@@ -54,7 +54,10 @@ whole language is [`SHALE.md`](SHALE.md).
 **On Linux, the Linux prelude** (`src/shale_prelude_linux.shale`; metal
 has none of it):
 - **Programs:** `run(argv, opts)` runs one (`timeout_ms` and a keep, `head`
-  or `tail` or `whole`, are required; see SHALE.md, "The runner").
+  or `tail` or `whole`, are required; see SHALE.md, "The runner"). Its
+  `cwd` is a path as every path is: under the root, or through a mount
+  (`cwd = "repos:shale"` runs a sibling repo's step from another's
+  checkout); `..` and an absolute path are refused.
   `must(r)` gives `r` if it exited 0; otherwise it prints its output and
   fails, naming the program and how it ended. `real(p)` gives a path's OS
   path, for an argv.
