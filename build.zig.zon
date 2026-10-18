@@ -1,0 +1,16 @@
+.{
+    // Shale, the script language for a site's own data and an agent's own
+    // tool: two modules an application depends on: `shale` (src/shale.zig,
+    // portable, what its code imports) and `shale_linux` (src/shale_linux.zig,
+    // the Linux host, for its Linux `main`); and the `shale` CLI.
+    .name = .shale,
+    .version = "0.1.0",
+    .fingerprint = 0x3b47a285030d9023,
+    .minimum_zig_version = "0.16.0",
+    .paths = .{ "build.zig", "build.zig.zon", "src", "tools" },
+    .dependencies = .{
+        // The web-server-in-a-box library: zig-webbox, a sibling checkout
+        // (../zig-webbox): its `store` holds every effect a script has.
+        .webbox = .{ .path = "../zig-webbox" },
+    },
+}
