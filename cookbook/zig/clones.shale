@@ -33,9 +33,17 @@ for p in glob(GLOB) do
   if TESTS or not contains(p, "_test") then
     local kept = {}
     local ls = lines(read(p))
+    -- A `test` block's lines are its own setup, said again in each test;
+    -- passed by unless tests=yes (zig_decls gives each test's lines).
+    local in_test = {}
+    if not TESTS then
+      for d in zig_decls(p) do
+        if d.kind == "test" then for i = d.first, d.last do in_test[tostring(i)] = true end end
+      end
+    end
     for i = 1, #ls do
       local t = trim(ls[i])
-      if significant(t) then push(kept, {text = t, line = i}) end
+      if significant(t) and not has_key(in_test, tostring(i)) then push(kept, {text = t, line = i}) end
     end
     push(files, p)
     push(sig, kept)

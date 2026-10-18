@@ -1,0 +1,55 @@
+-- **A CONSTANT'S BYTES, THE SAME AFTER A REFACTOR**: a top-level `const`
+-- as `rev` (HEAD) had it and as the file has it now, both compiled into a
+-- throwaway test beside the file and compared by Zig, byte for byte. For
+-- a page's text spliced from shared parts (`a ++ shared.js ++ b`), a
+-- table rewritten: what it is, not what it looks like. The test takes the
+-- file's own imports (now's), so a part the new text names is found; an
+-- old text that names a constant of its own file is not (copy it in, or
+-- judge that one too).
+--
+--   cd <repo>/<dir> && shale <shale>/cookbook/zig/const_judge.shale path=src/x.zig name=page [rev=HEAD]
+
+const P = arg("path", "")
+const NAME = arg("name", "")
+const REV = arg("rev", "HEAD")
+if P == "" or NAME == "" then fail("const_judge: path= name= [rev=]") end
+
+-- The const's text: from `const NAME =` (or `pub const`) to its `;` line.
+function cut(text, as)
+  local head = "const " .. NAME .. " ="
+  local a = find(text, "\n" .. head)
+  if a == nil then
+    if starts_with(text, head) then a = 0 else fail("const_judge: no `" .. head .. "` in " .. as) end
+  end
+  local rest = sub(text, a + 1)
+  local b = find(rest, "\n;\n")
+  local one = find(rest, ";\n")
+  -- A one-line const ends at its own `;`.
+  local stop = b
+  if one ~= nil and (b == nil or one < b) and not contains(sub(rest, 1, one), "\n") then stop = one - 1 end
+  if stop == nil then fail("const_judge: `" .. head .. "` has no end in " .. as) end
+  return substitute(sub(rest, 1, stop + 2), head, "pub const " .. as .. " =")
+end
+
+-- Git's path for the file: from the repo's top.
+local top = trim(must(run({"git", "rev-parse", "--show-prefix"}, {timeout_ms = 10000, whole = 4096})).out)
+local old = must(run({"git", "show", REV .. ":" .. top .. P}, {timeout_ms = 30000, whole = 16777216})).out
+local now = read(P)
+local imports = {}
+for l in lines(now) do
+  if starts_with(l, "const ") and contains(l, "@import(") then push(imports, l) end
+end
+local dir = ""
+local parts = split(P, "/")
+if #parts > 1 then dir = join(take(parts, #parts - 1), "/") .. "/" end
+local test = dir .. "zz_const_judge_test.zig"
+if exists(test) then fail("const_judge: " .. test .. " is there already: a judge left behind? remove it") end
+create(test, join(imports, "\n") .. "\nconst zz_testing = @import(\"std\").testing;\n" .. cut(old, "zz_was") .. cut(now, "zz_is") ..
+  "test \"" .. NAME .. " is the same bytes as at " .. REV .. "\" { try zz_testing.expectEqualStrings(zz_was, zz_is); }\n")
+local r = run({"zig", "test", test}, {timeout_ms = 300000, tail = 8000})
+remove(test)
+if r.code ~= 0 then
+  print(r.out)
+  fail("const_judge: `" .. NAME .. "` in " .. P .. " is not the bytes it was at " .. REV)
+end
+print("const_judge: `" .. NAME .. "` in " .. P .. " is the same bytes as at " .. REV)

@@ -91,3 +91,8 @@ string's text):
   steps=200000000 --budget arena_bytes=...`.
 - `same_tests.shale`: a checkout's suite again, against a baseline of test
   names, wherever a moved test now lives.
+- `const_judge.shale` (`path= name= [rev=HEAD]`): a top-level `const` as
+  `rev` had it and as the file has it now, compiled side by side in a
+  throwaway test and compared by Zig, byte for byte: for a page's text
+  spliced from a shared part (`a ++ shared.css ++ b`), which a symbol
+  judge cannot see. A planted one-character change fails it.
