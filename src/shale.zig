@@ -14,8 +14,10 @@ pub const script_route = @import("script_route.zig");
 /// scripts, run on a schedule as background runs, their last output kept.
 pub const shale_suite = @import("shale_suite.zig");
 /// Shale's number parses that no request reaches, for an application's
-/// request-edge check (webbox's edge_sites.zig, by the same rules).
-pub const edge_sites = @import("edge_sites.zig");
+/// request-edge check (webbox's edge_sites.zig, by the same rules; a name
+/// of its own, as an application's lints read webbox's and Shale's sources
+/// as one folder).
+pub const edge_sites = @import("shale_edge_sites.zig");
 
 test {
     _ = script;
