@@ -1232,7 +1232,7 @@ it three things through `Options`, and metal hands none
   - the user's.
   
   A later prelude may not redefine an earlier one's function. **Metal's
-  parse compiles none of this**: `host_io_std.zig` says
+  parse compiles none of this**: zig-webbox's `src/host_io_std.zig` says
   `shale_preludes`, and metal's host_io doesn't.
 - **A run runs at most 64 programs** (`budget runs`).
 - **The gate** (`tools/shale_gate.zig`, installed on the box) is the PreToolUse
@@ -1244,7 +1244,7 @@ can happen three times alike.
 
 ## On the live site: `script_route` and the signer
 
-`webbox.script_route` (`src/script_route.zig`) is the reusable half of an
+`shale.script_route` (`src/script_route.zig`) is the reusable half of an
 application's `POST /admin/script`, which angry-gopher mounts. In order,
 it:
 1. reads the envelope;
@@ -1487,7 +1487,7 @@ holds every source of the module.
   undo; on metal, rehearse a script on a copy of the data.
 - **On metal, no effects beyond the store.** No network, no clock but
   `now()`, no host. Linux's Shale has more behind one seam, metal's
-  unchanged ("On Linux: behind the seam"; zig-webbox
+  unchanged ("On Linux: behind the seam";
   `docs/designs/DESIGN-shale-dogfood.md`).
 - **A step a byte for a builtin's work, and a step for 16 bytes of bulk
   byte work** (Steve, 209): reads, scans and the haystacks of searches.

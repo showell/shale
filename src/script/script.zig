@@ -1,7 +1,7 @@
 //! **SHALE, A SMALL SCRIPT LANGUAGE FOR A SITE'S OWN DATA** (metal-vmm QUEUE
 //! 199): Lua's look, a smaller language's semantics, every effect through
 //! webbox's `store`, every run inside its budgets. The language, its
-//! builtins and its budgets are zig-webbox's docs/SHALE.md.
+//! builtins and its budgets are this repo's docs/SHALE.md.
 //!
 //! Portable as every webbox file is: the host's `Io` from `host_io`, an
 //! allocator from the caller, and nothing that names the host

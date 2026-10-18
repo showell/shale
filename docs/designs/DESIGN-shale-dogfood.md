@@ -425,7 +425,7 @@ Remembered rules fail; this one is enforced.
   cold-agent brief then names SHALE-AGENTS.md.
 - **A PreToolUse hook on Bash and Monitor** (`~/.claude/settings.json`) runs
   `shale-gate`, a zig tool in
-  zig-webbox's `tools/` (a pure classifier, tested), behind a wrapper that
+  shale's `tools/` (zig-webbox's when this was written; a pure classifier, tested), behind a wrapper that
   turns every failure into a refusal (exit 2), so a missing binary refuses
   rather than passes. It reads the hook's JSON (`tool_input.command`) and
   passes exactly:
@@ -441,7 +441,7 @@ Remembered rules fail; this one is enforced.
     `~/.local/state/shale/wants.tsv` with one append (`O_APPEND`, a line under
     4 KiB, so concurrent hooks never interleave), outside every repo.
   - Anything else is refused with one line naming both forms.
-- **Claude curates** that log into zig-webbox's `docs/SHALE-WANTS.md`; a tag
+- **Claude curates** that log into `docs/SHALE-WANTS.md`; a tag
   seen three times goes to the queue.
 - **Read, Grep, Edit and Write stay allowed**: the ban is on bash and Python,
   and Edit is better than a python heredoc for one replacement.

@@ -129,7 +129,7 @@ has none of it):
   Zig's parser (a split call is one, a comment's or a string's none):
   `{kind, target, name, line, file}`, `file` being `"found"` or
   `"missing"` beside it, or `"module"` (no extension: `std`, `host_io`).
-  It is library_test.zig's reading too (webbox's `zig_refs`).
+  It is zig-webbox's library_test.zig's reading too (its `zig_refs`).
   `zig_rename` and `zig_move` read identifiers one way
   (`shale_zig_ast.identifiers`): a field, an enum's member or a nested
   container's own declaration of the name is another thing, and
@@ -319,7 +319,7 @@ analysis is tokens, not types:** a name reached through a module
 uses get their own `edit`, and the compiler judges after
 (`same_tests.shale`). `opts.lines = {first, last}` limits it to a range.
 
-**Moving a block to another file, then its uses** (the linux_host split):
+**Moving a block to another file, then its uses** (zig-webbox's linux_host split):
 move the declarations, then rename what the old file still says to the
 qualified name:
 
@@ -491,7 +491,7 @@ here is what every launch runs. The hook, in `~/.claude/settings.json`:
 
 ```json
 {"hooks": {"PreToolUse": [{"matcher": "Bash|Monitor",
-  "hooks": [{"type": "command", "command": "/home/steve/showell_repos/zig-webbox/tools/shale-gate.sh"}]}]}}
+  "hooks": [{"type": "command", "command": "/home/steve/showell_repos/shale/tools/shale-gate.sh"}]}]}}
 ```
 
 ## Where Shale is worse, said plainly
