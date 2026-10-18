@@ -1,0 +1,89 @@
+-- **DECLARATIONS NOTHING USES**: Zig never says so, as its analysis is
+-- lazy, so a function nobody calls sits in its file. By Zig's tokenizer:
+--
+--   - **dead**: a top-level declaration that is not `pub` and whose name no
+--     other identifier in its file is (not after a `.` either: a private
+--     name is only reached bare). Certain: nothing outside can see it.
+--   - **unreached, pub**: a `pub` one no identifier in the tree names, bare
+--     or after a `.`. A question, not a verdict: another repo, a build
+--     script, or `@field(x, "name")` may reach it.
+--
+-- Tests, `comptime` blocks, `export`ed and `extern` declarations, and
+-- `_` are never counted dead. `main`, `panic` and the root's `std_options`
+-- are a program's, by name.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/dead.shale [glob=src/**/*.zig] [also=probe/**/*.zig] [drop=yes]
+--
+-- `drop=yes` removes the dead ones (never a pub one), each by its own
+-- bytes (`zig_decls`' start and stop, its doc comment with it), the last
+-- in a file first; a run with `--undo-on-stop` puts them back on a stop.
+-- The compiler and the tests judge after.
+
+const GLOB = arg("glob", "src/**/*.zig")
+const DROP = arg("drop", "no") == "yes"
+const ALSO = arg("also", "")
+const files = {}
+for p in glob(GLOB) do push(files, p) end
+if ALSO ~= "" then for p in glob(ALSO) do push(files, p) end end
+
+-- Every identifier in the tree, by name: how many times, and per file.
+const tree = {}
+const per_file = {}
+for p in files do
+  local mine = {}
+  for t in zig_tokens(p, {tag = "identifier"}) do
+    tree[t.text] = get(tree, t.text, 0) + 1
+    mine[t.text] = get(mine, t.text, 0) + 1
+  end
+  per_file[p] = mine
+end
+
+const by_name = {main = true, panic = true, std_options = true, _ = true}
+const dead = {}
+const unreached = {}
+for p in files do
+  for d in zig_decls(p) do
+    local skip = d.kind == "test" or d.kind == "comptime" or d.kind == "field" or d.linkage ~= "none" or d.name_form ~= "identifier" or has_key(by_name, d.name)
+    if not skip then
+      -- Its own name is one identifier; any more is a use.
+      if d.visibility ~= "pub" then
+        if get(per_file[p], d.name, 0) <= 1 then push(dead, {at = p .. ":" .. d.first, p = p, name = d.name, kind = d.kind, lines = d.last - d.first + 1, start = d.start, stop = d.stop}) end
+      elseif get(tree, d.name, 0) <= 1 then
+        push(unreached, {at = p .. ":" .. d.first, name = d.name, kind = d.kind, lines = d.last - d.first + 1})
+      end
+    end
+  end
+end
+sort(dead, {{key = "lines", desc = true}, "at"})
+sort(unreached, {{key = "lines", desc = true}, "at"})
+local dead_lines = 0
+for d in dead do dead_lines = dead_lines + d.lines end
+print(#files .. " files: " .. #dead .. " dead (" .. dead_lines .. " lines), " .. #unreached .. " pub ones the tree never names")
+print("")
+print("dead (not pub, unnamed in its file):")
+for d in dead do print("  " .. d.lines .. " lines  " .. d.kind .. " " .. d.name .. "  " .. d.at) end
+print("")
+print("pub, unnamed anywhere in the tree (another repo, a build, @field?):")
+for d in unreached do print("  " .. d.lines .. " lines  " .. d.kind .. " " .. d.name .. "  " .. d.at) end
+
+if DROP and #dead > 0 then
+  local in_file = {}
+  for d in dead do
+    local l = get(in_file, d.p, {})
+    push(l, d)
+    in_file[d.p] = l
+  end
+  for p in sort(keys(in_file)) do
+    -- The last first, so each one's bytes are where zig_decls said.
+    local ds = sort(in_file[p], {{key = "start", desc = true}})
+    local t = read(p)
+    for d in ds do
+      local after = sub(t, d.stop + 1)
+      -- Its line's own newline goes with it.
+      if starts_with(after, "\n") then after = sub(after, 2) end
+      t = sub(t, 1, d.start) .. after
+    end
+    replace(p, t)
+    print("dropped " .. #ds .. " from " .. p)
+  end
+end

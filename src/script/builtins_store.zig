@@ -12,7 +12,6 @@ const ast = @import("ast.zig");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const bi = @import("builtins.zig");
-const text = @import("builtins_text.zig");
 
 const store = @import("webbox").store;
 

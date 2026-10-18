@@ -230,10 +230,6 @@ pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u
     return result;
 }
 
-fn arenaStop(result: *Result) Result {
-    result.stop = .{ .line = 1, .column = 1, .class = .budget, .budget = .arena, .message = "the arena budget ran out" };
-    return result.*;
-}
 
 test {
     _ = lex;
