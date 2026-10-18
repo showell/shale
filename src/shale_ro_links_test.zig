@@ -51,6 +51,23 @@ test "ro mounts: every change builtin through one is refused before anything is 
     try testing.expectError(error.FileNotFound, t.file("mine2.zig"));
 }
 
+test "a walk through a mount: each entry stat'ed where the mount points, its path the mount's; glob and a walk resumed by `after` too" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    try t.tmp.dir.createDirPath(t.threaded.io(), "elsewhere/sub");
+    try t.put("elsewhere/a.zig", "x");
+    try t.put("elsewhere/sub/b.zig", "yy");
+    var why: []const u8 = "";
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "m = {s}/elsewhere\n", .{t.root}), "/home/x", &why);
+    try t.expectOutput("for e in walk(\"m:\", {kind = \"file\"}) do print(e.path, e.size) end", "m:a.zig\t1\nm:sub/b.zig\t2\n");
+    try t.expectOutput("for e in walk(\"m:sub\") do print(e.path, e.size) end", "m:sub/b.zig\t2\n");
+    try t.expectOutput("print(join(glob(\"m:**/*.zig\"), \" \"))", "m:a.zig m:sub/b.zig\n");
+    try t.expectOutput("for e in walk(\"m:\", {after = \"m:a.zig\"}) do print(e.path) end", "m:sub\nm:sub/b.zig\n");
+    try t.expectOutput("for e in walk(\"m:sub\", {after = \"m:sub/b.zig\"}) do print(e.path) end", "");
+}
+
 test "ro mounts: the mounts file's ` ro`; any other trailing word, or a path with a space, refused by line" {
     var t: T = undefined;
     try init(&t);

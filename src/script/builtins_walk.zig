@@ -65,7 +65,15 @@ fn sortEntries(run: *Run, pos: ast.Pos, entries: []store.Entry) Error![]store.En
 pub var between_list_and_stat_for_test: ?*const fn () void = null;
 
 /// A folder the walk is in: its entries, and the next to take.
-const Level = struct { rel: []const u8, entries: []store.Entry, at: usize = 0, depth: u64 };
+const Level = struct { rel: []const u8, full: []const u8, entries: []store.Entry, at: usize = 0, depth: u64 };
+
+/// An entry's path under its folder's: a mount's folder (`m:`) takes the
+/// name with no `/`.
+fn under(run: *Run, pos: ast.Pos, folder: []const u8, name: []const u8) Error![]const u8 {
+    if (folder.len == 0) return name;
+    const sep: []const u8 = if (folder[folder.len - 1] == ':') "" else "/";
+    return std.fmt.allocPrint(run.alloc, "{s}{s}{s}", .{ folder, sep, name }) catch run.oom(pos);
+}
 
 /// **THE WALK PUT BACK WHERE `after` LEFT IT**: each folder on `after`'s
 /// path listed again, and its next entry the first name past `after`'s
@@ -74,7 +82,8 @@ const Level = struct { rel: []const u8, entries: []store.Entry, at: usize = 0, d
 /// itself is the start.
 fn walkResume(run: *Run, pos: ast.Pos, p: Path, o: WalkOptions, after: []const u8, levels: *std.ArrayList(Level)) Error!void {
     if (after.len == 0 or std.mem.eql(u8, after, p.rel)) return;
-    const rest = if (p.rel.len == 0) after else if (after.len > p.rel.len and std.mem.startsWith(u8, after, p.rel) and after[p.rel.len] == '/') after[p.rel.len + 1 ..] else return run.fail(pos, .argument, "`walk`: `after` is \"{s}\", which is not under \"{s}\": it is a path an earlier walk of it returned", .{ after, p.rel });
+    const skip = p.rel.len + @intFromBool(p.rel.len > 0 and p.rel[p.rel.len - 1] != ':');
+    const rest = if (p.rel.len == 0) after else if (after.len > skip and std.mem.startsWith(u8, after, p.rel) and (skip == p.rel.len or after[p.rel.len] == '/')) after[skip..] else return run.fail(pos, .argument, "`walk`: `after` is \"{s}\", which is not under \"{s}\": it is a path an earlier walk of it returned", .{ after, p.rel });
     var parts = std.mem.splitScalar(u8, rest, '/');
     while (parts.next()) |part| {
         const top = &levels.items[levels.items.len - 1];
@@ -89,12 +98,12 @@ fn walkResume(run: *Run, pos: ast.Pos, p: Path, o: WalkOptions, after: []const u
         top.at = i + 1;
         const en = top.entries[i];
         if (en.kind != .directory or (o.depth != null and top.depth >= o.depth.?)) return;
-        const rel = if (top.rel.len == 0) en.name else std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ top.rel, en.name }) catch return run.oom(pos);
-        const full = std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ run.root, rel }) catch return run.oom(pos);
+        const rel = try under(run, pos, top.rel, en.name);
+        const full = std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ top.full, en.name }) catch return run.oom(pos);
         try countRead(run, pos);
         const entries = (try sortedEntriesOrGone(run, pos, .walk, full, rel)) orelse return;
         const depth = top.depth + 1;
-        levels.append(run.alloc, .{ .rel = rel, .entries = entries, .depth = depth }) catch return run.oom(pos);
+        levels.append(run.alloc, .{ .rel = rel, .full = full, .entries = entries, .depth = depth }) catch return run.oom(pos);
     }
 }
 
@@ -180,7 +189,7 @@ fn walk(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const st = (store.statOrNull(run.io, a, p.full) catch |e| return storeFailed(run, pos, .walk, p.rel, e)) orelse return storeFailed(run, pos, .walk, p.rel, error.FileNotFound);
     if (st.kind != .directory) return storeFailed(run, pos, .walk, p.rel, error.NotDir);
     var levels: std.ArrayList(Level) = .empty;
-    levels.append(a, .{ .rel = p.rel, .entries = try sortedEntries(run, pos, .walk, p.full, p.rel), .depth = 1 }) catch return run.oom(pos);
+    levels.append(a, .{ .rel = p.rel, .full = p.full, .entries = try sortedEntries(run, pos, .walk, p.full, p.rel), .depth = 1 }) catch return run.oom(pos);
     if (o.after) |after| try walkResume(run, pos, p, o, after, &levels);
     const out = try run.newTable(pos);
     out.kind = .list;
@@ -204,16 +213,16 @@ fn walk(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         const en = top.entries[top.at];
         top.at += 1;
         if (o.skip) |pat| if (try text.likeCharged(run, pos, en.name, pat)) {
-            last = if (top.rel.len == 0) en.name else std.fmt.allocPrint(a, "{s}/{s}", .{ top.rel, en.name }) catch return run.oom(pos);
+            last = try under(run, pos, top.rel, en.name);
             continue;
         };
         const depth = top.depth;
-        const rel = if (top.rel.len == 0) en.name else std.fmt.allocPrint(a, "{s}/{s}", .{ top.rel, en.name }) catch return run.oom(pos);
+        const rel = try under(run, pos, top.rel, en.name);
         last = rel;
         try run.charge(pos, rel.len);
         run.tally(rel.len);
         const into = en.kind == .directory and (o.depth == null or depth < o.depth.?);
-        const full: ?[]const u8 = if (en.kind != .other or into) std.fmt.allocPrint(a, "{s}/{s}", .{ run.root, rel }) catch return run.oom(pos) else null;
+        const full: ?[]const u8 = if (en.kind != .other or into) std.fmt.allocPrint(a, "{s}/{s}", .{ top.full, en.name }) catch return run.oom(pos) else null;
         var keep = o.kind == null or o.kind.? == en.kind;
         if (keep) if (o.like) |pat| {
             keep = try text.likeCharged(run, pos, en.name, pat);
@@ -255,7 +264,7 @@ fn walk(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
             try countRead(run, pos);
             // A folder gone since it was listed, in a background run, too.
             const entries = (try sortedEntriesOrGone(run, pos, .walk, full.?, rel)) orelse continue;
-            levels.append(a, .{ .rel = rel, .entries = entries, .depth = depth + 1 }) catch return run.oom(pos);
+            levels.append(a, .{ .rel = rel, .full = full.?, .entries = entries, .depth = depth + 1 }) catch return run.oom(pos);
         }
     }
     return .{ .table = out };
