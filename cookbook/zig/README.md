@@ -56,6 +56,14 @@ string's text):
   a named enum would make read; **a bool every call passes the same
   literal is no parameter at all** (`ONE VALUE`). A name declared by more
   than one function is said, as its calls cannot be told apart.
+- `dead.shale` (`glob=`, `also=`, `drop=yes`): declarations nothing uses,
+  which Zig never reports (its analysis is lazy). Dead: not `pub`, and no
+  other identifier in its file names it, which is certain. Unreached: `pub`,
+  and nothing in the tree names it, which is a question (another repo, a
+  build, `@field`). `drop=yes` removes the dead, each by its own bytes; run it
+  under `--undo-on-stop`, again until none is left, and let the tests
+  judge. On 2026-10-18 it found 120 unused imports across five repos, and
+  one dead function.
 - `clones.shale` (`glob=`, `tests=yes`, `window=`, `top=`): the same code
   in two places, runs of 6 or more alike lines (trimmed; blank lines,
   comments, imports, one-name aliases and brackets alone passed by), in
