@@ -1,0 +1,27 @@
+-- A file's map: each top-level declaration and test, with its first line and
+-- its length (to the next one), and the test lines' total.
+-- shale <shale>/cookbook/zig/file_map.shale path=src/x.zig
+
+local path = arg("path", "")
+local all = lines(read(path))
+local marks = {}
+for i = 1, #all do
+  local l = all[i]
+  local m = re_find(l, "^(pub fn|fn|pub const|const|pub var|var|test) ")
+  if m ~= nil and (re_find(l, "^test ") ~= nil or re_find(l, "fn |= struct|= enum|= union") ~= nil) then
+    push(marks, {line = i, text = sub(l, 1, 90)})
+  end
+end
+local test_lines = 0
+local rows = {}
+for k = 1, #marks do
+  local stop = #all + 1
+  if k < #marks then stop = marks[k + 1].line end
+  local n = stop - marks[k].line
+  if re_find(marks[k].text, "^test ") ~= nil then test_lines = test_lines + n end
+  push(rows, {line = marks[k].line, lines = n, decl = marks[k].text})
+end
+print(table(rows, {"line", "lines", "decl"}))
+local first = 0
+for r in rows do if first == 0 and re_find(r.decl, "^test ") ~= nil then first = r.line end end
+print(#all .. " lines; tests " .. test_lines .. "; the first test at line " .. first)

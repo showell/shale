@@ -1,0 +1,235 @@
+-- **WHERE A ZIG FILE DIVIDES**: its top-level declarations as a graph
+-- (zig_decls' `uses`), the hubs (what most of the file uses) set aside,
+-- and the groups that are left, connected only through the hubs: each a
+-- candidate seam, with its size, the hubs it needs, what outside it uses
+-- it (each would need `pub`), and the tests that touch only it.
+--
+--   shale <shale>/cookbook/zig/seams.shale path=src/x.zig [container=Name] [hub=N] [show=N]
+--
+-- `container=Name`: that container's members, not the file's, with what
+-- each reaches through a `.` (`self.slots`) counted as a use.
+--
+-- `hub` is how many declarations must use a name for it to be a hub
+-- (default: a fifth of the file's, at least 3).
+
+const P = arg("path", "")
+const SHOW = parse_int(arg("show", "10"))
+const C = arg("container", "")
+-- How many members each group lists (`names=N`).
+const NAMES_SHOWN = parse_int(arg("names", "12"))
+
+function lines_of(d)
+  return d.last - d.first + 1
+end
+
+function find(parent, x)
+  local r = x
+  while parent[r] ~= r do r = parent[r] end
+  return r
+end
+
+function union(parent, a, b)
+  local ra = find(parent, a)
+  local rb = find(parent, b)
+  if ra ~= rb then parent[ra] = rb end
+  return nil
+end
+
+function member(l, x)
+  for y in l do
+    if y == x then return true end
+  end
+  return false
+end
+
+if P == "" then fail("seams: give path=src/x.zig") end
+local decls = nil
+if C == "" then
+  decls = zig_decls(P)
+else
+  decls = zig_decls(P, {container = C})
+  -- A member's edges: the names it uses and the members it reaches.
+  for d in decls do
+    for r in d.reaches do
+      if not member(d.uses, r) then push(d.uses, r) end
+    end
+  end
+end
+local imported = {}
+for i in zig_imports(P) do
+  if i.name ~= "" then imported[i.name] = true end
+end
+-- A const that only renames another (`const Io = std.Io;`) is an import too.
+local prod = {}
+local tests = {}
+local by_name = {}
+local total = 0
+for d in decls do
+  total = total + lines_of(d)
+  if d.kind == "test" then
+    push(tests, d)
+  elseif d.name ~= "" and not has_key(imported, d.name) then
+    local text = read(P, d.start, d.stop - d.start)
+    local alias = re_find(text, "^(pub )?const [A-Za-z_][A-Za-z0-9_]* = [A-Za-z_][A-Za-z0-9_.]*;$") ~= nil
+    if alias and lines_of(d) == 1 and #d.uses <= 1 then
+      imported[d.name] = true
+    else
+      push(prod, d)
+      by_name[d.name] = d
+    end
+  end
+end
+
+-- How many production declarations use each name (its fan-in), and how
+-- many it uses (its fan-out).
+local used_by = {}
+local uses_n = {}
+for d in prod do
+  local n = 0
+  for u in d.uses do
+    if has_key(by_name, u) then
+      used_by[u] = get(used_by, u, 0) + 1
+      n = n + 1
+    end
+  end
+  uses_n[d.name] = n
+end
+-- **TWO KINDS OF HUB**: what much of the file uses (a shared type or
+-- helper), and what uses much of the file (an orchestrator: `main`,
+-- `serve`). Either glues everything to everything; set aside, what is left
+-- shows its parts.
+local in_at = parse_int(arg("hub", tostring(max(4, #prod // 8))))
+local out_at = parse_int(arg("out", tostring(max(6, #prod // 6))))
+local hubs = {}
+local hub_names = {}
+for d in prod do
+  local fin = get(used_by, d.name, 0)
+  if fin >= in_at or uses_n[d.name] >= out_at then
+    hubs[d.name] = true
+    push(hub_names, d.name .. " (in " .. fin .. ", out " .. uses_n[d.name] .. ")")
+  end
+end
+
+-- The rest, in file order, with the edges among them.
+local rest = {}
+local at = {}
+for d in prod do
+  if not has_key(hubs, d.name) then
+    push(rest, d)
+    at[d.name] = #rest
+  end
+end
+local edges = {}
+for d in rest do
+  for u in d.uses do
+    if has_key(at, u) then push(edges, {a = at[d.name], b = at[u], text = d.name .. "->" .. u}) end
+  end
+end
+local before = {}
+local sum = 0
+for i = 1, #rest do
+  sum = sum + lines_of(rest[i])
+  before[i] = sum
+end
+
+print(P .. ": " .. #decls .. " declarations; " .. #prod .. " production, " .. #tests .. " tests; " .. #rest .. " left once " .. #hub_names .. " hubs are set aside, " .. #edges .. " edges among them")
+local big = {}
+for d in decls do
+  if lines_of(d) >= 150 then push(big, d.name .. ":" .. d.first .. "(" .. lines_of(d) .. ")") end
+end
+if #big > 0 then print("largest (150+ lines; a seam inside one is below the top level): " .. join(big, ", ")) end
+print("hubs: " .. join(hub_names, ", "))
+
+-- **THE CUT PROFILE**: for each gap after the i-th, the edges that cross
+-- it; a gap few cross, with code on both sides, is a seam in the file's
+-- own order.
+local most = parse_int(arg("min", "120"))
+local gaps = {}
+for i = 1, #rest - 1 do
+  local left = before[i]
+  local right = sum - left
+  if left >= most and right >= most then
+    local crossing = {}
+    for e in edges do
+      local lo = min(e.a, e.b)
+      local hi = max(e.a, e.b)
+      if lo <= i and hi > i then push(crossing, e.text) end
+    end
+    push(gaps, {i = i, n = #crossing, crossing = crossing, left = left, right = right})
+  end
+end
+print("")
+print("the gaps fewest edges cross (each side at least " .. most .. " lines):")
+local shown = 0
+local taken = {}
+while shown < SHOW and count(taken) < #gaps do
+  local best = 0
+  for k = 1, #gaps do
+    if not has_key(taken, tostring(k)) then
+      if best == 0 or gaps[k].n < gaps[best].n then best = k end
+    end
+  end
+  taken[tostring(best)] = true
+  local g = gaps[best]
+  -- Neighbours of a gap already shown say the same seam: shown once.
+  local near = false
+  for k in keys(taken) do
+    local o = gaps[parse_int(k)]
+    if o.i ~= g.i and o.i >= g.i - 2 and o.i <= g.i + 2 and get(o, "shown", false) then near = true end
+  end
+  if not near then
+    g.shown = true
+    shown = shown + 1
+    local a = rest[g.i]
+    local b = rest[g.i + 1]
+    print("  after " .. a.name .. ":" .. a.last .. ", before " .. b.name .. ":" .. b.first .. ": " .. g.n .. " cross (" .. g.left .. " lines above, " .. g.right .. " below)" .. (g.n > 0 and (": " .. join(take(g.crossing, 6), ", ")) or ""))
+  end
+end
+
+-- **WHO REACHES IT**: each declaration that is not a hub, grouped by the
+-- hubs whose uses reach it (through other declarations, not through
+-- hubs). A helper only `serve` reaches goes with `serve`; one `main` and
+-- `serve` both reach is shared; one no hub reaches is the tests' or dead.
+-- This is the file's structure by caller, whatever its order.
+local reached = {}
+for d in rest do reached[d.name] = {} end
+for h in prod do
+  if has_key(hubs, h.name) then
+    local todo = {}
+    for u in h.uses do
+      if has_key(at, u) then push(todo, u) end
+    end
+    local seen = {}
+    while #todo > 0 do
+      local x = todo[#todo]
+      todo = take(todo, #todo - 1)
+      if not has_key(seen, x) then
+        seen[x] = true
+        push(reached[x], h.name)
+        for u in rest[at[x]].uses do
+          if has_key(at, u) and not has_key(seen, u) then push(todo, u) end
+        end
+      end
+    end
+  end
+end
+local by_sig = {}
+local sigs = {}
+for d in rest do
+  local hs = reached[d.name]
+  sort(hs)
+  local sig = join(hs, " + ")
+  if sig == "" then sig = "(no hub: tests' or unused)" end
+  if not has_key(by_sig, sig) then
+    by_sig[sig] = {lines = 0, names = {}}
+    push(sigs, sig)
+  end
+  by_sig[sig].lines = by_sig[sig].lines + lines_of(d)
+  push(by_sig[sig].names, d.name .. ":" .. d.first .. "(" .. lines_of(d) .. ")")
+end
+print("")
+print("by the hubs that reach them:")
+for s in sigs do
+  local g = by_sig[s]
+  print("  " .. s .. ": " .. #g.names .. " declarations, " .. g.lines .. " lines: " .. join(take(g.names, NAMES_SHOWN), ", ") .. (#g.names > NAMES_SHOWN and (", ... " .. (#g.names - NAMES_SHOWN) .. " more") or ""))
+end

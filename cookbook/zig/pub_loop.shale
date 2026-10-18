@@ -1,0 +1,51 @@
+-- **WHAT THE COMPILER SAYS NEEDS `pub`, MADE PUB**: after a move, a
+-- method called through a value (`machine.step()`) is zig_move's known
+-- limit, so the compiler names it. Builds, and for each "is not marked
+-- 'pub'" puts `pub` on the line its "declared here" note points at; again,
+-- until it builds or an error of another kind is left (printed).
+--
+--   cd <repo> && shale <shale>/cookbook/zig/pub_loop.shale [build=<step>]
+
+local build = {"zig", "build"}
+if arg("build", "") ~= "" then push(build, arg("build", "")) end
+local made = 0
+local round = 0
+local done = false
+while round < 20 and not done do
+  round = round + 1
+  local r = run(build, {timeout_ms = 400000, whole = 2000000})
+  if r.code == 0 then
+    print("builds after " .. round .. " rounds, " .. made .. " made pub")
+    done = true
+  else
+    local ls = lines(r.out)
+    local fixed = 0
+    local other = {}
+    for i = 1, #ls do
+      if contains(ls[i], "is not marked 'pub'") then
+        local j = i + 1
+        while j <= #ls and not contains(ls[j], "declared here") do j = j + 1 end
+        local m = nil
+        if j <= #ls then m = re_find(ls[j], "([A-Za-z0-9_/]+\\.zig:[0-9]+):[0-9]+: note: declared here") end
+        if m ~= nil then
+          local parts = split(m.group, ":")
+          local line = lines(read(parts[1]))[parse_int(parts[2])]
+          local ind = re_find(line, "^( *)")
+          local body = sub(line, #ind.group + 1)
+          if not starts_with(body, "pub ") then
+            edit(parts[1], line .. "\n", ind.group .. "pub " .. body .. "\n")
+            made = made + 1
+            fixed = fixed + 1
+          end
+        end
+      elseif contains(ls[i], "error:") then
+        push(other, ls[i])
+      end
+    end
+    if fixed == 0 then
+      for e in take(other, 20) do print(e) end
+      fail("pub_loop: round " .. round .. ": no pub to make, and it does not build")
+    end
+  end
+end
+if not done then fail("pub_loop: still not building after " .. round .. " rounds") end

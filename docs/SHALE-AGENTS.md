@@ -201,6 +201,11 @@ prints is under `-- prints:` (a tab shows as `<TAB>`).
 
 ## The cookbook, beside what an agent would write otherwise
 
+The short recipes are here, each tested as written. **The longer ones are
+files**, in [`cookbook/`](../cookbook/zig/README.md): the Zig ones find a
+file's seams, move declarations along them and judge the move. Copy one
+and change it; not everything is a builtin.
+
 Each task says what it uses: a literal finds the lines (`grep`), and a
 pattern takes the field out of them (`re_find`), where a field has a
 shape. A literal that is the whole of what is wanted stays a literal.

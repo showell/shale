@@ -1,0 +1,16 @@
+-- The .zig files over a thousand lines in the repos we work in, longest first.
+-- From ~/showell_repos: shale <shale>/cookbook/zig/long_zig.shale [over=N]
+
+local repos = {"zig-metal-unikernel", "zig-webbox", "shale", "metal-vmm", "dog-park", "observatory", "angry-gopher", "zig-coverage-sdk"}
+local rows = {}
+local files = 0
+for r in repos do
+  for p in glob(r .. "/**/*.zig") do
+    files = files + 1
+    local n = count_lines(p)
+    if n > arg("over", 1000) then push(rows, {lines = n, path = p}) end
+  end
+end
+sort(rows, "lines", "desc")
+print(table(rows, {"lines", "path"}))
+print(#rows .. " of " .. files .. " .zig files are over " .. arg("over", 1000) .. " lines")

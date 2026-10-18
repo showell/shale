@@ -1,0 +1,179 @@
+-- **A PURE MOVE CHANGED NOTHING**: the judge of a refactor that only moves
+-- declarations between files, in a Zig repo with `zig build` and `zig
+-- build test`. Three things, taken before (`mode=baseline`) and held equal
+-- after (`mode=check`):
+--
+--   - the tests, by name, read from the source with zig_decls (a moved
+--     test keeps its name; its file is left out), and the runner's count;
+--   - the release binary's symbols, each by name and size, the name's
+--     first part (its file) left out: Zig compiles one unit, so where a
+--     function lives does not change its code;
+--   - every test passing.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/move_judge.shale mode=baseline bin=zig-out/bin/metal-vmm
+--   cd <repo> && shale <shale>/cookbook/zig/move_judge.shale mode=check bin=zig-out/bin/metal-vmm
+--
+-- The baseline is zig-out/move-judge.txt.
+
+const MODE = arg("mode", "check")
+-- `bin=a,b`: each binary's symbols, by name and size, under its own name.
+const BINS = split(arg("bin", ""), ",")
+-- `build=<step>`: `zig build <step>` (default: `zig build`); `test=none`
+-- for a tree whose moved file has no tests of its own (a kernel's root).
+const BUILD = arg("build", "")
+const TEST = arg("test", "test")
+-- `clean=yes`: refuse a tree with changes. A build that stamps its commit
+-- (zig-metal-unikernel's) says `+dirty` on one, a string 6 bytes longer:
+-- commit first (locally), then judge.
+const CLEAN = arg("clean", "no") == "yes"
+-- `flags=-Dstamp=off,...`: options for the build (zig-metal-unikernel's
+-- and dog-park's `-Dstamp=off` unstamp their commits, so no commit or
+-- `+dirty` moves a byte, and `clean=yes` is not needed).
+const FLAGS = arg("flags", "")
+-- `same=gopher,volumes`: module names a move makes one, wherever they
+-- appear in a symbol (a generic over a moved type: `Checker(*gopher.X)`
+-- becomes `Checker(*volumes.X)`). A coverage site's file name
+-- (`siteOf...S.file_`) is the file's name: its size is not compared.
+const SAME = split(arg("same", ""), ",")
+-- `new_files=src/a.zig,...`: the files the move made. Each that holds a
+-- coverage site (`@src()`) has a file-name string of its own, where its
+-- sites shared the old file's: exactly one more `S.file_` symbol each,
+-- in each binary, and nothing else is excused.
+const NEW_FILES = split(arg("new_files", ""), ",")
+const SAVED = "zig-out/move-judge.txt"
+
+function test_names()
+  local got = {}
+  for p in glob("src/**/*.zig") do
+    for d in zig_decls(p) do
+      if d.kind == "test" then push(got, "test " .. d.name) end
+    end
+  end
+  sort(got)
+  return got
+end
+
+-- `main.Machine.step` and `machine.Machine.step` are one function.
+function symbols(bin)
+  local nm = must(run({"nm", "-S", "-t", "d", bin}, {timeout_ms = 60000, whole = 64000000}))
+  local got = {}
+  for l in lines(nm.out) do
+    local parts = split(l, " ")
+    if #parts >= 4 then
+      local kind = lower(parts[3])
+      if kind == "t" or kind == "r" or kind == "d" or kind == "b" then
+        local name = parts[4]
+        local dot = find(name, ".")
+        if dot ~= nil then name = sub(name, dot + 1) end
+        -- Zig numbers its anonymous types and instances (`__enum_2457`,
+        -- `__anon_31`): the numbers move with any change, so they go.
+        local f = re_find(name, "__[a-z]+_[0-9]+")
+        while f ~= nil do
+          local kind = sub(f.text, 1, find(sub(f.text, 3), "_") + 1)
+          name = sub(name, 1, f.at - 1) .. kind .. sub(name, f.at + #f.text)
+          f = re_find(name, "__[a-z]+_[0-9]+")
+        end
+        -- The coverage SDK names a site by a hash of where it is: a move
+        -- changes the name, not the code under it.
+        local cov = re_find(name, "^zig_coverage_site_[0-9a-f]+$")
+        if cov ~= nil then name = "zig_coverage_site_" end
+        push(got, "sym " .. bin .. " " .. name .. " " .. parse_int(parts[2]))
+      end
+    end
+  end
+  sort(got)
+  return got
+end
+
+-- A line as the comparison takes it (`same`, and a file name's size left
+-- out), on both sides: the baseline is written as it was found.
+function same_as(l)
+  if not starts_with(l, "sym ") then return l end
+  local out = l
+  if SAME[1] ~= "" then
+    for m in SAME do out = substitute(out, m .. ".", SAME[1] .. ".") end
+  end
+  local f = re_find(out, "\\.S\\.file_ [0-9]+$")
+  if f ~= nil then out = sub(out, 1, f.at - 1) .. ".S.file_ (a file's name)" end
+  return out
+end
+
+function passed()
+  -- The summary line alone: after `--summary all`'s step tree it was
+  -- past what a short tail keeps (the kernel's tree is long).
+  local r = run({"zig", "build", "test", "--summary", "line"}, {timeout_ms = 580000, tail = 4000})
+  if r.code ~= 0 then
+    print(r.out)
+    fail("zig build test exited " .. r.code)
+  end
+  local m = re_find(r.out, "([0-9]+/[0-9]+) tests passed")
+  if m == nil then fail("no `N/M tests passed` in the test step's summary") end
+  return "passed " .. m.group
+end
+
+if BINS[1] == "" then fail("move_judge: give bin=<the release binary>[,<another>]") end
+if CLEAN then
+  local st = must(run({"git", "status", "--porcelain", "--untracked-files=no"}, {timeout_ms = 10000, whole = 100000}))
+  if trim(st.out) ~= "" then fail("move_judge: clean=yes, and the tree has changes: commit them first (a stamped build says +dirty)") end
+end
+local build = {"zig", "build"}
+if BUILD ~= "" then push(build, BUILD) end
+if FLAGS ~= "" then
+  for f in split(FLAGS, ",") do push(build, f) end
+end
+must(run(build, {timeout_ms = 580000, tail = 20}))
+local now = test_names()
+for b in BINS do
+  for s in symbols(b) do push(now, s) end
+end
+if TEST ~= "none" then push(now, passed()) end
+
+if MODE == "baseline" then
+  replace(SAVED, join(now, "\n") .. "\n")
+  print("move judge: baseline of " .. #now .. " lines in " .. SAVED)
+else
+  local was = {}
+  for l in lines(read(SAVED)) do
+    if l ~= "" then push(was, same_as(l)) end
+  end
+  local now_n = {}
+  for l in now do push(now_n, same_as(l)) end
+  now = now_n
+  local count = {}
+  for l in was do count[l] = get(count, l, 0) + 1 end
+  local extra = {}
+  for l in now do
+    if get(count, l, 0) > 0 then count[l] = count[l] - 1 else push(extra, l) end
+  end
+  local missing = {}
+  for l in keys(count) do
+    if count[l] > 0 then push(missing, l) end
+  end
+  sort(missing)
+  -- A new file's own file-name string, as many as `new_files` excuses.
+  local with_sites = 0
+  for f in NEW_FILES do
+    if f ~= "" and count_in(f, "@src()") > 0 then with_sites = with_sites + 1 end
+  end
+  local excused = {}
+  for b in BINS do excused[b] = 0 end
+  local kept = {}
+  for l in extra do
+    local excuse = false
+    for b in BINS do
+      if not excuse and l == "sym " .. b .. " siteOf__anon.S.file_ (a file's name)" and excused[b] < with_sites then
+        excused[b] = excused[b] + 1
+        excuse = true
+      end
+    end
+    if not excuse then push(kept, l) end
+  end
+  for b in BINS do
+    if excused[b] > 0 then print("excused: " .. excused[b] .. " new file-name string(s) in " .. b .. " (new_files with a coverage site: " .. with_sites .. ")") end
+  end
+  extra = kept
+  for l in take(missing, 30) do print("before only: " .. l) end
+  for l in take(extra, 30) do print("after only:  " .. l) end
+  if #missing > 0 or #extra > 0 then fail("move judge: " .. #missing .. " before only, " .. #extra .. " after only") end
+  print("move judge: the same " .. #now .. " lines (tests, symbols by name and size, the count passing)")
+end

@@ -81,6 +81,9 @@ and `zig build shale-scale` (the largest site each cookbook script fits).
   Linux.
 - [docs/SHALE-WANTS.md](docs/SHALE-WANTS.md): the ledger of what Claude
   reached past Shale for.
+- [cookbook/zig/README.md](cookbook/zig/README.md): recipes for finding a
+  Zig file's seams, moving code along them and judging the move, each
+  tested to parse. Recipes, not builtins: copy one and change it.
 - [docs/designs/DESIGN-shale-dogfood.md](docs/designs/DESIGN-shale-dogfood.md):
   the design for Claude working in Shale instead of bash and Python.
 

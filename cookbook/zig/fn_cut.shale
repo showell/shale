@@ -1,0 +1,73 @@
+-- **WHAT A CUT OF A LONG FUNCTION WOULD TAKE AND GIVE**: for lines
+-- `first`..`last` of function `fn` in `path`, the function's own locals and
+-- parameters declared before the range that it uses (an extracted function's
+-- parameters, or a context's fields), the ones it assigns (`x = ...`, `x +=`:
+-- each a pointer, or a field), and the locals it declares that the function
+-- uses after it (what it would give back). By Zig's tokenizer: an identifier
+-- not after a `.`; a declaration is `const x`, `var x`, a `|x|` capture or a
+-- parameter. Names declared again inside the range are its own.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/fn_cut.shale path=probe/gopher.zig fn=kmain first=689 last=883
+
+const P = arg("path", "")
+const FN = arg("fn", "")
+const FIRST = parse_int(arg("first", "0"))
+const LAST = parse_int(arg("last", "0"))
+if P == "" or FN == "" or FIRST == 0 or LAST == 0 then fail("fn_cut: path= fn= first= last=") end
+
+local f = nil
+for d in zig_decls(P) do if d.name == FN then f = d end end
+if f == nil then fail("fn_cut: no top-level `" .. FN .. "` in " .. P) end
+if FIRST < f.first or LAST > f.last then fail("fn_cut: " .. FIRST .. ".." .. LAST .. " is not inside " .. FN .. " (" .. f.first .. ".." .. f.last .. ")") end
+
+local toks = zig_tokens(P)
+-- Declarations: name -> the line of its first declaration, before, in, or after.
+local before = {}
+local inside = {}
+local used_in = {}
+local assigned_in = {}
+local used_after = {}
+local order_before = {}
+for k = 1, #toks do
+  local t = toks[k]
+  if t.line >= f.first and t.line <= f.last and t.tag == "identifier" and (k == 1 or toks[k - 1].tag ~= "period") then
+    local prev = toks[k - 1]
+    local nxt = toks[k + 1]
+    local declared = prev.tag == "keyword_const" or prev.tag == "keyword_var" or
+      (prev.tag == "pipe" and (nxt.tag == "pipe" or nxt.tag == "comma")) or
+      (prev.tag == "asterisk" and k > 2 and toks[k - 2].tag == "pipe") or
+      (prev.tag == "comma" and nxt.tag == "pipe") or
+      (t.line == f.first and nxt.tag == "colon")
+    if declared then
+      if t.line < FIRST then
+        if not has_key(before, t.text) then before[t.text] = t.line push(order_before, t.text) end
+      elseif t.line <= LAST then
+        inside[t.text] = true
+      end
+    else
+      if t.line >= FIRST and t.line <= LAST then
+        used_in[t.text] = true
+        if nxt.tag == "equal" or nxt.tag == "plus_equal" or nxt.tag == "minus_equal" or nxt.tag == "plus_percent_equal" then assigned_in[t.text] = true end
+      elseif t.line > LAST then
+        used_after[t.text] = true
+      end
+    end
+  end
+end
+
+local takes = {}
+local writes = {}
+for n in order_before do
+  if has_key(used_in, n) and not has_key(inside, n) then
+    if has_key(assigned_in, n) then push(writes, n .. ":" .. before[n]) else push(takes, n .. ":" .. before[n]) end
+  end
+end
+local gives = {}
+for n in keys(inside) do
+  if has_key(used_after, n) then push(gives, n) end
+end
+print(FN .. " " .. FIRST .. ".." .. LAST .. " of " .. f.first .. ".." .. f.last)
+print("takes (" .. #takes .. ", read only): " .. join(takes, " "))
+print("writes (" .. #writes .. ", assigned in the range): " .. join(writes, " "))
+sort(gives)
+print("gives (" .. #gives .. ", used after it): " .. join(gives, " "))

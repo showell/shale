@@ -1,0 +1,273 @@
+-- **DECLARATIONS MOVED TO A NEW FILE, AND THE OLD ONE MADE TO USE THEM**:
+-- shale's docs/SHALE-AGENTS.md recipe, as one script.
+--
+--   cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/zig_split.shale --args-stdin <<'ARGS'
+--   from=src/main.zig
+--   to=src/boot.zig
+--   as=boot
+--   names=a|b|the boot's test, which has a comma
+--   doc=The guest's boot: ...\nits second line
+--   ARGS
+--
+-- The values on stdin, raw, so the doc and a test's name need no quoting;
+-- `--undo-on-stop`, so a stop leaves both files as they were. Optional:
+-- uses=alias, into=yes, from_as=X, reexport=yes, after=<import>. `names`
+-- are separated by `|` (a test's name may hold a comma); `doc`'s lines by
+-- `\n`.
+--
+--   1. zig_move the names, each with its doc and the plain comment above;
+--   2. `pub` on each the old file still uses (needs_pub);
+--   3. the new file's `//!` (doc) and the imports the moved code uses;
+--   4. each use left in the old file qualified, `as.name` (zig_rename);
+--      or, with `uses=alias`, left as it is under `const name = as.name;`
+--      beside the import (the old file's own idiom, where it has one);
+--   4b. with `reexport=yes`, each moved `pub` declaration re-exported:
+--      `pub const name = as.name;` (uses of it left as they are);
+--   5. `const as = @import("to's name");` in the old file, after the
+--      import named `after` (or after its last top-level import);
+--   6. what the moved code uses of the old file (needs_from_from) printed:
+--      the script's caller decides, import or copy;
+--   6b. with `from_as=X`, what the moved code uses of the old file is
+--      reached through it (zig_move's own `from_as`: the uses qualified,
+--      the import, `pub` in the old file);
+--   7. the new file named in the old file's `test {}` block of
+--      `_ = @import(...)` lines, where it has one: a test build never
+--      analyses `main`, so a file only `main` reaches never runs its tests
+--      (metal-vmm's serve.zig: the same names, two tests fewer run).
+-- The compiler judges after (`zig build`), and a move judge.
+
+const FROM = arg("from", "")
+const TO = arg("to", "")
+const AS = arg("as", "")
+const NAMES = split(arg("names", ""), "|")
+const DOC = arg("doc", "")
+const AFTER = arg("after", "")
+const USES = arg("uses", "qualify")
+-- `into=yes`: TO is a file already there (the declarations join it): no
+-- `//!` of its own, only the imports it lacks, and no test block to add it to.
+const INTO = arg("into", "no") == "yes"
+const FROM_AS = arg("from_as", "")
+-- `reexport=yes`: each moved `pub` declaration stays the old file's too,
+-- `pub const x = as.x;` beside the import, for a module whose surface is
+-- the file itself (the kernel's io.zig is `Io`: callers say `Io.mount`).
+-- A `pub var` cannot be one (a var is no comptime value): refused.
+const REEXPORT = arg("reexport", "no") == "yes"
+if USES ~= "qualify" and USES ~= "alias" then fail("zig_split: uses=qualify or uses=alias, not " .. USES) end
+
+if FROM == "" or TO == "" or AS == "" or #NAMES == 0 or (DOC == "" and not INTO) then fail("zig_split: from, to, as, names and doc (or into=yes)") end
+if INTO and not exists(TO) then fail("zig_split: into=yes, and " .. TO .. " is not there") end
+if not INTO and exists(TO) then fail("zig_split: " .. TO .. " is there already: this makes a new file (into=yes joins one)") end
+-- **THE IMPORT'S NAME MUST BE FREE**: Zig lets nothing shadow a top-level
+-- name, so a parameter or a local already called `as` would stop the
+-- build in every function that has one. Exact, by Zig's tokenizer: an
+-- identifier `as` not right after a `.` (`x.as` is a field, not a name).
+local toks = zig_tokens(FROM)
+local taken = 0
+for k = 1, #toks do
+  if toks[k].tag == "identifier" and toks[k].text == AS and (k == 1 or toks[k - 1].tag ~= "period") then taken = taken + 1 end
+end
+-- Joining a file the old one imports already, under `as`, is the point.
+local imported_as = false
+for i in zig_imports(FROM) do
+  local tb = split(TO, "/")
+  if i.name == AS and i.target == tb[#tb] then imported_as = true end
+end
+if taken > 0 and not imported_as then fail("zig_split: `" .. AS .. "` is a name in " .. FROM .. " already (" .. taken .. " times, a parameter, a local or a declaration): choose another `as`") end
+
+-- What is pub before the move, for reexport=yes: step 2 makes more pub.
+-- A pub var refused here, before anything moves.
+local was_pub = {}
+if REEXPORT then
+  local wanted = {}
+  for n in NAMES do wanted[n] = true end
+  for d in zig_decls(FROM) do
+    if has_key(wanted, d.name) and d.visibility == "pub" and d.kind ~= "test" then
+      if d.kind == "var" then fail("zig_split: reexport=yes, and `" .. d.name .. "` is a pub var: a var cannot be re-exported") end
+      was_pub[d.name] = true
+    end
+  end
+end
+
+local move_opts = {comment = "doc_and_plain"}
+if FROM_AS ~= "" then move_opts.from_as = FROM_AS end
+local r = zig_move(FROM, TO, NAMES, move_opts)
+print("moved " .. r.moved)
+if FROM_AS ~= "" then print("reached through " .. FROM_AS .. ": " .. r.qualified .. " uses; made pub in " .. FROM .. ": " .. join(r.made_pub, ", ")) end
+
+-- 2. pub, where the old file still uses one.
+local made_pub = {}
+for n in r.needs_pub do
+  if not has_key(made_pub, n.name) then
+    made_pub[n.name] = true
+    local done = false
+    -- The name whole: what follows it is what follows a declaration's name
+    -- (`var site:` is not `var site_cache:`).
+    for prefix in {"const ", "fn ", "var "} do
+      for after in {" ", ":", "("} do
+        local key = prefix .. n.name .. after
+        if not done and count_in(TO, "\n" .. key) + (starts_with(read(TO), key) and 1 or 0) > 0 then
+          local text = read(TO)
+          if starts_with(text, key) then
+            replace(TO, "pub " .. text)
+          else
+            edit(TO, "\n" .. key, "\npub " .. key)
+          end
+          done = true
+        end
+      end
+    end
+    -- A member (`Scenario.choose`): found in its container by Zig's parser,
+    -- and its declaration's line made pub where it is, so two containers'
+    -- `fn choose(` are never confused.
+    local dot = find(n.name, ".")
+    if not done and dot ~= nil then
+      local container = sub(n.name, 1, dot - 1)
+      local member = sub(n.name, dot + 1)
+      for d in zig_decls(TO, {container = container}) do
+        if not done and d.name == member then
+          local ls = lines(read(TO))
+          for i = d.first, d.last do
+            local body = trim(ls[i])
+            local decl = starts_with(body, "fn " .. member) or starts_with(body, "const " .. member) or starts_with(body, "var " .. member)
+            if not done and decl then
+              local ind = re_find(ls[i], "^( *)")
+              ls[i] = ind.group .. "pub " .. sub(ls[i], #ind.group + 1)
+              replace(TO, join(ls, "\n") .. "\n")
+              print("pub: " .. n.name .. " (" .. TO .. ":" .. i .. ")")
+              done = true
+            end
+          end
+        end
+      end
+    end
+    if not done then print("needs pub, not made: " .. n.name .. " (by hand)") end
+  end
+end
+
+-- 3. The new file's head: its doc and its imports; or, joining a file,
+-- the imports it lacks, after its last.
+if INTO then
+  local have = {}
+  for d in zig_decls(TO) do have[d.name] = true end
+  local add = {}
+  local seen = {}
+  for i in r.needs_import do
+    if not has_key(seen, i.name) and not has_key(have, i.name) then
+      seen[i.name] = true
+      push(add, "const " .. i.name .. " = " .. i.target .. ";")
+    end
+  end
+  if #add > 0 then
+    local to_lines = lines(read(TO))
+    local its = {}
+    for i in zig_imports(TO) do
+      if i.name ~= "" and (starts_with(to_lines[i.line], "const ") or starts_with(to_lines[i.line], "pub const ")) then push(its, i) end
+    end
+    local at_text = to_lines[its[#its].line]
+    edit(TO, at_text .. "\n", at_text .. "\n" .. join(add, "\n") .. "\n")
+  end
+  print("imports added to " .. TO .. ": " .. #add)
+else
+  local head = {}
+  for l in split(DOC, "\\n") do push(head, "//! " .. l) end
+  push(head, "")
+  local seen = {}
+  for i in r.needs_import do
+    if not has_key(seen, i.name) then
+      seen[i.name] = true
+      push(head, "const " .. i.name .. " = " .. i.target .. ";")
+    end
+  end
+  -- One blank line under the head, whatever it holds.
+  while #head > 0 and head[#head] == "" do head = take(head, #head - 1) end
+  local body = read(TO)
+  while starts_with(body, "\n") do body = sub(body, 2) end
+  replace(TO, join(head, "\n") .. "\n\n" .. body)
+end
+
+-- 4. The old file's uses, qualified, or aliased.
+local moved = {}
+for n in NAMES do moved[n] = true end
+local renamed = 0
+local qualified = {}
+local aliases = {}
+-- The re-exports first: a name the old file uses and re-exports is the
+-- re-export, used unqualified.
+local reexported = {}
+if REEXPORT then
+  for d in zig_decls(TO) do
+    if has_key(was_pub, d.name) then
+      push(aliases, "pub const " .. d.name .. " = " .. AS .. "." .. d.name .. ";")
+      reexported[d.name] = true
+      qualified[d.name] = true
+    end
+  end
+end
+for u in r.uses_left do
+  if has_key(moved, u.name) and not has_key(qualified, u.name) then
+    qualified[u.name] = true
+    -- A `var` cannot be aliased (`const x = m.x;` copies it, at comptime,
+    -- which a var is not): its uses are qualified, in either mode.
+    local is_var = false
+    for d in zig_decls(TO) do
+      if d.name == u.name and d.kind == "var" then is_var = true end
+    end
+    if USES == "alias" and not is_var then
+      push(aliases, "const " .. u.name .. " = " .. AS .. "." .. u.name .. ";")
+    else
+      local z = zig_rename(FROM, u.name, AS .. "." .. u.name)
+      renamed = renamed + z.renamed
+    end
+  end
+end
+if REEXPORT then print("re-exported " .. count(reexported) .. " pub names") end
+if USES == "alias" then print("aliased " .. #aliases .. " names") else print("qualified " .. renamed .. " uses of " .. count(qualified) .. " names") end
+
+-- 5. The import, in the old file.
+-- Top-level imports only: a function's own `const x = @import(...)` is
+-- no place for the file's (tcp_sim.zig has one at its end).
+local lines_of = lines(read(FROM))
+local imports = {}
+for i in zig_imports(FROM) do
+  local at = lines_of[i.line]
+  if i.name ~= "" and (starts_with(at, "const ") or starts_with(at, "pub const ")) then push(imports, i) end
+end
+local anchor = nil
+for i in imports do
+  if AFTER ~= "" and i.name == AFTER then anchor = i end
+end
+if anchor == nil then anchor = imports[#imports] end
+local anchor_text = lines_of[anchor.line]
+local base = split(TO, "/")
+local added = "const " .. AS .. " = @import(\"" .. base[#base] .. "\");"
+if imported_as then added = nil end
+if #aliases > 0 then
+  if added == nil then added = join(aliases, "\n") else added = added .. "\n" .. join(aliases, "\n") end
+end
+if added ~= nil then edit(FROM, anchor_text .. "\n", anchor_text .. "\n" .. added .. "\n") end
+
+-- 7. The new file in the old file's test block, if it has one.
+local text = read(FROM)
+-- A plain find first: the pattern over a whole large file is costly.
+local block = nil
+local tb_at = find(text, "\ntest {\n")
+if tb_at ~= nil then block = re_find(sub(text, tb_at, tb_at + 8000), "^\ntest \\{\n(    _ = @import\\(\"[^\"]+\"\\);\n)+\\}") end
+if INTO then
+  print(TO .. " was there: enrolled as it was")
+  block = nil
+end
+if block ~= nil and contains(block.text, "@import(\"" .. base[#base] .. "\")") then
+  print(base[#base] .. " is enrolled in " .. FROM .. "'s test block already")
+elseif block ~= nil then
+  local closing = sub(block.text, 1, #block.text - 1)
+  edit(FROM, block.text, closing .. "    _ = @import(\"" .. base[#base] .. "\");\n}")
+  print("enrolled " .. base[#base] .. " in " .. FROM .. "'s test block")
+elseif not INTO then
+  print("no `test {}` block of imports in " .. FROM .. ": name " .. TO .. " where its tests are enrolled")
+end
+
+-- 6. What the moved code uses of the old file.
+if FROM_AS == "" then
+  for n in r.needs_from_from do print("needs from " .. FROM .. ": " .. n.name .. " (" .. FROM .. ":" .. n.line .. "): import or copy it, or give from_as") end
+end
+for n in r.needs_pub do print("pub: " .. n.name) end
