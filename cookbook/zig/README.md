@@ -64,6 +64,10 @@ string's text):
   under `--undo-on-stop`, again until none is left, and let the tests
   judge. On 2026-10-18 it found 120 unused imports across five repos, and
   one dead function.
+- `param_runs.shale` (`glob=`, `min=`, `longest=`, `skip=`, `top=`): a run
+  of parameter names that several functions declare in a row, plumbing
+  (`io`, `alloc`, ...) passed by: a struct with its users already, where a
+  long list is only a question. Each run once, at its longest.
 - `clones.shale` (`glob=`, `tests=yes`, `window=`, `top=`): the same code
   in two places, runs of 6 or more alike lines (trimmed; blank lines,
   comments, imports, one-name aliases and brackets alone passed by), in
@@ -90,7 +94,9 @@ string's text):
   Arguments split at the call's own commas, past brackets, strings and
   characters. A call that runs past its line, or has other than the
   template's count of arguments, is refused by place, and then nothing is
-  written. The declaration is yours to change. Its body's half, when
+  written. The declaration is yours to change. Run it before a body's
+  own call is changed by hand: a call already in the new shape has the
+  wrong count and refuses the run. Its body's half, when
   parameters become one struct's fields, is a builtin, no recipe:
   `zig_renames(path, {stream = "w.stream", ...}, {lines = {first,
   last}})` over the body's lines, by Zig's tokenizer (never a field, a

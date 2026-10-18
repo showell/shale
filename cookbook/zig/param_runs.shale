@@ -1,0 +1,105 @@
+-- **THE SAME PARAMETERS IN A ROW, IN FUNCTION AFTER FUNCTION**: a run of
+-- parameter names (`conv_dir, conv_key, sid`) that several functions
+-- declare, in that order. A long list is a question; a run that recurs is
+-- a struct with more than one user already, which is when one earns its
+-- keep. Read from Zig's tokenizer: each `fn`'s names before a `:` at its
+-- parentheses' own depth.
+--
+-- The plumbing every handler takes (`skip=`, by default io, alloc, a,
+-- req, bus, self, gpa, arena, and a comparator's `_`) is passed by, so runs are of the parameters
+-- that say what a function is about. A run is reported once, at its
+-- longest: a shorter run inside it, in no more functions, is left out.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/param_runs.shale [glob=src/**/*.zig] [min=3] [longest=4] [top=15]
+--
+-- A tree of a hundred files needs `--budget steps=900000000 --budget
+-- arena_bytes=4000000000`, as smells does. On 2026-10-18 it found
+-- angry-gopher's (conv_dir, sid) in 21 functions and (user_id,
+-- session_id) in 14.
+
+const GLOB = arg("glob", "src/**/*.zig")
+const MIN = parse_int(arg("min", "3"))
+const LONGEST = parse_int(arg("longest", "4"))
+const TOP = parse_int(arg("top", "15"))
+const SKIP = {}
+for w in split(arg("skip", "io,alloc,a,req,bus,self,gpa,arena,_"), ",") do SKIP[trim(w)] = true end
+
+-- Each function's parameter names, plumbing passed by.
+const fns = {}
+function params_of(p)
+  local toks = zig_tokens(p)
+  local n = #toks
+  local k = 1
+  while k <= n do
+    local t = toks[k]
+    if t.tag == "keyword_fn" and k < n and toks[k + 1].tag == "identifier" and k + 2 <= n and toks[k + 2].tag == "l_paren" then
+      local names = {}
+      local depth = 1
+      local j = k + 3
+      while j <= n and depth > 0 do
+        local u = toks[j]
+        if u.tag == "l_paren" or u.tag == "l_brace" or u.tag == "l_bracket" then depth = depth + 1 end
+        if u.tag == "r_paren" or u.tag == "r_brace" or u.tag == "r_bracket" then depth = depth - 1 end
+        if depth == 1 and u.tag == "colon" and toks[j - 1].tag == "identifier" and not has_key(SKIP, toks[j - 1].text) then
+          push(names, toks[j - 1].text)
+        end
+        j = j + 1
+      end
+      push(fns, {name = toks[k + 1].text, at = p .. ":" .. t.line, names = names})
+      k = j
+    else
+      k = k + 1
+    end
+  end
+end
+for p in glob(GLOB) do params_of(p) end
+
+-- Every run of 2 to LONGEST names, and the functions declaring it.
+const runs = {}
+for f in fns do
+  local seen = {}
+  local m = #f.names
+  for i = 1, m do
+    local len = 2
+    local key = f.names[i]
+    while len <= LONGEST and i + len - 1 <= m do
+      key = key .. ", " .. f.names[i + len - 1]
+      if not has_key(seen, key) then
+        seen[key] = true
+        local r = get(runs, key, {key = key, len = len, at = {}})
+        push(r.at, f.name .. "  " .. f.at)
+        runs[key] = r
+      end
+      len = len + 1
+    end
+  end
+end
+
+-- Kept: in MIN functions or more, and not inside a longer kept run that
+-- as many functions declare.
+const kept = {}
+for key in keys(runs) do
+  local r = runs[key]
+  if #r.at >= MIN then push(kept, {key = key, len = r.len, n = #r.at, at = r.at}) end
+end
+const shown = {}
+for r in kept do
+  local inside = false
+  for o in kept do
+    if o.len > r.len and o.n >= r.n and contains(", " .. o.key .. ", ", ", " .. r.key .. ", ") then inside = true end
+  end
+  if not inside then push(shown, r) end
+end
+sort(shown, {{key = "n", desc = true}, {key = "len", desc = true}, "key"})
+print(#fns .. " functions; " .. #shown .. " runs of parameters in " .. MIN .. " or more")
+local i = 0
+for r in shown do
+  i = i + 1
+  if i > TOP then
+    print("  ... " .. (#shown - TOP) .. " more (top=)")
+    break
+  end
+  print("")
+  print("  " .. r.n .. " functions  (" .. r.key .. ")")
+  for a in sort(r.at) do print("      " .. a) end
+end
