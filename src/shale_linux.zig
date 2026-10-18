@@ -11,6 +11,8 @@ pub const shale_spawn = @import("shale_spawn.zig");
 pub const shale_host_linux = @import("shale_host_linux.zig");
 /// What a Linux run is set up with: mounts, preludes, its programs' environment.
 pub const shale_host_setup = @import("shale_host_setup.zig");
+/// `run` on Linux: its options, a program under its deadline, its output kept.
+pub const shale_host_run = @import("shale_host_run.zig");
 /// Jobs: programs that outlive the run, under a detached reaper.
 pub const shale_jobs = @import("shale_jobs.zig");
 /// The host's job calls, over `shale_jobs`.
@@ -24,6 +26,7 @@ test {
     _ = shale_spawn;
     _ = shale_host_linux;
     _ = shale_host_setup;
+    _ = shale_host_run;
     _ = shale_jobs;
     _ = shale_host_jobs;
     _ = shale_host_zig;

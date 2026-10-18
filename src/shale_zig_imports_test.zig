@@ -75,8 +75,13 @@ test "zig_decls and zig_imports: a parse lives for its call; the run keeps only 
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
-    // A large file of the repo's own, read again and again, as test_roots.shale does.
-    try t.put("big.zig", @embedFile("shale_host_linux.zig"));
+    // A large file of the repo's own, read again and again, as test_roots.shale
+    // does: one of few declarations (the parser, mostly one struct), so what a
+    // call rightly keeps, its list, is small beside a parse kept by mistake,
+    // which is ten times the file whatever it declares. (It was
+    // shale_host_linux.zig, until the 2026-10-18 split left that file half
+    // aliases, whose list is larger per byte.)
+    try t.put("big.zig", @embedFile("script/parse.zig"));
     const Use = struct {
         fn of(tt: *T, call: []const u8, n: usize) !usize {
             var src: std.ArrayList(u8) = .empty;
@@ -91,7 +96,7 @@ test "zig_decls and zig_imports: a parse lives for its call; the run keeps only 
             return r.arena_bytes;
         }
     };
-    const size = @embedFile("shale_host_linux.zig").len;
+    const size = @embedFile("script/parse.zig").len;
     for ([_][]const u8{ "zig_decls", "zig_imports" }) |call| {
         const one = try Use.of(&t, call, 1);
         const ten = try Use.of(&t, call, 10);
