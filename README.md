@@ -10,11 +10,13 @@ budgets. A script **just runs**: a stopped run keeps what it already did,
 and its effects log says what.
 
 - **On a live site:** a signed script, run by the site itself
-  (`script_route`, `zig build shale-sign`), and the installed suite
-  (`shale_suite`): [angry-gopher](https://github.com/showell/angry-gopher)
-  (lynrummy.com) and [dog-park](https://github.com/showell/dog-park), on
-  Linux and on [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel).
-  Each names `.shale` in its `build.zig.zon`.
+  (`script_route`, `zig build shale-sign`):
+  [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com) and
+  [dog-park](https://github.com/showell/dog-park), on Linux and on
+  [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel). The
+  two name `.shale` in their `build.zig.zon`s; the kernel takes `-Dshale-root`.
+  The installed suite (`shale_suite`) is built and tested, and no site runs
+  it yet.
 - **On the box:** the `shale` CLI, every top-level shell call an agent
   makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
   with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`.

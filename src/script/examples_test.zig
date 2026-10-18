@@ -1,5 +1,5 @@
 //! The example scripts, run against a store shaped like angry-gopher's
-//! data (chat_paths.zig, chat_store.zig, chat_retire.zig).
+//! data (its zig-server/src chat_paths.zig, chat_store.zig, chat_retire.zig).
 
 const std = @import("std");
 const script = @import("script.zig");

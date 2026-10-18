@@ -32,7 +32,7 @@ test "gate: the launch, every form the design names" {
     try passes("shale count.shale");
     try passes("shale --verbose rename.shale from=old to=new");
     try passes("shale --budget steps=99 --verbose x.shale");
-    try passes("/home/x/zig-webbox/zig-out/bin/shale a.shale");
+    try passes("/home/x/shale/zig-out/bin/shale a.shale");
     try passes("cd ../dog-park && shale a.shale");
     try passes("shale <<'SHALE'\nprint(1)\nSHALE");
     try passes("cd /home/x && shale <<'END_IT'\nprint(\"a $b `c` ; | & < > ( ) * ?\")\nEND_IT  ");

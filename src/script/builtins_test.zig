@@ -3,7 +3,7 @@
 const std = @import("std");
 const script = @import("script.zig");
 const testing = std.testing;
-const Io = std.Io;
+const Io = @import("host_io").Io;
 
 var out_buf: [64 * 1024]u8 = undefined;
 

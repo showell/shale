@@ -247,7 +247,7 @@ pub fn tokens(a: std.mem.Allocator, src: [:0]const u8) error{OutOfMemory}!union(
 /// a capture's `|...|`); or a `field`: a nested container's member (its
 /// fields, before their `:`; an enum's, a union's or an error set's
 /// members; and its own `const`, `var` and `fn` declarations), which may
-/// share a top-level name and is never that declaration. (linux_host.zig's
+/// share a top-level name and is never that declaration. (webbox's linux_host.zig's
 /// `pub const kept_open = &host_file.kept_open;`, in a nested struct.)
 pub const Role = enum { use, declaration, field };
 

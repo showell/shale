@@ -111,7 +111,7 @@ test "zig_rename: a qualified `to` in a declaration's place stops, naming the li
     try testing.expectEqualStrings("2\t0", try lastLine(&t, "local r = zig_rename(\"f.zig\", \"from\", \"go\") print(r.renamed, r.left_in_comments)", .atomic));
     try testing.expectEqualStrings("fn go() u8 {\n    return 1;\n}\nconst S = struct {\n    from: u8,\n    b: u8 = go(),\n};\nconst E = enum { a, from };\nconst R = error{ a, from };\nconst U = union(enum) { from, b: u8 };\n", try t.file("f.zig"));
     // A nested container's own declaration of that name is its member,
-    // reaching the outer one qualified, as Zig requires (linux_host.zig's
+    // reaching the outer one qualified, as Zig requires (webbox's linux_host.zig's
     // `pub const kept_open = &host_file.kept_open;`).
     try t.put("n.zig", "const file = @This();\nconst kept = 1;\nconst S = struct {\n    pub const kept = &file.kept;\n};\nconst y = kept + S.kept.*;\n");
     try testing.expectEqualStrings("2\t0", try lastLine(&t, "local r = zig_rename(\"n.zig\", \"kept\", \"held\") print(r.renamed, r.left_in_comments)", .atomic));

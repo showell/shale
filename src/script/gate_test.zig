@@ -9,7 +9,7 @@
 
 const std = @import("std");
 const script = @import("script.zig");
-const Io = std.Io;
+const Io = @import("host_io").Io;
 
 pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const u8, budgets: script.Budgets, now: i64, out: []u8, options: script.Options) script.Result {
     var paths: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
