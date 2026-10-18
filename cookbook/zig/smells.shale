@@ -1,0 +1,182 @@
+-- **WHERE A ZIG TREE MAY WANT A SECOND LOOK**: each smell a list, read
+-- from Zig's tokenizer (so never a comment's or a string's), not a verdict:
+--
+--   - a long function (`long=` lines, 80), a struct's members and nested
+--     functions included;
+--   - a long parameter list (`params=`, 6): a struct waiting to be named;
+--   - a flag-like `bool` parameter or field: a named enum says what true
+--     means at each call (`f(x, true)` says nothing);
+--   - an error swallowed, `catch {}`, and `catch unreachable` (a crash
+--     where a reason was due), each counted by file;
+--   - a protocol in comments: three or more numbered steps (`// 1.`) in a
+--     file, where a call order wants to be a function or a type.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/smells.shale [glob=src/**/*.zig] [tests=no] [top=15]
+
+const GLOB = arg("glob", "src/**/*.zig")
+const TESTS = arg("tests", "no") == "yes"
+const LONG = parse_int(arg("long", "80"))
+const PARAMS = parse_int(arg("params", "6"))
+const TOP = parse_int(arg("top", "15"))
+
+-- The lists every file adds to (a function sees the script's `const`s).
+const fns = {}
+const bool_params = {}
+const bool_fields = {}
+const swallowed = {}
+const crashes = {}
+const protocols = {}
+local files = 0
+
+function smells_of(p)
+  local toks = zig_tokens(p)
+  local n = #toks
+  local paren = 0
+  local k = 1
+  while k <= n do
+    local t = toks[k]
+    if t.tag == "l_paren" then paren = paren + 1 end
+    if t.tag == "r_paren" then paren = paren - 1 end
+    -- A function: its name, its parameters, its body's lines.
+    if t.tag == "keyword_fn" and k < n and toks[k + 1].tag == "identifier" then
+      local name = toks[k + 1].text
+      local j = k + 2
+      local params = 0
+      local any = false
+      local depth = 0
+      if j <= n and toks[j].tag == "l_paren" then
+        depth = 1
+        j = j + 1
+        while j <= n and depth > 0 do
+          local u = toks[j]
+          if u.tag == "l_paren" or u.tag == "l_brace" or u.tag == "l_bracket" then depth = depth + 1 end
+          if u.tag == "r_paren" or u.tag == "r_brace" or u.tag == "r_bracket" then depth = depth - 1 end
+          if depth == 1 and u.tag == "colon" then
+            params = params + 1
+            if j < n and toks[j + 1].text == "bool" and toks[j - 1].tag == "identifier" then
+              push(bool_params, p .. ":" .. u.line .. " " .. name .. "(" .. toks[j - 1].text .. ": bool)")
+            end
+          end
+          j = j + 1
+        end
+      end
+      if params >= PARAMS then push(fns, {kind = "params", n = params, at = p .. ":" .. t.line, name = name}) end
+      -- `fn X(...) type`: a type made of its arguments (a generic
+      -- container), long as its struct is, not a function to cut.
+      local makes_type = j <= n and toks[j].text == "type"
+      -- The body: the first `{` at no depth that no `error` names, unless
+      -- a `;` comes first (an extern, a function type).
+      local body = nil
+      while j <= n and body == nil do
+        local u = toks[j]
+        if u.tag == "semicolon" then break end
+        if u.tag == "l_brace" and toks[j - 1].tag ~= "keyword_error" then body = j end
+        if u.tag == "l_brace" and toks[j - 1].tag == "keyword_error" then
+          local d = 1
+          j = j + 1
+          while j <= n and d > 0 do
+            if toks[j].tag == "l_brace" then d = d + 1 end
+            if toks[j].tag == "r_brace" then d = d - 1 end
+            if d > 0 then j = j + 1 end
+          end
+        end
+        j = j + 1
+      end
+      if body ~= nil then
+        local d = 1
+        local e = body + 1
+        while e <= n and d > 0 do
+          if toks[e].tag == "l_brace" then d = d + 1 end
+          if toks[e].tag == "r_brace" then d = d - 1 end
+          if d > 0 then e = e + 1 end
+        end
+        if e <= n then
+          local len = toks[e].line - t.line + 1
+          if len >= LONG then push(fns, {kind = "long", n = len, at = p .. ":" .. t.line, name = makes_type and (name .. " (a type)") or name}) end
+        end
+      end
+    end
+    -- A field `name: bool` (after a `,` or a container's `{`), at no
+    -- parenthesis: not a parameter, not a local (`const x: bool`).
+    if t.tag == "colon" and paren == 0 and k > 2 and k < n and toks[k + 1].text == "bool" and toks[k - 1].tag == "identifier" then
+      local before = toks[k - 2].tag
+      if before == "comma" or before == "l_brace" or before == "doc_comment" then
+        push(bool_fields, p .. ":" .. t.line .. " " .. toks[k - 1].text .. ": bool")
+      end
+    end
+    if t.tag == "keyword_catch" and k + 2 <= n and toks[k + 1].tag == "l_brace" and toks[k + 2].tag == "r_brace" then
+      -- Inside another error's handler (`catch |e| { ... }`), a cleanup
+      -- whose own failure the error already returned outranks: apart.
+      local in_handler = false
+      local back = k - 1
+      local d = 0
+      while back > 1 and back > k - 60 and not in_handler do
+        if toks[back].tag == "r_brace" then d = d + 1 end
+        if toks[back].tag == "l_brace" then
+          if d == 0 and toks[back - 1].tag == "pipe" and back > 4 and toks[back - 4].tag == "keyword_catch" then in_handler = true end
+          d = d - 1
+        end
+        back = back - 1
+      end
+      local key = in_handler and (p .. " (a cleanup in an error's handler)") or p
+      swallowed[key] = get(swallowed, key, 0) + 1
+    end
+    if t.tag == "keyword_catch" and k < n and toks[k + 1].tag == "keyword_unreachable" then
+      crashes[p] = get(crashes, p, 0) + 1
+    end
+    k = k + 1
+  end
+  -- Numbered steps in comments: the comments are no tokens, so lines.
+  local steps = 0
+  for l in lines(read(p)) do
+    if re_find(l, "^ *//+ +[0-9]+[.)] ") ~= nil then steps = steps + 1 end
+  end
+  if steps >= 3 then push(protocols, {at = p, n = steps}) end
+end
+
+for p in glob(GLOB) do
+  -- A test's file is named *_test.zig, or a test helper's *_test_*.zig.
+  if TESTS or not contains(p, "_test") then
+    files = files + 1
+    smells_of(p)
+  end
+end
+
+function section(title, rows)
+  print("")
+  print(title .. " (" .. #rows .. ")")
+  for r in take(rows, TOP) do print("  " .. r) end
+  if #rows > TOP then print("  ... " .. (#rows - TOP) .. " more (top=)") end
+end
+
+local long = {}
+local many = {}
+for f in fns do
+  if f.kind == "long" then push(long, f) else push(many, f) end
+end
+sort(long, {{key = "n", desc = true}, "at"})
+sort(many, {{key = "n", desc = true}, "at"})
+local long_rows = {}
+for f in long do push(long_rows, f.n .. " lines  " .. f.name .. "  " .. f.at) end
+local many_rows = {}
+for f in many do push(many_rows, f.n .. " params  " .. f.name .. "  " .. f.at) end
+function counted(m)
+  local rows = {}
+  for p in keys(m) do push(rows, {p = p, n = m[p]}) end
+  sort(rows, {{key = "n", desc = true}, "p"})
+  local out = {}
+  for r in rows do push(out, r.n .. "  " .. r.p) end
+  return out
+end
+sort(protocols, {{key = "n", desc = true}, "at"})
+local proto_rows = {}
+for r in protocols do push(proto_rows, r.n .. " numbered steps  " .. r.at) end
+
+print(files .. " files (" .. GLOB .. (TESTS and ", tests included" or ", tests left out") .. ")")
+section("functions of " .. LONG .. "+ lines", long_rows)
+section("functions of " .. PARAMS .. "+ parameters", many_rows)
+section("bool parameters", sort(bool_params))
+section("bool fields", sort(bool_fields))
+section("catch {} (an error swallowed), by file", counted(swallowed))
+section("catch unreachable, by file", counted(crashes))
+section("numbered steps in comments (a function's own order is fine; a caller's is a protocol to make code)", proto_rows)

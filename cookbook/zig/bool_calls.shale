@@ -1,0 +1,125 @@
+-- **WHERE A `bool` PARAMETER IS A FLAG**: each function with one, and the
+-- calls that pass it a bare `true` or `false`, which says nothing at the
+-- call (`begin(c, n, true, false)`), where a named enum says what it means
+-- (`.chunked`, `.upload`). A computed condition (`settle(n == want)`)
+-- reads; a literal does not. By Zig's tokenizer, across the tree: a call
+-- is the name, `(`, its arguments split at the commas of its own depth.
+-- A method's call (`x.name(`) counts its receiver as the first argument.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/bool_calls.shale [glob=src/**/*.zig] [probe/**/*.zig too: glob2=]
+
+const GLOB = arg("glob", "src/**/*.zig")
+const GLOB2 = arg("glob2", "")
+
+const files = {}
+for p in glob(GLOB) do push(files, p) end
+if GLOB2 ~= "" then for p in glob(GLOB2) do push(files, p) end end
+
+-- Every function with a bool parameter: name -> {at, params, bools = {i = name}}.
+const flagged = {}
+-- How many functions each name declares, anywhere: a name declared twice
+-- has calls this cannot tell apart, said beside its counts.
+const declared = {}
+for p in files do
+  local toks = zig_tokens(p)
+  local n = #toks
+  for k = 1, n - 2 do
+    if toks[k].tag == "keyword_fn" and toks[k + 1].tag == "identifier" and toks[k + 2].tag == "l_paren" then
+      local name = toks[k + 1].text
+      declared[name] = get(declared, name, 0) + 1
+      local j = k + 3
+      local depth = 1
+      local index = 0
+      local seen_any = false
+      local bools = {}
+      local self_first = false
+      while j <= n and depth > 0 do
+        local u = toks[j]
+        if u.tag == "l_paren" or u.tag == "l_brace" or u.tag == "l_bracket" then depth = depth + 1 end
+        if u.tag == "r_paren" or u.tag == "r_brace" or u.tag == "r_bracket" then depth = depth - 1 end
+        if depth == 1 and u.tag == "colon" then
+          index = index + 1
+          if j < n and toks[j + 1].text == "bool" and toks[j - 1].tag == "identifier" then bools[tostring(index)] = toks[j - 1].text end
+        end
+        j = j + 1
+      end
+      if count(bools) > 0 then
+        local key = name
+        if has_key(flagged, key) then key = name .. "@" .. p .. ":" .. toks[k].line end
+        flagged[key] = {name = name, at = p .. ":" .. toks[k].line, bools = bools, calls = 0, literal = 0, sites = {}, values = {}}
+      end
+    end
+  end
+end
+
+-- Every call of each, and what it passes where the bool goes.
+for p in files do
+  local toks = zig_tokens(p)
+  local n = #toks
+  for k = 1, n - 1 do
+    local t = toks[k]
+    if t.tag == "identifier" and toks[k + 1].tag == "l_paren" and has_key(flagged, t.text) and (k == 1 or toks[k - 1].tag ~= "keyword_fn") then
+      local f = flagged[t.text]
+      -- `x.name(`: the receiver is the first parameter (`self`).
+      local index = (k > 1 and toks[k - 1].tag == "period") and 2 or 1
+      local j = k + 2
+      local depth = 1
+      local arg_toks = {}
+      local args = {}
+      while j <= n and depth > 0 do
+        local u = toks[j]
+        if u.tag == "l_paren" or u.tag == "l_brace" or u.tag == "l_bracket" then depth = depth + 1 end
+        if u.tag == "r_paren" or u.tag == "r_brace" or u.tag == "r_bracket" then depth = depth - 1 end
+        if depth == 1 and u.tag == "comma" then
+          push(args, arg_toks)
+          arg_toks = {}
+        elseif depth >= 1 then
+          push(arg_toks, u)
+        end
+        j = j + 1
+      end
+      if #arg_toks > 0 then push(args, arg_toks) end
+      f.calls = f.calls + 1
+      local bare = false
+      for i = 1, #args do
+        local at = tostring(index + i - 1)
+        local a = args[i]
+        if has_key(f.bools, at) then
+          -- What the call passes there: a literal, or `computed`.
+          local v = (#a == 1 and (a[1].text == "true" or a[1].text == "false")) and a[1].text or "computed"
+          local seen = get(f.values, at, {})
+          seen[v] = true
+          f.values[at] = seen
+          if v ~= "computed" then
+            bare = true
+            push(f.sites, p .. ":" .. t.line .. " " .. f.bools[at] .. "=" .. v)
+          end
+        end
+      end
+      if bare then f.literal = f.literal + 1 end
+    end
+  end
+end
+
+const rows = {}
+for key in keys(flagged) do push(rows, flagged[key]) end
+sort(rows, {{key = "literal", desc = true}, "at"})
+print("functions with a bool parameter: " .. #rows .. "; those a call passes a bare true or false:")
+for f in rows do
+  if f.literal > 0 then
+    local names = {}
+    for i in sort(keys(f.bools)) do push(names, f.bools[i]) end
+    -- **ONE VALUE EVER**: a bool every call passes the same literal is no
+    -- parameter at all.
+    local always = {}
+    for i in sort(keys(f.bools)) do
+      local seen = get(f.values, i, {})
+      if count(seen) == 1 and not has_key(seen, "computed") then push(always, f.bools[i] .. " is always " .. keys(seen)[1]) end
+    end
+    local note = ""
+    if #always > 0 then note = "  ONE VALUE: " .. join(always, ", ") end
+    if declared[f.name] > 1 then note = note .. "  (" .. declared[f.name] .. " functions are named " .. f.name .. ": calls of any are counted)" end
+    print("  " .. f.literal .. " of " .. f.calls .. " calls  " .. f.name .. "(" .. join(names, ", ") .. ")  " .. f.at .. note)
+    for s in take(f.sites, 3) do print("      " .. s) end
+  end
+end

@@ -40,6 +40,23 @@ files runs with `--undo-on-stop`, so a stop leaves them as they were:
 - `long_zig.shale` (`over=N`): every `.zig` file over a thousand lines in
   the repos it names (its list is one box's; change it).
 
+## Smells: where a tree may want a second look
+
+Lists, not verdicts, read from Zig's tokenizer (never a comment's or a
+string's text):
+
+- `smells.shale` (`glob=`, `tests=yes`, `long=`, `params=`, `top=`): long
+  functions (a `fn X(...) type` marked a type, not a function to cut),
+  long parameter lists, `bool` parameters and fields, `catch {}` (one in
+  another error's handler, a cleanup, said apart) and `catch unreachable`
+  by file, and numbered steps in comments (a function's own order is
+  fine; a caller's is a protocol that wants to be code).
+- `bool_calls.shale` (`glob=`, `glob2=`): each function with a `bool`
+  parameter and the calls that pass it a bare `true` or `false`, the ones
+  a named enum would make read; **a bool every call passes the same
+  literal is no parameter at all** (`ONE VALUE`). A name declared by more
+  than one function is said, as its calls cannot be told apart.
+
 ## Moving along them
 
 - `zig_split.shale`: declarations moved to a new file and the old one made
