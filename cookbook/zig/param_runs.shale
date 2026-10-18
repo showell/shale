@@ -9,6 +9,9 @@
 -- req, bus, self, gpa, arena, and a comparator's `_`) is passed by, so runs are of the parameters
 -- that say what a function is about. A run is reported once, at its
 -- longest: a shorter run inside it, in no more functions, is left out.
+-- **Functions are counted by name**: an interface's implementations (a
+-- writer's `drain` in five files, a vtable's `read`) declare one shape
+-- because they must, so a run needs `min` distinct names.
 --
 --   cd <repo> && shale <shale>/cookbook/zig/param_runs.shale [glob=src/**/*.zig] [min=3] [longest=4] [top=15]
 --
@@ -66,8 +69,9 @@ for f in fns do
       key = key .. ", " .. f.names[i + len - 1]
       if not has_key(seen, key) then
         seen[key] = true
-        local r = get(runs, key, {key = key, len = len, at = {}})
+        local r = get(runs, key, {key = key, len = len, at = {}, names = {}})
         push(r.at, f.name .. "  " .. f.at)
+        r.names[f.name] = true
         runs[key] = r
       end
       len = len + 1
@@ -80,7 +84,7 @@ end
 const kept = {}
 for key in keys(runs) do
   local r = runs[key]
-  if #r.at >= MIN then push(kept, {key = key, len = r.len, n = #r.at, at = r.at}) end
+  if count(r.names) >= MIN then push(kept, {key = key, len = r.len, n = count(r.names), at = r.at}) end
 end
 const shown = {}
 for r in kept do
@@ -91,7 +95,7 @@ for r in kept do
   if not inside then push(shown, r) end
 end
 sort(shown, {{key = "n", desc = true}, {key = "len", desc = true}, "key"})
-print(#fns .. " functions; " .. #shown .. " runs of parameters in " .. MIN .. " or more")
+print(#fns .. " functions; " .. #shown .. " runs of parameters in " .. MIN .. " or more names")
 local i = 0
 for r in shown do
   i = i + 1
@@ -100,6 +104,6 @@ for r in shown do
     break
   end
   print("")
-  print("  " .. r.n .. " functions  (" .. r.key .. ")")
+  print("  " .. r.n .. " names, " .. #r.at .. " functions  (" .. r.key .. ")")
   for a in sort(r.at) do print("      " .. a) end
 end
