@@ -81,7 +81,10 @@ if DROP and #dead > 0 then
       local after = sub(t, d.stop + 1)
       -- Its line's own newline goes with it.
       if starts_with(after, "\n") then after = sub(after, 2) end
-      t = sub(t, 1, d.start) .. after
+      local before = sub(t, 1, d.start)
+      -- Blank lines on both sides become one, as zig fmt keeps them.
+      while ends_with(before, "\n\n") and starts_with(after, "\n") do after = sub(after, 2) end
+      t = before .. after
     end
     replace(p, t)
     print("dropped " .. #ds .. " from " .. p)

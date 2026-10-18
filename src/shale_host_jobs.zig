@@ -96,6 +96,9 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         return run.fail(pos, .host, "`job_start`: `{s}` is not found{s}", .{ argv[0], if (std.mem.indexOfScalar(u8, argv[0], '/') == null) " along PATH" else "" });
     const log_os = try hl.osPath(h, run, pos, log_v, false);
     const record_os = std.fmt.allocPrint(a, "{s}.job", .{log_os}) catch return run.oom(pos);
+    // The reaper writes the log and the record there; it does not make room.
+    if (std.fs.path.dirname(log_os)) |dir| std.Io.Dir.cwd().access(run.io, dir, .{}) catch
+        return run.fail(pos, .store, "`job_start`: {s}'s directory is not there: the log and its record go in it", .{log_shown});
     // A job still running on this log: its record is its one handle, and
     // the old job's end would be written over the new one's record. Its
     // end written, its reaper has nothing left to write (that was its
