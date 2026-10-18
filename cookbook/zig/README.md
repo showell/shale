@@ -84,6 +84,13 @@ string's text):
   name the old file already uses (by `zig_tokens`).
 - `pub_loop.shale` (`build=<step>`): builds, and puts `pub` where the
   compiler says a method called through a value needs it, until it builds.
+- `call_args.shale` (`name= template= [glob=] [count=]`): every call of a
+  function, its arguments regrouped by a template of `$N`s (`$1,
+  .{ .dir = $2, .key = $3 }`), the call sites' half of a new signature.
+  Arguments split at the call's own commas, past brackets, strings and
+  characters. A call that runs past its line, or has other than the
+  template's count of arguments, is refused by place, and then nothing is
+  written. The declaration is yours to change.
 - `zig_tidy.shale` (`path=`): an alias moved after the import it names;
   section banners with nothing under them removed.
 

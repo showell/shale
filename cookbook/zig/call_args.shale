@@ -1,0 +1,151 @@
+-- **EVERY CALL OF A FUNCTION, ITS ARGUMENTS REGROUPED**: the call sites'
+-- half of changing a signature, as when seven strings in a row become two
+-- structs and two strings. Each call `name(a1, a2, ...)` (bare, or after a
+-- `.`, so `store.name(` too) is rewritten by `template`, where `$N` is the
+-- Nth argument's text as written:
+--
+--   template=$1, $2, $3, $4, .{ .dir = $5, .key = $6, .sid = $7 }, .{ .name = $8, .id = $9 }, $10, $11
+--
+-- The arguments are split at the commas of the call's own depth, past
+-- brackets of every kind, `"..."` strings with their escapes and `'x'`
+-- characters. **A CALL IT CANNOT TAKE WHOLE IS REFUSED, NAMED**, before
+-- anything is written: one that runs past its line (`\\` strings, an
+-- argument list wrapped), or one whose arguments number other than the
+-- template's highest `$N` (`count=` says how many every call must have).
+-- The declaration (`fn name(`) is left: its signature is yours to write.
+-- Run it under `--undo-on-stop`; the compiler judges after.
+--
+--   cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/call_args.shale --args-stdin <<'ARGS'
+--   name=appendMessage
+--   glob=src/**/*.zig
+--   template=...
+--   ARGS
+
+const NAME = arg("name", "")
+const GLOB = arg("glob", "src/**/*.zig")
+const TEMPLATE = arg("template", "")
+if NAME == "" or TEMPLATE == "" then fail("call_args: name= template= [glob=] [count=]") end
+
+-- The highest `$N` the template names: what every call must have.
+function highest(t)
+  local most = 0
+  local rest = t
+  while true do
+    local m = re_find(rest, "\\$([0-9]+)")
+    if m == nil then return most end
+    local n = parse_int(m.group)
+    if n > most then most = n end
+    rest = sub(rest, m.at + #m.text)
+  end
+end
+const WANT = parse_int(arg("count", tostring(highest(TEMPLATE))))
+
+-- The arguments of the call whose `(` is at `open` in `s`: {args, close},
+-- each argument's text trimmed; nil when the line ends first.
+function args_at(s, open)
+  local args = {}
+  local depth = 0
+  local start = open + 1
+  local i = open + 1
+  local n = #s
+  while i <= n do
+    local c = sub(s, i, i)
+    if c == "\"" then
+      i = i + 1
+      while i <= n and sub(s, i, i) ~= "\"" do
+        if sub(s, i, i) == "\\" then i = i + 1 end
+        i = i + 1
+      end
+      if i > n then return nil end
+    elseif c == "'" then
+      i = i + 1
+      while i <= n and sub(s, i, i) ~= "'" do
+        if sub(s, i, i) == "\\" then i = i + 1 end
+        i = i + 1
+      end
+      if i > n then return nil end
+    elseif c == "(" or c == "[" or c == "{" then
+      depth = depth + 1
+    elseif c == ")" or c == "]" or c == "}" then
+      if depth == 0 then
+        local last = trim(sub(s, start, i - 1))
+        if last ~= "" or #args > 0 then push(args, last) end
+        return {args = args, close = i}
+      end
+      depth = depth - 1
+    elseif c == "," and depth == 0 then
+      push(args, trim(sub(s, start, i - 1)))
+      start = i + 1
+    end
+    i = i + 1
+  end
+  return nil
+end
+
+function filled(args)
+  local out = TEMPLATE
+  -- The highest first, so `$1` never eats the start of `$11`.
+  local k = #args
+  while k >= 1 do
+    out = substitute(out, "$" .. k, args[k])
+    k = k - 1
+  end
+  return out
+end
+
+-- Every call, planned first; nothing is written unless all can be taken.
+const rewritten = {}
+const refused = {}
+local calls = 0
+for p in glob(GLOB) do
+  local ls = lines(read(p))
+  local touched = false
+  for i = 1, #ls do
+    local line = ls[i]
+    local from = 1
+    local out = ""
+    local any = false
+    while true do
+      local at = find(line, NAME .. "(", from)
+      if at == nil then break end
+      local before = at > 1 and sub(line, at - 1, at - 1) or " "
+      local is_call = re_find(before, "[A-Za-z0-9_]") == nil and not ends_with(trim(sub(line, 1, at - 1)), "fn")
+      local open = at + #NAME
+      if not is_call then
+        out = out .. sub(line, from, open)
+        from = open + 1
+      else
+        local got = args_at(line, open)
+        if got == nil then
+          push(refused, p .. ":" .. i .. " runs past its line")
+          break
+        elseif #got.args ~= WANT then
+          push(refused, p .. ":" .. i .. " has " .. #got.args .. " arguments, not " .. WANT)
+          break
+        end
+        -- An argument holding `$N` would be filled again by a later `$N`.
+        local dollar = false
+        for x in got.args do if re_find(x, "\\$[0-9]") ~= nil then dollar = true end end
+        if dollar then
+          push(refused, p .. ":" .. i .. " has an argument holding `$` and a digit")
+          break
+        end
+        out = out .. sub(line, from, open) .. filled(got.args) .. ")"
+        from = got.close + 1
+        any = true
+        calls = calls + 1
+      end
+    end
+    if any then
+      ls[i] = out .. sub(line, from)
+      touched = true
+    end
+  end
+  if touched then rewritten[p] = ls end
+end
+if #refused > 0 then
+  for r in refused do print("refused: " .. r) end
+  fail("call_args: " .. #refused .. " calls of " .. NAME .. " it cannot take whole: none changed")
+end
+for p in sort(keys(rewritten)) do replace(p, join(rewritten[p], "\n") .. "\n") end
+print("call_args: " .. calls .. " calls of " .. NAME .. " rewritten in " .. count(rewritten) .. " files")
