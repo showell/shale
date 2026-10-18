@@ -12,6 +12,10 @@
 --     file, where a call order wants to be a function or a type.
 --
 --   cd <repo> && shale <shale>/cookbook/zig/smells.shale [glob=src/**/*.zig] [tests=no] [top=15]
+--
+-- A tree of a hundred files or more needs room past the defaults: on
+-- 2026-10-18, zig-webbox's 70 files ran out of arena, and `--budget
+-- steps=900000000 --budget arena_bytes=4000000000` took each of four repos.
 
 const GLOB = arg("glob", "src/**/*.zig")
 const TESTS = arg("tests", "no") == "yes"

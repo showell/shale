@@ -90,7 +90,12 @@ string's text):
   Arguments split at the call's own commas, past brackets, strings and
   characters. A call that runs past its line, or has other than the
   template's count of arguments, is refused by place, and then nothing is
-  written. The declaration is yours to change.
+  written. The declaration is yours to change. Its body's half, when
+  parameters become one struct's fields, is a builtin, no recipe:
+  `zig_renames(path, {stream = "w.stream", ...}, {lines = {first,
+  last}})` over the body's lines, by Zig's tokenizer (never a field, a
+  string or a comment). It stops at a declaration of a name, so change
+  the signature first.
 - `zig_tidy.shale` (`path=`): an alias moved after the import it names;
   section banners with nothing under them removed.
 
