@@ -56,6 +56,11 @@ string's text):
   a named enum would make read; **a bool every call passes the same
   literal is no parameter at all** (`ONE VALUE`). A name declared by more
   than one function is said, as its calls cannot be told apart.
+- `clones.shale` (`glob=`, `tests=yes`, `window=`, `top=`): the same code
+  in two places, runs of 6 or more alike lines (trimmed; blank lines,
+  comments, imports, one-name aliases and brackets alone passed by), in
+  one file or two. A find is a question: one became `store.Store.of` in
+  the kernel; two simulators alike on purpose stayed apart.
 
 ## Moving along them
 

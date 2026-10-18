@@ -23,7 +23,7 @@ pub const specs = [_]bi.Spec{
     spec(.starts_with, 2, 2, looks(.starts_with)),
     spec(.ends_with, 2, 2, looks(.ends_with)),
     spec(.contains, 2, 2, looks(.contains)),
-    spec(.find, 2, 2, find),
+    spec(.find, 2, 3, find),
     spec(.sub, 2, 3, sub),
     spec(.trim, 1, 1, trim),
     spec(.upper, 1, 1, cased(.upper)),
@@ -283,12 +283,19 @@ fn looks(comptime l: Look) bi.Impl {
     }.f;
 }
 
-/// **`find(s, t)`**: where `t` first is in `s`, 1-based; nil when absent.
+/// **`find(s, t[, from])`**: where `t` first is in `s`, 1-based; nil when
+/// absent. From `from` on (1-based, `#s + 1` the end), so the next one is
+/// `find(s, t, at + 1)`, and what is past `from` is all it reads.
 fn find(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const str = try bi.stringArg(run, pos, .find, args[0], "its first argument");
     const sub_s = try bi.stringArg(run, pos, .find, args[1], "what it looks for");
-    try bi.chargeBytes(run, pos, str.len);
-    const at = (try (try Finder.init(run, pos, sub_s)).find(str, 0)) orelse return .nil;
+    const from: usize = if (args.len > 2) blk: {
+        const f = try bi.intArg(run, pos, .find, args[2], "where it starts");
+        if (f < 1 or f > @as(i64, @intCast(str.len)) + 1) return run.fail(pos, .argument, "`find` starts at 1 to {d} (`#s + 1`), not {d}", .{ str.len + 1, f });
+        break :blk @intCast(f - 1);
+    } else 0;
+    try bi.chargeBytes(run, pos, str.len - from);
+    const at = (try (try Finder.init(run, pos, sub_s)).find(str, from)) orelse return .nil;
     return .{ .int = @intCast(at + 1) };
 }
 

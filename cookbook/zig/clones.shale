@@ -1,0 +1,119 @@
+-- **THE SAME CODE IN TWO PLACES**: runs of `window=` (6) or more lines,
+-- alike once each is trimmed, found in two places, in one file or two:
+-- what a shared function, a table or a loop would say once. Blank lines,
+-- comments and a line of only brackets (`}`, `};`, `) {`) are passed by,
+-- so a run is of lines that do something; so are imports and one-name
+-- aliases. Exact, line by line: a copy with its names changed is not found.
+--
+-- **A FIND IS A QUESTION, NOT A FIX.** The kernel's three stores' vtable
+-- casts were one generic waiting (store.Store.of, 2026-10-18); its two TCP
+-- simulators' networks are alike on purpose, two models kept apart to judge
+-- each other; and two algorithms' shared setup, an `errdefer` among it,
+-- stays each function's own.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/clones.shale [glob=src/**/*.zig] [tests=no] [window=6] [top=20]
+
+const GLOB = arg("glob", "src/**/*.zig")
+const TESTS = arg("tests", "no") == "yes"
+const W = parse_int(arg("window", "6"))
+const TOP = parse_int(arg("top", "20"))
+
+-- A line that does something: not blank, no comment, not brackets alone.
+function significant(t)
+  if t == "" or starts_with(t, "//") then return false end
+  -- An import or a one-name alias (`const X = y.X;`) names, it does nothing.
+  if contains(t, "@import(") then return false end
+  if re_find(t, "^(pub )?const [A-Za-z_][A-Za-z0-9_]* = [A-Za-z_][A-Za-z0-9_.]*;$") ~= nil then return false end
+  return re_find(t, "^[{}()\\[\\];,. ]+$") == nil
+end
+
+const files = {}
+const sig = {}
+for p in glob(GLOB) do
+  if TESTS or not contains(p, "_test") then
+    local kept = {}
+    local ls = lines(read(p))
+    for i = 1, #ls do
+      local t = trim(ls[i])
+      if significant(t) then push(kept, {text = t, line = i}) end
+    end
+    push(files, p)
+    push(sig, kept)
+  end
+end
+
+-- Every window, by its text: file index, its first line's index.
+const at = {}
+for f = 1, #files do
+  local kept = sig[f]
+  for i = 1, #kept - W + 1 do
+    local parts = {}
+    for j = i, i + W - 1 do push(parts, kept[j].text) end
+    local key = join(parts, "\n")
+    local places = get(at, key, {})
+    push(places, {f = f, i = i})
+    at[key] = places
+  end
+end
+
+-- Each pair of places a window has, by the two files and the offset
+-- between them, so a run of windows that slide together is one clone.
+const pairs = {}
+for key in keys(at) do
+  local places = at[key]
+  if #places >= 2 and #places <= 8 then
+    for a = 1, #places - 1 do
+      for b = a + 1, #places do
+        local x = places[a]
+        local y = places[b]
+        -- A window against itself shifted (a repeated line in one run) is
+        -- no clone of anything.
+        if not (x.f == y.f and y.i - x.i < W) then
+          local id = x.f .. ":" .. y.f .. ":" .. (y.i - x.i)
+          local starts = get(pairs, id, {})
+          push(starts, x.i)
+          pairs[id] = starts
+        end
+      end
+    end
+  end
+end
+
+const runs = {}
+for id in keys(pairs) do
+  local parts = split(id, ":")
+  local fa = parse_int(parts[1])
+  local fb = parse_int(parts[2])
+  local off = parse_int(parts[3])
+  local starts = sort(pairs[id])
+  local first = starts[1]
+  local last = starts[1]
+  for k = 2, #starts + 1 do
+    if k <= #starts and starts[k] == last + 1 then
+      last = starts[k]
+    else
+      local n = last - first + W
+      local a0 = sig[fa][first].line
+      local a1 = sig[fa][last + W - 1].line
+      local b0 = sig[fb][first + off].line
+      local b1 = sig[fb][last + W - 1 + off].line
+      push(runs, {n = n, a = files[fa] .. ":" .. a0 .. "-" .. a1, b = files[fb] .. ":" .. b0 .. "-" .. b1, first = sig[fa][first].text})
+      if k <= #starts then
+        first = starts[k]
+        last = starts[k]
+      end
+    end
+  end
+end
+
+sort(runs, {{key = "n", desc = true}, "a"})
+local lines_in = 0
+for r in runs do lines_in = lines_in + r.n end
+print(#files .. " files (" .. GLOB .. (TESTS and ", tests included" or ", tests left out") .. "): " .. #runs .. " runs of " .. W .. "+ alike lines, " .. lines_in .. " lines in all")
+for r in take(runs, TOP) do
+  print("")
+  print(r.n .. " lines  " .. r.a)
+  print("      and  " .. r.b)
+  print("      " .. sub(r.first, 1, 100))
+end
+if #runs > TOP then print("") print("... " .. (#runs - TOP) .. " more (top=)") end

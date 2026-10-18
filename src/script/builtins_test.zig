@@ -189,6 +189,13 @@ test "builtins: strings" {
     try f.expectOutput("print(join({\"a\", 1, \"b\"}, \"-\"), join({}, \",\") == \"\")", "a-1-b\ttrue\n");
     try f.expectOutput("print(starts_with(\"hello\", \"he\"), ends_with(\"hello\", \"lo\"), contains(\"hello\", \"ll\"), contains(\"hello\", \"x\"))", "true\ttrue\ttrue\tfalse\n");
     try f.expectOutput("print(find(\"hello\", \"l\"), find(\"hello\", \"z\"), find(\"a.b\", \".\"))", "3\tnil\t2\n");
+    // From a start: the next one is `find(s, t, at + 1)`; `#s + 1` finds
+    // only "" (2026-10-18).
+    try f.expectOutput(
+        \\print(find("hello", "l", 4), find("hello", "l", 5), find("hello", "h", 1), find("abc", "", 4), find("abc", "c", 4))
+    , "4\tnil\t1\t4\tnil\n");
+    try f.expectStop("find(\"abc\", \"a\", 0)", .argument);
+    try f.expectStop("find(\"abc\", \"a\", 5)", .argument);
     try f.expectOutput("print(sub(\"hello\", 2, 4), sub(\"hello\", -3), sub(\"hello\", 2), sub(\"hello\", 0), sub(\"hello\", 4, 2), sub(\"hello\", -100, 100))", "ell\tllo\tello\thello\t\thello\n");
     try f.expectOutput("print(\"[\" .. trim(\" \\t a b \\n\") .. \"]\", upper(\"aBc1\"), lower(\"AbC\"))", "[a b]\tABC1\tabc\n");
     try f.expectOutput("print(tonumber(\"42\") + 1, tonumber(\"-7\"), tostring(5) .. \"x\")", "43\t-7\t5x\n");

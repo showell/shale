@@ -585,7 +585,7 @@ the errors column says the rest.
 | `split(s, sep)`, `lines(s)`, `words(s)` | lists of strings | `argument` for `sep` = "" |
 | `join(l, sep)` | one string | `type` for an item not a string or integer |
 | `starts_with`, `ends_with`, `contains` `(s, t)` | booleans | |
-| `find(s, t)` | `t`'s 1-based position, or nil | |
+| `find(s, t[, from])` | `t`'s 1-based position, or nil | `argument` for a `from` outside 1 to `#s + 1` |
 | `sub(s, i[, j])` | a part of `s` | |
 | `trim`, `upper`, `lower` `(s)` | strings | |
 | `like(s, pattern)` | a boolean | |
@@ -685,7 +685,7 @@ the bytes compared there a step for 16 (see "What a builtin costs").
 | `words(s)` | the runs between ASCII whitespace, none empty |
 | `join(list, sep)` | strings and integers, joined |
 | `starts_with(s, t)`, `ends_with(s, t)`, `contains(s, t)` | booleans |
-| `find(s, t)` | where `t` first is in `s`, 1-based; nil when absent |
+| `find(s, t)`, `find(s, t, from)` | where `t` first is in `s`, 1-based; nil when absent. From `from` on (1 to `#s + 1`), so the next one is `find(s, t, at + 1)`, and only what is past `from` is read |
 | `sub(s, i[, j])` | Lua's: 1-based, inclusive, negatives counted from the end, clamped |
 | `trim(s)`, `upper(s)`, `lower(s)` | ASCII only |
 | `like(s, pattern)` | whether the whole of `s` matches: `*` is any run of bytes, `?` is one byte, any other byte is itself. Every byte looked at is a step, so a pattern that backtracks a long string runs out of steps |
