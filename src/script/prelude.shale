@@ -127,3 +127,11 @@ function drop(l, n)
   if n < 0 then fail("`drop`: a count of " .. n) end
   return last(l, max(0, #l - n))
 end
+
+-- **A SCRIPT'S OWN CHECK**: `ok` must be true, else the run stops with
+-- `why` (`fail`'s class). Only a boolean is taken: a number, a string or
+-- nil is a stop of its own, never true by default (Lua's `assert(0)`).
+function assert(ok, why)
+  if ok == false then fail(why) end
+  if ok ~= true then fail("`assert`: its first argument must be true or false, not " .. tostring(ok)) end
+end

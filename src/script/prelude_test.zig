@@ -171,6 +171,25 @@ test "prelude: drop gives all but the first n items, in order; a part of a list 
     try testing.expect(std.mem.indexOf(u8, bad.stop.?.message, "`drop`: a count of -1") != null);
 }
 
+test "prelude: assert stops with its reason when false, does nothing when true, and takes nothing but a boolean" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("assert(1 < 2, \"arithmetic\") print(\"on\")", "on\n");
+    var no = f.run("assert(2 < 1, \"two is not less than one\") print(\"never\")", .{});
+    defer no.deinit();
+    try testing.expectEqual(script.diag.Class.fail, no.stop.?.class);
+    try testing.expect(std.mem.indexOf(u8, no.stop.?.message, "two is not less than one") != null);
+    try testing.expectEqualStrings("", no.output);
+    for ([_][]const u8{ "assert(0, \"z\")", "assert(nil, \"n\")", "assert(\"yes\", \"s\")" }) |src| {
+        var bad = f.run(src, .{});
+        defer bad.deinit();
+        errdefer std.debug.print("{s}\n", .{src});
+        try testing.expectEqual(script.diag.Class.fail, bad.stop.?.class);
+        try testing.expect(std.mem.indexOf(u8, bad.stop.?.message, "must be true or false") != null);
+    }
+}
+
 test "prelude: the functions found in prelude.shale are every function a parse of it declares, and it declares nothing else (QUEUE 230)" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -199,6 +218,7 @@ test "prelude: every prelude function is reached when a script calls it, one scr
         .{ "count_all", "print(count_all(\"top.txt\", \"o\"))" },
         .{ "find_next", "print(find_next(\"top.txt\", \"p\", 3))" },
         .{ "drop", "print(#drop({1, 2, 3}, 1))" },
+        .{ "assert", "assert(true, \"never\") print(1)" },
     };
     try testing.expectEqual(script.parse.prelude_index.len, calls.len);
     for (script.parse.prelude_index, calls) |at, c| {
