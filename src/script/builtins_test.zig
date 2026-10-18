@@ -321,9 +321,45 @@ test "builtins: sort by a key keeps equal keys in order; reverse" {
     try f.expectOutput("local l = {1, 2, 3} reverse(l) print(join(l, \",\")) local e = {} reverse(e) sort(e, \"k\") print(#e)", "3,2,1\n0\n");
     try f.expectStop("sort({{v = 1}, {w = 2}}, \"v\")", .index);
     try f.expectStop("sort({{v = 1}, {v = \"x\"}}, \"v\")", .type);
-    try f.expectStop("sort({1, 2}, \"v\")", .type);
+    // A list of integers or strings takes an order, not a key (2026-10-18).
+    try f.expectStop("sort({1, 2}, \"v\")", .argument);
     try f.expectStop("sort({{v = 1}}, 1)", .type);
     try f.expectStop("reverse({a = 1})", .type);
+}
+
+test "builtins: sort gives its list back; by several keys, each its own order; a list of scalars descending" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    // Given back, so a sort is an expression; still in place.
+    try f.expectOutput(
+        \\local l = {"b", "c", "a"}
+        \\print(join(sort(l), ","), join(l, ","), join(sort({3, 1, 2}, "desc"), ","), join(sort({"x", "y"}, "asc"), ","))
+    , "a,b,c\ta,b,c\t3,2,1\tx,y\n");
+    // Several keys: the first decides first; each key a name, in the
+    // sort's order, or {key, desc}, its own. Equal in every key: as given.
+    const rows =
+        \\local rows = {
+        \\  {kind = "fn", name = "b", size = 3}, {kind = "const", name = "z", size = 1},
+        \\  {kind = "fn", name = "a", size = 3}, {kind = "fn", name = "c", size = 9},
+        \\  {kind = "const", name = "y", size = 1},
+        \\}
+        \\function names(rs) local o = {} for r in rs do push(o, r.name) end return join(o, ",") end
+        \\
+    ;
+    try f.expectOutput(rows ++
+        \\print(names(sort(rows, {"kind", "name"})))
+        \\print(names(sort(rows, {{key = "size", desc = true}, "name"})))
+        \\print(names(sort(rows, {"kind", "name"}, "desc")))
+        \\print(names(sort(rows, {"size"})))
+    , "y,z,a,b,c\nc,a,b,y,z\nc,b,a,z,y\nz,y,b,a,c\n");
+    try f.expectStop("sort({{a = 1}}, {})", .argument);
+    try f.expectStop("sort({{a = 1}}, {{key = \"a\", up = true}})", .argument);
+    try f.expectStop("sort({{a = 1}}, {{key = \"a\", desc = 1}})", .type);
+    try f.expectStop("sort({{a = 1}}, {{desc = true}})", .argument);
+    try f.expectStop("sort({{a = 1, b = 1}, {a = 2}}, {\"a\", \"b\"})", .index);
+    try f.expectStop("sort({1, 2}, \"asc\", \"desc\")", .argument);
+    try f.expectStop("sort({1, 2}, \"up\")", .argument);
 }
 
 test "builtins: date and seconds, each the other's inverse, in UTC" {

@@ -605,7 +605,7 @@ the errors column says the rest.
 | `date(seconds)`, `seconds(text)` | each other's inverse | `argument` out of range or unreadable |
 | `human(bytes)`, `pad(v, width)`, `table(rows, columns)` | text | `index` for a row missing a column |
 | `push(l, x)` | nil | `type` for a map or for nil |
-| `sort(l)`, `sort(rows, key[, "asc" or "desc"])` | nil: in place | `type` for mixed kinds; `index` for a row with no `key`; `argument` for another order |
+| `sort(l[, order])`, `sort(rows, keys[, order])` | `l` (`rows`), sorted in place | `type` for mixed kinds; `index` for a row with no `key`; `argument` for another order |
 | `take(l, n)` | a new list of the first `n` | `argument` for `n` < 0 |
 | `last(l, n)` | a new list of the last `n` | `argument` for `n` < 0 |
 | `reverse(l)` | nil: in place | |
@@ -811,9 +811,10 @@ Perl and Python sometimes take one more turn after it, so on "a",
 | builtin | gives |
 |---|---|
 | `push(l, x)` | `x` added to the end |
-| `sort(l)` | in place, all integers or all strings, no comparator |
-| `sort(rows, key)` | a list of maps, in place, by each one's `key`: all integers or all strings. **Stable**: equal keys keep their order, so sorting by one key then another orders by both |
-| `sort(rows, key, "desc")` | the same, descending, **still stable**: equal keys keep their order (a sort then `reverse` reversed them). `"asc"` is the default |
+| `sort(l)`, `sort(l, "desc")` | in place, all integers or all strings, and `l` given back, so a sort is an expression: `join(sort(keys(m)), ",")`. No comparator: a list of scalars' second argument is its order, `"asc"` (the default) or `"desc"` |
+| `sort(rows, key)` | a list of maps, in place, by each one's `key`: all integers or all strings. **Stable**: equal keys keep their order |
+| `sort(rows, {k1, k2, ...})` | by several keys, the first deciding first, the next breaking its ties (at most 8): `sort(defs, {"kind", "name"})`. A key is a name, or `{key = name, desc = true}` for its own order: `sort(files, {{key = "size", desc = true}, "path"})` |
+| `sort(rows, keys, "desc")` | the same, descending (each key without its own `desc`), **still stable**: rows equal in every key keep their order (a sort then `reverse` reversed them). An empty list is given back, whatever its second argument |
 | `take(l, n)` | a new list of `l`'s first `n` items, or all of a shorter one: the top N of a sorted list |
 | `last(l, n)` | a new list of `l`'s last `n` items, in order, or all of a shorter one: the tail of a log's lines (QUEUE 232). A count below 0 is an error, as `take`'s: a count gone negative never quietly becomes a tail |
 | `reverse(l)` | in place |
@@ -1136,8 +1137,9 @@ first.
 ## The runner
 
 ```sh
-shale [--root DIR] [--verbose] [--budget NAME=N]... [FILE | -e SOURCE] [NAME=VALUE]...
+shale [--root DIR] [--verbose] [--undo-on-stop] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
 shale <<'SHALE'                  # no FILE, no -e: the script is stdin
+shale split.shale --args-stdin <<'ARGS'   # a FILE's values on stdin, one a line, raw
 SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
 ```
 
@@ -1145,6 +1147,20 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   directory.
 - **A run makes its changes and runs its programs**: on Linux, git is
   the undo ("What was decided": no dry run).
+- **`--undo-on-stop`**: a run that stops puts back every path it changed,
+  the last first: a file's bytes and mode as they were, a file or folder
+  it made taken away again (a folder with all in it). The Linux host keeps
+  each path's state before the run's first change of it, at the one point
+  every change passes (`PathHook.may_change`), at most 64 MiB in all: a
+  change past that stops the run. What it cannot put back it says, `── not
+  put back: <path>`: a folder that was there and was removed whole, and
+  anything a program changed (`run`, `git_commit`), which Shale never sees.
+  A run that finishes keeps every change. The exit is 1 either way.
+- **`--args-stdin`**: the FILE's `NAME=VALUE`s are stdin's lines, after the
+  command line's, each value raw to its line's end (quotes, spaces, `|`,
+  `$` and backslashes as they are: no shell sees them), blank lines passed
+  by, a name given twice refused. For a value a launch's plain words
+  cannot carry (`names=a|b|a test's name, with a comma`), under a heredoc.
 - `--budget NAME=N` sets one budget: `steps`, `reads`, `read_bytes`,
   `output_bytes`, `changes`, `change_bytes`, `arena_bytes`, `call_bytes`
   or `call_entries`. **The runner's own defaults** (metal-vmm QUEUE 233):

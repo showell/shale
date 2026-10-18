@@ -2,7 +2,7 @@
 //! what `shale` was asked, pure, so it is tested here and the runner
 //! (`src/script_runner.zig`) only does the I/O.
 //!
-//!     shale [--root DIR] [--verbose] [--budget NAME=N]... [FILE | -e SOURCE] [NAME=VALUE]...
+//!     shale [--root DIR] [--verbose] [--undo-on-stop] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
 //!
 //! **A run makes its changes and runs its programs**: on Linux, git is
 //! the undo (Steve, 2026-10-17, deleting the dry run). **With no FILE and
@@ -19,9 +19,11 @@ const script = @import("script.zig");
 const diag = @import("diag.zig");
 
 pub const usage =
-    \\usage: shale [--root DIR] [--verbose] [--budget NAME=N]... [FILE | -e SOURCE] [NAME=VALUE]...
+    \\usage: shale [--root DIR] [--verbose] [--undo-on-stop] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
     \\  --root DIR        the folder the script's paths are relative to (SHALE_ROOT, or here)
     \\  --verbose         the effects, the programs run and what the run used, always
+    \\  --undo-on-stop    a run that stops puts back every path it changed (not a program's)
+    \\  --args-stdin      the FILE's NAME=VALUEs on stdin, one a line, each value raw to its end
     \\  --budget NAME=N   one budget: steps, reads, read_bytes, output_bytes, changes,
     \\                    change_bytes, arena_bytes, call_bytes, call_entries
     \\  -e SOURCE         the script itself, in place of a file (neither: stdin is the script)
@@ -43,6 +45,10 @@ pub const Command = struct {
     /// Neither a FILE nor `-e`: the script is stdin.
     from_stdin: bool = false,
     verbose: bool = false,
+    /// `--undo-on-stop`: a stopped run's changes put back (the Linux host's journal).
+    undo_on_stop: bool = false,
+    /// `--args-stdin`: the FILE's values are stdin's lines (`argLines`).
+    args_stdin: bool = false,
     budgets: interp.Budgets = defaults,
     /// Into the caller's buffer.
     args: []const interp.Arg = &.{},
@@ -65,6 +71,10 @@ pub fn parse(argv: []const []const u8, env_root: ?[]const u8, args_buf: []interp
         const a = argv[i];
         if (std.mem.eql(u8, a, "--verbose")) {
             c.verbose = true;
+        } else if (std.mem.eql(u8, a, "--undo-on-stop")) {
+            c.undo_on_stop = true;
+        } else if (std.mem.eql(u8, a, "--args-stdin")) {
+            c.args_stdin = true;
         } else if (std.mem.eql(u8, a, "--root") or std.mem.eql(u8, a, "--budget") or std.mem.eql(u8, a, "-e")) {
             if (i + 1 == argv.len) return refuse(why_buf, "{s} needs a value", .{a});
             i += 1;
@@ -98,8 +108,39 @@ pub fn parse(argv: []const []const u8, env_root: ?[]const u8, args_buf: []interp
         }
     }
     c.from_stdin = c.file == null and c.source == null;
+    if (c.args_stdin and c.file == null) return refuse(why_buf, "--args-stdin: stdin is the values of a FILE, and there is no FILE", .{});
     c.args = args_buf[0..n_args];
     return .{ .command = c };
+}
+
+/// **A FILE'S VALUES ON STDIN** (`--args-stdin`): one `NAME=VALUE` a line,
+/// the value raw to the line's end (quotes, spaces, `|` and backslashes as
+/// they are: no shell sees them), so a heredoc gives a script what a
+/// command line could not without quoting. Blank lines are passed by. The
+/// values go after `have` (the command line's), into `buf`; a name given
+/// twice, in either, is refused.
+pub fn argLines(text: []const u8, have: []const interp.Arg, buf: []interp.Arg, why_buf: []u8) union(enum) { args: []const interp.Arg, refused: Refused } {
+    if (have.len > buf.len) return .{ .refused = .{ .why = "more values than the buffer holds" } };
+    @memcpy(buf[0..have.len], have);
+    var n = have.len;
+    var it = std.mem.splitScalar(u8, text, '\n');
+    var line_no: usize = 0;
+    while (it.next()) |raw| {
+        line_no += 1;
+        const line = std.mem.trimEnd(u8, raw, "\r");
+        if (std.mem.trim(u8, line, " \t").len == 0) continue;
+        const eq = std.mem.indexOfScalar(u8, line, '=') orelse
+            return .{ .refused = .{ .why = std.fmt.bufPrint(why_buf, "--args-stdin: line {d} is not NAME=VALUE", .{line_no}) catch "--args-stdin: a line is not NAME=VALUE" } };
+        const name = line[0..eq];
+        if (name.len == 0 or std.mem.indexOfAny(u8, name, " \t") != null)
+            return .{ .refused = .{ .why = std.fmt.bufPrint(why_buf, "--args-stdin: line {d}: `{s}` is not a name", .{ line_no, name }) catch "--args-stdin: a line's name is not one" } };
+        for (buf[0..n]) |a| if (std.mem.eql(u8, a.name, name))
+            return .{ .refused = .{ .why = std.fmt.bufPrint(why_buf, "--args-stdin: line {d}: {s} is given twice", .{ line_no, name }) catch "--args-stdin: a name is given twice" } };
+        if (n == buf.len) return .{ .refused = .{ .why = std.fmt.bufPrint(why_buf, "more than {d} values", .{buf.len}) catch "too many values" } };
+        buf[n] = .{ .name = name, .value = line[eq + 1 ..] };
+        n += 1;
+    }
+    return .{ .args = buf[0..n] };
 }
 
 /// What a stop and its trail call the script: its file, `-e` or `stdin`.
@@ -197,6 +238,47 @@ fn refused(argv: []const []const u8) ![]const u8 {
     return switch (parse(argv, null, &S.args, &S.why)) {
         .command => error.NotRefused,
         .refused => |r| r.why,
+    };
+}
+
+test "cli: --undo-on-stop and --args-stdin are read; --args-stdin wants a FILE" {
+    const c = try parsed(&.{ "--undo-on-stop", "split.shale", "--args-stdin", "n=1" }, null);
+    try testing.expect(c.undo_on_stop and c.args_stdin);
+    try testing.expectEqualStrings("split.shale", c.file.?);
+    try testing.expectEqualStrings("--args-stdin: stdin is the values of a FILE, and there is no FILE", try refused(&.{ "--args-stdin", "-e", "x" }));
+    try testing.expectEqualStrings("--args-stdin: stdin is the values of a FILE, and there is no FILE", try refused(&.{"--args-stdin"}));
+}
+
+test "cli: argLines takes NAME=VALUE a line, each value raw, after the command line's, and refuses a name twice" {
+    var buf: [8]interp.Arg = undefined;
+    var why: [128]u8 = undefined;
+    const text =
+        \\names=a|b|the site cache keeps what fits, up to its capacity
+        \\
+        \\doc=It's "quoted", with a \ and $HOME as they are
+        \\empty=
+    ;
+    const got = switch (argLines(text, &.{.{ .name = "from", .value = "src/x.zig" }}, &buf, &why)) {
+        .args => |a| a,
+        .refused => |r| {
+            std.debug.print("{s}\n", .{r.why});
+            return error.TestUnexpectedResult;
+        },
+    };
+    try testing.expectEqual(@as(usize, 4), got.len);
+    try testing.expectEqualStrings("from", got[0].name);
+    try testing.expectEqualStrings("a|b|the site cache keeps what fits, up to its capacity", got[1].value);
+    try testing.expectEqualStrings("It's \"quoted\", with a \\ and $HOME as they are", got[2].value);
+    try testing.expectEqualStrings("", got[3].value);
+    for ([_]struct { []const u8, []const u8 }{
+        .{ "x", "--args-stdin: line 1 is not NAME=VALUE" },
+        .{ "=v", "--args-stdin: line 1: `` is not a name" },
+        .{ "a b=v", "--args-stdin: line 1: `a b` is not a name" },
+        .{ "from=y", "--args-stdin: line 1: from is given twice" },
+        .{ "n=1\nn=2", "--args-stdin: line 2: n is given twice" },
+    }) |c| switch (argLines(c[0], &.{.{ .name = "from", .value = "x" }}, &buf, &why)) {
+        .args => return error.TestUnexpectedResult,
+        .refused => |r| try testing.expectEqualStrings(c[1], r.why),
     };
 }
 

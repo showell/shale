@@ -37,10 +37,12 @@ test "gate: the launch, every form the design names" {
     try passes("shale <<'SHALE'\nprint(1)\nSHALE");
     try passes("cd /home/x && shale <<'END_IT'\nprint(\"a $b `c` ; | & < > ( ) * ?\")\nEND_IT  ");
     try passes("shale n=3 <<'SHALE'\nprint(arg(\"n\", 0))\nSHALE\n");
+    // A file's values on stdin, raw (2026-10-18), and the undo on a stop.
+    try passes("shale --undo-on-stop ~/s/split.shale --args-stdin <<'ARGS'\nnames=a|b c\ndoc=It's \"x\"\nARGS");
 }
 
 test "gate: what it refuses, naming both forms" {
-    const both = "`shale [--verbose] [FILE] [NAME=VALUE]... <<'TAG'`";
+    const both = "`shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'`";
     try refuses("ls -la", both);
     try refuses("ls -la", "`# want: <tag>: <text>`");
     try refuses("shale -e 'print(1)'", both);
@@ -63,7 +65,7 @@ test "gate: what it refuses, naming both forms" {
 }
 
 test "gate: a heredoc's failure modes: unquoted, a lower-case tag, no closer, a closer met twice, text after it" {
-    const both = "`shale [--verbose] [FILE] [NAME=VALUE]... <<'TAG'`";
+    const both = "`shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'`";
     try refuses("shale <<SHALE\nprint(1)\nSHALE", both);
     try refuses("shale <<\"SHALE\"\nprint(1)\nSHALE", both);
     try refuses("shale <<'shale'\nprint(1)\nshale", both);

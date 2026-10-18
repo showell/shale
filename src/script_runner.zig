@@ -57,6 +57,23 @@ pub fn main(init: std.process.Init) !u8 {
             return 2;
         },
     };
+    // **THE FILE'S VALUES ON STDIN** (`--args-stdin`), after the command line's.
+    var stdin_args_buf: [64]script.Arg = undefined;
+    const args: []const script.Arg = if (c.args_stdin) blk: {
+        var in_buf: [4096]u8 = undefined;
+        var r = std.Io.File.stdin().reader(io, &in_buf);
+        const text = r.interface.allocRemaining(arena, .limited(1 << 20)) catch |e| {
+            try err.print("shale: cannot read the values on stdin: {s}\n", .{@errorName(e)});
+            return 2;
+        };
+        break :blk switch (cli.argLines(text, c.args, &stdin_args_buf, &why_buf)) {
+            .args => |a| a,
+            .refused => |rf| {
+                try err.print("shale: {s}\n{s}", .{ rf.why, cli.usage });
+                return 2;
+            },
+        };
+    } else c.args;
     const now: i64 = if (init.environ_map.get("SHALE_NOW")) |t| script.builtins.parseInteger(t) orelse {
         try err.print("shale: SHALE_NOW={s} is not an integer\n", .{t});
         return 2;
@@ -104,6 +121,7 @@ pub fn main(init: std.process.Init) !u8 {
         .mounts_from = mounts.from,
         .env = try shale_host.baseEnv(arena, init.environ_map),
         .reaper = reaperPath(arena),
+        .undo = c.undo_on_stop,
     };
     defer host.deinit();
     const seam = host.options();
@@ -118,7 +136,7 @@ pub fn main(init: std.process.Init) !u8 {
 
     const out = try gpa.alloc(u8, c.budgets.output_bytes);
     defer gpa.free(out);
-    var result = script.runWith(io, gpa, if (root.len == 0) "/" else root, source, c.budgets, now, out, .{ .args = c.args, .host = seam.host, .path_hook = seam.path_hook, .preludes = preludes, .diffs = if (c.verbose) .full else .summary });
+    var result = script.runWith(io, gpa, if (root.len == 0) "/" else root, source, c.budgets, now, out, .{ .args = args, .host = seam.host, .path_hook = seam.path_hook, .preludes = preludes, .diffs = if (c.verbose) .full else .summary });
     defer result.deinit();
 
     var out_buf: [4096]u8 = undefined;
@@ -129,6 +147,9 @@ pub fn main(init: std.process.Init) !u8 {
     const records = try arena.alloc([]const u8, host.records.items.len);
     for (host.records.items, records) |r, *line| line.* = r.line;
     try cli.printReport(&result, cli.scriptName(c), preludes, .{ .verbose = c.verbose, .records = records, .budgets = c.budgets }, err);
+    // **A STOPPED RUN PUTS BACK WHAT IT CHANGED** (`--undo-on-stop`). Exit 1
+    // either way: the run stopped, and what could not be put back is said.
+    if (c.undo_on_stop and !result.finished()) _ = try shale_host.undoChanges(&host, io, err);
     return if (result.finished()) 0 else 1;
 }
 

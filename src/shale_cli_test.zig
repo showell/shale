@@ -23,3 +23,74 @@ test "cli: stdout and stderr into one file (`> f 2>&1`) keep both, in order" {
     defer a.free(both);
     try testing.expect(std.mem.startsWith(u8, both, "one line of output\n── stopped at -e:1:"));
 }
+
+test "cli: --undo-on-stop puts back what a stopped run changed: an edit, a file made, a folder made, a file removed, an executable's bytes and mode" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    try tmp.dir.writeFile(io, .{ .sub_path = "a.txt", .data = "one\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "gone.txt", .data = "kept\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "x.sh", .data = "#!/bin/sh\necho old\n", .flags = .{ .permissions = @enumFromInt(0o755) } });
+    try tmp.dir.createDirPath(io, "there");
+    try tmp.dir.writeFile(io, .{ .sub_path = "u.shale", .data =
+        \\edit("a.txt", "one", "two")
+        \\create("new.txt", "made\n")
+        \\mkdir("made")
+        \\create("made/inner.txt", "in\n")
+        \\replace("x.sh", "#!/bin/sh\necho new\n")
+        \\remove("gone.txt")
+        \\create("there/n.txt", "n\n")
+        \\fail("stopped on purpose")
+        \\
+    });
+    const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(root);
+    const file = try std.fmt.allocPrint(a, "{s}/u.shale", .{root});
+    defer a.free(file);
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "--undo-on-stop", file } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}\n", .{r.stderr});
+    try testing.expectEqual(@as(u8, 1), r.term.exited);
+    try testing.expect(std.mem.indexOf(u8, r.stderr, "── undone: 7 path(s) the run changed put back\n") != null);
+    const back = struct {
+        fn of(d: std.Io.Dir, i: std.Io, name: []const u8) ![]u8 {
+            return d.readFileAlloc(i, name, testing.allocator, .limited(1 << 16));
+        }
+    };
+    for ([_][2][]const u8{ .{ "a.txt", "one\n" }, .{ "gone.txt", "kept\n" }, .{ "x.sh", "#!/bin/sh\necho old\n" } }) |f| {
+        const got = try back.of(tmp.dir, io, f[0]);
+        defer a.free(got);
+        try testing.expectEqualStrings(f[1], got);
+    }
+    for ([_][]const u8{ "new.txt", "made", "there/n.txt" }) |gone| {
+        try testing.expectError(error.FileNotFound, tmp.dir.statFile(io, gone, .{}));
+    }
+    // The folder that was there is there still, and the executable still one.
+    _ = try tmp.dir.statFile(io, "there", .{});
+    const st = try tmp.dir.statFile(io, "x.sh", .{});
+    try testing.expectEqual(@as(u32, 0o755), @intFromEnum(st.permissions) & 0o777);
+}
+
+test "cli: --args-stdin gives a file's values from stdin, raw: quotes, `|`, `$`, a backslash" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    try tmp.dir.writeFile(io, .{ .sub_path = "p.shale", .data = "print(arg(\"doc\", \"\"))\nprint(arg(\"n\", \"\"))\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "args", .data = "doc=It's \"quoted\" | $HOME \\ as is\n\n" });
+    const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(dir);
+    const cmd = try std.fmt.allocPrint(a, "'{s}' --root '{s}' '{s}/p.shale' --args-stdin n=3 < '{s}/args'", .{ shale_exe, dir, dir, dir });
+    defer a.free(cmd);
+    const r = try std.process.run(a, io, .{ .argv = &.{ "sh", "-c", cmd } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}\n", .{r.stderr});
+    try testing.expectEqualStrings("It's \"quoted\" | $HOME \\ as is\n3\n", r.stdout);
+}

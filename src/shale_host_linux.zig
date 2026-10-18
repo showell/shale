@@ -80,10 +80,23 @@ pub const Host = struct {
     spawn_fn: Spawn = realSpawn,
     spawn_ctx: ?*anyopaque = null,
     records: std.ArrayList(Record) = .empty,
+    /// **`--undo-on-stop`**: each path's state before the run's first change
+    /// of it, so a run that stops puts back what it changed (`undoChanges`).
+    undo: bool = false,
+    journal: std.ArrayList(Prior) = .empty,
+    journal_bytes: usize = 0,
 
     pub fn deinit(h: *Host) void {
         for (h.records.items) |r| h.alloc.free(r.line);
         h.records.deinit(h.alloc);
+        for (h.journal.items) |p| {
+            h.alloc.free(p.abs);
+            switch (p.was) {
+                .file => |f| h.alloc.free(f.bytes),
+                else => {},
+            }
+        }
+        h.journal.deinit(h.alloc);
     }
 
     pub fn options(h: *Host) struct { host: interp.Host, path_hook: interp.PathHook } {
@@ -179,6 +192,92 @@ fn mayChange(ctx: *anyopaque, run: *Run, pos: ast.Pos, rel: []const u8, full: []
         const under = std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/');
         if (named or under) return run.fail(pos, .refused, "{s}: mount `{s}` is read-only", .{ rel, m.name });
     }
+    if (h.undo) try noteBefore(h, run, pos, abs);
+}
+
+// ── what a stopped run puts back (`--undo-on-stop`) ─────────────────────────
+
+/// A path as it was before the run's first change of it.
+pub const Prior = struct {
+    abs: []const u8,
+    was: union(enum) {
+        /// Nothing there: what the run made is taken away again.
+        absent,
+        /// A folder: still there, or said not put back (its files went).
+        dir,
+        file: struct { bytes: []const u8, permissions: @FieldType(std.Io.File.Stat, "permissions") },
+    },
+};
+
+/// The most of what a run changes that `--undo-on-stop` keeps: a change past
+/// it stops the run, so nothing is changed that could not be put back.
+pub const journal_most = 64 << 20;
+
+/// **BEFORE THE FIRST CHANGE OF A PATH, WHAT IS THERE**: once a path.
+fn noteBefore(h: *Host, run: *Run, pos: ast.Pos, abs_in: []const u8) Error!void {
+    const abs = std.mem.trimEnd(u8, abs_in, "/");
+    for (h.journal.items) |p| if (std.mem.eql(u8, p.abs, abs)) return;
+    const io = run.io;
+    const cwd = std.Io.Dir.cwd();
+    var bytes: ?[]u8 = null;
+    errdefer if (bytes) |b| h.alloc.free(b);
+    const was: @FieldType(Prior, "was") = if (cwd.statFile(io, abs, .{ .follow_symlinks = false })) |st| switch (st.kind) {
+        .directory => .dir,
+        .file => blk: {
+            if (st.size > journal_most - h.journal_bytes) return run.fail(pos, .refused, "--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it", .{ journal_most, abs });
+            bytes = cwd.readFileAlloc(io, abs, h.alloc, .limited(journal_most - h.journal_bytes + 1)) catch |e| return run.fail(pos, .store, "--undo-on-stop: {s} cannot be read ({t}), so it could not be put back", .{ abs, e });
+            h.journal_bytes += bytes.?.len;
+            break :blk .{ .file = .{ .bytes = bytes.?, .permissions = st.permissions } };
+        },
+        else => return run.fail(pos, .refused, "--undo-on-stop: {s} is neither a file nor a folder, and could not be put back", .{abs}),
+    } else |e| switch (e) {
+        error.FileNotFound => .absent,
+        else => return run.fail(pos, .store, "--undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back", .{ abs, e }),
+    };
+    const owned = h.alloc.dupe(u8, abs) catch return run.oom(pos);
+    h.journal.append(h.alloc, .{ .abs = owned, .was = was }) catch {
+        h.alloc.free(owned);
+        return run.oom(pos);
+    };
+}
+
+/// **A STOPPED RUN'S CHANGES, PUT BACK** (`--undo-on-stop`), the last
+/// first: a file as it was, a path that was not there taken away (a folder
+/// the run made with whatever is in it). A folder that was there and is
+/// gone cannot be put back (its files went with it), and neither can a
+/// change a program made: each one not put back is said, and the result is
+/// false. Each line on `w`.
+pub fn undoChanges(h: *Host, io: std.Io, w: *std.Io.Writer) !bool {
+    const cwd = std.Io.Dir.cwd();
+    var all = true;
+    var k = h.journal.items.len;
+    while (k > 0) {
+        k -= 1;
+        const p = h.journal.items[k];
+        switch (p.was) {
+            .absent => cwd.deleteFile(io, p.abs) catch |e| switch (e) {
+                error.FileNotFound => {},
+                error.IsDir => cwd.deleteTree(io, p.abs) catch |de| {
+                    try w.print("── not put back: {s}: the folder the run made ({t})\n", .{ p.abs, de });
+                    all = false;
+                },
+                else => {
+                    try w.print("── not put back: {s}: what the run made ({t})\n", .{ p.abs, e });
+                    all = false;
+                },
+            },
+            .file => |f| cwd.writeFile(io, .{ .sub_path = p.abs, .data = f.bytes, .flags = .{ .permissions = f.permissions } }) catch |e| {
+                try w.print("── not put back: {s} ({t})\n", .{ p.abs, e });
+                all = false;
+            },
+            .dir => if (cwd.statFile(io, p.abs, .{ .follow_symlinks = false })) |_| {} else |_| {
+                try w.print("── not put back: {s}: a folder removed whole, and its files with it\n", .{p.abs});
+                all = false;
+            },
+        }
+    }
+    try w.print("── undone: {d} path(s) the run changed put back{s}\n", .{ h.journal.items.len, if (all) "" else ", but not all (above)" });
+    return all;
 }
 
 /// The run's own root, absolute.

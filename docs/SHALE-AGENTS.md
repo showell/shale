@@ -28,6 +28,13 @@ is known before a bigger run finds it;
 `--verbose`, which prints it in full. With
 no file and no `-e`, the script is stdin (`shale <<'SHALE'`).
 
+**A recipe with values a plain word cannot carry** (a doc, a test's name,
+`|`): its values on stdin, one a line, raw, `shale ~/r/split.shale
+--args-stdin <<'ARGS'` then `doc=It's "the" doc` and `names=a|b`. **A
+script that changes several files**: `--undo-on-stop`, and a stop puts
+back what it changed, so no half-done edit is left (SHALE.md, "The
+runner": what it cannot put back, it says).
+
 ```sh
 zig build                      # zig-out/bin/shale: put it on PATH
 shale count.shale dir=src
@@ -474,8 +481,9 @@ two can give a quiet wrong answer, an empty list:
 (`tools/shale_gate.zig`, run by `tools/shale-gate.sh`, which turns any
 failure, a missing binary included, into a refusal). It passes exactly:
 
-- **a launch:** `[cd DIR && ]shale [--verbose] [--budget N=V]
-  [FILE] [NAME=VALUE]...`, every word plain (no quotes, `$`, backticks,
+- **a launch:** `[cd DIR && ]shale [--verbose] [--undo-on-stop]
+  [--budget N=V] [FILE [--args-stdin]] [NAME=VALUE]...`, every word plain
+  (no quotes, `$`, backticks,
   `;|&<>()*?`), optionally ending `<<'TAG'` (TAG `[A-Z_]+`), with the
   script below and a last line `TAG` that no earlier line is;
 - **the escape:** a first line `# want: <tag>: <text>` (Shale should do
