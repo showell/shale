@@ -1,0 +1,88 @@
+-- **EACH BARE `true` OR `false` A CALL PASSES, FLIPPED, AND THE TESTS RUN**:
+-- a flip the tests let through is a decision nothing checks. Mutation
+-- testing kept to the one mutation that names a choice at a call: a bool
+-- argument (`f(x, true)`), outside tests, comments and strings' lines.
+-- Each flip is planted alone, the build's tests run, and the file put back
+-- before the next; under `--undo-on-stop` a stop puts it back too.
+--
+-- **A HUNT, NEVER A GATE**: each flip is a whole test run (half a minute
+-- in angry-gopher), so it runs alone, detached, and what survives becomes
+-- a test, or an enum and a test.
+--
+--   cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/flip_bools.shale [glob=src/**/*.zig] [build=test] [most=40] [timeout_ms=600000]
+--
+-- `most` caps the flips a run plants; the rest are listed, not run.
+--
+-- **READ EACH SURVIVOR BEFORE BELIEVING IT**: one in code the build step
+-- never runs (a bench's own binary) survives for that alone, and one a
+-- separate step judges (angry-gopher's `markdown-regression`) wants
+-- `build=` that step. On 2026-10-18, angry-gopher's 24 flips left 17
+-- standing; 9 were real gaps, each now a test, and the rest one of those
+-- two or a choice that changes nothing.
+
+const GLOB = arg("glob", "src/**/*.zig")
+const BUILD = arg("build", "test")
+const MOST = parse_int(arg("most", "40"))
+const TIMEOUT = parse_int(arg("timeout_ms", "600000"))
+
+-- Whether `c` may be part of a name.
+function ident(c) return c ~= "" and re_find(c, "[A-Za-z0-9_]") ~= nil end
+
+-- The candidates: a whole `true` or `false` right after `(` or `, ` and
+-- right before `)` or `,`, on a line that is no comment, outside any
+-- top-level `test "..." {` block, in a file that is no test file.
+const sites = {}
+for p in glob(GLOB) do
+  if not ends_with(p, "_test.zig") then
+    local ls = lines(read(p))
+    local in_test = false
+    for i = 1, #ls do
+      local l = ls[i]
+      if starts_with(l, "test \"") or starts_with(l, "test {") then in_test = true end
+      if in_test and l == "}" then
+        in_test = false
+      elseif not in_test and not starts_with(trim(l), "//") and find(l, "\"") == nil then
+        for word in {"true", "false"} do
+          local from = 1
+          while true do
+            local at = find(l, word, from)
+            if at == nil then break end
+            local before = sub(l, at - 2, at - 1)
+            local after = sub(l, at + #word, at + #word)
+            local opens = ends_with(before, "(") or before == ", "
+            if opens and (after == ")" or after == ",") and not ident(sub(l, at - 1, at - 1)) then
+              push(sites, {p = p, line = i, at = at, word = word})
+            end
+            from = at + #word
+          end
+        end
+      end
+    end
+  end
+end
+print(#sites .. " bare bool arguments outside tests")
+
+const survived = {}
+local planted = 0
+for s in sites do
+  if planted >= MOST then break end
+  planted = planted + 1
+  local good = read(s.p)
+  local ls = lines(good)
+  local l = ls[s.line]
+  local flip = s.word == "true" and "false" or "true"
+  ls[s.line] = sub(l, 1, s.at - 1) .. flip .. sub(l, s.at + #s.word)
+  replace(s.p, join(ls, "\n") .. "\n")
+  local r = run({"zig", "build", BUILD}, {timeout_ms = TIMEOUT, tail = 3})
+  replace(s.p, good)
+  local where = s.p .. ":" .. s.line .. "  " .. trim(l)
+  if r.code == 0 then
+    push(survived, where)
+    print("SURVIVED  " .. where)
+  else
+    print("caught    " .. s.p .. ":" .. s.line)
+  end
+end
+print("")
+print(planted .. " flipped, " .. #survived .. " survived" .. (#sites > planted and ("; " .. (#sites - planted) .. " not run (most=)") or ""))
+for w in survived do print("  " .. w) end

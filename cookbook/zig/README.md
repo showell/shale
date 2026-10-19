@@ -105,6 +105,14 @@ string's text):
 - `zig_tidy.shale` (`path=`): an alias moved after the import it names;
   section banners with nothing under them removed.
 
+## Judging a test suite
+
+- `flip_bools.shale` (`glob=`, `build=test`, `most=40`): each bare `true`
+  or `false` a production call passes, flipped alone, and the build's tests
+  run; a flip that survives is a decision no test checks. A test run per
+  flip: a hunt, run detached, never a gate. Read each survivor: code the
+  step never runs survives too.
+
 ## Judging a move
 
 - `move_judge.shale` (`mode=baseline|check bin=a,b [build=step]
