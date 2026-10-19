@@ -17,8 +17,9 @@
 -- never runs (a bench's own binary) survives for that alone, and one a
 -- separate step judges (angry-gopher's `markdown-regression`) wants
 -- `build=` that step. On 2026-10-18, angry-gopher's 24 flips left 17
--- standing; 9 were real gaps, each now a test, and the rest one of those
--- two or a choice that changes nothing.
+-- standing: 8 were real gaps (4 tests now hold them), 4 were judged by
+-- markdown-regression, 2 sat in the stress binary, and 3 change nothing
+-- that matters.
 
 const GLOB = arg("glob", "src/**/*.zig")
 const BUILD = arg("build", "test")
