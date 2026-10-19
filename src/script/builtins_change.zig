@@ -156,6 +156,32 @@ fn replaced(run: *Run, pos: ast.Pos, spans: *std.ArrayList(Span), i: usize, len:
     }
 }
 
+/// **WHERE A MISSED `old` PARTS FROM THE FILE**, for `edit`'s error: the
+/// first of its lines (trimmed, not blank) the file lacks, and the file's
+/// line holding that line's longest tail (8 bytes or more), so a miss on a
+/// changed word points at the line it is on; or, with every line there,
+/// that they are not there together (the blank lines or the indentation
+/// between them differ).
+fn missHint(a: std.mem.Allocator, file: []const u8, old: []const u8) error{OutOfMemory}![]const u8 {
+    var lines = std.mem.splitScalar(u8, old, '\n');
+    while (lines.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (line.len == 0 or std.mem.indexOf(u8, file, line) != null) continue;
+        const cut = line[0..@min(line.len, 80)];
+        var s: usize = 0;
+        while (s + 8 <= line.len) : (s += 1) {
+            const i = std.mem.indexOf(u8, file, line[s..]) orelse continue;
+            const start = if (std.mem.lastIndexOfScalar(u8, file[0..i], '\n')) |n| n + 1 else 0;
+            const end = std.mem.indexOfScalarPos(u8, file, i, '\n') orelse file.len;
+            const there = std.mem.trim(u8, file[start..end], " \t\r");
+            const no = std.mem.count(u8, file[0..start], "\n") + 1;
+            return std.fmt.allocPrint(a, ": its line \"{s}\" is not in it; its line {d} ends alike: \"{s}\"", .{ cut, no, there[0..@min(there.len, 100)] });
+        }
+        return std.fmt.allocPrint(a, ": its line \"{s}\" is not in it", .{cut});
+    }
+    return ": each of its lines is in it, but not together (the blank lines or the indentation between them differ)";
+}
+
 /// **`edit(p, old, new[, {all, word}])`**: the file with `old` replaced by
 /// `new`, **its diff printed first**, as a unified diff's hunks of the
 /// lines it changes. `old` must be in the file exactly once, unless
@@ -194,7 +220,7 @@ fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
             at.append(a, i) catch return run.oom(pos);
         }
         const shown = e.old[0..@min(e.old.len, 40)];
-        if (at.items.len == 0) return run.fail(pos, .argument, "`edit`: \"{s}\" is not in {s}{s}{s}", .{ shown, p.rel, if (e.word) " as a whole word" else "", which });
+        if (at.items.len == 0) return run.fail(pos, .argument, "`edit`: \"{s}\" is not in {s}{s}{s}{s}", .{ shown, p.rel, if (e.word) " as a whole word" else "", missHint(a, now, e.old) catch return run.oom(pos), which });
         if (at.items.len > 1 and !e.all) return run.fail(pos, .argument, "`edit`: \"{s}\" is in {s} {d} times: a longer `old` picks one, or `{{all = true}}` changes every one{s}", .{ shown, p.rel, at.items.len, which });
         // The file after this edit, and the spans, from the last
         // occurrence back so each one's place is the text's as it was.

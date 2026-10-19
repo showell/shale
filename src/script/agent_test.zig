@@ -146,6 +146,10 @@ test "agent: edit prints its diff and changes the file, one occurrence or all of
     // A line added: the hunk counts it.
     try t.expectOutput("print(edit(\"README.md\", \"top\", \"top\\nmore\"))", .{}, "--- a/README.md\n+++ b/README.md\n@@ -1,1 +1,2 @@\n-top\n+top\n+more\n1\n");
     try t.expectStop("edit(\"src/tcp.zig\", \"nothing here\", \"x\")", .{}, .argument, "is not in src/tcp.zig");
+    // A miss says where: a word changed points at the line it is on ...
+    try t.expectStop("edit(\"src/tcp.zig\", \"// DEPARTS (unbounded): the window\", \"x\")", .{}, .argument, "its line 2 ends alike: \"// DEPARTS (bounded): the window\"");
+    // ... and lines each there, but not one after the other, say so.
+    try t.expectStop("edit(\"src/tcp.zig\", \"const x = 2;\\nfn send() void {}\", \"x\")", .{}, .argument, "each of its lines is in it, but not together");
     try t.expectStop("edit(\"src/tcp_arrives.zig\", \"DEPARTS\", \"X\")", .{}, .argument, "2 times");
     try t.expectStop("edit(\"src/tcp.zig\", \"\", \"x\")", .{}, .argument, "nothing to replace");
     try t.expectStop("edit(\"src/tcp.zig\", \"x\", \"y\", {every = true})", .{}, .argument, "takes `all` and `word`");
