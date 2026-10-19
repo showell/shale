@@ -4,7 +4,9 @@
 there to stay safe is what an agent wants on Linux too:**
 
 - **Every run is bounded.** Its steps, its reads, its changes and **what
-  it prints** each have a budget (`--budget NAME=N` sets one). A script
+  it prints** each have a budget (`--budget NAME=N` sets one; a script
+  that needs more says so in a `-- budget: NAME=N ...` line among its
+  opening comments, which `shale` takes and prints). A script
   that would print a megabyte stops at the output budget (64 KiB in `shale` unset)
   and says so: its output is a bounded context cost, never a flood.
 - **A stop is one line that says where and why**, with the calls that led
@@ -26,7 +28,8 @@ is known before a bigger run finds it;
 `--verbose` says so always, with the effects and the programs run. The
 arena is not among the four: a stop on it (`budget arena`, 16 MiB unset)
 says nothing of what it would have needed: raise it and run again
-(`--budget arena_bytes=4000000000`). An
+(`--budget arena_bytes=4000000000`), and if the script is one you keep,
+put it in its `-- budget:` line. An
 `edit`'s diff is one line, `edit p: 3 hunks, -4 +5 lines`, unless
 `--verbose`, which prints it in full. With
 no file and no `-e`, the script is stdin (`shale <<'SHALE'`).

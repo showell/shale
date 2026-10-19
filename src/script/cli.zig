@@ -25,7 +25,9 @@ pub const usage =
     \\  --undo-on-stop    a run that stops puts back every path it changed (not a program's)
     \\  --args-stdin      the FILE's NAME=VALUEs on stdin, one a line, each value raw to its end
     \\  --budget NAME=N   one budget: steps, reads, read_bytes, output_bytes, changes,
-    \\                    change_bytes, arena_bytes, call_bytes, call_entries
+    \\                    change_bytes, arena_bytes, call_bytes, call_entries; a
+    \\                    script's own `-- budget: NAME=N ...` line sets its
+    \\                    budgets where this does not
     \\  -e SOURCE         the script itself, in place of a file (neither: stdin is the script)
     \\  NAME=VALUE        a value the script reads with arg("NAME", default)
     \\
@@ -50,6 +52,11 @@ pub const Command = struct {
     /// `--args-stdin`: the FILE's values are stdin's lines (`argLines`).
     args_stdin: bool = false,
     budgets: interp.Budgets = defaults,
+    /// The budgets `--budget` set (by `settable`'s order): a script's header
+    /// never takes one of these (`headerBudgets`).
+    flagged: [settable.len]bool = @splat(false),
+    /// The budgets the script's `-- budget:` line set (`headerBudgets`).
+    from_header: [settable.len]bool = @splat(false),
     /// Into the caller's buffer.
     args: []const interp.Arg = &.{},
 };
@@ -90,7 +97,9 @@ pub fn parse(argv: []const []const u8, env_root: ?[]const u8, args_buf: []interp
                 const name = v[0..eq];
                 const n = builtins.parseInteger(v[eq + 1 ..]) orelse return refuse(why_buf, "--budget {s}: {s} is not a number", .{ v, v[eq + 1 ..] });
                 if (n < 1) return refuse(why_buf, "--budget {s}: a budget is at least 1", .{v});
-                if (!setBudget(&c.budgets, name, @intCast(n))) return refuse(why_buf, "--budget {s}: no budget is called {s}", .{ v, name });
+                const k = budgetIndex(name) orelse return refuse(why_buf, "--budget {s}: no budget is called {s}", .{ v, name });
+                _ = setBudget(&c.budgets, name, @intCast(n));
+                c.flagged[k] = true;
             }
         } else if (std.mem.startsWith(u8, a, "-")) {
             return refuse(why_buf, "{s} is not an option", .{a});
@@ -141,6 +150,59 @@ pub fn argLines(text: []const u8, have: []const interp.Arg, buf: []interp.Arg, w
         n += 1;
     }
     return .{ .args = buf[0..n] };
+}
+
+/// **A SCRIPT'S OWN BUDGETS**: a line `-- budget: NAME=N NAME=N ...` among
+/// the comments that open a script sets those budgets for its run, as
+/// `--budget` would, where the command line has not set them itself. A
+/// recipe that needs room says so where it is read, and the run says what
+/// it took (`printHeaderBudgets`), so the cost stays in sight. One such
+/// line; a name or a number `--budget` would refuse is refused. The first
+/// line that is neither blank nor a comment ends the header.
+pub fn headerBudgets(source: []const u8, c: *Command, why_buf: []u8) ?Refused {
+    var it = std.mem.splitScalar(u8, source, '\n');
+    var seen = false;
+    while (it.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (line.len == 0) continue;
+        if (!std.mem.startsWith(u8, line, "--")) break;
+        const rest = std.mem.trimStart(u8, line[2..], " ");
+        if (!std.mem.startsWith(u8, rest, "budget:")) continue;
+        if (seen) return said(why_buf, "a second `-- budget:` line: one line says them all", .{});
+        seen = true;
+        var words = std.mem.tokenizeAny(u8, rest["budget:".len..], " \t");
+        var any = false;
+        while (words.next()) |v| {
+            any = true;
+            const eq = std.mem.indexOfScalar(u8, v, '=') orelse return said(why_buf, "`-- budget:` {s}: it is NAME=N", .{v});
+            const name = v[0..eq];
+            const n = builtins.parseInteger(v[eq + 1 ..]) orelse return said(why_buf, "`-- budget:` {s}: {s} is not a number", .{ v, v[eq + 1 ..] });
+            if (n < 1) return said(why_buf, "`-- budget:` {s}: a budget is at least 1", .{v});
+            const k = budgetIndex(name) orelse return said(why_buf, "`-- budget:` {s}: no budget is called {s}", .{ v, name });
+            if (c.flagged[k]) continue;
+            _ = setBudget(&c.budgets, name, @intCast(n));
+            c.from_header[k] = true;
+        }
+        if (!any) return said(why_buf, "`-- budget:` names no budget", .{});
+    }
+    return null;
+}
+
+/// The budgets the script's header set, said before it runs: one line,
+/// or nothing when it set none.
+pub fn printHeaderBudgets(c: Command, w: *std.Io.Writer) std.Io.Writer.Error!void {
+    var first = true;
+    inline for (settable, 0..) |field, k| {
+        if (c.from_header[k]) {
+            try w.print("{s}{s}={d}", .{ if (first) "── budgets from the script's header: " else ", ", field, @field(c.budgets, field) });
+            first = false;
+        }
+    }
+    if (!first) try w.writeAll("\n");
+}
+
+fn said(buf: []u8, comptime fmt: []const u8, args: anytype) Refused {
+    return .{ .why = std.fmt.bufPrint(buf, fmt, args) catch fmt };
 }
 
 /// What a stop and its trail call the script: its file, `-e` or `stdin`.
@@ -202,6 +264,11 @@ fn placeOf(function: []const u8, name: []const u8, preludes: []const parse_mod.P
 
 fn refuse(buf: []u8, comptime fmt: []const u8, args: anytype) @typeInfo(@TypeOf(parse)).@"fn".return_type.? {
     return .{ .refused = .{ .why = std.fmt.bufPrint(buf, fmt, args) catch fmt } };
+}
+
+fn budgetIndex(name: []const u8) ?usize {
+    for (settable, 0..) |field, k| if (std.mem.eql(u8, name, field)) return k;
+    return null;
 }
 
 fn setBudget(b: *interp.Budgets, name: []const u8, n: u64) bool {
@@ -340,6 +407,39 @@ test "cli: the CLI's own defaults, and --verbose" {
     try testing.expect((try parsed(&.{ "--verbose", "a.shale" }, null)).verbose);
     // A budget given still wins.
     try testing.expectEqual(@as(usize, 9), (try parsed(&.{ "--budget", "output_bytes=9", "a.shale" }, null)).budgets.output_bytes);
+}
+
+test "cli: a script's `-- budget:` line sets its budgets where the command line has not, and is said; one line; names and numbers as --budget's" {
+    var why: [256]u8 = undefined;
+    var c = try parsed(&.{ "--budget", "arena_bytes=7", "a.shale" }, null);
+    try testing.expect(headerBudgets("-- A RECIPE\n-- budget: steps=900 arena_bytes=4000\n\nconst X = 1\n-- budget: steps=1\n", &c, &why) == null);
+    try testing.expectEqual(@as(u64, 900), c.budgets.steps);
+    // The command line's wins.
+    try testing.expectEqual(@as(u64, 7), c.budgets.arena_bytes);
+    var w: std.Io.Writer.Allocating = .init(testing.allocator);
+    defer w.deinit();
+    try printHeaderBudgets(c, &w.writer);
+    try testing.expectEqualStrings("── budgets from the script's header: steps=900\n", w.written());
+    // After the first line of code, a comment is no header.
+    var d = try parsed(&.{"a.shale"}, null);
+    try testing.expect(headerBudgets("print(1)\n-- budget: steps=9\n", &d, &why) == null);
+    try testing.expectEqual(@as(u64, 5_000_000), d.budgets.steps);
+    var nothing: std.Io.Writer.Allocating = .init(testing.allocator);
+    defer nothing.deinit();
+    try printHeaderBudgets(d, &nothing.writer);
+    try testing.expectEqualStrings("", nothing.written());
+    for ([_]struct { []const u8, []const u8 }{
+        .{ "-- budget: stepz=3", "`-- budget:` stepz=3: no budget is called stepz" },
+        .{ "-- budget: steps=x", "`-- budget:` steps=x: x is not a number" },
+        .{ "-- budget: steps=0", "`-- budget:` steps=0: a budget is at least 1" },
+        .{ "-- budget: steps", "`-- budget:` steps: it is NAME=N" },
+        .{ "-- budget:", "`-- budget:` names no budget" },
+        .{ "-- budget: steps=9\n-- budget: reads=9", "a second `-- budget:` line: one line says them all" },
+    }) |case| {
+        var e = try parsed(&.{"a.shale"}, null);
+        const r = headerBudgets(case[0], &e, &why) orelse return error.TestUnexpectedResult;
+        try testing.expectEqualStrings(case[1], r.why);
+    }
 }
 
 test "cli: used: past half of a budget" {

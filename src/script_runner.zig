@@ -50,7 +50,7 @@ pub fn main(init: std.process.Init) !u8 {
     }
     var args_buf: [64]script.Arg = undefined;
     var why_buf: [512]u8 = undefined;
-    const c = switch (cli.parse(argv[1..], init.environ_map.get("SHALE_ROOT"), &args_buf, &why_buf)) {
+    var c = switch (cli.parse(argv[1..], init.environ_map.get("SHALE_ROOT"), &args_buf, &why_buf)) {
         .command => |c| c,
         .refused => |r| {
             try err.print("shale: {s}\n{s}", .{ r.why, cli.usage });
@@ -94,6 +94,13 @@ pub fn main(init: std.process.Init) !u8 {
             return 2;
         };
     };
+    // **THE SCRIPT'S OWN BUDGETS** (its `-- budget:` line), said before it runs.
+    if (cli.headerBudgets(source, &c, &why_buf)) |rf| {
+        try err.print("shale: {s}\n", .{rf.why});
+        return 2;
+    }
+    try cli.printHeaderBudgets(c, err);
+    try err.flush();
     const root = std.mem.trimEnd(u8, c.root, "/");
     const auth = try std.fs.path.join(gpa, &.{ root, "..", "auth" });
     defer gpa.free(auth);

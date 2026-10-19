@@ -1166,6 +1166,14 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   or `call_entries`. **The runner's own defaults** (metal-vmm QUEUE 233):
   output 64 KiB, `call_bytes` 64 MiB, 64 programs a run; the rest the
   core's.
+- **A script says its own budgets** in a line among the comments that
+  open it, `-- budget: steps=900000000 arena_bytes=4000000000`: the same
+  names and numbers `--budget` takes, one such line, each set where the
+  command line has not set it (a `--budget` wins). The runner prints what
+  it took before the run (`── budgets from the script's header: ...`), so
+  a recipe's cost is said where it is read and seen when it runs. The
+  first line that is neither blank nor a comment ends the opening
+  comments.
 - `-e SOURCE` is the script itself, in place of a file. **With neither,
   the script is stdin**, and a stop names it `stdin`; a terminal on stdin
   is refused.
