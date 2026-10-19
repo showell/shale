@@ -184,14 +184,17 @@ function zig_rename(path, from, to, opts?)
   return host("zig_rename", path, {from = from, to = to}, opts)
 end
 
--- **A ZIG FILE'S TOP-LEVEL DECLARATIONS** (metal-vmm QUEUE 235, 1), from
--- Zig's own parser, in file order: each `{kind, name, name_form,
--- visibility, linkage, first, last, start, stop[, comment_above]}`.
--- Many names at once: `{a = "x.a", b = "x.b"}`, one pass, one write.
+-- Many names at once, `zig_rename` over a map: `{a = "x.a", b = "x.b"}`,
+-- one pass, one write.
 function zig_renames(path, names, opts?)
   return host("zig_rename", path, {many = names}, opts)
 end
 
+-- **A ZIG FILE'S TOP-LEVEL DECLARATIONS** (metal-vmm QUEUE 235, 1), from
+-- Zig's own parser, in file order: each `{kind, name, name_form,
+-- visibility, linkage, first, last, start, stop, uses[, comment_above]}`,
+-- `uses` the top-level names its span uses. `opts.container` names a
+-- container: its members instead, each with `reaches` too.
 function zig_decls(path, opts?)
   if opts == nil then return host("zig_decls", path) end
   return host("zig_decls", path, opts)
@@ -210,14 +213,16 @@ function zig_move(from, to, names, opts?)
   return host("zig_move", from, to, packed)
 end
 
--- **A ZIG FILE'S `@import`s AND `@embedFile`s** (metal-vmm QUEUE 235, 3),
--- from Zig's parser, in source order: each `{kind = "import" | "embed",
--- target, name, line, file = "found" | "missing" | "module"}`.
+-- A Zig file's tokens, from Zig's tokenizer: each `{tag, text, line}`;
+-- `opts.tag` (a std.zig.Token.Tag name) keeps one tag.
 function zig_tokens(path, opts?)
   if opts == nil then return host("zig_tokens", path) end
   return host("zig_tokens", path, opts)
 end
 
+-- **A ZIG FILE'S `@import`s AND `@embedFile`s** (metal-vmm QUEUE 235, 3),
+-- from Zig's parser, in source order: each `{kind = "import" | "embed",
+-- target, name, line, file = "found" | "missing" | "module"}`.
 function zig_imports(path)
   return host("zig_imports", path)
 end
@@ -228,14 +233,15 @@ function create(p, text)
   replace(p, text)
 end
 
--- Whether `c` (one byte, or "" at an end) is a word's, as `edit`'s
--- `word` reads it: a letter, a digit or `_`.
+-- **INTERNAL to `edits_all`** (as is `edit_words`): no script's to call,
+-- but its name is taken. Whether `c` (one byte, or "" at an end) is a
+-- word's, as `edit`'s `word` reads it: a letter, a digit or `_`.
 function edit_word_byte(c)
   return c ~= "" and re_find(c, "^[A-Za-z0-9_]$") ~= nil
 end
 
--- `text` with each whole-word `old` replaced by `new`, as `edit`'s
--- `{word = true, all = true}` does: `{text, n}`.
+-- **INTERNAL to `edits_all`**: `text` with each whole-word `old` replaced
+-- by `new`, as `edit`'s `{word = true, all = true}` does: `{text, n}`.
 function edit_words(text, old, new)
   local out = {}
   local rest = text

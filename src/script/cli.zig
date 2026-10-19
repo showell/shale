@@ -5,11 +5,11 @@
 //!     shale [--root DIR] [--verbose] [--undo-on-stop] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
 //!
 //! **A run makes its changes and runs its programs**: on Linux, git is
-//! the undo (Steve, 2026-10-17, deleting the dry run). **With no FILE and
-//! no `-e`, the script is stdin** (metal-vmm QUEUE 233). **TERSE** (the
-//! dogfood design's "The CLI's defaults"): what a run used is said only
-//! past half a budget or on a stop, the effects only on `--verbose`;
-//! `printReport` is the CLI's, and `script.report`, the route's, is frozen.
+//! the undo. **With no FILE and no `-e`, the script is stdin** (metal-vmm
+//! QUEUE 233). **TERSE** (the dogfood design's "The CLI's defaults"): what
+//! a run used is said only past half a budget or on a stop, the effects
+//! only on `--verbose`; `printReport` is the CLI's, and `script.report`,
+//! the route's, is frozen.
 
 const std = @import("std");
 const interp = @import("interp.zig");

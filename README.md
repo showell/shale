@@ -42,8 +42,8 @@ compiles the portable half with its own `host_io`, as it does webbox.
 - the store and its confinement;
 - the runner (`zig build script`) and the signed route on the live site;
 - a short tutorial;
-- a cookbook of operator scripts, each tested against a store shaped like
-  angry-gopher's data;
+- the site examples, operator scripts each tested against a store shaped
+  like angry-gopher's data;
 - what was decided and refused.
 
 ## Checks
@@ -72,7 +72,7 @@ file. Each repo's gate runs it for its own docs (`-- only=<repo>`).
 `-Dtest-timing` prints each test's time, slowest first; `-Dscript-fuzz=N`
 sets how many sources the script fuzzer runs. Two more steps measure and
 are run by hand, by no tier: `zig build script-bench` (Shale's hot paths)
-and `zig build shale-scale` (the largest site each cookbook script fits).
+and `zig build shale-scale` (the largest site each site example fits).
 
 ## Docs
 
@@ -86,6 +86,8 @@ and `zig build shale-scale` (the largest site each cookbook script fits).
   tested to parse. Recipes, not builtins: copy one and change it.
 - [docs/designs/DESIGN-shale-dogfood.md](docs/designs/DESIGN-shale-dogfood.md):
   the design for Claude working in Shale instead of bash and Python.
+- [docs/designs/DESIGN-shale-stream.md](docs/designs/DESIGN-shale-stream.md):
+  a background run's output streamed as it runs; proposed, parked.
 
 ## Status
 

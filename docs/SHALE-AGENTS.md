@@ -10,8 +10,8 @@ there to stay safe is what an agent wants on Linux too:**
 - **A stop is one line that says where and why**, with the calls that led
   there (`called from file:line:column (in f)`), and a class: `type`,
   `index`, `store`, `budget reads`. No traceback to read through.
-- **A run makes its changes; git is the undo.** There is no dry run
-  (Steve, 2026-10-17): every change is checked and logged, an `edit`'s
+- **A run makes its changes; git is the undo.** There is no dry run:
+  every change is checked and logged, an `edit`'s
   diff is printed before it is written, and an edit that would not pin its
   text down is refused before anything is changed. Work in a checkout, so
   `git diff` shows what a run did and `git checkout --` takes it back.
@@ -23,7 +23,10 @@ there to stay safe is what an agent wants on Linux too:**
 run used of four, steps, reads, read bytes and output bytes (`── used:
 52374 of 5000000 steps, 12 of 10000 reads, ...`), so a script near an edge
 is known before a bigger run finds it;
-`--verbose` says so always, with the effects and the programs run. An
+`--verbose` says so always, with the effects and the programs run. The
+arena is not among the four: a stop on it (`budget arena`, 16 MiB unset)
+says nothing of what it would have needed: raise it and run again
+(`--budget arena_bytes=4000000000`). An
 `edit`'s diff is one line, `edit p: 3 hunks, -4 +5 lines`, unless
 `--verbose`, which prints it in full. With
 no file and no `-e`, the script is stdin (`shale <<'SHALE'`).
@@ -39,8 +42,14 @@ runner": what it cannot put back, it says).
 zig build                      # zig-out/bin/shale: put it on PATH
 shale count.shale dir=src
 shale rename.shale from=old to=new
-shale -e 'for p in glob("src/*.zig") do print(p) end'
+shale <<'EOF'
+for p in glob("src/*.zig") do print(p) end
+EOF
 ```
+
+(`-e SOURCE` runs a script given on the command line too, but the gate
+refuses it: its quotes and `*` are not plain words. It is for a subagent,
+or a shell outside the gate.)
 
 A value given as `name=value` is the script's `arg("name", default)`; a
 default that is an integer or a boolean reads the value as one.
@@ -109,8 +118,9 @@ has none of it):
   type** (a `.slots` of another value is counted). A file that does not
   parse stops, naming the line. **The
   analysis is Zig's parser and its tokens, not types**: what it cannot
-  see (a method reached through a value), the compiler judges after
-  (`same_tests.shale`).
+  see (a method reached through a value), `zig build` judges after, with
+  `cookbook/zig/move_judge.shale` (and `same_tests.shale` for the test
+  names).
   `zig_move(from, to, names, {comment, after}?)` moves top-level
   declarations (a name, or `{kind, name}` when one name is two) from one
   Zig file to another (made if missing; written first, then `from` cut),
@@ -331,8 +341,9 @@ string, a test's name or a comment (it counts the comments' mentions in
 `sed`'s `\b`, and `edit`'s `word`, take every one of those. **The
 analysis is tokens, not types:** a name reached through a module
 (`timeouts.pastDeadline`) is after a `.` and is left, so the qualified
-uses get their own `edit`, and the compiler judges after
-(`same_tests.shale`). `opts.lines = {first, last}` limits it to a range.
+uses get their own `edit`, and `zig build` judges after, with
+`cookbook/zig/move_judge.shale` (and `same_tests.shale` for the test
+names). `opts.lines = {first, last}` limits it to a range.
 
 **Moving a block to another file, then its uses** (zig-webbox's linux_host split):
 move the declarations, then rename what the old file still says to the
@@ -433,17 +444,15 @@ for m in re.finditer(r"([\w/]+\.zig):(\d+)", pathlib.Path("docs/notes.md").read_
 
 **Uses** `grep` for the lines, `words` for each reference, `re_find` for
 the name (its group) and the number after it, and `glob` and `count_lines`
-to check it. **About even with Python now:** where this took a seven-line
-function for the digits and two `substitute`s for the punctuation around
-a reference, the pattern does both; with one group, the number is what
-follows the name in the match.
+to check it. One pattern takes the digits and the punctuation around a
+reference; with one group, the number is what follows the name in the
+match.
 
 ## If you write Lua
 
 Shale reads like Lua, and an agent's Lua habits are most of its first
-stops (the box's first afternoon under the gate: essay
-`notes/shale-from-the-inside.md`). Most are a clear stop; the first
-two can give a quiet wrong answer, an empty list:
+stops (essay `notes/shale-from-the-inside.md`). Most are a clear stop;
+the first two can give a quiet wrong answer, an empty list:
 
 - **Patterns are regular expressions, not Lua's.** The escape is `\`
   (`"\\."` in a string), and `%` is a plain character, so Lua's `%d+` or
@@ -460,6 +469,12 @@ two can give a quiet wrong answer, an empty list:
   adds, and `create` refuses one already there.
 - **Functions are not values**: no closures and no anonymous functions.
   Declare `function name(...)` at the top level.
+- **A function sees only its parameters, its locals and the `const`s
+  above it**, never the script's `local`s: `const X = 1`, or pass it in.
+- **One name per `local`**: `local a, b = 1, 2` is refused, and so are
+  multiple assignment and multiple returns (return a list or a map).
+- **Integers only**: no floats, so `/` is refused; `//` divides (it
+  floors, `-7 // 2` is -4), and `tonumber` reads an integer.
 - **Loops are `for x in l do`** over a list's items (no `ipairs`, no
   `pairs`, no `range`), or `while`. Not-equal is `~=`.
 - **`run`'s keep is a size**: `whole = <bytes>`, `tail = <lines>` or
@@ -480,14 +495,15 @@ two can give a quiet wrong answer, an empty list:
   a listing alike. A mount's own path is resolved once, when the mounts
   are read.
 
-## The gate: `shale-gate` (installed on the box, 2026-10-17, in `~/.claude/settings.json`)
+## The gate: `shale-gate` (in `~/.claude/settings.json`)
 
 **A PreToolUse hook on Bash and Monitor** holds a session to Shale
 (`tools/shale_gate.zig`, run by `tools/shale-gate.sh`, which turns any
 failure, a missing binary included, into a refusal). It passes exactly:
 
 - **a launch:** `[cd DIR && ]shale [--verbose] [--undo-on-stop]
-  [--budget N=V] [FILE [--args-stdin]] [NAME=VALUE]...`, every word plain
+  [--budget NAME=N]... [FILE [--args-stdin]] [NAME=VALUE]...`, `shale`
+  or an absolute path ending `/shale`, every word plain
   (no quotes, `$`, backticks,
   `;|&<>()*?`), optionally ending `<<'TAG'` (TAG `[A-Z_]+`), with the
   script below and a last line `TAG` that no earlier line is;
@@ -496,10 +512,9 @@ failure, a missing binary included, into a refusal). It passes exactly:
   runs, and a line goes to `~/.local/state/shale/wants.tsv`: the date, the
   session, the kind, the tag, the text, and the command's first 160 bytes;
 - **a subagent's call.** Its hook input carries an `agent_id` (the hooks
-  reference, "Common input fields"), and local cold agents are exempt.
-  Checked live on the box (2026-10-17, a logging hook): a subagent's Bash
-  call carried `agent_id` and `agent_type`; the top-level session's calls
-  carried neither.
+  reference, "Common input fields"), and local cold agents are exempt. A
+  subagent's Bash call carries `agent_id` and `agent_type`; the top-level
+  session's calls carry neither.
 
 Anything else is refused, with one line naming both forms. `shale` is on
 `PATH` as `~/.local/bin/shale`, a link to `zig-out/bin/shale`, so a rebuild
@@ -518,7 +533,8 @@ here is what every launch runs. The hook, in `~/.claude/settings.json`:
   pattern makes a search slower than linear, and its cost is known before
   it runs.
 - **A file is read whole by `grep` and `edit`**, at most the call-bytes cap
-  (1 MiB): a bigger one goes through `read_lines` a part at a time.
+  (64 MiB under `shale`, `--budget call_bytes=N`; 1 MiB on a site): a
+  bigger one goes through `read_lines` a part at a time.
 - **Step budgets are real.** A walk of a large tree, or a script that loops
   over every line in Shale rather than in a builtin, runs out of the
   5,000,000 steps a run has unset; `--budget steps=N` raises them, and the

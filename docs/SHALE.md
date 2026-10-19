@@ -21,7 +21,7 @@ one-line summary, or the whole diff with `--verbose`.
 This page is in three parts:
 - **for a script's author:** a first script, what a run may do, the
   language, every builtin (one index, then each topic's table), the
-  prelude, the store's paths, the budgets, and the cookbook;
+  prelude, the store's paths, the budgets, and the site examples;
 - **for running one:** the runner, and the signed route on the live site;
 - **for a host:** the Zig API, the contract a host holds a run to, the VM,
   `yield`, and the Zig stack.
@@ -31,7 +31,7 @@ It ends with what was decided and what was refused. The code is
 
 ## Before you send a script: the author's checklist
 
-The traps the cookbook's scripts fell into on the live site, each with
+The traps the site examples fell into on the live site, each with
 what avoids it:
 
 1. **Guard every budget a loop spends.** A loop over a walk or a file's
@@ -57,7 +57,7 @@ what avoids it:
 7. **Look before you change.** On Linux, work in a git checkout, so a
    run's changes can be seen (`git diff`) and taken back; `edit` prints its
    diff before it writes. On metal there is no undo: rehearse a script on
-   a copy of the data first (Steve, 2026-10-17).
+   a copy of the data first.
 
 When a run stops, its report names the line, and the calls that led
 there:
@@ -80,7 +80,7 @@ there:
 ## A first script, step by step
 
 Every block of Shale on this page runs as a test, on a store shaped like
-angry-gopher's (the cookbook's below), at `now()` = 2026-10-14. What it
+angry-gopher's (the site examples' below), at `now()` = 2026-10-14. What it
 prints is under `-- prints:` (a tab shows as `<TAB>`), or how it stops
 under `-- stops:`.
 
@@ -724,8 +724,7 @@ print(find(s, "cd"), sub(s, o + 1, o + 2))   -- a position is one more
 
 ### Regular expressions
 
-**A small subset, and linear** (metal-vmm QUEUES 230 and 232; Steve,
-2026-10-17).
+**A small subset, and linear** (metal-vmm QUEUES 230 and 232).
 A field taken out of a line is one call, where `between`, `split` and a
 helper took three:
 
@@ -863,7 +862,7 @@ the script does next, and says where it stopped; the script prints what it
 found and `resume after <path>`, and a later run starts from there (`const
 START`, given to `opts.after`). Work done an entry at a time guards each
 with `room_for` and resumes after the last entry it finished. The
-cookbook's walks all do this:
+site examples' walks all do this:
 
 ```shale
 const START = ""
@@ -1020,14 +1019,14 @@ not name is Shale's default, the machine's included.
 **Plan for the site's budgets.** A whole-chat line scan can't fit: the
 chat is about 190 MB. Use what the site keeps instead (the `.count`
 sidecars, `walk`'s sizes and times), read parts of files, and use
-`budget()` to stop at a point of your own. The cookbook does all three.
+`budget()` to stop at a point of your own. The site examples do all three.
 At a step for 16 bytes, the site's whole read budget is in reach: its
 16 MiB of read bytes cost 1M of its 2M steps when read, more when
 scanned for something that is often there (a step a match). On a
-site-shaped folder of 3.9 MB, the cookbook's scans went from about 2.8M
+site-shaped folder of 3.9 MB, the site examples' scans went from about 2.8M
 steps at a step a byte to about 0.26M.
 
-## The cookbook
+## The site examples
 
 The scripts in `src/script/examples/` run as tests (`examples_test.zig`)
 against a store shaped like angry-gopher's own data. Its formats come from
@@ -1114,7 +1113,7 @@ The sizes are to within a tenth.
 | background | `chat_topics` | 1000 (~217 KiB each) | 1292 topics | 273.6 MiB | budget arena |
 | background | `big_files` | 1000 (~217 KiB each) | 2514 topics | 533.3 MiB | budget steps |
 
-**Two modes, two budgets** (Steve, 2026-10-15): an **atomic** run holds up
+**Two modes, two budgets**: an **atomic** run holds up
 the site's requests, so it keeps the site's 500 reads; a **background**
 run only fills the gaps between them, so it may read 10,000 (angry-gopher
 `admin_script.background_budgets`). Since walk's stats count as reads
@@ -1155,7 +1154,8 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   change past that stops the run. What it cannot put back it says, `── not
   put back: <path>`: a folder that was there and was removed whole, and
   anything a program changed (`run`, `git_commit`), which Shale never sees.
-  A run that finishes keeps every change. The exit is 1 either way.
+  A run that finishes keeps every change and exits 0; a run that stops
+  exits 1, whether or not everything was put back.
 - **`--args-stdin`**: the FILE's `NAME=VALUE`s are stdin's lines, after the
   command line's, each value raw to its line's end (quotes, spaces, `|`,
   `$` and backslashes as they are: no shell sees them), blank lines passed
@@ -1188,12 +1188,14 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   `lstat` (a component walk, a step a part) and a link stops the run,
   `refused`, for every read, change, `exists`/`stat` and listing; `walk`
   passes the links it lists by.
-- **The preludes after the core's**: the Linux prelude (`run`, `must`,
-  `re_lines`, `head_lines`, `tail_lines`, `grep_all`, `unique`, `newest`,
-  `create`, `edits_all`, `zig_rename`, `zig_decls`, `zig_move` and
-  `zig_imports` (Zig's
-  tokenizer and parser, over the host's calls of those names), and the jobs, `job_start`, `job_alive`, `job_stop`
-  and `job_wait`: SHALE-AGENTS.md), the git prelude (`git_status`,
+- **The preludes after the core's**: the Linux prelude (`run`, `real`,
+  `must`, `re_lines`, `head_lines`, `tail_lines`, `grep_all`, `unique`,
+  `newest`, `create`, `edits_all`; `zig_rename`, `zig_renames`,
+  `zig_decls`, `zig_move`, `zig_tokens` and `zig_imports`, Zig's tokenizer
+  and parser over the host's calls of those names; and the jobs,
+  `job_start`, `job_alive`, `job_stop` and `job_wait`: SHALE-AGENTS.md
+  has each; `edit_words` and `edit_word_byte` are `edits_all`'s own, and
+  their names are taken), the git prelude (`git_status`,
   `git_log`, `git_commit`, ...), the repo's
   (`.shale/prelude.shale` at the root) and the user's (`SHALE_PRELUDE`'s
   file, `""` none, else `~/.config/shale/prelude.shale`). A later one may
