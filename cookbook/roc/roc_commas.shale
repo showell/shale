@@ -1,0 +1,150 @@
+-- **LONG ROC LINES, LAID OUT BY `roc fmt`**: `roc fmt` never wraps a
+-- line, but lays a record, list, call or lambda's arguments one item a line
+-- when its last item has a trailing comma. For each code line wider than
+-- `width`, this puts a comma after the last item of the line's widest
+-- group of two or more items that closes on it, then runs `roc fmt`, and
+-- again until no line changes. What it can't reach is listed: comments, and
+-- lines with no such group (a function type's bare arguments).
+--
+--   cd <repo> && shale roc_commas.shale dir=roc width=100
+--
+-- budget: steps=400000000 arena_bytes=2000000000
+
+const DIR = arg("dir", "roc")
+const WIDTH = arg("width", 100)
+const PASSES = 8
+
+-- The 1-based position of the closer to give a trailing comma, or 0: of
+-- the groups that open and close on `l`, the widest holding a comma at its
+-- own depth. A lambda's arguments `|a, b|` are a group; `|>` is not.
+function comma_at(l)
+  local stack = {}
+  local commas = {}
+  local best = 0
+  local best_width = 0
+  local i = 1
+  local n = #l
+  local in_string = false
+  while i <= n do
+    local c = sub(l, i, i)
+    if in_string then
+      if c == "\\" then
+        i = i + 1
+      elseif c == "\"" then
+        in_string = false
+      end
+    elseif c == "\"" then
+      in_string = true
+    elseif c == "#" then
+      break
+    elseif c == "(" or c == "{" or c == "[" then
+      push(stack, i)
+      push(commas, 0)
+    elseif c == "|" and sub(l, i + 1, i + 1) ~= ">" and sub(l, i - 1, i - 1) ~= "|" and sub(l, i + 1, i + 1) ~= "|" then
+      if #stack > 0 and sub(l, stack[#stack], stack[#stack]) == "|" then
+        local open = stack[#stack]
+        if commas[#commas] > 0 and i - open > best_width then
+          best = i
+          best_width = i - open
+        end
+        stack = take(stack, #stack - 1)
+        commas = take(commas, #commas - 1)
+      else
+        push(stack, i)
+        push(commas, 0)
+      end
+    elseif c == ")" or c == "}" or c == "]" then
+      if #stack > 0 then
+        local open = stack[#stack]
+        if commas[#commas] > 0 and i - open > best_width then
+          best = i
+          best_width = i - open
+        end
+        stack = take(stack, #stack - 1)
+        commas = take(commas, #commas - 1)
+      end
+    elseif c == "," and #commas > 0 then
+      commas[#commas] = commas[#commas] + 1
+    end
+    i = i + 1
+  end
+  return best
+end
+
+-- A line's width, a tab four columns.
+function width(l)
+  return #l + 3 * (#split(l, "\t") - 1)
+end
+
+-- `l` with its trailing comma, or nil when it has none to take or holds
+-- one already.
+function with_comma(l)
+  local at = comma_at(l)
+  if at == 0 then return nil end
+  local before = trim(sub(l, 1, at - 1))
+  if ends_with(before, ",") then return nil end
+  -- Before the closer, after the last item: spaces stay where fmt puts them.
+  local j = at - 1
+  while j > 0 and sub(l, j, j) == " " do j = j - 1 end
+  return sub(l, 1, j) .. "," .. sub(l, j + 1)
+end
+
+function roc_files()
+  local out = {}
+  for e in walk_all(DIR, {}) do
+    if e.kind == "file" and ends_with(e.path, ".roc") then push(out, e.path) end
+  end
+  return out
+end
+
+function fmt()
+  local r = run({"roc", "fmt", DIR}, {timeout_ms = 60000, tail = 20})
+  if r.code ~= 0 then
+    print(r.out)
+    fail("roc fmt failed")
+  end
+end
+
+fmt()
+local pass = 1
+local changed = 1
+while changed > 0 and pass <= PASSES do
+  changed = 0
+  for p in roc_files() do
+    local ls = split(read(p), "\n")
+    local n = 0
+    for i = 1, #ls do
+      if width(ls[i]) > WIDTH and not starts_with(trim(ls[i]), "#") then
+        local w = with_comma(ls[i])
+        if w ~= nil then
+          ls[i] = w
+          n = n + 1
+        end
+      end
+    end
+    if n > 0 then
+      replace(p, join(ls, "\n"))
+      changed = changed + n
+    end
+  end
+  print("pass " .. pass .. ": " .. changed .. " lines given a trailing comma")
+  fmt()
+  pass = pass + 1
+end
+
+local comments = 0
+local code = 0
+for p in roc_files() do
+  local ls = split(read(p), "\n")
+  for i = 1, #ls do
+    if width(ls[i]) > WIDTH then
+      if starts_with(trim(ls[i]), "#") then
+        comments = comments + 1
+      else
+        code = code + 1
+        print(p .. ":" .. i .. " (" .. width(ls[i]) .. "): " .. trim(sub(ls[i], 1, 140)))
+      end
+    end
+  end
+end
+print("still over " .. WIDTH .. ": " .. code .. " code lines, " .. comments .. " comment lines")
