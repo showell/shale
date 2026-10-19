@@ -84,9 +84,9 @@ and `zig build shale-scale` (the largest site each site example fits).
 - [cookbook/zig/README.md](cookbook/zig/README.md): recipes for finding a
   Zig file's seams, moving code along them and judging the move, each
   tested to parse. Recipes, not builtins: copy one and change it.
-- [cookbook/roc/roc_commas.shale](cookbook/roc/roc_commas.shale): lays
-  out a Roc tree's long lines with `roc fmt`, by a trailing comma on each
-  one's widest group (`roc fmt` never wraps).
+- [cookbook/roc/README.md](cookbook/roc/README.md): recipes for a Roc
+  tree: long lines laid out by `roc fmt`, and two archives judged the same
+  machine code.
 - [docs/designs/DESIGN-shale-dogfood.md](docs/designs/DESIGN-shale-dogfood.md):
   the design for Claude working in Shale instead of bash and Python.
 - [docs/designs/DESIGN-shale-stream.md](docs/designs/DESIGN-shale-stream.md):

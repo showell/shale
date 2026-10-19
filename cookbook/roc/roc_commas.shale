@@ -91,7 +91,7 @@ end
 
 function roc_files()
   local out = {}
-  for e in walk_all(DIR, {}) do
+  for e in walk_all(DIR) do
     if e.kind == "file" and ends_with(e.path, ".roc") then push(out, e.path) end
   end
   return out

@@ -617,7 +617,7 @@ the errors column says the rest.
 | `arg(name[, default])` | the run's value by that name, or `default` | `argument` for a value not of an integer or boolean default's kind |
 | `fail(msg)` | never returns: the run stops | `fail`, with `msg` |
 | `attempt(f, ...)` | `{ok, value}` or `{ok = false, error, class, line, column, in_function, trail}` | (the language's own: see `attempt`) |
-| the prelude's `walk_all(p, opts)`, `walk_upto(p, opts, keep)`, `count_all(p, s)`, `find_next(p, s, at)`, `room_for(need)`, `glob(pattern[, {hidden}])`, `drop(l, n)`, `assert(ok, why)` | every entry; as many as the reads allow; every occurrence; the next one; whether the budgets hold `need`; the files a glob names; all but the first `n`; nothing, or a stop naming `why` | as `walk`, `count_in`, `find_in`, `match_path` |
+| the prelude's `walk_all(p[, opts])`, `walk_upto(p, opts, keep)`, `count_all(p, s)`, `find_next(p, s, at)`, `room_for(need)`, `glob(pattern[, {hidden}])`, `drop(l, n)`, `assert(ok, why)` | every entry; as many as the reads allow; every occurrence; the next one; whether the budgets hold `need`; the files a glob names; all but the first `n`; nothing, or a stop naming `why` | as `walk`, `count_in`, `find_in`, `match_path` |
 
 ### The store
 
@@ -847,7 +847,7 @@ are the prelude's, whatever the script has declared.
 
 | function | gives | costs |
 |---|---|---|
-| `walk_all(p, opts)` | every entry `walk(p, opts)` gives, across all its parts, the `more` entries left out; `opts` is not changed | `walk`'s, a part at a time |
+| `walk_all(p[, opts])` | every entry `walk(p, opts)` gives, across all its parts, the `more` entries left out, each `path` beginning with `p`; `opts` (none: `{}`) is not changed | `walk`'s, a part at a time |
 | `count_all(p, s)` | `s`'s occurrences in the whole file | a stat, then a `count_in` a megabyte |
 | `find_next(p, s, at)` | the 0-based offset of the first `s` at or after `at`, or nil | a `find_in` from `at`; a stat and more parts only when that finds nothing |
 | `walk_upto(p, opts, keep)` | `{entries, more, done}`: every entry from `opts.after` on, as `walk_all`, until the walk ends (`done`, `more` is "") or its reads would leave fewer than `keep` (not `done`: `more` is the path the next walk goes on after) | `walk`'s, a part at a time, with `keep_reads = keep` |

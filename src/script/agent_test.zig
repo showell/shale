@@ -95,6 +95,8 @@ test "agent: walk's skip passes by names, a folder never entered; glob finds fil
     try t.init();
     defer t.deinit();
     try t.expectOutput("local got = {} for e in walk_all(\"\", {kind = \"file\", skip = \".*\"}) do push(got, e.path) end print(join(got, \" \"))", .{}, "README.md docs/a.md src/sub/deep.zig src/tcp.zig src/tcp_arrives.zig\n");
+    // With no options, every entry, each path beginning with the walk's.
+    try t.expectOutput("local got = {} for e in walk_all(\"src/sub\") do push(got, e.path) end print(join(got, \" \"))", .{}, "src/sub/deep.zig\n");
     try t.expectOutput("print(join(glob(\"src/tcp*.zig\"), \" \"))", .{}, "src/tcp.zig src/tcp_arrives.zig\n");
     try t.expectOutput("print(join(glob(\"**/*.zig\"), \" \"))", .{}, "src/sub/deep.zig src/tcp.zig src/tcp_arrives.zig\n");
     try t.expectOutput("print(join(glob(\"README.md\"), \" \"), #glob(\"none/*.zig\"), #glob(\"none.md\"))", .{}, "README.md\t0\t0\n");

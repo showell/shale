@@ -1,0 +1,44 @@
+-- **A TREE'S CHANGE AS A PATCH**: every file under `new` (a copy of
+-- `old` with changes made to it) against the same path under `old`, as one
+-- unified patch with `a/` and `b/` paths from `under`, which `patch -p1`
+-- applies from the repository's root. It is how Dog Park's
+-- test/new_kind/sheep.patch was rebuilt after its base changed: copy
+-- roc/ aside, make the new kind there (Shale `edit`s), write the patch.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/tree_patch.shale old=roc new=<copy>/roc under=roc out=test/new_kind/sheep.patch
+--
+-- `like=*.roc` (the default) picks the files; one only in `new` is added
+-- from /dev/null. A file only in `old` is not looked for: a removal is
+-- not a patch this makes.
+--
+-- budget: steps=100000000
+
+const OLD = arg("old", "")
+const NEW = arg("new", "")
+const UNDER = arg("under", "")
+const OUT = arg("out", "")
+const LIKE = arg("like", "*.roc")
+
+if OLD == "" or NEW == "" or UNDER == "" or OUT == "" then fail("old=<dir> new=<dir> under=<path in the repo> out=<patch file>") end
+
+local patch = ""
+local files = 0
+local changed = 0
+for e in walk_all(NEW, {kind = "file", like = LIKE}) do
+  local rel = sub(e.path, #NEW + 2)
+  local was = path(OLD, rel)
+  local from = was
+  if not exists(was) then from = "/dev/null" end
+  local r = run({"diff", "-u", "--label", "a/" .. path(UNDER, rel), "--label", "b/" .. path(UNDER, rel), from, e.path}, {timeout_ms = 60000, whole = 4000000})
+  -- diff: 0 the same, 1 different, anything else trouble.
+  if r.code > 1 then fail("diff " .. rel .. ": code " .. r.code) end
+  if r.code == 1 then
+    patch = patch .. r.out
+    if not ends_with(r.out, "\n") then patch = patch .. "\n" end
+    changed = changed + 1
+  end
+  files = files + 1
+end
+if changed == 0 then fail("no file under " .. NEW .. " differs from " .. OLD .. ": no patch") end
+replace(OUT, patch)
+print(OUT .. ": " .. changed .. " of " .. files .. " files changed")
