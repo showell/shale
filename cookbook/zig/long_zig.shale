@@ -1,5 +1,6 @@
 -- The .zig files over a thousand lines in the repos we work in, longest first.
--- From ~/showell_repos: shale <shale>/cookbook/zig/long_zig.shale [over=N]
+-- Run from the folder holding the repos:
+--   cd ~/showell_repos && shale <shale>/cookbook/zig/long_zig.shale [over=N]
 
 local repos = {"zig-metal-unikernel", "zig-webbox", "shale", "metal-vmm", "dog-park", "observatory", "angry-gopher", "zig-coverage-sdk"}
 local rows = {}

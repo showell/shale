@@ -13,10 +13,12 @@
 -- writer's `drain` in five files, a vtable's `read`) declare one shape
 -- because they must, so a run needs `min` distinct names.
 --
---   cd <repo> && shale <shale>/cookbook/zig/param_runs.shale [glob=src/**/*.zig] [min=3] [longest=4] [top=15]
+--   cd <repo> && shale --budget steps=900000000 --budget arena_bytes=4000000000 <shale>/cookbook/zig/param_runs.shale [min=3] [longest=4] [skip=io,alloc] [top=15]
+--   (`glob=`, default src/**/*.zig, holds a `*`: on stdin, `--args-stdin`;
+--   see the README.)
 --
--- A tree of a hundred files needs `--budget steps=900000000 --budget
--- arena_bytes=4000000000`, as smells does. On 2026-10-18 it found
+-- Any real tree needs those budgets, as smells does: each file's tokens
+-- are held for the run. On 2026-10-18 it found
 -- angry-gopher's (conv_dir, sid) in 21 functions and (user_id,
 -- session_id) in 14.
 

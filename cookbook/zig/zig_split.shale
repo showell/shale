@@ -1,5 +1,5 @@
 -- **DECLARATIONS MOVED TO A NEW FILE, AND THE OLD ONE MADE TO USE THEM**:
--- shale's docs/SHALE-AGENTS.md recipe, as one script.
+-- zig_move and what a split needs around it, as one script.
 --
 --   cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/zig_split.shale --args-stdin <<'ARGS'
 --   from=src/main.zig

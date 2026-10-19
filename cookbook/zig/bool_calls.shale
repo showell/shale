@@ -6,7 +6,10 @@
 -- is the name, `(`, its arguments split at the commas of its own depth.
 -- A method's call (`x.name(`) counts its receiver as the first argument.
 --
---   cd <repo> && shale <shale>/cookbook/zig/bool_calls.shale [glob=src/**/*.zig] [probe/**/*.zig too: glob2=]
+--   cd <repo> && shale --budget steps=900000000 --budget arena_bytes=4000000000 <shale>/cookbook/zig/bool_calls.shale
+--
+-- `glob=` (default src/**/*.zig) and `glob2=` (a second glob,
+-- probe/**/*.zig) hold a `*`: on stdin, `--args-stdin` (see the README).
 
 const GLOB = arg("glob", "src/**/*.zig")
 const GLOB2 = arg("glob2", "")

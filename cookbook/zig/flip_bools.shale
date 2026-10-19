@@ -9,7 +9,9 @@
 -- in angry-gopher), so it runs alone, detached, and what survives becomes
 -- a test, or an enum and a test.
 --
---   cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/flip_bools.shale [glob=src/**/*.zig] [build=test] [most=40] [timeout_ms=600000]
+--   cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/flip_bools.shale [build=test] [most=40] [timeout_ms=600000]
+--   (`glob=`, default src/**/*.zig, holds a `*`: on stdin, `--args-stdin`;
+--   see the README.)
 --
 -- `most` caps the flips a run plants; the rest are listed, not run.
 --

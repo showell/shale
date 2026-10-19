@@ -1,6 +1,6 @@
 -- A file's map: each top-level declaration and test, with its first line and
 -- its length (to the next one), and the test lines' total.
--- shale <shale>/cookbook/zig/file_map.shale path=src/x.zig
+--   cd <repo> && shale <shale>/cookbook/zig/file_map.shale path=src/x.zig
 
 local path = arg("path", "")
 local all = lines(read(path))

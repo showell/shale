@@ -5,17 +5,40 @@ written in Shale over its Zig builtins (`zig_decls`, `zig_tokens`,
 `zig_move`, `zig_rename`, `zig_renames`, `zig_imports`: Zig's own
 tokenizer and parser). They are recipes, not builtins: read one, copy it,
 change it for the job in front of you. Each is tested to parse
-(`src/shale_cookbook_test.zig`); what each does is shown by the splits
-made with them (the kernel's io.zig, tcp_sim.zig and virtio.zig, metal-vmm's
-main.zig, this repo's shale_host_linux.zig, 2026-10-18).
+(`src/shale_cookbook_test.zig`).
 
-Run one from the checkout it works on:
+Run one from the checkout it works on. `<shale>` is the shale checkout
+(`~/showell_repos/shale`); `<repo>` is the repo the recipe works on, its
+root the current directory:
 
     cd <repo> && shale <shale>/cookbook/zig/seams.shale path=src/x.zig
 
-A recipe whose values a plain word cannot carry (a doc, a test's name,
-`|`) takes them on stdin, one a line, raw, and one that changes several
-files runs with `--undo-on-stop`, so a stop leaves them as they were:
+**The tree-wide recipes need room on any real tree.** `smells`, `dead`,
+`bool_calls` and `param_runs` hold each file's tokens for the run: at the
+CLI's defaults they stop on the arena on this repo's 75 files, and `clones`
+stops on steps (5,000,000). Give them
+
+    --budget steps=900000000 --budget arena_bytes=4000000000
+
+as each one's usage line shows.
+
+**A value a plain word cannot carry goes on stdin.** At the top level of
+this box's Claude sessions, a hook (`tools/shale_gate.zig`) passes only a
+plain launch: `cd DIR && ` if wanted, then `shale` and its words
+(`--verbose`, `--undo-on-stop`, `--args-stdin`, `--budget NAME=N`, a file,
+`NAME=VALUE`), none holding a quote, `$`, a backtick, `;|&<>()`, `\`, or
+`*` and `?`; and optionally a heredoc, `<<'TAG'` (TAG in capitals) ending
+the first line. So a glob (`glob=src/**/*.zig`), a doc, a test's name or
+a `|` goes on stdin after `--args-stdin`, one `NAME=VALUE` a line, raw.
+Every tree-wide recipe's `glob=` defaults to `src/**/*.zig`; another is
+given this way:
+
+    cd <repo> && shale --budget steps=900000000 --budget arena_bytes=4000000000 <shale>/cookbook/zig/smells.shale --args-stdin <<'ARGS'
+    glob=probe/**/*.zig
+    ARGS
+
+A recipe that changes several files runs with `--undo-on-stop`, so a stop
+leaves them as they were:
 
     cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/zig_split.shale --args-stdin <<'ARGS'
     from=src/x.zig
@@ -27,23 +50,28 @@ files runs with `--undo-on-stop`, so a stop leaves them as they were:
 
 ## Finding the seams
 
-- `seams.shale` (`path=`, `container=Name` for a struct's members): the
-  file's reference graph (`zig_decls`' `uses`), the hubs set aside (what
-  much uses, and what uses much), the cut profile in file order (the gaps
-  the fewest edges cross), and **each declaration grouped by the hubs that
-  reach it**: the structure by caller, which is where a hidden seam shows.
+- `seams.shale` (`path=`, `container=Name` for a struct's members,
+  `hub=N` (a declaration N use; an eighth of the file's, at least 4),
+  `out=N` (one that uses N; a sixth, at least 6), `min=120` (lines each
+  side of a gap), `show=10` (gaps), `names=12` (each group's names)): the
+  file's reference graph (`zig_decls`' `uses`), the largest declarations,
+  the hubs set aside (what much uses, and what uses much), the cut profile
+  in file order (the gaps the fewest edges cross), and **each declaration
+  grouped by the hubs that reach it**: the structure by caller, which is
+  where a hidden seam shows.
 - `fn_cut.shale` (`path= fn= first= last=`): what a cut of a long
   function would take (the locals it reads), write and give back: the
   parameters an extracted function would need.
 - `file_map.shale` (`path=`): a file's top-level declarations and tests,
   with their lines.
 - `long_zig.shale` (`over=N`): every `.zig` file over a thousand lines in
-  the repos it names (its list is one box's; change it).
+  the repos it names (its list is one box's; change it). It runs from the
+  folder holding them (`cd ~/showell_repos`), not from a repo.
 
 ## Smells: where a tree may want a second look
 
 Lists, not verdicts, read from Zig's tokenizer (never a comment's or a
-string's text):
+string's text). Each needs the budgets above on a real tree:
 
 - `smells.shale` (`glob=`, `tests=yes`, `long=`, `params=`, `top=`): long
   functions (a `fn X(...) type` marked a type, not a function to cut),
@@ -76,13 +104,15 @@ string's text):
 
 ## Moving along them
 
-- `zig_split.shale`: declarations moved to a new file and the old one made
-  to use them: `zig_move`, `pub` where the old file still uses one (a
-  member through its container), the new file's doc and imports, the old
-  file's uses qualified or aliased (`uses=alias`; a `var` always
-  qualified), the import after the last top-level one, the new file in the
-  old one's `test {}` block. `from_as=X`: the moved code reaches what it
-  needs of the old file through it. `reexport=yes`: each moved `pub`
+- `zig_split.shale` (on stdin: `from= to= as= names=a|b doc=`, and
+  optionally `after=<import> uses=alias from_as=X reexport=yes into=yes`):
+  declarations moved to a new file and the old one made to use them:
+  `zig_move`, `pub` where the old file still uses one (a member through
+  its container), the new file's doc and imports, the old file's uses
+  qualified or aliased (`uses=alias`; a `var` always qualified), the
+  import after the last top-level one (or after the one `after=` names),
+  the new file in the old one's `test {}` block. `from_as=X`: the moved
+  code reaches what it needs of the old file through it. `reexport=yes`: each moved `pub`
   declaration stays the old file's too, for a module whose surface is the
   file itself. `into=yes` joins a file already there. Refuses an import
   name the old file already uses (by `zig_tokens`).
@@ -107,7 +137,8 @@ string's text):
 
 ## Judging a test suite
 
-- `flip_bools.shale` (`glob=`, `build=test`, `most=40`): each bare `true`
+- `flip_bools.shale` (`glob=`, `build=test`, `most=40`,
+  `timeout_ms=600000` a test run): each bare `true`
   or `false` a production call passes, flipped alone, and the build's tests
   run; a flip that survives is a decision no test checks. A test run per
   flip: a hunt, run detached, never a gate. Read each survivor: code the
@@ -116,17 +147,43 @@ string's text):
 ## Judging a move
 
 - `move_judge.shale` (`mode=baseline|check bin=a,b [build=step]
-  [flags=-Dstamp=off] [test=none] [same=old,new,...] [new_files=...]`): a
+  [flags=-Dstamp=off] [test=none] [clean=yes] [same=old,new,...]
+  [new_files=...]`): a
   pure move changed nothing: the tests by name and the runner's count,
   each binary's symbols by name and size (the file part left out, Zig's
   type numbers and coverage sites' hashes normalized). `new_files=`
   excuses exactly one file-name string per new file that holds a coverage
-  site, and nothing else. A large file's moves need room: `--budget
-  steps=200000000 --budget arena_bytes=...`.
-- `same_tests.shale`: a checkout's suite again, against a baseline of test
-  names, wherever a moved test now lives.
+  site, and nothing else. `clean=yes` refuses a tree with changes (a
+  stamped build says `+dirty`). A large file's moves need room: `--budget
+  steps=200000000 --budget arena_bytes=4000000000`.
+- `same_tests.shale` (`mode=baseline|check`): a checkout's suite again,
+  against a baseline of test names, wherever a moved test now lives.
+  `mode=baseline` runs `zig build test` before the refactor and writes the
+  names to `zig-out/refactor-baseline.txt`; `mode=check` runs it after and
+  holds every test passing and the same names.
 - `const_judge.shale` (`path= name= [rev=HEAD]`): a top-level `const` as
   `rev` had it and as the file has it now, compiled side by side in a
   throwaway test and compared by Zig, byte for byte: for a page's text
-  spliced from a shared part (`a ++ shared.css ++ b`), which a symbol
+  spliced from a shared part (`a ++ shared ++ b`), which a symbol
   judge cannot see. A planted one-character change fails it.
+
+## Writing a recipe
+
+What a recipe's author meets first, each in `docs/SHALE.md`:
+
+- One name a `local`: `local a, b = ...` is refused ("Refused, each by
+  name").
+- No `local function` or nested function: a function is `function
+  name(...)`, at the top level ("Statements").
+- A function sees its parameters, its locals and the `const`s above it,
+  never the script's `local`s: what functions share is a top-level `const`
+  ("Names").
+- Integers only: no floats and no `/`; `//` divides, flooring
+  ("Operators").
+- `print` takes scalars: a list or a map goes through `join`, `table` or
+  its fields ("The host and output").
+- `sort` sorts in place and gives the list back ("Lists and maps").
+- A regular expression has at most one capture group, `m.group`
+  ("Regular expressions").
+- A long string always has a level, `[=[ ... ]=]`; one holding `]=]` takes
+  `[==[ ... ]==]` ("Values").

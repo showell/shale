@@ -11,7 +11,11 @@
 -- each other; and two algorithms' shared setup, an `errdefer` among it,
 -- stays each function's own.
 --
---   cd <repo> && shale <shale>/cookbook/zig/clones.shale [glob=src/**/*.zig] [tests=no] [window=6] [top=20]
+--   cd <repo> && shale --budget steps=900000000 --budget arena_bytes=4000000000 <shale>/cookbook/zig/clones.shale [tests=yes] [window=6] [top=20]
+--   (`glob=`, default src/**/*.zig, holds a `*`: on stdin, `--args-stdin`;
+--   see the README.)
+-- Any real tree needs those budgets: at the default 5,000,000 steps a
+-- tree of 75 files stops.
 
 const GLOB = arg("glob", "src/**/*.zig")
 const TESTS = arg("tests", "no") == "yes"

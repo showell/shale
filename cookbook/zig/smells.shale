@@ -11,11 +11,13 @@
 --   - a protocol in comments: three or more numbered steps (`// 1.`) in a
 --     file, where a call order wants to be a function or a type.
 --
---   cd <repo> && shale <shale>/cookbook/zig/smells.shale [glob=src/**/*.zig] [tests=no] [top=15]
+--   cd <repo> && shale --budget steps=900000000 --budget arena_bytes=4000000000 <shale>/cookbook/zig/smells.shale [tests=yes] [long=80] [params=6] [top=15]
+--   (`glob=`, default src/**/*.zig, holds a `*`: on stdin, `--args-stdin`;
+--   see the README.)
 --
--- A tree of a hundred files or more needs room past the defaults: on
--- 2026-10-18, zig-webbox's 70 files ran out of arena, and `--budget
--- steps=900000000 --budget arena_bytes=4000000000` took each of four repos.
+-- Any real tree needs those budgets: each file's tokens are held for the
+-- run, and on 2026-10-18 zig-webbox's 70 files ran out of arena at the
+-- defaults; with them, each of four repos finished.
 
 const GLOB = arg("glob", "src/**/*.zig")
 const TESTS = arg("tests", "no") == "yes"

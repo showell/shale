@@ -12,7 +12,10 @@
 -- `_` are never counted dead. `main`, `panic` and the root's `std_options`
 -- are a program's, by name.
 --
---   cd <repo> && shale <shale>/cookbook/zig/dead.shale [glob=src/**/*.zig] [also=probe/**/*.zig] [drop=yes]
+--   cd <repo> && shale --budget steps=900000000 --budget arena_bytes=4000000000 <shale>/cookbook/zig/dead.shale [drop=yes]
+--
+-- `glob=` (default src/**/*.zig) and `also=` (a second glob,
+-- probe/**/*.zig) hold a `*`: on stdin, `--args-stdin` (see the README).
 --
 -- `drop=yes` removes the dead ones (never a pub one), each by its own
 -- bytes (`zig_decls`' start and stop, its doc comment with it), the last

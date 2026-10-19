@@ -1,9 +1,14 @@
--- The suite again, against the baseline: every test passes, and the same
+-- The suite again, against a baseline: every test passes, and the same
 -- tests run, by name, whichever file holds them (the module part of a name,
 -- before ".test.", is left out, since a moved test's module changes).
--- Run from the checkout whose suite it is (zig-webbox's or shale's):
---   shale <shale>/cookbook/zig/same_tests.shale
+-- Run from the checkout whose suite it is (zig-webbox's or shale's), once
+-- before the refactor and once after:
+--   shale <shale>/cookbook/zig/same_tests.shale mode=baseline
+--   shale <shale>/cookbook/zig/same_tests.shale mode=check
 -- The baseline is zig-out/refactor-baseline.txt, one test's full name a line.
+
+const MODE = arg("mode", "")
+const SAVED = "zig-out/refactor-baseline.txt"
 
 function short(name)
   local m = re_find(name, "\\.test\\.(.*)$")
@@ -15,20 +20,28 @@ function names_of(text)
   local got = {}
   for l in lines(text) do
     local m = re_find(l, "^ *[0-9]+\\.[0-9]+ s  (.*)$")
-    if m ~= nil and re_find(m.group, "^total, ") == nil then push(got, short(m.group)) end
+    if m ~= nil and re_find(m.group, "^total, ") == nil then push(got, m.group) end
   end
   sort(got)
   return got
 end
 
+if MODE ~= "baseline" and MODE ~= "check" then fail("same_tests: give mode=baseline (before the refactor) or mode=check (after)") end
 local r = run({"zig", "build", "test", "-Dtest-timing"}, {timeout_ms = 110000, whole = 4000000})
 if r.code ~= 0 then
   for l in last(lines(r.out), 40) do print(l) end
   fail("zig build test exited " .. r.code)
 end
-local now = names_of(r.out)
+local full = names_of(r.out)
+if MODE == "baseline" then
+  replace(SAVED, join(full, "\n") .. "\n")
+  print("same tests: baseline of " .. #full .. " tests in " .. SAVED)
+  return
+end
+local now = {}
+for n in full do push(now, short(n)) end
 local was = {}
-for n in lines(read("zig-out/refactor-baseline.txt")) do if n ~= "" then push(was, short(n)) end end
+for n in lines(read(SAVED)) do if n ~= "" then push(was, short(n)) end end
 sort(was)
 
 local seen = {}

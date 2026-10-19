@@ -1,36 +1,42 @@
 -- **WHERE A ZIG FILE DIVIDES**: its top-level declarations as a graph
--- (zig_decls' `uses`), the hubs (what most of the file uses) set aside,
--- and the groups that are left, connected only through the hubs: each a
--- candidate seam, with its size, the hubs it needs, what outside it uses
--- it (each would need `pub`), and the tests that touch only it.
+-- (zig_decls' `uses`), the hubs set aside (what much of the file uses, and
+-- what uses much of it), and what is left. It prints a count line
+-- (declarations, production and tests, the edges left), the largest
+-- declarations (150 lines or more), the hubs with their edges in and out,
+-- the cut profile in file order (the gaps the fewest edges cross, each with
+-- the edges that cross it), and each declaration grouped by the hubs that
+-- reach it: the structure by caller.
 --
---   shale <shale>/cookbook/zig/seams.shale path=src/x.zig [container=Name] [hub=N] [show=N]
+--   cd <repo> && shale <shale>/cookbook/zig/seams.shale path=src/x.zig [container=Name] [hub=N] [out=N] [min=N] [show=N] [names=N]
 --
 -- `container=Name`: that container's members, not the file's, with what
 -- each reaches through a `.` (`self.slots`) counted as a use.
---
--- `hub` is how many declarations must use a name for it to be a hub
--- (default: a fifth of the file's, at least 3).
+-- `hub=N`: a declaration that N or more use is a hub (default: an eighth
+-- of the production declarations, at least 4).
+-- `out=N`: a declaration that uses N or more is a hub (default: a sixth of
+-- them, at least 6).
+-- `min=N`: a gap is listed only with N lines or more on each side (120).
+-- `show=N`: how many gaps the cut profile lists (10).
+-- `names=N`: how many declarations each group lists (12).
 
 const P = arg("path", "")
 const SHOW = parse_int(arg("show", "10"))
 const C = arg("container", "")
--- How many members each group lists (`names=N`).
 const NAMES_SHOWN = parse_int(arg("names", "12"))
 
 function lines_of(d)
   return d.last - d.first + 1
 end
 
-function find(parent, x)
+function root_of(parent, x)
   local r = x
   while parent[r] ~= r do r = parent[r] end
   return r
 end
 
 function union(parent, a, b)
-  local ra = find(parent, a)
-  local rb = find(parent, b)
+  local ra = root_of(parent, a)
+  local rb = root_of(parent, b)
   if ra ~= rb then parent[ra] = rb end
   return nil
 end
@@ -143,12 +149,12 @@ print("hubs: " .. join(hub_names, ", "))
 -- **THE CUT PROFILE**: for each gap after the i-th, the edges that cross
 -- it; a gap few cross, with code on both sides, is a seam in the file's
 -- own order.
-local most = parse_int(arg("min", "120"))
+local min_lines = parse_int(arg("min", "120"))
 local gaps = {}
 for i = 1, #rest - 1 do
   local left = before[i]
   local right = sum - left
-  if left >= most and right >= most then
+  if left >= min_lines and right >= min_lines then
     local crossing = {}
     for e in edges do
       local lo = min(e.a, e.b)
@@ -159,7 +165,7 @@ for i = 1, #rest - 1 do
   end
 end
 print("")
-print("the gaps fewest edges cross (each side at least " .. most .. " lines):")
+print("the gaps fewest edges cross (each side at least " .. min_lines .. " lines):")
 local shown = 0
 local taken = {}
 while shown < SHOW and count(taken) < #gaps do
