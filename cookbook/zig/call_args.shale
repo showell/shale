@@ -20,6 +20,11 @@
 --   glob=src/**/*.zig
 --   template=...
 --   ARGS
+--
+-- Every file is read and every line scanned: angry-gopher's 95 files
+-- took 3 million steps of the default 5.
+--
+-- budget: steps=100000000
 
 const NAME = arg("name", "")
 const GLOB = arg("glob", "src/**/*.zig")

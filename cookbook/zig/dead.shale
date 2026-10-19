@@ -12,7 +12,7 @@
 -- `_` are never counted dead. `main`, `panic` and the root's `std_options`
 -- are a program's, by name.
 --
---   cd <repo> && shale --budget steps=900000000 --budget arena_bytes=4000000000 <shale>/cookbook/zig/dead.shale [drop=yes]
+--   cd <repo> && shale <shale>/cookbook/zig/dead.shale [drop=yes]
 --
 -- `glob=` (default src/**/*.zig) and `also=` (a second glob,
 -- probe/**/*.zig) hold a `*`: on stdin, `--args-stdin` (see the README).
@@ -21,6 +21,10 @@
 -- bytes (`zig_decls`' start and stop, its doc comment with it), the last
 -- in a file first; a run with `--undo-on-stop` puts them back on a stop.
 -- The compiler and the tests judge after.
+--
+-- Each file's tokens are held for the run, so a real tree needs room:
+--
+-- budget: steps=900000000 arena_bytes=4000000000
 
 const GLOB = arg("glob", "src/**/*.zig")
 const DROP = arg("drop", "no") == "yes"

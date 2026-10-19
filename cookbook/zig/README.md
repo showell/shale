@@ -13,14 +13,16 @@ root the current directory:
 
     cd <repo> && shale <shale>/cookbook/zig/seams.shale path=src/x.zig
 
-**The tree-wide recipes need room on any real tree.** `smells`, `dead`,
-`bool_calls` and `param_runs` hold each file's tokens for the run: at the
-CLI's defaults they stop on the arena on this repo's 75 files, and `clones`
-stops on steps (5,000,000). Give them
+**A recipe says the room it needs.** The tree-wide recipes (`smells`,
+`dead`, `bool_calls`, `param_runs`, `clones`) hold each file's tokens for
+the run, far past the CLI's defaults (5,000,000 steps). Each says its
+budgets in a line among its opening comments,
 
-    --budget steps=900000000 --budget arena_bytes=4000000000
+    -- budget: steps=900000000 arena_bytes=4000000000
 
-as each one's usage line shows.
+which `shale` takes and prints before the run (`── budgets from the
+script's header: ...`), so the cost is in sight. A `--budget` on the
+command line still wins.
 
 **A value a plain word cannot carry goes on stdin.** At the top level of
 this box's Claude sessions, a hook (`tools/shale_gate.zig`) passes only a
@@ -33,7 +35,7 @@ a `|` goes on stdin after `--args-stdin`, one `NAME=VALUE` a line, raw.
 Every tree-wide recipe's `glob=` defaults to `src/**/*.zig`; another is
 given this way:
 
-    cd <repo> && shale --budget steps=900000000 --budget arena_bytes=4000000000 <shale>/cookbook/zig/smells.shale --args-stdin <<'ARGS'
+    cd <repo> && shale <shale>/cookbook/zig/smells.shale --args-stdin <<'ARGS'
     glob=probe/**/*.zig
     ARGS
 
@@ -71,7 +73,7 @@ leaves them as they were:
 ## Smells: where a tree may want a second look
 
 Lists, not verdicts, read from Zig's tokenizer (never a comment's or a
-string's text). Each needs the budgets above on a real tree:
+string's text). Each says its budgets in its `-- budget:` line:
 
 - `smells.shale` (`glob=`, `tests=yes`, `long=`, `params=`, `top=`): long
   functions (a `fn X(...) type` marked a type, not a function to cut),
@@ -154,8 +156,8 @@ string's text). Each needs the budgets above on a real tree:
   type numbers and coverage sites' hashes normalized). `new_files=`
   excuses exactly one file-name string per new file that holds a coverage
   site, and nothing else. `clean=yes` refuses a tree with changes (a
-  stamped build says `+dirty`). A large file's moves need room: `--budget
-  steps=200000000 --budget arena_bytes=4000000000`.
+  stamped build says `+dirty`). A large file's moves need room, which
+  its `-- budget:` line gives.
 - `same_tests.shale` (`mode=baseline|check`): a checkout's suite again,
   against a baseline of test names, wherever a moved test now lives.
   `mode=baseline` runs `zig build test` before the refactor and writes the

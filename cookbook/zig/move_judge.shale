@@ -14,6 +14,10 @@
 --   cd <repo> && shale <shale>/cookbook/zig/move_judge.shale mode=check bin=zig-out/bin/metal-vmm
 --
 -- The baseline is zig-out/move-judge.txt.
+--
+-- A large file's symbols and tests need room:
+--
+-- budget: steps=200000000 arena_bytes=4000000000
 
 const MODE = arg("mode", "check")
 -- `bin=a,b`: each binary's symbols, by name and size, under its own name.

@@ -28,7 +28,10 @@
 --   not hold the name are counted too.
 --
 -- It fails on any finding. From the folder that holds the repos:
---   shale --budget arena_bytes=2000000000 --budget steps=200000000 shale/tools/doc_check.shale
+--   shale shale/tools/doc_check.shale
+--
+-- budget: steps=200000000 arena_bytes=2000000000
+--
 --   ... shale/tools/doc_check.shale self_test=1    its fixtures first
 -- `zig build doc-check` runs both, with this tree's `shale`.
 
