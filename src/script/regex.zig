@@ -1,25 +1,20 @@
-//! **REGULAR EXPRESSIONS, A LINEAR-TIME SUBSET** (metal-vmm QUEUE 230,
-//! chunk 2; Steve, 2026-10-17: "yes to regex"): the engine `re_find` and
-//! `re_match` run (builtins_regex.zig). Literals, `.`, classes (`[a-z]`,
-//! `[^...]`, `\d \w \s` and their capitals), `*`, `+`, `?`, `^`, `$`,
-//! alternation (`|`, lowest precedence, the leftmost alternative first) and
-//! `\b \B` (a word's edge, ASCII; QUEUE 232), and one capture group, which
-//! may hold alternatives; `nocase` folds ASCII letters when the pattern
-//! compiles. No counted repetition, no backreferences, no lookaround: each
-//! is refused, saying so.
+//! A linear-time regular expression engine, behind `re_find` and `re_match`.
+//! Supports literals, `.`, classes (`[a-z]`, `[^...]`, `\d \w \s` and their
+//! negations), `*`, `+`, `?`, `^`, `$`, alternation (lowest precedence,
+//! leftmost preferred), `\b \B` (ASCII word edges), and one capture group;
+//! `nocase` folds ASCII letters at compile time. Counted repetition,
+//! backreferences and lookaround are refused with a message.
 //!
-//! **A THOMPSON MACHINE, SO THE COST IS LINEAR.** A pattern compiles to a
-//! program of at most a few instructions a byte; a search runs every way
-//! through it at once, one byte of the string at a time, each instruction
-//! at most once a byte (Pike's machine: the threads in order of preference,
-//! so the match is the one a backtracking matcher would find first). A
-//! search is at most (string bytes + 1) times the program's instructions,
-//! whatever the pattern: `(a*)*b` on a long run of `a` costs about what
-//! `a*b` does. Pure: no Run, no I/O; its memory is the caller's.
+//! A pattern compiles to a Pike VM program of a few instructions per byte. A
+//! search advances all threads one byte at a time in order of preference,
+//! visiting each instruction at most once per position, so it finds the match
+//! a backtracking matcher would find first in at most (string bytes + 1) times
+//! the program's instructions, whatever the pattern. Pure: no I/O, and all
+//! memory is the caller's.
 
 const std = @import("std");
 
-/// The longest pattern compiled: one past it is refused before it is read.
+/// The longest pattern accepted; a longer one is refused before it is read.
 pub const pattern_most = 256;
 
 pub const Op = enum(u8) {
@@ -29,18 +24,20 @@ pub const Op = enum(u8) {
     any,
     /// A byte in `sets[x]`.
     set,
-    /// Go on at `x`, and (less preferred) at `y`.
+    /// Continue at `x`, and, less preferred, at `y`.
     split,
+    /// Continue at `x`.
     jmp,
-    /// Note where the string is in capture slot `x` (0 the group's start, 1 its end).
+    /// Record the position in capture slot `x` (0 the group's start, 1 its end).
     save,
-    /// Only at the string's start.
+    /// Matches only at the start of the string.
     start,
-    /// Only at the string's end.
+    /// Matches only at the end of the string.
     end,
-    /// Only at a word's edge (`c` 0), or only not at one (`c` 1): a word
-    /// byte on one side and none on the other.
+    /// Matches only at a word edge (`c` 0) or only not at one (`c` 1). An edge
+    /// has a word byte on one side and none on the other.
     boundary,
+    /// The pattern has matched.
     match,
 };
 
@@ -51,9 +48,9 @@ pub const Set = std.StaticBitSet(256);
 pub const Program = struct {
     insts: []Inst,
     sets: []Set,
-    /// Whether the pattern has its capture group.
+    /// Whether the pattern has a capture group.
     group: bool,
-    /// Whether the pattern begins with `^`: only a match at the start.
+    /// Whether the pattern begins with `^`, so it can only match at the start.
     anchored: bool,
 
     pub fn deinit(p: *Program, alloc: std.mem.Allocator) void {
@@ -62,24 +59,22 @@ pub const Program = struct {
     }
 };
 
-/// Why a pattern is not compiled: the byte of the pattern it is at, and
+/// Why a pattern was refused: the offending byte offset, and a message saying
 /// what to write instead.
 pub const Refusal = struct { at: usize, message: []const u8 };
 
 pub const Error = error{ OutOfMemory, Refused };
 
 pub const Options = struct {
-    /// ASCII letters match either case, folded into the program as it is
-    /// compiled: a class is folded before its `^` (`[^a]` takes neither `a`
-    /// nor `A`), as Python's is.
+    /// ASCII letters match either case, folded at compile time. A class is
+    /// folded before its `^` is applied (`[^a]` matches neither `a` nor `A`),
+    /// as in Python.
     nocase: bool = false,
 };
 
-// ── the pattern, read ───────────────────────────────────────────────────
-
 const Quant = enum { one, star, plus, opt };
 
-/// A pattern's alternatives, each a run of nodes.
+/// A pattern's alternatives, each a sequence of nodes.
 const Alt = []const []const Node;
 
 const Node = struct {
@@ -94,9 +89,9 @@ const Node = struct {
 const Reader = struct {
     p: []const u8,
     at: usize = 0,
-    /// The sets', kept in the program.
+    /// Allocates the sets, which the program keeps.
     alloc: std.mem.Allocator,
-    /// The tree's, dropped when the program is made.
+    /// Allocates the tree, freed once the program is emitted.
     tree: std.mem.Allocator,
     refused: *Refusal,
     options: Options,
@@ -108,7 +103,7 @@ const Reader = struct {
         return error.Refused;
     }
 
-    /// Alternatives, to the pattern's end or (in the group) its `)`.
+    /// Parses alternatives up to the end of the pattern or, in the group, its `)`.
     fn alt(r: *Reader, in_group: bool) Error!Alt {
         var seqs: std.ArrayList([]const Node) = .empty;
         while (true) {
@@ -121,7 +116,7 @@ const Reader = struct {
         }
     }
 
-    /// A run of nodes, to the pattern's end, a `|`, or (in the group) its `)`.
+    /// Parses a sequence up to the end, a `|`, or, in the group, its `)`.
     fn seq(r: *Reader, in_group: bool) Error![]const Node {
         var list: std.ArrayList(Node) = .empty;
         while (r.at < r.p.len) {
@@ -189,7 +184,7 @@ const Reader = struct {
         return list.items;
     }
 
-    /// A byte, or under `nocase` a letter's two cases.
+    /// A byte node, or under `nocase` a set of a letter's two cases.
     fn byteNode(r: *Reader, c: u8) Error!Node {
         if (r.options.nocase and std.ascii.isAlphabetic(c)) {
             var s = Set.empty;
@@ -205,7 +200,7 @@ const Reader = struct {
         return .{ .kind = .set, .set = @intCast(r.sets.items.len - 1) };
     }
 
-    /// `\d \w \s` and their capitals, as a set; null for any other escape.
+    /// Returns the set for `\d \w \s` or their negations; null for any other.
     fn shorthand(c: u8) ?Set {
         var s = Set.empty;
         switch (std.ascii.toLower(c)) {
@@ -223,7 +218,7 @@ const Reader = struct {
         return s;
     }
 
-    /// The byte an escape that is one byte stands for: `\n \t \r`, or a
+    /// Returns the byte a single-byte escape stands for: `\n \t \r`, or any
     /// byte that is not a letter or digit, itself.
     fn escapedByte(r: *Reader, at: usize, c: u8) Error!u8 {
         switch (c) {
@@ -248,9 +243,9 @@ const Reader = struct {
         return r.byteNode(try r.escapedByte(at, c));
     }
 
-    /// `[...]`: bytes, ranges (`a-z`) and shorthands; `^` first is every
-    /// byte but those; a `]` first is the byte. Under `nocase` the letters
-    /// are folded before the `^`.
+    /// Parses `[...]`: bytes, ranges (`a-z`) and shorthands. A leading `^`
+    /// negates it; a `]` first is a literal. Under `nocase`, letters are
+    /// folded before negation.
     fn class(r: *Reader) Error!Node {
         const open = r.at;
         r.at += 1;
@@ -279,7 +274,7 @@ const Reader = struct {
                 if (e == 'b' or e == 'B') return r.refuse(at, "`\\b` in a class is not in this subset: a word's edge is a place, not a byte; write it outside the `[...]`");
                 lo = try r.escapedByte(at, e);
             } else r.at += 1;
-            // A range, unless the `-` is the class's last byte.
+            // A `-` just before `]` is a literal, not a range.
             if (r.at + 1 < r.p.len and r.p[r.at] == '-' and r.p[r.at + 1] != ']') {
                 const hi_at = r.at + 1;
                 var hi = r.p[hi_at];
@@ -309,8 +304,6 @@ const Reader = struct {
     }
 };
 
-// ── the program, made ───────────────────────────────────────────────────
-
 const Emitter = struct {
     insts: std.ArrayList(Inst) = .empty,
     alloc: std.mem.Allocator,
@@ -324,8 +317,8 @@ const Emitter = struct {
         return @intCast(e.insts.items.len);
     }
 
-    /// Alternatives: a split to each in turn, the leftmost preferred, each
-    /// but the last ending in a jump past the rest.
+    /// Emits a split before each alternative but the last, the leftmost
+    /// preferred, each ending in a jump past the rest.
     fn alt(e: *Emitter, a: Alt) Error!void {
         var ends: [pattern_most + 1]u16 = undefined;
         var n_ends: usize = 0;
@@ -365,9 +358,8 @@ const Emitter = struct {
         }
     }
 
-    /// Thompson's: `e*` is a split to the part or past it and a jump back;
-    /// `e+` the part and a split back; `e?` a split to the part or past it.
-    /// The first way of each split is the one preferred: more, not fewer.
+    /// Thompson's construction. Each split prefers its first way, so every
+    /// repetition is greedy.
     fn node(e: *Emitter, n: Node) Error!void {
         switch (n.quant) {
             .one => try e.atom(n),
@@ -394,8 +386,8 @@ const Emitter = struct {
     }
 };
 
-/// **A PATTERN, COMPILED**, or refused (`refused` says where and why).
-/// Its memory is `alloc`'s, given back by `Program.deinit`.
+/// Compiles a pattern, or refuses it with `refused` set to where and why.
+/// The program is allocated from `alloc` and freed by `Program.deinit`.
 pub fn compile(alloc: std.mem.Allocator, pattern: []const u8, options: Options, refused: *Refusal) Error!Program {
     if (pattern.len > pattern_most) {
         refused.* = .{ .at = pattern_most, .message = "a pattern of more than 256 bytes" };
@@ -424,18 +416,16 @@ fn wordByte(c: u8) bool {
     return std.ascii.isAlphanumeric(c) or c == '_';
 }
 
-// ── the search ──────────────────────────────────────────────────────────
-
-/// Where a thread's string is: the match's start, the group's start and end
-/// (`unset` where it has none).
+/// A thread's captures: the match's start, then the group's start and end,
+/// each `unset` until recorded.
 const Caps = [3]usize;
 const unset = std.math.maxInt(usize);
 
 const Thread = struct { pc: u16, caps: Caps };
 
-/// The threads waiting at one place of the string, in order of preference,
-/// and every instruction the adding has been to for that place: each at
-/// most once (`stamp[pc] == now`). A list made anew is a stamp later.
+/// The threads at one position, in order of preference. `stamp[pc] == now`
+/// marks an instruction already visited at this position; `reset` clears all
+/// marks by advancing `now`.
 const List = struct {
     threads: []Thread,
     stamp: []u64,
@@ -448,13 +438,12 @@ const List = struct {
     }
 };
 
-/// What a search works in, made once for a program and used for every
-/// search with it.
+/// Working memory for searches, allocated once per program and reused.
 pub const Scratch = struct {
     a: List,
     b: List,
-    /// The ways still to be followed while threads are added: a split's
-    /// second way waits while its first is followed.
+    /// Pending split alternatives while threads are added: a split's second
+    /// way waits while its first is followed.
     stack: []Thread,
 
     pub fn init(alloc: std.mem.Allocator, p: *const Program) error{OutOfMemory}!Scratch {
@@ -483,30 +472,30 @@ pub const Scratch = struct {
 };
 
 pub const Found = struct {
-    /// The match: `s[start..end]`.
+    /// The match is `s[start..end]`.
     start: usize,
     end: usize,
-    /// The group's `[start, end]`, where the match went through it.
+    /// The group's `[start, end]`, if the match passed through it.
     group: ?[2]usize,
 };
 
 pub const Searched = struct {
     found: ?Found,
-    /// The string's places looked at, 0 to its length: what a search
-    /// costs is this times the program's instructions.
+    /// Positions examined, from 0 to the string's length. A search costs
+    /// this times the program's instructions.
     positions: u64,
-    /// The instructions followed (a measure, for the tests: at most twice
-    /// the program's instructions a place).
+    /// Instructions followed; tests assert it stays at most twice the
+    /// program's instructions per position.
     work: u64,
-    /// Whether the search ended; not when `positions_most` stopped it.
+    /// False when `positions_most` stopped the search early.
     finished: bool,
 };
 
-/// Every way from `first` that ends at a byte to match or at the match,
-/// added to `list` in order of preference, at the string's place `pos`. A
-/// way that comes to an instruction already followed for this place ends
-/// there (a loop's turn that took no byte, or a way less preferred than
-/// one already there), so each instruction is followed at most once a place.
+/// Follows every path from `first` to a consuming instruction or `match`,
+/// adding the threads to `list` in order of preference at position `pos`. A
+/// path reaching an instruction already visited here ends there (an empty loop
+/// iteration, or a less preferred path), so each instruction is followed at
+/// most once per position.
 fn add(p: *const Program, sc: *Scratch, list: *List, first: Thread, pos: usize, s: []const u8, work: *u64) void {
     const len = s.len;
     var top: usize = 1;
@@ -549,8 +538,8 @@ fn add(p: *const Program, sc: *Scratch, list: *List, first: Thread, pos: usize, 
     }
 }
 
-/// **THE LEFTMOST MATCH OF `p` IN `s`**, the one a backtracking matcher
-/// would find first, or none; at most `positions_most` places looked at.
+/// Returns the leftmost match of `p` in `s`, the one a backtracking matcher
+/// would find first, examining at most `positions_most` positions.
 pub fn search(p: *const Program, sc: *Scratch, s: []const u8, positions_most: u64) Searched {
     var clist = &sc.a;
     var nlist = &sc.b;
@@ -563,7 +552,7 @@ pub fn search(p: *const Program, sc: *Scratch, s: []const u8, positions_most: u6
     while (true) : (pos += 1) {
         if (positions == positions_most) return .{ .found = null, .positions = positions, .work = work, .finished = false };
         positions += 1;
-        // A new start, least preferred, until there is a match.
+        // A new start at each position, least preferred, until a match.
         if (matched == null and (!p.anchored or pos == 0))
             add(p, sc, clist, .{ .pc = 0, .caps = .{ pos, unset, unset } }, pos, s, &work);
         nlist.reset();
@@ -571,7 +560,7 @@ pub fn search(p: *const Program, sc: *Scratch, s: []const u8, positions_most: u6
             work += 1;
             const i = p.insts[t.pc];
             if (i.op == .match) {
-                // Every way less preferred than this one is cut.
+                // Cut every less preferred thread.
                 matched = t.caps;
                 match_end = pos;
                 break;
@@ -587,7 +576,6 @@ pub fn search(p: *const Program, sc: *Scratch, s: []const u8, positions_most: u6
         }
         std.mem.swap(*List, &clist, &nlist);
         if (pos == s.len) break;
-        // Nothing left to follow, and nothing new will start.
         if (clist.len == 0 and (matched != null or p.anchored)) break;
     }
     const caps = matched orelse return .{ .found = null, .positions = positions, .work = work, .finished = true };
@@ -599,12 +587,8 @@ pub fn search(p: *const Program, sc: *Scratch, s: []const u8, positions_most: u6
     };
 }
 
-// ── the compiled patterns, kept ─────────────────────────────────────────
-
-/// **A PATTERN IS COMPILED ONCE A RUN, CACHED BY ITS TEXT** (QUEUE 230)
-/// and its `nocase` (QUEUE 232):
-/// the last `cache_most` patterns a run used, each with the scratch its
-/// searches work in. A ninth takes the place of the one used longest ago.
+/// The number of compiled patterns a run caches, keyed by text and `nocase`,
+/// each with its scratch. A new pattern evicts the least recently used.
 pub const cache_most = 8;
 
 pub const Cached = struct {
@@ -625,7 +609,7 @@ pub const Cache = struct {
     entries: [cache_most]?Cached = @splat(null),
     clock: u64 = 0,
 
-    /// The pattern's compiled program, if the cache has it.
+    /// Returns the cached entry for the pattern, if any, marking it used.
     pub fn get(c: *Cache, pattern: []const u8, options: Options) ?*Cached {
         c.clock += 1;
         for (&c.entries) |*e| if (e.*) |*got| if (got.nocase == options.nocase and std.mem.eql(u8, got.text, pattern)) {
@@ -635,7 +619,7 @@ pub const Cache = struct {
         return null;
     }
 
-    /// The pattern, compiled and kept (`get` found it not there).
+    /// Compiles and caches a pattern `get` did not find.
     pub fn put(c: *Cache, alloc: std.mem.Allocator, pattern: []const u8, options: Options, refused: *Refusal) Error!*Cached {
         var program = try compile(alloc, pattern, options, refused);
         errdefer program.deinit(alloc);

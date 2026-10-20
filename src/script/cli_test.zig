@@ -1,5 +1,5 @@
-//! **THE CLI'S REPORT, ON RUNS** (metal-vmm QUEUE 233, chunk 1): terse,
-//! and a prelude's line by the prelude's name (`cli.printReport`).
+//! Tests of `cli.printReport` on real runs: the report is terse, and a line in a
+//! prelude is named by the prelude.
 
 const std = @import("std");
 const script = @import("script.zig");
@@ -30,11 +30,11 @@ test "cli: terse: a run that finished well inside says nothing; a stop, where, t
     const verbose = try reported("print(1)", "a.shale", &.{}, .{ .verbose = true, .records = &.{"run x -> exit 0 (1 ms)"} });
     defer testing.allocator.free(verbose);
     try testing.expectEqualStrings("── effects (0) ──\n── ran ──\nrun x -> exit 0 (1 ms)\n── finished (5 steps)\n── used: 5 of 1000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 2 of 262144 output bytes\n", verbose);
-    // Past half a budget, the used line.
+    // Past half a budget, the usage line appears.
     const busy = try reported("local i = 0 while i < 100 do i = i + 1 end", "a.shale", &.{}, .{});
     defer testing.allocator.free(busy);
     try testing.expect(std.mem.startsWith(u8, busy, "── used: "));
-    // A stop in a later prelude's function is that prelude's line.
+    // A stop in a later prelude's function is placed in that prelude.
     const pre = [_]parse_mod.Prelude{.{ .name = "the Linux prelude", .source = "function boom(x)\n  return x + {}\nend\n" }};
     const stop = try reported("\nboom(1)", "stdin", &pre, .{});
     defer testing.allocator.free(stop);

@@ -49,13 +49,13 @@ const Fixture = struct {
         for (files) |f| {
             const text = try transcript(a, f.sid, f.n);
             try d.writeFile(io, .{ .sub_path = f.path, .data = text });
-            // **THE SIDECAR AS THE SITE WRITES IT** (angry-gopher
-            // chat_count.zig, writeCount): "<count> <size>", the
-            // transcript's size when counted, then "<offset> <uid>": where
-            // its last message's block begins, the separator before it (0
-            // for a first message: chat_store.zig's `new_size -
-            // stored.len`), and who sent it. misc has none, as a topic not
-            // yet read since the server started.
+            // The count sidecar as the site writes it (angry-gopher
+            // chat_count.zig, writeCount): "<count> <size>", the transcript's
+            // size when counted, then "<offset> <uid>": where its last
+            // message's block begins, at the separator before it (0 for a
+            // first message: chat_store.zig's `new_size - stored.len`), and
+            // who sent it. misc has none, like a topic not yet read since the
+            // server started.
             if (std.mem.eql(u8, f.sid, "misc")) continue;
             const last = if (f.n > 1) std.mem.lastIndexOf(u8, text, sep).? else 0;
             const sidecar = try std.fmt.allocPrint(a, "{d} {d}\n{d} 7\n", .{ f.n, text.len, last });
@@ -148,8 +148,6 @@ test "example: delete one topic, its sidecars and uploads with it, every change 
     try testing.expect(std.mem.startsWith(u8, twice.output, "no such topic"));
 }
 
-// ── 204(a)'s three scripts, in v31's builtins (metal-vmm QUEUE 206) ──────
-
 test "example: where the bytes are, folder by folder, then the largest files" {
     var f: Fixture = undefined;
     try f.init();
@@ -187,9 +185,9 @@ test "example: chat topics from their count caches, the quiet ones, the caches s
     try testing.expect(std.mem.indexOf(u8, r.output, "unchanged since 9999-10-02T23:46:40Z): 4\n") != null);
     try testing.expect(std.mem.indexOf(u8, r.output, "): 4\n") != null);
     try testing.expect(std.mem.indexOf(u8, r.output, "count caches that are stale or missing (the server recounts them): 2\ntopic           bytes  cache\n#general plans   4166  39 at 4000\n#random misc      188  none\n") != null);
-    // Not one transcript read: the walk's folders and the caches, read one each.
+    // No transcript is read: only the walk's folders and the caches.
     try testing.expect(r.steps < 20_000);
-    // On 2026-10-14, the files (written today or later) are not quiet.
+    // At the fixture's date, the files (written then or later) are not quiet.
     var today = f.runAt(chat_topics, 1791936000, &out_buf);
     defer today.deinit();
     try finished(&today);
@@ -219,8 +217,6 @@ test "example: the first change makes one folder and one file, and says what the
     try testing.expectEqual(@as(usize, 1), again.effects.len);
     try testing.expect(std.mem.startsWith(u8, again.output, "the last run wrote:\nwritten by a signed Shale script at 2026-10-14T00:00:00Z\n"));
 }
-
-// ── 208(d)'s cookbook ────────────────────────────────────────────────────
 
 test "example: every count cache checked against its transcript's own separators, the stale and missing named, none read whole" {
     var f: Fixture = undefined;
@@ -261,8 +257,8 @@ test "example: a phrase found in the chat, each topic's first message with it, a
     try testing.expect(std.mem.indexOf(u8, short.output, "stopped at the read budget, after ") != null);
 }
 
-/// **THE SITE'S BUDGETS** (angry-gopher `zig-server/src/admin_script.zig`,
-/// `budgets`, at v30): what the live route gives a signed script.
+/// The budgets the live route gives a signed script (angry-gopher
+/// `zig-server/src/admin_script.zig`, `budgets`).
 const site_budgets: script.Budgets = .{
     .steps = 2_000_000,
     .arena_bytes = 8 * 1024 * 1024,
@@ -308,20 +304,18 @@ test "every cookbook script that walks gives the same answer walking in parts of
     }
 }
 
-// ── 209(b): docs/SHALE.md's snippets run ─────────────────────────────────
-
-/// One ```shale block of the reference: its source, and what it must do,
-/// from its last comment lines: `-- prints:` and the output, a line of it
-/// each as `-- text` (or `--` for an empty line), or `-- stops: <class>`.
-/// **A PASSING RUN PRINTS NOTHING THAT SAYS "FAILED"** (the box, 209): the
-/// planted cases below expect these complaints, so they are kept quiet
-/// there, and said only when a real doc check fails.
+/// Silences `complain`. A passing run prints nothing that says "failed": the
+/// planted cases below expect complaints, so they set this, and complaints
+/// are printed only when a real doc check fails.
 var quiet = false;
 
 fn complain(comptime fmt: []const u8, args: anytype) void {
     if (!quiet) std.debug.print(fmt, args);
 }
 
+/// One ```shale block of the reference: its source, and what it must do, from
+/// its last comment lines: `-- prints:` and the output, one line each as
+/// `-- text` (or `--` for an empty line), or `-- stops: <class>`.
 pub const Snippet = struct { line: usize, source: []const u8, prints: ?[]const u8, stops: ?[]const u8 };
 
 pub fn snippets(a: std.mem.Allocator, doc: []const u8) ![]Snippet {
@@ -398,8 +392,8 @@ fn parseSnippet(a: std.mem.Allocator, line: usize, text: []const u8) !Snippet {
     return .{ .line = line, .source = text[0..mark], .prints = want.items, .stops = null };
 }
 
-/// Every ```shale block of the reference, run on the site-shaped store at
-/// 2026-10-14 (tabs written as `<TAB>` in the doc).
+/// Runs every ```shale block of the reference on the site-shaped store at the
+/// fixture's date (tabs written as `<TAB>` in the doc).
 fn checkDoc(doc: []const u8) !usize {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -429,7 +423,7 @@ fn checkDoc(doc: []const u8) !usize {
         }
         const got = try std.mem.replaceOwned(u8, a, r.output, "\t", "<TAB>");
         if (!std.mem.eql(u8, got, sn.prints.?)) {
-            // Every block that differs is said, so a doc is fixed in one go.
+            // Report every block that differs, so a doc is fixed in one pass.
             complain("docs/SHALE.md:{d}: prints\n{s}-- not --\n{s}", .{ sn.line, got, sn.prints.? });
             wrong += 1;
         }
@@ -461,8 +455,6 @@ test "docs/SHALE.md's check fires: a snippet whose output is wrong, one with no 
     try testing.expectEqual(@as(usize, 1), try checkDoc("```shale\nprint(1, 2)\n-- prints:\n-- 1<TAB>2\n```\n"));
 }
 
-// ── 229, chunk 2: partial results at a budget ────────────────────────────
-
 /// `src` with its `const START = ""` set to `start`.
 fn startingAt(a: std.mem.Allocator, src: []const u8, start: []const u8) ![]u8 {
     const line = "const START = \"\"";
@@ -470,7 +462,7 @@ fn startingAt(a: std.mem.Allocator, src: []const u8, start: []const u8) ![]u8 {
     return std.fmt.allocPrint(a, "{s}const START = \"{s}\"{s}", .{ src[0..at], start, src[at + line.len ..] });
 }
 
-/// What follows "resume after " on its line, or null.
+/// Returns what follows "resume after " on its line, or null.
 fn resumeAfter(output: []const u8) ?[]const u8 {
     const key = "resume after ";
     const at = std.mem.indexOf(u8, output, key) orelse return null;
@@ -478,7 +470,7 @@ fn resumeAfter(output: []const u8) ?[]const u8 {
     return rest[0 .. std.mem.indexOfScalar(u8, rest, '\n') orelse rest.len];
 }
 
-/// The `all` row's files and bytes, as `where_the_bytes_are` prints it.
+/// Parses the `all` row's files and bytes, as `where_the_bytes_are` prints it.
 fn allRow(output: []const u8) ![2]u64 {
     const at = std.mem.indexOf(u8, output, "\nall ") orelse return error.NoAllRow;
     var it = std.mem.tokenizeScalar(u8, output[at + 5 ..], ' ');
@@ -521,7 +513,7 @@ test "example: where the bytes are, past what the site's reads walk, prints what
     try testing.expectEqual(total[1], part[1] + rest[1]);
 }
 
-/// The integer after `key` (and a tab or a space) in `output`.
+/// Returns the integer after `key` (and a tab or a space) in `output`.
 fn numberAfter(output: []const u8, key: []const u8) !u64 {
     const at = std.mem.indexOf(u8, output, key) orelse return error.NoKey;
     var rest = output[at + key.len ..];

@@ -1,5 +1,5 @@
-//! **NUMBERS' BUILTINS**: the least and the most of a few integers, and an
-//! integer's size. The operators do the rest (`+ - * // %`, checked).
+//! The number builtins: `min` and `max` of a few integers, and `abs`. The
+//! operators do the rest (`+ - * // %`, checked).
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -21,7 +21,7 @@ pub const specs = [_]bi.Spec{
 
 const Way = enum { min, max };
 
-/// **`min(a, b, ...)`, `max(a, b, ...)`**: two to four integers.
+/// `min(a, b, ...)` and `max(a, b, ...)` of two to four integers.
 fn extreme(comptime way: Way) bi.Impl {
     return struct {
         fn f(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {

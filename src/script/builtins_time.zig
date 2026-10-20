@@ -1,6 +1,6 @@
-//! **TIME'S AND THE HOST'S BUILTINS**: `now()`, the one time a script has,
-//! handed in by the host; `date` and `seconds`, UTC both ways; and
-//! `budget()`, what a run has left.
+//! Builtins for time and the host: `now()`, the one time a script sees, handed
+//! in by the host; `date` and `seconds`, converting to and from UTC text;
+//! `arg`, `fail`, `host`, `yield`, and `budget()`, what a run has left.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -24,29 +24,25 @@ pub const specs = [_]bi.Spec{
     spec(.seconds, 1, 1, seconds),
 };
 
+/// `now()` returns the run's one time, in seconds since the epoch, as the host
+/// handed it in.
 fn now(run: *Run, _: ast.Pos, _: []const Value) Error!Value {
     return .{ .int = run.now };
 }
 
-/// **`arg(name[, default])`** (metal-vmm QUEUE 229, chunk 4): the value the
-/// run was given as `name` (the Linux tool's `name=value`), or `default`
-/// (nil unset) when it was given none: a script's inputs, where they were
-/// once edited into its source. A default that is an integer or a boolean
-/// reads the value as one (`true`, `false`, `1`, `0`), and a value that
-/// is none is an `argument` error; any other default, the string as given.
-/// **`fail(msg)`** (the design, final; metal-vmm QUEUE 232): the run stops
-/// here with class `fail` and `msg` as its message, one line and its
-/// trail, as any stop; `attempt` catches it. A script's own assertion.
+/// `fail(msg)` stops the run here with class `fail` and `msg` as its message,
+/// reported with its trail like any stop; `attempt` catches it. A script's own
+/// assertion.
 fn failWith(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const msg = try bi.stringArg(run, pos, .fail, args[0], "its message");
     try run.charge(pos, msg.len);
     return run.fail(pos, .fail, "{s}", .{msg});
 }
 
-/// **`host(name, ...)`** (metal-vmm QUEUE 233): the host's call `name`,
-/// given the rest; what the Linux CLI's preludes wrap as `run`, `real` and
-/// the jobs. Where there is no host (metal), a `host` stop naming the call.
-/// The host checks and charges its own arguments and work.
+/// `host(name, ...)` invokes the host's call `name` with the remaining
+/// arguments; the Linux CLI's preludes wrap these as `run`, `real` and the
+/// jobs. Where there is no host (metal), stops with class `host`, naming the
+/// call. The host checks and charges its own arguments and work.
 fn hostCall(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const name = try bi.stringArg(run, pos, .host, args[0], "its call's name");
     try run.charge(pos, name.len);
@@ -54,6 +50,11 @@ fn hostCall(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return h.call(h.ctx, run, pos, name, args[1..]);
 }
 
+/// `arg(name[, default])` returns the value the run was given as `name` (the
+/// Linux tool's `name=value`), or `default` (nil if unset) when there is none.
+/// An integer or boolean default parses the value as one (`true`, `false`,
+/// `1`, `0`), and a value that does not parse is an `argument` error; any other
+/// default returns the string as given.
 fn givenArg(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const name = try bi.stringArg(run, pos, .arg, args[0], "its name");
     try run.charge(pos, name.len);
@@ -75,17 +76,16 @@ fn givenArg(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return fallback;
 }
 
-/// **`yield()`** (metal-vmm QUEUE 211, M1, as Steve's model of 2026-10-15
-/// left it): a collection point only. The VM keeps the values the run
-/// still reaches, copied into a fresh arena (its own op, `collect`); a
-/// slice's end is the host's to choose, never the script's. The walker
-/// keeps everything, so here it is nothing.
+/// `yield()` is a collection point only. The VM compiles it to its own op,
+/// `collect`, which copies the values the run still reaches into a fresh arena.
+/// Where a slice ends is the host's choice, never the script's. The tree walker
+/// keeps everything, so here it does nothing.
 fn yield(_: *Run, _: ast.Pos, _: []const Value) Error!Value {
     return .nil;
 }
 
-/// **`budget()`** (QUEUE 206): what is left of each budget a script spends
-/// as it runs, so it can stop at a point of its own.
+/// `budget()` returns what is left of each budget a script spends as it runs,
+/// so it can stop at a point of its own choosing.
 fn budget(run: *Run, pos: ast.Pos, _: []const Value) Error!Value {
     const a = run.alloc;
     const out = try run.newTable(pos);
@@ -101,8 +101,6 @@ fn budget(run: *Run, pos: ast.Pos, _: []const Value) Error!Value {
     out.kind = .map;
     return .{ .table = out };
 }
-
-// ── dates ────────────────────────────────────────────────────────────────
 
 /// The latest second `date` writes: 9999-12-31T23:59:59Z.
 const last_second: i64 = 253402300799;
@@ -140,7 +138,7 @@ fn daysInMonth(y: i64, m: i64) i64 {
     };
 }
 
-/// **`date(seconds)`**: the UTC time `seconds` after the epoch, as
+/// `date(seconds)` formats the UTC time `seconds` after the epoch as
 /// `YYYY-MM-DDTHH:MM:SSZ`, from 1970 to the end of 9999.
 fn date(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const arg = args[0];
@@ -156,7 +154,7 @@ fn date(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .string = text };
 }
 
-/// Digits at `s[at..][0..n]`, all of them, as a number; null otherwise.
+/// Parses `s[at..][0..n]` as decimal; null unless all of it is digits.
 fn digitsAt(s: []const u8, at: usize, n: usize) ?i64 {
     if (at + n > s.len) return null;
     var v: i64 = 0;
@@ -167,8 +165,8 @@ fn digitsAt(s: []const u8, at: usize, n: usize) ?i64 {
     return v;
 }
 
-/// The seconds since the epoch of an RFC 3339 time, or of a date alone (its
-/// midnight UTC); null when `s` is neither, or names no real day or time.
+/// Returns the seconds since the epoch of an RFC 3339 time, or of a date alone
+/// (its midnight UTC); null when `s` is neither, or names no real day or time.
 pub fn parseTime(s: []const u8) ?i64 {
     const y = digitsAt(s, 0, 4) orelse return null;
     if (s.len < 10 or s[4] != '-' or s[7] != '-') return null;
@@ -183,7 +181,7 @@ pub fn parseTime(s: []const u8) ?i64 {
     const ss = digitsAt(s, 17, 2) orelse return null;
     if (hh > 23 or mm > 59 or ss > 59) return null;
     var at: usize = 19;
-    // A fraction of a second, dropped: the time is whole seconds.
+    // Fractions of a second are dropped: the result is whole seconds.
     if (s[at] == '.') {
         at += 1;
         const from = at;
@@ -207,17 +205,16 @@ pub fn parseTime(s: []const u8) ?i64 {
     return day + hh * 3600 + mm * 60 + ss - offset;
 }
 
-/// **`seconds(text)`**: `date`'s inverse, over `date`'s range. An RFC 3339 time (`T` between the
-/// date and the time, then `Z` or `±HH:MM`; a fraction of a second is
-/// dropped) or a date alone, which is its midnight UTC. Anything else, a
-/// day that is not in the calendar among them, is an error.
+/// `seconds(text)` is the inverse of `date`, over `date`'s range. Accepts an
+/// RFC 3339 time (`T` between date and time, then `Z` or `±HH:MM`; a fraction
+/// of a second is dropped) or a date alone, meaning its midnight UTC. Anything
+/// else, including a day not in the calendar, is an error.
 fn seconds(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const arg = args[0];
     const s = try bi.stringArg(run, pos, .seconds, arg, "its time");
     try run.charge(pos, s.len);
     const t = parseTime(s) orelse return run.fail(pos, .argument, "`seconds`: \"{s}\" is not an RFC 3339 time (2026-10-14T03:00:00Z, or +02:00 for Z) nor a date (2026-10-14)", .{s[0..@min(s.len, 40)]});
-    // **`date`'S RANGE, BOTH WAYS** (208(c)): every time `seconds` gives,
-    // `date` writes.
+    // Every time `seconds` returns, `date` can format.
     if (t < 0 or t > last_second) return run.fail(pos, .argument, "`seconds`: \"{s}\" is outside 1970-01-01 to 9999-12-31, `date`'s range", .{s[0..@min(s.len, 40)]});
     return .{ .int = t };
 }

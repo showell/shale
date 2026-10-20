@@ -20,7 +20,7 @@ pub const Fixture = struct {
         self.root = try std.fs.path.join(testing.allocator, &.{ self.base, "data" });
         const io = self.threaded.io();
         try self.tmp.dir.createDir(io, "data", .default_dir);
-        // What lies beside the root, which no script may reach.
+        // Beside the root, where no script may reach.
         try self.tmp.dir.createDir(io, "auth", .default_dir);
         try self.tmp.dir.writeFile(io, .{ .sub_path = "auth/secret", .data = "s3cret" });
         try self.tmp.dir.createDir(io, "data/chat", .default_dir);
@@ -98,7 +98,7 @@ test "builtins: the store's changes, each in the effects log with its outcome, a
     defer testing.allocator.free(x);
     try testing.expectEqualStrings("onetwo", x);
     try f.expectOutput("print(exists(\"top.txt\"), exists(\"chat\"), is_dir(\"d/e\"))", "false\tfalse\ttrue\n");
-    // A change that fails stops the run: logged with its error, and what
+    // A change that fails stops the run and is logged with its error; what
     // came before it stays done.
     var r = f.run("replace(\"kept.txt\", \"k\") remove(\"no/such/file\") replace(\"never.txt\", \"n\")", .{});
     defer r.deinit();
@@ -190,7 +190,7 @@ test "builtins: strings" {
     try f.expectOutput("print(starts_with(\"hello\", \"he\"), ends_with(\"hello\", \"lo\"), contains(\"hello\", \"ll\"), contains(\"hello\", \"x\"))", "true\ttrue\ttrue\tfalse\n");
     try f.expectOutput("print(find(\"hello\", \"l\"), find(\"hello\", \"z\"), find(\"a.b\", \".\"))", "3\tnil\t2\n");
     // From a start: the next one is `find(s, t, at + 1)`; `#s + 1` finds
-    // only "" (2026-10-18).
+    // only "".
     try f.expectOutput(
         \\print(find("hello", "l", 4), find("hello", "l", 5), find("hello", "h", 1), find("abc", "", 4), find("abc", "c", 4))
     , "4\tnil\t1\t4\tnil\n");
@@ -228,10 +228,9 @@ test "builtins: every builtin's work is charged, so one call cannot hide a milli
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
-    // A string of a million bytes built in twenty doublings, then searched:
-    // the steps the search takes are counted (a step for 16 bytes: 65,536
-    // for the million). The build alone, measured, then the build and the
-    // search with 30,000 steps to spare.
+    // A million-byte string built by twenty doublings, then searched at a
+    // step per 16 bytes (65,536 steps). We measure the build alone, then
+    // give the build and search only 30,000 steps to spare.
     var built = f.run("local s = \"x\" for i = 1, 20 do s = s .. s end", .{});
     defer built.deinit();
     try testing.expect(built.finished());
@@ -239,8 +238,6 @@ test "builtins: every builtin's work is charged, so one call cannot hide a milli
     defer r.deinit();
     try testing.expectEqual(script.diag.Budget.steps, r.stop.?.budget.?);
 }
-
-// ── v31's builtins (metal-vmm QUEUE 206) ──────────────────────────────────
 
 test "builtins: walk lists every entry under a folder, depth first and sorted, for one read a folder and one an entry's stat" {
     var f: Fixture = undefined;
@@ -303,7 +300,7 @@ test "builtins: sort by a key keeps equal keys in order; reverse" {
     try f.expectOutput("local l = {1, 2, 3} reverse(l) print(join(l, \",\")) local e = {} reverse(e) sort(e, \"k\") print(#e)", "3,2,1\n0\n");
     try f.expectStop("sort({{v = 1}, {w = 2}}, \"v\")", .index);
     try f.expectStop("sort({{v = 1}, {v = \"x\"}}, \"v\")", .type);
-    // A list of integers or strings takes an order, not a key (2026-10-18).
+    // A list of integers or strings takes an order, not a key.
     try f.expectStop("sort({1, 2}, \"v\")", .argument);
     try f.expectStop("sort({{v = 1}}, 1)", .type);
     try f.expectStop("reverse({a = 1})", .type);
@@ -313,13 +310,14 @@ test "builtins: sort gives its list back; by several keys, each its own order; a
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
-    // Given back, so a sort is an expression; still in place.
+    // Returned, so a sort is an expression; still in place.
     try f.expectOutput(
         \\local l = {"b", "c", "a"}
         \\print(join(sort(l), ","), join(l, ","), join(sort({3, 1, 2}, "desc"), ","), join(sort({"x", "y"}, "asc"), ","))
     , "a,b,c\ta,b,c\t3,2,1\tx,y\n");
-    // Several keys: the first decides first; each key a name, in the
-    // sort's order, or {key, desc}, its own. Equal in every key: as given.
+    // Several keys: the first decides first; each key is a name, in the
+    // sort's order, or {key, desc}, with its own. Rows equal in every key
+    // keep their order.
     const rows =
         \\local rows = {
         \\  {kind = "fn", name = "b", size = 3}, {kind = "const", name = "z", size = 1},
@@ -392,8 +390,6 @@ test "builtins: like, with * and ? only, the whole string" {
     try testing.expectEqual(script.diag.Budget.steps, r.stop.?.budget.?);
 }
 
-// ── 208(b): reading part of a file, scanning one, walking with options ───
-
 test "builtins: read(p, offset, n) reads only the part, 0-based, clamped at the end, and counts only those bytes" {
     var f: Fixture = undefined;
     try f.init();
@@ -403,8 +399,8 @@ test "builtins: read(p, offset, n) reads only the part, 0-based, clamped at the 
     try f.expectStop("print(read(\"chat/a.md\", 0, -2))", .argument);
     try f.expectStop("print(read(\"chat\", 0, 2))", .store);
     try f.expectStop("print(read(\"chat/none.md\", 0, 2))", .store);
-    // Three bytes of budget: a part of three reads, of four stops; the
-    // whole file (five) would have too.
+    // With three bytes of budget, a part of three reads and one of four
+    // stops, as the whole file (five) would.
     var ok = f.run("print(read(\"chat/a.md\", 1, 3))", .{ .read_bytes = 3 });
     defer ok.deinit();
     try testing.expect(ok.finished());
@@ -413,8 +409,8 @@ test "builtins: read(p, offset, n) reads only the part, 0-based, clamped at the 
     try testing.expectEqual(script.diag.Budget.read_bytes, over.stop.?.budget.?);
 }
 
-/// A file of `n` pseudo-random bytes from a small alphabet, so short
-/// needles match often, on every seam of the scan's chunks too.
+/// Returns `n` pseudo-random bytes from a small alphabet, so short needles
+/// match often, including across the scan's chunk boundaries.
 fn plantedFile(f: *Fixture, sub: []const u8, n: usize, seed: u64) ![]u8 {
     const data = try testing.allocator.alloc(u8, n);
     var prng: std.Random.DefaultPrng = .init(seed);
@@ -445,22 +441,22 @@ test "builtins: count_in, find_in and count_lines agree with the whole file's ow
             std.debug.print("needle {s}\n", .{needle});
             return e;
         };
-        // Half a megabyte scanned in the scan buffer (128 KiB) and change.
+        // Half a megabyte scanned through the 128 KiB scan buffer.
         testing.expect(r.arena_bytes < 320 * 1024) catch |e| {
             std.debug.print("held {d}\n", .{r.arena_bytes});
             return e;
         };
     }
     // Long runs of `a`: every seam falls inside a run, so a count of
-    // `aaa` (none overlapping) depends on each seam carried right.
+    // non-overlapping `aaa` depends on carrying each seam correctly.
     const runs = try testing.allocator.alloc(u8, 3 * 65536 + 777);
     defer testing.allocator.free(runs);
     var prng: std.Random.DefaultPrng = .init(11);
     var i: usize = 0;
     while (i < runs.len) : (i += 1) runs[i] = if (prng.random().uintLessThan(u16, 300) == 0) 'b' else 'a';
     try f.tmp.dir.writeFile(f.threaded.io(), .{ .sub_path = "data/runs.txt", .data = runs });
-    // And one run of `a` from end to end: the first window (64 KiB and two)
-    // ends on a match of `aaa` exactly, which must not be counted again.
+    // One run of `a` end to end: the first window (64 KiB plus two) ends
+    // exactly on a match of `aaa`, which must not be counted again.
     const solid = try testing.allocator.alloc(u8, 2 * 65536 + 5);
     defer testing.allocator.free(solid);
     @memset(solid, 'a');
@@ -513,7 +509,7 @@ test "builtins: walk's options: depth stops it and reads fewer folders, like and
     try f.expectOutput("for e in walk(\"\", {depth = 1}) do print(e.path, e.kind, e.size) end", "chat\tdirectory\t0\ntop.txt\tfile\t3\n");
     try f.expectOutput("for e in walk(\"chat\", {like = \"*.md\"}) do print(e.path) end", "chat/a.md\nchat/b.md\nchat/deep/deeper/c.md\n");
     try f.expectOutput("for e in walk(\"\", {kind = \"directory\", depth = 2}) do print(e.path) end", "chat\nchat/deep\n");
-    // depth 1 is one folder read and its two entries' stats; the whole
+    // Depth 1 is one folder read and its two entries' stats; the whole
     // walk is four folders and seven stats.
     var shallow = f.run("local w = walk(\"\", {depth = 1}) print(10 - budget().reads)", .{ .reads = 10 });
     defer shallow.deinit();
@@ -527,8 +523,6 @@ test "builtins: walk's options: depth stops it and reads fewer folders, like and
     try f.expectStop("local w = walk(\"\", {1, 2})", .type);
 }
 
-// ── 208(c): the small gaps a real script hits ────────────────────────────
-
 test "builtins: min, max and abs; rep and substitute, plain text, charged before they make the string" {
     var f: Fixture = undefined;
     try f.init();
@@ -540,7 +534,7 @@ test "builtins: min, max and abs; rep and substitute, plain text, charged before
     try f.expectOutput("print(rep(\"ab\", 3), #rep(\"x\", 0), substitute(\"a.b.c\", \".\", \"::\"), substitute(\"aaa\", \"aa\", \"b\"), substitute(\"abc\", \"z\", \"y\"))", "ababab\t0\ta::b::c\tba\tabc\n");
     try f.expectStop("print(rep(\"x\", -1))", .argument);
     try f.expectStop("print(substitute(\"abc\", \"\", \"y\"))", .argument);
-    // A hundred million bytes asked for: the steps run out before the
+    // A hundred million bytes requested: the steps run out before the
     // arena is asked.
     var r = f.run("local s = rep(\"0123456789\", 10000000)", .{});
     defer r.deinit();
@@ -558,12 +552,9 @@ test "builtins: seconds gives only what date can write: 1970 to 9999" {
     try f.expectStop("print(seconds(\"0000-01-01\"))", .argument);
 }
 
-// ── 208's cold review ────────────────────────────────────────────────────
-
 test "builtins: a search pays for its matches and its compares: dense matches cost at least a step each (209's cold review)" {
-    // Before, substitute(s, "a", "") over a megabyte of `a` charged 65,536
-    // steps for a million matches, twice searched: 661 ms in the site's
-    // 2M. count_lines on a file of newlines, the same.
+    // A search over dense matches must charge at least a step per match,
+    // not only a step per 16 haystack bytes.
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -592,12 +583,10 @@ test "builtins: a search pays for its matches and its compares: dense matches co
 }
 
 test "builtins: a long near-match needle pays for its compares: each search stops at the step budget, quickly, instead of running for seconds" {
-    // At 208's first cut each of these did haystack x needle work for a
-    // step a haystack byte: tens of seconds inside the budget. Now every
-    // compare is charged, so the budget ends each one soon. The sizes keep
-    // the two apart: the setup takes about 12,000 steps, a search charged
-    // per compare about 572,000, one charged per haystack byte (the bug)
-    // about 22,000, and the budget is 50,000.
+    // Each does haystack x needle compares. The sizes separate the cases:
+    // the setup takes about 12,000 steps, a search charged per compare about
+    // 572,000, one charged only per haystack byte about 22,000, and the
+    // budget is 50,000.
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -618,9 +607,8 @@ test "builtins: a long near-match needle pays for its compares: each search stop
 }
 
 test "builtins: a search the budget stops did about the budget's worth of work, not the whole haystack-by-needle search first" {
-    // A near-match search does haystack x needle compares; it was charged
-    // when it ended, so a budget stopped it only after all of them (8
-    // billion at 300,000 and 30,000 bytes, seconds in one call on metal).
+    // A near-match search does haystack x needle compares; charged only at
+    // its end, a budget would stop it after all of them.
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -628,9 +616,9 @@ test "builtins: a search the budget stops did about the budget's worth of work, 
     var r = f.run("local hay = rep(\"a\", 100000) local needle = rep(\"a\", 10000) .. \"b\" local x = find(hay, needle)", .{ .steps = budget });
     defer r.deinit();
     try testing.expectEqual(script.diag.Budget.steps, r.stop.?.budget.?);
-    // At most 40 units of work a step (charge_test's bound), and one batch
-    // of compares (64 KiB) and one needle past it: about 8 million, where
-    // the whole search is 900 million.
+    // At most 40 units of work per step (charge_test's bound), plus one
+    // batch of compares (64 KiB) and one needle: about 8 million, against
+    // 900 million for the whole search.
     errdefer std.debug.print("work {d}\n", .{r.work});
     try testing.expect(r.work <= budget * 40 + 64 * 1024 + 10_001);
 }
@@ -797,13 +785,13 @@ test "builtins: walk's stats count as reads, a call considers at most call_entri
     var part = f.run("local w = walk(\"\") print(#w, w[#w].kind, w[#w].path)", .{ .call_entries = 2 });
     defer part.deinit();
     try testing.expectEqualStrings("3\tmore\tchat/a.md\n", part.output);
-    // `after` is a place in the walk's order, there or not.
+    // `after` is a place in the walk's order, whether it exists or not.
     try f.expectOutput("for e in walk(\"\", {after = \"chat/aa.md\"}) do print(e.path) end", "chat/b.md\nchat/deep\nchat/deep/deeper\nchat/deep/deeper/c.md\ntop.txt\n");
     try f.expectOutput("for e in walk(\"chat\", {after = \"chat/deep\"}) do print(e.path) end", "chat/deep/deeper\nchat/deep/deeper/c.md\n");
     try f.expectStop("walk(\"chat\", {after = \"top.txt\"})", .argument);
-    // An entry gone between its folder's listing and its stat: a background
-    // run, which only reads while others write, goes on without it; an
-    // atomic one, which holds the turn, says so.
+    // An entry removed between its folder's listing and its stat: a
+    // background run, which reads while others write, skips it; an atomic
+    // one, which holds the turn, stops.
     const b_md = try std.fs.path.join(testing.allocator, &.{ f.root, "chat", "b.md" });
     defer testing.allocator.free(b_md);
     script.builtins_walk.between_list_and_stat_for_test = vanishOnce;
@@ -830,8 +818,6 @@ test "builtins: an empty needle is found where the search starts, never a crash:
     try f.expectStop("split(\"abc\", \"\")", .argument);
     try f.expectStop("substitute(\"abc\", \"\", \"x\")", .argument);
 }
-
-// ── 229, chunk 3: lenient reads ──────────────────────────────────────────
 
 test "builtin: parse_int reads an integer from real data, or gives nil, where tonumber stops the run" {
     var f: Fixture = undefined;
@@ -911,10 +897,10 @@ test "builtins: re_find and re_match at their edges, and a run's patterns past t
     try f.expectOutput("print(re_find(\"abab\", \"(ab)*\").group, re_find(\"a\", \"(a?)*\").group)", "ab\ta\n");
     // A `]` first in a class is the byte; `\\]` is too.
     try f.expectOutput("print(re_find(\"x]y\", \"[]]\").at, re_find(\"x]y\", \"[^]x]\").text, re_find(\"a]\", \"\\\\]\").at)", "2\ty\t2\n");
-    // No match: nil, and `if m` is how it is told.
+    // No match is nil, tested with `if m`.
     try f.expectOutput("local m = re_find(\"abc\", \"d\") if m then print(\"found\") else print(\"none\") end", "none\n");
     // Twelve patterns, each used twice: the cache holds eight, and every
-    // search says what it should whichever were put out.
+    // search is right whichever were evicted.
     try f.expectOutput(
         \\local ok = 0
         \\for round = 1, 2 do
@@ -970,7 +956,7 @@ test "builtins: an edit's diff in full, or one line a change when the run says `
     try testing.expectEqualStrings("edit n.txt: 20 hunks, -20 +20 lines\n20\n", short.output);
     try testing.expect(short.output.len * 10 < full_bytes);
     // The hunk walk is charged either way (charge_test's `edit` case); only
-    // the writes' charge goes.
+    // the writes' charge is saved.
     try testing.expect(short.steps < full.steps);
     // One hunk, one line.
     try f.tmp.dir.writeFile(f.threaded.io(), .{ .sub_path = "data/n.txt", .data = body.items });

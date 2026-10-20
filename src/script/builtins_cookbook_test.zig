@@ -1,6 +1,6 @@
-//! The builtins the cookbook asked for (metal-vmm QUEUE 220): a sort that
-//! goes down, the first of a list, paths, and a read of a file that may be
-//! missing. Every run here is the gate's (script.run in tests).
+//! Tests of the builtins the cookbook relies on: descending sort, `take`,
+//! paths, and `read_or` of a file that may be missing. Every run goes through
+//! `script.run`, as the gate's do.
 
 const std = @import("std");
 const script = @import("script.zig");
@@ -20,7 +20,7 @@ test "cookbook: sort by a key, descending, keeps equal keys in their order; take
     try f.expectOutput("print(#take({5, 6}, 9), #take({5, 6}, 0), #take({}, 3))", "2\t0\t0\n");
     try f.expectStop("take({1}, -1)", .argument);
     try f.expectStop("take(\"abc\", 1)", .type);
-    // A new list: the old one is as it was.
+    // `take` returns a new list; the old one is unchanged.
     try f.expectOutput("local l = {1, 2} local t = take(l, 1) push(t, 9) print(#l, #t)", "2\t2\n");
 }
 
@@ -29,7 +29,7 @@ test "cookbook: path joins its parts with / and \"\" is the root; basename is th
     try f.init();
     defer f.deinit();
     try f.expectOutput("print(path(\"chat\", \"a.md\"), path(\"\", \"top.txt\"), path(\"a\", \"\", \"b\", \"c\"), path(\"x\"), path(\"\"))", "chat/a.md\ttop.txt\ta/b/c\tx\t\n");
-    // What it makes is a path the store takes.
+    // The result is a path the store accepts.
     try f.expectOutput("print(read(path(\"chat\", \"a.md\")), #ls(path(\"\", \"chat\")))", "hello\t2\n");
     try f.expectStop("path(\"a\", 1)", .type);
     try f.expectOutput("print(basename(\"chat/channels/x.md\"), basename(\"top.txt\"), basename(\"\"))", "x.md\ttop.txt\t\n");
@@ -42,13 +42,13 @@ test "cookbook: read_or reads a file, or answers the default when nothing is the
     try f.init();
     defer f.deinit();
     try f.expectOutput("print(read_or(\"top.txt\", \"none\"), read_or(\"missing\", \"none\"), read_or(\"chat/missing.count\", nil))", "top\tnone\tnil\n");
-    // One read either way, where exists then read was two.
+    // One read either way.
     var one = f.run("local a = read_or(\"top.txt\", \"\") local b = read_or(\"gone\", \"\") print(10 - budget().reads)", .{ .reads = 10 });
     defer one.deinit();
     try testing.expectEqualStrings("2\n", one.output);
-    // A folder is not a missing file: the store's error.
+    // A folder is not a missing file: the store's error stands.
     try f.expectStop("read_or(\"chat\", \"\")", .store);
-    // Its bytes are a read's: the read budget holds.
+    // Its bytes count as a read, so the read budget applies.
     var over = f.run("print(read_or(\"top.txt\", \"\"))", .{ .read_bytes = 2 });
     defer over.deinit();
     try testing.expectEqual(script.diag.Class.budget, over.stop.?.class);

@@ -1,7 +1,7 @@
-//! The prelude (src/script/prelude.shale, metal-vmm QUEUE 220): functions
-//! every script has, written in Shale, each part of their work one builtin
-//! call under its cap. Every run here is the gate's (script.run in tests):
-//! the VM held to the tree-walker, cut into slices and as a background run.
+//! Tests of the prelude (src/script/prelude.shale): functions every script has,
+//! written in Shale, each step of their work one builtin call under its cap.
+//! Every run goes through `script.run`, as the gate's do: the VM checked
+//! against the tree walker, in slices and as a background run.
 
 const std = @import("std");
 const script = @import("script.zig");
@@ -135,8 +135,7 @@ test "prelude: walk_upto walks as far as its reads allow, keeps what it is told 
                 break;
             }
             // A run with too few reads for any entry takes none: the
-            // budget, not the walk, is what ends it, and that is a fixed
-            // budget here.
+            // budget, not the walk, ends it.
             if (std.mem.eql(u8, more, start)) break;
             start = try arena.allocator().dupe(u8, more);
         }
@@ -194,7 +193,7 @@ test "prelude: the functions found in prelude.shale are every function a parse o
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     var stop: ?script.diag.Stop = null;
-    // The prelude parsed as a script's source: its functions the script's own.
+    // The prelude parsed as a script's source: its functions are the script's own.
     const whole = try script.parse.parse(arena.allocator(), script.parse.prelude, 64, &stop);
     try testing.expectEqual(whole.functions.len, script.parse.prelude_index.len);
     for (whole.functions, script.parse.prelude_index) |f, at| {
@@ -202,7 +201,7 @@ test "prelude: the functions found in prelude.shale are every function a parse o
         try testing.expectEqual(f.pos.line, at.line);
         try testing.expectEqual(@as(u32, 1), f.pos.column);
     }
-    // A declaration is an empty `do` where it stood: nothing else is there.
+    // A declaration leaves an empty `do` where it stood, and nothing else.
     for (whole.main.body) |s| try testing.expect(s.kind == .do and s.kind.do.len == 0);
 }
 
@@ -235,8 +234,8 @@ test "prelude: a prelude function's own calls are the prelude's, though the scri
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
-    // glob's walk_all is the prelude's, parsed at glob's first call, after
-    // the script's own: the script's is called only by the script.
+    // glob's walk_all is the prelude's, parsed at glob's first call after
+    // the script's own; the script's is called only by the script.
     try f.expectOutput("function walk_all(p, o) return {} end\nprint(#glob(\"*.txt\"), #walk_all(\"\", {}))", "1\t0\n");
     // A prelude function first met inside the script's function: the
     // function's locals and the script's consts are not the prelude's.
@@ -245,8 +244,6 @@ test "prelude: a prelude function's own calls are the prelude's, though the scri
     // of the prelude's.
     try f.expectOutput("const walk_all = 1\nfunction f() return #glob(\"*.txt\") end\nprint(f())", "1\n");
 }
-
-// ── preludes beyond the core's (metal-vmm QUEUE 233, chunk 1) ───────────
 
 var list_out: [8 * 1024]u8 = undefined;
 

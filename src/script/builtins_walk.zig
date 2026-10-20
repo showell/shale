@@ -1,6 +1,5 @@
-//! **THE STORE'S BUILTINS: THE WALK** (split from builtins_store.zig,
-//! metal-vmm QUEUE 232): every entry under a folder, a part at a time,
-//! resumed where the last part ended.
+//! The store's `walk` builtin: every entry under a folder, a part at a time,
+//! each part resumed where the last one ended.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -27,15 +26,15 @@ pub const specs = [_]bi.Spec{
     spec(.walk, 1, 2, walk),
 };
 
-/// What a folder holds, its names sorted, charged as `ls` is: an entry a
-/// step and the sort's bound. The read is the caller's to count.
+/// Lists a folder's entries sorted by name, charged as `ls` is: a step per
+/// entry plus the sort's bound. The caller counts the read.
 pub fn sortedEntries(run: *Run, pos: ast.Pos, b: B, full: []const u8, rel: []const u8) Error![]store.Entry {
     const entries = store.list(run.io, run.alloc, full) catch |e| return storeFailed(run, pos, b, rel, e);
     return sortEntries(run, pos, entries);
 }
 
-/// `sortedEntries`, or null for a folder gone in a background run, which
-/// reads while others write.
+/// Like `sortedEntries`, but returns null for a folder that vanished during a
+/// background run, which reads while others write.
 fn sortedEntriesOrGone(run: *Run, pos: ast.Pos, b: B, full: []const u8, rel: []const u8) Error!?[]store.Entry {
     const entries = store.list(run.io, run.alloc, full) catch |e| {
         if (run.read_only and e == error.FileNotFound) return null;
@@ -60,14 +59,14 @@ fn sortEntries(run: *Run, pos: ast.Pos, entries: []store.Entry) Error![]store.En
     return entries;
 }
 
-/// A test's own moment between a folder's listing and an entry's stat
-/// (an entry removed there is one gone under a background run).
+/// Called between a folder's listing and an entry's stat, for tests: an entry
+/// removed there simulates one gone under a background run.
 pub var between_list_and_stat_for_test: ?*const fn () void = null;
 
-/// A folder the walk is in: its entries, and the next to take.
+/// A folder the walk is in: its entries, and the index of the next to take.
 const Level = struct { rel: []const u8, full: []const u8, entries: []store.Entry, at: usize = 0, depth: u64 };
 
-/// An entry's path under its folder's: a mount's folder (`m:`) takes the
+/// Joins an entry's name to its folder's path. A mount's root (`m:`) takes the
 /// name with no `/`.
 fn under(run: *Run, pos: ast.Pos, folder: []const u8, name: []const u8) Error![]const u8 {
     if (folder.len == 0) return name;
@@ -75,11 +74,10 @@ fn under(run: *Run, pos: ast.Pos, folder: []const u8, name: []const u8) Error![]
     return std.fmt.allocPrint(run.alloc, "{s}{s}{s}", .{ folder, sep, name }) catch run.oom(pos);
 }
 
-/// **THE WALK PUT BACK WHERE `after` LEFT IT**: each folder on `after`'s
-/// path listed again, and its next entry the first name past `after`'s
-/// part, so a walk in parts takes each entry once, whatever came or went
-/// in between. `after` is a path the walk returned, under `p`; "" or `p`
-/// itself is the start.
+/// Restores the walk to where `after` left it: each folder on `after`'s path is
+/// listed again, positioned at the first name past `after`'s part, so a walk
+/// in parts takes each entry once whatever came or went in between. `after` is
+/// a path the walk returned, under `p`; "" or `p` itself means the start.
 fn walkResume(run: *Run, pos: ast.Pos, p: Path, o: WalkOptions, after: []const u8, levels: *std.ArrayList(Level)) Error!void {
     if (after.len == 0 or std.mem.eql(u8, after, p.rel)) return;
     const skip = p.rel.len + @intFromBool(p.rel.len > 0 and p.rel[p.rel.len - 1] != ':');
@@ -109,23 +107,24 @@ fn walkResume(run: *Run, pos: ast.Pos, p: Path, o: WalkOptions, after: []const u
 
 /// What `walk`'s second argument asks: how deep, and which entries.
 const WalkOptions = struct {
-    /// 1 lists only the folder's own entries.
+    /// How deep to walk; 1 lists only the folder's own entries.
     depth: ?u64 = null,
-    /// The entries whose names match (`like`); folders are walked into
+    /// Keep only entries whose names match (`like`); folders are walked into
     /// whether they match or not.
     like: ?[]const u8 = null,
+    /// Keep only entries of this kind.
     kind: ?store.Kind = null,
-    /// Where an earlier call stopped: the walk goes on after this path, in
-    /// its order, whether the path is still there or not.
+    /// Where an earlier call stopped: the walk continues after this path, in
+    /// its order, whether the path still exists or not.
     after: ?[]const u8 = null,
-    /// Names passed by, files and folders alike, a folder never entered
-    /// (`like`'s patterns): `.*` leaves out `.git`, `.zig-cache` and every
-    /// other hidden name (QUEUE 229, chunk 4).
+    /// Names to pass over, files and folders alike, as a `like` pattern; a
+    /// skipped folder is never entered. `.*` leaves out `.git`, `.zig-cache`
+    /// and every other hidden name.
     skip: ?[]const u8 = null,
-    /// **THE READS TO KEEP** (metal-vmm QUEUE 229, chunk 2): the part ends,
-    /// with its `more` entry, before an entry could take the run's reads
-    /// left below this, so a script that walks as far as its budget allows
-    /// still has the reads to say what it found. Counts only: deterministic.
+    /// Reads to leave in the budget. The part ends, with its `more` entry,
+    /// before an entry could take the remaining reads below this, so a script
+    /// that walks as far as its budget allows can still report what it found.
+    /// Counts reads only, so it is deterministic.
     keep_reads: ?u64 = null,
 };
 
@@ -159,23 +158,21 @@ fn walkOptions(run: *Run, pos: ast.Pos, v: Value) Error!WalkOptions {
     return o;
 }
 
-/// **`walk(p[, {depth, like, kind}])`** (QUEUE 206, 208(b)): every entry
-/// under `p`, depth first, each folder's names sorted and a folder before
-/// what it holds, as `{path, size, kind, modified}` with `path` relative to
-/// the root. **ONE READ A FOLDER LISTED**, not one an entry: what a walk
-/// of the whole root costs is its folders. A folder's size is 0 (the hosts
-/// disagree on it). `depth` stops it (1: the folder's own entries, which
-/// is `ls` with each one's stat); `like` and `kind` keep only the entries
-/// that match, and an entry left out is never stat'ed. Kept on a stack of
-/// its own, not the Zig stack: a tree's depth is the store's.
+/// `walk(p[, {depth, like, kind, after, skip, keep_reads}])` returns every
+/// entry under `p`, depth first, each folder's names sorted and a folder
+/// before its contents, as `{path, size, kind, modified}` with `path` relative
+/// to the root. Each folder listed costs one read and each entry kept one
+/// stat. A folder's size is 0, since the hosts disagree on it. `depth` limits
+/// it (1 is `ls` with each entry's stat); `like` and `kind` filter entries, and
+/// an entry filtered out is never stat'ed. The walk keeps its own stack, not
+/// the Zig stack, since a tree's depth is the store's to choose.
 fn walk(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const p = try pathArg(run, pos, .walk, args[0], true);
     const o: WalkOptions = if (args.len > 1) try walkOptions(run, pos, args[1]) else .{};
     const a = run.alloc;
-    // **NO ROOM TO START** (`keep_reads`): the walk's own stat and listing,
-    // the listings that put it back where `after` left it, and one entry,
-    // past what is kept: none of it is read, and the part is its `more`
-    // entry alone, where it was.
+    // If the walk's own stat and listing, the listings to resume at `after`,
+    // and one entry would eat into `keep_reads`, we read nothing and return
+    // only the `more` entry, unchanged.
     if (o.keep_reads) |keep| {
         const head = 2 + if (o.after) |after| std.mem.count(u8, after, "/") + 1 else 0;
         if (run.budgets.reads -| run.reads < keep +| head +| entry_reads) {
@@ -201,9 +198,8 @@ fn walk(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
             _ = levels.pop();
             continue;
         }
-        // **AT MOST `call_entries` A CALL** (QUEUE 211, the caps), and no
-        // entry past the reads it is to keep (`keep_reads`): with more to
-        // come, the list ends with where to go on from.
+        // At most `call_entries` per call, and none past `keep_reads`; with
+        // more to come, the list ends with where to resume.
         const kept_back = if (o.keep_reads) |keep| run.budgets.reads -| run.reads < keep +| entry_reads else false;
         if (considered == run.budgets.call_entries or kept_back) {
             out.list.append(a, try moreEntry(run, pos, if (considered == 0) o.after orelse "" else last)) catch return run.oom(pos);
@@ -228,20 +224,17 @@ fn walk(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
             keep = try text.likeCharged(run, pos, en.name, pat);
         };
         if (keep) {
-            // **THE LISTING'S KIND, NEVER A STAT'S**: a stat follows a
-            // link, so a symlink inside the root to `/` would walk the
-            // host's files, and a link loop would recurse. The listing
-            // names a link `other`; it is reported, not stat'ed, and never
-            // entered. (Metal's FAT has no links, so both hosts walk the
-            // same tree.)
-            // **EACH STAT A READ** (QUEUE 211, the caps): it is a store call,
-            // a disk command on metal, as `stat(p)` is.
+            // Trust the listing's kind, never a stat's: a stat follows links,
+            // so a symlink to `/` would walk the host's files and a link loop
+            // would recurse. The listing calls a link `other`; it is reported,
+            // never stat'ed or entered. Metal's FAT has no links, so both hosts
+            // walk the same tree. Each stat counts as a read, as `stat(p)` does.
             const es: ?store.Stat = if (en.kind == .other) null else stat: {
                 try countRead(run, pos);
                 if (between_list_and_stat_for_test) |hook| hook();
                 break :stat store.stat(run.io, a, full.?) catch |e| {
-                    // **A BACKGROUND RUN READS WHILE OTHERS WRITE**: an
-                    // entry gone since its folder was listed is passed by.
+                    // A background run reads while others write: skip an
+                    // entry removed since its folder was listed.
                     if (run.read_only and e == error.FileNotFound) continue;
                     return storeFailed(run, pos, .walk, rel, e);
                 };
@@ -262,7 +255,7 @@ fn walk(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         }
         if (into) {
             try countRead(run, pos);
-            // A folder gone since it was listed, in a background run, too.
+            // Likewise a folder removed since it was listed.
             const entries = (try sortedEntriesOrGone(run, pos, .walk, full.?, rel)) orelse continue;
             levels.append(a, .{ .rel = rel, .full = full.?, .entries = entries, .depth = depth + 1 }) catch return run.oom(pos);
         }
@@ -270,8 +263,8 @@ fn walk(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .table = out };
 }
 
-/// A walk's last entry when there is more: `{path, kind = "more"}`, where
-/// the next part goes on after.
+/// The last entry of a part when there is more: `{path, kind = "more"}`,
+/// with `path` the place the next part resumes after.
 fn moreEntry(run: *Run, pos: ast.Pos, path: []const u8) Error!Value {
     const a = run.alloc;
     const m = try run.newTable(pos);
@@ -282,5 +275,3 @@ fn moreEntry(run: *Run, pos: ast.Pos, path: []const u8) Error!Value {
     m.kind = .map;
     return .{ .table = m };
 }
-
-// ── an edit, with its diff (QUEUE 229, chunk 4) ─────────────────────────

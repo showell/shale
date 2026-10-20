@@ -1,8 +1,8 @@
-//! The builtins' hunt (`zig build fuzz`, src/script/hunt.zig): a sweep too
-//! long for `zig build test`, against a real store in a temporary folder.
-//! Its fixture is its own, the part of builtins_test.zig's this sweep uses:
-//! a file is in one module only, and builtins_test.zig is the `shale`
-//! module's, which the hunt reaches as a module (by path, it would hold
+//! The builtins' hunt (`zig build fuzz`, src/script/hunt.zig): a sweep too long
+//! for `zig build test`, against a real store in a temporary folder. It has its
+//! own copy of the part of builtins_test.zig's fixture it uses, since a file
+//! belongs to one module only: builtins_test.zig is in the `shale` module,
+//! which the hunt imports as a module (importing it by path would pull in
 //! every unit test).
 
 const std = @import("std");
@@ -56,6 +56,6 @@ test "expensive sweep: builtins: a change on the disk is in the effects log, how
             try f.tmp.dir.deleteFile(io, "data/x.txt");
         }
     }
-    // Not vacuous: the sweep crossed from too little to enough.
+    // Not vacuous: the sweep crossed from too little arena to enough.
     try testing.expect(finished > 0 and stopped_by_arena > 0);
 }

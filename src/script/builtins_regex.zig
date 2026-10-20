@@ -1,9 +1,8 @@
-//! **REGULAR EXPRESSIONS' BUILTINS** (metal-vmm QUEUE 230, chunk 2):
-//! `re_find` and `re_match`, over regex.zig's linear-time subset. A pattern
-//! is compiled once a run (the run's cache, in the machine's memory), its
-//! compile a step a byte; a search is charged a step a byte of the string
-//! (and one for its end) times the pattern's instructions, so what a
-//! budget allows is what it says, whatever the pattern.
+//! The regular-expression builtins, `re_find` and `re_match`, over regex.zig's
+//! linear-time subset. A pattern is compiled once per run (cached in the
+//! machine's memory) at a step per byte; a search is charged a step per byte
+//! of the string, plus one for its end, times the pattern's instructions, so a
+//! budget bounds a search whatever the pattern.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -23,11 +22,12 @@ pub const specs = [_]bi.Spec{
     spec(.re_match, 2, 3, reMatch),
 };
 
-/// The pattern's compiled program: the run's, or compiled now and kept.
+/// Returns the pattern's compiled program from the run's cache, compiling and
+/// caching it if absent.
 fn program(run: *Run, pos: ast.Pos, b: B, pattern: []const u8, options: regex.Options) Error!*regex.Cached {
     if (run.patterns.get(pattern, options)) |got| return got;
     if (pattern.len > regex.pattern_most) return run.fail(pos, .argument, "`{s}`'s pattern is {d} bytes, and one may be at most {d}", .{ @tagName(b), pattern.len, regex.pattern_most });
-    // A step a byte to compile, and a step a byte more to fold its case.
+    // A step per byte to compile, and a step per byte more to fold case.
     const cost = pattern.len + 1 + if (options.nocase) pattern.len else 0;
     try run.charge(pos, cost);
     run.tally(cost);
@@ -38,9 +38,7 @@ fn program(run: *Run, pos: ast.Pos, b: B, pattern: []const u8, options: regex.Op
     };
 }
 
-/// The search, charged as it goes: when the steps left would not cover
-/// the whole of it, it stops where they run out.
-/// The options map a call may end with: `{nocase = true}`.
+/// Parses the options map a call may end with: `{nocase = true}`.
 fn optionsArg(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!regex.Options {
     var o: regex.Options = .{};
     if (args.len < 3) return o;
@@ -55,6 +53,8 @@ fn optionsArg(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!regex.Op
     return o;
 }
 
+/// Runs the search, charged as it goes: when the steps left would not cover
+/// all of it, it stops where they run out.
 fn searched(run: *Run, pos: ast.Pos, b: B, s: []const u8, pattern: []const u8, args: []const Value) Error!struct { ?regex.Found, *regex.Cached } {
     const c = try program(run, pos, b, pattern, try optionsArg(run, pos, b, args));
     const per: u64 = c.program.insts.len;
@@ -66,10 +66,10 @@ fn searched(run: *Run, pos: ast.Pos, b: B, s: []const u8, pattern: []const u8, a
     return .{ r.found, c };
 }
 
-/// **`re_find(s, pattern[, {nocase}])`**: the leftmost match of `pattern` in `s`, the
-/// one a backtracking matcher would find first, as `{at, text}` (`at`
-/// 1-based) with `group`, the capture group's text ("" where the match did
-/// not go through it), when the pattern has one; nil when there is none.
+/// `re_find(s, pattern[, {nocase}])` returns the leftmost match of `pattern` in
+/// `s`, the one a backtracking matcher would find first, as `{at, text}` with
+/// `at` 1-based, or nil. When the pattern has a capture group, also `group`,
+/// its text ("" where the match did not pass through it).
 fn reFind(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const s = try bi.stringArg(run, pos, .re_find, args[0], "its first argument");
     const pattern = try bi.stringArg(run, pos, .re_find, args[1], "its pattern");
@@ -84,8 +84,8 @@ fn reFind(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .table = m };
 }
 
-/// **`re_match(s, pattern[, {nocase}])`**: whether `s` holds a match of `pattern`,
-/// anywhere, as `grep` would say of a line: `^` and `$` pin it to the
+/// `re_match(s, pattern[, {nocase}])` returns whether `s` contains a match of
+/// `pattern` anywhere, as `grep` would of a line; `^` and `$` anchor it to the
 /// whole.
 fn reMatch(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const s = try bi.stringArg(run, pos, .re_match, args[0], "its first argument");

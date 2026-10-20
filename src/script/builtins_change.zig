@@ -1,7 +1,6 @@
-//! **THE STORE'S BUILTINS: CHANGES** (split from builtins_store.zig,
-//! metal-vmm QUEUE 232): a file written, added to or removed, a folder made
-//! or removed, and `edit`, a literal replaced with its diff printed; each
-//! counted against the change budgets and logged.
+//! The store's builtins that change it: a file written, appended to or removed, a
+//! folder made or removed, and `edit`, which replaces a literal and prints the diff.
+//! Each change is counted against the change budgets and logged.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -34,20 +33,19 @@ pub const specs = [_]bi.Spec{
     spec(.edit, 2, 4, editFile),
 };
 
-/// One edit: `old` replaced by `new`, as `edit`'s arguments or one entry of
-/// its list form ask.
+/// One edit: `old` replaced by `new`. Either `edit`'s own arguments or one
+/// entry of its list form.
 const Edit = struct {
     old: []const u8,
     new: []const u8,
-    /// Every occurrence, where one alone is required unset.
+    /// Replace every occurrence. Unset, `old` must occur exactly once.
     all: bool = false,
-    /// Only where `old` is a whole word: no letter, digit or `_` on either
-    /// side, as a symbol's rename wants.
+    /// Match only where `old` is a whole word: no letter, digit or `_` on
+    /// either side.
     word: bool = false,
 };
 
-/// The most edits one call of the list form makes (the design's cap):
-/// each is a pass over the file.
+/// The most edits one call of the list form accepts; each is a pass over the file.
 const edits_most = 64;
 
 fn wordByte(c: u8) bool {
@@ -61,9 +59,8 @@ fn boolOption(run: *Run, pos: ast.Pos, k: []const u8, x: Value) Error!bool {
     };
 }
 
-/// The edits `edit` was given: `(p, old, new[, {all, word}])`, one; or
-/// `(p, {{old = ..., new = ...[, all][, word]}, ...})`, its list form
-/// (metal-vmm QUEUE 232).
+/// Parses `edit`'s arguments: `(p, old, new[, {all, word}])` gives one edit,
+/// `(p, {{old = ..., new = ...[, all][, word]}, ...})` gives the list.
 fn editsArg(run: *Run, pos: ast.Pos, args: []const Value) Error![]Edit {
     const b: B = .edit;
     const a = run.alloc;
@@ -118,18 +115,17 @@ fn editsArg(run: *Run, pos: ast.Pos, args: []const Value) Error![]Edit {
     return one;
 }
 
-/// **WHAT THE EDITS CHANGED, AS SPANS** of the file as it was and as it is
-/// now: `was[o0..o1]` became `now[c0..c1]`; outside every span the two are
-/// the same bytes. In order and apart, so the diff is the file as it was
-/// against the file as the last edit left it, however the edits met.
+/// A region the edits changed: `was[o0..o1]` became `now[c0..c1]`. Outside
+/// every span the two files are the same bytes. Spans are sorted and disjoint,
+/// so the diff compares the original file against the final one however the
+/// edits overlapped.
 pub const Span = struct { o0: usize, o1: usize, c0: usize, c1: usize };
 
-/// `now[i..i + len]` replaced by `n` bytes: the spans it meets (or touches)
-/// become one, which spans the old text they and the bytes between them
-/// stood for; the spans after it move by the change in length.
+/// Records `now[i..i + len]` replaced by `n` bytes. The spans it meets or
+/// touches merge into one covering the old text they and the bytes between
+/// them stood for; the spans after it shift by the change in length.
 fn replaced(run: *Run, pos: ast.Pos, spans: *std.ArrayList(Span), i: usize, len: usize, n: usize) Error!void {
     const end = i + len;
-    // The spans wholly before; the first one met.
     var first: usize = 0;
     var shift: i64 = 0;
     while (first < spans.items.len and spans.items[first].c1 < i) : (first += 1) {
@@ -156,12 +152,11 @@ fn replaced(run: *Run, pos: ast.Pos, spans: *std.ArrayList(Span), i: usize, len:
     }
 }
 
-/// **WHERE A MISSED `old` PARTS FROM THE FILE**, for `edit`'s error: the
-/// first of its lines (trimmed, not blank) the file lacks, and the file's
-/// line holding that line's longest tail (8 bytes or more), so a miss on a
-/// changed word points at the line it is on; or, with every line there,
-/// that they are not there together (the blank lines or the indentation
-/// between them differ).
+/// Explains, for `edit`'s error, where an `old` that is not in the file
+/// diverges from it: the first nonblank line of `old` the file lacks, and the
+/// file's line holding that line's longest tail of 8 bytes or more, so a miss
+/// on a changed word points at its line. If every line is present, says they
+/// are not present together.
 fn missHint(a: std.mem.Allocator, file: []const u8, old: []const u8) error{OutOfMemory}![]const u8 {
     var lines = std.mem.splitScalar(u8, old, '\n');
     while (lines.next()) |raw| {
@@ -182,15 +177,15 @@ fn missHint(a: std.mem.Allocator, file: []const u8, old: []const u8) error{OutOf
     return ": each of its lines is in it, but not together (the blank lines or the indentation between them differ)";
 }
 
-/// **`edit(p, old, new[, {all, word}])`**: the file with `old` replaced by
-/// `new`, **its diff printed first**, as a unified diff's hunks of the
-/// lines it changes. `old` must be in the file exactly once, unless
-/// `all`; `word` takes only whole words. **`edit(p, {{old = ..., new =
-/// ...}, ...})`** (QUEUE 232): the edits in sequence, each to the file as
-/// the one before left it and held to the same rules, one diff and one
-/// write; an edit that fails stops the run before anything is printed or
-/// written. The change is `replace`'s, logged as `edit`. The file is read
-/// whole: at most the call-bytes cap. The number of occurrences replaced.
+/// `edit(p, old, new[, {all, word}])` replaces `old` with `new` in the file,
+/// printing a unified diff of the changed lines first. `old` must occur
+/// exactly once unless `all`; `word` matches whole words only.
+/// `edit(p, {{old = ..., new = ...}, ...})` applies the edits in sequence, each
+/// to the file as the previous one left it and held to the same rules, then
+/// prints one diff and writes once; an edit that fails stops the run before
+/// anything is printed or written. The write is a `replace`, logged as `edit`.
+/// The file is read whole, so it is limited by the call-bytes cap.
+/// Returns the number of occurrences replaced.
 fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const b: B = .edit;
     const p = try pathArg(run, pos, b, args[0], false);
@@ -205,9 +200,9 @@ fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     for (edits, 1..) |e, n| {
         const which = if (edits.len > 1) std.fmt.allocPrint(a, " (edit {d} of {d}; none is made)", .{ n, edits.len }) catch return run.oom(pos) else "";
         if (e.old.len == 0) return run.fail(pos, .argument, "`edit` of \"\" is an error: there is nothing to replace{s}", .{which});
-        // Where `old` is, none overlapping.
+        // Non-overlapping occurrences of `old`.
         var at: std.ArrayList(usize) = .empty;
-        // The search is bulk work over the file: a step for 16 bytes, as a scan.
+        // The search is charged as a scan: a step per 16 bytes.
         try bi.chargeBytes(run, pos, now.len);
         run.tally(now.len);
         var from: usize = 0;
@@ -222,8 +217,8 @@ fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         const shown = e.old[0..@min(e.old.len, 40)];
         if (at.items.len == 0) return run.fail(pos, .argument, "`edit`: \"{s}\" is not in {s}{s}{s}{s}", .{ shown, p.rel, if (e.word) " as a whole word" else "", missHint(a, now, e.old) catch return run.oom(pos), which });
         if (at.items.len > 1 and !e.all) return run.fail(pos, .argument, "`edit`: \"{s}\" is in {s} {d} times: a longer `old` picks one, or `{{all = true}}` changes every one{s}", .{ shown, p.rel, at.items.len, which });
-        // The file after this edit, and the spans, from the last
-        // occurrence back so each one's place is the text's as it was.
+        // Spans are recorded from the last occurrence back, so each offset
+        // still refers to the text before this edit.
         var next: std.ArrayList(u8) = .empty;
         var last: usize = 0;
         for (at.items) |i| {
@@ -241,32 +236,31 @@ fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         now = next.items;
         replaced_n += at.items.len;
     }
-    // `rewrite`'s two lines, here again: so `rewrite` is unreferenced on
-    // metal, and metal's image does not move (80 bytes, measured).
+    // These duplicate `rewrite` so that `rewrite` stays unreferenced, and
+    // out of the image, on metal.
     try writeDiff(run, pos, p.rel, was, now, spans.items);
     _ = try changeAt(run, pos, b, .replace, p, now);
     return .{ .int = @intCast(replaced_n) };
 }
 
-/// **A FILE REWRITTEN BY SPANS** (metal-vmm QUEUE 234, 3): `was` became
-/// `now`, `spans` saying where. Its diff (by the run's `diffs` setting),
-/// then the change, logged as an `edit`: a dry run's, its overlay's and
-/// its budgets' as every change is: `edit`'s own tail, for the Linux
-/// host's `zig_rename`.
+/// Writes a file rewritten by a host: `was` became `now`, `spans` saying
+/// where. Prints the diff per the run's `diffs` setting, then makes the change,
+/// logged as `edit` and subject to dry runs, overlays and budgets like any
+/// change. This is `edit`'s tail, for the Linux host's `zig_rename`.
 pub fn rewrite(run: *Run, pos: ast.Pos, p: Path, was: []const u8, now: []const u8, spans: []const Span) Error!void {
     try writeDiff(run, pos, p.rel, was, now, spans);
     _ = try changeAt(run, pos, .edit, .replace, p, now);
 }
 
-/// Whether this host prints a diff as one line (`Diffs.summary`): metal's
-/// `host_io` does not say so, and its image compiles none of it.
+/// Whether this host can print a diff as one line (`Diffs.summary`). Metal's
+/// `host_io` does not declare it, so its image compiles none of it.
 const summary_on = @hasDecl(@import("host_io"), "shale_diff_summary") and @import("host_io").shale_diff_summary;
 
-/// **THE DIFF**, unified: `--- a/p`, `+++ b/p`, then a hunk for each run of
-/// lines a span touches (spans on lines that meet share one), its old lines
-/// `-` and its new ones `+`, numbered as the files have them. **In
-/// `summary`** (metal-vmm QUEUE 234) the same walk, charged the same, and
-/// one line for all of it: `edit p: N hunks, -O +N lines`.
+/// Prints a unified diff: `--- a/p`, `+++ b/p`, then a hunk for each run of
+/// lines the spans touch (spans on adjacent lines share one), old lines as
+/// `-` and new as `+`, numbered as in the files. In `summary` mode the walk
+/// and its charge are the same, and the output is one line:
+/// `edit p: N hunks, -O +N lines`.
 fn writeDiff(run: *Run, pos: ast.Pos, rel: []const u8, was: []const u8, now: []const u8, spans: []const Span) Error!void {
     const a = run.alloc;
     const summary = summary_on and run.diffs == .summary;
@@ -281,9 +275,9 @@ fn writeDiff(run: *Run, pos: ast.Pos, rel: []const u8, was: []const u8, now: []c
     var line: i64 = 1;
     var counted: usize = 0;
     while (k < spans.len) {
-        // The hunk: from the line the first span starts in to the end of
-        // the line the last one that meets it ends in, in both files (the
-        // bytes around a span are the same in each).
+        // The hunk runs from the start of the first span's line to the end of
+        // the last adjacent span's line. The bytes around a span are the same
+        // in both files, so the bounds carry over.
         const s = spans[k];
         const start = if (std.mem.lastIndexOfScalar(u8, was[0..s.o0], '\n')) |i| i + 1 else 0;
         const now_start = s.c0 - (s.o0 - start);
@@ -317,10 +311,9 @@ fn writeDiff(run: *Run, pos: ast.Pos, rel: []const u8, was: []const u8, now: []c
     if (summary) try run.write(pos, std.fmt.allocPrint(a, "edit {s}: {d} hunk{s}, -{d} +{d} lines\n", .{ rel, hunks, if (hunks == 1) "" else "s", lines_old, lines_new }) catch return run.oom(pos));
 }
 
-/// Where a span's hunk ends in the old file: the newline that ends the
-/// line its end is in; or, when its old and new text both end with a
-/// newline, that newline, so the untouched line after it stays out of the
-/// hunk.
+/// Where a span's hunk ends in the old file: the newline ending the line its
+/// end is in. If its old and new text both end in a newline, that newline,
+/// so the untouched line after it stays out of the hunk.
 fn hunkEnd(was: []const u8, now: []const u8, s: Span) usize {
     if (s.o1 > s.o0 and was[s.o1 - 1] == '\n' and s.c1 > s.c0 and now[s.c1 - 1] == '\n') return s.o1 - 1;
     return lineEnd(was, s.o1);
@@ -340,8 +333,6 @@ fn writeLines(run: *Run, pos: ast.Pos, mark: []const u8, s: []const u8) Error!vo
     }
 }
 
-// ── changing ─────────────────────────────────────────────────────────────
-
 const Change = enum { replace, append, mkdir, remove, remove_tree };
 
 /// A change's builtin, one for each kind.
@@ -353,8 +344,8 @@ fn change(comptime c: Change) bi.Impl {
     }.f;
 }
 
-/// **A CHANGE**: counted against the change budgets, made, and logged with
-/// its outcome, whatever it is.
+/// Counts a change against the change budgets, makes it, and logs it with its
+/// outcome, whatever it is.
 fn storeChange(run: *Run, pos: ast.Pos, c: Change, args: []const Value) Error!Value {
     const b: B = switch (c) {
         inline else => |t| @field(B, @tagName(t)),
@@ -367,18 +358,17 @@ fn storeChange(run: *Run, pos: ast.Pos, c: Change, args: []const Value) Error!Va
     return changeAt(run, pos, b, c, p, data);
 }
 
-/// **WHETHER THE HOST LETS `p` CHANGE** (metal-vmm QUEUE 235): every change
-/// asks, before anything is written; a change of two files (`zig_move`)
-/// asks for both first. On metal, nothing.
+/// Asks the host whether `p` may change. Every change asks before anything is
+/// written; a change of two files (`zig_move`) asks for both first. A no-op
+/// on metal.
 pub fn mayChange(run: *Run, pos: ast.Pos, p: Path) Error!void {
     if (comptime interp.change_check_on) if (run.path_hook) |h| if (h.may_change) |f| try f(h.ctx, run, pos, p.rel, p.full);
 }
 
 /// A change to `p` with `data`, logged under `b`'s name.
 fn changeAt(run: *Run, pos: ast.Pos, b: B, c: Change, p: Path, data: []const u8) Error!Value {
-    // **NO CHANGE IN A BACKGROUND RUN, BY ANY DOOR**: `call` refuses the
-    // change builtins first, by name; this holds a host's writes
-    // (`rewrite`) to the same rule.
+    // A background run never changes the store. `call` already refuses the
+    // change builtins by name; this also holds a host's writes (`rewrite`).
     run.tried_change = true;
     if (run.read_only) return run.fail(pos, .argument, "`{s}` changes the store, and a background run only reads: send it as an `atomic` run", .{@tagName(b)});
     try mayChange(run, pos, p);
@@ -389,14 +379,14 @@ fn changeAt(run: *Run, pos: ast.Pos, b: B, c: Change, p: Path, data: []const u8)
     try run.charge(pos, data.len);
     const io = run.io;
     const a = run.alloc;
-    // **ITS LOG ENTRY'S ROOM FIRST**: a change made and then not logged
-    // (the arena full) would be on the disk but missing from `effects`,
-    // which is how a host knows to rebuild what it remembers.
+    // Reserve the log entry first: a change made but not logged (arena full)
+    // would be on disk yet missing from `effects`, which is how a host knows
+    // to rebuild what it remembers.
     run.effects.ensureUnusedCapacity(a, 1) catch return run.oom(pos);
-    // The store takes removing what is not there as done; a script's
-    // removal of a missing path is an error, logged (docs/SHALE.md, "The store").
-    // **ONLY WHAT ISN'T THERE IS MISSING** (209(a)): any other failure to
-    // look is the store's own, named, logged, and why the run stopped.
+    // The store treats removing a missing path as done; for a script it is
+    // an error, logged (docs/SHALE.md, "The store"). Only `null` means
+    // missing: any other failure to stat is the store's own error, logged,
+    // and stops the run.
     const looked: ?anyerror = switch (c) {
         .remove, .remove_tree => if (store.statOrNull(io, a, p.full)) |st| (if (st == null) error.FileNotFound else null) else |e| e,
         else => null,
@@ -408,8 +398,8 @@ fn changeAt(run: *Run, pos: ast.Pos, b: B, c: Change, p: Path, data: []const u8)
         .remove => if (store.remove(io, a, p.full)) |_| null else |e| e,
         .remove_tree => if (store.removeTree(io, a, p.full)) |_| null else |e| e,
     };
-    // **EVERY CHANGE ATTEMPTED IS LOGGED**, its outcome with it: a failed
-    // one is also why the run stopped.
+    // Every attempted change is logged with its outcome; a failed one also
+    // stops the run.
     run.effects.appendAssumeCapacity(.{ .op = @tagName(b), .path = p.rel, .outcome = if (outcome) |e| @errorName(e) else "ok" });
     if (outcome) |e| return storeFailed(run, pos, b, p.rel, e);
     return .nil;

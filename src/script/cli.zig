@@ -1,15 +1,13 @@
-//! **THE LINUX TOOL'S COMMAND LINE, READ** (metal-vmm QUEUE 229, chunk 4):
-//! what `shale` was asked, pure, so it is tested here and the runner
-//! (`src/script_runner.zig`) only does the I/O.
+//! Parses the Linux tool's command line and formats its report. Pure, so it is
+//! tested here and the runner (`src/script_runner.zig`) only does the I/O.
 //!
 //!     shale [--root DIR] [--verbose] [--undo-on-stop] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
 //!
-//! **A run makes its changes and runs its programs**: on Linux, git is
-//! the undo. **With no FILE and no `-e`, the script is stdin** (metal-vmm
-//! QUEUE 233). **TERSE** (the dogfood design's "The CLI's defaults"): what
-//! a run used is said only past half a budget or on a stop, the effects
-//! only on `--verbose`; `printReport` is the CLI's, and `script.report`,
-//! the route's, is frozen.
+//! A run makes its changes and runs its programs; on Linux, git is the undo.
+//! With no FILE and no `-e`, the script is stdin. The report is terse: usage
+//! is printed only past half a budget or on a stop, the effects only with
+//! `--verbose`. `printReport` is the CLI's own; `script.report`, which the
+//! route uses, stays fixed.
 
 const std = @import("std");
 const interp = @import("interp.zig");
@@ -33,43 +31,45 @@ pub const usage =
     \\
 ;
 
-/// **THE CLI'S BUDGETS** (the dogfood design's "The CLI's defaults"):
-/// output 64 KiB, a call's bytes 64 MiB (a program's log read whole, a
-/// `git diff`), the rest the core's.
+/// The CLI's default budgets: output 64 KiB and call bytes 64 MiB (enough to
+/// read a program's log or a `git diff` whole); the rest are the core's.
 pub const defaults: interp.Budgets = .{ .output_bytes = 64 * 1024, .call_bytes = 64 * 1024 * 1024 };
 
 pub const Command = struct {
     /// The data root: `--root`, else the caller's `SHALE_ROOT`, else ".".
     root: []const u8,
-    /// The file to read, or null for `-e`'s source or stdin's.
+    /// The script file, or null for `-e` or stdin.
     file: ?[]const u8 = null,
+    /// The source given with `-e`.
     source: ?[]const u8 = null,
-    /// Neither a FILE nor `-e`: the script is stdin.
+    /// Neither a FILE nor `-e` was given, so the script is stdin.
     from_stdin: bool = false,
+    /// `--verbose`: report the effects, the programs run and usage, always.
     verbose: bool = false,
-    /// `--undo-on-stop`: a stopped run's changes put back (the Linux host's journal).
+    /// `--undo-on-stop`: a stopped run's changes are put back, from the Linux
+    /// host's journal.
     undo_on_stop: bool = false,
-    /// `--args-stdin`: the FILE's values are stdin's lines (`argLines`).
+    /// `--args-stdin`: the FILE's values are read from stdin (`argLines`).
     args_stdin: bool = false,
     budgets: interp.Budgets = defaults,
-    /// The budgets `--budget` set (by `settable`'s order): a script's header
-    /// never takes one of these (`headerBudgets`).
+    /// The budgets `--budget` set, indexed as `settable`. A script's header
+    /// never overrides these (`headerBudgets`).
     flagged: [settable.len]bool = @splat(false),
     /// The budgets the script's `-- budget:` line set (`headerBudgets`).
     from_header: [settable.len]bool = @splat(false),
-    /// Into the caller's buffer.
+    /// The `NAME=VALUE` arguments; points into the caller's buffer.
     args: []const interp.Arg = &.{},
 };
 
-/// What went wrong reading it, said in `why`.
+/// Why a command line or argument list was refused.
 pub const Refused = struct { why: []const u8 };
 
 /// The budgets a command line may set, by name.
 const settable = [_][]const u8{ "steps", "reads", "read_bytes", "output_bytes", "changes", "change_bytes", "arena_bytes", "call_bytes", "call_entries" };
 
-/// **THE COMMAND LINE** (`argv` past the program's name), the caller's
-/// `SHALE_ROOT` if it has one, the `NAME=VALUE`s into `args_buf`; or why
-/// not, in `why_buf`.
+/// Parses `argv` (without the program's name) and the caller's `SHALE_ROOT`,
+/// if any. The `NAME=VALUE` arguments go into `args_buf`; a refusal's message
+/// into `why_buf`.
 pub fn parse(argv: []const []const u8, env_root: ?[]const u8, args_buf: []interp.Arg, why_buf: []u8) union(enum) { command: Command, refused: Refused } {
     var c: Command = .{ .root = env_root orelse "." };
     var n_args: usize = 0;
@@ -104,8 +104,8 @@ pub fn parse(argv: []const []const u8, env_root: ?[]const u8, args_buf: []interp
         } else if (std.mem.startsWith(u8, a, "-")) {
             return refuse(why_buf, "{s} is not an option", .{a});
         } else if (std.mem.indexOfScalar(u8, a, '=')) |eq| {
-            // Before any script, a value is stdin's script's, unless a
-            // script comes after it (refused there).
+            // A value before any script belongs to stdin's script, unless a
+            // script follows, which is refused there.
             if (eq == 0) return refuse(why_buf, "{s}: a value needs a name", .{a});
             if (n_args == args_buf.len) return refuse(why_buf, "more than {d} values", .{args_buf.len});
             args_buf[n_args] = .{ .name = a[0..eq], .value = a[eq + 1 ..] };
@@ -122,12 +122,11 @@ pub fn parse(argv: []const []const u8, env_root: ?[]const u8, args_buf: []interp
     return .{ .command = c };
 }
 
-/// **A FILE'S VALUES ON STDIN** (`--args-stdin`): one `NAME=VALUE` a line,
-/// the value raw to the line's end (quotes, spaces, `|` and backslashes as
-/// they are: no shell sees them), so a heredoc gives a script what a
-/// command line could not without quoting. Blank lines are passed by. The
-/// values go after `have` (the command line's), into `buf`; a name given
-/// twice, in either, is refused.
+/// Parses `--args-stdin` input: one `NAME=VALUE` per line, the value raw to the
+/// end of the line (quotes, spaces, `|` and backslashes as they are, since no
+/// shell sees them), so a heredoc passes what a command line could not without
+/// quoting. Blank lines are skipped. The values follow `have`, the command
+/// line's, in `buf`; a name given twice in either is refused.
 pub fn argLines(text: []const u8, have: []const interp.Arg, buf: []interp.Arg, why_buf: []u8) union(enum) { args: []const interp.Arg, refused: Refused } {
     if (have.len > buf.len) return .{ .refused = .{ .why = "more values than the buffer holds" } };
     @memcpy(buf[0..have.len], have);
@@ -152,13 +151,13 @@ pub fn argLines(text: []const u8, have: []const interp.Arg, buf: []interp.Arg, w
     return .{ .args = buf[0..n] };
 }
 
-/// **A SCRIPT'S OWN BUDGETS**: a line `-- budget: NAME=N NAME=N ...` among
-/// the comments that open a script sets those budgets for its run, as
-/// `--budget` would, where the command line has not set them itself. A
-/// recipe that needs room says so where it is read, and the run says what
-/// it took (`printHeaderBudgets`), so the cost stays in sight. One such
-/// line; a name or a number `--budget` would refuse is refused. The first
-/// line that is neither blank nor a comment ends the header.
+/// Applies a script's own budgets: a line `-- budget: NAME=N NAME=N ...` among
+/// the comments opening a script sets those budgets as `--budget` would,
+/// except where the command line set them. A recipe that needs room says so
+/// where it is read, and the run prints what it took (`printHeaderBudgets`),
+/// so the cost stays visible. At most one such line; anything `--budget` would
+/// refuse is refused. The first line that is neither blank nor a comment ends
+/// the header.
 pub fn headerBudgets(source: []const u8, c: *Command, why_buf: []u8) ?Refused {
     var it = std.mem.splitScalar(u8, source, '\n');
     var seen = false;
@@ -188,8 +187,8 @@ pub fn headerBudgets(source: []const u8, c: *Command, why_buf: []u8) ?Refused {
     return null;
 }
 
-/// The budgets the script's header set, said before it runs: one line,
-/// or nothing when it set none.
+/// Prints the budgets the script's header set, before it runs: one line, or
+/// nothing when it set none.
 pub fn printHeaderBudgets(c: Command, w: *std.Io.Writer) std.Io.Writer.Error!void {
     var first = true;
     inline for (settable, 0..) |field, k| {
@@ -205,15 +204,16 @@ fn said(buf: []u8, comptime fmt: []const u8, args: anytype) Refused {
     return .{ .why = std.fmt.bufPrint(buf, fmt, args) catch fmt };
 }
 
-/// What a stop and its trail call the script: its file, `-e` or `stdin`.
+/// The script's name in a stop and its trail: its file, `-e` or `stdin`.
 pub fn scriptName(c: Command) []const u8 {
     return c.file orelse if (c.source != null) "-e" else "stdin";
 }
 
-/// What the run took, beside its budgets.
+/// What a run used, to compare against its budgets.
 pub const Used = struct { steps: u64 = 0, reads: u64 = 0, read_bytes: u64 = 0, output: usize = 0 };
 
-/// **PAST HALF A BUDGET**: the run that will meet an edge next time.
+/// Whether the run used more than half of any budget, and so may hit it next
+/// time.
 pub fn pastHalf(u: Used, b: interp.Budgets) bool {
     return u.steps * 2 > b.steps or u.reads * 2 > b.reads or u.read_bytes * 2 > b.read_bytes or u.output * 2 > b.output_bytes;
 }
@@ -221,14 +221,15 @@ pub fn pastHalf(u: Used, b: interp.Budgets) bool {
 /// How the CLI reports a run.
 pub const How = struct {
     verbose: bool = false,
-    /// What the host did (each program it ran, each log): on `--verbose`.
+    /// What the host did (each program it ran, each log), shown with
+    /// `--verbose`.
     records: []const []const u8 = &.{},
     budgets: interp.Budgets = .{},
 };
 
-/// **THE CLI'S REPORT** (stderr, after the script's own output): terse.
-/// A stop, always, and where: a line in a prelude is that prelude's, by its
-/// name (`the Linux prelude:12:5`), never the script's.
+/// Prints the CLI's terse report, to stderr after the script's own output. A
+/// stop is always reported with its place; a line in a prelude is named by
+/// that prelude (`the Linux prelude:12:5`), never the script.
 pub fn printReport(r: *const script.Result, name: []const u8, preludes: []const parse_mod.Prelude, how: How, w: *std.Io.Writer) std.Io.Writer.Error!void {
     if (how.verbose) {
         try w.print("── effects ({d}) ──\n", .{r.effects.len});
@@ -252,8 +253,8 @@ pub fn printReport(r: *const script.Result, name: []const u8, preludes: []const 
         try w.print("── used: {d} of {d} steps, {d} of {d} reads, {d} of {d} read bytes, {d} of {d} output bytes\n", .{ r.steps, b.steps, r.reads, b.reads, r.read_bytes, b.read_bytes, r.output.len, b.output_bytes });
 }
 
-/// The source a line of `function` is in: the core's prelude, a later
-/// one's (its functions are shown `<its name>'s f`), or the script.
+/// Names the source `function` is in: the core's prelude, a later prelude (its
+/// functions are shown as `<its name>'s f`), or the script.
 fn placeOf(function: []const u8, name: []const u8, preludes: []const parse_mod.Prelude) []const u8 {
     if (diag.inPrelude(function)) return "the prelude";
     for (preludes) |p| {
@@ -281,8 +282,6 @@ fn setBudget(b: *interp.Budgets, name: []const u8, n: u64) bool {
     }
     return false;
 }
-
-// ── tests ─────────────────────────────────────────────────────────────────
 
 const testing = std.testing;
 
@@ -385,7 +384,6 @@ test "cli: what it refuses, said" {
 }
 
 test "cli: no FILE and no -e: the script is stdin's, its values still read" {
-    // Re-pinned (QUEUE 233): "no script" was refused; stdin is the script.
     const c = try parsed(&.{}, null);
     try testing.expect(c.from_stdin);
     try testing.expect(c.file == null and c.source == null);
@@ -405,7 +403,7 @@ test "cli: the CLI's own defaults, and --verbose" {
     try testing.expectEqual(@as(u64, 5_000_000), c.budgets.steps);
     try testing.expect(!c.verbose);
     try testing.expect((try parsed(&.{ "--verbose", "a.shale" }, null)).verbose);
-    // A budget given still wins.
+    // A budget given on the command line overrides the default.
     try testing.expectEqual(@as(usize, 9), (try parsed(&.{ "--budget", "output_bytes=9", "a.shale" }, null)).budgets.output_bytes);
 }
 
@@ -414,13 +412,13 @@ test "cli: a script's `-- budget:` line sets its budgets where the command line 
     var c = try parsed(&.{ "--budget", "arena_bytes=7", "a.shale" }, null);
     try testing.expect(headerBudgets("-- A RECIPE\n-- budget: steps=900 arena_bytes=4000\n\nconst X = 1\n-- budget: steps=1\n", &c, &why) == null);
     try testing.expectEqual(@as(u64, 900), c.budgets.steps);
-    // The command line's wins.
+    // The command line's value wins over the header's.
     try testing.expectEqual(@as(u64, 7), c.budgets.arena_bytes);
     var w: std.Io.Writer.Allocating = .init(testing.allocator);
     defer w.deinit();
     try printHeaderBudgets(c, &w.writer);
     try testing.expectEqualStrings("── budgets from the script's header: steps=900\n", w.written());
-    // After the first line of code, a comment is no header.
+    // After the first line of code, a comment is not part of the header.
     var d = try parsed(&.{"a.shale"}, null);
     try testing.expect(headerBudgets("print(1)\n-- budget: steps=9\n", &d, &why) == null);
     try testing.expectEqual(@as(u64, 5_000_000), d.budgets.steps);

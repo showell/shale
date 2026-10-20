@@ -1,7 +1,7 @@
-//! **TEXT'S BUILTINS**: splitting and joining, looking for text, cutting
-//! and changing it, `like`'s patterns, and text to and from integers. Plain
-//! text everywhere: not Lua's patterns. Each charges a step a byte it looks
-//! at.
+//! The text builtins: splitting and joining, searching, slicing and replacing,
+//! `like` and `match_path` globs, and parsing integers. Every search is for
+//! plain text, not Lua's patterns. Each builtin charges a step per byte it
+//! examines.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -43,9 +43,8 @@ pub const specs = [_]bi.Spec{
     spec(.strip_suffix, 2, 2, stripSuffix),
 };
 
-/// **`path(a, b, ...)`**: the parts joined with `/`, each "" left out, so
-/// "" is the root (QUEUE 220: `dir .. "/" .. name`, with the root's case
-/// written by hand). A step a byte it makes.
+/// `path(a, b, ...)` joins the parts with `/`, leaving out each "", so ""
+/// denotes the root and needs no special case. A step per byte produced.
 fn path(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     var total: u64 = 0;
     for (args, 0..) |a, i| {
@@ -72,7 +71,7 @@ fn path(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .string = out };
 }
 
-/// **`basename(p)`**: what follows the last `/`, or all of `p`.
+/// `basename(p)` returns what follows the last `/`, or all of `p`.
 fn basename(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const p = try bi.stringArg(run, pos, .basename, args[0], "its path");
     try run.charge(pos, p.len);
@@ -80,7 +79,7 @@ fn basename(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .string = if (std.mem.lastIndexOfScalar(u8, p, '/')) |i| p[i + 1 ..] else p };
 }
 
-/// **`strip_suffix(s, t)`**: `s` without `t` at its end, or `s` as it is.
+/// `strip_suffix(s, t)` returns `s` without the suffix `t`, or `s` unchanged.
 fn stripSuffix(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const str = try bi.stringArg(run, pos, .strip_suffix, args[0], "its first argument");
     const t = try bi.stringArg(run, pos, .strip_suffix, args[1], "its suffix");
@@ -89,8 +88,8 @@ fn stripSuffix(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .string = if (std.mem.endsWith(u8, str, t)) str[0 .. str.len - t.len] else str };
 }
 
-/// **`rep(s, n)`**: `s` `n` times over. Charged a step a byte before the
-/// string is made.
+/// `rep(s, n)` returns `s` repeated `n` times. Charges a step per byte before
+/// building the string.
 fn rep(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const str = try bi.stringArg(run, pos, .rep, args[0], "its first argument");
     const n = try bi.intArg(run, pos, .rep, args[1], "how many times");
@@ -104,9 +103,8 @@ fn rep(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .string = out };
 }
 
-/// **`substitute(s, old, new)`**: `s` with every `old` (plain text, none
-/// overlapping, left to right) put as `new`. A step a byte of `s` and of
-/// what it makes.
+/// `substitute(s, old, new)` replaces every non-overlapping `old` in `s`, left
+/// to right, with `new`; plain text. A step per byte of `s` and of the result.
 fn substitute(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const str = try bi.stringArg(run, pos, .substitute, args[0], "its first argument");
     const old = try bi.stringArg(run, pos, .substitute, args[1], "what it replaces");
@@ -135,13 +133,12 @@ fn substitute(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .string = out };
 }
 
-/// **A NEEDLE FOUND, ITS WORK CHARGED AS IT IS DONE** (208's and 209's
-/// cold reviews): the haystack is charged by its caller, a step for 16
-/// bytes, for the fast pass that looks for the needle's first byte. Every
-/// place that pass stops at is a step more, and the bytes compared there
-/// a step for 16. So a dense haystack (a match every byte) pays a step a
-/// match, and a long near-match (`rep("a", 30000) .. "b"` in a run of `a`,
-/// 75 s inside the budget at 208's first cut) pays for every compare.
+/// Searches for a needle, charging the work as it is done. The caller charges
+/// the haystack, a step per 16 bytes, for the fast pass over the needle's
+/// first byte. Each place that pass stops costs a step more, and the bytes
+/// compared there a step per 16. So a dense haystack pays a step per match,
+/// and a long near-match (`rep("a", 30000) .. "b"` in a run of `a`) pays for
+/// every compare.
 pub const Finder = struct {
     run: *Run,
     pos: ast.Pos,
@@ -151,24 +148,21 @@ pub const Finder = struct {
         return .{ .run = run, .pos = pos, .needle = needle };
     }
 
-    /// The compares a search does between two charges (whole steps of them).
+    /// The byte compares a search does between two charges.
     const batch_compares = 64 * 1024;
 
-    /// Where the needle first is in `hay` at or after `from`.
+    /// Returns the first index of the needle in `hay` at or after `from`.
     pub fn find(f: *const Finder, hay: []const u8, from: usize) Error!?usize {
         const n = f.needle;
-        // "" is found where the search starts, as Lua's `find` answers 1
-        // (it read `n[0]` and panicked: 220's cold read).
+        // "" is found where the search starts, as Lua's `find` answers 1.
         if (n.len == 0) return if (from <= hay.len) from else null;
         var at = from;
         var stops: u64 = 0;
         var compared: u64 = 0;
-        // **PAID AS IT GOES** (the box, 2026-10-17): a near-match search
-        // does haystack x needle compares, so one charged at its end did all
-        // of them before a budget could stop it (8 billion at 300,000 and
-        // 30,000 bytes). Each batch of compares is charged when it is done,
-        // whole steps of it, so a budget stops the search within a batch and
-        // a needle; the total charged is what it was.
+        // A near-match search does haystack x needle compares, so charging
+        // only at the end would let it finish before a budget could stop it.
+        // We charge each batch of compares as whole steps when it is done, so
+        // a budget stops the search within a batch; the total is unchanged.
         var paid_stops: u64 = 0;
         var paid_compared: u64 = 0;
         const found: ?usize = while (std.mem.indexOfScalarPos(u8, hay, at, n[0])) |i| {
@@ -200,7 +194,7 @@ fn split(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const out = try run.newTable(pos);
     var at: usize = 0;
     while (try finder.find(str, at)) |i| : (at = i + sep.len) {
-        // A piece is an item made: a step each, as the haystack is cheap.
+        // Each piece is an item made: a step each.
         try run.charge(pos, 1);
         run.tally(1);
         out.list.append(run.alloc, .{ .string = str[at..i] }) catch return run.oom(pos);
@@ -229,8 +223,8 @@ fn join(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .string = buf.items };
 }
 
-/// **`lines(s)`**: `s` split at each `\n`, with no last empty piece after a
-/// final newline (`#lines("a\nb\n")` is 2).
+/// `lines(s)` splits `s` at each `\n`, with no empty last piece after a final
+/// newline (`#lines("a\nb\n")` is 2).
 fn lines(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const str = try bi.stringArg(run, pos, .lines, args[0], "its first argument");
     try run.charge(pos, str.len);
@@ -247,7 +241,7 @@ fn lines(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .table = out };
 }
 
-/// **`words(s)`**: the runs between ASCII whitespace, none empty.
+/// `words(s)` returns the nonempty runs between ASCII whitespace.
 fn words(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const str = try bi.stringArg(run, pos, .words, args[0], "its first argument");
     try run.charge(pos, str.len);
@@ -285,9 +279,9 @@ fn looks(comptime l: Look) bi.Impl {
     }.f;
 }
 
-/// **`find(s, t[, from])`**: where `t` first is in `s`, 1-based; nil when
-/// absent. From `from` on (1-based, `#s + 1` the end), so the next one is
-/// `find(s, t, at + 1)`, and what is past `from` is all it reads.
+/// `find(s, t[, from])` returns the 1-based index of the first `t` in `s`, or
+/// nil. Searches from `from` (1-based, `#s + 1` is the end), so the next one
+/// is `find(s, t, at + 1)`; reads only what is past `from`.
 fn find(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const str = try bi.stringArg(run, pos, .find, args[0], "its first argument");
     const sub_s = try bi.stringArg(run, pos, .find, args[1], "what it looks for");
@@ -325,8 +319,8 @@ pub fn subRange(len: usize, i: i64, j: i64) struct { start: usize, len: usize } 
 
 const Side = enum { both, start, end };
 
-/// `trim`, `trim_start`, `trim_end`: spaces, tabs, `\r` and `\n` off both
-/// ends, the start, or the end. A slice of `s`: nothing copied.
+/// `trim`, `trim_start`, `trim_end` remove spaces, tabs, `\r` and `\n` from
+/// both ends, the start, or the end. Returns a slice of `s`; nothing is copied.
 fn trimmed(comptime side: Side) bi.Impl {
     return struct {
         fn f(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
@@ -379,11 +373,11 @@ fn tonumber(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .int = bi.parseInteger(str) orelse return run.fail(pos, .argument, "`tonumber`: \"{s}\" is not an integer (an optional `-`, then decimal digits)", .{str[0..@min(str.len, 40)]}) };
 }
 
-/// **`parse_int(s)`** (QUEUE 229, chunk 3): the integer `s` says, its
-/// blanks around it (spaces, tabs, `\r`, `\n`) let be, or nil for anything
-/// else: a torn line, a word, a number past 64 bits. For data a script did
-/// not write, where `tonumber`'s stop would end the whole report. nil is
-/// nil and an integer itself, so a missing field reads as no number.
+/// `parse_int(s)` returns the integer `s` denotes, ignoring surrounding spaces,
+/// tabs, `\r` and `\n`, or nil for anything else: a torn line, a word, a number
+/// past 64 bits. For data a script did not write, where `tonumber` stopping
+/// would end the whole run. nil maps to nil and an integer to itself, so a
+/// missing field reads as no number.
 fn parseInt(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const str = switch (args[0]) {
         .nil => return .nil,
@@ -397,11 +391,9 @@ fn parseInt(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .int = n };
 }
 
-/// **`between(s, a, b)`** (CC's own, after QUEUE 229's cookbook): the text
-/// after the first `a` in `s` and before the first `b` after it, or nil
-/// when either is not there. `a` of "" is `s`'s start, `b` of "" its end.
-/// What a field's extraction needs without regular expressions: the
-/// reason in `DEPARTS (bounded):`, a call's first string literal.
+/// `between(s, a, b)` returns the text after the first `a` in `s` and before
+/// the first `b` after it, or nil when either is absent. `a` of "" is the start
+/// of `s`, `b` of "" its end. Extracts a field without regular expressions.
 fn between(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const s = try bi.stringArg(run, pos, .between, args[0], "its first argument");
     const a = try bi.stringArg(run, pos, .between, args[1], "what it starts after");
@@ -418,11 +410,11 @@ fn between(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .string = s[start..end] };
 }
 
-/// **`match_path(path, pattern)`** (QUEUE 229, chunk 4): whether a path
-/// matches a glob, part by part on `/`: `**` is any number of parts (none
-/// included), and in any other part `*` is any run of bytes and `?` one
-/// byte, as `like`'s, never across a `/`. So `src/**/*.zig` is every
-/// `.zig` file under `src`, `src/tcp*.zig` only those directly in it.
+/// `match_path(path, pattern)` returns whether a path matches a glob, part by
+/// part on `/`: `**` matches any number of parts, including none, and in any
+/// other part `*` and `?` are as in `like`, never crossing a `/`. So
+/// `src/**/*.zig` is every `.zig` file under `src`, and `src/tcp*.zig` only
+/// those directly in it.
 fn matchPath(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const subject = try bi.stringArg(run, pos, .match_path, args[0], "its path");
     const pattern = try bi.stringArg(run, pos, .match_path, args[1], "its pattern");
@@ -451,7 +443,7 @@ fn matchPath(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .boolean = can[p.len] };
 }
 
-/// The most parts a path or a pattern `match_path` takes has.
+/// The most `/`-separated parts `match_path` accepts in a path or pattern.
 const path_parts_most = 64;
 
 fn splitParts(s: []const u8, out: *[path_parts_most][]const u8) ?[]const []const u8 {
@@ -465,18 +457,18 @@ fn splitParts(s: []const u8, out: *[path_parts_most][]const u8) ?[]const []const
     return out[0..n];
 }
 
-/// **`like(s, pattern)`**: whether the whole of `s` matches `pattern`, where
-/// `*` is any run of bytes (none included), `?` is one byte, and every other
-/// byte is itself. No classes, no escapes: not Lua's patterns.
+/// `like(s, pattern)` returns whether all of `s` matches `pattern`, where `*`
+/// matches any run of bytes, including none, `?` one byte, and every other
+/// byte itself. No classes, no escapes: not Lua's patterns.
 fn like(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const s = try bi.stringArg(run, pos, .like, args[0], "its first argument");
     const p = try bi.stringArg(run, pos, .like, args[1], "its pattern");
     return .{ .boolean = try likeCharged(run, pos, s, p) };
 }
 
-/// `like`'s match: the classic walk that goes back only to the last `*`.
-/// Every byte it looks at is a step, so a pattern that backtracks a long
-/// string runs out of steps.
+/// The match behind `like`: the classic walk that backtracks only to the last
+/// `*`. Every byte examined is a step, so a pattern that backtracks over a
+/// long string runs out of steps.
 pub fn likeCharged(run: *Run, pos: ast.Pos, s: []const u8, p: []const u8) Error!bool {
     var si: usize = 0;
     var pi: usize = 0;
