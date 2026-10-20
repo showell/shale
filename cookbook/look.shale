@@ -13,7 +13,8 @@
 -- each file or folder of `in` (comma-separated; folders walked, their
 -- .zig-cache, zig-out, zig-pkg, node_modules and .git passed by), files
 -- matching `like` (`*` for all). At most `most` lines are printed, and a
--- run that finds more says so: never a silent cut.
+-- run that finds more says so: never a silent cut. A found line longer than
+-- `wide` characters is cut there, ending ` ...`.
 --
 -- budget: steps=900000000 reads=100000 read_bytes=1000000000 arena_bytes=2000000000
 
@@ -22,6 +23,7 @@ const FIND = arg("find", "")
 const IN = arg("in", ".")
 const LIKE = arg("like", "*")
 const MOST = arg("most", 300)
+const WIDE = arg("wide", 200)
 
 if AT == "" and FIND == "" then fail("look: give at=path:first-last[,...] or find=TEXT [in=dirs] [like=*.zig]") end
 
@@ -68,7 +70,9 @@ if FIND ~= "" then
     local place = trim(given)
     local paths = {}
     -- `.` is the root, a folder `is_dir` will not be asked about.
-    if place == "." or is_dir(place) then
+    if place ~= "." and not exists(place) then
+      print("(not there: " .. place .. ")")
+    elseif place == "." or is_dir(place) then
       -- Hidden folders (.git, .zig-cache) are not entered at all.
       local opts = {kind = "file", skip = ".*"}
       if LIKE ~= "*" then opts = {kind = "file", skip = ".*", like = LIKE} end
@@ -83,7 +87,9 @@ if FIND ~= "" then
       for m in grep_all(p, FIND) do
         found = found + 1
         if shown < MOST then
-          print(p .. ":" .. m.line .. ": " .. trim(m.text))
+          local text = trim(m.text)
+          if #text > WIDE then text = sub(text, 1, WIDE) .. " ..." end
+          print(p .. ":" .. m.line .. ": " .. text)
           shown = shown + 1
         end
       end
