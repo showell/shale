@@ -15,7 +15,10 @@ until the cutover):
    `shale <shale>/cookbook/zig17/census.shale only=<repo>` (from
    `~/showell_repos`). The counts are text, so an upper bound: many of
    0.17's renames keep the old name as a deprecated alias.
-2. **Run the scripted fixes**, then `~/zig-0.17.0/zig fmt` over the tree:
+2. **Run the scripted fixes**, then `~/zig-0.17.0/zig fmt $(git ls-files '*.zig')`
+   (the `.zig` files only: `zig fmt .` formats `.zon` too, and reformatted
+   dog-park's generated world.zon, whose hash then turned its golden tests
+   into silent skips):
    - [array_mult.shale](array_mult.shale): `[_]T{v} ** N` becomes `@splat(v)`,
      and a repeated one-character string `"x" ** N` becomes
      `&@as([N]u8, @splat('x'))` (0.17 removed both). What it can't type is
@@ -28,6 +31,9 @@ until the cutover):
      - the optimize tags: `.ReleaseSafe` to `.safe` and so on; `.Debug`
        only on a line about the optimize mode;
      - `if (b.args) |a| run.addArgs(a);` to `run.addPassthruArgs();`;
+     - `X.pathFromRoot(p)` to `pathFromRoot(X, p)`, appending that function
+       and `rootOf` (an absolute path), and `b.build_root.handle` to
+       `b.root.root_dir.handle`;
      - a fixed-size bitset's `.initEmpty()` / `.initFull()` to `.empty` /
        `.full`;
      - type info: `.fields.len` to `.field_names.len`; a pointer's
@@ -52,8 +58,27 @@ until the cutover):
    - A loop over a type's fields (`for (info.fields) |f|`): loop over
      `info.field_names`, `info.field_types` or both zipped, `f.name` and
      `f.type` renamed in the body. Eight in all our repos: by hand.
-   - A string repeated that is longer than one character: build it at
-     comptime (metal-vmm's client.zig has the pattern).
+   - A string repeated that is longer than one character: array_mult.shale
+     writes `repeated(s, n)`; one built from an expression (`(part ++ "/")
+     ** n`) is a hand's, the same way.
+   - `std.meta.fields(T)` is a compile error: `std.meta.fieldNames(T)` where
+     only names are used (`comptime` before it in an `inline for`); an
+     enum's values are `@typeInfo(E).@"enum".field_values`.
+   - The build API: `LazyPath.getPath` is gone (resolve a checked-in file's
+     path yourself, the kernel's `sourcePath`); `setExecCmd` is gone (build
+     the run step around the wrapper, the kernel's `runTest`);
+     `b.findProgram(.{ .names = ... })` returns an optional; `addFmt` takes
+     LazyPaths; `std.zon.parse.fromSlice(T, .{ .gpa, .arena, .source,
+     .diagnostics })`.
+   - A dependency's `builder.root.root_dir.path` is relative to the
+     top-level build, not to the dependency: resolve it through the
+     dependency's own `root_dir.handle` (shale's build worked alone and broke
+     under angry-gopher).
+   - **Zig compiles only what is used**, so a library's function its own
+     tests never call keeps its 0.16 code until a consumer's build reaches
+     it (webbox's `edge.countsJSON`). Grep the whole set for the removed
+     forms (`.fields`, `meta.fields(`, ` ** `) instead of trusting one
+     repo's green build.
    - `linux.waitpid` and `wait4` fill an `i32`; `linux.W` reads a `u32`:
      hold the status as `i32` and `@bitCast` it for `W`.
    - `b.addOptionPath` takes a path relative to the build root now; a
@@ -86,6 +111,9 @@ until the cutover):
 | zig-coverage-sdk | `zig-0.17` | typeInfo fields, Ast.parse, one array, the `__func_` suffix, fmt's builtins |
 | zig-webbox | `zig-0.17` | 34 arrays and strings, 5 renames, 3 `pub` for @hasDecl, `build_root`, allocRemaining's limit |
 | metal-vmm | `zig-0.17` | arrays, the optimize tags, `b.args`, bitsets, bufPrintZ, type info, 4 field loops, a comptime string, waitpid |
+| zig-metal-unikernel | `zig-0.17` (in `~/zig17`) | 113 arrays and strings, 15 renames, six build APIs by hand, meta.fields, a test's false assumption about where a test heap lies; 1436 tests as on 0.16. **Its images wait on 0.17.1** (below) |
+| observatory | `zig-0.17` (in `~/zig17`) | scripts only; 13 tests as on 0.16; its image waits on 0.17.1 |
+| dog-park | `zig-0.17` (in `~/zig17`) | scripts, findProgram, the zon parser, an enum loop; `check` and `roc-fresh` green, the golden physics bit-for-bit; its image waits on 0.17.1 |
 | shale | `zig-0.17` (in `~/zig17`) | 9 arrays, 36 renames, `build_root`, webbox's root absolute, waitpid/wait4, the `**` token, the history replays; 327 tests as on 0.16. `zig build consumers` waits for the siblings |
 
 ## The repos with siblings
@@ -95,3 +123,13 @@ against their siblings by path (`../zig-webbox`, ...), so they move as a
 set: a tree of `zig-0.17` worktrees side by side (each repo's branch
 checked out under one folder, as the siblings' paths expect), every repo
 ported there, the whole set judged together, then each branch merged.
+
+## The blocker: compiler_rt on soft-float x86_64
+
+0.17.0's compiler_rt does not compile for a soft-float x86_64 target: its
+long-double functions (`truncl`, `sinl`, ...) are exported unconditionally,
+and 0.17 refuses `c_longdouble` in a C-ABI function under soft float
+(ziglang/zig#37006, a regression in 0.17.0's notes; the fix is aimed at
+0.17.1). Every kernel image (the kernel's probes, observatory's, dog-park's,
+angry-gopher's) needs compiler_rt and soft float, so none builds on 0.17.0.
+Everything else ports and tests on 0.17.0.
