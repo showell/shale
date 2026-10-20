@@ -1,13 +1,17 @@
-//! **A SCRIPT'S VALUES**: nil, booleans, 64-bit integers, byte strings, and
-//! tables, each a list or a map once it has an entry. All in the run's arena.
+//! A script's values: nil, booleans, 64-bit integers, byte strings, and tables, each a list
+//! or a map once it has an entry. All of them live in the run's arena, which `Budgeted` bounds.
 
 const std = @import("std");
 
 pub const Value = union(enum) {
+    /// The absence of a value. A list or a map never holds it.
     nil,
     boolean: bool,
+    /// Arithmetic on it stops on overflow; it never wraps.
     int: i64,
+    /// Bytes, not necessarily UTF-8. Never changed once made.
     string: []const u8,
+    /// A list or a map, shared by reference.
     table: *Table,
 
     pub fn truthy(v: Value) bool {
@@ -34,29 +38,26 @@ pub const Value = union(enum) {
 };
 
 pub const Table = struct {
-    /// `{}` takes its kind from its first entry.
+    /// `{}` takes its kind from its first entry, and keeps it.
     kind: enum { empty, list, map } = .empty,
+    /// The items of a list, index 1 first. A list never shrinks.
     list: std.ArrayList(Value) = .empty,
     /// Keys in the order they were first set.
     map: std.StringArrayHashMapUnmanaged(Value) = .empty,
 };
 
-/// **THE RUN'S ARENA, ITS BUDGET ITS SIZE** (metal-vmm QUEUE 209, the box's
-/// review 2): every value of a run is bumped out of chunks this arena takes
-/// from the backing allocator, and **it never takes more than its limit in
-/// all**, so the budget bounds the memory a run holds on metal, whatever
-/// the script does. (std's ArenaAllocator grows each block by about half
-/// again what it holds, so a count kept outside it can't bound it: an 8
-/// MiB budget held 14-16 MiB.) Past the limit an allocation fails, and
-/// every `OutOfMemory` of the run, a store call's among them, is read as
-/// this budget.
+/// The run's arena, whose size is the arena budget. Every value of a run is bumped out of
+/// chunks this arena takes from the backing allocator, and it never takes more than `limit`
+/// in all, so the budget bounds the memory a run holds on metal, whatever the script does.
+/// std's ArenaAllocator grows each block by about half again what it holds, so a count kept
+/// outside it cannot bound it. Past the limit an allocation fails, and every `OutOfMemory`
+/// of the run, a store call's among them, is read as this budget.
 ///
-/// Small allocations are bumped out of chunks of at least `chunk_least`,
-/// twice the last when the limit has that left; only the last of them can
-/// grow, shrink or be taken back, in place, and any other free is kept (as
-/// an arena's is). **An allocation of `big` or more has a chunk of its
-/// own,** given back to the backing allocator when it is freed: a list
-/// grown to megabytes holds its live buffer, not every one it outgrew.
+/// Small allocations are bumped out of chunks of at least `chunk_least`, each twice the last
+/// when the limit has that left. Only the last allocation can grow, shrink or be freed, in
+/// place; any other free is kept, as in an arena. An allocation of `big` or more has a
+/// chunk of its own, returned to the backing allocator when it is freed, so a list grown to
+/// megabytes holds its live buffer, not every one it outgrew.
 pub const Budgeted = struct {
     backing: std.mem.Allocator,
     limit: usize,
@@ -64,8 +65,9 @@ pub const Budgeted = struct {
     held: usize = 0,
     /// The bytes handed out (a measure, not a bound).
     used: usize = 0,
+    /// Whether an allocation was refused.
     hit: bool = false,
-    /// The newest chunk, first; each its header then its bytes.
+    /// The newest chunk, linked to the older ones; each is its header, then its bytes.
     chunk: ?*Chunk = null,
     /// How far into the newest chunk's bytes the next allocation starts.
     end: usize = 0,
@@ -98,9 +100,9 @@ pub const Budgeted = struct {
             while (c) |x| {
                 c = x.next;
                 const base: [*]u8 = @ptrCast(x);
-                // **IN THE TESTS, FREED IS OVERWRITTEN**, so a value still
-                // read after its arena went (a root a `yield` missed)
-                // reads as garbage, not as what it was.
+                // In tests we overwrite freed memory, so a value still read after its
+                // arena is gone (a root a `yield` missed) reads as garbage, not as what
+                // it was.
                 const whole = base[0..x.total];
                 if (@import("builtin").is_test) @memset(whole, 0xaa);
                 self.backing.rawFree(whole, chunk_align, @returnAddress());
@@ -179,9 +181,8 @@ pub const Budgeted = struct {
 
     fn resize(ctx: *anyopaque, m: []u8, _: Alignment, new_len: usize, _: usize) bool {
         const self: *Budgeted = @ptrCast(@alignCast(ctx));
-        // A big one never changes its length in place: its chunk is freed
-        // by the length it was made with. A small one never grows into a
-        // big one's place but by moving.
+        // A big allocation never changes its length in place, since its chunk is freed
+        // by the length it was made with. A small one becomes big only by moving.
         if (m.len >= big or new_len >= big) return false;
         if (!self.isLast(m)) return new_len <= m.len;
         const start = self.end - m.len;
@@ -198,7 +199,6 @@ pub const Budgeted = struct {
     fn free(ctx: *anyopaque, m: []u8, a: Alignment, _: usize) void {
         const self: *Budgeted = @ptrCast(@alignCast(ctx));
         if (m.len >= big) {
-            // Its own chunk, given back.
             var at = &self.bigs;
             while (at.*) |c| : (at = &c.next) {
                 if (bigBytes(c, a) != m.ptr) continue;
@@ -227,6 +227,7 @@ test "the arena's budget refuses past its limit, and says it was hit" {
 /// The backing allocator's bytes outstanding, and the most there ever were.
 pub const Peak = struct {
     child: std.mem.Allocator,
+    /// Bytes outstanding. Resizing is refused, so allocation and free account for all.
     now: usize = 0,
     most: usize = 0,
 
@@ -254,8 +255,8 @@ pub const Peak = struct {
 };
 
 test "the arena never takes more than its limit from the backing allocator, whatever grows in it" {
-    // The review's shapes: many small tables, one list pushed to, and the
-    // two interleaved, which std's arena held at 1.7x and 2.0x its count.
+    // Many small tables, one list pushed to, and the two interleaved: std's arena held
+    // the last two at 1.7x and 2.0x its count.
     const limit = 1024 * 1024;
     for (0..3) |shape| {
         var peak: Peak = .{ .child = std.testing.allocator };

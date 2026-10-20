@@ -1,7 +1,6 @@
-//! **NOTHING IN THE MODULE NAMES THE HOST** (metal-vmm QUEUE 199): each of
-//! its sources, read as text, refused anything that reaches past `host_io`
-//! and the caller's allocator, outside `test` blocks and outside the
-//! `*_test.zig` files (which run only on the Linux host's tests).
+//! Checks that nothing in the module names the host. Each source, read as text, may not
+//! reach past `host_io` and the caller's allocator outside its `test` blocks. The
+//! `*_test.zig` files are exempt: they run only in the Linux host's tests.
 
 const std = @import("std");
 

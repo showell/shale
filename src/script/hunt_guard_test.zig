@@ -1,16 +1,14 @@
-//! **NO CARRIED SKIPS, NO STRAY HUNT** (metal-vmm QUEUE 241): beside
-//! portable_test.zig's scan, the sources of src/ and tools/ read as text.
-//! A test that skips is a test `zig build test` counts and never runs, so
-//! none may name the skip; and a test named `expensive ...` belongs to the
-//! hunt (src/script/hunt.zig, build.zig's `hunt_files`), which only
-//! `zig build fuzz` runs, so one outside those files would run in `test`
-//! under a hunt's name, or in no step at all.
+//! Scans the sources of src/ and tools/ as text, beside portable_test.zig's scan, for
+//! skipped tests and stray hunts. A test that skips is one `zig build test` counts and
+//! never runs, so no source may name the skip. A test named `expensive ...` belongs to the
+//! hunt (src/script/hunt.zig, build.zig's `hunt_files`), which only `zig build fuzz` runs;
+//! one outside those files would run in `test` under a hunt's name, or in no step at all.
 
 const std = @import("std");
 const testing = std.testing;
 const hunt_files = @import("shale_test_options").hunt_files;
 
-// Built, not written, so this file holds neither.
+// Built by concatenation, so this file's own text holds neither.
 const skip = "Skip" ++ "ZigTest";
 const hunt_test = "test \"" ++ "expensive";
 

@@ -1,7 +1,7 @@
-//! **EVERY BUILTIN CHARGES AT LEAST IN PROPORTION TO ITS WORK** (metal-vmm
-//! QUEUE 208(e)): for each builtin whose work grows with its input, the
-//! call's own steps (the whole script's, less its setup's) at size N and at
-//! 4N, and the growth must be at least a step for each byte or item added.
+//! Checks that every builtin charges at least in proportion to its work. For each builtin
+//! whose work grows with its input, we measure the call's own steps (the whole script's,
+//! less its setup's) at size N and at 4N; the growth must be at least a step for each byte
+//! or item added.
 //! A builtin whose work does not grow is listed as constant, with why. The
 //! table must name every builtin (checked at compile time), so a builtin
 //! added to the language is added here too.
@@ -194,8 +194,8 @@ fn callSteps(c: Case, n: usize) !u64 {
     return try f.steps(whole_src, n) - setup;
 }
 
-/// **THE OPERATORS, TOO** (209): what grows with a value's size, as the
-/// builtins are held to.
+/// The operators whose work grows with a value's size, held to the same rule as the
+/// builtins.
 const op_cases = [_]struct { name: []const u8, setup: []const u8, call: []const u8 }{
     .{ .name = "a map's key, read", .setup = "local k = rep(\"k\", N) local m = {} m[k] = 1", .call = "local x = m[k]" },
     .{ .name = "a map's key, set", .setup = "local k = rep(\"k\", N) local m = {}", .call = "m[k] = 1" },
@@ -245,7 +245,7 @@ fn callMeasure(store: Setup, setup: []const u8, call: []const u8, n: usize) !Fix
     return .{ .steps = all.steps - before.steps, .work = all.work - before.work };
 }
 
-/// **THE UPPER BOUND** (209(c)): the most units of work a step may buy.
+/// The most units of work a step may buy.
 /// A unit is a byte touched, a compare, a place a search stops, an item
 /// made; bulk byte work buys 16 a step, and a search's stops and compares
 /// sit on top. An uncharged loop's work grows with nothing to match it.
@@ -278,8 +278,8 @@ test "steps bound the work: no builtin or operator does more than a fixed amount
     };
     for (op_cases) |c| try within(c.name, try callMeasure(.none, c.setup, c.call, n), &worst);
     for (hard_cases) |c| try within(c.name, try callMeasure(c.store, c.setup, c.call, n), &worst);
-    // Said only when a case breaks the bound (`within`), never on a pass
-    // (the box, 209): the worst today is 30.3, well inside it.
+    // `within` prints only a case that breaks the bound, never on a pass. The worst
+    // ratio is about 30, well inside it.
     try testing.expect(worst <= work_per_step_most);
 }
 

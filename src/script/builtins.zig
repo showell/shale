@@ -1,8 +1,6 @@
-//! **THE BUILTINS, DECLARED IN ONE PLACE** (metal-vmm QUEUE 208(a)): each
-//! topic's file lists its builtins as `Spec`s (the name, how many
-//! arguments, the function), and this file gathers them into one table,
-//! checked at compile time to name every builtin exactly once. The
-//! arguments' helpers every topic shares are here too.
+//! Gathers the builtins into one table. Each topic's file lists its builtins as `Spec`s,
+//! and the table is checked at compile time to name every builtin exactly once. The
+//! argument helpers every topic shares are here too.
 //!
 //! The topics: the store (`builtins_store.zig`, with its reading, walking
 //! and changing in `builtins_read.zig`, `builtins_walk.zig` and
@@ -22,14 +20,15 @@ const Value = value.Value;
 const Error = interp.Error;
 const B = ast.Builtin;
 
-/// A builtin's arguments, evaluated and counted against its `Spec`.
+/// A builtin's function. Its arguments are evaluated and already counted against its `Spec`.
 pub const Impl = *const fn (run: *Run, pos: ast.Pos, args: []const Value) Error!Value;
 
-/// **A BUILTIN'S DECLARATION**: its name, how many arguments it takes
-/// (`at_least` to `at_most`), and the function.
+/// A builtin's declaration.
 pub const Spec = struct {
     name: B,
+    /// The fewest arguments it takes.
     at_least: u8,
+    /// The most arguments it takes; at most `most_args`, but for `print`.
     at_most: u8,
     impl: Impl,
 };
@@ -53,9 +52,8 @@ const topics = .{
 /// evaluates them into a buffer this long.
 pub const most_args = 4;
 
-/// **THE BUILTINS THAT CALL THE STORE** (metal-vmm QUEUE 211, Steve's
-/// model): a slice ends after each, so a host can let a request in between
-/// a run's I/O (`vm.zig`'s `.builtin`).
+/// The builtins that call the store. A slice ends after each, so a host can let a request
+/// in between a run's I/O (`vm.zig`'s `.builtin`).
 pub const touches_store: std.EnumSet(B) = blk: {
     @setEvalBranchQuota(10_000);
     var set: std.EnumSet(B) = .empty;
@@ -95,14 +93,13 @@ pub fn tooMany(run: *Run, pos: ast.Pos, b: B) Error {
     return run.fail(pos, .argument, "`{s}` takes at most {d} arguments", .{ @tagName(b), specs.get(b).at_most });
 }
 
-/// **A CALL**: its arguments counted against the declaration, then the
-/// builtin.
+/// Calls builtin `b`, after counting its arguments against its declaration.
 pub fn call(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!Value {
     const s = specs.get(b);
     if (changes_store.contains(b)) {
         run.tried_change = true;
-        // **A BACKGROUND RUN ONLY READS** (metal-vmm QUEUE 211, Steve's
-        // model), refused before its arguments or its path are looked at.
+        // A background run only reads; we refuse the change before looking at its
+        // arguments or its path.
         if (run.read_only) return run.fail(pos, .argument, "`{s}` changes the store, and a background run only reads: send it as an `atomic` run", .{@tagName(b)});
     }
     if (args.len < s.at_least or args.len > s.at_most) {
@@ -111,8 +108,6 @@ pub fn call(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!Value {
     }
     return s.impl(run, pos, args);
 }
-
-// ── the arguments' helpers ──────────────────────────────────────────────
 
 /// A scalar as `print` and `tostring` write it: nil, true, false, the
 /// integer, the string. A table is an error.
@@ -171,11 +166,10 @@ pub fn listOf(run: *Run, pos: ast.Pos, items: []const Value) Error!Value {
     return .{ .table = out };
 }
 
-/// **THE PRICE OF A BYTE OF BULK WORK** (metal-vmm QUEUE 209, Steve): a
-/// step for every 16 bytes, or part of 16, that a read brings, a scan looks
-/// at or a search runs over. Measured: a byte read whole costs 0.4 ns, a
-/// byte scanned 3.7 ns, an interpreted step 7-15 ns. Everything else a
-/// builtin touches stays a step a byte.
+/// The price of bulk work: a step for every 16 bytes, or part of 16, that a read brings, a
+/// scan looks at or a search runs over. Measured, a byte read whole costs 0.4 ns, a byte
+/// scanned 3.7 ns, and an interpreted step 7-15 ns. Everything else a builtin touches
+/// costs a step a byte.
 pub const bytes_per_step = 16;
 
 pub fn chargeBytes(run: *Run, pos: ast.Pos, n: u64) Error!void {
@@ -217,8 +211,8 @@ pub const SortContext = struct {
 };
 
 test "every builtin has one declaration, and none takes more than the interpreter's buffer holds" {
-    // The table's comptime checks say so; this names the count, so a
-    // builtin added or dropped shows here too.
+    // The table's comptime checks already hold this; the test makes a builtin added or
+    // dropped show in the test run too.
     try std.testing.expectEqual(std.enums.values(B).len, specs.values.len);
     for (std.enums.values(B)) |b| {
         const s = specs.get(b);

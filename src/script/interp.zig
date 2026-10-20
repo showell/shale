@@ -1,7 +1,6 @@
-//! **THE INTERPRETER**: a walk over the tree, every statement and every
-//! expression a step, every budget checked where it is spent. A run ends
-//! finished or stopped, never in a Zig panic: every error is a `Stop` with
-//! its line, column and class.
+//! Walks the tree and runs it: every statement and every expression is a step, and every
+//! budget is checked where it is spent. A run ends finished or stopped, never in a Zig panic:
+//! every error is a `Stop` with its line, column and class.
 
 const std = @import("std");
 const Io = @import("host_io").Io;
@@ -13,60 +12,64 @@ const builtins = @import("builtins.zig");
 const Value = value.Value;
 const Table = value.Table;
 
-/// Every budget, a named default each, any of which the caller overrides.
+/// Every limit on a run. Each has a default; the caller may override any of them.
 pub const Budgets = struct {
     pub const default_source_bytes = 64 * 1024;
     pub const default_output_bytes = 256 * 1024;
 
+    /// Statements, expressions and charged work, in steps.
     steps: u64 = 5_000_000,
+    /// Bytes of the values' arena.
     arena_bytes: usize = 16 * 1024 * 1024,
+    /// Calls of script functions in progress at once.
     call_depth: u32 = 64,
+    /// Bytes printed.
     output_bytes: usize = default_output_bytes,
+    /// Store reads, by count.
     reads: u64 = 10_000,
+    /// Bytes read from the store.
     read_bytes: u64 = 64 * 1024 * 1024,
+    /// Store changes, by count.
     changes: u64 = 1_000,
+    /// Bytes written to the store.
     change_bytes: u64 = 16 * 1024 * 1024,
+    /// Bytes of source.
     source_bytes: usize = default_source_bytes,
+    /// How deeply the source may nest.
     nesting: u32 = 200,
-    /// **THE WALK'S DEPTH** (docs/SHALE.md, "The Zig stack"): expressions and
-    /// statements the walk is inside of at once, across every call. The
-    /// call depth times the nesting is 12,800 levels, and at about 1 KB of
-    /// Zig stack a level in Debug that is more than a thread has; this
-    /// bounds the walk to what the stack holds, whatever the script.
+    /// Expressions and statements the walk is inside of at once, across every call.
+    /// The call depth times the nesting is 12,800 levels, and at about 1 KB of Zig stack
+    /// a level in Debug that is more than a thread has; this bounds the walk to what the
+    /// stack holds, whatever the script. See docs/SHALE.md, "The Zig stack".
     depth: u32 = 2_000,
-    /// **WHAT A YIELD KEEPS** (metal-vmm QUEUE 211, M1): the bytes the
-    /// values the VM still reaches take, copied into a fresh arena at each
-    /// `yield`; past it, the run stops.
+    /// Bytes of the values the VM still reaches, copied into a fresh arena at each
+    /// `yield`. Past it, the run stops.
     kept_bytes: usize = 1024 * 1024,
-    /// **THE MACHINE'S MEMORY** (the box's review of 211: off the arena, it
-    /// was off every budget, and 5,500 parameters 63 calls deep took 14 MB
-    /// past an 8 MiB arena): the parse's tree, the compiled code, the
-    /// frames' slots, the operand stack, the `..` chains' parts and a
-    /// yield's copying, all from one arena of this size beside the values'.
-    /// **EVERY SOURCE WITHIN THE SOURCE BUDGET COMPILES IN HALF OF IT** (the
-    /// box's re-review, FEEDBACK 1599c8f): the worst shapes, short
-    /// statements and list literals, take about 113 bytes of tree and code
-    /// a byte of source, 7.4 MB for 64 KiB; the other half is for the
-    /// frames and the operands (`process_test.zig` holds both).
+    /// One arena, beside the values', for the parse's tree, the compiled code, the frames'
+    /// slots, the operand stack, the `..` chains' parts and a yield's copying. Without it
+    /// these would be outside every budget.
+    /// Every source within the source budget compiles in half of it: the worst shapes,
+    /// short statements and list literals, take about 113 bytes of tree and code a byte
+    /// of source, 7.4 MB for 64 KiB. The other half is for the frames and the operands.
+    /// `process_test.zig` holds both.
     machine_bytes: usize = 16 * 1024 * 1024,
-    /// **WHAT ONE CALL BRINGS FROM THE STORE** (metal-vmm QUEUE 211, the
-    /// caps: builtins stay atomic, so each one's work is capped): the most
-    /// bytes one `read` (or one scan) takes from the store in one call. A
-    /// bigger file is read in parts, `read(p, offset, n)`, each a call.
+    /// The most bytes one `read` (or one scan) takes from the store in one call. Builtins
+    /// are atomic, so each one's work is capped; a bigger file is read in parts,
+    /// `read(p, offset, n)`, each a call.
     call_bytes: u64 = 1024 * 1024,
-    /// **WHAT ONE `walk` CONSIDERS** (QUEUE 211, the caps): the entries one
-    /// call takes from its folders' listings, each a stat if it is kept. A
-    /// walk with more ends its list with a `more` entry, and goes on from
-    /// it with `walk(p, {after = its path})`.
+    /// The entries one `walk` call takes from its folders' listings, each a stat if it is
+    /// kept. A walk with more ends its list with a `more` entry, and goes on from it with
+    /// `walk(p, {after = its path})`.
     call_entries: u64 = 256,
 };
 
-/// **ONE VALUE GIVEN TO THE RUN BY NAME** (metal-vmm QUEUE 229, chunk 4):
-/// `shale script.shale name=value`, read with `arg(name, default)`.
+/// One value given to the run by name: `shale script.shale name=value`, read with
+/// `arg(name, default)`.
 pub const Arg = struct { name: []const u8, value: []const u8 };
 
 /// One store change the script attempted, in order, root-relative.
 pub const Effect = struct {
+    /// The builtin's name.
     op: []const u8,
     path: []const u8,
     /// "ok", or the store's error.
@@ -75,29 +78,27 @@ pub const Effect = struct {
 
 pub const Error = error{ Stop, OutOfMemory };
 
-/// **THE CORE'S ONE DOOR OUT** (metal-vmm QUEUE 233; the dogfood design's
-/// "The architecture"): `host(name, ...)` calls `call` with the name and
-/// the rest of its arguments. The Linux CLI gives one (running programs,
-/// mounts, jobs); metal gives none, and `host` stops with class `host`.
+/// The core's one way out to its host: `host(name, ...)` calls `call` with the name and the
+/// rest of its arguments. The Linux CLI provides one (running programs, mounts, jobs);
+/// metal provides none, and `host` stops with class `host`.
 pub const Host = struct {
     ctx: *anyopaque,
     call: *const fn (ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []const Value) Error!Value,
 };
 
-/// **HOW A CHANGE'S DIFF IS PRINTED** (metal-vmm QUEUE 234): in `full`,
-/// the route's and metal's way and the CLI's with `--verbose`; or one line
-/// a change, `summary`, the CLI's otherwise.
+/// How a change's diff is printed: `full` (the route's and metal's way, and the CLI's with
+/// `--verbose`) or `summary`, one line a change (the CLI's default).
 pub const Diffs = enum { full, summary };
 
-/// **THE ONE HOOK ON PATHS**: called first by every path argument, when
-/// set; the OS path a script's path names, or null for the root's rules.
-/// What a mount is (`runs:x`) is the host's. Metal sets none.
+/// The one hook on paths. When set, every path argument calls `resolve` first, which
+/// returns the OS path a script's path names, or null for the root's rules. What a mount
+/// (`runs:x`) is belongs to the host. Metal sets none.
 pub const PathHook = struct {
     ctx: *anyopaque,
     resolve: *const fn (ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]const u8,
-    /// **THE HOST'S WORD ON A CHANGE** (metal-vmm QUEUE 235: a read-only
-    /// mount refuses it), asked before anything is written. Only where the
-    /// host's `host_io` says `shale_change_check`: on metal, nothing.
+    /// Asked before anything is written; returns an error to refuse the change (a
+    /// read-only mount does). Exists only where the host's `host_io` declares
+    /// `shale_change_check`; on metal, it is `void`.
     may_change: if (change_check_on) ?*const fn (ctx: *anyopaque, run: *Run, pos: ast.Pos, rel: []const u8, full: []const u8) Error!void else void = if (change_check_on) null else {},
 };
 
@@ -106,12 +107,11 @@ pub const change_check_on = @hasDecl(@import("host_io"), "shale_change_check") a
 pub const Run = struct {
     io: Io,
     alloc: std.mem.Allocator,
-    /// **THE MACHINE'S OWN MEMORY** (metal-vmm QUEUE 211): the frames' slots,
-    /// the `..` chains' parts, the arguments of a long call, the VM's
-    /// operands and frames, outside the values' arena, so a tree-walker and
-    /// a VM, whose machinery differs, take the same arena and stop on it at
-    /// the same place. **Its own budget bounds it** (`Budgets.machine_bytes`,
-    /// with the tree and the code): no value points into it.
+    /// The frames' slots, the `..` chains' parts, the arguments of a long call, the VM's
+    /// operands and frames. Kept outside the values' arena so that the tree-walker and the
+    /// VM, whose machinery differs, use the same arena and stop on it at the same place.
+    /// Bounded by `Budgets.machine_bytes`, with the tree and the code. No value points
+    /// into it.
     machine: std.mem.Allocator,
     budgeted: *value.Budgeted,
     budgets: Budgets,
@@ -123,16 +123,15 @@ pub const Run = struct {
     out_len: usize = 0,
     out_cap: usize,
     steps: u64 = 0,
-    /// **THE WORK DONE, COUNTED APART FROM WHAT IS CHARGED** (209(c)): the
-    /// bytes, compares, stops and items the builtins' and operators' inner
-    /// loops touch, in tests only (`tally`), so a test can hold the work
-    /// to a multiple of the steps: an uncharged loop shows.
+    /// The bytes, compares and items the builtins' and operators' inner loops touch,
+    /// counted apart from what is charged, in tests only (`tally`). A test holds the work
+    /// to a multiple of the steps, so an uncharged loop shows.
     work: u64 = 0,
     depth: u32 = 0,
     /// The yields that collected (`collect.zig`): a run's steps and arena
     /// differ from a walker's by them, and by nothing else.
     collections: u64 = 0,
-    /// **A BACKGROUND RUN ONLY READS** (`process.Mode`): a change is an
+    /// Set for a background run (`process.Mode`), which only reads: a change is an
     /// `argument` error naming `atomic`.
     read_only: bool = false,
     /// The values the run was given by name (`arg`).
@@ -164,15 +163,14 @@ pub const Run = struct {
     stop: ?diag.Stop = null,
     /// The function the walk is in, by name; "" at the top level.
     function: []const u8 = "",
-    /// **THE CALLS THE RUN IS IN** (QUEUE 229, chunk 1), outermost first:
-    /// where each was made, a stop's trail. Pushed as a call starts and
-    /// taken off only as it returns, so a stop finds it whole; an
-    /// `attempt` that catches one cuts it back to its own depth. In the
-    /// machine's memory, which lives as long as the Result, and never given
-    /// back by `deinit`: a stop's `trail` is its items.
+    /// The calls the run is in, outermost first, each where it was made: a stop's trail.
+    /// Pushed as a call starts and popped only as it returns, so a stop finds it whole;
+    /// an `attempt` that catches a stop cuts it back to its own depth. Lives in the
+    /// machine's memory, which lives as long as the Result, and is not freed by `deinit`,
+    /// since a stop's `trail` is its items.
     calls: std.ArrayList(diag.Call) = .empty,
-    /// **THE LAST STRING A `..` CHAIN BUILT** (`concatChain`): its buffer,
-    /// how much of it the string fills, and how big it is.
+    /// The last string a `..` chain built (`concatChain`): its buffer, how much of it the
+    /// string fills, and the buffer's size.
     tail_ptr: ?[*]u8 = null,
     tail_used: usize = 0,
     tail_cap: usize = 0,
@@ -186,8 +184,7 @@ pub const Run = struct {
     scan_buf: []u8 = &.{},
     /// The top-level `const`s, each null until its line has run.
     consts: []?Value = &.{},
-    /// The patterns `re_find` and `re_match` compiled (QUEUE 230), in the
-    /// machine's memory.
+    /// The patterns `re_find` and `re_match` compiled, in the machine's memory.
     patterns: @import("regex.zig").Cache = .{},
     /// The lowest frame address the walk reached: the Zig stack it took,
     /// measured (docs/SHALE.md, "The Zig stack").
@@ -236,9 +233,8 @@ pub const Run = struct {
     /// Steps, charged; `n` for a builtin's work in proportion to what it
     /// touches.
     pub fn charge(self: *Run, pos: ast.Pos, n: u64) Error!void {
-        // **A CHARGE PAST WHAT IS LEFT STOPS A STEP PAST THE BUDGET**, as a
-        // step does: the run never did that work, so its count is not the
-        // charge's size (`rep("ab", 2^62)` reported 2^63 steps).
+        // A charge past what is left stops one step past the budget, as a single step
+        // does: the run never did that work, so the count must not grow by the charge.
         if (n > self.budgets.steps -| self.steps) {
             self.steps = self.budgets.steps +| 1;
             return self.budgetStop(pos, .steps);
@@ -264,8 +260,6 @@ pub const Run = struct {
     pub fn machineOom(self: *Run, pos: ast.Pos) Error {
         return self.budgetStop(pos, .machine);
     }
-
-    // ── statements ────────────────────────────────────────────────────────
 
     const Flow = enum { normal, @"break", @"continue", @"return" };
 
@@ -359,7 +353,7 @@ pub const Run = struct {
         if (step == 0) return self.fail(pos, .argument, "a `for` with a step of 0 never ends", .{});
         var i: i64 = from;
         while (if (step > 0) i <= to else i >= to) {
-            // An iteration is a step, its body or none.
+            // An iteration is a step, whether or not its body has statements.
             try self.charge(pos, 1);
             self.slot(f.slot).* = .{ .int = i };
             switch (try self.block(f.body)) {
@@ -374,10 +368,9 @@ pub const Run = struct {
         return .normal;
     }
 
-    /// **`for x in l`**: the first `#l` items, `#l` as it was when the loop
-    /// began (an item pushed meanwhile is not visited), each as it is when
-    /// the loop reaches it. In place: a loop copies nothing, so a loop over
-    /// a list inside another costs no arena (metal-vmm QUEUE 208(a)).
+    /// `for x in l` visits the first `#l` items, `#l` as it was when the loop began (an
+    /// item pushed meanwhile is not visited), each as it is when the loop reaches it.
+    /// The loop copies nothing, so nested loops cost no arena.
     noinline fn listFor(self: *Run, pos: ast.Pos, f: *const ListFor) Error!Flow {
         const t = try self.listToWalk(f.list.pos, try self.eval(f.list)) orelse return .normal;
         const n = t.list.items.len;
@@ -395,8 +388,8 @@ pub const Run = struct {
         return .normal;
     }
 
-    /// **`for x in`'s list**, `pos` its expression's: null for a table
-    /// still empty (the loop runs no turn and charges nothing).
+    /// The list of a `for x in`, `pos` being its expression's. Returns null for a table
+    /// still empty: the loop runs no iteration and charges nothing.
     pub fn listToWalk(self: *Run, pos: ast.Pos, l: Value) Error!?*Table {
         return switch (l) {
             .table => |t| switch (t.kind) {
@@ -419,8 +412,6 @@ pub const Run = struct {
             else => self.fail(pos, .type, "{s} must be an integer, not {s}", .{ what, v.typeName() }),
         };
     }
-
-    // ── tables ────────────────────────────────────────────────────────────
 
     pub fn newTable(self: *Run, pos: ast.Pos) Error!*Table {
         const t = self.alloc.create(Table) catch return self.oom(pos);
@@ -448,9 +439,7 @@ pub const Run = struct {
             .string => |k| {
                 if (t.kind == .list) return self.fail(pos, .type, "a list's keys are integers: this one is a list, indexed by a string", .{});
                 if (v == .nil) return self.fail(pos, .type, "a map cannot hold nil (`m.k = nil` is an error: there is no remove)", .{});
-                // **A KEY IS HASHED AND COMPARED WHOLE**: a step a byte
-                // (209's cold review: a 900 KB key set a million times ran
-                // 11 s inside the site's budgets).
+                // A key is hashed and compared whole, so it costs a step a byte.
                 try self.charge(pos, k.len);
                 self.tally(k.len);
                 const g = t.map.getOrPut(self.alloc, k) catch return self.oom(pos);
@@ -483,11 +472,9 @@ pub const Run = struct {
         }
     }
 
-    // ── expressions ───────────────────────────────────────────────────────
-
-    /// **THE RECURSION'S FRAME IS KEPT SMALL** (docs/SHALE.md, "The Zig stack"):
-    /// every case that needs locals or a message's formatting is a function
-    /// of its own, out of this frame, which every nested expression pays.
+    /// Every nested expression pays for this frame, so it is kept small: each case that
+    /// needs locals or formats a message is a function of its own. See docs/SHALE.md,
+    /// "The Zig stack".
     pub fn eval(self: *Run, e: *const ast.Expr) Error!Value {
         try self.enter(e.pos);
         defer self.walk -= 1;
@@ -623,14 +610,12 @@ pub const Run = struct {
         return .{ .int = result orelse return self.fail(pos, .arithmetic, "{d} {s} {d} overflows 64 bits", .{ a, opText(op), b }) };
     }
 
-    /// **A CHAIN OF `..`, JOINED ONCE** (metal-vmm QUEUE 208(a)): `a .. b ..
-    /// c` (right-associative, so one chain) is every part evaluated left to
-    /// right, then one string. When the first part is the string the last
-    /// chain built, whole, and its buffer has room, the rest is written
-    /// after it in place: `s = s .. x` in a loop is linear, not quadratic,
-    /// in time and arena. A buffer outgrown is copied to one twice the
-    /// size. A string is never changed: the room is past the end of every
-    /// slice of the buffer. Each byte written is a step.
+    /// Joins a chain of `..` once. `a .. b .. c` is right-associative, so one chain: every
+    /// part is evaluated left to right, then one string is built. When the first part is
+    /// the whole string the last chain built and its buffer has room, the rest is written
+    /// after it in place, so `s = s .. x` in a loop is linear in time and arena. An
+    /// outgrown buffer is copied to one twice the size. No string is ever changed: the
+    /// room is past the end of every slice of the buffer. Each byte written is a step.
     noinline fn concatChain(self: *Run, pos: ast.Pos, le: *const ast.Expr, re: *const ast.Expr) Error!Value {
         // The parts, and the `..` before each but the first (the first's is
         // its own: the chain's first operator).
@@ -689,8 +674,6 @@ pub const Run = struct {
         };
         const in_place = parts[0] == .string and first.len > 0 and first.ptr == self.tail_ptr and first.len == self.tail_used and total <= self.tail_cap;
         const buf: [*]u8 = if (in_place) self.tail_ptr.? else blk: {
-            // Outgrown: twice the size, so a string built a piece at a time
-            // is copied a logarithmic number of times.
             const grow = parts[0] == .string and first.len > 0 and first.ptr == self.tail_ptr and first.len == self.tail_used;
             const cap = if (grow) @max(2 * total, 64) else total;
             const fresh = self.alloc.alloc(u8, cap) catch return self.oom(pos);
@@ -777,14 +760,13 @@ pub const Run = struct {
         }
     }
 
-    /// **`attempt(f, ...)`** (metal-vmm QUEUE 208(c)): the script's function
-    /// `f`, called with the arguments (evaluated first, outside the
-    /// attempt, as Lua's `pcall` does), and its error a value instead of
-    /// the run's end: `{ok = true, value = v}` (no `value` for nil) or `{ok
-    /// = false, error, class, line, column, in_function}`. **A BUDGET IS
-    /// NEVER CAUGHT**: it is the run's, not the call's, so a run that runs
-    /// out stops wherever it is. Whatever the call did before its error
-    /// stays done: its output, and its changes in the effects log.
+    /// `attempt(f, ...)` calls the script's function `f` with the arguments (evaluated
+    /// first, outside the attempt, as Lua's `pcall` does) and returns its error as a value
+    /// instead of ending the run: `{ok = true, value = v}` (no `value` for nil) or
+    /// `{ok = false, error, class, line, column, in_function, trail}`.
+    /// A budget stop is never caught: a budget is the run's, not the call's.
+    /// Whatever the call did before its error stays done: its output, and its changes in
+    /// the effects log.
     noinline fn attempt(self: *Run, pos: ast.Pos, index: u32, arg_exprs: []const *ast.Expr) Error!Value {
         var small: [8]Value = undefined;
         const vals = if (arg_exprs.len <= small.len) small[0..arg_exprs.len] else self.machine.alloc(Value, arg_exprs.len) catch return self.machineOom(pos);
@@ -927,8 +909,6 @@ pub const Run = struct {
         self.base = 0;
         _ = try self.block(self.program.main.body);
     }
-
-    // ── output ────────────────────────────────────────────────────────────
 
     pub fn write(self: *Run, pos: ast.Pos, bytes: []const u8) Error!void {
         try self.charge(pos, bytes.len);

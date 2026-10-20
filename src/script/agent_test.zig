@@ -1,8 +1,7 @@
-//! **SHALE AS AN AGENT'S TOOL** (metal-vmm QUEUE 229, chunk 4): what a
-//! script needs to work on a code checkout, held through the gate like
-//! every other run: its values by name (`arg`), globs (`match_path`, the
-//! prelude's `glob`), lines that hold a literal (`grep`), and edits that
-//! show their diff, made only when the run may change the store.
+//! Tests Shale as an agent's tool: what a script needs to work on a code checkout, run
+//! through the gate like every other run. Values by name (`arg`), globs (`match_path`, the
+//! prelude's `glob`), lines that hold a literal (`grep`), and edits that show their diff,
+//! made only when the run may change the store.
 
 const std = @import("std");
 const script = @import("script.zig");
@@ -100,7 +99,7 @@ test "agent: walk's skip passes by names, a folder never entered; glob finds fil
     try t.expectOutput("print(join(glob(\"src/tcp*.zig\"), \" \"))", .{}, "src/tcp.zig src/tcp_arrives.zig\n");
     try t.expectOutput("print(join(glob(\"**/*.zig\"), \" \"))", .{}, "src/sub/deep.zig src/tcp.zig src/tcp_arrives.zig\n");
     try t.expectOutput("print(join(glob(\"README.md\"), \" \"), #glob(\"none/*.zig\"), #glob(\"none.md\"))", .{}, "README.md\t0\t0\n");
-    // `{hidden = true}` takes dot-names too (QUEUE 233); another option is a mistake.
+    // `{hidden = true}` takes dot-names too; any other option is a mistake.
     try t.expectOutput("print(join(glob(\"**/*.zig\", {hidden = true}), \" \"), #glob(\"**/*.zig\", {hidden = false}))", .{}, ".zig-cache/o/junk.zig src/sub/deep.zig src/tcp.zig src/tcp_arrives.zig\t3\n");
     try t.expectStop("glob(\"*.zig\", {hiden = true})", .{}, .fail, "`glob` takes `hidden`, not `hiden`");
     // In parts of two entries, the same.
@@ -253,7 +252,7 @@ test "agent: a list of edits that fails anywhere writes nothing and prints no di
     try testing.expect(std.mem.indexOf(u8, made, "const y") != null and std.mem.indexOf(u8, made, "fn go") != null);
 }
 
-// ── docs/SHALE-AGENTS.md: every block runs ──────────────────────────────
+// Every block of docs/SHALE-AGENTS.md runs.
 
 /// A checkout shaped like zig-metal-unikernel's, small: what the cookbook
 /// in docs/SHALE-AGENTS.md is run on.

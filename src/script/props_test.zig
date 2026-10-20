@@ -1,6 +1,5 @@
-//! **THE BUILTINS' PROPERTIES** (metal-vmm QUEUE 209(e)): what must hold
-//! between builtins whatever the input, tried on random inputs from fixed
-//! seeds. Each script states its property and prints `ok`, or what broke;
+//! The builtins' properties: what must hold between builtins whatever the input, tried on
+//! random inputs from fixed seeds. Each script states its property and prints `ok`, or what broke;
 //! where Zig can say the answer itself (a stable sort, the table's
 //! columns), it does, and the script's answer is checked against it.
 
@@ -400,15 +399,14 @@ test "expensive fuzz: property: line_at at every offset of a file is the line li
     , "line_at");
 }
 
-// ── regular expressions (metal-vmm QUEUE 230, chunk 2) ──────────────────
+// Regular expressions.
 
 const regex = script.regex;
 
-/// **A PATTERN OF THE SUBSET, AS A TREE**: what the generator makes, the
-/// reference matcher reads, and `render` writes as the pattern's text. The
-/// reference never parses: it reads the tree the text was written from.
-/// A pattern is alternatives (`|`), each a run of nodes; the one group
-/// holds alternatives of its own (QUEUE 232).
+/// A pattern of the supported subset, as a tree: what the generator makes, the reference
+/// matcher reads, and `render` writes as the pattern's text. The reference never parses:
+/// it reads the tree the text was written from. A pattern is alternatives (`|`), each a run
+/// of nodes; the one group holds alternatives of its own.
 const GNode = struct {
     kind: enum { lit, any, set, start, end, boundary, group },
     c: u8 = 0,
@@ -512,14 +510,13 @@ fn wordByte(c: u8) bool {
     return std.ascii.isAlphanumeric(c) or c == '_';
 }
 
-/// **THE REFERENCE: A BACKTRACKING MATCHER**, slow and plainly right:
-/// each choice tried in its order of preference (the alternatives left to
-/// right, more before fewer, a group's `?` taken before skipped), the first
-/// way through that reaches the pattern's end is the match. **A loop's
-/// turn that matched nothing ends the loop**, as a Thompson machine's does
-/// (it would come back to the loop's head at the same place): a `*`'s turn,
-/// or a `+`'s after its first, as failed; a `+`'s first turn, with the loop
-/// done. An empty turn is never followed by another.
+/// The reference: a backtracking matcher, slow and plainly right. Each choice is tried in
+/// its order of preference (the alternatives left to right, more before fewer, a group's
+/// `?` taken before skipped), and the first way through that reaches the pattern's end is
+/// the match. A loop's turn that matched nothing ends the loop, as in a Thompson machine,
+/// which would come back to the loop's head at the same place: a `*`'s turn, or a `+`'s
+/// after its first, counts as failed; a `+`'s first turn ends the loop as done. An empty
+/// turn is never followed by another.
 const Ref = struct {
     s: []const u8,
     nocase: bool = false,
@@ -743,7 +740,7 @@ test "expensive fuzz: property: a search's cost is linear in the string, whateve
     try testing.expect(try reSteps(&f, "(a*)*b", n) <= 2 * plain);
 }
 
-// ── edit's list form (metal-vmm QUEUE 232) ───────────────────────────────
+// `edit`'s list form.
 
 /// `s` with every `old` replaced by `new`, left to right, none overlapping:
 /// what one edit with `all` does.

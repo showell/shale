@@ -1,11 +1,9 @@
-//! **SHALE, A SMALL SCRIPT LANGUAGE FOR A SITE'S OWN DATA** (metal-vmm QUEUE
-//! 199): Lua's look, a smaller language's semantics, every effect through
-//! webbox's `store`, every run inside its budgets. The language, its
-//! builtins and its budgets are this repo's docs/SHALE.md.
+//! Shale, a small script language for a site's own data: Lua's look, a smaller language's
+//! semantics, every effect through webbox's `store`, every run inside its budgets. The
+//! language, its builtins and its budgets are documented in docs/SHALE.md.
 //!
-//! Portable as every webbox file is: the host's `Io` from `host_io`, an
-//! allocator from the caller, and nothing that names the host
-//! (`portable_test.zig` holds that).
+//! Portable as every webbox file is: the host's `Io` comes from `host_io`, the allocator
+//! from the caller, and nothing names the host (`portable_test.zig` checks this).
 
 pub const diag = @import("diag.zig");
 pub const ast = @import("ast.zig");
@@ -46,8 +44,8 @@ pub const Result = struct {
     /// stopped: a run has no rollback, so this says what it changed.
     effects: []const Effect,
     steps: u64,
-    /// What the run took of its store budgets (the Linux tool says so at
-    /// its end: a run's cost, beside what it was allowed).
+    /// What the run took of its store budgets, which the Linux tool prints at the end
+    /// beside what it was allowed.
     reads: u64 = 0,
     read_bytes: u64 = 0,
     changes: u64 = 0,
@@ -62,12 +60,10 @@ pub const Result = struct {
     collections: u64 = 0,
     /// Whether it called a builtin that changes the store (`interp.Run`).
     tried_change: bool = false,
-    /// **THE MACHINE'S MEMORY** (metal-vmm QUEUE 211; the box's review: under
-    /// its own budget): the parse's tree, apart from the values so a `yield`
-    /// that trades their arena for a fresh one leaves the code's literals
-    /// and the functions' names where they are, and, while the run runs,
-    /// its code, frames and operands. Null only when even it could not be
-    /// made.
+    /// The machine's memory, under its own budget: the parse's tree, and while the run
+    /// runs, its code, frames and operands. Kept apart from the values so that a `yield`
+    /// that trades their arena for a fresh one leaves the code's literals and the
+    /// functions' names where they are. Null only when it could not be allocated.
     machine: ?*MachineMemory = null,
 
     pub fn finished(r: *const Result) bool {
@@ -85,17 +81,15 @@ pub const Result = struct {
     }
 };
 
-/// The machine's budgeted memory, and the tree's arena over it: on the
-/// heap, so the arena's pointer to the budget stays good as a Result moves.
+/// The machine's budgeted memory, and the tree's arena over it. Heap-allocated, so the
+/// arena's pointer to the budget stays valid as a Result moves.
 pub const MachineMemory = process.MachineMemory;
 
-/// **WHAT A RUN DID, IN THE ONE LAYOUT** (metal-vmm QUEUE 200): its effects,
-/// a line each, then how it ended, the stop named as `name:line:column`,
-/// and, after a stop in a function, a line for each call that led there,
-/// innermost first (`called from name:line:column (in `f`)`; a call in the
-/// prelude is `the prelude:line:column`, its line the prelude's). The
-/// Linux runner and the script route both print it, so a run reads the
-/// same on the box as on the site.
+/// Writes what a run did: its effects, a line each, then how it ended, a stop named as
+/// `name:line:column`. After a stop in a function, a line follows for each call that led
+/// there, innermost first (`called from name:line:column (in `f`)`); a call in the prelude
+/// is `the prelude:line:column`, its line the prelude's. The Linux runner and the script
+/// route both print this layout, so a run reads the same on Linux as on the site.
 pub fn report(r: *const Result, name: []const u8, w: *std.Io.Writer) std.Io.Writer.Error!void {
     try w.print("── effects ({d}) ──\n", .{r.effects.len});
     for (r.effects) |e| try w.print("{s} {s}: {s}\n", .{ e.op, e.path, e.outcome });
@@ -111,40 +105,38 @@ pub fn report(r: *const Result, name: []const u8, w: *std.Io.Writer) std.Io.Writ
     } else try w.print("── finished ({d} steps)\n", .{r.steps});
 }
 
-/// **THE ONE ENTRY**: parse `source` and run it against the store under
-/// `root`, inside `budgets`, with `now` the only time it can know. Every
-/// value it makes comes from one arena over `backing`; `print` writes into
-/// `out`, and the output budget is at most `out.len`. It always returns a
+/// Parses `source` and runs it against the store under `root`, inside `budgets`, with `now`
+/// the only time it can know. Every value it makes comes from one arena over `backing`;
+/// `print` writes into `out`, and the output budget is at most `out.len`. Always returns a
 /// Result: a source however hostile ends finished or stopped.
 pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const u8, budgets: Budgets, now: i64, out: []u8) Result {
     return runWith(io, backing, root, source, budgets, now, out, .{});
 }
 
-/// `run`, with its options: its mode and its values by name (QUEUE 229).
+/// `run`, with options: the mode and the values given by name.
 pub fn runWith(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const u8, budgets: Budgets, now: i64, out: []u8, options: Options) Result {
-    // **IN THE TESTS, THE GATE** (metal-vmm QUEUE 211): every run is the
-    // VM's, held to the tree-walker's on a copy of the store.
+    // In tests every run goes through the gate: the VM's run, checked against the
+    // tree-walker's on a copy of the store.
     if (@import("builtin").is_test) return @import("gate_test.zig").run(io, backing, root, source, budgets, now, out, options);
     return runOn(.vm, io, backing, root, source, budgets, now, out, options);
 }
 
-/// What runs a script: **the VM**, which the route and the runner use, or
-/// the tree-walker, kept as its second implementation (the tests' gate
-/// holds the two to the same run).
+/// What runs a script. The tests' gate holds every engine to the same run.
 pub const Engine = union(enum) {
+    /// The VM, which the route and the runner use.
     vm,
+    /// The tree-walker, kept as a second implementation.
     walker,
-    /// The VM in slices of this many steps, each a pause the next goes on
-    /// from (`vm.Task`): the same run, cut (the tests' gate checks it).
+    /// The VM in slices of this many steps, each a pause the next resumes (`vm.Task`).
     vm_sliced: u64,
-    /// The same, as a `background` run, which only reads: for a script
-    /// that changes nothing, the same run again (the gate checks it).
+    /// `vm_sliced`, as a `background` run, which only reads. For a script that changes
+    /// nothing, it is the same run.
     vm_background: u64,
 };
 
 pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u8, source: []const u8, budgets: Budgets, now: i64, out: []u8, options: Options) Result {
-    // **THE VM THROUGH ITS CONTRACT** (`process.zig`): what a host runs is
-    // what a one-shot run is, in slices or in one.
+    // The VM runs through its `process.zig` contract, so a one-shot run is exactly what
+    // a host runs, in slices or in one.
     switch (engine) {
         .walker => {},
         .vm, .vm_sliced, .vm_background => {
@@ -208,7 +200,6 @@ pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u
         .diffs = options.diffs,
     };
     defer r.deinit();
-    // The VM's runs went through its Process above: here, the walker's.
     std.debug.assert(engine == .walker);
     r.main() catch |e| switch (e) {
         error.Stop => {},

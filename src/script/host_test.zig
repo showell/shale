@@ -1,8 +1,7 @@
-//! **THE SEAM** (metal-vmm QUEUE 233, chunk 1; the dogfood design's "The
-//! architecture"): the core's one door out, `host(name, ...)`, forwarded
-//! to `Options.host`, and its one hook on paths, `Options.path_hook`.
-//! With neither (metal), `host` stops with class `host` and `pathArg` is
-//! what it was. Every run here is the gate's: the VM held to the walker.
+//! Tests the seam between the core and its host: `host(name, ...)`, forwarded to
+//! `Options.host`, and the hook on paths, `Options.path_hook`. With neither (metal), `host`
+//! stops with class `host` and `pathArg` follows the root's rules. Every run here goes
+//! through the gate, which holds the VM to the walker.
 
 const std = @import("std");
 const script = @import("script.zig");
@@ -22,7 +21,7 @@ test "seam: with no host, `host` stops with class host, naming the call, on both
     const s = r.stop orelse return error.TestUnexpectedResult;
     try testing.expectEqual(script.diag.Class.host, s.class);
     try testing.expectEqualStrings("`run`: not on this host", s.message);
-    // Not caught by attempt? It is an error like any other: attempt catches it.
+    // An error like any other: `attempt` catches it.
     var a = runWith("function f() return host(\"real\", \"runs:x\") end local r = attempt(f) print(r.ok, r.class)", .{});
     defer a.deinit();
     try testing.expectEqualStrings("false\thost\n", a.output);

@@ -93,10 +93,9 @@ test "run: an optional parameter (`b?`) is nil when a call leaves it out (metal-
 }
 
 test "run: a local whose value is a call keeps it, when the call grows the locals' stack (the stack moved under the slot's pointer)" {
-    // `local s = f()` took the slot's address before the call, and the
-    // call's frame, appended, could move the stack: the value went to the
-    // old memory and the slot stayed nil. A frame and nested locals enough
-    // that the call's frame outgrows the stack's capacity.
+    // A slot's address taken before the call would point into the old memory once the
+    // call's frame moves the stack. The frame and nested locals here are enough for the
+    // call's frame to outgrow the stack's capacity.
     try expectOutput(
         \\function scan(t)
         \\  return {messages = 1}
@@ -279,8 +278,8 @@ test "run: a top-level const is seen by the functions declared after it, and is 
     try expectStop("if true then const Y = 1 end", .refused, null);
     try expectStop("const X", .syntax, null);
     try expectStop("const X = 1 const X = 2", .name, null);
-    // A const may take a builtin's name, as a local may; then a call by
-    // that name in its scope is refused (209).
+    // A const may take a builtin's name, as a local may; then a call by that name in its
+    // scope is refused.
     try expectStop("const print = 1 print(print)", .refused, null);
     // A function declared before the const does not see it.
     try expectStop("function f() return A end const A = 1 print(f())", .name, null);
@@ -288,7 +287,7 @@ test "run: a top-level const is seen by the functions declared after it, and is 
     try expectStop("const A = g() function g() return f() end function f() return A end", .name, null);
 }
 
-// ── 208(a): `..` joined once, in place; `for x in` without a copy ────────
+// `..` joined once, in place; `for x in` without a copy.
 
 test "run: a chain of `..` built in place never changes a string already made, however it is shared or cut" {
     // `b` extends `a`'s buffer; `c`, from `a` again, must not see `b`'s
@@ -349,7 +348,7 @@ test "run: `for x in l` visits the first #l items, each as it is when reached, a
     try testing.expect(r.arena_bytes < 64 * 1024);
 }
 
-// ── 208(c): the language, small but complete ─────────────────────────────
+// The language, small but complete.
 
 test "run: a script's names may take a builtin's; a call by a name that is a value in scope is refused; a function is called only after it is declared, and a later one never takes over an earlier call (209)" {
     // A local is the value; calling it is refused, not the builtin.
@@ -439,18 +438,16 @@ test "run: 208's cold review: attempt needs its commas; a long chain in a loop c
     try testing.expectEqual(@as(u32, 33), m.stop.?.column);
 }
 
-/// The machine's memory a shape of a few locals and no calls may take
-/// beside its arena (metal-vmm QUEUE 211): the frames, the operand stack
-/// and the compiled code's arena, whatever the loop's count (68 KB
-/// measured, most of it the code arena's first pages). **ONLY THE
-/// PRELUDE A SCRIPT CALLS IS IN IT** (QUEUE 230): parsed and compiled for
-/// every run, the whole prelude took the machine from 48 KiB to 112 KiB
-/// after the compile (QUEUE 229), and this bound to 256 KiB.
+/// The machine's memory a shape of a few locals and no calls may take beside its arena:
+/// the frames, the operand stack and the compiled code's arena, whatever the loop's count.
+/// About 68 KB is measured, most of it the code arena's first pages. Only the prelude a
+/// script calls is compiled into it; the whole prelude would take the machine past
+/// 112 KiB.
 const machine_most = 128 * 1024;
 
 test "run: the arena budget bounds the memory a run takes: the backing allocator's peak stays under it, for the review's shapes (209)" {
-    // At 208, std's arena held 1.7x and 2.0x what was counted: 14.1 MB
-    // for 200,000 tables against 8 MiB, 12.7 MB for 400,000 pushes.
+    // std's arena holds 1.7x and 2.0x what is counted on the first two: 14.1 MB for
+    // 200,000 tables against 8 MiB, 12.7 MB for 400,000 pushes.
     const limit = 8 * 1024 * 1024;
     const shapes = [_][]const u8{
         "local l = {} for i = 1, 200000 do l[i] = {} end",
@@ -465,17 +462,14 @@ test "run: the arena budget bounds the memory a run takes: the backing allocator
         var r = script.run(threaded.io(), peak.allocator(), ".zig-cache/no-root", src, .{ .arena_bytes = limit, .steps = 100_000_000 }, 0, &out_buf);
         defer r.deinit();
         errdefer std.debug.print("{s}: peak {d}\n", .{ src, peak.most });
-        // The arena, and the machine's own memory beside it (211: the
-        // frames' slots and the `..` chains' parts, outside the arena),
-        // which for these shapes is a frame of a few slots.
+        // The arena, and the machine's own memory beside it (the frames' slots and the
+        // `..` chains' parts), which for these shapes is a frame of a few slots.
         try testing.expect(peak.most <= limit + machine_most);
         try testing.expect(r.arena_bytes <= limit);
     }
 }
 
 test "run: one huge charge stops the run a step past its budget, not at the charge's size" {
-    // 209 (the box's review of 208, cosmetic): `rep("ab", 2^62)` reported
-    // 9223372036854775812 steps.
     for ([_][]const u8{ "local x = rep(\"ab\", 4611686018427387904)", "local x = 1 local y = rep(\"ab\", 1000000000)" }) |src| {
         var r = runWith(src, .{ .steps = 1000 });
         defer r.deinit();
@@ -485,7 +479,7 @@ test "run: one huge charge stops the run a step past its budget, not at the char
 }
 
 test "run: a `..` chain's part of the wrong type stops at its own `..`, when a part is a chain, a map or a print (211's cold review of the VM)" {
-    // The VM once read the chain's positions mixed with a part's own.
+    // The VM must not mix the chain's positions with a part's own.
     const cases = [_]struct { src: []const u8, column: u32 }{
         .{ .src = "local s = (\"a\" .. \"b\") .. nil", .column = 24 },
         .{ .src = "local s = \"a\" .. (\"b\" .. \"c\") .. nil", .column = 31 },
@@ -506,8 +500,8 @@ test "run: a `..` chain's part of the wrong type stops at its own `..`, when a p
 }
 
 test "run: the machine's memory has a budget: 5,500 parameters 63 calls deep stop on it, and the host's peak stays under both budgets (the box's review of 211)" {
-    // Off the arena, the machine's memory was off every budget: this shape
-    // finished with a 14 MB peak against an 8 MiB arena.
+    // Without a budget of its own, the machine's memory would let this shape reach a
+    // 14 MB peak against an 8 MiB arena.
     var src: std.ArrayList(u8) = .empty;
     defer src.deinit(testing.allocator);
     const params = 5500;

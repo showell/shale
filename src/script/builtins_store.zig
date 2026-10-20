@@ -1,11 +1,12 @@
-//! **THE STORE'S BUILTINS**: what a script reads of the data root and what
-//! it changes there, every path confined to the root, every read counted
-//! against the read budgets and every change logged (docs/SHALE.md, "The store").
-//! Only through webbox's `store`, so a script does the same on Linux and on
-//! metal. Here: the paths, a failure's words, and `ls`, `stat`, `exists` and
-//! `is_dir`; reading files is builtins_read.zig, the walk builtins_walk.zig,
-//! the changes builtins_change.zig (split by concern, metal-vmm QUEUE 232),
-//! and every one's `Spec` is gathered here, so `touches_store` is all of them.
+//! The store's builtins: what a script reads of the data root and what it changes there.
+//! Every path is confined to the root, every read is counted against the read budgets and
+//! every change is logged (docs/SHALE.md, "The store"). All of it goes through webbox's
+//! `store`, so a script does the same on Linux and on metal.
+//!
+//! This file holds the paths, a failure's words, and `ls`, `stat`, `exists` and `is_dir`.
+//! Reading files is in builtins_read.zig, the walk in builtins_walk.zig, the changes in
+//! builtins_change.zig. Every one's `Spec` is gathered here, so `touches_store` is all of
+//! them.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -32,21 +33,19 @@ pub const specs = [_]bi.Spec{
     spec(.is_dir, 1, 1, isDir),
 } ++ read.specs ++ walk.specs ++ change.specs;
 
-// ── paths ────────────────────────────────────────────────────────────────
-
-/// **A SCRIPT'S PATH, CONFINED TO THE ROOT** (docs/SHALE.md, "The store"): every part
-/// a name FAT holds (so `.`, `..` and empty parts are refused, and a
-/// leading `/`), joined to the root. `""` is the root, and so is `"."`, for
-/// the calls that only look (`allow_root`); every change needs at least
-/// one part.
+/// A script's path, confined to the root (docs/SHALE.md, "The store"). Every part is a name
+/// FAT holds, so `.`, `..`, empty parts and a leading `/` are refused. `""` is the root, and
+/// so is `"."`, for the calls that only look (`allow_root`); every change needs at least
+/// one part. `full` is the path joined to the root (or the host hook's), `rel` the
+/// script's own.
 pub const Path = struct { full: []const u8, rel: []const u8 };
 
 pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!Path {
     const given = try bi.stringArg(run, pos, b, v, "its path");
     const rel = if (std.mem.eql(u8, given, ".")) "" else given;
     try run.charge(pos, given.len);
-    // **THE HOST'S HOOK, WHEN IT HAS ONE** (metal-vmm QUEUE 233): a path it
-    // resolves (a mount's, on Linux) is its; any other, the root's rules.
+    // A path the host's hook resolves (a mount's, on Linux) is the host's; any other
+    // follows the root's rules.
     if (run.path_hook) |h| if (try h.resolve(h.ctx, run, pos, rel)) |full| return .{ .full = full, .rel = rel };
     if (rel.len == 0) {
         if (!allow_root) return run.fail(pos, .argument, "`{s}(\"\")` would act on the whole root: a change needs a path of at least one part", .{@tagName(b)});
@@ -105,11 +104,8 @@ pub fn modifiedSeconds(mtime_ns: i96) i64 {
     return @intCast(@divFloor(mtime_ns, 1_000_000_000));
 }
 
-// ── reading ──────────────────────────────────────────────────────────────
-
-/// **`ls(p)`**: the names in a folder, sorted. The store lists a missing
-/// folder as empty; a script's `ls` of one is an error (docs/SHALE.md, "The
-/// store").
+/// `ls(p)`: the names in a folder, sorted. The store lists a missing folder as empty; a
+/// script's `ls` of one is an error (docs/SHALE.md, "The store").
 fn ls(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const p = try pathArg(run, pos, .ls, args[0], true);
     try countRead(run, pos);
@@ -124,7 +120,7 @@ fn ls(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .table = out };
 }
 
-/// **`stat(p)`**: `{size, kind, modified}`.
+/// `stat(p)`: `{size, kind, modified}`.
 fn stat(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const p = try pathArg(run, pos, .stat, args[0], true);
     try countRead(run, pos);

@@ -1,5 +1,5 @@
-//! **THE ADVERSARY**: random and mutated sources, seeded and replayable,
-//! each run against a real store with small budgets. Every run must end,
+//! Runs random and mutated sources, seeded and replayable, each against a real store with
+//! small budgets. Every run must end,
 //! finished or stopped: never a Zig panic (the test would crash), never a
 //! leak (the backing allocator is `testing.allocator`), never past its
 //! output or arena budget, never outside its root. `zig build fuzz
@@ -23,7 +23,7 @@ const corpus = [_][]const u8{
     "mkdir(\"a/b\") print(is_dir(\"a\"), exists(\"a/b\")) remove_tree(\"a\")",
     "print(sub(\"hello\", -3, -2), upper(trim(\"  x \")), find(\"abc\", \"c\"), tonumber(\"-12\"))",
     "local t = {} t[1] = 1 t[2] = 2 print(#t, t[1] + t[#t])",
-    // 208's: the reading builtins, the language's additions, `..` in place.
+    // The reading builtins, `attempt`, `continue`, and `..` in place.
     @embedFile("examples/where_the_bytes_are.shale"),
     @embedFile("examples/chat_topics.shale"),
     @embedFile("examples/first_change.shale"),
@@ -31,12 +31,12 @@ const corpus = [_][]const u8{
     "for e in walk(\"\", {depth = 2, like = \"*\", kind = \"file\"}) do print(e.path, e.size) end",
     "function g(x) return tonumber(x) end local r = attempt(g, \"q\") print(r.ok, r.class, r.in_function)",
     "for i = 1, 9 do if i % 2 == 0 then continue end print(i) end",
-    // A yield in the middle of what an op is building (the box's review
-    // of M1: a list literal half built across a yield panicked).
+    // A yield in the middle of what an op is building: a list literal half built across a
+    // yield must survive the collection.
     "function h() yield() return 3 end local s = \"ab\" local l = {h(), s, {s, h()}, h()} local m = {a = h(), b = s .. h()} print(#l, l[3][2], m.a, m.b)",
     "local s = \"\" local t = s for i = 1, 50 do s = s .. \"\\x41\\r\" .. i if i == 25 then t = s end end print(#s, #t, sub(t, -2))",
     "print(min(1, 2, 3), max(-1, 0), abs(-7), substitute(\"a-b-c\", \"-\", \"--\"))",
-    // QUEUE 232: long strings, block comments, edit's list form.
+    // Long strings, block comments, and `edit`'s list form.
     "replace(\"z\", [=[\nfn a() {\n  x[i]] = \"q\"\n}\n]=]) --[==[ a ]=] comment ]==]\nprint(edit(\"z\", {{old = [=[x[i]]]=], new = [==[y[j]=]]==]}, {old = \"y\", new = \"w\", all = true}}), read(\"z\"))",
 };
 
