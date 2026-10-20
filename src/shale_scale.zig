@@ -1,4 +1,4 @@
-//! **THE SITE'S REAL SCALE** (metal-vmm QUEUE 209(g)): a store shaped like
+//! Measures how large a site Shale's scripts handle: a store shaped like
 //! angry-gopher's data, generated at a growing size, and each read-only
 //! script of the cookbook run on it under the site's own budgets until it
 //! no longer fits. It prints, for each script and each size of transcript,
@@ -6,7 +6,7 @@
 //!
 //!     zig build shale-scale            (ReleaseSafe; under .zig-cache/shale-scale)
 //!
-//! **THE GENERATOR** (`Site`): `topics` topics, spread over conversations
+//! The generator (`Site`) makes `topics` topics, spread over conversations
 //! (`chat/<a>_<b>/sessions/`) and channels (`chat/channels/<name>/sessions/`,
 //! each with its `<name>.channel`), each a transcript of `messages`
 //! messages, its `.count` sidecar as the site writes it, a
@@ -16,7 +16,7 @@
 //! `find_message.shale` looks for, so its search reads every transcript to
 //! its end: the worst case, not the best.
 //!
-//! **SPARSE WHERE NOTHING READS IT:** a script that never reads a
+//! Files nothing reads are sparse: a script that never reads a
 //! transcript (`where_the_bytes_are`, `chat_topics`, `big_files`) is run on
 //! a site whose transcripts and images are sparse files of their real
 //! sizes, so a site of hundreds of thousands of files fits the disk.
@@ -37,8 +37,8 @@ const site_budgets: script.Budgets = .{
     .changes = 100,
 };
 
-/// **A BACKGROUND RUN'S** (Steve, 2026-10-15): the site's, but for its
-/// reads, which may be many, since it only fills the gaps between requests.
+/// A background run's budgets: the site's, but for its reads, which may be
+/// many, since it only fills the gaps between requests.
 const background_budgets: script.Budgets = blk: {
     var b = site_budgets;
     b.reads = 10_000;
@@ -158,7 +158,7 @@ fn tryScript(io: std.Io, gpa: std.mem.Allocator, root: []const u8, s: Script, bu
         return .{ .fits = false, .why = why };
     }
     // A script that stops itself at the read budget says so, and where the
-    // next run goes on (QUEUE 229): a partial answer, which is not a fit.
+    // next run goes on: a partial answer, which is not a fit.
     if (std.mem.indexOf(u8, r.output, "resume after ") != null or std.mem.indexOf(u8, r.output, "stopped at the read budget") != null) return .{ .fits = false, .why = "reads to its budget, then says what it found and where to resume" };
     return .{ .fits = true, .why = "" };
 }

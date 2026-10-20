@@ -1,25 +1,23 @@
-//! **SHALE-GATE** (metal-vmm QUEUE 233, chunk 5; the dogfood design's
-//! "Making the ban real"): the PreToolUse hook on Bash and Monitor that
-//! holds Claude to Shale. It reads the hook's JSON on stdin and passes
-//! (exit 0) exactly:
+//! The PreToolUse hook on Bash and Monitor that holds Claude to Shale. It
+//! reads the hook's JSON on stdin and passes (exit 0) exactly:
 //!
-//!   - **the launch:** optionally `cd WORD && `, then `shale` (or an
+//!   - the launch: optionally `cd WORD && `, then `shale` (or an
 //!     absolute path ending `/shale`) and its words (`--verbose`,
 //!     `--undo-on-stop`, `--args-stdin`, `--budget N=V`, a FILE,
 //!     `NAME=VALUE`), each plain (no
 //!     quotes, `$`, backticks, `;|&<>()*?`, `\`), and optionally `<<'TAG'`
 //!     ending the first line (TAG `[A-Z_]+`), a body, and a last line that
 //!     is `TAG` (trailing spaces allowed) and that no other line is;
-//!   - **the escape:** a first line `# want: <tag>: <text>` or
+//!   - the escape: a first line `# want: <tag>: <text>` or
 //!     `# out-of-scope: <tag>: <text>` (tag `[a-z0-9-]+`), run and logged
 //!     to `~/.local/state/shale/wants.tsv` with one append;
-//!   - **a subagent's call** (its input carries an `agent_id`): local cold
-//!     agents are exempt (Steve, 2026-10-17);
+//!   - a subagent's call (its input carries an `agent_id`): local cold
+//!     agents are exempt;
 //!   - any tool but Bash and Monitor (the hook's matcher names those two).
 //!
 //! Anything else is refused (exit 2), with one line naming both forms.
 //! `tools/shale-gate.sh` runs it and turns any other failure, a missing
-//! binary included, into a refusal. Steve installs the hook.
+//! binary included, into a refusal. The build does not install the hook.
 
 const std = @import("std");
 const linux = std.os.linux;
@@ -36,7 +34,7 @@ fn refuse(comptime fmt: []const u8, args: anytype) Verdict {
     return .{ .refused = std.fmt.bufPrint(&why_buf, "shale-gate: " ++ fmt ++ "only " ++ forms, args) catch "shale-gate: refused: only " ++ forms };
 }
 
-/// **WHAT A COMMAND IS**: a launch, an escape, or refused (and why).
+/// Classifies a command: a launch, an escape, or refused (and why).
 pub fn classify(cmd: []const u8) Verdict {
     const nl = std.mem.indexOfScalar(u8, cmd, '\n');
     const first = cmd[0 .. nl orelse cmd.len];
@@ -132,7 +130,7 @@ fn plain(w: []const u8) bool {
     return true;
 }
 
-/// **A WANTS LOG LINE**: date, session, kind, tag, text, and the
+/// A wants log line: date, session, kind, tag, text, and the
 /// command's first 160 bytes, tab-separated, each with its tabs, newlines
 /// and backslashes shown; at most 4 KiB, so one append never interleaves.
 pub fn logLine(buf: []u8, date: []const u8, session: []const u8, e: Escape, cmd: []const u8) []const u8 {

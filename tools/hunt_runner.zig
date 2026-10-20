@@ -1,9 +1,9 @@
-//! **THE HUNT'S RUNNER** (`zig build fuzz`, src/script/hunt.zig): runs every
-//! test as zig's own runner does (a fresh `testing.allocator` and
-//! `testing.io` each, leaks counted), fails when any test returns an error
-//! of any kind, a skip among them, and prints how many hunts ran, so the
-//! count can be held to the count defined. Runs in the build's "simple"
-//! mode, as tools/timing_runner.zig.
+//! The test runner for the hunts (`zig build fuzz`, src/script/hunt.zig). Runs
+//! every test as zig's own runner does (a fresh `testing.allocator` and
+//! `testing.io` each, leaks counted), fails when any test returns an error of
+//! any kind, a skip among them, and prints how many hunts ran, so the count
+//! can be held to the count defined. Runs in the build's "simple" mode, as
+//! tools/timing_runner.zig does.
 
 const std = @import("std");
 const builtin = @import("builtin");

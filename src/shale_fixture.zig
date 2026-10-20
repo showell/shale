@@ -1,6 +1,6 @@
-//! **THE FIXTURE PROGRAM** `run`'s tests run (metal-vmm QUEUE 233, chunk
-//! 1: "red first against the fixture program the build makes, never
-//! /bin/sh"). Each verb is one behaviour a test needs, and nothing else:
+//! The program `run`'s tests spawn, built by the build so the tests never
+//! depend on /bin/sh. Each verb is one behaviour a test needs, and nothing
+//! else:
 //!
 //!     shale-fixture lines N [TEXT]   N lines, "TEXT i" (TEXT "line")
 //!     shale-fixture exit CODE        exits CODE, printing nothing

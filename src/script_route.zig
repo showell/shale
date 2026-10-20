@@ -1,25 +1,24 @@
-//! **A SIGNED SCRIPT, RUN ON THE LIVE SITE** (metal-vmm QUEUE 200): the
-//! reusable half of an application's `POST /admin/script`. The application
-//! checks its admin's bearer key (the first lock), hands the body here, and
-//! answers with what comes back. Here: the envelope read, its Ed25519
-//! signature checked against the public key the server holds (the second
-//! lock), the target, the expiry and the sequence number, the sequence
-//! written durably before anything runs, the run itself (`script.run`), the
-//! log of it, and the reply.
+//! The reusable half of an application's `POST /admin/script`: a signed script,
+//! run on the live site. The application checks its admin's bearer key (the
+//! first lock), hands the body here, and answers with what comes back. This
+//! file reads the envelope, checks its Ed25519 signature against the public
+//! key the server holds (the second lock), checks the target, the expiry and
+//! the sequence number, writes the sequence durably before anything runs, runs
+//! the script (`script.run`), logs the run, and writes the reply.
 //!
-//! **THE ENVELOPE** (the request's body), three parts, nothing optional:
+//! The envelope (the request's body) has three parts, none optional:
 //!
 //!     shale-signature <128 hex digits>\n
 //!     shale-1 target=<host> sequence=<n> expires=<unix seconds>[ mode=<m>]\n
 //!     <the script's bytes, to the end of the body>
 //!
-//! **THE MODE** (metal-vmm QUEUE 211, Steve's model), its one optional
-//! field: none is `atomic`, today's run, whole inside the request, which may
-//! change the store. `mode=background` starts a run that only reads, stepped
-//! in slices between handlers (`sliceBackground`), and is answered at once
-//! with its number (202); one at a time, a second refused 503 `busy` before
-//! its number is spent. `mode=kill` ends the background run (its script is
-//! ignored). `mode=atomic` is not a spelling: none is.
+//! `mode` is the one optional field. Without it the run is atomic: whole inside
+//! the request, and it may change the store. `mode=background` starts a run
+//! that only reads, stepped in slices between handlers (`sliceBackground`),
+//! and is answered at once with its number (202). Only one runs at a time; a
+//! second is refused 503 `busy` before its number is spent. `mode=kill` ends
+//! the background run, and its script is ignored. `mode=atomic` is not a
+//! spelling: the absence of `mode` is.
 //!
 //! The signature is over every byte after the first line: the second line
 //! and the script. The second line has one spelling for its values (its
@@ -29,10 +28,10 @@
 //! is the format's name: a signature over anything else is not one over
 //! this.
 //!
-//! **THE ORDER, AND WHAT EACH REFUSAL IS.** Every refusal comes before the
-//! script runs and changes nothing on the store, except the last two, which
-//! burn the sequence number (the safe direction: a request may be refused
-//! and its number spent, never run twice):
+//! Checks run in this order. Every refusal comes before the script runs and
+//! changes nothing on the store, except the last two, which burn the sequence
+//! number (the safe direction: a request may be refused and its number spent,
+//! never run twice):
 //!
 //!   1. the envelope, read: 400 `malformed`;
 //!   2. the server's config (`public_key`, `target`): 403 `no_key` when
@@ -50,13 +49,14 @@
 //! Then the script runs, and the reply is 200 whatever it did: what it
 //! printed, its effects, and how it ended, as the Linux runner prints them
 //! (`script.report`). A run whose end could not be logged is answered 500,
-//! with the same body and the failure first: loud, never quiet.
+//! with the same body and the failure first.
 //!
-//! **ON THE STORE, UNDER THE AUTH ROOT**, out of a script's reach (its paths
-//! are confined to the data root): `shale.conf` (the config), `shale/sequence`
-//! (the last number accepted), `shale/log` (a line when each run starts, and
-//! its effects and ending when it ends) and `shale/runs/<n>.shale` (each
-//! run's source, so the log's hash names a script anyone can read back).
+//! The route keeps its state on the store under the auth root, out of a
+//! script's reach (a script's paths are confined to the data root):
+//! `shale.conf` (the config), `shale/sequence` (the last number accepted),
+//! `shale/log` (a line when each run starts, and its effects and ending when
+//! it ends) and `shale/runs/<n>.shale` (each run's source, so the log's hash
+//! names a script anyone can read back).
 
 const std = @import("std");
 const Io = @import("host_io").Io;
@@ -99,8 +99,7 @@ pub const Refusal = enum {
     replayed,
     sequence_unreadable,
     not_recorded,
-    /// A background run while one runs: one at a time (Steve: "refuse the
-    /// second job for now").
+    /// A background run while one runs: one runs at a time.
     busy,
     /// A background run on a host that steps none.
     no_background,
@@ -182,7 +181,7 @@ pub fn parse(body: []const u8) error{Malformed}!Envelope {
     const mode: Mode = if (fields.next()) |m| std.meta.stringToEnum(Mode, try field(m, "mode=")) orelse return error.Malformed else .atomic;
     if (fields.next() != null) return error.Malformed;
     if (!validTarget(target) or sequence == 0) return error.Malformed;
-    // **ONE SPELLING**: written again from what was read, it is what came.
+    // One spelling: written again from what was read, it must be what came.
     var again: [header_bytes]u8 = undefined;
     const line = headerLine(&again, target, sequence, expires, mode) catch return error.Malformed;
     if (!std.mem.eql(u8, line, signed[0 .. second_end + 1])) return error.Malformed;
@@ -257,13 +256,12 @@ pub const Request = struct {
     now: i64,
     /// Where the script's `print` goes: its output budget is at most this.
     out: []u8,
-    /// **A BACKGROUND RUN'S MEMORY**, the host's own allocator, never a
-    /// request's heap: null on a host that steps no background run.
+    /// A background run's memory: the host's own allocator, never a
+    /// request's heap. Null on a host that steps no background run.
     backing: ?std.mem.Allocator = null,
-    /// **A BACKGROUND RUN'S BUDGETS**, when they are not `budgets` (Steve,
-    /// 2026-10-15: an atomic run holds up requests, so the site's reads stay
-    /// few; a background run only fills the gaps between them, so it may
-    /// read far more).
+    /// A background run's budgets, when they are not `budgets`. An atomic run
+    /// holds up requests, so its reads stay few; a background run only fills
+    /// the gaps between them, so it may read far more.
     background_budgets: ?script.Budgets = null,
 };
 
@@ -307,7 +305,7 @@ pub const Outcome = union(enum) {
     }
 };
 
-/// **THE WHOLE ROUTE BUT THE BEARER AND THE ANSWER**: refused, or run.
+/// The whole route but the bearer check and the answer: refused, or run.
 /// `alloc` is the request's (the detail strings live there); the run's own
 /// memory is its result's arena, given back by `Outcome.deinit`.
 pub fn handle(io: Io, alloc: std.mem.Allocator, body: []const u8, req: Request) !Outcome {
@@ -344,7 +342,7 @@ pub fn handle(io: Io, alloc: std.mem.Allocator, body: []const u8, req: Request) 
 
     var sha: [Sha256.digest_length]u8 = undefined;
     Sha256.hash(env.source, &sha, .{});
-    // **RECORDED, DURABLY, BEFORE IT RUNS**: a crash mid-run cannot let the
+    // Recorded durably before it runs, so a crash mid-run cannot let the
     // same signed request run twice.
     record(io, alloc, req, env, sha) catch |e|
         return refuse(.not_recorded, try std.fmt.allocPrint(alloc, "sequence {d} could not be recorded durably ({s}): not run", .{ env.sequence, @errorName(e) }));
@@ -375,11 +373,9 @@ pub fn handle(io: Io, alloc: std.mem.Allocator, body: []const u8, req: Request) 
     return .{ .ran = ran };
 }
 
-// ── the background run (metal-vmm QUEUE 211, step 5) ────────────────────
-
-/// **ONE BACKGROUND RUN AT A TIME**, the process's: a host steps it a slice
-/// at a time between handlers (`sliceBackground`), under the turn. What it
-/// holds is from the host's allocator (`Request.backing`).
+/// The process's one background run. A host steps it a slice at a time
+/// between handlers (`sliceBackground`), under the turn. What it holds is
+/// from the host's allocator (`Request.backing`).
 pub const Background = struct {
     process: ?*script.process.Process = null,
     backing: std.mem.Allocator = undefined,
@@ -436,7 +432,7 @@ pub const Background = struct {
 
 pub var background: Background = .{};
 
-/// **A SLICE'S STEPS**: at about 7 ns a step, a slice of pure work is under
+/// The steps in one slice. At about 7 ns a step, a slice of pure work is under
 /// a millisecond; one with a store call ends after it, its work capped by
 /// the call caps (`call_bytes`, `call_entries`).
 pub const slice_steps: u64 = 100_000;
@@ -457,8 +453,8 @@ fn startBackground(io: Io, req: Request, env: Envelope, sha: [Sha256.digest_leng
     background = .{ .process = p, .backing = a, .sequence = env.sequence, .root = root, .log = log, .last_logged = req.now };
 }
 
-/// **ONE SLICE OF THE BACKGROUND RUN**, for a host to call between
-/// handlers, under the turn: whether a run is still going after it.
+/// Steps the background run one slice. A host calls it between handlers,
+/// under the turn. Returns whether a run is still going after it.
 pub fn sliceBackground(io: Io, now: i64) bool {
     const p = background.process orelse return false;
     const outcome = p.step(.{ .steps = slice_steps, .now = now });
@@ -478,8 +474,8 @@ pub fn sliceBackground(io: Io, now: i64) bool {
     }
 }
 
-/// **WHAT A STATUS SHOWS**: the background run going, or the one that
-/// ended last, its output so far and how it stands.
+/// Writes the background run going, or the one that ended last: its output
+/// so far and how it stands.
 pub fn writeBackgroundStatus(w: *std.Io.Writer) std.Io.Writer.Error!void {
     if (background.process) |p| {
         const st = p.status();
@@ -508,16 +504,16 @@ fn refuse(why: Refusal, detail: []const u8) Outcome {
     return .{ .refused = .{ .why = why, .detail = detail } };
 }
 
-/// The last sequence number accepted. **A MISSING FILE IS AN ERROR, NOT
-/// 0**: `installKey` writes it with the key, so one missing beside a key
-/// was lost, and reading it as 0 would run again every signed request
-/// still unexpired.
+/// The last sequence number accepted. A missing file is an error, not 0:
+/// `installKey` writes it with the key, so one missing beside a key was
+/// lost, and reading it as 0 would run again every signed request still
+/// unexpired.
 pub fn lastSequence(io: Io, alloc: std.mem.Allocator, path: []const u8) !u64 {
     const text = (try store.readOrNull(io, alloc, path, .limited(64))) orelse return error.NoSequenceFile;
     return std.fmt.parseInt(u64, std.mem.trimEnd(u8, text, "\n"), 10) catch error.BadSequenceFile;
 }
 
-/// **THE ONE WAY A KEY IS SET**: the sequence first, at least `floor` (the
+/// The one way a key is set: the sequence first, at least `floor` (the
 /// clock's seconds: the signer numbers from them, so nothing signed before
 /// now runs after) and never lower than it was, then the config. A key set
 /// again after the sequence was lost reopens nothing.
@@ -586,9 +582,8 @@ fn ending(alloc: std.mem.Allocator, w: *std.ArrayList(u8), r: *const script.Resu
     if (r.stop) |s| {
         try w.print(alloc, "stopped at {d}:{d}{s}{s}{s}: {s}{s}{s}: ", .{ s.line, s.column, if (s.function.len > 0) " (in `" else "", s.function, if (s.function.len > 0) "`)" else "", @tagName(s.class), if (s.budget != null) " " else "", if (s.budget) |b| @tagName(b) else "" });
         try escaped(alloc, w, s.message);
-        // **THE TRAIL, ON THE LINE** (CC's own, after QUEUE 229): the calls
-        // that led there, innermost first, so the log names the script's
-        // line when a stop is in the prelude.
+        // The calls that led there, innermost first, so the log names the
+        // script's line when a stop is in the prelude.
         var k = s.trail.len;
         while (k > 0) {
             k -= 1;
@@ -599,10 +594,10 @@ fn ending(alloc: std.mem.Allocator, w: *std.ArrayList(u8), r: *const script.Resu
     } else try w.print(alloc, "finished ({d} steps)\n", .{r.steps});
 }
 
-/// **THE REPLY'S BODY**: the reason, for a refusal; for a run, what it
-/// printed, then `script.report` (its effects and how it ended), as the
-/// Linux runner prints them, under the sequence number, and a log that
-/// failed said first and last.
+/// Writes the reply's body: the reason, for a refusal; for a run, what it
+/// printed, then `script.report` (its effects and how it ended) under the
+/// sequence number, as the Linux runner prints them. A log that failed is
+/// said first and last.
 pub fn writeReply(o: *const Outcome, w: *std.Io.Writer) std.Io.Writer.Error!void {
     switch (o.*) {
         .refused => |r| try w.print("refused ({s}): {s}\nnot run\n", .{ @tagName(r.why), r.detail }),

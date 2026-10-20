@@ -1,8 +1,8 @@
-//! **THE SHALE SIGNER, FOR THE BOX** (metal-vmm QUEUE 200): makes the key
-//! pair once, and signs a `.shale` file for a target with the next
-//! sequence number, writing the request's body beside it and printing the
-//! one line that sends it. The private key never leaves this program, and
-//! this program never prints it.
+//! The Shale signer, run on the admin's own machine. Makes the key pair once,
+//! and signs a `.shale` file for a target with the next sequence number,
+//! writing the request's body beside it and printing the one line that sends
+//! it. The private key never leaves this program, and this program never
+//! prints it.
 //!
 //!     zig build shale-sign -- keygen [target]
 //!         makes ~/.shale_signing_key (mode 600), or a target's own key,
@@ -20,13 +20,13 @@
 //!         a signed `mode=kill`, ending the background run going: written to
 //!         kill.<sequence>.req
 //!
-//! **THE NEXT SEQUENCE NUMBER** is one past the last this program signed
+//! The next sequence number is one past the last this program signed
 //! for the target (~/.shale_sequences, a line per target), and never less
 //! than the clock's seconds: a lost file or a second machine still signs
 //! a number past every one before it, as long as no two are signed for one
 //! target in the same second from two places.
 //!
-//! **ONE KEY PER SITE, WHEN IT HAS ITS OWN**: signing for a target uses
+//! A site may have a key of its own: signing for a target uses
 //! ~/.shale_signing_key.<target> when that file is there (Dog Park's, say,
 //! never lynrummy's), else ~/.shale_signing_key. A server holding another
 //! key's public half refuses the signature, so the wrong key never runs.

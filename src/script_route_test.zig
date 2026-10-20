@@ -1,6 +1,6 @@
-//! The script route against a real store in a temporary folder: each
-//! refusal the brief names, and runs that read, delete, and stop on a
-//! budget with some of their effects done (metal-vmm QUEUE 200).
+//! Tests the script route against a real store in a temporary folder: each
+//! refusal, and runs that read, delete, and stop on a budget with some of
+//! their effects done.
 
 const std = @import("std");
 const route = @import("script_route.zig");
@@ -266,7 +266,7 @@ test "refused, and not run: the sequence cannot be made durable; its number is s
     durable_answer = false;
     try f.expectRefused(try f.body(f.kp, "test.example", 3, now + 60, "remove(\"chat/a.md\")\n"), .not_recorded);
     try testing.expect(try store.has(f.threaded.io(), f.arena.allocator(), try std.fs.path.join(f.arena.allocator(), &.{ f.data, "chat", "a.md" })));
-    // No host said how: never true.
+    // With no host hook, the store is never durable.
     store.durable_now = null;
     try testing.expect(!store.makeDurable());
 }
@@ -343,8 +343,6 @@ test "refused: the auth root inside the data root, or the other way, or the same
     try testing.expect(!try route.nested(a, "data", "auth"));
     try testing.expect(try route.nested(a, "x/data", "x/data/auth"));
 }
-
-// ── background runs (metal-vmm QUEUE 211, step 5) ──────────────────────
 
 const walk_source = "for e in walk(\"chat\") do print(e.path, e.size) end\n";
 

@@ -1,9 +1,9 @@
-//! shale_linux: Shale's Linux host, its own module, so the portable half
-//! (the `shale` module) never carries it: the `shale` CLI and a site's Linux
-//! `main` import this, and nothing else does. Its files reach the portable
-//! half as the `shale` module, and webbox as `webbox`, never by path.
+//! Shale's Linux host, a module of its own so the portable `shale` module never
+//! carries it. The `shale` CLI and a site's Linux `main` import this, and
+//! nothing else does. Its files reach the portable half as the `shale` module,
+//! and webbox as `webbox`, never by path.
 
-/// What Shale's `run` keeps of a program's output, pure (metal-vmm QUEUE 233).
+/// What Shale's `run` keeps of a program's output; pure.
 pub const shale_keep = @import("shale_keep.zig");
 /// One program run under `run`'s rules: the raw spawn and its poll loop.
 pub const shale_spawn = @import("shale_spawn.zig");

@@ -1,5 +1,4 @@
-//! **SHALE-GATE, TESTED** (metal-vmm QUEUE 233, chunk 5): the design's
-//! grammar, each form it passes and each way it refuses.
+//! Tests shale-gate's grammar: each form it passes and each way it refuses.
 
 const std = @import("std");
 const testing = std.testing;
@@ -37,7 +36,7 @@ test "gate: the launch, every form the design names" {
     try passes("shale <<'SHALE'\nprint(1)\nSHALE");
     try passes("cd /home/x && shale <<'END_IT'\nprint(\"a $b `c` ; | & < > ( ) * ?\")\nEND_IT  ");
     try passes("shale n=3 <<'SHALE'\nprint(arg(\"n\", 0))\nSHALE\n");
-    // A file's values on stdin, raw (2026-10-18), and the undo on a stop.
+    // A file's values on stdin, raw, and the undo on a stop.
     try passes("shale --undo-on-stop ~/s/split.shale --args-stdin <<'ARGS'\nnames=a|b c\ndoc=It's \"x\"\nARGS");
 }
 
@@ -56,7 +55,7 @@ test "gate: what it refuses, naming both forms" {
     try refuses("shale --budget", both);
     try refuses("shale --budget steps", both);
     try refuses("shale --root here a.shale", both);
-    // No dry run, so no `--write` (Steve, 2026-10-17).
+    // There is no dry run, so there is no `--write`.
     try refuses("shale --write a.shale", both);
     try refuses("cd a b && shale x.shale", both);
     try refuses("cd $HOME && shale x.shale", both);
@@ -123,7 +122,7 @@ test "gate: the hook's input: the command of Bash and Monitor, any other tool pa
     try testing.expect(r.command == null);
     try testing.expect(!h.subagent);
     // A subagent's call carries its `agent_id` (the hooks reference,
-    // "Common input fields"): local cold agents are exempt (Steve).
+    // "Common input fields"): local cold agents are exempt.
     const sub = gate.readHook(a.allocator(), "{\"session_id\":\"s1\",\"agent_id\":\"a-9\",\"agent_type\":\"Explore\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}").?;
     try testing.expect(sub.subagent);
     // `agent_type` alone is a top-level `--agent` session: held.

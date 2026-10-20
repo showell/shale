@@ -1,4 +1,4 @@
-//! **SHALE'S NUMBER PARSES THAT NO REQUEST REACHES**, each with why: webbox's
+//! Shale's number parses that no request reaches, each with why: webbox's
 //! edge_sites.zig for this repo's sources, read by the same `parseSites`. An
 //! application's request-edge check (angry-gopher router.zig's) walks this
 //! repo's `src/` beside webbox's and knows these without listing them.

@@ -1,6 +1,5 @@
-//! **SHALE ON LINUX** (metal-vmm QUEUE 199; as an agent's tool, QUEUE 229;
-//! dogfooded, QUEUE 233): a script run against a folder, a site's data or a
-//! code checkout, inside its budgets, so whatever it does is bounded: its
+//! The `shale` command on Linux: runs a script against a folder, a site's data
+//! or a code checkout, inside its budgets, so whatever it does is bounded: its
 //! steps, its reads, what it prints, what it changes, the programs it runs.
 //!
 //!     shale [--root DIR] [--verbose] [--budget NAME=N]... [FILE | -e SOURCE] [NAME=VALUE]...
@@ -10,16 +9,15 @@
 //! The root is `--root`, else `SHALE_ROOT`, else the working directory.
 //! `now()` is the wall clock; `SHALE_NOW` pins it. A run makes its changes
 //! (an `edit`'s diff printed first) and runs its programs: git is the
-//! undo. The Linux host (`shale_host_linux.zig`)
-//! is the core's seam: `host("run", ...)`, `host("real", ...)` and mount
-//! paths (`runs:x`), the mounts from `SHALE_MOUNTS` or
-//! `~/.config/shale/mounts`. **The preludes after the core's**: the Linux
-//! prelude (`run`, `must`, `tail_lines`, ...), the repo's
-//! (`.shale/prelude.shale` at the root) and the user's (the file
+//! undo. The Linux host (`shale_host_linux.zig`) is the core's seam:
+//! `host("run", ...)`, `host("real", ...)` and mount paths (`runs:x`), the
+//! mounts from `SHALE_MOUNTS` or `~/.config/shale/mounts`. After the core's
+//! prelude come the Linux prelude (`run`, `must`, `tail_lines`, ...), the
+//! repo's (`.shale/prelude.shale` at the root) and the user's (the file
 //! `SHALE_PRELUDE` names, `""` none, else `~/.config/shale/prelude.shale`).
-//! The store's bases are set as a server sets
-//! them, the root and `<root>/../auth`, so its path limits are measured as
-//! the bare-metal host spells them. It prints what the script printed on
+//! The store's bases are set as a server sets them, the root and
+//! `<root>/../auth`, so its path limits are measured as the bare-metal host
+//! spells them. It prints what the script printed on
 //! stdout, then, tersely, how the run ended on stderr (`cli.printReport`).
 //! Exit 0 finished, 1 stopped, 2 a command line or a file it could not
 //! take. Outside the script module: it may name the host.
@@ -42,8 +40,8 @@ pub fn main(init: std.process.Init) !u8 {
     defer err.flush() catch {};
 
     const argv = try init.minimal.args.toSlice(arena);
-    // **THE REAPER** (`shale --reap ...`): a job's, detached by
-    // `job_start`; its environment is the job's.
+    // `shale --reap ...` is a job's reaper, detached by `job_start`; its
+    // environment is the job's.
     if (argv.len > 1 and std.mem.eql(u8, argv[1], "--reap")) {
         const env = try shale_host.baseEnv(arena, init.environ_map);
         return linux.shale_jobs.reapMain(arena, argv[2..], env);
@@ -57,7 +55,7 @@ pub fn main(init: std.process.Init) !u8 {
             return 2;
         },
     };
-    // **THE FILE'S VALUES ON STDIN** (`--args-stdin`), after the command line's.
+    // `--args-stdin`: more values on stdin, after the command line's.
     var stdin_args_buf: [64]script.Arg = undefined;
     const args: []const script.Arg = if (c.args_stdin) blk: {
         var in_buf: [4096]u8 = undefined;
@@ -112,7 +110,7 @@ pub fn main(init: std.process.Init) !u8 {
             return 2;
         };
     };
-    // **THE SCRIPT'S OWN BUDGETS** (its `-- budget:` line), said before it runs.
+    // The script's own budgets (its `-- budget:` line), said before it runs.
     if (cli.headerBudgets(source, &c, &why_buf)) |rf| {
         try err.print("shale: {s}\n", .{rf.why});
         return 2;
@@ -124,8 +122,8 @@ pub fn main(init: std.process.Init) !u8 {
     defer gpa.free(auth);
     webbox.store.setBases(root, auth);
 
-    // **THE LINUX HOST**: the mounts, the environment a program inherits,
-    // the root and the working folder as absolute paths.
+    // The Linux host: the mounts, the environment a program inherits, the
+    // root and the working folder as absolute paths.
     var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
     const cwd_len = std.os.linux.getcwd(&cwd_buf, cwd_buf.len);
     const cwd_abs = try arena.dupe(u8, std.mem.sliceTo(cwd_buf[0..cwd_len], 0));
@@ -163,7 +161,7 @@ pub fn main(init: std.process.Init) !u8 {
     const records = try arena.alloc([]const u8, host.records.items.len);
     for (host.records.items, records) |r, *line| line.* = r.line;
     try cli.printReport(&result, cli.scriptName(c), preludes, .{ .verbose = c.verbose, .records = records, .budgets = c.budgets }, err);
-    // **A STOPPED RUN PUTS BACK WHAT IT CHANGED** (`--undo-on-stop`). Exit 1
+    // `--undo-on-stop`: a stopped run puts back what it changed. Exit 1
     // either way: the run stopped, and what could not be put back is said.
     if (c.undo_on_stop and !result.finished()) _ = try shale_host.undoChanges(&host, io, err);
     return if (result.finished()) 0 else 1;

@@ -1,21 +1,20 @@
-//! **THE INSTALLED SUITE, ON A SCHEDULE** (metal-vmm QUEUE 229, chunk 6;
-//! Steve's first idea: scripts on disk once they are well tested). An
+//! The installed suite: an application's own scripts, run on a schedule. An
 //! application declares its scripts, each `{name, source = @embedFile(...),
 //! args, period_s}`, and steps the suite from its `between`. Each runs as a
-//! **background run** (it only reads), a slice at a time between requests,
+//! background run (it only reads), a slice at a time between requests,
 //! every `period_s`, scheduled from when it was due (`wake.periodAfter`),
-//! never from when it ran. **A SIGNED BACKGROUND RUN GOES FIRST**: while one
+//! never from when it ran. A signed background run goes first: while one
 //! is going (`script_route.background`) the suite waits.
 //!
-//! **WHAT IT KEEPS**, under the auth root, out of a script's reach: each
+//! What it keeps is under the auth root, out of a script's reach: each
 //! name's last run, `{auth}/shale/suite/<name>.out`, replaced whole, its
 //! first line how the run ended and the rest what it printed, bounded by
 //! the run's output budget; and a line in `shale/log` as each ends.
 //! `writeStatus` is what an application's GET shows.
 //!
-//! **ONLY ON A SCHEDULE.** Running one by name on request would put a run
-//! behind the admin's bearer key and no signature: that is the auth path's,
-//! proposed in metal-vmm's FEEDBACK, not built.
+//! Scripts run only on their schedule. Running one by name on request would
+//! put a run behind the admin's bearer key with no signature, so there is no
+//! such entry point.
 
 const std = @import("std");
 const Io = @import("host_io").Io;
@@ -61,7 +60,7 @@ pub const Suite = struct {
 
     pub const InstallError = error{ TooMany, BadName, NoPeriod };
 
-    /// **THE SUITE, INSTALLED**: its entries checked, nothing run yet. The
+    /// Installs the suite: its entries checked, nothing run yet. The
     /// entries, the roots and the paths are the caller's, kept as long as the
     /// suite; `backing` is the host's long-lived allocator, never a
     /// request's.
@@ -75,8 +74,8 @@ pub const Suite = struct {
         self.budgets.output_bytes = @min(budgets.output_bytes, kept_most);
     }
 
-    /// **ONE TURN**, from the application's `between`: a slice of the run
-    /// going, or the next one due started; what the suite needs next.
+    /// One turn, from the application's `between`: a slice of the run going,
+    /// or the next one due started. Returns what the suite needs next.
     pub fn step(self: *Suite, io: Io, now: wake.Now) wake.Wake {
         if (self.entries.len == 0) return .idle;
         // A signed background run goes first.
@@ -141,7 +140,7 @@ pub const Suite = struct {
         l.line_len = line.len;
     }
 
-    /// **WHAT A GET SHOWS**: each script, its period, how its last run
+    /// Writes what a GET shows: each script, its period, how its last run
     /// ended and when, and the one going.
     pub fn writeStatus(self: *const Suite, w: *std.Io.Writer) std.Io.Writer.Error!void {
         if (self.entries.len == 0) return w.writeAll("no installed scripts\n");
@@ -166,8 +165,8 @@ pub fn keptPath(a: std.mem.Allocator, paths: script_route.Paths, name: []const u
     return std.fs.path.join(a, &.{ paths.root, "shale", "suite", try std.fmt.allocPrint(a, "{s}.out", .{name}) });
 }
 
-/// **A NAME'S LAST RUN, AS KEPT**: its first line how it ended, then what it
-/// printed; null when it has not run (or its file is gone).
+/// A name's last run, as kept: its first line how it ended, then what it
+/// printed. Null when it has not run (or its file is gone).
 pub fn readKept(io: Io, a: std.mem.Allocator, paths: script_route.Paths, name: []const u8) !?[]u8 {
     if (!validName(name)) return error.BadName;
     // absent-ok: a name not run yet has no file; any other failure is the caller's.
@@ -187,8 +186,6 @@ fn endingLine(buf: []u8, stop: ?script.Stop, steps: u64) []const u8 {
     const s = stop orelse return std.fmt.bufPrint(buf, "finished ({d} steps)", .{steps}) catch buf[0..0];
     return std.fmt.bufPrint(buf, "stopped at {d}:{d}: {s}{s}{s}: {s} ({d} steps)", .{ s.line, s.column, @tagName(s.class), if (s.budget != null) " " else "", if (s.budget) |b| @tagName(b) else "", s.message, steps }) catch buf[0..0];
 }
-
-// ── tests ─────────────────────────────────────────────────────────────────
 
 const testing = std.testing;
 

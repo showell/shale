@@ -1,11 +1,9 @@
-//! **SHALE'S HOT PATHS, TIMED** (metal-vmm QUEUE 208(a)): a few scripts
-//! that each lean on one path of the interpreter (a loop's iteration, a
-//! list's and a map's index, a call, building a string), each run as many
-//! times as fit in about half a second, its time and its steps printed:
+//! Times Shale's hot paths: a few scripts that each lean on one path of the
+//! interpreter (a loop's iteration, a list's and a map's index, a call,
+//! building a string), each run on the tree-walker and on the VM as many times
+//! as fit in about half a second, its time and its steps printed:
 //!
 //!     zig build script-bench        (ReleaseSafe)
-//!
-//! Each on the tree-walker and on the VM (metal-vmm QUEUE 211).
 //!
 //! Outside the script module: it may name the host.
 
@@ -80,8 +78,8 @@ pub fn main(init: std.process.Init) !void {
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = "bench-8m", .data = big });
     defer std.Io.Dir.cwd().deleteFile(io, "bench-8m") catch {};
     for (cases) |c| {
-        // **WALKER AGAINST VM** (metal-vmm QUEUE 211): the same case on
-        // each engine; their steps are the same by the tests' gate.
+        // The same case on each engine; the tests hold their step counts
+        // equal.
         var ns_of: [2]f64 = undefined;
         for ([_]script.Engine{ .walker, .vm }, 0..) |engine, k| {
             var runs: u64 = 0;

@@ -1,9 +1,8 @@
-//! **EACH TEST'S TIME** (`zig build test -Dtest-timing`): a test runner that
-//! runs every test as zig's own does (a fresh `testing.allocator` and
-//! `testing.io` each, leaks counted) and prints each one's wall time,
-//! slowest first, then the total. A gate's cost is the sum of its tests', and
-//! this says which tests it is. Runs in the build's "simple" mode: its output
-//! is the run's, shown when the step ends.
+//! A test runner that times each test (`zig build test -Dtest-timing`). Runs
+//! every test as zig's own runner does (a fresh `testing.allocator` and
+//! `testing.io` each, leaks counted) and prints each one's wall time, slowest
+//! first, then the total, so a slow gate names its slow tests. Runs in the
+//! build's "simple" mode: its output is the run's, shown when the step ends.
 
 const std = @import("std");
 const builtin = @import("builtin");
