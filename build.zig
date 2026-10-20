@@ -158,8 +158,11 @@ pub fn build(b: *std.Build) void {
     // Absolute, as 0.16's addOptionPath gave it: the tests hand it to
     // scripts that run `git -C` from elsewhere, where Zig 0.17's relative
     // path (`../zig-webbox/.`) would not reach it.
-    const webbox_rel = webbox_dep.builder.root.root_dir.path orelse ".";
-    shale_options.addOption([]const u8, "webbox_root", b.root.root_dir.handle.realPathFileAlloc(b.graph.io, webbox_rel, b.allocator) catch |e| std.debug.panic("shale: webbox's root {s}: {t}", .{ webbox_rel, e }));
+    // Resolved through webbox's own directory: its `root_dir.path` is
+    // relative to the top-level build, which is shale only when shale is
+    // built alone.
+    const webbox_root = webbox_dep.builder.root;
+    shale_options.addOption([]const u8, "webbox_root", webbox_root.root_dir.handle.realPathFileAlloc(b.graph.io, webbox_root.subPathOrDot(), b.allocator) catch |e| std.debug.panic("shale: webbox's root {f}: {t}", .{ webbox_root, e }));
     for ([_][]const u8{ "src/shale.zig", "src/shale_linux.zig" }) |path| {
         const unit = b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path(path),
