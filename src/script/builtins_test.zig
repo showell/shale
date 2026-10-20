@@ -1022,3 +1022,68 @@ test "builtins: \".\" is the root, as \"\" is, wherever a path is taken; a `.` i
     defer r.deinit();
     try testing.expect(r.stop != null);
 }
+
+test "builtins: each refusal of a value of the wrong type, by builtin: edit's options, get's key, sort's keys and items, table's columns" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectStop("edit(\"top.txt\", \"top\", \"pot\", {all = 1})", .type);
+    try f.expectStop("print(get({1}, true))", .type);
+    try f.expectStop("sort({{a = 1}}, {1})", .type);
+    try f.expectStop("sort({{a = 1}, 2}, \"a\")", .type);
+    try f.expectStop("print(table({}, {1}))", .type);
+    try f.expectStop("print(seconds(\"2026-10-14T03:00:00X\"))", .argument);
+}
+
+test "builtins: `date`'s text past the arena budget stops on it" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    var r = f.run("while true do date(0) end", .{ .steps = 100_000_000, .arena_bytes = 64 * 1024 });
+    defer r.deinit();
+    try testing.expectEqual(script.diag.Budget.arena, r.stop.?.budget.?);
+}
+
+test "builtins: a folder `walk` cannot list (its path past the system's longest) stops it, naming the folder" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const io = f.threaded.io();
+    // Twenty folders of 240 bytes each: about 4900 bytes below the root.
+    const name_bytes: [240]u8 = @splat('d');
+    const name: []const u8 = &name_bytes;
+    var d = try f.tmp.dir.openDir(io, "data", .{});
+    try d.createDir(io, "deep", .default_dir);
+    var next = try d.openDir(io, "deep", .{});
+    d.close(io);
+    d = next;
+    for (0..20) |_| {
+        try d.createDir(io, name, .default_dir);
+        next = try d.openDir(io, name, .{});
+        d.close(io);
+        d = next;
+    }
+    d.close(io);
+    // Walked, its stat fails first; resumed past its deepest, each folder on
+    // the way is listed, unstat'ed, and the first too long stops it.
+    var after: std.ArrayList(u8) = .empty;
+    defer after.deinit(testing.allocator);
+    try after.appendSlice(testing.allocator, "deep");
+    for (0..20) |_| {
+        try after.append(testing.allocator, '/');
+        try after.appendSlice(testing.allocator, name);
+    }
+    const resumed = try std.fmt.allocPrint(testing.allocator, "print(#walk(\"deep\", {{after = \"{s}/x\"}}))", .{after.items});
+    defer testing.allocator.free(resumed);
+    // Each engine alone: the gate copies the root, and the copy cannot hold it either.
+    for ([_]script.Engine{ .walker, .vm }) |engine| {
+        for ([_][]const u8{ "print(#walk(\"deep\"))", resumed }) |src| {
+            var r = script.runOn(engine, io, testing.allocator, f.root, src, .{}, 0, &out_buf, .{});
+            defer r.deinit();
+            const s = r.stop.?;
+            try testing.expectEqual(script.diag.Class.store, s.class);
+            try testing.expect(std.mem.indexOf(u8, s.message, "`walk(\"deep/") != null);
+            try testing.expect(std.mem.indexOf(u8, s.message, "(NameTooLong)") != null);
+        }
+    }
+}

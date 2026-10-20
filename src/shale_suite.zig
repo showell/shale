@@ -305,3 +305,21 @@ test "suite: what it refuses to install" {
     try suite.writeStatus(&w);
     try testing.expectEqualStrings("no installed scripts\n", w.buffered());
 }
+
+test "suite: a run the host cannot start is said, and the next is due a period on" {
+    var r: Rig = undefined;
+    try r.init();
+    defer r.deinit();
+    const io = r.threaded.io();
+    const entries = [_]Entry{.{ .name = "hello", .source = "print(1)", .period_s = 60 }};
+    var failing: testing.FailingAllocator = .init(testing.allocator, .{ .fail_index = 0 });
+    var suite: Suite = .{};
+    defer suite.reset();
+    try suite.install(&entries, failing.allocator(), .{}, r.data, r.paths);
+    try testing.expectEqual(wake.Wake{ .at = 65 * s_ns }, suite.step(io, .{ .awake_ns = 5 * s_ns, .unix_s = 1000 }));
+    try testing.expectEqual(@as(?*script.process.Process, null), suite.process);
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try suite.writeStatus(&w);
+    try testing.expectEqualStrings("suite hello every 60 s: 1 runs, the last at 1000: not started: OutOfMemory\n", w.buffered());
+}

@@ -98,7 +98,7 @@ pub fn parse(argv: []const []const u8, env_root: ?[]const u8, args_buf: []interp
                 const n = builtins.parseInteger(v[eq + 1 ..]) orelse return refuse(why_buf, "--budget {s}: {s} is not a number", .{ v, v[eq + 1 ..] });
                 if (n < 1) return refuse(why_buf, "--budget {s}: a budget is at least 1", .{v});
                 const k = budgetIndex(name) orelse return refuse(why_buf, "--budget {s}: no budget is called {s}", .{ v, name });
-                _ = setBudget(&c.budgets, name, @intCast(n));
+                setBudget(&c.budgets, k, @intCast(n));
                 c.flagged[k] = true;
             }
         } else if (std.mem.startsWith(u8, a, "-")) {
@@ -179,7 +179,7 @@ pub fn headerBudgets(source: []const u8, c: *Command, why_buf: []u8) ?Refused {
             if (n < 1) return said(why_buf, "`-- budget:` {s}: a budget is at least 1", .{v});
             const k = budgetIndex(name) orelse return said(why_buf, "`-- budget:` {s}: no budget is called {s}", .{ v, name });
             if (c.flagged[k]) continue;
-            _ = setBudget(&c.budgets, name, @intCast(n));
+            setBudget(&c.budgets, k, @intCast(n));
             c.from_header[k] = true;
         }
         if (!any) return said(why_buf, "`-- budget:` names no budget", .{});
@@ -272,15 +272,14 @@ fn budgetIndex(name: []const u8) ?usize {
     return null;
 }
 
-fn setBudget(b: *interp.Budgets, name: []const u8, n: u64) bool {
-    inline for (settable) |field| {
-        if (std.mem.eql(u8, name, field)) {
+/// Sets budget `k`, an index `budgetIndex` gave.
+fn setBudget(b: *interp.Budgets, k: usize, n: u64) void {
+    inline for (settable, 0..) |field, i| {
+        if (i == k) {
             const T = @TypeOf(@field(b, field));
             @field(b, field) = std.math.cast(T, n) orelse std.math.maxInt(T);
-            return true;
         }
     }
-    return false;
 }
 
 const testing = std.testing;
