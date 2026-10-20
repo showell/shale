@@ -1,0 +1,97 @@
+-- **A CHANGE THAT TOUCHES COMMENTS ONLY**: each Zig file, as it is and as
+-- `rev` holds it, by Zig's tokenizer (`zig_tokens`), its doc-comment tokens
+-- dropped (a plain `//` comment is no token): the two lists of tags and
+-- texts must be the same. Says "comment-only" for each file that holds,
+-- and for one that does not, the first token that differs, with its line
+-- on each side (QUEUE 242's judge: a commit that fails it is split).
+--
+--   cd <repo> && shale <shale>/cookbook/zig/comments_only.shale
+--   cd <repo> && shale <shale>/cookbook/zig/comments_only.shale rev=origin/master
+--   cd <repo> && shale <shale>/cookbook/zig/comments_only.shale rev=HEAD~1 files=src/script/vm.zig
+--
+-- `rev` defaults to `HEAD` (the working tree's uncommitted change);
+-- `files` (comma-separated) defaults to every `.zig` file `git diff
+-- --name-only rev` names. A file new or gone since `rev` is not
+-- comment-only. Each version at `rev` is written under
+-- `.zig-cache/comments_only/` for the tokenizer to read.
+--
+-- budget: steps=900000000 reads=100000 read_bytes=400000000 arena_bytes=2000000000
+
+const REV = arg("rev", "HEAD")
+const FILES = arg("files", "")
+
+-- The tokens that are not comments, `{tag, text, line}`.
+function code_tokens(p)
+  local got = {}
+  for t in zig_tokens(p) do
+    if t.tag ~= "doc_comment" and t.tag ~= "container_doc_comment" then push(got, t) end
+  end
+  return got
+end
+
+local files = {}
+if FILES ~= "" then
+  for f in split(FILES, ",") do push(files, trim(f)) end
+else
+  for f in lines(git_call(".", {"diff", "--name-only", REV, "--", "*.zig"}, nil, true, nil).out) do
+    if f ~= "" then push(files, f) end
+  end
+end
+if #files == 0 then
+  print("comments_only: no .zig file differs from " .. REV)
+else
+  -- Every file at `rev` from one `git cat-file --batch` (a `git show` a
+  -- file would spend a run's 64 programs on 64 files): a header line,
+  -- `<object> blob <size>` or `<name> missing`, then that many bytes and a
+  -- newline.
+  local asked = {}
+  for f in files do push(asked, REV .. ":" .. f) end
+  local out = git_call(".", {"cat-file", "--batch"}, nil, true, join(asked, "\n") .. "\n").out
+  local at_rev = {}
+  local pos = 1
+  for f in files do
+    local nl = find(out, "\n", pos)
+    local header = sub(out, pos, nl - 1)
+    pos = nl + 1
+    if not ends_with(header, " missing") then
+      local size = parse_int(words(header)[3])
+      at_rev[f] = sub(out, pos, pos + size - 1)
+      pos = pos + size + 1
+    end
+  end
+
+  local failed = 0
+  for f in files do
+    if not exists(f) or not has_key(at_rev, f) then
+      failed = failed + 1
+      print(f .. ": not comment-only: the file is new or gone since " .. REV)
+    else
+      local old_path = ".zig-cache/comments_only/" .. substitute(f, "/", "__")
+      replace(old_path, at_rev[f])
+      local was = code_tokens(old_path)
+      local now = code_tokens(f)
+      local differ = nil
+      local n = #was
+      if #now < n then n = #now end
+      for i = 1, n do
+        if was[i].tag ~= now[i].tag or was[i].text ~= now[i].text then
+          differ = i
+          break
+        end
+      end
+      if differ == nil and #was ~= #now then differ = n + 1 end
+      if differ == nil then
+        print(f .. ": comment-only (" .. #now .. " tokens)")
+      else
+        failed = failed + 1
+        local w = "the end"
+        if differ <= #was then w = "`" .. was[differ].text .. "` (" .. was[differ].tag .. ", line " .. was[differ].line .. ")" end
+        local h = "the end"
+        if differ <= #now then h = "`" .. now[differ].text .. "` (" .. now[differ].tag .. ", line " .. now[differ].line .. ")" end
+        print(f .. ": NOT comment-only: token " .. differ .. " was " .. w .. ", is " .. h)
+      end
+    end
+  end
+  if failed > 0 then fail("comments_only: " .. failed .. " of " .. #files .. " files change more than comments since " .. REV) end
+  print("comments_only: all " .. #files .. " files comment-only since " .. REV)
+end

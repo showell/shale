@@ -1,0 +1,96 @@
+-- **HOW MUCH THE COMMENTS SAY, AND HOW LOUDLY**: per Zig file, its code
+-- lines, its doc lines (`///`, `//!`), its plain `//` lines, comment lines
+-- per 100 lines of code, words a comment line, and the loud and dated ones
+-- (QUEUE 242: Shale's comments in the Zig compiler authors' voice; this is
+-- the before and after of every commit).
+--
+--   cd <repo> && shale <shale>/cookbook/zig/comment_census.shale
+--   shale <shale>/cookbook/zig/comment_census.shale dir=zig:lib/std/zig files=AstGen.zig,Parse.zig,Zir.zig
+--   cd <repo> && shale <shale>/cookbook/zig/comment_census.shale top=10
+--
+-- `files` is comma-separated globs under `dir` (default `.`, the root;
+-- a mount works): default `src/**/*.zig,tools/*.zig,build.zig`. A glob's
+-- `*` on the command line is the shell's unless quoted.
+--
+-- A line is code when it holds anything but a comment, a comment line
+-- when it is only one (a comment after code counts as code). **Loud**: a
+-- comment line with `**`, a heading of two upper-case words or more
+-- (`THE HUNT`), or a `──` banner. **Dated**: one naming a QUEUE or
+-- FEEDBACK item, a date (`2026-10-20`), or a person (`Steve`, `the box`,
+-- `CC`). The table is the loudest first, `top` rows of it (default all),
+-- then the whole's totals.
+--
+-- budget: steps=900000000 reads=100000 read_bytes=400000000 arena_bytes=2000000000
+
+const DIR = arg("dir", ".")
+const FILES = arg("files", "src/**/*.zig,tools/*.zig,build.zig")
+const TOP = arg("top", 0)
+
+function is_loud(c)
+  return contains(c, "**") or contains(c, "──") or re_match(c, "\\b[A-Z][A-Z]+ [A-Z][A-Z]+")
+end
+
+function is_dated(c)
+  return re_match(c, "QUEUE|FEEDBACK|\\b20\\d\\d-\\d\\d-\\d\\d\\b|\\bSteve\\b|\\bthe box\\b|\\bCC\\b")
+end
+
+-- The files `FILES` names under `DIR`, each once, in the order named.
+local paths = {}
+local seen = {}
+for pattern in split(FILES, ",") do
+  local p = trim(pattern)
+  local full = p
+  if DIR ~= "." then full = DIR .. "/" .. p end
+  local got = {}
+  if contains(p, "*") then got = glob(full) elseif exists(full) then got = {full} end
+  for g in got do
+    if not get(seen, g, false) then
+      seen[g] = true
+      push(paths, g)
+    end
+  end
+end
+if #paths == 0 then fail("comment_census: no file matches " .. FILES .. " under " .. DIR) end
+
+local rows = {}
+local all = {code = 0, doc = 0, plain = 0, words = 0, loud = 0, dated = 0}
+for p in paths do
+  local r = {code = 0, doc = 0, plain = 0, words = 0, loud = 0, dated = 0}
+  for l in lines(read(p)) do
+    local t = trim(l)
+    if t ~= "" then
+      if starts_with(t, "//") then
+        if starts_with(t, "///") or starts_with(t, "//!") then r.doc = r.doc + 1 else r.plain = r.plain + 1 end
+        r.words = r.words + #words(sub(t, 4))
+        if is_loud(t) then r.loud = r.loud + 1 end
+        if is_dated(t) then r.dated = r.dated + 1 end
+      else
+        r.code = r.code + 1
+      end
+    end
+  end
+  for k in keys(all) do all[k] = all[k] + r[k] end
+  local shown = p
+  if DIR ~= "." and starts_with(p, DIR .. "/") then shown = sub(p, #DIR + 2) end
+  push(rows, {file = shown, code = r.code, doc = r.doc, plain = r.plain, loud = r.loud, dated = r.dated, r = r})
+end
+
+-- A share as `n.d`, of `part` per 100 of `whole`.
+function per100(part, whole)
+  if whole == 0 then return "-" end
+  local tenths = (part * 1000 + whole // 2) // whole
+  return (tenths // 10) .. "." .. (tenths % 10)
+end
+
+for row in rows do
+  local comments = row.r.doc + row.r.plain
+  row.per100 = per100(comments, row.r.code)
+  row.words = per100(row.r.words, comments * 100)
+end
+local sorted = sort(rows, "loud", "desc")
+if TOP > 0 then sorted = take(sorted, TOP) end
+print(table(sorted, {"file", "code", "doc", "plain", "per100", "words", "loud", "dated"}))
+local comments = all.doc + all.plain
+print(#paths .. " files: " .. all.code .. " code lines, " .. comments .. " comment lines (" .. all.doc .. " doc, " .. all.plain ..
+  " plain), " .. per100(comments, all.code) .. " per 100, " .. per100(all.words, comments * 100) .. " words a line, " ..
+  all.loud .. " loud, " .. all.dated .. " dated")
