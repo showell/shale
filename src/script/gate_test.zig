@@ -66,7 +66,9 @@ pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const
     }
 
     var why = verdict(&v, &w);
-    if (why == null and has_root) {
+    // Runs that made different changes, as an arena-shaped stop may, leave different
+    // stores; their changes were compared above.
+    if (why == null and has_root and v.effects.len == w.effects.len) {
         if (!(sameTree(io, a, root, copy) catch false)) why = "the store left";
     }
     if (why) |what| {
@@ -98,8 +100,14 @@ pub fn verdict(v: *const script.Result, w: *const script.Result) ?[]const u8 {
     // valid source.
     const machine_shaped = isBudget(v.stop, .machine) and isBudget(w.stop, .machine);
     const arena_shaped = yields and (isArenaShaped(v.stop) or isArenaShaped(w.stop));
-    if (!arena_shaped) {
+    if (arena_shaped) {
+        // The engine that stopped first did what the other did, up to its stop: its
+        // output and its changes are the other's first ones.
+        if (!prefixes(v.output, w.output)) why = "the output";
+        if (!sameEffects(v.effects[0..@min(v.effects.len, w.effects.len)], w.effects[0..@min(v.effects.len, w.effects.len)])) why = "the effects";
+    } else {
         if (!std.mem.eql(u8, v.output, w.output)) why = "the output";
+        if (!sameEffects(v.effects, w.effects)) why = "the effects";
         // A machine stop both make is at the same place, but may be at a
         // different depth of the same recursion, so its trail is not compared.
         if (!sameStop(v.stop, w.stop) and !(machine_shaped and samePlace(v.stop.?, w.stop.?))) why = "the stop";
@@ -109,7 +117,6 @@ pub fn verdict(v: *const script.Result, w: *const script.Result) ?[]const u8 {
         if (v.work != w.work) why = "the work";
         if (v.arena_bytes != w.arena_bytes) why = "the arena";
     }
-    if (!sameEffects(v.effects, w.effects)) why = "the effects";
     return why;
 }
 
@@ -132,6 +139,12 @@ fn isBudget(s: ?script.Stop, b: script.diag.Budget) bool {
 fn isArenaShaped(s: ?script.Stop) bool {
     const b = (s orelse return false).budget orelse return false;
     return b == .steps or b == .arena or b == .kept;
+}
+
+/// Whether the shorter of `x` and `y` begins the longer.
+fn prefixes(x: []const u8, y: []const u8) bool {
+    const n = @min(x.len, y.len);
+    return std.mem.eql(u8, x[0..n], y[0..n]);
 }
 
 /// Whether each effect is the same op on the same path with the same outcome,
