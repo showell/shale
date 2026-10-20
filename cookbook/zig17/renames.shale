@@ -3,6 +3,13 @@
 -- deprecated), rewritten in place:
 --   - `x.dupeZ(T, s)`: `x.dupeSentinel(T, s, 0)` (the call's closing
 --     parenthesis found by depth, so nested arguments are safe)
+--   - type info reshaped: a pointer's `.pointer.is_const` (and
+--     `is_volatile`, `is_allowzero`, `alignment`, `address_space`):
+--     `.pointer.attrs.@"const"` (`@"volatile"`, `@"allowzero"`, `@"align"`,
+--     `@"addrspace"`); a function's `.params[i].type`: `.param_types[i]`
+--   - `std.fmt.bufPrintZ(b, f, a)`: `std.mem.printSentinel(b, f, a, 0)`
+--   - a fixed-size bitset's `.initEmpty()` / `.initFull()`: `.empty` /
+--     `.full` (the dynamic sets' take an allocator, and are left)
 --   - `std.ascii.indexOfIgnoreCase...`: `std.ascii.findIgnoreCase...`
 --     (and its Pos, PosLinear)
 --   - `Ast.parse(gpa, src, .zig)` (or `.zon`): `Ast.parse(gpa, src,
@@ -10,6 +17,13 @@
 --   - a container's field count, `@typeInfo(T).@"enum".fields.len` (and
 --     `@"struct"`, `@"union"`): `.field_names.len` (0.17's type info is
 --     struct-of-arrays; a loop over the fields is a hand's)
+--   - the optimize modes' old tags, deprecated and refused after `orelse`,
+--     `==` and in a switch: `.ReleaseSafe` / `.ReleaseFast` / `.ReleaseSmall`
+--     to `.safe` / `.fast` / `.small` everywhere (whole tokens), and
+--     `.Debug` to `.debug` on a line that says `ptimize` (other enums have
+--     a `Debug`). The command line's `-Doptimize=ReleaseSafe` still reads.
+--   - `if (b.args) |a| run.addArgs(a);`: `run.addPassthruArgs();` (0.17's
+--     build script no longer sees the arguments after `--`)
 -- Every changed file is rewritten whole; run `zig fmt` after, and let the
 -- compiler judge.
 --
@@ -47,6 +61,46 @@ function fix(text)
     n = n + 1
     from = at + 1
   end
+  -- fmt.bufPrintZ(b, f, a) -> mem.printSentinel(b, f, a, 0)
+  from = 1
+  while true do
+    local at = find(text, "fmt.bufPrintZ(", from)
+    if at == nil then break end
+    local open = at + 13
+    local close = close_of(text, open)
+    if close == nil then break end
+    text = sub(text, 1, at - 1) .. "mem.printSentinel(" .. sub(text, open + 1, close - 1) .. ", 0)" .. sub(text, close + 1)
+    n = n + 1
+    from = at + 1
+  end
+  -- A pointer's attributes moved under `attrs`.
+  for pair in {{".pointer.is_const", ".pointer.attrs.@\"const\""}, {".pointer.is_volatile", ".pointer.attrs.@\"volatile\""}, {".pointer.is_allowzero", ".pointer.attrs.@\"allowzero\""}, {".pointer.alignment", ".pointer.attrs.@\"align\""}, {".pointer.address_space", ".pointer.attrs.@\"addrspace\""}} do
+    local k = #split(text, pair[1]) - 1
+    if k > 0 then
+      text = substitute(text, pair[1], pair[2])
+      n = n + k
+    end
+  end
+  -- A function's .params[i].type -> .param_types[i]
+  from = 1
+  while true do
+    local at = find(text, ".params[", from)
+    if at == nil then break end
+    local close = find(text, "]", at)
+    if close ~= nil and sub(text, close + 1, close + 5) == ".type" then
+      text = sub(text, 1, at) .. "param_types[" .. sub(text, at + 8, close) .. sub(text, close + 6)
+      n = n + 1
+    end
+    from = at + 1
+  end
+  -- .initEmpty() / .initFull(), no arguments -> .empty / .full
+  for pair in {{".initEmpty()", ".empty"}, {".initFull()", ".full"}} do
+    local k = #split(text, pair[1]) - 1
+    if k > 0 then
+      text = substitute(text, pair[1], pair[2])
+      n = n + k
+    end
+  end
   -- std.ascii.indexOfIgnoreCase... -> findIgnoreCase...
   local k = #split(text, "ascii.indexOfIgnoreCase") - 1
   if k > 0 then
@@ -70,6 +124,41 @@ function fix(text)
       from = at + 1
     end
   end
+  -- The optimize modes' tags, whole tokens: the next byte no identifier's.
+  local out = {}
+  for line in split(text, "\n") do
+    for pair in {{".ReleaseSafe", ".safe"}, {".ReleaseFast", ".fast"}, {".ReleaseSmall", ".small"}, {".Debug", ".debug"}} do
+      if pair[1] ~= ".Debug" or contains(line, "ptimize") then
+        local seek = 1
+        while true do
+          local at = find(line, pair[1], seek)
+          if at == nil then break end
+          local next = sub(line, at + #pair[1], at + #pair[1])
+          if next ~= "" and contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789", next) then
+            seek = at + 1
+          else
+            line = sub(line, 1, at - 1) .. pair[2] .. sub(line, at + #pair[1])
+            n = n + 1
+            seek = at + #pair[2]
+          end
+        end
+      end
+    end
+    -- if (b.args) |a| run.addArgs(a);  ->  run.addPassthruArgs();
+    local t = trim(line)
+    if starts_with(t, "if (b.args) |") then
+      local bar = find(t, "|", 14)
+      local cap = sub(t, 14, bar - 1)
+      local rest = trim(sub(t, bar + 1))
+      local call = find(rest, ".addArgs(" .. cap .. ");")
+      if call ~= nil and call + #(".addArgs(" .. cap .. ");") - 1 == #rest then
+        line = sub(line, 1, #line - #t) .. sub(rest, 1, call - 1) .. ".addPassthruArgs();"
+        n = n + 1
+      end
+    end
+    push(out, line)
+  end
+  text = join(out, "\n")
   for kind in {"enum", "struct", "union"} do
     local old = ".@\"" .. kind .. "\".fields.len"
     local k = #split(text, old) - 1
@@ -85,7 +174,7 @@ local total = 0
 for e in walk_all(DIR, {kind = "file", like = "*.zig"}) do
   if not contains(e.path, ".zig-cache") and not contains(e.path, "zig-out") then
     local was = read(e.path)
-    if contains(was, "dupeZ(") or contains(was, "indexOfIgnoreCase") or contains(was, "Ast.parse(") or contains(was, ".fields.len") then
+    if contains(was, "dupeZ(") or contains(was, "indexOfIgnoreCase") or contains(was, "Ast.parse(") or contains(was, ".fields.len") or contains(was, ".Release") or contains(was, ".Debug") or contains(was, "b.args") or contains(was, "bufPrintZ(") or contains(was, ".initEmpty()") or contains(was, ".initFull()") or contains(was, ".pointer.") or contains(was, ".params[") then
       local r = fix(was)
       if r.n > 0 then
         print(e.path .. ": " .. r.n)
