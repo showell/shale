@@ -283,3 +283,35 @@ test "gate: when only the walker outgrows the arena, keeping what the VM's yield
     try std.testing.expect(w.effects.len < v.effects.len);
     try std.testing.expectEqual(@as(?[]const u8, null), verdict(&v, &w));
 }
+
+test "gate: when the walker's arena runs out in a change, that change is refused where the VM's is made, and the two agree up to it" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var threaded = std.Io.Threaded.init(std.testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    const root = try std.fs.path.join(std.testing.allocator, &.{ ".zig-cache", "tmp", &tmp.sub_path, "data" });
+    defer std.testing.allocator.free(root);
+    const source = "for i = 1, 40 do local s = rep(\"x\", 300) yield() replace(\"f\" .. (i % 3), s .. i) end";
+    var out_v: [4096]u8 = undefined;
+    var out_w: [4096]u8 = undefined;
+    // Every arena from 4 KiB to 32 KiB, so some budget runs out inside a change.
+    var refused_in_a_change = false;
+    var n: usize = 4096;
+    while (n <= 32 * 1024) : (n += 64) {
+        try tmp.dir.deleteTree(io, "data");
+        try tmp.dir.createDirPath(io, "data");
+        var v = script.runOn(.vm, io, std.testing.allocator, root, source, .{ .arena_bytes = n }, 0, &out_v, .{});
+        defer v.deinit();
+        try tmp.dir.deleteTree(io, "data");
+        try tmp.dir.createDirPath(io, "data");
+        var w = script.runOn(.walker, io, std.testing.allocator, root, source, .{ .arena_bytes = n }, 0, &out_w, .{});
+        defer w.deinit();
+        if (w.effects.len > 0 and std.mem.eql(u8, w.effects[w.effects.len - 1].outcome, "OutOfMemory")) refused_in_a_change = true;
+        if (verdict(&v, &w)) |why| {
+            std.debug.print("an arena of {d}: the gate says they differ in {s}\n", .{ n, why });
+            return error.TestUnexpectedResult;
+        }
+    }
+    try std.testing.expect(refused_in_a_change);
+}
