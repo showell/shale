@@ -232,6 +232,11 @@ pub fn build(b: *std.Build) void {
     // would pass unread. So the unit runs always run.
     // Each unit binary twice: as `test` runs it, and Debug, whole and
     // under zig's own runner, for `script-coverage` (built only for it).
+    // Zig 0.17's own backend emits no coverage for `--fuzz` (its report:
+    // "corrupted coverage file ... pcs_len was zero"); LLVM's does. So
+    // `zig build test -Dtest-llvm --fuzz=N` fuzzes the `std.testing.fuzz`
+    // tests (241 D2); without --fuzz they run their corpus, as any test.
+    const test_llvm = b.option(bool, "test-llvm", "build the unit tests with LLVM, which `--fuzz` needs in Zig 0.17") orelse false;
     const unit_roots = [_][]const u8{ "src/shale.zig", "src/shale_linux.zig" };
     var coverage_units: [unit_roots.len]*std.Build.Step.Compile = undefined;
     for (unit_roots, &coverage_units) |path, *for_coverage| for ([_]bool{ false, true }) |measured| {
@@ -239,7 +244,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path(path),
             .target = target,
             .optimize = if (measured) .debug else optimize,
-        }), .filters = if (test_filter != null and !measured) b.dupeStrings(&.{test_filter.?}) else &.{}, .test_runner = if (measured) null else timing });
+        }), .filters = if (test_filter != null and !measured) b.dupeStrings(&.{test_filter.?}) else &.{}, .test_runner = if (measured) null else timing, .use_llvm = if (test_llvm and !measured) true else null });
         // A file of the Linux host reaches the portable half as the module;
         // a file of the portable half, by path.
         unit.root_module.addImport("shale", shale);

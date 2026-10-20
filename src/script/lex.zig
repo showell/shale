@@ -551,3 +551,34 @@ test "lex: a block comment is `--` and a long string's opener, any level (the de
     try testing.expectEqual(@as(u32, 3), bad.err.?.column);
     try testing.expect(std.mem.indexOf(u8, bad.err.?.message, "a long comment with no `]=]`") != null);
 }
+
+/// One input for `std.testing.fuzz`: the lexer ends in a stream of tokens or a clean
+/// error, its lines never going back, and every error inside the source.
+fn lexOne(_: void, smith: *std.testing.Smith) anyerror!void {
+    var buf: [256]u8 = undefined;
+    const src = buf[0..smith.slice(&buf)];
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var lx = Lexer.init(arena.allocator(), src);
+    var last_line: u32 = 1;
+    const lines: u32 = @intCast(1 + std.mem.count(u8, src, "\n"));
+    while (true) {
+        const t = lx.next() catch |e| {
+            if (e == error.OutOfMemory) return e;
+            try std.testing.expect(lx.err.?.line >= last_line and lx.err.?.line <= lines);
+            return;
+        };
+        try std.testing.expect(t.line >= last_line and t.line <= lines);
+        last_line = t.line;
+        if (t.tag == .eof) return;
+    }
+}
+
+test "lex: any bytes end in a token stream or a clean error inside the source (Zig's fuzzer: `zig build test -Dtest-llvm --fuzz=N`; built plainly, the corpus and an empty input)" {
+    try std.testing.fuzz({}, lexOne, .{ .corpus = &.{
+        "local x = 1 print(x .. \"y\")",
+        "[=[ a ]] ]=] --[==[ c ]==] -- end",
+        "\"\\x41\\n\" 'q' 9223372036854775807 a.b[c]",
+        "if a then b() elseif c then d() else e() end",
+    } });
+}

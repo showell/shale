@@ -261,3 +261,39 @@ test "parse: an allocation that fails while looking ahead, or deep in a long pre
     }
     try testing.expect(oom > 10);
 }
+
+/// One input for `std.testing.fuzz`: a source of the language's pieces, which parses or
+/// stops cleanly, a stop of one line inside the source, and gives back all it borrowed.
+fn parseOne(_: void, smith: *std.testing.Smith) anyerror!void {
+    const pieces = [_][]const u8{
+        "local ", "x", "y",        " = ",    "1",     "\"s\"", "(",   ")",      "{",        "}",         "[",           "]",      ",",    ".",    "..",   "+",         "-", "*",       "//",     "%",
+        "==",     "<", " and ",    " or ",   "not ",  "#",     "if ", " then ", " elseif ", " else ",    " end ",       "while ", " do ", "for ", " in ", "function ", "f", "return ", "break ", "continue ",
+        "const ", "C", "attempt(", "print(", "push(", "\n",    ";",   "nil",    "true",     "[=[ s ]=]", "--[=[ c ]=]", "-- c\n", "a = ", "?",
+    };
+    var buf: [512]u8 = undefined;
+    var len: usize = 0;
+    while (!smith.eos()) {
+        const p = pieces[smith.index(pieces.len)];
+        if (len + p.len > buf.len) break;
+        @memcpy(buf[len..][0..p.len], p);
+        len += p.len;
+    }
+    const src = buf[0..len];
+    var tree = std.heap.ArenaAllocator.init(testing.allocator);
+    defer tree.deinit();
+    var stop: ?diag.Stop = null;
+    if (@import("parse.zig").parseMeasured(tree.allocator(), testing.allocator, src, 40, &stop, null, &.{})) |_| {} else |e| {
+        try testing.expectEqual(error.Parse, e);
+        const s = stop.?;
+        try testing.expect(std.mem.indexOfScalar(u8, s.message, '\n') == null);
+        try testing.expect(s.line >= 1 and s.line <= 1 + std.mem.count(u8, src, "\n"));
+    }
+}
+
+test "parse: a source of the language's pieces parses or stops on one line inside it, giving back what it borrowed (Zig's fuzzer: `zig build test -Dtest-llvm --fuzz=N`)" {
+    try std.testing.fuzz({}, parseOne, .{ .corpus = &.{
+        "local x = 1 function f(a) return a end print(f(x))",
+        "if x then y = 1 elseif nil then else end",
+        "for i = 1, 2 do break end while true do continue end",
+    } });
+}
