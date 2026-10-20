@@ -198,6 +198,8 @@ test "builtins: strings" {
     try f.expectStop("find(\"abc\", \"a\", 5)", .argument);
     try f.expectOutput("print(sub(\"hello\", 2, 4), sub(\"hello\", -3), sub(\"hello\", 2), sub(\"hello\", 0), sub(\"hello\", 4, 2), sub(\"hello\", -100, 100))", "ell\tllo\tello\thello\t\thello\n");
     try f.expectOutput("print(\"[\" .. trim(\" \\t a b \\n\") .. \"]\", upper(\"aBc1\"), lower(\"AbC\"))", "[a b]\tABC1\tabc\n");
+    try f.expectOutput("print(\"[\" .. trim_start(\" \\t a b \\n\") .. \"]\")", "[a b \n]\n");
+    try f.expectOutput("print(\"[\" .. trim_end(\" \\t a b \\r\\n\") .. \"]\", \"[\" .. trim_end(\"\") .. \"]\", \"[\" .. trim_start(\"  \") .. \"]\")", "[ \t a b]\t[]\t[]\n");
     try f.expectOutput("print(tonumber(\"42\") + 1, tonumber(\"-7\"), tostring(5) .. \"x\")", "43\t-7\t5x\n");
     const bad = [_][]const u8{ "tonumber(\"\")", "tonumber(\"1.5\")", "tonumber(\" 1\")", "tonumber(\"+1\")", "tonumber(\"0x1\")", "tonumber(\"99999999999999999999\")", "tonumber(\"-\")" };
     for (bad) |src| try f.expectStop(src, .argument);

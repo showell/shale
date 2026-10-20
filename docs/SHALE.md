@@ -587,7 +587,7 @@ the errors column says the rest.
 | `starts_with`, `ends_with`, `contains` `(s, t)` | booleans | |
 | `find(s, t[, from])` | `t`'s 1-based position, or nil | `argument` for a `from` outside 1 to `#s + 1` |
 | `sub(s, i[, j])` | a part of `s` | |
-| `trim`, `upper`, `lower` `(s)` | strings | |
+| `trim`, `trim_start`, `trim_end`, `upper`, `lower` `(s)` | strings | |
 | `like(s, pattern)` | a boolean | |
 | `match_path(path, pattern)` | a boolean | `argument` past 64 parts |
 | `between(s, a, b)` | the text between, or nil | |
@@ -688,6 +688,7 @@ the bytes compared there a step for 16 (see "What a builtin costs").
 | `find(s, t)`, `find(s, t, from)` | where `t` first is in `s`, 1-based; nil when absent. From `from` on (1 to `#s + 1`), so the next one is `find(s, t, at + 1)`, and only what is past `from` is read |
 | `sub(s, i[, j])` | Lua's: 1-based, inclusive, negatives counted from the end, clamped |
 | `trim(s)`, `upper(s)`, `lower(s)` | ASCII only |
+| `trim_start(s)`, `trim_end(s)` | as `trim`, one end only: spaces, tabs, `\r` and `\n` off the start, or off the end (`trim_end(line)` keeps a line's indent) |
 | `like(s, pattern)` | whether the whole of `s` matches: `*` is any run of bytes, `?` is one byte, any other byte is itself. Every byte looked at is a step, so a pattern that backtracks a long string runs out of steps |
 | `between(s, a, b)` | the text after the first `a` in `s` and before the first `b` after it, or nil when either is not there; `a` of "" is the start, `b` of "" the end: `between(line, "DEPARTS (", ")")`. A field between two literals; `re_find` where a field has a shape |
 | `match_path(path, pattern)` | whether a path matches a glob, part by part on `/`: `**` is any number of parts, none included; in any other part `*` and `?` are `like`'s, never across a `/`. `src/**/*.zig` is every `.zig` under `src`, `src/tcp*.zig` only those in it. The prelude's `glob` uses it |

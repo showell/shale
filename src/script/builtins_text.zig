@@ -25,7 +25,9 @@ pub const specs = [_]bi.Spec{
     spec(.contains, 2, 2, looks(.contains)),
     spec(.find, 2, 3, find),
     spec(.sub, 2, 3, sub),
-    spec(.trim, 1, 1, trim),
+    spec(.trim, 1, 1, trimmed(.both)),
+    spec(.trim_start, 1, 1, trimmed(.start)),
+    spec(.trim_end, 1, 1, trimmed(.end)),
     spec(.upper, 1, 1, cased(.upper)),
     spec(.lower, 1, 1, cased(.lower)),
     spec(.like, 2, 2, like),
@@ -321,11 +323,29 @@ pub fn subRange(len: usize, i: i64, j: i64) struct { start: usize, len: usize } 
     return .{ .start = @intCast(a - 1), .len = @intCast(z - a + 1) };
 }
 
-fn trim(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
-    const str = try bi.stringArg(run, pos, .trim, args[0], "its first argument");
-    try run.charge(pos, str.len);
-    run.tally(str.len);
-    return .{ .string = std.mem.trim(u8, str, " \t\r\n") };
+const Side = enum { both, start, end };
+
+/// `trim`, `trim_start`, `trim_end`: spaces, tabs, `\r` and `\n` off both
+/// ends, the start, or the end. A slice of `s`: nothing copied.
+fn trimmed(comptime side: Side) bi.Impl {
+    return struct {
+        fn f(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+            const b: B = switch (side) {
+                .both => .trim,
+                .start => .trim_start,
+                .end => .trim_end,
+            };
+            const str = try bi.stringArg(run, pos, b, args[0], "its first argument");
+            try run.charge(pos, str.len);
+            run.tally(str.len);
+            const blank = " \t\r\n";
+            return .{ .string = switch (side) {
+                .both => std.mem.trim(u8, str, blank),
+                .start => std.mem.trimStart(u8, str, blank),
+                .end => std.mem.trimEnd(u8, str, blank),
+            } };
+        }
+    }.f;
 }
 
 const Case = enum { upper, lower };

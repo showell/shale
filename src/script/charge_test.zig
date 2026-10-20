@@ -67,6 +67,8 @@ const cases = [_]Case{
     .{ .b = .find, .grows = .scales, .per = script.builtins.bytes_per_step, .setup = "local s = rep(\"a\", N)", .call = "local x = find(s, \"b\")" },
     .{ .b = .sub, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = sub(s, 1, -1)" },
     .{ .b = .trim, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = trim(s)" },
+    .{ .b = .trim_start, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = trim_start(s)" },
+    .{ .b = .trim_end, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = trim_end(s)" },
     .{ .b = .path, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = path(s, s)" },
     .{ .b = .match_path, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = match_path(s, \"*b\")" },
     .{ .b = .between, .grows = .scales, .per = script.builtins.bytes_per_step, .setup = "local s = rep(\"a\", N) .. \"(x)\"", .call = "local x = between(s, \"(\", \")\")" },
