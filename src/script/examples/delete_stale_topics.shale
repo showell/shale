@@ -1,0 +1,46 @@
+-- Delete the topics stale_topics.shale listed and Steve approved
+-- (2026-10-20), each as delete_topic.shale does: its transcript, its
+-- sidecars, and its uploads (angry-gopher's chat_retire.zig removes the
+-- same). Every one is checked first, before anything is removed: it is
+-- there, and still untouched for 30 days. One that fails either stops the
+-- run with nothing removed; so does a run with too few changes left for
+-- them all. Atomic (`shale-sign sign`): a background run changes nothing.
+-- TOPICS is the list approved for lynrummy.com on 2026-10-20 (all six
+-- went); write the next one's in its place.
+
+const TOPICS = {
+  "chat/1_5/sessions/2026-06-03",
+  "chat/1_15/sessions/wsl-qemu",
+  "chat/channels/Cobblestone/sessions/safari",
+  "chat/1_2/sessions/cobblestone",
+  "chat/2_15/sessions/general",
+  "chat/1_15/sessions/Layout",
+}
+const STALE = 30 * 86400
+
+for base in TOPICS do
+  if not exists(base .. ".md") then fail("no such topic " .. base .. ": nothing removed") end
+  local m = stat(base .. ".md").modified
+  if m >= now() - STALE then fail(base .. " was touched " .. date(m) .. ", within 30 days: nothing removed") end
+end
+
+-- Each topic is at most five removals: room for every one, or none begun.
+local room = budget().changes
+if room < #TOPICS * 5 then fail("the run may make " .. room .. " changes, and these need up to " .. (#TOPICS * 5) .. ": nothing removed") end
+
+for base in TOPICS do
+  remove(base .. ".md")
+  local gone = {".md"}
+  for suffix in {".count", ".lastauthor", ".reactions.jsonl"} do
+    if exists(base .. suffix) then
+      remove(base .. suffix)
+      push(gone, suffix)
+    end
+  end
+  if is_dir(base .. ".uploads") then
+    remove_tree(base .. ".uploads")
+    push(gone, ".uploads/")
+  end
+  print("deleted", base, join(gone, " "))
+end
+print("topics deleted", #TOPICS)
