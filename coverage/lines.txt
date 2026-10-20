@@ -1,8 +1,8 @@
 src/script_route.zig 0
 src/script/regex.zig 0
 src/script/builtins_regex.zig 0
-src/script/lex.zig 3
-src/script/parse.zig 8
+src/script/lex.zig 0
+src/script/parse.zig 0
 src/script/diag.zig 0
 src/script/compile.zig 15
 src/script/vm.zig 5

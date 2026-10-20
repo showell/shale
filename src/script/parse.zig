@@ -233,8 +233,9 @@ pub const Parser = struct {
 
     /// Whether the local in `slot` of this frame is a `const`.
     fn isConst(self: *const Parser, slot: u16) bool {
-        for (self.frame.locals.items) |l| if (l.slot == slot) return l.constant;
-        return false;
+        // A name resolved as this frame's local is in this frame's list.
+        const l = for (self.frame.locals.items) |l| (if (l.slot == slot) break l) else unreachable;
+        return l.constant;
     }
 
     fn unknownName(self: *Parser, name: []const u8, pos: ast.Pos) Error {
