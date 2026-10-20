@@ -191,12 +191,10 @@ const Machine = struct {
 
     fn run(m: *Machine) Error!Exit {
         while (true) {
-            // A stop an `attempt` catches goes on; any other error ends the
-            // run. (An op's allocations are budget stops, so a bare
-            // OutOfMemory would be the host's own.)
-            return m.ops() catch |e| {
-                if (e == error.Stop and try m.caught()) continue;
-                return e;
+            // A stop an `attempt` catches goes on; any other ends the run.
+            return m.ops() catch {
+                if (try m.caught()) continue;
+                return error.Stop;
             };
         }
     }
@@ -217,7 +215,7 @@ const Machine = struct {
                 .push_int => m.push(.{ .int = code.ints[op.a] }),
                 .push_string => m.push(.{ .string = code.strings[op.a] }),
                 .push_local => m.push(m.slot(op.a).*),
-                .push_const => m.push(r.consts[op.a] orelse return r.constUnset(op.pos, @intCast(op.a))),
+                .push_const => m.push(r.consts[op.a].?), // set before it is read, as the walker's
                 .pop => _ = m.pop(),
                 .store_local => m.slot(op.a).* = m.pop(),
                 .store_const => {
@@ -440,13 +438,12 @@ pub const Task = struct {
         t.m.deinit();
     }
 
-    /// Runs one slice. An allocation the host refused is the arena's stop.
+    /// Runs one slice.
     pub fn step(t: *Task, slice: Slice) Outcome {
         if (t.ended) |o| return o;
         const r = t.m.r;
         t.m.slice_end = r.steps +| slice.steps;
-        const exit = t.m.run() catch |e| {
-            if (e == error.OutOfMemory) r.stop = .{ .line = 1, .column = 1, .class = .budget, .budget = .arena, .message = "the arena budget ran out" };
+        const exit = t.m.run() catch {
             t.ended = .stopped;
             return .stopped;
         };
@@ -466,7 +463,7 @@ pub fn main(r: *Run, code: *const Code) Error!void {
     defer t.deinit();
     switch (t.step(.{})) {
         .finished => {},
-        .stopped => return if (r.stop != null) error.Stop else error.OutOfMemory,
+        .stopped => return error.Stop,
         .paused => unreachable,
     }
 }

@@ -199,15 +199,14 @@ pub const Budgeted = struct {
     fn free(ctx: *anyopaque, m: []u8, a: Alignment, _: usize) void {
         const self: *Budgeted = @ptrCast(@alignCast(ctx));
         if (m.len >= big) {
+            // A big allocation is one of `bigs`, which `alloc` made.
             var at = &self.bigs;
-            while (at.*) |c| : (at = &c.next) {
-                if (bigBytes(c, a) != m.ptr) continue;
-                at.* = c.next;
-                self.held -= c.total;
-                const base: [*]u8 = @ptrCast(c);
-                self.backing.rawFree(base[0..c.total], chunk_align, @returnAddress());
-                return;
-            }
+            while (bigBytes(at.*.?, a) != m.ptr) at = &at.*.?.next;
+            const c = at.*.?;
+            at.* = c.next;
+            self.held -= c.total;
+            const base: [*]u8 = @ptrCast(c);
+            self.backing.rawFree(base[0..c.total], chunk_align, @returnAddress());
             return;
         }
         if (self.isLast(m)) self.end -= m.len;
@@ -253,6 +252,20 @@ pub const Peak = struct {
         self.now -= m.len;
     }
 };
+
+test "a Peak counts what is held now and the most ever held; it never resizes or remaps in place" {
+    var peak: Peak = .{ .child = std.testing.allocator };
+    const a = peak.allocator();
+    const m = try a.alloc(u8, 100);
+    try std.testing.expect(!a.resize(m, 200));
+    try std.testing.expectEqual(null, a.remap(m, 200));
+    const n = try a.alloc(u8, 50);
+    try std.testing.expectEqual(150, peak.now);
+    a.free(m);
+    a.free(n);
+    try std.testing.expectEqual(0, peak.now);
+    try std.testing.expectEqual(150, peak.most);
+}
 
 test "the arena never takes more than its limit from the backing allocator, whatever grows in it" {
     // Many small tables, one list pushed to, and the two interleaved: std's arena held

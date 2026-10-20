@@ -32,7 +32,7 @@ pub const Tag = enum(u8) {
     push_string,
     /// `a`: the slot.
     push_local,
-    /// `a`: the const's index (an error before its line has run).
+    /// `a`: the const's index.
     push_const,
     /// Discards the top value.
     pop,

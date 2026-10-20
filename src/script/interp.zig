@@ -76,7 +76,9 @@ pub const Effect = struct {
     outcome: []const u8,
 };
 
-pub const Error = error{ Stop, OutOfMemory };
+/// A run's one error: it stopped, and `stop` says why. An allocation that fails is a
+/// stop too (`oom`, `machineOom`), so none returns `OutOfMemory`.
+pub const Error = error{Stop};
 
 /// The core's one way out to its host: `host(name, ...)` calls `call` with the name and the
 /// rest of its arguments. The Linux CLI provides one (running programs, mounts, jobs);
@@ -315,12 +317,13 @@ pub const Run = struct {
         const v = try self.eval(value_expr);
         switch (target.kind) {
             .local => |sl| self.slot(sl).* = v,
-            .index => |ix| {
+            // The parser takes no other target than a local or an index.
+            else => {
+                const ix = target.kind.index;
                 const obj = try self.eval(ix.obj);
                 const key = try self.eval(ix.key);
                 try self.setIndex(target.pos, obj, key, v);
             },
-            else => unreachable, // the parser takes only these
         }
     }
 
@@ -484,7 +487,9 @@ pub const Run = struct {
             .int => |i| return .{ .int = i },
             .string => |s| return .{ .string = s },
             .local => |s| return self.slot(s).*,
-            .constant => |i| return self.consts[i] orelse self.constUnset(e.pos, i),
+            // Set before it is read: the parser shows a const only to the
+            // top level below it and to the functions declared after it.
+            .constant => |i| return self.consts[i].?,
             .index => return self.indexExpr(e),
             .call => |*c| return self.call(e.pos, c),
             .unary => return self.unary(e),
@@ -493,10 +498,6 @@ pub const Run = struct {
             .map => |entries| return self.mapLiteral(e.pos, entries),
             .empty_table => return .{ .table = try self.newTable(e.pos) },
         }
-    }
-
-    pub noinline fn constUnset(self: *Run, pos: ast.Pos, i: u16) Error {
-        return self.fail(pos, .name, "the `const` {s} is read before its line has run", .{self.program.const_names[i]});
     }
 
     noinline fn indexExpr(self: *Run, e: *const ast.Expr) Error!Value {
@@ -566,11 +567,10 @@ pub const Run = struct {
         const r = try self.eval(re);
         return switch (op) {
             .add, .sub, .mul, .idiv, .mod => self.arith(pos, op, l, r),
-            .concat => unreachable, // `concatChain`
             .eq, .ne => .{ .boolean = (try self.equal(pos, l, r)) == (op == .eq) },
             .eq_nil, .ne_nil => .{ .boolean = bothNil(l, r) == (op == .eq_nil) },
-            .lt, .le, .gt, .ge => self.compare(pos, op, l, r),
-            .@"and", .@"or" => unreachable,
+            // `..`, `and` and `or` are taken above.
+            else => self.compare(pos, op, l, r),
         };
     }
 
@@ -600,12 +600,12 @@ pub const Run = struct {
                 if (b == 0) return self.fail(pos, .arithmetic, "integer division by zero", .{});
                 break :blk std.math.divFloor(i64, a, b) catch null;
             },
-            .mod => blk: {
+            else => blk: {
+                std.debug.assert(op == .mod);
                 if (b == 0) return self.fail(pos, .arithmetic, "`%` by zero", .{});
                 if (b == -1) break :blk 0;
                 break :blk @mod(a, b);
             },
-            else => unreachable,
         };
         return .{ .int = result orelse return self.fail(pos, .arithmetic, "{d} {s} {d} overflows 64 bits", .{ a, opText(op), b }) };
     }
@@ -686,8 +686,8 @@ pub const Run = struct {
         for (parts[if (in_place) 1 else 0..]) |v| {
             switch (v) {
                 .string => |x| @memcpy(buf[len..][0..x.len], x),
-                .int => |i| _ = std.fmt.bufPrint(buf[len..total], "{d}", .{i}) catch unreachable,
-                else => unreachable,
+                // The parts are strings and integers, checked above.
+                else => _ = std.fmt.bufPrint(buf[len..total], "{d}", .{v.int}) catch unreachable,
             }
             len += textLen(v);
         }
@@ -699,8 +699,7 @@ pub const Run = struct {
     fn textLen(v: Value) usize {
         return switch (v) {
             .string => |x| x.len,
-            .int => |i| std.fmt.count("{d}", .{i}),
-            else => unreachable,
+            else => std.fmt.count("{d}", .{v.int}),
         };
     }
 
@@ -731,8 +730,10 @@ pub const Run = struct {
             .lt => order == .lt,
             .le => order != .gt,
             .gt => order == .gt,
-            .ge => order != .lt,
-            else => unreachable,
+            else => blk: {
+                std.debug.assert(op == .ge);
+                break :blk order != .lt;
+            },
         } };
     }
 
@@ -743,12 +744,13 @@ pub const Run = struct {
             .nil => true,
             .boolean => |a| a == r.boolean,
             .int => |a| a == r.int,
-            .string => |a| blk: {
+            // A table is refused above.
+            else => blk: {
+                const a = l.string;
                 try self.charge(pos, @min(a.len, r.string.len));
                 self.tally(@min(a.len, r.string.len));
                 break :blk std.mem.eql(u8, a, r.string);
             },
-            .table => unreachable,
         };
     }
 
@@ -774,17 +776,14 @@ pub const Run = struct {
         for (arg_exprs, vals) |a, *v| v.* = try self.eval(a);
         const out = try self.attemptTable(pos);
         const calls = self.calls.items.len;
-        const got = self.invoke(pos, index, vals) catch |e| switch (e) {
-            error.OutOfMemory => return error.OutOfMemory,
-            error.Stop => {
-                const s = self.stop.?;
-                if (s.class == .budget) return error.Stop;
-                self.stop = null;
-                self.ret = .nil;
-                const failed = try self.attemptFailed(pos, out, s);
-                self.calls.shrinkRetainingCapacity(calls);
-                return failed;
-            },
+        const got = self.invoke(pos, index, vals) catch {
+            const s = self.stop.?;
+            if (s.class == .budget) return error.Stop;
+            self.stop = null;
+            self.ret = .nil;
+            const failed = try self.attemptFailed(pos, out, s);
+            self.calls.shrinkRetainingCapacity(calls);
+            return failed;
         };
         return self.attemptReturned(pos, out, got);
     }

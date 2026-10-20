@@ -201,11 +201,8 @@ pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u
     };
     defer r.deinit();
     std.debug.assert(engine == .walker);
-    r.main() catch |e| switch (e) {
-        error.Stop => {},
-        // An allocation that failed outside a builtin's own check.
-        error.OutOfMemory => r.stop = .{ .line = 1, .column = 1, .class = .budget, .budget = .arena, .message = "the arena budget ran out" },
-    };
+    // A stop is the run's answer, in `r.stop`.
+    r.main() catch {};
     result.stop = r.stop;
     result.output = out[0..r.out_len];
     result.effects = r.effects.items;

@@ -80,8 +80,8 @@ pub const specs: std.EnumArray(B, Spec) = blk: {
     break :blk all;
 };
 
-fn printIsTheInterpreters(_: *Run, _: ast.Pos, _: []const Value) Error!Value {
-    unreachable;
+fn printIsTheInterpreters(_: *Run, _: ast.Pos, _: []const Value) Error!Value { // coverage: not run, `print` is the interpreter's own; this fills its slot in the table
+    unreachable; // coverage: not run, as above
 }
 
 /// "s" after a count that is not 1.
@@ -201,11 +201,12 @@ pub const SortContext = struct {
         ctx.comparisons += 1;
         return switch (a) {
             .int => |x| x < b.int,
-            .string => |x| blk: {
+            // A sort's keys are all integers or all strings, checked before.
+            else => blk: {
+                const x = a.string;
                 ctx.bytes += @min(x.len, b.string.len);
                 break :blk std.mem.lessThan(u8, x, b.string);
             },
-            else => unreachable,
         };
     }
 };

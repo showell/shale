@@ -603,3 +603,48 @@ test "a builtin called with more arguments than any builtin takes stops at the c
     try testing.expectEqual(@as(u32, 7), s.column);
     try testing.expectEqualStrings("`path` takes at most 4 arguments", s.message);
 }
+
+test "run: the walker's own refusals, each by class: a return out of a numeric loop, a set on what is no table, a key no table takes, a const read too early, arithmetic and order on what they do not take" {
+    try expectOutput("function f() for i = 1, 3 do return i end end print(f())", "1\n");
+    const cases = [_]struct { src: []const u8, class: script.diag.Class }{
+        .{ .src = "local x = 1 x[1] = 2", .class = .type },
+        .{ .src = "local t = {1} print(t[true])", .class = .type },
+        .{ .src = "function f() return X end print(f()) const X = 1", .class = .name },
+        .{ .src = "function f() return X end const X = f()", .class = .name },
+        .{ .src = "print({} + 1)", .class = .type },
+        .{ .src = "print(\"a\" < 1)", .class = .type },
+        .{ .src = "print(keys(1))", .class = .type },
+    };
+    for (cases) |case| try expectStop(case.src, case.class, null);
+}
+
+test "run: a host that cannot hold a run, at every allocation on either engine, stops it as a budget and leaks nothing" {
+    // Under an attempt, so an allocation that fails inside the call it makes is
+    // the run's, not the call's.
+    const src =
+        \\function deep(n) if n == 0 then return {n} end local l = deep(n - 1) push(l, n) return l end
+        \\local r = attempt(deep, 40)
+        \\print(#r.value)
+    ;
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    var stops = [_]usize{ 0, 0 };
+    for ([_]script.Engine{ .walker, .vm }, 0..) |engine, e| {
+        var i: usize = 0;
+        while (true) : (i += 1) {
+            var failing: testing.FailingAllocator = .init(testing.allocator, .{ .fail_index = i });
+            var r = script.runOn(engine, threaded.io(), failing.allocator(), ".zig-cache/no-root", src, .{}, 1_700_000_000, &out_buf, .{});
+            defer r.deinit();
+            if (!failing.has_induced_failure) {
+                try testing.expectEqual(null, r.stop);
+                try testing.expectEqualStrings("41\n", r.output);
+                break;
+            }
+            if (r.stop) |s| {
+                try testing.expectEqual(script.diag.Class.budget, s.class);
+                stops[e] += 1;
+            } else try testing.expectEqualStrings("41\n", r.output);
+        }
+        try testing.expect(stops[e] > 0);
+    }
+}

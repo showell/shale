@@ -227,8 +227,8 @@ The host chooses, not the script; a signed request names it
   one (`re_lines(s, p, opts?)`).
 - `const NAME = e`, at the top level only. The name is never assigned
   again, and the functions declared after it see it. A table it names can
-  still change. A function that reads a const before its line has run
-  stops with an error.
+  still change. No const is read before its line has run: the top level
+  below it and the functions declared after it are all that see it.
 
 
 **No separator is needed** between statements: `local x = 1 local y = 2`
