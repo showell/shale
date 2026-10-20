@@ -68,8 +68,8 @@ Shale form, most of them one launch:
 |---|---|
 | `sed -n 40,80p f; sed -n 5,9p g` | `shale cookbook:look.shale at=f:40-80,g:5-9` |
 | `grep -rn 'text' src build.zig` | `shale cookbook:look.shale find=text in=src,build.zig like=*.zig` (a value with `(` or a space: `--args-stdin`) |
-| grep in Zig's std, a sibling repo, `~/zig17` | the same, through a mount: `in=zig017:lib/std/Build.zig`, `repos:dog-park/src`, `zig17:shale/src` |
-| `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:zig_build.shale step=test` (`zig=zig017:zig` for 0.17): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
+| grep in Zig's std, a sibling repo, `~/zig17` | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:dog-park/src`, `zig17:shale/src` |
+| `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
 | `git log`, `git diff --stat`, `git show rev:path`, `git status` | the git prelude: `git_log`, `git_diff`, `git_show`, `git_status`, `git_is_clean` (below) |
 | `git commit -m ... && git push` | `git_commit(repo, msg, {add})`, `git_push(repo)`; `git_worktree_add`, `git_merge_ff` |
 | a script you would write in python | a heredoc, `shale <<'TAG'`: `edit`'s list form, `walk_all`, `grep`, `re_lines`, `run` |

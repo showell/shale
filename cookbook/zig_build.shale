@@ -8,13 +8,13 @@
 -- rest.
 --
 --   cd <repo> && shale cookbook:zig_build.shale step=test
---   cd <repo> && shale cookbook:zig_build.shale step=metal zig=zig017:zig
+--   cd <repo> && shale cookbook:zig_build.shale step=metal zig=zig016:zig
 --   cd <repo> && shale cookbook:zig_build.shale --args-stdin <<'ARGS'
 --   args=test -Dtest-file=src/floor_sim.zig --summary all
 --   ARGS
 --
 -- `zig` is the compiler (default `zig` on the PATH; another through a
--- ` tools` mount, such as `zig017:zig`), `step` a step's name, `args` more words after
+-- ` tools` mount, such as `zig016:zig`), `step` a step's name, `args` more words after
 -- it (split on spaces), `dir` where to run, `minutes` the time it gets.
 --
 -- budget: steps=400000000 arena_bytes=1000000000

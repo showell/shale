@@ -5,10 +5,10 @@
 --
 --   shale <cookbook>/look.shale at=src/io.zig:690-730,build.zig:16-29
 --   shale <cookbook>/look.shale find=pathFromRoot( in=src,build.zig like=*.zig
---   shale <cookbook>/look.shale find="pub fn findProgram" in=zig017:std/Build.zig
+--   shale <cookbook>/look.shale find="pub fn findProgram" in=zig:lib/std/Build.zig
 --
 -- `at` is a comma-separated list of `path:first-last` (or `path:n` for one
--- line); a mount path (`zig017:std/Build.zig:100-120`) works, the range
+-- line); a mount path (`zig:lib/std/Build.zig:100-120`) works, the range
 -- after the last colon. `find` is a literal (not a pattern), looked for in
 -- each file or folder of `in` (comma-separated; folders walked, their
 -- .zig-cache, zig-out, zig-pkg, node_modules and .git passed by), files
