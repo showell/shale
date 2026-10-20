@@ -52,6 +52,7 @@ compiles the portable half with its own `host_io`, as it does webbox.
     zig build consumers     # the applications' own checks against this tree: minutes
     zig build fuzz          # the expensive fuzzes and sweeps, for a bug hunt
     zig build doc-check     # every repo's docs: each cited path and name is there
+    zig build script-coverage   # the lines no unit test runs, per key module: about 2 min
 
 **`test`** runs the two modules' tests, the signer's and the gate's. The
 Zig tools' tests read zig-webbox's checkout too: they replay splits from its
@@ -67,7 +68,13 @@ test that does not pass (a skip among them) and prints how many ran. `test`
 compiles the hunt but never runs it, and skips nothing:
 `src/script/hunt_guard_test.zig` fails on a skip anywhere in `src/` or
 `tools/`, or a hunt outside the list. A fuzz hunts bugs once, and each bug
-it finds becomes a test of its own. **`doc-check`** runs
+it finds becomes a test of its own. **`script-coverage`** runs the coverage SDK's `linecov` (a lazy dependency on
+`../zig-coverage-sdk`, which nothing else needs) over the two unit binaries,
+built Debug, for every file of build.zig's `coverage_files`; `shale
+tools/coverage.shale` reads it back as a table of each module's lines, ran,
+uncovered and exempt (`// coverage: not run, <why>` on the line), and fails
+when an uncovered count differs from `coverage/lines.txt`, the floor a
+change moves in the same commit (`floor=write`). **`doc-check`** runs
 `tools/doc_check.shale` from the folder that holds the repos, its fixtures
 first: in every repo's tracked docs but the history, each backticked or
 linked path must resolve, and each `` `file`'s `name` `` must be in that

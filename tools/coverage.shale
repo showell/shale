@@ -1,0 +1,163 @@
+-- **THE LINES NO UNIT TEST RUNS, PER KEY MODULE** (metal-vmm QUEUE 241 B):
+-- `zig build script-coverage` (the coverage SDK's linecov over the two unit
+-- binaries, build.zig's `coverage_files`), read back as one table: each
+-- module's lines with code, how many ran, the share, the uncovered left,
+-- the exemptions, and the first few uncovered lines with their text.
+--
+--   cd <shale> && shale tools/coverage.shale
+--   cd <shale> && shale tools/coverage.shale floor=write
+--   cd <shale> && shale tools/coverage.shale from=.zig-cache/coverage/build.log
+--
+-- **AN EXEMPTION** (Steve, 2026-10-20) is a line no unit test can reach
+-- that says why, on the line: `// coverage: not run, <why>` (a kernel
+-- refusal, an allocation that fails only outside a budget). It is counted
+-- beside the uncovered, not among them, and every one is listed, so they
+-- stay visible and few. One on a line that ran is listed as stale.
+--
+-- **A TEST'S OWN LINES ARE NOT THE MODULE'S**: an unrun line inside a
+-- `test` block of a measured file (from `zig_decls`) is counted in
+-- `in_tests`, not `uncovered`, and is not in the floor: a passing test
+-- never runs its own failure branch, and no test can. `lines`, `ran` and
+-- `pct` are linecov's, tests' lines among them.
+--
+-- **THE FLOOR** (`coverage/lines.txt`): each module's count of uncovered
+-- lines, exemptions not among them. The run fails when any count differs
+-- from it, up or down: a change that covers lines moves the floor in the
+-- same commit (`floor=write`), so the file is the record of the climb.
+-- The whole list per module is in `.zig-cache/coverage/<module>.txt`, for
+-- `look.shale at=`; the build's output in `.zig-cache/coverage/build.log`.
+--
+-- budget: steps=400000000 arena_bytes=1000000000 reads=100000 read_bytes=400000000
+
+const FLOOR = "coverage/lines.txt"
+const MARK = "// coverage: not run,"
+const FIRST = arg("first", 3)
+const ZIG = arg("zig", "zig")
+
+-- `from=<log>` reads a build's output kept before, not building again.
+local FROM = arg("from", "")
+local r = {code = 0, out = ""}
+if FROM ~= "" then
+  r.out = read(FROM)
+else
+  r = run({ZIG, "build", "script-coverage"}, {timeout_ms = 20 * 60000, whole = 16777216})
+  replace(".zig-cache/coverage/build.log", r.out)
+end
+if r.code ~= 0 then
+  for l in last(lines(r.out), 20) do print(l) end
+  fail("coverage: `zig build script-coverage` exited " .. r.code .. "; its output is in .zig-cache/coverage/build.log")
+end
+
+-- linecov's report: `<path>: R of H lines with code ran (P%), over N
+-- binaries`, then `  <line>  <text>` for each line with code not run.
+local modules = {}
+local current = nil
+for l in lines(r.out) do
+  local head = re_find(l, "^\\S+: \\d+ of \\d+ lines with code ran")
+  if head ~= nil then
+    local path = sub(l, 1, find(l, ": ") - 1)
+    local nums = words(between(l, ": ", " lines with code"))
+    current = {path = path, have = parse_int(nums[3]), ran = parse_int(nums[1]), missed = {}}
+    push(modules, current)
+  elseif current ~= nil and re_match(l, "^\\s+\\d+  ") then
+    push(current.missed, parse_int(words(l)[1]))
+  end
+end
+if #modules == 0 then fail("coverage: the build said no module's lines; its output is in .zig-cache/coverage/build.log") end
+
+-- Each module against its source: the uncovered, the exempt, the stale.
+local rows = {}
+local exemptions = {}
+local floor_now = {}
+local total_have = 0
+local total_ran = 0
+for m in modules do
+  local text = lines(read(m.path))
+  local in_test = {}
+  for d in zig_decls(m.path) do
+    if d.kind == "test" then
+      for i = d.first, d.last do in_test["" .. i] = true end
+    end
+  end
+  local test_missed = 0
+  for n in m.missed do
+    if get(in_test, "" .. n, false) then test_missed = test_missed + 1 end
+  end
+  local kept = {}
+  for n in m.missed do
+    if not get(in_test, "" .. n, false) then push(kept, n) end
+  end
+  m.missed = kept
+  local missed_set = {}
+  for n in m.missed do missed_set["" .. n] = true end
+  local uncovered = {}
+  local exempt = 0
+  for n in m.missed do
+    if contains(text[n], MARK) then
+      exempt = exempt + 1
+      push(exemptions, m.path .. ":" .. n .. "  " .. trim(text[n]))
+    else
+      push(uncovered, n)
+    end
+  end
+  for i = 1, #text do
+    if contains(text[i], MARK) and not get(missed_set, "" .. i, false) then
+      push(exemptions, m.path .. ":" .. i .. "  STALE (it ran, or has no code)  " .. trim(text[i]))
+    end
+  end
+  local listing = {}
+  for n in uncovered do push(listing, pad(n, 5) .. "  " .. trim(text[n])) end
+  local name = strip_suffix(basename(m.path), ".zig")
+  replace(".zig-cache/coverage/" .. name .. ".txt", join(listing, "\n") .. "\n")
+  local first = {}
+  for n in take(uncovered, FIRST) do push(first, n .. " " .. sub(trim(text[n]), 1, 30)) end
+  local share = (m.ran * 1000 + m.have // 2) // m.have
+  push(rows, {module = m.path, lines = m.have, ran = m.ran, pct = (share // 10) .. "." .. (share % 10),
+    uncovered = #uncovered, in_tests = test_missed, exempt = exempt, first = join(first, " | ")})
+  push(floor_now, m.path .. " " .. #uncovered)
+  total_have = total_have + m.have
+  total_ran = total_ran + m.ran
+end
+print(table(rows, {"module", "lines", "ran", "pct", "uncovered", "in_tests", "exempt", "first"}))
+print(#modules .. " modules: " .. total_ran .. " of " .. total_have .. " lines with code ran; the lists in .zig-cache/coverage/<module>.txt")
+if #exemptions > 0 then
+  print("-- exemptions (" .. #exemptions .. "):")
+  for e in exemptions do print("   " .. e) end
+end
+
+-- The floor, strictly equal.
+local now = join(floor_now, "\n") .. "\n"
+if arg("floor", "") == "write" then
+  replace(FLOOR, now)
+  print("floor written: " .. FLOOR)
+elseif not exists(FLOOR) then
+  fail("coverage: no " .. FLOOR .. " yet: `floor=write` makes it")
+else
+  local was = {}
+  for l in lines(read(FLOOR)) do
+    if trim(l) ~= "" then
+      local w = words(l)
+      was[w[1]] = parse_int(w[2])
+    end
+  end
+  local moved = {}
+  local measured = {}
+  for l in floor_now do
+    local w = words(l)
+    measured[w[1]] = true
+    local before = get(was, w[1], nil)
+    if before == nil then
+      push(moved, w[1] .. ": not in the floor (now " .. w[2] .. ")")
+    elseif before ~= parse_int(w[2]) then
+      push(moved, w[1] .. ": " .. before .. " in the floor, " .. w[2] .. " now")
+    end
+  end
+  for k in keys(was) do
+    if not get(measured, k, false) then push(moved, k .. ": in the floor, not measured") end
+  end
+  if #moved > 0 then
+    for l in moved do print("FLOOR " .. l) end
+    fail("coverage: " .. #moved .. " modules differ from " .. FLOOR .. "; a change that covers lines moves it in the same commit (`floor=write`)")
+  end
+  print("floor: every module's uncovered count is " .. FLOOR .. "'s")
+end

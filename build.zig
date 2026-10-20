@@ -23,6 +23,54 @@ comptime {
     }
 }
 
+// **THE KEY MODULES, MEASURED** (`zig build script-coverage`, metal-vmm
+// QUEUE 241 B and C): what the site runs, held to 100% (C1-C6), then the
+// Linux host, measured and reported (C7). tools/coverage.shale groups them.
+const coverage_files = [_][]const u8{
+    // C1: the live site's POST /admin/script.
+    "src/script_route.zig",
+    // C2: the regex engine.
+    "src/script/regex.zig",
+    "src/script/builtins_regex.zig",
+    // C3: the front end.
+    "src/script/lex.zig",
+    "src/script/parse.zig",
+    "src/script/diag.zig",
+    // C4: the compiler and VM.
+    "src/script/compile.zig",
+    "src/script/vm.zig",
+    "src/script/process.zig",
+    "src/script/collect.zig",
+    // C5: the walker and the budgets.
+    "src/script/interp.zig",
+    "src/script/value.zig",
+    "src/script/builtins_store.zig",
+    "src/script/script.zig",
+    // C6: the other builtins, and the suite.
+    "src/script/builtins_change.zig",
+    "src/script/builtins_read.zig",
+    "src/script/builtins_text.zig",
+    "src/script/builtins_lists.zig",
+    "src/script/builtins_walk.zig",
+    "src/script/builtins_time.zig",
+    "src/script/builtins_format.zig",
+    "src/script/builtins_numbers.zig",
+    "src/script/builtins.zig",
+    "src/shale_suite.zig",
+    // C7: the Linux host (measured, not held to 100%).
+    "src/shale_spawn.zig",
+    "src/shale_keep.zig",
+    "src/shale_jobs.zig",
+    "src/shale_host_jobs.zig",
+    "src/shale_host_run.zig",
+    "src/shale_host_linux.zig",
+    "src/shale_host_zig.zig",
+    "src/shale_zig_ast.zig",
+    "src/shale_zig_move.zig",
+    "src/shale_host_setup.zig",
+    "src/script/cli.zig",
+};
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -180,12 +228,16 @@ pub fn build(b: *std.Build) void {
     // built alone.
     const webbox_root = webbox_dep.builder.root;
     shale_options.addOption([]const u8, "webbox_root", webbox_root.root_dir.handle.realPathFileAlloc(b.graph.io, webbox_root.subPathOrDot(), b.allocator) catch |e| std.debug.panic("shale: webbox's root {f}: {t}", .{ webbox_root, e }));
-    for ([_][]const u8{ "src/shale.zig", "src/shale_linux.zig" }) |path| {
+    // Each unit binary twice: as `test` runs it, and Debug, whole and
+    // under zig's own runner, for `script-coverage` (built only for it).
+    const unit_roots = [_][]const u8{ "src/shale.zig", "src/shale_linux.zig" };
+    var coverage_units: [unit_roots.len]*std.Build.Step.Compile = undefined;
+    for (unit_roots, &coverage_units) |path, *for_coverage| for ([_]bool{ false, true }) |measured| {
         const unit = b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path(path),
             .target = target,
-            .optimize = optimize,
-        }), .filters = if (test_filter) |t| b.dupeStrings(&.{t}) else &.{}, .test_runner = timing });
+            .optimize = if (measured) .debug else optimize,
+        }), .filters = if (test_filter != null and !measured) b.dupeStrings(&.{test_filter.?}) else &.{}, .test_runner = if (measured) null else timing });
         // A file of the Linux host reaches the portable half as the module;
         // a file of the portable half, by path.
         unit.root_module.addImport("shale", shale);
@@ -193,7 +245,33 @@ pub fn build(b: *std.Build) void {
         unit.root_module.addImport("host_io", host_io);
         unit.root_module.addImport("script_test_options", script_options.createModule());
         unit.root_module.addImport("shale_test_options", shale_options.createModule());
-        test_step.dependOn(&b.addRunArtifact(unit).step);
+        if (measured) for_coverage.* = unit else test_step.dependOn(&b.addRunArtifact(unit).step);
+    };
+    // **THE LINES NO UNIT TEST RUNS** (`zig build script-coverage`, metal-vmm
+    // QUEUE 241 B): the coverage SDK's `linecov` over the two unit binaries,
+    // every file of `coverage_files` measured in one run of each (not the
+    // hunt: the measure is of the unit tests). tools/coverage.shale reads it.
+    // The SDK is resolved only when Shale is the build at the top and the
+    // sibling is there, so an application that builds Shale, or a checkout
+    // without the SDK, never needs it; the step then says what it lacks.
+    const coverage_step = b.step("script-coverage", "the lines of each key module (build.zig's coverage_files) no unit test runs, by the coverage SDK's linecov (needs ../zig-coverage-sdk)");
+    const sdk_there = if (b.root.root_dir.handle.openDir(b.graph.io, b.pathJoin(&.{ b.root.subPathOrDot(), "..", "zig-coverage-sdk" }), .{})) |d| blk: {
+        d.close(b.graph.io);
+        break :blk true;
+    } else |_| false;
+    if (!b.isRoot()) {} else if (!sdk_there) {
+        coverage_step.dependOn(&b.addFail("script-coverage: no ../zig-coverage-sdk beside this checkout").step);
+    } else if (b.lazyDependency("zig_coverage_sdk", .{})) |sdk| {
+        const measure = b.addRunArtifact(sdk.artifact("linecov"));
+        for (coverage_files) |f| {
+            measure.addArg(f);
+            measure.addFileInput(b.path(f));
+        }
+        measure.addArg("--");
+        for (coverage_units) |u| measure.addArtifactArg(u);
+        measure.has_side_effects = true;
+        measure.stdio = .inherit;
+        coverage_step.dependOn(&measure.step);
     }
     // The hunt, under tools/hunt_runner.zig: every test it holds runs, any
     // error (a skip among them) fails it, and it says how many ran.
