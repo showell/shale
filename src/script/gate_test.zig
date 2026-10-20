@@ -65,6 +65,25 @@ pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const
         @panic("the VM in slices differs from the VM whole (metal-vmm QUEUE 211's gate)");
     }
 
+    var why = verdict(&v, &w);
+    if (why == null and has_root) {
+        if (!(sameTree(io, a, root, copy) catch false)) why = "the store left";
+    }
+    if (why) |what| {
+        std.debug.print("\n── THE GATE: the VM and the walker differ in {s} ──\n{s}\n", .{ what, source });
+        for ([_]struct { name: []const u8, r: *const script.Result }{ .{ .name = "vm", .r = &v }, .{ .name = "walker", .r = &w } }) |x| {
+            std.debug.print("── {s}: {d} steps, {d} work, {d} arena, {d} effects\n", .{ x.name, x.r.steps, x.r.work, x.r.arena_bytes, x.r.effects.len });
+            if (x.r.stop) |s| std.debug.print("   stopped {d}:{d} ({s}) {t} {?t}: {s}\n", .{ s.line, s.column, s.function, s.class, s.budget, s.message });
+            std.debug.print("   output: {s}\n", .{x.r.output[0..@min(x.r.output.len, 400)]});
+        }
+        @panic("the VM and the tree-walker differ (metal-vmm QUEUE 211's gate)");
+    }
+    return v;
+}
+
+/// What the VM's run `v` and the walker's `w` differ in, by the gate's rules, or null
+/// when they agree. The store each left is compared apart, in `run`.
+pub fn verdict(v: *const script.Result, w: *const script.Result) ?[]const u8 {
     var why: ?[]const u8 = null;
     // At each `yield` the VM copies what it keeps into a fresh arena,
     // charged as steps, while the walker keeps everything. Their steps, work
@@ -91,19 +110,7 @@ pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const
         if (v.arena_bytes != w.arena_bytes) why = "the arena";
     }
     if (!sameEffects(v.effects, w.effects)) why = "the effects";
-    if (why == null and has_root) {
-        if (!(sameTree(io, a, root, copy) catch false)) why = "the store left";
-    }
-    if (why) |what| {
-        std.debug.print("\n── THE GATE: the VM and the walker differ in {s} ──\n{s}\n", .{ what, source });
-        for ([_]struct { name: []const u8, r: *const script.Result }{ .{ .name = "vm", .r = &v }, .{ .name = "walker", .r = &w } }) |x| {
-            std.debug.print("── {s}: {d} steps, {d} work, {d} arena, {d} effects\n", .{ x.name, x.r.steps, x.r.work, x.r.arena_bytes, x.r.effects.len });
-            if (x.r.stop) |s| std.debug.print("   stopped {d}:{d} ({s}) {t} {?t}: {s}\n", .{ s.line, s.column, s.function, s.class, s.budget, s.message });
-            std.debug.print("   output: {s}\n", .{x.r.output[0..@min(x.r.output.len, 400)]});
-        }
-        @panic("the VM and the tree-walker differ (metal-vmm QUEUE 211's gate)");
-    }
-    return v;
+    return why;
 }
 
 /// A sibling of `root` with a name as long as its own, its last byte the first
@@ -237,4 +244,29 @@ fn listing(io: Io, a: std.mem.Allocator, path: []const u8) ![]Named {
         }
     }.lt);
     return out.items;
+}
+
+test "gate: when only the walker outgrows the arena, keeping what the VM's yields let go, the changes it made before its stop are the VM's first ones, and agree" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var threaded = std.Io.Threaded.init(std.testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    try tmp.dir.createDirPath(io, "data");
+    const root = try std.fs.path.join(std.testing.allocator, &.{ ".zig-cache", "tmp", &tmp.sub_path, "data" });
+    defer std.testing.allocator.free(root);
+    // Each turn makes 4000 bytes and lets them go at its yield: the VM holds one turn's,
+    // the walker every turn's.
+    const source = "for i = 1, 40 do local s = rep(\"x\", 4000) yield() replace(\"f\" .. (i % 3), \"v\") print(i) end";
+    const budgets: script.Budgets = .{ .arena_bytes = 64 * 1024 };
+    var out_v: [4096]u8 = undefined;
+    var out_w: [4096]u8 = undefined;
+    var v = script.runOn(.vm, io, std.testing.allocator, root, source, budgets, 0, &out_v, .{});
+    defer v.deinit();
+    var w = script.runOn(.walker, io, std.testing.allocator, root, source, budgets, 0, &out_w, .{});
+    defer w.deinit();
+    try std.testing.expectEqual(null, v.stop);
+    try std.testing.expectEqual(script.diag.Budget.arena, w.stop.?.budget.?);
+    try std.testing.expect(w.effects.len < v.effects.len);
+    try std.testing.expectEqual(@as(?[]const u8, null), verdict(&v, &w));
 }

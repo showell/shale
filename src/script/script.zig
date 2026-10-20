@@ -233,6 +233,7 @@ test {
     _ = @import("hunt_guard_test.zig");
     _ = builtins;
     _ = @import("charge_test.zig");
+    _ = @import("gate_test.zig");
     _ = @import("errors_test.zig");
     _ = @import("yield_test.zig");
     _ = @import("process_test.zig");
