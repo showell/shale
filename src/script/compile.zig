@@ -1,17 +1,16 @@
-//! **THE TREE, COMPILED** (metal-vmm QUEUE 211): a script's functions as
-//! one array of ops for `vm.zig`, a stack machine over the walker's own
-//! semantics (`interp.Run`'s helpers and the builtins).
+//! Compiles a script's functions into one array of ops for `vm.zig`, a stack
+//! machine over the walker's semantics (`interp.Run`'s helpers and the builtins).
 //!
-//! **STEP PARITY IS EXACT.** The walker charges a step as it enters each
-//! node (`Run.enter`), before the node's own work, and checks the depth
-//! budget there against how deep the walk is. The compiler keeps those
-//! enters in the walker's order, each with its node's position and its
-//! static depth in its function (`Enter`), and hangs the run of enters
-//! that comes before an op's work on that op (`Op.enter`, `Op.enters`).
-//! The VM runs them first. A run is charged at once when it fits the
-//! budgets, and node by node when it doesn't, so a stop names the node the
-//! walker's would. A label (a jump's target) first flushes the enters
-//! pending before it onto a `nop`, so a jump never repeats or skips them.
+//! Steps are charged exactly as the walker charges them. The walker charges a
+//! step as it enters each node (`Run.enter`), before the node's own work, and
+//! checks the depth budget there against how deep the walk is. The compiler
+//! records those enters in the walker's order, each with its node's position
+//! and its static depth in its function (`Enter`), and hangs the run of enters
+//! that precedes an op's work on that op (`Op.enter`, `Op.enters`). The VM
+//! runs them first. A run is charged at once when it fits the budgets, and
+//! node by node when it does not, so a stop names the node the walker's would.
+//! A label (a jump's target) first flushes the enters pending before it onto a
+//! `nop`, so a jump never repeats or skips them.
 //!
 //! A call's frame starts its walk where the walker's would: the caller's
 //! walk at the call (its frame's base plus the call's static depth), plus
@@ -21,7 +20,9 @@ const std = @import("std");
 const ast = @import("ast.zig");
 
 pub const Tag = enum(u8) {
+    /// Does nothing; carries the enters flushed before a label.
     nop,
+    /// Pushes nil.
     push_nil,
     /// `a`: 1 for true.
     push_bool,
@@ -33,6 +34,7 @@ pub const Tag = enum(u8) {
     push_local,
     /// `a`: the const's index (an error before its line has run).
     push_const,
+    /// Discards the top value.
     pop,
     /// `a`: the slot.
     store_local,
@@ -42,11 +44,13 @@ pub const Tag = enum(u8) {
     index_get,
     /// value, obj, key ->.
     index_set,
+    /// Pushes an empty table.
     new_table,
     /// `a`: the items to come; pushes the list.
     list_begin,
     /// list, item -> list (`pos` the item's).
     list_item,
+    /// Pushes an empty map.
     map_begin,
     /// map, value -> map: `a` the key (`Code.strings`), `b` the map's
     /// position (`Code.positions`), `pos` the entry's.
@@ -84,6 +88,7 @@ pub const Tag = enum(u8) {
     attempt,
     /// value ->: the frame's end.
     ret,
+    /// The frame's end, returning nil.
     ret_nil,
     /// A `for`'s start, end or step (`a`: 0, 1, 2) checked an integer.
     for_int,
@@ -103,14 +108,19 @@ pub const Tag = enum(u8) {
 
 pub const Op = struct {
     tag: Tag,
+    /// The first operand; its meaning is per `tag`.
     a: u32 = 0,
+    /// The second operand.
     b: u32 = 0,
+    /// The third operand.
     c: u32 = 0,
+    /// Where an error at this op is reported, unless `tag` names another place.
     pos: ast.Pos,
     /// The walker's enters before this op's work: `Code.enters[enter..][0..enters]`.
     enter: u32 = 0,
+    /// How many enters precede this op's work; often zero.
     enters: u32 = 0,
-    /// The deepest of them, from the frame's walk.
+    /// The deepest of them, relative to the frame's walk.
     deepest: u32 = 0,
 };
 
@@ -120,23 +130,31 @@ pub const Enter = struct { pos: ast.Pos, depth: u32 };
 pub const Func = struct {
     name: []const u8,
     pos: ast.Pos,
+    /// The index of its first op.
     entry: u32,
-    /// Its slots, the hidden ones the loops keep included.
+    /// Its slots, including the hidden ones its loops keep.
     frame: u32,
-    /// The most its operands stand on the stack at once.
+    /// The most operands it has on the stack at once.
     operands: u32,
 };
 
 pub const Code = struct {
+    /// Every function's ops, the top level's included.
     ops: []const Op,
+    /// Indexed by `Op.enter`.
     enters: []const Enter,
+    /// Indexed by `push_int`'s `a`.
     ints: []const i64,
+    /// String literals and map keys.
     strings: []const []const u8,
+    /// The places an op checks beyond its own `pos`.
     positions: []const ast.Pos,
+    /// Indexed by `call`'s `a`. Allocated in `compile`'s `a`, not `keep`.
     functions: []const Func,
+    /// The script's top level.
     main: Func,
 
-    /// Its lists given back to the allocator `compile` kept them in.
+    /// Frees the lists `compile` allocated in `keep`.
     pub fn deinit(code: *const Code, keep: std.mem.Allocator) void {
         keep.free(code.ops);
         keep.free(code.enters);
@@ -160,19 +178,17 @@ const Loop = struct {
 const Compiler = struct {
     /// What compiling uses and drops: the loops' jumps, a chain's places.
     a: std.mem.Allocator,
-    /// **WHAT THE CODE KEEPS** (the box's re-review, FEEDBACK 1599c8f): its
-    /// five growing lists, from the machine's own allocator, which gives a
-    /// big list's old room back as it grows. In the arena, each growth left
-    /// its old copy behind: a 64 KiB list literal's 3 MB of code held 26 MB.
+    /// Holds the code's five growing lists. This is the machine's own
+    /// allocator, not an arena, so a list's old buffer is freed as it grows;
+    /// in an arena a 64 KiB list literal's 3 MB of code would hold 26 MB.
     keep: std.mem.Allocator,
     /// The most arguments a builtin takes (`builtins.most_args`).
     most_args: usize,
-    /// **THE DEPTH BUDGET** (the box's re-review, FEEDBACK 1599c8f): a node
-    /// at this static depth or past it stops any run that reaches it
-    /// (`walk + depth >= budget`, whatever its frame's walk), so it is
-    /// compiled as its enter and nothing under it. The compiler's own
-    /// recursion is bounded as the walker's is: a 64 KiB `1+1+...+1`,
-    /// which the parse takes as one level, overflowed the Zig stack.
+    /// The depth budget. A node at this static depth or past it stops any
+    /// run that reaches it (`walk + depth >= budget`, whatever its frame's
+    /// walk), so it compiles to its enter and nothing under it. This also
+    /// bounds the compiler's own recursion as the walker's is bounded; a
+    /// 64 KiB `1+1+...+1` would otherwise overflow the Zig stack.
     depth_most: u32,
     ops: std.ArrayList(Op) = .empty,
     enters: std.ArrayList(Enter) = .empty,
@@ -181,7 +197,7 @@ const Compiler = struct {
     positions: std.ArrayList(ast.Pos) = .empty,
     /// The first enter not yet hung on an op.
     pending: u32 = 0,
-    // The function being compiled:
+    // The function being compiled.
     hidden: u32 = 0,
     frame: u32 = 0,
     operands: u32 = 0,
@@ -296,7 +312,7 @@ const Compiler = struct {
                         _ = try c.emit(.{ .tag = .index_set, .pos = as.target.pos });
                         c.pop(3);
                     },
-                    else => unreachable, // the parser takes only these
+                    else => unreachable, // the parser accepts no other target
                 }
             },
             .call => |e| {
@@ -403,8 +419,8 @@ const Compiler = struct {
     fn expr(c: *Compiler, e: *const ast.Expr, d: u32) Error!void {
         try c.enter(e.pos, d);
         if (d >= c.depth_most) {
-            // Never run past its enter: a value in its place keeps the
-            // operands' count.
+            // No run gets past this node's enter; a placeholder keeps the
+            // operand count right.
             _ = try c.emit(.{ .tag = .push_nil, .pos = e.pos });
             c.push(1);
             return;
@@ -490,14 +506,14 @@ const Compiler = struct {
         }
     }
 
-    /// **A `..` CHAIN** as the walker's `concatChain` takes it: the chain's
-    /// inner `..` nodes are not entered, every part is, one deeper than
-    /// the chain; part k is checked at the `..` whose left it is, the last
-    /// at the innermost's.
+    /// A `..` chain, as the walker's `concatChain` evaluates it: the chain's
+    /// inner `..` nodes are not entered, and every part is, one deeper than
+    /// the chain. Part k is checked at the `..` whose left operand it is, the
+    /// last part at the innermost's.
     fn concat(c: *Compiler, pos: ast.Pos, le: *const ast.Expr, re: *const ast.Expr, d: u32) Error!void {
-        // **THE CHAIN'S PLACES KEPT APART** while its parts compile: a part
-        // that is itself a chain, a map or a `print` adds places of its own
-        // (211's cold review: the chain read them as its own).
+        // The chain's places are kept apart from `c.positions` until its
+        // parts are compiled, since a part that is itself a chain, a map or
+        // a `print` adds places of its own.
         var at: std.ArrayList(ast.Pos) = .empty;
         try at.append(c.a, pos);
         try c.expr(le, d + 1);
@@ -560,12 +576,11 @@ const Compiler = struct {
     }
 };
 
-/// The program's code, in `a`: **NEVER THE RUN'S ARENA**, which holds
-/// only what the script makes, so a compiled run and a walked one take the
-/// same arena (`interp.Run.machine`).
-/// The program's code: its lists in `keep`, exactly their size (the
-/// caller gives them back with `Code.deinit`), and what compiling drops in
-/// `a`. A failure leaves nothing in `keep`.
+/// Compiles `program`. The code's lists go in `keep`, each exactly its size
+/// (the caller frees them with `Code.deinit`), and what compiling drops goes
+/// in `a`. Neither may be the run's arena, which holds only what the script
+/// makes, so a compiled run and a walked one use the same arena
+/// (`interp.Run.machine`). A failure leaves nothing in `keep`.
 pub fn compile(a: std.mem.Allocator, keep: std.mem.Allocator, program: *const ast.Program, most_args: usize, depth_most: u32) Error!Code {
     var c: Compiler = .{ .a = a, .keep = keep, .most_args = most_args, .depth_most = depth_most };
     errdefer {
@@ -578,8 +593,7 @@ pub fn compile(a: std.mem.Allocator, keep: std.mem.Allocator, program: *const as
     const funcs = try a.alloc(Func, program.functions.len);
     for (program.functions, funcs) |*f, *out| out.* = try c.function(f);
     const main = try c.function(&program.main);
-    // Each list exactly its size; a shrink that cannot be made in place
-    // keeps the list as it is.
+    // A shrink that cannot be made in place keeps the list as it is.
     var code: Code = .{ .ops = &.{}, .enters = &.{}, .ints = &.{}, .strings = &.{}, .positions = &.{}, .functions = funcs, .main = main };
     code.ops = try c.ops.toOwnedSlice(keep);
     code.enters = try c.enters.toOwnedSlice(keep);

@@ -1,6 +1,5 @@
-//! **`yield` AND COPY AT A YIELD** (metal-vmm QUEUE 211, M1): in a one-shot
-//! run a `yield` only collects. Each test here runs through the gate, so
-//! the output is the walker's too.
+//! Tests of `yield` and the copy at a yield. In a one-shot run a `yield` only
+//! collects. Each test runs through the gate, so the output is the walker's too.
 
 const std = @import("std");
 const script = @import("script.zig");
@@ -149,16 +148,16 @@ test "yield: the effects so far are still the run's after one" {
 }
 
 test "yield: inside a list or map literal being built, the literal goes on (the box's review of M1)" {
-    // The copy kept only the room a half-built list held, and the next
-    // item was appended assuming the room its literal reserved.
+    // The VM appends a literal's next item into the room the literal
+    // reserved, so the copy must keep that room.
     try expectOutput("function f() yield() return 3 end print(#{f(), 2, 4})", "3\n");
     try expectOutput("function f() yield() return 3 end local l = {1, f(), f(), 4} print(l[2] + l[3] + #l)", "10\n");
     try expectOutput("function f() yield() return \"v\" end local m = {a = f(), b = 2, c = f()} print(m.a .. m.c, m.b)", "vv\t2\n");
 }
 
 test "yield: a string reached many times is kept once (the box's review of M1)" {
-    // 160 KB pushed 200 times is 32 MB copied apiece, past the kept budget;
-    // shared, it is 160 KB.
+    // Copied per reference, 160 KB pushed 200 times is 32 MB, past the kept
+    // budget; shared, it is 160 KB.
     var r = runWith("local s = rep(\"x\", 160000) local l = {} for i = 1, 200 do push(l, s) end yield() print(#l, #l[200])", .{ .steps = 100_000_000 });
     defer r.deinit();
     if (r.stop) |s| std.debug.print("{s}\n", .{s.message});
@@ -168,7 +167,7 @@ test "yield: a string reached many times is kept once (the box's review of M1)" 
 }
 
 test "yield: the gate exempts only a run that collected, not a source that says the word (the box's review)" {
-    // A comment and a string naming yield: no collection, so the gate
+    // A comment and a string naming yield make no collection, so the gate
     // still holds the steps and the arena to the walker's.
     var r = runWith("-- yield here\nlocal s = \"yield\" print(s)", .{});
     defer r.deinit();
@@ -179,8 +178,7 @@ test "yield: the gate exempts only a run that collected, not a source that says 
 }
 
 test "yield: a kept list or map takes the same room after 100 yields as after 10: its room is copied exactly, never rounded up (the box's re-review, FEEDBACK 1599c8f)" {
-    // The re-review's repros: 30 ints kept stopped `budget kept`, and a push
-    // a yield died around the 20th.
+    // Capacity rounded up at each copy would stop these with `budget kept`.
     try expectOutput("local l = {} for i = 1, 30 do push(l, 7) end for i = 1, 30 do yield() end print(#l)", "30\n");
     try expectOutput("local l = {} for i = 1, 25 do push(l, 7) yield() end print(#l)", "25\n");
     try expectOutput("local l = {} for i = 1, 25 do l[#l + 1] = 7 yield() end print(#l)", "25\n");

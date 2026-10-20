@@ -1,7 +1,6 @@
-//! **A RUN, AS THE HOST SEES IT: THE CONTRACT** (metal-vmm QUEUE 211, Steve's
-//! model): a script's whole run behind a handful of calls, so a host (the
-//! Linux one, metal's kernel) treats the VM as an opaque box. Nothing of
-//! its frames, arenas or ops crosses this file:
+//! A script's run as the host sees it: the whole run behind a handful of
+//! calls, so a host (the Linux one, metal's kernel) treats the VM as an opaque
+//! box. Nothing of its frames, arenas or ops crosses this file:
 //!
 //!     start(...)    -> *Process   parse, compile, ready to run
 //!     step(limits)  -> paused | finished | stopped
@@ -9,19 +8,17 @@
 //!     status()      -> its state, steps, slices, effects, its stop
 //!     kill()        -> everything it holds, given back
 //!
-//! **IT OWNS ALL IT HOLDS**, from the allocator `start` is handed (never a
-//! request's heap), under the run's budgets: the values' arena, the
-//! machine's memory (its own copy of the source, which the tree's names
-//! and strings point into; the tree, the code, the frames, the operands)
-//! and its output. So it may outlive what started it: a background run
-//! outlives its request (a crash on Dog Park's host, before it kept its
-//! source). `kill` gives every byte of it back.
+//! A process owns all it holds, from the allocator `start` is handed (never a
+//! request's heap), under the run's budgets: the values' arena, the machine's
+//! memory (its own copy of the source, which the tree's names and strings
+//! point into; the tree, the code, the frames, the operands) and its output.
+//! So it may outlive what started it, as a background run outlives its
+//! request. `kill` frees every byte of it.
 //!
-//! **TWO MODES:** an `atomic` run is today's, whole inside one handler, and
-//! may change the store; a `background` run is stepped in slices between
-//! handlers and **only reads**: a change is an `argument` error naming
-//! `atomic` (Steve: a script that finds and then deletes is a background
-//! run to find, then an atomic one to act).
+//! An `atomic` run runs whole inside one handler and may change the store. A
+//! `background` run is stepped in slices between handlers and only reads: a
+//! change is an `argument` error naming `atomic`. A script that finds and then
+//! deletes is a background run to find, then an atomic one to act.
 
 const std = @import("std");
 const Io = @import("host_io").Io;
@@ -40,20 +37,21 @@ pub const Stop = diag.Stop;
 /// An `atomic` run may change the store; a `background` one only reads.
 pub const Mode = enum { atomic, background };
 
-/// **WHAT A RUN IS GIVEN BESIDE ITS SOURCE**: its mode, and its values by
-/// name (`arg`), which the caller keeps alive as long as the run.
+/// What a run is given beside its source.
 pub const Options = struct {
     mode: Mode = .atomic,
+    /// The values `arg` reads by name. The caller keeps them alive as long as
+    /// the run.
     args: []const interp.Arg = &.{},
-    /// The host's door, `host(name, ...)` (metal-vmm QUEUE 233): none on
-    /// metal, where `host` stops with class `host`.
+    /// What `host(name, ...)` calls. None on metal, where `host` stops with
+    /// class `host`.
     host: ?interp.Host = null,
-    /// The host's hook on paths, called first when set: none on metal.
+    /// The host's hook on paths, called first when set. None on metal.
     path_hook: ?interp.PathHook = null,
     /// The preludes after the core's, in order (the Linux host's, a
-    /// repo's, a user's): none on metal.
+    /// repo's, a user's). None on metal.
     preludes: []const parse.Prelude = &.{},
-    /// How a change's diff is printed: in full unless the host says
+    /// How a change's diff is printed: in full unless the host asks for
     /// `summary` (the Linux CLI without `--verbose`).
     diffs: interp.Diffs = .full,
 };
@@ -64,7 +62,7 @@ pub const State = enum { running, finished, stopped };
 pub const Limits = struct {
     /// The most steps the slice may take, checked between ops.
     steps: u64 = std.math.maxInt(u64),
-    /// The host's clock at the slice's start: `now()` is per slice, not
+    /// The host's clock at the slice's start, so `now()` is per slice, not
     /// frozen at the run's start. Null keeps the last.
     now: ?i64 = null,
 };
@@ -73,41 +71,53 @@ pub const Outcome = enum { paused, finished, stopped };
 
 pub const Status = struct {
     state: State,
+    /// The steps taken so far, every slice's.
     steps: u64,
+    /// The slices stepped so far.
     slices: u64,
+    /// How many effects the run has made.
     effects: usize,
+    /// Where and why the run stopped, once it has.
     stop: ?Stop,
 };
 
 /// The machine's budgeted memory, and the tree's arena over it.
 pub const MachineMemory = struct {
+    /// Charged against `Budgets.machine_bytes`.
     budget: value.Budgeted,
+    /// The source's copy and the tree.
     tree: std.heap.ArenaAllocator,
 };
 
 pub const Process = struct {
+    /// The allocator `start` is handed; everything below comes from it.
     backing: std.mem.Allocator,
+    /// The values' arena, charged against `Budgets.arena_bytes`.
     values: value.Budgeted,
     machine: *MachineMemory,
     run: interp.Run,
+    /// What compiling drops.
     code_arena: std.heap.ArenaAllocator,
+    /// Valid when `coded`.
     code: compile.Code = undefined,
+    /// Valid when `tasked`.
     task: vm.Task = undefined,
-    /// Whether `task` was made (a run stopped before it was has none).
+    /// Whether `task` was made; a run stopped before it was has none.
     tasked: bool = false,
-    /// Whether `code` was made, its lists the machine's to give back.
+    /// Whether `code` was made, its lists in the machine's memory to free.
     coded: bool = false,
+    /// The output buffer, `run.out_len` of it written.
     out: []u8,
-    /// The preludes after the core's the parse is given (`Options.preludes`).
+    /// The preludes after the core's that the parse is given (`Options.preludes`).
     preludes: []const parse.Prelude = &.{},
     state: State = .running,
     slices: u64 = 0,
-    /// The Zig stack the parse took.
+    /// The bytes of Zig stack the parse took.
     parse_stack: usize = 0,
 
-    /// **A RUN, READY.** Parsed and compiled; a source that doesn't parse or
-    /// doesn't fit is a process already stopped, saying why. Fails only
-    /// when the host can't hold the process at all.
+    /// Parses and compiles `source`, ready to step. A source that does not
+    /// parse or does not fit gives a process already stopped, saying why.
+    /// Fails only when the host cannot hold the process at all.
     pub fn start(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const u8, mode: Mode, budgets: Budgets, now: i64, output_most: usize) error{OutOfMemory}!*Process {
         return startWith(io, backing, root, source, .{ .mode = mode }, budgets, now, output_most);
     }
@@ -157,7 +167,7 @@ pub const Process = struct {
         if (source.len > budgets.source_bytes) return p.stopWith(.{ .line = 1, .column = 1, .class = .budget, .budget = .source, .message = "the source is larger than the source budget" });
         const machine_stop: Stop = .{ .line = 1, .column = 1, .class = .budget, .budget = .machine, .message = "the machine's memory (the code, the frames, the operands) is past its budget" };
         const tree = p.machine.tree.allocator();
-        // **ITS OWN SOURCE**: the tree points into it (above).
+        // The tree points into the source, so the process keeps its own copy.
         const own = tree.dupe(u8, source) catch return p.stopWith(machine_stop);
         const program = tree.create(ast.Program) catch return p.stopWith(machine_stop);
         var stop: ?Stop = null;
@@ -182,7 +192,7 @@ pub const Process = struct {
         return error.Stop;
     }
 
-    /// **ONE SLICE**: at most `limits.steps` (an op that starts inside the
+    /// Runs one slice of at most `limits.steps` (an op that starts inside the
     /// slice finishes). A run that has ended says so again and runs nothing.
     pub fn step(p: *Process, limits: Limits) Outcome {
         switch (p.state) {
@@ -219,8 +229,8 @@ pub const Process = struct {
         return p.run.effects.items;
     }
 
-    /// **EVERYTHING IT HOLDS, GIVEN BACK**, whatever state it is in; the
-    /// process is gone.
+    /// Frees everything the process holds, whatever its state, and the
+    /// process itself.
     pub fn kill(p: *Process) void {
         p.release();
         p.values.deinit();
@@ -231,7 +241,7 @@ pub const Process = struct {
         p.backing.destroy(p);
     }
 
-    /// The machine's working state: the task, the run's own lists, the code.
+    /// Frees the machine's working state: the task, the run's own lists, the code.
     fn release(p: *Process) void {
         if (p.tasked) p.task.deinit();
         p.tasked = false;
@@ -241,9 +251,9 @@ pub const Process = struct {
         p.code_arena.deinit();
     }
 
-    /// **THE RUN'S VALUES AND TREE HANDED ON** to a one-shot caller's
-    /// `script.Result` (which then owns and frees them), the output copied
-    /// into `into`; the rest is given back and the process is gone.
+    /// Hands the run's values and tree on to a one-shot caller's
+    /// `script.Result`, which then owns and frees them, and copies the output
+    /// into `into`. The rest is freed, and the process with it.
     pub fn intoResult(p: *Process, comptime R: type, into: []u8) R {
         const n = p.run.out_len;
         @memcpy(into[0..n], p.out[0..n]);

@@ -1,23 +1,20 @@
-//! **COPY AT A YIELD** (metal-vmm QUEUE 211, M1): the values a run still
-//! reaches, copied out of its arena into a fresh one of the same budget,
-//! and the old arena freed whole. Whatever the script made and let go of
-//! goes with it, so a run that yields every minute for a month holds what
-//! it keeps, not what it ever made.
+//! The copy at a yield: the values a run still reaches are copied out of its
+//! arena into a fresh one of the same budget, and the old arena is freed
+//! whole. Whatever the script made and let go of goes with it, so a run that
+//! yields every minute for a month holds what it keeps, not what it ever made.
 //!
-//! - **What is kept:** the roots the VM hands over (its frames' slots, its
-//!   operands, `attempt`'s answers being made), the top-level `const`s,
-//!   and the effects log. Nothing else in the arena is reachable at a
-//!   yield: the code and its literals live in the parse's own arena, and
-//!   a builtin's buffers (`Run.scan_buf`) are made again when next needed.
-//! - **Shared stays shared:** a table reached twice is copied once, and
-//!   both references go to the copy. A string (a start and a length)
-//!   reached twice is copied once, too: strings have no identity a script
-//!   can see, but a copy of each reference would multiply what is kept.
-//! - **No recursion:** a table's contents are copied from a worklist, so a
+//! - The roots are those the VM hands over (its frames' slots, its operands,
+//!   the `attempt` answers being made), the top-level `const`s, and the
+//!   effects log. Nothing else in the arena is reachable at a yield: the code
+//!   and its literals live in the parse's own arena, and a builtin's buffers
+//!   (`Run.scan_buf`) are made again when next needed.
+//! - A table reached twice is copied once, and both references go to the
+//!   copy. So is a string (a start and a length): strings have no identity a
+//!   script can see, but a copy per reference would multiply what is kept.
+//! - A table's contents are copied from a worklist, not by recursion, so a
 //!   list nested a million deep is copied in a loop.
-//! - **Charged and capped:** a step for each value copied and each 16 bytes
-//!   of string, and past `Budgets.kept_bytes` the run stops (`budget
-//!   kept`).
+//! - The copy costs a step for each value and each 16 bytes of string, and
+//!   past `Budgets.kept_bytes` the run stops (`budget kept`).
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -30,16 +27,15 @@ const Value = value.Value;
 const Table = value.Table;
 const Error = interp.Error;
 
-/// **THE COPY'S BOOKKEEPING, KEPT FROM YIELD TO YIELD** (`Run.collecting`):
-/// the machine's memory is an arena that takes nothing back but its last
-/// allocation, so maps made afresh at each yield would grow it at each
-/// one. Emptied after each copy, their room kept.
+/// The copy's bookkeeping, kept from yield to yield (`Run.collecting`) and
+/// emptied after each copy with its capacity kept. The machine's memory frees
+/// nothing but its last allocation, so maps made afresh at each yield would
+/// grow it at each one.
 pub const Books = struct {
     /// Old table -> its copy.
     seen: std.AutoHashMapUnmanaged(*Table, *Table) = .empty,
-    /// **A STRING REACHED TWICE IS COPIED ONCE** (the box's review of M1: a
-    /// 160 KB string in a list 200 times was copied 200 times, past the
-    /// kept budget): by where it starts and how long it is.
+    /// Old string, by where it starts and how long it is -> its copy. Without
+    /// it, a 160 KB string in a list 200 times would be copied 200 times.
     strings: std.AutoHashMapUnmanaged(struct { ptr: usize, len: usize }, []const u8) = .empty,
     /// Copies whose contents still point into the old arena.
     todo: std.ArrayList(struct { old: *Table, new: *Table }) = .empty,
@@ -77,7 +73,7 @@ const Copier = struct {
         return g.value_ptr.*;
     }
 
-    /// `v` in the fresh arena; a table's contents follow from `todo`.
+    /// Returns `v` in the fresh arena. A table's contents follow from `todo`.
     fn copy(c: *Copier, v: Value) Error!Value {
         c.values += 1;
         return switch (v) {
@@ -97,20 +93,17 @@ const Copier = struct {
         return new;
     }
 
-    /// Every table's contents copied, the worklist emptied.
+    /// Copies every pending table's contents, until the worklist is empty.
     fn drain(c: *Copier) Error!void {
         const a = c.r.alloc;
         while (c.todo.pop()) |job| {
             const old = job.old;
             const new = job.new;
-            // **THE ROOM KEPT TOO**: a list literal half built when its
-            // item's call yielded has reserved room for the rest (the box's
-            // review of M1: a copy with only what it held, and the next item
-            // appended into room that wasn't there).
-            // **EXACTLY THE ROOM IT HAD** (the box's re-review, FEEDBACK
-            // 1599c8f): `ensureTotalCapacity` rounds up by half, so a kept
-            // list grew 1.5x a yield until 30 ints ran out the kept budget.
-            // A map is sized from its count, not its room, so it stays put.
+            // A list keeps exactly its capacity: a list literal half built
+            // when an item's call yielded has reserved room for the rest,
+            // which the VM appends into. `ensureTotalCapacity` would round
+            // up, growing a kept list 1.5x per yield. A map is sized from its
+            // count, not its capacity, so it does not grow.
             new.list.ensureTotalCapacityPrecise(a, old.list.capacity) catch return c.r.budgetStop(c.pos, .kept);
             for (old.list.items) |item| new.list.appendAssumeCapacity(try c.copy(item));
             new.map.ensureTotalCapacity(a, old.map.count()) catch return c.r.budgetStop(c.pos, .kept);
@@ -123,18 +116,18 @@ const Copier = struct {
     }
 };
 
-/// **THE ARENA TRADED FOR A FRESH ONE** holding only what `slots` (every
-/// slice of values the caller still reaches) and `tables` (single tables
-/// it holds) reach, with the run's consts and effects. The slices and
-/// tables are updated in place to the copies.
+/// Replaces the run's arena with a fresh one holding only what `slots` (every
+/// slice of values the caller still reaches) and `tables` (single tables it
+/// holds) reach, with the run's consts and effects. The slices and tables are
+/// updated in place to the copies.
 pub fn collect(r: *Run, pos: ast.Pos, slots: []const []Value, tables: []const *?*Table) Error!void {
     r.collections += 1;
     var old = r.budgeted.*;
     r.budgeted.* = .{ .backing = old.backing, .limit = old.limit };
     var c: Copier = .{ .r = r, .pos = pos, .seen = &r.collecting.seen, .strings = &r.collecting.strings, .todo = &r.collecting.todo };
     defer c.deinit();
-    // **THE EFFECTS FIRST**: the run reports them however it ends. Should
-    // even they not fit, the old arena is put back, and the run stops
+    // The effects go first, since the run reports them however it ends.
+    // Should even they not fit, we put the old arena back, and the run stops
     // with what it had.
     var effects: std.ArrayList(interp.Effect) = .empty;
     copyEffects(&c, &effects) catch |e| {

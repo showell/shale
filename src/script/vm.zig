@@ -1,13 +1,12 @@
-//! **THE VM** (metal-vmm QUEUE 211): a script's compiled ops (`compile.zig`)
-//! run on the walker's own `interp.Run`: its slots, budgets, output,
-//! effects and every semantic helper, so a run here is the walker's run,
-//! step for step. What is its own: the operand stack, the frames
-//! (`Frame`), and a loop that never recurses, so a run's state is data a
-//! later yield can keep (QUEUE 211, M1).
+//! Runs a script's compiled ops (`compile.zig`) on the walker's own
+//! `interp.Run`: its slots, budgets, output, effects and semantic helpers, so
+//! a run here is the walker's run, step for step. The VM's own state is the
+//! operand stack, the frames (`Frame`), and a loop that never recurses, so a
+//! run's state is data that a slice boundary or a yield can keep.
 //!
-//! **`attempt`** is a frame marked with its answer (`Frame.out`): an error
-//! that is not a budget unwinds to the innermost such frame, and the
-//! answer says what it was, as the walker's `attempt` catches it.
+//! An `attempt` is a frame marked with its answer (`Frame.out`): an error that
+//! is not a budget's unwinds to the innermost such frame, and the answer says
+//! what it was, as the walker's `attempt` catches it.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -26,7 +25,7 @@ const Op = compile.Op;
 
 const Frame = struct {
     func: *const compile.Func,
-    /// Where the caller goes on.
+    /// Where the caller resumes.
     ret_pc: u32,
     /// Its slots in `Run.stack`.
     base: u32,
@@ -36,8 +35,9 @@ const Frame = struct {
     sp: u32,
     /// The caller's function name, put back when it ends.
     caller: []const u8,
-    /// `attempt`'s answer, for a frame an `attempt` called; where it was.
+    /// The answer table, when an `attempt` called this frame.
     out: ?*Table = null,
+    /// The `attempt`'s position.
     at: ast.Pos = .{ .line = 0, .column = 0 },
 };
 
@@ -49,11 +49,11 @@ const Machine = struct {
     pc: u32 = 0,
     /// The top frame's `walk`, kept here for every op's enters.
     walk: u32 = 0,
-    /// The `attempt` answers a yield copies, kept from yield to yield (the
-    /// machine's memory takes nothing back but its last allocation).
+    /// The `attempt` answers a yield copies. Kept from yield to yield, since
+    /// the machine's allocator frees nothing but its last allocation.
     outs: std.ArrayList(*?*Table) = .empty,
-    /// **WHERE THE SLICE ENDS** (`Task.step`): at the first op boundary
-    /// with the run's steps at or past it; never, for a run in one piece.
+    /// The slice ends at the first op boundary with the run's steps at or
+    /// past this (`Task.step`); a run in one piece never reaches it.
     slice_end: u64 = std.math.maxInt(u64),
 
     fn deinit(m: *Machine) void {
@@ -82,8 +82,8 @@ const Machine = struct {
         return &m.frames.items[m.frames.items.len - 1];
     }
 
-    /// **THE WALKER'S ENTERS** before an op's work: a step each, the steps
-    /// budget then the depth budget checked at each node, as `Run.enter`
+    /// Charges the walker's enters before an op's work: a step each, checking
+    /// the steps budget and then the depth budget at each node, as `Run.enter`
     /// does; all at once when the run fits both.
     inline fn enters(m: *Machine, op: *const Op) Error!void {
         const r = m.r;
@@ -99,8 +99,8 @@ const Machine = struct {
         }
     }
 
-    /// A frame for function `func` with `argc` arguments on the operand
-    /// stack, `walk` deeper than the caller's frame begins.
+    /// Pushes a frame for `func`, taking its `argc` arguments off the
+    /// operand stack. Its walk starts `op.c` deeper than the caller's frame's.
     fn enterFrame(m: *Machine, op: *const Op, func: *const compile.Func, argc: u32, out: ?*Table) Error!void {
         const r = m.r;
         const base = r.stack.items.len;
@@ -128,7 +128,8 @@ const Machine = struct {
         m.walk = m.frame().walk;
     }
 
-    /// The frame ends with `v`; false when it was the script's top level.
+    /// Ends the top frame with `v`. Returns false when it was the script's
+    /// top level.
     fn leave(m: *Machine, v: Value) Error!bool {
         const r = m.r;
         const f = m.frames.pop().?;
@@ -145,8 +146,8 @@ const Machine = struct {
         return true;
     }
 
-    /// **AN ERROR, CAUGHT** by the innermost `attempt` below it, when it is
-    /// not a budget's: true when the run goes on.
+    /// Unwinds the current stop to the innermost `attempt` frame, unless it
+    /// is a budget's. Returns true when the run goes on.
     fn caught(m: *Machine) Error!bool {
         const r = m.r;
         const s = r.stop.?;
@@ -167,16 +168,16 @@ const Machine = struct {
             r.stop = null;
             r.ret = .nil;
             m.push(try r.attemptFailed(f.at, out, s));
-            // The calls back to the attempt's caller's: after its answer,
-            // made from the stop's whole trail.
+            // Trimmed only after the answer, which is made from the
+            // stop's whole call trail.
             r.calls.shrinkRetainingCapacity(i - 1);
             return true;
         }
         return false;
     }
 
-    /// **A YIELD**: what the run still reaches, copied into a fresh arena
-    /// (`collect.zig`); every value the machine holds is a root.
+    /// Copies what the run still reaches into a fresh arena (`collect.zig`).
+    /// Every value the machine holds is a root.
     fn yieldHere(m: *Machine, pos: ast.Pos) Error!void {
         const r = m.r;
         m.outs.clearRetainingCapacity();
@@ -197,8 +198,7 @@ const Machine = struct {
         }
     }
 
-    /// Runs ops until the top level ends, the slice does, a yield that
-    /// ends it, or an error.
+    /// Runs ops until the top level ends, the slice ends, or an error.
     fn ops(m: *Machine) Error!Exit {
         const r = m.r;
         const code = m.code;
@@ -243,9 +243,8 @@ const Machine = struct {
                 .list_item => {
                     const v = m.pop();
                     if (v == .nil) return r.fail(op.pos, .type, "a list cannot hold nil", .{});
-                    // Through the allocator: the room `list_begin` reserved
-                    // is there unless a yield made it again, and then this
-                    // takes none either (`collect` keeps the room).
+                    // This allocates nothing: the room `list_begin` reserved
+                    // survives a yield, since `collect` copies a list's capacity.
                     m.top().table.list.append(r.alloc, v) catch return r.oom(op.pos);
                 },
                 .map_begin => {
@@ -298,10 +297,9 @@ const Machine = struct {
                     _ = m.pop();
                 },
                 .builtin => {
-                    // **A SLICE ENDS AFTER A STORE CALL** (QUEUE 211, Steve's
-                    // model: "swap it out on any I/O request"), whether it
-                    // returns or fails into an `attempt`: either way it did
-                    // its I/O, and the next op waits for the next slice.
+                    // A slice ends after a store call, whether it returns or
+                    // fails into an `attempt`: either way it did its I/O, and
+                    // the next op waits for the next slice.
                     if (builtins.touches_store.contains(@fromBackingInt(@intCast(op.a)))) m.slice_end = r.steps;
                     const args = m.operands.items[m.operands.items.len - op.b ..];
                     const v = try builtins.call(r, op.pos, @fromBackingInt(@intCast(op.a)), args);
@@ -361,8 +359,7 @@ const Machine = struct {
                 .for_num_next => {
                     const i = m.slot(op.a).int;
                     const step = m.slot(op.a + 2).int;
-                    // The last step of a loop that ends at maxint is not
-                    // taken past it.
+                    // A step that would overflow ends the loop.
                     if (std.math.add(i64, i, step)) |next| {
                         m.slot(op.a).* = .{ .int = next };
                         m.pc = op.b;
@@ -395,29 +392,30 @@ const Machine = struct {
     }
 };
 
-/// **A RUN IN SLICES** (metal-vmm QUEUE 211; docs/SHALE.md, "The contract"): the
-/// machine kept between them, so a slice ends at any op boundary and the
-/// next goes on from there. The VM never recurses, so nothing of the run is
-/// on the Zig stack between slices.
+/// A run in slices (docs/SHALE.md, "The contract"). The machine is kept
+/// between them, so a slice ends at any op boundary and the next goes on from
+/// there. The VM never recurses, so nothing of the run is on the Zig stack
+/// between slices.
 pub const Task = struct {
     m: Machine,
 
-    /// **AN ENDED TASK STAYS ENDED** (the box's review): `step` after
-    /// `.finished` or `.stopped` runs nothing and says so again.
+    /// Set once `step` returns `.finished` or `.stopped`; a later `step`
+    /// runs nothing and returns it again.
     ended: ?Outcome = null,
 
     pub const Outcome = enum {
+        /// The script's top level returned.
         finished,
-        /// The run stopped (`Run.stop` says where and why): for good.
+        /// The run stopped for good; `Run.stop` says where and why.
         stopped,
-        /// The slice's steps ran out, and the run goes on in the next.
+        /// The slice's steps ran out; the run goes on in the next.
         paused,
     };
 
     pub const Slice = struct {
-        /// The most steps the slice may take, checked between ops: an op
-        /// that starts inside it finishes (a builtin's whole work among
-        /// them: a slice is capped by its builtins' caps too).
+        /// The most steps the slice may take, checked between ops. An op
+        /// that starts inside it finishes, a builtin's whole work included,
+        /// so a slice can overrun by as much as its builtins' caps allow.
         steps: u64 = std.math.maxInt(u64),
     };
 
@@ -439,7 +437,7 @@ pub const Task = struct {
         t.m.deinit();
     }
 
-    /// One slice. An allocation the host refused is the arena's stop.
+    /// Runs one slice. An allocation the host refused is the arena's stop.
     pub fn step(t: *Task, slice: Slice) Outcome {
         if (t.ended) |o| return o;
         const r = t.m.r;
@@ -459,7 +457,7 @@ pub const Task = struct {
     }
 };
 
-/// **THE SCRIPT'S TOP LEVEL, RUN** in one piece.
+/// Runs the script's top level in one piece.
 pub fn main(r: *Run, code: *const Code) Error!void {
     var t = try Task.init(r, code);
     defer t.deinit();

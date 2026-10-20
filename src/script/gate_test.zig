@@ -1,24 +1,25 @@
-//! **THE GATE** (metal-vmm QUEUE 211): in the tests, every `script.run` is
-//! the VM's, on the store it was given, and the tree-walker's, on a copy
-//! of that store made before; the two must agree on everything a run
-//! shows: the output, the effects, the stop (its class, budget, place,
-//! function and message), the steps, the work, the arena held, and the
-//! store each leaves. A difference panics with both runs: the test it
-//! happened in is the reproduction. So every interpreter, builtin,
-//! example, cookbook and fuzz test holds the VM to the walker.
+//! The gate: in the tests, every `script.run` is the VM's, on the store it was
+//! given, and the tree-walker's, on a copy of that store made before. The two
+//! must agree on everything a run shows: the output, the effects, the stop
+//! (its class, budget, place, function and message), the steps, the work, the
+//! arena held, and the store each leaves. A difference panics with both runs,
+//! so the test it happened in is the reproduction, and every interpreter,
+//! builtin, example, cookbook and fuzz test holds the VM to the walker.
 
 const std = @import("std");
 const script = @import("script.zig");
 const Io = @import("host_io").Io;
 
+/// Runs `source` on the VM whole, on the VM in slices, and on the walker, and
+/// panics if they differ. Returns the whole VM run's result.
 pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const u8, budgets: script.Budgets, now: i64, out: []u8, options: script.Options) script.Result {
     var paths: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
     defer paths.deinit();
     const a = paths.allocator();
     const d = Io.Dir.cwd();
-    // **THE COPY'S PATH IS AS LONG AS THE ROOT'S**: a store call's full
+    // The copy's path is exactly as long as the root's: a store call's full
     // path is made in the arena, so a longer one would stop the walker on
-    // the arena budget sooner. A sibling, its name's last byte changed.
+    // the arena budget sooner.
     const copy = sibling(io, a, root, "~_#@");
     const cut_copy = sibling(io, a, root, "=+%^");
     const has_root = if (d.openDir(io, root, .{})) |dir| blk: {
@@ -42,12 +43,10 @@ pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const
     defer w.deinit();
     const v = script.runOn(.vm, io, backing, root, source, budgets, now, out, options);
 
-    // **THE SAME RUN, CUT INTO SLICES** (QUEUE 211): a pause between any
-    // two ops changes nothing, so the VM in slices of 1 to 29 steps (by the
-    // source) is the uncut VM in every respect. **A RUN THAT CHANGED
-    // NOTHING IS CUT AS A BACKGROUND RUN** (QUEUE 211, step 5): a background
-    // run only reads, and for a script that tries no change, it is the
-    // atomic run, slice for slice.
+    // A pause between any two ops changes nothing, so the VM in slices of
+    // 1 to 29 steps (chosen by the source) must be the uncut VM in every
+    // respect. A run that tried no change is cut as a background run, which
+    // only reads and for such a script is the atomic run, slice for slice.
     const cut_out = std.testing.allocator.alloc(u8, out.len) catch @panic("the gate's output");
     defer std.testing.allocator.free(cut_out);
     const slice = 1 + std.hash.Wyhash.hash(0, source) % 29;
@@ -67,26 +66,23 @@ pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const
     }
 
     var why: ?[]const u8 = null;
-    // **A SCRIPT THAT YIELDS** (QUEUE 211, M1): the VM copies what it keeps
-    // into a fresh arena at each `yield`, charged as steps, and the walker
-    // keeps everything. Their steps, work and arena differ by that, and so
-    // may a stop on the steps, the arena or what is kept; all else is the
-    // same.
-    // Counted on the run, never searched for in the source: a comment or a
-    // string saying "yield" exempts nothing (the box's review).
+    // At each `yield` the VM copies what it keeps into a fresh arena,
+    // charged as steps, while the walker keeps everything. Their steps, work
+    // and arena differ by that, and so may a stop on the steps, the arena or
+    // what is kept; all else is the same. Yields are counted on the run, not
+    // searched for in the source, so a comment saying "yield" exempts nothing.
     const yields = v.collections > 0;
-    // **THE MACHINE'S MEMORY** (the box's re-review, FEEDBACK 1599c8f: a
-    // blanket exemption hid the machine budget refusing valid sources): only
-    // a machine stop BOTH engines make is exempt, and only from what their
-    // machinery spends differently on the way there (the steps, the work,
-    // the arena); the stop, its place included, and the output are held.
+    // Only a machine stop both engines make is exempt, and only from what
+    // their machinery spends differently on the way there (the steps, the
+    // work, the arena); the stop, its place included, and the output are
+    // held. A broader exemption would hide the machine budget refusing a
+    // valid source.
     const machine_shaped = isBudget(v.stop, .machine) and isBudget(w.stop, .machine);
     const arena_shaped = yields and (isArenaShaped(v.stop) or isArenaShaped(w.stop));
     if (!arena_shaped) {
         if (!std.mem.eql(u8, v.output, w.output)) why = "the output";
-        // A machine stop both make is at the same place, and may be at a
-        // different depth of the same recursion: its trail is the
-        // machinery's too (QUEUE 229, chunk 1).
+        // A machine stop both make is at the same place, but may be at a
+        // different depth of the same recursion, so its trail is not compared.
         if (!sameStop(v.stop, w.stop) and !(machine_shaped and samePlace(v.stop.?, w.stop.?))) why = "the stop";
     }
     if (!yields and !machine_shaped) {
@@ -110,8 +106,8 @@ pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const
     return v;
 }
 
-/// A sibling of `root` with a name as long as its own: its last byte the
-/// first of `bytes` no sibling has.
+/// A sibling of `root` with a name as long as its own, its last byte the first
+/// of `bytes` that names no existing sibling.
 fn sibling(io: Io, a: std.mem.Allocator, root: []const u8, bytes: []const u8) []u8 {
     const p = a.dupe(u8, std.mem.trimEnd(u8, root, "/")) catch @panic("the gate's path");
     for (bytes) |c| {
@@ -131,7 +127,8 @@ fn isArenaShaped(s: ?script.Stop) bool {
     return b == .steps or b == .arena or b == .kept;
 }
 
-/// Each effect the same op on the same path with the same outcome, in order.
+/// Whether each effect is the same op on the same path with the same outcome,
+/// in order.
 fn sameEffects(x: []const script.Effect, y: []const script.Effect) bool {
     if (x.len != y.len) return false;
     for (x, y) |a, b| {
@@ -148,7 +145,7 @@ fn sameStop(x: ?script.Stop, y: ?script.Stop) bool {
         std.mem.eql(u8, a.function, b.function) and std.mem.eql(u8, a.message, b.message) and sameTrail(a.trail, b.trail);
 }
 
-/// The same stop but for its trail.
+/// Whether the stops are the same but for their trails.
 fn samePlace(a: script.Stop, b: script.Stop) bool {
     var x = a;
     var y = b;
@@ -157,7 +154,7 @@ fn samePlace(a: script.Stop, b: script.Stop) bool {
     return sameStop(x, y);
 }
 
-/// Each call made at the same place in the same function, in order.
+/// Whether each call is made at the same place in the same function, in order.
 fn sameTrail(x: []const script.diag.Call, y: []const script.diag.Call) bool {
     if (x.len != y.len) return false;
     for (x, y) |a, b| {
@@ -166,7 +163,7 @@ fn sameTrail(x: []const script.diag.Call, y: []const script.diag.Call) bool {
     return true;
 }
 
-/// `src` to `dst`, links as links (their targets unread).
+/// Copies the tree `src` to `dst`, links as links (their targets unread).
 fn copyTree(io: Io, a: std.mem.Allocator, src: []const u8, dst: []const u8) !void {
     const d = Io.Dir.cwd();
     try d.createDirPath(io, dst);
@@ -195,8 +192,8 @@ fn copyTree(io: Io, a: std.mem.Allocator, src: []const u8, dst: []const u8) !voi
     }
 }
 
-/// `to` modified when `from` was: a script reads the times (`walk`,
-/// `stat`), so the copy keeps them.
+/// Sets `to`'s modification time to `from`'s. A script reads the times
+/// (`walk`, `stat`), so the copy keeps them.
 fn keepTime(io: Io, from: []const u8, to: []const u8) !void {
     const d = Io.Dir.cwd();
     const st = try d.statFile(io, from, .{});

@@ -1,5 +1,4 @@
-//! **THE CONTRACT, TESTED** (metal-vmm QUEUE 211, Steve's model): a run as
-//! a host sees it, through `process.zig` alone.
+//! Tests of a run as a host sees it, through `process.zig` alone.
 
 const std = @import("std");
 const script = @import("script.zig");
@@ -32,7 +31,7 @@ const Fixture = struct {
     }
 };
 
-/// Steps `p` to its end in slices of `steps`; how many it took.
+/// Steps `p` to its end in slices of `steps`. Returns how many slices it took.
 fn finish(p: *process.Process, steps: u64) u64 {
     var n: u64 = 0;
     while (true) {
@@ -152,10 +151,8 @@ test "process: an ended run says so again and runs nothing" {
 }
 
 test "process: every source within the source budget compiles, in at most half the default machine budget, and runs (the box's re-review, FEEDBACK 1599c8f, item 3)" {
-    // The shapes that take the most of the machine a byte of source: short
-    // statements, a list literal of ints or strings, calls, `if`s. At 4 MiB
-    // and with the parse's and the code's growth left in their arenas,
-    // `x = x + 1` and a list literal stopped `budget machine` at 1:1.
+    // The shapes that take the most machine per byte of source: short
+    // statements, a list literal of ints or strings, calls, `if`s.
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     const Shape = struct { head: []const u8, part: []const u8, tail: []const u8 };
@@ -230,7 +227,7 @@ test "process: it keeps its own source: the caller's freed after start, the run 
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
-    // From the page allocator: freed is unmapped, so a read of it faults.
+    // From the page allocator, so freeing it unmaps it and a read of it faults.
     const text = "local m = {a = \"one\"}\nlocal n = 0\nfor name in ls(\"notes\") do n = n + 1 end\nprint(m.a, n, m[\"a\"])\n";
     const source = try std.heap.page_allocator.dupe(u8, text);
     const p = try f.start(testing.allocator, source, .background);
@@ -266,12 +263,11 @@ test "process: only the prelude a script calls is parsed and compiled, through t
         .{ .src = "", .holds = &.{} },
         .{ .src = "print(1)", .holds = &.{} },
         .{ .src = "local r = walk_upto(\"\", {}, 2)", .holds = &.{"the prelude's walk_upto"} },
-        // glob calls walk_all: what the prelude calls is reached too.
+        // glob calls walk_all, so the prelude's own calls are reached too.
         .{ .src = "local g = glob(\"*\")", .holds = &.{ "the prelude's glob", "the prelude's walk_all" } },
-        // Called twice, from the script and from a function: parsed once.
+        // Called from the script and from a function, but parsed once.
         .{ .src = "function f() return glob(\"*\") end local a = walk_all(\"\", {}) local b = f()", .holds = &.{ "f", "the prelude's glob", "the prelude's walk_all" } },
-        // A script's own function of a prelude name is its own: the
-        // prelude's is never reached.
+        // A script's own function shadows the prelude's of that name.
         .{ .src = "function glob(p) return {} end local g = glob(\"*\")", .holds = &.{"glob"} },
     }) |c| {
         var buf: [16][]const u8 = undefined;
