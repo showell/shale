@@ -33,3 +33,5 @@ src/shale_zig_ast.zig 4
 src/shale_zig_move.zig 2
 src/shale_host_setup.zig 4
 src/script/cli.zig 0
+src/shale_prelude_linux.shale 0
+src/shale_prelude_git.shale 0

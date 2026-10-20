@@ -48,6 +48,8 @@ pub const Options = struct {
     host: ?interp.Host = null,
     /// The host's hook on paths, called first when set. None on metal.
     path_hook: ?interp.PathHook = null,
+    /// `interp.LineHook`, in a test build.
+    line_hook: if (interp.line_hook_on) ?interp.LineHook else void = if (interp.line_hook_on) null else {},
     /// The preludes after the core's, in order (the Linux host's, a
     /// repo's, a user's). None on metal.
     preludes: []const parse.Prelude = &.{},
@@ -155,6 +157,7 @@ pub const Process = struct {
             .args = options.args,
             .host = options.host,
             .path_hook = options.path_hook,
+            .line_hook = options.line_hook,
             .diffs = options.diffs,
         };
         p.preludes = options.preludes;

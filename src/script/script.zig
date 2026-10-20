@@ -197,6 +197,7 @@ pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u
         .args = options.args,
         .host = options.host,
         .path_hook = options.path_hook,
+        .line_hook = options.line_hook,
         .diffs = options.diffs,
     };
     defer r.deinit();

@@ -212,6 +212,7 @@ const Machine = struct {
             if (r.steps >= m.slice_end) return .paused;
             const op = &code.ops[m.pc];
             m.pc += 1;
+            if (comptime interp.line_hook_on) if (r.line_hook) |h| h.hit(h.ctx, r.function, op.pos.line);
             if (op.enters != 0) try m.enters(op);
             switch (op.tag) {
                 .nop => {},

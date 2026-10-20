@@ -11,6 +11,37 @@ const shale_exe = @import("shale_test_options").shale;
 
 var out_buf: [64 * 1024]u8 = undefined;
 
+/// The preludes, by the name their functions run under, and their files.
+pub const prelude_files = [_]struct { shown: []const u8, path: []const u8 }{
+    .{ .shown = "the Linux prelude's ", .path = "src/shale_prelude_linux.shale" },
+    .{ .shown = "the git prelude's ", .path = "src/shale_prelude_git.shale" },
+};
+
+/// **THE PRELUDES' LINES THE TESTS RAN** (metal-vmm QUEUE 241 F): `file << 32 | line`,
+/// over every run of this process through a `T`, each op's line in a prelude function
+/// (`interp.LineHook`). Written out as each `T` ends, for tools/coverage.shale.
+var prelude_hits: std.AutoArrayHashMapUnmanaged(u64, void) = .empty;
+
+fn preludeHit(_: *anyopaque, function: []const u8, line: u32) void {
+    for (prelude_files, 0..) |f, i| if (std.mem.startsWith(u8, function, f.shown)) {
+        prelude_hits.put(std.heap.page_allocator, @as(u64, i) << 32 | line, {}) catch {};
+        return;
+    };
+}
+
+const line_hook: script.interp.LineHook = .{ .ctx = @ptrCast(&prelude_hits), .hit = preludeHit };
+
+/// This process's hits, `<path> <line>` a line, to `.zig-cache/coverage/prelude_hits/<pid>.txt`.
+fn writeHits(io: std.Io) void {
+    var text: std.ArrayList(u8) = .empty;
+    defer text.deinit(std.heap.page_allocator);
+    for (prelude_hits.keys()) |k| text.print(std.heap.page_allocator, "{s} {d}\n", .{ prelude_files[@intCast(k >> 32)].path, @as(u32, @truncate(k)) }) catch return;
+    var name: [96]u8 = undefined;
+    const path = std.fmt.bufPrint(&name, ".zig-cache/coverage/prelude_hits/{d}.txt", .{std.os.linux.getpid()}) catch return;
+    std.Io.Dir.cwd().createDirPath(io, ".zig-cache/coverage/prelude_hits") catch return;
+    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = text.items }) catch return;
+}
+
 pub const T = struct {
     tmp: std.testing.TmpDir,
     threaded: std.Io.Threaded,
@@ -44,6 +75,7 @@ pub const T = struct {
     }
 
     pub fn deinit(t: *T) void {
+        writeHits(t.threaded.io());
         t.host.deinit();
         t.arena.deinit();
         t.threaded.deinit();
@@ -52,14 +84,14 @@ pub const T = struct {
 
     pub fn run(t: *T, src: []const u8, mode: script.process.Mode) script.Result {
         const o = t.host.options();
-        return script.runWith(t.threaded.io(), testing.allocator, t.root, src, t.budgets, 0, &out_buf, .{ .mode = mode, .host = o.host, .path_hook = o.path_hook, .preludes = t.preludes, .diffs = t.diffs });
+        return script.runWith(t.threaded.io(), testing.allocator, t.root, src, t.budgets, 0, &out_buf, .{ .mode = mode, .host = o.host, .path_hook = o.path_hook, .preludes = t.preludes, .diffs = t.diffs, .line_hook = line_hook });
     }
 
     /// One run of the VM, outside the gate: for a script whose effects
     /// on the world cannot happen three times alike (a commit, a push).
     pub fn runOnce(t: *T, src: []const u8, mode: script.process.Mode) script.Result {
         const o = t.host.options();
-        return script.runOn(.vm, t.threaded.io(), testing.allocator, t.root, src, t.budgets, 0, &out_buf, .{ .mode = mode, .host = o.host, .path_hook = o.path_hook, .preludes = t.preludes });
+        return script.runOn(.vm, t.threaded.io(), testing.allocator, t.root, src, t.budgets, 0, &out_buf, .{ .mode = mode, .host = o.host, .path_hook = o.path_hook, .preludes = t.preludes, .line_hook = line_hook });
     }
 
     pub fn expectOutput(t: *T, src: []const u8, want: []const u8) !void {

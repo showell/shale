@@ -102,3 +102,42 @@ test "preludes: every function of the Linux and git preludes is called by some t
     try testing.expect(functions.items.len >= 40);
     try testing.expectEqual(@as(usize, 0), uncalled);
 }
+
+test "preludes: each one compiled whole, its lines with code written for tools/coverage.shale (metal-vmm QUEUE 241 F)" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var out: std.ArrayList(u8) = .empty;
+    // Each prelude parsed as a script, after those it calls, so every function is
+    // compiled; a function's lines are its file's, as when it loads as a prelude.
+    const files = [_]struct { path: []const u8, after: []const script.parse.Prelude }{
+        .{ .path = "src/shale_prelude_linux.shale", .after = &.{} },
+        .{ .path = "src/shale_prelude_git.shale", .after = &.{host_linux.linux_prelude} },
+    };
+    for (files) |f| {
+        const source = try std.Io.Dir.cwd().readFileAlloc(io, f.path, a, .limited(1 << 20));
+        var stop: ?script.diag.Stop = null;
+        const program = try script.parse.parseMeasured(a, a, source, 200, &stop, null, f.after);
+        const code = try script.compile.compile(a, a, &program, script.builtins.most_args, 2000);
+        // Each function's ops run from its entry to the next function's.
+        var entries: std.ArrayList(u32) = .empty;
+        for (code.functions) |fun| try entries.append(a, fun.entry);
+        try entries.append(a, code.main.entry);
+        try entries.append(a, @intCast(code.ops.len));
+        std.mem.sort(u32, entries.items, {}, std.sort.asc(u32));
+        var lines: std.AutoArrayHashMapUnmanaged(u32, void) = .empty;
+        for (code.functions) |fun| {
+            // A function of a prelude this one calls is that prelude's.
+            if (std.mem.startsWith(u8, fun.name, "the ")) continue;
+            const end = for (entries.items) |e| (if (e > fun.entry) break e) else code.ops.len;
+            for (code.ops[fun.entry..end]) |op| if (op.pos.line > 0) try lines.put(a, op.pos.line, {});
+        }
+        try testing.expect(lines.count() > 100);
+        for (lines.keys()) |l| try out.print(a, "{s} {d}\n", .{ f.path, l });
+    }
+    try std.Io.Dir.cwd().createDirPath(io, ".zig-cache/coverage");
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = ".zig-cache/coverage/prelude_code.txt", .data = out.items });
+}

@@ -95,6 +95,17 @@ pub const Diffs = enum { full, summary };
 /// The one hook on paths. When set, every path argument calls `resolve` first, which
 /// returns the OS path a script's path names, or null for the root's rules. What a mount
 /// (`runs:x`) is belongs to the host. Metal sets none.
+/// **WHICH LINES RAN** (metal-vmm QUEUE 241 F): called by the VM at each op it runs, with
+/// the function it is in ("the Linux prelude's f", "" at the top level) and the op's
+/// line in that function's source; a host's tests measure the preludes' lines by it. In
+/// a test build only: elsewhere it is `void`, and the VM's loop holds no trace of it. It
+/// charges nothing, so no step count moves.
+pub const line_hook_on = @import("builtin").is_test;
+pub const LineHook = struct {
+    ctx: *anyopaque,
+    hit: *const fn (ctx: *anyopaque, function: []const u8, line: u32) void,
+};
+
 pub const PathHook = struct {
     ctx: *anyopaque,
     resolve: *const fn (ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]const u8,
@@ -141,6 +152,7 @@ pub const Run = struct {
     /// The host's door and hook, where it has them (`Host`, `PathHook`).
     host: ?Host = null,
     path_hook: ?PathHook = null,
+    line_hook: if (line_hook_on) ?LineHook else void = if (line_hook_on) null else {},
     /// How a change's diff is printed (`Diffs`).
     diffs: Diffs = .full,
     /// The programs this run's host has run for it: the host's cap is

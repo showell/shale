@@ -176,16 +176,17 @@ function git_commit(repo, msg, opts?)
   if add ~= nil and attempt(git_text, add).ok then
     if add ~= "tracked" and add ~= "all" then fail("`git_commit`'s `add` is \"tracked\", \"all\" or a list of paths, not \"" .. add .. "\"") end
   end
-  if add == nil then
-    add = nil
-  elseif not attempt(git_text, add).ok then
-    local a = {"add", "--"}
-    for p in add do push(a, p) end
-    git_call(repo, a, opts, false, nil)
-  elseif add == "tracked" then
-    push(args, "-a")
-  else
-    git_call(repo, {"add", "-A"}, opts, false, nil)
+  -- No `add`: the commit takes what is staged.
+  if add ~= nil then
+    if not attempt(git_text, add).ok then
+      local a = {"add", "--"}
+      for p in add do push(a, p) end
+      git_call(repo, a, opts, false, nil)
+    elseif add == "tracked" then
+      push(args, "-a")
+    else
+      git_call(repo, {"add", "-A"}, opts, false, nil)
+    end
   end
   push(args, "-F")
   push(args, "-")

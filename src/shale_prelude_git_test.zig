@@ -178,3 +178,52 @@ test "git prelude: SHALE-AGENTS.md's user-prelude commit refuses a message witho
     try testing.expectEqualStrings("`commit`: the message has no Co-Authored-By: line", bad.stop.?.message);
     try expectOnce(&t, "commit(\"\", \"signed\\n\\nCo-Authored-By: Test <t@x>\", {add = \"all\"}) print(git_log(\"\", {n = 1})[1].subject)", "signed\n");
 }
+
+/// A hook of the repo at the root: `name`, a shell script that runs `body`.
+fn hook(t: *T, name: []const u8, body: []const u8) !void {
+    const a = t.arena.allocator();
+    const rel = try std.fmt.allocPrint(a, ".git/hooks/{s}", .{name});
+    try t.put(rel, try std.fmt.allocPrint(a, "#!/bin/sh\n{s}\n", .{body}));
+    var c: Collect = .{};
+    defer c.buf.deinit(testing.allocator);
+    const o = try spawn.run(a, .{ .argv = &.{ "chmod", "+x", try std.fmt.allocPrint(a, "{s}/{s}", .{ t.root, rel }) }, .env = t.host.env, .timeout_ms = 20_000 }, &c);
+    try testing.expectEqual(@as(?u8, 0), o.code);
+}
+
+test "git prelude: a git that runs out of time, or is ended by a signal, stops saying which; a merge that fails without a conflict, by its exit or its time" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try repo(&t);
+    // A commit whose hook outlasts the call's time.
+    try hook(&t, "pre-commit", "sleep 5");
+    var slow = t.runOnce("git_commit(\"\", \"x\", {add = \"all\", timeout_ms = 300})", .atomic);
+    defer slow.deinit();
+    try testing.expectEqualStrings("`git commit -q -F -` timed out", slow.stop.?.message);
+    // One whose hook ends the git that runs it.
+    try hook(&t, "pre-commit", "kill -9 $PPID");
+    var killed = t.runOnce("git_commit(\"\", \"x\", {add = \"all\"})", .atomic);
+    defer killed.deinit();
+    try testing.expectEqualStrings("`git commit -q -F -` was ended by a signal", killed.stop.?.message);
+    try hook(&t, "pre-commit", "exit 0");
+    try git(&t, "", &.{ "commit", "-q", "-m", "second" });
+    // A ref that is none: git's words, then its exit.
+    var none = t.runOnce("git_merge(\"\", \"nosuch\")", .atomic);
+    defer none.deinit();
+    try testing.expectEqualStrings("`git merge nosuch` exited 1", none.stop.?.message);
+    try testing.expect(std.mem.indexOf(u8, none.output, "nosuch") != null);
+    // A merge that makes a commit, whose hook outlasts the merge's time.
+    try git(&t, "", &.{ "branch", "side" });
+    try t.put("h.txt", "h\n");
+    try git(&t, "", &.{ "add", "h.txt" });
+    try git(&t, "", &.{ "commit", "-q", "-m", "main's" });
+    try git(&t, "", &.{ "checkout", "-q", "side" });
+    try t.put("i.txt", "i\n");
+    try git(&t, "", &.{ "add", "i.txt" });
+    try git(&t, "", &.{ "commit", "-q", "-m", "side's" });
+    try git(&t, "", &.{ "checkout", "-q", "main" });
+    try hook(&t, "pre-merge-commit", "sleep 5");
+    var stuck = t.runOnce("git_merge(\"\", \"side\", {timeout_ms = 300})", .atomic);
+    defer stuck.deinit();
+    try testing.expectEqualStrings("`git merge side` did not finish (timeout)", stuck.stop.?.message);
+}
