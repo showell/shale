@@ -1,0 +1,82 @@
+-- **A ZIG BUILD, AND WHAT IT SAID THAT MATTERS**: the verdict of `zig build
+-- STEP` without its noise, the escape behind most `zig build ... | grep
+-- error | sort | uniq -c` (2026-10-20: about 70 of them). It prints the
+-- Build Summary, each distinct error line with how often it came (a
+-- failing step's error repeats once per binary), the failed tests' names
+-- and their first lines, a failed run's last lines, and the exit code. Every line of the output is
+-- kept in `log` (default .zig-cache/zig_build.log under `dir`) for the
+-- rest.
+--
+--   cd <repo> && shale cookbook:zig_build.shale step=test
+--   cd <repo> && shale cookbook:zig_build.shale step=metal zig=zig017:zig
+--   cd <repo> && shale cookbook:zig_build.shale --args-stdin <<'ARGS'
+--   args=test -Dtest-file=src/floor_sim.zig --summary all
+--   ARGS
+--
+-- `zig` is the compiler (default `zig` on the PATH; another through a
+-- ` tools` mount, such as `zig017:zig`), `step` a step's name, `args` more words after
+-- it (split on spaces), `dir` where to run, `minutes` the time it gets.
+--
+-- budget: steps=400000000 arena_bytes=1000000000
+
+const ZIG = arg("zig", "zig")
+const STEP = arg("step", "")
+const ARGS = arg("args", "")
+const DIR = arg("dir", ".")
+const MINUTES = arg("minutes", 10)
+const LOG = arg("log", ".zig-cache/zig_build.log")
+
+local argv = {ZIG, "build"}
+if contains(ZIG, ":") then argv = {real(ZIG), "build"} end
+if STEP ~= "" then push(argv, STEP) end
+-- `--summary all` goes to the build itself, before any `--` (after it, the
+-- words are the step's own).
+local passed = {}
+local to_step = false
+for w in words(ARGS) do
+  if w == "--" then to_step = true end
+  if to_step then push(passed, w) else push(argv, w) end
+end
+if not contains(ARGS, "--summary") then push(argv, "--summary") push(argv, "all") end
+for w in passed do push(argv, w) end
+
+-- A compiler named through a mount runs if that mount is marked ` tools`
+-- (SHALE-AGENTS.md: the user's word, once, for a new toolchain).
+local r = run(argv, {cwd = DIR, timeout_ms = MINUTES * 60000, whole = 16777216})
+local log_path = LOG
+if DIR ~= "." then log_path = DIR .. "/" .. LOG end
+replace(log_path, r.out)
+
+local counts = {}
+local order = {}
+local failed = {}
+local summary = ""
+local lines_of = lines(r.out)
+for i = 1, #lines_of do
+  local t = trim(lines_of[i])
+  if starts_with(t, "Build Summary:") then summary = t end
+  if contains(t, "error:") and not contains(t, "compilation errors") and not starts_with(t, "failed command:") then
+    if not has_key(counts, t) then push(order, t) counts[t] = 0 end
+    counts[t] = counts[t] + 1
+  end
+  if starts_with(t, "error: '") and contains(t, "' failed:") then
+    local why = ""
+    if i < #lines_of then why = trim(lines_of[i + 1]) end
+    push(failed, sub(t, 9, #t - 9) .. ": " .. why)
+  end
+end
+
+print(summary ~= "" and summary or "(no Build Summary: the build runner did not get that far)")
+for t in order do
+  if not starts_with(t, "error: '") then print(counts[t] .. "x " .. sub(t, 1, 240)) end
+end
+for f in failed do print("FAILED " .. sub(f, 1, 240)) end
+-- A failed run whose own words are not `error:` lines (a checker's
+-- findings, a script's stop): its last lines, so nothing is hidden.
+if r.code ~= 0 then
+  print("-- the last lines:")
+  local from = #lines_of - 14
+  if from < 1 then from = 1 end
+  for i = from, #lines_of do print("   " .. sub(lines_of[i], 1, 200)) end
+end
+print("exit " .. r.code .. " in " .. (r.ms // 1000) .. " s; the whole output in " .. log_path)

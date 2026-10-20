@@ -1,0 +1,100 @@
+-- **LOOK: LINES BY NUMBER, AND A LITERAL'S LINES ACROSS FOLDERS**, the
+-- two reads behind most `# want:` escapes (2026-10-19 and 20: 120 escapes
+-- for `sed -n a,bp`, 195 for `grep -n`, most of them several files or
+-- repos at once). One launch, no script to write:
+--
+--   shale <cookbook>/look.shale at=src/io.zig:690-730,build.zig:16-29
+--   shale <cookbook>/look.shale find=pathFromRoot( in=src,build.zig like=*.zig
+--   shale <cookbook>/look.shale find="pub fn findProgram" in=zig017:std/Build.zig
+--
+-- `at` is a comma-separated list of `path:first-last` (or `path:n` for one
+-- line); a mount path (`zig017:std/Build.zig:100-120`) works, the range
+-- after the last colon. `find` is a literal (not a pattern), looked for in
+-- each file or folder of `in` (comma-separated; folders walked, their
+-- .zig-cache, zig-out, zig-pkg, node_modules and .git passed by), files
+-- matching `like` (`*` for all). At most `most` lines are printed, and a
+-- run that finds more says so: never a silent cut. A found line longer than
+-- `wide` characters is cut there, ending ` ...`.
+--
+-- budget: steps=900000000 reads=100000 read_bytes=1000000000 arena_bytes=2000000000
+
+const AT = arg("at", "")
+const FIND = arg("find", "")
+const IN = arg("in", ".")
+const LIKE = arg("like", "*")
+const MOST = arg("most", 300)
+const WIDE = arg("wide", 200)
+
+if AT == "" and FIND == "" then fail("look: give at=path:first-last[,...] or find=TEXT [in=dirs] [like=*.zig]") end
+
+-- `path:first-last` or `path:n`, split at the last colon.
+function range_of(spec)
+  local parts = split(spec, ":")
+  if #parts < 2 then fail("look: " .. spec .. " is not path:first-last") end
+  local span = parts[#parts]
+  local path = join(take(parts, #parts - 1), ":")
+  local ends = split(span, "-")
+  local first = parse_int(ends[1])
+  local last = first
+  if #ends == 2 then last = parse_int(ends[2]) end
+  if first == nil or last == nil or last < first then fail("look: " .. spec .. ": the range is not first-last") end
+  return {path = path, first = first, last = last}
+end
+
+if AT ~= "" then
+  for spec in split(AT, ",") do
+    local r = range_of(trim(spec))
+    print("== " .. r.path .. ":" .. r.first .. "-" .. r.last)
+    local i = 0
+    for l in lines(read(r.path)) do
+      i = i + 1
+      if i > r.last then break end
+      if i >= r.first then print(i .. "\t" .. l) end
+    end
+    if i < r.first then print("(the file has " .. i .. " lines)") end
+  end
+end
+
+function passed_by(path)
+  for part in {"/.zig-cache/", "/zig-out/", "/zig-pkg/", "/node_modules/", "/.git/"} do
+    if contains("/" .. path .. "/", part) then return true end
+  end
+  return false
+end
+
+if FIND ~= "" then
+  local shown = 0
+  local found = 0
+  local files = 0
+  for given in split(IN, ",") do
+    local place = trim(given)
+    local paths = {}
+    -- `.` is the root, a folder `is_dir` will not be asked about.
+    if place ~= "." and not exists(place) then
+      print("(not there: " .. place .. ")")
+    elseif place == "." or is_dir(place) then
+      -- Hidden folders (.git, .zig-cache) are not entered at all.
+      local opts = {kind = "file", skip = ".*"}
+      if LIKE ~= "*" then opts = {kind = "file", skip = ".*", like = LIKE} end
+      for e in walk_all(place, opts) do
+        if not passed_by(e.path) then push(paths, e.path) end
+      end
+    else
+      push(paths, place)
+    end
+    for p in paths do
+      files = files + 1
+      for m in grep_all(p, FIND) do
+        found = found + 1
+        if shown < MOST then
+          local text = trim(m.text)
+          if #text > WIDE then text = sub(text, 1, WIDE) .. " ..." end
+          print(p .. ":" .. m.line .. ": " .. text)
+          shown = shown + 1
+        end
+      end
+    end
+  end
+  if found > shown then print("... " .. (found - shown) .. " more (most=" .. MOST .. " shown; raise most= or narrow in=)") end
+  print(found .. " lines in " .. files .. " files")
+end

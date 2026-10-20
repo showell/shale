@@ -10,7 +10,9 @@
 --   - anywhere else (an operand of `&`, an argument): `@as([N]T, @splat(v))`
 -- A repeated one-character string, `"x" ** N`, is `&@as([N]u8, @splat('x'))`
 -- (a pointer to an array: it is a slice where one is wanted, and `++`
--- takes it). A longer string repeated is listed, not changed.
+-- takes it). A longer string repeated, `"ab" ** N`, is `repeated("ab", N)`,
+-- and the file gets that function appended (built at comptime: a pointer
+-- to an array as well).
 -- An anonymous `.{v} ** N`, with no element type, is listed, not changed:
 -- give it its type by hand. Every changed file is rewritten whole; run
 -- `zig fmt` after, and let the compiler judge.
@@ -22,6 +24,21 @@
 
 const DIR = arg("dir", ".")
 const DRY = arg("dry", "no") == "yes"
+
+-- What a file that repeats a longer string gets at its end.
+const REPEATED = join({
+  "",
+  "/// `s` repeated `n` times, built at comptime (Zig 0.17 removed `s ** n`).",
+  "fn repeated(comptime s: []const u8, comptime n: usize) *const [s.len * n]u8 {",
+  "    const out = comptime blk: {",
+  "        var a: [s.len * n]u8 = undefined;",
+  "        @setEvalBranchQuota(1000 + n);",
+  "        for (0..n) |i| @memcpy(a[i * s.len ..][0..s.len], s);",
+  "        break :blk a;",
+  "    };",
+  "    return &out;",
+  "}",
+}, "\n") .. "\n"
 
 -- The end of the count expression that starts at `at` in `l`: one operand,
 -- since `**` binds tighter than any other operator (`"b" ** max ++ "x"` is
@@ -105,6 +122,7 @@ end
 function fix_line(l)
   local changed = 0
   local left = 0
+  local strings = 0
   local from = 1
   while true do
     local m = re_find(sub(l, from), "\\[_\\]")
@@ -155,7 +173,16 @@ function fix_line(l)
     end
     local inner = sub(l, open + 1, star - 1)
     local one = #inner == 1 or (#inner == 2 and starts_with(inner, "\\"))
-    if open > 0 and one then
+    if open > 0 and not one then
+      local nstart = star + 4
+      while sub(l, nstart, nstart) == " " do nstart = nstart + 1 end
+      local nend = count_end(l, nstart)
+      local before = sub(l, 1, open - 1)
+      l = before .. "repeated(\"" .. inner .. "\", " .. bare(sub(l, nstart, nend)) .. ")" .. sub(l, nend + 1)
+      changed = changed + 1
+      strings = strings + 1
+      sseek = #before + 1
+    elseif open > 0 and one then
       local nstart = star + 4
       while sub(l, nstart, nstart) == " " do nstart = nstart + 1 end
       local nend = count_end(l, nstart)
@@ -192,7 +219,7 @@ function fix_line(l)
     end
   end
   if re_find(l, "\\}\\s*\\*\\*") ~= nil or contains(l, "\" **") then left = left + 1 end
-  return {line = l, changed = changed, left = left}
+  return {line = l, changed = changed, left = left, strings = strings}
 end
 
 local total = 0
@@ -204,24 +231,28 @@ for e in walk_all(DIR, {kind = "file", like = "*.zig"}) do
     if contains(text, " ** ") then
       local out = {}
       local n = 0
+      local strings = 0
       local i = 0
       for l in lines(text) do
         i = i + 1
         local r = fix_line(l)
         push(out, r.line)
         n = n + r.changed
+        strings = strings + r.strings
         if r.left > 0 then push(leftover, e.path .. ":" .. i .. ": " .. trim(r.line)) end
       end
       if n > 0 then
         files = files + 1
         total = total + n
         print(e.path .. ": " .. n)
-        if not DRY then replace(e.path, join(out, "\n") .. "\n") end
+        local whole = join(out, "\n") .. "\n"
+        if strings > 0 and not contains(text, "fn repeated(") then whole = whole .. REPEATED end
+        if not DRY then replace(e.path, whole) end
       end
     end
   end
 end
-print("array multiplications made @splat: " .. total .. " in " .. files .. " files" .. (DRY and " (dry run: nothing written)" or ""))
+print("array multiplications rewritten: " .. total .. " in " .. files .. " files" .. (DRY and " (dry run: nothing written)" or ""))
 if #leftover > 0 then
   print("left for a hand (no element type, or a form this does not read):")
   for l in leftover do print("  " .. sub(l, 1, 160)) end

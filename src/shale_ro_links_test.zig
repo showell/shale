@@ -68,19 +68,23 @@ test "a walk through a mount: each entry stat'ed where the mount points, its pat
     try t.expectOutput("for e in walk(\"m:sub\", {after = \"m:sub/b.zig\"}) do print(e.path) end", "");
 }
 
-test "ro mounts: the mounts file's ` ro`; any other trailing word, or a path with a space, refused by line" {
+test "ro mounts: the mounts file's ` ro` and ` tools`, in either order; any other trailing word, or one twice, refused by line" {
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
     const a = t.arena.allocator();
     var why: []const u8 = "";
-    const ms = try host_linux.parseMounts(a, "a = /x ro\nb = /y\n", "/home/x", &why);
+    const ms = try host_linux.parseMounts(a, "a = /x ro\nb = /y\nc = /z ro tools\nd = /w tools ro\ne = /v tools\n", "/home/x", &why);
     try testing.expectEqual(host_linux.Mount.Access.read_only, ms[0].access);
     try testing.expectEqual(host_linux.Mount.Access.read_write, ms[1].access);
     try testing.expectEqualStrings("/x", ms[0].dir);
+    for (ms, [_]bool{ false, false, true, true, true }) |m, tools| try testing.expectEqual(tools, m.tools);
+    try testing.expectEqual(host_linux.Mount.Access.read_only, ms[3].access);
+    try testing.expectEqual(host_linux.Mount.Access.read_write, ms[4].access);
     for ([_]struct { []const u8, []const u8 }{
-        .{ "a = /x rw\n", "line 1: `rw` after `a`'s path: only `ro` may follow it" },
-        .{ "a = /x y z\n", "line 1: `a`'s path has a space" },
+        .{ "a = /x rw\n", "line 1: `rw` after `a`'s path: only `ro` and `tools` may follow it" },
+        .{ "a = /x y z\n", "line 1: `y` after `a`'s path" },
+        .{ "a = /x ro ro\n", "line 1: `ro` twice after `a`'s path" },
     }) |c| {
         try testing.expectError(error.Malformed, host_linux.parseMounts(a, c[0], "/home/x", &why));
         errdefer std.debug.print("{s}: {s}\n", .{ c[0], why });

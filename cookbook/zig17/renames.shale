@@ -24,6 +24,10 @@
 --     a `Debug`). The command line's `-Doptimize=ReleaseSafe` still reads.
 --   - `if (b.args) |a| run.addArgs(a);`: `run.addPassthruArgs();` (0.17's
 --     build script no longer sees the arguments after `--`)
+--   - `X.pathFromRoot(p)` (removed): `pathFromRoot(X, p)`, the file given
+--     that function and `rootOf`, which make the path absolute (0.17's
+--     `b.root` may hold a relative one); `b.build_root.handle`:
+--     `b.root.root_dir.handle`
 -- Every changed file is rewritten whole; run `zig fmt` after, and let the
 -- compiler judge.
 --
@@ -32,6 +36,22 @@
 -- budget: steps=900000000 reads=100000 arena_bytes=4000000000
 
 const DIR = arg("dir", ".")
+
+-- What a build.zig that called `b.pathFromRoot` gets at its end.
+const FROM_ROOT = join({
+  "",
+  "/// `builder`'s build root as an absolute path: 0.17's `b.root` may hold a",
+  "/// relative one, and these paths are handed to other processes and builds.",
+  "fn rootOf(builder: *std.Build) []const u8 {",
+  "    return builder.root.root_dir.handle.realPathFileAlloc(builder.graph.io, builder.root.subPathOrDot(), builder.allocator) catch |e|",
+  "        std.debug.panic(\"the build root {f}: {t}\", .{ builder.root, e });",
+  "}",
+  "",
+  "/// `sub` under this build's root, absolute (0.17 removed `b.pathFromRoot`).",
+  "fn pathFromRoot(b: *std.Build, sub: []const u8) []const u8 {",
+  "    return b.pathJoin(&.{ rootOf(b), sub });",
+  "}",
+}, "\n") .. "\n"
 
 -- The index of the `)` closing the call whose `(` is at `open`.
 function close_of(l, open)
@@ -159,6 +179,29 @@ function fix(text)
     push(out, line)
   end
   text = join(out, "\n")
+  -- X.pathFromRoot(p) -> pathFromRoot(X, p) for any builder X (`b`,
+  -- `dep.builder`), with the helpers appended once.
+  local roots = 0
+  local seek = 1
+  while true do
+    local at = find(text, ".pathFromRoot(", seek)
+    if at == nil then break end
+    local start = at
+    while start > 1 and contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789.", sub(text, start - 1, start - 1)) do start = start - 1 end
+    local receiver = sub(text, start, at - 1)
+    text = sub(text, 1, start - 1) .. "pathFromRoot(" .. receiver .. ", " .. sub(text, at + 14)
+    roots = roots + 1
+    seek = start + 1
+  end
+  if roots > 0 then
+    if not contains(text, "fn pathFromRoot(") then text = text .. FROM_ROOT end
+    n = n + roots
+  end
+  roots = #split(text, "b.build_root.handle") - 1
+  if roots > 0 then
+    text = substitute(text, "b.build_root.handle", "b.root.root_dir.handle")
+    n = n + roots
+  end
   for kind in {"enum", "struct", "union"} do
     local old = ".@\"" .. kind .. "\".fields.len"
     local k = #split(text, old) - 1
@@ -174,7 +217,7 @@ local total = 0
 for e in walk_all(DIR, {kind = "file", like = "*.zig"}) do
   if not contains(e.path, ".zig-cache") and not contains(e.path, "zig-out") then
     local was = read(e.path)
-    if contains(was, "dupeZ(") or contains(was, "indexOfIgnoreCase") or contains(was, "Ast.parse(") or contains(was, ".fields.len") or contains(was, ".Release") or contains(was, ".Debug") or contains(was, "b.args") or contains(was, "bufPrintZ(") or contains(was, ".initEmpty()") or contains(was, ".initFull()") or contains(was, ".pointer.") or contains(was, ".params[") then
+    if contains(was, "dupeZ(") or contains(was, "indexOfIgnoreCase") or contains(was, "Ast.parse(") or contains(was, ".fields.len") or contains(was, ".Release") or contains(was, ".Debug") or contains(was, "b.args") or contains(was, "bufPrintZ(") or contains(was, ".initEmpty()") or contains(was, ".initFull()") or contains(was, ".pointer.") or contains(was, ".params[") or contains(was, "pathFromRoot(") or contains(was, "build_root.handle") then
       local r = fix(was)
       if r.n > 0 then
         print(e.path .. ": " .. r.n)

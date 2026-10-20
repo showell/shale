@@ -25,6 +25,10 @@ pub const Mount = struct {
     /// ` ro` after the path (metal-vmm QUEUE 235): every change through it
     /// is refused before anything is written; reads and programs as ever.
     access: Access = .read_write,
+    /// ` tools` after the path: a toolchain's install (a newer Zig), whose
+    /// programs `run` takes by path without a `want`. The user's word, given
+    /// once in the mounts file, for programs git does not track.
+    tools: bool = false,
 
     pub const Access = enum { read_write, read_only };
 };
@@ -45,20 +49,21 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
             return error.Malformed;
         };
         const name = std.mem.trim(u8, line[0..eq], " \t");
-        // The path, and ` ro` after it, or nothing.
+        // The path, and after it ` ro`, ` tools`, both or nothing.
         var words = std.mem.tokenizeAny(u8, line[eq + 1 ..], " \t");
         const value = words.next() orelse "";
         var access: Mount.Access = .read_write;
-        if (words.next()) |w| {
-            if (words.next() != null) {
-                why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}`'s path has a space, or more than ` ro` follows it", .{ n, name });
+        var tools = false;
+        while (words.next()) |w| {
+            const seen = if (std.mem.eql(u8, w, "ro")) access == .read_only else if (std.mem.eql(u8, w, "tools")) tools else {
+                why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` after `{s}`'s path: only `ro` and `tools` may follow it (and a path has no space)", .{ n, w, name });
+                return error.Malformed;
+            };
+            if (seen) {
+                why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` twice after `{s}`'s path", .{ n, w, name });
                 return error.Malformed;
             }
-            if (!std.mem.eql(u8, w, "ro")) {
-                why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` after `{s}`'s path: only `ro` may follow it (and a path has no space)", .{ n, w, name });
-                return error.Malformed;
-            }
-            access = .read_only;
+            if (std.mem.eql(u8, w, "ro")) access = .read_only else tools = true;
         }
         if (name.len == 0 or !validName(name)) {
             why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` is not a mount's name: letters, digits, `_` and `-`", .{ n, name });
@@ -76,7 +81,7 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
             why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}`'s value `{s}` is relative: an absolute path, or one from `~/`", .{ n, name, value });
             return error.Malformed;
         };
-        try out.append(alloc, .{ .name = try alloc.dupe(u8, name), .dir = std.mem.trimEnd(u8, dir, "/"), .access = access });
+        try out.append(alloc, .{ .name = try alloc.dupe(u8, name), .dir = std.mem.trimEnd(u8, dir, "/"), .access = access, .tools = tools });
     }
     return out.toOwnedSlice(alloc);
 }

@@ -57,6 +57,30 @@ or a shell outside the gate.)
 A value given as `name=value` is the script's `arg("name", default)`; a
 default that is an integer or a boolean reads the value as one.
 
+## Before you reach for the shell
+
+**Most escapes past the gate are a shell habit for something Shale already
+does.** On 2026-10-19 and 20, 694 escapes broke down as: `grep -n` 195, `sed -n
+a,bp` 120, `git` 98, `zig build | grep` about 70. Every one of these has a
+Shale form, most of them one launch:
+
+| the habit | in Shale |
+|---|---|
+| `sed -n 40,80p f; sed -n 5,9p g` | `shale cookbook:look.shale at=f:40-80,g:5-9` |
+| `grep -rn 'text' src build.zig` | `shale cookbook:look.shale find=text in=src,build.zig like=*.zig` (a value with `(` or a space: `--args-stdin`) |
+| grep in Zig's std, a sibling repo, `~/zig17` | the same, through a mount: `in=zig017:lib/std/Build.zig`, `repos:dog-park/src`, `zig17:shale/src` |
+| `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:zig_build.shale step=test` (`zig=zig017:zig` for 0.17): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
+| `git log`, `git diff --stat`, `git show rev:path`, `git status` | the git prelude: `git_log`, `git_diff`, `git_show`, `git_status`, `git_is_clean` (below) |
+| `git commit -m ... && git push` | `git_commit(repo, msg, {add})`, `git_push(repo)`; `git_worktree_add`, `git_merge_ff` |
+| a script you would write in python | a heredoc, `shale <<'TAG'`: `edit`'s list form, `walk_all`, `grep`, `re_lines`, `run` |
+
+A script is named through a mount too (`shale cookbook:look.shale`), so a
+recipe launches from any checkout. The box's mounts are in
+`~/.config/shale/mounts`; `shale` says which it read when a name is missing.
+Escape only for what this table and the cookbook don't cover (a build run in
+the background, an interactive tool, a path no mount reaches), and say what
+was missing in the escape's text: that is how the next want is found.
+
 **What it has for code:** `glob(pattern)` (`**` any folders, `*` and `?`
 within one; hidden names like `.git` and `.zig-cache` left out, unless `{hidden = true}`),
 `grep(p, s)` (the lines holding a literal, numbered), `read_lines` and
@@ -492,6 +516,14 @@ the first two can give a quiet wrong answer, an empty list:
   ... mount `x` is read-only`, before anything is written; reads work. A
   `run` with its `cwd` there runs: Shale cannot see what a program
   writes.
+- **A newer compiler is a `tools` mount.** `run` refuses a program by a
+  path git does not track (a script just written?), and a toolchain's
+  install is one. A mount line with ` tools` after its path
+  (`zig017 = ~/zig-0.17.0 ro tools`) lets `run` take any program under it
+  by path, `real("zig017:zig")`; a shell or text tool there is refused all
+  the same. **Adding that line is the user's call:** when a new compiler is
+  installed, ask once, then add the line; never pass `want` on every run
+  instead.
 - **The store follows no symbolic link.** A path any part of which, below
   the root or a mount's own folder, is a link stops the run, `refused:
   <path> is a symbolic link`, for a read, a change, `exists`, `stat` and
