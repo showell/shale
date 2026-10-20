@@ -68,7 +68,7 @@ pub fn run(io: Io, backing: std.mem.Allocator, root: []const u8, source: []const
     var why = verdict(&v, &w);
     // Runs that made different changes, as an arena-shaped stop may, leave different
     // stores; their changes were compared above.
-    if (why == null and has_root and v.effects.len == w.effects.len) {
+    if (why == null and has_root and sameEffects(v.effects, w.effects)) {
         if (!(sameTree(io, a, root, copy) catch false)) why = "the store left";
     }
     if (why) |what| {
@@ -104,7 +104,7 @@ pub fn verdict(v: *const script.Result, w: *const script.Result) ?[]const u8 {
         // The engine that stopped first did what the other did, up to its stop: its
         // output and its changes are the other's first ones.
         if (!prefixes(v.output, w.output)) why = "the output";
-        if (!sameEffects(v.effects[0..@min(v.effects.len, w.effects.len)], w.effects[0..@min(v.effects.len, w.effects.len)])) why = "the effects";
+        if (!firstChanges(v, w)) why = "the effects";
     } else {
         if (!std.mem.eql(u8, v.output, w.output)) why = "the output";
         if (!sameEffects(v.effects, w.effects)) why = "the effects";
@@ -139,6 +139,25 @@ fn isBudget(s: ?script.Stop, b: script.diag.Budget) bool {
 fn isArenaShaped(s: ?script.Stop) bool {
     const b = (s orelse return false).budget orelse return false;
     return b == .steps or b == .arena or b == .kept;
+}
+
+/// Whether the changes of the run that made fewer are the other's first ones. Its last
+/// may have been refused where the other's was made, when that refusal is its stop: an
+/// arena run out inside the change.
+fn firstChanges(v: *const script.Result, w: *const script.Result) bool {
+    const n = @min(v.effects.len, w.effects.len);
+    if (n == 0) return true;
+    if (!sameEffects(v.effects[0 .. n - 1], w.effects[0 .. n - 1])) return false;
+    const x = v.effects[n - 1];
+    const y = w.effects[n - 1];
+    if (!std.mem.eql(u8, x.op, y.op) or !std.mem.eql(u8, x.path, y.path)) return false;
+    if (std.mem.eql(u8, x.outcome, y.outcome)) return true;
+    return refusedAtItsStop(v, n) or refusedAtItsStop(w, n);
+}
+
+/// Whether `r`'s change `n - 1` is its last, refused for want of arena, and its stop.
+fn refusedAtItsStop(r: *const script.Result, n: usize) bool {
+    return r.effects.len == n and std.mem.eql(u8, r.effects[n - 1].outcome, "OutOfMemory") and isBudget(r.stop, .arena);
 }
 
 /// Whether the shorter of `x` and `y` begins the longer.
