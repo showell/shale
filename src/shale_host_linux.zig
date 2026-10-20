@@ -331,15 +331,25 @@ const refused = [_]struct { []const []const u8, []const u8 }{
 };
 
 /// **WHAT `run` AND `job_start` REFUSE**, without a `want`: the lists
-/// above, by basename, and a program by path that git does not track.
+/// above, by basename, and a program by path that git does not track,
+/// unless it is under a `tools` mount (a toolchain the user named once).
 pub fn refuse(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv0: []const u8, cwd: []const u8, want: ?[]const u8) Error!void {
     if (want != null) return;
     const base = baseName(argv0);
     const bare = std.mem.trimEnd(u8, base, "0123456789");
     for (refused) |group| for (group[0]) |n| if (std.mem.eql(u8, n, base) or (bare.len > 0 and std.mem.eql(u8, n, bare)))
         return run.fail(pos, .refused, "`{s}` of `{s}`: {s}; {{want = \"tag: why\"}} to run it anyway", .{ who, base, group[1] });
-    if (std.mem.indexOfScalar(u8, argv0, '/') != null and !try tracked(h, run, pos, argv0, cwd))
+    if (std.mem.indexOfScalar(u8, argv0, '/') != null and !underToolsMount(h, argv0) and !try tracked(h, run, pos, argv0, cwd))
         return run.fail(pos, .refused, "`{s}` of `{s}`: a program by path that git does not track (a script just written?); {{want = \"tag: why\"}} to run it anyway", .{ who, argv0 });
+}
+
+/// Whether `argv0`, an absolute path, is inside a mount marked ` tools`.
+fn underToolsMount(h: *Host, argv0: []const u8) bool {
+    for (h.mounts) |m| {
+        if (!m.tools) continue;
+        if (std.mem.startsWith(u8, argv0, m.dir) and argv0.len > m.dir.len and argv0[m.dir.len] == '/') return true;
+    }
+    return false;
 }
 
 fn baseName(argv0: []const u8) []const u8 {
@@ -629,6 +639,16 @@ test "host: what run refuses without a want, by name and by an untracked path; a
     try t.expectOutput(try std.fmt.bufPrint(&buf, "print(host(\"run\", {{\"{s}/shale-fixture\", \"lines\", \"1\"}}, {{timeout_ms = 10000, tail = 1, want = \"test: the fixture\"}}).out)", .{path}), "line 1\n\n");
     // The want is in what the CLI lists.
     try testing.expect(std.mem.indexOf(u8, t.host.records.items[t.host.records.items.len - 1].line, "(want: test: the fixture)") != null);
+    // A program under a `tools` mount (a toolchain's install, the user's
+    // word for it once) runs without a want; a plain mount over it does not.
+    const a = t.arena.allocator();
+    var why: []const u8 = "";
+    t.host.mounts = try parseMounts(a, try std.fmt.allocPrint(a, "bin = {s}\n", .{path}), "/home/x", &why);
+    try t.expectStop(try std.fmt.bufPrint(&buf, "host(\"run\", {{\"{s}/shale-fixture\", \"lines\", \"1\"}}, {{timeout_ms = 10000, tail = 1}})", .{path}), .atomic, .refused, "git does not track");
+    t.host.mounts = try parseMounts(a, try std.fmt.allocPrint(a, "bin = {s} ro tools\n", .{path}), "/home/x", &why);
+    try t.expectOutput(try std.fmt.bufPrint(&buf, "print(host(\"run\", {{\"{s}/shale-fixture\", \"lines\", \"1\"}}, {{timeout_ms = 10000, tail = 1}}).out)", .{path}), "line 1\n\n");
+    // A name on the lists is refused under a tools mount all the same.
+    try t.expectStop(try std.fmt.bufPrint(&buf, "host(\"run\", {{\"{s}/bash\", \"x\"}}, {{timeout_ms = 1000, tail = 1}})", .{path}), .atomic, .refused, "want =");
 }
 
 test "host: a timeout is a result" {

@@ -1186,11 +1186,13 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   path's OS path, and a path whose first part has a `:` is a mount's
   (`runs:gates/summary`). The mounts are in `SHALE_MOUNTS`'s file, else
   `~/.config/shale/mounts` (`name = /abs/path` or `name = ~/path` a line,
-  ` ro` after it for a read-only mount: every change through it is
+  ` ro` after it for a read-only mount, ` tools` for a toolchain whose
+  programs `run` takes by path though git does not track them (either
+  order, each once): every change through a read-only mount is
   refused before anything is written, at the one point every change
   passes, `PathHook.may_change`, which only a `host_io` saying
-  `shale_change_check` compiles; another word after the path, or a path
-  with a space, is a mistake named by its line). A mount's own path is
+  `shale_change_check` compiles; another word after the path, one twice,
+  or a path with a space, is a mistake named by its line). A mount's own path is
   resolved once, at load. **The store follows no symbolic link** below
   the root or a mount's folder: the path hook walks each part with
   `lstat` (a component walk, a step a part) and a link stops the run,

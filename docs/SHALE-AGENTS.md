@@ -516,6 +516,14 @@ the first two can give a quiet wrong answer, an empty list:
   ... mount `x` is read-only`, before anything is written; reads work. A
   `run` with its `cwd` there runs: Shale cannot see what a program
   writes.
+- **A newer compiler is a `tools` mount.** `run` refuses a program by a
+  path git does not track (a script just written?), and a toolchain's
+  install is one. A mount line with ` tools` after its path
+  (`zig017 = ~/zig-0.17.0 ro tools`) lets `run` take any program under it
+  by path, `real("zig017:zig")`; a shell or text tool there is refused all
+  the same. **Adding that line is the user's call:** when a new compiler is
+  installed, ask once, then add the line; never pass `want` on every run
+  instead.
 - **The store follows no symbolic link.** A path any part of which, below
   the root or a mount's own folder, is a link stops the run, `refused:
   <path> is a symbolic link`, for a read, a change, `exists`, `stat` and
