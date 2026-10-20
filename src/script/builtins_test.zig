@@ -929,6 +929,36 @@ test "builtins: re_find's alternatives, \\b and nocase (the design, final; QUEUE
     try f.expectOutput("print(re_match(\"A\", \"a\"), re_match(\"A\", \"a\", {nocase = true}), re_match(\"A\", \"a\"))", "false\ttrue\tfalse\n");
 }
 
+test "builtins: re_find's nocase must be a boolean" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectStop("print(re_find(\"a\", \"a\", {nocase = 1}))", .type);
+    try f.expectStop("print(re_match(\"a\", \"a\", {nocase = \"yes\"}))", .type);
+}
+
+test "builtins: patterns whose programs do not fit the machine's memory stop on that budget, at the call" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    // Eight patterns, each its own program and scratch in the run's cache
+    // (about 16 KiB each), from one call. 64 KiB holds either engine's code
+    // many times over and the cache's eight not at all: both stop there, at
+    // the call. (Near a budget's edge the engines part, their code being of
+    // different sizes, and the gate would rightly say so.)
+    const src = "for i = 1, 8 do re_find(\"x\", rep(\"[a-z]\", 50) .. i) end print(\"done\")\n";
+    var big = f.run(src, .{ .machine_bytes = 512 * 1024 });
+    try testing.expectEqualStrings("done\n", big.output);
+    big.deinit();
+    var r = f.run(src, .{ .machine_bytes = 64 * 1024 });
+    defer r.deinit();
+    const s = r.stop.?;
+    try testing.expectEqual(script.diag.Budget.machine, s.budget.?);
+    try testing.expectEqual(@as(usize, 1), s.line);
+    try testing.expectEqual(@as(usize, 17), s.column);
+    try testing.expectEqualStrings("", r.output);
+}
+
 test "builtins: an edit's diff in full, or one line a change when the run says `summary` (metal-vmm QUEUE 234, 1)" {
     var f: Fixture = undefined;
     try f.init();

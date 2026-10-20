@@ -566,11 +566,14 @@ pub fn search(p: *const Program, sc: *Scratch, s: []const u8, positions_most: u6
                 break;
             }
             if (pos == s.len) continue;
+            // `add` leaves only consuming instructions and `match` on a list.
             const ok = switch (i.op) {
                 .byte => s[pos] == i.c,
                 .any => s[pos] != '\n',
-                .set => p.sets[i.x].isSet(s[pos]),
-                else => unreachable,
+                else => set: {
+                    std.debug.assert(i.op == .set);
+                    break :set p.sets[i.x].isSet(s[pos]);
+                },
             };
             if (ok) add(p, sc, nlist, .{ .pc = t.pc + 1, .caps = t.caps }, pos + 1, s, &work);
         }

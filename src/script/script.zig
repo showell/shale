@@ -232,6 +232,7 @@ test {
     _ = @import("builtins_cookbook_test.zig");
     _ = @import("examples_test.zig");
     _ = @import("portable_test.zig");
+    _ = @import("regex_test.zig");
     _ = @import("hunt_guard_test.zig");
     _ = builtins;
     _ = @import("charge_test.zig");
