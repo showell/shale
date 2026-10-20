@@ -274,7 +274,19 @@ const Machine = struct {
                     const rv = m.pop();
                     const lv = m.pop();
                     const bop: ast.BinOp = @fromBackingInt(@intCast(op.a));
-                    m.push(switch (bop) {
+                    // Two integers, a loop's usual operands, without the call: the
+                    // value `arith` or `compare` gives them, which take every other
+                    // case, an overflow among them, and so every error.
+                    const fast: ?Value = if (lv == .int and rv == .int) switch (bop) {
+                        .add => if (std.math.add(i64, lv.int, rv.int)) |x| .{ .int = x } else |_| null,
+                        .sub => if (std.math.sub(i64, lv.int, rv.int)) |x| .{ .int = x } else |_| null,
+                        .lt => .{ .boolean = lv.int < rv.int },
+                        .le => .{ .boolean = lv.int <= rv.int },
+                        .gt => .{ .boolean = lv.int > rv.int },
+                        .ge => .{ .boolean = lv.int >= rv.int },
+                        else => null,
+                    } else null;
+                    m.push(fast orelse switch (bop) {
                         .add, .sub, .mul, .idiv, .mod => try r.arith(op.pos, bop, lv, rv),
                         .eq, .ne => .{ .boolean = (try r.equal(op.pos, lv, rv)) == (bop == .eq) },
                         .eq_nil, .ne_nil => .{ .boolean = interp.Run.bothNil(lv, rv) == (bop == .eq_nil) },
