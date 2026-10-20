@@ -182,3 +182,53 @@ test "parse: a name is the innermost declared before it; a block's locals end wi
     defer testing.allocator.free(s.message);
     try testing.expectEqual(diag.Class.name, s.class);
 }
+
+test "parse: a byte the lexer refuses, met while looking ahead for a key's `=`, stops there, the byte shown as \\x" {
+    const s = try parseStop("local t = {a \x01}");
+    defer testing.allocator.free(s.message);
+    try testing.expectEqual(@as(u32, 14), s.column);
+    try testing.expect(std.mem.indexOf(u8, s.message, "the byte \\x01") != null);
+}
+
+test "parse: a long string whose opening is followed by a CRLF starts after the CRLF" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const p = try parseOk(arena.allocator(), "local s = [=[\r\nab]=]");
+    const e = p.main.body[0].kind.local.value.?;
+    try testing.expectEqualStrings("ab", e.kind.string);
+}
+
+test "parse: a call's result is not called again, and a string or table after a name is not a call" {
+    for ([_][]const u8{ "function f() return 1 end f()(2)", "local t = {} t.x \"a\"", "local t = {} t {}" }) |src| {
+        const s = try parseStop(src);
+        defer testing.allocator.free(s.message);
+        try testing.expectEqual(diag.Class.refused, s.class);
+    }
+    // After a call, a string ends the expression; the next statement is what
+    // is wrong there.
+    const s = try parseStop("function f() return 1 end local x = f() \"a\"");
+    defer testing.allocator.free(s.message);
+    try testing.expect(s.class != .refused or std.mem.indexOf(u8, s.message, "parentheses") == null);
+}
+
+test "parse: an allocation that fails, anywhere in the lexer, the lookahead or a prelude's check, is OutOfMemory and nothing leaks" {
+    const parse_mod = @import("parse.zig");
+    const preludes = [_]parse_mod.Prelude{.{ .name = "a test prelude", .source = "function twice(x)\n  return x * 2\nend\n" }};
+    const src = "local t = {a = \"x\\ty\", b = twice(2)}\nprint(t.a, \"\\n\" .. t.b)\n";
+    var i: usize = 0;
+    var failed: usize = 0;
+    while (true) : (i += 1) {
+        var failing: testing.FailingAllocator = .init(testing.allocator, .{ .fail_index = i });
+        var tree = std.heap.ArenaAllocator.init(failing.allocator());
+        defer tree.deinit();
+        var stop: ?diag.Stop = null;
+        if (parse_mod.parseMeasured(tree.allocator(), failing.allocator(), src, 200, &stop, null, &preludes)) |_| {
+            break;
+        } else |e| {
+            if (e != error.OutOfMemory) std.debug.print("at {d}: {t} {?s}\n", .{ i, e, if (stop) |s| s.message else null });
+            try testing.expectEqual(error.OutOfMemory, e);
+            failed += 1;
+        }
+    }
+    try testing.expect(failed > 10);
+}
