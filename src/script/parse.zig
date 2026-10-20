@@ -973,9 +973,15 @@ pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, sourc
             var at: usize = 0;
             var line: u32 = 1;
             while (nextFunction(pre.source, &at, &line)) |f| try index.append(scratch, f);
-            const loaded = try scratch.alloc(?u32, index.items.len);
+            // Each is given back by hand until `x` holds both, when the
+            // defer above does.
+            const owned = try index.toOwnedSlice(scratch);
+            const loaded = scratch.alloc(?u32, owned.len) catch |e| {
+                scratch.free(owned);
+                return e;
+            };
             @memset(loaded, null);
-            x.* = .{ .prelude = pre, .index = try index.toOwnedSlice(scratch), .loaded = loaded };
+            x.* = .{ .prelude = pre, .index = owned, .loaded = loaded };
             p.extra = extra[0 .. p.extra.len + 1];
             try checkPrelude(&p, p.extra.len);
         }
