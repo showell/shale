@@ -111,9 +111,10 @@ until the cutover):
 | zig-coverage-sdk | `zig-0.17` | typeInfo fields, Ast.parse, one array, the `__func_` suffix, fmt's builtins |
 | zig-webbox | `zig-0.17` | 34 arrays and strings, 5 renames, 3 `pub` for @hasDecl, `build_root`, allocRemaining's limit |
 | metal-vmm | `zig-0.17` | arrays, the optimize tags, `b.args`, bitsets, bufPrintZ, type info, 4 field loops, a comptime string, waitpid |
-| zig-metal-unikernel | `zig-0.17` (in `~/zig17`) | 113 arrays and strings, 15 renames, six build APIs by hand, meta.fields, a test's false assumption about where a test heap lies; 1436 tests as on 0.16. **Its images wait on 0.17.1** (below) |
-| observatory | `zig-0.17` (in `~/zig17`) | scripts only; 13 tests as on 0.16; its image waits on 0.17.1 |
-| dog-park | `zig-0.17` (in `~/zig17`) | scripts, findProgram, the zon parser, an enum loop; `check` and `roc-fresh` green, the golden physics bit-for-bit; its image waits on 0.17.1 |
+| zig-metal-unikernel | `zig-0.17` (in `~/zig17`) | 113 arrays and strings, 15 renames, six build APIs by hand, meta.fields, a test's false assumption about where a test heap lies; 1436 tests as on 0.16. its images link the patched compiler_rt (below): 25 probes boot |
+| observatory | `zig-0.17` (in `~/zig17`) | scripts only; 13 tests as on 0.16; its image builds |
+| dog-park | `zig-0.17` (in `~/zig17`) | scripts, findProgram, the zon parser, an enum loop; `check` and `roc-fresh` green, the golden physics bit-for-bit; its image boots (metal-gate) |
+| angry-gopher | `zig-0.17` (in `~/zig17`) | 97 arrays, 9 renames, meta.fields, `@Tuple`; `ops/check`'s counts as on 0.16; its image builds |
 | shale | `zig-0.17` (in `~/zig17`) | 9 arrays, 36 renames, `build_root`, webbox's root absolute, waitpid/wait4, the `**` token, the history replays; 327 tests as on 0.16. `zig build consumers` waits for the siblings |
 
 ## The repos with siblings
@@ -124,12 +125,17 @@ set: a tree of `zig-0.17` worktrees side by side (each repo's branch
 checked out under one folder, as the siblings' paths expect), every repo
 ported there, the whole set judged together, then each branch merged.
 
-## The blocker: compiler_rt on soft-float x86_64
+## The blocker, worked around: compiler_rt on soft-float x86_64
 
-0.17.0's compiler_rt does not compile for a soft-float x86_64 target: its
+0.17.0's compiler_rt does not compile for a soft-float x86_64 target. Its
 long-double functions (`truncl`, `sinl`, ...) are exported unconditionally,
 and 0.17 refuses `c_longdouble` in a C-ABI function under soft float
-(ziglang/zig#37006, a regression in 0.17.0's notes; the fix is aimed at
-0.17.1). Every kernel image (the kernel's probes, observatory's, dog-park's,
-angry-gopher's) needs compiler_rt and soft float, so none builds on 0.17.0.
-Everything else ports and tests on 0.17.0.
+(ziglang/zig#37006, a regression in 0.17.0's notes; the fix, PR #37324, is
+aimed at 0.17.1). Past that fix, LLVM still rejects `mulc3.zig` and
+`divc3.zig` for soft float, which #37324 doesn't touch. Every kernel image
+needs compiler_rt.
+
+zig-metal-unikernel carries `compiler_rt_0_17_0/`: 0.17.0's compiler_rt with
+#37324's hunks and two local lines, linked into every kernel in place of
+Zig's. Its build refuses any Zig but 0.17.0, so the patch can't outlive the
+version it is for. That folder's README says how to delete it.
