@@ -1,0 +1,91 @@
+-- **THE ZIG 0.17 UPGRADE: WHAT EACH REPO USES THAT CHANGED** (written for
+-- the 0.16 -> 0.17 upgrade, 2026-10-20). For each repo, each change the
+-- 0.17 release notes list, counted by a literal text pattern in its .zig
+-- files (.zig-cache, zig-out and zig-pkg skipped): a census to choose the
+-- scripted fixes by, and to show a repo done (every count 0, or every
+-- remaining hit one the compiler accepts). Text, not tokens: a comment
+-- counts too, so a count is an upper bound.
+--
+--   cd ~/showell_repos && shale shale/cookbook/zig17/census.shale
+--   cd ~/showell_repos && shale shale/cookbook/zig17/census.shale only=zig-webbox
+--
+-- budget: steps=900000000 reads=100000 arena_bytes=4000000000
+
+const ONLY = arg("only", "")
+const REPOS = {"zig-coverage-sdk", "zig-webbox", "metal-vmm", "shale", "zig-metal-unikernel", "angry-gopher", "dog-park", "observatory"}
+
+-- {name, pattern}: each a change in the 0.17 release notes.
+const CHANGES = {
+  {"typeInfo .fields", ".@\"struct\".fields"},
+  {"optimize ReleaseSafe", ".ReleaseSafe"},
+  {"optimize ReleaseFast", ".ReleaseFast"},
+  {"optimize ReleaseSmall", ".ReleaseSmall"},
+  {"OptimizeMode", "OptimizeMode"},
+  {"b.build_root", "build_root"},
+  {"run addArgs(b.args)", "addArgs(args)"},
+  {"addFileArg", "addFileArg("},
+  {"addPrefixedFileArg", "addPrefixedFileArg("},
+  {"addOutputFileArg", "addOutputFileArg("},
+  {"addPrefixedOutputFileArg", "addPrefixedOutputFileArg("},
+  {"addArtifactArg", "addArtifactArg("},
+  {"addDirectoryArg", "addDirectoryArg("},
+  {"findProgram", "findProgram("},
+  {"Ast.parse", "Ast.parse("},
+  {"StaticBitSet", "StaticBitSet"},
+  {"ArrayBitSet", "ArrayBitSet"},
+  {"IntegerBitSet", "IntegerBitSet"},
+  {"DynamicBitSet", "DynamicBitSet"},
+  {"initEmpty", "initEmpty"},
+  {"initFull", "initFull"},
+  {"getLast(", "getLast("},
+  {"getLastOrNull(", "getLastOrNull("},
+  {"void{}", "void{}"},
+  {"errdefer |", "errdefer |"},
+  {"stackFallback", "stackFallback"},
+  {"StackFallbackAllocator", "StackFallbackAllocator"},
+  {"zon fromSlice", "zon.parse.fromSlice"},
+  {"indexOfIgnoreCase", "indexOfIgnoreCase"},
+  {"readPackedInt", "readPackedInt"},
+  {"writePackedInt", "writePackedInt"},
+  {"containsAtLeastScalar", "containsAtLeastScalar"},
+  {"meta.fieldNames", "meta.fieldNames"},
+  {"meta.fieldInfo", "meta.fieldInfo"},
+  {"Uri.getHost", "getHost("},
+  {"GlobalLinkage internal", ".internal"},
+  {"link_once", "link_once"},
+  {"@bitCast (audit)", "@bitCast("},
+  {"std.builtin (deprecated)", "std.builtin"},
+  {"@intFromEnum (deprecated)", "@intFromEnum("},
+  {"@enumFromInt (deprecated)", "@enumFromInt("},
+  {"builtin.cpu/os (deprecated)", "builtin.cpu"},
+  {"allocPrint (arena.print)", "allocPrint("},
+}
+
+function zig_files(repo)
+  local out = {}
+  for e in walk_all(repo, {kind = "file", like = "*.zig", skip = ".zig-cache"}) do
+    if not contains(e.path, "/zig-out/") and not contains(e.path, "/zig-pkg/") and not contains(e.path, "/.zig-cache/") then push(out, e.path) end
+  end
+  return out
+end
+
+local rows = {}
+for repo in REPOS do
+  if ONLY == "" or ONLY == repo then
+    local files = zig_files(repo)
+    local counts = {}
+    for f in files do
+      local text = read_or(f, "")
+      for c in CHANGES do
+        local n = #split(text, c[2]) - 1
+        if n > 0 then counts[c[1]] = get(counts, c[1], 0) + n end
+      end
+    end
+    for c in CHANGES do
+      if get(counts, c[1], 0) > 0 then push(rows, {repo = repo, change = c[1], hits = counts[c[1]]}) end
+    end
+    print(repo .. ": " .. #files .. " .zig files")
+  end
+end
+print("")
+print(table(rows, {"repo", "change", "hits"}))

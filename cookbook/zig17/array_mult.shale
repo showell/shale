@@ -1,0 +1,195 @@
+-- **THE ZIG 0.17 UPGRADE: ARRAY MULTIPLICATION BECOMES @splat** (written for
+-- the 0.16 -> 0.17 upgrade, 2026-10-20). 0.17 removed `a ** n` for arrays;
+-- a repeated one-element array, `[_]T{v} ** N`, is `@splat(v)` with the
+-- array's type known. Each one, by where it stands:
+--   - an untyped declaration, `var x = [_]T{v} ** N;` (and `const`, `pub`,
+--     `export`, with `align(...)` or `linksection(...)` kept after the
+--     type): `var x: [N]T = @splat(v);`
+--   - after an `=` whose target has a type (a typed declaration, a field's
+--     default, an assignment, a struct literal's `.field =`): `@splat(v)`
+--   - anywhere else (an operand of `&`, an argument): `@as([N]T, @splat(v))`
+-- An anonymous `.{v} ** N`, with no element type, is listed, not changed:
+-- give it its type by hand. Every changed file is rewritten whole; run
+-- `zig fmt` after, and let the compiler judge.
+--
+--   cd <repo> && shale <shale>/cookbook/zig17/array_mult.shale dir=src
+--   cd <repo> && shale <shale>/cookbook/zig17/array_mult.shale dir=src dry=yes
+--
+-- budget: steps=900000000 reads=100000 arena_bytes=4000000000
+
+const DIR = arg("dir", ".")
+const DRY = arg("dry", "no") == "yes"
+
+-- The end of the count expression that starts at `at` in `l`: up to a `;`,
+-- `,` or a closing bracket at depth zero.
+function count_end(l, at)
+  local depth = 0
+  local i = at
+  while i <= #l do
+    local c = sub(l, i, i)
+    if c == "(" or c == "[" or c == "{" then
+      depth = depth + 1
+    elseif c == ")" or c == "]" or c == "}" then
+      if depth == 0 then return i - 1 end
+      depth = depth - 1
+    elseif (c == ";" or c == ",") and depth == 0 then
+      return i - 1
+    end
+    i = i + 1
+  end
+  return #l
+end
+
+-- `(n)` without its outer parentheses, when they wrap it whole.
+function bare(n)
+  local t = trim(n)
+  if starts_with(t, "(") and ends_with(t, ")") then
+    local depth = 0
+    for i = 1, #t do
+      local c = sub(t, i, i)
+      if c == "(" then depth = depth + 1 elseif c == ")" then depth = depth - 1 end
+      if depth == 0 and i < #t then return t end
+    end
+    return trim(sub(t, 2, #t - 1))
+  end
+  return t
+end
+
+-- The value inside `{...}` from `open` (the `{`), and the index of its `}`.
+function braced(l, open)
+  local depth = 0
+  for i = open, #l do
+    local c = sub(l, i, i)
+    if c == "{" or c == "(" or c == "[" then depth = depth + 1
+    elseif c == "}" or c == ")" or c == "]" then
+      depth = depth - 1
+      if depth == 0 then return {value = sub(l, open + 1, i - 1), close = i} end
+    end
+  end
+  return nil
+end
+
+-- When `before` (the line up to the array) is an untyped declaration's
+-- head, `[pub ][export ](var|const) NAME[ align(..)][ linksection(..)] = `:
+-- {head = "...var NAME", attrs = "align(..) ..."}; else nil.
+function untyped_decl(before)
+  if not ends_with(before, " = ") then return nil end
+  local s = sub(before, 1, #before - 3)
+  local indent = #s - #trim(s)
+  local w = trim(s)
+  local head = sub(s, 1, indent)
+  for kw in {"pub ", "export "} do
+    if starts_with(w, kw) then
+      head = head .. kw
+      w = sub(w, #kw + 1)
+    end
+  end
+  local kind = ""
+  if starts_with(w, "var ") then kind = "var " elseif starts_with(w, "const ") then kind = "const " else return nil end
+  head = head .. kind
+  w = sub(w, #kind + 1)
+  local name = re_find(w, "^[A-Za-z_][A-Za-z0-9_]*")
+  if name == nil then return nil end
+  head = head .. name.text
+  local attrs = trim(sub(w, #name.text + 1))
+  if attrs ~= "" and not starts_with(attrs, "align(") and not starts_with(attrs, "linksection(") then return nil end
+  return {head = head, attrs = attrs}
+end
+
+-- One line with its array multiplications rewritten, and what was left.
+function fix_line(l)
+  local changed = 0
+  local left = 0
+  local from = 1
+  while true do
+    local m = re_find(sub(l, from), "\\[_\\]")
+    if m == nil then break end
+    local at = from + m.at - 1
+    local open = find(l, "{", at)
+    if open == nil then break end
+    local elem = trim(sub(l, at + 3, open - 1))
+    local b = braced(l, open)
+    if b == nil then break end
+    local rest = sub(l, b.close + 1)
+    local star = re_find(rest, "^\\s*\\*\\*\\s*")
+    if star == nil or contains(elem, " ") and not contains(elem, "(") then
+      from = b.close + 1
+    else
+      local nstart = b.close + 1 + #star.text
+      local nend = count_end(l, nstart)
+      local n = bare(sub(l, nstart, nend))
+      local before = sub(l, 1, at - 1)
+      local after = sub(l, nend + 1)
+      local value = trim(b.value)
+      local decl = untyped_decl(before)
+      if decl ~= nil then
+        local typed = decl.head .. ": [" .. n .. "]" .. elem
+        if decl.attrs ~= "" then typed = typed .. " " .. decl.attrs end
+        l = typed .. " = @splat(" .. value .. ")" .. after
+        from = 1
+      elseif ends_with(before, "= ") then
+        l = before .. "@splat(" .. value .. ")" .. after
+        from = #before + 1
+      else
+        l = before .. "@as([" .. n .. "]" .. elem .. ", @splat(" .. value .. "))" .. after
+        from = #before + 1
+      end
+      changed = changed + 1
+    end
+  end
+  -- An anonymous `.{v} ** N` whose target has its type (`x: [6]u8 =
+  -- .{0} ** 6`, a typed field's default): `@splat(v)`. Untyped, or nested,
+  -- it is left for a hand.
+  local seek = 1
+  while true do
+    local open = find(l, ".{", seek)
+    if open == nil then break end
+    local b = braced(l, open + 1)
+    if b == nil then break end
+    local star = re_find(sub(l, b.close + 1), "^\\s*\\*\\*\\s*")
+    local before = sub(l, 1, open - 1)
+    if star ~= nil and ends_with(before, "= ") and untyped_decl(before) == nil and not contains(b.value, "**") then
+      local nstart = b.close + 1 + #star.text
+      local nend = count_end(l, nstart)
+      l = before .. "@splat(" .. trim(b.value) .. ")" .. sub(l, nend + 1)
+      changed = changed + 1
+      seek = #before + 1
+    else
+      seek = open + 2
+    end
+  end
+  if re_find(l, "\\}\\s*\\*\\*") ~= nil then left = left + 1 end
+  return {line = l, changed = changed, left = left}
+end
+
+local total = 0
+local files = 0
+local leftover = {}
+for e in walk_all(DIR, {kind = "file", like = "*.zig"}) do
+  if not contains(e.path, ".zig-cache") and not contains(e.path, "zig-out") then
+    local text = read(e.path)
+    if contains(text, "**") then
+      local out = {}
+      local n = 0
+      local i = 0
+      for l in lines(text) do
+        i = i + 1
+        local r = fix_line(l)
+        push(out, r.line)
+        n = n + r.changed
+        if r.left > 0 then push(leftover, e.path .. ":" .. i .. ": " .. trim(r.line)) end
+      end
+      if n > 0 then
+        files = files + 1
+        total = total + n
+        print(e.path .. ": " .. n)
+        if not DRY then replace(e.path, join(out, "\n") .. "\n") end
+      end
+    end
+  end
+end
+print("array multiplications made @splat: " .. total .. " in " .. files .. " files" .. (DRY and " (dry run: nothing written)" or ""))
+if #leftover > 0 then
+  print("left for a hand (no element type, or a form this does not read):")
+  for l in leftover do print("  " .. sub(l, 1, 160)) end
+end
