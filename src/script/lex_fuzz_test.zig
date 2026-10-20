@@ -1,5 +1,5 @@
-//! The lexer's fuzz (the dogfood design: fuzzed first, before long strings
-//! went in). Expensive, so out of the gate: `zig build fuzz`.
+//! Fuzzes the lexer. Expensive, so it runs under `zig build fuzz`, not the
+//! ordinary tests.
 
 const std = @import("std");
 const testing = std.testing;

@@ -1,7 +1,5 @@
 //! The parser's tests.
 
-// ── tests ────────────────────────────────────────────────────────────────
-
 const std = @import("std");
 const ast = @import("ast.zig");
 const diag = @import("diag.zig");
@@ -152,7 +150,7 @@ test "parse: what is refused, and the class it is refused as" {
 }
 
 test "parse: a source nested past the nesting budget stops as that budget, however it nests" {
-    // ("- " with its space: "--" is a comment.)
+    // "- " keeps its space, since "--" starts a comment.
     for ([_][]const u8{ "(", "{", "- ", "not ", "# " }) |opener| {
         var src: std.ArrayList(u8) = .empty;
         defer src.deinit(testing.allocator);

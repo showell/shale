@@ -1,6 +1,7 @@
-//! **THE PARSER**: tokens to `ast.Program`, names resolved, Lua's
-//! constructs this language does not take refused by name, and its depth
-//! held to the nesting budget so no source can run the parser off its stack.
+//! Parses tokens into an `ast.Program`, resolving names as it goes. Lua's
+//! constructs this language does not take are refused by name, and the depth
+//! is held to the nesting budget so that no source can run the parser off its
+//! stack.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -57,15 +58,13 @@ const Frame = struct {
 const reserved_call = "attempt";
 
 pub const Parser = struct {
-    /// The tree's: what the parse returns.
+    /// Owns the tree the parse returns.
     alloc: std.mem.Allocator,
-    /// **WHAT THE PARSE BUILDS AND DROPS** (the box's re-review, FEEDBACK
-    /// 1599c8f): the lists under construction, from an allocator that gives
-    /// room back, each copied into the tree at its size when it is done. In
-    /// the tree's arena, every growth left its old copy behind and every
-    /// list its spare room: a 64 KiB source of `f()` held 7 MB of tree.
+    /// Holds what the parse builds and drops: the lists under construction,
+    /// each copied into the tree at its exact size when done. It must give
+    /// room back; in an arena every growth would leave its old copy behind.
     scratch: std.mem.Allocator,
-    /// The lists under construction, one stack a kind, shared by every
+    /// The lists under construction, one stack per kind, shared by every
     /// level: a list is the stack above its mark.
     stmts: std.ArrayList(ast.Stmt) = .empty,
     exprs: std.ArrayList(*ast.Expr) = .empty,
@@ -75,8 +74,8 @@ pub const Parser = struct {
     tok: Token,
     ahead: ?Token = null,
     stop: ?diag.Stop = null,
-    /// The long string just before `tok`, if it is one: where it opened,
-    /// its level, where it closed.
+    /// The long string just before `tok`, if there is one: where it opened,
+    /// its level, and where it closed.
     after_long: ?struct { open: ast.Pos, long: lex.Long } = null,
     max_nesting: u32,
     nesting: u32 = 0,
@@ -86,31 +85,28 @@ pub const Parser = struct {
     functions: std.ArrayList(ast.Function) = .empty,
     /// The script's own functions, by name.
     function_names: std.StringHashMapUnmanaged(u32) = .empty,
-    /// **ONLY THE PRELUDE A SCRIPT CALLS** (metal-vmm QUEUE 230): each of
-    /// `prelude_index`'s functions, once its first call has parsed it, as
-    /// its index in `functions`. One never called is never parsed, and
+    /// For each of `prelude_index`'s functions, its index in `functions` once
+    /// its first call has parsed it. One never called is never parsed and
     /// takes none of the machine.
     prelude_loaded: [prelude_index.len]?u32 = @splat(null),
-    /// **THE PRELUDES AFTER THE CORE'S** (metal-vmm QUEUE 233): the Linux
-    /// host's, a repo's, a user's, in order, each indexed when the parse
-    /// starts and loaded as the core's is, at a function's first call.
-    /// Metal has none.
+    /// The preludes after the core's, in order: the Linux host's, a repo's, a
+    /// user's. Each is indexed when the parse starts and loaded like the
+    /// core's, at a function's first call. Empty on metal.
     extra: []Extra = &.{},
-    /// Which prelude is being parsed (0 the core's, then `extra`'s), or
-    /// null for the script: a prelude's calls are to its own functions,
-    /// the preludes before it and the builtins, never to the script's or a
-    /// later prelude's.
+    /// Which prelude is being parsed (0 for the core's, then `extra`'s), or
+    /// null for the script. A prelude calls only its own functions, earlier
+    /// preludes' and the builtins, never the script's or a later prelude's.
     in_prelude: ?usize = null,
-    /// The top-level `const`s declared so far: what a function declared
-    /// after them sees (QUEUE 206).
+    /// The top-level `const`s declared so far, which a function declared
+    /// after them sees.
     consts: std.ArrayList([]const u8) = .empty,
     /// The lowest frame address the parse reached (docs/SHALE.md, "The Zig stack").
     stack_low: usize = std.math.maxInt(usize),
 
     fn failAt(self: *Parser, pos: ast.Pos, class: diag.Class, message: []const u8) Error {
-        // **RIGHT AFTER A LONG STRING, WHERE IT CLOSED** (QUEUE 232): a
-        // closer inside the text ends it early, and what follows is the
-        // error; the hint names the closer it met and the level that holds it.
+        // A syntax error right after a long string is most likely a closer
+        // inside its text that ended it early, so we name that closer and
+        // the level that would hold it.
         const said = if (class == .syntax and self.after_long != null and pos.line == self.tok.line and pos.column == self.tok.column) blk: {
             const l = self.after_long.?;
             var buf: [66]u8 = undefined;
@@ -179,6 +175,8 @@ pub const Parser = struct {
         return t;
     }
 
+    /// Charges one level of the nesting budget. Every recursive production
+    /// calls it, which is what bounds the parser's stack.
     fn enter(self: *Parser) Error!void {
         self.stack_low = @min(self.stack_low, @frameAddress());
         self.nesting += 1;
@@ -198,8 +196,6 @@ pub const Parser = struct {
         return p;
     }
 
-    // ── names ────────────────────────────────────────────────────────────
-
     fn lookup(self: *const Parser, name: []const u8) ?u16 {
         var i = self.frame.locals.items.len;
         while (i > 0) {
@@ -210,10 +206,10 @@ pub const Parser = struct {
         return null;
     }
 
-    /// A local in this block. **A LOCAL MAY TAKE A BUILTIN'S NAME** (docs/SHALE.md,
-    /// "Names"): a value by that name is the local; a call by it is still
-    /// the builtin, since only functions are called. So a builtin added to
-    /// the language never breaks a script that already used its name.
+    /// Declares a local in this block. A local may take a builtin's name: a
+    /// value by that name is the local, while a call by it is still the
+    /// builtin, since only functions are called. So a builtin added to the
+    /// language never breaks a script that already used its name.
     fn declare(self: *Parser, name: []const u8, pos: ast.Pos) Error!u16 {
         var i = self.frame.locals.items.len;
         while (i > 0) {
@@ -246,8 +242,6 @@ pub const Parser = struct {
         if (self.in_function) return self.failf(pos, .name, "no local `{s}` here: a function sees only its own parameters and locals, and the script's `const`s declared above it", .{name});
         return self.failf(pos, .name, "no local `{s}`: declare it with `local {s} = ...` (there are no globals)", .{ name, name });
     }
-
-    // ── blocks and statements ────────────────────────────────────────────
 
     fn blockEnds(tag: Tag) bool {
         return switch (tag) {
@@ -463,19 +457,18 @@ pub const Parser = struct {
         const name_tok = try self.expect(.name, "the function's name");
         const name = name_tok.text;
         if (self.tok.tag == .dot) return self.failAt(self.here(), .refused, "functions in tables are not in this language: functions are not values");
-        // A function may take a builtin's name: the script's calls by that
-        // name are then its own (docs/SHALE.md, "Names").
+        // A builtin's name is allowed: the script's calls by it are then
+        // to this function.
         if (std.mem.eql(u8, name, reserved_call)) return self.failAt(pos, .name, "`attempt` is the language's own: name the function otherwise");
         if (lua_names.get(name) != null) return self.failf(pos, .name, "`{s}` is a name of Lua's library, kept to say what to write instead: name the function otherwise", .{name});
-        // **A SCRIPT'S OWN FUNCTION OF A PRELUDE NAME IS ITS OWN** (QUEUE
-        // 220): from its line on, its calls by that name are to it, so a
-        // function added to the prelude never breaks a script that already
-        // declared one; declared twice by the script, it is refused.
+        // A prelude function's name is allowed too, and from this line on the
+        // script's calls by it are to this function, so a function added to
+        // the prelude never breaks a script that already declared one.
         if (self.in_prelude == null and self.function_names.contains(name))
             return self.failf(pos, .name, "a function `{s}` is already declared", .{name});
         const index: u32 = @intCast(self.functions.items.len);
-        // An error in a prelude function names it so: its line is the
-        // prelude's, never the script's.
+        // An error inside a prelude function must say so: its line is the
+        // prelude's, not the script's.
         const shown = if (self.in_prelude) |k| try std.fmt.allocPrint(self.alloc, "{s}'s {s}", .{ self.preludeName(k), name }) else name;
         if (self.in_prelude) |k| {
             if (k == 0) {
@@ -497,9 +490,6 @@ pub const Parser = struct {
         _ = try self.expect(.lparen, "`(` after the function's name");
         self.frame.depth = 1;
         var params: u16 = 0;
-        // **OPTIONAL PARAMETERS** (`function f(a, b?)`, metal-vmm QUEUE
-        // 233): the last ones only; a call may leave them out, and the
-        // parse gives them nil.
         var optional: u16 = 0;
         var first_optional: []const u8 = "";
         if (self.tok.tag != .rparen) {
@@ -524,8 +514,6 @@ pub const Parser = struct {
         _ = try self.expect(.kw_end, "`end` to close the function");
         self.functions.items[index] = .{ .name = shown, .pos = pos, .params = params, .optional = optional, .frame = self.frame.slots, .body = body };
     }
-
-    // ── expressions ──────────────────────────────────────────────────────
 
     pub fn expr(self: *Parser) Error!*ast.Expr {
         return self.binary(0);
@@ -564,9 +552,9 @@ pub const Parser = struct {
             const pos = self.here();
             try self.advance();
             const right = try self.binary(if (lv.right) lv.prec else lv.prec + 1);
-            // **A MAP OR A LIST AGAINST THE WRITTEN `nil`** (QUEUE 231): its
-            // own comparison, which any value may be in; `==` stays refused
-            // for a map against any other value, a nil one included.
+            // Against a literal `nil`, `==` and `~=` become their own ops,
+            // which any value may be in; a map against any other value, even
+            // a nil one, stays refused.
             const op: ast.BinOp = if (left.kind == .nil or right.kind == .nil) switch (lv.op) {
                 .eq => .eq_nil,
                 .ne => .ne_nil,
@@ -589,17 +577,15 @@ pub const Parser = struct {
             try self.enter();
             defer self.leave();
             try self.advance();
-            // The smallest integer, written: its magnitude is no integer,
-            // so only a minus right before it makes it one.
+            // The magnitude of the smallest integer is no i64, so only a
+            // minus right before it makes it one.
             if (o == .neg and self.tok.tag == .int and self.tok.min_magnitude) {
                 try self.advance();
                 return self.new(ast.Expr, .{ .pos = pos, .kind = .{ .int = std.math.minInt(i64) } });
             }
-            // A literal's minus is the literal's: every negative can be
-            // written without overflow.
             const operand = try self.unary();
-            // Folded, unless it overflows (`-(-9223372036854775808)`): that
-            // is left to run, as the arithmetic error it is.
+            // We fold a minus into its literal, unless that overflows
+            // (`-(-9223372036854775808)`), which is left to fail at run time.
             if (o == .neg and operand.kind == .int) if (std.math.negate(operand.kind.int)) |n| {
                 operand.kind.int = n;
                 operand.pos = pos;
@@ -680,13 +666,11 @@ pub const Parser = struct {
         }
     }
 
-    /// **A CALL, RESOLVED WHERE IT STANDS** (metal-vmm QUEUE 209; Steve:
-    /// "I'm fine with functions only being called after they're
-    /// declared"): a name that is a value here (a local, a parameter, a
-    /// `const`) is refused; then the script's own function declared above
-    /// (or the one being declared: it may call itself); then the builtin;
-    /// then Lua's library, refused by name. A function declared later never
-    /// takes over an earlier call.
+    /// Resolves a call where it stands. A name that is a value here (a local,
+    /// a parameter, a `const`) is refused; otherwise it is the script's own
+    /// function declared above (or the one being declared, which may call
+    /// itself), then the builtin, then Lua's library, refused by name. A
+    /// function declared later never takes over an earlier call.
     fn call(self: *Parser, name: []const u8, pos: ast.Pos) Error!*ast.Expr {
         const attempt = std.mem.eql(u8, name, reserved_call);
         var target: ast.Call.Target = undefined;
@@ -735,22 +719,21 @@ pub const Parser = struct {
         if (params) |n| {
             if (optional > 0 and (given < n - optional or given > n)) return self.failf(pos, .argument, "`{s}` takes {d} to {d} arguments, given {d}", .{ shown, n - optional, n, given });
             if (optional == 0 and given != n) return self.failf(pos, .argument, "`{s}` takes {d} argument{s}, given {d}", .{ shown, n, if (n == 1) "" else "s", given });
-            // The ones left out, nil.
+            // Optional parameters left out are passed nil.
             for (given..n) |_| try self.exprs.append(self.scratch, try self.new(ast.Expr, .{ .pos = pos, .kind = .nil }));
         }
         return self.new(ast.Expr, .{ .pos = pos, .kind = .{ .call = .{ .target = target, .args = try self.alloc.dupe(*ast.Expr, self.exprs.items[at..]) } } });
     }
 
-    /// The function a call by `name` is to: the script's own, declared
-    /// above (never, from inside the prelude); else the prelude's, parsed
-    /// now if this is its first call; else none.
+    /// The function a call by `name` is to: the script's own, declared above
+    /// (never from inside a prelude); else a prelude's, parsed now if this is
+    /// its first call; else null.
     fn functionNamed(self: *Parser, name: []const u8) Error!?u32 {
         if (self.in_prelude == null) if (self.function_names.get(name)) |i| return i;
         if (preludeAt(name)) |i| {
             if (self.prelude_loaded[i] == null) try self.loadPrelude(0, i);
             return self.prelude_loaded[i].?;
         }
-        // The preludes after the core's, up to the one being parsed.
         if (comptime !preludes_on) return null;
         const last = if (self.in_prelude) |k| k else self.extra.len;
         for (self.extra[0..@min(last, self.extra.len)], 1..) |*x, k| if (indexAt(x.index, name)) |i| {
@@ -766,11 +749,10 @@ pub const Parser = struct {
         return if (k == 0) "the prelude" else self.extra[k - 1].prelude.name;
     }
 
-    /// **A PRELUDE FUNCTION, PARSED AT ITS FIRST CALL** (QUEUE 230), from
-    /// its own line of prelude.shale, as if the prelude had been parsed
-    /// before the script: no `const` of the script's, no local, no depth
-    /// of the call it was met in. Its own calls to the prelude parse what
-    /// they reach in turn.
+    /// Parses function `i` of prelude `k` at its first call, from its own
+    /// line, as if the prelude had been parsed before the script: it sees no
+    /// `const` or local of the script's and is charged none of the calling
+    /// depth. Its own calls to the prelude load what they reach in turn.
     fn loadPrelude(self: *Parser, k: usize, i: usize) Error!void {
         const saved_lexer = self.lexer;
         const saved_tok = self.tok;
@@ -844,29 +826,28 @@ pub const Parser = struct {
     }
 };
 
-/// **THE PRELUDE**: functions every script has, in Shale (prelude.shale).
+/// The core prelude: functions every script has, written in Shale.
 pub const prelude = @embedFile("prelude.shale");
 
 /// Where a prelude function begins: its `function`, at the start of `line`.
 pub const PreludeFunction = struct { name: []const u8, at: usize, line: u32 };
 
-/// A prelude after the core's (metal-vmm QUEUE 233): its name as a stop
-/// shows it ("the Linux prelude") and its source, only functions, each
-/// from the start of a line.
+/// A prelude after the core's: its name as a stop shows it ("the Linux
+/// prelude"), and its source, which holds only functions, each from the
+/// start of a line.
 pub const Prelude = struct { name: []const u8, source: []const u8 };
 
-/// **WHETHER THIS HOST HANDS SHALE PRELUDES AFTER THE CORE'S** (QUEUE
-/// 233): a host with an operating system says so in its `host_io`
-/// (`shale_preludes`); metal's does not, and its image carries none of
-/// their indexing, checking or lookup.
+/// Whether this host hands the parse preludes after the core's. A host with
+/// an operating system says so with `host_io.shale_preludes`; metal's does
+/// not, and its image carries none of their indexing, checking or lookup.
 const preludes_on = @hasDecl(@import("host_io"), "shale_preludes") and @import("host_io").shale_preludes;
 
 /// A later prelude as a parse holds it: its functions, and which are loaded.
 const Extra = struct { prelude: Prelude, index: []const PreludeFunction, loaded: []?u32 };
 
-/// **THE INDEXER, ONE FUNCTION FOR EVERY PRELUDE** (QUEUE 233): the next
-/// line from `at` on that begins `function name(`, or null at the end; run
-/// at comptime for the core's prelude and at runtime for the rest.
+/// Returns the next line from `at` on that begins `function name(`, or null
+/// at the end. Indexes every prelude: at comptime for the core's, at runtime
+/// for the rest.
 pub fn nextFunction(src: []const u8, at: *usize, line: *u32) ?PreludeFunction {
     while (at.* < src.len) {
         const start = at.*;
@@ -883,10 +864,9 @@ pub fn nextFunction(src: []const u8, at: *usize, line: *u32) ?PreludeFunction {
     return null;
 }
 
-/// **THE PRELUDE'S FUNCTIONS, FOUND WHEN THIS IS BUILT** (QUEUE 230): each
-/// line of prelude.shale that begins `function name(`. The prelude holds
-/// only functions, each from the start of a line; parse_test holds this
-/// list to a parse of the whole prelude.
+/// The core prelude's functions, found at comptime: each line that begins
+/// `function name(`. This relies on the prelude holding only functions, each
+/// from the start of a line; parse_test checks it against a full parse.
 pub const prelude_index: []const PreludeFunction = blk: {
     @setEvalBranchQuota(200_000);
     var found: []const PreludeFunction = &.{};
@@ -906,10 +886,10 @@ fn indexAt(index: []const PreludeFunction, name: []const u8) ?usize {
     return null;
 }
 
-/// **A LATER PRELUDE, CHECKED BEFORE THE SCRIPT** (QUEUE 233): no name an
-/// earlier prelude has (or one it has twice), and only functions, every
-/// one of which parses, in a parse of its own thrown away after. A failure
-/// is a stop naming the prelude, at its line.
+/// Checks prelude `k` before the script: it takes no name an earlier prelude
+/// has, none twice, and holds only functions that parse, in a parse of its
+/// own thrown away after. A failure is a stop naming the prelude, at its
+/// line.
 fn checkPrelude(p: *Parser, k: usize) Error!void {
     const x = p.extra[k - 1];
     for (x.index, 0..) |f, i| {
@@ -957,9 +937,9 @@ pub fn parse(alloc: std.mem.Allocator, source: []const u8, max_nesting: u32, sto
     return parseMeasured(alloc, alloc, source, max_nesting, stop, null, &.{});
 }
 
-/// `parse`, saying how many bytes of the Zig stack it took.
-/// What it builds and drops comes from `scratch` and is given back to it;
-/// the tree, from `alloc`, exactly its size.
+/// `parse`, also reporting how many bytes of the Zig stack it took. What it
+/// builds and drops comes from `scratch` and is given back to it; the tree
+/// comes from `alloc`, at exactly its size.
 pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, source: []const u8, max_nesting: u32, stop: *?diag.Stop, stack_used: ?*usize, preludes: []const Prelude) Error!ast.Program {
     const top = @frameAddress();
     var p: Parser = .{ .alloc = alloc, .scratch = scratch, .lexer = lex.Lexer.init(alloc, source), .tok = undefined, .max_nesting = max_nesting };
@@ -978,9 +958,6 @@ pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, sourc
     }
     errdefer stop.* = p.stop;
     p.frame.depth = 0;
-    // **THE LATER PRELUDES, INDEXED AND CHECKED** (QUEUE 233): each holds
-    // only functions that parse, and none takes an earlier prelude's name.
-    // A host that takes none (metal) compiles none of this.
     const extra: []Extra = if (comptime preludes_on) try scratch.alloc(Extra, preludes.len) else &.{};
     defer if (comptime preludes_on) {
         for (extra[0..p.extra.len]) |x| {
@@ -1003,8 +980,6 @@ pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, sourc
             try checkPrelude(&p, p.extra.len);
         }
     } else if (preludes.len > 0) return p.failf(.{ .line = 1, .column = 1 }, .host, "{s}: this host takes no prelude after the core's", .{preludes[0].name});
-    // The script; a prelude function (prelude.shale, QUEUE 220) is parsed
-    // at its first call (QUEUE 230).
     try p.advance();
     const body = try p.block();
     if (p.tok.tag != .eof) return p.failf(p.here(), .syntax, "{s} with nothing open to close", .{p.describe(p.tok)});

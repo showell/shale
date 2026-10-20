@@ -1,6 +1,6 @@
-//! **THE TREE** a script parses to: every node with its line and column,
-//! every name already resolved to a slot in its function's frame, every
-//! call to a builtin or a function by index. All of it in the run's arena.
+//! The tree a script parses to. Every node has its line and column, every
+//! name is already resolved to a slot in its function's frame, and every call
+//! names a builtin or a function by index. All of it lives in the run's arena.
 
 pub const Pos = struct { line: u32, column: u32 };
 
@@ -51,7 +51,7 @@ pub const Builtin = enum {
     basename,
     strip_suffix,
     between,
-    // regular expressions (QUEUE 230)
+    // regular expressions
     re_find,
     re_match,
     // numbers
@@ -84,9 +84,9 @@ pub const Builtin = enum {
     print,
 };
 
-/// `eq_nil` and `ne_nil` are `==` and `~=` with the literal `nil` on a
-/// side (metal-vmm QUEUE 231): the one comparison a map or a list may be
-/// in, so `if m == nil` reads as written.
+/// `eq_nil` and `ne_nil` are `==` and `~=` with the literal `nil` on one
+/// side: the one comparison a map or a list may be in, so `if m == nil`
+/// reads as written.
 pub const BinOp = enum { add, sub, mul, idiv, mod, concat, eq, ne, eq_nil, ne_nil, lt, le, gt, ge, @"and", @"or" };
 pub const UnOp = enum { neg, not, len };
 
@@ -99,6 +99,7 @@ pub const Expr = struct {
         boolean: bool,
         int: i64,
         string: []const u8,
+        /// A slot in the current function's frame.
         local: u16,
         /// A top-level `const`, read in a function: an index into the
         /// run's constants (`Program.const_names`).
@@ -121,11 +122,11 @@ pub const Call = struct {
 
     pub const Target = union(enum) {
         builtin: Builtin,
-        /// An index into `Program.functions`, set
-        /// as the call is parsed (a function is called only after it is declared).
+        /// An index into `Program.functions`, set as the call is parsed: a
+        /// function is called only after it is declared.
         function: u32,
-        /// `attempt(f, ...)`: the function `f` (an index, as `function`)
-        /// called with the rest of the arguments, its error a value.
+        /// `attempt(f, ...)`: the function `f`, an index as in `function`,
+        /// called with the rest of the arguments; its error becomes a value.
         attempt: u32,
     };
 };
@@ -136,8 +137,8 @@ pub const Stmt = struct {
 
     pub const Kind = union(enum) {
         local: struct { slot: u16, value: ?*Expr },
-        /// `const NAME = e`, at the top level: the script's own slot, and
-        /// the constant the functions declared after it read.
+        /// `const NAME = e` at the top level: the script's own slot, and the
+        /// index of the constant that functions declared after it read.
         constant: struct { slot: u16, index: u16, value: *Expr },
         assign: struct { target: *Expr, value: *Expr },
         call: *Expr,
@@ -158,8 +159,8 @@ pub const Function = struct {
     name: []const u8,
     pos: Pos,
     params: u16,
-    /// The last of `params` that may be left out (`b?`): a call that
-    /// leaves them out is given nil for them, by the parse.
+    /// How many of the last `params` may be left out (`b?`). The parse passes
+    /// nil for each one a call leaves out.
     optional: u16 = 0,
     /// Slots in its frame: parameters first, then every local it declares.
     frame: u16,
@@ -167,8 +168,8 @@ pub const Function = struct {
 };
 
 pub const Program = struct {
-    /// The script's functions and the prelude's it calls (QUEUE 230), in
-    /// the order the parse met them.
+    /// The script's functions and the prelude functions it calls, in the
+    /// order the parse met them.
     functions: []Function,
     /// The top-level `const`s, in order, by name.
     const_names: []const []const u8 = &.{},

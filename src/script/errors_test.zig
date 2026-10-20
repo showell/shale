@@ -1,9 +1,8 @@
-//! **THE GOLDEN CORPUS OF ERRORS** (metal-vmm QUEUE 209(d)): a wrong
-//! script of each kind, and exactly what the person who wrote it is told:
-//! the class, the line and column, the function it stopped in, and the
-//! message, word for word. A message changed is a line of this file
-//! changed, read in review; every class the language has is here
-//! (the test below checks it).
+//! The golden corpus of errors: a wrong script of each kind, and exactly what
+//! its writer is told: the class, the line and column, the function it
+//! stopped in, and the message, word for word. Changing a message changes a
+//! line of this file, so it is read in review. Every class the language has
+//! appears here; a test below checks that.
 
 const std = @import("std");
 const script = @import("script.zig");
@@ -51,15 +50,15 @@ const cases = [_]Case{
     .{ .src = "local x = )", .line = 1, .column = 11, .class = .syntax, .message = "expected a value, found `)`" },
     .{ .src = "local x = (1\n", .line = 2, .column = 1, .class = .syntax, .message = "expected `)`, found the end of the script" },
     .{ .src = "print(1) = 2", .line = 1, .column = 1, .class = .syntax, .message = "only a local or an element `t[k]`, `t.k` can be assigned" },
-    // `fail` (the design, final; QUEUE 232): the script's own stop, its
-    // message as given; Lua's `error` refused, naming it.
+    // `fail` is the script's own stop, with its message as given; Lua's
+    // `error` is refused by name.
     .{ .src = "function f() fail(\"no config in \" .. \"etc\") end\nf()", .line = 1, .column = 14, .function = "f", .class = .fail, .message = "no config in etc" },
-    // The seam (QUEUE 233): a call no host here has.
+    // A call no host here has.
     .{ .src = "local r = host(\"run\", {\"zig\", \"build\"}, {})", .line = 1, .column = 11, .class = .host, .message = "`run`: not on this host" },
     .{ .src = "error(\"x\")", .line = 1, .column = 1, .class = .refused, .message = "`error` is not in this language: `fail(msg)` stops the run with your message, and `attempt` catches it" },
     .{ .src = "local x = 1.5", .line = 1, .column = 11, .class = .refused, .message = "float literals are not in this language: integers only" },
-    // Long strings (QUEUE 232): a level is required, and a syntax error
-    // right after one says where it closed.
+    // Long strings: a level is required, and a syntax error right after
+    // one says where it closed.
     .{ .src = "local s = [=[\nfirst\nsecond ]] ]=]\nlocal x = 1 // 0", .line = 4, .column = 13, .class = .arithmetic, .message = "integer division by zero" },
     .{ .src = "local s = [[a]]", .line = 1, .column = 11, .class = .refused, .message = "a long string needs a level: `[=[ ... ]=]` (code being edited is full of `]]`)" },
     .{ .src = "print([=[a]=]b]=])", .line = 1, .column = 14, .class = .syntax, .message = "expected `)` to close the call, found the name `b` (the long string at 1:7 closed at 1:11; if it holds `]=]`, open it with `[==[`)" },
@@ -83,8 +82,8 @@ const cases = [_]Case{
     .{ .src = "local x = \"a\" .. {}", .line = 1, .column = 15, .class = .type, .message = "`..` takes strings and integers, not an empty table" },
     .{ .src = "local x = 1 < \"a\"", .line = 1, .column = 13, .class = .type, .message = "`<` compares an integer with a string" },
     .{ .src = "local x = {} == {}", .line = 1, .column = 14, .class = .type, .message = "`==` on a list or a map is not in this language" },
-    // Only the literal `nil` meets a map or a list (QUEUE 231): a value
-    // that is nil when the line runs is still a value compared with it.
+    // Only the literal `nil` meets a map or a list: a value that is nil
+    // when the line runs is still a value compared with it.
     .{ .src = "local m = {} local x = 1 local b = m == x", .line = 1, .column = 38, .class = .type, .message = "`==` on a list or a map is not in this language" },
     .{ .src = "local m = {} local x = nil local b = x ~= m", .line = 1, .column = 40, .class = .type, .message = "`==` on a list or a map is not in this language" },
     .{ .src = "local x = -\"a\"", .line = 1, .column = 11, .class = .type, .message = "`-` takes an integer, not a string" },
@@ -148,7 +147,7 @@ const cases = [_]Case{
     .{ .src = "function f(n) return f(n + 1) end f(1)", .line = 1, .column = 22, .function = "f", .budget = .call_depth, .class = .budget, .message = "calls nest deeper than the call-depth budget (64)" },
     .{ .src = "while true do end", .line = 1, .column = 7, .budget = .steps, .class = .budget, .message = "the step budget (100000 steps) ran out" },
     .{ .src = "function g(x) return x + {} end print(g(1))", .line = 1, .column = 24, .function = "g", .class = .type, .message = "`+` takes integers, and its right is an empty table" },
-    // Regular expressions (QUEUE 230): every construct the subset leaves out, refused by name.
+    // Regular expressions: every construct the subset leaves out, refused by name.
     .{ .src = "local m = re_find(\"x\", \"a{2}\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 2: `{n,m}` is not in this subset: write the part out as often as it must come (`\\d\\d\\d?`), or `\\{` for the byte" },
     .{ .src = "local m = re_find(\"x\", \"(?:a)\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 1: `(?` is not in this subset: no lookaround and no groups that do not capture" },
     .{ .src = "local m = re_find(\"x\", \"(a)(b)\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 4: one capture group a pattern: a second `(` is not in this subset (`\\(` is the byte)" },
@@ -218,8 +217,6 @@ test "errors: the corpus holds every class of stop" {
     while (it.next()) |class| std.debug.print("no case of class {s}\n", .{@tagName(class)});
     try testing.expectEqual(0, missing.count());
 }
-
-// ── the call trail (metal-vmm QUEUE 229, chunk 1) ────────────────────────────
 
 /// A call site in a trail as a case says it: the function the call is in
 /// ("" at the top level), its line and column.
@@ -319,10 +316,9 @@ test "errors: a call site in the prelude is the prelude's line, and the report s
     const io = threaded.io();
     const root = try trailRoot(io, &tmp);
     defer testing.allocator.free(root);
-    // `walk_all` calls `walk`, a builtin: a script's own function of a
-    // prelude function's name is the script's. So a prelude function that
-    // calls a function of the script: none does; the line is held through
-    // `walk_all`'s own builtin stop instead, with the script calling it.
+    // No prelude function calls one of the script's, so the prelude's line
+    // is checked through `walk_all`'s own call to the builtin `walk`, which
+    // stops, with the script calling `walk_all`.
     var r = script.run(io, testing.allocator, root, "local x = walk_all(\"none\", {})", .{}, 0, &out_buf);
     defer r.deinit();
     const s = r.stop.?;

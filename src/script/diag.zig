@@ -1,10 +1,10 @@
-//! How a script stops: where, which class of error, and why. Parse errors
-//! and run errors alike; tests check the class, not every message.
+//! How a script stops: where, which class of error, and why. Covers parse
+//! errors and run errors alike; tests check the class, not every message.
 
 pub const Class = enum {
     /// Not a sentence of the language.
     syntax,
-    /// Lua accepts it and this language does not (named).
+    /// Lua accepts it and this language does not. The message names what.
     refused,
     /// A name not declared, or declared twice in one scope.
     name,
@@ -20,36 +20,44 @@ pub const Class = enum {
     budget,
     /// A store call failed.
     store,
-    /// The script's own stop: `fail(msg)`, its message as given (the
-    /// design, final; metal-vmm QUEUE 232). `attempt` catches it.
+    /// The script's own stop, `fail(msg)`, with its message as given.
+    /// `attempt` catches it.
     fail,
-    /// A call this host does not have (`host(name, ...)` where there is
-    /// none, as on metal), or one the host could not make: its program not
-    /// found (metal-vmm QUEUE 233).
+    /// A `host(name, ...)` call this host does not have (on metal, every
+    /// one), or one it could not make, such as a program not found.
     host,
 };
 
+/// Which budget ran out. Each but `runs` names a field of `Budgets`.
 pub const Budget = enum {
+    /// Steps the machine takes.
     steps,
+    /// Bytes of the values' arena.
     arena,
+    /// Calls in progress at once.
     call_depth,
+    /// Bytes printed.
     output,
+    /// Reads from the store, by count.
     reads,
+    /// Bytes read from the store.
     read_bytes,
+    /// Changes made to the store.
     changes,
+    /// Bytes written to the store.
     change_bytes,
+    /// Bytes of source.
     source,
+    /// Blocks and expressions nested in the source.
     nesting,
-    /// The walk's own recursion, across calls: what the Zig stack bounds.
+    /// The walk's recursion across calls, which the Zig stack bounds.
     depth,
-    /// What a `yield` keeps (metal-vmm QUEUE 211, M1).
+    /// Bytes of values a `yield` keeps.
     kept,
-    /// The machine's own memory: the tree, the code, the frames, the
-    /// operands (the box's review of 211).
+    /// The machine's own memory: the tree, the code, the frames, the operands.
     machine,
-    /// Programs a host runs (metal-vmm QUEUE 233): the host's own cap on a
-    /// run's (the Linux CLI's, 64). Not a field of
-    /// the budgets: the host counts and says.
+    /// Programs a host runs. Not a field of `Budgets`: the host keeps its own
+    /// cap (the Linux CLI's is 64), counts, and says.
     runs,
 };
 
@@ -63,15 +71,15 @@ pub const Stop = struct {
     message: []const u8,
     /// The script's function it stopped in, by name; "" at the top level.
     function: []const u8 = "",
-    /// **HOW IT GOT THERE** (metal-vmm QUEUE 229, chunk 1): every call
-    /// between the top level and `function`, outermost first, each where it
-    /// was made. Empty at the top level. Owned by the run's machine memory.
+    /// Every call between the top level and `function`, outermost first, each
+    /// where it was made. Empty at the top level. Owned by the run's machine
+    /// memory.
     trail: []const Call = &.{},
 };
 
-/// **ONE CALL IN A TRAIL**: where it was made, and in which function ("" at
-/// the top level; a prelude function's name says so, "the prelude's f", and
-/// its line is the prelude's).
+/// One call in a trail: where it was made, and in which function. `function`
+/// is "" at the top level; a prelude function's is "the prelude's f", and its
+/// line is the prelude's.
 pub const Call = struct {
     line: u32,
     column: u32,

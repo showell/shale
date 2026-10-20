@@ -1,6 +1,6 @@
-//! **THE LEXER**: Lua's tokens, and a refusal by name for each of Lua's
-//! that this language does not take (a long string without a level, floats, `/`, `:`, `...`,
-//! bitwise operators, `goto`, `repeat`).
+//! Turns source into Lua's tokens, and refuses by name each of Lua's that this
+//! language does not take: a long string without a level, floats, `/`, `:`,
+//! `...`, bitwise operators, `goto`, `repeat`.
 
 const std = @import("std");
 
@@ -61,18 +61,18 @@ pub const Tag = enum {
 
 pub const Token = struct {
     tag: Tag,
-    /// The source bytes: a name, an int's digits; for a string, its bytes
-    /// with escapes undone (owned by the lexer's allocator).
+    /// The source bytes of a name or an int's digits. For a string, its bytes
+    /// with escapes undone, owned by the lexer's allocator.
     text: []const u8,
     line: u32,
     column: u32,
     /// An int's value.
     int: i64 = 0,
-    /// 9223372036854775808: too big for 64 bits, but the magnitude of the
-    /// smallest integer, which a `-` before it makes (the parser's).
+    /// The literal is 9223372036854775808: too big for an i64, but the
+    /// magnitude of the smallest one, which the parser makes of a `-` before it.
     min_magnitude: bool = false,
-    /// A long string's level and where its closer is (QUEUE 232): what a
-    /// syntax error right after it says.
+    /// A long string's level and where its closer is, for a syntax error
+    /// right after it to name.
     long: ?Long = null,
 };
 
@@ -152,8 +152,8 @@ pub const Lexer = struct {
                 if (self.peekAt(2) == '[' and self.peekAt(3) == '[')
                     return self.fail(self.line, self.column, true, "a long comment needs a level: `--[=[ ... ]=]` (code is full of `]]`), or start each line with `--`");
                 if (self.peekAt(2) == '[' and self.peekAt(3) == '=') {
-                    // **A BLOCK COMMENT** (the design, final): `--` and a
-                    // long string's opener; `--[=x` is a line comment.
+                    // A block comment is `--` and a long string's opener;
+                    // `--[=x` is a line comment.
                     var n: usize = 3;
                     while (self.peekAt(n) == '=') n += 1;
                     if (self.peekAt(n) == '[') {
@@ -285,11 +285,11 @@ pub const Lexer = struct {
         return .{ .tag = .int, .text = text, .line = line, .column = column, .int = value };
     }
 
-    /// **A LONG STRING** (QUEUE 232): `[=[ ... ]=]`, `[==[ ... ]==]`, a
-    /// level of one or more `=`, closed by the same level. Its bytes are the
-    /// source's, raw (no escapes, a CRLF kept), but for a newline right after
-    /// the opener, dropped. Its line and column advance through it, so what
-    /// follows is placed right. The `[` is taken.
+    /// Lexes a long string, `[=[ ... ]=]` or `[==[ ... ]==]`: a level of one
+    /// or more `=`, closed by the same level. Its bytes are the source's, raw
+    /// (no escapes, a CRLF kept), except that a newline right after the opener
+    /// is dropped. Line and column advance through it, so what follows is
+    /// placed right. The caller has taken the opening `[`.
     fn longString(self: *Lexer, line: u32, column: u32) error{Lex}!Token {
         var level: u32 = 0;
         while (self.peekAt(0) == '=') : (level += 1) _ = self.bump();
