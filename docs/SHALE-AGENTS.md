@@ -478,7 +478,7 @@ match.
 ## If you write Lua
 
 Shale reads like Lua, and an agent's Lua habits are most of its first
-stops (essay `notes/shale-from-the-inside.md`). Most are a clear stop;
+stops (essay `essay-repl-server/notes/shale-from-the-inside.md`). Most are a clear stop;
 the first two can give a quiet wrong answer, an empty list:
 
 - **Patterns are regular expressions, not Lua's.** The escape is `\`
