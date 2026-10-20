@@ -126,7 +126,7 @@ fn setNonblocking(fd: i32) void {
 /// The child between fork and exec. Uses raw system calls only and allocates
 /// nothing; on failure, writes the errno to `err_w` and exits 127. A `chdir`
 /// failure is written as 1000 plus its errno.
-fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, out_w: i32, err_w: i32, paths: []const [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) noreturn {
+fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, out_w: i32, err_w: i32, paths: []const [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) noreturn { // coverage: not run, the forked child's: linecov lets a child go before it runs a line
     _ = linux.prctl(@backingInt(linux.PR.SET_PDEATHSIG), @backingInt(linux.SIG.KILL), 0, 0, 0);
     if (linux.getppid() != parent) linux.exit_group(127);
     _ = linux.setpgid(0, 0);
@@ -152,7 +152,7 @@ fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, out_w: i32
     fail(err_w, @backingInt(last));
 }
 
-fn fail(err_w: i32, code: u32) noreturn {
+fn fail(err_w: i32, code: u32) noreturn { // coverage: not run, as `child`, whose alone it is
     const bytes = std.mem.asBytes(&code);
     _ = linux.write(err_w, bytes.ptr, bytes.len);
     linux.exit_group(127);

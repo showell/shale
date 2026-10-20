@@ -12,7 +12,10 @@
 -- that says why, on the line: `// coverage: not run, <why>` (a kernel
 -- refusal, an allocation that fails only outside a budget). It is counted
 -- beside the uncovered, not among them, and every one is listed, so they
--- stay visible and few. One on a line that ran is listed as stale.
+-- stay visible and few. One on a line that ran is listed as stale. On a
+-- top-level function's `fn` line it exempts the whole function, listed
+-- once with its count: for a function no traced process runs (a forked
+-- child's, which linecov puts back and lets go before it runs a line).
 --
 -- **A TEST'S OWN LINES ARE NOT THE MODULE'S**: an unrun line inside a
 -- `test` block of a measured file (from `zig_decls`) is counted in
@@ -74,9 +77,22 @@ local total_ran = 0
 for m in modules do
   local text = lines(read(m.path))
   local in_test = {}
+  -- A mark on a function's `fn` line exempts the function: line -> that line.
+  local in_fn = {}
+  local fn_marks = {}
   for d in zig_decls(m.path) do
     if d.kind == "test" then
       for i = d.first, d.last do in_test["" .. i] = true end
+    elseif d.kind == "fn" then
+      for i = d.first, d.last do
+        if contains(text[i], "fn " .. d.name .. "(") then
+          if contains(text[i], MARK) then
+            for j = d.first, d.last do in_fn["" .. j] = i end
+            push(fn_marks, {at = i, first = d.first, last = d.last})
+          end
+          break
+        end
+      end
     end
   end
   local test_missed = 0
@@ -93,15 +109,28 @@ for m in modules do
   local uncovered = {}
   local exempt = 0
   for n in m.missed do
-    if contains(text[n], MARK) then
+    if has_key(in_fn, "" .. n) then
+      exempt = exempt + 1
+    elseif contains(text[n], MARK) then
       exempt = exempt + 1
       push(exemptions, m.path .. ":" .. n .. "  " .. trim(text[n]))
     else
       push(uncovered, n)
     end
   end
+  for f in fn_marks do
+    local n = 0
+    for i = f.first, f.last do
+      if get(missed_set, "" .. i, false) then n = n + 1 end
+    end
+    if n == 0 then
+      push(exemptions, m.path .. ":" .. f.at .. "  STALE (its function ran)  " .. trim(text[f.at]))
+    else
+      push(exemptions, m.path .. ":" .. f.first .. "-" .. f.last .. "  the function, " .. n .. " lines  " .. trim(text[f.at]))
+    end
+  end
   for i = 1, #text do
-    if contains(text[i], MARK) and not get(missed_set, "" .. i, false) then
+    if contains(text[i], MARK) and not has_key(in_fn, "" .. i) and not get(missed_set, "" .. i, false) then
       push(exemptions, m.path .. ":" .. i .. "  STALE (it ran, or has no code)  " .. trim(text[i]))
     end
   end

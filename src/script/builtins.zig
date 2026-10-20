@@ -81,7 +81,7 @@ pub const specs: std.EnumArray(B, Spec) = blk: {
 };
 
 fn printIsTheInterpreters(_: *Run, _: ast.Pos, _: []const Value) Error!Value { // coverage: not run, `print` is the interpreter's own; this fills its slot in the table
-    unreachable; // coverage: not run, as above
+    unreachable;
 }
 
 /// "s" after a count that is not 1.
