@@ -13,6 +13,7 @@ const hunt_files = [_][]const u8{
     "src/script/lex_fuzz_test.zig",
     "src/script/props_test.zig",
     "src/script/builtins_hunt_test.zig",
+    "src/script/gen_hunt_test.zig",
 };
 comptime {
     @setEvalBranchQuota(1_000_000);
@@ -281,18 +282,27 @@ pub fn build(b: *std.Build) void {
         coverage_step.dependOn(&measure.step);
     }
     // The hunt, under tools/hunt_runner.zig: every test it holds runs, any
-    // error (a skip among them) fails it, and it says how many ran.
-    const hunt = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/script/hunt.zig"),
-        .target = target,
-        .optimize = optimize,
-    }), .test_runner = .{ .path = b.path("tools/hunt_runner.zig"), .mode = .simple } });
-    // The script module as a module: by path, the hunt would hold its tests.
-    hunt.root_module.addImport("shale", shale);
-    hunt.root_module.addImport("script_test_options", script_options.createModule());
-    // Compiled by `test`, so a hunt cannot rot between expeditions.
-    test_step.dependOn(&hunt.step);
-    fuzz_step.dependOn(&b.addRunArtifact(hunt).step);
+    // error (a skip among them) fails it, and it says how many ran. The hunts
+    // over generated scripts say what they reached by the coverage SDK's
+    // properties (241 D), so the hunt needs the SDK, resolved as
+    // `script-coverage` resolves it; without it, `fuzz` says so and `test`
+    // does not compile the hunt.
+    if (!b.isRoot()) {} else if (!sdk_there) {
+        fuzz_step.dependOn(&b.addFail("fuzz: no ../zig-coverage-sdk beside this checkout").step);
+    } else if (b.lazyDependency("zig_coverage_sdk", .{})) |sdk| {
+        const hunt = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("src/script/hunt.zig"),
+            .target = target,
+            .optimize = optimize,
+        }), .test_runner = .{ .path = b.path("tools/hunt_runner.zig"), .mode = .simple } });
+        // The script module as a module: by path, the hunt would hold its tests.
+        hunt.root_module.addImport("shale", shale);
+        hunt.root_module.addImport("script_test_options", script_options.createModule());
+        hunt.root_module.addImport("coverage", sdk.module("coverage"));
+        // Compiled by `test`, so a hunt cannot rot between expeditions.
+        test_step.dependOn(&hunt.step);
+        fuzz_step.dependOn(&b.addRunArtifact(hunt).step);
+    }
     test_step.dependOn(&b.addRunArtifact(signer_test).step);
 
     // Checks the docs' cited paths and names: tools/doc_check.shale, by this

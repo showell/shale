@@ -10,4 +10,5 @@ comptime {
     _ = @import("lex_fuzz_test.zig");
     _ = @import("props_test.zig");
     _ = @import("builtins_hunt_test.zig");
+    _ = @import("gen_hunt_test.zig");
 }
