@@ -1,4 +1,4 @@
-src/script_route.zig 15
+src/script_route.zig 0
 src/script/regex.zig 21
 src/script/builtins_regex.zig 2
 src/script/lex.zig 3

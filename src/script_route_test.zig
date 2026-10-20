@@ -494,3 +494,135 @@ test "THE ROUTE'S REPLY, WHOLE, FROZEN (the dogfood design: its four readers, do
         \\
     , try Fixture.reply(&s, &buf));
 }
+
+test "parse: a signature in capital hex, or with a byte that is not hex, is malformed" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const good = try f.body(f.kp, "test.example", 1, now + 60, "print(1)\n");
+    _ = try route.parse(good);
+    const at = "shale-signature ".len;
+    for ([_]u8{ 'G', 'A' }) |c| {
+        const bad = try f.arena.allocator().dupe(u8, good);
+        // The first hex digit that is a letter, so `A` is its capital.
+        var i = at;
+        while (!std.ascii.isAlphabetic(bad[i])) i += 1;
+        bad[i] = c;
+        try testing.expectError(error.Malformed, route.parse(bad));
+    }
+}
+
+test "parseConfig: a key other than public_key and target is not a config" {
+    try testing.expectError(error.BadConfig, route.parseConfig("colour = red\n"));
+}
+
+test "refused, bad_config: a config that cannot be read (a folder where the file is), and nothing runs" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const io = f.threaded.io();
+    try store.remove(io, f.arena.allocator(), f.paths.config);
+    try f.tmp.dir.createDir(io, try std.fs.path.join(f.arena.allocator(), &.{ "auth", std.fs.path.basename(f.paths.config) }), .default_dir);
+    var o = try f.send(try f.body(f.kp, "test.example", 1, now + 60, "print(1)\n"));
+    defer o.deinit();
+    try testing.expectEqual(route.Refusal.bad_config, o.refused.why);
+    try testing.expect(std.mem.startsWith(u8, o.refused.detail, "the script config cannot be read: "));
+    try testing.expectEqual(@as(u64, 0), try f.last());
+}
+
+test "a background run that cannot start is refused not_recorded: its number spent, the failure logged, nothing left running" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    defer route.background.reset();
+    // The run's root and log are copied; the process's own memory fails.
+    var failing: std.testing.FailingAllocator = .init(testing.allocator, .{ .fail_index = 2 });
+    var o = try route.handle(f.threaded.io(), f.arena.allocator(), try f.bodyIn(1, .background, walk_source), .{ .paths = f.paths, .data_root = f.data, .budgets = .{}, .now = now, .out = &out_buf, .backing = failing.allocator() });
+    defer o.deinit();
+    try testing.expectEqual(route.Refusal.not_recorded, o.refused.why);
+    try testing.expectEqualStrings("background run 1 could not start (OutOfMemory)", o.refused.detail);
+    try testing.expectEqual(@as(u64, 1), try f.last());
+    try testing.expect(std.mem.indexOf(u8, try f.log(), " seq=1 background not started: OutOfMemory\n") != null);
+    try testing.expect(route.background.process == null);
+    try testing.expectEqual(failing.allocations, failing.deallocations);
+}
+
+test "a run whose end cannot be logged stands: answered 500, the reply says the log was not written, the sequence spent" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const io = f.threaded.io();
+    const req: route.Request = .{ .paths = f.paths, .data_root = f.data, .budgets = .{}, .now = now, .out = &out_buf };
+    // A whole request's allocations, counted; then the same request with one
+    // of its last ones refused, from the end back, until the one that fails
+    // is the end's log line: the run done, its log not.
+    var counting: std.testing.FailingAllocator = .init(f.arena.allocator(), .{});
+    var whole = try route.handle(io, counting.allocator(), try f.body(f.kp, "test.example", 1, now + 60, "print(1)\n"), req);
+    whole.deinit();
+    try testing.expect(whole.ran.log_failed == null);
+    var sequence: u64 = 1;
+    var o: route.Outcome = for (1..64) |back| {
+        sequence += 1;
+        var failing: std.testing.FailingAllocator = .init(f.arena.allocator(), .{ .fail_index = counting.alloc_index - back });
+        var got = try route.handle(io, failing.allocator(), try f.body(f.kp, "test.example", sequence, now + 60, "print(1)\n"), req);
+        if (got == .ran and got.ran.log_failed != null) break got;
+        got.deinit();
+    } else return error.TestUnexpectedResult;
+    defer o.deinit();
+    try testing.expectEqual(@as(?anyerror, error.OutOfMemory), o.ran.log_failed);
+    try testing.expectEqual(std.http.Status.internal_server_error, o.status());
+    try testing.expectEqualStrings("1\n", o.ran.result.output);
+    try testing.expectEqual(sequence, try f.last());
+    var buf: [4096]u8 = undefined;
+    const reply = try Fixture.reply(&o, &buf);
+    try testing.expect(std.mem.startsWith(u8, reply, "── THE LOG WAS NOT WRITTEN (OutOfMemory): this run is on the store's sequence and source, not its log ──\n1\n"));
+    try testing.expect(std.mem.endsWith(u8, reply, "── THE LOG WAS NOT WRITTEN (OutOfMemory) ──\n"));
+}
+
+test "a background run still going is logged once each progress_every_s, never between" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    defer route.background.reset();
+    var o = try f.sendHosted(try f.bodyIn(1, .background, "local n = 0 while true do n = n + 1 end"));
+    defer o.deinit();
+    const io = f.threaded.io();
+    try testing.expect(route.sliceBackground(io, now + route.progress_every_s - 1));
+    try testing.expect(std.mem.indexOf(u8, try f.log(), "background running") == null);
+    try testing.expect(route.sliceBackground(io, now + route.progress_every_s));
+    const st = route.background.process.?.status();
+    try testing.expectEqual(@as(u64, 2), st.slices);
+    const line = try std.fmt.allocPrint(f.arena.allocator(), "{d} seq=1 background running: {d} steps, 2 slices\n", .{ now + route.progress_every_s, st.steps });
+    try testing.expect(std.mem.indexOf(u8, try f.log(), line) != null);
+    try testing.expect(route.sliceBackground(io, now + route.progress_every_s + 1));
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, try f.log(), "background running"));
+}
+
+test "the background status before any run says none has been" {
+    route.background.reset();
+    try testing.expectEqualStrings("no background run since the server started\n", try Fixture.status());
+}
+
+test "installKey: a sequence file that is not a number stops it, and neither file changes" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const io = f.threaded.io();
+    const a = f.arena.allocator();
+    try store.replace(io, a, f.paths.sequence, "seven\n", .{});
+    const before = (try store.readOrNull(io, a, f.paths.config, .unlimited)).?;
+    const hex = std.fmt.bytesToHex(f.kp.public_key.toBytes(), .lower);
+    try testing.expectError(error.BadSequenceFile, route.installKey(io, a, f.paths, try std.fmt.allocPrint(a, "public_key = {s}\ntarget = other.example\n", .{&hex}), 0));
+    try testing.expectEqualStrings("seven\n", (try store.readOrNull(io, a, f.paths.sequence, .unlimited)).?);
+    try testing.expectEqualStrings(before, (try store.readOrNull(io, a, f.paths.config, .unlimited)).?);
+}
+
+test "the reply to a refusal, a background start and a kill, whole" {
+    var buf: [512]u8 = undefined;
+    const refused: route.Outcome = .{ .refused = .{ .why = .expired, .detail = "expired at 5; it is 6" } };
+    try testing.expectEqualStrings("refused (expired): expired at 5; it is 6\nnot run\n", try Fixture.reply(&refused, &buf));
+    const started: route.Outcome = .{ .started = 4 };
+    try testing.expectEqualStrings("started seq 4 in the background: it only reads, a slice at a time between requests\n", try Fixture.reply(&started, &buf));
+    const killed: route.Outcome = .{ .killed = .{ .sequence = 4, .steps = 200000, .slices = 2 } };
+    try testing.expectEqualStrings("killed background seq 4 after 200000 steps, 2 slices\n", try Fixture.reply(&killed, &buf));
+}
