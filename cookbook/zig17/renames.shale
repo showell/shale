@@ -1,0 +1,98 @@
+-- **THE ZIG 0.17 UPGRADE: CALLS RENAMED OR RESHAPED** (written for the
+-- 0.16 -> 0.17 upgrade, 2026-10-20), each one 0.17 removed (not merely
+-- deprecated), rewritten in place:
+--   - `x.dupeZ(T, s)`: `x.dupeSentinel(T, s, 0)` (the call's closing
+--     parenthesis found by depth, so nested arguments are safe)
+--   - `std.ascii.indexOfIgnoreCase...`: `std.ascii.findIgnoreCase...`
+--     (and its Pos, PosLinear)
+--   - `Ast.parse(gpa, src, .zig)` (or `.zon`): `Ast.parse(gpa, src,
+--     .{ .mode = .zig })`
+--   - a container's field count, `@typeInfo(T).@"enum".fields.len` (and
+--     `@"struct"`, `@"union"`): `.field_names.len` (0.17's type info is
+--     struct-of-arrays; a loop over the fields is a hand's)
+-- Every changed file is rewritten whole; run `zig fmt` after, and let the
+-- compiler judge.
+--
+--   cd <repo> && shale <shale>/cookbook/zig17/renames.shale dir=src
+--
+-- budget: steps=900000000 reads=100000 arena_bytes=4000000000
+
+const DIR = arg("dir", ".")
+
+-- The index of the `)` closing the call whose `(` is at `open`.
+function close_of(l, open)
+  local depth = 0
+  for i = open, #l do
+    local c = sub(l, i, i)
+    if c == "(" or c == "[" or c == "{" then depth = depth + 1
+    elseif c == ")" or c == "]" or c == "}" then
+      depth = depth - 1
+      if depth == 0 then return i end
+    end
+  end
+  return nil
+end
+
+function fix(text)
+  local n = 0
+  -- dupeZ(T, s) -> dupeSentinel(T, s, 0)
+  local from = 1
+  while true do
+    local at = find(text, ".dupeZ(", from)
+    if at == nil then break end
+    local open = at + 6
+    local close = close_of(text, open)
+    if close == nil then break end
+    text = sub(text, 1, at) .. "dupeSentinel(" .. sub(text, open + 1, close - 1) .. ", 0)" .. sub(text, close + 1)
+    n = n + 1
+    from = at + 1
+  end
+  -- std.ascii.indexOfIgnoreCase... -> findIgnoreCase...
+  local k = #split(text, "ascii.indexOfIgnoreCase") - 1
+  if k > 0 then
+    text = substitute(text, "ascii.indexOfIgnoreCase", "ascii.findIgnoreCase")
+    n = n + k
+  end
+  -- Ast.parse(a, s, .zig) -> Ast.parse(a, s, .{ .mode = .zig })
+  for mode in {"zig", "zon"} do
+    from = 1
+    while true do
+      local at = find(text, "Ast.parse(", from)
+      if at == nil then break end
+      local close = close_of(text, at + 9)
+      if close == nil then break end
+      local call = sub(text, at, close)
+      if ends_with(call, ", ." .. mode .. ")") then
+        local fixed = sub(call, 1, #call - #mode - 3) .. ".{ .mode = ." .. mode .. " })"
+        text = sub(text, 1, at - 1) .. fixed .. sub(text, close + 1)
+        n = n + 1
+      end
+      from = at + 1
+    end
+  end
+  for kind in {"enum", "struct", "union"} do
+    local old = ".@\"" .. kind .. "\".fields.len"
+    local k = #split(text, old) - 1
+    if k > 0 then
+      text = substitute(text, old, ".@\"" .. kind .. "\".field_names.len")
+      n = n + k
+    end
+  end
+  return {text = text, n = n}
+end
+
+local total = 0
+for e in walk_all(DIR, {kind = "file", like = "*.zig"}) do
+  if not contains(e.path, ".zig-cache") and not contains(e.path, "zig-out") then
+    local was = read(e.path)
+    if contains(was, "dupeZ(") or contains(was, "indexOfIgnoreCase") or contains(was, "Ast.parse(") or contains(was, ".fields.len") then
+      local r = fix(was)
+      if r.n > 0 then
+        print(e.path .. ": " .. r.n)
+        replace(e.path, r.text)
+        total = total + r.n
+      end
+    end
+  end
+end
+print("calls rewritten: " .. total)

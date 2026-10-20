@@ -8,6 +8,9 @@
 --   - after an `=` whose target has a type (a typed declaration, a field's
 --     default, an assignment, a struct literal's `.field =`): `@splat(v)`
 --   - anywhere else (an operand of `&`, an argument): `@as([N]T, @splat(v))`
+-- A repeated one-character string, `"x" ** N`, is `&@as([N]u8, @splat('x'))`
+-- (a pointer to an array: it is a slice where one is wanted, and `++`
+-- takes it). A longer string repeated is listed, not changed.
 -- An anonymous `.{v} ** N`, with no element type, is listed, not changed:
 -- give it its type by hand. Every changed file is rewritten whole; run
 -- `zig fmt` after, and let the compiler judge.
@@ -20,8 +23,10 @@
 const DIR = arg("dir", ".")
 const DRY = arg("dry", "no") == "yes"
 
--- The end of the count expression that starts at `at` in `l`: up to a `;`,
--- `,` or a closing bracket at depth zero.
+-- The end of the count expression that starts at `at` in `l`: one operand,
+-- since `**` binds tighter than any other operator (`"b" ** max ++ "x"` is
+-- `("b" ** max) ++ "x"`), so up to a space, `;`, `,` or a closing bracket
+-- at depth zero.
 function count_end(l, at)
   local depth = 0
   local i = at
@@ -32,7 +37,7 @@ function count_end(l, at)
     elseif c == ")" or c == "]" or c == "}" then
       if depth == 0 then return i - 1 end
       depth = depth - 1
-    elseif (c == ";" or c == ",") and depth == 0 then
+    elseif (c == ";" or c == "," or c == " ") and depth == 0 then
       return i - 1
     end
     i = i + 1
@@ -137,6 +142,34 @@ function fix_line(l)
       changed = changed + 1
     end
   end
+  -- A repeated one-character string: `"x" ** N`.
+  local sseek = 1
+  while true do
+    local star = find(l, "\" **", sseek)
+    if star == nil then break end
+    -- The string's opening quote, back from its closing one.
+    local open = star - 1
+    while open > 0 do
+      if sub(l, open, open) == "\"" and (open == 1 or sub(l, open - 1, open - 1) ~= "\\") then break end
+      open = open - 1
+    end
+    local inner = sub(l, open + 1, star - 1)
+    local one = #inner == 1 or (#inner == 2 and starts_with(inner, "\\"))
+    if open > 0 and one then
+      local nstart = star + 4
+      while sub(l, nstart, nstart) == " " do nstart = nstart + 1 end
+      local nend = count_end(l, nstart)
+      local ch = inner
+      if ch == "'" then ch = "\\'" end
+      local n = bare(sub(l, nstart, nend))
+      local before = sub(l, 1, open - 1)
+      l = before .. "&@as([" .. n .. "]u8, @splat('" .. ch .. "'))" .. sub(l, nend + 1)
+      changed = changed + 1
+      sseek = #before + 1
+    else
+      sseek = star + 4
+    end
+  end
   -- An anonymous `.{v} ** N` whose target has its type (`x: [6]u8 =
   -- .{0} ** 6`, a typed field's default): `@splat(v)`. Untyped, or nested,
   -- it is left for a hand.
@@ -158,7 +191,7 @@ function fix_line(l)
       seek = open + 2
     end
   end
-  if re_find(l, "\\}\\s*\\*\\*") ~= nil then left = left + 1 end
+  if re_find(l, "\\}\\s*\\*\\*") ~= nil or contains(l, "\" **") then left = left + 1 end
   return {line = l, changed = changed, left = left}
 end
 
@@ -168,7 +201,7 @@ local leftover = {}
 for e in walk_all(DIR, {kind = "file", like = "*.zig"}) do
   if not contains(e.path, ".zig-cache") and not contains(e.path, "zig-out") then
     local text = read(e.path)
-    if contains(text, "**") then
+    if contains(text, " ** ") then
       local out = {}
       local n = 0
       local i = 0

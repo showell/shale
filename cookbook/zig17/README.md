@@ -16,8 +16,16 @@ until the cutover):
    `~/showell_repos`). The counts are text, so an upper bound: many of
    0.17's renames keep the old name as a deprecated alias.
 2. **Run the scripted fixes**, then `~/zig-0.17.0/zig fmt` over the tree:
-   - [array_mult.shale](array_mult.shale): `[_]T{v} ** N` becomes `@splat(v)`
-     (0.17 removed array multiplication). What it can't type is listed.
+   - [array_mult.shale](array_mult.shale): `[_]T{v} ** N` becomes `@splat(v)`,
+     and a repeated one-character string `"x" ** N` becomes
+     `&@as([N]u8, @splat('x'))` (0.17 removed both). What it can't type is
+     listed.
+   - [renames.shale](renames.shale): calls 0.17 removed: `dupeZ` to
+     `dupeSentinel(.., 0)`, `ascii.indexOfIgnoreCase` to `findIgnoreCase`,
+     `Ast.parse`'s mode, a container's `.fields.len` to `.field_names.len`.
+   - [has_decl.shale](has_decl.shale) (`fix=yes`): every declaration of a
+     name some `@hasDecl` asks about, made `pub` (0.17's `@hasDecl` sees
+     only `pub`; an optional check then turns its feature off silently).
    - **`zig fmt` itself (0.17) rewrites the deprecated builtins**:
      `@intFromEnum` to `@backingInt`, `@enumFromInt(x)` to
      `@fromBackingInt(@intCast(x))`.
@@ -29,12 +37,18 @@ until the cutover):
    - An optimize mode compared with `==` or switched on uses the new tags
      (`.debug`, `.safe`, `.fast`, `.small`); as a value (`.optimize =
      .ReleaseSafe`) the old name still resolves, deprecated.
-   - `b.build_root` is `b.root` (a Path).
+   - `b.build_root` is `b.root` (a Path): the build root's path is
+     `b.root.root_dir.path`; `b.pathFromRoot` is gone too.
    - Run steps' `addArgs(b.args)` is `addPassthruArgs()`.
 4. **Then the behaviour 0.17 changed under the code**, which no compiler
    error shows and the repo's own tests must:
    - A generic's `@src().fn_name` ends `__func_<n>` (it was `__anon_<n>`):
      zig-coverage-sdk cut on the old suffix, and two of its tests failed.
+   - `Reader.allocRemaining(.limited(n))` takes exactly `n` bytes and errors
+     past it; 0.16 errored on reaching `n`. Code that passed `max + 1` to
+     allow `max` now allows `max + 1` (webbox's readLimitedBody; shale's
+     script_runner source cap): pass `max`. Audit every `.limited(...)`.
+   - `@hasDecl` sees only `pub` (above): `has_decl.shale` before the tests.
 5. **Judge** with the repo's own tests, and commit to the branch, not
    master: the repos move together.
 
@@ -43,3 +57,4 @@ until the cutover):
 | repo | branch | fixes |
 |---|---|---|
 | zig-coverage-sdk | `zig-0.17` | typeInfo fields, Ast.parse, one array, the `__func_` suffix, fmt's builtins |
+| zig-webbox | `zig-0.17` | 34 arrays and strings, 5 renames, 3 `pub` for @hasDecl, `build_root`, allocRemaining's limit |

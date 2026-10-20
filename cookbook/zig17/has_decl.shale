@@ -1,0 +1,62 @@
+-- **THE ZIG 0.17 UPGRADE: @hasDecl SEES ONLY `pub`** (written for the
+-- 0.16 -> 0.17 upgrade, 2026-10-20). Under 0.16 `@hasDecl(T, "name")` found
+-- a declaration that was not `pub` (in the same file, at least); under 0.17
+-- only a `pub` one. Where the check is optional (a site's `between`,
+-- `family`, `uploader`; a host's feature flag), a declaration left
+-- without `pub` turns its feature off with no compile error, and only a
+-- test (or nothing) notices. This finds every declaration of a checked
+-- name that is not `pub`, in the repo's .zig files, and with `fix=yes`
+-- makes each `pub`. The names are those our repos ask @hasDecl about by
+-- a literal; pass `names=a,b` for others.
+--
+--   cd <repo> && shale <shale>/cookbook/zig17/has_decl.shale dir=.
+--   cd <repo> && shale <shale>/cookbook/zig17/has_decl.shale dir=. fix=yes
+--
+-- budget: steps=900000000 reads=100000 arena_bytes=4000000000
+
+const DIR = arg("dir", ".")
+const FIX = arg("fix", "no") == "yes"
+const NAMES = split(arg("names", "between,family,uploader,shale_change_check,shale_preludes,shale_diff_summary,coverage_checks,burst,name"), ",")
+
+-- The checked name a line declares without `pub`, or nil: `fn NAME` at
+-- any depth (a function is always a container's), or `const NAME` / `var
+-- NAME` at the top level only (indented, it may be a function's local,
+-- which `pub` would not compile).
+function declares(line)
+  local t = trim(line)
+  if starts_with(t, "pub ") or starts_with(t, "//") then return nil end
+  local kws = {"fn "}
+  if #t == #line then kws = {"fn ", "const ", "var "} end
+  for kw in kws do
+    if starts_with(t, kw) then
+      local rest = sub(t, #kw + 1)
+      for n in NAMES do
+        if starts_with(rest, n .. "(") or starts_with(rest, n .. " ") or starts_with(rest, n .. ":") then return n end
+      end
+    end
+  end
+  return nil
+end
+
+local found = 0
+for e in walk_all(DIR, {kind = "file", like = "*.zig"}) do
+  if not contains(e.path, ".zig-cache") and not contains(e.path, "zig-out") then
+    local out = {}
+    local here = 0
+    local i = 0
+    for line in lines(read(e.path)) do
+      i = i + 1
+      local n = declares(line)
+      if n ~= nil then
+        here = here + 1
+        print(e.path .. ":" .. i .. ": " .. trim(line))
+        local indent = sub(line, 1, #line - #trim(line))
+        line = indent .. "pub " .. trim(line)
+      end
+      push(out, line)
+    end
+    found = found + here
+    if FIX and here > 0 then replace(e.path, join(out, "\n") .. "\n") end
+  end
+end
+print("declarations of a checked name, not pub: " .. found .. (FIX and " (made pub)" or " (fix=yes makes them pub)"))
