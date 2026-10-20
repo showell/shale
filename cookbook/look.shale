@@ -6,6 +6,8 @@
 --   shale <cookbook>/look.shale at=src/io.zig:690-730,build.zig:16-29
 --   shale <cookbook>/look.shale find=pathFromRoot( in=src,build.zig like=*.zig
 --   shale <cookbook>/look.shale find="pub fn findProgram" in=zig:lib/std/Build.zig
+--   shale <cookbook>/look.shale rev=origin/master at=QUEUE.md:10-40
+--   shale <cookbook>/look.shale rev=HEAD~3 find=fuzz_runs in=src,build.zig like=*.zig
 --
 -- `at` is a comma-separated list of `path:first-last` (or `path:n` for one
 -- line); a mount path (`zig:lib/std/Build.zig:100-120`) works, the range
@@ -16,6 +18,13 @@
 -- run that finds more says so: never a silent cut. A found line longer than
 -- `wide` characters is cut there, ending ` ...`.
 --
+-- **AT A REVISION** (`rev=`, 2026-10-20, from CC's escapes: `git show
+-- origin/master:QUEUE.md | awk` to read one item): every path of `at` and
+-- `in` is read as `rev` holds it, in the git checkout `repo` (default the
+-- root), through the git prelude; a folder of `in` is the files `git
+-- ls-tree` lists under it there, `like` as before. Its own argument, not a
+-- `rev:path`, because a path's colon is already a mount's.
+--
 -- budget: steps=900000000 reads=100000 read_bytes=1000000000 arena_bytes=2000000000
 
 const AT = arg("at", "")
@@ -24,6 +33,47 @@ const IN = arg("in", ".")
 const LIKE = arg("like", "*")
 const MOST = arg("most", 300)
 const WIDE = arg("wide", 200)
+const REV = arg("rev", "")
+const REPO = arg("repo", ".")
+
+-- A file's text: as the disk holds it, or as `rev` does.
+function text_of(path)
+  if REV == "" then return read(path) end
+  return git_show(REPO, REV .. ":" .. path)
+end
+
+-- The files under `place` at `rev` (`place` itself when it is a file there).
+function files_at_rev(place)
+  local args = {"ls-tree", "-r", "--name-only", REV, "--"}
+  if place ~= "." then push(args, place) end
+  local got = {}
+  for p in lines(git_call(REPO, args, nil, true, nil).out) do
+    if p ~= "" and (LIKE == "*" or like(basename(p), LIKE)) then push(got, p) end
+  end
+  return got
+end
+
+-- Each line holding FIND under `place` at `rev`, by path: `{path:
+-- {{line, text}, ...}}`, from one `git grep` (a `git show` a file would
+-- spend a run's 64 programs on 64 files). It exits 1 when nothing is found.
+function grep_at_rev(place)
+  local argv = {"git", "-c", "color.ui=never", "--no-optional-locks", "grep", "-n", "-I", "-F", "-e", FIND, REV, "--"}
+  if place ~= "." then push(argv, place) end
+  local r = run(argv, {cwd = REPO, timeout_ms = 60000, whole = 16777216})
+  if r.code ~= 0 and r.code ~= 1 then fail("look: `git grep` at " .. REV .. " exited " .. r.code .. ": " .. sub(r.out, 1, 200)) end
+  local by_path = {}
+  local skip = #REV + 2
+  for l in lines(r.out) do
+    local rest = sub(l, skip)
+    local m = re_find(rest, ":\\d+:")
+    if m ~= nil then
+      local p = sub(rest, 1, m.at - 1)
+      if not has_key(by_path, p) then by_path[p] = {} end
+      push(by_path[p], {line = parse_int(sub(m.text, 2, #m.text - 1)), text = sub(rest, m.at + #m.text)})
+    end
+  end
+  return by_path
+end
 
 if AT == "" and FIND == "" then fail("look: give at=path:first-last[,...] or find=TEXT [in=dirs] [like=*.zig]") end
 
@@ -44,9 +94,9 @@ end
 if AT ~= "" then
   for spec in split(AT, ",") do
     local r = range_of(trim(spec))
-    print("== " .. r.path .. ":" .. r.first .. "-" .. r.last)
+    if REV ~= "" then print("== " .. REV .. ":" .. r.path .. ":" .. r.first .. "-" .. r.last) else print("== " .. r.path .. ":" .. r.first .. "-" .. r.last) end
     local i = 0
-    for l in lines(read(r.path)) do
+    for l in lines(text_of(r.path)) do
       i = i + 1
       if i > r.last then break end
       if i >= r.first then print(i .. "\t" .. l) end
@@ -69,8 +119,13 @@ if FIND ~= "" then
   for given in split(IN, ",") do
     local place = trim(given)
     local paths = {}
+    local at_rev = {}
+    if REV ~= "" then
+      paths = files_at_rev(place)
+      at_rev = grep_at_rev(place)
+      if #paths == 0 then print("(not at " .. REV .. ": " .. place .. ")") end
     -- `.` is the root, a folder `is_dir` will not be asked about.
-    if place ~= "." and not exists(place) then
+    elseif place ~= "." and not exists(place) then
       print("(not there: " .. place .. ")")
     elseif place == "." or is_dir(place) then
       -- Hidden folders (.git, .zig-cache) are not entered at all.
@@ -84,7 +139,9 @@ if FIND ~= "" then
     end
     for p in paths do
       files = files + 1
-      for m in grep_all(p, FIND) do
+      local found_in = {}
+      if REV ~= "" then found_in = get(at_rev, p, {}) else found_in = grep_all(p, FIND) end
+      for m in found_in do
         found = found + 1
         if shown < MOST then
           local text = trim(m.text)

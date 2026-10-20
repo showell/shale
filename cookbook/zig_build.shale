@@ -17,6 +17,13 @@
 -- ` tools` mount, such as `zig016:zig`), `step` a step's name, `args` more words after
 -- it (split on spaces), `dir` where to run, `minutes` the time it gets.
 --
+-- **THE LINES A VERDICT HANGS ON** (`grep=`, 2026-10-20, from CC's escapes:
+-- `zig build fuzz 2>&1 | grep FAIL` to show a plant's verdict): every line
+-- of the output holding one of `grep`'s literals (comma-separated), in
+-- order, after the summary, at most `most` of them (said when more):
+--
+--   shale cookbook:zig_build.shale step=fuzz "grep=FAIL,hunts ran"
+--
 -- budget: steps=400000000 arena_bytes=1000000000
 
 const ZIG = arg("zig", "zig")
@@ -25,6 +32,8 @@ const ARGS = arg("args", "")
 const DIR = arg("dir", ".")
 const MINUTES = arg("minutes", 10)
 const LOG = arg("log", ".zig-cache/zig_build.log")
+const GREP = arg("grep", "")
+const MOST = arg("most", 60)
 
 local argv = {ZIG, "build"}
 if contains(ZIG, ":") then argv = {real(ZIG), "build"} end
@@ -78,6 +87,21 @@ for t in order do
   if not starts_with(t, "error: '") then print(counts[t] .. "x " .. sub(t, 1, 240)) end
 end
 for f in failed do print("FAILED " .. sub(f, 1, 240)) end
+if GREP ~= "" then
+  local wanted = split(GREP, ",")
+  local held = 0
+  for l in lines_of do
+    for w in wanted do
+      if w ~= "" and contains(l, w) then
+        held = held + 1
+        if held <= MOST then print("grep: " .. sub(l, 1, 240)) end
+        break
+      end
+    end
+  end
+  if held > MOST then print("grep: ... " .. (held - MOST) .. " more (most=" .. MOST .. ")") end
+  if held == 0 then print("grep: no line holds " .. GREP) end
+end
 -- A failed run whose own words are not `error:` lines (a checker's
 -- findings, a script's stop): its last lines, so nothing is hidden.
 if r.code ~= 0 then
