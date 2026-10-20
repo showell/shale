@@ -1,20 +1,16 @@
-//! **DECLARATIONS MOVED BETWEEN FILES, AND WHAT THE MOVE BROKE**
-//! (metal-vmm QUEUE 235, 2): `zig_move`'s pure part. The declarations are
-//! `zig_decls`'s (shale_zig_ast.zig) and the uses are the one reading of
-//! identifiers (`za.identifiers`, `zig_rename`'s too). **The analysis is
-//! Zig's parser and its tokens, not types**: a method called through a
-//! value (`progress.end(.deadline)`) and a name reached through an
-//! `@This()` alias are not reported, and the compiler finds both. A local
-//! or a parameter cannot shadow a top-level name in Zig, so a name that
-//! matches is that declaration or a use of it.
+//! Moves top-level declarations from one Zig file to another and reports what
+//! the move broke: the pure part of `zig_move`. Declarations come from
+//! `za.decls` and uses from `za.identifiers`. The analysis is syntax, not types:
+//! a method called through a value (`progress.end(.deadline)`) and a name
+//! reached through an `@This()` alias are not reported; the compiler finds both.
 
 const std = @import("std");
 const za = @import("shale_zig_ast.zig");
 
-/// `was[o0..o1]` became `now[c0..c1]` (core's `Span`, field for field).
+/// `was[o0..o1]` became `now[c0..c1]`. Matches core's `Span` field for field.
 pub const Span = struct { o0: usize, o1: usize, c0: usize, c1: usize };
 
-/// A declaration to move: by name, and by kind when a name is two
+/// A declaration to move, by name, and by kind when two share the name
 /// (`test foo {}` and `const foo`).
 pub const Want = struct { name: []const u8, kind: ?za.Kind = null };
 
@@ -22,28 +18,34 @@ pub const Want = struct { name: []const u8, kind: ?za.Kind = null };
 /// plain `//` lines directly above it (`doc_and_plain`).
 pub const CommentMode = enum { doc, doc_and_plain };
 
+/// A name and the line it is reported at.
 pub const NameLine = struct { name: []const u8, line: usize };
 
-/// An import the moved code uses: its name, and its value as `from` says
-/// it (`@import("std")`, `std.Io.net`), so `const name = target;` copies it.
+/// An import the moved code uses: its name and its value as written in `from`
+/// (`@import("std")`, `std.Io.net`), so `const name = target;` copies it.
 pub const ImportNeed = struct { name: []const u8, target: []const u8, line: usize };
 
+/// A planned move.
 pub const Moved = struct {
+    /// `from` with the declarations cut.
     from_now: []const u8,
     from_spans: []const Span,
+    /// `to` with the declarations added.
     to_now: []const u8,
     to_spans: []const Span,
+    /// The number of declarations moved.
     moved: usize,
     /// Moved declarations `from` still uses that are not `pub`, at their
     /// name's line; and members `X.y` of a moved `X` that `from` names and
     /// that are not `pub`, at their first use.
     needs_pub: []const NameLine,
+    /// Imports of `from` the moved code uses.
     needs_import: []const ImportNeed,
     /// Other top-level declarations of `from` the moved code uses.
     needs_from_from: []const NameLine,
     /// Each line of `from` that still names a moved declaration.
     uses_left: []const NameLine,
-    /// The tokens and Ast nodes read, of both files: the charge.
+    /// The tokens and Ast nodes read of both files: the charge.
     work: usize,
 };
 
@@ -54,9 +56,9 @@ fn ws(c: u8) bool {
     return c == ' ' or c == '\t' or c == '\n' or c == '\r';
 }
 
-/// Where a declaration ends for a move: its `;` or `}`, or the end of a
-/// `//` comment on its last line (`const b = 2; // why`), which is its own.
-/// A `///` there is the next declaration's doc comment, not this one's.
+/// Where a declaration ends for a move: its `;` or `}`, or the end of a `//`
+/// comment on its last line (`const b = 2; // why`). A `///` there belongs to
+/// the next declaration.
 fn endWithComment(src: []const u8, stop: usize) usize {
     var i = stop;
     while (i < src.len and (src[i] == ' ' or src[i] == '\t')) i += 1;
@@ -70,26 +72,26 @@ fn refuse(a: std.mem.Allocator, comptime f: []const u8, args: anytype) error{Out
     return .{ .refused = try std.fmt.allocPrint(a, f, args) };
 }
 
-/// **THE MOVE, PLANNED**: `wants` cut from `from` (each with the
-/// whitespace after it, up to the next token or comment, so one blank
-/// line stays where it was between two others, and none at the end of the
-/// file) and put in `to` in `from`'s order, one blank line between each
-/// and before the first: at the end, or after the declaration `after`.
-/// How `file`'s lines end: CRLF when its first does, else LF; a file with
-/// no line yet ends them as `other` does.
+/// How `file`'s lines end: CRLF when its first does, else LF. A file with no
+/// line yet ends them as `other` does.
 fn newline(file: []const u8, other: []const u8) []const u8 {
     const in = if (std.mem.indexOfScalar(u8, file, '\n') != null) file else other;
     const at = std.mem.indexOfScalar(u8, in, '\n') orelse return "\n";
     return if (at > 0 and in[at - 1] == '\r') "\r\n" else "\n";
 }
 
-/// `text` with its lines ended by `nl`: a moved block takes `to`'s endings,
-/// so no file mixes them, and there and back gives each file its own.
+/// `text` with its lines ended by `nl`. A moved block takes `to`'s endings, so
+/// no file mixes them and a move there and back restores each file's own.
 fn endedBy(a: std.mem.Allocator, text: []const u8, nl: []const u8) error{OutOfMemory}![]const u8 {
     const lf = try std.mem.replaceOwned(u8, a, text, "\r\n", "\n");
     return if (nl.len == 2) std.mem.replaceOwned(u8, a, lf, "\n", "\r\n") else lf;
 }
 
+/// Plans moving `wants` from `from` to `to`. Each is cut with the whitespace
+/// after it, up to the next token or comment, so one blank line stays between
+/// the declarations around it and none is left at the end of the file. They
+/// go into `to` in `from`'s order, with one blank line between each and
+/// before the first: at the end, or after the declaration `after`.
 pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: []const Want, mode: CommentMode, after: ?[]const u8) error{OutOfMemory}!Outcome {
     const fd = switch (try za.decls(a, from)) {
         .ok => |ok| ok,
@@ -99,7 +101,7 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
         .ok => |ok| ok,
         .parse_error => |e| return refuse(a, "`to` does not parse as Zig: line {d} ({s})", .{ e.line, e.tag }),
     };
-    // **WHAT TO MOVE**: each name once, found once.
+    // Each name must be given once and match exactly one declaration.
     const picked = try a.alloc(bool, fd.decls.len);
     @memset(picked, false);
     for (wants) |w| {
@@ -117,9 +119,8 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
         if (picked[found]) return refuse(a, "`{s}` is named twice; nothing written", .{w.name});
         picked[found] = true;
     }
-    // **A SECTION'S BANNER GOES WITH ITS SECTION**: a `// ──` line heads
-    // the declarations under it, to the next banner or the file's end; when
-    // every one of them moves, the first one's cut starts at the banner.
+    // A `// ──` banner heads the declarations under it, up to the next banner
+    // or the file's end. When all of them move, the banner moves too.
     const banner_of = try a.alloc(?usize, fd.decls.len);
     @memset(banner_of, null);
     {
@@ -142,14 +143,14 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
             };
         }
     }
-    // **THE CUTS**, in file order, adjacent ones joined.
+    // The cuts, in file order, with adjacent ones joined.
     const starts = try za.lineStarts(a, from);
     const Cut = struct { s: usize, e: usize };
     var cuts: std.ArrayList(Cut) = .empty;
     var texts: std.ArrayList([]const u8) = .empty;
-    // **WHAT EACH MOVED ONE SAT NEXT TO**: one on the line under the last
-    // moved one (no blank line, nothing between) stays under it in `to`,
-    // as a group of constants under one doc comment does.
+    // A declaration directly under the previous moved one, with no blank line,
+    // stays directly under it in `to`, so a group of constants under one doc
+    // comment stays a group.
     const Join = enum { under, apart };
     var joins: std.ArrayList(Join) = .empty;
     var last_picked: ?usize = null;
@@ -171,8 +172,8 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
         var e = stop;
         while (e < from.len and ws(from[e])) e += 1;
         try texts.append(a, from[s..stop]);
-        // A cut that starts at or before the last one's end joins it: the
-        // last one's whitespace ran up to an indented comment this one takes.
+        // A cut can start before the last one's end when the last one's
+        // whitespace ran up to an indented comment this one takes; join them.
         if (cuts.items.len > 0 and s <= cuts.items[cuts.items.len - 1].e) {
             const last = &cuts.items[cuts.items.len - 1];
             last.e = @max(last.e, e);
@@ -198,7 +199,6 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
     }
     try out.appendSlice(a, from[copied..]);
 
-    // **WHERE THEY GO**, between lines ended as `to`'s are.
     const nl = newline(to, from);
     const gap = try std.mem.concat(a, u8, &.{ nl, nl });
     for (texts.items) |*t| t.* = try endedBy(a, t.*, nl);
@@ -227,7 +227,7 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
         to_span = .{ .o0 = t.len, .o1 = to.len, .c0 = t.len, .c1 = to_now.len };
     }
 
-    // **WHAT THE MOVE BROKE**, read from `from` as it was.
+    // What the move broke, read from `from` as it was.
     const ts = switch (try za.tokens(a, from)) {
         .ok => |ok| ok,
         .invalid => |n| return refuse(a, "`from` does not tokenize as Zig at line {d}", .{n}),
@@ -239,8 +239,8 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
         if (d.name_form == .none or d.kind == .@"test") continue;
         if (picked[i]) try moved_names.put(a, d.name, i) else try staying.put(a, d.name, i);
     }
-    // The imports that stay: `@import(...)`, then what names a part of one
-    // (`std.Io.net`), until no more are found.
+    // The imports that stay: each `@import(...)`, then, to a fixed point, each
+    // chain into one (`std.Io.net`).
     var imports: std.StringHashMapUnmanaged([]const u8) = .empty;
     var grew = true;
     while (grew) {
@@ -248,7 +248,7 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
         for (fd.decls, 0..) |d, i| {
             if (picked[i] or d.kind != .@"const" or imports.contains(d.name)) continue;
             const v = d.value;
-            // (Split, so library_test's reader of imports passes it by.)
+            // Split so library_test's import reader does not see an import here.
             const is_import = std.mem.startsWith(u8, v, "@" ++ "import(") or (chain(v) and imports.contains(v[0 .. std.mem.indexOfScalar(u8, v, '.') orelse v.len]));
             if (is_import) {
                 try imports.put(a, d.name, v);
@@ -278,7 +278,7 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
         }
         const i = moved_names.get(name) orelse continue;
         if (!(try seen.getOrPut(a, try key(a, "u", name, line))).found_existing) try uses_left.append(a, .{ .name = name, .line = line });
-        // `X.y`, a member of a moved `X` that is not `pub`.
+        // `X.y`, where `y` is a member of a moved `X` that is not `pub`.
         if (id.tok + 2 < ts.len and ts[id.tok + 1].tag == .period and ts[id.tok + 2].tag == .identifier) {
             const y = from[ts[id.tok + 2].start..ts[id.tok + 2].end];
             for (fd.decls[i].private_members) |m| if (std.mem.eql(u8, m, y)) {
@@ -287,9 +287,9 @@ pub fn move(a: std.mem.Allocator, from: [:0]const u8, to: [:0]const u8, wants: [
             };
         }
     }
-    // **AN IMPORT NAMED THROUGH ANOTHER** (`const Bus = streams.Bus;`)
-    // needs that one too, and so on to an `@import` (angry-gopher router.zig's
-    // search tests named `Bus` and `Hub` and never `streams`).
+    // An import named through another (`const Bus = streams.Bus;`) needs that
+    // one too, and so on to an `@import`, since the moved code may never name
+    // `streams` itself.
     var k: usize = 0;
     while (k < needs_import.items.len) : (k += 1) {
         const need = needs_import.items[k];

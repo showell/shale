@@ -1,15 +1,12 @@
-//! **A RENAME THAT KNOWS ZIG** (metal-vmm QUEUE 234, 3): `zig_rename(path,
-//! from, to, opts?)`, the Linux prelude's, over `host("zig_rename", ...)`.
-//! Every identifier token `from` (std.zig.Tokenizer's) becomes `to`: never
-//! one right after `.` (a field, a declaration reached through a value or
-//! a module, an enum literal), never `@"from"` (its bytes are not `from`'s),
-//! never in a string, a character or a comment, which are not identifier
-//! tokens. **The analysis is tokens, not types**: the compiler judges
-//! after. A `to` with a `.` in it where `from` is declared (after `const`,
-//! `var` or `fn`, before a `:`, in a capture's `|...|`, an enum's or an
-//! error set's member) stops the run, nothing written: `pub const
-//! m.from` is the miss it stops. The plan is pure (`plan`), and the run's
-//! part writes through core's `rewrite`, a change like any other.
+//! The host's Zig tools over std.zig's tokenizer and parser: `zig_rename`,
+//! `zig_decls`, `zig_tokens`, `zig_move` and `zig_imports`.
+//!
+//! A rename turns every identifier token `from` into `to`, but never one right
+//! after `.` (a field, a member, an enum literal), never `@"from"`, and never in
+//! a string, character or comment. The analysis is tokens, not types; the
+//! compiler judges after. A qualified `to` (with a `.`) where `from` is declared
+//! stops the run with nothing written, since `pub const m.from` is not Zig.
+//! Planning is pure (`plan`); the write goes through core's `rewrite`.
 
 const std = @import("std");
 const webbox = @import("webbox");
@@ -25,13 +22,12 @@ pub const Span = script.builtins_change.Span;
 /// Lines, 1-based, inclusive.
 pub const Lines = struct { first: usize, last: usize };
 
-/// **WHAT A RENAME WOULD DO**: the file after it, where it changed, what
-/// it renamed and what it left in comments (whole words in the gaps
-/// between tokens, and in doc comments), and the tokens it read.
+/// A planned rename: the new text, the changed spans, the count renamed, the
+/// whole-word matches left in comments (plain and doc), and the tokens read.
 pub const Plan = struct { now: []const u8, spans: []const Span, renamed: usize, left_in_comments: usize, tokens: usize };
 
-/// A plan, or the line it stopped at: `declaration`, a qualified `to`
-/// where `from` is declared; `invalid`, a token Zig's tokenizer refuses.
+/// A plan, or where planning stopped: `declaration` is a qualified `to` where
+/// `from` is declared; `invalid` is the line of a token the tokenizer refuses.
 pub const Outcome = union(enum) { done: Plan, declaration: struct { line: usize, name: []const u8 }, invalid: usize };
 
 /// One name and what it becomes.
@@ -40,18 +36,17 @@ pub const Rename = struct { from: []const u8, to: []const u8 };
 const za = @import("shale_zig_ast.zig");
 const hl = @import("shale_host_linux.zig");
 
-/// **A PARSE LIVES FOR ITS CALL** (the host hunt: 236's test_roots.shale,
-/// `zig_decls` and `zig_imports` over 100 files, needed a 2 GB arena). The
-/// source's NUL-ended copy, its tokens, its Ast and the plan grow in an
-/// arena over the host's allocator, capped by the run's arena budget while
-/// they live (`Capped`) and freed when the call returns. The run's arena
-/// keeps what the script is given, and what a change hands core.
+/// Per-call memory for a parse: the NUL-terminated source, tokens, Ast and plan
+/// live in an arena over the host's allocator, capped by what is left of the
+/// run's arena budget (`Capped`), and freed when the call returns. Without it a
+/// script calling `zig_decls` over a hundred files holds every parse at once.
+/// Only what the script is given, and what a change hands core, goes in the
+/// run's arena.
 const Scratch = struct {
     capped: hl.Capped,
     arena: std.heap.ArenaAllocator,
 
     fn init(s: *Scratch, backing: std.mem.Allocator, run: *Run) std.mem.Allocator {
-        // What is left of the budget, so the arena and a parse together stay in it.
         s.capped = .{ .backing = backing, .most = run.budgets.arena_bytes -| run.budgeted.held };
         s.arena = std.heap.ArenaAllocator.init(s.capped.allocator());
         return s.arena.allocator();
@@ -62,20 +57,19 @@ const Scratch = struct {
     }
 };
 
-/// `x` copied into the run's arena: what the script keeps of a parse.
+/// Copies `x` into the run's arena, so it outlives the scratch.
 fn keep(run: *Run, pos: ast.Pos, x: []const u8) Error![]const u8 {
     return run.alloc.dupe(u8, x) catch run.oom(pos);
 }
 
-/// **THE RENAME, PLANNED**: pure, over `src`'s tokens and the one reading
-/// of identifiers (`za.identifiers`, which `zig_move` reads with too).
+/// Plans renaming `from` to `to` in `src`, within `lines` if given. Pure; reads
+/// identifiers through `za.identifiers`, as `zig_move` does.
 pub fn plan(a: std.mem.Allocator, src: [:0]const u8, from: []const u8, to: []const u8, lines: ?Lines) error{OutOfMemory}!Outcome {
     return planMany(a, src, &.{.{ .from = from, .to = to }}, lines);
 }
 
-/// **MANY NAMES, ONE PASS** (`zig_renames`): each identifier looked up
-/// among `renames`, by the same rules as one name's; the first declaration
-/// a qualified `to` cannot take stops it, naming it.
+/// Plans several renames in one pass (`zig_renames`), each by `plan`'s rules.
+/// Returns `declaration` for the first declaration a qualified `to` cannot take.
 pub fn planMany(a: std.mem.Allocator, src: [:0]const u8, renames: []const Rename, lines: ?Lines) error{OutOfMemory}!Outcome {
     const ts = switch (try za.tokens(a, src)) {
         .ok => |ok| ok,
@@ -84,8 +78,8 @@ pub fn planMany(a: std.mem.Allocator, src: [:0]const u8, renames: []const Rename
     var to_of: std.StringHashMapUnmanaged([]const u8) = .empty;
     for (renames) |r| try to_of.put(a, r.from, r.to);
     const starts = try za.lineStarts(a, src);
-    // The comments: the gaps between tokens, and the doc comments, each
-    // name counted with a cursor of its own (its offsets only grow).
+    // Count matches left in comments: plain ones sit in the gaps between
+    // tokens, doc comments are tokens. Each name gets its own line cursor.
     var left: usize = 0;
     for (renames) |r| {
         var line: LineCursor = .{ .src = src };
@@ -107,7 +101,6 @@ pub fn planMany(a: std.mem.Allocator, src: [:0]const u8, renames: []const Rename
         const qualified = std.mem.indexOfScalar(u8, to, '.') != null;
         const n = za.lineOf(starts, id.start);
         if (lines != null and (n < lines.?.first or n > lines.?.last)) continue;
-        // A field of that name is another thing: never renamed.
         if (id.role == .field) continue;
         if (qualified and id.role == .declaration) return .{ .declaration = .{ .line = n, .name = name } };
         try out.appendSlice(a, src[copied..id.start]);
@@ -134,7 +127,8 @@ const LineCursor = struct {
     }
 };
 
-/// The whole-word `from`s in `text` (at `base` in the file), in range.
+/// Counts whole-word `from`s in `text`, which is at `base` in the file, within
+/// `lines`.
 fn wordsIn(line: *LineCursor, text: []const u8, base: usize, from: []const u8, lines: ?Lines) !usize {
     var n: usize = 0;
     var i: usize = 0;
@@ -152,19 +146,16 @@ fn word(c: u8) bool {
     return std.ascii.isAlphanumeric(c) or c == '_';
 }
 
-// ── the run's part ───────────────────────────────────────────────────────
-
-/// **`host("zig_rename", path, {from, to}, opts)`**: checked, read, planned,
-/// charged (the file `dupeZ`'d for the tokenizer, a step a token), and
-/// written through core's `rewrite` when it renames anything.
-/// `{renamed, left_in_comments}`.
-/// **IT CHANGES THE STORE**, as the core's change builtins do: a background
-/// run refuses it before it reads a thing, and the gate knows it tried.
+/// Marks the run as trying a change and refuses it in a background run, before
+/// anything is read, as the core's change builtins do.
 fn changes(run: *Run, pos: ast.Pos, name: []const u8) Error!void {
     run.tried_change = true;
     if (run.read_only) return run.fail(pos, .argument, "`{s}` changes the store, and a background run only reads: send it as an `atomic` run", .{name});
 }
 
+/// `host("zig_rename", path, {from, to}, opts)`: reads, plans and writes
+/// through core's `rewrite` if anything is renamed. Returns
+/// `{renamed, left_in_comments}`. Charges the copy and a step per token.
 pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     try changes(run, pos, "zig_rename");
     if (args.len != 3) return run.fail(pos, .argument, "`zig_rename` takes a path, `{{from, to}}` and options, given {d}", .{args.len});
@@ -230,13 +221,12 @@ pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
     return .{ .table = t };
 }
 
-/// **`host("zig_decls", path)`**: a Zig file's top-level declarations, from
-/// Zig's parser (shale_zig_ast.zig), as maps, in file order. Charged: the
-/// read, the `dupeZ`, a step a token and a step an Ast node. A parse error
-/// stops, naming its first line.
+/// `host("zig_decls", path)`: a Zig file's top-level declarations as maps, in
+/// file order, from `shale_zig_ast.zig`. Charges the read, the copy, and a step
+/// per token and per Ast node. A parse error stops the run at its first line.
 pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (args.len < 1 or args.len > 2) return run.fail(pos, .argument, "`zig_decls` takes a path and options, given {d} arguments", .{args.len});
-    // `{container = name}`: that container's own members, not the file's.
+    // `{container = name}` lists that container's members instead.
     var container: ?[]const u8 = null;
     if (args.len == 2) switch (args[1]) {
         .table => |t| if (t.kind == .map) {
@@ -273,19 +263,17 @@ pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const 
         .no_container => return run.fail(pos, .argument, "`zig_decls`: {s} has no container `{s}` (a top-level `const {s} = struct {{...}}`, or a union's, an enum's, an opaque's)", .{ p.rel, name, name }),
     } else root;
     if (container != null) try run.charge(pos, got.tokens + got.nodes);
-    // **WHAT EACH ONE USES** (the seam finder's graph): the top-level names
-    // a declaration's span uses, by the one reading of identifiers (so never
-    // a field's, a member's after `.`, a comment's or a string's), not its
-    // own, distinct and sorted. A test's name and a root field are not names
-    // a declaration can use.
+    // Each declaration's `uses`: the top-level names in its span other than its
+    // own, distinct and sorted. Identifiers come from `za.identifiers`, so a
+    // field, a member after `.`, a comment and a string never count.
     const toks = switch (za.tokens(sa, src) catch return run.oom(pos)) {
         .ok => |ok| ok,
         .invalid => |n| return run.fail(pos, .argument, "`zig_decls`: {s} does not tokenize as Zig at line {d}", .{ p.rel, n }),
     };
     const ids = za.identifiers(sa, toks) catch return run.oom(pos);
     try run.charge(pos, ids.len);
-    // The names a use can be: the file's top level, and, in a container,
-    // its members (never the container itself: every method names it).
+    // A test's name and a field are never used by name. In a container, we
+    // drop the container itself, since every method names it.
     var top: std.StringHashMapUnmanaged(void) = .empty;
     for (root.decls) |d| if (d.name_form == .identifier and d.kind != .@"test" and d.kind != .field) {
         top.put(sa, d.name, {}) catch return run.oom(pos);
@@ -322,8 +310,8 @@ pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const 
         const uses = try run.newTable(pos);
         uses.kind = .list;
         for (names.items) |n| uses.list.append(a, .{ .string = try keep(run, pos, n) }) catch return run.oom(pos);
-        // **WHAT IT REACHES THROUGH A `.`**, in a container: its members a
-        // method touches as `self.x` (or `other.x`): by name, not by type.
+        // In a container, the members a method reaches as `self.x` (or any
+        // `v.x`), matched by name, not by type.
         var reached: std.ArrayList([]const u8) = .empty;
         if (container != null) {
             var rseen: std.StringHashMapUnmanaged(void) = .empty;
@@ -369,12 +357,10 @@ pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const 
     return .{ .table = list };
 }
 
-/// **`host("zig_tokens", path[, {tag}])`**: the file's tokens, by the one
-/// tokenizer (`za.tokens`, which `zig_rename` and `zig_move` read with):
-/// each `{tag, text, line}`, `tag` std.zig.Token.Tag's name. A plain
-/// comment is no token (a doc comment is); a string is one token, its words
-/// none. `{tag = "identifier"}` keeps one kind, so a script that wants
-/// names does not hold every token. Charged a step a token.
+/// `host("zig_tokens", path[, {tag}])`: the file's tokens from `za.tokens`, as
+/// `{tag, text, line}`, where `tag` is a std.zig.Token.Tag name. A plain comment
+/// is not a token; a doc comment is. `{tag = "identifier"}` keeps one kind, so
+/// the script does not hold every token. Charges a step per token.
 pub fn tokens(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (args.len < 1 or args.len > 2) return run.fail(pos, .argument, "`zig_tokens` takes a path and options, given {d} arguments", .{args.len});
     var only: ?za.Tag = null;
@@ -422,9 +408,9 @@ pub fn tokens(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
     return .{ .table = list };
 }
 
-/// What `from_as` makes of a move: each text, and its spans from the one
-/// before (`done.to_now` to `to_qualified` to `to_imported`; `done.from_now`
-/// to `from_pub`).
+/// The extra rewrites of a move with `from_as`, each with its spans against the
+/// text before it: `done.to_now` to `to_qualified` to `to_imported`, and
+/// `done.from_now` to `from_pub`.
 const FromAs = struct {
     to_qualified: []const u8,
     qualified_spans: []const Span,
@@ -437,7 +423,6 @@ const FromAs = struct {
 };
 
 fn fromAs(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, done: anytype, fa: []const u8, from_base: []const u8) Error!FromAs {
-    // The import's name must be free in the moved code (no shadowing).
     const to_z = sa.dupeSentinel(u8, done.to_now, 0) catch return run.oom(pos);
     const toks = switch (za.tokens(sa, to_z) catch return run.oom(pos)) {
         .ok => |ok| ok,
@@ -445,7 +430,7 @@ fn fromAs(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, done: anytype, fa: []c
     };
     for (toks, 0..) |tk, i| if (tk.tag == .identifier and std.mem.eql(u8, to_z[tk.start..tk.end], fa) and (i == 0 or toks[i - 1].tag != .period))
         return run.fail(pos, .argument, "`zig_move`: `{s}` is a name in the moved code already: `from_as` would shadow it; nothing written", .{fa});
-    // 1. The uses, qualified.
+    // Qualify the moved code's uses of `from`'s names.
     var renames: std.ArrayList(Rename) = .empty;
     var wanted: std.StringHashMapUnmanaged(void) = .empty;
     for (done.needs_from_from) |n| if (!wanted.contains(n.name)) {
@@ -458,7 +443,7 @@ fn fromAs(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, done: anytype, fa: []c
         .invalid => |n| return run.fail(pos, .argument, "`zig_move`: the moved code does not tokenize at line {d}", .{n}),
     };
     try run.charge(pos, q.tokens);
-    // 2. The import, after `to`'s last `@import` (or first, if none).
+    // Insert the import after `to`'s last `@import`, or first if there is none.
     const qz = sa.dupeSentinel(u8, q.now, 0) catch return run.oom(pos);
     const line = std.fmt.allocPrint(sa, "const {s} = @import(\"{s}\");", .{ fa, from_base }) catch return run.oom(pos);
     var at: usize = 0;
@@ -475,7 +460,7 @@ fn fromAs(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, done: anytype, fa: []c
     const imported = std.mem.concat(sa, u8, &.{ q.now[0..at], text, q.now[at..] }) catch return run.oom(pos);
     const import_spans = sa.alloc(Span, 1) catch return run.oom(pos);
     import_spans[0] = .{ .o0 = at, .o1 = at, .c0 = at, .c1 = at + text.len };
-    // 3. `pub` on those names in `from`, before the keyword (past the doc).
+    // Make those names `pub` in `from`, inserting past any doc comment.
     const fz = sa.dupeSentinel(u8, done.from_now, 0) catch return run.oom(pos);
     var made: std.ArrayList([]const u8) = .empty;
     var offsets: std.ArrayList(usize) = .empty;
@@ -514,10 +499,11 @@ fn fromAs(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, done: anytype, fa: []c
     return .{ .to_qualified = q.now, .qualified_spans = q.spans, .to_imported = imported, .import_spans = import_spans, .from_pub = out.items, .pub_spans = spans.items, .qualified = q.renamed, .made_pub = made.items };
 }
 
-/// A Zig file read whole (`was`, in the run's arena when `kept`: a change
-/// hands it core) and NUL-ended for the parser (`src`, in `sa`), the read and the copy charged; null for one
-/// that is not there, when that is allowed.
+/// A Zig file as read (`was`, in the run's arena when it may be handed to core)
+/// and NUL-terminated for the parser (`src`, in the scratch).
 const Read = struct { was: []const u8, src: [:0]const u8 };
+/// Reads `p`, charging the read and the copy. Returns `null` for a missing file
+/// when `missing_ok`.
 fn readZig(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, p: script.builtins_store.Path, missing_ok: bool, kept: bool) Error!?Read {
     const hub = script.builtins_store;
     try hub.countRead(run, pos);
@@ -536,7 +522,7 @@ fn put(run: *Run, pos: ast.Pos, t: *script.value.Table, k: []const u8, v: Value)
     t.map.put(run.alloc, k, v) catch return run.oom(pos);
 }
 
-/// `{name, line}` maps, a list (`{name, target, line}` with a target).
+/// A list of `{name, line}` maps, or `{name, target, line}` if items have a target.
 fn nameLines(run: *Run, pos: ast.Pos, items: anytype) Error!Value {
     const list = try run.newTable(pos);
     list.kind = .list;
@@ -551,12 +537,11 @@ fn nameLines(run: *Run, pos: ast.Pos, items: anytype) Error!Value {
     return .{ .table = list };
 }
 
-/// **`host("zig_move", from, to, {names, opts})`**: top-level declarations
-/// moved from one Zig file to another (shale_zig_move.zig), and what the
-/// move broke. `to` may be missing: it is made. `to` is written first and
-/// `from` after, each through core's `rewrite`, so a stop between them
-/// leaves the declarations in both, never in neither. Charged: the reads,
-/// the copies, a step a token and a node of both files.
+/// `host("zig_move", from, to, {names, opts})`: moves top-level declarations
+/// from one Zig file to another (`shale_zig_move.zig`) and reports what the
+/// move broke. A missing `to` is created. `to` is written before `from`, so a
+/// stop between them leaves the declarations in both, never in neither.
+/// Charges the reads, the copies, and a step per token and node of both files.
 pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const zm = @import("shale_zig_move.zig");
     try changes(run, pos, "zig_move");
@@ -598,7 +583,7 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
     if (wants.items.len == 0) return run.fail(pos, .argument, "`zig_move`: no names: nothing to move", .{});
     var mode: zm.CommentMode = .doc;
     var after: ?[]const u8 = null;
-    // `from_as`: what the moved code uses of `from` is reached through it.
+    // `from_as` names the import through which the moved code reaches `from`.
     var from_as: ?[]const u8 = null;
     switch (packed_args.map.get("opts") orelse Value.nil) {
         .nil => {},
@@ -630,7 +615,7 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
         .refused => |why| return run.fail(pos, .argument, "`zig_move` {s} to {s}: {s}", .{ p.rel, q.rel, try keep(run, pos, why) }),
     };
     try run.charge(pos, done.work);
-    // Both files may change, or neither is written.
+    // Check both files may change before writing either.
     try script.builtins_change.mayChange(run, pos, q);
     try script.builtins_change.mayChange(run, pos, p);
     const spans = struct {
@@ -640,14 +625,12 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
             return out;
         }
     }.of;
-    // **WITH `from_as`**, worked out before anything is written: the moved
-    // code's uses of `from`'s names qualified (one pass, `planMany`), the
-    // import after `to`'s last, and `pub` on those names in `from`.
+    // `from_as` rewrites are planned before anything is written.
     var reach: ?FromAs = null;
     if (from_as) |fa| reach = try fromAs(sa, run, pos, done, fa, std.fs.path.basename(p.rel));
     const writes: u64 = if (reach != null) 5 else 2;
-    // **ALL ITS WRITES OR NONE, AS FAR AS THE BUDGETS SAY**: room for every
-    // change first, so a budget never stops a move between them.
+    // Check the budgets for every write up front, so a budget never stops a
+    // move halfway.
     var bytes: u64 = done.to_now.len + done.from_now.len;
     if (reach) |r| bytes += r.to_qualified.len + r.to_imported.len + r.from_pub.len;
     if (run.changes + writes > run.budgets.changes) return run.budgetStop(pos, .changes);
@@ -655,8 +638,8 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
     const to_spans = try spans(run, pos, done.to_spans);
     const from_spans = try spans(run, pos, done.from_spans);
     try script.builtins_change.rewrite(run, pos, q, to_src, try keep(run, pos, done.to_now), to_spans);
-    // What can still stop it there (the store, the output's budget) is said
-    // with what was written: `to` holds the copies, `from` still has them.
+    // The store or the output budget can still stop the second write; the
+    // message then says `to` already holds the copies.
     script.builtins_change.rewrite(run, pos, p, from_src, try keep(run, pos, done.from_now), from_spans) catch |e| {
         if (e == error.Stop) if (run.stop) |*s| {
             s.message = std.fmt.allocPrint(a, "{s}; `zig_move` wrote {s} first, so it holds the moved declarations, which {s} still has: take {s} back (`git checkout --`) before moving again", .{ s.message, q.rel, p.rel, q.rel }) catch s.message;
@@ -685,12 +668,11 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
     return .{ .table = t };
 }
 
-/// **`host("zig_imports", path)`**: a Zig file's `@import`s and
-/// `@embedFile`s, from Zig's parser (webbox's zig_refs.zig, library_test's
-/// reading too), in source order: `{kind, target, name, line, file}`, the
-/// file `found` or `missing` beside the importer, or a `module` (a target
-/// with no extension). Charged: the read, the copy, a step a token and a
-/// node, and a step a call for its look at the file.
+/// `host("zig_imports", path)`: a Zig file's `@import`s and `@embedFile`s in
+/// source order, from webbox's `zig_refs.zig`, as `{kind, target, name, line,
+/// file}`. `file` is `found` or `missing` beside the importer, or `module` for a
+/// target with no extension. Charges the read, the copy, a step per token and
+/// node, and a step per call for the file check.
 pub fn imports(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (args.len != 1) return run.fail(pos, .argument, "`zig_imports` takes a path, given {d} arguments", .{args.len});
     const a = run.alloc;

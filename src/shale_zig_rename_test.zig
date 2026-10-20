@@ -1,6 +1,6 @@
-//! **A RENAME THAT KNOWS ZIG, TESTED** (metal-vmm QUEUE 234, 3): the
-//! essay's misses each untouched or refused, through the gate; the pure
-//! plan (`shale_host_zig.plan`) over the repo's own files, to and back.
+//! Tests `zig_rename` through the gate, each of the essay's misses left
+//! untouched or refused, and the pure plan (`shale_host_zig.plan`) over the
+//! repo's own files, there and back.
 
 const std = @import("std");
 const testing = std.testing;

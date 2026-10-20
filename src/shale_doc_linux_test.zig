@@ -1,9 +1,8 @@
-//! **SHALE-AGENTS.md'S `shale-linux` BLOCKS, RUN** (metal-vmm QUEUE 234,
-//! 3): a block that needs the Linux prelude (`zig_rename`, `run`, git) is
-//! fenced `shale-linux`, which the core's doc test (script/agent_test.zig)
-//! passes by, and runs here instead: each on a fresh small checkout, with
-//! the CLI's summary diffs, printing what the doc says it prints (`--
-//! prints:`) or stopping as it says (`-- stops: class`).
+//! Runs SHALE-AGENTS.md's `shale-linux` blocks: those that need the Linux
+//! prelude (`zig_rename`, `run`, git), which the core's doc test
+//! (script/agent_test.zig) skips. Each runs on a fresh small checkout with the
+//! CLI's summary diffs, and must print what the doc says (`-- prints:`) or
+//! stop as it says (`-- stops: class`).
 
 const std = @import("std");
 const testing = std.testing;

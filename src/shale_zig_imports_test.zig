@@ -1,6 +1,5 @@
-//! **A ZIG FILE'S IMPORTS AND EMBEDS, TESTED** (metal-vmm QUEUE 235, 3):
-//! `zig_imports` through the gate, on a small tree: each call's target, the
-//! declaration it binds, its line, and whether its file is there.
+//! Tests `zig_imports` through the gate on a small tree: each call's target,
+//! the declaration it binds, its line, and whether its file is there.
 
 const std = @import("std");
 const testing = std.testing;
@@ -75,12 +74,9 @@ test "zig_decls and zig_imports: a parse lives for its call; the run keeps only 
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
-    // A large file of the repo's own, read again and again, as test_roots.shale
-    // does: one of few declarations (the parser, mostly one struct), so what a
-    // call rightly keeps, its list, is small beside a parse kept by mistake,
-    // which is ten times the file whatever it declares. (It was
-    // shale_host_linux.zig, until the 2026-10-18 split left that file half
-    // aliases, whose list is larger per byte.)
+    // A large file of the repo's own, read again and again as test_roots.shale
+    // does. The parser has few declarations, so the list a call rightly keeps
+    // is small beside a parse kept by mistake, which is ten times the file.
     try t.put("big.zig", @embedFile("script/parse.zig"));
     const Use = struct {
         fn of(tt: *T, call: []const u8, n: usize) !usize {
@@ -100,9 +96,8 @@ test "zig_decls and zig_imports: a parse lives for its call; the run keeps only 
     for ([_][]const u8{ "zig_decls", "zig_imports" }) |call| {
         const one = try Use.of(&t, call, 1);
         const ten = try Use.of(&t, call, 10);
-        // Each call's read, tokens and Ast go when it returns, and the run
-        // keeps the list it gave: zig_decls kept about ten times the file a
-        // call, and keeps under twice it.
+        // Each call's read, tokens and Ast are freed when it returns; the run
+        // keeps only the list it gave.
         testing.expect((ten - one) / 9 < 2 * size) catch |e| {
             std.debug.print("{s}: a call keeps {d} bytes of a {d}-byte file\n", .{ call, (ten - one) / 9, size });
             return e;

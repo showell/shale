@@ -1,41 +1,38 @@
-//! What a Linux run of Shale is set up with, before its first step: the
-//! mounts (`~/.config/shale/mounts`, or `SHALE_MOUNTS`), the preludes after
-//! the core's (the Linux prelude, the git prelude, the repo's and the user's)
-//! and the environment its programs start from. shale_host_linux.zig
-//! re-exports what its callers use.
+//! A Linux run's setup before its first step: the mounts, the preludes after
+//! the core's, and the environment its programs start from.
+//! `shale_host_linux.zig` re-exports what its callers use.
 
 const script = shale.script;
 const std = @import("std");
 const interp = script.interp;
 const shale = @import("shale");
 
-/// **THE LINUX PRELUDE** (QUEUE 233, chunk 2): the names a script types
-/// (`run`, `real`) over `host`, and the helpers only Linux has.
+/// The script-facing names over `host` (`run`, `real`) and the helpers only
+/// Linux has.
 pub const linux_prelude: script.parse.Prelude = .{ .name = "the Linux prelude", .source = @embedFile("shale_prelude_linux.shale") };
 
-/// **THE GIT PRELUDE** (QUEUE 233, chunk 3): git over `run`, after the
-/// Linux prelude whose `run` and `real` it calls.
+/// Git over `run`. Loads after the Linux prelude, whose `run` and `real` it calls.
 pub const git_prelude: script.parse.Prelude = .{ .name = "the git prelude", .source = @embedFile("shale_prelude_git.shale") };
 
-// ── mounts ───────────────────────────────────────────────────────────────
-
+/// A named folder outside the root, reached as `name:path`.
 pub const Mount = struct {
+    /// What precedes the `:`; letters, digits, `_` and `-`.
     name: []const u8,
+    /// The folder, absolute; links in it are resolved if it exists.
     dir: []const u8,
-    /// ` ro` after the path (metal-vmm QUEUE 235): every change through it
-    /// is refused before anything is written; reads and programs as ever.
+    /// ` ro` after the path refuses every change through the mount before
+    /// anything is written; reads and programs are unaffected.
     access: Access = .read_write,
-    /// ` tools` after the path: a toolchain's install (a newer Zig), whose
-    /// programs `run` takes by path without a `want`. The user's word, given
-    /// once in the mounts file, for programs git does not track.
+    /// ` tools` after the path marks a toolchain's install, whose programs
+    /// `run` takes by path without a `want` though git does not track them.
     tools: bool = false,
 
     pub const Access = enum { read_write, read_only };
 };
 
-/// **THE MOUNTS FILE**: `name = value` a line, `#` comments and blank
-/// lines; a value an absolute path or one from `~/`. What is wrong is said
-/// with its line: a relative value, a name twice, a line that is neither.
+/// Parses a mounts file: one `name = value` per line, with `#` comments and
+/// blank lines. A value is an absolute path or one from `~/`. On
+/// `error.Malformed`, `why` names the line and what is wrong with it.
 pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8, why: *[]const u8) error{ OutOfMemory, Malformed }![]Mount {
     var out: std.ArrayList(Mount) = .empty;
     var it = std.mem.splitScalar(u8, text, '\n');
@@ -49,7 +46,7 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
             return error.Malformed;
         };
         const name = std.mem.trim(u8, line[0..eq], " \t");
-        // The path, and after it ` ro`, ` tools`, both or nothing.
+        // The path, then any of ` ro` and ` tools`.
         var words = std.mem.tokenizeAny(u8, line[eq + 1 ..], " \t");
         const value = words.next() orelse "";
         var access: Mount.Access = .read_write;
@@ -86,9 +83,9 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
     return out.toOwnedSlice(alloc);
 }
 
-/// **WHERE THE MOUNTS ARE**: `SHALE_MOUNTS` names the file (the tests pin
-/// it), else `~/.config/shale/mounts`. The default's absence is no mounts;
-/// a file named and missing, or any file's mistake, is said with the file.
+/// Loads the mounts from `pinned` (`SHALE_MOUNTS`) or else
+/// `~/.config/shale/mounts`. A missing default file means no mounts; a missing
+/// pinned file, or any mistake in a file, is `error.Malformed` naming the file.
 pub fn loadMounts(alloc: std.mem.Allocator, io: std.Io, pinned: ?[]const u8, home: []const u8, why: *[]const u8) error{ OutOfMemory, Malformed }!struct { mounts: []Mount, from: []const u8 } {
     const from = if (pinned) |p| p else try std.fmt.allocPrint(alloc, "{s}/.config/shale/mounts", .{home});
     const text = std.Io.Dir.cwd().readFileAlloc(io, from, alloc, .limited(64 * 1024)) catch |e| {
@@ -101,9 +98,8 @@ pub fn loadMounts(alloc: std.mem.Allocator, io: std.Io, pinned: ?[]const u8, hom
         if (e == error.Malformed) why.* = try std.fmt.allocPrint(alloc, "{s}: {s}", .{ from, line_why });
         return e;
     };
-    // **A MOUNT'S OWN PATH, RESOLVED ONCE** (metal-vmm QUEUE 235): a link
-    // in it (`~/zig` to `~/zig-0.16.0`) is the user's choice, taken here;
-    // below it, the store follows none.
+    // A link in a mount's own path (`~/zig` to `~/zig-0.16.0`) is the user's
+    // choice, so we resolve it once here; below it, the store follows none.
     for (mounts) |*m| {
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const n = std.Io.Dir.cwd().realPathFile(io, m.dir, &buf) catch continue;
@@ -112,11 +108,10 @@ pub fn loadMounts(alloc: std.mem.Allocator, io: std.Io, pinned: ?[]const u8, hom
     return .{ .mounts = mounts, .from = from };
 }
 
-/// **THE PRELUDES AFTER THE CORE'S, IN ORDER** (the dogfood design's "The
-/// architecture"): the Linux prelude and the git prelude; the repo's, `.shale/prelude.shale` at
-/// the root, if it is there; the user's, the file `SHALE_PRELUDE` names
-/// (`""` none, the tests' pin) or else `~/.config/shale/prelude.shale` if it
-/// is there. Each is named as a stop shows its lines.
+/// The preludes after the core's, in order: the Linux prelude, the git prelude,
+/// the repo's `.shale/prelude.shale` if present, and the user's: the file
+/// `pinned` (`SHALE_PRELUDE`) names, none if it is `""`, or else
+/// `~/.config/shale/prelude.shale` if present. Each is named as a stop shows it.
 pub fn loadPreludes(alloc: std.mem.Allocator, io: std.Io, root_abs: []const u8, pinned: ?[]const u8, home: []const u8, why: *[]const u8) error{ OutOfMemory, Malformed }![]script.parse.Prelude {
     var out: std.ArrayList(script.parse.Prelude) = .empty;
     try out.append(alloc, linux_prelude);
@@ -132,7 +127,7 @@ pub fn loadPreludes(alloc: std.mem.Allocator, io: std.Io, root_abs: []const u8, 
     return out.toOwnedSlice(alloc);
 }
 
-/// A prelude's source; null for one not there that need not be.
+/// A prelude's source. Returns `null` if it is missing and not `required`.
 fn readPrelude(alloc: std.mem.Allocator, io: std.Io, path: []const u8, required: bool, shown: []const u8, why: *[]const u8) error{ OutOfMemory, Malformed }!?[]const u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(interp.Budgets.default_source_bytes)) catch |e| {
         if (!required and e == error.FileNotFound) return null;
@@ -141,9 +136,9 @@ fn readPrelude(alloc: std.mem.Allocator, io: std.Io, path: []const u8, required:
     };
 }
 
-/// **A PROGRAM'S ENVIRONMENT**, inherited, `K=V` each, but for
-/// `ZIG_PROGRESS`: a `zig build` that `run` runs writes its progress to a
-/// pipe the build that ran the CLI holds, never to `run`'s output.
+/// The environment a program inherits, as `K=V` strings, without
+/// `ZIG_PROGRESS`: otherwise a `zig build` that `run` runs writes its progress
+/// to the pipe of the build that ran the CLI, not to `run`'s output.
 pub fn baseEnv(alloc: std.mem.Allocator, map: *const std.process.Environ.Map) error{OutOfMemory}![]const []const u8 {
     var out: std.ArrayList([]const u8) = .empty;
     errdefer {

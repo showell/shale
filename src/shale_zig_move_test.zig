@@ -1,8 +1,6 @@
-//! **DECLARATIONS MOVED, AND WHAT THE MOVE BROKE, TESTED** (metal-vmm
-//! QUEUE 235, 2): `zig_move` through the gate on fixtures and on the two
-//! files the linux_host split began from; the pure mover
-//! (`shale_zig_move.move`) over the repo's own files, there and back; and
-//! `zig_rename` and `uses_left` held to one answer.
+//! Tests `zig_move` through the gate on fixtures and on a historical webbox
+//! split; the pure mover (`shale_zig_move.move`) over the repo's own files,
+//! there and back; and that `zig_rename` and `uses_left` agree.
 
 const std = @import("std");
 const testing = std.testing;
@@ -16,7 +14,7 @@ const zig = @import("shale_host_zig.zig");
 fn init(t: *T) !void {
     try t.init();
     t.preludes = &.{host_linux.linux_prelude};
-    // The CLI's: a change is one line.
+    // As the CLI prints: a change is one line.
     t.diffs = .summary;
 }
 
@@ -320,10 +318,9 @@ test "zig_move and zig_rename: `const` that qualifies a pointer declares nothing
     try t.expectOutput("print(zig_rename(\"k.zig\", \"X\", \"m.X\").renamed)", "edit k.zig: 1 hunk, -1 +1 lines\n3\n");
 }
 
-/// webbox's linux_host split, replayed from its checkout: `commit`'s
-/// parent's linux_host.zig, the declarations its new file took from it (in
-/// the new file, in the parent, gone from linux_host.zig after), moved by
-/// `zig_move`; its report a row a list, `name:line` each.
+/// A script replaying a webbox linux_host split from its checkout: the declarations the
+/// new file took from `commit`'s parent's linux_host.zig, moved by `zig_move`.
+/// Its report is a row per list, `name:line` each.
 const replay = "const W = \"" ++ webbox_root ++ "\"\n" ++
     \\-- The history is 0.16 source; Zig 0.17 removed `**` on arrays and strings,
     \\-- so its four uses become what cookbook/zig17/array_mult.shale writes, each
@@ -448,9 +445,8 @@ test "zig_move's mover over this repo's src/**/*.zig and webbox's: two declarati
             if (!(once(ds, ds[i - 1]) and once(ds, ds[i]) and once(ds, ds[i + 1]))) continue;
             break;
         } else continue;
-        // The file as it is, and with each boundary the box found
-        // (metal-vmm QUEUE 235's review): a trailing comment on both
-        // moved declarations' last lines, an indented comment between
+        // The file as it is, and with each hard boundary: a trailing comment
+        // on both moved declarations' last lines, an indented comment between
         // them, and every line ended by CRLF.
         for (std.enums.values(Boundary)) |b| try thereAndBack(a, f.path, try withBoundary(a, f.src, ds, i, b), i, b);
         tried += 1;

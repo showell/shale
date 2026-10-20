@@ -1,56 +1,62 @@
-//! **ONE PROGRAM, RUN AND ENDED** (metal-vmm QUEUE 233, chunk 1; the
-//! dogfood design's "Running a program", "How it is built"): what `run`
-//! does under its options, the raw spawn and one poll loop.
+//! Runs one program to its end or its deadline: the raw spawn and poll loop
+//! under `run`.
 //!
-//! zig 0.16's `process.spawn` has no hook before exec, and its `kill`
-//! signals the leader alone and then waits without bound, so this forks
-//! itself: in the child a death signal (and a check that the parent is
-//! still the one that forked it), a process group of its own, signals
-//! unblocked, stdin from the bytes given or /dev/null, stdout and stderr
-//! one pipe, `chdir`, and `execve` along PATH. An exec that fails says why
-//! through a close-on-exec pipe, so "not found" is an answer, not a hang.
+//! `std.process.spawn` has no hook before exec, and its `kill` signals only
+//! the leader and then waits without bound, so we fork ourselves. The child
+//! sets a death signal (and checks its parent is still the one that forked
+//! it), takes a process group of its own, unblocks signals, gets stdin from
+//! the given bytes or /dev/null and stdout and stderr on one pipe, then
+//! `chdir`s and `execve`s along PATH. A failed exec reports its errno through a
+//! close-on-exec pipe, so "not found" is an answer, not a hang.
 //!
-//! The parent's loop polls the output, the stdin it is still writing, a
-//! pidfd for the exit and a signalfd for TERM and HUP. **On the deadline,
-//! or a TERM or HUP to `shale` itself: TERM to the whole group, a grace,
-//! then KILL.** After the leader exits, the output is read for at most
-//! `drain_ms` more (a grandchild holding the pipe open never holds `run`).
+//! The parent polls the output, the stdin it is still writing, a pidfd for the
+//! exit and a signalfd for TERM and HUP. On the deadline, or a TERM or HUP to
+//! `shale` itself, the whole group gets TERM, a grace period, then KILL. After
+//! the leader exits, output is read for at most `drain_ms` more, so a
+//! grandchild holding the pipe open never holds `run`.
 
 const std = @import("std");
 const linux = std.os.linux;
 
+/// A program to run and how.
 pub const Spec = struct {
-    /// argv[0] is found along PATH unless it has a `/` (then it is a path,
-    /// a relative one against `cwd`).
+    /// argv[0] is found along PATH unless it has a `/`; then it is a path,
+    /// relative to `cwd`.
     argv: []const []const u8,
-    /// The OS folder it starts in; null for `shale`'s own.
+    /// The OS folder it starts in; `null` for `shale`'s own.
     cwd: ?[]const u8 = null,
-    /// The whole environment, each `K=V`.
+    /// The whole environment, as `K=V` strings.
     env: []const []const u8,
-    /// Its stdin's bytes, or null for /dev/null.
+    /// The bytes for stdin; `null` for /dev/null.
     stdin: ?[]const u8 = null,
+    /// When the program's group gets TERM.
     timeout_ms: u64,
-    /// Between TERM and KILL.
+    /// The time between TERM and KILL.
     grace_ms: u64 = 2000,
-    /// How long the output is read after the program ends.
+    /// How long output is still read after the program exits.
     drain_ms: u64 = 200,
 };
 
+/// How a program ended.
 pub const Ended = enum {
-    /// It exited: `code`.
+    /// It exited with `code`.
     exit,
-    /// Its time ran out and it was ended.
+    /// Its deadline passed and it was ended.
     timeout,
-    /// A signal ended it that `run` did not send: `signal`.
+    /// A signal `run` did not send ended it; see `signal`.
     signal,
     /// `shale` itself was told to stop (TERM or HUP) and ended it.
     interrupted,
 };
 
+/// How a program ended, and how long it ran.
 pub const Outcome = struct {
     ended: Ended,
+    /// The exit code, if it exited.
     code: ?u8 = null,
+    /// The signal that ended it, if one did.
     signal: ?u32 = null,
+    /// Milliseconds the run took, the drain included.
     ms: u64,
 };
 
@@ -58,7 +64,7 @@ pub const Error = error{
     OutOfMemory,
     /// No such program, along PATH or at its path.
     NotFound,
-    /// Found, but not to be run (no permission, not a program).
+    /// Found but not runnable: no permission, or not a program.
     NotRunnable,
     /// `cwd` is not a folder that can be entered.
     NoCwd,
@@ -87,8 +93,8 @@ fn zList(a: std.mem.Allocator, items: []const []const u8) ![*:null]const ?[*:0]c
     return out.ptr;
 }
 
-/// The candidates `execve` tries, in order: argv[0] itself when it has a
-/// `/`, else each folder of PATH (the environment's, or the usual one).
+/// The paths `execve` tries, in order: argv[0] itself if it has a `/`, else
+/// argv[0] in each folder of the environment's PATH, or of a default PATH.
 fn candidates(a: std.mem.Allocator, argv0: []const u8, env: []const []const u8) ![]const [*:0]const u8 {
     var out: std.ArrayList([*:0]const u8) = .empty;
     if (std.mem.indexOfScalar(u8, argv0, '/') != null) {
@@ -117,8 +123,9 @@ fn setNonblocking(fd: i32) void {
     _ = linux.fcntl(fd, linux.F.SETFL, flags | (1 << 11));
 }
 
-/// **THE CHILD, BETWEEN FORK AND EXEC**: raw system calls only, nothing
-/// allocated; any failure is its errno on `err_w`, then exit 127.
+/// The child between fork and exec. Uses raw system calls only and allocates
+/// nothing; on failure, writes the errno to `err_w` and exits 127. A `chdir`
+/// failure is written as 1000 plus its errno.
 fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, out_w: i32, err_w: i32, paths: []const [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) noreturn {
     _ = linux.prctl(@backingInt(linux.PR.SET_PDEATHSIG), @backingInt(linux.SIG.KILL), 0, 0, 0);
     if (linux.getppid() != parent) linux.exit_group(127);
@@ -151,8 +158,8 @@ fn fail(err_w: i32, code: u32) noreturn {
     linux.exit_group(127);
 }
 
-/// **A PROGRAM, RUN TO ITS END OR ITS DEADLINE**, its output (stdout and
-/// stderr, one stream) given to `sink.write(bytes)` as it comes.
+/// Runs a program to its end or its deadline, passing its output (stdout and
+/// stderr as one stream) to `sink.write(bytes)` as it comes.
 pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkError(@TypeOf(sink)))!Outcome {
     var arena = std.heap.ArenaAllocator.init(alloc);
     defer arena.deinit();
@@ -175,8 +182,8 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     defer closeFd(&in_pipe[0]);
     defer closeFd(&in_pipe[1]);
 
-    // TERM and HUP to `shale` come to the loop, not the default action,
-    // while a program runs; the child unblocks them before exec.
+    // While a program runs, TERM and HUP to `shale` go to the loop instead of
+    // the default action; the child unblocks them before exec.
     var stop_set = linux.sigemptyset();
     linux.sigaddset(&stop_set, .TERM);
     linux.sigaddset(&stop_set, .HUP);
@@ -195,7 +202,7 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     const pid: linux.pid_t = @intCast(fork_rc);
     if (pid == 0) child(parent, cwd, in_pipe[0], out_pipe[1], err_pipe[1], paths, argv, envp);
 
-    // The parent: the child's ends closed, then did the exec happen?
+    // A word on the error pipe means the exec failed.
     closeFd(&out_pipe[1]);
     closeFd(&err_pipe[1]);
     closeFd(&in_pipe[0]);
@@ -224,10 +231,9 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     if (in_pipe[1] >= 0) setNonblocking(in_pipe[1]);
 
     var exited = false;
-    var raw: i32 = 0; // waitpid's and wait4's (Zig 0.17); W reads it as a u32
-    // **A FAILURE ON THE WAY OUT ENDS IT**: the sink refusing (the keep at
-    // the host's cap) returns before the program's end, which would leave
-    // it running, then a zombie, for as long as `shale` lives.
+    var raw: i32 = 0; // wait4 fills an i32; `W` reads it as a u32
+    // A sink failure (the keep at the host's cap) returns before the program
+    // ends; without this the program would run on, then linger as a zombie.
     errdefer if (!exited) {
         _ = linux.kill(-pid, .KILL);
         _ = linux.wait4(pid, &raw, 0, null);
@@ -252,7 +258,7 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
             _ = linux.kill(-pid, .KILL);
             killed = true;
         }
-        // The nearest of the deadline, the grace's end and the drain's.
+        // Wake for the nearest of the deadline, the grace's end and the drain's.
         var wait_ms: u64 = 1000;
         if (!exited and termed_at == null) wait_ms = @min(wait_ms, deadline -| now);
         if (!exited and termed_at != null and !killed) wait_ms = @min(wait_ms, (termed_at.? + spec.grace_ms) -| now);
@@ -294,9 +300,9 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
         if (pid_at) |i| if (fds[i].revents != 0) {
             if (linux.wait4(pid, &raw, linux.W.NOHANG, null) == pid) {
                 exited = true;
-                // All it wrote is in the pipe now, though this poll may
-                // have seen the pipe before it: read it before any drain's
-                // end can come, which bounds only what outlives it.
+                // All the leader wrote is in the pipe now, though this poll
+                // may have looked before it was. Read it before the drain
+                // starts, so the drain bounds only what outlives the leader.
                 if (out_pipe[0] >= 0) try readAvailable(&out_pipe[0], &buf, sink);
                 drain_until = monoMs() + spec.drain_ms;
                 closeFd(&in_pipe[1]);
@@ -319,8 +325,8 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     return .{ .ended = .signal, .signal = @backingInt(linux.W.TERMSIG(status)), .ms = ms };
 }
 
-/// What the pipe holds now, to the sink: until it would block, or at its
-/// end, closed.
+/// Passes what the pipe holds to the sink until a read would block. Closes
+/// the pipe at its end.
 fn readAvailable(fd: *i32, buf: []u8, sink: anytype) !void {
     while (true) {
         const r = linux.read(fd.*, buf.ptr, buf.len);
@@ -335,7 +341,7 @@ fn readAvailable(fd: *i32, buf: []u8, sink: anytype) !void {
     }
 }
 
-// ── tests: the fixture program the build makes, never /bin/sh ────────
+// The tests run the fixture program the build makes, never /bin/sh.
 
 const testing = std.testing;
 const fixture = @import("shale_test_options").fixture;
@@ -348,7 +354,7 @@ const Collect = struct {
     }
 };
 
-/// The fixture's absolute path: a relative argv[0] is taken against `cwd`.
+/// The fixture's absolute path, since a relative argv[0] is taken against `cwd`.
 fn fixturePath(buf: []u8) []const u8 {
     if (std.fs.path.isAbsolute(fixture)) return fixture;
     var cwd: [std.fs.max_path_bytes]u8 = undefined;
@@ -431,15 +437,15 @@ test "spawn: much output, past the pipe's buffer, all of it read" {
     try testing.expectEqual(@as(usize, 1_000_000), c.out.items.len);
 }
 
-/// A sink that sends `shale` (this thread) a TERM at the first output: as
-/// a TaskStop, or the session ending, would.
+/// A sink that sends this thread a TERM at the first output, as stopping
+/// `shale` from outside would.
 const Interrupting = struct {
     sent: bool = false,
     pub const Error = error{};
     fn write(i: *Interrupting, bytes: []const u8) Interrupting.Error!void {
         _ = bytes;
-        // To this thread: the mask the loop sets is the thread's, and a
-        // process-directed signal may land on another of the process's.
+        // Signal this thread: the loop's mask is per thread, and a signal to
+        // the process may land on another thread.
         if (!i.sent) _ = linux.tgkill(linux.getpid(), linux.gettid(), .TERM);
         i.sent = true;
     }

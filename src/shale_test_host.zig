@@ -1,6 +1,5 @@
-//! **A TEST'S LINUX HOST** (metal-vmm QUEUE 233): a temporary root, the
-//! host over it, the fixture program the build makes found along `PATH`,
-//! and runs through the gate. Only the tests use it.
+//! A Linux host for tests: a temporary root, the host over it, the build's
+//! fixture program on `PATH`, and runs through the gate.
 
 const std = @import("std");
 const shale = @import("shale");

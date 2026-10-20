@@ -1,8 +1,7 @@
-//! **THE COOKBOOK'S RECIPES PARSE** (cookbook/): each `.shale` under it,
-//! read as the CLI reads a script, with the Linux and git preludes, so a
-//! recipe calling a builtin or a prelude function that is gone, or written
-//! wrongly, fails here and not in the hands of the next one to copy it.
-//! What each does is shown by its use, not here.
+//! Parses each `.shale` recipe under cookbook/ as the CLI reads a script, with
+//! the Linux and git preludes, so a recipe that calls a builtin or prelude
+//! function that is gone, or calls it wrongly, fails here and not in the hands
+//! of whoever copies it next.
 
 const std = @import("std");
 const testing = std.testing;
@@ -30,6 +29,6 @@ test "cookbook: every recipe parses, with the Linux and git preludes" {
         };
         recipes += 1;
     }
-    // The zig recipes, at least: a walk that found none would pass.
+    // A walk that found nothing would pass, so require at least the zig recipes.
     try testing.expect(recipes >= 9);
 }

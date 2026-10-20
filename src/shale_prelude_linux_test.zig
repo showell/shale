@@ -1,6 +1,5 @@
-//! **THE LINUX PRELUDE, TESTED** (metal-vmm QUEUE 233, chunk 2): every
-//! function of `shale_prelude_linux.shale`, through the gate, against a
-//! temporary root and the fixture program the build makes.
+//! Tests every function of `shale_prelude_linux.shale` through the gate,
+//! against a temporary root and the build's fixture program.
 
 const std = @import("std");
 const testing = std.testing;

@@ -1,31 +1,38 @@
-//! **LONG JOBS** (metal-vmm QUEUE 233, chunk 4; the dogfood design's "Long
-//! jobs"): a program that outlives the `shale` that started it.
+//! Long jobs: programs that outlive the `shale` that started them.
 //!
-//! `launch` double-forks a reaper out of every task's process tree (so
-//! stopping the `shale` that waits on a job never kills the job): the
-//! first child makes its own session and forks the reaper, then exits, and
-//! the reaper, re-parented to init, execs `shale --reap`. The reaper
-//! (`reapMain`) starts the job in a session of its own, stdin `/dev/null`,
-//! stdout and stderr its log, no death signal; writes its record; waits
-//! for it; and writes how it ended. **The record, `<log>.job`**, is a few
-//! `key=value` lines: `pid`, `pgid`, `start` (the leader's start time, raw
-//! from `/proc/<pid>/stat`), `started`, `argv`, `reaper` and `reaper_start`
-//! (the reaper's own id and start time), and at its end `exit` or `signal`,
-//! and `ended`. Each write is whole: a new file renamed over it.
+//! `launch` double-forks a reaper out of the caller's process tree, so stopping
+//! the `shale` that waits on a job never kills the job. The first child makes
+//! its own session, forks the reaper and exits; the reaper, re-parented to
+//! init, execs `shale --reap`. The reaper (`reapMain`) starts the job in its
+//! own session with stdin `/dev/null` and stdout and stderr to its log, writes
+//! the job's record, waits for it, and writes how it ended. The record,
+//! `<log>.job`, is `key=value` lines (`Record`), each write a new file renamed
+//! over the old.
 
 const std = @import("std");
 const linux = std.os.linux;
 
+/// A job's record, as `<log>.job` holds it.
 pub const Record = struct {
+    /// The job's leader.
     pid: i32 = 0,
+    /// The job's process group, which is its session's.
     pgid: i32 = 0,
+    /// The leader's start time, raw from `/proc/<pid>/stat`.
     start: []const u8 = "",
+    /// When the job started, in Unix seconds.
     started: i64 = 0,
+    /// The job's argv joined by spaces, for display.
     argv: []const u8 = "",
+    /// The reaper's pid.
     reaper: i32 = 0,
+    /// The reaper's start time, raw from `/proc/<pid>/stat`.
     reaper_start: []const u8 = "",
+    /// The exit code, once the job exited.
     exit: ?u8 = null,
+    /// The signal that ended the job, once it did.
     signal: ?u32 = null,
+    /// When the job ended, in Unix seconds.
     ended: ?i64 = null,
 
     pub fn done(r: Record) bool {
@@ -33,7 +40,7 @@ pub const Record = struct {
     }
 };
 
-/// A record's text, or null for one that is not a record.
+/// Parses a record's text. Returns `null` if it is not a record.
 pub fn parseRecord(text: []const u8) ?Record {
     var r: Record = .{};
     var it = std.mem.splitScalar(u8, text, '\n');
@@ -65,9 +72,9 @@ fn formatRecord(buf: []u8, r: Record) []const u8 {
     return w.buffered();
 }
 
-/// **A PROCESS'S START TIME**, raw: `/proc/<pid>/stat`'s 22nd field, read
-/// after the last `)` (a program's name may hold one). Null when there is
-/// no such process.
+/// A process's raw start time: field 22 of `/proc/<pid>/stat`, counted after
+/// the last `)`, since a program's name may contain one. Returns `null` if
+/// there is no such process.
 pub fn startOf(buf: []u8, pid: i32) ?[]const u8 {
     var path: [64]u8 = undefined;
     const p = std.mem.printSentinel(&path, "/proc/{d}/stat", .{pid}, 0) catch return null;
@@ -85,8 +92,8 @@ pub fn startOf(buf: []u8, pid: i32) ?[]const u8 {
     return null;
 }
 
-/// **WHETHER A JOB'S REAPER LIVES**, the one the record names: while it
-/// does, a job that is gone has an end still to be written.
+/// Whether the reaper the record names is alive. While it is, a job that is
+/// gone still has its end to be written.
 pub fn reaperAlive(r: Record) bool {
     if (r.reaper <= 0) return false;
     var buf: [1024]u8 = undefined;
@@ -99,9 +106,9 @@ fn signalGroup(pgid: i32, sig: u32) bool {
     return linux.errno(rc) == .SUCCESS;
 }
 
-/// **WHETHER A JOB LIVES**: its group has a process, and its leader, if
-/// still there, is the one the record names (its start time). A leader
-/// that exited, its group living on, is alive.
+/// Whether a job is alive: its group has a process, and its leader, if still
+/// there, has the record's start time. A job whose leader exited but whose
+/// group lives on is alive.
 pub fn alive(r: Record) bool {
     var buf: [1024]u8 = undefined;
     if (startOf(&buf, r.pid)) |s| if (!std.mem.eql(u8, s, r.start)) return false;
@@ -113,9 +120,9 @@ fn sleepMs(ms: u64) void {
     _ = linux.nanosleep(&ts, null);
 }
 
-/// **A JOB STOPPED**: TERM to its group, `grace_ms`, then KILL; whether it
-/// was alive. The start-time check narrows a reused id's race; it does not
-/// close it.
+/// Sends TERM to a job's group, waits up to `grace_ms`, then sends KILL.
+/// Returns whether the job was alive. The start-time check narrows the race
+/// with a reused pid; it does not close it.
 pub fn stop(r: Record, grace_ms: u64) bool {
     if (!alive(r)) return false;
     _ = signalGroup(r.pgid, @backingInt(linux.SIG.TERM));
@@ -131,8 +138,8 @@ pub fn stop(r: Record, grace_ms: u64) bool {
     return true;
 }
 
-/// argv[0] as `execve` would find it: a path (against `cwd` when
-/// relative), or along PATH. Null when nothing runnable is there.
+/// Finds argv[0] as `execve` would: a path (relative to `cwd`), or along PATH.
+/// Returns `null` if nothing runnable is there.
 pub fn find(a: std.mem.Allocator, argv0: []const u8, env: []const []const u8, cwd: []const u8) !?[]const u8 {
     if (std.mem.indexOfScalar(u8, argv0, '/') != null) {
         const p = if (std.fs.path.isAbsolute(argv0)) argv0 else try std.fmt.allocPrint(a, "{s}/{s}", .{ cwd, argv0 });
@@ -164,12 +171,11 @@ fn zList(a: std.mem.Allocator, items: []const []const u8) ![*:null]const ?[*:0]c
 
 pub const LaunchError = error{ OutOfMemory, Spawn, NoRecord };
 
-/// **A JOB LAUNCHED**: `reaper --reap <record> <log> <cwd> <program> --
-/// argv...` double-forked out of this process's tree, with `env`; then
-/// its record, once the reaper says it is written: a byte on its fd 3, a
-/// pipe whose other end this holds. The pipe's end with no byte is a
-/// reaper gone before its record (`NoRecord`); a slow one is only slow, so
-/// there is no deadline.
+/// Double-forks `reaper --reap <record> <log> <cwd> <program> -- argv...` out
+/// of this process's tree with `env`, and returns the job's record once the
+/// reaper signals it is written by a byte on its fd 3, a pipe. End of file
+/// with no byte means the reaper died first (`NoRecord`). A slow reaper is
+/// only slow, so there is no deadline.
 pub fn launch(a: std.mem.Allocator, io: std.Io, reaper: []const u8, record: []const u8, log: []const u8, cwd: []const u8, program: []const u8, argv: []const []const u8, env: []const []const u8) LaunchError!Record {
     var args: std.ArrayList([]const u8) = .empty;
     try args.appendSlice(a, &.{ reaper, "--reap", record, log, cwd, program, "--" });
@@ -188,12 +194,11 @@ pub fn launch(a: std.mem.Allocator, io: std.Io, reaper: []const u8, record: []co
         return error.Spawn;
     }
     if (first == 0) {
-        // The first child: a session of its own, the reaper, and gone.
         _ = linux.setsid();
         const second = linux.fork();
         if (second == 0) {
-            // The started pipe is fd 3, kept across the exec (dup2's copy
-            // has no CLOEXEC; one already at 3 is cleared).
+            // The started pipe becomes fd 3 and survives the exec: dup2's copy
+            // has no CLOEXEC, and an end already at 3 has the flag cleared.
             if (started[1] == reaper_started_fd) {
                 _ = linux.fcntl(reaper_started_fd, linux.F.SETFD, 0);
             } else _ = linux.dup2(started[1], reaper_started_fd);
@@ -220,7 +225,7 @@ pub fn launch(a: std.mem.Allocator, io: std.Io, reaper: []const u8, record: []co
         const rc = linux.read(started[0], &byte, 1);
         if (linux.errno(rc) != .INTR) break;
     }
-    // Written or not, the reaper has said all it will.
+    // The reaper wrote its byte or exited; either way the record is final.
     const text = std.Io.Dir.cwd().readFileAlloc(io, record, a, .limited(64 * 1024)) catch return error.NoRecord;
     return parseRecord(text) orelse error.NoRecord;
 }
@@ -234,7 +239,8 @@ fn nowSeconds() i64 {
     return @intCast(ts.sec);
 }
 
-/// Whether the record is there now, whole: written to `tmp`, then renamed.
+/// Writes the record to `tmp` and renames it over `record`, so a reader never
+/// sees a partial one. Returns whether it succeeded.
 fn writeRecord(record: [*:0]const u8, tmp: [*:0]const u8, r: Record) bool {
     var buf: [8192]u8 = undefined;
     const text = formatRecord(&buf, r);
@@ -249,13 +255,13 @@ fn writeRecord(record: [*:0]const u8, tmp: [*:0]const u8, r: Record) bool {
     return true;
 }
 
-/// **THE REAPER** (`shale --reap <record> <log> <cwd> <program> -- argv...`,
-/// its own environment the job's): the job started, its record written,
-/// its end waited for and written. Its exit says only whether it could.
+/// The reaper, `shale --reap <record> <log> <cwd> <program> -- argv...`, whose
+/// environment is the job's: starts the job, writes its record, waits for it
+/// and writes how it ended. The exit code says only whether it could.
 pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []const u8) u8 {
     if (args.len < 6 or !std.mem.eql(u8, args[4], "--")) return 2;
     const record = a.dupeSentinel(u8, args[0], 0) catch return 2;
-    // Its own: a reaper ending as another starts must not share one.
+    // A temp file of its own, so a reaper ending as another starts never shares one.
     const tmp = std.fmt.allocPrintSentinel(a, "{s}.{d}.tmp", .{ args[0], linux.getpid() }, 0) catch return 2;
     const log = a.dupeSentinel(u8, args[1], 0) catch return 2;
     const cwd = a.dupeSentinel(u8, args[2], 0) catch return 2;
@@ -264,7 +270,7 @@ pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []c
     const zargv = zList(a, argv) catch return 2;
     const zenv = zList(a, env) catch return 2;
     const shown = std.mem.join(a, " ", argv) catch return 2;
-    // Not the job's: it closes at the job's exec.
+    // The started pipe must not leak into the job.
     _ = linux.fcntl(reaper_started_fd, linux.F.SETFD, linux.FD_CLOEXEC);
     var own_buf: [1024]u8 = undefined;
     const reaper_start = startOf(&own_buf, linux.getpid()) orelse return 2;
@@ -273,8 +279,6 @@ pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []c
     const pid = linux.fork();
     if (linux.errno(pid) != .SUCCESS) return 2;
     if (pid == 0) {
-        // The job: a session (and so a group) of its own, its log for both
-        // streams, `/dev/null` for stdin.
         _ = linux.setsid();
         const devnull: i32 = @intCast(linux.open("/dev/null", .{ .ACCMODE = .RDONLY }, 0));
         _ = linux.dup2(devnull, 0);
@@ -287,7 +291,7 @@ pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []c
     _ = linux.close(@intCast(log_fd));
     var r: Record = .{ .pid = @intCast(pid), .pgid = @intCast(pid), .started = nowSeconds(), .argv = shown, .reaper = linux.getpid(), .reaper_start = reaper_start };
     var stat_buf: [1024]u8 = undefined;
-    // The child's start time, once it is the session leader (a moment).
+    // The child's stat may take a moment to appear.
     var tries: usize = 0;
     while (tries < 100) : (tries += 1) {
         if (startOf(&stat_buf, r.pid)) |s| {
@@ -296,11 +300,10 @@ pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []c
         }
         sleepMs(1);
     }
-    // **NO JOB THAT NO RECORD NAMES**: its record is its one handle, so a
-    // job whose first record cannot be written is ended, and `launch`
-    // finds no record and says so.
+    // The record is a job's only handle, so a job whose first record cannot
+    // be written is killed, and `launch` reports `NoRecord`.
     if (!writeRecord(record, tmp, r)) {
-        // Its group, and itself in case it has yet to make one.
+        // Kill the child too, in case it has not made its group yet.
         _ = linux.kill(-r.pgid, .KILL);
         _ = linux.kill(@intCast(pid), .KILL);
         var st: i32 = 0;
@@ -309,7 +312,7 @@ pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []c
     }
     _ = linux.write(reaper_started_fd, "s", 1);
     _ = linux.close(reaper_started_fd);
-    // waitpid fills an i32 (Zig 0.17); W reads a u32.
+    // waitpid fills an i32; `W` reads a u32.
     var raw: i32 = 0;
     while (true) {
         const rc = linux.waitpid(@intCast(pid), &raw, 0);
@@ -349,7 +352,7 @@ test "jobs: a reaper gone before its record is NoRecord at once, the pipe's end 
     try std.testing.expectError(error.NoRecord, launch(a, io, "/bin/true", record, log, dir, "/bin/true", &.{"true"}, &.{}));
     var t1: linux.timespec = undefined;
     _ = linux.clock_gettime(.MONOTONIC, &t1);
-    // No deadline was waited out (the old one was 5 seconds).
+    // No deadline was waited out.
     try std.testing.expect(t1.sec - t0.sec < 3);
 }
 

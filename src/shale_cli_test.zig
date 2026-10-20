@@ -1,5 +1,4 @@
-//! **THE `shale` BINARY, TESTED AS RUN** (metal-vmm QUEUE 233): what a
-//! shell sees of it, the build's own `shale`.
+//! Tests the build's own `shale` binary as a shell sees it.
 
 const std = @import("std");
 const testing = std.testing;

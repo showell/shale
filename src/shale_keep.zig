@@ -1,23 +1,16 @@
-//! **THE KEEP** (metal-vmm QUEUE 233, chunk 1; the dogfood design's
-//! "Running a program"): what `run` keeps of a program's output, pure. The
-//! output streams in as bytes; each line is filtered (`not_re` takes the
-//! lines it matches out of the stream altogether; of the rest, `re` keeps
-//! those that match, and `before` and `after` keep the lines around a match
-//! as grep's context does), then **kept from both
-//! ends**: the first `head` lines and a ring of the last `tail`, each cut at
-//! `width`. What it holds is bounded by `(head + tail) · width` and one
-//! line of at most `line_most`, whatever the program prints.
-//!
-//! `out` is the kept lines, a line `… N lines left out …` where lines were
-//! dropped between head and tail. `total` counts every line of the output,
-//! `matched` those that passed the filter (grep -c: context lines are kept,
-//! not counted), `kept` the lines in `out`.
+//! What `run` keeps of a program's output. Pure: bytes stream in, and each line
+//! is filtered, then kept from both ends. `not_re` removes the lines it matches
+//! from the stream; of the rest, `re` keeps those that match, and `before` and
+//! `after` keep context lines around a match as grep does. The first `head`
+//! lines and a ring of the last `tail` are kept, each cut at `width`. Memory is
+//! bounded by `(head + tail) * width` plus one line of at most `line_most`,
+//! whatever the program prints.
 
 const std = @import("std");
 const regex = @import("shale").script.regex;
 
-/// The most of one line the filter looks at; past it a line is matched on
-/// its first `line_most` bytes, and kept cut as any long line is.
+/// The most of one line the filter reads. A longer line is matched on its first
+/// `line_most` bytes and kept cut, as any long line is.
 pub const line_most = 64 * 1024;
 
 /// A compiled pattern and the scratch its searches work in.
@@ -32,48 +25,64 @@ pub const Pattern = struct {
     }
 };
 
+/// What to keep of the output.
 pub const Options = struct {
+    /// Keep only lines that match, plus context.
     re: ?Pattern = null,
+    /// Remove lines that match from the stream: neither kept nor context.
     not_re: ?Pattern = null,
+    /// Context lines kept before a match; only with `re`.
     before: usize = 0,
+    /// Context lines kept after a match.
     after: usize = 0,
+    /// Lines kept from the start.
     head: usize = 0,
+    /// Lines kept from the end.
     tail: usize = 0,
+    /// The bytes of a line kept; a longer line is cut and marked.
     width: usize = 200,
 };
 
+/// What was kept, and the counts.
 pub const Kept = struct {
+    /// The kept lines, with `… N lines left out …` where lines were dropped
+    /// between head and tail.
     out: []u8,
+    /// Every line of the output.
     total: u64,
+    /// Lines that passed the filter, as grep -c counts: context is not counted.
     matched: u64,
+    /// The lines in `out`.
     kept: u64,
-    /// The filter's searches' work, places times instructions: what the
-    /// host charges beside the bytes read.
+    /// The filter's work, positions searched times instructions: what the host
+    /// charges besides the bytes read.
     work: u64,
 };
 
 /// The mark a cut line ends with.
 pub const cut_mark = "…";
 
+/// The streaming keep: `feed` it bytes, then `finish`.
 pub const Keep = struct {
     alloc: std.mem.Allocator,
     o: Options,
-    /// The line being read, at most `line_most` of it.
+    /// The line being read, up to `line_most` bytes of it.
     line: std.ArrayList(u8) = .empty,
     /// Whether the line being read ran past `line_most`.
     line_over: bool = false,
+    /// The first `head` lines passed.
     head: std.ArrayList([]u8) = .empty,
-    /// The last `tail` lines kept, a ring from `ring_at`.
+    /// The last `tail` lines passed, a ring starting at `ring_at`.
     ring: [][]u8,
     ring_len: usize = 0,
     ring_at: usize = 0,
-    /// The lines before the next match, for `before`: a ring as `ring`.
+    /// The lines before the next match, for `before`; a ring like `ring`.
     back: [][]u8,
     back_len: usize = 0,
     back_at: usize = 0,
     /// How many lines after a match are still to be kept as context.
     after_left: usize = 0,
-    /// The lines that passed into the keep, head and tail and between.
+    /// The lines that passed the filter into the keep, dropped ones included.
     passed: u64 = 0,
     total: u64 = 0,
     matched: u64 = 0,
@@ -90,15 +99,15 @@ pub const Keep = struct {
         k.line.deinit(k.alloc);
         for (k.head.items) |l| k.alloc.free(l);
         k.head.deinit(k.alloc);
-        // Each ring from where it starts: a drain stopped part way leaves
-        // `back` starting past 0.
+        // Free each ring from where it starts: a drain that failed part way
+        // leaves `back` starting past 0.
         for (0..k.ring_len) |i| k.alloc.free(k.ring[(k.ring_at + i) % k.ring.len]);
         k.alloc.free(k.ring);
         for (0..k.back_len) |i| k.alloc.free(k.back[(k.back_at + i) % k.back.len]);
         k.alloc.free(k.back);
     }
 
-    /// The program's next bytes, any number.
+    /// Takes the program's next bytes, any number.
     pub fn feed(k: *Keep, bytes: []const u8) error{OutOfMemory}!void {
         var rest = bytes;
         while (rest.len > 0) {
@@ -121,14 +130,13 @@ pub const Keep = struct {
         }
         k.total += 1;
         const l = k.line.items;
-        // Out of the stream altogether: neither kept nor context.
         if (k.o.not_re) |p| if (p.matches(l, &k.work)) return;
         const hit = if (k.o.re) |p| p.matches(l, &k.work) else true;
         if (hit) {
             k.matched += 1;
-            // The lines before it, in order, then it. Each leaves the ring
-            // before it is passed on: `pass` owns it then (and frees it if
-            // it fails), so a failure part way leaves none in two places.
+            // Pass the context before the match, in order, then the match.
+            // Each line leaves the ring before `pass` owns it (and frees it on
+            // failure), so a failure part way never leaves a line in two places.
             while (k.back_len > 0) {
                 const l0 = k.back[k.back_at];
                 k.back_at = (k.back_at + 1) % k.back.len;
@@ -154,7 +162,7 @@ pub const Keep = struct {
         }
     }
 
-    /// A line `width` long at most, its cut marked.
+    /// A copy of `l`, cut to `width` and marked if longer or `over`.
     fn cut(k: *Keep, l: []const u8, over: bool) error{OutOfMemory}![]u8 {
         if (l.len <= k.o.width and !over) return k.alloc.dupe(u8, l);
         const n = @min(l.len, k.o.width);
@@ -164,8 +172,8 @@ pub const Keep = struct {
         return c;
     }
 
-    /// A line through the filter (owned now by the keep): to the head
-    /// while it has room, else to the tail's ring, the oldest out.
+    /// Takes ownership of a line that passed the filter: into the head while it
+    /// has room, else into the tail's ring, dropping the oldest.
     fn pass(k: *Keep, line: []u8) error{OutOfMemory}!void {
         k.passed += 1;
         if (k.head.items.len < k.o.head) {
@@ -189,8 +197,8 @@ pub const Keep = struct {
         }
     }
 
-    /// The output ended: its last line, if it had no newline, and what was
-    /// kept. `out` is the caller's, from the keep's allocator.
+    /// Ends the output, taking a last line that had no newline, and returns
+    /// what was kept. The caller owns `out`, allocated by the keep's allocator.
     pub fn finish(k: *Keep) error{OutOfMemory}!Kept {
         if (k.line.items.len > 0 or k.line_over) try k.endLine();
         var out: std.ArrayList(u8) = .empty;
@@ -210,13 +218,11 @@ pub const Keep = struct {
     }
 };
 
-// ── tests ────────────────────────────────────────────────────────────────
-
 const testing = std.testing;
 
-/// **THE ORACLE** (the design's): the output split into lines, filtered as
-/// grep's context would, each cut, then the first `head` and the last
-/// `tail`, a mark between where lines were dropped. Plainly right, and slow.
+/// The test oracle: the output split into lines, filtered with grep's context
+/// rules, each cut, then the first `head` and the last `tail` with a mark
+/// where lines were dropped. Plainly right, and slow.
 fn oracle(a: std.mem.Allocator, out: []const u8, o: Options, re: ?[]const u8, not_re: ?[]const u8) ![]u8 {
     var all: std.ArrayList([]const u8) = .empty;
     var it = std.mem.splitScalar(u8, out, '\n');

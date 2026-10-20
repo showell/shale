@@ -1,8 +1,7 @@
-//! **THE HOST'S JOBS** (metal-vmm QUEUE 233, chunk 4; the dogfood design's
-//! "Long jobs"): `host("job_start", argv, opts)` and the calls that find a
-//! job again, by the job `job_start` gave or by its record's Shale path
-//! (`"runs:x/gates.log.job"`), so a later `shale` carries on where an
-//! earlier one started. The processes are `shale_jobs.zig`'s.
+//! The host's job calls: `job_start`, and `job_alive`, `job_stop` and
+//! `job_wait`, which find a job by the map `job_start` returned or by its
+//! record's Shale path (`"runs:x/gates.log.job"`), so a later `shale` can carry
+//! on where an earlier one started. The processes are `shale_jobs.zig`'s.
 
 const std = @import("std");
 const webbox = @import("webbox");
@@ -37,10 +36,10 @@ pub fn call(h: *Host, run: *Run, pos: ast.Pos, name: []const u8, args: []const V
     return run.fail(pos, .host, "`{s}`: not on this host", .{name});
 }
 
-/// **A JOB STARTED**: `argv` under the reaper, `log` its output (required),
-/// `cwd`, `env` added to the inherited environment, `want` as `run`'s. No
-/// `secrets`: a detached job's log has nobody to scrub it. Counted against
-/// the run's cap on programs.
+/// `job_start(argv, opts)`: starts `argv` under the reaper. Options are `log`
+/// (required), `cwd`, `env` (added to the inherited environment) and `want`
+/// (as `run`'s). There is no `secrets`, since nothing scrubs a detached job's
+/// log. Counts against the run's cap on programs.
 fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (args.len != 2) return run.fail(pos, .argument, "`job_start` takes argv and its options, `job_start({{\"zig\", \"build\"}}, {{log = \"runs:build.log\"}})`, given {d} arguments", .{args.len});
     const a = run.alloc;
@@ -99,20 +98,18 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     // The reaper writes the log and the record there; it does not make room.
     if (std.fs.path.dirname(log_os)) |dir| std.Io.Dir.cwd().access(run.io, dir, .{}) catch
         return run.fail(pos, .store, "`job_start`: {s}'s directory is not there: the log and its record go in it", .{log_shown});
-    // A job still running on this log: its record is its one handle, and
-    // the old job's end would be written over the new one's record. Its
-    // end written, its reaper has nothing left to write (that was its
-    // last), so one still exiting holds nothing; its group still living
+    // Refuse a log a job still runs on: its record is the job's only handle,
+    // and the old reaper would write its end over the new record. A job whose
+    // end is written has a reaper with nothing left to write, but its group
     // (a child it left) may still write the log.
     if (std.Io.Dir.cwd().readFileAlloc(run.io, record_os, a, .limited(64 * 1024))) |text| {
         try chargeRead(run, pos, text.len);
         if (jobs.parseRecord(text)) |old| if (jobs.alive(old) or (!old.done() and jobs.reaperAlive(old)))
             return run.fail(pos, .host, "`job_start`: a job still runs on {s} (pid {d}, its record {s}.job): `job_stop` or `job_wait` it, or give another log", .{ log_shown, old.pid, log_shown });
     } else |e| switch (e) {
-        // No record: no job has had this log.
         error.FileNotFound => {},
-        // Any other failure is not "no job": a job may run there still,
-        // and the reaper would start the program before failing to write.
+        // Any other failure is not "no job": a job may still run there, and
+        // the reaper would start the program before failing to write.
         else => return run.fail(pos, .store, "`job_start`: {s}.job cannot be read: {s}", .{ log_shown, @errorName(e) }),
     }
     run.host_runs += 1;
@@ -133,10 +130,12 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .table = t };
 }
 
+/// A job found again: its record as read now, its record's Shale path, and
+/// its log's.
 const Found = struct { record: jobs.Record, shown: []const u8, log: Value };
 
-/// A job by the map `job_start` gave or its record's Shale path; its
-/// record read now.
+/// Finds a job by the map `job_start` returned or its record's Shale path, and
+/// reads its record.
 fn find(h: *Host, run: *Run, pos: ast.Pos, v: Value, name: []const u8) Error!Found {
     const shown: []const u8 = switch (v) {
         .string => |s| s,
@@ -157,12 +156,12 @@ fn find(h: *Host, run: *Run, pos: ast.Pos, v: Value, name: []const u8) Error!Fou
     return .{ .record = r, .shown = shown, .log = .{ .string = shown[0 .. shown.len - ".job".len] } };
 }
 
-/// **WAITING ON A JOB**: until it ends (`exited`, and its `code` if it
-/// exited or the `signal` that ended it), a `file` (the log unless named) holds `contains` (`found`), or
-/// `timeout_ms` passes (`timeout`). It looks at once, then every second. A
-/// job gone while its reaper lives is still ending: the reaper writes its
-/// end after it reaps it. Gone with its reaper and no end written, it is
-/// `lost`.
+/// `job_wait(job, opts)`: waits until the job ends (`exited`, with its `code`
+/// or `signal`), until `file` (the log by default) holds `contains` (`found`),
+/// or until `timeout_ms` passes (`timeout`). It looks at once, then every
+/// second. A job gone while its reaper lives is still ending, since the reaper
+/// writes the end after reaping it; gone with its reaper and no end written,
+/// it is `lost`.
 fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (args.len != 2) return run.fail(pos, .argument, "`job_wait` takes a job and its options, `{{timeout_ms = ...}}`, given {d} arguments", .{args.len});
     const m = switch (args[1]) {
@@ -179,12 +178,10 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (file != null and contains == null) return run.fail(pos, .argument, "`job_wait`: `file` without `contains`: what to wait for in it", .{});
     if (contains) |c| if (c.len == 0) return run.fail(pos, .argument, "`job_wait`'s `contains` is \"\": every file holds it", .{});
     const began = monoMs();
-    // **WHAT THE LOG GAINED, NOT ALL OF IT**: each look reads from where
-    // the last stopped (less `#contains - 1`, so a line the last read cut
-    // is whole), a piece at a time into one buffer of the host's, and is
-    // charged for what it reads. Read whole every second, a log of a few
-    // MB spent the step budget in a minute, and its reads piled up in the
-    // run's arena until one failed, which was taken for "not there yet".
+    // Each look reads only what the log gained, a piece at a time into one
+    // host buffer, and is charged for what it reads. Reading a log of a few
+    // MB whole every second would spend the step budget in a minute and pile
+    // up reads in the run's arena.
     var scratch = std.heap.ArenaAllocator.init(h.alloc);
     defer scratch.deinit();
     var scan: Scan = .{};
@@ -197,7 +194,7 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         if (j.record.done()) return result(run, pos, "exited", j.record.exit, j.record.signal);
         const gone = !jobs.alive(j.record);
         if (gone and !jobs.reaperAlive(j.record)) {
-            // The reaper's last write, if it made one, is there now.
+            // The reaper is gone, so its last write, if any, is there now.
             const again = try find(h, run, pos, args[0], "job_wait");
             if (again.record.done()) return result(run, pos, "exited", again.record.exit, again.record.signal);
             return result(run, pos, "lost", null, null);
@@ -208,30 +205,31 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     }
 }
 
-/// A log searched as it grows: what was read already is not read again.
+/// A log searched as it grows, never reading again what it already read.
 pub const Scan = struct {
-    /// How far the log was searched, and for which job.
+    /// How far the log was searched.
     done: u64 = 0,
+    /// The job whose log was searched.
     job: ?Job = null,
     buf: []u8 = &.{},
 
     pub const piece = 1024 * 1024;
     const Job = struct { pid: i32, started: i64 };
 
-    /// **WHERE A LOOK STARTS**: on from what was searched, less `#c - 1`
-    /// so a line the last read cut is whole; from 0 for a log begun again,
-    /// which is a log shorter than what was searched or another job's
-    /// (`job_start` truncates the log, and the new one may grow past the
-    /// old end between two looks).
+    /// Where a look starts: where the last stopped, less `c_len - 1` so a match
+    /// the last read cut is whole; or 0 for a log begun again. A log is begun
+    /// again if it is shorter than what was searched or belongs to another job,
+    /// since `job_start` truncates the log and the new one may grow past the
+    /// old end between two looks.
     pub fn from(s: *Scan, size: u64, job: Job, c_len: usize) u64 {
         if (size < s.done or (s.job != null and !std.meta.eql(s.job.?, job))) s.done = 0;
         s.job = job;
         return s.done -| (c_len - 1);
     }
 
-    /// Whether `c` is in what the log at `os` holds now. A log not there
-    /// (yet, or gone between the look's stat and its read) is not a
-    /// failure; any other is said, never taken for "not yet".
+    /// Whether `c` is in what the log at `os` holds now. A missing log (not yet
+    /// made, or gone between the stat and the read) is `false`; any other
+    /// failure stops the run rather than reading as "not yet".
     fn look(s: *Scan, sa: std.mem.Allocator, run: *Run, pos: ast.Pos, os: []const u8, c: []const u8, r: jobs.Record) Error!bool {
         const store = webbox.store;
         const st = (store.statOrNull(run.io, sa, os) catch |e| return run.fail(pos, .store, "`job_wait`: {s} cannot be read: {s}", .{ os, @errorName(e) })) orelse return false;
@@ -288,7 +286,7 @@ fn sleepMs(ms: u64) void {
     _ = std.os.linux.nanosleep(&ts, null);
 }
 
-/// A file the host read for the script: its bytes as a read's.
+/// Charges a file the host read for the script as a script's read is charged.
 fn chargeRead(run: *Run, pos: ast.Pos, n: usize) Error!void {
     try script.builtins.chargeBytes(run, pos, n);
     run.read_bytes += n;

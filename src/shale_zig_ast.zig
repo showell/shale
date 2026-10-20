@@ -1,57 +1,61 @@
-//! **ZIG READ BY ZIG'S PARSER** (metal-vmm QUEUE 235): what `zig_decls`
-//! (and after it `zig_move` and `zig_imports`) know of a file, from
-//! `std.zig.Ast`. Pure: the source in, the answer out. **The analysis is
-//! the parser's and its tokens, not types**: the compiler judges after.
+//! Reads a Zig file's declarations and identifiers with `std.zig.Ast` and the
+//! tokenizer, for `zig_decls`, `zig_rename`, `zig_move` and `zig_imports`. Pure:
+//! source in, answer out. The analysis is syntax and tokens, not types.
 
 const std = @import("std");
 const Ast = std.zig.Ast;
 
+/// What a declaration is, by its leading keyword; `field` is a container field.
 pub const Kind = enum { @"fn", @"const", @"var", @"test", @"comptime", field };
 
 /// How a declaration is named: `identifier` (a declaration, a field,
-/// `test foo {}`), `string` (`test "..."`, its name the string's text) or
-/// `none` (`test {}`, `comptime`, its name `""`).
+/// `test foo {}`), `string` (`test "..."`, named by the string's text) or
+/// `none` (`test {}`, `comptime`, named `""`).
 pub const NameForm = enum { identifier, string, none };
 
 /// Lines, 1-based, inclusive.
 pub const Lines = struct { first: usize, last: usize };
 
-/// **A TOP-LEVEL DECLARATION**: its span from its doc comment to the `}`,
-/// `;` or (a field's) `,` that ends it, as lines and as bytes (`start`
-/// inclusive, `stop` exclusive, from 0), and the plain `//` lines directly
-/// above it, if any. A field has no visibility of its own: `pub`.
+/// A declaration of a container's top level. Its span runs from its doc
+/// comment to the `}`, `;` or (for a field) `,` that ends it.
 pub const Decl = struct {
     kind: Kind,
+    /// The name's text; `""` when `name_form` is `none`.
     name: []const u8,
     name_form: NameForm,
+    /// A field is always `pub`.
     visibility: enum { @"pub", file },
     linkage: enum { none, @"extern", @"export" },
+    /// First line of the span, 1-based.
     first: usize,
+    /// Last line of the span, 1-based, inclusive.
     last: usize,
+    /// Byte offset of the span's start, inclusive.
     start: usize,
+    /// Byte offset of the span's end, exclusive.
     stop: usize,
+    /// The plain `//` lines directly above the span, if any.
     comment_above: ?Lines,
-    /// The line its name is on (a test's or a comptime's first token's).
+    /// The line its name is on (for a test or a comptime, its first token's).
     name_line: usize = 0,
     /// A `const`'s or `var`'s value, as its source says it; else "".
     value: []const u8 = "",
-    /// The names of its members that are not `pub`, when its value is a
-    /// container (`struct`, `union`, `enum`, `opaque`): what `X.y` from
-    /// another file needs `pub` on. Fields have no `pub` and are not here.
+    /// When its value is a container, the names of its members that are not
+    /// `pub`: what `X.y` from another file needs `pub` on. Fields are not listed.
     private_members: []const []const u8 = &.{},
 };
 
-/// The declarations and what reading them took, or the line of the
-/// parser's first error (and its tag): no partial list.
-/// Declarations read, and what reading them took (the charge).
+/// Declarations read, and the tokens and nodes it took (the charge).
 pub const Read = struct { decls: []const Decl, tokens: usize, nodes: usize };
 
+/// The declarations, or the line and tag of the parser's first error; never a
+/// partial list.
 pub const Decls = union(enum) {
     ok: Read,
     parse_error: struct { line: usize, tag: []const u8 },
 };
 
-/// **A FILE'S TOP-LEVEL DECLARATIONS**, in file order.
+/// A file's top-level declarations, in file order.
 pub fn decls(a: std.mem.Allocator, src: [:0]const u8) error{OutOfMemory}!Decls {
     const tree = try Ast.parse(a, src, .{ .mode = .zig });
     if (tree.errors.len != 0) {
@@ -72,9 +76,9 @@ pub const Members = union(enum) {
     no_container: void,
 };
 
-/// **A CONTAINER'S OWN DECLARATIONS AND FIELDS** (the top-level `const
-/// name = struct {...}`, or a union's, an enum's, an opaque's), in its
-/// order: what `zig_decls(p, {in = name})` gives, read as the top level is.
+/// The declarations and fields of the top-level `const name = struct {...}` (or
+/// union, enum, opaque), in order, read as the top level is. Used by
+/// `zig_decls(p, {container = name})`.
 pub fn members(a: std.mem.Allocator, src: [:0]const u8, name: []const u8) error{OutOfMemory}!Members {
     const tree = try Ast.parse(a, src, .{ .mode = .zig });
     if (tree.errors.len != 0) {
@@ -144,10 +148,10 @@ fn declOf(a: std.mem.Allocator, tree: *const Ast, src: [:0]const u8, starts: []c
             d.visibility = .@"pub";
             d.name = tree.tokenSlice(cf.ast.main_token);
         },
-        // A file's root, and a container's members, are nothing else in 0.16.
+        // A container's members are nothing else.
         else => unreachable,
     }
-    // The span: back over its doc comment, on to its `;` or `,`.
+    // Widen the span back over its doc comment and on to its `;` or `,`.
     var first = tree.firstToken(n);
     while (first > 0 and tree.tokenTag(first - 1) == .doc_comment) first -= 1;
     var last = tree.lastToken(n);
@@ -167,8 +171,8 @@ fn declOf(a: std.mem.Allocator, tree: *const Ast, src: [:0]const u8, starts: []c
     return d;
 }
 
-/// A container value's members that are not `pub`: declarations and
-/// functions, by name.
+/// The names of a container value's declarations and functions that are not
+/// `pub`.
 fn privateMembers(a: std.mem.Allocator, tree: *const Ast, node: Ast.Node.Index) ![]const []const u8 {
     var buf: [2]Ast.Node.Index = undefined;
     const c = tree.fullContainerDecl(&buf, node) orelse return &.{};
@@ -224,9 +228,8 @@ fn commentAbove(src: []const u8, starts: []const usize, first: usize) ?Lines {
     }
     return if (top == first) null else .{ .first = top, .last = first - 1 };
 }
-// ── tokens: the one reading of identifiers ───────────────────────────────
-
 pub const Tag = std.zig.Token.Tag;
+/// A token's tag and byte range.
 pub const Tok = struct { tag: Tag, start: usize, end: usize };
 
 /// A file's tokens, or the line of the first one Zig's tokenizer refuses.
@@ -243,32 +246,28 @@ pub fn tokens(a: std.mem.Allocator, src: [:0]const u8) error{OutOfMemory}!union(
 }
 
 /// What an identifier token is: a `use` of a name; a `declaration` (after
-/// `const`, `var` or `fn`, before a `:` outside a container's own level, in
-/// a capture's `|...|`); or a `field`: a nested container's member (its
-/// fields, before their `:`; an enum's, a union's or an error set's
-/// members; and its own `const`, `var` and `fn` declarations), which may
-/// share a top-level name and is never that declaration. (webbox's linux_host.zig's
-/// `pub const kept_open = &host_file.kept_open;`, in a nested struct.)
+/// `const`, `var` or `fn`, before a `:` outside a container's own level, or in
+/// a capture's `|...|`); or a `field`, a nested container's member (a field, an
+/// enum, union or error set member, or the container's own `const`, `var` or
+/// `fn`). A `field` may share a top-level name (`pub const kept_open =
+/// &host_file.kept_open;`) and is never that declaration.
 pub const Role = enum { use, declaration, field };
 
 pub const Ident = struct { tok: usize, start: usize, end: usize, role: Role };
 
-/// **THE ONE READING OF IDENTIFIERS** (metal-vmm QUEUE 235: `zig_rename`
-/// and `zig_move` read with it, and a test holds them to the same
-/// answers): every `.identifier` token not right after `.` (a field, a
-/// declaration reached through a value or a module, an enum literal), with
-/// its role. A local or a parameter cannot shadow a top-level name in Zig,
-/// so a matching use or declaration is that declaration's. `@"x"` is its
-/// own bytes. Two false declarations, both safe (a rename stops, nothing
-/// written): `buf[0..n :0]`'s `n` before the sentinel's `:`, and `(a) | b
-/// | c`, read as a capture.
+/// Every `.identifier` token not right after `.`, with its role. `zig_rename`
+/// and `zig_move` both read identifiers only through this. Zig forbids a local
+/// or parameter shadowing a top-level name, so a matching use or declaration is
+/// that declaration's. `@"x"` is its own bytes. Two known false declarations
+/// are safe, since a rename then stops with nothing written: `n` in
+/// `buf[0..n :0]`, and `(a) | b | c` read as a capture.
 pub fn identifiers(a: std.mem.Allocator, ts: []const Tok) error{OutOfMemory}![]const Ident {
     const Opens = enum { block, container, members };
     const Brace = struct { kind: Opens, parens: usize };
     var out: std.ArrayList(Ident) = .empty;
     var braces: std.ArrayList(Brace) = .empty;
-    // What the next `{` opens: a container's after `struct` or `opaque`;
-    // members' after `enum`, `union` or `error` (through `(enum)`, `(u8)`).
+    // What the next `{` opens: a container after `struct` or `opaque`;
+    // members after `enum`, `union` or `error` (through `(enum)`, `(u8)`).
     var next_brace: Opens = .block;
     var parens: usize = 0;
     var in_capture = false;
@@ -307,8 +306,8 @@ pub fn identifiers(a: std.mem.Allocator, ts: []const Tok) error{OutOfMemory}![]c
                 };
                 const field = level and member_start and (next == .colon or
                     (top.kind == .members and (next == .comma or next == .r_brace or next == .equal)));
-                // `const` names a declaration, unless it qualifies a pointer
-                // (`[]const T`, `*const T`, `*align(4) const T`).
+                // `const` qualifying a pointer (`[]const T`, `*align(4) const T`)
+                // does not declare.
                 const pointer_const = prev == .keyword_const and i >= 2 and switch (ts[i - 2].tag) {
                     .r_bracket, .asterisk, .r_paren, .keyword_allowzero, .keyword_volatile => true,
                     else => false,

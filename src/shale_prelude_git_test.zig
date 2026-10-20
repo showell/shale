@@ -1,8 +1,7 @@
-//! **THE GIT PRELUDE, TESTED** (metal-vmm QUEUE 233, chunk 3): on a
-//! temporary repo made with `git init`, inside the root. The reading calls
-//! go through the gate (each engine in its own copy of the repo: they take
-//! no lock and write nothing); the changing ones run the VM once, as a
-//! commit cannot happen three times alike.
+//! Tests the git prelude on a temporary repo made with `git init` inside the
+//! root. The reading calls go through the gate, each engine in its own copy of
+//! the repo, since they take no lock and write nothing; the changing ones run
+//! the VM once, as a commit cannot happen three times alike.
 
 const std = @import("std");
 const testing = std.testing;
@@ -10,8 +9,8 @@ const T = @import("shale_test_host.zig").T;
 const host_linux = @import("shale_host_linux.zig");
 const spawn = @import("shale_spawn.zig");
 
-/// The repo's git, alone: no user's or system's config, a fixed clock and
-/// name, so every engine's hashes are the same.
+/// The environment for the repo's git: no user or system config, and a fixed
+/// clock and name, so every engine's hashes are the same.
 fn init(t: *T) !void {
     try t.init();
     t.preludes = &.{ host_linux.linux_prelude, host_linux.git_prelude };
@@ -33,7 +32,7 @@ const Collect = struct {
     }
 };
 
-/// git, in `dir` under the root, as the test's own hand.
+/// Runs git in `dir` under the root, outside any script.
 fn git(t: *T, dir: []const u8, args: []const []const u8) !void {
     const a = t.arena.allocator();
     var argv: std.ArrayList([]const u8) = .empty;

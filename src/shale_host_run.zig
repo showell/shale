@@ -1,8 +1,6 @@
-//! Shale's `run` on Linux, beside shale_host_jobs.zig and shale_host_zig.zig:
-//! the host's `call` hands it `run`'s arguments; it reads the options, runs
-//! the program under its deadline, and keeps what the script asked of its
-//! output. The refusals and the option readers the job and Zig builtins share
-//! stay the host's.
+//! The host's `run`: reads the options, runs the program under its deadline,
+//! and keeps what the script asked of its output. The refusals and option
+//! readers it shares with the job and Zig calls live in `shale_host_linux.zig`.
 
 const script = shale.script;
 const Value = script.value.Value;
@@ -18,22 +16,40 @@ const hl = @import("shale_host_linux.zig");
 
 const regex = script.regex;
 
+/// `run`'s options, as the script gives them.
 const Opts = struct {
+    /// The deadline; required.
     timeout_ms: ?u64 = null,
+    /// Keep only lines matching this pattern, plus context.
     re: ?[]const u8 = null,
+    /// Drop lines matching this pattern from the stream.
     not_re: ?[]const u8 = null,
+    /// Match `re` and `not_re` ignoring case.
     nocase: bool = false,
+    /// Context lines before a match; needs `re`.
     before: usize = 0,
+    /// Context lines after a match; needs `re`.
     after: usize = 0,
+    /// Lines kept from the start.
     head: ?usize = null,
+    /// Lines kept from the end.
     tail: ?usize = null,
+    /// The bytes of a kept line; a longer line is cut.
     width: usize = 200,
+    /// Keep the whole output, up to this many bytes; excludes filters and keeps.
     whole: ?usize = null,
+    /// A Shale path the whole scrubbed output is written to.
     log: ?Value = null,
+    /// The Shale path the program starts in; the root by default.
     cwd: ?Value = null,
+    /// A string, or the result of a `whole` run, given as stdin.
     stdin: ?Value = null,
+    /// Variables added to the inherited environment.
     env: ?*script.value.Table = null,
+    /// Variables whose values are read from the Shale paths given, added to the
+    /// environment and scrubbed from the output.
     secrets: ?*script.value.Table = null,
+    /// `"tag: why"`, to run a program `refuse` would refuse.
     want: ?[]const u8 = null,
 };
 
@@ -82,7 +98,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     const cwd = if (o.cwd) |c| try hl.osPath(h, run, pos, c, true) else try hl.rootOf(h, run, pos);
     try hl.refuse(h, run, pos, "run", argv[0], cwd, o.want);
 
-    // The environment: inherited, `env` added, `secrets` read in.
+    // The inherited environment, overridden by `env` and `secrets`.
     var env: std.ArrayList([]const u8) = .empty;
     var secrets: std.ArrayList([2][]const u8) = .empty;
     var shown_env: std.ArrayList(u8) = .empty;
@@ -117,7 +133,6 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
         shown_env.print(a, " {s}=<secret {s}>", .{ k, shown }) catch return run.oom(pos);
     };
 
-    // stdin: a string, or a result of a `whole` run.
     const stdin: ?[]const u8 = if (o.stdin) |v| switch (v) {
         .string => |s| s,
         .table => |t| blk: {
@@ -133,16 +148,13 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     } else null;
     if (o.stdin != null and stdin == null) return run.fail(pos, .argument, "`run`'s stdin is a kept result: its `out` is not the program's output (lines left out, lines cut); run it with `whole = N` to pipe it", .{});
 
-    // **THE STREAM'S OWN MEMORY**: what grows as the output arrives (the
-    // keep, `whole`'s buffer, the scrub's carry) grows by how the pipe's
-    // reads fall, which is the scheduler's. In the run's arena that made
-    // the arena's size the scheduler's too, and the gate, which holds the
-    // engines' arenas equal, failed a 141 KB `git show` at random. So it
-    // is the host's, live and capped (`Capped`), and only the results go
-    // to the arena.
+    // What grows as output arrives (the keep, `whole`'s buffer, the scrub's
+    // carry) grows by how the pipe's reads fall, which the scheduler decides.
+    // In the run's arena that would make the arena's size nondeterministic,
+    // and the gate holds the engines' arenas equal. So the stream uses the
+    // host's allocator, capped (`Capped`), and only results go to the arena.
     var capped: hl.Capped = .{ .backing = h.alloc, .most = run.budgets.arena_bytes -| run.budgeted.held };
     const sa = capped.allocator();
-    // The output's ends: the log, the keep or `whole`.
     var out: hl.Out = .{ .alloc = sa };
     var log_file: ?std.Io.File = null;
     var log_buf: [16 * 1024]u8 = undefined;
@@ -202,8 +214,8 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     };
     scrub.finish() catch return if (capped.hit) streamOver(run, pos, capped.most) else run.oom(pos);
 
-    // What the run spent: a step a 16 bytes read, as bulk work, in
-    // read_bytes; and the filter's searches.
+    // Charge the output as bulk work and as read bytes, and the filter's
+    // searches.
     try script.builtins.chargeBytes(run, pos, out.bytes);
     run.read_bytes += out.bytes;
     const joined = std.mem.join(a, " ", argv) catch return run.oom(pos);
@@ -213,7 +225,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
         @tagName(outcome.ended),                if (outcome.code) |c| std.fmt.allocPrint(a, " {d}", .{c}) catch "" else "",
         outcome.ms,
     });
-    // Its last bytes flushed before the record says whether it is whole.
+    // Flush before the record says whether the log is whole.
     if (log_file != null) log_writer.interface.flush() catch {
         out.log_failed = true;
     };
@@ -249,7 +261,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
         r.map.put(a, "kept_lines", .{ .int = @intCast(kept.kept) }) catch return run.oom(pos);
     }
     if (run.read_bytes > run.budgets.read_bytes) return run.budgetStop(pos, .read_bytes);
-    // An interrupted shale stops here, after the program's group is gone.
+    // An interrupted `shale` stops here, once the program's group is gone.
     if (outcome.ended == .interrupted) return run.fail(pos, .host, "`run`: shale was told to stop (TERM or HUP) while `{s}` ran; it was ended", .{argv[0]});
     return .{ .table = r };
 }

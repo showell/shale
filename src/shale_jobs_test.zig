@@ -1,8 +1,7 @@
-//! **JOBS, TESTED** (metal-vmm QUEUE 233, chunk 4): programs that outlive
-//! the run that started them, reaped by a detached `shale --reap` (the
-//! build's own `shale`), found again by their record's path. A job's start
-//! happens once, so these run the VM once (`T.runOnce`); the mistakes a
-//! job's call can make go through the gate.
+//! Tests jobs: programs that outlive the run that started them, reaped by a
+//! detached `shale --reap` (the build's own `shale`) and found again by their
+//! record's path. A job starts once, so these run the VM once (`T.runOnce`);
+//! the mistakes a job call can make go through the gate.
 
 const std = @import("std");
 const testing = std.testing;
@@ -51,7 +50,7 @@ test "jobs: a job outlives its run; a later run finds it by its record, waits fo
     try init(&t);
     defer t.deinit();
     try testing.expectEqualStrings("true\n", try once(&t, "local j = job_start({\"shale-fixture\", \"ignore-term\", \"20000\"}, {log = \"slow.log\"}) print(j.record == \"slow.log.job\")"));
-    // A second run, as a later Bash call would be.
+    // A second run, as a later `shale` would be.
     try testing.expectEqualStrings("found\ttrue\n", try once(&t, "local w = job_wait(\"slow.log.job\", {timeout_ms = 10000, contains = \"ignoring\"}) print(w.ended, job_alive(\"slow.log.job\"))"));
     try testing.expectEqualStrings("timeout\n", try once(&t, "print(job_wait(\"slow.log.job\", {timeout_ms = 300}).ended)"));
     // It ignores TERM: the grace, then KILL.
@@ -125,8 +124,8 @@ test "jobs: waiting for a line reads only what the log gained since it last look
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
-    // A 7 MB log: read whole each second, its reads piled up in the run's
-    // arena until one failed, taken for "not there yet": `exited`.
+    // A 7 MB log, whose reads would pile up in the run's arena if each look
+    // read it whole.
     try testing.expectEqualStrings("found\n", try once(&t, "local j = job_start({\"shale-fixture\", \"lines\", \"300000\", \"a line of the log\"}, {log = \"big.log\"}) print(job_wait(j, {timeout_ms = 10000, contains = \"log 300000\"}).ended)"));
     // Across pieces: 20 bytes on both sides of where the first read
     // (a piece and the needle's length) ends, so only the overlap finds it.
@@ -139,8 +138,8 @@ test "jobs: waiting for a line reads only what the log gained since it last look
         const src = try std.fmt.allocPrint(t.arena.allocator(), "print(job_wait(\"big.log.job\", {{timeout_ms = 1000, contains = \"{f}\"}}).ended)", .{std.zig.fmtString(needle)});
         try testing.expectEqualStrings("found\n", try once(&t, src));
     }
-    // 4 MB growing over about 4 seconds: read whole at each look, the
-    // looks cost more than this budget; read as it grows, about 262,000.
+    // 4 MB growing over about 4 seconds. Read whole at each look, the looks
+    // would cost more than this budget; read as it grows, about 262,000 steps.
     t.budgets.steps = 400_000;
     try testing.expectEqualStrings("exited\n", try once(&t, "local j = job_start({\"shale-fixture\", \"chunks\", \"4000000\", \"1000\"}, {log = \"slow.log\"}) print(job_wait(j, {timeout_ms = 60000, contains = \"never printed\"}).ended)"));
 }
@@ -159,8 +158,8 @@ test "jobs: a reaper that cannot write the job's first record ends the job, so n
     defer t.deinit();
     const a = t.arena.allocator();
     const io = t.threaded.io();
-    // The record's path a folder: its rename fails. (`job_start` refuses
-    // this before the reaper; `launch` is the reaper's own guard.)
+    // A folder at the record's path makes its rename fail. `job_start`
+    // refuses this before the reaper; this tests the reaper's own guard.
     try t.tmp.dir.createDirPath(io, "rec.log.job");
     const record = try std.fmt.allocPrint(a, "{s}/rec.log.job", .{t.root});
     const log = try std.fmt.allocPrint(a, "{s}/rec.log", .{t.root});

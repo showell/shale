@@ -1,8 +1,7 @@
-//! **A FILE'S TOP-LEVEL DECLARATIONS, FROM ZIG'S PARSER, TESTED**
-//! (metal-vmm QUEUE 235, 1): `zig_decls` over the file webbox's linux_host
-//! split began from (`git show 589837e^:src/linux_host.zig` in its
-//! checkout) and over hand-written fixtures for the rest; the pure reader
-//! (`shale_zig_ast.decls`) over this repo's src/**/*.zig and webbox's.
+//! Tests `zig_decls` over a historical webbox file
+//! (`git show 589837e^:src/linux_host.zig` in its checkout) and hand-written
+//! fixtures, and the pure reader (`shale_zig_ast.decls`) over this repo's
+//! src/**/*.zig and webbox's.
 
 const std = @import("std");
 const testing = std.testing;
@@ -16,8 +15,8 @@ fn init(t: *T) !void {
     t.preludes = &.{host_linux.linux_prelude};
 }
 
-/// Each declaration a row: kind, name, name_form, visibility, linkage,
-/// first, last, comment_above (or `-`).
+/// A script printing a row per declaration: kind, name, name_form, visibility,
+/// linkage, first, last, comment_above (or `-`).
 const rows =
     \\for d in zig_decls(arg("p", "a.zig")) do
     \\  local ca = "-"
@@ -180,7 +179,8 @@ test "zig_decls over this repo's src/**/*.zig and webbox's: in file order, never
     try testing.expect(listed > 2000);
 }
 
-/// A gap's tokens: none but a file's own doc comment (`//!`).
+/// Asserts a gap between declarations holds no token but a container doc
+/// comment (`//!`).
 fn onlyComments(a: std.mem.Allocator, path: []const u8, gap: []const u8) !void {
     const z = try a.dupeSentinel(u8, gap, 0);
     var tz = std.zig.Tokenizer.init(z);

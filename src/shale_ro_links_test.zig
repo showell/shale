@@ -1,8 +1,8 @@
-//! **READ-ONLY MOUNTS, AND A STORE THAT FOLLOWS NO LINK, TESTED** (metal-vmm
-//! QUEUE 235, 4): every change through an `ro` mount refused before
-//! anything is written, its reads as ever; the mounts file's ` ro`; and a
-//! symbolic link anywhere in a path (to a file, to a folder, in the middle,
-//! in a mount) refused for reads, changes, `exists`/`stat` and listings.
+//! Tests read-only mounts and a store that follows no link: every change
+//! through an `ro` mount is refused before anything is written while reads
+//! work; the mounts file's ` ro`; and a symbolic link anywhere in a path (to a
+//! file, to a folder, in the middle, in a mount) is refused for reads, changes,
+//! `exists`/`stat` and listings.
 
 const std = @import("std");
 const testing = std.testing;
@@ -25,7 +25,7 @@ test "ro mounts: every change builtin through one is refused before anything is 
     var why: []const u8 = "";
     t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "ro = {s}/frozen ro\n", .{t.root}), "/home/x", &why);
     try t.expectOutput("print(read(\"ro:a.zig\"), exists(\"ro:sub\"), #ls(\"ro:\"))", "const x = 1;\n\nconst y = x;\n\ttrue\t2\n");
-    // Every change builtin, through the mount: a new one cannot skip it.
+    // Every change builtin, through the mount, so a new one cannot skip it.
     for ([_][]const u8{
         "replace(\"ro:a.zig\", \"x\")",
         "append(\"ro:a.zig\", \"x\")",

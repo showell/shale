@@ -1,12 +1,7 @@
-//! **SHALE'S LINUX HOST** (metal-vmm QUEUE 233, chunk 1; the dogfood
-//! design's "The architecture", "Mounts", "Running a program"): what the
-//! CLI hands the core through its seam. `host(name, ...)`
-//! comes here (`call`): `run` a program under its options, `real` a Shale
-//! path's OS path. Paths come here first (`resolve`): a path whose first
-//! part has a `:` is a mount's (`runs:x/test.log`).
-//!
-//! Metal has none of this: the core it shares is unchanged, and with no
-//! host its `host` stops and its paths are the root's.
+//! The Linux host the CLI hands the core: `host(name, ...)` calls (`call`) and the
+//! mount-aware path resolution (`resolve`). A path whose first part has a `:` is a
+//! mount's (`runs:x/test.log`). Metal runs the same core with no host: its `host`
+//! stops and its paths are the root's.
 
 const std = @import("std");
 const webbox = @import("webbox");
@@ -31,10 +26,8 @@ pub const loadMounts = setup.loadMounts;
 pub const loadPreludes = setup.loadPreludes;
 pub const baseEnv = setup.baseEnv;
 
-/// The most programs a run may run (the design's "The CLI's defaults").
+/// The most programs one run may start.
 pub const runs_most = 64;
-
-// ── the spawn, real or a test's ─────────────────────────────────────────
 
 /// Where a program's output goes as it comes: the scrubber, then the log
 /// and the keep (or `whole`).
@@ -47,25 +40,24 @@ pub const Sink = struct {
     }
 };
 
-/// **THE ONE THING A GATED TEST FAKES**: the spawn, bytes in and bytes
-/// out. Everything around it (the options, the filter, the keep, the
-/// charges) is the real code in both engines.
+/// Starts a program and streams its output into `sink`. This is the only part a
+/// gated test fakes; the options, filter, keep and charges around it are the
+/// real code in both engines.
 pub const Spawn = *const fn (ctx: ?*anyopaque, alloc: std.mem.Allocator, spec: spawn.Spec, sink: *Sink) (spawn.Error || Sink.Error)!spawn.Outcome;
 
 fn realSpawn(_: ?*anyopaque, alloc: std.mem.Allocator, spec: spawn.Spec, sink: *Sink) (spawn.Error || Sink.Error)!spawn.Outcome {
     return spawn.run(alloc, spec, sink);
 }
 
-/// What the host did that the CLI lists after the run: each program it
-/// ran, with its want, and each log it wrote.
+/// One line the CLI lists after the run: a program run, with its want, or a log
+/// written.
 pub const Record = struct { line: []const u8 };
 
 pub const Host = struct {
     alloc: std.mem.Allocator,
-    /// The root as the CLI was given it, an absolute OS path. A mount
-    /// inside it is taken against the run's own root, so a gated test's
-    /// engines, each in a copy of the root, each use their own (the design's
-    /// "The gate").
+    /// The root as the CLI was given it, an absolute OS path. A mount inside it
+    /// is taken against the run's own root, so each engine of a gated test, in
+    /// its own copy of the root, uses its own copy of the mount.
     root_abs: []const u8,
     /// The process's working folder: what a relative root is against.
     cwd_abs: []const u8,
@@ -74,14 +66,13 @@ pub const Host = struct {
     mounts_from: []const u8 = "~/.config/shale/mounts",
     /// The environment a program inherits, `K=V` each (`ZIG_PROGRESS` out).
     env: []const []const u8 = &.{},
-    /// The program a job runs under (`shale` itself, `--reap`): null, no
-    /// jobs.
+    /// The program a job runs under (`shale --reap`). Null means no jobs.
     reaper: ?[]const u8 = null,
     spawn_fn: Spawn = realSpawn,
     spawn_ctx: ?*anyopaque = null,
     records: std.ArrayList(Record) = .empty,
-    /// **`--undo-on-stop`**: each path's state before the run's first change
-    /// of it, so a run that stops puts back what it changed (`undoChanges`).
+    /// `--undo-on-stop`: record each path's state before its first change, so a
+    /// run that stops can put back what it changed (`undoChanges`).
     undo: bool = false,
     journal: std.ArrayList(Prior) = .empty,
     journal_bytes: usize = 0,
@@ -109,17 +100,15 @@ pub const Host = struct {
     }
 };
 
-// ── paths ────────────────────────────────────────────────────────────────
-
-/// **A MOUNT'S PATH** (`runs:x/y`): the mount's folder and the rest, with
-/// the root's rules on the rest (no `..`, no absolute path, FAT's names).
-/// Any other path is the root's (null).
+/// Resolves a mount's path (`runs:x/y`) to the mount's folder joined with the
+/// rest, which follows the root's rules (no `..`, not absolute, FAT names).
+/// Returns `null` for a root path.
 fn resolve(ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]const u8 {
     const h: *Host = @ptrCast(@alignCast(ctx));
     const first_end = std.mem.indexOfScalar(u8, path, '/') orelse path.len;
     const colon = std.mem.indexOfScalar(u8, path[0..first_end], ':') orelse {
-        // The root's path: the root's rules are the core's; a link in it is
-        // refused here, when its parts are names (else the core says why).
+        // The core checks a root path's names; we refuse links only once every
+        // part is a name, so a bad name gets the core's message.
         var it = std.mem.splitScalar(u8, path, '/');
         while (it.next()) |part| if (!store.fatName(part)) return null;
         try refuseLinks(run, pos, std.mem.trimEnd(u8, run.root, "/"), path, "");
@@ -143,8 +132,7 @@ fn resolve(ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]
         var it = std.mem.splitScalar(u8, rest, '/');
         while (it.next()) |part| if (!store.fatName(part)) return run.fail(pos, .argument, "\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ path, part });
     }
-    // A mount whose folder is not there, or cannot be opened, stops when
-    // it is used, saying which.
+    // A missing mount folder stops the run only when the mount is used.
     if (std.Io.Dir.cwd().openDir(run.io, m.dir, .{})) |d| d.close(run.io) else |e| switch (e) {
         error.FileNotFound, error.NotDir => return run.fail(pos, .store, "the mount `{s}` is {s}, which is not a folder there", .{ m.name, m.dir }),
         else => return run.fail(pos, .store, "the mount `{s}` is {s}, which cannot be opened: {s}", .{ m.name, m.dir, @errorName(e) }),
@@ -156,13 +144,10 @@ fn resolve(ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]
     return std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ dir, rest }) catch run.oom(pos);
 }
 
-/// **THE STORE FOLLOWS NO LINK** (metal-vmm QUEUE 235; Steve: "refuse
-/// any"): each part of `rest` below `base`, looked at without following
-/// it (`lstat`, a component walk); a symbolic link stops the run, for a
-/// read, a change, `exists`, `stat` and a listing alike. A part not there
-/// ends the walk: what is below it is not there either. A step a part.
-/// (`walk` passes the links it lists by: what a listing names is not a
-/// path given.)
+/// Stops the run if any part of `rest` below `base` is a symbolic link: the
+/// store follows none, for reads, changes, `exists`, `stat` and listings alike.
+/// Each part is checked with `lstat`, charging a step; a missing part ends the
+/// walk. `walk` skips the links it lists, since a listed name is not a given path.
 fn refuseLinks(run: *Run, pos: ast.Pos, base: []const u8, rest: []const u8, shown_prefix: []const u8) Error!void {
     if (rest.len == 0) return;
     var at: std.ArrayList(u8) = .empty;
@@ -179,8 +164,8 @@ fn refuseLinks(run: *Run, pos: ast.Pos, base: []const u8, rest: []const u8, show
     }
 }
 
-/// **A CHANGE THROUGH A READ-ONLY MOUNT IS REFUSED** (metal-vmm QUEUE 235),
-/// by the mount's name, or by its folder when a root path reaches into it.
+/// Refuses a change through a read-only mount, whether by the mount's name or by
+/// a root path that reaches into its folder. Journals the path under `--undo-on-stop`.
 fn mayChange(ctx: *anyopaque, run: *Run, pos: ast.Pos, rel: []const u8, full: []const u8) Error!void {
     const h: *Host = @ptrCast(@alignCast(ctx));
     const abs = try absolute(h, run, pos, std.mem.trimEnd(u8, full, "/"));
@@ -195,25 +180,23 @@ fn mayChange(ctx: *anyopaque, run: *Run, pos: ast.Pos, rel: []const u8, full: []
     if (h.undo) try noteBefore(h, run, pos, abs);
 }
 
-// ── what a stopped run puts back (`--undo-on-stop`) ─────────────────────────
-
 /// A path as it was before the run's first change of it.
 pub const Prior = struct {
     abs: []const u8,
     was: union(enum) {
-        /// Nothing there: what the run made is taken away again.
+        /// Nothing was there; undo deletes what the run made.
         absent,
-        /// A folder: still there, or said not put back (its files went).
+        /// A folder; undo only reports it if it is gone.
         dir,
         file: struct { bytes: []const u8, permissions: @FieldType(std.Io.File.Stat, "permissions") },
     },
 };
 
-/// The most of what a run changes that `--undo-on-stop` keeps: a change past
-/// it stops the run, so nothing is changed that could not be put back.
+/// The most bytes `--undo-on-stop` journals. A change past it stops the run, so
+/// nothing is changed that could not be put back.
 pub const journal_most = 64 << 20;
 
-/// **BEFORE THE FIRST CHANGE OF A PATH, WHAT IS THERE**: once a path.
+/// Journals what is at `abs_in` before its first change; later changes are no-ops.
 fn noteBefore(h: *Host, run: *Run, pos: ast.Pos, abs_in: []const u8) Error!void {
     const abs = std.mem.trimEnd(u8, abs_in, "/");
     for (h.journal.items) |p| if (std.mem.eql(u8, p.abs, abs)) return;
@@ -241,12 +224,10 @@ fn noteBefore(h: *Host, run: *Run, pos: ast.Pos, abs_in: []const u8) Error!void 
     };
 }
 
-/// **A STOPPED RUN'S CHANGES, PUT BACK** (`--undo-on-stop`), the last
-/// first: a file as it was, a path that was not there taken away (a folder
-/// the run made with whatever is in it). A folder that was there and is
-/// gone cannot be put back (its files went with it), and neither can a
-/// change a program made: each one not put back is said, and the result is
-/// false. Each line on `w`.
+/// Puts back a stopped run's changes, newest first: a file's bytes restored, a
+/// path that was not there deleted (a folder with its contents). A removed
+/// folder and a program's changes cannot be restored; each such path is
+/// reported on `w` and the result is false.
 pub fn undoChanges(h: *Host, io: std.Io, w: *std.Io.Writer) !bool {
     const cwd = std.Io.Dir.cwd();
     var all = true;
@@ -296,8 +277,6 @@ pub fn osPath(h: *Host, run: *Run, pos: ast.Pos, v: Value, allow_root: bool) Err
     return absolute(h, run, pos, std.mem.trimEnd(u8, p.full, "/"));
 }
 
-// ── the host's calls ─────────────────────────────────────────────────────
-
 fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []const Value) Error!Value {
     const h: *Host = @ptrCast(@alignCast(ctx));
     if (std.mem.eql(u8, name, "real")) {
@@ -311,7 +290,7 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
     if (std.mem.eql(u8, name, "zig_move")) return @import("shale_host_zig.zig").move(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "zig_imports")) return @import("shale_host_zig.zig").imports(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "zig_tokens")) return @import("shale_host_zig.zig").tokens(h.alloc, run, pos, args);
-    // Whether a path may change: what `edits_all` asks of every file first.
+    // `edits_all` asks this of every file before it changes any.
     if (std.mem.eql(u8, name, "may_change")) {
         if (args.len != 1) return run.fail(pos, .argument, "`may_change` takes one path, given {d}", .{args.len});
         try script.builtins_change.mayChange(run, pos, try script.builtins_store.pathArg(run, pos, .host, args[0], false));
@@ -320,19 +299,18 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
     return run.fail(pos, .host, "`{s}`: not on this host", .{name});
 }
 
-/// What `run` refuses unless it is given a `want`, by argv[0]'s basename
-/// with a version suffix dropped (`python3.12` is `python3`), or with its
-/// trailing version digits dropped too (`bash5.2` is `bash`, `perl5` is
-/// `perl`).
+/// Programs `run` refuses without a `want`, by argv[0]'s basename with a version
+/// suffix dropped (`python3.12` is `python3`) or its trailing digits dropped too
+/// (`bash5.2` is `bash`, `perl5` is `perl`).
 const refused = [_]struct { []const []const u8, []const u8 }{
     .{ &.{ "bash", "sh", "dash", "zsh", "busybox", "python", "python3", "perl", "node" }, "a shell or an interpreter: Shale is the script" },
     .{ &.{ "head", "tail", "grep", "sed", "awk", "gawk", "cut", "sort", "uniq", "wc", "cat", "tr" }, "a text tool: Shale's builtins and run's own filter and keep do this" },
     .{ &.{ "env", "xargs", "timeout", "nice", "nohup", "setsid", "stdbuf", "time" }, "a wrapper that runs another program: run that program, with run's own options" },
 };
 
-/// **WHAT `run` AND `job_start` REFUSE**, without a `want`: the lists
-/// above, by basename, and a program by path that git does not track,
-/// unless it is under a `tools` mount (a toolchain the user named once).
+/// Refuses, unless given a `want`, a program in `refused` and a program by path
+/// that git does not track, unless it is under a `tools` mount. Used by `run`
+/// and `job_start`.
 pub fn refuse(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv0: []const u8, cwd: []const u8, want: ?[]const u8) Error!void {
     if (want != null) return;
     const base = baseName(argv0);
@@ -354,7 +332,6 @@ fn underToolsMount(h: *Host, argv0: []const u8) bool {
 
 fn baseName(argv0: []const u8) []const u8 {
     var b = std.fs.path.basename(argv0);
-    // `python3.12` is `python3`: a version's `.N` parts dropped.
     while (std.mem.lastIndexOfScalar(u8, b, '.')) |dot| {
         const tail = b[dot + 1 ..];
         if (tail.len == 0) break;
@@ -385,9 +362,9 @@ pub fn mapOpt(run: *Run, pos: ast.Pos, k: []const u8, x: Value) Error!*script.va
     };
 }
 
-/// **THE SCRUBBER**: a secret's bytes replaced by `<secret K>` in all a
-/// program prints, before the filter, the keep and the log; a secret split
-/// across reads is held back until it can be told.
+/// Replaces each secret's bytes with `<secret K>` in a program's output, before
+/// the filter, the keep and the log. A possible secret split across reads is
+/// held back until it can be decided.
 pub const Scrub = struct {
     alloc: std.mem.Allocator,
     secrets: []const [2][]const u8 = &.{},
@@ -400,12 +377,10 @@ pub const Scrub = struct {
         try s.scan(false);
     }
 
-    /// The carry scrubbed and passed on, but for what may be a secret's
-    /// start when more is to come (`last` false). At each place, a
-    /// secret the rest is the start of is waited for, though a shorter one
-    /// is whole there (`abc` and `abcdef`: `abc` at a read's end may go on
-    /// to the longer); then the longest whole one is told, so a secret that
-    /// begins another never tells the other's rest.
+    /// Scrubs the carry and passes it on, keeping back a possible secret's start
+    /// unless `last`. Where the rest is a prefix of a longer secret we wait even
+    /// if a shorter one is whole (`abc` may go on to `abcdef`); then the longest
+    /// whole match wins, so a secret that begins another never leaks its rest.
     fn scan(s: *Scrub, last: bool) Sink.Error!void {
         const buf = s.carry.items;
         var out: std.ArrayList(u8) = .empty;
@@ -419,10 +394,9 @@ pub const Scrub = struct {
                 best = kv;
             };
             if (best) |kv| {
-                // **OVERLAPS TOLD AS ONE**: a secret that starts inside this
-                // one and runs past its end (`abc`, `bcdef` in `abcdef`)
-                // widens what is told, so none of it is left raw; one that
-                // may still go on in the next read is waited for.
+                // A secret starting inside this one and running past its end
+                // (`abc`, `bcdef` in `abcdef`) widens the match, so none of it is
+                // left raw; one that may continue in the next read is waited for.
                 var end = i + kv[1].len;
                 var j = i + 1;
                 while (j < end) : (j += 1) for (s.secrets) |o| {
@@ -443,15 +417,14 @@ pub const Scrub = struct {
         s.carry.shrinkRetainingCapacity(buf.len - i);
     }
 
-    /// The output ended: what was held, scrubbed with nothing more to come.
+    /// Scrubs what is held, with nothing more to come.
     pub fn finish(s: *Scrub) Sink.Error!void {
         if (s.secrets.len == 0) return;
         try s.scan(true);
     }
 };
 
-/// The scrubbed output's two ends: the log, whole, and the keep or the
-/// collected `whole`.
+/// Where scrubbed output goes: the whole log, and the keep or `whole`.
 pub const Out = struct {
     alloc: std.mem.Allocator,
     log: ?*std.Io.File.Writer = null,
@@ -474,15 +447,14 @@ pub const Out = struct {
     }
 };
 
-/// **WHAT A RUN'S STREAM HOLDS, LIVE AND CAPPED**: the host's allocator,
-/// every free given back, and at most `most` bytes live at once (what is
-/// left of the run's arena budget). A tail of 3 over a 10 GB log holds three lines; a keep
-/// that needs more than the budget stops the run (`streamOver`).
+/// An allocator for a run's stream that frees for real and allows at most `most`
+/// bytes live at once (what is left of the run's arena budget). A tail of 3 over
+/// a 10 GB log holds three lines; a keep that needs more stops the run (`streamOver`).
 pub const Capped = struct {
     backing: std.mem.Allocator,
     most: usize,
     live: usize = 0,
-    /// Whether an allocation was refused for the cap, not by the backing.
+    /// Set when the cap, not the backing allocator, refused an allocation.
     hit: bool = false,
 
     pub fn allocator(c: *Capped) std.mem.Allocator {
@@ -528,8 +500,7 @@ pub const Capped = struct {
     }
 };
 
-/// Whether git tracks the program at `path` (against `cwd`): a program
-/// by path that git does not is refused without a `want`.
+/// Whether git tracks the program at `path`, relative to `cwd`.
 fn tracked(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, cwd: []const u8) Error!bool {
     var nothing: Out = .{ .alloc = run.alloc };
     var scrub: Scrub = .{ .alloc = run.alloc, .next = &nothing };
@@ -541,7 +512,7 @@ fn tracked(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, cwd: []const u8)
     return o.ended == .exit and o.code == 0;
 }
 
-// ── tests: the fixture the build makes, found along PATH ─────────────────
+// The tests run `shale-fixture`, which the build puts on PATH.
 
 const testing = std.testing;
 
@@ -762,7 +733,7 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
     try testing.expectEqualStrings("via the mount", try t.file("elsewhere/logs/a.txt"));
     // A program's cwd and log through a mount.
     try t.expectOutput("print(sub(host(\"run\", {\"shale-fixture\", \"pwd\"}, {timeout_ms = 10000, tail = 1, cwd = \"runs:logs\"}).out, -15))", "elsewhere/logs\n\n");
-    // (The pwd's log would differ per gate copy: a fixed program's, instead.)
+    // `pwd`'s output differs per gate copy, so the log test uses a fixed program.
     try t.expectOutput("print(host(\"run\", {\"shale-fixture\", \"lines\", \"2\"}, {timeout_ms = 10000, tail = 1, log = \"runs:two.log\"}).kept_lines)", "1\n");
     try testing.expectEqualStrings("line 1\nline 2\n", try t.file("elsewhere/two.log"));
     try t.expectStop("read(\"nope:x\")", .atomic, .argument, "the mounts are `runs`, `home`, `gone`");
