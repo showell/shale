@@ -292,3 +292,87 @@ test "process: a script that calls no prelude function holds the machine it did 
         try testing.expect(p.machine.budget.held <= c[1]);
     }
 }
+
+test "process: an allocation that fails anywhere in a run's life, from its start through its yields, ends it cleanly, nothing leaked" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    // Effects, then values kept across yields: each yield copies them, and
+    // the effects first, into a fresh arena.
+    const src =
+        \\for i = 1, 40 do replace("notes/c" .. i .. ".txt", "one") end
+        \\local t = {}
+        \\for i = 1, 4 do
+        \\  push(t, "s" .. i .. rep("x", 9000))
+        \\  yield()
+        \\end
+        \\print(#t, sub(t[4], 1, 3))
+    ;
+    var started_failing: usize = 0;
+    var stopped: usize = 0;
+    var i: usize = 0;
+    while (true) : (i += 1) {
+        var failing: testing.FailingAllocator = .init(testing.allocator, .{ .fail_index = i });
+        const p = f.start(failing.allocator(), src, .atomic) catch |e| {
+            try testing.expectEqual(error.OutOfMemory, e);
+            started_failing += 1;
+            continue;
+        };
+        _ = finish(p, 50);
+        const st = p.status();
+        const done = st.stop == null;
+        if (done) try testing.expectEqualStrings("4\ts4x\n", p.output()) else stopped += 1;
+        p.kill();
+        try testing.expectEqual(failing.allocations, failing.deallocations);
+        if (done) break;
+    }
+    try testing.expect(started_failing >= 3);
+    // The process, its machine's memory and its output buffer; then the
+    // run's own blocks, which its arenas take a few at a time.
+    try testing.expectEqual(@as(usize, 3), started_failing);
+    try testing.expect(stopped >= 5);
+}
+
+test "process: a machine budget that holds the code but not the task's first frame stops before the run, on that budget" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    var limit: usize = 64;
+    var machine_stops: usize = 0;
+    while (true) : (limit += 16) {
+        const p = try process.Process.start(f.threaded.io(), testing.allocator, f.root, "print(1)", .atomic, .{ .machine_bytes = limit }, 100, 64 * 1024);
+        defer p.kill();
+        _ = finish(p, 1000);
+        if (p.status().stop) |s| {
+            try testing.expectEqual(script.diag.Budget.machine, s.budget.?);
+            machine_stops += 1;
+        } else {
+            try testing.expectEqualStrings("1\n", p.output());
+            break;
+        }
+    }
+    try testing.expect(machine_stops > 10);
+}
+
+test "process: a recursion that outgrows the machine's memory stops on that budget wherever its next frame, call or operands need room" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const src = "function down(n) if n == 0 then return 0 end return 1 + down(n - 1) end print(down(60))";
+    var limit: usize = 4096;
+    var machine_stops: usize = 0;
+    while (true) : (limit += 64) {
+        const p = try process.Process.start(f.threaded.io(), testing.allocator, f.root, src, .atomic, .{ .machine_bytes = limit }, 100, 64 * 1024);
+        defer p.kill();
+        _ = finish(p, 1_000_000);
+        const st = p.status();
+        if (st.stop) |s| {
+            try testing.expectEqual(script.diag.Budget.machine, s.budget.?);
+            machine_stops += 1;
+        } else {
+            try testing.expectEqualStrings("60\n", p.output());
+            break;
+        }
+    }
+    try testing.expect(machine_stops > 10);
+}

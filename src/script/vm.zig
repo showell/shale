@@ -191,9 +191,12 @@ const Machine = struct {
 
     fn run(m: *Machine) Error!Exit {
         while (true) {
-            return m.ops() catch |e| switch (e) {
-                error.OutOfMemory => return e,
-                error.Stop => if (try m.caught()) continue else return e,
+            // A stop an `attempt` catches goes on; any other error ends the
+            // run. (An op's allocations are budget stops, so a bare
+            // OutOfMemory would be the host's own.)
+            return m.ops() catch |e| {
+                if (e == error.Stop and try m.caught()) continue;
+                return e;
             };
         }
     }
@@ -272,8 +275,8 @@ const Machine = struct {
                         .add, .sub, .mul, .idiv, .mod => try r.arith(op.pos, bop, lv, rv),
                         .eq, .ne => .{ .boolean = (try r.equal(op.pos, lv, rv)) == (bop == .eq) },
                         .eq_nil, .ne_nil => .{ .boolean = interp.Run.bothNil(lv, rv) == (bop == .eq_nil) },
-                        .lt, .le, .gt, .ge => try r.compare(op.pos, bop, lv, rv),
-                        .concat, .@"and", .@"or" => unreachable,
+                        // `..`, `and` and `or` have ops of their own.
+                        else => try r.compare(op.pos, bop, lv, rv),
                     });
                 },
                 .concat => {

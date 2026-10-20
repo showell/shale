@@ -4,12 +4,12 @@ src/script/builtins_regex.zig 0
 src/script/lex.zig 0
 src/script/parse.zig 0
 src/script/diag.zig 0
-src/script/compile.zig 15
-src/script/vm.zig 5
-src/script/process.zig 5
-src/script/collect.zig 5
+src/script/compile.zig 0
+src/script/vm.zig 0
+src/script/process.zig 0
+src/script/collect.zig 0
 src/script/interp.zig 16
-src/script/value.zig 7
+src/script/value.zig 5
 src/script/builtins_store.zig 0
 src/script/script.zig 6
 src/script/builtins_change.zig 1
@@ -20,7 +20,7 @@ src/script/builtins_walk.zig 2
 src/script/builtins_time.zig 2
 src/script/builtins_format.zig 1
 src/script/builtins_numbers.zig 0
-src/script/builtins.zig 6
+src/script/builtins.zig 4
 src/shale_suite.zig 2
 src/shale_spawn.zig 28
 src/shale_keep.zig 0

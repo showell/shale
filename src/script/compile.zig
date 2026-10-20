@@ -237,8 +237,11 @@ const Compiler = struct {
         switch (c.ops.items[at].tag) {
             .jump, .jump_false, .and_jump, .or_jump => c.ops.items[at].a = target,
             .for_num_iter, .for_list_iter, .for_list_init => c.ops.items[at].b = target,
-            .for_num_next => c.ops.items[at].c = target,
-            else => unreachable,
+            // The one left that jumps: `for_num_next`.
+            else => |t| {
+                std.debug.assert(t == .for_num_next);
+                c.ops.items[at].c = target;
+            },
         }
     }
 
@@ -306,13 +309,14 @@ const Compiler = struct {
                         _ = try c.emit(.{ .tag = .store_local, .a = sl, .pos = s.pos });
                         c.pop(1);
                     },
-                    .index => |ix| {
+                    // The parser accepts no other target than a local or an index.
+                    else => {
+                        const ix = as.target.kind.index;
                         try c.expr(ix.obj, d + 1);
                         try c.expr(ix.key, d + 1);
                         _ = try c.emit(.{ .tag = .index_set, .pos = as.target.pos });
                         c.pop(3);
                     },
-                    else => unreachable, // the parser accepts no other target
                 }
             },
             .call => |e| {

@@ -584,3 +584,22 @@ test "run: fail(msg) ends the run with class fail; attempt catches it, its class
         \\print(good.ok, good.value, bad.ok, bad.class, bad.error, bad.in_function)
     , "true\t1\tfalse\tfail\ttoo many: 5\tcheck\n");
 }
+
+test "a local declared without a value is nil, in both engines" {
+    try expectOutput("local x print(x == nil) x = 2 print(x)", "true\n2\n");
+}
+
+test "statements nested past the depth budget stop on it before they run, the deeper ones never compiled to more than a placeholder" {
+    const src = "if true then if true then if true then if true then if true then if true then print(1) end end end end end end";
+    try expectStopWith(src, .budget, .depth, .{ .depth = 4 });
+    try expectOutput(src, "1\n");
+}
+
+test "a builtin called with more arguments than any builtin takes stops at the call, naming its most" {
+    var r = runWith("print(path(\"a\", \"b\", \"c\", \"d\", \"e\"))", .{});
+    defer r.deinit();
+    const s = r.stop.?;
+    try testing.expectEqual(script.diag.Class.argument, s.class);
+    try testing.expectEqual(@as(u32, 7), s.column);
+    try testing.expectEqualStrings("`path` takes at most 4 arguments", s.message);
+}
