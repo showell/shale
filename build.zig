@@ -299,6 +299,7 @@ pub fn build(b: *std.Build) void {
         hunt.root_module.addImport("shale", shale);
         hunt.root_module.addImport("script_test_options", script_options.createModule());
         hunt.root_module.addImport("coverage", sdk.module("coverage"));
+        hunt.root_module.addImport("explore", sdk.module("explore"));
         // Compiled by `test`, so a hunt cannot rot between expeditions.
         test_step.dependOn(&hunt.step);
         fuzz_step.dependOn(&b.addRunArtifact(hunt).step);

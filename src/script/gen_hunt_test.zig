@@ -9,6 +9,7 @@ const std = @import("std");
 const script = @import("shale").script;
 const options = @import("script_test_options");
 const coverage = @import("coverage");
+const explore = @import("explore");
 const gen = @import("gen.zig");
 const testing = std.testing;
 
@@ -353,4 +354,45 @@ test "expensive sweep: numbers: tostring(tonumber(x)) is x at every 64-bit extre
     var r = rig.run("print(9223372036854775806 + 1, (-9223372036854775807 - 1) + 1, -9223372036854775807 - 1, (-9223372036854775807 - 1) % -1, (-9223372036854775807 - 1) // 1)", .{}, &out_a);
     defer r.deinit();
     try testing.expectEqualStrings("9223372036854775807\t-9223372036854775807\t-9223372036854775808\t0\t-9223372036854775808\n", r.output);
+}
+
+/// The explorer's run: a script from the tape, through the gate, its cases recorded.
+var explore_rig: *Rig = undefined;
+
+fn exploreRun(tape: *explore.Tape) anyerror!void {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var g = gen.Gen.init(tape.random(), arena.allocator(), .{});
+    const src = try g.script();
+    try explore_rig.clear();
+    var r = explore_rig.run(src, .{}, &out_a);
+    defer r.deinit();
+    reach(&r);
+}
+
+/// The cases about generated scripts reached since the last reset.
+fn casesReached() usize {
+    var n: usize = 0;
+    var it = coverage.catalog();
+    while (it.next()) |site| {
+        if (std.mem.startsWith(u8, std.mem.span(site.message), "a generated script") and site.passes > 0) n += 1;
+    }
+    return n;
+}
+
+test "expensive fuzz: generated scripts: the explorer against blind runs, the cases each reaches in the same number of runs (an experiment, measured, not judged)" {
+    var rig: Rig = undefined;
+    try rig.init();
+    defer rig.deinit();
+    explore_rig = &rig;
+    const runs: u32 = @max(50, options.fuzz_runs);
+    for ([_]u64{ 1, 2 }) |seed| {
+        for ([_]struct { name: []const u8, blind: f32 }{ .{ .name = "blind", .blind = 1.0 }, .{ .name = "explorer", .blind = 0.2 } }) |mode| {
+            coverage.reset();
+            var report = try explore.explore(testing.allocator, exploreRun, .{ .budget = runs, .seed = seed, .blind = mode.blind });
+            defer report.deinit(testing.allocator);
+            std.debug.print("explore experiment: seed {d}, {s}: {d} runs, {d} cases of generated scripts reached, a corpus of {d}\n", .{ seed, mode.name, report.runs, casesReached(), report.corpus });
+            try testing.expectEqual(runs, report.runs);
+        }
+    }
 }
