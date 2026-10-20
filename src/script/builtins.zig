@@ -58,7 +58,7 @@ pub const most_args = 4;
 /// a run's I/O (`vm.zig`'s `.builtin`).
 pub const touches_store: std.EnumSet(B) = blk: {
     @setEvalBranchQuota(10_000);
-    var set: std.EnumSet(B) = .initEmpty();
+    var set: std.EnumSet(B) = .empty;
     for (@import("builtins_store.zig").specs) |s| set.insert(s.name);
     break :blk set;
 };

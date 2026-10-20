@@ -207,7 +207,7 @@ pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
     var scratch: Scratch = undefined;
     const sa = scratch.init(backing, run);
     defer scratch.deinit();
-    const src = sa.dupeZ(u8, was) catch return run.oom(pos);
+    const src = sa.dupeSentinel(u8, was, 0) catch return run.oom(pos);
     try script.builtins.chargeBytes(run, pos, src.len);
     const got = planMany(sa, src, renames.items, lines) catch return run.oom(pos);
     const done = switch (got) {
@@ -260,7 +260,7 @@ pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const 
     const sa = scratch.init(backing, run);
     defer scratch.deinit();
     const was = try rd.readSizedIn(sa, run, pos, .host, p, size, 0, null);
-    const src = sa.dupeZ(u8, was) catch return run.oom(pos);
+    const src = sa.dupeSentinel(u8, was, 0) catch return run.oom(pos);
     try script.builtins.chargeBytes(run, pos, src.len);
     const root = switch (za.decls(sa, src) catch return run.oom(pos)) {
         .ok => |ok| ok,
@@ -400,7 +400,7 @@ pub fn tokens(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
     const sa = scratch.init(backing, run);
     defer scratch.deinit();
     const was = try rd.readSizedIn(sa, run, pos, .host, p, size, 0, null);
-    const src = sa.dupeZ(u8, was) catch return run.oom(pos);
+    const src = sa.dupeSentinel(u8, was, 0) catch return run.oom(pos);
     try script.builtins.chargeBytes(run, pos, src.len);
     const toks = switch (za.tokens(sa, src) catch return run.oom(pos)) {
         .ok => |ok| ok,
@@ -438,7 +438,7 @@ const FromAs = struct {
 
 fn fromAs(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, done: anytype, fa: []const u8, from_base: []const u8) Error!FromAs {
     // The import's name must be free in the moved code (no shadowing).
-    const to_z = sa.dupeZ(u8, done.to_now) catch return run.oom(pos);
+    const to_z = sa.dupeSentinel(u8, done.to_now, 0) catch return run.oom(pos);
     const toks = switch (za.tokens(sa, to_z) catch return run.oom(pos)) {
         .ok => |ok| ok,
         .invalid => |n| return run.fail(pos, .argument, "`zig_move`: the moved code does not tokenize at line {d}", .{n}),
@@ -459,7 +459,7 @@ fn fromAs(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, done: anytype, fa: []c
     };
     try run.charge(pos, q.tokens);
     // 2. The import, after `to`'s last `@import` (or first, if none).
-    const qz = sa.dupeZ(u8, q.now) catch return run.oom(pos);
+    const qz = sa.dupeSentinel(u8, q.now, 0) catch return run.oom(pos);
     const line = std.fmt.allocPrint(sa, "const {s} = @import(\"{s}\");", .{ fa, from_base }) catch return run.oom(pos);
     var at: usize = 0;
     var text: []const u8 = undefined;
@@ -476,7 +476,7 @@ fn fromAs(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, done: anytype, fa: []c
     const import_spans = sa.alloc(Span, 1) catch return run.oom(pos);
     import_spans[0] = .{ .o0 = at, .o1 = at, .c0 = at, .c1 = at + text.len };
     // 3. `pub` on those names in `from`, before the keyword (past the doc).
-    const fz = sa.dupeZ(u8, done.from_now) catch return run.oom(pos);
+    const fz = sa.dupeSentinel(u8, done.from_now, 0) catch return run.oom(pos);
     var made: std.ArrayList([]const u8) = .empty;
     var offsets: std.ArrayList(usize) = .empty;
     switch (za.decls(sa, fz) catch return run.oom(pos)) {
@@ -527,7 +527,7 @@ fn readZig(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, p: script.builtins_st
     }
     const size = try script.builtins_read.fileSize(run, pos, .host, p);
     const was = try script.builtins_read.readSizedIn(if (kept) run.alloc else sa, run, pos, .host, p, size, 0, null);
-    const src = sa.dupeZ(u8, was) catch return run.oom(pos);
+    const src = sa.dupeSentinel(u8, was, 0) catch return run.oom(pos);
     try script.builtins.chargeBytes(run, pos, src.len);
     return .{ .was = was, .src = src };
 }

@@ -33,7 +33,7 @@ test "cli: --undo-on-stop puts back what a stopped run changed: an edit, a file 
     const a = testing.allocator;
     try tmp.dir.writeFile(io, .{ .sub_path = "a.txt", .data = "one\n" });
     try tmp.dir.writeFile(io, .{ .sub_path = "gone.txt", .data = "kept\n" });
-    try tmp.dir.writeFile(io, .{ .sub_path = "x.sh", .data = "#!/bin/sh\necho old\n", .flags = .{ .permissions = @enumFromInt(0o755) } });
+    try tmp.dir.writeFile(io, .{ .sub_path = "x.sh", .data = "#!/bin/sh\necho old\n", .flags = .{ .permissions = @fromBackingInt(@intCast(0o755)) } });
     try tmp.dir.createDirPath(io, "there");
     try tmp.dir.writeFile(io, .{ .sub_path = "u.shale", .data =
         \\edit("a.txt", "one", "two")
@@ -72,7 +72,7 @@ test "cli: --undo-on-stop puts back what a stopped run changed: an edit, a file 
     // The folder that was there is there still, and the executable still one.
     _ = try tmp.dir.statFile(io, "there", .{});
     const st = try tmp.dir.statFile(io, "x.sh", .{});
-    try testing.expectEqual(@as(u32, 0o755), @intFromEnum(st.permissions) & 0o777);
+    try testing.expectEqual(@as(u32, 0o755), @backingInt(st.permissions) & 0o777);
 }
 
 test "cli: --args-stdin gives a file's values from stdin, raw: quotes, `|`, `$`, a backslash" {

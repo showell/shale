@@ -201,7 +201,7 @@ fn appendLog(a: std.mem.Allocator, home: []const u8, line: []const u8) bool {
     var it = std.mem.splitScalar(u8, dir[1..], '/');
     while (it.next()) |part| {
         made = std.fmt.allocPrint(a, "{s}/{s}", .{ made, part }) catch return false;
-        _ = linux.mkdir(a.dupeZ(u8, made) catch return false, 0o755);
+        _ = linux.mkdir(a.dupeSentinel(u8, made, 0) catch return false, 0o755);
     }
     const path = std.fmt.allocPrintSentinel(a, "{s}/wants.tsv", .{dir}, 0) catch return false;
     const fd = linux.open(path, .{ .ACCMODE = .WRONLY, .CREAT = true, .APPEND = true }, 0o644);

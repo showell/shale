@@ -192,7 +192,7 @@ const Reader = struct {
     /// A byte, or under `nocase` a letter's two cases.
     fn byteNode(r: *Reader, c: u8) Error!Node {
         if (r.options.nocase and std.ascii.isAlphabetic(c)) {
-            var s = Set.initEmpty();
+            var s = Set.empty;
             s.set(std.ascii.toLower(c));
             s.set(std.ascii.toUpper(c));
             return r.newSet(s);
@@ -207,7 +207,7 @@ const Reader = struct {
 
     /// `\d \w \s` and their capitals, as a set; null for any other escape.
     fn shorthand(c: u8) ?Set {
-        var s = Set.initEmpty();
+        var s = Set.empty;
         switch (std.ascii.toLower(c)) {
             'd' => s.setRangeValue(.{ .start = '0', .end = '9' + 1 }, true),
             'w' => {
@@ -254,7 +254,7 @@ const Reader = struct {
     fn class(r: *Reader) Error!Node {
         const open = r.at;
         r.at += 1;
-        var s = Set.initEmpty();
+        var s = Set.empty;
         const negated = r.at < r.p.len and r.p[r.at] == '^';
         if (negated) r.at += 1;
         var first = true;

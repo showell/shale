@@ -99,14 +99,14 @@ test "gate: the escape, a want or an out-of-scope, its tag and text read" {
 
 test "gate: a log line is one line, tabs and newlines shown, the command's first 160 bytes" {
     var buf: [4096]u8 = undefined;
-    const cmd = "# want: t: why\tnot\n" ++ "x" ** 300;
+    const cmd = "# want: t: why\tnot\n" ++ &@as([300]u8, @splat('x'));
     const line = gate.logLine(&buf, "2026-10-17T12:00:00Z", "sess-1", .{ .kind = "want", .tag = "t", .text = "why\tnot" }, cmd);
     try testing.expect(std.mem.endsWith(u8, line, "\n"));
     try testing.expectEqual(@as(usize, 1), std.mem.count(u8, line, "\n"));
     try testing.expect(std.mem.startsWith(u8, line, "2026-10-17T12:00:00Z\tsess-1\twant\tt\twhy\\tnot\t# want: t: why\\tnot\\n"));
     try testing.expect(line.len < 4096);
     // A text past the line's room is cut, never the line.
-    const long = "y" ** 5000;
+    const long = &@as([5000]u8, @splat('y'));
     const cut = gate.logLine(&buf, "d", "s", .{ .kind = "want", .tag = "t", .text = long }, "c");
     try testing.expect(cut.len < 4096 and std.mem.endsWith(u8, cut, "\n"));
 }

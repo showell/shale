@@ -34,7 +34,14 @@ test "zig_decls: the linux_host split's file: a pub fn with its doc, a struct li
     try t.expectOutput(
         "const W = \"" ++ webbox_root ++ "\"\n" ++
             \\local r = must(run({"git", "-C", W, "show", "589837e^:src/linux_host.zig"}, {timeout_ms = 30000, whole = 1048576}))
-            \\create("lh.zig", r.out)
+            \\-- The history is 0.16 source; Zig 0.17 removed `**` on arrays and strings,
+            \\-- so its four uses become what cookbook/zig17/array_mult.shale writes, each
+            \\-- on its own line (line numbers kept).
+            \\function to17(src)
+            \\  for p in {{"\"x\" ** 100", "&@as([100]u8, @splat('x'))"}, {"\"x\" ** 40", "&@as([40]u8, @splat('x'))"}, {"\"u\" ** 2000000", "&@as([2000000]u8, @splat('u'))"}, {"&([_]u8{'x'} ** n)", "&(@as([n]u8, @splat('x')))"}} do src = substitute(src, p[1], p[2]) end
+            \\  return src
+            \\end
+            \\create("lh.zig", to17(r.out))
             \\local seen = {}
             \\for d in zig_decls("lh.zig") do
             \\  seen[d.name] = true
@@ -175,7 +182,7 @@ test "zig_decls over this repo's src/**/*.zig and webbox's: in file order, never
 
 /// A gap's tokens: none but a file's own doc comment (`//!`).
 fn onlyComments(a: std.mem.Allocator, path: []const u8, gap: []const u8) !void {
-    const z = try a.dupeZ(u8, gap);
+    const z = try a.dupeSentinel(u8, gap, 0);
     var tz = std.zig.Tokenizer.init(z);
     while (true) {
         const t = tz.next();

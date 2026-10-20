@@ -325,7 +325,14 @@ test "zig_move and zig_rename: `const` that qualifies a pointer declares nothing
 /// the new file, in the parent, gone from linux_host.zig after), moved by
 /// `zig_move`; its report a row a list, `name:line` each.
 const replay = "const W = \"" ++ webbox_root ++ "\"\n" ++
-    \\function show(rev, p) return must(run({"git", "-C", W, "show", rev .. ":src/" .. p}, {timeout_ms = 30000, whole = 2097152})).out end
+    \\-- The history is 0.16 source; Zig 0.17 removed `**` on arrays and strings,
+    \\-- so its four uses become what cookbook/zig17/array_mult.shale writes, each
+    \\-- on its own line (line numbers kept).
+    \\function to17(src)
+    \\  for p in {{"\"x\" ** 100", "&@as([100]u8, @splat('x'))"}, {"\"x\" ** 40", "&@as([40]u8, @splat('x'))"}, {"\"u\" ** 2000000", "&@as([2000000]u8, @splat('u'))"}, {"&([_]u8{'x'} ** n)", "&(@as([n]u8, @splat('x')))"}} do src = substitute(src, p[1], p[2]) end
+    \\  return src
+    \\end
+    \\function show(rev, p) return to17(must(run({"git", "-C", W, "show", rev .. ":src/" .. p}, {timeout_ms = 30000, whole = 2097152})).out) end
     \\function replay(commit, newfile)
     \\  create("lh.zig", show(commit .. "^", "linux_host.zig"))
     \\  create("new_hand.zig", show(commit, newfile))
@@ -484,7 +491,7 @@ fn thereAndBack(a: std.mem.Allocator, path: []const u8, src: [:0]const u8, i: us
             return error.TestUnexpectedResult;
         },
     };
-    const back = switch (try zm.move(a, try a.dupeZ(u8, there.to_now), try a.dupeZ(u8, there.from_now), &wants, mode, ds[i - 1].name)) {
+    const back = switch (try zm.move(a, try a.dupeSentinel(u8, there.to_now, 0), try a.dupeSentinel(u8, there.from_now, 0), &wants, mode, ds[i - 1].name)) {
         .done => |d| d,
         .refused => |why| {
             std.debug.print("{s} ({t}), back: {s}\n", .{ path, b, why });

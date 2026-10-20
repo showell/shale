@@ -301,7 +301,7 @@ test "suite: what it refuses to install" {
     const paths: script_route.Paths = undefined;
     try testing.expectError(error.BadName, suite.install(&.{.{ .name = "../x", .source = "", .period_s = 1 }}, testing.allocator, .{}, "", paths));
     try testing.expectError(error.NoPeriod, suite.install(&.{.{ .name = "x", .source = "", .period_s = 0 }}, testing.allocator, .{}, "", paths));
-    const many = [_]Entry{.{ .name = "x", .source = "", .period_s = 1 }} ** (most_entries + 1);
+    const many: [most_entries + 1]Entry = @splat(.{ .name = "x", .source = "", .period_s = 1 });
     try testing.expectError(error.TooMany, suite.install(&many, testing.allocator, .{}, "", paths));
     var buf: [64]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);

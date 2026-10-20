@@ -50,11 +50,11 @@ pub fn build(b: *std.Build) void {
     }) });
     b.installArtifact(runner);
     const run_script = b.addRunArtifact(runner);
-    if (b.args) |a| run_script.addArgs(a);
+    run_script.addPassthruArgs();
     b.step("script", "run a Shale script: zig build script -- [--root DIR] [--verbose] [--budget NAME=N]... [<file.shale> | -e SOURCE] [name=value ...]").dependOn(&run_script.step);
 
     // **SHALE'S HOT PATHS, TIMED** (src/script_bench.zig): no tier runs it.
-    const webbox_rs = b.dependency("webbox", .{ .target = target, .optimize = .ReleaseSafe });
+    const webbox_rs = b.dependency("webbox", .{ .target = target, .optimize = .safe });
     const shale_release = b.addModule("shale_release", .{
         .root_source_file = b.path("src/shale.zig"),
         .imports = &.{
@@ -65,7 +65,7 @@ pub fn build(b: *std.Build) void {
     const script_bench = b.addExecutable(.{ .name = "script-bench", .root_module = b.createModule(.{
         .root_source_file = b.path("src/script_bench.zig"),
         .target = target,
-        .optimize = .ReleaseSafe,
+        .optimize = .safe,
         .imports = &.{.{ .name = "shale", .module = shale_release }},
     }) });
     b.step("script-bench", "time Shale's hot paths (ReleaseSafe)").dependOn(&b.addRunArtifact(script_bench).step);
@@ -75,7 +75,7 @@ pub fn build(b: *std.Build) void {
     const scale = b.addExecutable(.{ .name = "shale-scale", .root_module = b.createModule(.{
         .root_source_file = b.path("src/shale_scale.zig"),
         .target = target,
-        .optimize = .ReleaseSafe,
+        .optimize = .safe,
         .imports = &.{.{ .name = "shale", .module = shale_release }},
     }) });
     b.step("shale-scale", "the largest site each cookbook script fits, under the site's budgets (ReleaseSafe)").dependOn(&b.addRunArtifact(scale).step);
@@ -91,7 +91,7 @@ pub fn build(b: *std.Build) void {
     }) });
     b.installArtifact(signer);
     const run_signer = b.addRunArtifact(signer);
-    if (b.args) |a| run_signer.addArgs(a);
+    run_signer.addPassthruArgs();
     b.step("shale-sign", "the Shale signer: zig build shale-sign -- keygen | pubkey | sign <file.shale> <target> [minutes]").dependOn(&run_signer.step);
     const signer_test = b.addTest(.{ .root_module = signer.root_module });
 
@@ -155,7 +155,11 @@ pub fn build(b: *std.Build) void {
     shale_options.addOptionPath("shale", runner.getEmittedBin());
     // webbox's checkout: the Zig tools' tests replay splits from its
     // history and read its sources beside this repo's.
-    shale_options.addOptionPath("webbox_root", webbox_dep.path("."));
+    // Absolute, as 0.16's addOptionPath gave it: the tests hand it to
+    // scripts that run `git -C` from elsewhere, where Zig 0.17's relative
+    // path (`../zig-webbox/.`) would not reach it.
+    const webbox_rel = webbox_dep.builder.root.root_dir.path orelse ".";
+    shale_options.addOption([]const u8, "webbox_root", b.root.root_dir.handle.realPathFileAlloc(b.graph.io, webbox_rel, b.allocator) catch |e| std.debug.panic("shale: webbox's root {s}: {t}", .{ webbox_rel, e }));
     for ([_][]const u8{ "src/shale.zig", "src/shale_linux.zig" }) |path| {
         const unit = b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path(path),
@@ -189,7 +193,7 @@ pub fn build(b: *std.Build) void {
     // that holds the repos: its fixtures first, then the docs. Fails on
     // any finding. Each repo's gate checks its own (`only=<repo>`, through
     // `zig build doc-check -- only=<repo>` here), never another's.
-    const here = b.build_root.path orelse ".";
+    const here = b.root.root_dir.path orelse ".";
     const parent = b.pathJoin(&.{ here, ".." });
     const docCheck = struct {
         fn run(bb: *std.Build, bin: std.Build.LazyPath, dir: []const u8) *std.Build.Step.Run {
@@ -254,7 +258,7 @@ pub fn build(b: *std.Build) void {
     // `-- at=dir/ show=N` pass through.
     {
         const run = docCheck(b, runner.getEmittedBin(), parent);
-        if (b.args) |args| run.addArgs(args);
+        run.addPassthruArgs();
         b.step("doc-check", "Every cited path in the repos' docs resolves and every cited name is there; `-- only=<repo>` for one repo's (tools/doc_check.shale; needs the sibling checkouts)").dependOn(&run.step);
     }
 }

@@ -263,12 +263,12 @@ const Machine = struct {
                 },
                 .unary => {
                     const v = m.pop();
-                    m.push(try r.unaryOp(op.pos, @enumFromInt(op.a), v));
+                    m.push(try r.unaryOp(op.pos, @fromBackingInt(@intCast(op.a)), v));
                 },
                 .binary => {
                     const rv = m.pop();
                     const lv = m.pop();
-                    const bop: ast.BinOp = @enumFromInt(op.a);
+                    const bop: ast.BinOp = @fromBackingInt(@intCast(op.a));
                     m.push(switch (bop) {
                         .add, .sub, .mul, .idiv, .mod => try r.arith(op.pos, bop, lv, rv),
                         .eq, .ne => .{ .boolean = (try r.equal(op.pos, lv, rv)) == (bop == .eq) },
@@ -302,9 +302,9 @@ const Machine = struct {
                     // model: "swap it out on any I/O request"), whether it
                     // returns or fails into an `attempt`: either way it did
                     // its I/O, and the next op waits for the next slice.
-                    if (builtins.touches_store.contains(@enumFromInt(op.a))) m.slice_end = r.steps;
+                    if (builtins.touches_store.contains(@fromBackingInt(@intCast(op.a)))) m.slice_end = r.steps;
                     const args = m.operands.items[m.operands.items.len - op.b ..];
-                    const v = try builtins.call(r, op.pos, @enumFromInt(op.a), args);
+                    const v = try builtins.call(r, op.pos, @fromBackingInt(@intCast(op.a)), args);
                     m.operands.shrinkRetainingCapacity(m.operands.items.len - op.b);
                     m.push(v);
                 },
@@ -323,7 +323,7 @@ const Machine = struct {
                     m.operands.shrinkRetainingCapacity(m.operands.items.len - op.a);
                     m.push(.nil);
                 },
-                .too_many => return builtins.tooMany(r, op.pos, @enumFromInt(op.a)),
+                .too_many => return builtins.tooMany(r, op.pos, @fromBackingInt(@intCast(op.a))),
                 .call_prep => if (r.depth >= r.budgets.call_depth) return r.budgetStop(op.pos, .call_depth),
                 .call => try m.enterFrame(op, &code.functions[op.a], op.b, null),
                 .attempt => {

@@ -215,7 +215,7 @@ test "zig_rename's plan, over this repo's src/*.zig and webbox's: renaming a nam
                     .done => |p| p,
                     else => return error.TestUnexpectedResult,
                 };
-                const z = try ar.dupeZ(u8, there.now);
+                const z = try ar.dupeSentinel(u8, there.now, 0);
                 const back = switch (try zig.plan(ar, z, away, from, null)) {
                     .done => |p| p,
                     else => return error.TestUnexpectedResult,

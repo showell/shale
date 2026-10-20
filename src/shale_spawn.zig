@@ -78,7 +78,7 @@ fn monoMs() u64 {
 }
 
 fn zString(a: std.mem.Allocator, s: []const u8) ![*:0]const u8 {
-    return (try a.dupeZ(u8, s)).ptr;
+    return (try a.dupeSentinel(u8, s, 0)).ptr;
 }
 
 fn zList(a: std.mem.Allocator, items: []const []const u8) ![*:null]const ?[*:0]const u8 {
@@ -120,7 +120,7 @@ fn setNonblocking(fd: i32) void {
 /// **THE CHILD, BETWEEN FORK AND EXEC**: raw system calls only, nothing
 /// allocated; any failure is its errno on `err_w`, then exit 127.
 fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, out_w: i32, err_w: i32, paths: []const [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) noreturn {
-    _ = linux.prctl(@intFromEnum(linux.PR.SET_PDEATHSIG), @intFromEnum(linux.SIG.KILL), 0, 0, 0);
+    _ = linux.prctl(@backingInt(linux.PR.SET_PDEATHSIG), @backingInt(linux.SIG.KILL), 0, 0, 0);
     if (linux.getppid() != parent) linux.exit_group(127);
     _ = linux.setpgid(0, 0);
     var none = linux.sigemptyset();
@@ -131,7 +131,7 @@ fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, out_w: i32
     _ = linux.dup2(out_w, 2);
     if (spec_cwd) |c| {
         const rc = linux.chdir(c);
-        if (linux.errno(rc) != .SUCCESS) fail(err_w, 1000 + @as(u32, @intFromEnum(linux.errno(rc))));
+        if (linux.errno(rc) != .SUCCESS) fail(err_w, 1000 + @as(u32, @backingInt(linux.errno(rc))));
     }
     var last: linux.E = .NOENT;
     for (paths) |p| {
@@ -142,7 +142,7 @@ fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, out_w: i32
             else => last = e,
         }
     }
-    fail(err_w, @intFromEnum(last));
+    fail(err_w, @backingInt(last));
 }
 
 fn fail(err_w: i32, code: u32) noreturn {
@@ -202,10 +202,10 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     var why: u32 = 0;
     const n = linux.read(err_pipe[0], std.mem.asBytes(&why).ptr, @sizeOf(u32));
     if (linux.errno(n) == .SUCCESS and n == @sizeOf(u32)) {
-        var status: u32 = 0;
+        var status: i32 = 0;
         _ = linux.wait4(pid, &status, 0, null);
         if (why >= 1000) return error.NoCwd;
-        return switch (@as(linux.E, @enumFromInt(why))) {
+        return switch (@as(linux.E, @fromBackingInt(@intCast(why)))) {
             .NOENT => error.NotFound,
             else => error.NotRunnable,
         };
@@ -214,7 +214,7 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     const pidfd_rc = linux.pidfd_open(pid, 0);
     if (linux.errno(pidfd_rc) != .SUCCESS) {
         _ = linux.kill(-pid, .KILL);
-        var status: u32 = 0;
+        var status: i32 = 0;
         _ = linux.wait4(pid, &status, 0, null);
         return error.Spawn;
     }
@@ -224,13 +224,13 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     if (in_pipe[1] >= 0) setNonblocking(in_pipe[1]);
 
     var exited = false;
-    var status: u32 = 0;
+    var raw: i32 = 0; // waitpid's and wait4's (Zig 0.17); W reads it as a u32
     // **A FAILURE ON THE WAY OUT ENDS IT**: the sink refusing (the keep at
     // the host's cap) returns before the program's end, which would leave
     // it running, then a zombie, for as long as `shale` lives.
     errdefer if (!exited) {
         _ = linux.kill(-pid, .KILL);
-        _ = linux.wait4(pid, &status, 0, null);
+        _ = linux.wait4(pid, &raw, 0, null);
     };
     var stdin_left: []const u8 = spec.stdin orelse "";
     if (spec.stdin != null and stdin_left.len == 0) closeFd(&in_pipe[1]);
@@ -292,7 +292,7 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
             if (stdin_left.len == 0) closeFd(&in_pipe[1]);
         };
         if (pid_at) |i| if (fds[i].revents != 0) {
-            if (linux.wait4(pid, &status, linux.W.NOHANG, null) == pid) {
+            if (linux.wait4(pid, &raw, linux.W.NOHANG, null) == pid) {
                 exited = true;
                 // All it wrote is in the pipe now, though this poll may
                 // have seen the pipe before it: read it before any drain's
@@ -313,9 +313,10 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
         }
     }
     const ms = monoMs() - start;
-    if (why_ended) |w| return .{ .ended = w, .ms = ms, .signal = if (linux.W.IFSIGNALED(status)) @intFromEnum(linux.W.TERMSIG(status)) else null, .code = if (linux.W.IFEXITED(status)) linux.W.EXITSTATUS(status) else null };
+    const status: u32 = @bitCast(raw);
+    if (why_ended) |w| return .{ .ended = w, .ms = ms, .signal = if (linux.W.IFSIGNALED(status)) @backingInt(linux.W.TERMSIG(status)) else null, .code = if (linux.W.IFEXITED(status)) linux.W.EXITSTATUS(status) else null };
     if (linux.W.IFEXITED(status)) return .{ .ended = .exit, .code = linux.W.EXITSTATUS(status), .ms = ms };
-    return .{ .ended = .signal, .signal = @intFromEnum(linux.W.TERMSIG(status)), .ms = ms };
+    return .{ .ended = .signal, .signal = @backingInt(linux.W.TERMSIG(status)), .ms = ms };
 }
 
 /// What the pipe holds now, to the sink: until it would block, or at its
@@ -404,11 +405,11 @@ test "spawn: a deadline ends it (TERM, then KILL for one that ignores TERM); a s
     try testing.expect(o.ms < 5_000);
     o = try spawn(&.{ "ignore-term", "20000" }, .{ .argv = &.{}, .env = &env, .timeout_ms = 300, .grace_ms = 300 }, &c);
     try testing.expectEqual(Ended.timeout, o.ended);
-    try testing.expectEqual(@as(?u32, @intFromEnum(linux.SIG.KILL)), o.signal);
+    try testing.expectEqual(@as(?u32, @backingInt(linux.SIG.KILL)), o.signal);
     try testing.expect(o.ms < 5_000);
     o = try spawn(&.{"kill-self"}, .{ .argv = &.{}, .env = &env, .timeout_ms = 10_000 }, &c);
     try testing.expectEqual(Ended.signal, o.ended);
-    try testing.expectEqual(@as(?u32, @intFromEnum(linux.SIG.KILL)), o.signal);
+    try testing.expectEqual(@as(?u32, @backingInt(linux.SIG.KILL)), o.signal);
     try testing.expectError(error.NotFound, run(testing.allocator, .{ .argv = &.{"shale-no-such-program"}, .env = &env, .timeout_ms = 1000 }, &c));
     try testing.expectError(error.NotFound, run(testing.allocator, .{ .argv = &.{"./not-here"}, .env = &env, .timeout_ms = 1000 }, &c));
     try testing.expectError(error.NoCwd, spawn(&.{"pwd"}, .{ .argv = &.{}, .env = &env, .cwd = "/no/such/folder", .timeout_ms = 1000 }, &c));
@@ -475,7 +476,7 @@ test "spawn: a sink that fails ends the program's group and reaps it before the 
     const pid = r.pid orelse return error.TestUnexpectedResult;
     // Neither running nor a zombie: gone.
     var path: [64]u8 = undefined;
-    const stat = try std.fmt.bufPrintZ(&path, "/proc/{d}/stat", .{pid});
+    const stat = try std.mem.printSentinel(&path, "/proc/{d}/stat", .{pid}, 0);
     const fd = linux.open(stat, .{ .ACCMODE = .RDONLY }, 0);
     if (linux.errno(fd) == .SUCCESS) {
         var st: [256]u8 = undefined;

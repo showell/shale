@@ -53,7 +53,7 @@ pub const Decls = union(enum) {
 
 /// **A FILE'S TOP-LEVEL DECLARATIONS**, in file order.
 pub fn decls(a: std.mem.Allocator, src: [:0]const u8) error{OutOfMemory}!Decls {
-    const tree = try Ast.parse(a, src, .zig);
+    const tree = try Ast.parse(a, src, .{ .mode = .zig });
     if (tree.errors.len != 0) {
         const e = tree.errors[0];
         return .{ .parse_error = .{ .line = tree.tokenLocation(0, e.token).line + 1, .tag = @tagName(e.tag) } };
@@ -76,7 +76,7 @@ pub const Members = union(enum) {
 /// name = struct {...}`, or a union's, an enum's, an opaque's), in its
 /// order: what `zig_decls(p, {in = name})` gives, read as the top level is.
 pub fn members(a: std.mem.Allocator, src: [:0]const u8, name: []const u8) error{OutOfMemory}!Members {
-    const tree = try Ast.parse(a, src, .zig);
+    const tree = try Ast.parse(a, src, .{ .mode = .zig });
     if (tree.errors.len != 0) {
         const e = tree.errors[0];
         return .{ .parse_error = .{ .line = tree.tokenLocation(0, e.token).line + 1, .tag = @tagName(e.tag) } };
@@ -310,7 +310,7 @@ pub fn identifiers(a: std.mem.Allocator, ts: []const Tok) error{OutOfMemory}![]c
                 // `const` names a declaration, unless it qualifies a pointer
                 // (`[]const T`, `*const T`, `*align(4) const T`).
                 const pointer_const = prev == .keyword_const and i >= 2 and switch (ts[i - 2].tag) {
-                    .r_bracket, .asterisk, .asterisk_asterisk, .r_paren, .keyword_allowzero, .keyword_volatile => true,
+                    .r_bracket, .asterisk, .r_paren, .keyword_allowzero, .keyword_volatile => true,
                     else => false,
                 };
                 const keyword = (prev == .keyword_const and !pointer_const) or prev == .keyword_var or prev == .keyword_fn;

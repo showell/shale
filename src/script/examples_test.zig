@@ -64,7 +64,7 @@ const Fixture = struct {
         try d.writeFile(io, .{ .sub_path = "data/chat/channels/general/sessions/plans.reactions.jsonl", .data = "{}\n" });
         try d.writeFile(io, .{ .sub_path = "data/chat/channels/general/sessions/plans.uploads/1.png", .data = "png" });
         try d.writeFile(io, .{ .sub_path = "data/chat/channels/general.channel", .data = "1\n2\n" });
-        try d.writeFile(io, .{ .sub_path = "data/games/big.json", .data = "x" ** 5000 });
+        try d.writeFile(io, .{ .sub_path = "data/games/big.json", .data = &@as([5000]u8, @splat('x')) });
     }
 
     fn deinit(self: *Fixture) void {
@@ -494,7 +494,7 @@ test "example: where the bytes are, past what the site's reads walk, prints what
     // 600 files in 20 folders: more than 500 reads can stat.
     for (0..20) |d| {
         try f.tmp.dir.createDirPath(io, try std.fmt.allocPrint(a, "data/bulk/d{d:0>2}", .{d}));
-        for (0..30) |k| try f.tmp.dir.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "data/bulk/d{d:0>2}/f{d:0>2}", .{ d, k }), .data = "x" ** 10 });
+        for (0..30) |k| try f.tmp.dir.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "data/bulk/d{d:0>2}/f{d:0>2}", .{ d, k }), .data = &@as([10]u8, @splat('x')) });
     }
     var whole_buf: [64 * 1024]u8 = undefined;
     var whole = script.run(io, testing.allocator, f.root, where_the_bytes_are, .{}, 1791936000, &whole_buf);
@@ -546,7 +546,7 @@ test "every cookbook script that walks, past what the site's reads reach, goes o
         const text = try transcript(a, sid, 2);
         try f.tmp.dir.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "data/chat/channels/bulk/sessions/{s}.md", .{sid}), .data = text });
         try f.tmp.dir.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "data/chat/channels/bulk/sessions/{s}.count", .{sid}), .data = try std.fmt.allocPrint(a, "2 {d}\n0 7\n", .{text.len}) });
-        try f.tmp.dir.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "data/bulk/b{d:0>3}", .{k}), .data = "y" ** 1200 });
+        try f.tmp.dir.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "data/bulk/b{d:0>3}", .{k}), .data = &@as([1200]u8, @splat('y')) });
     }
     const cases = [_]struct { name: []const u8, src: []const u8, key: []const u8 }{
         .{ .name = "big_files", .src = big_files, .key = "files over 1000 bytes:" },

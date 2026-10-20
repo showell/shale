@@ -445,7 +445,7 @@ const Compiler = struct {
             .call => |*call| try c.callExpr(e.pos, call, d),
             .unary => |u| {
                 try c.expr(u.operand, d + 1);
-                _ = try c.emit(.{ .tag = .unary, .a = @intFromEnum(u.op), .pos = e.pos });
+                _ = try c.emit(.{ .tag = .unary, .a = @backingInt(u.op), .pos = e.pos });
             },
             .binary => |b| switch (b.op) {
                 .@"and", .@"or" => {
@@ -459,7 +459,7 @@ const Compiler = struct {
                 else => {
                     try c.expr(b.left, d + 1);
                     try c.expr(b.right, d + 1);
-                    _ = try c.emit(.{ .tag = .binary, .a = @intFromEnum(b.op), .pos = e.pos });
+                    _ = try c.emit(.{ .tag = .binary, .a = @backingInt(b.op), .pos = e.pos });
                     c.pop(1);
                 },
             },
@@ -529,7 +529,7 @@ const Compiler = struct {
                     return;
                 }
                 if (argc > c.most_args) {
-                    _ = try c.emit(.{ .tag = .too_many, .a = @intFromEnum(b), .pos = pos });
+                    _ = try c.emit(.{ .tag = .too_many, .a = @backingInt(b), .pos = pos });
                     c.push(1);
                     return;
                 }
@@ -539,7 +539,7 @@ const Compiler = struct {
                     return;
                 }
                 for (call.args) |a| try c.expr(a, d + 1);
-                _ = try c.emit(.{ .tag = .builtin, .a = @intFromEnum(b), .b = argc, .pos = pos });
+                _ = try c.emit(.{ .tag = .builtin, .a = @backingInt(b), .b = argc, .pos = pos });
                 c.pop(argc);
                 c.push(1);
             },

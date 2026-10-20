@@ -585,7 +585,7 @@ test "host: what run holds of a stream is its live bytes, capped by the arena bu
     // 20,000 lines of about 1 KB: 20 MB through the keep, more than the
     // 16 MiB arena budget. With 100 lines of context held, it finishes: the
     // lines dropped were given back.
-    const long = "x" ** 1000;
+    const long = &@as([1000]u8, @splat('x'));
     var r = t.runOnce("local r = host(\"run\", {\"shale-fixture\", \"lines\", \"20000\", \"" ++ long ++ "\"}, {timeout_ms = 60000, re = \"^nothing\", before = 100, tail = 1, width = 2000}) print(r.total_lines, r.kept_lines)", .atomic);
     defer r.deinit();
     if (r.stop) |s| std.debug.print("stopped: {s}\n", .{s.message});

@@ -70,7 +70,7 @@ fn formatRecord(buf: []u8, r: Record) []const u8 {
 /// no such process.
 pub fn startOf(buf: []u8, pid: i32) ?[]const u8 {
     var path: [64]u8 = undefined;
-    const p = std.fmt.bufPrintZ(&path, "/proc/{d}/stat", .{pid}) catch return null;
+    const p = std.mem.printSentinel(&path, "/proc/{d}/stat", .{pid}, 0) catch return null;
     const fd = linux.open(p, .{ .ACCMODE = .RDONLY }, 0);
     if (linux.errno(fd) != .SUCCESS) return null;
     defer _ = linux.close(@intCast(fd));
@@ -118,13 +118,13 @@ fn sleepMs(ms: u64) void {
 /// close it.
 pub fn stop(r: Record, grace_ms: u64) bool {
     if (!alive(r)) return false;
-    _ = signalGroup(r.pgid, @intFromEnum(linux.SIG.TERM));
+    _ = signalGroup(r.pgid, @backingInt(linux.SIG.TERM));
     var waited: u64 = 0;
     while (waited < grace_ms) : (waited += 50) {
         if (!signalGroup(r.pgid, 0)) return true;
         sleepMs(50);
     }
-    _ = signalGroup(r.pgid, @intFromEnum(linux.SIG.KILL));
+    _ = signalGroup(r.pgid, @backingInt(linux.SIG.KILL));
     // The reaper reaps the leader; wait a little for the group to go.
     waited = 0;
     while (waited < 2000 and signalGroup(r.pgid, 0)) : (waited += 20) sleepMs(20);
@@ -152,13 +152,13 @@ pub fn find(a: std.mem.Allocator, argv0: []const u8, env: []const []const u8, cw
 }
 
 fn runnable(a: std.mem.Allocator, p: []const u8) bool {
-    const z = a.dupeZ(u8, p) catch return false;
+    const z = a.dupeSentinel(u8, p, 0) catch return false;
     return linux.errno(linux.access(z, 1)) == .SUCCESS;
 }
 
 fn zList(a: std.mem.Allocator, items: []const []const u8) ![*:null]const ?[*:0]const u8 {
     const out = try a.allocSentinel(?[*:0]const u8, items.len, null);
-    for (items, out) |s, *o| o.* = (try a.dupeZ(u8, s)).ptr;
+    for (items, out) |s, *o| o.* = (try a.dupeSentinel(u8, s, 0)).ptr;
     return out.ptr;
 }
 
@@ -176,7 +176,7 @@ pub fn launch(a: std.mem.Allocator, io: std.Io, reaper: []const u8, record: []co
     try args.appendSlice(a, argv);
     const zargv = try zList(a, args.items);
     const zenv = try zList(a, env);
-    const zexe = try a.dupeZ(u8, reaper);
+    const zexe = try a.dupeSentinel(u8, reaper, 0);
     // An old record would be read as the new one's.
     std.Io.Dir.cwd().deleteFile(io, record) catch {};
     var started: [2]i32 = undefined;
@@ -210,7 +210,7 @@ pub fn launch(a: std.mem.Allocator, io: std.Io, reaper: []const u8, record: []co
         linux.exit_group(0);
     }
     _ = linux.close(started[1]);
-    var status: u32 = 0;
+    var status: i32 = 0;
     while (true) {
         const rc = linux.waitpid(@intCast(first), &status, 0);
         if (linux.errno(rc) != .INTR) break;
@@ -254,12 +254,12 @@ fn writeRecord(record: [*:0]const u8, tmp: [*:0]const u8, r: Record) bool {
 /// its end waited for and written. Its exit says only whether it could.
 pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []const u8) u8 {
     if (args.len < 6 or !std.mem.eql(u8, args[4], "--")) return 2;
-    const record = a.dupeZ(u8, args[0]) catch return 2;
+    const record = a.dupeSentinel(u8, args[0], 0) catch return 2;
     // Its own: a reaper ending as another starts must not share one.
     const tmp = std.fmt.allocPrintSentinel(a, "{s}.{d}.tmp", .{ args[0], linux.getpid() }, 0) catch return 2;
-    const log = a.dupeZ(u8, args[1]) catch return 2;
-    const cwd = a.dupeZ(u8, args[2]) catch return 2;
-    const program = a.dupeZ(u8, args[3]) catch return 2;
+    const log = a.dupeSentinel(u8, args[1], 0) catch return 2;
+    const cwd = a.dupeSentinel(u8, args[2], 0) catch return 2;
+    const program = a.dupeSentinel(u8, args[3], 0) catch return 2;
     const argv = args[5..];
     const zargv = zList(a, argv) catch return 2;
     const zenv = zList(a, env) catch return 2;
@@ -303,18 +303,20 @@ pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []c
         // Its group, and itself in case it has yet to make one.
         _ = linux.kill(-r.pgid, .KILL);
         _ = linux.kill(@intCast(pid), .KILL);
-        var st: u32 = 0;
+        var st: i32 = 0;
         _ = linux.waitpid(@intCast(pid), &st, 0);
         return 2;
     }
     _ = linux.write(reaper_started_fd, "s", 1);
     _ = linux.close(reaper_started_fd);
-    var status: u32 = 0;
+    // waitpid fills an i32 (Zig 0.17); W reads a u32.
+    var raw: i32 = 0;
     while (true) {
-        const rc = linux.waitpid(@intCast(pid), &status, 0);
+        const rc = linux.waitpid(@intCast(pid), &raw, 0);
         if (linux.errno(rc) != .INTR) break;
     }
-    if (linux.W.IFEXITED(status)) r.exit = linux.W.EXITSTATUS(status) else r.signal = @intFromEnum(linux.W.TERMSIG(status));
+    const status: u32 = @bitCast(raw);
+    if (linux.W.IFEXITED(status)) r.exit = linux.W.EXITSTATUS(status) else r.signal = @backingInt(linux.W.TERMSIG(status));
     r.ended = nowSeconds();
     return if (writeRecord(record, tmp, r)) 0 else 2;
 }

@@ -210,9 +210,9 @@ test "errors: every wrong script in the corpus is told exactly what it is told h
 }
 
 test "errors: the corpus holds every class of stop" {
-    var seen = std.EnumSet(script.diag.Class).initEmpty();
+    var seen = std.EnumSet(script.diag.Class).empty;
     for (cases) |c| seen.insert(c.class);
-    var missing = std.EnumSet(script.diag.Class).initFull();
+    var missing = std.EnumSet(script.diag.Class).full;
     missing.setIntersection(seen.complement());
     var it = missing.iterator();
     while (it.next()) |class| std.debug.print("no case of class {s}\n", .{@tagName(class)});

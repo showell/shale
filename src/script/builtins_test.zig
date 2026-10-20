@@ -412,7 +412,7 @@ test "builtins: like, with * and ? only, the whole string" {
     defer f.deinit();
     try f.expectOutput("print(like(\"a.md\", \"*.md\"), like(\"a.md\", \"*.txt\"), like(\"abc\", \"a?c\"), like(\"ac\", \"a?c\"), like(\"\", \"*\"), like(\"x\", \"\"), like(\"aaa\", \"a*a*a\"), like(\"ab\", \"a*b*\"), like(\"a.md.bak\", \"*.md\"), like(\"[x]\", \"[x]\"))", "true\tfalse\ttrue\tfalse\ttrue\tfalse\ttrue\ttrue\tfalse\ttrue\n");
     // Its work is charged: a long string against a pattern that backtracks.
-    var r = f.run("local s = \"a\" for i = 1, 16 do s = s .. s end print(like(s, \"*" ++ "a" ** 39 ++ "b\"))", .{ .steps = 400_000 });
+    var r = f.run("local s = \"a\" for i = 1, 16 do s = s .. s end print(like(s, \"*" ++ &@as([39]u8, @splat('a')) ++ "b\"))", .{ .steps = 400_000 });
     defer r.deinit();
     try testing.expectEqual(script.diag.Budget.steps, r.stop.?.budget.?);
 }
@@ -906,7 +906,7 @@ test "builtin: a line longer than one call brings is an error that says so, for 
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
-    try f.tmp.dir.writeFile(f.threaded.io(), .{ .sub_path = "data/long.txt", .data = "a\n" ++ "x" ** 300 ++ "\nb\n" });
+    try f.tmp.dir.writeFile(f.threaded.io(), .{ .sub_path = "data/long.txt", .data = "a\n" ++ &@as([300]u8, @splat('x')) ++ "\nb\n" });
     var r = f.run("local r = read_lines(\"long.txt\", 2, 10)", .{ .call_bytes = 100 });
     defer r.deinit();
     try testing.expectEqual(script.diag.Class.argument, r.stop.?.class);
