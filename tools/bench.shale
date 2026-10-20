@@ -1,0 +1,79 @@
+-- **SCRIPT-BENCH LOGS SIDE BY SIDE** (metal-vmm QUEUE 241 E): the logs of
+-- `zig build script-bench` runs, each case's best time on each engine over
+-- the runs of a side, the spread between its best and worst (the machine's
+-- noise), and with an `after` side, the ratio after over before. The steps
+-- of a case must be the same in every log, both sides: a change that moves
+-- them is not a speedup but a change to what every budget means (E's rule),
+-- and the script fails on one.
+--
+--   cd <shale> && shale tools/bench.shale before=b1.log,b2.log,b3.log
+--   cd <shale> && shale tools/bench.shale before=b1.log,b2.log after=a1.log,a2.log
+--
+-- Run the two sides alternately (b1, a1, b2, a2, ...), so a slow minute of
+-- the machine falls on both.
+--
+-- budget: steps=50000000 reads=1000 read_bytes=50000000
+
+const BEFORE = arg("before", "")
+const AFTER = arg("after", "")
+
+-- {`case|engine`: {ms = best, worst = worst, steps = steps}} over `paths`, and
+-- the cases in their order.
+function side(paths, order, keep)
+  local got = {}
+  for p in split(paths, ",") do
+    for l in lines(read(trim(p))) do
+      local m = re_find(l, "\\s(walker|vm)\\s+[\\d.]+ ms")
+      if m ~= nil then
+        local name = trim(sub(l, 1, m.at))
+        local w = words(sub(l, m.at + 1, -1))
+        local key = name .. "|" .. w[1]
+        -- Times are milliseconds with two decimals: kept in hundredths.
+        local ms = parse_int(substitute(w[2], ".", ""))
+        local steps = parse_int(w[4])
+        if not has_key(got, key) then
+          got[key] = {ms = ms, worst = ms, steps = steps}
+          if keep then push(order, key) end
+        else
+          local e = got[key]
+          if e.steps ~= steps then fail("bench: " .. key .. " took " .. e.steps .. " steps in one log and " .. steps .. " in " .. p) end
+          if ms < e.ms then e.ms = ms end
+          if ms > e.worst then e.worst = ms end
+        end
+      end
+    end
+  end
+  return got
+end
+
+-- Hundredths as `12.34`.
+function hund(n)
+  local f = n % 100
+  if f < 10 then return (n // 100) .. ".0" .. f end
+  return (n // 100) .. "." .. f
+end
+
+if BEFORE == "" then fail("bench: before=<log>[,<log>...] is needed") end
+local order = {}
+local b = side(BEFORE, order, true)
+local a = nil
+if AFTER ~= "" then a = side(AFTER, {}, false) end
+local rows = {}
+for key in order do
+  local e = b[key]
+  local parts = split(key, "|")
+  local row = {case = parts[1], engine = parts[2], steps = e.steps, best = hund(e.ms), spread = hund(((e.worst - e.ms) * 10000) // e.ms) .. "%"}
+  if a ~= nil then
+    if not has_key(a, key) then fail("bench: " .. key .. " is not in the after logs") end
+    local x = a[key]
+    if x.steps ~= e.steps then fail("bench: " .. key .. " took " .. e.steps .. " steps before and " .. x.steps .. " after: steps changed") end
+    row.after = hund(x.ms)
+    row.ratio = hund((x.ms * 100) // e.ms)
+  end
+  push(rows, row)
+end
+if a == nil then
+  print(table(rows, {"case", "engine", "steps", "best", "spread"}))
+else
+  print(table(rows, {"case", "engine", "steps", "best", "spread", "after", "ratio"}))
+end

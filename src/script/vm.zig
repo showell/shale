@@ -66,8 +66,13 @@ const Machine = struct {
         m.operands.appendAssumeCapacity(v);
     }
 
+    /// The top operand, taken off. Not `ArrayList.pop`, which writes `undefined` over
+    /// the slot it gives up (a store of 0xAA bytes in a safe build) and checks for an
+    /// empty list the compiler already guarantees against.
     inline fn pop(m: *Machine) Value {
-        return m.operands.pop().?;
+        const n = m.operands.items.len - 1;
+        m.operands.items.len = n;
+        return m.operands.items.ptr[n];
     }
 
     inline fn top(m: *Machine) *Value {
