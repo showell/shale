@@ -71,23 +71,6 @@ const coverage_files = [_][]const u8{
     "src/script/cli.zig",
 };
 
-/// Every file under `dirs` (relative to the build root), as paths from it.
-fn filesUnder(b: *std.Build, dirs: []const []const u8) []const []const u8 {
-    const io = b.graph.io;
-    var out: std.ArrayList([]const u8) = .empty;
-    for (dirs) |d| {
-        var dir = b.root.root_dir.handle.openDir(io, b.pathJoin(&.{ b.root.subPathOrDot(), d }), .{ .iterate = true }) catch |e| std.debug.panic("shale: {s}: {t}", .{ d, e });
-        defer dir.close(io);
-        var walker = dir.walk(b.allocator) catch @panic("OOM");
-        defer walker.deinit();
-        while (walker.next(io) catch |e| std.debug.panic("shale: walking {s}: {t}", .{ d, e })) |entry| {
-            if (entry.kind != .file) continue;
-            out.append(b.allocator, b.pathJoin(&.{ d, entry.path })) catch @panic("OOM");
-        }
-    }
-    return out.items;
-}
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -245,11 +228,10 @@ pub fn build(b: *std.Build) void {
     // built alone.
     const webbox_root = webbox_dep.builder.root;
     shale_options.addOption([]const u8, "webbox_root", webbox_root.root_dir.handle.realPathFileAlloc(b.graph.io, webbox_root.subPathOrDot(), b.allocator) catch |e| std.debug.panic("shale: webbox's root {f}: {t}", .{ webbox_root, e }));
-    // **WHAT THE TESTS READ AS THEY RUN** (2026-10-20): the cookbook's
-    // recipes (shale_cookbook_test.zig parses each), the docs and tools/
-    // (the doc and hunt-guard tests): inputs of the unit runs, so a changed
-    // recipe runs them again, where a cached run once passed it unread.
-    const read_at_run = filesUnder(b, &.{ "cookbook", "docs", "tools" });
+    // The unit tests read files as they run (each cookbook recipe, the
+    // docs, tools/), which the build cannot list as inputs: a list made
+    // when the build is configured is itself cached, and a file added since
+    // would pass unread. So the unit runs always run.
     // Each unit binary twice: as `test` runs it, and Debug, whole and
     // under zig's own runner, for `script-coverage` (built only for it).
     const unit_roots = [_][]const u8{ "src/shale.zig", "src/shale_linux.zig" };
@@ -271,7 +253,7 @@ pub fn build(b: *std.Build) void {
             for_coverage.* = unit;
         } else {
             const unit_run = b.addRunArtifact(unit);
-            for (read_at_run) |p| unit_run.addFileInput(b.path(p));
+            unit_run.has_side_effects = true;
             test_step.dependOn(&unit_run.step);
         }
     };
