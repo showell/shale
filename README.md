@@ -48,7 +48,7 @@ compiles the portable half with its own `host_io`, as it does webbox.
 
 ## Checks
 
-    zig build test          # every test but the expensive ones: about 80 s
+    zig build test          # every unit test, none skipped; the hunt compiled: about 60 s
     zig build consumers     # the applications' own checks against this tree: minutes
     zig build fuzz          # the expensive fuzzes and sweeps, for a bug hunt
     zig build doc-check     # every repo's docs: each cited path and name is there
@@ -60,9 +60,14 @@ repo's own docs check, metal-vmm's queue tool by this tree's `shale`, then
 dog-park's `zig build test`, zig-metal-unikernel's `zig build gopher` and
 angry-gopher's `ops/check_zig`, one at a time; it needs those checkouts
 beside this one, and fails naming one that is missing. Run it before a change
-here goes to master. **`fuzz`** runs the tests named `expensive fuzz: ...` or
-`expensive sweep: ...`, which `test` counts as skipped: a fuzz hunts bugs
-once, and each bug it finds becomes a test of its own. **`doc-check`** runs
+here goes to master. **`fuzz`** runs the hunt: the tests named `expensive fuzz: ...` or
+`expensive sweep: ...`, in build.zig's `hunt_files` alone, reached from
+`src/script/hunt.zig` and run by `tools/hunt_runner.zig`, which fails on any
+test that does not pass (a skip among them) and prints how many ran. `test`
+compiles the hunt but never runs it, and skips nothing:
+`src/script/hunt_guard_test.zig` fails on a skip anywhere in `src/` or
+`tools/`, or a hunt outside the list. A fuzz hunts bugs once, and each bug
+it finds becomes a test of its own. **`doc-check`** runs
 `tools/doc_check.shale` from the folder that holds the repos, its fixtures
 first: in every repo's tracked docs but the history, each backticked or
 linked path must resolve, and each `` `file`'s `name` `` must be in that

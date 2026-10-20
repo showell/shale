@@ -2,11 +2,11 @@
 //! each run against a real store with small budgets. Every run must end,
 //! finished or stopped: never a Zig panic (the test would crash), never a
 //! leak (the backing allocator is `testing.allocator`), never past its
-//! output or arena budget, never outside its root. `zig build test
-//! -Dscript-fuzz=N` runs N.
+//! output or arena budget, never outside its root. `zig build fuzz
+//! -Dscript-fuzz=N` runs N (the hunt, src/script/hunt.zig).
 
 const std = @import("std");
-const script = @import("script.zig");
+const script = @import("shale").script;
 const options = @import("script_test_options");
 const testing = std.testing;
 
@@ -96,7 +96,6 @@ fn soup(r: std.Random, alloc: std.mem.Allocator) ![]u8 {
 }
 
 test "expensive fuzz: fuzz: every random or mutated source ends, finished or stopped, inside its budgets and its root" {
-    if (!@import("script_test_options").expensive) return error.SkipZigTest;
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
@@ -146,7 +145,6 @@ test "expensive fuzz: fuzz: every random or mutated source ends, finished or sto
 }
 
 test "expensive fuzz: fuzz: the same source, store and now give the same output, the same stop and the same effects, byte for byte" {
-    if (!@import("script_test_options").expensive) return error.SkipZigTest;
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     var threaded = std.Io.Threaded.init(testing.allocator, .{});

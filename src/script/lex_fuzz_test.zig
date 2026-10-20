@@ -3,10 +3,9 @@
 
 const std = @import("std");
 const testing = std.testing;
-const Lexer = @import("lex.zig").Lexer;
+const Lexer = @import("shale").script.lex.Lexer;
 
 test "expensive fuzz: lex: random sources of brackets, `=`, `-`, quotes and newlines end in a token stream or a clean error, never a panic, every place in the source (the design: fuzzed first)" {
-    if (!@import("script_test_options").expensive) return error.SkipZigTest;
     var prng = std.Random.DefaultPrng.init(2322);
     const rand = prng.random();
     // Bytes, and the pieces of openers and closers, so long strings and

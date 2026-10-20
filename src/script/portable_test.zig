@@ -30,6 +30,7 @@ const sources = .{
     .{ "process.zig", @embedFile("process.zig") },
     .{ "cli.zig", @embedFile("cli.zig") },
     .{ "regex.zig", @embedFile("regex.zig") },
+    .{ "hunt.zig", @embedFile("hunt.zig") },
 };
 
 /// What a portable file may not name: the file system but its path

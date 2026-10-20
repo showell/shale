@@ -22,14 +22,14 @@ pub fn main(init: std.process.Init.Minimal) !void {
     var leaks: usize = 0;
     var total: u64 = 0;
     for (fns, 0..) |t, i| {
-        testing.allocator_instance = .{};
+        testing.allocator_instance = .init(std.heap.page_allocator, .{ .canary = 0xc3a701ba, .check_write_after_free = true });
         testing.io_instance = .init(testing.allocator, .{ .argv0 = .init(init.args), .environ = init.environ });
         testing.environ = init.environ;
         const from = Io.Clock.now(.awake, io);
-        const ok = if (t.func()) |_| true else |e| e == error.SkipZigTest;
+        const ok = if (t.func()) |_| true else |_| false;
         const ns: u64 = @intCast(from.durationTo(Io.Clock.now(.awake, io)).nanoseconds);
         testing.io_instance.deinit();
-        if (testing.allocator_instance.deinit() == .leak) leaks += 1;
+        if (testing.allocator_instance.deinit() != 0) leaks += 1;
         if (!ok) {
             failed += 1;
             std.debug.print("FAIL {s}\n", .{t.name});

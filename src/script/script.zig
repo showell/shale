@@ -241,12 +241,10 @@ test {
     _ = @import("builtins_cookbook_test.zig");
     _ = @import("examples_test.zig");
     _ = @import("portable_test.zig");
-    _ = @import("lex_fuzz_test.zig");
+    _ = @import("hunt_guard_test.zig");
     _ = builtins;
-    _ = @import("fuzz_test.zig");
     _ = @import("charge_test.zig");
     _ = @import("errors_test.zig");
-    _ = @import("props_test.zig");
     _ = @import("yield_test.zig");
     _ = @import("process_test.zig");
     _ = @import("agent_test.zig");

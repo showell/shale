@@ -4,6 +4,25 @@ const std = @import("std");
 // `shale` CLI, the box's tool.
 //
 //   zig build test   -> the unit tests
+// **THE HUNT FILES** (`zig build fuzz`, metal-vmm QUEUE 241): the files of
+// the tests named `expensive ...`, and the only ones. src/script/hunt.zig
+// imports exactly these (checked here); src/script/hunt_guard_test.zig,
+// handed the list, fails on such a test anywhere else.
+const hunt_files = [_][]const u8{
+    "src/script/fuzz_test.zig",
+    "src/script/lex_fuzz_test.zig",
+    "src/script/props_test.zig",
+    "src/script/builtins_hunt_test.zig",
+};
+comptime {
+    @setEvalBranchQuota(1_000_000);
+    const root = @embedFile("src/script/hunt.zig");
+    if (std.mem.count(u8, root, "\n    _ = @import(") != hunt_files.len) @compileError("src/script/hunt.zig imports other than build.zig's hunt_files");
+    for (hunt_files) |path| {
+        if (std.mem.indexOf(u8, root, "\n    _ = @import(\"" ++ path["src/script/".len..] ++ "\");") == null) @compileError("src/script/hunt.zig does not import " ++ path);
+    }
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -120,18 +139,15 @@ pub fn build(b: *std.Build) void {
     const fuzz_runs = b.option(u32, "script-fuzz", "how many random and mutated sources the script fuzzer runs (default 400)") orelse 400;
     // **THE EXPENSIVE ONES HUNT, NO GATE PAYS FOR THEM** (Steve, 2026-10-17:
     // fuzzers are for bug-hunting expeditions; each bug found becomes a
-    // targeted unit test): a test named `expensive fuzz: ...` or `expensive
-    // sweep: ...` is skipped by `zig build test` and counted as skipped, and
-    // `zig build fuzz` runs those and nothing else.
-    const options_of = struct {
-        fn make(bb: *std.Build, runs: u32, expensive: bool) *std.Build.Module {
-            const o = bb.addOptions();
-            o.addOption(u32, "fuzz_runs", runs);
-            o.addOption(bool, "expensive", expensive);
-            return o.createModule();
-        }
-    }.make;
-    const fuzz_step = b.step("fuzz", "The expensive fuzzes and sweeps (tests named `expensive ...`), for a bug hunt; no gate runs them");
+    // targeted unit test): the tests named `expensive fuzz: ...` or
+    // `expensive sweep: ...` live in `hunt_files` alone, reached from a root
+    // of their own (src/script/hunt.zig, its imports checked against the
+    // list below), which `zig build test` compiles and only `zig build fuzz`
+    // runs (metal-vmm QUEUE 241). Nothing is skipped: src/script/
+    // hunt_guard_test.zig fails on a skip, or a hunt outside the list.
+    const script_options = b.addOptions();
+    script_options.addOption(u32, "fuzz_runs", fuzz_runs);
+    const fuzz_step = b.step("fuzz", "The expensive fuzzes and sweeps (src/script/hunt.zig), for a bug hunt; no gate runs them");
     // **ONLY THE TESTS NAMED** (-Dtest-filter=<text>): a change's own tests
     // in seconds, before the whole suite.
     const test_filter = b.option([]const u8, "test-filter", "run only the tests whose names contain this");
@@ -153,6 +169,7 @@ pub fn build(b: *std.Build) void {
     shale_options.addOptionPath("fixture", fixture.getEmittedBin());
     // The jobs' reaper is `shale` itself (`shale --reap`): its tests run it.
     shale_options.addOptionPath("shale", runner.getEmittedBin());
+    shale_options.addOption([]const []const u8, "hunt_files", &hunt_files);
     // webbox's checkout: the Zig tools' tests replay splits from its
     // history and read its sources beside this repo's.
     // Absolute, as 0.16's addOptionPath gave it: the tests hand it to
@@ -174,20 +191,22 @@ pub fn build(b: *std.Build) void {
         unit.root_module.addImport("shale", shale);
         unit.root_module.addImport("webbox", webbox);
         unit.root_module.addImport("host_io", host_io);
-        unit.root_module.addImport("script_test_options", options_of(b, fuzz_runs, false));
+        unit.root_module.addImport("script_test_options", script_options.createModule());
         unit.root_module.addImport("shale_test_options", shale_options.createModule());
         test_step.dependOn(&b.addRunArtifact(unit).step);
     }
-    // The expensive tests are all reached from shale.zig's test block.
+    // The hunt, under tools/hunt_runner.zig: every test it holds runs, any
+    // error (a skip among them) fails it, and it says how many ran.
     const hunt = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/shale.zig"),
+        .root_source_file = b.path("src/script/hunt.zig"),
         .target = target,
         .optimize = optimize,
-    }), .filters = b.dupeStrings(&.{"expensive "}), .test_runner = timing });
-    hunt.root_module.addImport("webbox", webbox);
-    hunt.root_module.addImport("host_io", host_io);
-    hunt.root_module.addImport("script_test_options", options_of(b, fuzz_runs, true));
-    hunt.root_module.addImport("shale_test_options", shale_options.createModule());
+    }), .test_runner = .{ .path = b.path("tools/hunt_runner.zig"), .mode = .simple } });
+    // The script module as a module: by path, the hunt would hold its tests.
+    hunt.root_module.addImport("shale", shale);
+    hunt.root_module.addImport("script_test_options", script_options.createModule());
+    // Compiled by `test`, so a hunt cannot rot between expeditions.
+    test_step.dependOn(&hunt.step);
     fuzz_step.dependOn(&b.addRunArtifact(hunt).step);
     test_step.dependOn(&b.addRunArtifact(signer_test).step);
 
