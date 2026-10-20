@@ -67,6 +67,13 @@ for i = 1, #lines_of do
 end
 
 print(summary ~= "" and summary or "(no Build Summary: the build runner did not get that far)")
+-- A test run taken from the cache reports no counts, so the summary's
+-- total is only of the runs that ran: said, so it is not compared as whole.
+local cached_runs = 0
+for l in lines_of do
+  if contains(l, "+- run test cached") or contains(l, "+- run test") and ends_with(trim(l), "cached") then cached_runs = cached_runs + 1 end
+end
+if cached_runs > 0 then print("(" .. cached_runs .. " test runs came from the cache and are not in the counts: `args=--cache-dir .zig-cache/fresh` for a whole count)") end
 for t in order do
   if not starts_with(t, "error: '") then print(counts[t] .. "x " .. sub(t, 1, 240)) end
 end
