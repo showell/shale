@@ -6,7 +6,7 @@
     .name = .shale,
     .version = "0.1.0",
     .fingerprint = 0x3b47a285030d9023,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .paths = .{ "build.zig", "build.zig.zon", "src", "tools", "cookbook" },
     .dependencies = .{
         // The web-server-in-a-box library: zig-webbox, a sibling checkout
