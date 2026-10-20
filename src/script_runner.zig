@@ -78,8 +78,26 @@ pub fn main(init: std.process.Init) !u8 {
         try err.print("shale: SHALE_NOW={s} is not an integer\n", .{t});
         return 2;
     } else @intCast(@divFloor(std.Io.Clock.now(.real, io).nanoseconds, std.time.ns_per_s));
-    const source = if (c.source) |s| s else if (c.file) |f| std.Io.Dir.cwd().readFileAlloc(io, f, arena, .limited(c.budgets.source_bytes + 1)) catch |e| {
-        try err.print("shale: cannot read {s}: {s}\n", .{ f, @errorName(e) });
+    const home = init.environ_map.get("HOME") orelse "/";
+    var mounts_why: []const u8 = "";
+    const mounts = shale_host.loadMounts(arena, io, init.environ_map.get("SHALE_MOUNTS"), home, &mounts_why) catch |e| switch (e) {
+        error.Malformed => {
+            try err.print("shale: the mounts: {s}\n", .{mounts_why});
+            return 2;
+        },
+        else => return e,
+    };
+    // A script named through a mount (`cookbook:look.shale`) is read from
+    // the mount's folder, as a path in the script would be.
+    const file: ?[]const u8 = if (c.file) |f| scriptFile(arena, f, mounts.mounts) catch |e| switch (e) {
+        error.NoSuchMount => {
+            try err.print("shale: {s}: no mount named `{s}` (the mounts: {s})\n", .{ f, f[0..std.mem.indexOfScalar(u8, f, ':').?], mounts.from });
+            return 2;
+        },
+        else => return e,
+    } else null;
+    const source = if (c.source) |s| s else if (file) |f| std.Io.Dir.cwd().readFileAlloc(io, f, arena, .limited(c.budgets.source_bytes + 1)) catch |e| {
+        try err.print("shale: cannot read {s}: {s}\n", .{ c.file.?, @errorName(e) });
         return 2;
     } else blk: {
         // A terminal on stdin with no script is a mistake, not a script.
@@ -111,15 +129,6 @@ pub fn main(init: std.process.Init) !u8 {
     var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
     const cwd_len = std.os.linux.getcwd(&cwd_buf, cwd_buf.len);
     const cwd_abs = try arena.dupe(u8, std.mem.sliceTo(cwd_buf[0..cwd_len], 0));
-    const home = init.environ_map.get("HOME") orelse "/";
-    var mounts_why: []const u8 = "";
-    const mounts = shale_host.loadMounts(arena, io, init.environ_map.get("SHALE_MOUNTS"), home, &mounts_why) catch |e| switch (e) {
-        error.Malformed => {
-            try err.print("shale: the mounts: {s}\n", .{mounts_why});
-            return 2;
-        },
-        else => return e,
-    };
     var host: shale_host.Host = .{
         .alloc = gpa,
         .root_abs = if (root.len == 0) "/" else if (std.fs.path.isAbsolute(root)) root else try std.fs.path.join(arena, &.{ cwd_abs, root }),
@@ -166,4 +175,17 @@ fn reaperPath(a: std.mem.Allocator) ?[]const u8 {
     const n = std.os.linux.readlink("/proc/self/exe", &buf, buf.len);
     if (std.os.linux.errno(n) != .SUCCESS) return null;
     return a.dupe(u8, buf[0..n]) catch null;
+}
+
+/// The OS path of a script given as `name:path` through a mount; any other
+/// name as given. A `name:` that looks like a mount's (no `/` before the
+/// colon) and is none is an error, not a file named so.
+fn scriptFile(arena: std.mem.Allocator, given: []const u8, mounts: []const shale_host.Mount) error{ OutOfMemory, NoSuchMount }![]const u8 {
+    const colon = std.mem.indexOfScalar(u8, given, ':') orelse return given;
+    const name = given[0..colon];
+    if (name.len == 0 or std.mem.indexOfScalar(u8, name, '/') != null) return given;
+    for (mounts) |m| {
+        if (std.mem.eql(u8, m.name, name)) return std.fs.path.join(arena, &.{ m.dir, given[colon + 1 ..] });
+    }
+    return error.NoSuchMount;
 }

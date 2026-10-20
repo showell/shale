@@ -94,3 +94,30 @@ test "cli: --args-stdin gives a file's values from stdin, raw: quotes, `|`, `$`,
     errdefer std.debug.print("{s}\n", .{r.stderr});
     try testing.expectEqualStrings("It's \"quoted\" | $HOME \\ as is\n3\n", r.stdout);
 }
+
+test "cli: a script named through a mount (`lib:hi.shale`) is read from the mount's folder; a name no mount has says so" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    try tmp.dir.createDirPath(io, "libdir");
+    try tmp.dir.writeFile(io, .{ .sub_path = "libdir/hi.shale", .data = "print(\"from the mount\")\n" });
+    const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(dir);
+    const cmd = try std.fmt.allocPrint(a, "printf 'lib = %s/{s}/libdir\\n' \"$PWD\" > '{s}/mounts' && SHALE_MOUNTS='{s}/mounts' '{s}' --root '{s}' lib:hi.shale", .{ dir, dir, dir, shale_exe, dir });
+    defer a.free(cmd);
+    const r = try std.process.run(a, io, .{ .argv = &.{ "sh", "-c", cmd } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}\n", .{r.stderr});
+    try testing.expectEqualStrings("from the mount\n", r.stdout);
+
+    const none = try std.fmt.allocPrint(a, "SHALE_MOUNTS='{s}/mounts' '{s}' --root '{s}' nope:hi.shale", .{ dir, shale_exe, dir });
+    defer a.free(none);
+    const n = try std.process.run(a, io, .{ .argv = &.{ "sh", "-c", none } });
+    defer a.free(n.stdout);
+    defer a.free(n.stderr);
+    try testing.expect(std.mem.indexOf(u8, n.stderr, "no mount named `nope`") != null);
+}

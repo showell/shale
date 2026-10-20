@@ -131,8 +131,8 @@ ported there, the whole set judged together, then each branch merged.
 long-double functions (`truncl`, `sinl`, ...) are exported unconditionally,
 and 0.17 refuses `c_longdouble` in a C-ABI function under soft float
 (ziglang/zig#37006, a regression in 0.17.0's notes; the fix, PR #37324, is
-aimed at 0.17.1). Past that fix, LLVM still rejects `mulc3.zig` and
-`divc3.zig` for soft float, which #37324 doesn't touch. Every kernel image
+aimed at 0.17.1). Past that fix, LLVM still rejects compiler_rt's complex
+multiply and divide (mulc3, divc3) for soft float, which #37324 doesn't touch. Every kernel image
 needs compiler_rt.
 
 zig-metal-unikernel carries `compiler_rt_0_17_0/`: 0.17.0's compiler_rt with
