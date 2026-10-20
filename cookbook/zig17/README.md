@@ -54,16 +54,27 @@ until the cutover):
      `f.type` renamed in the body. Eight in all our repos: by hand.
    - A string repeated that is longer than one character: build it at
      comptime (metal-vmm's client.zig has the pattern).
-   - `linux.waitpid` fills an `i32`; `linux.W` reads a `u32`: hold the
-     status as `i32` and `@bitCast` it for `W`.
+   - `linux.waitpid` and `wait4` fill an `i32`; `linux.W` reads a `u32`:
+     hold the status as `i32` and `@bitCast` it for `W`.
+   - `b.addOptionPath` takes a path relative to the build root now; a
+     consumer that needs a sibling's root absolute (shale runs git in
+     webbox's) resolves it with `realPathFileAlloc`.
+   - A switch on Zig's tokens: `.asterisk_asterisk` is gone.
+   - Tests that read old source from git history (shale's zig_move and
+     zig_decls replays) parse 0.16 code with the 0.17 parser: translate
+     its `**` first, as array_mult.shale would, on the same lines.
+   - has_decl.shale's names are plain words: a builtin or local with the
+     same name (shale's own `between`) is a false hit. Read its list
+     before `fix=yes`.
 4. **Then the behaviour 0.17 changed under the code**, which no compiler
    error shows and the repo's own tests must:
    - A generic's `@src().fn_name` ends `__func_<n>` (it was `__anon_<n>`):
      zig-coverage-sdk cut on the old suffix, and two of its tests failed.
    - `Reader.allocRemaining(.limited(n))` takes exactly `n` bytes and errors
      past it; 0.16 errored on reaching `n`. Code that passed `max + 1` to
-     allow `max` now allows `max + 1` (webbox's readLimitedBody; shale's
-     script_runner source cap): pass `max`. Audit every `.limited(...)`.
+     allow `max` now allows `max + 1` (webbox's readLimitedBody): pass `max`.
+     A `max + 1` read followed by its own `len > max` check (shale's script
+     source) is still right. Audit every `.limited(...)`.
    - `@hasDecl` sees only `pub` (above): `has_decl.shale` before the tests.
 5. **Judge** with the repo's own tests, and commit to the branch, not
    master: the repos move together.
@@ -75,6 +86,7 @@ until the cutover):
 | zig-coverage-sdk | `zig-0.17` | typeInfo fields, Ast.parse, one array, the `__func_` suffix, fmt's builtins |
 | zig-webbox | `zig-0.17` | 34 arrays and strings, 5 renames, 3 `pub` for @hasDecl, `build_root`, allocRemaining's limit |
 | metal-vmm | `zig-0.17` | arrays, the optimize tags, `b.args`, bitsets, bufPrintZ, type info, 4 field loops, a comptime string, waitpid |
+| shale | `zig-0.17` (in `~/zig17`) | 9 arrays, 36 renames, `build_root`, webbox's root absolute, waitpid/wait4, the `**` token, the history replays; 327 tests as on 0.16. `zig build consumers` waits for the siblings |
 
 ## The repos with siblings
 
