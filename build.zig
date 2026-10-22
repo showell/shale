@@ -147,6 +147,46 @@ pub fn build(b: *std.Build) void {
     }) });
     b.step("shale-scale", "the largest site each cookbook script fits, under the site's budgets (ReleaseSafe)").dependOn(&b.addRunArtifact(scale).step);
 
+    // Shale in a browser (web/): the portable module over an in-memory tree
+    // (src/host_io_wasm.zig), and the page that edits the tree and runs
+    // scripts against it. Installs zig-out/web/.
+    // `atomics` for webbox's 64-bit change counter, which baseline wasm has no
+    // instruction for.
+    const wasm_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+        .cpu_features_add = std.Target.wasm.featureSet(&.{ .atomics, .bulk_memory }),
+    });
+    const wasm_io = b.createModule(.{ .root_source_file = b.path("src/host_io_wasm.zig") });
+    const wasm_webbox = b.createModule(.{
+        .root_source_file = webbox_dep.path("src/webbox.zig"),
+        .imports = &.{.{ .name = "host_io", .module = wasm_io }},
+    });
+    const wasm = b.addExecutable(.{ .name = "shale", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/shale_wasm.zig"),
+        .target = wasm_target,
+        .optimize = .ReleaseSmall,
+        .imports = &.{
+            .{ .name = "host_io", .module = wasm_io },
+            .{ .name = "shale", .module = b.createModule(.{
+                .root_source_file = b.path("src/shale.zig"),
+                .imports = &.{
+                    .{ .name = "host_io", .module = wasm_io },
+                    .{ .name = "webbox", .module = wasm_webbox },
+                },
+            }) },
+        },
+    }) });
+    wasm.entry = .disabled;
+    wasm.rdynamic = true;
+    const web = b.step("web", "Shale in a browser: zig-out/web/ (index.html and shale.wasm)");
+    web.dependOn(&b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .{ .custom = "web" } } }).step);
+    web.dependOn(&b.addInstallDirectory(.{ .source_dir = b.path("web"), .install_dir = .{ .custom = "web" }, .install_subdir = "" }).step);
+    const web_smoke = b.addSystemCommand(&.{"node"});
+    web_smoke.addFileArg(b.path("web/smoke_test.mjs"));
+    web_smoke.addArtifactArg(wasm);
+    b.step("web-test", "the browser build's module under Node (web/smoke_test.mjs)").dependOn(&web_smoke.step);
+
     // The signer (src/shale_sign.zig): the key pair, made once, and a script
     // signed for a target.
     //   zig build shale-sign -- keygen [target] | pubkey [target] | sign <file.shale> <target> [minutes]
@@ -183,6 +223,7 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&b.addRunArtifact(gate_test).step);
+    test_step.dependOn(&web_smoke.step);
     // The script fuzzer's count (src/script/fuzz_test.zig): a few hundred
     // sources by default, as many as asked for with -Dscript-fuzz.
     const fuzz_runs = b.option(u32, "script-fuzz", "how many random and mutated sources the script fuzzer runs (default 400)") orelse 400;

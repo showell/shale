@@ -162,6 +162,14 @@ zig-webbox by path (`../zig-webbox`), and an application takes `shale` from
 `b.dependency("shale", ...)` beside its `webbox`. zig-metal-unikernel
 compiles the portable half with its own `host_io`, as it does webbox.
 
+**In a browser:** `zig build web` builds the portable half to WebAssembly
+over an in-memory tree (`src/wasm_io.zig`, the `host_io` of
+`src/host_io_wasm.zig`; the exports in `src/shale_wasm.zig`) and installs
+`zig-out/web/`: a page with a file tree, an editor and the run's output,
+and a sample Python project with scripts to run on it (`web/sample.js`).
+Serve that folder over HTTP (a page cannot load wasm from `file:`). There is
+no `host` there, so `run`, git and jobs are not in it.
+
     script.run(io, backing_allocator, root, source, budgets, now, out) -> Result
 
 **The reference is [docs/SHALE.md](docs/SHALE.md):**
@@ -183,7 +191,9 @@ compiles the portable half with its own `host_io`, as it does webbox.
     zig build doc-check     # every repo's docs: each cited path and name is there
     zig build script-coverage   # the lines no unit test runs, per key module: about 2 min
 
-**`test`** runs the two modules' tests, the signer's and the gate's. The
+**`test`** runs the two modules' tests, the signer's and the gate's, and
+`web-test`: the browser build under Node (`web/smoke_test.mjs`), its
+sample's scripts included. The
 Zig tools' tests read zig-webbox's checkout too: they replay splits from its
 history and walk its sources beside this repo's. **`consumers`** runs this
 repo's own docs check, metal-vmm's queue tool by this tree's `shale`, then
