@@ -160,12 +160,13 @@ function grep_all(p, lit)
 end
 
 -- The names of the `n` entries of a folder that changed last, newest
--- first (`ls -t | head`); names that changed at once, by name.
+-- first (`ls -t | head`); names that changed at once, by name. The root is
+-- `""` or `"."`.
 function newest(p, n)
   local rows = {}
   for name in ls(p) do
     local path = name
-    if p ~= "" and not ends_with(p, ":") then path = p .. "/" .. name end
+    if p ~= "" and p ~= "." and not ends_with(p, ":") then path = p .. "/" .. name end
     push(rows, {name = name, modified = stat(path).modified})
   end
   sort(rows, "modified", "desc")
