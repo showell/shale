@@ -140,7 +140,7 @@ test "linux prelude: edits_all checks every file's edits before it writes any" {
     try testing.expectEqualStrings("thrEE\n", try t.file("b.txt"));
 }
 
-test "linux prelude: edits_all checks a word edit as edit applies it, so the next is checked against its result (QUEUE 234, 0)" {
+test "linux prelude: edits_all checks a word edit as edit applies it, so the next is checked against its result" {
     var t: T = undefined;
     try init(&t);
     defer t.deinit();

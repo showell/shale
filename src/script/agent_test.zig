@@ -156,7 +156,7 @@ test "agent: edit prints its diff and changes the file, one occurrence or all of
     try t.expectStop("edit(\"src/tcp.zig\", \"x\", \"y\", {every = true})", .{}, .argument, "takes `all` and `word`");
 }
 
-test "agent: edit's list form applies its edits in sequence, each to the one before, one diff and one write (QUEUE 232)" {
+test "agent: edit's list form applies its edits in sequence, each to the one before, one diff and one write" {
     var t: Tree = undefined;
     try t.init();
     defer t.deinit();
@@ -215,7 +215,7 @@ test "agent: edit's list form applies its edits in sequence, each to the one bef
     );
 }
 
-test "agent: a list of edits that fails anywhere writes nothing and prints no diff; each edit is held to the one-edit form's rules (QUEUE 232)" {
+test "agent: a list of edits that fails anywhere writes nothing and prints no diff; each edit is held to the one-edit form's rules" {
     var t: Tree = undefined;
     try t.init();
     defer t.deinit();

@@ -269,7 +269,7 @@ const hard_cases = [_]struct { name: []const u8, store: Setup = .none, setup: []
     .{ .name = "sort, strings sharing a prefix", .setup = "local l = {} for i = 1, N do push(l, rep(\"x\", 20) .. (N - i)) end", .call = "sort(l)" },
 };
 
-test "steps bound the work: no builtin or operator does more than a fixed amount of work a step, on its hardest shapes (209(c))" {
+test "steps bound the work: no builtin or operator does more than a fixed amount of work a step, on its hardest shapes" {
     const n = 2000;
     var worst: f64 = 0;
     for (cases) |c| if (c.grows == .scales) {

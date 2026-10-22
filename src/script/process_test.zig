@@ -195,7 +195,7 @@ test "process: every source within the source budget compiles, in at most half t
 
 var big_out: [1024 * 1024]u8 = undefined;
 
-test "process: a slice ends after any store call, however many steps it has left (metal-vmm QUEUE 211, Steve's model: swap on I/O)" {
+test "process: a slice ends after any store call, however many steps it has left" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -223,7 +223,7 @@ test "process: a slice ends after any store call, however many steps it has left
     try testing.expectEqual(process.Outcome.finished, w.step(.{}));
 }
 
-test "process: it keeps its own source: the caller's freed after start, the run goes on (a crash on Dog Park's host, metal-vmm QUEUE 214)" {
+test "process: it keeps its own source: the caller's freed after start, the run goes on" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -257,7 +257,7 @@ fn functionNames(src: []const u8, buf: *[16][]const u8) ![]const []const u8 {
 }
 var name_bufs: [16][64]u8 = undefined;
 
-test "process: only the prelude a script calls is parsed and compiled, through the prelude's own calls (metal-vmm QUEUE 230)" {
+test "process: only the prelude a script calls is parsed and compiled, through the prelude's own calls" {
     const Case = struct { src: []const u8, holds: []const []const u8 };
     for ([_]Case{
         .{ .src = "", .holds = &.{} },
@@ -278,7 +278,7 @@ test "process: only the prelude a script calls is parsed and compiled, through t
     }
 }
 
-test "process: a script that calls no prelude function holds the machine it did before the prelude grew (QUEUE 230: 48 KiB, where 229 left 112 KiB)" {
+test "process: a script that calls no prelude function holds the machine it did before the prelude grew" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     for ([_]struct { []const u8, usize }{

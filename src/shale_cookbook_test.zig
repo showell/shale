@@ -47,7 +47,7 @@ fn calls(text: []const u8, name: []const u8) bool {
     return false;
 }
 
-test "preludes: every function of the Linux and git preludes is called by some test, or by a function a test calls (metal-vmm QUEUE 241 F)" {
+test "preludes: every function of the Linux and git preludes is called by some test, or by a function a test calls" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -103,7 +103,7 @@ test "preludes: every function of the Linux and git preludes is called by some t
     try testing.expectEqual(@as(usize, 0), uncalled);
 }
 
-test "preludes: each one compiled whole, its lines with code written for tools/coverage.shale (metal-vmm QUEUE 241 F)" {
+test "preludes: each one compiled whole, its lines with code written for tools/coverage.shale" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();

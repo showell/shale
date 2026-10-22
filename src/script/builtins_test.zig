@@ -552,7 +552,7 @@ test "builtins: seconds gives only what date can write: 1970 to 9999" {
     try f.expectStop("print(seconds(\"0000-01-01\"))", .argument);
 }
 
-test "builtins: a search pays for its matches and its compares: dense matches cost at least a step each (209's cold review)" {
+test "builtins: a search pays for its matches and its compares: dense matches cost at least a step each" {
     // A search over dense matches must charge at least a step per match,
     // not only a step per 16 haystack bytes.
     var f: Fixture = undefined;
@@ -642,7 +642,7 @@ test "builtins: every scan of a run reuses one buffer: five hundred files scanne
     try testing.expect(r.arena_bytes < 2 * 1024 * 1024);
 }
 
-test "builtins: a store error is never read as missing: a remove that can't look names the store's own error (209(a))" {
+test "builtins: a store error is never read as missing: a remove that can't look names the store's own error" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -661,7 +661,7 @@ test "builtins: a store error is never read as missing: a remove that can't look
     try testing.expectEqualStrings("FileNotFound", m.effects[0].outcome);
 }
 
-test "builtins: one read brings at most its cap, whole or in part; a bigger file is read in parts (metal-vmm QUEUE 211, the caps)" {
+test "builtins: one read brings at most its cap, whole or in part; a bigger file is read in parts" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -685,7 +685,7 @@ test "builtins: one read brings at most its cap, whole or in part; a bigger file
     try testing.expectEqualStrings("3000\n", r.output);
 }
 
-test "builtins: a scan takes at most its cap too; in parts, by its range, it counts and finds as the whole file does (metal-vmm QUEUE 211, the caps)" {
+test "builtins: a scan takes at most its cap too; in parts, by its range, it counts and finds as the whole file does" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -744,7 +744,7 @@ fn vanishOnce() void {
     std.Io.Dir.cwd().deleteFile(vanish_io, p) catch {};
 }
 
-test "builtins: walk's stats count as reads, a call considers at most call_entries, and a walk in parts by `after` gives the whole walk's entries (metal-vmm QUEUE 211, the caps)" {
+test "builtins: walk's stats count as reads, a call considers at most call_entries, and a walk in parts by `after` gives the whole walk's entries" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -810,7 +810,7 @@ test "builtins: walk's stats count as reads, a call considers at most call_entri
     }
 }
 
-test "builtins: an empty needle is found where the search starts, never a crash: find and contains, as Lua's find (220's cold read found the panic)" {
+test "builtins: an empty needle is found where the search starts, never a crash: find and contains, as Lua's find" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -879,7 +879,7 @@ test "builtin: a line longer than one call brings is an error that says so, for 
     try testing.expectEqualStrings("a\tb\n", ok.output);
 }
 
-test "builtins: re_find and re_match at their edges, and a run's patterns past the cache's eight (QUEUE 230)" {
+test "builtins: re_find and re_match at their edges, and a run's patterns past the cache's eight" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -913,7 +913,7 @@ test "builtins: re_find and re_match at their edges, and a run's patterns past t
     , "24\n");
 }
 
-test "builtins: re_find's alternatives, \\b and nocase (the design, final; QUEUE 232)" {
+test "builtins: re_find's alternatives, \\b and nocase" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -959,7 +959,7 @@ test "builtins: patterns whose programs do not fit the machine's memory stop on 
     try testing.expectEqualStrings("", r.output);
 }
 
-test "builtins: an edit's diff in full, or one line a change when the run says `summary` (metal-vmm QUEUE 234, 1)" {
+test "builtins: an edit's diff in full, or one line a change when the run says `summary`" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();

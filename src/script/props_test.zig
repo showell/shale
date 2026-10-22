@@ -336,7 +336,7 @@ fn checkTable(out: []const u8, cells: []const [4][]const u8, ints: []const bool,
     try testing.expectEqual(cells.len, r);
 }
 
-test "expensive fuzz: property: read_lines over a file, in parts of any size, gives lines(read(the whole file)), each line whole (QUEUE 229)" {
+test "expensive fuzz: property: read_lines over a file, in parts of any size, gives lines(read(the whole file)), each line whole" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -601,7 +601,7 @@ fn groupText(s: []const u8, f: regex.Found) []const u8 {
     return if (f.group) |g| s[g[0]..g[1]] else "";
 }
 
-test "expensive fuzz: property: re_find's machine finds what a backtracking matcher finds, on random patterns of the subset and random strings, `|`, `\\b` and `nocase` among them (QUEUES 230, 232)" {
+test "expensive fuzz: property: re_find's machine finds what a backtracking matcher finds, on random patterns of the subset and random strings, `|`, `\\b` and `nocase` among them" {
     var prng = std.Random.DefaultPrng.init(230);
     const rand = prng.random();
     var pattern: std.ArrayList(u8) = .empty;
@@ -656,7 +656,7 @@ fn appendShaleString(src: *std.ArrayList(u8), s: []const u8) !void {
     };
 }
 
-test "expensive fuzz: property: re_find and re_match in a script say what the backtracking matcher says, through both engines (QUEUE 230)" {
+test "expensive fuzz: property: re_find and re_match in a script say what the backtracking matcher says, through both engines" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -717,7 +717,7 @@ fn reSteps(f: *Fixture, pattern: []const u8, n: usize) !u64 {
     return r.steps - r0.steps;
 }
 
-test "expensive fuzz: property: a search's cost is linear in the string, whatever the pattern: `(a*)*b` on a run of `a` costs about what `a*b` does (QUEUE 230)" {
+test "expensive fuzz: property: a search's cost is linear in the string, whatever the pattern: `(a*)*b` on a run of `a` costs about what `a*b` does" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -796,7 +796,7 @@ fn applyDiff(a: std.mem.Allocator, was: []const u8, diff: []const u8) ![]u8 {
     return std.mem.join(a, "\n", out.items);
 }
 
-test "expensive fuzz: property: a list of edits writes what the edits make in sequence, and its one diff, applied to the file as it was, gives the file written (QUEUE 232)" {
+test "expensive fuzz: property: a list of edits writes what the edits make in sequence, and its one diff, applied to the file as it was, gives the file written" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();

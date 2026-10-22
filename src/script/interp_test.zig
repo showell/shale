@@ -77,7 +77,7 @@ test "run: control flow, loops, break, and a top-level return" {
     try expectOutput("for i = 9223372036854775806, 9223372036854775807 do print(i) end", "9223372036854775806\n9223372036854775807\n");
 }
 
-test "run: functions, recursion, and a frame of their own; a function is called only after it is declared (209)" {
+test "run: functions, recursion, and a frame of their own; a function is called only after it is declared" {
     try expectOutput("function fact(n) if n <= 1 then return 1 end return n * fact(n - 1) end print(fact(10))", "3628800\n");
     try expectStop("print(fact(10)) function fact(n) return n end", .name, null);
     try expectOutput("function f(a, b) local c = a .. b return c end print(f(\"x\", 1), f(\"y\", 2))", "x1\ty2\n");
@@ -85,7 +85,7 @@ test "run: functions, recursion, and a frame of their own; a function is called 
     try expectOutput("function f(n) local x = n if n > 0 then f(n - 1) end return x end print(f(3))", "3\n");
 }
 
-test "run: an optional parameter (`b?`) is nil when a call leaves it out (metal-vmm QUEUE 233)" {
+test "run: an optional parameter (`b?`) is nil when a call leaves it out" {
     try expectOutput("function f(a, b?) if b == nil then return a end return a + b end print(f(1), f(1, 2))", "1\t3\n");
     try expectOutput("function g(a?, b?) return tostring(a) .. tostring(b) end print(g(), g(1), g(1, 2))", "nilnil\t1nil\t12\n");
     // `attempt` fills them in as a call does.
@@ -266,7 +266,7 @@ test "run: print evaluates all its arguments before it writes one, as Lua's" {
     try expectOutput("function f() print(\"inner\") return 2 end print(1, f())", "inner\n1\t2\n");
 }
 
-test "run: a top-level const is seen by the functions declared after it, and is never assigned (metal-vmm QUEUE 206)" {
+test "run: a top-level const is seen by the functions declared after it, and is never assigned" {
     try expectOutput("const LIMIT = 3 function f(n) return n + LIMIT end print(f(1), LIMIT)", "4\t3\n");
     // A table a const names can still change; the name cannot.
     try expectOutput("const SEEN = {} function mark(k) SEEN[k] = true end mark(\"a\") print(count(SEEN))", "1\n");
@@ -350,7 +350,7 @@ test "run: `for x in l` visits the first #l items, each as it is when reached, a
 
 // The language, small but complete.
 
-test "run: a script's names may take a builtin's; a call by a name that is a value in scope is refused; a function is called only after it is declared, and a later one never takes over an earlier call (209)" {
+test "run: a script's names may take a builtin's; a call by a name that is a value in scope is refused; a function is called only after it is declared, and a later one never takes over an earlier call" {
     // A local is the value; calling it is refused, not the builtin.
     try expectOutput("local lines = 3 print(lines)", "3\n");
     try expectStop("local lines = 3 print(#lines(\"a\\nb\"))", .refused, null);
@@ -445,7 +445,7 @@ test "run: 208's cold review: attempt needs its commas; a long chain in a loop c
 /// 112 KiB.
 const machine_most = 128 * 1024;
 
-test "run: the arena budget bounds the memory a run takes: the backing allocator's peak stays under it, for the review's shapes (209)" {
+test "run: the arena budget bounds the memory a run takes: the backing allocator's peak stays under it, for the review's shapes" {
     // std's arena holds 1.7x and 2.0x what is counted on the first two: 14.1 MB for
     // 200,000 tables against 8 MiB, 12.7 MB for 400,000 pushes.
     const limit = 8 * 1024 * 1024;
@@ -478,7 +478,7 @@ test "run: one huge charge stops the run a step past its budget, not at the char
     }
 }
 
-test "run: a `..` chain's part of the wrong type stops at its own `..`, when a part is a chain, a map or a print (211's cold review of the VM)" {
+test "run: a `..` chain's part of the wrong type stops at its own `..`, when a part is a chain, a map or a print" {
     // The VM must not mix the chain's positions with a part's own.
     const cases = [_]struct { src: []const u8, column: u32 }{
         .{ .src = "local s = (\"a\" .. \"b\") .. nil", .column = 24 },
@@ -558,7 +558,7 @@ test "run: a 64 KiB chain the parse takes as one level, `1+1+...+1` and its kin,
     }
 }
 
-test "run: a map or a list compared with the literal nil, `==` and `~=`, either side (metal-vmm QUEUE 231)" {
+test "run: a map or a list compared with the literal nil, `==` and `~=`, either side" {
     try expectOutput("print({} == nil, nil == {1}, {a = 1} ~= nil, nil ~= {})", "false\tfalse\ttrue\ttrue\n");
     // What `re_find` gives: a map, or nil.
     try expectOutput("local m = re_find(\"ab\", \"b\") local n = re_find(\"ab\", \"c\") print(m == nil, m ~= nil, n == nil, n ~= nil)", "false\ttrue\ttrue\tfalse\n");
@@ -568,14 +568,14 @@ test "run: a map or a list compared with the literal nil, `==` and `~=`, either 
     try expectOutput("local x = nil print(x == nil, 1 == nil, nil ~= \"a\", nil == nil)", "true\tfalse\ttrue\ttrue\n");
 }
 
-test "run: last(l, n), the last n of a list; fewer when the list is shorter (the design, final; QUEUE 232)" {
+test "run: last(l, n), the last n of a list; fewer when the list is shorter" {
     try expectOutput("local l = {1, 2, 3, 4} print(join(last(l, 2), \",\"), #last(l, 9), #last(l, 0), #last({}, 3))", "3,4\t4\t0\t0\n");
     // `take` with a negative count stays the stop it is.
     try expectStop("local x = take({1, 2}, -1)", .argument, null);
     try expectStop("local x = last({1, 2}, -1)", .argument, null);
 }
 
-test "run: fail(msg) ends the run with class fail; attempt catches it, its class and message (the design, final; QUEUE 232)" {
+test "run: fail(msg) ends the run with class fail; attempt catches it, its class and message" {
     try expectStop("fail(\"the build is red\")", .fail, null);
     try expectOutput(
         \\function check(n) if n > 2 then fail("too many: " .. n) end return n end

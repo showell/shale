@@ -438,7 +438,7 @@ test "a background run takes the background budgets when the host gives them, th
     try testing.expect(std.mem.startsWith(u8, try Fixture.status(), "background seq=2 finished: "));
 }
 
-test "a background run owns its source: the request's memory gone, the run goes on (a crash on Dog Park's host, metal-vmm QUEUE 214)" {
+test "a background run owns its source: the request's memory gone, the run goes on" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -466,7 +466,7 @@ test "a background run owns its source: the request's memory gone, the run goes 
     }
 }
 
-test "THE ROUTE'S REPLY, WHOLE, FROZEN (the dogfood design: its four readers, dog-park's test_shale.mjs, metal-vmm's script-refused.shape, judge_gopher.py and angry-gopher's tests, see nothing change)" {
+test "the route's reply, whole and frozen: its four readers (dog-park's test_shale.mjs, metal-vmm's script-refused.shape, judge_gopher.py and angry-gopher's tests) see nothing change" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();

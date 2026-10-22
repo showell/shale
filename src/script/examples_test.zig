@@ -290,7 +290,7 @@ test "every read-only script of the cookbook finishes on the site-shaped store i
     }
 }
 
-test "every cookbook script that walks gives the same answer walking in parts of three entries as in parts of 256 (metal-vmm QUEUE 211, the caps)" {
+test "every cookbook script that walks gives the same answer walking in parts of three entries as in parts of 256" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -548,7 +548,7 @@ fn allRow(output: []const u8) ![2]u64 {
     return .{ try std.fmt.parseInt(u64, it.next().?, 10), try std.fmt.parseInt(u64, it.next().?, 10) };
 }
 
-test "example: where the bytes are, past what the site's reads walk, prints what it found and where to resume, and the rest from there completes the totals (QUEUE 229)" {
+test "example: where the bytes are, past what the site's reads walk, prints what it found and where to resume, and the rest from there completes the totals" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -594,7 +594,7 @@ fn numberAfter(output: []const u8, key: []const u8) !u64 {
     return std.fmt.parseInt(u64, rest[0..n], 10);
 }
 
-test "every cookbook script that walks, past what the site's reads reach, goes on from where it says and adds up to the whole run (QUEUE 229)" {
+test "every cookbook script that walks, past what the site's reads reach, goes on from where it says and adds up to the whole run" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -644,7 +644,7 @@ test "every cookbook script that walks, past what the site's reads reach, goes o
     }
 }
 
-test "example: a count cache torn into words, or into nothing, is read as no cache: chat_topics and stale_caches report it and go on (QUEUE 229)" {
+test "example: a count cache torn into words, or into nothing, is read as no cache: chat_topics and stale_caches report it and go on" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();

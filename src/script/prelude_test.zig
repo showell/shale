@@ -99,7 +99,7 @@ test "prelude: an error inside a prelude function says it is the prelude's" {
     try testing.expectEqualStrings("the prelude's count_all", s.function);
 }
 
-test "prelude: walk_upto walks as far as its reads allow, keeps what it is told to, and goes on from `more` to the rest (QUEUE 229)" {
+test "prelude: walk_upto walks as far as its reads allow, keeps what it is told to, and goes on from `more` to the rest" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -202,7 +202,7 @@ test "prelude: assert stops with its reason when false, does nothing when true, 
     }
 }
 
-test "prelude: the functions found in prelude.shale are every function a parse of it declares, and it declares nothing else (QUEUE 230)" {
+test "prelude: the functions found in prelude.shale are every function a parse of it declares, and it declares nothing else" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     var stop: ?script.diag.Stop = null;
@@ -218,7 +218,7 @@ test "prelude: the functions found in prelude.shale are every function a parse o
     for (whole.main.body) |s| try testing.expect(s.kind == .do and s.kind.do.len == 0);
 }
 
-test "prelude: every prelude function is reached when a script calls it, one script each, and runs (QUEUE 230)" {
+test "prelude: every prelude function is reached when a script calls it, one script each, and runs" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -243,7 +243,7 @@ test "prelude: every prelude function is reached when a script calls it, one scr
     }
 }
 
-test "prelude: a prelude function's own calls are the prelude's, though the script declared one of their name (QUEUE 230)" {
+test "prelude: a prelude function's own calls are the prelude's, though the script declared one of their name" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();

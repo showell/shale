@@ -474,7 +474,7 @@ test "lex: plain errors: an unclosed string, a string across a line, a number to
     }
 }
 
-test "lex: long strings, a level of `=` each (QUEUE 232): `]]` and a lower closer inside, the first newline dropped, bytes raw, the lines after placed right" {
+test "lex: long strings, a level of `=` each: `]]` and a lower closer inside, the first newline dropped, bytes raw, the lines after placed right" {
     const cases = [_]struct { src: []const u8, text: []const u8 }{
         .{ .src = "[=[a]]b]=]", .text = "a]]b" },
         .{ .src = "[==[x ]=] y]]]==]", .text = "x ]=] y]]" },
@@ -530,7 +530,7 @@ test "lex: a long string that is never closed, or an opener that is not one, is 
     }
 }
 
-test "lex: a block comment is `--` and a long string's opener, any level (the design, final): what it holds is passed by, the lines after placed right" {
+test "lex: a block comment is `--` and a long string's opener, any level: what it holds is passed by, the lines after placed right" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     var lx = Lexer.init(arena.allocator(), "x --[=[ a ]] b\n c ]=] y --[==[ ]=] ]==]\nz --[=x is a line comment\nw --[ too\nv");
