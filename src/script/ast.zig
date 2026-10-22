@@ -80,6 +80,7 @@ pub const Builtin = enum {
     fail,
     host,
     budget,
+    call_bytes,
     yield,
     print,
 };

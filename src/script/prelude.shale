@@ -101,10 +101,10 @@ function glob(pattern, opts?)
 end
 
 -- How many times `s` occurs in the file, a part at a time: one scan brings
--- at most the call-bytes cap (`budget().call_bytes`, 1 MiB unset). A stat,
+-- at most the call-bytes cap (`call_bytes()`, 1 MiB unset). A stat,
 -- then a scan a part.
 function count_all(path, s)
-  local part = budget().call_bytes
+  local part = call_bytes()
   local size = stat(path).size
   local n = 0
   local at = 0
@@ -120,7 +120,7 @@ end
 -- once (a part past the file's end is cut at it); only when it finds
 -- nothing is the file stat'ed, to see whether there is more.
 function find_next(path, s, at)
-  local part = budget().call_bytes
+  local part = call_bytes()
   local f = find_in(path, s, at, part)
   if f ~= nil then return f end
   local size = stat(path).size

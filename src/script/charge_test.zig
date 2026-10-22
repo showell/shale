@@ -112,6 +112,7 @@ const cases = [_]Case{
     .{ .b = .host, .grows = .constant, .why = "the host's door: none here (a stop); a host charges its own work" },
     .{ .b = .fail, .grows = .constant, .why = "the run stops: its message's bytes charged once" },
     .{ .b = .budget, .grows = .constant, .why = "six counters" },
+    .{ .b = .call_bytes, .grows = .constant, .why = "one integer, the run's cap" },
     .{ .b = .yield, .grows = .constant, .why = "its argument checked; in the VM the copy it makes is charged a step a value and a step for 16 bytes, by collect.zig" },
     .{ .b = .print, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "print(s)" },
 };

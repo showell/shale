@@ -71,7 +71,7 @@ test "prelude: count_all and find_next scan a file past the call-bytes cap, part
     defer each.deinit();
     try testing.expectEqualStrings(counted, each.output);
     // A host whose call-bytes cap is smaller: parts of its size, the same answers.
-    var small = f.run("print(count_all(\"big.log\", \"NEEDL\"), find_next(\"big.log\", \"NEEDL\", 1048577), budget().call_bytes)", .{ .call_bytes = 65536 });
+    var small = f.run("print(count_all(\"big.log\", \"NEEDL\"), find_next(\"big.log\", \"NEEDL\", 1048577), call_bytes())", .{ .call_bytes = 65536 });
     defer small.deinit();
     if (small.stop) |s| std.debug.print("{s}\n", .{s.message});
     const small_want = try std.fmt.allocPrint(testing.allocator, "{d}\t{d}\t65536\n", .{ want, first_after.? });

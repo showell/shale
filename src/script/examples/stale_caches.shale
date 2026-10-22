@@ -31,7 +31,7 @@ local last = START
 local resume = nil
 for e in part.entries do
   -- The cache, a stat, and a scan a part (the call-bytes cap).
-  if not room_for({reads = 3 + e.size // budget().call_bytes}) then
+  if not room_for({reads = 3 + e.size // call_bytes()}) then
     resume = last
     break
   end

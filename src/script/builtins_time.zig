@@ -1,6 +1,7 @@
 //! Builtins for time and the host: `now()`, the one time a script sees, handed
 //! in by the host; `date` and `seconds`, converting to and from UTC text;
-//! `arg`, `fail`, `host`, `yield`, and `budget()`, what a run has left.
+//! `arg`, `fail`, `host`, `yield`, `budget()`, what a run has left, and
+//! `call_bytes()`, what one call may bring.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -19,6 +20,7 @@ pub const specs = [_]bi.Spec{
     spec(.fail, 1, 1, failWith),
     spec(.host, 1, bi.most_args, hostCall),
     spec(.budget, 0, 0, budget),
+    spec(.call_bytes, 0, 0, callBytes),
     spec(.yield, 0, 0, yield),
     spec(.date, 1, 1, date),
     spec(.seconds, 1, 1, seconds),
@@ -85,8 +87,7 @@ fn yield(_: *Run, _: ast.Pos, _: []const Value) Error!Value {
 }
 
 /// `budget()` returns what is left of each budget a script spends as it runs,
-/// so it can stop at a point of its own choosing, and `call_bytes`, what one
-/// call may bring (a cap, never spent), so a scan can size its parts to it.
+/// so it can stop at a point of its own choosing.
 fn budget(run: *Run, pos: ast.Pos, _: []const Value) Error!Value {
     const a = run.alloc;
     const out = try run.newTable(pos);
@@ -97,11 +98,17 @@ fn budget(run: *Run, pos: ast.Pos, _: []const Value) Error!Value {
         .{ "changes", run.budgets.changes -| run.changes },
         .{ "change_bytes", run.budgets.change_bytes -| run.change_bytes },
         .{ "output", run.out_cap -| run.out_len },
-        .{ "call_bytes", run.budgets.call_bytes },
     };
     for (left) |kv| out.map.put(a, kv[0], .{ .int = @intCast(@min(kv[1], std.math.maxInt(i64))) }) catch return run.oom(pos);
     out.kind = .map;
     return .{ .table = out };
+}
+
+/// `call_bytes()` is what one store call may bring, a cap never spent, so a scan
+/// sizes its parts to it. An integer, not a map: `room_for` and a scan's loop
+/// call it often, and a map would be built each time.
+fn callBytes(run: *Run, _: ast.Pos, _: []const Value) Error!Value {
+    return .{ .int = @intCast(@min(run.budgets.call_bytes, std.math.maxInt(i64))) };
 }
 
 /// The latest second `date` writes: 9999-12-31T23:59:59Z.

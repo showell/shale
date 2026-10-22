@@ -4,7 +4,7 @@
 -- counts messages as it does: `count_in` within the call-bytes cap,
 -- the prelude's `count_all` past it, so no transcript is held.
 
-const CAP = budget().call_bytes
+const CAP = call_bytes()
 
 function messages(e)
   if e.size <= CAP then return count_in(e.path, "MSG_") end
