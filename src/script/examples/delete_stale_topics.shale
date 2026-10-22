@@ -1,22 +1,21 @@
--- Delete the topics stale_topics.shale listed and Steve approved
--- (2026-10-20), each as delete_topic.shale does: its transcript, its
--- sidecars, and its uploads (angry-gopher's chat_retire.zig removes the
--- same). Every one is checked first, before anything is removed: it is
--- there, and still untouched for 30 days. One that fails either stops the
--- run with nothing removed; so does a run with too few changes left for
--- them all. Atomic (`shale-sign sign`): a background run changes nothing.
--- TOPICS is the list approved for lynrummy.com on 2026-10-20 (all six
--- went); write the next one's in its place.
+-- Delete the topics stale_topics.shale listed and the owner approved, each
+-- as delete_topic.shale does: its transcript, its sidecars, and its uploads
+-- (angry-gopher's chat_retire.zig removes the same). Every one is checked
+-- first, before anything is removed: it is there, and still untouched for
+-- 30 days. One that fails either stops the run with nothing removed; so does
+-- a run with too few changes left for them all. Atomic (`shale-sign sign`):
+-- a background run changes nothing.
+--
+--   topics=chat/1_5/sessions/2026-06-03,chat/channels/x/sessions/old
+--
+-- `topics` is each topic's path without `.md`, comma-separated. A signed
+-- script runs with no arguments, so for the site write the list as this
+-- argument's default before signing.
 
-const TOPICS = {
-  "chat/1_5/sessions/2026-06-03",
-  "chat/1_15/sessions/wsl-qemu",
-  "chat/channels/Cobblestone/sessions/safari",
-  "chat/1_2/sessions/cobblestone",
-  "chat/2_15/sessions/general",
-  "chat/1_15/sessions/Layout",
-}
+const TOPICS = split(arg("topics", ""), ",")
 const STALE = 30 * 86400
+
+if #TOPICS == 1 and TOPICS[1] == "" then fail("no topics: give topics=<path>,<path> (each without .md)") end
 
 for base in TOPICS do
   if not exists(base .. ".md") then fail("no such topic " .. base .. ": nothing removed") end

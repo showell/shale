@@ -13,6 +13,8 @@ const chat_topics = @embedFile("examples/chat_topics.shale");
 const first_change = @embedFile("examples/first_change.shale");
 const stale_caches = @embedFile("examples/stale_caches.shale");
 const find_message = @embedFile("examples/find_message.shale");
+const stale_topics = @embedFile("examples/stale_topics.shale");
+const delete_stale_topics = @embedFile("examples/delete_stale_topics.shale");
 
 const sep = "\n\n-------------\n";
 
@@ -301,6 +303,59 @@ test "every cookbook script that walks gives the same answer walking in parts of
         defer parts.deinit();
         try finished(&parts);
         try testing.expectEqualStrings(whole.output, parts.output);
+    }
+}
+
+/// The fixture's files are written as the test runs, so "now" is the clock's,
+/// and 40 days on is past every topic's 30.
+fn clockNow(f: *Fixture) i64 {
+    return @intCast(@divFloor(std.Io.Clock.now(.real, f.threaded.io()).nanoseconds, std.time.ns_per_s));
+}
+
+test "example: the topics untouched for 30 days, none when all are fresh" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    var fresh = f.runAt(stale_topics, clockNow(&f), &out_buf);
+    defer fresh.deinit();
+    try finished(&fresh);
+    try testing.expectEqualStrings("topics\t0\n", fresh.output);
+    var later = f.runAt(stale_topics, clockNow(&f) + 40 * 86400, &out_buf);
+    defer later.deinit();
+    try finished(&later);
+    errdefer std.debug.print("{s}", .{later.output});
+    for ([_][]const u8{ "1_2\thello\t3\t", "#general\tlunch\t1\t", "#general\tplans\t40\t", "#random\tmisc\t2\t" }) |row|
+        try testing.expect(std.mem.indexOf(u8, later.output, row) != null);
+    try testing.expect(std.mem.endsWith(u8, later.output, "topics\t4\n"));
+    try testing.expectEqual(@as(usize, 0), later.effects.len);
+}
+
+test "example: stale topics deleted with their sidecars and uploads; a fresh one, a missing one or none given removes nothing" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const given = "const TOPICS = split(arg(\"topics\", \"\"), \",\")";
+    try testing.expect(std.mem.indexOf(u8, delete_stale_topics, given) != null);
+    const two = try std.mem.replaceOwned(u8, a, delete_stale_topics, given, "const TOPICS = split(arg(\"topics\", \"chat/channels/general/sessions/plans,chat/1_2/sessions/hello\"), \",\")");
+    const missing = try std.mem.replaceOwned(u8, a, delete_stale_topics, given, "const TOPICS = split(arg(\"topics\", \"chat/1_2/sessions/hello,chat/1_2/sessions/nope\"), \",\")");
+    {
+        var f: Fixture = undefined;
+        try f.init();
+        defer f.deinit();
+        var r = f.runAt(two, clockNow(&f) + 40 * 86400, &out_buf);
+        defer r.deinit();
+        try finished(&r);
+        try testing.expectEqualStrings("deleted\tchat/channels/general/sessions/plans\t.md .count .reactions.jsonl .uploads/\ndeleted\tchat/1_2/sessions/hello\t.md .count\ntopics deleted\t2\n", r.output);
+        try testing.expectEqual(@as(usize, 6), r.effects.len);
+    }
+    for ([_]struct { src: []const u8, ahead: i64 }{ .{ .src = two, .ahead = 0 }, .{ .src = missing, .ahead = 40 * 86400 }, .{ .src = delete_stale_topics, .ahead = 40 * 86400 } }) |c| {
+        var f: Fixture = undefined;
+        try f.init();
+        defer f.deinit();
+        var r = f.runAt(c.src, clockNow(&f) + c.ahead, &out_buf);
+        defer r.deinit();
+        try testing.expectEqualStrings("fail", @tagName(r.stop.?.class));
+        try testing.expectEqual(@as(usize, 0), r.effects.len);
     }
 }
 

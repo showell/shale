@@ -1,13 +1,8 @@
 -- Every topic untouched for 30 days (its transcript's modified time), with
 -- its message count and that time: the candidates to delete
--- (delete_topic.shale). topics.shale, its condition one clause longer.
--- Every topic with its message count: the direct conversations
--- (chat/<a>_<b>/sessions/<sid>.md) and the channels
--- (chat/channels/<name>/sessions/<sid>.md). A message is a block that
--- starts with a line "MSG_<sid>_<n>", and no message's text holds "MSG_"
--- (as find_message.shale reads them): counted without holding a
--- transcript, in one call when it is within the call-bytes cap (1 MiB),
--- and by the prelude's count_all, a part at a time, when it is bigger.
+-- (delete_stale_topics.shale). It is topics.shale with one clause more, and
+-- counts messages as it does: `count_in` within the call-bytes cap (1 MiB),
+-- the prelude's `count_all` past it, so no transcript is held.
 
 const CAP = 1048576
 
