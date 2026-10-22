@@ -4,20 +4,22 @@
 -- repos at once). One launch, no script to write:
 --
 --   shale <cookbook>/look.shale at=src/io.zig:690-730,build.zig:16-29
---   shale <cookbook>/look.shale find=pathFromRoot( in=src,build.zig like=*.zig
+--   shale <cookbook>/look.shale find=pathFromRoot( in=src,build.zig ext=zig
 --   shale <cookbook>/look.shale --args-stdin <<'ARGS'   (a value with spaces)
 --   find=pub fn findProgram
 --   in=zig:lib/std/Build.zig
 --   ARGS
 --   shale <cookbook>/look.shale rev=origin/master at=QUEUE.md:10-40
---   shale <cookbook>/look.shale rev=HEAD~3 find=fuzz_runs in=src,build.zig like=*.zig
+--   shale <cookbook>/look.shale rev=HEAD~3 find=fuzz_runs in=src,build.zig ext=zig
 --
 -- `at` is a comma-separated list of `path:first-last` (or `path:n` for one
 -- line); a mount path (`zig:lib/std/Build.zig:100-120`) works, the range
 -- after the last colon. `find` is a literal (not a pattern), looked for in
 -- each file or folder of `in` (comma-separated; folders walked, their
 -- .zig-cache, zig-out, zig-pkg, node_modules and .git passed by), files
--- matching `like` (`*` for all). At most `most` lines are printed, and a
+-- matching `like` (`*` for all; a glob is no plain word, so it goes on
+-- stdin with `--args-stdin`) and ending in one of `ext`'s extensions
+-- (`ext=zig`, `ext=ts,tsx`: plain words, for the launch line). At most `most` lines are printed, and a
 -- run that finds more says so: never a silent cut. A found line longer than
 -- `wide` characters is cut there, ending ` ...`.
 --
@@ -34,6 +36,16 @@ const AT = arg("at", "")
 const FIND = arg("find", "")
 const IN = arg("in", ".")
 const LIKE = arg("like", "*")
+const EXT = arg("ext", "")
+
+-- Whether a walked file ends in one of `ext`'s extensions (any, unset).
+function wanted(path)
+  if EXT == "" then return true end
+  for e in split(EXT, ",") do
+    if ends_with(path, "." .. trim(e)) then return true end
+  end
+  return false
+end
 const MOST = arg("most", 300)
 const WIDE = arg("wide", 200)
 const REV = arg("rev", "")
@@ -51,7 +63,7 @@ function files_at_rev(place)
   if place ~= "." then push(args, place) end
   local got = {}
   for p in lines(git_call(REPO, args, nil, true, nil).out) do
-    if p ~= "" and (LIKE == "*" or like(basename(p), LIKE)) then push(got, p) end
+    if p ~= "" and (LIKE == "*" or like(basename(p), LIKE)) and wanted(p) then push(got, p) end
   end
   return got
 end
@@ -78,7 +90,7 @@ function grep_at_rev(place)
   return by_path
 end
 
-if AT == "" and FIND == "" then fail("look: give at=path:first-last[,...] or find=TEXT [in=dirs] [like=*.zig]") end
+if AT == "" and FIND == "" then fail("look: give at=path:first-last[,...] or find=TEXT [in=dirs] [ext=zig]") end
 
 -- `path:first-last` or `path:n`, split at the last colon.
 function range_of(spec)
@@ -135,7 +147,7 @@ if FIND ~= "" then
       local opts = {kind = "file", skip = ".*"}
       if LIKE ~= "*" then opts = {kind = "file", skip = ".*", like = LIKE} end
       for e in walk_all(place, opts) do
-        if not passed_by(e.path) then push(paths, e.path) end
+        if not passed_by(e.path) and wanted(e.path) then push(paths, e.path) end
       end
     else
       push(paths, place)

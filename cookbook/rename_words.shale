@@ -1,0 +1,79 @@
+-- A word renamed across a project, any language: every whole-word `from` in
+-- the files matching `like` under `in` becomes `to`, one write a file, a
+-- one-line summary each. Whole words only (`fetchUserName` is left when
+-- `from` is `fetchUser`), but strings and comments are words too: read the
+-- summaries, then `git diff`. For Zig, `zig_rename` reads tokens instead
+-- (SHALE-AGENTS.md, "A symbol renamed across a tree").
+--
+--   shale cookbook:rename_words.shale from=fetchUser to=loadUser in=src ext=ts,tsx
+--
+-- `ext` is the extensions to change (plain words for the launch line; a
+-- glob, `like=`, goes on stdin with `--args-stdin`). `in` is
+-- comma-separated files or folders (default the root); folders are
+-- walked past hidden ones (.git, .venv) and node_modules, zig-out and
+-- .zig-cache. A file that holds `from` only inside longer words is listed,
+-- not changed.
+--
+-- budget: steps=500000000 reads=100000 read_bytes=1000000000 arena_bytes=1000000000
+
+const FROM = arg("from", "")
+const TO = arg("to", "")
+const IN = arg("in", ".")
+const LIKE = arg("like", "*")
+const EXT = arg("ext", "")
+
+-- Whether a walked file ends in one of `ext`'s extensions (any, unset).
+function wanted(path)
+  if EXT == "" then return true end
+  for e in split(EXT, ",") do
+    if ends_with(path, "." .. trim(e)) then return true end
+  end
+  return false
+end
+
+if FROM == "" or TO == "" then fail("rename_words: give from=NAME to=NAME [in=dirs] [ext=ts,tsx]") end
+
+function passed_by(path)
+  for part in {"/node_modules/", "/zig-out/", "/.zig-cache/"} do
+    if contains("/" .. path .. "/", part) then return true end
+  end
+  return false
+end
+
+-- One file's whole-word edit; its own function, as `attempt` takes one.
+function rename_in(p)
+  return edit(p, FROM, TO, {all = true, word = true})
+end
+
+local renamed = 0
+local files = 0
+local only_inside = {}
+for given in split(IN, ",") do
+  local place = trim(given)
+  local paths = {}
+  if place == "." or is_dir(place) then
+    local opts = {kind = "file", skip = ".*"}
+    if LIKE ~= "*" then opts = {kind = "file", skip = ".*", like = LIKE} end
+    for e in walk_all(place, opts) do
+      if not passed_by(e.path) and wanted(e.path) then push(paths, e.path) end
+    end
+  else
+    push(paths, place)
+  end
+  for p in paths do
+    if #grep_all(p, FROM) > 0 then
+      local r = attempt(rename_in, p)
+      if r.ok then
+        renamed = renamed + r.value
+        files = files + 1
+      elseif r.class == "argument" then
+        -- `edit` found no whole word: `from` is only inside longer ones.
+        push(only_inside, p)
+      else
+        fail(p .. ": " .. r.error)
+      end
+    end
+  end
+end
+print(FROM .. " to " .. TO .. ": " .. renamed .. " in " .. files .. " files")
+if #only_inside > 0 then print("only inside longer words, left: " .. join(only_inside, ", ")) end

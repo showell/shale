@@ -131,10 +131,13 @@ list of what Shale should learn next
 
 The cookbook's general recipes work on any language's files:
 
-    shale cookbook:look.shale find=TODO in=src,tests          # every TODO, with its line
+    shale cookbook:look.shale find=TODO in=src,tests ext=ts,py   # every TODO, with its line
     shale cookbook:look.shale at=src/app.ts:40-80,README.md:1-20
+    shale cookbook:rename_words.shale from=fetchUser to=loadUser ext=ts,tsx
 
-and a rename by whole words across a tree, in a heredoc:
+(`*` is not a plain word for the gate, so `ext=` names extensions; a full
+glob goes on stdin as `like=`, with `--args-stdin`.) The rename, written out
+as a heredoc to change:
 
 ```lua
 for e in walk_all(".", {kind = "file", like = "*.ts", skip = "node_modules"}) do
