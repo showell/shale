@@ -59,8 +59,9 @@ that is), then:
     print("hello from " .. #glob("src/**/*") .. " files")
     EOF
 
-**Mounts (optional):** a folder outside the one a script runs in is reached
-through a mount, `name:path`. Make `~/.config/shale/mounts`:
+**Mounts (optional):** a folder outside the one a script runs in is a
+mount: listed as `name = /abs/path` in `~/.config/shale/mounts`, then reached
+as `name:file`. For the recipes, make that file:
 
     cookbook = /ABSOLUTE/PATH/TO/shale/cookbook
 
@@ -109,14 +110,22 @@ When Shale truly can't do it, escape with a first line
 
 | you'd type | what happens | instead |
 |---|---|---|
-| `npm test`, `git status`, `pytest` at the top level | refused: only a `shale` launch passes | from a script: `run({"npm", "test"}, {timeout_ms = 600000, tail = 40})`; or the escape `# want: tests: run npm test` as the call's first line |
-| `node <script>.js`, `python3 -m ...`, `bash -c ...` | refused inside `run` too: Shale is the script | `{want = "tag: why"}` in `run`'s options runs it, logged; or the escape |
+| `npm test`, `git status`, `pytest` at the top level | refused: only a `shale` launch passes | from a script: `print(must(run({"npm", "test"}, {timeout_ms = 600000, tail = 40})).out)` (below); or the escape `# want: tests: run npm test` as the call's first line |
+| `node <script>.js`, `python3 -m ...`, `bash -c ...` | refused inside `run` too: Shale is the script | `{want = "tag: why"}` in `run`'s options runs it, recorded in the run's effects (`--verbose`); or the escape |
 | `grep`, `sed`, `cat`, `head` | refused: Shale has builtins for these | `grep(p, text)`, `read`, `lines`, `look.shale` (below) |
 | `<project>/node_modules/.bin/tsc`, `<project>/.venv/bin/pytest` | refused: a program by a path git does not track | `npx tsc`; for a venv, a ` tools` mount (`venv = <project>/.venv ro tools`, the path absolute) and `run({real("venv:bin/pytest")}, ...)` |
 | `npm`, `npx`, `git`, `pytest`, `cargo`, a compiler by name | allowed inside `run` | `run` needs `timeout_ms` and a keep: `head = N`, `tail = N` or `whole = BYTES` |
 
-Every escape lands in `~/.local/state/shale/wants.tsv`: the list of what
-Shale should learn next ([docs/SHALE-WANTS.md](docs/SHALE-WANTS.md) is ours).
+**`run` returns, it does not print or fail:** its result holds `out` (what
+the program printed, as much as the keep keeps) and `code`. A failing test
+run does not stop the script unless you ask: `must(r)` gives `r` when the
+program exited 0, and otherwise prints its output and stops the run, naming
+the command and its exit. So `print(must(run(...)).out)` shows the tests'
+last lines and fails when they fail.
+
+Every gate escape (`# want:`) lands in `~/.local/state/shale/wants.tsv`: the
+list of what Shale should learn next
+([docs/SHALE-WANTS.md](docs/SHALE-WANTS.md) is ours).
 
 ### Recipes for any project
 
@@ -128,7 +137,7 @@ The cookbook's general recipes work on any language's files:
 and a rename by whole words across a tree, in a heredoc:
 
 ```lua
-for e in walk_all("src", {kind = "file", like = "*.ts", skip = "node_modules"}) do
+for e in walk_all(".", {kind = "file", like = "*.ts", skip = "node_modules"}) do
   if #grep(e.path, "fetchUser") > 0 then edit(e.path, "fetchUser", "loadUser", {all = true, word = true}) end
 end
 ```
