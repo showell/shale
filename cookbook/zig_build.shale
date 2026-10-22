@@ -52,6 +52,10 @@ for w in passed do push(argv, w) end
 -- A compiler named through a mount runs if that mount is marked ` tools`
 -- (SHALE-AGENTS.md: the user's word, once, for a new toolchain).
 local r = run(argv, {cwd = DIR, timeout_ms = MINUTES * 60000, whole = 16777216})
+-- A run ended by its time or a signal has no exit code: say how it ended.
+local how = ""
+if has_key(r, "code") then how = "exit " .. r.code else how = "ended: " .. tostring(r.ended) .. " (no exit code)" end
+local failed_run = not has_key(r, "code") or r.code ~= 0
 local log_path = LOG
 if DIR ~= "." then log_path = DIR .. "/" .. LOG end
 replace(log_path, r.out)
@@ -104,10 +108,11 @@ if GREP ~= "" then
 end
 -- A failed run whose own words are not `error:` lines (a checker's
 -- findings, a script's stop): its last lines, so nothing is hidden.
-if r.code ~= 0 then
+if failed_run then
   print("-- the last lines:")
   local from = #lines_of - 14
   if from < 1 then from = 1 end
   for i = from, #lines_of do print("   " .. sub(lines_of[i], 1, 200)) end
 end
-print("exit " .. r.code .. " in " .. (r.ms // 1000) .. " s; the whole output in " .. log_path)
+print(how .. " in " .. (r.ms // 1000) .. " s; the whole output in " .. log_path)
+if failed_run then fail("zig_build: " .. how) end
