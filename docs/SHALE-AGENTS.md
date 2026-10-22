@@ -237,7 +237,7 @@ them nil.
 
 Every block of Shale below runs as a test (`src/script/agent_test.zig`), on
 a small checkout shaped like zig-metal-unikernel's, a fresh one each. What it
-prints is under `-- prints:` (a tab shows as `<TAB>`).
+prints is in the box after it, exactly.
 
 ## The cookbook, beside what an agent would write otherwise
 
@@ -269,12 +269,14 @@ for k in keys(by) do push(rows, {reason = k, lines = by[k]}) end
 sort(rows, "reason")
 print(table(rows, {"reason", "lines"}))
 print("all", total)
--- prints:
--- reason   lines
--- bounded      1
--- fast         1
--- simpler      1
--- all<TAB>3
+```
+
+```output
+reason   lines
+bounded      1
+fast         1
+simpler      1
+all	3
 ```
 
 ```sh
@@ -296,9 +298,11 @@ for p in glob("**/*.zig") do
 end
 sort(rows, "lines", "desc")
 print(table(rows, {"lines", "path"}))
--- prints:
--- lines  path
---  1200  src/big_test.zig
+```
+
+```output
+lines  path
+ 1200  src/big_test.zig
 ```
 
 ```sh
@@ -318,9 +322,11 @@ for p in glob("src/**/*.zig") do
     if r ~= nil then print(p .. ":" .. m.line, r.group) end
   end
 end
--- prints:
--- src/tcp.zig:7<TAB>tcp: what is sent was queued
--- src/tcp_timeouts.zig:3<TAB>tcp: a deadline is after the start
+```
+
+```output
+src/tcp.zig:7	tcp: what is sent was queued
+src/tcp_timeouts.zig:3	tcp: a deadline is after the start
 ```
 
 ```python
@@ -352,11 +358,13 @@ for p in glob("src/**/*.zig") do
 end
 print(n .. " renamed")
 -- (the CLI's summary of each diff; --verbose for the diffs)
--- prints:
--- edit src/tcp.zig: 1 hunk, -1 +1 lines
--- edit src/tcp.zig: 1 hunk, -1 +1 lines
--- edit src/tcp_timeouts.zig: 1 hunk, -1 +1 lines
--- 2 renamed
+```
+
+```output
+edit src/tcp.zig: 1 hunk, -1 +1 lines
+edit src/tcp.zig: 1 hunk, -1 +1 lines
+edit src/tcp_timeouts.zig: 1 hunk, -1 +1 lines
+2 renamed
 ```
 
 ```sh
@@ -407,20 +415,22 @@ fn check(queued: bool) void {
   {old = "// DEPARTS (simpler): no SACK.", new = "// DEPARTS (simpler): no SACK, no window scaling."},
 })
 print(n .. " edits")
--- prints:
--- --- a/src/tcp.zig
--- +++ b/src/tcp.zig
--- @@ -4,1 +4,1 @@
--- -// DEPARTS (simpler): no SACK.
--- +// DEPARTS (simpler): no SACK, no window scaling.
--- @@ -6,3 +6,3 @@
--- -fn check() void {
--- -    props.always(@src(), true, "tcp: what is sent was queued", .{});
--- -}
--- +fn check(queued: bool) void {
--- +    props.always(@src(), queued, "tcp: what is sent was queued", .{});
--- +}
--- 2 edits
+```
+
+```output
+--- a/src/tcp.zig
++++ b/src/tcp.zig
+@@ -4,1 +4,1 @@
+-// DEPARTS (simpler): no SACK.
++// DEPARTS (simpler): no SACK, no window scaling.
+@@ -6,3 +6,3 @@
+-fn check() void {
+-    props.always(@src(), true, "tcp: what is sent was queued", .{});
+-}
++fn check(queued: bool) void {
++    props.always(@src(), queued, "tcp: what is sent was queued", .{});
++}
+2 edits
 ```
 
 ```python
@@ -459,9 +469,11 @@ for m in grep("docs/notes.md", ".zig:") do
     end
   end
 end
--- prints:
--- tcp_timeouts.zig:40<TAB>src/tcp_timeouts.zig has 5 lines
--- gone.zig:1<TAB>no such file
+```
+
+```output
+tcp_timeouts.zig:40	src/tcp_timeouts.zig has 5 lines
+gone.zig:1	no such file
 ```
 
 ```python

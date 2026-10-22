@@ -328,6 +328,9 @@ pub fn snippets(a: std.mem.Allocator, name: []const u8, doc: []const u8) ![]Snip
     var prev_blank = true;
     // A shale block that prints, until its output block is read.
     var awaiting: ?Snippet = null;
+    // The language of the block before, so an output block after another
+    // language's (`shale-linux`, read by its own test) is that block's.
+    var before: []const u8 = "";
     while (lines.next()) |line| {
         n += 1;
         if (in_block) |lang| {
@@ -338,14 +341,17 @@ pub fn snippets(a: std.mem.Allocator, name: []const u8, doc: []const u8) ![]Snip
                     const sn = try parseSnippet(name, start, body.items);
                     if (sn.stops != null) try out.append(a, sn) else awaiting = sn;
                 } else if (std.mem.eql(u8, lang, "output")) {
-                    var sn = awaiting orelse {
-                        complain("{s}:{d}: an output block with no shale block before it\n", .{ name, start });
+                    if (awaiting) |pending| {
+                        var sn = pending;
+                        sn.prints = body.items;
+                        try out.append(a, sn);
+                        awaiting = null;
+                    } else if (before.len == 0 or std.mem.eql(u8, before, "shale") or std.mem.eql(u8, before, "output")) {
+                        complain("{s}:{d}: an output block with no program block before it\n", .{ name, start });
                         return error.TestUnexpectedResult;
-                    };
-                    sn.prints = body.items;
-                    try out.append(a, sn);
-                    awaiting = null;
+                    }
                 }
+                before = lang;
                 body = .empty;
             } else if (kept) {
                 try body.appendSlice(a, line);

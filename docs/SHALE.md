@@ -81,16 +81,18 @@ there:
 
 Every block of Shale on this page runs as a test, on a store shaped like
 angry-gopher's (the site examples' below), at `now()` = 2026-10-14. What it
-prints is under `-- prints:` (a tab shows as `<TAB>`), or how it stops
-under `-- stops:`.
+prints is in the box after it, exactly; a block that stops instead ends
+with `-- stops:` and the stop's class.
 
 **Look before you change.** List what is at the root:
 
 ```shale
 for name in ls("") do print(name) end
--- prints:
--- chat
--- games
+```
+
+```output
+chat
+games
 ```
 
 **Walk a folder** to see everything under it, one store read per folder:
@@ -99,11 +101,13 @@ for name in ls("") do print(name) end
 for e in walk("chat", {like = "*.md"}) do
   print(e.path, e.size)
 end
--- prints:
--- chat/1_2/sessions/hello.md<TAB>293
--- chat/channels/general/sessions/lunch.md<TAB>87
--- chat/channels/general/sessions/plans.md<TAB>4166
--- chat/channels/random/sessions/misc.md<TAB>188
+```
+
+```output
+chat/1_2/sessions/hello.md	293
+chat/channels/general/sessions/lunch.md	87
+chat/channels/general/sessions/plans.md	4166
+chat/channels/random/sessions/misc.md	188
 ```
 
 **Read only what you need.** Here, a count cache's first line and the
@@ -113,11 +117,13 @@ start of a transcript:
 local cache = read("chat/1_2/sessions/hello.count")
 print(words(lines(cache)[1])[1])     -- the cached message count
 print(read("chat/1_2/sessions/hello.md", 0, 40))
--- prints:
--- 3
--- MSG_hello_1
--- from: steve
--- date: 2026-10-13
+```
+
+```output
+3
+MSG_hello_1
+from: steve
+date: 2026-10-13
 ```
 
 **Count without holding a file.** A message is a block, and blocks are
@@ -126,8 +132,10 @@ joined by the separator:
 ```shale
 local sep = "\n\n-------------\n"
 print(count_in("chat/1_2/sessions/hello.md", sep) + 1)
--- prints:
--- 3
+```
+
+```output
+3
 ```
 
 **Then change something.** The effects log lists every change with its
@@ -137,9 +145,11 @@ outcome:
 mkdir("shale-check")
 replace("shale-check/note.txt", "written at " .. date(now()) .. "\n")
 print(read("shale-check/note.txt"))
--- prints:
--- written at 2026-10-14T00:00:00Z
---
+```
+
+```output
+written at 2026-10-14T00:00:00Z
+
 ```
 
 **Survive one bad file** with `attempt`, which turns an error into a
@@ -152,11 +162,13 @@ for e in walk("chat", {like = "*.count"}) do
   local r = attempt(size_of, e.path)
   if r.ok then print(e.path, r.value) else print(e.path, "unreadable:", r.class) end
 end
--- prints:
--- chat/1_2/sessions/hello.count<TAB>3
--- chat/1_2/sessions/torn.count<TAB>unreadable:<TAB>argument
--- chat/channels/general/sessions/lunch.count<TAB>1
--- chat/channels/general/sessions/plans.count<TAB>40
+```
+
+```output
+chat/1_2/sessions/hello.count	3
+chat/1_2/sessions/torn.count	unreadable:	argument
+chat/channels/general/sessions/lunch.count	1
+chat/channels/general/sessions/plans.count	40
 ```
 
 **A name that is a value can't be called:**
@@ -253,8 +265,10 @@ function parity(n, even)
   return parity(n - 1, not even)
 end
 print(parity(4, true), parity(3, true))
--- prints:
--- true<TAB>false
+```
+
+```output
+true	false
 ```
 
 ### Values
@@ -282,8 +296,10 @@ local old = [=[
 if (x[i]] == "a\n") {
 ]=]
 print(#old, sub(old, 1, 9), contains(old, "\\n"))
--- prints:
--- 22<TAB>if (x[i]]<TAB>true
+```
+
+```output
+22	if (x[i]]	true
 ```
 
 `{}` takes its kind, list or map, from its first entry; using it as the
@@ -440,9 +456,11 @@ local good = attempt(half, "10")
 local bad = attempt(half, "ten")
 print(good.ok, good.value)
 print(bad.ok, bad.class, bad.line, bad.in_function)
--- prints:
--- true<TAB>5
--- false<TAB>argument<TAB>1<TAB>half
+```
+
+```output
+true	5
+false	argument	1	half
 ```
 
 `attempt` calls the script's function `f` with the arguments. The
@@ -718,9 +736,11 @@ local o = find_in("shale-check/off.txt", "cd")
 print(o, read("shale-check/off.txt", o, 2))  -- an offset reads from there
 local s = read("shale-check/off.txt")
 print(find(s, "cd"), sub(s, o + 1, o + 2))   -- a position is one more
--- prints:
--- 2<TAB>cd
--- 3<TAB>cd
+```
+
+```output
+2	cd
+3	cd
 ```
 
 ### Regular expressions
@@ -736,11 +756,13 @@ print(re_match("  pub fn deadline(", "^\\s*pub fn"), re_match("x", "\\d"))
 local r = re_find("see tcp.zig:40 and gone.zig:1", "(\\w+\\.zig):\\d+")
 print(r.group, parse_int(sub(r.text, #r.group + 2)))
 print(re_find("error: test 4 FAILED", "\\b(fail|error|panic)", {nocase = true}).group)
--- prints:
--- 18<TAB>DEPARTS (bounded)<TAB>bounded
--- true<TAB>false
--- tcp.zig<TAB>40
--- error
+```
+
+```output
+18	DEPARTS (bounded)	bounded
+true	false
+tcp.zig	40
+error
 ```
 
 | builtin | gives |
@@ -872,8 +894,10 @@ local bytes = 0
 for e in part.entries do bytes = bytes + e.size end
 print(#part.entries, bytes, part.done)
 if not part.done then print("resume after " .. part.more) end
--- prints:
--- 10<TAB>4780<TAB>true
+```
+
+```output
+10	4780	true
 ```
 
 **The walk in parts, in full,** as `walk_all` does it: each call
@@ -895,8 +919,10 @@ function every_entry(path, opts)
   end
 end
 print(#every_entry("chat", {like = "*.md"}), #walk_all("chat", {like = "*.md"}))
--- prints:
--- 4<TAB>4
+```
+
+```output
+4	4
 ```
 
 **Each finding in a file of any size,** with `find_next`:
@@ -911,8 +937,10 @@ while true do
   at = f + 1
 end
 print(found, count_all("chat/channels/general/sessions/plans.md", "MSG_"))
--- prints:
--- 40<TAB>40
+```
+
+```output
+40	40
 ```
 
 **A big file's lines, a part at a time,** with `read_lines`: each part is
@@ -934,8 +962,10 @@ function lines_with(path, s, part)
   end
 end
 print(lines_with("chat/channels/general/sessions/plans.md", "from:", 512))
--- prints:
--- 40
+```
+
+```output
+40
 ```
 
 **Data a script did not write** (a log, a sidecar, a line torn by a crash)
@@ -950,9 +980,11 @@ local fields = words("2026-10-17 GET /x 200 log-x")
 print(parse_int(get(fields, 4, "")), parse_int(get(fields, 5, "")), get(fields, 9, "none"))
 local at = find_in("chat/channels/general/sessions/plans.md", "message 7,")
 print(line_at("chat/channels/general/sessions/plans.md", at))
--- prints:
--- 200<TAB>nil<TAB>none
--- message 7, a line of it
+```
+
+```output
+200	nil	none
+message 7, a line of it
 ```
 
 ## The store
@@ -1473,8 +1505,10 @@ for i = 1, 1000 do
   yield()
 end
 print(total)
--- prints:
--- 20000
+```
+
+```output
+20000
 ```
 
 The tree-walker kept as the VM's second implementation never collects,
