@@ -1,10 +1,10 @@
 -- Every topic untouched for 30 days (its transcript's modified time), with
 -- its message count and that time: the candidates to delete
 -- (delete_stale_topics.shale). It is topics.shale with one clause more, and
--- counts messages as it does: `count_in` within the call-bytes cap (1 MiB),
+-- counts messages as it does: `count_in` within the call-bytes cap,
 -- the prelude's `count_all` past it, so no transcript is held.
 
-const CAP = 1048576
+const CAP = budget().call_bytes
 
 function messages(e)
   if e.size <= CAP then return count_in(e.path, "MSG_") end

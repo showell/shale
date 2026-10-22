@@ -35,7 +35,7 @@ local last = START
 local resume = nil
 for e in topics do
   -- A scan a part (the call-bytes cap), a stat, and the window's read.
-  if not room_for({reads = 3 + e.size // 1048576, read_bytes = e.size + WINDOW}) then
+  if not room_for({reads = 3 + e.size // budget().call_bytes, read_bytes = e.size + WINDOW}) then
     print("stopped at the read budget, after " .. looked .. " of " .. #topics .. " topics")
     resume = last
     break

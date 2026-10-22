@@ -864,7 +864,7 @@ Perl and Python sometimes take one more turn after it, so on "a",
 | builtin | gives |
 |---|---|
 | `now()` | the integer the host handed in: the only time a script has |
-| `budget()` | a map of what is left of `steps`, `reads`, `read_bytes`, `changes`, `change_bytes` and `output`, so a script can stop at a point of its own (the other budgets are not in it) |
+| `budget()` | a map of what is left of `steps`, `reads`, `read_bytes`, `changes`, `change_bytes` and `output`, so a script can stop at a point of its own, and `call_bytes`, what one call may bring (a cap, never spent), so a scan sizes its parts to it (the other budgets are not in it) |
 | `print(...)` | scalars only. It evaluates every argument first, joins them with tabs, and ends with a newline: `print()` is an empty line, `print(nil, true)` is `nil<TAB>true` |
 | `arg(name[, default])` | the value the run was given as `name` (the runner's `name=value`), or `default` (nil unset): a script's inputs. An integer or boolean default reads the value as one (`true`, `false`, `1`, `0`); any other, the string. The live site's route gives no values |
 | `fail(msg)` | the run stops here, class `fail`, `msg` its message: one line and its trail, as any stop (QUEUE 232). The script's own assertion: `if #found == 0 then fail("no config under " .. dir) end`. `attempt` catches it; the CLI exits 1 on it |
@@ -885,8 +885,8 @@ are the prelude's, whatever the script has declared.
 | function | gives | costs |
 |---|---|---|
 | `walk_all(p[, opts])` | every entry `walk(p, opts)` gives, from `opts.after` on when it is given, across all its parts, the `more` entries left out, each `path` beginning with `p`; `opts` (none: `{}`) is not changed | `walk`'s, a part at a time |
-| `count_all(p, s)` | `s`'s occurrences in the whole file | a stat, then a `count_in` a megabyte (a host whose call-bytes cap is under 1 MiB stops it with `argument`) |
-| `find_next(p, s, at)` | the 0-based offset of the first `s` at or after `at`, or nil | a `find_in` from `at`, a megabyte at a time; a stat and more parts only when that finds nothing (under a 1 MiB call-bytes cap, as `count_all`) |
+| `count_all(p, s)` | `s`'s occurrences in the whole file | a stat, then a `count_in` a part, each the call-bytes cap (`budget().call_bytes`) |
+| `find_next(p, s, at)` | the 0-based offset of the first `s` at or after `at`, or nil | a `find_in` from `at`, a part the call-bytes cap; a stat and more parts only when that finds nothing |
 | `walk_upto(p, opts, keep)` | `{entries, more, done}`: every entry from `opts.after` on, as `walk_all`, until the walk ends (`done`, `more` is "") or its reads would leave fewer than `keep` (not `done`: `more` is the path the next walk goes on after) | `walk`'s, a part at a time, with `keep_reads = keep` |
 | `glob(pattern[, {hidden}])` | every file whose path matches `pattern` (`match_path`), in the walk's order; the walk starts at the parts before the first wildcard and passes by hidden names (`walk`'s `skip = ".*"`) unless `{hidden = true}`. A pattern with no wildcard is that file, if it is one | `walk_all`'s |
 | `room_for(need)` | whether what is left of the budgets holds `need`, a map of `budget()`'s names: `room_for({reads = 3, read_bytes = n})`; a name not among them is an `index` stop | a `budget()` |

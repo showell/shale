@@ -3,10 +3,10 @@
 -- (chat/channels/<name>/sessions/<sid>.md). A message is a block that
 -- starts with a line "MSG_<sid>_<n>", and no message's text holds "MSG_"
 -- (as find_message.shale reads them): counted without holding a
--- transcript, in one call when it is within the call-bytes cap (1 MiB),
+-- transcript, in one call when it is within the call-bytes cap (`budget().call_bytes`),
 -- and by the prelude's count_all, a part at a time, when it is bigger.
 
-const CAP = 1048576
+const CAP = budget().call_bytes
 
 function messages(e)
   if e.size <= CAP then return count_in(e.path, "MSG_") end

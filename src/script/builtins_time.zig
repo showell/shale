@@ -85,7 +85,8 @@ fn yield(_: *Run, _: ast.Pos, _: []const Value) Error!Value {
 }
 
 /// `budget()` returns what is left of each budget a script spends as it runs,
-/// so it can stop at a point of its own choosing.
+/// so it can stop at a point of its own choosing, and `call_bytes`, what one
+/// call may bring (a cap, never spent), so a scan can size its parts to it.
 fn budget(run: *Run, pos: ast.Pos, _: []const Value) Error!Value {
     const a = run.alloc;
     const out = try run.newTable(pos);
@@ -96,6 +97,7 @@ fn budget(run: *Run, pos: ast.Pos, _: []const Value) Error!Value {
         .{ "changes", run.budgets.changes -| run.changes },
         .{ "change_bytes", run.budgets.change_bytes -| run.change_bytes },
         .{ "output", run.out_cap -| run.out_len },
+        .{ "call_bytes", run.budgets.call_bytes },
     };
     for (left) |kv| out.map.put(a, kv[0], .{ .int = @intCast(@min(kv[1], std.math.maxInt(i64))) }) catch return run.oom(pos);
     out.kind = .map;
