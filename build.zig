@@ -149,7 +149,8 @@ pub fn build(b: *std.Build) void {
 
     // The signer (src/shale_sign.zig): the key pair, made once, and a script
     // signed for a target.
-    //   zig build shale-sign -- keygen | pubkey | sign <file.shale> <target> [minutes]
+    //   zig build shale-sign -- keygen [target] | pubkey [target] | sign <file.shale> <target> [minutes]
+//     | background <file.shale> <target> [minutes] | kill <target> [minutes]
     const signer = b.addExecutable(.{ .name = "shale-sign", .root_module = b.createModule(.{
         .root_source_file = b.path("src/shale_sign.zig"),
         .target = target,
@@ -159,7 +160,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(signer);
     const run_signer = b.addRunArtifact(signer);
     run_signer.addPassthruArgs();
-    b.step("shale-sign", "the Shale signer: zig build shale-sign -- keygen | pubkey | sign <file.shale> <target> [minutes]").dependOn(&run_signer.step);
+    b.step("shale-sign", "the Shale signer: zig build shale-sign -- keygen | pubkey | sign <file.shale> <target> | background <file.shale> <target> | kill <target> (src/shale_sign.zig)").dependOn(&run_signer.step);
     const signer_test = b.addTest(.{ .root_module = signer.root_module });
 
     // shale-gate (tools/shale_gate.zig): the PreToolUse hook's classifier,

@@ -7,8 +7,10 @@ effect goes through webbox's `store`, so a script does the same on Linux
 and on bare metal. Every run stays inside its budgets.
 
 A script **just runs.** Its effects happen as it goes. A run that stops
-keeps what it already did, and its effects log says what that was. There
-is no rollback; on Linux, git is the undo.
+keeps what it already did, and its effects log says what that was (always
+in the route's reply; with `--verbose` on the runner). There is no
+rollback by default: on Linux, git is the undo, and `shale
+--undo-on-stop` puts back the paths a stopped run changed.
 
 **For an agent choosing a tool** (in place of Python, sed or awk, on a code
 checkout or any folder): [`SHALE-AGENTS.md`](SHALE-AGENTS.md). **The
@@ -55,15 +57,16 @@ what avoids it:
    `line_at(p, offset)` gives the whole line around an offset, and
    `read_lines` whole lines a part at a time.
 7. **Look before you change.** On Linux, work in a git checkout, so a
-   run's changes can be seen (`git diff`) and taken back; `edit` prints its
-   diff before it writes. On metal there is no undo: rehearse a script on
+   run's changes can be seen (`git diff`) and taken back; `edit` says what
+   it changes before it writes (a one-line summary, the whole diff with
+   `--verbose`). On metal there is no undo: rehearse a script on
    a copy of the data first.
 
 When a run stops, its report names the line, and the calls that led
 there:
 
 ```text
-── stopped at seq 12:18:14 (in `the prelude's walk_all`): budget reads: the store-read budget (count) ran out (134718 steps)
+── stopped at the prelude:19:14 (in `the prelude's walk_all`): budget reads: the store-read budget (count) ran out (134718 steps)
    called from seq 12:31:15 (in `sizes`)
    called from seq 12:40:1
 ```
@@ -197,8 +200,8 @@ The host chooses, not the script; a signed request names it
 | | atomic | background |
 |---|---|---|
 | when it runs | whole, inside one request, holding the site's other requests up | in slices between requests: a slice ends after any store call or a number of steps |
-| may change the store | yes | **no**: `replace`, `append`, `mkdir`, `remove` and `remove_tree` stop it, an `argument` error naming `atomic` |
-| its budgets on the live sites | the site's own, small: lynrummy.com's 500 reads, 16 MiB read, 2M steps | the background's, larger: 10,000 reads (Dog Park's, `budgets` in its `src/play/shale.zig`) |
+| may change the store | yes | **no**: `replace`, `append`, `edit`, `mkdir`, `remove` and `remove_tree` stop it, an `argument` error naming `atomic` |
+| its budgets on the live sites | the site's own, small: lynrummy.com's 500 reads, 16 MiB read, 2M steps | the background's, larger: lynrummy.com's 10,000 reads, the rest as atomic (angry-gopher `admin_script.background_budgets`); Dog Park's larger on every count (`budgets` in its `src/play/shale.zig`) |
 
 - **The runner** (`shale`, `zig build script`, below) runs atomic, with
   Shale's default budgets, each of which `--budget NAME=N` sets (the
@@ -209,6 +212,9 @@ The host chooses, not the script; a signed request names it
   `admin_script.background_budgets`).
 - A script can ask what is left with `budget()`, but not which mode it is
   in: write a script that changes nothing when it may run either way.
+- A background run's walk passes over a file or folder that vanished
+  between its listing and its look, where an atomic run's stops with
+  `store`: requests change the store between a background run's slices.
 
 ## The language
 
@@ -404,7 +410,7 @@ was in. The classes are:
 | class | |
 |---|---|
 | `syntax` | not a sentence of the language |
-| `refused` | Lua has it and this language does not (named) |
+| `refused` | Lua has it and this language does not (named), or a name that holds a value called as a function |
 | `name` | a name not declared, or declared twice in one scope |
 | `type` | a value of the wrong type for what was done with it |
 | `index` | a missing key, or an index out of range |
@@ -424,7 +430,8 @@ was in. The classes are:
 
 `(in ...)` is there when it stopped inside a function, `<budget>` when a
 budget stopped it, and a function of the prelude is named "the prelude's
-<name>", its line the prelude's.
+<name>": a stop inside one reads `the prelude:<line>:<column>`, its line
+the prelude's. The runner adds a `── used:` line after a stop.
 
 **The trail** (metal-vmm QUEUE 229): after a stop inside a function, one
 `called from` line for each call that led there, innermost first, out to
@@ -434,7 +441,7 @@ prelude's. So a budget that runs out in the prelude's `walk_all` names the
 line of the script that called it:
 
 ```text
-── stopped at seq 12:18:14 (in `the prelude's walk_all`): budget reads: the store-read budget (count) ran out (134718 steps)
+── stopped at the prelude:19:14 (in `the prelude's walk_all`): budget reads: the store-read budget (count) ran out (134718 steps)
    called from seq 12:31:15 (in `sizes`)
    called from seq 12:40:1
 ```
@@ -443,7 +450,8 @@ line of the script that called it:
 **The message says what to do.** Each one names what was wrong and, where
 there is one, the way that works: a store error gives its plain words, its
 name and what asks first (`` `read("none.txt")`: not found (FileNotFound):
-`exists(p)` asks first ``); a budget gives its number. The golden corpus,
+`exists(p)` asks first ``); a budget names which one ran out (the step
+budget gives its number too). The golden corpus,
 `src/script/errors_test.zig`, holds a wrong script of every kind and the
 exact class, place and message it gets, so a message changed is a line
 changed in review.
@@ -471,8 +479,8 @@ It gives back a map:
 - or `{ok = false, error = "...", class = "store", line = 12, column = 9,
   in_function = "f", trail = {...}}`. `trail` is the stop's calls,
   innermost first, as the report's `called from` lines: a list of `{line,
-  column, in_function}` maps, out to the top level: the `attempt`
-  itself is one of them, the call of `f`, and the calls before it.
+  column, in_function}` maps, out to the top level. The `attempt` call is
+  the entry for the call of `f`; a top-level entry's `in_function` is `""`.
 
 **It catches a `fail`** as any other error: `fail(msg)` is how a function
 says it could not do what it was asked, and `attempt` gives `class =
@@ -523,12 +531,13 @@ stat      = "local" NAME [ "=" expr ]
           | "while" expr "do" block "end"
           | "for" NAME "=" expr "," expr [ "," expr ] "do" block "end"
           | "for" NAME "in" expr "do" block "end"
-          | "function" NAME "(" [ NAME { "," NAME } ] ")" block "end"   (top level)
+          | "function" NAME "(" [ param { "," param } ] ")" block "end"   (top level)
           | "do" block "end"
           | "break" | "continue"
           | "return" [ expr ]                             (last in its block)
           | ";" ;
 block     = { stat } ;
+param     = NAME [ "?" ] ;                      (an optional one after every required one)
 target    = NAME | value "[" expr "]" | value "." NAME ;
 expr      = expr binop expr | unop expr | value ;
 value     = primary { "[" expr "]" | "." NAME } ;
@@ -565,7 +574,8 @@ line comment). A `STRING` is
   ns for the interpreter's own steps (they ran at 67 to 713 before
   matches were charged). The operators are held to it too: a map's key is charged its
   length wherever it is hashed. A sort is charged its bound before it
-  runs (n log n comparisons, and every byte in each of the log n passes).
+  runs (2 n log n comparisons, and every byte in each of the log n passes;
+a sort by keys, that for each key, and its keys hashed).
   `charge_test.zig` holds every builtin and operator to this: its own
   steps at N and at 4N must grow by at least a step a unit (a step for 16,
   for bulk work). The ones whose work does not grow say why.
@@ -581,7 +591,10 @@ names the builtin and the argument.
 
 Each in its topic's table below, with what it costs. A wrong argument's
 type is a `type` error, a wrong count of arguments an `argument` error;
-the errors column says the rest.
+the errors column says the rest. Every builtin that takes a path also
+stops with `argument` for a path the root refuses (`..`, a leading `/`,
+an empty part), and every change with `budget changes` or `budget
+change_bytes` past those budgets.
 
 | builtin | gives | errors (besides a wrong type or count) |
 |---|---|---|
@@ -599,7 +612,7 @@ the errors column says the rest.
 | `find_in(p, s[, offset[, n]])` | the first `s`'s 0-based offset, or nil | as `count_in` |
 | `walk(p[, opts])` | the entries under `p`, a part at a time | `argument` for an unknown option or a bad `after`; `store` |
 | `replace(p, s)`, `append(p, s)` | a file written whole, or added to | `store`; in a background run, `argument` |
-| `mkdir(p)`, `remove(p)`, `remove_tree(p)` | a folder made; a file or a tree removed | `store` (a missing path too); in a background run, `argument` |
+| `mkdir(p)`, `remove(p)`, `remove_tree(p)` | a folder made, with its parents; a file or a tree removed | `store` (`remove` and `remove_tree` of a missing path too, `remove` of a folder too); in a background run, `argument` |
 | `split(s, sep)`, `lines(s)`, `words(s)` | lists of strings | `argument` for `sep` = "" |
 | `join(l, sep)` | one string | `type` for an item not a string or integer |
 | `starts_with`, `ends_with`, `contains` `(s, t)` | booleans | |
@@ -630,6 +643,7 @@ the errors column says the rest.
 | `keys(m)`, `has_key(m, k)`, `count(t)` | a list; a boolean; an integer | |
 | `get(t, k[, default])` | `t[k]`, or `default` where there is none | `type` for a key of the wrong kind |
 | `now()`, `budget()` | the host's time; what is left | |
+| `host(name, ...)` | what the host's call gives ("On Linux: behind the seam") | `host` where the host has no such call: metal has none |
 | `print(...)` | nil | `type` for a list or map |
 | `yield()` | nil | |
 | `arg(name[, default])` | the run's value by that name, or `default` | `argument` for a value not of an integer or boolean default's kind |
@@ -648,7 +662,7 @@ the errors column says the rest.
 | `read(p)` | the whole file | a read; each byte a read byte, and a step for 16 | `argument` for a file over the call-bytes cap (1 MiB): read it in parts; `budget read_bytes` when the file is longer than what is left; `store` |
 | `read_or(p, default)` | the whole file, or `default` when nothing is at `p` | one read: where `exists` then `read` was two; its bytes as `read`'s | as `read`; a folder is `store` |
 | `read(p, offset[, n])` | `n` bytes from byte `offset`, or to the end; fewer where the file ends, and "" from its end or past it. **Offsets are 0-based**, as the site's sidecars count them | a read; only those bytes | `argument` for a negative offset or count, or for more than the call-bytes cap; `store` for a folder or a missing file |
-| `read_lines(p[, offset[, n]])` | `{lines, next, done}`: the whole lines from byte `offset` (0 unset), at least `n` bytes (64 KiB unset) and on to the end of the line it stops in, so no line is cut; `lines` as `lines` splits them; `next` where the next part starts; `done` whether that is the file's end. `offset` is a line's start, as `next` is | a read; the part's bytes, and up to 512 past it for the last line's end; the whole part at most the call-bytes cap | `argument` for a negative offset, `n` under 1 or past the cap, or a line longer than the cap; `store` |
+| `read_lines(p[, offset[, n]])` | `{lines, next, done}`: the whole lines from byte `offset` (0 unset), at least `n` bytes (64 KiB unset) and on to the end of the line it stops in, so no line is cut; `lines` as `lines` splits them; `next` where the next part starts; `done` whether that is the file's end. `offset` is a line's start, as `next` is | a read; the part's bytes, then 512 bytes at a time past it to the last line's end, all of it at most the call-bytes cap; a step a byte of the part | `argument` for a negative offset, `n` under 1 or past the cap, or a line longer than the cap; `store` |
 | `grep(p, s)` | the lines of the file holding `s`, a literal, as `{line, text}`, `line` 1-based, in order, a line once however often it holds `s` | a read; the file whole, a step for 16 bytes, and each line kept a step a byte. At most the call-bytes cap: a bigger file goes through `read_lines` | `argument` for `s` empty or a file past the cap; `store` |
 | `edit(p, old, new[, {all, word}])` | the number of occurrences of `old` replaced by `new`; **the change's diff is printed first** (unified: `--- a/p`, `+++ b/p`, a hunk for the lines each occurrence is on). `old` must be in the file once, unless `all`; `word` takes only whole words (no letter, digit or `_` either side). Logged as `edit`. **Where the host says `summary`** (`Options.diffs`; the Linux CLI unless `--verbose`), the diff is one line, `edit p: N hunks, -O +N lines`, printed where the diff is, before the change budgets are checked; the hunk walk is charged as in full, and only the writes' charge goes. **`edit(p, {{old = ..., new = ...[, all = true][, word = true]}, ...})`**, its list form (metal-vmm QUEUE 232): at most 64 edits a call, in sequence, each to the file as the one before left it, each held to the rules above; one diff, from the file as it was to the file as the last edit left it; one write. An edit that fails stops the run with nothing printed and nothing written, and its error says which edit it was | a read, the file whole (at most the call-bytes cap), a step for 16 bytes, each edit; then `replace`'s change | `argument` for `old` empty, not there, or there more than once without `all`, and for an edit with no `old` or `new` or another key; `type` for an edit not a map; as `read` and `replace` |
 | `line_at(p, offset)` | the whole line holding byte `offset`, without its newline (a newline is its own line's last byte); nil at the file's end or past it | a read; the line, read back and on from `offset` 512 bytes at a time, then once more whole | `argument` for a negative offset or a line longer than the call-bytes cap; `store` |
@@ -824,7 +838,7 @@ Perl and Python sometimes take one more turn after it, so on "a",
 |---|---|
 | `date(seconds)` | `2026-10-14T03:00:00Z`, UTC, from 1970 to the end of 9999 |
 | `seconds(text)` | `date`'s inverse, over the same range. It takes an RFC 3339 time with `Z` or `±HH:MM` (a fraction of a second is dropped), or a date alone, which is its midnight UTC. Anything else, an unreal day among them, is an error |
-| `human(bytes)` | `512 B`, `1.5 KiB`, up to `EiB`: one decimal, rounded half up |
+| `human(bytes)` | `512 B`, `1.5 KiB`, up to `EiB`: one decimal, rounded half up; a negative size keeps its sign (`-2.0 KiB`) |
 | `pad(v, width)` | a string or an integer padded with spaces to `width` on the right, or to `-width` on the left; longer text is kept whole |
 | `table(rows, columns)` | a list of maps as aligned text: a line of the column names, then one a row, two spaces apart. A column of integers is aligned right. Every row must have every column. There is no newline at the end: `print` adds it. Charged a step a cell before the grid is made |
 
@@ -870,12 +884,12 @@ are the prelude's, whatever the script has declared.
 
 | function | gives | costs |
 |---|---|---|
-| `walk_all(p[, opts])` | every entry `walk(p, opts)` gives, across all its parts, the `more` entries left out, each `path` beginning with `p`; `opts` (none: `{}`) is not changed | `walk`'s, a part at a time |
-| `count_all(p, s)` | `s`'s occurrences in the whole file | a stat, then a `count_in` a megabyte |
-| `find_next(p, s, at)` | the 0-based offset of the first `s` at or after `at`, or nil | a `find_in` from `at`; a stat and more parts only when that finds nothing |
+| `walk_all(p[, opts])` | every entry `walk(p, opts)` gives, from `opts.after` on when it is given, across all its parts, the `more` entries left out, each `path` beginning with `p`; `opts` (none: `{}`) is not changed | `walk`'s, a part at a time |
+| `count_all(p, s)` | `s`'s occurrences in the whole file | a stat, then a `count_in` a megabyte (a host whose call-bytes cap is under 1 MiB stops it with `argument`) |
+| `find_next(p, s, at)` | the 0-based offset of the first `s` at or after `at`, or nil | a `find_in` from `at`, a megabyte at a time; a stat and more parts only when that finds nothing (under a 1 MiB call-bytes cap, as `count_all`) |
 | `walk_upto(p, opts, keep)` | `{entries, more, done}`: every entry from `opts.after` on, as `walk_all`, until the walk ends (`done`, `more` is "") or its reads would leave fewer than `keep` (not `done`: `more` is the path the next walk goes on after) | `walk`'s, a part at a time, with `keep_reads = keep` |
 | `glob(pattern[, {hidden}])` | every file whose path matches `pattern` (`match_path`), in the walk's order; the walk starts at the parts before the first wildcard and passes by hidden names (`walk`'s `skip = ".*"`) unless `{hidden = true}`. A pattern with no wildcard is that file, if it is one | `walk_all`'s |
-| `room_for(need)` | whether what is left of the budgets holds `need`, a map of `budget()`'s names: `room_for({reads = 3, read_bytes = n})` | a `budget()` |
+| `room_for(need)` | whether what is left of the budgets holds `need`, a map of `budget()`'s names: `room_for({reads = 3, read_bytes = n})`; a name not among them is an `index` stop | a `budget()` |
 | `drop(l, n)` | a new list of all but `l`'s first `n` items, in order (none of a list no longer than `n`), so a part of a list is `take(drop(l, from), count)`; a count below 0 is a stop (class `fail`) | a `last` |
 | `assert(ok, why)` | nothing when `ok` is true; when it is false, a stop (class `fail`) whose message is `why`; anything but a boolean is a stop of its own, never true by default | a comparison or two |
 
@@ -1010,8 +1024,9 @@ on them. A failed change is in the effects log, and it is the reason the
 run stopped.
 
 **The same on both hosts.** Every store builtin goes through webbox's
-`store` (list, stat, read, readAt, replace, append, makeDir, remove,
-removeTree), which Linux and metal both implement. The one value that can
+`store` (`list`, `stat`, `statOrNull`, `has`, `readAt`, `replace`,
+`append`, `makeDir`, `remove`, `removeTree`), which Linux and metal both
+implement. The one value that can
 differ is `modified` (above).
 
 ## The budgets
@@ -1020,7 +1035,8 @@ Each budget has a default, and the caller can override any of them. A run
 that hits one stops cleanly, naming it, with its line and column. A stop
 names a budget as `budget()` spells it: `steps`, `reads`, `read_bytes`,
 `changes`, `change_bytes`, `output`, and the rest by the names below
-(`arena`, `machine`, `kept`, `depth`, `call_depth`, `source`, `nesting`).
+(`arena`, `machine`, `kept`, `depth`, `call_depth`, `source`, `nesting`),
+and on Linux `runs`, the programs a run may start ("On Linux").
 **Three are spelled with their unit where a host or the CLI sets them**
 (`interp.Budgets`, `--budget`): `arena_bytes` is `arena`, `output_bytes`
 is `output`, `source_bytes` is `source`.
@@ -1028,8 +1044,10 @@ is `output`, `source_bytes` is `source`.
 **What metal passes:** the route is the
 application's, not the kernel's, so zig-metal-unikernel sets no budgets of
 its own. The site's column is angry-gopher's `admin_script.budgets`, which
-lynrummy.com's route hands `script_route.handle` on metal; a budget it does
-not name is Shale's default, the machine's included.
+lynrummy.com's route hands `script_route.handle` on metal for an atomic
+run (a background run's are the same but 10,000 reads,
+`admin_script.background_budgets`); a budget it does not name is Shale's
+default, the machine's included.
 
 | budget | what it counts | default | the site's (angry-gopher `admin_script.budgets`) |
 |---|---|---|---|
@@ -1093,6 +1111,8 @@ budgets, and changes nothing.
 | `big_files.shale` | files over a size | `walk_upto`, files only, then `resume after` |
 | `delete_topic.shale` | one topic deleted, as `chat_retire.zig` does: its transcript, sidecars and uploads | a change each |
 | `first_change.shale` | one small change, a folder and a file, easy to check and to undo | |
+| `stale_topics.shale` | every topic untouched for 30 days (its transcript's modified time), with its message count and that time | as `topics.shale` |
+| `delete_stale_topics.shale` | the topics given (`topics=`), each deleted as `delete_topic.shale` does, after every one is checked there and still 30 days untouched: one that is not removes nothing | a check of the changes left first, then five changes a topic at most |
 
 ### How large a site each script fits
 
@@ -1184,11 +1204,13 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   it made taken away again (a folder with all in it). The Linux host keeps
   each path's state before the run's first change of it, at the one point
   every change passes (`PathHook.may_change`), at most 64 MiB in all: a
-  change past that stops the run. What it cannot put back it says, `── not
-  put back: <path>`: a folder that was there and was removed whole, and
-  anything a program changed (`run`, `git_commit`), which Shale never sees.
-  A run that finishes keeps every change and exits 0; a run that stops
-  exits 1, whether or not everything was put back.
+  change past that stops the run. A folder that was there and was removed
+  whole it cannot put back, and says so, `── not put back: <path>`; what a
+  program changed (`run`, `git_commit`) it never sees, so it neither puts it
+  back nor names it. It ends `── undone: N path(s) the run changed put
+  back` (`, but not all` when a folder was among them). A run that finishes
+  keeps every change and exits 0; a run that stops exits 1, whether or not
+  everything was put back.
 - **`--args-stdin`**: the FILE's `NAME=VALUE`s are stdin's lines, after the
   command line's, each value raw to its line's end (quotes, spaces, `|`,
   `$` and backslashes as they are: no shell sees them), blank lines passed
@@ -1251,13 +1273,17 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   diff as one line, `edit p: N hunks, -O +N lines`.
   `--verbose` adds the effects, the programs run and their logs, what the
   run used, always, and every diff in full.
-- **What goes where:** the script's own output on stdout; on stderr the
-  report: a stop and its trail, the effects, the programs run, and
+- **What goes where:** the script's own output on stdout, `edit`'s
+  one-line summary with it (it is written as the script's output, and
+  counts against `output_bytes`); on stderr the report: a stop and its
+  trail, the effects, the programs run, and
   `── used:`, which is what the run took of four budgets
   (steps, reads, read bytes, output bytes) beside each budget. Both
   stream, so `> f 2>&1` keeps them in order.
-- It exits 0 if the script finished, 1 if it stopped, 2 if the command
-  line, the script's file, the mounts or a prelude could not be taken.
+- It exits 0 if the script finished, 1 if it stopped, 2 if the run could
+  not begin: the command line, the script's file (a `name:` no mount has
+  among them), stdin, the mounts, a prelude, a `-- budget:` line, or a
+  `SHALE_NOW` that is not an integer.
 
 **Run it against a copy**, never the live data folder.
 
@@ -1272,19 +1298,27 @@ with a match every 4 bytes.
 
 **Metal's core and Linux's are one** (the lexer, the parser, both
 engines, the budgets, the store, text, regex, lists); the Linux CLI hands
-it three things through `Options`, and metal hands none
-(`docs/designs/DESIGN-shale-dogfood.md`):
+it a host, a path hook and the preludes through `Options` (beside the
+script's `args` and how diffs print, `diffs`), and metal hands none of the
+three (`docs/designs/DESIGN-shale-dogfood.md`):
 
 - **`host(name, ...)`**, the one builtin that reaches outside. It is
   `Options.host`, and on metal it stops with class `host` ("not on this
   host"). On Linux it is `src/shale_host_linux.zig`:
   - `run`, a program under a timeout, a keep and a filter;
   - `real`, a path's OS path;
-  - the jobs, `src/shale_host_jobs.zig` over `src/shale_jobs.zig`.
+  - the jobs, `src/shale_host_jobs.zig` over `src/shale_jobs.zig`;
+  - the Zig tools, `zig_rename`, `zig_decls`, `zig_move`, `zig_imports`
+    and `zig_tokens` (`src/shale_host_zig.zig`);
+  - `may_change`, the path hook's question before a change (below).
 - **`Options.path_hook`**, called first in every store call's path. Linux's
   is the mounts: a path whose first part has a `:` is a mount's
   (`runs:gates/summary`), named in `SHALE_MOUNTS`'s file or
-  `~/.config/shale/mounts`. Mounts are naming, not a sandbox.
+  `~/.config/shale/mounts`. It also refuses a path any part of which is a
+  symbolic link, refuses a change through a ` ro` mount before anything is
+  written, and keeps `--undo-on-stop`'s journal. Mounts confine the store's
+  calls, not the programs a script runs: `run`'s program reaches wherever
+  its user can.
 - **`Options.preludes`**, the preludes after the core's, in order:
   - the Linux prelude (`src/shale_prelude_linux.shale`): the names a
     script types, such as `run`, `real`, `must`, the `job_*` calls and
@@ -1307,18 +1341,30 @@ can happen three times alike.
 ## On the live site: `script_route` and the signer
 
 `shale.script_route` (`src/script_route.zig`) is the reusable half of an
-application's `POST /admin/script`, which angry-gopher mounts. In order,
-it:
-1. reads the envelope;
-2. checks its Ed25519 signature against `{auth}/shale.conf`;
-3. checks the target, the expiry, and a rising sequence number;
-4. writes the number durably before the script runs (`store.makeDurable`,
-   which each host sets);
-5. runs the script and logs the run under `{auth}/shale/`;
-6. replies in the runner's layout.
+application's `POST /admin/script`, which angry-gopher mounts. Every
+refusal comes before the script runs, in this order, each with its status
+and reason:
+1. the roots: 500 `bad_config` when the auth root and the data root nest
+   (before the body is read);
+2. the envelope, read: 400 `malformed`;
+3. the server's config (`{auth}/shale.conf`): 403 `no_key` when there is
+   none (the route never falls open), 500 `bad_config`;
+4. the Ed25519 signature: 403 `bad_signature`;
+5. the target: 403 `wrong_target`;
+6. the expiry: 403 `expired`, or `expires_too_far`;
+7. the sequence: 409 `replayed` at or under the last one run, 503
+   `sequence_unreadable`;
+8. the mode: 501 `no_background` on a host that steps no background run,
+   503 `busy` while one runs, 409 `not_running` for a kill with none;
+9. the sequence written, the source kept (`{auth}/shale/runs/<n>.shale`)
+   and the start logged, then the store made durable (`store.makeDurable`,
+   which each host sets): 503 `not_recorded` when any of it failed.
 
-The envelope's format is in the file's header. Refusals are 4xx with the
-reason; any run that started is 200.
+Then the script runs and the reply is in the runner's layout: an atomic run
+is 200 however it ended (500 when its end could not be logged), a
+background run's start is 202 with its number, and a kill is 200. The
+envelope's format, and the `mode` field (`background`, `kill`), are in the
+file's header.
 
 **Keys and the sequence.** A key is set only by `installKey`
 (angry-gopher's `/admin/script-key`), which raises the sequence to the
@@ -1330,12 +1376,18 @@ nest, by their spellings. Symlinks inside the data root are not checked
 (metal has none).
 
 ```sh
-zig build shale-sign -- keygen | pubkey | sign <file.shale> <target> [minutes]
+zig build shale-sign -- keygen [target] | pubkey [target]
+zig build shale-sign -- sign <file.shale> <target> [minutes]
+zig build shale-sign -- background <file.shale> <target> [minutes]
+zig build shale-sign -- kill <target> [minutes]
 ```
 
 `src/shale_sign.zig` makes the key pair once (the private key goes at
-`~/.shale_signing_key`, mode 600, never printed) and signs a script with
-the next sequence number. The steps for the site are in
+`~/.shale_signing_key`, or a target's own `~/.shale_signing_key.<target>`
+when there is one, mode 600, never printed) and signs a script with the
+next sequence number: it writes `<file.shale>.<sequence>.req`, the signed
+body, and prints the curl line that sends it. `background` signs a
+`mode=background` run; `kill` signs the `mode=kill` that ends one. The steps for the site are in
 zig-metal-unikernel's DEPLOY.md, "Shale scripts: looking inside a droplet".
 
 ## The installed suite: scripts on a schedule
@@ -1402,8 +1454,8 @@ else of the script module's insides:
   but a count.
 - **Two modes.** `atomic` is today's run, whole inside one handler, and
   may change the store. `background` is stepped in slices between
-  handlers and **only reads**: `replace`, `append`, `mkdir`, `remove`
-  and `remove_tree` are `argument` errors naming `atomic`. A script that
+  handlers and **only reads**: `replace`, `append`, `edit`, `mkdir`,
+  `remove` and `remove_tree` are `argument` errors naming `atomic`. A script that
   finds and then deletes is a background run to find, then an atomic
   one to act.
 - **A slice ends after any store call** (Steve: "let the kernel swap it
@@ -1537,7 +1589,7 @@ effects and stop, but not to the same steps or arena.
 the caller's `out`; the machine's own memory (the frames' slots, the VM's
 operands and frames, the compiled code) comes from the caller's
 allocator beside the arena, bounded by the call-depth and depth budgets
-and freed when the run ends. It assumes no threads. `src/script/portable_test.zig` reads each of the
+and by `machine_bytes`, and freed when the run ends. It assumes no threads. `src/script/portable_test.zig` reads each of the
 module's sources and refuses anything that names the host outside its
 tests: `std.posix`, `std.os`, `std.c`, `std.process`, `std.Thread`,
 `std.time`, `Io.Dir`, `Threaded`, `page_allocator`, `std.debug.print`, and
