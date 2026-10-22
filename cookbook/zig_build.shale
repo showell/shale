@@ -22,7 +22,9 @@
 -- of the output holding one of `grep`'s literals (comma-separated), in
 -- order, after the summary, at most `most` of them (said when more):
 --
---   shale cookbook:zig_build.shale step=fuzz "grep=FAIL,hunts ran"
+--   shale cookbook:zig_build.shale step=fuzz --args-stdin <<'ARGS'
+--   grep=FAIL,hunts ran
+--   ARGS
 --
 -- budget: steps=400000000 arena_bytes=1000000000
 

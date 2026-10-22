@@ -5,7 +5,10 @@
 --
 --   shale <cookbook>/look.shale at=src/io.zig:690-730,build.zig:16-29
 --   shale <cookbook>/look.shale find=pathFromRoot( in=src,build.zig like=*.zig
---   shale <cookbook>/look.shale find="pub fn findProgram" in=zig:lib/std/Build.zig
+--   shale <cookbook>/look.shale --args-stdin <<'ARGS'   (a value with spaces)
+--   find=pub fn findProgram
+--   in=zig:lib/std/Build.zig
+--   ARGS
 --   shale <cookbook>/look.shale rev=origin/master at=QUEUE.md:10-40
 --   shale <cookbook>/look.shale rev=HEAD~3 find=fuzz_runs in=src,build.zig like=*.zig
 --

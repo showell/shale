@@ -17,8 +17,8 @@ there to stay safe is what an agent wants on Linux too:**
   diff is printed before it is written, and an edit that would not pin its
   text down is refused before anything is changed. Work in a checkout, so
   `git diff` shows what a run did and `git checkout --` takes it back.
-- **It reads only what it is rooted at** (`--root`, else the working
-  directory) and its mounts (`runs:x`): no `..`, no absolute paths. It
+- **It reads only what it is rooted at** (`--root`, else `SHALE_ROOT`, else
+  the working directory) and its mounts (`runs:x`): no `..`, no absolute paths. It
   reaches past them only by running a program (`run`).
 
 `shale` is terse: past half of any budget, or on a stop, it says what the
@@ -68,9 +68,9 @@ Shale form, most of them one launch:
 |---|---|
 | `sed -n 40,80p f; sed -n 5,9p g` | `shale cookbook:look.shale at=f:40-80,g:5-9` |
 | `grep -rn 'text' src build.zig` | `shale cookbook:look.shale find=text in=src,build.zig like=*.zig` (a value with `(` or a space: `--args-stdin`) |
-| grep in Zig's std, a sibling repo, `~/zig17` | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:dog-park/src`, `zig17:shale/src` |
+| grep in Zig's std, a sibling repo | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:dog-park/src` |
 | `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
-| `zig build fuzz 2>&1 \| grep FAIL` | the same, `"grep=FAIL,hunts ran"`: every output line holding one of the literals, after the summary |
+| `zig build fuzz 2>&1 \| grep FAIL` | the same with `grep=FAIL,hunts ran` (a value with a space: on stdin, `--args-stdin`): every output line holding one of the literals, after the summary |
 | `git show origin/master:QUEUE.md \| sed -n 40,80p`, `git grep` at a revision | `shale cookbook:look.shale rev=origin/master at=QUEUE.md:40-80` (or `find=` `in=`): `at` and `in` read as the revision holds them (`repo=` another checkout) |
 | `git log`, `git diff --stat`, `git show rev:path`, `git status` | the git prelude: `git_log`, `git_diff`, `git_show`, `git_status`, `git_is_clean` (below) |
 | `git commit -m ... && git push` | `git_commit(repo, msg, {add})`, `git_push(repo)`; `git_worktree_add`, `git_merge_ff` |
@@ -103,7 +103,13 @@ has none of it):
   or `tail` or `whole`, are required; see SHALE.md, "The runner"). Its
   `cwd` is a path as every path is: under the root, or through a mount
   (`cwd = "repos:shale"` runs a sibling repo's step from another's
-  checkout); `..` and an absolute path are refused.
+  checkout); `..` and an absolute path are refused. **What `run` refuses**
+  unless its options say why (`want = "tag: why"`, logged in the run's
+  effects): a shell or an interpreter (`bash`, `sh`, `python3`, `node`,
+  `perl`: Shale is the script), a text tool (`grep`, `sed`, `cat`, `head`,
+  ...: the builtins do it), a wrapper (`env`, `timeout`, `xargs`, ...: run
+  the program itself), and a program by a path git does not track, unless
+  it is under a ` tools` mount (a toolchain's install).
   `must(r)` gives `r` if it exited 0; otherwise it prints its output and
   fails, naming the program and how it ended. `real(p)` gives a path's OS
   path, for an argv.
@@ -111,9 +117,10 @@ has none of it):
   `invert` and `nocase`. `head_lines(p, n)` and `tail_lines(p, n)` take a
   file of any size and give nil for a missing one. `grep_all(p, lit)` is
   `grep` for a file of any size. `unique(list)` gives each item once. `newest(dir, n)`
-  gives the names that changed last.
+  gives the names that changed last (the root as `""` or `"."`).
 - **Jobs**, programs that outlive the call:
-  - `job_start(argv, {log, cwd, env})` starts one under a detached reaper.
+  - `job_start(argv, {log, cwd, env, want})` starts one under a detached
+    reaper (`want` as `run`'s, for a program `run` would refuse).
     `log` is required, and there are no `secrets`. A log whose job still
     runs, or whose reaper has yet to write its end, is refused: stop or
     wait for it, or use another. Once `job_wait` says `exited`, the log
@@ -124,9 +131,12 @@ has none of it):
   - `job_wait` gives `{ended = "exited" | "found" | "timeout" | "lost"[,
     code | signal]}`. `exited` always has a `code` or a `signal`; `lost` is
     a job gone with its reaper and no end written (the reaper was itself
-    ended). `contains` reads only what the file gained since the last
-    look, so a long wait on a large log costs the log once; a file that
-    cannot be read stops the run, named.
+    ended). `contains` waits for a literal in `file`, or in the job's own
+    log when no `file` is given (a `file` with no `contains` is refused);
+    within one call it reads only what the file gained since the last
+    look, so a long wait on a large log costs the log once, and a later
+    call reads it from the start. A file that cannot be read stops the
+    run, named.
   - **Keep `timeout_ms` under the Bash call's own timeout** (120 s unless
     raised), because Shale cannot see it.
 - **Files:** `create(p, text)` refuses a file already there.
@@ -138,12 +148,13 @@ has none of it):
   own parser, in file order: `{kind, name, name_form, visibility, linkage,
   first, last, start, stop, uses[, comment_above]}`. A span runs from its
   doc comment to the `}`, `;` or field's `,` that ends it (`read(p, start,
-  stop - start)` is it); `comment_above` is the plain `//` lines directly
-  over it; `uses` is the top-level names its span uses (not its own, not a
+  stop - start)` is it); `comment_above` is `{first, last}`, the line
+  numbers of the plain `//` lines directly over it; `uses` is the top-level names its span uses (not its own, not a
   field's or a comment's), sorted: the file's reference graph, for finding
   where it divides. `zig_decls(p, {container = "Table"})` lists that
   container's own members the same way, `uses` counting its members'
-  names too (never its own), and adds `reaches`: the members a member
+  names used bare (never its own; a member used through `.` is in
+  `reaches`, not `uses`), and adds `reaches`: the members a member
   touches through a `.` (`self.slots`, `self.grow()`), **by name, not by
   type** (a `.slots` of another value is counted). A file that does not
   parse stops, naming the line. **The
@@ -197,8 +208,10 @@ or `"."` for the root and `repos:dog-park` for a mount.
 - **Changing:**
   - `git_commit(repo, msg, {add = "tracked" | "all" | {paths}})` passes
     the message on stdin and gives the new head.
-  - `git_push(repo, {remote, branch})` sets the upstream, as `push -u`
-    does.
+  - `git_push(repo)` pushes to the branch's upstream (an error when it has
+    none); `git_push(repo, {branch, remote})` pushes to that branch of
+    `remote` (`origin` unless named) and makes it the upstream, as `push
+    -u` does.
   - `git_fetch(repo, {all})`, `git_pull_ff(repo)` and `git_merge_ff(repo,
     ref)`.
   - `git_merge(repo, ref)` makes a merge commit when one is needed and
@@ -208,16 +221,20 @@ or `"."` for the root and `repos:dog-park` for a mount.
   - `git_worktree_add(repo, dir, {branch, new})`,
     `git_worktree_remove(repo, dir, {force})` and `git_branch_delete(repo,
     name, {force})`.
-- **Errors:** a git error stops the run with the call as you typed it and
-  git's first line: `` `git show HEAD:nope` exited 128: fatal: ... ``.
-  Each call has 60 seconds unless given `timeout_ms`.
+- **Errors:** a git error stops the run naming the git command and git's
+  first line: `` `git show HEAD:nope` exited 128: fatal: ... ``; a call
+  that changes things prints git's output first (its first and last 10
+  lines). Each call has 60 seconds; those that take options
+  (`git_log`, `git_diff`, `git_commit`, `git_push`, `git_fetch`,
+  `git_merge`, `git_worktree_add`, `git_worktree_remove`,
+  `git_branch_delete`) take `timeout_ms` to change it.
 
 **Claude's commit belongs in the user prelude**, not the git prelude: it
 refuses a message without its attribution.
 
 ```lua
 -- ~/.config/shale/prelude.shale
-function commit(repo, msg, opts)
+function commit(repo, msg, opts?)
   local signed = false
   for l in lines(msg) do
     if starts_with(l, "Co-Authored-By:") then signed = true end
@@ -242,9 +259,12 @@ prints is in the box after it, exactly.
 ## The cookbook, beside what an agent would write otherwise
 
 The short recipes are here, each tested as written. **The longer ones are
-files**, in [`cookbook/`](../cookbook/zig/README.md): the Zig ones find a
-file's seams, move declarations along them and judge the move. Copy one
-and change it; not everything is a builtin.
+files** in `cookbook/`: `look.shale` (lines by number, and a literal's
+lines across folders, mounts or a git revision) and `zig_build.shale` (a
+build's verdict without its noise) for any project; the Zig ones in
+[`cookbook/zig/`](../cookbook/zig/README.md) find a file's seams, move
+declarations along them and judge the move; `roc/` and `zig17/` are those
+work's. Copy one and change it; not everything is a builtin.
 
 Each task says what it uses: a literal finds the lines (`grep`), and a
 pattern takes the field out of them (`re_find`), where a field has a
@@ -286,7 +306,7 @@ grep -h 'DEPARTS (' src/tcp*.zig | sed -E 's/.*DEPARTS \(([a-z]+)\).*/\1/' | sor
 **Uses** `glob`, `grep` for the lines, `re_find` for the reason (the
 `sed` expression's own pattern, and its group). The shell is one line, and
 wins here. Shale's version is longer, but each step is a name an agent can
-change, and `.zig-cache`'s copy of a file is never counted.
+change.
 
 ### The files over a thousand lines
 
@@ -339,7 +359,7 @@ for p in sorted(pathlib.Path("src").rglob("*.zig")):
 
 **Uses** `grep` for the lines and `re_find` for the message: the call's
 first string literal, not merely the line's first string.
-With one group and no alternation, a message holding an escaped quote
+With one capture group and no `(?:`, a message holding an escaped quote
 (`\"`) is cut at it, which Python's `(?:\\.|[^"\\])*` would not be; for
 this tree it holds.
 
@@ -371,9 +391,9 @@ edit src/tcp_timeouts.zig: 1 hunk, -1 +1 lines
 grep -rlw pastDeadline src | xargs sed -i 's/\bpastDeadline\b/deadlinePassed/g' && git diff
 ```
 
-**Uses** `zig_rename` (metal-vmm QUEUE 234, 3): Zig's own tokenizer, so
-it renames identifier tokens and nothing else: not a field or an enum
-literal after `.` (the essay's `.watch`), not `@"pastDeadline"`, not a
+**Uses** `zig_rename`: Zig's own tokenizer, so it renames identifier
+tokens and nothing else: not a field or an enum literal after `.`
+(`.watch`), not `@"pastDeadline"`, not a
 string, a test's name or a comment (it counts the comments' mentions in
 `left_in_comments`, for you to decide), and not part of a longer name.
 `sed`'s `\b`, and `edit`'s `word`, take every one of those. **The
@@ -394,9 +414,9 @@ local r = zig_rename("src/linux_host.zig", "kept_write_deadline_ms", "linux_writ
 
 A `to` with a `.` where the name is still **declared** (after `const`,
 `var` or `fn`, before a `:`, in a capture, an enum's member) stops the run,
-naming the line, with nothing written: `pub const
-linux_writes.kept_write_deadline_ms` was the essay's worst miss. So the
-stop says the block was not moved yet, as it does here. The rename
+naming the line, with nothing written (`pub const
+linux_writes.kept_write_deadline_ms` is not Zig): the stop says the block
+was not moved yet, as it does here. The rename
 writes as it goes, so `git diff` shows it and `git checkout` takes it
 back. (A `shale-linux` block runs with the Linux prelude, in
 `src/shale_doc_linux_test.zig`.)
@@ -447,7 +467,8 @@ p.write_text(s)
 **Uses** `edit`'s list form and long strings: each `old` is held to being
 there exactly once, in the file as the edit before left it; one diff is
 printed, and the file is written once, or not at all if any edit fails.
-**About even**, and Shale's prints the diff before anything is written.
+**About even**, and Shale's says what it changes before anything is
+written (a one-line summary; the diff with `--verbose`).
 The text goes in as it is, quotes and
 lines and all, with no escaping.
 
@@ -551,16 +572,20 @@ the first two can give a quiet wrong answer, an empty list:
 (`tools/shale_gate.zig`, run by `tools/shale-gate.sh`, which turns any
 failure, a missing binary included, into a refusal). It passes exactly:
 
-- **a launch:** `[cd DIR && ]shale [--verbose] [--undo-on-stop]
-  [--budget NAME=N]... [FILE [--args-stdin]] [NAME=VALUE]...`, `shale`
-  or an absolute path ending `/shale`, every word plain
-  (no quotes, `$`, backticks,
-  `;|&<>()*?`), optionally ending `<<'TAG'` (TAG `[A-Z_]+`), with the
-  script below and a last line `TAG` that no earlier line is;
+- **a launch:** `[cd DIR && ]shale`, or an absolute path ending `/shale`,
+  then any of `--verbose`, `--undo-on-stop`, `--args-stdin`, `--budget
+  NAME=N`, and plain words (a FILE, `mount:path` included, and
+  `NAME=VALUE`s), every word plain (no quotes, `$`, backticks, `\`, a tab,
+  or `;|&<>()*?`; `-e` and `--root` are refused), optionally ending
+  `<<'TAG'` (TAG `[A-Z_]+`), with the script below and a last line `TAG`
+  that no earlier line is;
 - **the escape:** a first line `# want: <tag>: <text>` (Shale should do
-  this) or `# out-of-scope: <tag>: <text>` (it never will). The command
-  runs, and a line goes to `~/.local/state/shale/wants.tsv`: the date, the
-  session, the kind, the tag, the text, and the command's first 160 bytes;
+  this) or `# out-of-scope: <tag>: <text>` (it never will), the tag
+  `[a-z0-9-]+` and the text not empty. The command runs, and a line goes
+  to `~/.local/state/shale/wants.tsv`: the date (UTC), the session, the
+  kind, the tag, the text, and the command's first 160 bytes, tabs and
+  newlines escaped. An escape that cannot be logged (no `HOME`, a write
+  that fails) is refused, not run;
 - **a subagent's call.** Its hook input carries an `agent_id` (the hooks
   reference, "Common input fields"), and local cold agents are exempt. A
   subagent's Bash call carries `agent_id` and `agent_type`; the top-level
@@ -592,14 +617,17 @@ with what to do instead.
   bigger one goes through `read_lines` a part at a time.
 - **Step budgets are real.** A walk of a large tree, or a script that loops
   over every line in Shale rather than in a builtin, runs out of the
-  5,000,000 steps a run has unset; `--budget steps=N` raises them, and the
-  stop says which one ran out.
+  5,000,000 steps a run has unset; `--budget steps=N`, or the script's own
+  `-- budget: steps=N` line, raises them, and the stop says which one ran
+  out.
 - **Paths are a store's**: every part must be a name FAT holds, so a file
   whose name has `:` or `"` cannot be named, and hidden folders are left
   out of a `glob` unless `{hidden = true}`.
 - **A program is run whole, not piped:** `run`'s `stdin` is a string or a
   `whole` result, so a pipeline is two runs with the first's output in
-  memory, not a stream. Every run needs `timeout_ms` and a keep.
+  memory, not a stream; `run`'s own filters (`re`, `not_re`, `before`,
+  `after`) keep the lines a `| grep` would. Every run needs `timeout_ms`
+  and a keep.
 - **No network but a program's** (`run({"curl", ...})`), and **no
   environment**: a script cannot read a variable, only give one to a
   program (`env`, `secrets`).
