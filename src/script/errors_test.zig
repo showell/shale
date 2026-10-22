@@ -143,7 +143,7 @@ const cases = [_]Case{
     .{ .src = "local x = walk(\"\", {keep_reads = -1})", .line = 1, .column = 11, .class = .argument, .message = "`walk`: `keep_reads` of -1: it is a count of reads" },
     .{ .src = "local x = walk(\"\", {depth = 0})", .line = 1, .column = 11, .class = .argument, .message = "`walk`: a depth of 0: 1 is the folder's own entries" },
     .{ .src = "local x = count_in(\"x\", \"\")", .line = 1, .column = 11, .class = .argument, .message = "`count_in` of \"\" is an error: there is nothing to look for" },
-    .{ .src = "mkdir(\"\")", .line = 1, .column = 1, .class = .argument, .message = "`mkdir(\"\")` would act on the whole root: a change needs a path of at least one part" },
+    .{ .src = "mkdir(\"\")", .line = 1, .column = 1, .class = .argument, .message = "`mkdir(\"\")` would act on the whole root: name a path of at least one part" },
     .{ .src = "function f(n) return f(n + 1) end f(1)", .line = 1, .column = 22, .function = "f", .budget = .call_depth, .class = .budget, .message = "calls nest deeper than the call-depth budget (64)" },
     .{ .src = "while true do end", .line = 1, .column = 7, .budget = .steps, .class = .budget, .message = "the step budget (100000 steps) ran out" },
     .{ .src = "function g(x) return x + {} end print(g(1))", .line = 1, .column = 24, .function = "g", .class = .type, .message = "`+` takes integers, and its right is an empty table" },
@@ -286,7 +286,7 @@ test "errors: a stop names every call between it and the top level, innermost fi
     }
 }
 
-test "errors: the report keeps its first line, then says where each call was made" {
+test "errors: the report keeps its first line, a stop in the prelude named as the prelude's, then says where each call was made" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
@@ -301,7 +301,7 @@ test "errors: the report keeps its first line, then says where each call was mad
     try script.report(&r, "seq 7", &w);
     const want =
         \\── effects (0) ──
-        \\── stopped at seq 7:{d}:16 (in `the prelude's count_all`): store: `stat("none")`: not found (FileNotFound): `exists(p)` asks first (
+        \\── stopped at the prelude:{d}:16 (in `the prelude's count_all`): store: `stat("none")`: not found (FileNotFound): `exists(p)` asks first (
     ;
     var want_buf: [512]u8 = undefined;
     try testing.expect(std.mem.startsWith(u8, w.buffered(), try std.fmt.bufPrint(&want_buf, want, .{preludeLine("  local size = stat(path).size")})));
