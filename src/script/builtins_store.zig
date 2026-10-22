@@ -48,7 +48,7 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     // follows the root's rules.
     if (run.path_hook) |h| if (try h.resolve(h.ctx, run, pos, rel)) |full| return .{ .full = full, .rel = rel };
     if (rel.len == 0) {
-        if (!allow_root) return run.fail(pos, .argument, "`{s}(\"\")` would act on the whole root: a change needs a path of at least one part", .{@tagName(b)});
+        if (!allow_root) return run.fail(pos, .argument, "`{s}(\"\")` would act on the whole root: name a path of at least one part", .{@tagName(b)});
         return .{ .full = run.root, .rel = "" };
     }
     if (rel[0] == '/') return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root", .{ @tagName(b), rel });
