@@ -76,8 +76,9 @@ Shale form, most of them one launch:
 | `git commit -m ... && git push` | `git_commit(repo, msg, {add})`, `git_push(repo)`; `git_worktree_add`, `git_merge_ff` |
 | a script you would write in python | a heredoc, `shale <<'TAG'`: `edit`'s list form, `walk_all`, `grep`, `re_lines`, `run` |
 
-A script is named through a mount too (`shale cookbook:look.shale`), so a
-recipe launches from any checkout. The box's mounts are in
+A script is named through a mount too (`shale cookbook:look.shale`, once
+`~/.config/shale/mounts` has a `cookbook = /ABSOLUTE/PATH/TO/shale/cookbook`
+line), so a recipe launches from any checkout. The box's mounts are in
 `~/.config/shale/mounts`; `shale` says which it read when a name is missing.
 Escape only for what this table and the cookbook don't cover (a build run in
 the background, an interactive tool, a path no mount reaches), and say what
@@ -553,14 +554,19 @@ failure, a missing binary included, into a refusal). It passes exactly:
   subagent's Bash call carries `agent_id` and `agent_type`; the top-level
   session's calls carry neither.
 
-Anything else is refused, with one line naming both forms. `shale` is on
-`PATH` as `~/.local/bin/shale`, a link to `zig-out/bin/shale`, so a rebuild
-here is what every launch runs. The hook, in `~/.claude/settings.json`:
+Anything else is refused, with one line naming both forms. Put `shale` on
+`PATH` as a link to `zig-out/bin/shale`, so a rebuild is what every launch
+runs. The hook, in `~/.claude/settings.json` or a project's
+`.claude/settings.json`, the path absolute:
 
 ```json
 {"hooks": {"PreToolUse": [{"matcher": "Bash|Monitor",
-  "hooks": [{"type": "command", "command": "/home/steve/showell_repos/shale/tools/shale-gate.sh"}]}]}}
+  "hooks": [{"type": "command", "command": "/ABSOLUTE/PATH/TO/shale/tools/shale-gate.sh"}]}]}}
 ```
+
+The README's "Using Shale with Claude Code on your project" walks through
+installing it, turning it off, a block for `<project>/CLAUDE.md`, and what the gate refuses
+with what to do instead.
 
 ## Where Shale is worse, said plainly
 

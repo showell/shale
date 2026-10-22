@@ -21,6 +21,123 @@ and its effects log says what.
   makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
   with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`.
 
+**New here, and want Claude to use it on your own project?** Start with the
+next section; the rest of this README is how Shale is built and checked.
+
+## Using Shale with Claude Code on your project
+
+**Why:** Claude's shell calls become small scripts with guarantees bash
+does not give:
+
+- **Bounded output.** A run that would print a megabyte stops at its output
+  budget and says so, so a run never floods the context.
+- **One-line stops.** A failure says where and why in one line, with a
+  class (`type`, `budget reads`, `refused`), not a traceback.
+- **Git is the undo.** Every change is checked and logged; an `edit` prints
+  a one-line summary. Work in a checkout, and `git diff` shows what a run
+  did.
+- **Confined.** A script reads and writes only under the folder it runs in
+  (and the mounts you name); no `..`, no absolute paths.
+
+The gate (below) covers only the shell: **Claude's own Read, Edit, Write and
+Grep tools are untouched.**
+
+### Install
+
+Linux on x86-64, and **Zig 0.17.0** exactly (`zig version`). Shale builds
+against [zig-webbox](https://github.com/showell/zig-webbox), which must be
+checked out **beside** it:
+
+    git clone https://github.com/showell/shale
+    git clone https://github.com/showell/zig-webbox
+    cd shale && zig build          # zig-out/bin: shale, shale-gate, shale-sign
+
+Put `zig-out/bin` on your PATH (or link `zig-out/bin/shale` into a folder
+that is), then:
+
+    shale <<'EOF'
+    print("hello from " .. #glob("src/**/*") .. " files")
+    EOF
+
+**Mounts (optional):** a folder outside the one a script runs in is reached
+through a mount, `name:path`. Make `~/.config/shale/mounts`:
+
+    cookbook = /ABSOLUTE/PATH/TO/shale/cookbook
+
+and the recipes below launch as `shale cookbook:look.shale ...` from any
+project. Add ` ro` after a path for a read-only mount, and ` tools` for a
+toolchain whose programs a script may run by path (a newer compiler, a
+project's `.venv`); adding a `tools` line is a decision you make once, by
+hand.
+
+### Hook it into Claude Code
+
+A PreToolUse hook sends every Bash call Claude makes through `shale-gate`,
+which lets through a `shale` launch or a logged escape and refuses anything
+else. In `~/.claude/settings.json` (every project) or
+`<project>/.claude/settings.json` (one project), merged into any `"hooks"`
+already there:
+
+```json
+{"hooks": {"PreToolUse": [{"matcher": "Bash|Monitor",
+  "hooks": [{"type": "command", "command": "/ABSOLUTE/PATH/TO/shale/tools/shale-gate.sh"}]}]}}
+```
+
+- The path must be absolute, and `zig build` must have run first: **the gate
+  fails closed**, so without `zig-out/bin/shale-gate` every Bash call is
+  refused.
+- **To turn it off,** remove that block (Claude Code's `/hooks` menu shows
+  it).
+- Subagents Claude starts are not gated; only the session itself is.
+
+### Tell Claude how
+
+Claude learns a gate from its refusals, which is slow. Put this in
+`<project>/CLAUDE.md` (or `~/.claude/CLAUDE.md` for every project):
+
+```markdown
+## Shale
+Top-level Bash calls go through Shale's gate: run a `shale` launch
+(`shale <<'EOF'` ... `EOF`, or `shale FILE name=value ...`), plain words only.
+Read /ABSOLUTE/PATH/TO/shale/docs/SHALE-AGENTS.md before the first one: its
+"Before you reach for the shell" table and "If you write Lua" traps.
+When Shale truly can't do it, escape with a first line
+`# want: <tag>: <what Shale lacked>`; the call runs and is logged.
+```
+
+### What the gate refuses, and what to do instead
+
+| you'd type | what happens | instead |
+|---|---|---|
+| `npm test`, `git status`, `pytest` at the top level | refused: only a `shale` launch passes | from a script: `run({"npm", "test"}, {timeout_ms = 600000, tail = 40})`; or the escape `# want: tests: run npm test` as the call's first line |
+| `node <script>.js`, `python3 -m ...`, `bash -c ...` | refused inside `run` too: Shale is the script | `{want = "tag: why"}` in `run`'s options runs it, logged; or the escape |
+| `grep`, `sed`, `cat`, `head` | refused: Shale has builtins for these | `grep(p, text)`, `read`, `lines`, `look.shale` (below) |
+| `<project>/node_modules/.bin/tsc`, `<project>/.venv/bin/pytest` | refused: a program by a path git does not track | `npx tsc`; for a venv, a ` tools` mount (`venv = <project>/.venv ro tools`, the path absolute) and `run({real("venv:bin/pytest")}, ...)` |
+| `npm`, `npx`, `git`, `pytest`, `cargo`, a compiler by name | allowed inside `run` | `run` needs `timeout_ms` and a keep: `head = N`, `tail = N` or `whole = BYTES` |
+
+Every escape lands in `~/.local/state/shale/wants.tsv`: the list of what
+Shale should learn next ([docs/SHALE-WANTS.md](docs/SHALE-WANTS.md) is ours).
+
+### Recipes for any project
+
+The cookbook's general recipes work on any language's files:
+
+    shale cookbook:look.shale find=TODO in=src,tests          # every TODO, with its line
+    shale cookbook:look.shale at=src/app.ts:40-80,README.md:1-20
+
+and a rename by whole words across a tree, in a heredoc:
+
+```lua
+for e in walk_all("src", {kind = "file", like = "*.ts", skip = "node_modules"}) do
+  if #grep(e.path, "fetchUser") > 0 then edit(e.path, "fetchUser", "loadUser", {all = true, word = true}) end
+end
+```
+
+`word` matches whole words only (`fetchUserName` is left), but in strings
+and comments too: read the summary, then `git diff`. `glob("**/*.ts")`
+enters `node_modules`; `walk_all` with `skip` does not. The `zig/` and
+`roc/` cookbooks are for those languages only.
+
 ## The modules
 
 | module | root | what |
