@@ -78,6 +78,32 @@ expect("sizes finished", r.finished, true);
 expect("sizes total", r.output.includes(`${Object.keys(sample).length} files, `), true);
 
 fresh();
+r = canned("scripts/untested.shale");
+expect("untested", r.output.endsWith("2 of 4 functions have no test\n"), true);
+expect("untested names", r.output.includes("fetch_forecast") && r.output.includes("main"), true);
+
+fresh();
+r = canned("scripts/imports.shale");
+expect("imports", r.output.includes("cli        uses fetch, format\n"), true);
+expect("imports roots", r.output.endsWith("imported by no module: cli\n"), true);
+
+fresh();
+r = canned("scripts/add_header.shale");
+expect("header added", r.output.endsWith("5 files changed\n"), true);
+expect("header there", shale.read("src/weather/cli.py").startsWith("# Part of weather, MIT licensed.\nimport argparse"), true);
+r = canned("scripts/add_header.shale");
+expect("header twice", r.output, "0 files changed\n");
+
+fresh();
+r = canned("scripts/bump_version.shale");
+expect("bump patch", r.output.endsWith("0.3.1 -> 0.3.2\n"), true);
+r = canned("scripts/bump_version.shale", { part: "major" });
+expect("bump major", r.output.endsWith("0.3.2 -> 1.0.0\n"), true);
+r = canned("scripts/bump_version.shale", { part: "huge" });
+expect("bump refused", r.finished, false);
+expect("bump refused unchanged", shale.read("pyproject.toml").includes('version = "1.0.0"'), true);
+
+fresh();
 r = canned("scripts/runaway.shale");
 expect("runaway stopped", r.finished, false);
 expect("runaway says why", r.report.includes("stopped at scripts/runaway.shale:6:9: budget steps"), true);

@@ -12,6 +12,16 @@ A command-line forecast: \`weather Boston\` prints the next three days.
 The forecast comes from the Open-Meteo API; no key is needed.
 `,
 
+  "pyproject.toml": `[project]
+name = "weather"
+version = "0.3.1"
+description = "A three-day forecast on the command line"
+requires-python = ">=3.10"
+
+[project.scripts]
+weather = "weather.cli:main"
+`,
+
   "src/weather/__init__.py": `from .fetch import fetch_forecast
 from .format import format_day
 
@@ -118,6 +128,116 @@ sort(rows, {{key = "size", desc = true}, "file"})
 print(table(rows, {"size", "file"}))
 print()
 print(#rows .. " files, " .. human(total))
+`,
+
+  "scripts/untested.shale": `-- Functions the tests never mention: each \`def\` under src/, looked
+-- for as a whole word in every file under tests/.
+
+local tests = ""
+for e in walk_all("tests", {kind = "file"}) do
+  tests = tests .. read(e.path)
+end
+
+local untested = {}
+local total = 0
+for e in walk_all("src", {kind = "file"}) do
+  if ends_with(e.path, ".py") then
+    for hit in grep(e.path, "def ") do
+      local m = re_find(hit.text, [=[^\\s*def (\\w+)]=])
+      if m then
+        total = total + 1
+        if not re_match(tests, "\\\\b" .. m.group .. "\\\\b") then
+          push(untested, {name = m.group, defined = e.path .. ":" .. hit.line})
+        end
+      end
+    end
+  end
+end
+
+if #untested > 0 then print(table(untested, {"name", "defined"})) end
+print(#untested .. " of " .. total .. " functions have no test")
+`,
+
+  "scripts/imports.shale": `-- Which module of the package uses which, from its
+-- \`from .x import\` lines, and the ones nothing imports.
+
+local used = {}
+local modules = {}
+for e in walk_all("src/weather", {kind = "file"}) do
+  if ends_with(e.path, ".py") then
+    local name = strip_suffix(basename(e.path), ".py")
+    push(modules, name)
+    local uses = {}
+    for hit in grep(e.path, "from .") do
+      local m = re_find(hit.text, [=[^from \\.(\\w+) import]=])
+      if m then
+        push(uses, m.group)
+        used[m.group] = true
+      end
+    end
+    local list = "(nothing)"
+    if #uses > 0 then list = join(uses, ", ") end
+    print(pad(name, 10) .. " uses " .. list)
+  end
+end
+
+local roots = {}
+for name in modules do
+  if not has_key(used, name) and name ~= "__init__" then push(roots, name) end
+end
+print()
+print("imported by no module: " .. join(roots, ", "))
+`,
+
+  "scripts/add_header.shale": `-- Puts a header line at the top of every Python file that lacks
+-- it. Run it twice: the second run finds nothing to do.
+-- Args: header="..." for another line.
+
+const HEADER = arg("header", "# Part of weather, MIT licensed.")
+
+local added = 0
+for e in walk_all("", {kind = "file"}) do
+  if ends_with(e.path, ".py") then
+    local text = read(e.path)
+    if not starts_with(text, HEADER) then
+      replace(e.path, HEADER .. "\\n" .. text)
+      print("header added: " .. e.path)
+      added = added + 1
+    end
+  end
+end
+print(added .. " files changed")
+`,
+
+  "scripts/bump_version.shale": `-- Bumps the version in pyproject.toml. Args: part=patch (the
+-- default), minor or major. Anything else stops the run, and
+-- nothing is changed.
+
+const PART = arg("part", "patch")
+
+local m = re_find(read("pyproject.toml"), [=[version = "(\\d+\\.\\d+\\.\\d+)"]=])
+if m == nil then fail("pyproject.toml has no version = \\"x.y.z\\" line") end
+
+local n = split(m.group, ".")
+local major = tonumber(n[1])
+local minor = tonumber(n[2])
+local patch = tonumber(n[3])
+if PART == "major" then
+  major = major + 1
+  minor = 0
+  patch = 0
+elseif PART == "minor" then
+  minor = minor + 1
+  patch = 0
+elseif PART == "patch" then
+  patch = patch + 1
+else
+  fail("part= is major, minor or patch, not " .. PART)
+end
+
+local new = major .. "." .. minor .. "." .. patch
+edit("pyproject.toml", 'version = "' .. m.group .. '"', 'version = "' .. new .. '"')
+print(m.group .. " -> " .. new)
 `,
 
   "scripts/runaway.shale": `-- A loop that never ends. Every run has budgets (steps, reads,

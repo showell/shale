@@ -309,7 +309,9 @@ import { sample, first } from "./sample.js";
 
 const $ = (id) => document.getElementById(id);
 const tree = $("tree"), code = $("code"), gutter = $("gutter"), out = $("out");
-const STORE_KEY = "shale-playground-files";
+// Named by the sample's version: a new sample starts fresh, not from files
+// saved against the old one.
+const STORE_KEY = "shale-playground-files-2";
 
 let shale;
 let open = null;        // the open file's path
@@ -587,7 +589,7 @@ function showIntro() {
   const intro = el("div", "intro");
   intro.innerHTML = `
     <p>Each script under <code>scripts/</code> works on the project beside it: it reads files, edits them, and writes new ones. Press <b>Run</b> to try the open one.</p>
-    <p><code>rename.shale</code> takes Args, e.g. <code>from=format_day to=render_day</code>. <code>runaway.shale</code> never ends, so its step budget stops it.</p>
+    <p>Some take Args: <code>rename.shale</code> <code>from=format_day to=render_day</code>, <code>bump_version.shale</code> <code>part=minor</code>. <code>runaway.shale</code> never ends, so its step budget stops it.</p>
     <p>Edit any file, or add your own script. The files live in this page only; <b>Reset project</b> brings the sample back.</p>`;
   out.append(intro);
 }

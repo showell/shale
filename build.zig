@@ -185,6 +185,9 @@ pub fn build(b: *std.Build) void {
     const web_smoke = b.addSystemCommand(&.{"node"});
     web_smoke.addFileArg(b.path("web/smoke_test.mjs"));
     web_smoke.addArtifactArg(wasm);
+    // What the test imports, so a change to either runs it again.
+    web_smoke.addFileInput(b.path("web/shale.js"));
+    web_smoke.addFileInput(b.path("web/sample.js"));
     b.step("web-test", "the browser build's module under Node (web/smoke_test.mjs)").dependOn(&web_smoke.step);
 
     // The signer (src/shale_sign.zig): the key pair, made once, and a script
