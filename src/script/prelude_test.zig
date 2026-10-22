@@ -33,7 +33,7 @@ test "prelude: walk_all gives the whole walk across its parts, keeps the caller'
     try testing.expectEqualStrings("chat/deep/deeper/c.md,top.txt\n", after_cut.output);
 }
 
-test "prelude: count_all and find_next scan a file past the call-bytes cap, part by part, as the whole file's counts would" {
+test "prelude: count_all and find_next scan a file past the call-bytes cap, part by part, as the whole file's counts would, whatever the cap" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -70,6 +70,13 @@ test "prelude: count_all and find_next scan a file past the call-bytes cap, part
     var each = f.run("local at = 0 local n = 0 while true do local x = find_next(\"big.log\", \"NEEDL\", at) if x == nil then break end n = n + 1 at = x + 1 end print(n)", .{});
     defer each.deinit();
     try testing.expectEqualStrings(counted, each.output);
+    // A host whose call-bytes cap is smaller: parts of its size, the same answers.
+    var small = f.run("print(count_all(\"big.log\", \"NEEDL\"), find_next(\"big.log\", \"NEEDL\", 1048577), budget().call_bytes)", .{ .call_bytes = 65536 });
+    defer small.deinit();
+    if (small.stop) |s| std.debug.print("{s}\n", .{s.message});
+    const small_want = try std.fmt.allocPrint(testing.allocator, "{d}\t{d}\t65536\n", .{ want, first_after.? });
+    defer testing.allocator.free(small_want);
+    try testing.expectEqualStrings(small_want, small.output);
 }
 
 test "prelude: a script's own function of a prelude name is its own, and a call before it is the prelude's" {
