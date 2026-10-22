@@ -4,16 +4,15 @@
 -- itself. A script may declare a function of the same name: its calls are
 -- then its own.
 
--- Every entry `walk` gives, a part at a time: one call considers at most
--- the call-entries cap (256) and ends its part with a `more` entry, whose
--- path is where the next part starts. `opts` (none: `{}`) is not changed.
--- Each entry's `path` begins with `path`, as `walk`'s do.
+-- Every entry `walk(path, opts)` gives, from `opts.after` on if it is given,
+-- a part at a time: one call considers at most the call-entries cap (256)
+-- and ends its part with a `more` entry, whose path is where the next part
+-- starts. `opts` (none: `{}`) is not changed. Each entry's `path` begins
+-- with `path`, as `walk`'s do.
 function walk_all(path, opts?)
   local o = {after = ""}
   if opts == nil then opts = {} end
-  for k in keys(opts) do
-    if k ~= "after" then o[k] = opts[k] end
-  end
+  for k in keys(opts) do o[k] = opts[k] end
   local got = {}
   while true do
     local more = nil

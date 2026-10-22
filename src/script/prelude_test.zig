@@ -8,7 +8,7 @@ const script = @import("script.zig");
 const testing = std.testing;
 const Fixture = @import("builtins_test.zig").Fixture;
 
-test "prelude: walk_all gives the whole walk across its parts, keeps the caller's options, and costs what the parts cost" {
+test "prelude: walk_all gives the whole walk across its parts, keeps the caller's options (`after` among them), and costs what the parts cost" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
@@ -25,6 +25,12 @@ test "prelude: walk_all gives the whole walk across its parts, keeps the caller'
     try testing.expectEqualStrings(want, cut.output);
     // An empty map of options, and the folder's own entries.
     try f.expectOutput("print(#walk_all(\"chat\", {}))", "5\n");
+    // `after`, as `walk` takes it: the entries past it, in parts too.
+    const after = "local got = {} for e in walk_all(\"\", {kind = \"file\", after = \"chat/b.md\"}) do push(got, e.path) end print(join(got, \",\"))";
+    try f.expectOutput(after, "chat/deep/deeper/c.md,top.txt\n");
+    var after_cut = f.run(after, .{ .call_entries = 2 });
+    defer after_cut.deinit();
+    try testing.expectEqualStrings("chat/deep/deeper/c.md,top.txt\n", after_cut.output);
 }
 
 test "prelude: count_all and find_next scan a file past the call-bytes cap, part by part, as the whole file's counts would" {
