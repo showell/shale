@@ -99,7 +99,7 @@ fn touch(t: *T, name: []const u8, seconds: i64) !void {
     try testing.expectEqual(@as(usize, 0), std.os.linux.utimensat(std.os.linux.AT.FDCWD, path, &ts, 0));
 }
 
-test "linux prelude: newest, a folder's names by when they changed, newest first" {
+test "linux prelude: newest, a folder's names by when they changed, newest first; the root as `.` or as an empty path" {
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
@@ -109,6 +109,7 @@ test "linux prelude: newest, a folder's names by when they changed, newest first
         try touch(&t, f[0], f[1]);
     }
     try t.expectOutput("print(join(newest(\"logs\", 3), \",\"), #newest(\"logs\", 9))", "a,d,c\t4\n");
+    try t.expectOutput("print(join(newest(\".\", 99), \",\") == join(newest(\"\", 99), \",\"), #newest(\".\", 99) > 0)", "true\ttrue\n");
 }
 
 test "linux prelude: create refuses a file already there" {
