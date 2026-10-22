@@ -642,7 +642,7 @@ change_bytes` past those budgets.
 | `reverse(l)` | nil: in place | |
 | `keys(m)`, `has_key(m, k)`, `count(t)` | a list; a boolean; an integer | |
 | `get(t, k[, default])` | `t[k]`, or `default` where there is none | `type` for a key of the wrong kind |
-| `now()`, `budget()` | the host's time; what is left | |
+| `now()`, `budget()`, `call_bytes()` | the host's time; what is left; what one call may bring | |
 | `host(name, ...)` | what the host's call gives ("On Linux: behind the seam") | `host` where the host has no such call: metal has none |
 | `print(...)` | nil | `type` for a list or map |
 | `yield()` | nil | |
@@ -864,7 +864,8 @@ Perl and Python sometimes take one more turn after it, so on "a",
 | builtin | gives |
 |---|---|
 | `now()` | the integer the host handed in: the only time a script has |
-| `budget()` | a map of what is left of `steps`, `reads`, `read_bytes`, `changes`, `change_bytes` and `output`, so a script can stop at a point of its own, and `call_bytes`, what one call may bring (a cap, never spent), so a scan sizes its parts to it (the other budgets are not in it) |
+| `budget()` | a map of what is left of `steps`, `reads`, `read_bytes`, `changes`, `change_bytes` and `output`, so a script can stop at a point of its own (the other budgets are not in it) |
+| `call_bytes()` | what one store call may bring, the call-bytes cap (a cap, never spent), so a scan sizes its parts to it: an integer, built without a map |
 | `print(...)` | scalars only. It evaluates every argument first, joins them with tabs, and ends with a newline: `print()` is an empty line, `print(nil, true)` is `nil<TAB>true` |
 | `arg(name[, default])` | the value the run was given as `name` (the runner's `name=value`), or `default` (nil unset): a script's inputs. An integer or boolean default reads the value as one (`true`, `false`, `1`, `0`); any other, the string. The live site's route gives no values |
 | `fail(msg)` | the run stops here, class `fail`, `msg` its message: one line and its trail, as any stop (QUEUE 232). The script's own assertion: `if #found == 0 then fail("no config under " .. dir) end`. `attempt` catches it; the CLI exits 1 on it |
@@ -885,7 +886,7 @@ are the prelude's, whatever the script has declared.
 | function | gives | costs |
 |---|---|---|
 | `walk_all(p[, opts])` | every entry `walk(p, opts)` gives, from `opts.after` on when it is given, across all its parts, the `more` entries left out, each `path` beginning with `p`; `opts` (none: `{}`) is not changed | `walk`'s, a part at a time |
-| `count_all(p, s)` | `s`'s occurrences in the whole file | a stat, then a `count_in` a part, each the call-bytes cap (`budget().call_bytes`) |
+| `count_all(p, s)` | `s`'s occurrences in the whole file | a stat, then a `count_in` a part, each the call-bytes cap (`call_bytes()`) |
 | `find_next(p, s, at)` | the 0-based offset of the first `s` at or after `at`, or nil | a `find_in` from `at`, a part the call-bytes cap; a stat and more parts only when that finds nothing |
 | `walk_upto(p, opts, keep)` | `{entries, more, done}`: every entry from `opts.after` on, as `walk_all`, until the walk ends (`done`, `more` is "") or its reads would leave fewer than `keep` (not `done`: `more` is the path the next walk goes on after) | `walk`'s, a part at a time, with `keep_reads = keep` |
 | `glob(pattern[, {hidden}])` | every file whose path matches `pattern` (`match_path`), in the walk's order; the walk starts at the parts before the first wildcard and passes by hidden names (`walk`'s `skip = ".*"`) unless `{hidden = true}`. A pattern with no wildcard is that file, if it is one | `walk_all`'s |
@@ -1117,7 +1118,7 @@ budgets, and changes nothing.
 ### How large a site each script fits
 
 `zig build shale-scale` (src/shale_scale.zig; the table below is its
-output of 2026-10-16, and running it again gives it afresh) generates a store shaped
+output of 2026-10-22, and running it again gives it afresh) generates a store shaped
 like angry-gopher's, at a growing number of topics, and runs each
 read-only script on it under the site's budgets (steps 2M, arena 8 MiB,
 500 reads, 16 MiB read) until it no longer fits. A topic is its
@@ -1130,40 +1131,40 @@ The sizes are to within a tenth.
 | mode | script | messages a topic | largest site that fits | its transcripts | past it |
 |---|---|---|---|---|---|
 | atomic | `topics` | 10 (~2 KiB each) | 179 topics | 380 KiB | budget reads |
-| atomic | `stale_caches` | 10 (~2 KiB each) | 94 topics | 199 KiB | budget reads |
-| atomic | `find_message` | 10 (~2 KiB each) | 124 topics | 263 KiB | budget reads |
-| atomic | `where_the_bytes_are` | 10 (~2 KiB each) | 94 topics | 199 KiB | budget reads |
-| atomic | `chat_topics` | 10 (~2 KiB each) | 72 topics | 152 KiB | budget reads |
-| atomic | `big_files` | 10 (~2 KiB each) | 124 topics | 263 KiB | budget reads |
+| atomic | `stale_caches` | 10 (~2 KiB each) | 94 topics | 199 KiB | reads to its budget, then says what it found and where to resume |
+| atomic | `find_message` | 10 (~2 KiB each) | 124 topics | 263 KiB | reads to its budget, then says what it found and where to resume |
+| atomic | `where_the_bytes_are` | 10 (~2 KiB each) | 94 topics | 199 KiB | reads to its budget, then says what it found and where to resume |
+| atomic | `chat_topics` | 10 (~2 KiB each) | 20 topics | 42 KiB | reads to its budget, then says what it found and where to resume |
+| atomic | `big_files` | 10 (~2 KiB each) | 124 topics | 263 KiB | reads to its budget, then says what it found and where to resume |
 | atomic | `topics` | 100 (~21 KiB each) | 179 topics | 3.8 MiB | budget reads |
-| atomic | `stale_caches` | 100 (~21 KiB each) | 94 topics | 2.0 MiB | budget reads |
-| atomic | `find_message` | 100 (~21 KiB each) | 124 topics | 2.6 MiB | budget reads |
-| atomic | `where_the_bytes_are` | 100 (~21 KiB each) | 94 topics | 2.0 MiB | budget reads |
-| atomic | `chat_topics` | 100 (~21 KiB each) | 72 topics | 1.5 MiB | budget reads |
-| atomic | `big_files` | 100 (~21 KiB each) | 124 topics | 2.6 MiB | budget reads |
+| atomic | `stale_caches` | 100 (~21 KiB each) | 94 topics | 2.0 MiB | reads to its budget, then says what it found and where to resume |
+| atomic | `find_message` | 100 (~21 KiB each) | 124 topics | 2.6 MiB | reads to its budget, then says what it found and where to resume |
+| atomic | `where_the_bytes_are` | 100 (~21 KiB each) | 94 topics | 2.0 MiB | reads to its budget, then says what it found and where to resume |
+| atomic | `chat_topics` | 100 (~21 KiB each) | 20 topics | 428 KiB | reads to its budget, then says what it found and where to resume |
+| atomic | `big_files` | 100 (~21 KiB each) | 124 topics | 2.6 MiB | reads to its budget, then says what it found and where to resume |
 | atomic | `topics` | 1000 (~215 KiB each) | 72 topics | 15.2 MiB | budget read_bytes |
 | atomic | `stale_caches` | 1000 (~215 KiB each) | 72 topics | 15.2 MiB | budget steps |
-| atomic | `find_message` | 1000 (~215 KiB each) | 72 topics | 15.2 MiB | reads to its budget, then says how far it got |
-| atomic | `where_the_bytes_are` | 1000 (~215 KiB each) | 94 topics | 19.8 MiB | budget reads |
-| atomic | `chat_topics` | 1000 (~215 KiB each) | 72 topics | 15.2 MiB | budget reads |
-| atomic | `big_files` | 1000 (~215 KiB each) | 124 topics | 26.1 MiB | budget reads |
+| atomic | `find_message` | 1000 (~215 KiB each) | 72 topics | 15.2 MiB | reads to its budget, then says what it found and where to resume |
+| atomic | `where_the_bytes_are` | 1000 (~215 KiB each) | 94 topics | 19.8 MiB | reads to its budget, then says what it found and where to resume |
+| atomic | `chat_topics` | 1000 (~215 KiB each) | 20 topics | 4.2 MiB | reads to its budget, then says what it found and where to resume |
+| atomic | `big_files` | 1000 (~215 KiB each) | 124 topics | 26.1 MiB | reads to its budget, then says what it found and where to resume |
 | background | `topics` | 10 (~2 KiB each) | 2079 topics | 4.3 MiB | budget steps |
-| background | `stale_caches` | 10 (~2 KiB each) | 1292 topics | 2.7 MiB | budget arena |
+| background | `stale_caches` | 10 (~2 KiB each) | 972 topics | 2.0 MiB | budget arena |
 | background | `find_message` | 10 (~2 KiB each) | 804 topics | 1.7 MiB | budget arena |
 | background | `where_the_bytes_are` | 10 (~2 KiB each) | 1069 topics | 2.2 MiB | budget arena |
-| background | `chat_topics` | 10 (~2 KiB each) | 1292 topics | 2.7 MiB | budget arena |
+| background | `chat_topics` | 10 (~2 KiB each) | 1421 topics | 3.0 MiB | budget arena |
 | background | `big_files` | 10 (~2 KiB each) | 2514 topics | 5.2 MiB | budget steps |
 | background | `topics` | 100 (~21 KiB each) | 731 topics | 15.4 MiB | budget read_bytes |
-| background | `stale_caches` | 100 (~21 KiB each) | 550 topics | 11.6 MiB | budget steps |
+| background | `stale_caches` | 100 (~21 KiB each) | 500 topics | 10.5 MiB | budget steps |
 | background | `find_message` | 100 (~21 KiB each) | 605 topics | 12.7 MiB | budget steps |
 | background | `where_the_bytes_are` | 100 (~21 KiB each) | 1069 topics | 22.5 MiB | budget arena |
-| background | `chat_topics` | 100 (~21 KiB each) | 1292 topics | 27.2 MiB | budget arena |
+| background | `chat_topics` | 100 (~21 KiB each) | 1421 topics | 29.9 MiB | budget arena |
 | background | `big_files` | 100 (~21 KiB each) | 2514 topics | 53.1 MiB | budget steps |
 | background | `topics` | 1000 (~215 KiB each) | 72 topics | 15.2 MiB | budget read_bytes |
 | background | `stale_caches` | 1000 (~215 KiB each) | 72 topics | 15.2 MiB | budget steps |
-| background | `find_message` | 1000 (~215 KiB each) | 72 topics | 15.2 MiB | reads to its budget, then says how far it got |
+| background | `find_message` | 1000 (~215 KiB each) | 72 topics | 15.2 MiB | reads to its budget, then says what it found and where to resume |
 | background | `where_the_bytes_are` | 1000 (~217 KiB each) | 1069 topics | 226.2 MiB | budget arena |
-| background | `chat_topics` | 1000 (~217 KiB each) | 1292 topics | 273.6 MiB | budget arena |
+| background | `chat_topics` | 1000 (~217 KiB each) | 1421 topics | 301.0 MiB | budget arena |
 | background | `big_files` | 1000 (~217 KiB each) | 2514 topics | 533.3 MiB | budget steps |
 
 **Two modes, two budgets**: an **atomic** run holds up
@@ -1174,11 +1175,10 @@ run only fills the gaps between them, so it may read 10,000 (angry-gopher
 the chat fits fewer topics atomically than in the background, where the
 arena or the steps bind instead.
 
-**With the prelude (QUEUE 220),** atomically: `big_files` fits 124 topics
-where its `ls`, `is_dir` and `stat` an entry fit 46; `chat_topics` 72
-where 60 (`read_or`, one read a cache); `topics` 179 at 10 and 100
-messages a topic, and 72 at 1,000, where reading each transcript whole fit
-343, 163 and 17; the rest as they were.
+**Atomically,** `big_files` fits 124 topics; `topics` 179 at 10 and 100
+messages a topic and 72 at 1,000; `chat_topics` 20, the fewest, since it
+keeps half the reads for the count caches and stops early to say where to
+resume. A script that stops on its reads still answers for what it read.
 
 **The news is still mostly bad.** At angry-gopher's scale (its chat is
 about 190 MB), nothing that reads transcripts finishes in one run: a
@@ -1288,11 +1288,13 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
 **Run it against a copy**, never the live data folder.
 
 `zig build script-bench` (run it again to measure again; these are of
-2026-10-15) times the interpreter's hot paths in ReleaseSafe:
+2026-10-22) times the interpreter's hot paths in ReleaseSafe:
 a loop's iteration, a while loop, a list, a map, calls, a string built by
-`..` and by `join`, a scan, and a whole read. An interpreted step takes 7
-to 15 ns. A byte read whole takes 0.4 ns; a byte scanned takes 3.7 ns,
-with a match every 4 bytes.
+`..` and by `join`, a scan, and a whole read. An interpreted step takes 6
+to 15 ns. A byte read whole takes about 0.9 ns; a byte scanned about 6.6
+ns, with a match every 4 bytes. This box's runs differ by up to half from
+one day to the next: compare runs made side by side, never a day's with
+another's (`tools/bench.shale` reads the logs of both).
 
 ## On Linux: behind the seam
 
@@ -1507,22 +1509,22 @@ the code come from the machine's own arena (the `machine` budget,
 same values' arena and stop on it at the same place.
 
 `zig build script-bench`, ReleaseSafe, the VM's time over the walker's
-(2026-10-15's run; the step measures it again):
+(2026-10-22's run; the step measures it again):
 
 | case | walker | VM |
 |---|---|---|
-| a loop's iteration | 8.5 ns a step | 6.7 (0.79x) |
-| a while loop | 7.9 | 6.4 (0.81x) |
-| a list, built and indexed | 10.8 | 10.6 (0.98x) |
-| a map's fields | 9.1 | 7.1 (0.78x) |
-| calls | 13.2 | 10.6 (0.80x) |
-| a string built by `..` | 7.2 | 4.6 (0.64x) |
-| `count_in` over 8 MiB | 13.0 | 13.5 (1.04x) |
-| `read` 8 MiB whole | 9.8 | 11.4 (1.15x) |
-| a string built by `join` | 11.9 | 9.0 (0.76x) |
+| a loop's iteration | 9.0 ns a step | 8.5 (0.94x) |
+| a while loop | 9.5 | 7.5 (0.79x) |
+| a list, built and indexed | 12.3 | 11.9 (0.96x) |
+| a map's fields | 9.7 | 8.9 (0.92x) |
+| calls | 13.0 | 11.5 (0.88x) |
+| a string built by `..` | 6.6 | 6.0 (0.91x) |
+| `count_in` over 8 MiB | 11.8 | 12.5 (1.06x) |
+| `read` 8 MiB whole | 14.8 | 14.1 (0.95x) |
+| a string built by `join` | 10.5 | 9.3 (0.89x) |
 
-Where the interpreter's own work dominates, the VM takes about four
-fifths of the walker's time. Where a builtin's work dominates (a scan, a
+Where the interpreter's own work dominates, the VM takes four fifths to
+nine tenths of the walker's time. Where a builtin's work dominates (a scan, a
 read), the two are within this box's noise, since the work is the same
 code. Speed is not the VM's point; the state a yield can keep is.
 
