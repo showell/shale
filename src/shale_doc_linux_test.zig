@@ -1,8 +1,8 @@
 //! Runs SHALE-AGENTS.md's `shale-linux` blocks: those that need the Linux
 //! prelude (`zig_rename`, `run`, git), which the core's doc test
 //! (script/agent_test.zig) skips. Each runs on a fresh small checkout with the
-//! CLI's summary diffs, and must print what the doc says (`-- prints:`) or
-//! stop as it says (`-- stops: class`).
+//! CLI's summary diffs, and must print what the ```output block after it
+//! holds, exactly, or stop as its last line says (`-- stops: class`).
 
 const std = @import("std");
 const testing = std.testing;
@@ -11,15 +11,30 @@ const host_linux = @import("shale_host_linux.zig");
 
 const Block = struct { line: usize, source: []const u8, prints: ?[]const u8, stops: ?[]const u8 };
 
+/// Each ```shale-linux block, and the ```output block after it (blank lines
+/// between) or its last line `-- stops: <class>`. An ```output block is the
+/// next block's only when that block is a shale-linux one: the core's doc test
+/// reads the ```shale blocks and theirs.
 fn blocks(a: std.mem.Allocator, doc: []const u8) ![]Block {
     var out: std.ArrayList(Block) = .empty;
     var lines = std.mem.splitScalar(u8, doc, '\n');
     var n: usize = 0;
     var start: ?usize = null;
+    var reading_output = false;
     var body: std.ArrayList(u8) = .empty;
+    var awaiting: ?Block = null;
     while (lines.next()) |line| {
         n += 1;
-        if (start == null) {
+        if (start == null and !reading_output) {
+            if (awaiting) |b| {
+                if (std.mem.eql(u8, line, "```output")) {
+                    reading_output = true;
+                } else if (std.mem.trim(u8, line, " ").len != 0) {
+                    std.debug.print("docs/SHALE-AGENTS.md:{d}: a shale-linux block with no output block after it and no `-- stops:`\n", .{b.line});
+                    return error.TestUnexpectedResult;
+                }
+                continue;
+            }
             if (std.mem.eql(u8, line, "```shale-linux")) start = n;
             continue;
         }
@@ -30,28 +45,42 @@ fn blocks(a: std.mem.Allocator, doc: []const u8) ![]Block {
         }
         const text = body.items;
         body = .empty;
+        if (reading_output) {
+            var b = awaiting.?;
+            b.prints = text;
+            try out.append(a, b);
+            awaiting = null;
+            reading_output = false;
+            continue;
+        }
         defer start = null;
         if (std.mem.indexOf(u8, text, "\n-- stops: ")) |at| {
             try out.append(a, .{ .line = start.?, .source = text[0 .. at + 1], .prints = null, .stops = std.mem.trim(u8, text[at + "\n-- stops: ".len ..], " \n") });
             continue;
         }
-        const mark = std.mem.indexOf(u8, text, "-- prints:\n") orelse {
-            std.debug.print("docs/SHALE-AGENTS.md:{d}: a shale-linux block with no `-- prints:` or `-- stops:`\n", .{start.?});
+        if (std.mem.indexOf(u8, text, "-- prints:") != null) {
+            std.debug.print("docs/SHALE-AGENTS.md:{d}: `-- prints:` is the old form: the output goes in an ```output block after the block\n", .{start.?});
             return error.TestUnexpectedResult;
-        };
-        var want: std.ArrayList(u8) = .empty;
-        var rest = std.mem.splitScalar(u8, std.mem.trimEnd(u8, text[mark + "-- prints:\n".len ..], "\n"), '\n');
-        while (rest.next()) |l| {
-            if (!std.mem.startsWith(u8, l, "-- ")) {
-                std.debug.print("docs/SHALE-AGENTS.md:{d}: after `-- prints:`, only `-- ` lines\n", .{start.?});
-                return error.TestUnexpectedResult;
-            }
-            try want.appendSlice(a, l[3..]);
-            try want.append(a, '\n');
         }
-        try out.append(a, .{ .line = start.?, .source = text[0..mark], .prints = want.items, .stops = null });
+        awaiting = .{ .line = start.?, .source = text, .prints = null, .stops = null };
+    }
+    if (awaiting) |b| {
+        std.debug.print("docs/SHALE-AGENTS.md:{d}: a shale-linux block with no output block after it and no `-- stops:`\n", .{b.line});
+        return error.TestUnexpectedResult;
     }
     return out.items;
+}
+
+test "SHALE-AGENTS.md's shale-linux blocks: a block and its output block are read; no output block, or the old form, is refused" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const got = try blocks(a, "```shale-linux\nprint(1)\n```\n\n```output\n1\n```\n```shale-linux\nfail(\"x\")\n-- stops: fail\n```\n");
+    try testing.expectEqual(@as(usize, 2), got.len);
+    try testing.expectEqualStrings("1\n", got[0].prints.?);
+    try testing.expectEqualStrings("fail", got[1].stops.?);
+    try testing.expectError(error.TestUnexpectedResult, blocks(a, "```shale-linux\nprint(1)\n```\n\ntext\n"));
+    try testing.expectError(error.TestUnexpectedResult, blocks(a, "```shale-linux\nprint(1)\n-- prints:\n-- 1\n```\n"));
 }
 
 /// The checkout: agent_test's two tcp files, and a host that still

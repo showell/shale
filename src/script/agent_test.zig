@@ -283,7 +283,7 @@ test "docs/SHALE-AGENTS.md: every shale block runs on a fresh checkout and print
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const all = try @import("examples_test.zig").snippets(a, doc);
+    const all = try @import("examples_test.zig").snippets(a, "docs/SHALE-AGENTS.md", doc);
     var wrong: usize = 0;
     for (all) |sn| {
         var t: Tree = undefined;
@@ -297,9 +297,8 @@ test "docs/SHALE-AGENTS.md: every shale block runs on a fresh checkout and print
             wrong += 1;
             continue;
         }
-        const got = try std.mem.replaceOwned(u8, a, r.output, "\t", "<TAB>");
-        if (sn.prints == null or !std.mem.eql(u8, got, sn.prints.?)) {
-            std.debug.print("docs/SHALE-AGENTS.md:{d}: prints\n{s}-- not --\n{s}", .{ sn.line, got, sn.prints orelse "(nothing said)\n" });
+        if (sn.prints == null or !std.mem.eql(u8, r.output, sn.prints.?)) {
+            std.debug.print("docs/SHALE-AGENTS.md:{d}: prints\n{s}-- not --\n{s}", .{ sn.line, r.output, sn.prints orelse "(nothing said)\n" });
             wrong += 1;
         }
     }
