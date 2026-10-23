@@ -77,6 +77,7 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     }
     const cwd = if (cwd_v) |c| try hl.osPath(h, run, pos, c, true) else try hl.rootOf(h, run, pos);
     try hl.refuse(h, run, pos, "job_start", argv[0], cwd, want);
+    try hl.refuseSecretArgs(h, run, pos, "job_start", argv);
     const reaper = h.reaper orelse return run.fail(pos, .host, "`job_start`: this host has no reaper to start a job under", .{});
 
     var env: std.ArrayList([]const u8) = .empty;

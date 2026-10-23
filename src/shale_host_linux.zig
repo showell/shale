@@ -112,11 +112,75 @@ fn resolve(ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]
         var it = std.mem.splitScalar(u8, path, '/');
         while (it.next()) |part| if (!store.fatName(part)) return null;
         try refuseLinks(run, pos, std.mem.trimEnd(u8, run.root, "/"), path, "");
+        if (!anySecrets(h)) return null;
+        const root = try rootOf(h, run, pos);
+        try refuseSecretsUnder(h, run, pos, path, if (path.len == 0) root else std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ root, path }) catch return run.oom(pos));
         return null;
     };
+    const m = try mountOf(h, run, pos, path, colon);
+    if (m.secrets) return run.fail(pos, .refused, "\"{s}\": the mount `{s}` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files", .{ path, m.name });
+    const os = try mountPath(h, run, pos, path, colon, m);
+    try refuseSecretsUnder(h, run, pos, path, try absolute(h, run, pos, os));
+    return os;
+}
+
+/// A secret's file, for `run`'s `secrets`: its OS path, through any mount,
+/// a `secrets` one included (which every other path refuses).
+pub fn secretPath(h: *Host, run: *Run, pos: ast.Pos, v: Value) Error![]const u8 {
+    const path = switch (v) {
+        .string => |s| s,
+        else => return osPath(h, run, pos, v, false),
+    };
+    const first_end = std.mem.indexOfScalar(u8, path, '/') orelse path.len;
+    const colon = std.mem.indexOfScalar(u8, path[0..first_end], ':') orelse return osPath(h, run, pos, v, false);
+    const m = try mountOf(h, run, pos, path, colon);
+    if (!m.secrets) return osPath(h, run, pos, v, false);
+    if (colon + 1 == path.len) return run.fail(pos, .argument, "\"{s}\": a secret is a file in the mount, not the mount", .{path});
+    return absolute(h, run, pos, try mountPath(h, run, pos, path, colon, m));
+}
+
+/// A mount's folder as this run sees it: one inside the root is taken
+/// against the run's own root (each engine of a gated test has its copy).
+fn runDirOf(h: *Host, run: *Run, pos: ast.Pos, m: Mount) Error![]const u8 {
+    const inside = std.mem.startsWith(u8, m.dir, h.root_abs) and (m.dir.len == h.root_abs.len or m.dir[h.root_abs.len] == '/');
+    if (!inside) return m.dir;
+    return std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch run.oom(pos);
+}
+
+fn anySecrets(h: *const Host) bool {
+    for (h.mounts) |m| if (m.secrets) return true;
+    return false;
+}
+
+/// Refuses a program's argument that names a `secrets` mount's folder: a
+/// token is handed over as `secrets`, never as a path a program reads. Used
+/// by `run` and `job_start`, with or without a `want`.
+pub fn refuseSecretArgs(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv: []const []const u8) Error!void {
+    for (h.mounts) |m| {
+        if (!m.secrets) continue;
+        const dir = try runDirOf(h, run, pos, m);
+        for (argv, 1..) |arg, i| if (std.mem.indexOf(u8, arg, dir) != null)
+            return run.fail(pos, .refused, "`{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`", .{ who, i, m.name });
+    }
+}
+
+/// A path (`shown`, at `abs`) that reaches a `secrets` mount's folder by
+/// another way, the root or another mount, is refused as the mount's own
+/// path is. A folder above it may be listed: names are not secrets.
+fn refuseSecretsUnder(h: *Host, run: *Run, pos: ast.Pos, shown: []const u8, abs: []const u8) Error!void {
+    for (h.mounts) |m| {
+        if (!m.secrets) continue;
+        const dir = try runDirOf(h, run, pos, m);
+        if (std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/'))
+            return run.fail(pos, .refused, "\"{s}\" is in the mount `{s}`, which holds secrets", .{ shown, m.name });
+    }
+}
+
+/// The mount `path` names before its `:` at `colon`; a stop naming the
+/// mounts there are when it is none.
+fn mountOf(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize) Error!Mount {
     const name = path[0..colon];
-    const rest = path[colon + 1 ..];
-    const m = for (h.mounts) |m| {
+    return for (h.mounts) |m| {
         if (std.mem.eql(u8, m.name, name)) break m;
     } else {
         var names: std.ArrayList(u8) = .empty;
@@ -127,6 +191,12 @@ fn resolve(ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]
         if (h.mounts.len == 0) return run.fail(pos, .argument, "\"{s}\": `{s}:` is not a mount: there are none ({s})", .{ path, name, h.mounts_from });
         return run.fail(pos, .argument, "\"{s}\": `{s}:` is not a mount: the mounts are {s} ({s})", .{ path, name, names.items, h.mounts_from });
     };
+}
+
+/// `path` (the mount `m`'s, its `:` at `colon`) as an OS path, the rest
+/// held to the root's rules.
+fn mountPath(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize, m: Mount) Error![]const u8 {
+    const rest = path[colon + 1 ..];
     if (rest.len > 0 and rest[0] == '/') return run.fail(pos, .argument, "\"{s}\" is absolute inside its mount: a mount's paths are relative to it", .{path});
     if (rest.len > 0) {
         var it = std.mem.splitScalar(u8, rest, '/');

@@ -97,6 +97,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
 
     const cwd = if (o.cwd) |c| try hl.osPath(h, run, pos, c, true) else try hl.rootOf(h, run, pos);
     try hl.refuse(h, run, pos, "run", argv[0], cwd, o.want);
+    try hl.refuseSecretArgs(h, run, pos, "run", argv);
 
     // The inherited environment, overridden by `env` and `secrets`.
     var env: std.ArrayList([]const u8) = .empty;
@@ -119,7 +120,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
         shown_env.print(a, " {s}={s}", .{ k, v }) catch return run.oom(pos);
     };
     if (o.secrets) |t| for (t.map.keys(), t.map.values()) |k, x| {
-        const path = try hl.osPath(h, run, pos, x, false);
+        const path = try hl.secretPath(h, run, pos, x);
         const shown = switch (x) {
             .string => |s| s,
             else => "",

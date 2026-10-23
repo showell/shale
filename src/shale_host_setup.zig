@@ -26,6 +26,11 @@ pub const Mount = struct {
     /// ` tools` after the path marks a toolchain's install, whose programs
     /// `run` takes by path without a `want` though git does not track them.
     tools: bool = false,
+    /// ` secrets` after the path marks a folder of tokens: no script reads,
+    /// lists or names its files, and no program is handed its path; only
+    /// `run`'s `secrets` takes them (the value scrubbed from the output). It
+    /// is read-only too.
+    secrets: bool = false,
 
     pub const Access = enum { read_write, read_only };
 };
@@ -46,22 +51,29 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
             return error.Malformed;
         };
         const name = std.mem.trim(u8, line[0..eq], " \t");
-        // The path, then any of ` ro` and ` tools`.
+        // The path, then any of ` ro`, ` tools` and ` secrets`.
         var words = std.mem.tokenizeAny(u8, line[eq + 1 ..], " \t");
         const value = words.next() orelse "";
         var access: Mount.Access = .read_write;
+        var said_ro = false;
         var tools = false;
+        var secrets = false;
         while (words.next()) |w| {
-            const seen = if (std.mem.eql(u8, w, "ro")) access == .read_only else if (std.mem.eql(u8, w, "tools")) tools else {
-                why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` after `{s}`'s path: only `ro` and `tools` may follow it (and a path has no space)", .{ n, w, name });
+            const seen = if (std.mem.eql(u8, w, "ro")) said_ro else if (std.mem.eql(u8, w, "tools")) tools else if (std.mem.eql(u8, w, "secrets")) secrets else {
+                why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` after `{s}`'s path: only `ro`, `tools` and `secrets` may follow it (and a path has no space)", .{ n, w, name });
                 return error.Malformed;
             };
             if (seen) {
                 why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` twice after `{s}`'s path", .{ n, w, name });
                 return error.Malformed;
             }
-            if (std.mem.eql(u8, w, "ro")) access = .read_only else tools = true;
+            if (std.mem.eql(u8, w, "ro")) said_ro = true else if (std.mem.eql(u8, w, "tools")) tools = true else secrets = true;
         }
+        if (secrets and tools) {
+            why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` is `secrets` and `tools`: a toolchain's programs are not tokens", .{ n, name });
+            return error.Malformed;
+        }
+        if (said_ro or secrets) access = .read_only;
         if (name.len == 0 or !validName(name)) {
             why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` is not a mount's name: letters, digits, `_` and `-`", .{ n, name });
             return error.Malformed;
@@ -78,7 +90,7 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
             why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}`'s value `{s}` is relative: an absolute path, or one from `~/`", .{ n, name, value });
             return error.Malformed;
         };
-        try out.append(alloc, .{ .name = try alloc.dupe(u8, name), .dir = std.mem.trimEnd(u8, dir, "/"), .access = access, .tools = tools });
+        try out.append(alloc, .{ .name = try alloc.dupe(u8, name), .dir = std.mem.trimEnd(u8, dir, "/"), .access = access, .tools = tools, .secrets = secrets });
     }
     return out.toOwnedSlice(alloc);
 }

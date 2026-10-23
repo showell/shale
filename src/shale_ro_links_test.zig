@@ -82,7 +82,9 @@ test "ro mounts: the mounts file's ` ro` and ` tools`, in either order; any othe
     try testing.expectEqual(host_linux.Mount.Access.read_only, ms[3].access);
     try testing.expectEqual(host_linux.Mount.Access.read_write, ms[4].access);
     for ([_]struct { []const u8, []const u8 }{
-        .{ "a = /x rw\n", "line 1: `rw` after `a`'s path: only `ro` and `tools` may follow it" },
+        .{ "a = /x rw\n", "line 1: `rw` after `a`'s path: only `ro`, `tools` and `secrets` may follow it" },
+        .{ "a = /x secrets tools\n", "line 1: `a` is `secrets` and `tools`" },
+        .{ "a = /x secrets secrets\n", "line 1: `secrets` twice after `a`'s path" },
         .{ "a = /x y z\n", "line 1: `y` after `a`'s path" },
         .{ "a = /x ro ro\n", "line 1: `ro` twice after `a`'s path" },
     }) |c| {
@@ -90,6 +92,40 @@ test "ro mounts: the mounts file's ` ro` and ` tools`, in either order; any othe
         errdefer std.debug.print("{s}: {s}\n", .{ c[0], why });
         try testing.expect(std.mem.indexOf(u8, why, c[1]) != null);
     }
+}
+
+test "secrets mounts: no read, listing, change, path or argument reaches a token, by the mount or another way; run's secrets takes one, scrubbed" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    try t.tmp.dir.createDirPath(t.threaded.io(), "keys");
+    try t.put("keys/tok", "s3cret\n");
+    var why: []const u8 = "";
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/keys secrets\nall = {s}\n", .{ t.root, t.root }), "/home/x", &why);
+    try testing.expectEqual(host_linux.Mount.Access.read_only, t.host.mounts[0].access);
+    for ([_]struct { []const u8, []const u8 }{
+        .{ "read(\"k:tok\")", "the mount `k` holds secrets" },
+        .{ "ls(\"k:\")", "the mount `k` holds secrets" },
+        .{ "exists(\"k:tok\")", "the mount `k` holds secrets" },
+        .{ "stat(\"k:tok\")", "the mount `k` holds secrets" },
+        .{ "real(\"k:tok\")", "the mount `k` holds secrets" },
+        .{ "replace(\"k:tok\", \"x\")", "the mount `k` holds secrets" },
+        // The same folder by the root, or by a mount above it.
+        .{ "read(\"keys/tok\")", "is in the mount `k`, which holds secrets" },
+        .{ "ls(\"keys\")", "is in the mount `k`, which holds secrets" },
+        .{ "read(\"all:keys/tok\")", "is in the mount `k`, which holds secrets" },
+        // A program started in it, or handed its path.
+        .{ "run({\"shale-fixture\", \"cat\"}, {timeout_ms = 10000, tail = 5, cwd = \"k:\"})", "the mount `k` holds secrets" },
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", real(\"\") .. \"/keys/tok\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 names the mount `k`'s folder" },
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", real(\"\") .. \"/keys/tok\"}, {timeout_ms = 10000, tail = 5, want = \"x: y\"})", "names the mount `k`'s folder" },
+    }) |c| try t.expectStop(c[0], .atomic, .refused, c[1]);
+    try testing.expectEqualStrings("s3cret\n", try t.file("keys/tok"));
+    // `secrets` takes one, the value scrubbed; the mount itself is no secret.
+    try t.expectOutput("print(run({\"shale-fixture\", \"env\", \"TOK\"}, {timeout_ms = 10000, tail = 5, secrets = {TOK = \"k:tok\"}}).out)", "<secret TOK>\n\n");
+    try t.expectStop("run({\"shale-fixture\", \"env\", \"TOK\"}, {timeout_ms = 10000, tail = 5, secrets = {TOK = \"k:\"}})", .atomic, .argument, "a secret is a file in the mount, not the mount");
+    // Names are not secrets: the folder above it lists.
+    try t.expectOutput("print(contains(join(ls(\"\"), \",\"), \"keys\"))", "true\n");
 }
 
 test "the store follows no link: to a file, to a folder, in the middle of a path, in a mount, out of the root: refused for reads, changes, exists, stat and listings" {

@@ -567,6 +567,15 @@ the first two can give a quiet wrong answer, an empty list:
   the same. **Adding that line is the user's call:** when a new compiler is
   installed, ask once, then add the line; never pass `want` on every run
   instead.
+- **Tokens are a `secrets` mount** (`keys = ~/.shale-keys secrets`):
+  read-only, and no script reads, lists, `stat`s or `real`s its files, by
+  its name or by a root or mount path that reaches its folder; no program
+  starts there or is handed its folder in an argument (with or without
+  `want`). Only `run`'s `secrets = {NAME = "keys:file"}` takes one, the
+  value in the program's environment and scrubbed from its output as
+  `<secret NAME>`; `http_get`'s `bearer` and `cookbook:http.shale`'s
+  `bearer=keys:file` use it. A link to the file from elsewhere (an old
+  `~/.token`) is not the mount's and is not guarded.
 - **The store follows no symbolic link.** A path any part of which, below
   the root or a mount's own folder, is a link stops the run, `refused:
   <path> is a symbolic link`, for a read, a change, `exists`, `stat` and

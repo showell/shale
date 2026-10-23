@@ -69,7 +69,8 @@ and the recipes below launch as `shale cookbook:look.shale ...` from any
 project. Add ` ro` after a path for a read-only mount, and ` tools` for a
 toolchain whose programs a script may run by path (a newer compiler, a
 project's `.venv`); adding a `tools` line is a decision you make once, by
-hand.
+hand. ` secrets` marks a folder of tokens: no script reads its files, and
+only `run`'s `secrets` (and `http_get`'s `bearer`) hands one to a program.
 
 ### Hook it into Claude Code
 

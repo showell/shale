@@ -1242,8 +1242,9 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   (`runs:gates/summary`). The mounts are in `SHALE_MOUNTS`'s file, else
   `~/.config/shale/mounts` (`name = /abs/path` or `name = ~/path` a line,
   ` ro` after it for a read-only mount, ` tools` for a toolchain whose
-  programs `run` takes by path though git does not track them (either
-  order, each once): every change through a read-only mount is
+  programs `run` takes by path though git does not track them, ` secrets`
+  for a folder of tokens only `run`'s `secrets` may name, read-only too
+  (any order, each once; `secrets` and `tools` not both): every change through a read-only mount is
   refused before anything is written, at the one point every change
   passes, `PathHook.may_change`, which only a `host_io` saying
   `shale_change_check` compiles; another word after the path, one twice,
