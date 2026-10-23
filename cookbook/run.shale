@@ -1,8 +1,10 @@
 -- **A PROGRAM RUN, AND WHAT IT SAID THAT MATTERS**: one command line, or
 -- several joined by `&&` and run in order until one fails, each with how
 -- it ended, how long it took, the lines holding `grep`'s literals and its
--- last lines; the whole output kept in `log` (default
--- .zig-cache/run.log under `dir`). The escape behind most of 2026-10-23's
+-- last lines; the whole output kept in `log`. **The default log is
+-- .zig-cache/run.log under `dir` only where that folder is already** (a
+-- Zig checkout, which ignores it); elsewhere (an essay repo, a memory
+-- folder) nothing is written, and the last line says so. The escape behind most of 2026-10-23's
 -- wants (about 130 of 210: `roc check`, `zig build` with a log and a
 -- timing, a bench binary, `gh run`, `node`), which `run` already did
 -- but only from a script.
@@ -30,14 +32,31 @@ const MINUTES = arg("minutes", 10)
 const TAIL = arg("tail", 10)
 const GREP = arg("grep", "")
 const MOST = arg("most", 60)
-const LOG = arg("log", ".zig-cache/run.log")
+const LOG = arg("log", "")
 const WANT = arg("want", "")
 
 if trim(CMD) == "" then fail("run: say `cmd=`, the command line (with spaces: on stdin, `--args-stdin`)") end
 
-local log_path = LOG
--- A mount's own root (`memory:`) takes a path without a leading `/`.
-if DIR ~= "." and ends_with(DIR, ":") then log_path = DIR .. LOG elseif DIR ~= "." then log_path = DIR .. "/" .. LOG end
+-- `rel` under `dir`; a mount's own root (`memory:`) takes it without a
+-- leading `/`.
+function under(dir, rel)
+  if dir == "." then return rel end
+  if ends_with(dir, ":") then return dir .. rel end
+  return dir .. "/" .. rel
+end
+
+-- nil: the whole output is not kept.
+local log_path = nil
+if LOG ~= "" then
+  log_path = under(DIR, LOG)
+elseif is_dir(under(DIR, ".zig-cache")) then
+  log_path = under(DIR, ".zig-cache/run.log")
+end
+-- How the run's last line names where the output went.
+function kept_in(path)
+  if path == nil then return "the whole output not kept (no .zig-cache here: `log=PATH` keeps it)" end
+  return "the whole output in " .. path
+end
 local wanted = {}
 for w in split(GREP, ",") do if w ~= "" then push(wanted, w) end end
 
@@ -52,7 +71,7 @@ for part in split(CMD, "&&") do
   if WANT ~= "" then opts.want = WANT end
   local r = run(argv, opts)
   log = log .. "== " .. shown .. "\n" .. r.out
-  replace(log_path, log)
+  if log_path ~= nil then replace(log_path, log) end
   -- A run ended by its time or a signal has no exit code: say how it ended.
   local how = ""
   if has_key(r, "code") then how = "exit " .. r.code else how = "ended: " .. tostring(r.ended) .. " (no exit code)" end
@@ -82,8 +101,8 @@ for part in split(CMD, "&&") do
   if r.ms >= 1000 then took = (r.ms // 1000) .. "." .. (r.ms % 1000 // 100) .. " s" end
   print("── " .. how .. " in " .. took .. ": " .. shown)
   if failed then
-    print("the whole output in " .. log_path)
+    print(kept_in(log_path))
     fail("run: `" .. shown .. "` " .. how)
   end
 end
-print("the whole output in " .. log_path)
+print(kept_in(log_path))
