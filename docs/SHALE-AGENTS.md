@@ -74,6 +74,7 @@ Shale form, most of them one launch:
 | `roc check f && roc test f 2>&1 \| tail`, any other program and its verdict | `shale cookbook:run.shale` with `cmd=roc check f && roc test f` on stdin (`--args-stdin`): each command in order until one fails, how it ended and its time, its last lines (`tail=`), lines holding `grep=` literals, the whole output in a log; `want=tag: why` for a program `run` refuses (`node`, `sh`) |
 | `curl -s URL \| grep X`, a wait for a deploy | `shale cookbook:http.shale url=URL grep=X` (`wait=LITERAL minutes=N`: until the body holds it; `bearer=` a Shale path to a token file) |
 | `git tag -a v6 X -m ... && git push origin v6`, `git commit --amend`, ahead/behind | `git_tag(repo, "v6", {rev, msg})`, `git_push(repo, {tag = "v6"})`; `git_commit(repo, msg, {amend = true})`; `git_upstream(repo)` |
+| `git checkout -- f`, `git mv a b` | `git_restore(repo, {"f"})`, `git_mv(repo, "a", "b")` |
 | `git show origin/master:QUEUE.md \| sed -n 40,80p`, `git grep` at a revision | `shale cookbook:look.shale rev=origin/master at=QUEUE.md:40-80` (or `find=` `in=`): `at` and `in` read as the revision holds them (`repo=` another checkout) |
 | `git log`, `git diff --stat`, `git show rev:path`, `git status` | the git prelude: `git_log`, `git_diff`, `git_show`, `git_status`, `git_is_clean` (below) |
 | `git commit -m ... && git push` | `git_commit(repo, msg, {add})`, `git_push(repo)`; `git_worktree_add`, `git_merge_ff` |
@@ -215,6 +216,8 @@ or `"."` for the root and `repos:dog-park` for a mount.
     HEAD, refused once HEAD is on a remote branch.
   - `git_tag(repo, name, {rev, msg})`: annotated with `msg`, light
     without; `git_push(repo, {tag})` sends that tag alone.
+  - `git_restore(repo, {paths}, {from})` puts paths back as HEAD (or
+    `from`) has them, index and work tree; `git_mv(repo, from, to)`.
   - `git_push(repo)` pushes to the branch's upstream (an error when it has
     none); `git_push(repo, {branch, remote})` pushes to that branch of
     `remote` (`origin` unless named) and makes it the upstream, as `push
@@ -233,6 +236,7 @@ or `"."` for the root and `repos:dog-park` for a mount.
   that changes things prints git's output first (its first and last 10
   lines). Each call has 60 seconds; those that take options
   (`git_log`, `git_diff`, `git_commit`, `git_push`, `git_fetch`, `git_tag`,
+  `git_restore`, `git_mv`,
   `git_merge`, `git_worktree_add`, `git_worktree_remove`,
   `git_branch_delete`) take `timeout_ms` to change it.
 

@@ -153,6 +153,28 @@ test "git prelude: the upstream's counts; an amend before a push, refused after;
     try expectOnce(&t, "git_worktree_add(\"\", \"old\", {rev = \"HEAD~1\"}) print(read(\"old/a.txt\"), git_head(\"old\") == git_log(\"\", {n = 1, ref = \"HEAD~1\"})[1].hash) git_worktree_remove(\"\", \"old\", {})", "one\ntwo\n\ttrue\n");
 }
 
+test "git prelude: restore puts paths back as HEAD or a rev has them, index and tree; mv moves a tracked path, by case alone too" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try repo(&t);
+    // a.txt changed and staged: both undone; the rest left as they were.
+    try git(&t, "", &.{ "add", "a.txt" });
+    try expectOnce(&t, "git_restore(\"\", {\"a.txt\"}) print(read(\"a.txt\")) for e in git_status(\"\") do print(e.code, e.path) end", "one\n\nR \td.txt\n??\tc.txt\n");
+    try git(&t, "", &.{ "add", "-A" });
+    try git(&t, "", &.{ "commit", "-q", "-m", "second" });
+    try t.put("a.txt", "changed\n");
+    try git(&t, "", &.{ "commit", "-q", "-a", "-m", "third" });
+    try expectOnce(&t, "git_restore(\"\", {\"a.txt\"}, {from = \"HEAD~1\"}) print(read(\"a.txt\"), git_status(\"\")[1].code)", "one\n\tM \n");
+    try t.expectStop("git_restore(\"\", {\"nope.txt\"})", .atomic, .fail, "`git restore --source=HEAD --staged --worktree -- nope.txt` exited");
+    try t.expectStop("git_restore(\"\", {})", .atomic, .fail, "`git_restore` of no paths");
+    try git(&t, "", &.{ "commit", "-q", "-a", "-m", "fourth" });
+    try t.put("Word.roc", "w\n");
+    try git(&t, "", &.{ "add", "Word.roc" });
+    try git(&t, "", &.{ "commit", "-q", "-m", "fifth" });
+    try expectOnce(&t, "git_mv(\"\", \"Word.roc\", \"word.roc\") local s = git_status(\"\") local names = join(ls(\"\"), \",\") print(contains(names, \"word.roc\"), contains(names, \"Word.roc\"), s[1].code, s[1].path, s[1].from)", "true\tfalse\tR \tword.roc\tWord.roc\n");
+}
+
 test "git prelude: a merge makes its commit; a conflicted one is undone and named; \".\" is the root" {
     var t: T = undefined;
     try init(&t);

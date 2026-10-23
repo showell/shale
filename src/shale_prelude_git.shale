@@ -267,6 +267,27 @@ function git_tag(repo, name, opts?)
   return nil
 end
 
+-- `paths` put back exactly as HEAD (or `{from = rev}`) has them, in the
+-- index and the work tree alike: a plant undone, one file's change dropped
+-- while the rest stay. A path HEAD lacks stops it.
+function git_restore(repo, paths, opts?)
+  git_opts("git_restore", opts, {"from", "timeout_ms"})
+  if #paths == 0 then fail("`git_restore` of no paths: name them") end
+  local from = "HEAD"
+  if opts ~= nil and has_key(opts, "from") then from = opts.from end
+  local args = {"restore", "--source=" .. from, "--staged", "--worktree", "--"}
+  for p in paths do push(args, p) end
+  git_call(repo, args, opts, false, nil)
+  return nil
+end
+
+-- A tracked path moved, staged (`git mv`); a rename by case alone too.
+function git_mv(repo, from, to, opts?)
+  git_opts("git_mv", opts, {"timeout_ms"})
+  git_call(repo, {"mv", "--", from, to}, opts, false, nil)
+  return nil
+end
+
 -- Pull, fast-forward only.
 function git_pull_ff(repo)
   git_call(repo, {"pull", "-q", "--ff-only"}, nil, false, nil)
