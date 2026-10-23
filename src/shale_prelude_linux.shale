@@ -52,6 +52,58 @@ function must(r)
   fail(what .. " was ended by a signal")
 end
 
+-- **AN HTTP GET, BY `curl`** (2026-10-23: a release's checks fetched
+-- `/version` and a page by hand): `{status, body, ms}`, the status a
+-- number whatever it is (the caller judges it). `headers` are `"Name:
+-- value"` lines; `bearer` a Shale path whose file holds a token, sent as
+-- `Authorization: Bearer` and scrubbed from the output, never in an argv;
+-- `timeout_ms` (default 30000) the whole request's. No answer at all (a
+-- name that does not resolve, a refused connection, the time out) stops,
+-- in curl's words. Linux only: metal has no `curl`.
+function http_get(url, opts?)
+  local ms = 30000
+  local o = {whole = 16777216}
+  local argv = {"curl", "-sS", "--proto", "=http,https"}
+  if opts ~= nil then
+    for k in keys(opts) do
+      if k == "timeout_ms" then
+        ms = opts.timeout_ms
+      elseif k == "headers" then
+        for h in opts.headers do
+          push(argv, "-H")
+          push(argv, h)
+        end
+      elseif k == "bearer" then
+        o.secrets = {SHALE_BEARER = opts.bearer}
+        push(argv, "--variable")
+        push(argv, "%SHALE_BEARER")
+        push(argv, "--expand-header")
+        push(argv, "Authorization: Bearer {{SHALE_BEARER}}")
+      else
+        fail("`http_get` takes headers, bearer and timeout_ms, not `" .. k .. "`")
+      end
+    end
+  end
+  if not starts_with(url, "http://") and not starts_with(url, "https://") then fail("`http_get`: " .. url .. " is not an http:// or https:// URL") end
+  push(argv, "--max-time")
+  push(argv, tostring((ms + 999) // 1000))
+  -- The status after the body, on a line of its own.
+  push(argv, "-w")
+  push(argv, "\n%{http_code}")
+  push(argv, url)
+  o.timeout_ms = ms + 5000
+  local r = run(argv, o)
+  local said = lines(r.out)
+  local code = ""
+  if #said > 0 then code = said[#said] end
+  if r.ended ~= "exit" then fail("`http_get " .. url .. "` did not finish (" .. r.ended .. ")") end
+  if r.code ~= 0 then
+    local why = trim(sub(r.out, 1, #r.out - #code))
+    fail("`http_get " .. url .. "`: " .. (why ~= "" and why or "curl exited " .. r.code))
+  end
+  return {status = tonumber(code), body = sub(r.out, 1, #r.out - #code - 1), ms = r.ms}
+end
+
 -- The lines of `s` a regular expression matches (`{invert = true}`: the
 -- others; `{nocase = true}`: either case), each `{line, text}`, numbered
 -- from 1.

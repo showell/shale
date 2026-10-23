@@ -162,17 +162,43 @@ function git_head(repo)
   return trim(git_call(repo, {"rev-parse", "--short", "HEAD"}, nil, true, nil).out)
 end
 
+-- The branch's upstream as the last fetch saw it, `{name, ahead, behind}`
+-- (commits here it lacks, and there this lacks); nil with none (a
+-- detached HEAD, a branch never pushed). Fetch first for the remote's now.
+function git_upstream(repo)
+  local got = {}
+  for l in lines(git_call(repo, {"status", "--porcelain=v2", "--branch", "--untracked-files=no"}, nil, true, nil).out) do
+    if starts_with(l, "# branch.upstream ") then got.name = sub(l, #"# branch.upstream " + 1) end
+    if starts_with(l, "# branch.ab ") then
+      local ab = words(sub(l, #"# branch.ab " + 1))
+      got.ahead = tonumber(sub(ab[1], 2))
+      got.behind = tonumber(sub(ab[2], 2))
+    end
+  end
+  if not has_key(got, "name") then return nil end
+  -- An upstream whose branch is gone has no counts.
+  if not has_key(got, "ahead") then return nil end
+  return got
+end
+
 -- ── changing ────────────────────────────────────────────────────────────
 
 -- A commit of `msg` (given on stdin, so any text), adding first: the
 -- tracked files' changes (`add = "tracked"`, `-a`), everything (`"all"`,
 -- `add -A`), the paths listed, or nothing (what is staged; a merge's).
--- HEAD's short hash after.
+-- HEAD's short hash after. `amend = true` rewrites HEAD instead, message
+-- and all, **refused once HEAD is on a remote branch**: a pushed commit
+-- rewritten is history someone may hold.
 function git_commit(repo, msg, opts?)
-  git_opts("git_commit", opts, {"add", "timeout_ms"})
+  git_opts("git_commit", opts, {"add", "amend", "timeout_ms"})
   local add = nil
   if opts ~= nil then add = get(opts, "add") end
   local args = {"commit", "-q"}
+  if opts ~= nil and get(opts, "amend", false) then
+    local on = trim(git_call(repo, {"branch", "-r", "--contains", "HEAD", "--format=%(refname:short)"}, opts, true, nil).out)
+    if on ~= "" then fail("`git_commit`'s `amend`: HEAD is on " .. join(lines(on), ", ") .. " already; commit anew") end
+    push(args, "--amend")
+  end
   if add ~= nil and attempt(git_text, add).ok then
     if add ~= "tracked" and add ~= "all" then fail("`git_commit`'s `add` is \"tracked\", \"all\" or a list of paths, not \"" .. add .. "\"") end
   end
@@ -195,11 +221,16 @@ function git_commit(repo, msg, opts?)
 end
 
 -- Push: to the branch's upstream, or `{remote, branch}` (the remote
--- `origin` unless named), which becomes its upstream (`push -u`).
+-- `origin` unless named), which becomes its upstream (`push -u`); or
+-- `{tag}`, that tag alone (to `origin` unless named).
 function git_push(repo, opts?)
-  git_opts("git_push", opts, {"remote", "branch", "timeout_ms"})
+  git_opts("git_push", opts, {"remote", "branch", "tag", "timeout_ms"})
   local args = {"push", "-q"}
-  if opts ~= nil then
+  if opts ~= nil and has_key(opts, "tag") then
+    if has_key(opts, "branch") then fail("`git_push` takes a `branch` or a `tag`, not both") end
+    push(args, get(opts, "remote", "origin"))
+    push(args, "refs/tags/" .. opts.tag)
+  elseif opts ~= nil then
     if has_key(opts, "branch") then push(args, "-u") end
     if has_key(opts, "remote") then push(args, opts.remote) elseif has_key(opts, "branch") then push(args, "origin") end
     if has_key(opts, "branch") then push(args, opts.branch) end
@@ -214,6 +245,25 @@ function git_fetch(repo, opts?)
   local args = {"fetch", "-q"}
   if opts ~= nil and get(opts, "all", false) then push(args, "--all") end
   git_call(repo, args, opts, false, nil)
+  return nil
+end
+
+-- A tag `name` on HEAD or `rev`: annotated with `msg` (given on stdin, so
+-- any text), or light without one. `git_push(repo, {tag = name})` sends
+-- it.
+function git_tag(repo, name, opts?)
+  git_opts("git_tag", opts, {"rev", "msg", "timeout_ms"})
+  local args = {"tag"}
+  local msg = nil
+  if opts ~= nil then msg = get(opts, "msg") end
+  if msg ~= nil then
+    push(args, "-a")
+    push(args, "-F")
+    push(args, "-")
+  end
+  push(args, name)
+  if opts ~= nil and has_key(opts, "rev") then push(args, opts.rev) end
+  git_call(repo, args, opts, false, msg)
   return nil
 end
 
@@ -253,15 +303,24 @@ function git_merge(repo, ref, opts?)
   fail(shown .. " did not finish (" .. r.ended .. ")")
 end
 
--- A worktree at `dir` (a Shale path): of `branch`, or a `new` branch.
+-- A worktree at `dir` (a Shale path): of `branch`, or a `new` branch, or a
+-- `rev` detached (an old commit built beside the new).
 function git_worktree_add(repo, dir, opts?)
-  git_opts("git_worktree_add", opts, {"branch", "new", "timeout_ms"})
+  git_opts("git_worktree_add", opts, {"branch", "new", "rev", "timeout_ms"})
   local args = {"worktree", "add", "-q"}
   local branch = nil
   local new = false
   if opts ~= nil then
     branch = get(opts, "branch")
     new = get(opts, "new", false)
+    if has_key(opts, "rev") then
+      if branch ~= nil then fail("`git_worktree_add` takes a `branch` or a `rev`, not both") end
+      push(args, "--detach")
+      push(args, real(dir))
+      push(args, opts.rev)
+      git_call(repo, args, opts, false, nil)
+      return nil
+    end
   end
   if new then
     if branch == nil then fail("`git_worktree_add`: `new` needs the `branch` to make") end

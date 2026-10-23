@@ -72,6 +72,8 @@ Shale form, most of them one launch:
 | `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
 | `zig build fuzz 2>&1 \| grep FAIL` | the same with `grep=FAIL,hunts ran` (a value with a space: on stdin, `--args-stdin`): every output line holding one of the literals, after the summary |
 | `roc check f && roc test f 2>&1 \| tail`, any other program and its verdict | `shale cookbook:run.shale` with `cmd=roc check f && roc test f` on stdin (`--args-stdin`): each command in order until one fails, how it ended and its time, its last lines (`tail=`), lines holding `grep=` literals, the whole output in a log; `want=tag: why` for a program `run` refuses (`node`, `sh`) |
+| `curl -s URL \| grep X`, a wait for a deploy | `shale cookbook:http.shale url=URL grep=X` (`wait=LITERAL minutes=N`: until the body holds it; `bearer=` a Shale path to a token file) |
+| `git tag -a v6 X -m ... && git push origin v6`, `git commit --amend`, ahead/behind | `git_tag(repo, "v6", {rev, msg})`, `git_push(repo, {tag = "v6"})`; `git_commit(repo, msg, {amend = true})`; `git_upstream(repo)` |
 | `git show origin/master:QUEUE.md \| sed -n 40,80p`, `git grep` at a revision | `shale cookbook:look.shale rev=origin/master at=QUEUE.md:40-80` (or `find=` `in=`): `at` and `in` read as the revision holds them (`repo=` another checkout) |
 | `git log`, `git diff --stat`, `git show rev:path`, `git status` | the git prelude: `git_log`, `git_diff`, `git_show`, `git_status`, `git_is_clean` (below) |
 | `git commit -m ... && git push` | `git_commit(repo, msg, {add})`, `git_push(repo)`; `git_worktree_add`, `git_merge_ff` |
@@ -205,10 +207,14 @@ or `"."` for the root and `repos:dog-park` for a mount.
   author}`. `git_diff(repo, {range, paths, stat})` and `git_show(repo,
   "rev:path")` give text. `git_ls_files(repo)`, `git_is_clean(repo)` and
   `git_head(repo)` give the tracked paths, whether the tree is clean, and
-  the head's short hash.
+  the head's short hash. `git_upstream(repo)` gives `{name, ahead,
+  behind}` as the last fetch saw it, or nil with no upstream.
 - **Changing:**
   - `git_commit(repo, msg, {add = "tracked" | "all" | {paths}})` passes
-    the message on stdin and gives the new head.
+    the message on stdin and gives the new head; `amend = true` rewrites
+    HEAD, refused once HEAD is on a remote branch.
+  - `git_tag(repo, name, {rev, msg})`: annotated with `msg`, light
+    without; `git_push(repo, {tag})` sends that tag alone.
   - `git_push(repo)` pushes to the branch's upstream (an error when it has
     none); `git_push(repo, {branch, remote})` pushes to that branch of
     `remote` (`origin` unless named) and makes it the upstream, as `push
@@ -219,14 +225,14 @@ or `"."` for the root and `repos:dog-park` for a mount.
     gives the new head. On a conflict it undoes the merge (`merge
     --abort`) and stops, naming the conflicted paths, so the checkout is
     never left half merged.
-  - `git_worktree_add(repo, dir, {branch, new})`,
+  - `git_worktree_add(repo, dir, {branch, new})` (or `{rev}`, detached),
     `git_worktree_remove(repo, dir, {force})` and `git_branch_delete(repo,
     name, {force})`.
 - **Errors:** a git error stops the run naming the git command and git's
   first line: `` `git show HEAD:nope` exited 128: fatal: ... ``; a call
   that changes things prints git's output first (its first and last 10
   lines). Each call has 60 seconds; those that take options
-  (`git_log`, `git_diff`, `git_commit`, `git_push`, `git_fetch`,
+  (`git_log`, `git_diff`, `git_commit`, `git_push`, `git_fetch`, `git_tag`,
   `git_merge`, `git_worktree_add`, `git_worktree_remove`,
   `git_branch_delete`) take `timeout_ms` to change it.
 
@@ -629,7 +635,9 @@ with what to do instead.
   memory, not a stream; `run`'s own filters (`re`, `not_re`, `before`,
   `after`) keep the lines a `| grep` would. Every run needs `timeout_ms`
   and a keep.
-- **No network but a program's** (`run({"curl", ...})`), and **no
+- **No network but a program's**: `http_get(url, {headers, bearer,
+  timeout_ms})` (the Linux prelude's, by `curl`) gives `{status, body,
+  ms}`, and `cookbook:http.shale` is it from a launch line; and **no
   environment**: a script cannot read a variable, only give one to a
   program (`env`, `secrets`).
 - **Git is a prelude over `git`**, not a library: each call is a program

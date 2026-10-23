@@ -131,6 +131,28 @@ test "git prelude: branches, worktrees, and a remote: push, fetch, pull and merg
     try expectOnce(&t, "git_push(\"\", {}) git_pull_ff(\"\") print(git_head(\"\") == git_log(\"\", {n = 1, ref = \"origin/main\"})[1].hash)", "true\n");
 }
 
+test "git prelude: the upstream's counts; an amend before a push, refused after; a tag pushed alone; a worktree at a rev" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try repo(&t);
+    try git(&t, "", &.{ "commit", "-q", "-a", "-m", "second" });
+    try t.tmp.dir.createDirPath(t.threaded.io(), "remote.git");
+    try git(&t, "remote.git", &.{ "init", "-q", "--bare", "-b", "main" });
+    try git(&t, "", &.{ "remote", "add", "origin", try std.fmt.allocPrint(t.arena.allocator(), "{s}/remote.git", .{t.root}) });
+    try expectOnce(&t, "print(git_upstream(\"\") == nil)", "true\n");
+    try expectOnce(&t, "git_push(\"\", {remote = \"origin\", branch = \"main\"}) local u = git_upstream(\"\") print(u.name, u.ahead, u.behind)", "origin/main\t0\t0\n");
+    try t.put("a.txt", "three\n");
+    try expectOnce(&t, "git_commit(\"\", \"third\", {add = \"tracked\"}) git_commit(\"\", \"third, said again\", {add = \"tracked\", amend = true}) local l = git_log(\"\", {n = 2}) print(l[1].subject, l[2].subject, git_upstream(\"\").ahead)", "third, said again\tsecond\t1\n");
+    try expectOnce(&t, "git_push(\"\", {})", "");
+    var pushed = t.runOnce("git_commit(\"\", \"x\", {amend = true})", .atomic);
+    defer pushed.deinit();
+    try testing.expectEqualStrings("`git_commit`'s `amend`: HEAD is on origin/main already; commit anew", pushed.stop.?.message);
+    try expectOnce(&t, "git_tag(\"\", \"v1\", {msg = \"the first\\n\\nits body\"}) git_tag(\"\", \"light\", {rev = \"HEAD~1\"}) git_push(\"\", {tag = \"v1\"}) local there = must(run({\"git\", \"-C\", real(\"remote.git\"), \"tag\", \"-n1\"}, {timeout_ms = 10000, whole = 10000})).out print(contains(there, \"v1\"), contains(there, \"the first\"), contains(there, \"light\"))", "true\ttrue\tfalse\n");
+    try t.expectStop("git_push(\"\", {tag = \"v1\", branch = \"main\"})", .atomic, .fail, "`git_push` takes a `branch` or a `tag`, not both");
+    try expectOnce(&t, "git_worktree_add(\"\", \"old\", {rev = \"HEAD~1\"}) print(read(\"old/a.txt\"), git_head(\"old\") == git_log(\"\", {n = 1, ref = \"HEAD~1\"})[1].hash) git_worktree_remove(\"\", \"old\", {})", "one\ntwo\n\ttrue\n");
+}
+
 test "git prelude: a merge makes its commit; a conflicted one is undone and named; \".\" is the root" {
     var t: T = undefined;
     try init(&t);

@@ -1,0 +1,76 @@
+-- **A PAGE FETCHED, AND WHAT IT SAID THAT MATTERS**: `http_get` (the
+-- Linux prelude's, by `curl`) from a launch line: the status, how long it
+-- took, and the body's first `head` lines, or its lines holding `grep`'s
+-- literals. A status other than `status` (default 200) fails the launch.
+-- The escape behind a release's checks (2026-10-23: `/version`, a page's
+-- `Begin Game`, a wait for a new commit to serve).
+--
+--   shale cookbook:http.shale url=https://dogpark.lynrummy.com/version
+--   shale cookbook:http.shale url=https://dogpark.lynrummy.com/ grep=Begin,Game
+--   shale cookbook:http.shale url=https://dogpark.lynrummy.com/version wait=5419352 minutes=20
+--
+-- `bearer` is a Shale path (through a mount) whose file holds a token,
+-- sent as `Authorization: Bearer` and never shown. **`wait`**: fetch every
+-- `every` seconds (default 10) until the body holds that literal, for at
+-- most `minutes` (default 10); a failed fetch meanwhile (the server
+-- restarting) is said and tried again.
+--
+-- budget: steps=50000000
+
+const URL = arg("url", "")
+const GREP = arg("grep", "")
+const HEAD = arg("head", 20)
+const STATUS = arg("status", 200)
+const BEARER = arg("bearer", "")
+const WAIT = arg("wait", "")
+const MINUTES = arg("minutes", 10)
+const EVERY = arg("every", 10)
+
+if URL == "" then fail("http: say `url=`") end
+local opts = {}
+if BEARER ~= "" then opts.bearer = BEARER end
+
+local r = nil
+if WAIT == "" then
+  r = http_get(URL, opts)
+else
+  local tries = 0
+  local most = MINUTES * 60 // EVERY + 1
+  while true do
+    tries = tries + 1
+    local got = attempt(http_get, URL, opts)
+    if got.ok and contains(got.value.body, WAIT) then
+      r = got.value
+      break
+    end
+    local said = "status " .. (got.ok and got.value.status or "none: " .. tostring(got.error))
+    if tries >= most then fail("http: " .. URL .. " never held `" .. WAIT .. "` in " .. MINUTES .. " minutes (" .. tries .. " fetches; the last: " .. said .. ")") end
+    print("waiting (" .. tries .. "): " .. sub(said, 1, 160))
+    run({"sleep", tostring(EVERY)}, {timeout_ms = EVERY * 1000 + 5000, tail = 1})
+  end
+end
+
+local body = lines(r.body)
+if GREP ~= "" then
+  local held = 0
+  for l in body do
+    for w in split(GREP, ",") do
+      if w ~= "" and contains(l, w) then
+        held = held + 1
+        print("grep: " .. sub(l, 1, 240))
+        break
+      end
+    end
+  end
+  if held == 0 then print("grep: no line holds " .. GREP) end
+else
+  for i = 1, #body do
+    if i > HEAD then
+      print("   ... " .. (#body - HEAD) .. " more lines (head=" .. HEAD .. ")")
+      break
+    end
+    print("   " .. sub(body[i], 1, 240))
+  end
+end
+print("── " .. r.status .. " in " .. r.ms .. " ms: " .. URL)
+if r.status ~= STATUS then fail("http: " .. URL .. " answered " .. r.status .. ", not " .. STATUS) end

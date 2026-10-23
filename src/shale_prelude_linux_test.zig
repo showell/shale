@@ -42,6 +42,76 @@ test "linux prelude: must gives a run that exited 0, and fails on one that did n
     try testing.expectEqualStrings("", q.output);
 }
 
+/// One HTTP request answered on 127.0.0.1, 404 and a body that echoes the
+/// `Authorization` header it was sent, which is also kept for the test.
+const OneAnswer = struct {
+    listener: std.Io.net.Server,
+    auth: [128]u8 = undefined,
+    auth_len: usize = 0,
+
+    fn serve(self: *OneAnswer, io: std.Io) void {
+        const stream = self.listener.accept(io) catch return;
+        defer stream.close(io);
+        var rb: [4096]u8 = undefined;
+        var r = stream.reader(io, &rb);
+        while (true) {
+            const line = r.interface.takeDelimiterInclusive('\n') catch return;
+            if (std.mem.eql(u8, line, "\r\n")) break;
+            if (std.ascii.startsWithIgnoreCase(line, "authorization: ")) {
+                const v = std.mem.trimEnd(u8, line["authorization: ".len..], "\r\n");
+                @memcpy(self.auth[0..v.len], v);
+                self.auth_len = v.len;
+            }
+        }
+        var body: [160]u8 = undefined;
+        const b = std.fmt.bufPrint(&body, "hello\nauth={s}", .{self.auth[0..self.auth_len]}) catch return;
+        var head: [128]u8 = undefined;
+        const h = std.fmt.bufPrint(&head, "HTTP/1.1 404 Not Found\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n", .{b.len}) catch return;
+        var w = stream.writer(io, &.{});
+        w.interface.writeAll(h) catch return;
+        w.interface.writeAll(b) catch return;
+    }
+};
+
+test "linux prelude: http_get gives the status and body, a bearer sent but never shown; no answer, or a slip, stops" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const io = t.threaded.io();
+    const any: std.Io.net.IpAddress = try .parse("127.0.0.1", 0);
+    var one: OneAnswer = .{ .listener = try any.listen(io, .{ .reuse_address = true }) };
+    const port = one.listener.socket.address.getPort();
+    const served = try std.Thread.spawn(.{}, OneAnswer.serve, .{ &one, io });
+    try t.put("key.txt", "s3cret-token\n");
+    const a = t.arena.allocator();
+    // Once, not through the gate: the server answers one request.
+    var r = t.runOnce(try std.fmt.allocPrint(a, "local r = http_get(\"http://127.0.0.1:{d}/x\", {{bearer = \"key.txt\", headers = {{\"X-Who: test\"}}}}) print(r.status, r.body, r.ms >= 0)", .{port}), .atomic);
+    defer r.deinit();
+    // A script that stopped before its request would leave the server
+    // waiting: one empty request of our own, so the test fails, not hangs.
+    if (r.stop != null) {
+        if (one.listener.socket.address.connect(io, .{ .mode = .stream })) |s| {
+            var w = s.writer(io, &.{});
+            w.interface.writeAll("\r\n") catch {};
+            s.close(io);
+        } else |_| {}
+    }
+    served.join();
+    one.listener.deinit(io);
+    if (r.stop) |s| {
+        std.debug.print("stopped: {s}\n", .{s.message});
+        return error.TestUnexpectedResult;
+    }
+    try testing.expectEqualStrings("404\thello\nauth=Bearer <secret SHALE_BEARER>\ttrue\n", r.output);
+    try testing.expectEqualStrings("Bearer s3cret-token", one.auth[0..one.auth_len]);
+    // Nothing listens on the port now: curl's words.
+    var none = t.runOnce(try std.fmt.allocPrint(a, "http_get(\"http://127.0.0.1:{d}/\")", .{port}), .atomic);
+    defer none.deinit();
+    try testing.expect(std.mem.indexOf(u8, none.stop.?.message, "Failed to connect") != null);
+    try t.expectStop("http_get(\"file:///etc/passwd\")", .atomic, .fail, "`http_get`: file:///etc/passwd is not an http:// or https:// URL");
+    try t.expectStop("http_get(\"http://127.0.0.1/\", {token = \"k\"})", .atomic, .fail, "`http_get` takes headers, bearer and timeout_ms, not `token`");
+}
+
 test "linux prelude: re_lines, its lines numbered, inverted or folded if asked" {
     var t: T = undefined;
     try init(&t);
