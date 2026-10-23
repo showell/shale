@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { loadShale } from "./shale.js";
 import { sample, first } from "./sample.js";
+import { lessons } from "./lessons.js";
 
 const wasm = readFileSync(process.argv[2]);
 const shale = await loadShale(wasm);
@@ -109,6 +110,19 @@ expect("runaway stopped", r.finished, false);
 expect("runaway says why", r.report.includes("stopped at scripts/runaway.shale:6:9: budget steps"), true);
 
 expect("first is a script", sample[first] !== undefined, true);
+
+// The tutorial's lessons, every cell in order on one tree, as the page
+// replays them: each finishes, or stops where it says it stops on purpose.
+shale.clear();
+lessons.forEach((l, i) => {
+  l.cells.forEach((c, j) => {
+    r = shale.run(c.code, {}, `lesson ${i + 1}, script ${j + 1}`);
+    expect(`lesson ${i + 1} script ${j + 1} ${c.stops ? "stops" : "finishes"}: ${r.report.trim().split("\n").at(-1)}`, r.finished, !c.stops);
+  });
+});
+expect("the lessons build the blog", shale.read("index.md")?.startsWith("# Field Notes\n\n- 2026-10-11: [Field notes on crows]"), true);
+expect("the lessons' tags", shale.read("tags.md"), "# Tags\n\n- birds (1)\n- coast (1)\n- meta (1)\n- walking (2)\n- weather (1)\n");
+expect("fifteen lessons", lessons.length, 15);
 
 if (failed) {
   console.log(`${failed} failed`);

@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Learn Shale</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Zilla+Slab:wght@500;600&display=swap">
+<style>
+/* Layout: the lessons as levels | one lesson, read top to bottom, its cells run in place | the project's files. Stacked on a phone. */
+:root {
+  --bg: #e9ecef;
+  --panel: #f7f8f9;
+  --paper: #fdfdfc;
+  --ink: #1c2228;
+  --muted: #5a6570;
+  --line: #cbd2d8;
+  --accent: #a55a17;
+  --accent-ink: #ffffff;
+  --accent-soft: #f3e3d3;
+  --ok: #2b7149;
+  --stop: #b0261c;
+  --select: #dfe4e9;
+  --hl-key: #7a3b8f;
+  --hl-str: #2b6b45;
+  --hl-num: #a55a17;
+  --hl-call: #1f5c99;
+  --hl-comment: #7b858e;
+  --font-display: "Zilla Slab", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --code-size: 13px;
+  --code-line: 20px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181c; --panel: #1b2025; --paper: #191d22; --ink: #e2e6e9; --muted: #95a0aa; --line: #2d343b;
+    --accent: #d88b47; --accent-ink: #1a1208; --accent-soft: #3a2a1b; --ok: #6cbf8b; --stop: #f07c70; --select: #262d34;
+    --hl-key: #c99be0; --hl-str: #8fd0a6; --hl-num: #e3a46c; --hl-call: #8cbcef; --hl-comment: #7d8892;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181c; --panel: #1b2025; --paper: #191d22; --ink: #e2e6e9; --muted: #95a0aa; --line: #2d343b;
+  --accent: #d88b47; --accent-ink: #1a1208; --accent-soft: #3a2a1b; --ok: #6cbf8b; --stop: #f07c70; --select: #262d34;
+  --hl-key: #c99be0; --hl-str: #8fd0a6; --hl-num: #e3a46c; --hl-call: #8cbcef; --hl-comment: #7d8892;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 var(--font-body);
+  display: flex;
+  flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px;
+  box-sizing: border-box;
+  gap: 12px;
+}
+button, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+code { font: 0.88em var(--font-code); background: var(--select); padding: 1px 4px; border-radius: 3px; }
+
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+header h1 { font: 600 26px/1 var(--font-display); margin: 0; }
+header p { margin: 0; color: var(--muted); }
+
+.bench {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(170px, 210px) minmax(0, 1fr) minmax(220px, 300px);
+  gap: 12px;
+}
+.pane {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  min-height: 34px;
+  box-sizing: border-box;
+}
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.grow { flex: 1; }
+.btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn:hover { background: var(--select); }
+.btn:disabled { opacity: 0.45; cursor: default; background: transparent; }
+.btn.run {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  padding: 2px 14px;
+}
+.btn.run:hover { filter: brightness(1.08); }
+
+/* The levels */
+.levels { list-style: none; margin: 0; padding: 6px 0; overflow: auto; flex: 1; }
+.levels button {
+  display: grid;
+  grid-template-columns: 2.2ch 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.levels button:hover { background: var(--select); }
+.levels .n { font: 500 12px var(--font-code); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.levels .done .n { color: var(--ok); }
+.levels .tick { color: var(--ok); font-size: 12px; }
+.levels .here { background: var(--accent-soft); font-weight: 600; }
+.levels .here:hover { background: var(--accent-soft); }
+.progress { padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); display: grid; gap: 6px; }
+.meter { height: 4px; background: var(--select); border-radius: 2px; overflow: hidden; }
+.meter span { display: block; height: 100%; background: var(--ok); width: 0; transition: width 0.3s; }
+
+/* The lesson */
+.lesson { overflow: auto; flex: 1; background: var(--paper); border-radius: 0 0 6px 6px; }
+.page { max-width: 72ch; margin: 0 auto; padding: 22px 24px 40px; display: grid; gap: 18px; }
+.page h2 { font: 600 28px/1.15 var(--font-display); margin: 0; text-wrap: balance; }
+.page .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: -10px; }
+.page p { margin: 0; }
+.say { display: grid; gap: 8px; }
+.cell { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); overflow: hidden; }
+.cell.ran { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.cell .bar { border-bottom: 1px solid var(--line); padding: 5px 8px 5px 12px; min-height: 0; flex-wrap: wrap; }
+.chip {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--stop);
+  border: 1px solid color-mix(in srgb, var(--stop) 50%, transparent);
+  border-radius: 10px;
+  padding: 0 8px;
+}
+.code {
+  display: grid;
+  background: var(--paper);
+}
+.code > * {
+  grid-area: 1 / 1;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  font: var(--code-size)/var(--code-line) var(--font-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  box-sizing: border-box;
+  width: 100%;
+}
+.code textarea {
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ink);
+  overflow: hidden;
+  min-height: 0;
+}
+.code textarea::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); color: transparent; }
+.code textarea:focus-visible { outline: none; }
+.code:focus-within { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+.hl-key { color: var(--hl-key); font-weight: 500; }
+.hl-str { color: var(--hl-str); }
+.hl-num { color: var(--hl-num); }
+.hl-call { color: var(--hl-call); }
+.hl-comment { color: var(--hl-comment); font-style: italic; }
+.result { border-top: 1px dashed var(--line); padding: 10px 12px; display: grid; gap: 10px; }
+.result pre { margin: 0; font: var(--code-size)/var(--code-line) var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; }
+.result .none { color: var(--muted); font-style: italic; }
+.effects { display: grid; gap: 2px; font: 12px/1.5 var(--font-code); }
+.effects .op { color: var(--accent); font-weight: 500; }
+.ending { border-left: 3px solid var(--ok); padding: 3px 10px; font: 12px/1.5 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.ending.stopped { border-color: var(--stop); color: var(--stop); }
+.ending .trail { color: var(--muted); }
+.diff-add { color: var(--ok); }
+.diff-del { color: var(--stop); }
+.diff-hunk { color: var(--muted); }
+.start { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding-left: 10px; }
+.next { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 6px; border-top: 1px solid var(--line); }
+.next .btn { padding: 5px 14px; font-size: 14px; }
+
+/* The files */
+.tree { overflow: auto; padding: 6px 0; font: 12.5px/1.6 var(--font-code); max-height: 45%; }
+.row { display: flex; gap: 6px; padding: 0 12px 0 calc(12px + var(--depth) * 14px); white-space: nowrap; align-items: center; }
+.row.file { cursor: pointer; }
+.row.file:hover { background: var(--select); }
+.row.dir { color: var(--muted); }
+.row.shown { background: var(--select); font-weight: 500; }
+.row .name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.row .mark { font: 600 10px/1 var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.empty { padding: 8px 12px; color: var(--muted); font-size: 13px; font-family: var(--font-body); font-style: italic; }
+.viewer { border-top: 1px solid var(--line); flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.viewer pre { margin: 0; padding: 8px 12px; overflow: auto; flex: 1; font: 12px/1.5 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 980px) {
+  html, body { height: auto; }
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .levels { display: flex; overflow-x: auto; padding: 6px; gap: 4px; }
+  .levels li { flex: none; }
+  .levels button { grid-template-columns: auto; padding: 4px 10px; border-radius: 4px; }
+  .levels .t, .levels .tick { display: none; }
+  .levels .n { font-size: 13px; text-align: center; }
+  .progress { display: none; }
+  .lesson { overflow: visible; }
+  .pane.files { max-height: 70vh; }
+  .page { padding: 18px 14px 28px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Learn Shale</h1>
+  <p>Fifteen short lessons. Read each script, run it, and watch a small blog take shape in the files beside it.</p>
+</header>
+
+<main class="bench">
+  <nav class="pane" aria-label="Lessons">
+    <div class="bar"><span class="label">Lessons</span></div>
+    <ol class="levels" id="levels"></ol>
+    <div class="progress"><span id="progress-text"></span><div class="meter"><span id="meter"></span></div></div>
+  </nav>
+
+  <section class="pane" aria-label="Lesson">
+    <div class="bar">
+      <span class="label grow" id="where"></span>
+      <button class="btn" id="reset" type="button" title="Put this lesson's files and scripts back as they were">Start this lesson over</button>
+    </div>
+    <div class="lesson" id="lesson"><div class="page"><p>Loading Shale…</p></div></div>
+  </section>
+
+  <section class="pane files" aria-label="The project's files">
+    <div class="bar"><span class="label grow">The project</span></div>
+    <div class="tree" id="tree"></div>
+    <div class="viewer">
+      <div class="bar"><span class="label grow" id="viewing">No file open</span></div>
+      <pre id="file"></pre>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { loadShale } from "./shale.js";
+import { lessons } from "./lessons.js";
+import { showRun } from "./run_view.js";
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? "", textContent: text ?? "" });
+const PROGRESS_KEY = "shale-tutorial-progress";
+
+let shale;
+let at = 0;               // the lesson open, from 0
+let done = new Set();     // the lessons whose every cell has run
+let shown = null;         // the file in the viewer
+let changed = new Set();  // what the last run changed
+
+function loadProgress() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? "{}");
+    done = new Set((p.done ?? []).filter((n) => n >= 0 && n < lessons.length));
+    if (Number.isInteger(p.at) && p.at >= 0 && p.at < lessons.length) at = p.at;
+  } catch {}
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify({ done: [...done], at }));
+  } catch {}
+}
+
+// ── prose ────────────────────────────────────────────────────────────────
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+
+function prose(text) {
+  const p = document.createElement("p");
+  p.innerHTML = escapeHtml(text)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  return p;
+}
+
+// ── highlighting ─────────────────────────────────────────────────────────
+
+const KEYWORDS = new Set("and break const continue do else elseif end false for function if in local nil not or return then true while".split(" "));
+const TOKEN = /(--\[(=+)\[[\s\S]*?\]\2\]|--[^\n]*)|(\[(=+)\[[\s\S]*?\]\4\]|"(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?)|(\b\d+\b)|([A-Za-z_]\w*)(\s*\()?/g;
+
+function highlight(src) {
+  let html = "";
+  let last = 0;
+  for (const m of src.matchAll(TOKEN)) {
+    html += escapeHtml(src.slice(last, m.index));
+    last = m.index + m[0].length;
+    if (m[1]) html += `<span class="hl-comment">${escapeHtml(m[0])}</span>`;
+    else if (m[3]) html += `<span class="hl-str">${escapeHtml(m[0])}</span>`;
+    else if (m[5]) html += `<span class="hl-num">${m[0]}</span>`;
+    else if (KEYWORDS.has(m[6])) html += `<span class="hl-key">${m[6]}</span>` + escapeHtml(m[7] ?? "");
+    else if (m[7]) html += `<span class="hl-call">${m[6]}</span>` + escapeHtml(m[7]);
+    else html += m[6];
+  }
+  // A last empty line still takes its height, as the textarea's does.
+  return html + escapeHtml(src.slice(last)) + "\n";
+}
+
+// ── the files ────────────────────────────────────────────────────────────
+
+// The files lesson `n` starts from: every cell before it, as written.
+function filesBefore(n) {
+  shale.clear();
+  for (let i = 0; i < n; i++) {
+    lessons[i].cells.forEach((c, j) => shale.run(c.code, {}, `lesson ${i + 1}, script ${j + 1}`));
+  }
+}
+
+function drawTree() {
+  const tree = $("tree");
+  tree.replaceChildren();
+  const all = shale.list();
+  if (all.length === 0) tree.append(el("div", "empty", "No files yet. Lesson 3 makes the first."));
+  for (const e of all) {
+    const parts = e.path.split("/");
+    const row = el("div", "row " + (e.dir ? "dir" : "file") + (e.path === shown ? " shown" : ""));
+    row.style.setProperty("--depth", parts.length - 1);
+    row.append(el("span", "name", parts.at(-1) + (e.dir ? "/" : "")));
+    if (!e.dir) {
+      if (changed.has(e.path)) row.append(el("span", "mark", "changed"));
+      row.tabIndex = 0;
+      row.title = `${e.path}, ${e.size} bytes`;
+      const show = () => {
+        shown = e.path;
+        drawTree();
+        drawFile();
+      };
+      row.addEventListener("click", show);
+      row.addEventListener("keydown", (ev) => ev.key === "Enter" && show());
+    }
+    tree.append(row);
+  }
+}
+
+function drawFile() {
+  const text = shown === null ? null : shale.read(shown);
+  if (text === null) shown = null;
+  $("viewing").textContent = shown ?? "No file open";
+  $("file").textContent = shown === null ? "" : text;
+}
+
+// ── the lesson ───────────────────────────────────────────────────────────
+
+function drawLevels() {
+  const list = $("levels");
+  list.replaceChildren();
+  lessons.forEach((l, i) => {
+    const li = document.createElement("li");
+    const b = el("button", (i === at ? "here " : "") + (done.has(i) ? "done" : ""));
+    b.type = "button";
+    b.append(el("span", "n", String(i + 1)), el("span", "t", l.title), el("span", "tick", done.has(i) ? "✓" : ""));
+    b.setAttribute("aria-label", `Lesson ${i + 1}: ${l.title}${done.has(i) ? ", done" : ""}`);
+    if (i === at) b.setAttribute("aria-current", "page");
+    b.addEventListener("click", () => openLesson(i));
+    li.append(b);
+    list.append(li);
+  });
+  $("progress-text").textContent = `${done.size} of ${lessons.length} done`;
+  $("meter").style.width = `${(100 * done.size) / lessons.length}%`;
+}
+
+function cellView(cell, index, ran) {
+  const box = el("div", "cell");
+  const bar = el("div", "bar");
+  bar.append(el("span", "label grow", `Script ${index + 1}`));
+  if (cell.stops) bar.append(el("span", "chip", "stops on purpose"));
+  const undo = el("button", "btn", "Undo my changes");
+  undo.type = "button";
+  undo.hidden = true;
+  const run = el("button", "btn run", "Run");
+  run.type = "button";
+  run.title = "Run (Ctrl+Enter)";
+  bar.append(undo, run);
+
+  const code = el("div", "code");
+  const pre = el("pre");
+  pre.setAttribute("aria-hidden", "true");
+  const ta = el("textarea");
+  ta.spellcheck = false;
+  // One row: the highlighted copy beside it sets the cell's height.
+  ta.rows = 1;
+  ta.setAttribute("autocapitalize", "off");
+  ta.setAttribute("aria-label", `Script ${index + 1}`);
+  ta.id = `lesson-${at + 1}-script-${index + 1}`;
+  ta.value = cell.code;
+  const paint = () => {
+    pre.innerHTML = highlight(ta.value);
+    undo.hidden = ta.value === cell.code;
+  };
+  paint();
+  ta.addEventListener("input", paint);
+  ta.addEventListener("keydown", (ev) => {
+    if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
+      ev.preventDefault();
+      go();
+    } else if (ev.key === "Tab" && !ev.metaKey && !ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
+      ev.preventDefault();
+      ta.setRangeText("  ", ta.selectionStart, ta.selectionEnd, "end");
+      paint();
+    }
+  });
+  undo.addEventListener("click", () => {
+    ta.value = cell.code;
+    paint();
+  });
+  code.append(pre, ta);
+
+  const result = el("div", "result");
+  result.hidden = true;
+  box.append(bar, code, result);
+
+  function go() {
+    const r = shale.run(ta.value, {}, `script ${index + 1}`);
+    result.replaceChildren();
+    const rep = showRun(r, result);
+    result.hidden = false;
+    box.classList.add("ran");
+    changed = new Set(rep.effects.map((e) => e.path));
+    if (changed.size && !changed.has(shown)) shown = [...changed].find((p) => shale.read(p) !== null) ?? shown;
+    drawTree();
+    drawFile();
+    ran(index);
+  }
+  run.addEventListener("click", go);
+  return box;
+}
+
+function openLesson(n) {
+  at = n;
+  changed = new Set();
+  filesBefore(n);
+  if (shown !== null && shale.read(shown) === null) shown = null;
+  const lesson = lessons[n];
+  const page = el("div", "page");
+  page.append(el("div", "eyebrow", `Lesson ${n + 1} of ${lessons.length}`), el("h2", "", lesson.title));
+  if (n > 0) {
+    const start = el("p", "start");
+    start.textContent = "The project's files are as the lessons before this one leave them.";
+    page.append(start);
+  }
+
+  const ranCells = new Set();
+  const markRan = (i) => {
+    ranCells.add(i);
+    if (ranCells.size === lesson.cells.length && !done.has(n)) {
+      done.add(n);
+      saveProgress();
+      drawLevels();
+    }
+  };
+  lesson.cells.forEach((cell, i) => {
+    const say = el("div", "say");
+    for (const t of cell.say ?? []) say.append(prose(t));
+    page.append(say, cellView(cell, i, markRan));
+  });
+  if (lesson.end) {
+    const say = el("div", "say");
+    for (const t of lesson.end) say.append(prose(t));
+    page.append(say);
+  }
+
+  const next = el("div", "next");
+  if (n > 0) {
+    const back = el("button", "btn", `← ${n}. ${lessons[n - 1].title}`);
+    back.type = "button";
+    back.addEventListener("click", () => openLesson(n - 1));
+    next.append(back);
+  }
+  next.append(el("span", "grow"));
+  if (n + 1 < lessons.length) {
+    const fwd = el("button", "btn run", `${n + 2}. ${lessons[n + 1].title} →`);
+    fwd.type = "button";
+    fwd.addEventListener("click", () => openLesson(n + 1));
+    next.append(fwd);
+  }
+  page.append(next);
+
+  $("lesson").replaceChildren(page);
+  $("lesson").scrollTop = 0;
+  $("where").textContent = `Lesson ${n + 1}`;
+  try {
+    history.replaceState(null, "", `#lesson-${n + 1}`);
+  } catch {}
+  saveProgress();
+  drawLevels();
+  drawTree();
+  drawFile();
+}
+
+$("reset").addEventListener("click", () => openLesson(at));
+
+try {
+  shale = await loadShale(await (await fetch("./shale.wasm")).arrayBuffer());
+} catch (e) {
+  $("lesson").replaceChildren(el("div", "page", `Shale did not load: ${e.message}. This page needs a browser with WebAssembly.`));
+  throw e;
+}
+loadProgress();
+const hashed = location.hash.match(/^#lesson-(\d+)$/);
+if (hashed && Number(hashed[1]) >= 1 && Number(hashed[1]) <= lessons.length) at = Number(hashed[1]) - 1;
+openLesson(at);
+</script>
+</body>
+</html>

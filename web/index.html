@@ -306,6 +306,7 @@ textarea:focus-visible { outline: none; }
 <script type="module">
 import { loadShale } from "./shale.js";
 import { sample, first } from "./sample.js";
+import { showRun } from "./run_view.js";
 
 const $ = (id) => document.getElementById(id);
 const tree = $("tree"), code = $("code"), gutter = $("gutter"), out = $("out");
@@ -464,53 +465,14 @@ function parseArgs(text) {
 
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? "", textContent: text ?? "" });
 
-// Output with a diff's lines coloured, as `edit` prints them.
-function outputBlock(text) {
-  const pre = el("pre");
-  if (!text) {
-    pre.append(el("span", "none", "(nothing printed)"));
-    return pre;
-  }
-  for (const line of text.split(/(?<=\n)/)) {
-    let cls = "";
-    if (line.startsWith("+++ ") || line.startsWith("--- ")) cls = "diff-hunk";
-    else if (line.startsWith("@@")) cls = "diff-hunk";
-    else if (line.startsWith("+")) cls = "diff-add";
-    else if (line.startsWith("-")) cls = "diff-del";
-    pre.append(cls ? el("span", cls, line) : document.createTextNode(line));
-  }
-  return pre;
-}
-
 function run() {
   if (!isScript(open)) return;
   save();
   const r = shale.run(code.value, parseArgs($("args").value), open);
-  const lines = r.report.split("\n").filter((l) => l);
-  const effects = lines.filter((l) => !l.startsWith("── ") && !l.startsWith("   called from"));
-  const endIndex = lines.findIndex((l) => l.startsWith("── finished") || l.startsWith("── stopped"));
-  const ending = lines.slice(endIndex);
-  changed = new Set(effects.map((l) => l.slice(l.indexOf(" ") + 1, l.lastIndexOf(": "))));
-
   out.replaceChildren();
-  out.append(outputBlock(r.output));
-  if (effects.length) {
-    const box = el("div", "effects");
-    box.append(el("span", "label", `Changes (${effects.length})`));
-    for (const l of effects) {
-      const row = el("div");
-      const sp = l.indexOf(" ");
-      row.append(el("span", "op", l.slice(0, sp)), document.createTextNode(l.slice(sp)));
-      box.append(row);
-    }
-    out.append(box);
-  }
-  const end = el("div", "ending" + (r.finished ? "" : " stopped"));
-  end.append(document.createTextNode(ending[0].replace(/^── /, "")));
-  for (const t of ending.slice(1)) end.append(el("div", "trail", t.trim()));
-  out.append(end);
-  const m = ending[0].match(/\((\d+) steps\)/);
-  $("steps").textContent = m ? `${Number(m[1]).toLocaleString()} steps` : "";
+  const rep = showRun(r, out);
+  changed = new Set(rep.effects.map((e) => e.path));
+  $("steps").textContent = rep.steps === null ? "" : `${rep.steps.toLocaleString()} steps`;
 
   // The script may have changed the open file, itself included.
   const now = shale.read(open);

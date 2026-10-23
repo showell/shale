@@ -165,8 +165,10 @@ compiles the portable half with its own `host_io`, as it does webbox.
 **In a browser:** `zig build web` builds the portable half to WebAssembly
 over an in-memory tree (`src/wasm_io.zig`, the `host_io` of
 `src/host_io_wasm.zig`; the exports in `src/shale_wasm.zig`) and installs
-`zig-out/web/`: a page with a file tree, an editor and the run's output,
-and a sample Python project with scripts to run on it (`web/sample.js`).
+`zig-out/web/`: `index.html`, a playground (a file tree, an editor and the
+run's output, over a sample Python project and scripts to run on it,
+`web/sample.js`), and `tutorial.html`, fifteen lessons that build a small
+blog a script at a time (`web/lessons.js`).
 Serve that folder over HTTP (a page cannot load wasm from `file:`). There is
 no `host` there, so `run`, git and jobs are not in it.
 
@@ -193,7 +195,7 @@ no `host` there, so `run`, git and jobs are not in it.
 
 **`test`** runs the two modules' tests, the signer's and the gate's, and
 `web-test`: the browser build under Node (`web/smoke_test.mjs`), its
-sample's scripts included. The
+sample's scripts and every lesson's included. The
 Zig tools' tests read zig-webbox's checkout too: they replay splits from its
 history and walk its sources beside this repo's. **`consumers`** runs this
 repo's own docs check, metal-vmm's queue tool by this tree's `shale`, then
