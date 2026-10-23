@@ -1,0 +1,88 @@
+-- **A PROGRAM RUN, AND WHAT IT SAID THAT MATTERS**: one command line, or
+-- several joined by `&&` and run in order until one fails, each with how
+-- it ended, how long it took, the lines holding `grep`'s literals and its
+-- last lines; the whole output kept in `log` (default
+-- .zig-cache/run.log under `dir`). The escape behind most of 2026-10-23's
+-- wants (about 130 of 210: `roc check`, `zig build` with a log and a
+-- timing, a bench binary, `gh run`, `node`), which `run` already did
+-- but only from a script.
+--
+--   cd <repo> && shale cookbook:run.shale --args-stdin <<'ARGS'
+--   cmd=roc check roc/Game.roc && roc test roc/Game.roc && roc fmt --check roc/
+--   grep=error,warning
+--   ARGS
+--
+-- `cmd` is split on `&&`, each part on spaces (no quoting: a word with a
+-- space needs a script of its own); a program named through a mount
+-- (`zig:zig`) runs by its OS path. `dir` is where each runs, `minutes`
+-- the time each gets, `tail` the last lines printed of each (more for a
+-- failure), `grep` comma-separated literals, `most` the most grep lines
+-- printed of each. `want=tag: why` runs a program `run` refuses (a shell,
+-- an interpreter such as `node`, a text tool), logged as `run` logs it.
+-- The launch fails when a command does, naming it, so a chain in a
+-- shell's `&&` stops as this one does.
+--
+-- budget: steps=400000000 arena_bytes=1000000000
+
+const CMD = arg("cmd", "")
+const DIR = arg("dir", ".")
+const MINUTES = arg("minutes", 10)
+const TAIL = arg("tail", 10)
+const GREP = arg("grep", "")
+const MOST = arg("most", 60)
+const LOG = arg("log", ".zig-cache/run.log")
+const WANT = arg("want", "")
+
+if trim(CMD) == "" then fail("run: say `cmd=`, the command line (with spaces: on stdin, `--args-stdin`)") end
+
+local log_path = LOG
+if DIR ~= "." then log_path = DIR .. "/" .. LOG end
+local wanted = {}
+for w in split(GREP, ",") do if w ~= "" then push(wanted, w) end end
+
+local log = ""
+for part in split(CMD, "&&") do
+  local argv = {}
+  for w in words(part) do push(argv, w) end
+  if #argv == 0 then fail("run: an empty command in `" .. CMD .. "`") end
+  if contains(argv[1], ":") then argv[1] = real(argv[1]) end
+  local shown = trim(part)
+  local opts = {cwd = DIR, timeout_ms = MINUTES * 60000, whole = 16777216}
+  if WANT ~= "" then opts.want = WANT end
+  local r = run(argv, opts)
+  log = log .. "== " .. shown .. "\n" .. r.out
+  replace(log_path, log)
+  -- A run ended by its time or a signal has no exit code: say how it ended.
+  local how = ""
+  if has_key(r, "code") then how = "exit " .. r.code else how = "ended: " .. tostring(r.ended) .. " (no exit code)" end
+  local failed = not has_key(r, "code") or r.code ~= 0
+  local lines_of = lines(r.out)
+
+  local held = 0
+  for l in lines_of do
+    for w in wanted do
+      if contains(l, w) then
+        held = held + 1
+        if held <= MOST then print("grep: " .. sub(l, 1, 240)) end
+        break
+      end
+    end
+  end
+  if held > MOST then print("grep: ... " .. (held - MOST) .. " more (most=" .. MOST .. ")") end
+  if #wanted > 0 and held == 0 then print("grep: no line holds " .. GREP) end
+
+  -- A failure's own words are usually near its end: at least 30 of them.
+  local n = TAIL
+  if failed and n < 30 then n = 30 end
+  local from = #lines_of - n + 1
+  if from < 1 then from = 1 end
+  for i = from, #lines_of do print("   " .. sub(lines_of[i], 1, 240)) end
+  local took = r.ms .. " ms"
+  if r.ms >= 1000 then took = (r.ms // 1000) .. "." .. (r.ms % 1000 // 100) .. " s" end
+  print("── " .. how .. " in " .. took .. ": " .. shown)
+  if failed then
+    print("the whole output in " .. log_path)
+    fail("run: `" .. shown .. "` " .. how)
+  end
+end
+print("the whole output in " .. log_path)
