@@ -601,7 +601,9 @@ failure, a missing binary included, into a refusal). It passes exactly:
   to `~/.local/state/shale/wants.tsv`: the date (UTC), the session, the
   kind, the tag, the text, and the command's first 160 bytes, tabs and
   newlines escaped. An escape that cannot be logged (no `HOME`, a write
-  that fails) is refused, not run;
+  that fails) is refused, not run. `shale cookbook:wants.shale` reads it
+  back (today's, or `since=`, with counts by kind, tag and session),
+  through a mount over that folder (`state = ~/.local/state/shale ro`);
 - **a subagent's call.** Its hook input carries an `agent_id` (the hooks
   reference, "Common input fields"), and local cold agents are exempt. A
   subagent's Bash call carries `agent_id` and `agent_type`; the top-level

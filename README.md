@@ -126,7 +126,8 @@ last lines and fails when they fail.
 
 Every gate escape (`# want:`) lands in `~/.local/state/shale/wants.tsv`: the
 list of what Shale should learn next
-([docs/SHALE-WANTS.md](docs/SHALE-WANTS.md) is ours).
+([docs/SHALE-WANTS.md](docs/SHALE-WANTS.md) is ours). `cookbook/wants.shale`
+reads it back, given a `state = ~/.local/state/shale ro` mount.
 
 ### Recipes for any project
 

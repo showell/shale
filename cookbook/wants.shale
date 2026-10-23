@@ -1,0 +1,77 @@
+-- **WHAT THE ESCAPES ASKED SHALE FOR**: the gate's log of every escape
+-- (`state:wants.tsv`, a line each: time, session, `want` or
+-- `out-of-scope`, tag, text, the command), read back: the last `rows`
+-- escapes since `since`, and how many there were by kind, by tag and by
+-- session. `docs/SHALE-WANTS.md` gathers them; this is the look between.
+--
+--   shale cookbook:wants.shale                         (today, UTC)
+--   shale cookbook:wants.shale since=2026-10-23T22:24
+--   shale cookbook:wants.shale since=2026-10-17 rows=0 top=30
+--   shale cookbook:wants.shale tag=roc-check session=ba149522
+--
+-- `since` and `until` are times or their prefixes (`2026-10-23` is that
+-- day's start; `until` is before); `kind`, `tag` and `session` (a prefix
+-- of it) keep only those; `rows` is how many of the newest to list (0:
+-- the counts alone), `top` how many tags to count. `log` is the file
+-- (default `state:wants.tsv`, the `state` mount over
+-- ~/.local/state/shale).
+--
+-- budget: steps=200000000
+
+const LOG = arg("log", "state:wants.tsv")
+const SINCE = arg("since", sub(date(now()), 1, 10))
+const UNTIL = arg("until", "")
+const KIND = arg("kind", "")
+const TAG = arg("tag", "")
+const SESSION = arg("session", "")
+const ROWS = arg("rows", 40)
+const TOP = arg("top", 20)
+
+local kept = {}
+local at = 0
+while true do
+  local part = read_lines(LOG, at)
+  for l in part.lines do
+    local f = split(l, "\t")
+    if #f >= 5 and f[1] >= SINCE and (UNTIL == "" or f[1] < UNTIL)
+        and (KIND == "" or f[3] == KIND) and (TAG == "" or f[4] == TAG)
+        and (SESSION == "" or starts_with(f[2], SESSION)) then
+      push(kept, {time = f[1], session = f[2], kind = f[3], tag = f[4], text = f[5]})
+    end
+  end
+  if part.done then break end
+  at = part.next
+end
+
+-- The counts of `field` among `list`, most first.
+function counted(list, field)
+  local n = {}
+  for w in list do n[w[field]] = get(n, w[field], 0) + 1 end
+  local rows = {}
+  for k in keys(n) do push(rows, {name = k, n = n[k]}) end
+  sort(rows, "n", "desc")
+  return rows
+end
+
+local from = #kept - ROWS + 1
+if from < 1 then from = 1 end
+for i = from, #kept do
+  local w = kept[i]
+  local mark = w.kind == "want" and "" or " (" .. w.kind .. ")"
+  print(sub(w.time, 12, 16) .. "  " .. w.tag .. mark .. ": " .. sub(w.text, 1, 160))
+end
+if from > 1 and ROWS > 0 then print("... " .. (from - 1) .. " earlier (rows=" .. ROWS .. ")") end
+
+local shown = "since " .. SINCE
+if UNTIL ~= "" then shown = shown .. ", until " .. UNTIL end
+print("── " .. #kept .. " escapes " .. shown)
+local kinds = {}
+for k in counted(kept, "kind") do push(kinds, k.n .. " " .. k.name) end
+if #kinds > 0 then print("by kind: " .. join(kinds, ", ")) end
+local tags = counted(kept, "tag")
+local said = {}
+for t in take(tags, TOP) do push(said, t.n .. " " .. t.name) end
+if #said > 0 then print("by tag: " .. join(said, ", ") .. (#tags > TOP and ", ... " .. (#tags - TOP) .. " more" or "")) end
+local sessions = {}
+for s in counted(kept, "session") do push(sessions, s.n .. " " .. sub(s.name, 1, 8)) end
+if #sessions > 0 then print("by session: " .. join(sessions, ", ")) end
