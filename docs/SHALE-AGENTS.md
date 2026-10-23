@@ -561,8 +561,10 @@ the first two can give a quiet wrong answer, an empty list:
   (`edit`, `replace`, `create`, `append`, `remove`, `mkdir`,
   `remove_tree`, `edits_all`, `zig_rename`, `zig_move`) stops, `refused:
   ... mount `x` is read-only`, before anything is written; reads work. A
-  `run` with its `cwd` there runs: Shale cannot see what a program
-  writes.
+  writable mount inside a read-only one decides for its own folder
+  (`memory:` inside `projects:`), and through the read-only one's name
+  that folder stays read-only. A `run` with its `cwd` there runs: Shale
+  cannot see what a program writes.
 - **A newer compiler is a `tools` mount.** `run` refuses a program by a
   path git does not track (a script just written?), and a toolchain's
   install is one. A mount line with ` tools` after its path

@@ -245,9 +245,22 @@ fn mayChange(ctx: *anyopaque, run: *Run, pos: ast.Pos, rel: []const u8, full: []
         const inside = std.mem.startsWith(u8, m.dir, h.root_abs) and (m.dir.len == h.root_abs.len or m.dir[h.root_abs.len] == '/');
         const dir = if (inside) std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch return run.oom(pos) else m.dir;
         const under = std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/');
-        if (named or under) return run.fail(pos, .refused, "{s}: mount `{s}` is read-only", .{ rel, m.name });
+        if (named or (under and !underWritableWithin(h, run, pos, abs, dir))) return run.fail(pos, .refused, "{s}: mount `{s}` is read-only", .{ rel, m.name });
     }
     if (h.undo) try noteBefore(h, run, pos, abs);
+}
+
+/// Whether `abs` is under a writable mount whose folder is inside `ro_dir`
+/// (`memory = ~/.claude/projects/x/memory` inside `projects =
+/// ~/.claude/projects ro`): the nearer mount decides.
+fn underWritableWithin(h: *Host, run: *Run, pos: ast.Pos, abs: []const u8, ro_dir: []const u8) bool {
+    for (h.mounts) |m| {
+        if (m.access == .read_only) continue;
+        const dir = runDirOf(h, run, pos, m) catch return false;
+        if (dir.len <= ro_dir.len or !std.mem.startsWith(u8, dir, ro_dir) or dir[ro_dir.len] != '/') continue;
+        if (std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/')) return true;
+    }
+    return false;
 }
 
 /// A path as it was before the run's first change of it.

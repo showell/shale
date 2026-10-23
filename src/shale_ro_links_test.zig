@@ -51,6 +51,21 @@ test "ro mounts: every change builtin through one is refused before anything is 
     try testing.expectError(error.FileNotFound, t.file("mine2.zig"));
 }
 
+test "ro mounts: a writable mount inside a read-only one decides for its own folder; named by the read-only one, it stays read-only" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    try t.tmp.dir.createDirPath(t.threaded.io(), "all/open");
+    try t.put("all/a.txt", "a\n");
+    var why: []const u8 = "";
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "all = {s}/all ro\nopen = {s}/all/open\n", .{ t.root, t.root }), "/home/x", &why);
+    try t.expectOutput("replace(\"open:b.txt\", \"b\") print(read(\"all:open/b.txt\"))", "b\n");
+    try t.expectStop("replace(\"all:open/b.txt\", \"x\")", .atomic, .refused, "mount `all` is read-only");
+    try t.expectStop("replace(\"all:a.txt\", \"x\")", .atomic, .refused, "mount `all` is read-only");
+    try testing.expectEqualStrings("a\n", try t.file("all/a.txt"));
+}
+
 test "a walk through a mount: each entry stat'ed where the mount points, its path the mount's; glob and a walk resumed by `after` too" {
     var t: T = undefined;
     try init(&t);
