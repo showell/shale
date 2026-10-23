@@ -36,7 +36,8 @@ const WANT = arg("want", "")
 if trim(CMD) == "" then fail("run: say `cmd=`, the command line (with spaces: on stdin, `--args-stdin`)") end
 
 local log_path = LOG
-if DIR ~= "." then log_path = DIR .. "/" .. LOG end
+-- A mount's own root (`memory:`) takes a path without a leading `/`.
+if DIR ~= "." and ends_with(DIR, ":") then log_path = DIR .. LOG elseif DIR ~= "." then log_path = DIR .. "/" .. LOG end
 local wanted = {}
 for w in split(GREP, ",") do if w ~= "" then push(wanted, w) end end
 
