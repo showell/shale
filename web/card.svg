@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 420" width="600" height="420" role="img" aria-label="Shale: a tutorial script renames a tag across a blog's posts; beside it, the lines it changed and the files, two marked changed">
+<!-- Drawn by shale's web/card.js from the tutorial's own lesson 13, run through the wasm build: the script, its diff's changed lines, its report, and the blog's files after it. Do not edit by hand: node web/make_card.mjs. -->
+<rect width="600" height="420" fill="#24303a"/>
+<rect y="0" width="600" height="34" fill="#2b3843"/>
+<rect y="34" width="600" height="22" fill="#26323c"/>
+<rect y="56" width="600" height="46" fill="#2f3d48"/>
+<rect y="102" width="600" height="18" fill="#232e37"/>
+<rect y="120" width="600" height="30" fill="#2b3843"/>
+<rect y="150" width="600" height="52" fill="#26323c"/>
+<rect y="202" width="600" height="26" fill="#2f3d48"/>
+<rect y="228" width="600" height="40" fill="#232e37"/>
+<rect y="268" width="600" height="20" fill="#2b3843"/>
+<rect y="288" width="600" height="36" fill="#26323c"/>
+<rect y="324" width="600" height="48" fill="#2f3d48"/>
+<rect y="372" width="600" height="48" fill="#232e37"/>
+<rect x="26" y="25" width="552" height="146" rx="8" fill="#141c22" opacity="0.45"/>
+<rect x="24" y="22" width="552" height="146" rx="8" fill="#fbfbfa"/>
+<path d="M24 30 a8 8 0 0 1 8 -8 h536 a8 8 0 0 1 8 8 v20 h-552 z" fill="#e9ecef"/>
+<text x="36" y="40" font-family="'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" font-weight="600" fill="#5a6570" xml:space="preserve">Lesson 13 · Editing</text>
+<rect x="518" y="27" width="46" height="18" rx="4" fill="#a55a17"/>
+<text x="529" y="40" font-family="'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" font-weight="600" fill="#ffffff" xml:space="preserve">Run</text>
+<text x="38" y="70" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.5" xml:space="preserve"><tspan fill="#7a3b8f" font-weight="500">for</tspan><tspan fill="#1c2228"> </tspan><tspan fill="#1c2228">name</tspan><tspan fill="#1c2228"> </tspan><tspan fill="#7a3b8f" font-weight="500">in</tspan><tspan fill="#1c2228"> </tspan><tspan fill="#1f5c99">ls</tspan><tspan fill="#1c2228">(</tspan><tspan fill="#2b6b45">&quot;posts&quot;</tspan><tspan fill="#1c2228">) </tspan><tspan fill="#7a3b8f" font-weight="500">do</tspan></text>
+<text x="38" y="87" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.5" xml:space="preserve"><tspan fill="#1c2228">  </tspan><tspan fill="#7a3b8f" font-weight="500">local</tspan><tspan fill="#1c2228"> </tspan><tspan fill="#1c2228">p</tspan><tspan fill="#1c2228"> = </tspan><tspan fill="#2b6b45">&quot;posts/&quot;</tspan><tspan fill="#1c2228"> .. </tspan><tspan fill="#1c2228">name</tspan></text>
+<text x="38" y="104" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.5" xml:space="preserve"><tspan fill="#1c2228">  </tspan><tspan fill="#7a3b8f" font-weight="500">if</tspan><tspan fill="#1c2228"> </tspan><tspan fill="#1f5c99">count_in</tspan><tspan fill="#1c2228">(</tspan><tspan fill="#1c2228">p</tspan><tspan fill="#1c2228">, </tspan><tspan fill="#2b6b45">&quot;walks&quot;</tspan><tspan fill="#1c2228">) &gt; </tspan><tspan fill="#a55a17">0</tspan><tspan fill="#1c2228"> </tspan><tspan fill="#7a3b8f" font-weight="500">then</tspan></text>
+<text x="38" y="121" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.5" xml:space="preserve"><tspan fill="#1c2228">    </tspan><tspan fill="#1f5c99">edit</tspan><tspan fill="#1c2228">(</tspan><tspan fill="#1c2228">p</tspan><tspan fill="#1c2228">, </tspan><tspan fill="#2b6b45">&quot;walks&quot;</tspan><tspan fill="#1c2228">, </tspan><tspan fill="#2b6b45">&quot;walking&quot;</tspan><tspan fill="#1c2228">, {</tspan><tspan fill="#1c2228">all</tspan><tspan fill="#1c2228"> = </tspan><tspan fill="#7a3b8f" font-weight="500">true</tspan><tspan fill="#1c2228">, </tspan><tspan fill="#1c2228">word</tspan><tspan fill="#1c2228"> = </tspan><tspan fill="#7a3b8f" font-weight="500">true</tspan><tspan fill="#1c2228">})</tspan></text>
+<text x="38" y="138" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.5" xml:space="preserve"><tspan fill="#1c2228">  </tspan><tspan fill="#7a3b8f" font-weight="500">end</tspan></text>
+<text x="38" y="155" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.5" xml:space="preserve"><tspan fill="#7a3b8f" font-weight="500">end</tspan></text>
+<rect x="26" y="187" width="316" height="214" rx="8" fill="#141c22" opacity="0.45"/>
+<rect x="24" y="184" width="316" height="214" rx="8" fill="#fbfbfa"/>
+<path d="M24 192 a8 8 0 0 1 8 -8 h300 a8 8 0 0 1 8 8 v20 h-316 z" fill="#e9ecef"/>
+<text x="36" y="202" font-family="'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" font-weight="600" fill="#5a6570" xml:space="preserve">What it did</text>
+<text x="38" y="230" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#b0261c" xml:space="preserve">-tags: walks, weather</text>
+<text x="38" y="246" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#2b7149" xml:space="preserve">+tags: walking, weather</text>
+<text x="38" y="262" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#b0261c" xml:space="preserve">-tags: coast, walks</text>
+<text x="38" y="278" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#2b7149" xml:space="preserve">+tags: coast, walking</text>
+<text x="38" y="300" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.5" font-weight="400" fill="#5a6570" xml:space="preserve">edit posts/a-walk-in-the-fog.md: ok</text>
+<text x="38" y="315" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.5" font-weight="400" fill="#5a6570" xml:space="preserve">edit posts/tide-pools.md: ok</text>
+<rect x="38" y="327" width="3" height="16" fill="#2b7149"/>
+<text x="48" y="339" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.5" font-weight="400" fill="#2b7149" xml:space="preserve">finished (1417 steps)</text>
+<rect x="358" y="187" width="220" height="214" rx="8" fill="#141c22" opacity="0.45"/>
+<rect x="356" y="184" width="220" height="214" rx="8" fill="#fbfbfa"/>
+<path d="M356 192 a8 8 0 0 1 8 -8 h204 a8 8 0 0 1 8 8 v20 h-220 z" fill="#e9ecef"/>
+<text x="368" y="202" font-family="'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" font-weight="600" fill="#5a6570" xml:space="preserve">The project</text>
+<text x="370" y="230" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#5a6570" xml:space="preserve">drafts/</text>
+<text x="382" y="247" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#1c2228" xml:space="preserve">owls.md</text>
+<text x="370" y="264" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#5a6570" xml:space="preserve">posts/</text>
+<text x="382" y="281" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="500" fill="#1c2228" xml:space="preserve">a-walk-in-the-fog.md</text>
+<circle cx="560" cy="277" r="4" fill="#a55a17"/>
+<text x="382" y="298" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#1c2228" xml:space="preserve">field-notes-on-crows.md</text>
+<text x="382" y="315" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#1c2228" xml:space="preserve">hello-world.md</text>
+<text x="382" y="332" font-family="'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11" font-weight="500" fill="#1c2228" xml:space="preserve">tide-pools.md</text>
+<circle cx="560" cy="328" r="4" fill="#a55a17"/>
+<text x="370" y="386" font-family="'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="400" fill="#a55a17" xml:space="preserve">● changed by the run</text>
+</svg>

@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { loadShale } from "./shale.js";
 import { sample, first } from "./sample.js";
 import { lessons } from "./lessons.js";
+import { cardSvg } from "./card.js";
 
 const wasm = readFileSync(process.argv[2]);
 const shale = await loadShale(wasm);
@@ -123,6 +124,12 @@ lessons.forEach((l, i) => {
 expect("the lessons build the blog", shale.read("index.md")?.startsWith("# Field Notes\n\n- 2026-10-11: [Field notes on crows]"), true);
 expect("the lessons' tags", shale.read("tags.md"), "# Tags\n\n- birds (1)\n- coast (1)\n- meta (1)\n- walking (2)\n- weather (1)\n");
 expect("fifteen lessons", lessons.length, 15);
+
+// The picture is what the lessons draw now: a lesson changed redraws it
+// (node web/make_card.mjs).
+expect("card.svg is current (node web/make_card.mjs)", readFileSync(new URL("./card.svg", import.meta.url), "utf8") === cardSvg(shale, lessons), true);
+const landing = readFileSync(new URL("./learn.html", import.meta.url), "utf8");
+expect("the landing starts the tutorial", landing.includes('href="tutorial.html"') && landing.includes('src="card.svg"'), true);
 
 if (failed) {
   console.log(`${failed} failed`);

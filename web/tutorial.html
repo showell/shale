@@ -246,7 +246,7 @@ header p { margin: 0; color: var(--muted); }
 <body>
 <header>
   <h1>Learn Shale</h1>
-  <p>Fifteen short lessons. Read each script, run it, and watch a small blog take shape in the files beside it.</p>
+  <p>Fifteen short lessons. Read each script, run it, and watch a small blog take shape in the files beside it. <a href="learn.html">What is Shale?</a></p>
 </header>
 
 <main class="bench">
@@ -278,6 +278,7 @@ header p { margin: 0; color: var(--muted); }
 import { loadShale } from "./shale.js";
 import { lessons } from "./lessons.js";
 import { showRun } from "./run_view.js";
+import { escapeHtml, highlight } from "./highlight.js";
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? "", textContent: text ?? "" });
@@ -305,38 +306,12 @@ function saveProgress() {
 
 // ── prose ────────────────────────────────────────────────────────────────
 
-function escapeHtml(s) {
-  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-}
-
 function prose(text) {
   const p = document.createElement("p");
   p.innerHTML = escapeHtml(text)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
   return p;
-}
-
-// ── highlighting ─────────────────────────────────────────────────────────
-
-const KEYWORDS = new Set("and break const continue do else elseif end false for function if in local nil not or return then true while".split(" "));
-const TOKEN = /(--\[(=+)\[[\s\S]*?\]\2\]|--[^\n]*)|(\[(=+)\[[\s\S]*?\]\4\]|"(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?)|(\b\d+\b)|([A-Za-z_]\w*)(\s*\()?/g;
-
-function highlight(src) {
-  let html = "";
-  let last = 0;
-  for (const m of src.matchAll(TOKEN)) {
-    html += escapeHtml(src.slice(last, m.index));
-    last = m.index + m[0].length;
-    if (m[1]) html += `<span class="hl-comment">${escapeHtml(m[0])}</span>`;
-    else if (m[3]) html += `<span class="hl-str">${escapeHtml(m[0])}</span>`;
-    else if (m[5]) html += `<span class="hl-num">${m[0]}</span>`;
-    else if (KEYWORDS.has(m[6])) html += `<span class="hl-key">${m[6]}</span>` + escapeHtml(m[7] ?? "");
-    else if (m[7]) html += `<span class="hl-call">${m[6]}</span>` + escapeHtml(m[7]);
-    else html += m[6];
-  }
-  // A last empty line still takes its height, as the textarea's does.
-  return html + escapeHtml(src.slice(last)) + "\n";
 }
 
 // ── the files ────────────────────────────────────────────────────────────
