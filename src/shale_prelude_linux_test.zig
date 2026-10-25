@@ -112,6 +112,69 @@ test "linux prelude: http_get gives the status and body, a bearer sent but never
     try t.expectStop("http_get(\"http://127.0.0.1/\", {token = \"k\"})", .atomic, .fail, "`http_get` takes headers, bearer and timeout_ms, not `token`");
 }
 
+/// One HTTP request answered on 127.0.0.1: 201, two Set-Cookie headers, and
+/// a body that echoes the method and the body it was sent.
+const Echo = struct {
+    listener: std.Io.net.Server,
+
+    fn serve(self: *Echo, io: std.Io) void {
+        const stream = self.listener.accept(io) catch return;
+        defer stream.close(io);
+        var rb: [4096]u8 = undefined;
+        var r = stream.reader(io, &rb);
+        const first = r.interface.takeDelimiterInclusive('\n') catch return;
+        var method: [16]u8 = undefined;
+        const m = first[0 .. std.mem.indexOfScalar(u8, first, ' ') orelse return];
+        @memcpy(method[0..m.len], m);
+        var length: usize = 0;
+        while (true) {
+            const line = r.interface.takeDelimiterInclusive('\n') catch return;
+            if (std.mem.eql(u8, line, "\r\n")) break;
+            if (std.ascii.startsWithIgnoreCase(line, "content-length: "))
+                length = std.fmt.parseInt(usize, std.mem.trimEnd(u8, line["content-length: ".len..], "\r\n"), 10) catch return;
+        }
+        const sent = r.interface.take(length) catch return;
+        var body: [256]u8 = undefined;
+        const b = std.fmt.bufPrint(&body, "{s} {s}", .{ method[0..m.len], sent }) catch return;
+        var head: [256]u8 = undefined;
+        const h = std.fmt.bufPrint(&head, "HTTP/1.1 201 Created\r\nSet-Cookie: a=1; Path=/\r\nSet-Cookie: b=2\r\nX-Kind:  echo \r\nContent-Length: {d}\r\nConnection: close\r\n\r\n", .{b.len}) catch return;
+        var w = stream.writer(io, &.{});
+        w.interface.writeAll(h) catch return;
+        w.interface.writeAll(b) catch return;
+    }
+};
+
+test "linux prelude: http sends a method and a body, and gives the answer's headers, several of one name joined; a slip stops" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const io = t.threaded.io();
+    const any: std.Io.net.IpAddress = try .parse("127.0.0.1", 0);
+    var echo: Echo = .{ .listener = try any.listen(io, .{ .reuse_address = true }) };
+    const port = echo.listener.socket.address.getPort();
+    const served = try std.Thread.spawn(.{}, Echo.serve, .{ &echo, io });
+    const a = t.arena.allocator();
+    // A body with a newline and quotes: stdin, not an argv.
+    var r = t.runOnce(try std.fmt.allocPrint(a, "local r = http(\"POST\", \"http://127.0.0.1:{d}/x\", {{body = \"milk\\n\\\"2\\\"\"}}) print(r.status, r.body) print(r.headers[\"set-cookie\"]) print(r.headers[\"x-kind\"])", .{port}), .atomic);
+    defer r.deinit();
+    if (r.stop != null) {
+        if (echo.listener.socket.address.connect(io, .{ .mode = .stream })) |s| {
+            var w = s.writer(io, &.{});
+            w.interface.writeAll("GET / HTTP/1.1\r\n\r\n") catch {};
+            s.close(io);
+        } else |_| {}
+    }
+    served.join();
+    echo.listener.deinit(io);
+    if (r.stop) |s| {
+        std.debug.print("stopped: {s}\n", .{s.message});
+        return error.TestUnexpectedResult;
+    }
+    try testing.expectEqualStrings("201\tPOST milk\n\"2\"\na=1; Path=/\nb=2\necho\n", r.output);
+    try t.expectStop("http(\"POST\", \"http://127.0.0.1/\", {data = \"k\"})", .atomic, .fail, "`http` takes body, headers, bearer and timeout_ms, not `data`");
+    try t.expectStop("http_get(\"http://127.0.0.1/\", {body = \"k\"})", .atomic, .fail, "`http_get` takes headers, bearer and timeout_ms, not `body`");
+}
+
 test "linux prelude: re_lines, its lines numbered, inverted or folded if asked" {
     var t: T = undefined;
     try init(&t);

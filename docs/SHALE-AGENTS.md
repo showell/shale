@@ -73,6 +73,7 @@ Shale form, most of them one launch:
 | `zig build fuzz 2>&1 \| grep FAIL` | the same with `grep=FAIL,hunts ran` (a value with a space: on stdin, `--args-stdin`): every output line holding one of the literals, after the summary |
 | `roc check f && roc test f 2>&1 \| tail`, any other program and its verdict | `shale cookbook:run.shale` with `cmd=roc check f && roc test f` on stdin (`--args-stdin`): each command in order until one fails, how it ended and its time, its last lines (`tail=`), lines holding `grep=` literals, the whole output in `.zig-cache/run.log` where that folder is (else `log=PATH`, or not kept, said); `want=tag: why` for a program `run` refuses (`node`, `sh`) |
 | `curl -s URL \| grep X`, a wait for a deploy | `shale cookbook:http.shale url=URL grep=X` (`wait=LITERAL minutes=N`: until the body holds it; `bearer=` a Shale path to a token file) |
+| `curl -X POST --data ... -c jar -b jar`, a response's headers | in a heredoc, `http("POST", url, {body, headers})`: `{status, headers, body}`, the headers by lowercased name (`r.headers["set-cookie"]`), a cookie sent back as a `"Cookie: ..."` header |
 | `git tag -a v6 X -m ... && git push origin v6`, `git commit --amend`, ahead/behind | `git_tag(repo, "v6", {rev, msg})`, `git_push(repo, {tag = "v6"})`; `git_commit(repo, msg, {amend = true})`; `git_upstream(repo)` |
 | `git checkout -- f`, `git mv a b` | `git_restore(repo, {"f"})`, `git_mv(repo, "a", "b")` |
 | `git show origin/master:QUEUE.md \| sed -n 40,80p`, `git grep` at a revision | `shale cookbook:look.shale rev=origin/master at=QUEUE.md:40-80` (or `find=` `in=`): `at` and `in` read as the revision holds them (`repo=` another checkout) |
@@ -652,9 +653,10 @@ with what to do instead.
   memory, not a stream; `run`'s own filters (`re`, `not_re`, `before`,
   `after`) keep the lines a `| grep` would. Every run needs `timeout_ms`
   and a keep.
-- **No network but a program's**: `http_get(url, {headers, bearer,
-  timeout_ms})` (the Linux prelude's, by `curl`) gives `{status, body,
-  ms}`, and `cookbook:http.shale` is it from a launch line; and **no
+- **No network but a program's**: `http(method, url, {body, headers,
+  bearer, timeout_ms})` (the Linux prelude's, by `curl`) gives `{status,
+  headers, body, ms}`, `http_get(url, ...)` its GET, and
+  `cookbook:http.shale` is a GET from a launch line; and **no
   environment**: a script cannot read a variable, only give one to a
   program (`env`, `secrets`).
 - **Git is a prelude over `git`**, not a library: each call is a program

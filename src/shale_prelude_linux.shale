@@ -52,18 +52,12 @@ function must(r)
   fail(what .. " was ended by a signal")
 end
 
--- **AN HTTP GET, BY `curl`** (2026-10-23: a release's checks fetched
--- `/version` and a page by hand): `{status, body, ms}`, the status a
--- number whatever it is (the caller judges it). `headers` are `"Name:
--- value"` lines; `bearer` a Shale path whose file holds a token, sent as
--- `Authorization: Bearer` and scrubbed from the output, never in an argv;
--- `timeout_ms` (default 30000) the whole request's. No answer at all (a
--- name that does not resolve, a refused connection, the time out) stops,
--- in curl's words. Linux only: metal has no `curl`.
-function http_get(url, opts?)
+-- `http` and `http_get`'s one request (below), `who` the name a slip is
+-- told by.
+function curl_http(who, method, url, opts?)
   local ms = 30000
   local o = {whole = 16777216}
-  local argv = {"curl", "-sS", "--proto", "=http,https"}
+  local argv = {"curl", "-sS", "--proto", "=http,https", "-X", method, "-D", "-"}
   if opts ~= nil then
     for k in keys(opts) do
       if k == "timeout_ms" then
@@ -79,12 +73,18 @@ function http_get(url, opts?)
         push(argv, "%SHALE_BEARER")
         push(argv, "--expand-header")
         push(argv, "Authorization: Bearer {{SHALE_BEARER}}")
+      elseif k == "body" and who == "http" then
+        o.stdin = opts.body
+        push(argv, "--data-binary")
+        push(argv, "@-")
+      elseif who == "http" then
+        fail("`http` takes body, headers, bearer and timeout_ms, not `" .. k .. "`")
       else
-        fail("`http_get` takes headers, bearer and timeout_ms, not `" .. k .. "`")
+        fail("`" .. who .. "` takes headers, bearer and timeout_ms, not `" .. k .. "`")
       end
     end
   end
-  if not starts_with(url, "http://") and not starts_with(url, "https://") then fail("`http_get`: " .. url .. " is not an http:// or https:// URL") end
+  if not starts_with(url, "http://") and not starts_with(url, "https://") then fail("`" .. who .. "`: " .. url .. " is not an http:// or https:// URL") end
   push(argv, "--max-time")
   push(argv, tostring((ms + 999) // 1000))
   -- The status after the body, on a line of its own.
@@ -96,12 +96,57 @@ function http_get(url, opts?)
   local said = lines(r.out)
   local code = ""
   if #said > 0 then code = said[#said] end
-  if r.ended ~= "exit" then fail("`http_get " .. url .. "` did not finish (" .. r.ended .. ")") end
+  if r.ended ~= "exit" then fail("`" .. who .. " " .. url .. "` did not finish (" .. r.ended .. ")") end
   if r.code ~= 0 then
     local why = trim(sub(r.out, 1, #r.out - #code))
-    fail("`http_get " .. url .. "`: " .. (why ~= "" and why or "curl exited " .. r.code))
+    fail("`" .. who .. " " .. url .. "`: " .. (why ~= "" and why or "curl exited " .. r.code))
   end
-  return {status = tonumber(code), body = sub(r.out, 1, #r.out - #code - 1), ms = r.ms}
+  -- The head (`-D -`), a blank line, then the body; a `100 Continue` head
+  -- before the answer's is passed over.
+  local out = sub(r.out, 1, #r.out - #code - 1)
+  local cut = find(out, "\r\n\r\n")
+  while cut ~= nil and starts_with(out, "HTTP/") and contains(sub(out, 1, cut), " 100 ") do
+    out = sub(out, cut + 4)
+    cut = find(out, "\r\n\r\n")
+  end
+  if cut == nil then fail("`" .. who .. " " .. url .. "`: curl gave no head") end
+  local headers = {}
+  for line in lines(sub(out, 1, cut - 1)) do
+    local colon = find(line, ":")
+    if colon ~= nil then
+      local name = lower(sub(line, 1, colon - 1))
+      local value = trim(sub(line, colon + 1))
+      local had = get(headers, name, nil)
+      if had == nil then headers[name] = value else headers[name] = had .. "\n" .. value end
+    end
+  end
+  return {status = tonumber(code), headers = headers, body = sub(out, cut + 4), ms = r.ms}
+end
+
+-- **AN HTTP REQUEST, BY `curl`** (2026-10-25: a site's visitors, each kept
+-- by the cookie its first answer set, told apart by hand): `method` to
+-- `url`, and `{status, headers, body, ms}`, the status a number whatever it
+-- is (the caller judges it). Its options:
+-- - `body`: the request's body, a string, sent on curl's stdin (never in an
+--   argv);
+-- - `headers`: `"Name: value"` lines;
+-- - `bearer`: a Shale path whose file holds a token, sent as
+--   `Authorization: Bearer` and scrubbed from the output, never in an argv;
+-- - `timeout_ms` (default 30000): the whole request's.
+-- The answer's `headers` map each name, lowercased, to its value, several
+-- of one name (`set-cookie`) joined by "\n". A redirect is the answer, not
+-- followed. No answer at all (a name that does not resolve, a refused
+-- connection, the time out) stops, in curl's words. Linux only: metal has
+-- no `curl`.
+function http(method, url, opts?)
+  return curl_http("http", method, url, opts)
+end
+
+-- **AN HTTP GET, BY `curl`** (2026-10-23: a release's checks fetched
+-- `/version` and a page by hand): `http`'s answer to a GET. It takes
+-- `headers`, `bearer` and `timeout_ms`, as `http` does.
+function http_get(url, opts?)
+  return curl_http("http_get", "GET", url, opts)
 end
 
 -- The lines of `s` a regular expression matches (`{invert = true}`: the
