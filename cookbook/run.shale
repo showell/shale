@@ -60,6 +60,13 @@ end
 local wanted = {}
 for w in split(GREP, ",") do if w ~= "" then push(wanted, w) end end
 
+-- A line as printed: its first 240 bytes, and a cut one says so and how
+-- much is left (the log has it whole).
+function shown_line(l)
+  if #l <= 240 then return l end
+  return sub(l, 1, 240) .. " … (" .. (#l - 240) .. " more bytes)"
+end
+
 local log = ""
 for part in split(CMD, "&&") do
   local argv = {}
@@ -83,7 +90,7 @@ for part in split(CMD, "&&") do
     for w in wanted do
       if contains(l, w) then
         held = held + 1
-        if held <= MOST then print("grep: " .. sub(l, 1, 240)) end
+        if held <= MOST then print("grep: " .. shown_line(l)) end
         break
       end
     end
@@ -96,7 +103,7 @@ for part in split(CMD, "&&") do
   if failed and n < 30 then n = 30 end
   local from = #lines_of - n + 1
   if from < 1 then from = 1 end
-  for i = from, #lines_of do print("   " .. sub(lines_of[i], 1, 240)) end
+  for i = from, #lines_of do print("   " .. shown_line(lines_of[i])) end
   local took = r.ms .. " ms"
   if r.ms >= 1000 then took = (r.ms // 1000) .. "." .. (r.ms % 1000 // 100) .. " s" end
   print("── " .. how .. " in " .. took .. ": " .. shown)
