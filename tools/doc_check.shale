@@ -37,7 +37,7 @@
 
 -- The essays (`notes/*.md`, history, so its own are passed by) are
 -- essay-repl-server's: listed so the others' citations of them resolve.
-const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "dog-park", "observatory", "zig-coverage-sdk", "essay-repl-server"}
+const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "dog-park", "observatory", "zig-coverage-sdk", "essay-repl-server", "cobble-webbox", "roc-webbox"}
 const EXTS = {".zig", ".shale", ".md", ".sh", ".py", ".json", ".zon", ".js", ".html", ".css", ".txt", ".conf", ".toml"}
 const SHOW = parse_int(arg("show", "20"))
 -- `only=<repo>`: that repo's docs alone, still resolved against every
