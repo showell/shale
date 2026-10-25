@@ -106,12 +106,14 @@ fn signalGroup(pgid: i32, sig: u32) bool {
     return linux.errno(rc) == .SUCCESS;
 }
 
-/// Whether a job is alive: its group has a process, and its leader, if still
-/// there, has the record's start time. A job whose leader exited but whose
-/// group lives on is alive.
+/// Whether a job is alive: its leader, while it is there, by the record's
+/// start time; once it is gone, its group, if a process of it lives on. The
+/// leader is asked first because it makes its group (`setsid`) only once it
+/// runs, and the reaper writes the record as soon as it has forked it: a job
+/// asked about just after `job_start` may have no group yet.
 pub fn alive(r: Record) bool {
     var buf: [1024]u8 = undefined;
-    if (startOf(&buf, r.pid)) |s| if (!std.mem.eql(u8, s, r.start)) return false;
+    if (startOf(&buf, r.pid)) |s| return std.mem.eql(u8, s, r.start);
     return signalGroup(r.pgid, 0);
 }
 
@@ -126,6 +128,8 @@ fn sleepMs(ms: u64) void {
 pub fn stop(r: Record, grace_ms: u64) bool {
     if (!alive(r)) return false;
     _ = signalGroup(r.pgid, @backingInt(linux.SIG.TERM));
+    // A leader that has not made its group yet is not reached by it.
+    _ = linux.kill(r.pid, .TERM);
     var waited: u64 = 0;
     while (waited < grace_ms) : (waited += 50) {
         if (!signalGroup(r.pgid, 0)) return true;

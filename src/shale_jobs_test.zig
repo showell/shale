@@ -45,6 +45,25 @@ test "jobs: a job runs to its end, its output in its log, and job_wait says how 
     try testing.expect(std.mem.startsWith(u8, rec, "pid="));
 }
 
+test "jobs: a job asked about the moment it starts is alive, its group made or not" {
+    // The reaper writes the record once it has forked the job, which makes
+    // its own group only when it first runs: `job_alive` asked the group
+    // alone, and a job started a moment ago could read as gone. Many starts,
+    // so the window is crossed.
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try testing.expectEqualStrings("20\n", try once(&t,
+        \\local n = 0
+        \\for i = 1, 20 do
+        \\  local j = job_start({"shale-fixture", "sleep", "5000"}, {log = "quick" .. i .. ".log"})
+        \\  if job_alive(j) then n = n + 1 end
+        \\  job_stop(j)
+        \\end
+        \\print(n)
+    ));
+}
+
 test "jobs: a job outlives its run; a later run finds it by its record, waits for a line, and stops it" {
     var t: T = undefined;
     try init(&t);
