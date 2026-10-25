@@ -11,11 +11,16 @@ const host_linux = @import("shale_host_linux.zig");
 
 const Block = struct { line: usize, source: []const u8, prints: ?[]const u8, stops: ?[]const u8 };
 
+/// The doc's blocks, or why they cannot be read: a value, so a test that
+/// feeds a bad doc on purpose prints nothing (a passing run with a
+/// refusal on stderr looked like a failing one).
+const Read = union(enum) { blocks: []Block, refused: []const u8 };
+
 /// Each ```shale-linux block, and the ```output block after it (blank lines
 /// between) or its last line `-- stops: <class>`. An ```output block is the
 /// next block's only when that block is a shale-linux one: the core's doc test
 /// reads the ```shale blocks and theirs.
-fn blocks(a: std.mem.Allocator, doc: []const u8) ![]Block {
+fn blocks(a: std.mem.Allocator, doc: []const u8) !Read {
     var out: std.ArrayList(Block) = .empty;
     var lines = std.mem.splitScalar(u8, doc, '\n');
     var n: usize = 0;
@@ -30,8 +35,7 @@ fn blocks(a: std.mem.Allocator, doc: []const u8) ![]Block {
                 if (std.mem.eql(u8, line, "```output")) {
                     reading_output = true;
                 } else if (std.mem.trim(u8, line, " ").len != 0) {
-                    std.debug.print("docs/SHALE-AGENTS.md:{d}: a shale-linux block with no output block after it and no `-- stops:`\n", .{b.line});
-                    return error.TestUnexpectedResult;
+                    return .{ .refused = try std.fmt.allocPrint(a, "docs/SHALE-AGENTS.md:{d}: a shale-linux block with no output block after it and no `-- stops:`", .{b.line}) };
                 }
                 continue;
             }
@@ -59,28 +63,26 @@ fn blocks(a: std.mem.Allocator, doc: []const u8) ![]Block {
             continue;
         }
         if (std.mem.indexOf(u8, text, "-- prints:") != null) {
-            std.debug.print("docs/SHALE-AGENTS.md:{d}: `-- prints:` is the old form: the output goes in an ```output block after the block\n", .{start.?});
-            return error.TestUnexpectedResult;
+            return .{ .refused = try std.fmt.allocPrint(a, "docs/SHALE-AGENTS.md:{d}: `-- prints:` is the old form: the output goes in an ```output block after the block", .{start.?}) };
         }
         awaiting = .{ .line = start.?, .source = text, .prints = null, .stops = null };
     }
     if (awaiting) |b| {
-        std.debug.print("docs/SHALE-AGENTS.md:{d}: a shale-linux block with no output block after it and no `-- stops:`\n", .{b.line});
-        return error.TestUnexpectedResult;
+        return .{ .refused = try std.fmt.allocPrint(a, "docs/SHALE-AGENTS.md:{d}: a shale-linux block with no output block after it and no `-- stops:`", .{b.line}) };
     }
-    return out.items;
+    return .{ .blocks = out.items };
 }
 
 test "SHALE-AGENTS.md's shale-linux blocks: a block and its output block are read; no output block, or the old form, is refused" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const got = try blocks(a, "```shale-linux\nprint(1)\n```\n\n```output\n1\n```\n```shale-linux\nfail(\"x\")\n-- stops: fail\n```\n");
+    const got = (try blocks(a, "```shale-linux\nprint(1)\n```\n\n```output\n1\n```\n```shale-linux\nfail(\"x\")\n-- stops: fail\n```\n")).blocks;
     try testing.expectEqual(@as(usize, 2), got.len);
     try testing.expectEqualStrings("1\n", got[0].prints.?);
     try testing.expectEqualStrings("fail", got[1].stops.?);
-    try testing.expectError(error.TestUnexpectedResult, blocks(a, "```shale-linux\nprint(1)\n```\n\ntext\n"));
-    try testing.expectError(error.TestUnexpectedResult, blocks(a, "```shale-linux\nprint(1)\n-- prints:\n-- 1\n```\n"));
+    try testing.expectEqualStrings("docs/SHALE-AGENTS.md:1: a shale-linux block with no output block after it and no `-- stops:`", (try blocks(a, "```shale-linux\nprint(1)\n```\n\ntext\n")).refused);
+    try testing.expectEqualStrings("docs/SHALE-AGENTS.md:1: `-- prints:` is the old form: the output goes in an ```output block after the block", (try blocks(a, "```shale-linux\nprint(1)\n-- prints:\n-- 1\n```\n")).refused);
 }
 
 /// The checkout: agent_test's two tcp files, and a host that still
@@ -98,7 +100,13 @@ test "docs/SHALE-AGENTS.md: every shale-linux block runs with the Linux prelude 
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     const doc = try std.Io.Dir.cwd().readFileAlloc(threaded.io(), "docs/SHALE-AGENTS.md", a, .limited(1 << 20));
-    const all = try blocks(a, doc);
+    const all = switch (try blocks(a, doc)) {
+        .blocks => |bs| bs,
+        .refused => |why| {
+            std.debug.print("{s}\n", .{why});
+            return error.TestUnexpectedResult;
+        },
+    };
     var wrong: usize = 0;
     for (all) |b| {
         var t: T = undefined;
