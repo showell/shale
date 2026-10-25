@@ -183,6 +183,13 @@ pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u
         };
         return result;
     };
+    if (parse.unreadArgStop(tree, program, options.args) catch {
+        result.stop = machine_stop;
+        return result;
+    }) |s| {
+        result.stop = s;
+        return result;
+    }
     var r: interp.Run = .{
         .io = io,
         .alloc = alloc,

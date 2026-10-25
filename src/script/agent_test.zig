@@ -72,9 +72,23 @@ test "agent: arg gives the run's values by name, read as the default's kind, and
     defer t.deinit();
     const given = [_]script.Arg{ .{ .name = "dir", .value = "src" }, .{ .name = "n", .value = "12" }, .{ .name = "loud", .value = "true" } };
     try t.expectOutput("print(arg(\"dir\", \".\"), arg(\"n\", 3) + 1, arg(\"loud\", false), arg(\"none\", \"x\"), arg(\"none\"))", .{ .args = &given }, "src\t13\ttrue\tx\tnil\n");
-    try t.expectOutput("print(arg(\"n\", \"s\"), arg(\"dir\"))", .{ .args = &given }, "12\tsrc\n");
-    try t.expectStop("print(arg(\"dir\", 3))", .{ .args = &given }, .argument, "dir=src is not an integer");
-    try t.expectStop("print(arg(\"dir\", true))", .{ .args = &given }, .argument, "not true or false");
+    try t.expectOutput("print(arg(\"n\", \"s\"), arg(\"dir\"))", .{ .args = given[0..2] }, "12\tsrc\n");
+    try t.expectStop("print(arg(\"dir\", 3))", .{ .args = given[0..1] }, .argument, "dir=src is not an integer");
+    try t.expectStop("print(arg(\"dir\", true))", .{ .args = given[0..1] }, .argument, "not true or false");
+}
+
+test "agent: a value given that no arg call reads stops the run before it starts, naming what it reads; a name by value is not checked" {
+    var t: Tree = undefined;
+    try t.init();
+    defer t.deinit();
+    const given = [_]script.Arg{ .{ .name = "cwd", .value = "src" }, .{ .name = "cmd", .value = "x" } };
+    // Nothing ran: the print before the arg calls printed nothing.
+    try t.expectStop("print(\"ran\") print(arg(\"dir\", \".\"), arg(\"cmd\", \"\"))", .{ .args = &given }, .argument, "`cwd=` is given, and the script reads no `arg(\"cwd\")`: it reads dir, cmd");
+    try t.expectStop("print(1)", .{ .args = given[1..] }, .argument, "`cmd=` is given, and the script reads no `arg(\"cmd\")`: it reads none");
+    // A call in a function counts, read or not.
+    try t.expectOutput("function f() return arg(\"cwd\", \"\") end print(arg(\"cmd\", \"\"))", .{ .args = &given }, "x\n");
+    // A name made at run time: which are read cannot be said, so none is refused.
+    try t.expectOutput("local n = \"c\" .. \"md\" print(arg(n, \"\"))", .{ .args = &given }, "x\n");
 }
 
 test "agent: match_path matches a glob part by part: ** any parts, * and ? never across a /" {

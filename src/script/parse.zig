@@ -70,6 +70,10 @@ pub const Parser = struct {
     exprs: std.ArrayList(*ast.Expr) = .empty,
     arms: std.ArrayList(ast.Arm) = .empty,
     entries: std.ArrayList(ast.MapEntry) = .empty,
+    /// The names `arg("NAME", ...)` calls read (`ast.Program.args_read`);
+    /// `args_by_value` once one names it otherwise.
+    args_read: std.ArrayList([]const u8) = .empty,
+    args_by_value: bool = false,
     lexer: lex.Lexer,
     tok: Token,
     ahead: ?Token = null,
@@ -717,6 +721,14 @@ pub const Parser = struct {
         }
         _ = try self.expect(.rparen, "`)` to close the call");
         const given = self.exprs.items.len - at;
+        if (target == .builtin and target.builtin == .arg) {
+            if (given > 0 and self.exprs.items[at].kind == .string) {
+                const read = self.exprs.items[at].kind.string;
+                for (self.args_read.items) |r| {
+                    if (std.mem.eql(u8, r, read)) break;
+                } else try self.args_read.append(self.scratch, read);
+            } else self.args_by_value = true;
+        }
         if (params) |n| {
             if (optional > 0 and (given < n - optional or given > n)) return self.failf(pos, .argument, "`{s}` takes {d} to {d} arguments, given {d}", .{ shown, n - optional, n, given });
             if (optional == 0 and given != n) return self.failf(pos, .argument, "`{s}` takes {d} argument{s}, given {d}", .{ shown, n, if (n == 1) "" else "s", given });
@@ -941,6 +953,16 @@ pub fn parse(alloc: std.mem.Allocator, source: []const u8, max_nesting: u32, sto
 /// `parse`, also reporting how many bytes of the Zig stack it took. What it
 /// builds and drops comes from `scratch` and is given back to it; the tree
 /// comes from `alloc`, at exactly its size.
+/// The stop for a value `given` that no `arg` call of `program` reads
+/// (`ast.unreadArg`), before the run's first step; null when each is read.
+/// It names what the script reads, so the slip is plain.
+pub fn unreadArgStop(alloc: std.mem.Allocator, program: *const ast.Program, given: anytype) error{OutOfMemory}!?diag.Stop {
+    const name = ast.unreadArg(program, given) orelse return null;
+    const read = program.args_read.?;
+    const said = if (read.len == 0) "it reads none" else try std.fmt.allocPrint(alloc, "it reads {s}", .{try std.mem.join(alloc, ", ", read)});
+    return .{ .line = 1, .column = 1, .class = .argument, .message = try std.fmt.allocPrint(alloc, "`{s}=` is given, and the script reads no `arg(\"{s}\")`: {s}", .{ name, name, said }) };
+}
+
 pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, source: []const u8, max_nesting: u32, stop: *?diag.Stop, stack_used: ?*usize, preludes: []const Prelude) Error!ast.Program {
     const top = @frameAddress();
     var p: Parser = .{ .alloc = alloc, .scratch = scratch, .lexer = lex.Lexer.init(alloc, source), .tok = undefined, .max_nesting = max_nesting };
@@ -956,6 +978,7 @@ pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, sourc
         p.function_names.deinit(scratch);
         p.functions.deinit(scratch);
         p.consts.deinit(scratch);
+        p.args_read.deinit(scratch);
     }
     errdefer stop.* = p.stop;
     p.frame.depth = 0;
@@ -990,5 +1013,10 @@ pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, sourc
     try p.advance();
     const body = try p.block();
     if (p.tok.tag != .eof) return p.failf(p.here(), .syntax, "{s} with nothing open to close", .{p.describe(p.tok)});
-    return .{ .functions = try alloc.dupe(ast.Function, p.functions.items), .const_names = try alloc.dupe([]const u8, p.consts.items), .main = .{ .name = "the script", .pos = .{ .line = 1, .column = 1 }, .params = 0, .frame = p.frame.slots, .body = body } };
+    return .{
+        .functions = try alloc.dupe(ast.Function, p.functions.items),
+        .const_names = try alloc.dupe([]const u8, p.consts.items),
+        .main = .{ .name = "the script", .pos = .{ .line = 1, .column = 1 }, .params = 0, .frame = p.frame.slots, .body = body },
+        .args_read = if (p.args_by_value) null else try alloc.dupe([]const u8, p.args_read.items),
+    };
 }

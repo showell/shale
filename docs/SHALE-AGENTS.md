@@ -55,7 +55,10 @@ refuses it: its quotes and `*` are not plain words. It is for a subagent,
 or a shell outside the gate.)
 
 A value given as `name=value` is the script's `arg("name", default)`; a
-default that is an integer or a boolean reads the value as one.
+default that is an integer or a boolean reads the value as one. **A value
+no `arg` call reads stops the run before it starts**, naming the ones the
+script reads (`cwd=` given to a recipe that reads `dir=`), unless the
+script names one by a value made as it runs, which cannot be checked.
 
 ## Before you reach for the shell
 

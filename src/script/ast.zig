@@ -2,6 +2,8 @@
 //! name is already resolved to a slot in its function's frame, and every call
 //! names a builtin or a function by index. All of it lives in the run's arena.
 
+const std = @import("std");
+
 pub const Pos = struct { line: u32, column: u32 };
 
 pub const Builtin = enum {
@@ -176,4 +178,22 @@ pub const Program = struct {
     const_names: []const []const u8 = &.{},
     /// The script's own top level, a function with no parameters.
     main: Function,
+    /// The names its `arg("NAME", ...)` calls read, each once; null when
+    /// one names it by a value other than a string literal, so which names
+    /// it reads cannot be said before it runs (`unreadArg`).
+    args_read: ?[]const []const u8 = &.{},
 };
+
+/// **A VALUE GIVEN THAT NOTHING READS** (2026-10-25: `cwd=` given to a
+/// recipe that reads `dir=` was taken without a word, and the command ran
+/// in the wrong folder): the first of `given` that no `arg` call of
+/// `program` names, or null. Null too when the program names one by a
+/// value, which cannot be checked before it runs.
+pub fn unreadArg(program: *const Program, given: anytype) ?[]const u8 {
+    const read = program.args_read orelse return null;
+    outer: for (given) |g| {
+        for (read) |r| if (std.mem.eql(u8, r, g.name)) continue :outer;
+        return g.name;
+    }
+    return null;
+}

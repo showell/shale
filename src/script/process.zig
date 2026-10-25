@@ -179,6 +179,7 @@ pub const Process = struct {
             error.OutOfMemory => machine_stop,
         });
         p.run.program = program;
+        if (parse.unreadArgStop(tree, program, p.run.args) catch return p.stopWith(machine_stop)) |s| return p.stopWith(s);
         p.code = compile.compile(p.code_arena.allocator(), p.machine.budget.allocator(), program, builtins.most_args, budgets.depth) catch return p.stopWith(machine_stop);
         p.coded = true;
         p.task = vm.Task.init(&p.run, &p.code) catch {
