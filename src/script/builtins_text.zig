@@ -25,6 +25,7 @@ pub const specs = [_]bi.Spec{
     spec(.contains, 2, 2, looks(.contains)),
     spec(.find, 2, 3, find),
     spec(.sub, 2, 3, sub),
+    spec(.bad_utf8, 1, 1, badUtf8),
     spec(.trim, 1, 1, trimmed(.both)),
     spec(.trim_start, 1, 1, trimmed(.start)),
     spec(.trim_end, 1, 1, trimmed(.end)),
@@ -293,6 +294,24 @@ fn find(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     try bi.chargeBytes(run, pos, str.len - from);
     const at = (try (try Finder.init(run, pos, sub_s)).find(str, from)) orelse return .nil;
     return .{ .int = @intCast(at + 1) };
+}
+
+/// `bad_utf8(s)` is nil when `s` is valid UTF-8, else the position (from 1,
+/// as `find` counts) of the first byte that starts no valid sequence: a
+/// stray continuation byte, a lead byte with too few continuations after it
+/// (the text cut short counts), an overlong form, a surrogate half, or past
+/// U+10FFFF. A step per 16 bytes, as a search.
+fn badUtf8(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+    const str = try bi.stringArg(run, pos, .bad_utf8, args[0], "its text");
+    try bi.chargeBytes(run, pos, str.len);
+    var i: usize = 0;
+    while (i < str.len) {
+        const n = std.unicode.utf8ByteSequenceLength(str[i]) catch return .{ .int = @intCast(i + 1) };
+        if (n > str.len - i) return .{ .int = @intCast(i + 1) };
+        _ = std.unicode.utf8Decode(str[i..][0..n]) catch return .{ .int = @intCast(i + 1) };
+        i += n;
+    }
+    return .nil;
 }
 
 fn sub(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {

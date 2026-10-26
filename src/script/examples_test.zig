@@ -15,6 +15,7 @@ const stale_caches = @embedFile("examples/stale_caches.shale");
 const find_message = @embedFile("examples/find_message.shale");
 const stale_topics = @embedFile("examples/stale_topics.shale");
 const delete_stale_topics = @embedFile("examples/delete_stale_topics.shale");
+const bad_utf8 = @embedFile("examples/bad_utf8.shale");
 
 const sep = "\n\n-------------\n";
 
@@ -280,6 +281,7 @@ test "every read-only script of the cookbook finishes on the site-shaped store i
         .{ .name = "chat_topics", .src = chat_topics },
         .{ .name = "stale_caches", .src = stale_caches },
         .{ .name = "find_message", .src = find_message },
+        .{ .name = "bad_utf8", .src = bad_utf8 },
     };
     for (read_only) |ex| {
         var r = script.run(f.threaded.io(), testing.allocator, f.root, ex.src, site_budgets, 1791936000, &out_buf);
@@ -295,7 +297,7 @@ test "every cookbook script that walks gives the same answer walking in parts of
     try f.init();
     defer f.deinit();
     var whole_buf: [64 * 1024]u8 = undefined;
-    for ([_][]const u8{ where_the_bytes_are, chat_topics, stale_caches, find_message }) |src| {
+    for ([_][]const u8{ where_the_bytes_are, chat_topics, stale_caches, find_message, bad_utf8 }) |src| {
         var whole = script.run(f.threaded.io(), testing.allocator, f.root, src, .{}, 1791936000, &whole_buf);
         defer whole.deinit();
         try finished(&whole);

@@ -98,6 +98,9 @@ fn budget(run: *Run, pos: ast.Pos, _: []const Value) Error!Value {
         .{ "changes", run.budgets.changes -| run.changes },
         .{ "change_bytes", run.budgets.change_bytes -| run.change_bytes },
         .{ "output", run.out_cap -| run.out_len },
+        // What the values' arena may still take: a string read stays in it,
+        // so a scan that reads file after file guards on this too.
+        .{ "arena_bytes", run.budgeted.limit -| run.budgeted.held },
     };
     for (left) |kv| out.map.put(a, kv[0], .{ .int = @intCast(@min(kv[1], std.math.maxInt(i64))) }) catch return run.oom(pos);
     out.kind = .map;

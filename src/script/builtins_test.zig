@@ -275,6 +275,9 @@ test "builtins: budget says what is left of each budget" {
     try f.expectOutput("print(exists(\"top.txt\")) print(budget().reads) read(\"top.txt\") print(budget().read_bytes)", "true\n9999\n67108861\n");
     try f.expectOutput("local a = budget().steps local c = budget().steps print(a > c, a <= 5000000)", "true\ttrue\n");
     try f.expectOutput("print(\"ab\") print(budget().output)", "ab\n65533\n");
+    // The arena: what is left goes down as values are made, and never
+    // past the limit (16 MiB here).
+    try f.expectOutput("local a = budget().arena_bytes local s = rep(\"x\", 100000) local b = budget().arena_bytes print(a <= 16777216, a - b >= 100000)", "true\ttrue\n");
 }
 
 test "builtins: lines without a last empty piece, words, and count on a list" {
@@ -817,6 +820,19 @@ test "builtins: an empty needle is found where the search starts, never a crash:
     try f.expectOutput("print(find(\"abc\", \"\"), contains(\"abc\", \"\"), find(\"\", \"\"), contains(\"\", \"\"))", "1\ttrue\t1\ttrue\n");
     try f.expectStop("split(\"abc\", \"\")", .argument);
     try f.expectStop("substitute(\"abc\", \"\", \"x\")", .argument);
+}
+
+test "builtin: bad_utf8 is nil for UTF-8, else where the first bad byte is" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    // Valid: empty, ASCII, two-, three- and four-byte sequences.
+    try f.expectOutput("print(bad_utf8(\"\"), bad_utf8(\"abc\"), bad_utf8(\"caf\\xc3\\xa9\"), bad_utf8(\"\\xe2\\x82\\xac\"), bad_utf8(\"\\xf0\\x9f\\x98\\x80!\"))", "nil\tnil\tnil\tnil\tnil\n");
+    // A Latin-1 é and a 0xff (the Roc chat's twin transcript), a stray
+    // continuation byte, a sequence cut short by the end, an overlong `/`,
+    // a surrogate half, past U+10FFFF.
+    try f.expectOutput("print(bad_utf8(\"caf\\xe9 \\xff\"), bad_utf8(\"ab\\x80\"), bad_utf8(\"caf\\xc3\"), bad_utf8(\"\\xc0\\xaf\"), bad_utf8(\"x\\xed\\xa0\\x80\"), bad_utf8(\"\\xf4\\x90\\x80\\x80\"))", "4\t3\t4\t1\t2\t1\n");
+    try f.expectStop("print(bad_utf8(5))", .type);
 }
 
 test "builtin: parse_int reads an integer from real data, or gives nil, where tonumber stops the run" {

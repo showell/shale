@@ -1,0 +1,97 @@
+-- Every text file under the data root that isn't valid UTF-8: where its
+-- first bad byte is (position, line, column) and how many bad places it
+-- has. Text is by extension (TEXT); every other file is only counted, by
+-- extension, so the run says what it didn't look at. Reads only: a read
+-- a text file, and the walk.
+--
+-- A root larger than the budgets is told in parts: the run says where the
+-- next one goes on (`resume after <path>`: set START to it). Every file
+-- read stays in the run's arena, so on lynrummy.com (an 8 MiB arena) the
+-- arena is usually what ends a part.
+
+const TEXT = {"md", "json", "ndjson", "txt", "count", "csv", "conf", "log", "html", "js", "css"}
+const START = ""
+const MOST_PLACES = 1000
+
+-- A file's extension, lowercased; "" when it has none.
+function extension(p)
+  local name = basename(p)
+  local parts = split(name, ".")
+  if #parts < 2 then return "" end
+  return lower(parts[#parts])
+end
+
+-- How many bad places `text` has (at most MOST_PLACES), the first at `at`:
+-- each next one is looked for after the bad byte.
+function places(text, at)
+  local n = 1
+  local from = at
+  while n < MOST_PLACES do
+    local next = bad_utf8(sub(text, from + 1))
+    if next == nil then break end
+    from = from + next
+    n = n + 1
+  end
+  return n
+end
+
+local is_text = {}
+for e in TEXT do is_text[e] = true end
+
+local checked = 0
+local checked_bytes = 0
+local skipped = {}
+local bad = {}
+local part = walk_upto("", {kind = "file", after = START}, budget().reads // 2)
+local last = START
+local resume = nil
+for e in part.entries do
+  local ext = extension(e.path)
+  if get(is_text, ext, false) then
+    -- A file read stays in the run's arena, so the arena is a budget too.
+    if not room_for({reads = 1, read_bytes = e.size, arena_bytes = 2 * e.size + 4096, steps = e.size // 4 + 1000}) then
+      resume = last
+      break
+    end
+    local text = read(e.path)
+    checked = checked + 1
+    checked_bytes = checked_bytes + #text
+    local at = bad_utf8(text)
+    if at ~= nil then
+      local before = sub(text, 1, at - 1)
+      local line = #lines(before)
+      if before == "" or ends_with(before, "\n") then line = line + 1 end
+      local start = 1
+      local nl = find(before, "\n")
+      while nl ~= nil do
+        start = nl + 1
+        nl = find(before, "\n", nl + 1)
+      end
+      push(bad, {path = e.path, size = e.size, at = at, line = line, column = at - start + 1, places = places(text, at)})
+    end
+  else
+    local key = ext
+    if key == "" then key = "(none)" end
+    skipped[key] = get(skipped, key, 0) + 1
+  end
+  last = e.path
+end
+if resume == nil and not part.done then resume = part.more end
+
+print("text files checked", checked, "bytes", human(checked_bytes))
+print("not valid UTF-8: " .. #bad)
+if #bad > 0 then
+  sort(bad, "path")
+  print(table(bad, {"path", "size", "at", "line", "column", "places"}))
+end
+print("")
+local others = {}
+for k in keys(skipped) do push(others, {extension = k, files = skipped[k]}) end
+sort(others, "files", "desc")
+print("not text, not checked: " .. #others .. " extensions")
+if #others > 0 then print(table(others, {"extension", "files"})) end
+if resume ~= nil then
+  print("")
+  print("a part of the root: a budget (reads, bytes read, the arena or steps) ended it")
+  print("resume after " .. resume)
+end

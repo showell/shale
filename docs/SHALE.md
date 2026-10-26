@@ -618,6 +618,7 @@ change_bytes` past those budgets.
 | `starts_with`, `ends_with`, `contains` `(s, t)` | booleans | |
 | `find(s, t[, from])` | `t`'s 1-based position, or nil | `argument` for a `from` outside 1 to `#s + 1` |
 | `sub(s, i[, j])` | a part of `s` | |
+| `bad_utf8(s)` | nil, or the first bad byte's 1-based position | |
 | `trim`, `trim_start`, `trim_end`, `upper`, `lower` `(s)` | strings | |
 | `like(s, pattern)` | a boolean | |
 | `match_path(path, pattern)` | a boolean | `argument` past 64 parts |
@@ -719,6 +720,7 @@ the bytes compared there a step for 16 (see "What a builtin costs").
 | `starts_with(s, t)`, `ends_with(s, t)`, `contains(s, t)` | booleans |
 | `find(s, t)`, `find(s, t, from)` | where `t` first is in `s`, 1-based; nil when absent. From `from` on (1 to `#s + 1`), so the next one is `find(s, t, at + 1)`, and only what is past `from` is read |
 | `sub(s, i[, j])` | Lua's: 1-based, inclusive, negatives counted from the end, clamped |
+| `bad_utf8(s)` | nil when `s` is valid UTF-8; else where the first byte that starts no valid sequence is, 1-based as `find`: a stray continuation byte, a sequence cut short (by the end too), an overlong form, a surrogate half, past U+10FFFF. `bad_utf8("caf\xe9")` is 4. Strings are bytes, so a file read whole is checked whole |
 | `trim(s)`, `upper(s)`, `lower(s)` | ASCII only |
 | `trim_start(s)`, `trim_end(s)` | as `trim`, one end only: spaces, tabs, `\r` and `\n` off the start, or off the end (`trim_end(line)` keeps a line's indent) |
 | `like(s, pattern)` | whether the whole of `s` matches: `*` is any run of bytes, `?` is one byte, any other byte is itself. Every byte looked at is a step, so a pattern that backtracks a long string runs out of steps |
@@ -864,7 +866,7 @@ Perl and Python sometimes take one more turn after it, so on "a",
 | builtin | gives |
 |---|---|
 | `now()` | the integer the host handed in: the only time a script has |
-| `budget()` | a map of what is left of `steps`, `reads`, `read_bytes`, `changes`, `change_bytes` and `output`, so a script can stop at a point of its own (the other budgets are not in it) |
+| `budget()` | a map of what is left of `steps`, `reads`, `read_bytes`, `changes`, `change_bytes`, `output` and `arena_bytes` (the values' arena, which every string read stays in), so a script can stop at a point of its own (the other budgets are not in it) |
 | `call_bytes()` | what one store call may bring, the call-bytes cap (a cap, never spent), so a scan sizes its parts to it: an integer, built without a map |
 | `print(...)` | scalars only. It evaluates every argument first, joins them with tabs, and ends with a newline: `print()` is an empty line, `print(nil, true)` is `nil<TAB>true` |
 | `arg(name[, default])` | the value the run was given as `name` (the runner's `name=value`), or `default` (nil unset): a script's inputs. An integer or boolean default reads the value as one (`true`, `false`, `1`, `0`); any other, the string. The live site's route gives no values |

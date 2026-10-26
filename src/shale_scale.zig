@@ -60,6 +60,7 @@ const scripts = [_]Script{
     .{ .name = "where_the_bytes_are", .src = @embedFile("script/examples/where_the_bytes_are.shale"), .reads_transcripts = false },
     .{ .name = "chat_topics", .src = @embedFile("script/examples/chat_topics.shale"), .reads_transcripts = false },
     .{ .name = "big_files", .src = @embedFile("script/examples/big_files.shale"), .reads_transcripts = false },
+    .{ .name = "bad_utf8", .src = @embedFile("script/examples/bad_utf8.shale"), .reads_transcripts = true },
 };
 
 /// The sizes of transcript tried: messages a topic.

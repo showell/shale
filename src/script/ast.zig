@@ -35,6 +35,7 @@ pub const Builtin = enum {
     contains,
     find,
     sub,
+    bad_utf8,
     trim,
     trim_start,
     trim_end,
