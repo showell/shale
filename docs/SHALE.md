@@ -1412,7 +1412,8 @@ script's.
 
 - **What a yield keeps:** the values the run still reaches are copied
   into a fresh arena: every local of every frame, the parts of an
-  expression half evaluated, a loop's list, the `const`s, `attempt`'s
+  expression half evaluated, the list of a loop still running (a
+  loop that has ended or broken off has let go of it), the `const`s, `attempt`'s
   answers being made, and the effects log. The old arena is then freed
   whole, so whatever the script made and let go of goes with it. A run
   that yields every minute holds what it keeps, not what it ever made.

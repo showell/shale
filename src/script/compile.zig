@@ -394,6 +394,12 @@ const Compiler = struct {
                 const end = try c.label();
                 c.patch(init, end);
                 c.patch(iter, end);
+                // The list's slot let go at the exit, a break's too: a finished
+                // loop's list is no longer the run's to keep at a `yield`.
+                _ = try c.emit(.{ .tag = .push_nil, .pos = s.pos });
+                c.push(1);
+                _ = try c.emit(.{ .tag = .store_local, .a = h, .pos = s.pos });
+                c.pop(1);
                 var loop = c.loops.pop().?;
                 for (loop.breaks.items) |j| c.patch(j, end);
                 loop.breaks.deinit(c.a);
