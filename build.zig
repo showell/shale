@@ -198,7 +198,7 @@ pub fn build(b: *std.Build) void {
     // The signer (src/shale_sign.zig): the key pair, made once, and a script
     // signed for a target.
     //   zig build shale-sign -- keygen [target] | pubkey [target] | sign <file.shale> <target> [minutes]
-//     | background <file.shale> <target> [minutes] | kill <target> [minutes]
+    //     | background <file.shale> <target> [minutes] | kill <target> [minutes]
     const signer = b.addExecutable(.{ .name = "shale-sign", .root_module = b.createModule(.{
         .root_source_file = b.path("src/shale_sign.zig"),
         .target = target,
