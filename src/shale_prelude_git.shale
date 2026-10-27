@@ -35,6 +35,7 @@ end
 -- `repo`'s real path, `"."` and `""` the root's; a stop, naming the call
 -- as `shown`, when it is not a folder.
 function git_real(repo, shown)
+  if not attempt(git_text, repo).ok then fail(shown .. ": its repo is a path (a string), such as \"\" or \"repos:dog-park\"") end
   if repo == "." then repo = "" end
   if repo ~= "" and not is_dir(repo) then fail(shown .. ": " .. repo .. " is not a folder") end
   return real(repo)
@@ -190,6 +191,7 @@ end
 -- and all, **refused once HEAD is on a remote branch**: a pushed commit
 -- rewritten is history someone may hold.
 function git_commit(repo, msg, opts?)
+  if opts ~= nil and has_key(opts, "all") then fail("`git_commit` takes `add = \"all\"` for every change, not `all`") end
   git_opts("git_commit", opts, {"add", "amend", "timeout_ms"})
   local add = nil
   if opts ~= nil then add = get(opts, "add") end
