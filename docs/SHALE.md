@@ -1134,7 +1134,8 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
 - `NAME=VALUE` is a value the script reads with `arg(NAME, default)`.
   On the live site's route a script has no values: `arg` gives its
   default.
-- `now()` is the wall clock; `SHALE_NOW` pins it.
+- `now()` is the wall clock **when the run started**, the same at every
+  call (`SHALE_NOW` pins it): to time a program, use `run`'s own `ms`.
 - **The Linux host, its mounts and the preludes after the core's** are
   "On Linux: behind the seam", below.
 - The runner sets the store's bases as a server does, so path limits are

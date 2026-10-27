@@ -549,7 +549,10 @@ the first two can give a quiet wrong answer, an empty list:
 - **There is no `write`**: `replace(p, s)` writes a file whole, `append`
   adds, and `create` refuses one already there.
 - **Functions are not values**: no closures and no anonymous functions.
-  Declare `function name(...)` at the top level.
+  Declare `function name(...)` at the top level (no `local function`). An
+  argument a caller may leave out is declared `opts?`.
+- **`now()` is when the run started**, the same at every call, so `now() -
+  t0` is always 0: a program's time is `run`'s own `ms` on its answer.
 - **A function sees only its parameters, its locals and the `const`s
   above it**, never the script's `local`s: `const X = 1`, or pass it in.
 - **One name per `local`**: `local a, b = 1, 2` is refused, and so are
