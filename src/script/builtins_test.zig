@@ -946,6 +946,26 @@ test "builtins: re_find's alternatives, \\b and nocase" {
     try f.expectOutput("print(re_match(\"A\", \"a\"), re_match(\"A\", \"a\", {nocase = true}), re_match(\"A\", \"a\"))", "false\ttrue\tfalse\n");
 }
 
+test "builtins: re_replace: every match, `\\1`, anchors over the whole text, empty matches a byte apart" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    // Every non-overlapping match, left to right; none leaves the text.
+    try f.expectOutput("print(re_replace(\"a1b22c333\", \"\\\\d+\", \"#\"), re_replace(\"abc\", \"z\", \"y\"))", "a#b#c#\tabc\n");
+    // `\\1` is the group's text; "" where the match did not pass through it.
+    try f.expectOutput("print(re_replace(\"x=1, y=22\", \"(\\\\w)=\", \"\\\\1:\"), re_replace(\"b\", \"(a)?b\", \"<\\\\1>\"))", "x:1, y:22\t<>\n");
+    // The rest of the replacement is literal.
+    try f.expectOutput("print(re_replace(\"ab\", \"(a)\", \"[\\\\2$1&%1]\"))", "[\\2$1&%1]b\n");
+    // `^`, `$` and `\\b` see the whole text, not what is left of it.
+    try f.expectOutput("print(re_replace(\"aaa\", \"^a\", \"b\"), re_replace(\"abab\", \"b$\", \"\"), re_replace(\"ab ab xab\", \"\\\\bab\", \"X\"))", "baa\taba\tX X xab\n");
+    // An empty match moves on a byte, the byte kept.
+    try f.expectOutput("print(re_replace(\"baaac\", \"a*\", \"-\"), re_replace(\"\", \"x*\", \"-\"), re_replace(\"ab\", \"\", \"|\"))", "-b--c-\t-\t|a|b|\n");
+    try f.expectOutput("print(re_replace(\"Fail fail\", \"fail\", \"ok\", {nocase = true}), re_replace(\"Fail fail\", \"fail\", \"ok\"))", "ok ok\tFail ok\n");
+    // `\\1` with no group to fill it is a mistake, not literal text.
+    try f.expectStop("print(re_replace(\"a\", \"a\", \"\\\\1\"))", .argument);
+    try f.expectStop("print(re_replace(\"a\", \"a\", \"b\", {nocase = 1}))", .type);
+}
+
 test "builtins: re_find's nocase must be a boolean" {
     var f: Fixture = undefined;
     try f.init();

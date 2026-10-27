@@ -545,7 +545,9 @@ the first two can give a quiet wrong answer, an empty list:
 - **Patterns are regular expressions, not Lua's.** The escape is `\`
   (`"\\."` in a string), and `%` is a plain character, so Lua's `%d+` or
   `[%w_]` matches nothing it should and finds nothing, quietly. One capture
-  group at most, and no `(?:`. A match is `{at, text, group}`.
+  group at most, and no `(?:`. A match is `{at, text, group}`. Lua's
+  `gsub` is `re_replace(s, pattern, replacement)`: every match replaced,
+  `\1` (`"\\1"` in a string) the group's text, not `%1`.
 - **`grep(p, text)` is plain text**, and finding nothing is an empty list,
   not an error. So `grep(p, "edit%(")` quietly finds nothing. A pattern over
   a file is `re_lines(read(p), pattern)`.

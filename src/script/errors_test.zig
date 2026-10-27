@@ -169,6 +169,8 @@ const cases = [_]Case{
     .{ .src = "local m = re_find(\"x\", \"a\\\\b+\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 4: `^`, `$`, `\\b` and `\\B` are places, not bytes: they cannot repeat" },
     .{ .src = "local m = re_find(\"x\", \"x\", {nocase = true, wide = true})", .line = 1, .column = 11, .class = .argument, .message = "`re_find` takes `nocase`, not `wide`" },
     .{ .src = "local m = re_match(\"x\", rep(\"a\", 257))", .line = 1, .column = 11, .class = .argument, .message = "`re_match`'s pattern is 257 bytes, and one may be at most 256" },
+    .{ .src = "local m = re_replace(\"x\", \"a{2}\", \"b\")", .line = 1, .column = 11, .class = .argument, .message = "`re_replace`'s pattern, at its byte 2: `{n,m}` is not in this subset: write the part out as often as it must come (`\\d\\d\\d?`), or `\\{` for the byte" },
+    .{ .src = "local m = re_replace(\"x\", \"x\", \"\\\\1\")", .line = 1, .column = 11, .class = .argument, .message = "`re_replace`'s replacement has `\\1`, and its pattern has no capture group" },
 };
 
 var out_buf: [4096]u8 = undefined;

@@ -541,6 +541,13 @@ fn add(p: *const Program, sc: *Scratch, list: *List, first: Thread, pos: usize, 
 /// Returns the leftmost match of `p` in `s`, the one a backtracking matcher
 /// would find first, examining at most `positions_most` positions.
 pub fn search(p: *const Program, sc: *Scratch, s: []const u8, positions_most: u64) Searched {
+    return searchFrom(p, sc, s, 0, positions_most);
+}
+
+/// `search` starting at byte `from` of `s`: the leftmost match that starts
+/// there or later, with `^`, `$` and `\b` still seeing the whole of `s`.
+pub fn searchFrom(p: *const Program, sc: *Scratch, s: []const u8, from: usize, positions_most: u64) Searched {
+    std.debug.assert(from <= s.len);
     var clist = &sc.a;
     var nlist = &sc.b;
     clist.reset();
@@ -548,7 +555,7 @@ pub fn search(p: *const Program, sc: *Scratch, s: []const u8, positions_most: u6
     var match_end: usize = 0;
     var positions: u64 = 0;
     var work: u64 = 0;
-    var pos: usize = 0;
+    var pos: usize = from;
     while (true) : (pos += 1) {
         if (positions == positions_most) return .{ .found = null, .positions = positions, .work = work, .finished = false };
         positions += 1;

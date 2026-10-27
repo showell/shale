@@ -586,7 +586,13 @@ const Ref = struct {
 
     /// The leftmost match, as `regex.search` gives it.
     fn find(r: Ref, alt: GAlt) ?regex.Found {
-        for (0..r.s.len + 1) |start| {
+        return r.findFrom(alt, 0);
+    }
+
+    /// The leftmost match starting at `from` or later, as `regex.searchFrom`
+    /// gives it.
+    fn findFrom(r: Ref, alt: GAlt, from: usize) ?regex.Found {
+        for (from..r.s.len + 1) |start| {
             if (r.alts(alt, &Cont{ .done = {} }, start, .{})) |h| return .{
                 .start = start,
                 .end = h.end,
@@ -696,6 +702,61 @@ test "expensive fuzz: property: re_find and re_match in a script say what the ba
         if ((Ref{ .s = s, .nocase = nocase }).find(tree)) |w| {
             try want.print(testing.allocator, "{d}\t[{s}]\t[{s}]\ttrue\n", .{ w.start + 1, s[w.start..w.end], if (has_group) groupText(s, w) else "-" });
         } else try want.appendSlice(testing.allocator, "none\tfalse\n");
+        const out = try f.output(src.items);
+        defer testing.allocator.free(out);
+        errdefer std.debug.print("round {d}: /{s}/{s} on \"{f}\"\n", .{ round, pattern.items, if (nocase) "i" else "", std.zig.fmtString(s) });
+        try testing.expectEqualStrings(want.items, out);
+    }
+}
+
+test "expensive fuzz: property: re_replace in a script says what repeated searches of the backtracking matcher over the whole text say, through both engines" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    var prng = std.Random.DefaultPrng.init(2302);
+    const rand = prng.random();
+    var src: std.ArrayList(u8) = .empty;
+    defer src.deinit(testing.allocator);
+    var pattern: std.ArrayList(u8) = .empty;
+    defer pattern.deinit(testing.allocator);
+    var want: std.ArrayList(u8) = .empty;
+    defer want.deinit(testing.allocator);
+    var s_buf: [16]u8 = undefined;
+    for (0..300) |round| {
+        var arena = std.heap.ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        var group_left = true;
+        const tree = try genAlt(rand, arena.allocator(), 6, &group_left);
+        pattern.clearRetainingCapacity();
+        try render(&pattern, tree);
+        const nocase = rand.boolean();
+        const s = s_buf[0..rand.uintAtMost(usize, s_buf.len)];
+        for (s) |*c| c.* = gen_alphabet[rand.uintLessThan(usize, gen_alphabet.len)];
+        const has_group = std.mem.indexOfScalar(u8, pattern.items, '(') != null;
+        src.clearRetainingCapacity();
+        try src.appendSlice(testing.allocator, "local s = \"");
+        try appendShaleString(&src, s);
+        try src.appendSlice(testing.allocator, if (nocase) "\"\nlocal o = {nocase = true}\nlocal p = \"" else "\"\nlocal o = {nocase = false}\nlocal p = \"");
+        try appendShaleString(&src, pattern.items);
+        try src.appendSlice(testing.allocator, if (has_group) "\"\nprint(\"[\" .. re_replace(s, p, \"<\\\\1>\", o) .. \"]\")" else "\"\nprint(\"[\" .. re_replace(s, p, \"<>\", o) .. \"]\")");
+        // The oracle: search from the end of the last match (a byte on
+        // after an empty one), over the whole of `s`.
+        const ref: Ref = .{ .s = s, .nocase = nocase };
+        want.clearRetainingCapacity();
+        try want.append(testing.allocator, '[');
+        var at: usize = 0;
+        while (at <= s.len) {
+            const w = ref.findFrom(tree, at) orelse break;
+            try want.print(testing.allocator, "{s}<{s}>", .{ s[at..w.start], groupText(s, w) });
+            if (w.end > w.start) {
+                at = w.end;
+            } else {
+                if (w.end < s.len) try want.append(testing.allocator, s[w.end]);
+                at = w.end + 1;
+            }
+        }
+        if (at < s.len) try want.appendSlice(testing.allocator, s[at..]);
+        try want.appendSlice(testing.allocator, "]\n");
         const out = try f.output(src.items);
         defer testing.allocator.free(out);
         errdefer std.debug.print("round {d}: /{s}/{s} on \"{f}\"\n", .{ round, pattern.items, if (nocase) "i" else "", std.zig.fmtString(s) });

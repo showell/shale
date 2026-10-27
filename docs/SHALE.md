@@ -588,6 +588,7 @@ change_bytes` past those budgets.
 | `between(s, a, b)` | the text between, or nil | |
 | `re_find(s, pattern[, {nocase}])` | the leftmost match, `{at, text[, group]}`, or nil | `argument` for a pattern past 256 bytes or with what the subset leaves out |
 | `re_match(s, pattern[, {nocase}])` | a boolean: whether `s` holds a match | as `re_find` |
+| `re_replace(s, pattern, replacement[, {nocase}])` | `s` with every match replaced | as `re_find`; `argument` for `\1` in the replacement with no group in the pattern |
 | `rep(s, n)` | `s`, `n` times | `argument` for `n` < 0 |
 | `substitute(s, old, new)` | `s` with each `old` replaced | `argument` for `old` = "" |
 | `path(a, b, ...)` | the parts joined with `/` | |
@@ -744,6 +745,7 @@ error
 |---|---|
 | `re_find(s, pattern[, {nocase = true}])` | the leftmost match: `at` (1-based, as `find`) and `text`, and `group`, the capture group's text, when the pattern has one ("" where the match did not go through it); nil when there is none: `if m == nil` (or `if m then`). `nocase`: ASCII letters match either case |
 | `re_match(s, pattern[, {nocase = true}])` | whether `s` holds a match, anywhere, as `grep` says of a line; `^` and `$` pin it to the whole |
+| `re_replace(s, pattern, replacement[, {nocase = true}])` | `s` with every non-overlapping match replaced, left to right; each search sees the whole of `s`, so `^`, `$` and `\b` mean its real edges. The replacement is literal but for `\1` (`"\\1"` in a string), the group's text ("" where the match did not go through it); `\1` with no group in the pattern stops. After an empty match the next search starts a byte on, that byte kept: `re_replace("ab", "", "-")` is `-a-b-`. Each search is charged as `re_find`'s, so a pattern whose search looks past each short match to the end of `s` costs steps in the square of the length |
 
 | in a pattern | is |
 |---|---|

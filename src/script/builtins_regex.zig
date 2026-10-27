@@ -1,4 +1,4 @@
-//! The regular-expression builtins, `re_find` and `re_match`, over regex.zig's
+//! The regular-expression builtins, `re_find`, `re_match` and `re_replace`, over regex.zig's
 //! linear-time subset. A pattern is compiled once per run (cached in the
 //! machine's memory) at a step per byte; a search is charged a step per byte
 //! of the string, plus one for its end, times the pattern's instructions, so a
@@ -20,6 +20,7 @@ const spec = bi.spec;
 pub const specs = [_]bi.Spec{
     spec(.re_find, 2, 3, reFind),
     spec(.re_match, 2, 3, reMatch),
+    spec(.re_replace, 3, 4, reReplace),
 };
 
 /// Returns the pattern's compiled program from the run's cache, compiling and
@@ -41,8 +42,11 @@ fn program(run: *Run, pos: ast.Pos, b: B, pattern: []const u8, options: regex.Op
 /// Parses the options map a call may end with: `{nocase = true}`.
 fn optionsArg(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!regex.Options {
     var o: regex.Options = .{};
-    if (args.len < 3) return o;
-    const m = try bi.mapArg(run, pos, b, args[2]);
+    // The options follow the string and the pattern, and `re_replace`'s
+    // replacement too.
+    const at: usize = if (b == .re_replace) 3 else 2;
+    if (args.len <= at) return o;
+    const m = try bi.mapArg(run, pos, b, args[at]);
     for (m.map.keys(), m.map.values()) |k, x| {
         if (!std.mem.eql(u8, k, "nocase")) return run.fail(pos, .argument, "`{s}` takes `nocase`, not `{s}`", .{ @tagName(b), k });
         o.nocase = switch (x) {
@@ -57,13 +61,18 @@ fn optionsArg(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!regex.Op
 /// all of it, it stops where they run out.
 fn searched(run: *Run, pos: ast.Pos, b: B, s: []const u8, pattern: []const u8, args: []const Value) Error!struct { ?regex.Found, *regex.Cached } {
     const c = try program(run, pos, b, pattern, try optionsArg(run, pos, b, args));
+    return .{ try searchedFrom(run, pos, c, s, 0), c };
+}
+
+/// One search of `s` from byte `from`, charged as `searched` charges.
+fn searchedFrom(run: *Run, pos: ast.Pos, c: *regex.Cached, s: []const u8, from: usize) Error!?regex.Found {
     const per: u64 = c.program.insts.len;
     const most = (run.budgets.steps -| run.steps) / per + 1;
-    const r = regex.search(&c.program, &c.scratch, s, most);
+    const r = regex.searchFrom(&c.program, &c.scratch, s, from, most);
     run.tally(r.work);
     try run.charge(pos, r.positions * per);
     std.debug.assert(r.finished);
-    return .{ r.found, c };
+    return r.found;
 }
 
 /// `re_find(s, pattern[, {nocase}])` returns the leftmost match of `pattern` in
@@ -92,4 +101,58 @@ fn reMatch(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const pattern = try bi.stringArg(run, pos, .re_match, args[1], "its pattern");
     const found, _ = try searched(run, pos, .re_match, s, pattern, args);
     return .{ .boolean = found != null };
+}
+
+/// `re_replace(s, pattern, replacement[, {nocase}])` returns `s` with every
+/// non-overlapping match of `pattern` replaced, left to right, each search
+/// over the whole of `s` so `^`, `$` and `\b` see its real edges. The
+/// replacement is literal but for `\1`, the capture group's text ("" where the
+/// match did not pass through it); `\1` with no group in the pattern is an
+/// error. After an empty match the next search starts a byte on, that byte
+/// kept, so an empty match never repeats.
+fn reReplace(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+    const s = try bi.stringArg(run, pos, .re_replace, args[0], "its first argument");
+    const pattern = try bi.stringArg(run, pos, .re_replace, args[1], "its pattern");
+    const with = try bi.stringArg(run, pos, .re_replace, args[2], "its replacement");
+    const c = try program(run, pos, .re_replace, pattern, try optionsArg(run, pos, .re_replace, args));
+    const group = c.program.group;
+    if (!group and std.mem.indexOf(u8, with, "\\1") != null) return run.fail(pos, .argument, "`re_replace`'s replacement has `\\1`, and its pattern has no capture group", .{});
+    try bi.chargeBytes(run, pos, s.len + with.len);
+    const uses = if (group) std.mem.count(u8, with, "\\1") else 0;
+    var out: std.ArrayList(u8) = .empty;
+    const a = run.alloc;
+    var at: usize = 0;
+    var replaced = false;
+    while (at <= s.len) {
+        const f = try searchedFrom(run, pos, c, s, at) orelse break;
+        replaced = true;
+        const g = if (f.group) |gr| s[gr[0]..gr[1]] else "";
+        // A step a byte this match adds, charged before it is written.
+        const grown = std.math.mul(usize, uses, g.len) catch return run.budgetStop(pos, .arena);
+        try run.charge(pos, (f.start - at) + with.len - 2 * uses + grown + 1);
+        out.appendSlice(a, s[at..f.start]) catch return run.oom(pos);
+        var i: usize = 0;
+        while (i < with.len) {
+            if (group and with[i] == '\\' and i + 1 < with.len and with[i + 1] == '1') {
+                out.appendSlice(a, g) catch return run.oom(pos);
+                i += 2;
+            } else {
+                out.append(a, with[i]) catch return run.oom(pos);
+                i += 1;
+            }
+        }
+        if (f.end > f.start) {
+            at = f.end;
+        } else {
+            if (f.end < s.len) out.append(a, s[f.end]) catch return run.oom(pos);
+            at = f.end + 1;
+        }
+    }
+    if (!replaced) return .{ .string = s };
+    if (at < s.len) {
+        try run.charge(pos, s.len - at);
+        out.appendSlice(a, s[at..]) catch return run.oom(pos);
+    }
+    run.tally(out.items.len);
+    return .{ .string = out.items };
 }
