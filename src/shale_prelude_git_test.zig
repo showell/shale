@@ -94,6 +94,9 @@ test "git prelude: a git error stops, naming the call and git's words; an option
     try t.expectStop("git_show(\"\", \"HEAD:nope\")", .atomic, .fail, "`git show HEAD:nope` exited 128: fatal: path 'nope' does not exist in 'HEAD'");
     try t.expectStop("git_log(\"\", {count = 1})", .atomic, .fail, "`git_log` takes n, range, ref, fields and timeout_ms, not `count`");
     try t.expectStop("git_status(\"nowhere\")", .atomic, .fail, "`git status");
+    // A repo that is not a path, and `all` for `add = "all"`, are named.
+    try t.expectStop("git_status({\"x\"})", .atomic, .fail, "`git status`: its repo is a path (a string)");
+    try t.expectStop("git_commit(\"\", \"m\", {all = true})", .atomic, .fail, "`git_commit` takes `add = \"all\"` for every change, not `all`");
 }
 
 test "git prelude: commit by tracked files, by all, by paths; a failed one stops" {
