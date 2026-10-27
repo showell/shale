@@ -472,7 +472,7 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
         };
         if (ms < 0 or ms > sleep_most_ms) return run.fail(pos, .argument, "`sleep` takes 0 to {d} ms, not {d}", .{ sleep_most_ms, ms });
         try run.charge(pos, 1);
-        run.io.sleep(.fromMilliseconds(ms), .awake) catch {};
+        run.io.sleep(.fromMilliseconds(ms), .awake) catch return run.fail(pos, .host, "`sleep` was cancelled after its start", .{});
         h.time.sleep_ms += @intCast(ms);
         return .nil;
     }
