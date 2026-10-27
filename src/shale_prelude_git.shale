@@ -127,6 +127,9 @@ function git_log(repo, opts?)
       local values = split(record, "\x1f")
       local c = {}
       for i = 1, #fields do c[fields[i]] = values[i] end
+      -- One spelling of UTC whatever the git: newer ones write `%aI`'s
+      -- zero offset as `Z`, 2.43 as `+00:00`.
+      if has_key(c, "date") and ends_with(c.date, "Z") then c.date = sub(c.date, 1, #c.date - 1) .. "+00:00" end
       push(got, c)
     end
   end
