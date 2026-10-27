@@ -453,7 +453,7 @@ fn absolute(h: *Host, run: *Run, pos: ast.Pos, p: []const u8) Error![]const u8 {
 /// A Shale path's OS path, through the mounts or the root, made absolute.
 pub fn osPath(h: *Host, run: *Run, pos: ast.Pos, v: Value, allow_root: bool) Error![]const u8 {
     const p = try script.builtins_store.pathArg(run, pos, .host, v, allow_root);
-    return absolute(h, run, pos, setup.trimSlash(p.full));
+    return absolute(h, run, pos, setup.trimSlash(p.full()));
 }
 
 fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []const Value) Error!Value {

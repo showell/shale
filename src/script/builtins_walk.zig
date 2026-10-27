@@ -79,9 +79,9 @@ fn under(run: *Run, pos: ast.Pos, folder: []const u8, name: []const u8) Error![]
 /// in parts takes each entry once whatever came or went in between. `after` is
 /// a path the walk returned, under `p`; "" or `p` itself means the start.
 fn walkResume(run: *Run, pos: ast.Pos, p: Path, o: WalkOptions, after: []const u8, levels: *std.ArrayList(Level)) Error!void {
-    if (after.len == 0 or std.mem.eql(u8, after, p.rel)) return;
-    const skip = p.rel.len + @intFromBool(p.rel.len > 0 and p.rel[p.rel.len - 1] != ':');
-    const rest = if (p.rel.len == 0) after else if (after.len > skip and std.mem.startsWith(u8, after, p.rel) and (skip == p.rel.len or after[p.rel.len] == '/')) after[skip..] else return run.fail(pos, .argument, "`walk`: `after` is \"{s}\", which is not under \"{s}\": it is a path an earlier walk of it returned", .{ after, p.rel });
+    if (after.len == 0 or std.mem.eql(u8, after, p.rel())) return;
+    const skip = p.rel().len + @intFromBool(p.rel().len > 0 and p.rel()[p.rel().len - 1] != ':');
+    const rest = if (p.rel().len == 0) after else if (after.len > skip and std.mem.startsWith(u8, after, p.rel()) and (skip == p.rel().len or after[p.rel().len] == '/')) after[skip..] else return run.fail(pos, .argument, "`walk`: `after` is \"{s}\", which is not under \"{s}\": it is a path an earlier walk of it returned", .{ after, p.rel() });
     var parts = std.mem.splitScalar(u8, rest, '/');
     while (parts.next()) |part| {
         const top = &levels.items[levels.items.len - 1];
@@ -183,10 +183,10 @@ fn walk(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         }
     }
     try countRead(run, pos);
-    const st = (store.statOrNull(run.io, a, p.full) catch |e| return storeFailed(run, pos, .walk, p.rel, e)) orelse return storeFailed(run, pos, .walk, p.rel, error.FileNotFound);
-    if (st.kind != .directory) return storeFailed(run, pos, .walk, p.rel, error.NotDir);
+    const st = (store.statOrNull(run.io, a, p.full()) catch |e| return storeFailed(run, pos, .walk, p.rel(), e)) orelse return storeFailed(run, pos, .walk, p.rel(), error.FileNotFound);
+    if (st.kind != .directory) return storeFailed(run, pos, .walk, p.rel(), error.NotDir);
     var levels: std.ArrayList(Level) = .empty;
-    levels.append(a, .{ .rel = p.rel, .full = p.full, .entries = try sortedEntries(run, pos, .walk, p.full, p.rel), .depth = 1 }) catch return run.oom(pos);
+    levels.append(a, .{ .rel = p.rel(), .full = p.full(), .entries = try sortedEntries(run, pos, .walk, p.full(), p.rel()), .depth = 1 }) catch return run.oom(pos);
     if (o.after) |after| try walkResume(run, pos, p, o, after, &levels);
     const out = try run.newTable(pos);
     out.kind = .list;

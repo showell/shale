@@ -41,8 +41,22 @@ pub const specs = [_]bi.Spec{
 ///
 /// **SEALED** (metal-vmm QUEUE 250): only `pathArg` makes one, so a call that
 /// takes a `Path` took a checked one. A literal without `path_seal` does not
-/// compile, and cookbook/sealed.shale refuses one that sets it outside this file.
-pub const Path = struct { full: []const u8, rel: []const u8, path_seal: Seal };
+/// compile, and cookbook/sealed.shale refuses one that sets it, or changes
+/// `path_full` or `path_rel` of one made, outside this file. `full()` and
+/// `rel()` read them.
+pub const Path = struct {
+    path_full: []const u8,
+    path_rel: []const u8,
+    path_seal: Seal,
+
+    pub fn full(p: Path) []const u8 {
+        return p.path_full;
+    }
+
+    pub fn rel(p: Path) []const u8 {
+        return p.path_rel;
+    }
+};
 
 const Seal = struct {};
 
@@ -54,10 +68,10 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     try run.charge(pos, given.len);
     // A path the host's hook resolves (a mount's, on Linux) is the host's; any other
     // follows the root's rules.
-    if (run.path_hook) |h| if (try h.resolve(h.ctx, run, pos, rel)) |full| return .{ .full = full, .rel = rel, .path_seal = .{} };
+    if (run.path_hook) |h| if (try h.resolve(h.ctx, run, pos, rel)) |full| return .{ .path_full = full, .path_rel = rel, .path_seal = .{} };
     if (rel.len == 0) {
         if (!allow_root) return run.fail(pos, .argument, "`{s}(\"\")` would act on the whole root: name a path of at least one part", .{@tagName(b)});
-        return .{ .full = run.root, .rel = "", .path_seal = .{} };
+        return .{ .path_full = run.root, .path_rel = "", .path_seal = .{} };
     }
     if (rel[0] == '/') return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root", .{ @tagName(b), rel });
     var it = std.mem.splitScalar(u8, rel, '/');
@@ -67,7 +81,7 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     // A root of `/` takes no second `/`: `//x` is an empty part to the store.
     const sep = if (std.mem.endsWith(u8, run.root, "/")) "" else "/";
     const full = std.fmt.allocPrint(run.alloc, "{s}{s}{s}", .{ run.root, sep, rel }) catch return run.oom(pos);
-    return .{ .full = full, .rel = rel, .path_seal = .{} };
+    return .{ .path_full = full, .path_rel = rel, .path_seal = .{} };
 }
 
 /// A store error in plain words; its name follows in parentheses.
@@ -120,9 +134,9 @@ fn ls(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const p = try pathArg(run, pos, .ls, args[0], true);
     try countRead(run, pos);
     const a = run.alloc;
-    const st = (store.statOrNull(run.io, a, p.full) catch |e| return storeFailed(run, pos, .ls, p.rel, e)) orelse return storeFailed(run, pos, .ls, p.rel, error.FileNotFound);
-    if (st.kind != .directory) return storeFailed(run, pos, .ls, p.rel, error.NotDir);
-    const entries = try sortedEntries(run, pos, .ls, p.full, p.rel);
+    const st = (store.statOrNull(run.io, a, p.full()) catch |e| return storeFailed(run, pos, .ls, p.rel(), e)) orelse return storeFailed(run, pos, .ls, p.rel(), error.FileNotFound);
+    if (st.kind != .directory) return storeFailed(run, pos, .ls, p.rel(), error.NotDir);
+    const entries = try sortedEntries(run, pos, .ls, p.full(), p.rel());
     const out = try run.newTable(pos);
     out.list.ensureTotalCapacity(a, entries.len) catch return run.oom(pos);
     for (entries) |en| out.list.appendAssumeCapacity(.{ .string = en.name });
@@ -135,7 +149,7 @@ fn stat(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const p = try pathArg(run, pos, .stat, args[0], true);
     try countRead(run, pos);
     const a = run.alloc;
-    const st = store.stat(run.io, a, p.full) catch |e| return storeFailed(run, pos, .stat, p.rel, e);
+    const st = store.stat(run.io, a, p.full()) catch |e| return storeFailed(run, pos, .stat, p.rel(), e);
     const out = try run.newTable(pos);
     out.map.put(a, "size", .{ .int = @intCast(st.size) }) catch return run.oom(pos);
     out.map.put(a, "kind", .{ .string = @tagName(st.kind) }) catch return run.oom(pos);
@@ -147,12 +161,12 @@ fn stat(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
 fn exists(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const p = try pathArg(run, pos, .exists, args[0], true);
     try countRead(run, pos);
-    return .{ .boolean = store.has(run.io, run.alloc, p.full) catch |e| return storeFailed(run, pos, .exists, p.rel, e) };
+    return .{ .boolean = store.has(run.io, run.alloc, p.full()) catch |e| return storeFailed(run, pos, .exists, p.rel(), e) };
 }
 
 fn isDir(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const p = try pathArg(run, pos, .is_dir, args[0], true);
     try countRead(run, pos);
-    const st = store.statOrNull(run.io, run.alloc, p.full) catch |e| return storeFailed(run, pos, .is_dir, p.rel, e);
+    const st = store.statOrNull(run.io, run.alloc, p.full()) catch |e| return storeFailed(run, pos, .is_dir, p.rel(), e);
     return .{ .boolean = if (st) |x| x.kind == .directory else false };
 }

@@ -215,8 +215,8 @@ fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
             at.append(a, i) catch return run.oom(pos);
         }
         const shown = e.old[0..@min(e.old.len, 40)];
-        if (at.items.len == 0) return run.fail(pos, .argument, "`edit`: \"{s}\" is not in {s}{s}{s}{s}", .{ shown, p.rel, if (e.word) " as a whole word" else "", missHint(a, now, e.old) catch return run.oom(pos), which });
-        if (at.items.len > 1 and !e.all) return run.fail(pos, .argument, "`edit`: \"{s}\" is in {s} {d} times: a longer `old` picks one, or `{{all = true}}` changes every one{s}", .{ shown, p.rel, at.items.len, which });
+        if (at.items.len == 0) return run.fail(pos, .argument, "`edit`: \"{s}\" is not in {s}{s}{s}{s}", .{ shown, p.rel(), if (e.word) " as a whole word" else "", missHint(a, now, e.old) catch return run.oom(pos), which });
+        if (at.items.len > 1 and !e.all) return run.fail(pos, .argument, "`edit`: \"{s}\" is in {s} {d} times: a longer `old` picks one, or `{{all = true}}` changes every one{s}", .{ shown, p.rel(), at.items.len, which });
         // Spans are recorded from the last occurrence back, so each offset
         // still refers to the text before this edit.
         var next: std.ArrayList(u8) = .empty;
@@ -238,7 +238,7 @@ fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     }
     // These duplicate `rewrite` so that `rewrite` stays unreferenced, and
     // out of the image, on metal.
-    try writeDiff(run, pos, p.rel, was, now, spans.items);
+    try writeDiff(run, pos, p.rel(), was, now, spans.items);
     _ = try changeAt(run, pos, b, .replace, p, now);
     return .{ .int = @intCast(replaced_n) };
 }
@@ -248,7 +248,7 @@ fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
 /// logged as `edit` and subject to dry runs, overlays and budgets like any
 /// change. This is `edit`'s tail, for the Linux host's `zig_rename`.
 pub fn rewrite(run: *Run, pos: ast.Pos, p: Path, was: []const u8, now: []const u8, spans: []const Span) Error!void {
-    try writeDiff(run, pos, p.rel, was, now, spans);
+    try writeDiff(run, pos, p.rel(), was, now, spans);
     _ = try changeAt(run, pos, .edit, .replace, p, now);
 }
 
@@ -362,7 +362,7 @@ fn storeChange(run: *Run, pos: ast.Pos, c: Change, args: []const Value) Error!Va
 /// written; a change of two files (`zig_move`) asks for both first. A no-op
 /// on metal.
 pub fn mayChange(run: *Run, pos: ast.Pos, p: Path) Error!void {
-    if (comptime interp.change_check_on) if (run.path_hook) |h| if (h.may_change) |f| try f(h.ctx, run, pos, p.rel, p.full);
+    if (comptime interp.change_check_on) if (run.path_hook) |h| if (h.may_change) |f| try f(h.ctx, run, pos, p.rel(), p.full());
 }
 
 /// A change to `p` with `data`, logged under `b`'s name.
@@ -388,19 +388,19 @@ fn changeAt(run: *Run, pos: ast.Pos, b: B, c: Change, p: Path, data: []const u8)
     // missing: any other failure to stat is the store's own error, logged,
     // and stops the run.
     const looked: ?anyerror = switch (c) {
-        .remove, .remove_tree => if (store.statOrNull(io, a, p.full)) |st| (if (st == null) error.FileNotFound else null) else |e| e,
+        .remove, .remove_tree => if (store.statOrNull(io, a, p.full())) |st| (if (st == null) error.FileNotFound else null) else |e| e,
         else => null,
     };
     const outcome: ?anyerror = if (looked) |e| e else switch (c) {
-        .replace => if (store.replace(io, a, p.full, data, .{})) |_| null else |e| e,
-        .append => if (store.append(io, a, p.full, data)) |_| null else |e| e,
-        .mkdir => if (store.makeDir(io, a, p.full)) |_| null else |e| e,
-        .remove => if (store.remove(io, a, p.full)) |_| null else |e| e,
-        .remove_tree => if (store.removeTree(io, a, p.full)) |_| null else |e| e,
+        .replace => if (store.replace(io, a, p.full(), data, .{})) |_| null else |e| e,
+        .append => if (store.append(io, a, p.full(), data)) |_| null else |e| e,
+        .mkdir => if (store.makeDir(io, a, p.full())) |_| null else |e| e,
+        .remove => if (store.remove(io, a, p.full())) |_| null else |e| e,
+        .remove_tree => if (store.removeTree(io, a, p.full())) |_| null else |e| e,
     };
     // Every attempted change is logged with its outcome; a failed one also
     // stops the run.
-    run.effects.appendAssumeCapacity(.{ .op = @tagName(b), .path = p.rel, .outcome = if (outcome) |e| @errorName(e) else "ok" });
-    if (outcome) |e| return storeFailed(run, pos, b, p.rel, e);
+    run.effects.appendAssumeCapacity(.{ .op = @tagName(b), .path = p.rel(), .outcome = if (outcome) |e| @errorName(e) else "ok" });
+    if (outcome) |e| return storeFailed(run, pos, b, p.rel(), e);
     return .nil;
 }

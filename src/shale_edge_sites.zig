@@ -16,6 +16,7 @@ pub const unreachable_from_requests = [_]Site{
     .{ .file = "shale_fixture.zig", .func = "main", .why = "the program Shale's run tests spawn, not the server (metal-vmm QUEUE 233)" },
     .{ .file = "shale_jobs.zig", .func = "parseRecord", .why = "a job's record its reaper wrote, read by the Linux shale CLI, not the server (metal-vmm QUEUE 233)" },
     .{ .file = "shale_host_procs.zig", .func = "stat", .why = "the kernel's /proc/<pid>/stat, read by the Linux shale CLI's `procs`, not the server" },
+    .{ .file = "shale_host_procs.zig", .func = "uidOf", .why = "the kernel's /proc/<pid>/status, read by the Linux shale CLI's `procs`, not the server" },
     .{ .file = "shale_host_procs.zig", .func = "list", .why = "/proc's folder names, read by the Linux shale CLI's `procs`, not the server" },
     .{ .file = "shale_host_procs.zig", .func = "uidOf", .why = "the kernel's /proc/<pid>/status Uid line, read by the Linux shale CLI's `procs`, not the server" },
     .{ .file = "shale_sign.zig", .func = "lastFor", .why = "the signer, on the box, not the server" },
