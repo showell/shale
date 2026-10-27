@@ -6,7 +6,8 @@
 --   state_effect  an effect (`!`) named as a state: `held_raw!`, a past
 --                 participle first, `done!`, `ready!`
 --   question      `is_*`, `has_*`, `can_*`, `should_*` that returns no
---                 `Bool`, or that has an effect (`is_open!`)
+--                 `Bool`, or that has an effect (`is_open!`), or a `Bool`
+--                 named as a state (`marked : Str -> Bool`)
 --   vague         a name of nothing but vague words: `handle_data`,
 --                 `process!`, `do_it`
 --   name_type     a `*_count` value that is no integer, a `*_path` one
@@ -83,6 +84,7 @@ function hunt(p)
       if effect and not is_annotation and is_participle(ws[1]) then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
       local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
       if asks and not is_annotation and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end
+      if is_annotation and result_of(t) == "Bool" and contains(t, "->") and is_participle(ws[1]) then say(p, i, "question", "`" .. full .. "` gives a `Bool` but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
       if asks and is_annotation and not effect and result_of(t) ~= "Bool" then say(p, i, "question", "`" .. full .. "` asks a question but gives `" .. result_of(t) .. "`") end
       if not is_annotation then
         local all_vague = true

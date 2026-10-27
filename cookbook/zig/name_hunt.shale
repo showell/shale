@@ -5,7 +5,8 @@
 --   state_effect  a function with effects (it takes `io`, an `Io` or a
 --                 store) named as a state, not a verb: `held*`, a past
 --                 participle first (`loaded`, `kept`), `done`, `ready`
---   question      `is*`, `has*`, `can*`, `should*` that returns no bool
+--   question      `is*`, `has*`, `can*`, `should*` that returns no bool,
+--                 or a bool named as a state (`marked`): ask it, `isSigned`
 --   vague         a name of nothing but vague words: `handle`,
 --                 `process`, `doIt`, `handleData`, `manageStuff`
 --   name_type     a `*count` parameter that is no integer, a `*path` one
@@ -115,7 +116,9 @@ function hunt(p)
       for q in params do
         if q.name == "io" or contains(q.type, "Io") or contains(lower(q.type), "store") then effect = true end
       end
-      if effect and #ws > 0 and is_participle(ws[1]) then say(p, line, "state_effect", "`" .. name .. "` has effects (takes io or a store) but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
+      local gives_bool = ret == "bool" or ret == "!bool"
+      if gives_bool and #ws > 0 and is_participle(ws[1]) then say(p, line, "question", "`" .. name .. "` gives a bool but is named as a state, `" .. ws[1] .. "`: ask it (`is*`, `has*`)") end
+      if effect and not gives_bool and #ws > 0 and is_participle(ws[1]) then say(p, line, "state_effect", "`" .. name .. "` has effects (takes io or a store) but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
 
       if #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should") and not contains(ret, "bool") and ret ~= "" then say(p, line, "question", "`" .. name .. "` asks a question but returns `" .. ret .. "`") end
 
