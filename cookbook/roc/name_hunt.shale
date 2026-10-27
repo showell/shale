@@ -1,0 +1,128 @@
+-- **AWKWARD NAMES IN ROC, A QUESTION EACH** (metal-vmm QUEUE 256): the
+-- same five heuristics as `cookbook/zig/name_hunt.shale`, read from Roc's
+-- top-level annotations (`name : Type`) and definitions (`name = ...`).
+-- A finding is a question for a reader, never a verdict:
+--
+--   state_effect  an effect (`!`) named as a state: `held_raw!`, a past
+--                 participle first, `done!`, `ready!`
+--   question      `is_*`, `has_*`, `can_*`, `should_*` that returns no
+--                 `Bool`, or that has an effect (`is_open!`)
+--   vague         a name of nothing but vague words: `handle_data`,
+--                 `process!`, `do_it`
+--   name_type     a `*_count` value that is no integer, a `*_path` one
+--                 that is no `Str`
+--   negative      a `no_*`/`not_*` `Bool`, an `is_not_*`
+--
+-- One line a finding, `path:line: <check>: <why>`, then the counts.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob=chat/**/*.roc
+--   shale cookbook:roc/name_hunt.shale self_test=1
+--
+-- `self_test=1` runs it over `cookbook/roc/plants/name_hunt/`, one plant a
+-- check, each named for its check: every check must fire on its own plant
+-- and on no other. Only top-level names (column 1) are read.
+--
+-- budget: steps=200000000
+
+const SELF = arg("self_test", "") == "1"
+const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative"}
+
+const PARTICIPLES = {held = true, done = true, ready = true, kept = true, gone = true, sent = true, made = true, found = true, taken = true, given = true, shown = true, built = true, seen = true, known = true, stale = true, dirty = true}
+const ED_VERBS = {need = true, feed = true, seed = true, embed = true, speed = true, shed = true, bleed = true, proceed = true, exceed = true, succeed = true, breed = true}
+const VAGUE = {handle = true, process = true, ["do"] = true, manage = true, perform = true, run = true, data = true, info = true, stuff = true, tmp = true, temp = true, helper = true, thing = true, things = true, it = true, misc = true, util = true, item = true, value = true, all = true, ["object"] = true}
+const ENTRY = {handle = true, run = true, main = true}
+const INTS = {U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true}
+
+const found = {}
+for c in CHECKS do found[c] = 0 end
+const per_file = {}
+
+function say(p, line, check, why)
+  print(p .. ":" .. line .. ": " .. check .. ": " .. why)
+  found[check] = found[check] + 1
+  per_file[p .. "|" .. check] = true
+  return nil
+end
+
+function is_participle(w)
+  if has_key(PARTICIPLES, w) then return true end
+  return #w > 3 and ends_with(w, "ed") and not has_key(ED_VERBS, w)
+end
+
+-- A type's result: what follows its last `->` or `=>`, or the whole.
+function result_of(t)
+  local at = 0
+  local i = 1
+  while true do
+    local a = find(t, "->", i)
+    local b = find(t, "=>", i)
+    local next = a
+    if next == nil or (b ~= nil and b < next) then next = b end
+    if next == nil then break end
+    at = next
+    i = next + 2
+  end
+  if at == 0 then return trim(t) end
+  return trim(sub(t, at + 2))
+end
+
+function hunt(p)
+  local i = 0
+  for l in lines(read(p)) do
+    i = i + 1
+    -- The name (its `!` too), `:` or `=`, and what follows.
+    local m = re_find(l, "^([a-z][a-z0-9_]*)(!?) ([:=]) (.*)$")
+    if m ~= nil then
+      local name = m.groups[1]
+      local effect = m.groups[2] == "!"
+      local full = name .. m.groups[2]
+      local ws = split(name, "_")
+      local is_annotation = m.groups[3] == ":"
+      local t = trim(m.groups[4])
+      if effect and not is_annotation and is_participle(ws[1]) then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
+      local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
+      if asks and not is_annotation and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end
+      if asks and is_annotation and not effect and result_of(t) ~= "Bool" then say(p, i, "question", "`" .. full .. "` asks a question but gives `" .. result_of(t) .. "`") end
+      if not is_annotation then
+        local all_vague = true
+        for w in ws do
+          if not has_key(VAGUE, w) then all_vague = false end
+        end
+        if #ws == 1 and has_key(ENTRY, ws[1]) then all_vague = false end
+        if all_vague then say(p, i, "vague", "`" .. full .. "` is only vague words: what does it handle, and how?") end
+      end
+      if is_annotation and not contains(t, "->") and not contains(t, "=>") then
+        local last = ws[#ws]
+        if last == "count" and not has_key(INTS, t) then say(p, i, "name_type", "`" .. full .. "` is a count of type `" .. t .. "`") end
+        if last == "path" and t ~= "Str" and not contains(t, "Path") then say(p, i, "name_type", "`" .. full .. "` is a path of type `" .. t .. "`") end
+        if t == "Bool" and (ws[1] == "no" or ws[1] == "not") and #ws > 1 then say(p, i, "negative", "`" .. full .. "` is a negative flag: `" .. full .. " = Bool.false` reads twice") end
+      end
+      if is_annotation and #ws > 2 and ws[1] == "is" and ws[2] == "not" then say(p, i, "negative", "`" .. full .. "` asks a negative: `!" .. full .. "(...)` reads twice") end
+    end
+  end
+  return nil
+end
+
+local files = 0
+for p in glob(GLOB) do
+  files = files + 1
+  hunt(p)
+  yield()
+end
+
+local counts = {}
+for c in CHECKS do push(counts, c .. " " .. found[c]) end
+print("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "))
+
+if SELF then
+  for c in CHECKS do
+    for p in glob(GLOB) do
+      local mine = contains(p, "/" .. c .. ".roc")
+      local fired = has_key(per_file, p .. "|" .. c)
+      if mine and not fired then fail("name_hunt self_test: `" .. c .. "` does not fire on its plant " .. p) end
+      if fired and not mine then fail("name_hunt self_test: `" .. c .. "` fires on " .. p .. ", another check's plant") end
+    end
+  end
+  print("name_hunt (Roc) self_test: PASS (each check fires on its plant alone)")
+end

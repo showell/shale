@@ -77,8 +77,9 @@ fn searchedFrom(run: *Run, pos: ast.Pos, c: *regex.Cached, s: []const u8, from: 
 
 /// `re_find(s, pattern[, {nocase}])` returns the leftmost match of `pattern` in
 /// `s`, the one a backtracking matcher would find first, as `{at, text}` with
-/// `at` 1-based, or nil. When the pattern has a capture group, also `group`,
-/// its text ("" where the match did not pass through it).
+/// `at` 1-based, or nil. When the pattern has capture groups, also `groups`,
+/// each one's text in order of its `(` ("" where the match did not pass
+/// through it), and `group`, the first's: a one-group pattern reads as it did.
 fn reFind(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const s = try bi.stringArg(run, pos, .re_find, args[0], "its first argument");
     const pattern = try bi.stringArg(run, pos, .re_find, args[1], "its pattern");
@@ -89,7 +90,13 @@ fn reFind(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     m.kind = .map;
     m.map.put(a, "at", .{ .int = @intCast(f.start + 1) }) catch return run.oom(pos);
     m.map.put(a, "text", .{ .string = s[f.start..f.end] }) catch return run.oom(pos);
-    if (c.program.group) m.map.put(a, "group", .{ .string = if (f.group) |g| s[g[0]..g[1]] else "" }) catch return run.oom(pos);
+    const n = c.program.groups;
+    if (n > 0) {
+        const gs = try run.newTable(pos);
+        for (f.groups[0..n]) |g| gs.list.append(a, .{ .string = if (g) |x| s[x[0]..x[1]] else "" }) catch return run.oom(pos);
+        m.map.put(a, "groups", .{ .table = gs }) catch return run.oom(pos);
+        m.map.put(a, "group", gs.list.items[0]) catch return run.oom(pos);
+    }
     return .{ .table = m };
 }
 
@@ -106,19 +113,32 @@ fn reMatch(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
 /// `re_replace(s, pattern, replacement[, {nocase}])` returns `s` with every
 /// non-overlapping match of `pattern` replaced, left to right, each search
 /// over the whole of `s` so `^`, `$` and `\b` see its real edges. The
-/// replacement is literal but for `\1`, the capture group's text ("" where the
-/// match did not pass through it); `\1` with no group in the pattern is an
-/// error. After an empty match the next search starts a byte on, that byte
+/// replacement is literal but for `\1` to `\9`, that capture group's text (""
+/// where the match did not pass through it); a `\N` past the pattern's groups
+/// is an error. After an empty match the next search starts a byte on, that byte
 /// kept, so an empty match never repeats.
 fn reReplace(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const s = try bi.stringArg(run, pos, .re_replace, args[0], "its first argument");
     const pattern = try bi.stringArg(run, pos, .re_replace, args[1], "its pattern");
     const with = try bi.stringArg(run, pos, .re_replace, args[2], "its replacement");
     const c = try program(run, pos, .re_replace, pattern, try optionsArg(run, pos, .re_replace, args));
-    const group = c.program.group;
-    if (!group and std.mem.indexOf(u8, with, "\\1") != null) return run.fail(pos, .argument, "`re_replace`'s replacement has `\\1`, and its pattern has no capture group", .{});
+    const groups = c.program.groups;
+    // How often each group is named, and the bytes the names take.
+    var uses: [regex.groups_most]usize = @splat(0);
+    var named: usize = 0;
+    var k: usize = 0;
+    while (k + 1 < with.len) : (k += 1) {
+        if (with[k] != '\\' or with[k + 1] < '1' or with[k + 1] > '9') continue;
+        const g = with[k + 1] - '1';
+        if (g >= groups) {
+            if (groups == 0) return run.fail(pos, .argument, "`re_replace`'s replacement has `\\{c}`, and its pattern has no capture group", .{with[k + 1]});
+            return run.fail(pos, .argument, "`re_replace`'s replacement has `\\{c}`, and its pattern has only {d} capture group{s}", .{ with[k + 1], groups, if (groups == 1) "" else "s" });
+        }
+        uses[g] += 1;
+        named += 2;
+        k += 1;
+    }
     try bi.chargeBytes(run, pos, s.len + with.len);
-    const uses = if (group) std.mem.count(u8, with, "\\1") else 0;
     var out: std.ArrayList(u8) = .empty;
     const a = run.alloc;
     var at: usize = 0;
@@ -126,15 +146,18 @@ fn reReplace(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     while (at <= s.len) {
         const f = try searchedFrom(run, pos, c, s, at) orelse break;
         replaced = true;
-        const g = if (f.group) |gr| s[gr[0]..gr[1]] else "";
         // A step a byte this match adds, charged before it is written.
-        const grown = std.math.mul(usize, uses, g.len) catch return run.budgetStop(pos, .arena);
-        try run.charge(pos, (f.start - at) + with.len - 2 * uses + grown + 1);
+        var grown: usize = 0;
+        for (uses[0..groups], f.groups[0..groups]) |u, g| {
+            const len = if (g) |x| x[1] - x[0] else 0;
+            grown = std.math.add(usize, grown, std.math.mul(usize, u, len) catch return run.budgetStop(pos, .arena)) catch return run.budgetStop(pos, .arena);
+        }
+        try run.charge(pos, (f.start - at) + with.len - named + grown + 1);
         out.appendSlice(a, s[at..f.start]) catch return run.oom(pos);
         var i: usize = 0;
         while (i < with.len) {
-            if (group and with[i] == '\\' and i + 1 < with.len and with[i + 1] == '1') {
-                out.appendSlice(a, g) catch return run.oom(pos);
+            if (with[i] == '\\' and i + 1 < with.len and with[i + 1] >= '1' and with[i + 1] <= '9') {
+                if (f.groups[with[i + 1] - '1']) |x| out.appendSlice(a, s[x[0]..x[1]]) catch return run.oom(pos);
                 i += 2;
             } else {
                 out.append(a, with[i]) catch return run.oom(pos);

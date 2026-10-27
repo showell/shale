@@ -102,8 +102,8 @@ was missing in the escape's text: that is how the next want is found.
 within one; hidden names like `.git` and `.zig-cache` left out, unless `{hidden = true}`),
 `grep(p, s)` (the lines holding a literal, numbered), `read_lines` and
 `count_lines` for a file of any size, `re_find(s, pattern)` and
-`re_match` (regular expressions, a linear-time subset: `|`, `\b`, one
-capture group, `{nocase = true}`), `between(s, a, b)` (the text after one string and before the
+`re_match` (regular expressions, a linear-time subset: `|`, `\b`, up to
+nine capture groups and `(?:...)`, `{nocase = true}`), `between(s, a, b)` (the text after one string and before the
 next), `edit(p, old, new[, {all, word}])` (a literal replaced, its diff
 printed) and `edit(p, {{old = ..., new = ...}, ...})` (several in sequence,
 one diff, one write, none made if any fails), long strings (`[=[ ... ]=]`,
@@ -306,6 +306,12 @@ build's verdict without its noise) for any project; the Zig ones in
 declarations along them and judge the move; `roc/` and `zig17/` are those
 work's. Copy one and change it; not everything is a builtin.
 
+**A recipe over a whole tree** keeps each file's work in a function and
+calls `yield()` after each file, as `cookbook/sealed.shale` and the name
+hunts do: what a file's call made (its tokens, its lines) is let go there,
+so the run's memory is one file's, not the tree's. Without it a tree of a
+few hundred files runs out of arena.
+
 Each task says what it uses: a literal finds the lines (`grep`), and a
 pattern takes the field out of them (`re_find`), where a field has a
 shape. A literal that is the whole of what is wanted stays a literal.
@@ -378,7 +384,7 @@ not.
 ```shale
 for p in glob("src/**/*.zig") do
   for m in grep(p, "props.always(") do
-    local r = re_find(m.text, "props\\.always\\([^\"]*\"([^\"]*)\"")
+    local r = re_find(m.text, [=[props\.always\([^"]*"((?:\\.|[^"\\])*)"]=])
     if r ~= nil then print(p .. ":" .. m.line, r.group) end
   end
 end
@@ -399,9 +405,9 @@ for p in sorted(pathlib.Path("src").rglob("*.zig")):
 
 **Uses** `grep` for the lines and `re_find` for the message: the call's
 first string literal, not merely the line's first string.
-With one capture group and no `(?:`, a message holding an escaped quote
-(`\"`) is cut at it, which Python's `(?:\\.|[^"\\])*` would not be; for
-this tree it holds.
+`(?:\\.|[^"\\])*` takes the message whole, an escaped quote (`\"`) and
+all, as Python's does: the group that does not capture repeats, the one
+that does keeps the message.
 
 ### A symbol renamed across a tree, as Zig sees it
 
@@ -516,10 +522,10 @@ lines and all, with no escaping.
 ```shale
 for m in grep("docs/notes.md", ".zig:") do
   for w in words(m.text) do
-    local r = re_find(w, "(\\w+\\.zig):\\d+")
+    local r = re_find(w, "(\\w+\\.zig):(\\d+)")
     if r ~= nil then
-      local name = r.group
-      local n = parse_int(sub(r.text, #name + 2))
+      local name = r.groups[1]
+      local n = parse_int(r.groups[2])
       local found = glob("**/" .. name)
       if #found == 0 then
         print(name .. ":" .. n, "no such file")
@@ -545,10 +551,8 @@ for m in re.finditer(r"([\w/]+\.zig):(\d+)", pathlib.Path("docs/notes.md").read_
 ```
 
 **Uses** `grep` for the lines, `words` for each reference, `re_find` for
-the name (its group) and the number after it, and `glob` and `count_lines`
-to check it. One pattern takes the digits and the punctuation around a
-reference; with one group, the number is what follows the name in the
-match.
+the name and the number (its two groups, `groups[1]` and `groups[2]`), and
+`glob` and `count_lines` to check it.
 
 ## If you write Lua
 
@@ -665,11 +669,12 @@ what the gate refuses with what to do instead.
 
 ## Where Shale is worse, said plainly
 
-- **Regular expressions are a subset**: one capture group, no `{n,m}`, no
-  lookaround, no backreferences (each refused by name). Two fields from one
-  match are the group and what follows it in the match. In return no
-  pattern makes a search slower than linear, and its cost is known before
-  it runs.
+- **Regular expressions are a subset**: up to nine capture groups (and
+  `(?:...)`), no `{n,m}`, no lookaround, no backreferences (each refused by
+  name). In return no pattern makes a search slower than linear, and its
+  cost is known before it runs. One shape parts from a backtracker: a
+  repeated group holding a group whose first way is empty (`(\w*(|.))*`)
+  can end its match sooner (regex.zig's header says why).
 - **A file is read whole by `grep` and `edit`**, at most the call-bytes cap
   (64 MiB under `shale`, `--budget call_bytes=N`; 1 MiB on a site): a
   bigger one goes through `read_lines` a part at a time.

@@ -8,6 +8,10 @@ it works on, `<shale>` being the shale checkout:
 
     cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
 
+- [name_hunt.shale](name_hunt.shale): **awkward names, a question each**,
+  the Zig hunt's five checks over Roc's top-level annotations and
+  definitions (`held_raw!` named as a state). `self_test=1` runs its
+  plants (`plants/name_hunt/`).
 - [roc_commas.shale](roc_commas.shale): **long lines laid out by `roc fmt`.**
   `roc fmt` never wraps a line, and it joins hand-made breaks back. A
   trailing comma after a record's, call's or lambda's last item makes it

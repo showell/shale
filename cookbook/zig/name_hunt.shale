@@ -1,0 +1,173 @@
+-- **AWKWARD NAMES, A QUESTION EACH** (metal-vmm QUEUE 256): heuristic
+-- hunts over Zig's tokens for names that say something other than what
+-- the code does. A finding is a question for a reader, never a verdict:
+--
+--   state_effect  a function with effects (it takes `io`, an `Io` or a
+--                 store) named as a state, not a verb: `held*`, a past
+--                 participle first (`loaded`, `kept`), `done`, `ready`
+--   question      `is*`, `has*`, `can*`, `should*` that returns no bool
+--   vague         a name of nothing but vague words: `handle`,
+--                 `process`, `doIt`, `handleData`, `manageStuff`
+--   name_type     a `*count` parameter that is no integer, a `*path` one
+--                 that is no string or path type
+--   negative      a bool parameter named `no*`/`not*`, a fn `isNot*`
+--
+-- One line a finding, `path:line: <check>: <why>`, then the counts.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/name_hunt.shale glob=src/**/*.zig
+--   shale cookbook:zig/name_hunt.shale self_test=1
+--
+-- `self_test=1` runs it over `cookbook/zig/plants/name_hunt/`, one plant
+-- a check, each named for its check: every check must fire on its own
+-- plant and on no other. `glob2=` is a second glob.
+--
+-- budget: steps=900000000 arena_bytes=4000000000
+
+const SELF = arg("self_test", "") == "1"
+const GLOB = SELF and "cookbook:zig/plants/name_hunt/*.zig" or arg("glob", "src/**/*.zig")
+const GLOB2 = arg("glob2", "")
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative"}
+
+const PARTICIPLES = {held = true, done = true, ready = true, kept = true, gone = true, sent = true, made = true, found = true, taken = true, given = true, shown = true, built = true, seen = true, known = true, stale = true, dirty = true}
+-- Words ending in `ed` that are verbs, not participles.
+const ED_VERBS = {need = true, feed = true, seed = true, embed = true, speed = true, shed = true, bleed = true, proceed = true, exceed = true, succeed = true, breed = true}
+const VAGUE = {handle = true, process = true, ["do"] = true, manage = true, perform = true, run = true, data = true, info = true, stuff = true, tmp = true, temp = true, helper = true, thing = true, things = true, it = true, misc = true, util = true, item = true, value = true, all = true, ["object"] = true}
+const ENTRY = {handle = true, run = true}
+const INTS = {usize = true, isize = true, comptime_int = true}
+
+-- A Zig name's words, lower case: `handleData` and `handle_data` both
+-- `{handle, data}`.
+function words_of(name)
+  local s = re_replace(name, "([A-Z])", "_\\1")
+  local got = {}
+  for w in split(lower(s), "_") do
+    if w ~= "" then push(got, w) end
+  end
+  return got
+end
+
+function is_participle(w)
+  if has_key(PARTICIPLES, w) then return true end
+  return #w > 3 and ends_with(w, "ed") and not has_key(ED_VERBS, w)
+end
+
+function is_int(t)
+  if has_key(INTS, t) then return true end
+  return re_match(t, "^[ui][0-9]+$")
+end
+
+-- The text of `toks[a..b]`, joined.
+function text_of(toks, a, b)
+  local got = {}
+  for k = a, b do
+    push(got, toks[k].text)
+    if starts_with(toks[k].tag, "keyword_") then push(got, " ") end
+  end
+  return join(got, "")
+end
+
+const found = {}
+for c in CHECKS do found[c] = 0 end
+const per_file = {}
+
+function say(p, line, check, why)
+  print(p .. ":" .. line .. ": " .. check .. ": " .. why)
+  found[check] = found[check] + 1
+  per_file[p .. "|" .. check] = true
+  return nil
+end
+
+-- One file's findings.
+function hunt(p)
+  local toks = zig_tokens(p)
+  local n = #toks
+  for k = 1, n - 2 do
+    if toks[k].tag == "keyword_fn" and toks[k + 1].tag == "identifier" and toks[k + 2].tag == "l_paren" then
+      local name = toks[k + 1].text
+      local line = toks[k].line
+      -- The parameters, `{name, type}`, split at their own depth's commas.
+      local params = {}
+      local j = k + 3
+      local depth = 1
+      local pname = nil
+      local tfrom = 0
+      while j <= n and depth > 0 do
+        local u = toks[j]
+        if u.tag == "l_paren" or u.tag == "l_brace" or u.tag == "l_bracket" then depth = depth + 1 end
+        if u.tag == "r_paren" or u.tag == "r_brace" or u.tag == "r_bracket" then depth = depth - 1 end
+        if depth == 1 and u.tag == "colon" and toks[j - 1].tag == "identifier" then
+          pname = toks[j - 1].text
+          tfrom = j + 1
+        end
+        if (depth == 1 and u.tag == "comma") or depth == 0 then
+          if pname ~= nil then push(params, {name = pname, type = text_of(toks, tfrom, j - 1)}) end
+          pname = nil
+        end
+        j = j + 1
+      end
+      -- The return type: from `)` to the body's `{` or the `;`.
+      local rfrom = j
+      while j <= n and toks[j].tag ~= "l_brace" and toks[j].tag ~= "semicolon" do j = j + 1 end
+      local ret = text_of(toks, rfrom, j - 1)
+      local ws = words_of(name)
+
+      local effect = false
+      for q in params do
+        if q.name == "io" or contains(q.type, "Io") or contains(lower(q.type), "store") then effect = true end
+      end
+      if effect and #ws > 0 and is_participle(ws[1]) then say(p, line, "state_effect", "`" .. name .. "` has effects (takes io or a store) but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
+
+      if #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should") and not contains(ret, "bool") and ret ~= "" then say(p, line, "question", "`" .. name .. "` asks a question but returns `" .. ret .. "`") end
+
+      local all_vague = #ws > 0
+      for w in ws do
+        if not has_key(VAGUE, w) then all_vague = false end
+      end
+      -- A lone `handle` or `run` is an entry point's convention, not vague.
+      if #ws == 1 and has_key(ENTRY, ws[1]) then all_vague = false end
+      if all_vague then say(p, line, "vague", "`" .. name .. "` is only vague words: what does it handle, and how?") end
+
+      for q in params do
+        local qw = words_of(q.name)
+        local last = ""
+        if #qw > 0 then last = qw[#qw] end
+        local t = q.type
+        if last == "count" and not is_int(t) then say(p, line, "name_type", "`" .. name .. "`'s `" .. q.name .. "` is a count of type `" .. t .. "`") end
+        if last == "path" and not contains(t, "u8") and not contains(t, "Path") and not contains(t, "anytype") then say(p, line, "name_type", "`" .. name .. "`'s `" .. q.name .. "` is a path of type `" .. t .. "`") end
+        if t == "bool" and (qw[1] == "no" or qw[1] == "not") and #qw > 1 then say(p, line, "negative", "`" .. name .. "`'s `" .. q.name .. "` is a negative flag: `" .. q.name .. " = false` reads twice") end
+      end
+      if #ws > 2 and ws[1] == "is" and ws[2] == "not" then say(p, line, "negative", "`" .. name .. "` asks a negative: `!" .. name .. "(...)` reads twice") end
+    end
+  end
+  return nil
+end
+
+local files = 0
+for p in glob(GLOB) do
+  files = files + 1
+  hunt(p)
+  yield()
+end
+if GLOB2 ~= "" then
+  for p in glob(GLOB2) do
+    files = files + 1
+    hunt(p)
+    yield()
+  end
+end
+
+local counts = {}
+for c in CHECKS do push(counts, c .. " " .. found[c]) end
+print("name_hunt: " .. files .. " files; " .. join(counts, ", "))
+
+if SELF then
+  for c in CHECKS do
+    for p in glob(GLOB) do
+      local mine = contains(p, "/" .. c .. ".zig")
+      local fired = has_key(per_file, p .. "|" .. c)
+      if mine and not fired then fail("name_hunt self_test: `" .. c .. "` does not fire on its plant " .. p) end
+      if fired and not mine then fail("name_hunt self_test: `" .. c .. "` fires on " .. p .. ", another check's plant") end
+    end
+  end
+  print("name_hunt self_test: PASS (each check fires on its plant alone)")
+end

@@ -76,6 +76,11 @@ string's text). Each says its budgets in its `-- budget:` line:
   another error's handler, a cleanup, said apart) and `catch unreachable`
   by file, and numbered steps in comments (a function's own order is
   fine; a caller's is a protocol that wants to be code).
+- `name_hunt.shale` (`glob=`, `glob2=`, `self_test=1`): **awkward names, a
+  question each**: an effect named as a state (`heldRaw(io, ...)`), a
+  question that returns no bool, a name of vague words only, a `*count`
+  or `*path` of the wrong type, a negative flag. Heuristic: a finding is
+  for a reader. One plant a check in `plants/name_hunt/`.
 - `bool_calls.shale` (`glob=`, `glob2=`): each function with a `bool`
   parameter and the calls that pass it a bare `true` or `false`, the ones
   a named enum would make read; **a bool every call passes the same
