@@ -264,8 +264,12 @@ end
 function newest(p, n)
   local rows = {}
   for name in ls(p) do
+    -- In the root, the name; in a mount's folder (`m:`, `m:.`), the
+    -- mount's path; anywhere else, below `p`.
     local path = name
-    if p ~= "" and p ~= "." and not ends_with(p, ":") then path = p .. "/" .. name end
+    if ends_with(p, ":") then path = p .. name
+    elseif ends_with(p, ":.") then path = sub(p, 1, #p - 1) .. name
+    elseif p ~= "" and p ~= "." then path = p .. "/" .. name end
     push(rows, {name = name, modified = stat(path).modified})
   end
   sort(rows, "modified", "desc")
