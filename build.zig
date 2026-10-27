@@ -268,6 +268,9 @@ pub fn build(b: *std.Build) void {
     shale_options.addOptionPath("fixture", fixture.getEmittedBin());
     // The jobs' reaper is `shale` itself (`shale --reap`): its tests run it.
     shale_options.addOptionPath("shale", runner.getEmittedBin());
+    // The zig building the tests, which syntax.shale's test hands it: a
+    // runner's PATH need not hold one.
+    shale_options.addOption([]const u8, "zig", b.graph.zig_exe);
     shale_options.addOption([]const []const u8, "hunt_files", &hunt_files);
     // webbox's checkout: the Zig tools' tests replay splits from its
     // history and read its sources beside this repo's. It must be absolute:

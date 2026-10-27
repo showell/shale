@@ -21,11 +21,20 @@
 --
 -- A run holds 64 programs: one a file, one for every Python file, one
 -- `zig fmt` for every Zig file; more is refused before the first.
+--
+-- The tools are values (`zig=`, `roc=`, `node=`, each its name on PATH by
+-- default, or a path): a machine's PATH is not the build's. **A TOOL THE
+-- MACHINE LACKS IS SAID**, never a quiet pass nor a quiet fail: its files
+-- are `skip`, a line says `no <tool>: .<kind> files not checked`, and the
+-- PASS counts them apart.
 
 const FILES = arg("files", "")
 const REV = arg("rev", "")
 const REPO = arg("repo", ".")
 const SHALE = arg("shale", "shale")
+const ZIG = arg("zig", "zig")
+const ROC = arg("roc", "roc")
+const NODE = arg("node", "node")
 const MINUTES = arg("minutes", 5)
 
 not_option("syntax", "rev", REV)
@@ -74,6 +83,36 @@ if #by.zig + #by.zon > 0 then programs = programs + 1 end
 if programs > 64 then fail("syntax: " .. #paths .. " files need " .. programs .. " programs, and a run holds 64: check them in parts") end
 
 local verdict = {}
+
+-- Whether this machine has a tool: one not found is false, any other
+-- failure stops the run.
+function probe(argv)
+  return run(argv, {timeout_ms = 60000, tail = 2, want = "tool: whether this machine has it"})
+end
+function has_tool(argv)
+  local r = attempt(probe, argv)
+  if r.ok then return true end
+  if contains(r.error, "not found") then return false end
+  fail("syntax: " .. argv[1] .. ": " .. r.error)
+end
+
+-- Each kind whose tool is missing: its files skipped, the line that says so.
+local missing = {}
+local skipped = 0
+for k in {{kinds = {"zig", "zon"}, argv = {ZIG, "version"}, ext = ".zig and .zon"}, {kinds = {"roc"}, argv = {ROC, "version"}, ext = ".roc"}, {kinds = {"js"}, argv = {NODE, "--version"}, ext = ".js and .mjs"}} do
+  local n = 0
+  for kind in k.kinds do n = n + #by[kind] end
+  if n > 0 and not has_tool(k.argv) then
+    push(missing, "no " .. k.argv[1] .. ": " .. k.ext .. " files not checked")
+    for kind in k.kinds do
+      for p in by[kind] do
+        verdict[p] = "skip " .. p .. ": no " .. k.argv[1]
+        skipped = skipped + 1
+      end
+      by[kind] = {}
+    end
+  end
+end
 function say(verdict, p, bad, why)
   if bad then verdict[p] = "FAIL " .. p .. ": " .. why else verdict[p] = "ok   " .. p .. why end
   return nil
@@ -81,8 +120,8 @@ end
 
 -- A file's program, by its kind.
 function argv_of(kind, f)
-  if kind == "zig" then return {"zig", "ast-check", f} end
-  if kind == "js" then return {"node", "--check", f} end
+  if kind == "zig" then return {ZIG, "ast-check", f} end
+  if kind == "js" then return {NODE, "--check", f} end
   if kind == "shale" then return {SHALE, "--check", f} end
   return {"bash", "-n", f}
 end
@@ -94,6 +133,7 @@ function each(verdict, kind, files)
     if kind == "sh" then opts.want = "tool: a shell script's syntax, by bash's own parser" end
     if kind == "shale" and contains(SHALE, "/") then opts.want = "tool: the shale binary named by `shale=`" end
     if kind == "js" then opts.want = "tool: JavaScript's syntax, by node's own parser" end
+    if kind == "zig" and contains(ZIG, "/") then opts.want = "tool: the zig named by `zig=`" end
     local r = run(argv_of(kind, real(p)), opts)
     if r.ended ~= "exit" then say(verdict, p, true, "did not finish (" .. r.ended .. ")") elseif r.code == 0 then say(verdict, p, false, "") else say(verdict, p, true, first_error(r.out)) end
   end
@@ -108,7 +148,9 @@ each(verdict, "sh", by.sh)
 
 -- `roc check` exits 2 on warnings alone: its count of errors decides.
 for p in by.roc do
-  local r = run({"roc", "check", real(p)}, o)
+  local ro = {timeout_ms = o.timeout_ms, tail = o.tail}
+  if contains(ROC, "/") then ro.want = "tool: the roc named by `roc=`" end
+  local r = run({ROC, "check", real(p)}, ro)
   local clean = contains(r.out, "No errors found") or re_match(r.out, "── 0 errors")
   if r.ended ~= "exit" then say(verdict, p, true, "did not finish (" .. r.ended .. ")") elseif clean then say(verdict, p, false, "") else say(verdict, p, true, first_error(r.out)) end
 end
@@ -137,13 +179,15 @@ local fmt = {}
 for p in by.zig do push(fmt, p) end
 for p in by.zon do push(fmt, p) end
 if #fmt > 0 then
-  local argv = {"zig", "fmt", "--check"}
+  local argv = {ZIG, "fmt", "--check"}
   local real_of = {}
   for p in fmt do
     push(argv, real(p))
     real_of[real(p)] = p
   end
-  local r = run(argv, o)
+  local fo = {timeout_ms = o.timeout_ms, tail = o.tail}
+  if contains(ZIG, "/") then fo.want = "tool: the zig named by `zig=`" end
+  local r = run(argv, fo)
   for p in by.zon do say(verdict, p, false, "") end
   for l in lines(r.out) do
     local f = trim(l)
@@ -169,5 +213,6 @@ for p in paths do
   print(verdict[p])
   if starts_with(verdict[p], "FAIL") then failed = failed + 1 end
 end
+for m in missing do print(m) end
 if failed > 0 then fail("syntax: FAIL, " .. failed .. " of " .. #paths .. " files") end
-print("PASS: " .. #paths .. " files")
+if skipped > 0 then print("PASS: " .. (#paths - skipped) .. " files, " .. skipped .. " not checked") else print("PASS: " .. #paths .. " files") end

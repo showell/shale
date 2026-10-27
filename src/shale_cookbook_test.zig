@@ -160,17 +160,21 @@ test "cookbook: syntax.shale gives each file one verdict by its kind, a good fil
         .{ "Good.roc", "Good := [].{\n\tone : U64\n\tone = 1\n}\n", "ok" }, .{ "Bad.roc", "Bad := [].{\n\tone = (\n}\n", "FAIL" },
         .{ "a.md", "# a\n", "ok" },
     };
-    // `roc` is the one tool a box may lack: its pair is checked where it is there.
-    const has_roc = blk: {
-        const r = std.process.run(a, io, .{ .argv = &.{ "roc", "version" } }) catch break :blk false;
-        a.free(r.stdout);
-        a.free(r.stderr);
-        break :blk true;
+    // `roc` and `node` a machine may lack (GitHub's runner has no roc): the
+    // recipe says so of their files, and the test holds it to that.
+    const has = struct {
+        fn tool(al: std.mem.Allocator, i: std.Io, argv: []const []const u8) bool {
+            const r = std.process.run(al, i, .{ .argv = argv }) catch return false;
+            al.free(r.stdout);
+            al.free(r.stderr);
+            return true;
+        }
     };
+    const has_roc = has.tool(a, io, &.{ "roc", "version" });
+    const has_node = has.tool(a, io, &.{ "node", "--version" });
     var list: std.ArrayList(u8) = .empty;
     defer list.deinit(a);
     for (files) |f| {
-        if (!has_roc and std.mem.endsWith(u8, f[0], ".roc")) continue;
         try tmp.dir.writeFile(io, .{ .sub_path = f[0], .data = f[1] });
         if (list.items.len > 0) try list.append(a, ',');
         try list.appendSlice(a, f[0]);
@@ -183,16 +187,28 @@ test "cookbook: syntax.shale gives each file one verdict by its kind, a good fil
     const exe_n = try std.Io.Dir.cwd().realPathFile(io, shale_exe, &exe_buf);
     const shale_arg = try std.fmt.allocPrint(a, "shale={s}", .{exe_buf[0..exe_n]});
     defer a.free(shale_arg);
-    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/syntax.shale", files_arg, shale_arg } });
+    // The zig that builds this test, never the one on PATH.
+    const zig_arg = try std.fmt.allocPrint(a, "zig={s}", .{@import("shale_test_options").zig});
+    defer a.free(zig_arg);
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/syntax.shale", files_arg, shale_arg, zig_arg } });
     defer a.free(r.stdout);
     defer a.free(r.stderr);
     errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
     for (files) |f| {
-        if (!has_roc and std.mem.endsWith(u8, f[0], ".roc")) continue;
+        const roc_file = std.mem.endsWith(u8, f[0], ".roc");
+        const js_file = std.mem.endsWith(u8, f[0], ".js") or std.mem.endsWith(u8, f[0], ".mjs");
+        if ((roc_file and !has_roc) or (js_file and !has_node)) {
+            const skip = try std.fmt.allocPrint(a, "skip {s}: no ", .{f[0]});
+            defer a.free(skip);
+            try testing.expect(std.mem.indexOf(u8, r.stdout, skip) != null);
+            continue;
+        }
         const want = try std.fmt.allocPrint(a, "{s} {s}{s}", .{ f[2], if (std.mem.eql(u8, f[2], "ok")) "  " else "", f[0] });
         defer a.free(want);
         try testing.expect(std.mem.indexOf(u8, r.stdout, want) != null);
     }
+    if (!has_roc) try testing.expect(std.mem.indexOf(u8, r.stdout, "no roc: .roc files not checked") != null);
+    if (!has_node) try testing.expect(std.mem.indexOf(u8, r.stdout, "no node: .js and .mjs files not checked") != null);
     try testing.expectEqual(@as(u8, 1), r.term.exited);
     try testing.expect(std.mem.indexOf(u8, r.stderr, "syntax: FAIL") != null);
 }
