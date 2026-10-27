@@ -192,3 +192,28 @@ test "cli: cookbook/http.shale's wait says, by its own words, a wait of more fet
     try testing.expect(std.mem.indexOf(u8, r.stderr, "http: a wait of 121 fetches, and a run holds 64 programs") != null);
     try testing.expectEqualStrings("", r.stdout);
 }
+
+test "cli: a run that spent a second or more in programs, waits or sleeps says where, the slowest program named; a quick one says nothing" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    const a = testing.allocator;
+    const fixture = @import("shale_test_options").fixture;
+    const src = try std.fmt.allocPrint(a, "run({{\"{s}\", \"sleep\", \"1200\"}}, {{timeout_ms = 10000, tail = 1, want = \"test: the fixture\"}}) run({{\"{s}\", \"lines\", \"1\"}}, {{timeout_ms = 10000, tail = 1, want = \"test: the fixture\"}}) sleep(300)", .{ fixture, fixture });
+    defer a.free(src);
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "-e", src } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+    try testing.expectEqual(@as(u8, 0), r.term.exited);
+    const at = std.mem.indexOf(u8, r.stderr, "── time: 2 programs, 1.") orelse return error.TestUnexpectedResult;
+    const line = r.stderr[at .. std.mem.indexOfScalarPos(u8, r.stderr, at, '\n') orelse r.stderr.len];
+    try testing.expect(std.mem.indexOf(u8, line, " s in all; the slowest 1.") != null);
+    try testing.expect(std.mem.indexOf(u8, line, "shale-fixture sleep 1200") != null);
+    try testing.expect(std.mem.indexOf(u8, line, "; slept 0.3 s") != null);
+    // A quick run's report stays as it was.
+    const q = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "-e", "sleep(10)" } });
+    defer a.free(q.stdout);
+    defer a.free(q.stderr);
+    try testing.expect(std.mem.indexOf(u8, q.stderr, "── time:") == null);
+}
