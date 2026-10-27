@@ -157,14 +157,22 @@ pub fn argLines(text: []const u8, have: []const interp.Arg, buf: []interp.Arg, w
 /// where it is read, and the run prints what it took (`printHeaderBudgets`),
 /// so the cost stays visible. At most one such line; anything `--budget` would
 /// refuse is refused. The first line that is neither blank nor a comment ends
-/// the header.
+/// the header, and a `-- budget:` line after it is refused: it would be read
+/// as a comment, its budgets silently never set (Steve, 2026-10-27).
 pub fn headerBudgets(source: []const u8, c: *Command, why_buf: []u8) ?Refused {
     var it = std.mem.splitScalar(u8, source, '\n');
     var seen = false;
     while (it.next()) |raw| {
         const line = std.mem.trim(u8, raw, " \t\r");
         if (line.len == 0) continue;
-        if (!std.mem.startsWith(u8, line, "--")) break;
+        if (!std.mem.startsWith(u8, line, "--")) {
+            while (it.next()) |after| {
+                const l = std.mem.trim(u8, after, " \t\r");
+                if (std.mem.startsWith(u8, l, "--") and std.mem.startsWith(u8, std.mem.trimStart(u8, l[2..], " "), "budget:"))
+                    return said(why_buf, "a `-- budget:` line after the script's first line of code is never read: put it among the comments opening the script", .{});
+            }
+            break;
+        }
         const rest = std.mem.trimStart(u8, line[2..], " ");
         if (!std.mem.startsWith(u8, rest, "budget:")) continue;
         if (seen) return said(why_buf, "a second `-- budget:` line: one line says them all", .{});
@@ -409,7 +417,7 @@ test "cli: the CLI's own defaults, and --verbose" {
 test "cli: a script's `-- budget:` line sets its budgets where the command line has not, and is said; one line; names and numbers as --budget's" {
     var why: [256]u8 = undefined;
     var c = try parsed(&.{ "--budget", "arena_bytes=7", "a.shale" }, null);
-    try testing.expect(headerBudgets("-- A RECIPE\n-- budget: steps=900 arena_bytes=4000\n\nconst X = 1\n-- budget: steps=1\n", &c, &why) == null);
+    try testing.expect(headerBudgets("-- A RECIPE\n-- budget: steps=900 arena_bytes=4000\n\nconst X = 1\n-- a comment after code\n", &c, &why) == null);
     try testing.expectEqual(@as(u64, 900), c.budgets.steps);
     // The command line's value wins over the header's.
     try testing.expectEqual(@as(u64, 7), c.budgets.arena_bytes);
@@ -417,9 +425,9 @@ test "cli: a script's `-- budget:` line sets its budgets where the command line 
     defer w.deinit();
     try printHeaderBudgets(c, &w.writer);
     try testing.expectEqualStrings("── budgets from the script's header: steps=900\n", w.written());
-    // After the first line of code, a comment is not part of the header.
+    // A script with no header sets none.
     var d = try parsed(&.{"a.shale"}, null);
-    try testing.expect(headerBudgets("print(1)\n-- budget: steps=9\n", &d, &why) == null);
+    try testing.expect(headerBudgets("print(1)\n-- a comment\n", &d, &why) == null);
     try testing.expectEqual(@as(u64, 5_000_000), d.budgets.steps);
     var nothing: std.Io.Writer.Allocating = .init(testing.allocator);
     defer nothing.deinit();
@@ -432,6 +440,8 @@ test "cli: a script's `-- budget:` line sets its budgets where the command line 
         .{ "-- budget: steps", "`-- budget:` steps: it is NAME=N" },
         .{ "-- budget:", "`-- budget:` names no budget" },
         .{ "-- budget: steps=9\n-- budget: reads=9", "a second `-- budget:` line: one line says them all" },
+        .{ "print(1)\n-- budget: steps=9", "a `-- budget:` line after the script's first line of code is never read: put it among the comments opening the script" },
+        .{ "-- A RECIPE\nconst X = 1\n  --budget: steps=9", "a `-- budget:` line after the script's first line of code is never read: put it among the comments opening the script" },
     }) |case| {
         var e = try parsed(&.{"a.shale"}, null);
         const r = headerBudgets(case[0], &e, &why) orelse return error.TestUnexpectedResult;
