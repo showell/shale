@@ -303,6 +303,29 @@ test "linux prelude: edits_all checks a file named twice against its first edits
     try testing.expectEqualStrings("12\n", try t.file("a.txt"));
 }
 
+test "linux prelude: edits_all checks what edit will refuse or the budgets stop, before it writes any: more than 64 edits to a file, an empty `old`, the changes and their bytes" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.put("a.txt", "one\n");
+    var many: std.ArrayList(u8) = .empty;
+    var text: std.ArrayList(u8) = .empty;
+    const a = t.arena.allocator();
+    for (0..65) |i| {
+        try many.print(a, "{{old = \"w{d}.\", new = \"W\"}},", .{i});
+        try text.print(a, "w{d}.\n", .{i});
+    }
+    try t.put("b.txt", text.items);
+    try t.expectStop(try std.fmt.allocPrint(a, "edits_all({{{{\"a.txt\", {{{{old = \"one\", new = \"1\"}}}}}}, {{\"b.txt\", {{{s}}}}}}})", .{many.items}), .atomic, .fail, "`edits_all`: b.txt has 65 edits, and `edit` takes at most 64 a call; nothing written");
+    try testing.expectEqualStrings("one\n", try t.file("a.txt"));
+    try t.expectStop("edits_all({{\"a.txt\", {{old = \"\", new = \"x\"}}}})", .atomic, .fail, "`edits_all`: a.txt's edit 1: `old` is empty; nothing written");
+    // One change left: two files would stop on the second, so neither is written.
+    t.budgets.changes = 1;
+    try t.put("c.txt", "three\n");
+    try t.expectStop("edits_all({{\"a.txt\", {{old = \"one\", new = \"1\"}}}, {\"c.txt\", {{old = \"three\", new = \"3\"}}}})", .atomic, .fail, "`edits_all`: 2 files to write, and the budget has 1 change left; nothing written");
+    try testing.expectEqualStrings("one\n", try t.file("a.txt"));
+}
+
 test "linux prelude: edits_all checks a word edit as edit applies it, so the next is checked against its result" {
     var t: T = undefined;
     try init(&t);
