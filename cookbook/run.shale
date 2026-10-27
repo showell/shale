@@ -37,20 +37,12 @@ const WANT = arg("want", "")
 
 if trim(CMD) == "" then fail("run: say `cmd=`, the command line (with spaces: on stdin, `--args-stdin`)") end
 
--- `rel` under `dir`; a mount's own root (`memory:`) takes it without a
--- leading `/`.
-function under(dir, rel)
-  if dir == "." then return rel end
-  if ends_with(dir, ":") then return dir .. rel end
-  return dir .. "/" .. rel
-end
-
 -- nil: the whole output is not kept.
 local log_path = nil
 if LOG ~= "" then
-  log_path = under(DIR, LOG)
-elseif is_dir(under(DIR, ".zig-cache")) then
-  log_path = under(DIR, ".zig-cache/run.log")
+  log_path = path_under(DIR, LOG)
+elseif is_dir(path_under(DIR, ".zig-cache")) then
+  log_path = path_under(DIR, ".zig-cache/run.log")
 end
 -- How the run's last line names where the output went.
 function kept_in(path)

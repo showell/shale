@@ -963,7 +963,7 @@ message 7, a line of it
 - A script's path is joined to the root.
 - Every part must be a name FAT holds, so `.`, `..`, empty parts and a
   leading `/` are refused before the store is asked.
-- `""` is the root (and so is `"."`), for `ls`, `stat`, `exists` and `walk` only. Every
+- `""` is the root (and so is `"."`), for `ls`, `stat`, `exists`, `is_dir` and `walk` only. Every
   change needs a path of at least one part.
 - The store's own limits (a name's length, a path's, its depth) still
   apply on top.
@@ -1193,7 +1193,9 @@ three:
   of tokens only `run`'s `secrets` may name, read-only too), each once,
   `secrets` and `tools` not both; another word, one twice, or a path with
   a space is a mistake named by its line. A mount's own path is resolved
-  once, at load. The hook also:
+  once, at load, and so is the root (`--root`) to its real path, so a
+  root and a mount inside it compare as one. `m:.` is the mount's folder,
+  as `.` is the root. The hook also:
   - refuses every change through a read-only mount before anything is
     written, at the one point every change passes, `PathHook.may_change`
     (compiled only where the `host_io` says `shale_change_check`);
@@ -1208,7 +1210,7 @@ three:
 - **`Options.preludes`**, the preludes after the core's, in order:
   - the Linux prelude (`src/shale_prelude_linux.shale`): `run`, `real`,
     `must`, `http`, `http_get`, `re_lines`, `head_lines`, `tail_lines`,
-    `grep_all`, `unique`, `newest`, `create`, `edits_all`; the Zig tools
+    `grep_all`, `unique`, `path_under`, `newest`, `create`, `edits_all`; the Zig tools
     `zig_rename`, `zig_renames`, `zig_decls`, `zig_move`, `zig_tokens` and
     `zig_imports`; and the jobs, `job_start`, `job_alive`, `job_stop` and
     `job_wait` (its helpers `curl_http`, `edit_words` and `edit_word_byte`

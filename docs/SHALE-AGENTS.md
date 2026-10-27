@@ -128,6 +128,8 @@ has none of it):
   file of any size and give nil for a missing one. `grep_all(p, lit)` is
   `grep` for a file of any size. `unique(list)` gives each item once. `newest(dir, n)`
   gives the names that changed last (the root as `""` or `"."`).
+  `path_under(dir, name)` spells a name below a folder as every call takes
+  it: `name` in the root, `m:name` in a mount's folder, else `dir/name`.
 - **Jobs**, programs that outlive the call:
   - `job_start(argv, {log, cwd, env, want})` starts one under a detached
     reaper (`want` as `run`'s, for a program `run` would refuse).

@@ -258,19 +258,23 @@ function grep_all(p, lit)
   end
 end
 
+-- **A NAME BELOW A FOLDER**, spelled as every call takes it: in the root
+-- (`""`, `"."`) the name, in a mount's folder (`m:`, `m:.`) `m:name`,
+-- else `dir/name`.
+function path_under(dir, name)
+  if dir == "" or dir == "." then return name end
+  if ends_with(dir, ":") then return dir .. name end
+  if ends_with(dir, ":.") then return sub(dir, 1, #dir - 1) .. name end
+  return dir .. "/" .. name
+end
+
 -- The names of the `n` entries of a folder that changed last, newest
 -- first (`ls -t | head`); names that changed at once, by name. The root is
 -- `""` or `"."`.
 function newest(p, n)
   local rows = {}
   for name in ls(p) do
-    -- In the root, the name; in a mount's folder (`m:`, `m:.`), the
-    -- mount's path; anywhere else, below `p`.
-    local path = name
-    if ends_with(p, ":") then path = p .. name
-    elseif ends_with(p, ":.") then path = sub(p, 1, #p - 1) .. name
-    elseif p ~= "" and p ~= "." then path = p .. "/" .. name end
-    push(rows, {name = name, modified = stat(path).modified})
+    push(rows, {name = name, modified = stat(path_under(p, name)).modified})
   end
   sort(rows, "modified", "desc")
   local got = {}
