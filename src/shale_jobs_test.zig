@@ -223,6 +223,12 @@ test "jobs: the mistakes a job's call can make, each named" {
 test "jobs: a job stopped just after its start is gone when job_stop returns, its leader too, even one that ignores TERM before it made its group" {
     // The leader makes its group only when it first runs: a stop that
     // watched the group alone saw nothing, said "stopped", and sent no KILL.
+    // **Probabilistic, and why:** the window is in the reaper's child,
+    // between its fork and its `setsid`, before any program runs, so no
+    // fixture can hold it open (one runs only after `exec`). Twenty starts
+    // cross it often enough to have shown it red (1 in 20 before the fix).
+    // The green waits on `alive` for up to 2 s after KILL, the reaper's
+    // reap: a job not gone by then is a failure here, not a slow pass.
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
