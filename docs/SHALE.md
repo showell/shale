@@ -1213,7 +1213,7 @@ three:
   Mounts confine the store's calls, not the programs a script runs:
   `run`'s program reaches wherever its user can.
 - **`Options.preludes`**, the preludes after the core's, in order:
-  - the Linux prelude (`src/shale_prelude_linux.shale`): `run`, `real`, `sleep`,
+  - the Linux prelude (`src/shale_prelude_linux.shale`): `run`, `real`, `sleep`, `not_option`,
     `must`, `http`, `http_get`, `re_lines`, `head_lines`, `tail_lines`,
     `grep_all`, `unique`, `path_under`, `newest`, `create`, `edits_all`; the Zig tools
     `zig_rename`, `zig_renames`, `zig_decls`, `zig_move`, `zig_tokens` and

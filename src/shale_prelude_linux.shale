@@ -11,6 +11,22 @@ function run(argv, opts)
   return host("run", argv, opts)
 end
 
+-- **INTERNAL to `not_option`**: whether `x` is a string, by a string
+-- builtin taking it (Shale has no `type`).
+function option_text(x)
+  return lower(x)
+end
+
+-- **A VALUE, NOT AN OPTION**: `v`, a launch line's or a caller's value
+-- (`who`'s `name`), for a place where a program reads options; refused
+-- when it starts with `-`, which the program would take as one (git
+-- grep's `-O` runs a command). `v` back. A recipe calls it where it
+-- reads the value; the git prelude's `git_value` is it too.
+function not_option(who, name, v)
+  if attempt(option_text, v).ok and starts_with(v, "-") then fail("`" .. who .. "`'s `" .. name .. "` is \"" .. v .. "\": a value that starts with `-` would be one of the program's options") end
+  return v
+end
+
 -- A wait of `ms` (0 to 600000) without a program: a run holds 64
 -- programs, but may sleep as often as its steps allow. `now()` stays the
 -- run's start.

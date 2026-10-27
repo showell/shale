@@ -30,6 +30,7 @@
 
 const ZIG = arg("zig", "zig")
 const STEP = arg("step", "")
+not_option("zig_build", "step", STEP)
 const ARGS = arg("args", "")
 const DIR = arg("dir", ".")
 const MINUTES = arg("minutes", 10)

@@ -25,6 +25,7 @@
 
 const GLOB = arg("glob", "src/**/*.zig")
 const BUILD = arg("build", "test")
+not_option("flip_bools", "build", BUILD)
 const MOST = parse_int(arg("most", "40"))
 const TIMEOUT = parse_int(arg("timeout_ms", "600000"))
 

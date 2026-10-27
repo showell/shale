@@ -36,8 +36,7 @@ end
 -- when it starts with `-`, which git would take as one (`--output=` writes
 -- a file no mount, `may_change` or `--undo-on-stop` sees).
 function git_value(call, name, v)
-  if attempt(git_text, v).ok and starts_with(v, "-") then fail("`" .. call .. "`'s `" .. name .. "` is \"" .. v .. "\": a value that starts with `-` would be one of git's options") end
-  return v
+  return not_option(call, name, v)
 end
 
 -- `repo`'s real path, `"."` and `""` the root's; a stop, naming the call

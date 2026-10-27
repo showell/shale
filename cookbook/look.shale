@@ -50,6 +50,7 @@ const MOST = arg("most", 300)
 const WIDE = arg("wide", 200)
 const REV = arg("rev", "")
 const REPO = arg("repo", ".")
+not_option("look", "rev", REV)
 
 -- A file's text: as the disk holds it, or as `rev` does.
 function text_of(path)

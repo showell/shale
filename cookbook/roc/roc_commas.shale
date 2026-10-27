@@ -11,6 +11,7 @@
 -- budget: steps=400000000 arena_bytes=2000000000
 
 const DIR = arg("dir", "roc")
+not_option("roc_commas", "dir", DIR)
 const WIDTH = arg("width", 100)
 const PASSES = 8
 
