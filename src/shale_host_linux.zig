@@ -111,7 +111,7 @@ fn resolve(ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]
         // part is a name, so a bad name gets the core's message.
         var it = std.mem.splitScalar(u8, path, '/');
         while (it.next()) |part| if (!store.fatName(part)) return null;
-        try refuseLinks(run, pos, std.mem.trimEnd(u8, run.root, "/"), path, "");
+        try refuseLinks(run, pos, setup.trimSlash(run.root), path, "");
         if (!anySecrets(h)) return null;
         const root = try rootOf(h, run, pos);
         try refuseSecretsUnder(h, run, pos, path, if (path.len == 0) root else std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ root, path }) catch return run.oom(pos));
@@ -142,7 +142,7 @@ pub fn secretPath(h: *Host, run: *Run, pos: ast.Pos, v: Value) Error![]const u8 
 /// A mount's folder as this run sees it: one inside the root is taken
 /// against the run's own root (each engine of a gated test has its copy).
 fn runDirOf(h: *Host, run: *Run, pos: ast.Pos, m: Mount) Error![]const u8 {
-    const inside = std.mem.startsWith(u8, m.dir, h.root_abs) and (m.dir.len == h.root_abs.len or m.dir[h.root_abs.len] == '/');
+    const inside = setup.inFolder(m.dir, h.root_abs);
     if (!inside) return m.dir;
     return std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch run.oom(pos);
 }
@@ -171,7 +171,7 @@ fn refuseSecretsUnder(h: *Host, run: *Run, pos: ast.Pos, shown: []const u8, abs:
     for (h.mounts) |m| {
         if (!m.secrets) continue;
         const dir = try runDirOf(h, run, pos, m);
-        if (std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/'))
+        if (setup.inFolder(abs, dir))
             return run.fail(pos, .refused, "\"{s}\" is in the mount `{s}`, which holds secrets", .{ shown, m.name });
     }
 }
@@ -208,11 +208,11 @@ fn mountPath(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize, 
         error.FileNotFound, error.NotDir => return run.fail(pos, .store, "the mount `{s}` is {s}, which is not a folder there", .{ m.name, m.dir }),
         else => return run.fail(pos, .store, "the mount `{s}` is {s}, which cannot be opened: {s}", .{ m.name, m.dir, @errorName(e) }),
     }
-    const inside = std.mem.startsWith(u8, m.dir, h.root_abs) and (m.dir.len == h.root_abs.len or m.dir[h.root_abs.len] == '/');
+    const inside = setup.inFolder(m.dir, h.root_abs);
     const dir = if (inside) std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch return run.oom(pos) else m.dir;
     try refuseLinks(run, pos, dir, rest, path[0 .. colon + 1]);
     if (rest.len == 0) return dir;
-    return std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ dir, rest }) catch run.oom(pos);
+    return std.fmt.allocPrint(run.alloc, "{s}{s}{s}", .{ dir, if (std.mem.eql(u8, dir, "/")) "" else "/", rest }) catch run.oom(pos);
 }
 
 /// Stops the run if any part of `rest` below `base` is a symbolic link: the
@@ -239,13 +239,13 @@ fn refuseLinks(run: *Run, pos: ast.Pos, base: []const u8, rest: []const u8, show
 /// a root path that reaches into its folder. Journals the path under `--undo-on-stop`.
 fn mayChange(ctx: *anyopaque, run: *Run, pos: ast.Pos, rel: []const u8, full: []const u8) Error!void {
     const h: *Host = @ptrCast(@alignCast(ctx));
-    const abs = try absolute(h, run, pos, std.mem.trimEnd(u8, full, "/"));
+    const abs = try absolute(h, run, pos, setup.trimSlash(full));
     for (h.mounts) |m| {
         if (m.access != .read_only) continue;
         const named = std.mem.startsWith(u8, rel, m.name) and rel.len > m.name.len and rel[m.name.len] == ':';
-        const inside = std.mem.startsWith(u8, m.dir, h.root_abs) and (m.dir.len == h.root_abs.len or m.dir[h.root_abs.len] == '/');
+        const inside = setup.inFolder(m.dir, h.root_abs);
         const dir = if (inside) std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch return run.oom(pos) else m.dir;
-        const under = std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/');
+        const under = setup.inFolder(abs, dir);
         if (named or (under and !underWritableWithin(h, run, pos, abs, dir))) return run.fail(pos, .refused, "{s}: mount `{s}` is read-only", .{ rel, m.name });
     }
     if (h.undo) try noteBefore(h, run, pos, abs);
@@ -258,8 +258,8 @@ fn underWritableWithin(h: *Host, run: *Run, pos: ast.Pos, abs: []const u8, ro_di
     for (h.mounts) |m| {
         if (m.access == .read_only) continue;
         const dir = runDirOf(h, run, pos, m) catch return false;
-        if (dir.len <= ro_dir.len or !std.mem.startsWith(u8, dir, ro_dir) or dir[ro_dir.len] != '/') continue;
-        if (std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/')) return true;
+        if (dir.len <= ro_dir.len or !setup.inFolder(dir, ro_dir)) continue;
+        if (setup.inFolder(abs, dir)) return true;
     }
     return false;
 }
@@ -282,7 +282,7 @@ pub const journal_most = 64 << 20;
 
 /// Journals what is at `abs_in` before its first change; later changes are no-ops.
 fn noteBefore(h: *Host, run: *Run, pos: ast.Pos, abs_in: []const u8) Error!void {
-    const abs = std.mem.trimEnd(u8, abs_in, "/");
+    const abs = setup.trimSlash(abs_in);
     for (h.journal.items) |p| if (std.mem.eql(u8, p.abs, abs)) return;
     const io = run.io;
     const cwd = std.Io.Dir.cwd();
@@ -347,7 +347,7 @@ pub fn undoChanges(h: *Host, io: std.Io, w: *std.Io.Writer) !bool {
 
 /// The run's own root, absolute.
 pub fn rootOf(h: *Host, run: *Run, pos: ast.Pos) Error![]const u8 {
-    return absolute(h, run, pos, std.mem.trimEnd(u8, run.root, "/"));
+    return absolute(h, run, pos, setup.trimSlash(run.root));
 }
 
 fn absolute(h: *Host, run: *Run, pos: ast.Pos, p: []const u8) Error![]const u8 {
@@ -360,7 +360,7 @@ fn absolute(h: *Host, run: *Run, pos: ast.Pos, p: []const u8) Error![]const u8 {
 /// A Shale path's OS path, through the mounts or the root, made absolute.
 pub fn osPath(h: *Host, run: *Run, pos: ast.Pos, v: Value, allow_root: bool) Error![]const u8 {
     const p = try script.builtins_store.pathArg(run, pos, .host, v, allow_root);
-    return absolute(h, run, pos, std.mem.trimEnd(u8, p.full, "/"));
+    return absolute(h, run, pos, setup.trimSlash(p.full));
 }
 
 fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []const Value) Error!Value {
@@ -411,7 +411,7 @@ pub fn refuse(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv0: []const
 fn underToolsMount(h: *Host, argv0: []const u8) bool {
     for (h.mounts) |m| {
         if (!m.tools) continue;
-        if (std.mem.startsWith(u8, argv0, m.dir) and argv0.len > m.dir.len and argv0[m.dir.len] == '/') return true;
+        if (argv0.len > m.dir.len and setup.inFolder(argv0, m.dir)) return true;
     }
     return false;
 }

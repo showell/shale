@@ -58,7 +58,9 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     while (it.next()) |part| {
         if (!store.fatName(part)) return run.fail(pos, .argument, "`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ @tagName(b), rel, part });
     }
-    const full = std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ run.root, rel }) catch return run.oom(pos);
+    // A root of `/` takes no second `/`: `//x` is an empty part to the store.
+    const sep = if (std.mem.endsWith(u8, run.root, "/")) "" else "/";
+    const full = std.fmt.allocPrint(run.alloc, "{s}{s}{s}", .{ run.root, sep, rel }) catch return run.oom(pos);
     return .{ .full = full, .rel = rel };
 }
 
