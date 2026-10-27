@@ -197,7 +197,7 @@ no `host` there, so `run`, git and jobs are not in it.
 
 **`test`** runs the two modules' tests, the signer's and the gate's, and
 `web-test`: the browser build under Node (`web/smoke_test.mjs`), its
-sample's scripts and every lesson's included. The
+sample's scripts and every lesson's cell, each held to the output it pins. The
 Zig tools' tests read zig-webbox's checkout too: they replay splits from its
 history and walk its sources beside this repo's. **`consumers`** runs this
 repo's own docs check, metal-vmm's queue tool by this tree's `shale`, then
