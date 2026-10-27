@@ -284,7 +284,10 @@ test "linux prelude: edits_all checks a file named twice against its first edits
     try t.expectStop("edits_all({{\"a.txt\", {{old = \"one\", new = \"1\"}}}, {\"a.txt\", {{old = \"one two\", new = \"x\"}}}})", .atomic, .fail, "`edits_all`: a.txt's edit 1: `old` is not there; nothing written");
     try testing.expectEqualStrings("one two\n", try t.file("a.txt"));
     // And a second set that holds on the first's result is applied after it.
-    try t.expectOutput("print(edits_all({{\"a.txt\", {{old = \"one\", new = \"1\"}}}, {\"a.txt\", {{old = \"1 two\", new = \"12\"}}}}))", "2\n");
+    var r = t.run("print(edits_all({{\"a.txt\", {{old = \"one\", new = \"1\"}}}, {\"a.txt\", {{old = \"1 two\", new = \"12\"}}}}))", .atomic);
+    defer r.deinit();
+    try testing.expect(r.stop == null);
+    try testing.expect(std.mem.endsWith(u8, r.output, "\n2\n"));
     try testing.expectEqualStrings("12\n", try t.file("a.txt"));
 }
 

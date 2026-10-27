@@ -380,8 +380,13 @@ end
 -- only, so the edits after it are checked against its result. The
 -- replacements made in all.
 function edits_all(list)
+  -- A file named twice, by any spelling (a mount's, the root's), is checked
+  -- against its earlier edits' result, as `edit` will meet it.
+  local checked = {}
   for item in list do
-    local text = read(item[1])
+    local key = real(item[1])
+    local text = get(checked, key, nil)
+    if text == nil then text = read(item[1]) end
     local j = 0
     for e in item[2] do
       j = j + 1
@@ -399,6 +404,7 @@ function edits_all(list)
         text = substitute(text, e.old, e.new)
       end
     end
+    checked[key] = text
   end
   -- A file that may not change (a read-only mount's) stops it here,
   -- before any is written.
