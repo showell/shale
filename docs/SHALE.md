@@ -1195,7 +1195,10 @@ three:
   `~/.config/shale/mounts`: `name = /abs/path` or `name = ~/path` a line,
   then any of ` ro` (read-only), ` tools` (a toolchain whose programs `run`
   takes by path though git does not track them) and ` secrets` (a folder
-  of tokens only `run`'s `secrets` may name, read-only too), each once,
+  of tokens only `run`'s `secrets` may name, read-only too: it stops
+  Shale's own reads and a program handed an obvious path to it or to a
+  folder holding it, but **a program is not sandboxed**, and one that
+  builds a path itself can reach a secret), each once,
   `secrets` and `tools` not both; another word, one twice, or a path with
   a space is a mistake named by its line. A mount's own path is resolved
   once, at load, and so is the root (`--root`) to its real path, so a

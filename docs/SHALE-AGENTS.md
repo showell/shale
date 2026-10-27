@@ -600,7 +600,13 @@ the first two can give a quiet wrong answer, an empty list:
   value in the program's environment and scrubbed from its output as
   `<secret NAME>`; `http_get`'s `bearer` and `cookbook:http.shale`'s
   `bearer=keys:file` use it. A link to the file from elsewhere (an old
-  `~/.token`) is not the mount's and is not guarded.
+  `~/.token`) is not the mount's and is not guarded. **What this guard
+  is:** it stops Shale's own reads, and a program handed an obvious path
+  to a secret, or to a folder that holds one; **a program is not
+  sandboxed.** One that builds a path itself, takes it after a prefix
+  (`-Tkeys/tok`, `@keys/tok`) or follows a link it made, can reach a
+  secret. Keep a secrets mount out of the folders a script hands to
+  programs.
 - **The store follows no symbolic link.** A path any part of which, below
   the root or a mount's own folder, is a link stops the run, `refused:
   <path> is a symbolic link`, for a read, a change, `exists`, `stat` and

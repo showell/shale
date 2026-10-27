@@ -221,10 +221,13 @@ pub fn refuseSecretArgs(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv
     for (h.mounts) |m| {
         if (!m.secrets) continue;
         const dir = try runDirOf(h, run, pos, m);
-        for (argv, 1..) |arg, i| if (try namesFolder(run, pos, arg, cwd, dir))
-            return run.fail(pos, .refused, "`{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`", .{ who, i, m.name });
+        for (argv, 1..) |arg, i| switch (try namesFolder(run, pos, arg, cwd, dir)) {
+            .none => {},
+            .inside => return run.fail(pos, .refused, "`{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`", .{ who, i, m.name }),
+            .holds => return run.fail(pos, .refused, "`{s}`'s argument {d} holds the mount `{s}`'s folder, which holds secrets: name a folder beside it", .{ who, i, m.name }),
+        };
         if (env) |t| for (t.map.keys(), t.map.values()) |k, x| switch (x) {
-            .string => |v| if (try namesFolder(run, pos, v, cwd, dir))
+            .string => |v| if (try namesFolder(run, pos, v, cwd, dir) != .none)
                 return run.fail(pos, .refused, "`{s}`'s `env` {s} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`", .{ who, k, m.name }),
             else => {},
         };
@@ -232,22 +235,26 @@ pub fn refuseSecretArgs(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv
 }
 
 /// Whether `arg`, as a program may take it (whole, or after an option's
-/// `=`), reaches `dir`: by its text, resolved against the program's `cwd`,
-/// or through a link. A guard on how a path is spelled is no guard.
-fn namesFolder(run: *Run, pos: ast.Pos, arg: []const u8, cwd: []const u8, dir: []const u8) Error!bool {
-    if (std.mem.indexOf(u8, arg, dir) != null) return true;
+/// `=`), reaches `dir`: inside it, by its text, resolved against the
+/// program's `cwd`, or through a link; or holding it, a folder above it
+/// (`cp -r .`). An argv guard is no sandbox (SHALE.md, "The store"): a
+/// prefix (`-T<path>`), or a path a program builds, still reaches past it.
+fn namesFolder(run: *Run, pos: ast.Pos, arg: []const u8, cwd: []const u8, dir: []const u8) Error!enum { none, inside, holds } {
+    if (std.mem.indexOf(u8, arg, dir) != null) return .inside;
     const after_eq = if (std.mem.indexOfScalar(u8, arg, '=')) |e| arg[e + 1 ..] else "";
     for ([_][]const u8{ arg, after_eq }) |p| {
         if (p.len == 0) continue;
         try run.charge(pos, 1);
         const abs = std.fs.path.resolve(run.alloc, &.{ cwd, p }) catch return run.oom(pos);
-        if (setup.inFolder(abs, dir)) return true;
+        if (setup.inFolder(abs, dir)) return .inside;
+        if (setup.inFolder(dir, abs)) return .holds;
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         if (std.Io.Dir.cwd().realPathFile(run.io, abs, &buf)) |n| {
-            if (setup.inFolder(buf[0..n], dir)) return true;
+            if (setup.inFolder(buf[0..n], dir)) return .inside;
+            if (setup.inFolder(dir, buf[0..n])) return .holds;
         } else |_| {}
     }
-    return false;
+    return .none;
 }
 
 /// A path (`shown`, at `abs`) that reaches a `secrets` mount's folder by
