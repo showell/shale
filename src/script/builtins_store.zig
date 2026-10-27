@@ -42,7 +42,9 @@ pub const Path = struct { full: []const u8, rel: []const u8 };
 
 pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!Path {
     const given = try bi.stringArg(run, pos, b, v, "its path");
-    const rel = if (std.mem.eql(u8, given, ".")) "" else given;
+    // `.` is the root and `m:.` the mount `m`, each spelled as its own
+    // paths are, so a walk of it gives the paths every call takes.
+    const rel = if (std.mem.eql(u8, given, ".")) "" else if (std.mem.endsWith(u8, given, ":.") and std.mem.indexOfScalar(u8, given, '/') == null) given[0 .. given.len - 1] else given;
     try run.charge(pos, given.len);
     // A path the host's hook resolves (a mount's, on Linux) is the host's; any other
     // follows the root's rules.
@@ -56,7 +58,9 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     while (it.next()) |part| {
         if (!store.fatName(part)) return run.fail(pos, .argument, "`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ @tagName(b), rel, part });
     }
-    const full = std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ run.root, rel }) catch return run.oom(pos);
+    // A root of `/` takes no second `/`: `//x` is an empty part to the store.
+    const sep = if (std.mem.endsWith(u8, run.root, "/")) "" else "/";
+    const full = std.fmt.allocPrint(run.alloc, "{s}{s}{s}", .{ run.root, sep, rel }) catch return run.oom(pos);
     return .{ .full = full, .rel = rel };
 }
 
@@ -141,7 +145,7 @@ fn exists(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
 }
 
 fn isDir(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
-    const p = try pathArg(run, pos, .is_dir, args[0], false);
+    const p = try pathArg(run, pos, .is_dir, args[0], true);
     try countRead(run, pos);
     const st = store.statOrNull(run.io, run.alloc, p.full) catch |e| return storeFailed(run, pos, .is_dir, p.rel, e);
     return .{ .boolean = if (st) |x| x.kind == .directory else false };

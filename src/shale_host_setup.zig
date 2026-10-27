@@ -35,6 +35,20 @@ pub const Mount = struct {
     pub const Access = enum { read_write, read_only };
 };
 
+/// `p` without its trailing `/`s, but `/` itself kept: the filesystem's
+/// root trimmed to "" would be taken as the working folder.
+pub fn trimSlash(p: []const u8) []const u8 {
+    const t = std.mem.trimEnd(u8, p, "/");
+    return if (t.len == 0 and p.len > 0) "/" else t;
+}
+
+/// Whether `abs` is the folder `dir` or a path below it (`dir` absolute,
+/// `/` included).
+pub fn inFolder(abs: []const u8, dir: []const u8) bool {
+    if (std.mem.eql(u8, dir, "/")) return abs.len > 0 and abs[0] == '/';
+    return std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/');
+}
+
 /// Parses a mounts file: one `name = value` per line, with `#` comments and
 /// blank lines. A value is an absolute path or one from `~/`. On
 /// `error.Malformed`, `why` names the line and what is wrong with it.
@@ -90,7 +104,7 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
             why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}`'s value `{s}` is relative: an absolute path, or one from `~/`", .{ n, name, value });
             return error.Malformed;
         };
-        try out.append(alloc, .{ .name = try alloc.dupe(u8, name), .dir = std.mem.trimEnd(u8, dir, "/"), .access = access, .tools = tools, .secrets = secrets });
+        try out.append(alloc, .{ .name = try alloc.dupe(u8, name), .dir = trimSlash(dir), .access = access, .tools = tools, .secrets = secrets });
     }
     return out.toOwnedSlice(alloc);
 }

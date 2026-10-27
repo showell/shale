@@ -94,6 +94,9 @@ test "git prelude: a git error stops, naming the call and git's words; an option
     try t.expectStop("git_show(\"\", \"HEAD:nope\")", .atomic, .fail, "`git show HEAD:nope` exited 128: fatal: path 'nope' does not exist in 'HEAD'");
     try t.expectStop("git_log(\"\", {count = 1})", .atomic, .fail, "`git_log` takes n, range, ref, fields and timeout_ms, not `count`");
     try t.expectStop("git_status(\"nowhere\")", .atomic, .fail, "`git status");
+    // A repo that is not a path, and `all` for `add = "all"`, are named.
+    try t.expectStop("git_status({\"x\"})", .atomic, .fail, "`git status --porcelain=v1 -z`: its repo is a path (a string)");
+    try t.expectStop("git_commit(\"\", \"m\", {all = true})", .atomic, .fail, "`git_commit` takes `add = \"all\"` for every change, not `all`");
 }
 
 test "git prelude: commit by tracked files, by all, by paths; a failed one stops" {
@@ -270,4 +273,33 @@ test "git prelude: a git that runs out of time, or is ended by a signal, stops s
     var stuck = t.runOnce("git_merge(\"\", \"side\", {timeout_ms = 300})", .atomic);
     defer stuck.deinit();
     try testing.expectEqualStrings("`git merge side` did not finish (timeout)", stuck.stop.?.message);
+}
+
+test "git prelude: a value that starts with `-` is refused, never given to git as an option (`--output` would write a file no mount guards)" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try repo(&t);
+    try t.expectStop("git_show(\"\", \"--output=x.txt\")", .atomic, .fail, "`git_show`'s `what` is \"--output=x.txt\"");
+    try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(t.threaded.io(), "x.txt", .{}));
+    try t.expectStop("git_diff(\"\", {range = \"--output=y.txt\"})", .atomic, .fail, "`git_diff`'s `range` is \"--output=y.txt\"");
+    try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(t.threaded.io(), "y.txt", .{}));
+    try t.expectStop("git_log(\"\", {ref = \"--output=z.txt\"})", .atomic, .fail, "`git_log`'s `ref` is \"--output=z.txt\"");
+    try t.expectStop("git_log(\"\", {range = \"-p\"})", .atomic, .fail, "`git_log`'s `range` is \"-p\"");
+    try t.expectStop("git_merge_ff(\"\", \"--help\")", .atomic, .fail, "`git_merge_ff`'s `ref` is \"--help\"");
+    try t.expectStop("git_tag(\"\", \"-d\")", .atomic, .fail, "`git_tag`'s `name` is \"-d\"");
+}
+
+test "git prelude: a rename in the work tree (` R`, an intent-to-add file) is one entry with its `from`, not two" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.tmp.dir.createDirPath(t.threaded.io(), "w");
+    try git(&t, "w", &.{ "init", "-q", "-b", "main" });
+    try t.put("w/a.txt", "one\n");
+    try git(&t, "w", &.{ "add", "a.txt" });
+    try git(&t, "w", &.{ "commit", "-q", "-m", "first" });
+    try t.tmp.dir.rename("w/a.txt", t.tmp.dir, "w/b.txt", t.threaded.io());
+    try git(&t, "w", &.{ "add", "-N", "b.txt" });
+    try t.expectOutput("local s = git_status(\"w\") print(#s, s[1].code, s[1].path, get(s[1], \"from\", \"none\"))", "1\t R\tb.txt\ta.txt\n");
 }

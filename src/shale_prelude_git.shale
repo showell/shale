@@ -32,9 +32,17 @@ function git_opts(name, opts, allowed)
   return nil
 end
 
+-- `v`, a caller's value for a place where git reads options: refused
+-- when it starts with `-`, which git would take as one (`--output=` writes
+-- a file no mount, `may_change` or `--undo-on-stop` sees).
+function git_value(call, name, v)
+  return not_option(call, name, v)
+end
+
 -- `repo`'s real path, `"."` and `""` the root's; a stop, naming the call
 -- as `shown`, when it is not a folder.
 function git_real(repo, shown)
+  if not attempt(git_text, repo).ok then fail(shown .. ": its repo is a path (a string), such as \"\" or \"repos:dog-park\"") end
   if repo == "." then repo = "" end
   if repo ~= "" and not is_dir(repo) then fail(shown .. ": " .. repo .. " is not a folder") end
   return real(repo)
@@ -78,8 +86,11 @@ function git_status(repo)
     local e = parts[i]
     if e ~= "" then
       local item = {code = sub(e, 1, 2), path = sub(e, 4)}
+      -- A rename or copy in the index (`R `) or the work tree (` R`)
+      -- has its old path in the next field.
       local x = sub(e, 1, 1)
-      if x == "R" or x == "C" then
+      local y = sub(e, 2, 2)
+      if x == "R" or x == "C" or y == "R" or y == "C" then
         i = i + 1
         item.from = parts[i]
       end
@@ -106,8 +117,8 @@ function git_log(repo, opts?)
   local args = {"log", "--format=" .. join(spec, "%x1f") .. "%x1e"}
   if opts ~= nil then
     if has_key(opts, "n") then push(args, "-n" .. opts.n) end
-    if has_key(opts, "range") then push(args, opts.range) end
-    if has_key(opts, "ref") then push(args, opts.ref) end
+    if has_key(opts, "range") then push(args, git_value("git_log", "range", opts.range)) end
+    if has_key(opts, "ref") then push(args, git_value("git_log", "ref", opts.ref)) end
   end
   push(args, "--")
   local got = {}
@@ -129,7 +140,7 @@ function git_diff(repo, opts?)
   local args = {"diff", "--no-ext-diff"}
   if opts ~= nil then
     if get(opts, "stat", false) then push(args, "--stat") end
-    if has_key(opts, "range") then push(args, opts.range) end
+    if has_key(opts, "range") then push(args, git_value("git_diff", "range", opts.range)) end
   end
   push(args, "--")
   if opts ~= nil and has_key(opts, "paths") then
@@ -140,7 +151,7 @@ end
 
 -- `git show`'s text: a commit, or a file at one (`"HEAD:src/x.zig"`).
 function git_show(repo, what)
-  return git_call(repo, {"show", what}, nil, true, nil).out
+  return git_call(repo, {"show", git_value("git_show", "what", what)}, nil, true, nil).out
 end
 
 -- The tracked paths.
@@ -190,6 +201,7 @@ end
 -- and all, **refused once HEAD is on a remote branch**: a pushed commit
 -- rewritten is history someone may hold.
 function git_commit(repo, msg, opts?)
+  if opts ~= nil and has_key(opts, "all") then fail("`git_commit` takes `add = \"all\"` for every change, not `all`") end
   git_opts("git_commit", opts, {"add", "amend", "timeout_ms"})
   local add = nil
   if opts ~= nil then add = get(opts, "add") end
@@ -228,12 +240,12 @@ function git_push(repo, opts?)
   local args = {"push", "-q"}
   if opts ~= nil and has_key(opts, "tag") then
     if has_key(opts, "branch") then fail("`git_push` takes a `branch` or a `tag`, not both") end
-    push(args, get(opts, "remote", "origin"))
+    push(args, git_value("git_push", "remote", get(opts, "remote", "origin")))
     push(args, "refs/tags/" .. opts.tag)
   elseif opts ~= nil then
     if has_key(opts, "branch") then push(args, "-u") end
-    if has_key(opts, "remote") then push(args, opts.remote) elseif has_key(opts, "branch") then push(args, "origin") end
-    if has_key(opts, "branch") then push(args, opts.branch) end
+    if has_key(opts, "remote") then push(args, git_value("git_push", "remote", opts.remote)) elseif has_key(opts, "branch") then push(args, "origin") end
+    if has_key(opts, "branch") then push(args, git_value("git_push", "branch", opts.branch)) end
   end
   git_call(repo, args, opts, false, nil)
   return nil
@@ -261,8 +273,8 @@ function git_tag(repo, name, opts?)
     push(args, "-F")
     push(args, "-")
   end
-  push(args, name)
-  if opts ~= nil and has_key(opts, "rev") then push(args, opts.rev) end
+  push(args, git_value("git_tag", "name", name))
+  if opts ~= nil and has_key(opts, "rev") then push(args, git_value("git_tag", "rev", opts.rev)) end
   git_call(repo, args, opts, false, msg)
   return nil
 end
@@ -296,7 +308,7 @@ end
 
 -- Merge `ref`, fast-forward only.
 function git_merge_ff(repo, ref)
-  git_call(repo, {"merge", "-q", "--ff-only", ref}, nil, false, nil)
+  git_call(repo, {"merge", "-q", "--ff-only", git_value("git_merge_ff", "ref", ref)}, nil, false, nil)
   return nil
 end
 
@@ -306,6 +318,7 @@ end
 -- never left half merged for what runs next.
 function git_merge(repo, ref, opts?)
   git_opts("git_merge", opts, {"timeout_ms"})
+  git_value("git_merge", "ref", ref)
   local shown = "`git merge " .. ref .. "`"
   local o = {timeout_ms = 60000, env = {GIT_TERMINAL_PROMPT = "0"}, head = 10, tail = 10}
   if opts ~= nil and has_key(opts, "timeout_ms") then o.timeout_ms = opts.timeout_ms end
@@ -338,7 +351,7 @@ function git_worktree_add(repo, dir, opts?)
       if branch ~= nil then fail("`git_worktree_add` takes a `branch` or a `rev`, not both") end
       push(args, "--detach")
       push(args, real(dir))
-      push(args, opts.rev)
+      push(args, git_value("git_worktree_add", "rev", opts.rev))
       git_call(repo, args, opts, false, nil)
       return nil
     end
@@ -346,10 +359,10 @@ function git_worktree_add(repo, dir, opts?)
   if new then
     if branch == nil then fail("`git_worktree_add`: `new` needs the `branch` to make") end
     push(args, "-b")
-    push(args, branch)
+    push(args, git_value("git_worktree_add", "branch", branch))
   end
   push(args, real(dir))
-  if branch ~= nil and not new then push(args, branch) end
+  if branch ~= nil and not new then push(args, git_value("git_worktree_add", "branch", branch)) end
   git_call(repo, args, opts, false, nil)
   return nil
 end
@@ -369,6 +382,6 @@ function git_branch_delete(repo, name, opts?)
   git_opts("git_branch_delete", opts, {"force", "timeout_ms"})
   local flag = "-d"
   if opts ~= nil and get(opts, "force", false) then flag = "-D" end
-  git_call(repo, {"branch", "-q", flag, name}, opts, false, nil)
+  git_call(repo, {"branch", "-q", flag, git_value("git_branch_delete", "name", name)}, opts, false, nil)
   return nil
 end

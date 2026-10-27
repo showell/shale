@@ -182,7 +182,7 @@ no `host` there, so `run`, git and jobs are not in it.
 - the budgets and what each charges;
 - the store and its confinement;
 - the runner (`zig build script`) and the signed route on the live site;
-- a short tutorial;
+- a first script, step by step;
 - the site examples, operator scripts each tested against a store shaped
   like angry-gopher's data;
 - what was decided and refused.
@@ -242,8 +242,6 @@ and `zig build shale-scale` (the largest site each site example fits).
 - [cookbook/roc/README.md](cookbook/roc/README.md): recipes for a Roc
   tree: long lines laid out by `roc fmt`, and two archives judged the same
   machine code.
-- [docs/designs/DESIGN-shale-dogfood.md](docs/designs/DESIGN-shale-dogfood.md):
-  the design for Claude working in Shale instead of bash and Python.
 - [docs/designs/DESIGN-shale-stream.md](docs/designs/DESIGN-shale-stream.md):
   a background run's output streamed as it runs; proposed, parked.
 
@@ -251,6 +249,6 @@ and `zig build shale-scale` (the largest site each site example fits).
 
 | | |
 |---|---|
-| Source | moved from zig-webbox at 61f66b6 (2026-10-18), without its history: that is in zig-webbox's (`git -C ../zig-webbox log -- src/script`) |
+| Source | its history before this repo is zig-webbox's (`git -C ../zig-webbox log -- src/script`) |
 | Runs | on the box, as every agent's shell; in angry-gopher and dog-park on Linux and metal, through their builds |
 | Tests | the modules' unit tests; the request-edge harness for its number parses runs in angry-gopher |

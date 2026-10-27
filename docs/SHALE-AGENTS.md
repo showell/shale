@@ -25,7 +25,11 @@ there to stay safe is what an agent wants on Linux too:**
 run used of four, steps, reads, read bytes and output bytes (`── used:
 52374 of 5000000 steps, 12 of 10000 reads, ...`), so a script near an edge
 is known before a bigger run finds it;
-`--verbose` says so always, with the effects and the programs run. The
+`--verbose` says so always, with the effects and the programs run. A run
+that spent a second or more in programs, job waits and sleeps says where,
+the slowest program named (`── time: 3 programs, 52.1 s in all; the
+slowest 51.8 s: roc build ...`): when a step is slow, that line says
+which program to look at. The
 arena is not among the four: a stop on it (`budget arena`, 16 MiB unset)
 says nothing of what it would have needed: raise it and run again
 (`--budget arena_bytes=4000000000`), and if the script is one you keep,
@@ -63,9 +67,8 @@ script names one by a value made as it runs, which cannot be checked.
 ## Before you reach for the shell
 
 **Most escapes past the gate are a shell habit for something Shale already
-does.** On 2026-10-19 and 20, 694 escapes broke down as: `grep -n` 195, `sed -n
-a,bp` 120, `git` 98, `zig build | grep` about 70. Every one of these has a
-Shale form, most of them one launch:
+does** (`grep -n`, `sed -n a,bp`, `git` and `zig build | grep` above all).
+Each has a Shale form, most of them one launch:
 
 | the habit | in Shale |
 |---|---|
@@ -107,8 +110,11 @@ whole language is [`SHALE.md`](SHALE.md).
 
 **On Linux, the Linux prelude** (`src/shale_prelude_linux.shale`; metal
 has none of it):
-- **Programs:** `run(argv, opts)` runs one (`timeout_ms` and a keep, `head`
-  or `tail` or `whole`, are required; see SHALE.md, "The runner"). Its
+- **Programs:** `run(argv, opts)` runs one and gives `{argv, code, ended,
+  ms, out, ...}`. `timeout_ms` and a keep, `head` or `tail` (lines) or
+  `whole` (bytes), are required; the rest are `cwd`, `stdin`, `env`,
+  `secrets`, `log`, `want`, and the filters `re`, `not_re`, `nocase`,
+  `before`, `after` and `width` (`Opts` in `src/shale_host_run.zig`). Its
   `cwd` is a path as every path is: under the root, or through a mount
   (`cwd = "repos:shale"` runs a sibling repo's step from another's
   checkout); `..` and an absolute path are refused. **What `run` refuses**
@@ -126,6 +132,8 @@ has none of it):
   file of any size and give nil for a missing one. `grep_all(p, lit)` is
   `grep` for a file of any size. `unique(list)` gives each item once. `newest(dir, n)`
   gives the names that changed last (the root as `""` or `"."`).
+  `path_under(dir, name)` spells a name below a folder as every call takes
+  it: `name` in the root, `m:name` in a mount's folder, else `dir/name`.
 - **Jobs**, programs that outlive the call:
   - `job_start(argv, {log, cwd, env, want})` starts one under a detached
     reaper (`want` as `run`'s, for a program `run` would refuse).
@@ -418,8 +426,7 @@ uses get their own `edit`, and `zig build` judges after, with
 `cookbook/zig/move_judge.shale` (and `same_tests.shale` for the test
 names). `opts.lines = {first, last}` limits it to a range.
 
-**Moving a block to another file, then its uses** (zig-webbox's linux_host split):
-move the declarations, then rename what the old file still says to the
+**Moving a block to another file, then its uses:** move the declarations, then rename what the old file still says to the
 qualified name:
 
 ```shale-linux
@@ -529,7 +536,7 @@ match.
 ## If you write Lua
 
 Shale reads like Lua, and an agent's Lua habits are most of its first
-stops (essay `essay-repl-server/notes/shale-from-the-inside.md`). Most are a clear stop;
+stops. Most are a clear stop;
 the first two can give a quiet wrong answer, an empty list:
 
 - **Patterns are regular expressions, not Lua's.** The escape is `\`
@@ -550,6 +557,11 @@ the first two can give a quiet wrong answer, an empty list:
   argument a caller may leave out is declared `opts?`.
 - **`now()` is when the run started**, the same at every call, so `now() -
   t0` is always 0: a program's time is `run`'s own `ms` on its answer.
+  To wait, `sleep(ms)` (0 to 600000 a call, Linux): it is no program, so
+  it spends none of a run's 64.
+- **A launch value given to a program where it reads options**
+  (`step=`, `rev=`) goes through `not_option(who, name, v)`, which refuses
+  one that starts with `-`: the program would take it as an option.
 - **A function sees only its parameters, its locals and the `const`s
   above it**, never the script's `local`s: `const X = 1`, or pass it in.
 - **One name per `local`**: `local a, b = 1, 2` is refused, and so are
@@ -588,7 +600,13 @@ the first two can give a quiet wrong answer, an empty list:
   value in the program's environment and scrubbed from its output as
   `<secret NAME>`; `http_get`'s `bearer` and `cookbook:http.shale`'s
   `bearer=keys:file` use it. A link to the file from elsewhere (an old
-  `~/.token`) is not the mount's and is not guarded.
+  `~/.token`) is not the mount's and is not guarded. **What this guard
+  is:** it stops Shale's own reads, and a program handed an obvious path
+  to a secret, or to a folder that holds one; **a program is not
+  sandboxed.** One that builds a path itself, takes it after a prefix
+  (`-Tkeys/tok`, `@keys/tok`) or follows a link it made, can reach a
+  secret. Keep a secrets mount out of the folders a script hands to
+  programs.
 - **The store follows no symbolic link.** A path any part of which, below
   the root or a mount's own folder, is a link stops the run, `refused:
   <path> is a symbolic link`, for a read, a change, `exists`, `stat` and
@@ -617,24 +635,14 @@ failure, a missing binary included, into a refusal). It passes exactly:
   that fails) is refused, not run. `shale cookbook:wants.shale` reads it
   back (today's, or `since=`, with counts by kind, tag and session),
   through a mount over that folder (`state = ~/.local/state/shale ro`);
-- **a subagent's call.** Its hook input carries an `agent_id` (the hooks
-  reference, "Common input fields"), and local cold agents are exempt. A
-  subagent's Bash call carries `agent_id` and `agent_type`; the top-level
-  session's calls carry neither.
+- **a subagent's call:** its hook input carries an `agent_id` (the
+  top-level session's carries none), so subagents are not gated.
 
 Anything else is refused, with one line naming both forms. Put `shale` on
 `PATH` as a link to `zig-out/bin/shale`, so a rebuild is what every launch
-runs. The hook, in `~/.claude/settings.json` or a project's
-`.claude/settings.json`, the path absolute:
-
-```json
-{"hooks": {"PreToolUse": [{"matcher": "Bash|Monitor",
-  "hooks": [{"type": "command", "command": "/ABSOLUTE/PATH/TO/shale/tools/shale-gate.sh"}]}]}}
-```
-
-The README's "Using Shale with Claude Code on your project" walks through
-installing it, turning it off, a block for `<project>/CLAUDE.md`, and what the gate refuses
-with what to do instead.
+runs. The README's "Using Shale with Claude Code on your project" has the
+hook's settings, how to turn it off, a block for `<project>/CLAUDE.md`, and
+what the gate refuses with what to do instead.
 
 ## Where Shale is worse, said plainly
 

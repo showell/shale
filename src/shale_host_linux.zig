@@ -29,6 +29,9 @@ pub const baseEnv = setup.baseEnv;
 /// The most programs one run may start.
 pub const runs_most = 64;
 
+/// The most a `sleep` waits in one call: ten minutes.
+pub const sleep_most_ms = 600_000;
+
 /// Where a program's output goes as it comes: the scrubber, then the log
 /// and the keep (or `whole`).
 pub const Sink = struct {
@@ -53,7 +56,65 @@ fn realSpawn(_: ?*anyopaque, alloc: std.mem.Allocator, spec: spawn.Spec, sink: *
 /// written.
 pub const Record = struct { line: []const u8 };
 
+/// Where a run's time went, for the line after its report: the programs
+/// it ran, its waits on jobs and its sleeps (`now()` is the run's start, so
+/// a script cannot time itself).
+pub const Time = struct {
+    runs: u32 = 0,
+    run_ms: u64 = 0,
+    slowest_ms: u64 = 0,
+    /// The slowest program's argv, cut short; the host's allocator's.
+    slowest: []const u8 = "",
+    waits: u32 = 0,
+    wait_ms: u64 = 0,
+    sleep_ms: u64 = 0,
+
+    /// Said after the report when it passes a second, or always with `--verbose`.
+    pub fn worthSaying(t: Time, verbose: bool) bool {
+        return (verbose and (t.runs > 0 or t.waits > 0 or t.sleep_ms > 0)) or t.run_ms + t.wait_ms + t.sleep_ms >= 1000;
+    }
+
+    /// `── time: 2 programs, 1.4 s in all; the slowest 1.2 s: zig build test; 1 job wait, 40.0 s; slept 0.3 s`
+    pub fn print(t: Time, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        try w.print("── time: {d} program{s}, ", .{ t.runs, if (t.runs == 1) "" else "s" });
+        try seconds(w, t.run_ms);
+        try w.writeAll(" in all");
+        if (t.runs > 0) {
+            try w.writeAll("; the slowest ");
+            try seconds(w, t.slowest_ms);
+            try w.print(": {s}", .{t.slowest});
+        }
+        if (t.waits > 0) {
+            try w.print("; {d} job wait{s}, ", .{ t.waits, if (t.waits == 1) "" else "s" });
+            try seconds(w, t.wait_ms);
+        }
+        if (t.sleep_ms > 0) {
+            try w.writeAll("; slept ");
+            try seconds(w, t.sleep_ms);
+        }
+        try w.writeAll("\n");
+    }
+
+    fn seconds(w: *std.Io.Writer, ms: u64) std.Io.Writer.Error!void {
+        try w.print("{d}.{d} s", .{ ms / 1000, ms % 1000 / 100 });
+    }
+
+    /// Counts one program's `ms`, keeping its argv if it is the slowest.
+    pub fn ran(t: *Time, alloc: std.mem.Allocator, argv: []const u8, ms: u64) void {
+        t.runs += 1;
+        t.run_ms += ms;
+        if (ms < t.slowest_ms and t.runs > 1) return;
+        const cut = argv[0..@min(argv.len, 80)];
+        const kept = alloc.dupe(u8, cut) catch return;
+        if (t.slowest.len > 0) alloc.free(t.slowest);
+        t.slowest = kept;
+        t.slowest_ms = ms;
+    }
+};
+
 pub const Host = struct {
+    /// Where the run's time went (`Time`).
+    time: Time = .{},
     alloc: std.mem.Allocator,
     /// The root as the CLI was given it, an absolute OS path. A mount inside it
     /// is taken against the run's own root, so each engine of a gated test, in
@@ -78,6 +139,7 @@ pub const Host = struct {
     journal_bytes: usize = 0,
 
     pub fn deinit(h: *Host) void {
+        if (h.time.slowest.len > 0) h.alloc.free(h.time.slowest);
         for (h.records.items) |r| h.alloc.free(r.line);
         h.records.deinit(h.alloc);
         for (h.journal.items) |p| {
@@ -111,7 +173,7 @@ fn resolve(ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]
         // part is a name, so a bad name gets the core's message.
         var it = std.mem.splitScalar(u8, path, '/');
         while (it.next()) |part| if (!store.fatName(part)) return null;
-        try refuseLinks(run, pos, std.mem.trimEnd(u8, run.root, "/"), path, "");
+        try refuseLinks(run, pos, setup.trimSlash(run.root), path, "");
         if (!anySecrets(h)) return null;
         const root = try rootOf(h, run, pos);
         try refuseSecretsUnder(h, run, pos, path, if (path.len == 0) root else std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ root, path }) catch return run.oom(pos));
@@ -142,7 +204,7 @@ pub fn secretPath(h: *Host, run: *Run, pos: ast.Pos, v: Value) Error![]const u8 
 /// A mount's folder as this run sees it: one inside the root is taken
 /// against the run's own root (each engine of a gated test has its copy).
 fn runDirOf(h: *Host, run: *Run, pos: ast.Pos, m: Mount) Error![]const u8 {
-    const inside = std.mem.startsWith(u8, m.dir, h.root_abs) and (m.dir.len == h.root_abs.len or m.dir[h.root_abs.len] == '/');
+    const inside = setup.inFolder(m.dir, h.root_abs);
     if (!inside) return m.dir;
     return std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch run.oom(pos);
 }
@@ -155,13 +217,44 @@ fn anySecrets(h: *const Host) bool {
 /// Refuses a program's argument that names a `secrets` mount's folder: a
 /// token is handed over as `secrets`, never as a path a program reads. Used
 /// by `run` and `job_start`, with or without a `want`.
-pub fn refuseSecretArgs(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv: []const []const u8) Error!void {
+pub fn refuseSecretArgs(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv: []const []const u8, cwd: []const u8, env: ?*script.value.Table) Error!void {
     for (h.mounts) |m| {
         if (!m.secrets) continue;
         const dir = try runDirOf(h, run, pos, m);
-        for (argv, 1..) |arg, i| if (std.mem.indexOf(u8, arg, dir) != null)
-            return run.fail(pos, .refused, "`{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`", .{ who, i, m.name });
+        for (argv, 1..) |arg, i| switch (try namesFolder(run, pos, arg, cwd, dir)) {
+            .none => {},
+            .inside => return run.fail(pos, .refused, "`{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`", .{ who, i, m.name }),
+            .holds => return run.fail(pos, .refused, "`{s}`'s argument {d} holds the mount `{s}`'s folder, which holds secrets: name a folder beside it", .{ who, i, m.name }),
+        };
+        if (env) |t| for (t.map.keys(), t.map.values()) |k, x| switch (x) {
+            .string => |v| if (try namesFolder(run, pos, v, cwd, dir) != .none)
+                return run.fail(pos, .refused, "`{s}`'s `env` {s} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`", .{ who, k, m.name }),
+            else => {},
+        };
     }
+}
+
+/// Whether `arg`, as a program may take it (whole, or after an option's
+/// `=`), reaches `dir`: inside it, by its text, resolved against the
+/// program's `cwd`, or through a link; or holding it, a folder above it
+/// (`cp -r .`). An argv guard is no sandbox (SHALE.md, "The store"): a
+/// prefix (`-T<path>`), or a path a program builds, still reaches past it.
+fn namesFolder(run: *Run, pos: ast.Pos, arg: []const u8, cwd: []const u8, dir: []const u8) Error!enum { none, inside, holds } {
+    if (std.mem.indexOf(u8, arg, dir) != null) return .inside;
+    const after_eq = if (std.mem.indexOfScalar(u8, arg, '=')) |e| arg[e + 1 ..] else "";
+    for ([_][]const u8{ arg, after_eq }) |p| {
+        if (p.len == 0) continue;
+        try run.charge(pos, 1);
+        const abs = std.fs.path.resolve(run.alloc, &.{ cwd, p }) catch return run.oom(pos);
+        if (setup.inFolder(abs, dir)) return .inside;
+        if (setup.inFolder(dir, abs)) return .holds;
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        if (std.Io.Dir.cwd().realPathFile(run.io, abs, &buf)) |n| {
+            if (setup.inFolder(buf[0..n], dir)) return .inside;
+            if (setup.inFolder(dir, buf[0..n])) return .holds;
+        } else |_| {}
+    }
+    return .none;
 }
 
 /// A path (`shown`, at `abs`) that reaches a `secrets` mount's folder by
@@ -171,7 +264,7 @@ fn refuseSecretsUnder(h: *Host, run: *Run, pos: ast.Pos, shown: []const u8, abs:
     for (h.mounts) |m| {
         if (!m.secrets) continue;
         const dir = try runDirOf(h, run, pos, m);
-        if (std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/'))
+        if (setup.inFolder(abs, dir))
             return run.fail(pos, .refused, "\"{s}\" is in the mount `{s}`, which holds secrets", .{ shown, m.name });
     }
 }
@@ -196,7 +289,8 @@ fn mountOf(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize) Er
 /// `path` (the mount `m`'s, its `:` at `colon`) as an OS path, the rest
 /// held to the root's rules.
 fn mountPath(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize, m: Mount) Error![]const u8 {
-    const rest = path[colon + 1 ..];
+    // `m:.` is the mount's folder, as `.` is the root.
+    const rest = if (std.mem.eql(u8, path[colon + 1 ..], ".")) "" else path[colon + 1 ..];
     if (rest.len > 0 and rest[0] == '/') return run.fail(pos, .argument, "\"{s}\" is absolute inside its mount: a mount's paths are relative to it", .{path});
     if (rest.len > 0) {
         var it = std.mem.splitScalar(u8, rest, '/');
@@ -207,11 +301,11 @@ fn mountPath(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize, 
         error.FileNotFound, error.NotDir => return run.fail(pos, .store, "the mount `{s}` is {s}, which is not a folder there", .{ m.name, m.dir }),
         else => return run.fail(pos, .store, "the mount `{s}` is {s}, which cannot be opened: {s}", .{ m.name, m.dir, @errorName(e) }),
     }
-    const inside = std.mem.startsWith(u8, m.dir, h.root_abs) and (m.dir.len == h.root_abs.len or m.dir[h.root_abs.len] == '/');
+    const inside = setup.inFolder(m.dir, h.root_abs);
     const dir = if (inside) std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch return run.oom(pos) else m.dir;
     try refuseLinks(run, pos, dir, rest, path[0 .. colon + 1]);
     if (rest.len == 0) return dir;
-    return std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ dir, rest }) catch run.oom(pos);
+    return std.fmt.allocPrint(run.alloc, "{s}{s}{s}", .{ dir, if (std.mem.eql(u8, dir, "/")) "" else "/", rest }) catch run.oom(pos);
 }
 
 /// Stops the run if any part of `rest` below `base` is a symbolic link: the
@@ -238,13 +332,13 @@ fn refuseLinks(run: *Run, pos: ast.Pos, base: []const u8, rest: []const u8, show
 /// a root path that reaches into its folder. Journals the path under `--undo-on-stop`.
 fn mayChange(ctx: *anyopaque, run: *Run, pos: ast.Pos, rel: []const u8, full: []const u8) Error!void {
     const h: *Host = @ptrCast(@alignCast(ctx));
-    const abs = try absolute(h, run, pos, std.mem.trimEnd(u8, full, "/"));
+    const abs = try absolute(h, run, pos, setup.trimSlash(full));
     for (h.mounts) |m| {
         if (m.access != .read_only) continue;
         const named = std.mem.startsWith(u8, rel, m.name) and rel.len > m.name.len and rel[m.name.len] == ':';
-        const inside = std.mem.startsWith(u8, m.dir, h.root_abs) and (m.dir.len == h.root_abs.len or m.dir[h.root_abs.len] == '/');
+        const inside = setup.inFolder(m.dir, h.root_abs);
         const dir = if (inside) std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch return run.oom(pos) else m.dir;
-        const under = std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/');
+        const under = setup.inFolder(abs, dir);
         if (named or (under and !underWritableWithin(h, run, pos, abs, dir))) return run.fail(pos, .refused, "{s}: mount `{s}` is read-only", .{ rel, m.name });
     }
     if (h.undo) try noteBefore(h, run, pos, abs);
@@ -257,8 +351,8 @@ fn underWritableWithin(h: *Host, run: *Run, pos: ast.Pos, abs: []const u8, ro_di
     for (h.mounts) |m| {
         if (m.access == .read_only) continue;
         const dir = runDirOf(h, run, pos, m) catch return false;
-        if (dir.len <= ro_dir.len or !std.mem.startsWith(u8, dir, ro_dir) or dir[ro_dir.len] != '/') continue;
-        if (std.mem.startsWith(u8, abs, dir) and (abs.len == dir.len or abs[dir.len] == '/')) return true;
+        if (dir.len <= ro_dir.len or !setup.inFolder(dir, ro_dir)) continue;
+        if (setup.inFolder(abs, dir)) return true;
     }
     return false;
 }
@@ -281,7 +375,7 @@ pub const journal_most = 64 << 20;
 
 /// Journals what is at `abs_in` before its first change; later changes are no-ops.
 fn noteBefore(h: *Host, run: *Run, pos: ast.Pos, abs_in: []const u8) Error!void {
-    const abs = std.mem.trimEnd(u8, abs_in, "/");
+    const abs = setup.trimSlash(abs_in);
     for (h.journal.items) |p| if (std.mem.eql(u8, p.abs, abs)) return;
     const io = run.io;
     const cwd = std.Io.Dir.cwd();
@@ -346,7 +440,7 @@ pub fn undoChanges(h: *Host, io: std.Io, w: *std.Io.Writer) !bool {
 
 /// The run's own root, absolute.
 pub fn rootOf(h: *Host, run: *Run, pos: ast.Pos) Error![]const u8 {
-    return absolute(h, run, pos, std.mem.trimEnd(u8, run.root, "/"));
+    return absolute(h, run, pos, setup.trimSlash(run.root));
 }
 
 fn absolute(h: *Host, run: *Run, pos: ast.Pos, p: []const u8) Error![]const u8 {
@@ -359,7 +453,7 @@ fn absolute(h: *Host, run: *Run, pos: ast.Pos, p: []const u8) Error![]const u8 {
 /// A Shale path's OS path, through the mounts or the root, made absolute.
 pub fn osPath(h: *Host, run: *Run, pos: ast.Pos, v: Value, allow_root: bool) Error![]const u8 {
     const p = try script.builtins_store.pathArg(run, pos, .host, v, allow_root);
-    return absolute(h, run, pos, std.mem.trimEnd(u8, p.full, "/"));
+    return absolute(h, run, pos, setup.trimSlash(p.full));
 }
 
 fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []const Value) Error!Value {
@@ -369,6 +463,19 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
         return .{ .string = try osPath(h, run, pos, args[0], true) };
     }
     if (std.mem.eql(u8, name, "run")) return runProgram(h, run, pos, args);
+    // A wait that is no program, so it spends none of `runs_most`.
+    if (std.mem.eql(u8, name, "sleep")) {
+        if (args.len != 1) return run.fail(pos, .argument, "`sleep` takes one argument, the ms, given {d}", .{args.len});
+        const ms = switch (args[0]) {
+            .int => |n| n,
+            else => return run.fail(pos, .type, "`sleep`'s ms must be an integer, not {s}", .{args[0].typeName()}),
+        };
+        if (ms < 0 or ms > sleep_most_ms) return run.fail(pos, .argument, "`sleep` takes 0 to {d} ms, not {d}", .{ sleep_most_ms, ms });
+        try run.charge(pos, 1);
+        run.io.sleep(.fromMilliseconds(ms), .awake) catch return run.fail(pos, .host, "`sleep` was cancelled after its start", .{});
+        h.time.sleep_ms += @intCast(ms);
+        return .nil;
+    }
     if (std.mem.startsWith(u8, name, "job_")) return @import("shale_host_jobs.zig").call(h, run, pos, name, args);
     if (std.mem.eql(u8, name, "zig_rename")) return @import("shale_host_zig.zig").rename(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "zig_decls")) return @import("shale_host_zig.zig").decls(h.alloc, run, pos, args);
@@ -410,7 +517,7 @@ pub fn refuse(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv0: []const
 fn underToolsMount(h: *Host, argv0: []const u8) bool {
     for (h.mounts) |m| {
         if (!m.tools) continue;
-        if (std.mem.startsWith(u8, argv0, m.dir) and argv0.len > m.dir.len and argv0[m.dir.len] == '/') return true;
+        if (argv0.len > m.dir.len and setup.inFolder(argv0, m.dir)) return true;
     }
     return false;
 }
@@ -678,6 +785,9 @@ test "host: run's options are the script's to say; what it is given wrong stops,
     try t.expectStop("host(\"run\", {\"no-such-program-here\"}, {timeout_ms = 1000, tail = 1})", .atomic, .host, "not found along PATH");
     try t.expectStop("host(\"run\", {\"shale-fixture\"}, {timeout_ms = 10, tail = 1, re = \"a{2}\"})", .atomic, .argument, "`run`'s `re`");
     try t.expectStop("host(\"jobs\", 1)", .atomic, .host, "`jobs`: not on this host");
+    // A path option of another type is named as `run`'s.
+    try t.expectStop("host(\"run\", {\"shale-fixture\"}, {timeout_ms = 10, tail = 1, cwd = 3})", .atomic, .type, "`run`: its `cwd` must be a string, not an integer");
+    try t.expectStop("host(\"run\", {\"shale-fixture\"}, {timeout_ms = 10, tail = 1, log = true})", .atomic, .type, "`run`: its `log` must be a string, not a boolean");
 }
 
 test "host: what run refuses without a want, by name and by an untracked path; a want runs it" {
@@ -808,14 +918,24 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
     try t.tmp.dir.createDirPath(t.threaded.io(), "elsewhere/logs");
     const a = t.arena.allocator();
     var why: []const u8 = "";
-    const mounts = try parseMounts(a, try std.fmt.allocPrint(a, "# where things are\n\nruns = {s}/elsewhere\nhome = ~/\ngone = /no/such/folder\n", .{t.root}), "/home/someone", &why);
+    const mounts = try parseMounts(a, try std.fmt.allocPrint(a, "# where things are\n\nruns = {s}/elsewhere\nhome = ~/\ngone = /no/such/folder\nmy-runs = {s}/elsewhere\n", .{ t.root, t.root }), "/home/someone", &why);
     try testing.expectEqualStrings("/home/someone", mounts[1].dir);
+    // The filesystem's root is a folder too: its `/` is kept, not trimmed away.
+    const top = try parseMounts(a, "top = /\nslash = /tmp/\n", "/home/someone", &why);
+    try testing.expectEqualStrings("/", top[0].dir);
+    try testing.expectEqualStrings("/tmp", top[1].dir);
     t.host.mounts = mounts;
     try t.expectOutput(
         \\replace("runs:logs/a.txt", "via the mount")
         \\print(read("runs:logs/a.txt"), exists("runs:"), sub(host("real", "runs:logs"), -14), sub(host("real", ""), 1, 1))
     , "via the mount\ttrue\telsewhere/logs\t/\n");
     try t.expectOutput("print(host(\"real\", \".\") == host(\"real\", \"\"), sub(host(\"real\", \".\"), -2) ~= \"/.\")", "true\ttrue\n");
+    // A mount's `.` is the mount, as the root's `.` is the root.
+    try t.expectOutput("print(host(\"real\", \"runs:.\") == host(\"real\", \"runs:\"), exists(\"runs:.\"), is_dir(\"runs:.\"))", "true\ttrue\ttrue\n");
+    // A mount whose name has a `-` is globbed through, as any other.
+    try t.expectOutput("print(join(glob(\"my-runs:**/*.txt\"), \",\"))", "my-runs:logs/a.txt\n");
+    // And what a walk of it gives is spelled as the mount's own paths are.
+    try t.expectOutput("local p = {} for e in walk(\"runs:.\") do push(p, e.path) end print(join(p, \",\"))", "runs:logs,runs:logs/a.txt\n");
     try testing.expectEqualStrings("via the mount", try t.file("elsewhere/logs/a.txt"));
     // A program's cwd and log through a mount.
     try t.expectOutput("print(sub(host(\"run\", {\"shale-fixture\", \"pwd\"}, {timeout_ms = 10000, tail = 1, cwd = \"runs:logs\"}).out, -15))", "elsewhere/logs\n\n");

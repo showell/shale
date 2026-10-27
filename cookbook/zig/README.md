@@ -8,7 +8,7 @@ change it for the job in front of you. Each is tested to parse
 (`src/shale_cookbook_test.zig`).
 
 Run one from the checkout it works on. `<shale>` is the shale checkout
-(`~/showell_repos/shale`); `<repo>` is the repo the recipe works on, its
+; `<repo>` is the repo the recipe works on, its
 root the current directory:
 
     cd <repo> && shale <shale>/cookbook/zig/seams.shale path=src/x.zig
@@ -24,16 +24,11 @@ which `shale` takes and prints before the run (`── budgets from the
 script's header: ...`), so the cost is in sight. A `--budget` on the
 command line still wins.
 
-**A value a plain word cannot carry goes on stdin.** At the top level of
-this box's Claude sessions, a hook (`tools/shale_gate.zig`) passes only a
-plain launch: `cd DIR && ` if wanted, then `shale` and its words
-(`--verbose`, `--undo-on-stop`, `--args-stdin`, `--budget NAME=N`, a file,
-`NAME=VALUE`), none holding a quote, `$`, a backtick, `;|&<>()`, `\`, or
-`*` and `?`; and optionally a heredoc, `<<'TAG'` (TAG in capitals) ending
-the first line. So a glob (`glob=src/**/*.zig`), a doc, a test's name or
-a `|` goes on stdin after `--args-stdin`, one `NAME=VALUE` a line, raw.
-Every tree-wide recipe's `glob=` defaults to `src/**/*.zig`; another is
-given this way:
+**A value a plain word cannot carry goes on stdin.** The gate passes only
+a plain launch (SHALE-AGENTS.md, "The gate"), so a glob
+(`glob=src/**/*.zig`), a doc, a test's name or a `|` goes on stdin after
+`--args-stdin`, one `NAME=VALUE` a line, raw. Every tree-wide recipe's
+`glob=` defaults to `src/**/*.zig`; another is given this way:
 
     cd <repo> && shale <shale>/cookbook/zig/smells.shale --args-stdin <<'ARGS'
     glob=probe/**/*.zig
@@ -92,8 +87,7 @@ string's text). Each says its budgets in its `-- budget:` line:
   and nothing in the tree names it, which is a question (another repo, a
   build, `@field`). `drop=yes` removes the dead, each by its own bytes; run it
   under `--undo-on-stop`, again until none is left, and let the tests
-  judge. On 2026-10-18 it found 120 unused imports across five repos, and
-  one dead function.
+  judge.
 - `param_runs.shale` (`glob=`, `min=`, `longest=`, `skip=`, `top=`): a run
   of parameter names that several functions declare in a row, plumbing
   (`io`, `alloc`, ...) passed by: a struct with its users already, where a
@@ -101,8 +95,11 @@ string's text). Each says its budgets in its `-- budget:` line:
 - `clones.shale` (`glob=`, `tests=yes`, `window=`, `top=`): the same code
   in two places, runs of 6 or more alike lines (trimmed; blank lines,
   comments, imports, one-name aliases and brackets alone passed by), in
-  one file or two. A find is a question: one became `store.Store.of` in
-  the kernel; two simulators alike on purpose stayed apart.
+  one file or two. A find is a question, not a verdict: code may be alike
+  on purpose.
+- `comment_census.shale` (`dir=`, `files=`, `top=`): per Zig file, its
+  code, doc and plain comment lines, comment lines per 100 of code, words
+  a comment line, and the loud and dated comments.
 
 ## Moving along them
 
@@ -137,6 +134,7 @@ string's text). Each says its budgets in its `-- budget:` line:
 - `zig_tidy.shale` (`path=`): an alias moved after the import it names;
   section banners with nothing under them removed.
 
+
 ## Judging a test suite
 
 - `flip_bools.shale` (`glob=`, `build=test`, `most=40`,
@@ -168,6 +166,9 @@ string's text). Each says its budgets in its `-- budget:` line:
   throwaway test and compared by Zig, byte for byte: for a page's text
   spliced from a shared part (`a ++ shared ++ b`), which a symbol
   judge cannot see. A planted one-character change fails it.
+- `comments_only.shale` (`rev=HEAD`, `files=`): a change that touches
+  comments only, by Zig's tokenizer, each file against `rev`; for one
+  that does not, the first token that differs.
 
 ## Writing a recipe
 

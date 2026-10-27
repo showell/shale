@@ -219,3 +219,36 @@ test "jobs: the mistakes a job's call can make, each named" {
     try t.expectStop("job_wait(\"none.log.job\", {})", .atomic, .argument, "`job_wait` needs `timeout_ms`");
     try t.expectStop("job_wait(\"none.log.job\", {timeout_ms = 10, file = \"a\"})", .atomic, .argument, "`file` without `contains`");
 }
+
+test "jobs: a job stopped just after its start is gone when job_stop returns, its leader too, even one that ignores TERM before it made its group" {
+    // The leader makes its group only when it first runs: a stop that
+    // watched the group alone saw nothing, said "stopped", and sent no KILL.
+    // **Probabilistic, and why:** the window is in the reaper's child,
+    // between its fork and its `setsid`, before any program runs, so no
+    // fixture can hold it open (one runs only after `exec`). Twenty starts
+    // cross it often enough to have shown it red (1 in 20 before the fix).
+    // The green waits on `alive` for up to 2 s after KILL, the reaper's
+    // reap: a job not gone by then is a failure here, not a slow pass.
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try testing.expectEqualStrings("0\n", try once(&t,
+        \\local n = 0
+        \\for i = 1, 20 do
+        \\  local j = job_start({"shale-fixture", "ignore-term", "20000"}, {log = "stopped" .. i .. ".log"})
+        \\  job_stop(j)
+        \\  if job_alive(j) then n = n + 1 end
+        \\end
+        \\print(n)
+    ));
+}
+
+test "jobs: a job whose argument holds a newline is found again by its record; an argv too long for a record is said before it starts" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try testing.expectEqualStrings("exited\t0\n", try once(&t, "local j = job_start({\"shale-fixture\", \"lines\", \"1\", \"one\\ntwo\"}, {log = \"nl.log\"}) local w = job_wait(j, {timeout_ms = 10000}) print(w.ended, w.code)"));
+    var r = t.runOnce("job_start({\"shale-fixture\", \"lines\", \"1\", rep(\"x\", 8000)}, {log = \"long.log\"})", .atomic);
+    defer r.deinit();
+    try testing.expect(std.mem.indexOf(u8, r.stop.?.message, "a record holds 7168") != null);
+}

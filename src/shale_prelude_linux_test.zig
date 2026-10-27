@@ -243,6 +243,18 @@ test "linux prelude: newest, a folder's names by when they changed, newest first
     }
     try t.expectOutput("print(join(newest(\"logs\", 3), \",\"), #newest(\"logs\", 9))", "a,d,c\t4\n");
     try t.expectOutput("print(join(newest(\".\", 99), \",\") == join(newest(\"\", 99), \",\"), #newest(\".\", 99) > 0)", "true\ttrue\n");
+    // A mount's folder as `m:` or `m:.`, as the root is.
+    const a = t.arena.allocator();
+    var why: []const u8 = "";
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "lg = {s}/logs\n", .{t.root}), "/home/someone", &why);
+    try t.expectOutput("print(join(newest(\"lg:\", 3), \",\"), join(newest(\"lg:.\", 3), \",\"))", "a,d,c\ta,d,c\n");
+}
+
+test "linux prelude: path_under spells a name below a folder as every call takes it: the root, a mount's folder, a folder" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.expectOutput("print(path_under(\"\", \"a\"), path_under(\".\", \"a\"), path_under(\"m:\", \"a\"), path_under(\"m:.\", \"a\"), path_under(\"m:d\", \"a\"), path_under(\"d/e\", \"a/b\"))", "a\ta\tm:a\tm:a\tm:d/a\td/e/a/b\n");
 }
 
 test "linux prelude: create refuses a file already there" {
@@ -272,6 +284,58 @@ test "linux prelude: edits_all checks every file's edits before it writes any" {
     try testing.expect(std.mem.endsWith(u8, r.output, "\n4\n"));
     try testing.expectEqualStrings("12\n", try t.file("a.txt"));
     try testing.expectEqualStrings("thrEE\n", try t.file("b.txt"));
+}
+
+test "linux prelude: edits_all checks a file named twice against its first edits, so nothing is written when the second set fails" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.put("a.txt", "one two\n");
+    // The second set is checked against the first's result, where "one two"
+    // is gone: nothing is written.
+    try t.expectStop("edits_all({{\"a.txt\", {{old = \"one\", new = \"1\"}}}, {\"a.txt\", {{old = \"one two\", new = \"x\"}}}})", .atomic, .fail, "`edits_all`: a.txt's edit 1: `old` is not there; nothing written");
+    try testing.expectEqualStrings("one two\n", try t.file("a.txt"));
+    // And a second set that holds on the first's result is applied after it.
+    var r = t.run("print(edits_all({{\"a.txt\", {{old = \"one\", new = \"1\"}}}, {\"a.txt\", {{old = \"1 two\", new = \"12\"}}}}))", .atomic);
+    defer r.deinit();
+    try testing.expect(r.stop == null);
+    try testing.expect(std.mem.endsWith(u8, r.output, "\n2\n"));
+    try testing.expectEqualStrings("12\n", try t.file("a.txt"));
+}
+
+test "linux prelude: edits_all checks what edit will refuse or the budgets stop, before it writes any: more than 64 edits to a file, an empty `old`, the changes and their bytes" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.put("a.txt", "one\n");
+    var many: std.ArrayList(u8) = .empty;
+    var text: std.ArrayList(u8) = .empty;
+    const a = t.arena.allocator();
+    for (0..65) |i| {
+        try many.print(a, "{{old = \"w{d}.\", new = \"W\"}},", .{i});
+        try text.print(a, "w{d}.\n", .{i});
+    }
+    try t.put("b.txt", text.items);
+    try t.expectStop(try std.fmt.allocPrint(a, "edits_all({{{{\"a.txt\", {{{{old = \"one\", new = \"1\"}}}}}}, {{\"b.txt\", {{{s}}}}}}})", .{many.items}), .atomic, .fail, "`edits_all`: b.txt has 65 edits, and `edit` takes at most 64 a call; nothing written");
+    try testing.expectEqualStrings("one\n", try t.file("a.txt"));
+    try t.expectStop("edits_all({{\"a.txt\", {{old = \"\", new = \"x\"}}}})", .atomic, .fail, "`edits_all`: a.txt's edit 1: `old` is empty; nothing written");
+    // What `edit` refuses of an edit's shape, refused before the first file.
+    for ([_][2][]const u8{
+        .{ "{}", "`edits_all`: b.txt has no edits; nothing written" },
+        .{ "{{old = \"w0.\", neww = \"W\"}}", "`edits_all`: b.txt's edit 1 takes `old`, `new`, `all` and `word`, not `neww`; nothing written" },
+        .{ "{{old = \"w0.\"}}", "`edits_all`: b.txt's edit 1 has no `new`; nothing written" },
+        .{ "{{old = \"w0.\", new = 3}}", "`edits_all`: b.txt's edit 1's `new` is not a string; nothing written" },
+        .{ "{{old = \"w0.\", new = \"W\", all = 1}}", "`edits_all`: b.txt's edit 1's `all` is not true or false; nothing written" },
+        .{ "{\"w0.\"}", "`edits_all`: b.txt's edit 1 is not a map, `{old = ..., new = ...}`; nothing written" },
+    }) |c| {
+        try t.expectStop(try std.fmt.allocPrint(a, "edits_all({{{{\"a.txt\", {{{{old = \"one\", new = \"1\"}}}}}}, {{\"b.txt\", {s}}}}})", .{c[0]}), .atomic, .fail, c[1]);
+        try testing.expectEqualStrings("one\n", try t.file("a.txt"));
+    }
+    // One change left: two files would stop on the second, so neither is written.
+    t.budgets.changes = 1;
+    try t.put("c.txt", "three\n");
+    try t.expectStop("edits_all({{\"a.txt\", {{old = \"one\", new = \"1\"}}}, {\"c.txt\", {{old = \"three\", new = \"3\"}}}})", .atomic, .fail, "`edits_all`: 2 files to write, and the budget has 1 change left; nothing written");
+    try testing.expectEqualStrings("one\n", try t.file("a.txt"));
 }
 
 test "linux prelude: edits_all checks a word edit as edit applies it, so the next is checked against its result" {
@@ -364,4 +428,61 @@ test "linux prelude: the repo's and the user's preludes come after it, SHALE_PRE
     try t.put(".shale/prelude.shale", "function unique(x)\n  return x\nend\n");
     t.preludes = try host_linux.loadPreludes(a, io, t.root, "", "/h", &why);
     try t.expectStop("print(1)", .atomic, .name, ".shale/prelude.shale's `unique` is the Linux prelude's already");
+}
+
+/// One HTTP request answered on 127.0.0.1 with `answer`, as it is.
+const RawAnswer = struct {
+    listener: std.Io.net.Server,
+    answer: []const u8,
+
+    fn serve(self: *RawAnswer, io: std.Io) void {
+        const stream = self.listener.accept(io) catch return;
+        defer stream.close(io);
+        var rb: [4096]u8 = undefined;
+        var r = stream.reader(io, &rb);
+        while (true) {
+            const line = r.interface.takeDelimiterInclusive('\n') catch return;
+            if (std.mem.eql(u8, line, "\r\n")) break;
+        }
+        var w = stream.writer(io, &.{});
+        w.interface.writeAll(self.answer) catch return;
+    }
+};
+
+test "linux prelude: http_get keeps a folded header's continued value, never passing a head line by" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const io = t.threaded.io();
+    const any: std.Io.net.IpAddress = try .parse("127.0.0.1", 0);
+    var one: RawAnswer = .{ .listener = try any.listen(io, .{ .reuse_address = true }), .answer = "HTTP/1.1 200 OK\r\nX-Long: one\r\n two\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok" };
+    const port = one.listener.socket.address.getPort();
+    const served = try std.Thread.spawn(.{}, RawAnswer.serve, .{ &one, io });
+    const a = t.arena.allocator();
+    var r = t.runOnce(try std.fmt.allocPrint(a, "local r = http_get(\"http://127.0.0.1:{d}/\") print(r.status, r.headers[\"x-long\"], r.body)", .{port}), .atomic);
+    defer r.deinit();
+    if (r.stop != null) {
+        if (one.listener.socket.address.connect(io, .{ .mode = .stream })) |s| {
+            var w = s.writer(io, &.{});
+            w.interface.writeAll("\r\n") catch {};
+            s.close(io);
+        } else |_| {}
+    }
+    served.join();
+    one.listener.deinit(io);
+    if (r.stop) |s| {
+        std.debug.print("stopped: {s}\n", .{s.message});
+        return error.TestUnexpectedResult;
+    }
+    try testing.expectEqualStrings("200\tone two\tok\n", r.output);
+}
+
+test "linux prelude: sleep waits without a program, so a run sleeps more often than it may run programs; its ms from 0 to ten minutes" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.expectOutput("local n = 0 for i = 1, 100 do sleep(1) n = n + 1 end sleep(0) print(n, sleep(1) == nil)", "100\ttrue\n");
+    try t.expectStop("sleep(-1)", .atomic, .argument, "`sleep` takes 0 to 600000 ms, not -1");
+    try t.expectStop("sleep(600001)", .atomic, .argument, "`sleep` takes 0 to 600000 ms, not 600001");
+    try t.expectStop("sleep(\"10\")", .atomic, .type, "`sleep`'s ms must be an integer, not a string");
 }

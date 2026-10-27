@@ -11,6 +11,29 @@ function run(argv, opts)
   return host("run", argv, opts)
 end
 
+-- **INTERNAL to `not_option`**: whether `x` is a string, by a string
+-- builtin taking it (Shale has no `type`).
+function option_text(x)
+  return lower(x)
+end
+
+-- **A VALUE, NOT AN OPTION**: `v`, a launch line's or a caller's value
+-- (`who`'s `name`), for a place where a program reads options; refused
+-- when it starts with `-`, which the program would take as one (git
+-- grep's `-O` runs a command). `v` back. A recipe calls it where it
+-- reads the value; the git prelude's `git_value` is it too.
+function not_option(who, name, v)
+  if attempt(option_text, v).ok and starts_with(v, "-") then fail("`" .. who .. "`'s `" .. name .. "` is \"" .. v .. "\": a value that starts with `-` would be one of the program's options") end
+  return v
+end
+
+-- A wait of `ms` (0 to 600000) without a program: a run holds 64
+-- programs, but may sleep as often as its steps allow. `now()` stays the
+-- run's start.
+function sleep(ms)
+  return host("sleep", ms)
+end
+
 -- A Shale path's absolute OS path, for a program's argv.
 function real(path)
   return host("real", path)
@@ -112,14 +135,25 @@ function curl_http(who, method, url, opts?)
     cut = find(r.out, "\r\n\r\n", at)
   end
   if cut == nil then fail("`" .. who .. " " .. url .. "`: curl gave no head") end
+  -- After the status line, each line a `Name: value`, or the one before
+  -- it continued (a folded header, begun by a space or a tab); anything
+  -- else is curl's head misread, said, not passed by.
   local headers = {}
-  for line in lines(sub(r.out, at, cut - 1)) do
+  local prev = nil
+  local head = lines(sub(r.out, at, cut - 1))
+  for i = 2, #head do
+    local line = head[i]
     local colon = find(line, ":")
-    if colon ~= nil then
+    if (starts_with(line, " ") or starts_with(line, "\t")) and prev ~= nil then
+      headers[prev] = headers[prev] .. " " .. trim(line)
+    elseif colon ~= nil then
       local name = lower(sub(line, 1, colon - 1))
       local value = trim(sub(line, colon + 1))
       local had = get(headers, name, nil)
       if had == nil then headers[name] = value else headers[name] = had .. "\n" .. value end
+      prev = name
+    else
+      fail("`" .. who .. " " .. url .. "`: a head line that is no header: " .. line)
     end
   end
   return {status = tonumber(code), headers = headers, body = sub(r.out, cut + 4, #r.out - #code - 1), ms = r.ms}
@@ -258,15 +292,23 @@ function grep_all(p, lit)
   end
 end
 
+-- **A NAME BELOW A FOLDER**, spelled as every call takes it: in the root
+-- (`""`, `"."`) the name, in a mount's folder (`m:`, `m:.`) `m:name`,
+-- else `dir/name`.
+function path_under(dir, name)
+  if dir == "" or dir == "." then return name end
+  if ends_with(dir, ":") then return dir .. name end
+  if ends_with(dir, ":.") then return sub(dir, 1, #dir - 1) .. name end
+  return dir .. "/" .. name
+end
+
 -- The names of the `n` entries of a folder that changed last, newest
 -- first (`ls -t | head`); names that changed at once, by name. The root is
 -- `""` or `"."`.
 function newest(p, n)
   local rows = {}
   for name in ls(p) do
-    local path = name
-    if p ~= "" and p ~= "." and not ends_with(p, ":") then path = p .. "/" .. name end
-    push(rows, {name = name, modified = stat(path).modified})
+    push(rows, {name = name, modified = stat(path_under(p, name)).modified})
   end
   sort(rows, "modified", "desc")
   local got = {}
@@ -340,6 +382,36 @@ function edit_word_byte(c)
   return c ~= "" and re_find(c, "^[A-Za-z0-9_]$") ~= nil
 end
 
+-- **INTERNAL to `edits_all`**: whether `x` is a list (`#` takes one, and
+-- refuses a map).
+function edit_list_len(x)
+  return #x
+end
+
+-- **INTERNAL to `edits_all`**: whether `x` is a map (`keys` takes one).
+function edit_keys(x)
+  return keys(x)
+end
+
+-- **INTERNAL to `edits_all`**: an edit's shape, as `edit` will hold it,
+-- refused before any file is written: a map of `old` and `new` (strings)
+-- and `all` and `word` (booleans), no other key.
+function edit_shape(p, j, e)
+  local where = "`edits_all`: " .. p .. "'s edit " .. j
+  if attempt(edit_list_len, e).ok or not attempt(edit_keys, e).ok then fail(where .. " is not a map, `{old = ..., new = ...}`; nothing written") end
+  for k in keys(e) do
+    if k ~= "old" and k ~= "new" and k ~= "all" and k ~= "word" then fail(where .. " takes `old`, `new`, `all` and `word`, not `" .. k .. "`; nothing written") end
+  end
+  for k in {"old", "new"} do
+    if not has_key(e, k) then fail(where .. " has no `" .. k .. "`; nothing written") end
+    if not attempt(option_text, e[k]).ok then fail(where .. "'s `" .. k .. "` is not a string; nothing written") end
+  end
+  for k in {"all", "word"} do
+    if has_key(e, k) and e[k] ~= true and e[k] ~= false then fail(where .. "'s `" .. k .. "` is not true or false; nothing written") end
+  end
+  return nil
+end
+
 -- **INTERNAL to `edits_all`**: `text` with each whole-word `old` replaced
 -- by `new`, as `edit`'s `{word = true, all = true}` does: `{text, n}`.
 function edit_words(text, old, new)
@@ -380,13 +452,24 @@ end
 -- only, so the edits after it are checked against its result. The
 -- replacements made in all.
 function edits_all(list)
+  -- A file named twice, by any spelling (a mount's, the root's), is checked
+  -- against its earlier edits' result, as `edit` will meet it.
+  local checked = {}
+  -- Each item is one `edit`: a change, its bytes the file as written.
+  local bytes = 0
   for item in list do
-    local text = read(item[1])
+    if #item[2] > 64 then fail("`edits_all`: " .. item[1] .. " has " .. #item[2] .. " edits, and `edit` takes at most 64 a call; nothing written") end
+    local key = real(item[1])
+    local text = get(checked, key, nil)
+    if text == nil then text = read(item[1]) end
     local j = 0
+    if #item[2] == 0 then fail("`edits_all`: " .. item[1] .. " has no edits; nothing written") end
     for e in item[2] do
       j = j + 1
+      edit_shape(item[1], j, e)
       local where = "`edits_all`: " .. item[1] .. "'s edit " .. j .. ": "
       local all = get(e, "all", false)
+      if e.old == "" then fail(where .. "`old` is empty; nothing written") end
       if get(e, "word", false) then
         local r = edit_words(text, e.old, e.new)
         if r.n == 0 then fail(where .. "`old` is not there as a whole word; nothing written") end
@@ -399,7 +482,12 @@ function edits_all(list)
         text = substitute(text, e.old, e.new)
       end
     end
+    checked[key] = text
+    bytes = bytes + #text
   end
+  local left = budget()
+  if #list > left.changes then fail("`edits_all`: " .. #list .. " files to write, and the budget has " .. left.changes .. " change" .. (left.changes == 1 and "" or "s") .. " left; nothing written") end
+  if bytes > left.change_bytes then fail("`edits_all`: " .. bytes .. " bytes to write, and the budget has " .. left.change_bytes .. " left; nothing written") end
   -- A file that may not change (a read-only mount's) stops it here,
   -- before any is written.
   for item in list do host("may_change", item[1]) end

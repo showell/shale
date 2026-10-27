@@ -32,7 +32,14 @@ pub fn call(h: *Host, run: *Run, pos: ast.Pos, name: []const u8, args: []const V
         if (was) h.record("job {s} stopped", .{j.shown});
         return .{ .boolean = was };
     }
-    if (std.mem.eql(u8, name, "job_wait")) return wait(h, run, pos, args);
+    if (std.mem.eql(u8, name, "job_wait")) {
+        const began = monoMs();
+        defer {
+            h.time.waits += 1;
+            h.time.wait_ms += monoMs() - began;
+        }
+        return wait(h, run, pos, args);
+    }
     return run.fail(pos, .host, "`{s}`: not on this host", .{name});
 }
 
@@ -77,7 +84,14 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     }
     const cwd = if (cwd_v) |c| try hl.osPath(h, run, pos, c, true) else try hl.rootOf(h, run, pos);
     try hl.refuse(h, run, pos, "job_start", argv[0], cwd, want);
-    try hl.refuseSecretArgs(h, run, pos, "job_start", argv);
+    try hl.refuseSecretArgs(h, run, pos, "job_start", argv, cwd, env_t);
+    // Its record holds the argv, escaped: one too long is said here, not
+    // as a record the reaper could not write.
+    var argv_bytes: usize = argv.len -| 1;
+    for (argv) |x| for (x) |c| {
+        argv_bytes += if (c == '\n' or c == '\\') 2 else 1;
+    };
+    if (argv_bytes > jobs.argv_most) return run.fail(pos, .argument, "`job_start`: its argv is {d} bytes in its record, and a record holds {d}", .{ argv_bytes, jobs.argv_most });
     const reaper = h.reaper orelse return run.fail(pos, .host, "`job_start`: this host has no reaper to start a job under", .{});
 
     var env: std.ArrayList([]const u8) = .empty;

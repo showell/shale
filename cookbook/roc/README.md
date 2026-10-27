@@ -26,6 +26,3 @@ it works on, `<shale>` being the shale checkout:
   patch with `a/` and `b/` paths that `patch -p1` applies from the repo's
   root. Dog Park's new-kind proof (`test/new_kind/sheep.patch`) is rebuilt
   this way whenever the Roc it patches moves.
-
-Dog Park's 2026-10-19 reformat used the first two: 66 long lines down to 15, and
-the x86-64 archives the same code.

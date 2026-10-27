@@ -12,6 +12,7 @@
 const P = arg("path", "")
 const NAME = arg("name", "")
 const REV = arg("rev", "HEAD")
+not_option("const_judge", "rev", REV)
 if P == "" or NAME == "" then fail("const_judge: path= name= [rev=]") end
 
 -- The const's text: from `const NAME =` (or `pub const`) to its `;` line.
