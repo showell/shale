@@ -235,3 +235,34 @@ test "cli: a recipe's launch value where a program reads options is refused when
         try testing.expect(std.mem.indexOf(u8, r.stderr, c[1]) != null);
     }
 }
+
+test "cli: --check parses and compiles a script with its preludes and runs nothing: ok, or the first error and exit 1" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    try tmp.dir.writeFile(io, .{ .sub_path = "good.shale", .data = "replace(\"made.txt\", \"x\")\nprint(real(\".\"))\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "syntax.shale", .data = "print((1)\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "name.shale", .data = "nope(1)\n" });
+    const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(root);
+    for ([_]struct { []const u8, u8, []const u8 }{
+        .{ "good.shale", 0, "── checked: it parses and compiles; nothing ran" },
+        .{ "syntax.shale", 1, "syntax:" },
+        .{ "name.shale", 1, "name:" },
+    }) |c| {
+        const file = try std.fmt.allocPrint(a, "{s}/{s}", .{ root, c[0] });
+        defer a.free(file);
+        const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "--check", file } });
+        defer a.free(r.stdout);
+        defer a.free(r.stderr);
+        errdefer std.debug.print("{s}: {s}{s}\n", .{ c[0], r.stdout, r.stderr });
+        try testing.expectEqual(c[1], r.term.exited);
+        try testing.expect(std.mem.indexOf(u8, r.stderr, c[2]) != null);
+        try testing.expectEqualStrings("", r.stdout);
+    }
+    // Nothing ran: the good script's replace made no file.
+    try testing.expectError(error.FileNotFound, tmp.dir.statFile(io, "made.txt", .{}));
+}
