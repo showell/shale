@@ -141,7 +141,7 @@ fn exists(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
 }
 
 fn isDir(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
-    const p = try pathArg(run, pos, .is_dir, args[0], false);
+    const p = try pathArg(run, pos, .is_dir, args[0], true);
     try countRead(run, pos);
     const st = store.statOrNull(run.io, run.alloc, p.full) catch |e| return storeFailed(run, pos, .is_dir, p.rel, e);
     return .{ .boolean = if (st) |x| x.kind == .directory else false };
