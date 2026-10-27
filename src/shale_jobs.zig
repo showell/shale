@@ -357,6 +357,17 @@ test "jobs: a record reads back as it was written, and a broken one is none" {
     try std.testing.expect(parseRecord("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\ngarbage\n") == null);
 }
 
+test "jobs: an argv with a newline or a backslash reads back as it was, and none overrides a key; a key twice is none" {
+    var buf: [512]u8 = undefined;
+    for ([_][]const u8{ "git commit -m one\ntwo", "x\npid=7\nexit=3", "a\\nb \\ c" }) |argv| {
+        const r = parseRecord(formatRecord(&buf, .{ .pid = 42, .pgid = 42, .start = "123", .started = 9, .argv = argv, .reaper = 1, .reaper_start = "5" })) orelse return error.TestUnexpectedResult;
+        try std.testing.expectEqualStrings(argv, r.argv);
+        try std.testing.expectEqual(@as(i32, 42), r.pid);
+        try std.testing.expect(!r.done());
+    }
+    try std.testing.expect(parseRecord("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\npid=7\n") == null);
+}
+
 test "jobs: a reaper gone before its record is NoRecord at once, the pipe's end its word" {
     const io = std.testing.io;
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
