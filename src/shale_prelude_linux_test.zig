@@ -250,6 +250,13 @@ test "linux prelude: newest, a folder's names by when they changed, newest first
     try t.expectOutput("print(join(newest(\"lg:\", 3), \",\"), join(newest(\"lg:.\", 3), \",\"))", "a,d,c\ta,d,c\n");
 }
 
+test "linux prelude: path_under spells a name below a folder as every call takes it: the root, a mount's folder, a folder" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.expectOutput("print(path_under(\"\", \"a\"), path_under(\".\", \"a\"), path_under(\"m:\", \"a\"), path_under(\"m:.\", \"a\"), path_under(\"m:d\", \"a\"), path_under(\"d/e\", \"a/b\"))", "a\ta\tm:a\tm:a\tm:d/a\td/e/a/b\n");
+}
+
 test "linux prelude: create refuses a file already there" {
     var t: T = undefined;
     try init(&t);
