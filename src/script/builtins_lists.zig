@@ -15,6 +15,7 @@ const spec = bi.spec;
 
 pub const specs = [_]bi.Spec{
     spec(.push, 2, 2, push),
+    spec(.pop, 1, 1, pop),
     spec(.sort, 1, 3, sort),
     spec(.reverse, 1, 1, reverse),
     spec(.take, 2, 2, take),
@@ -32,6 +33,14 @@ fn push(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     t.list.append(run.alloc, args[1]) catch return run.oom(pos);
     t.kind = .list;
     return .nil;
+}
+
+/// `pop(l)` removes and returns a list's last item; on an empty list it
+/// stops, naming the call: an item, never nil. A `for` over the list stops
+/// at its new end.
+fn pop(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+    const t = try bi.listArg(run, pos, .pop, args[0]);
+    return t.list.pop() orelse run.fail(pos, .argument, "`pop` of an empty list: nothing to take (`#l > 0` asks first)", .{});
 }
 
 fn reverse(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {

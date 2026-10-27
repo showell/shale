@@ -1011,6 +1011,15 @@ test "builtins: same, the contents all the way down: lists in order, maps whatev
     try f.expectStop("local a = {} push(a, a) local b = {} push(b, b) print(same(a, b))", .argument);
 }
 
+test "builtins: pop takes the last item, shortens the list, and stops on an empty one; a for over it stops at its new end" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("local l = {1, 2, 3} print(pop(l), #l, join(l, \",\"))", "3\t2\t1,2\n");
+    try f.expectStop("local l = {} print(pop(l))", .argument);
+    try f.expectOutput("local l = {1, 2, 3, 4} for x in l do print(x) pop(l) end print(#l)", "1\n2\n2\n");
+}
+
 test "builtins: re_find's nocase must be a boolean" {
     var f: Fixture = undefined;
     try f.init();

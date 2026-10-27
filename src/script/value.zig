@@ -40,7 +40,7 @@ pub const Value = union(enum) {
 pub const Table = struct {
     /// `{}` takes its kind from its first entry, and keeps it.
     kind: enum { empty, list, map } = .empty,
-    /// The items of a list, index 1 first. A list never shrinks.
+    /// The items of a list, index 1 first. Only `pop` shrinks one.
     list: std.ArrayList(Value) = .empty,
     /// Keys in the order they were first set.
     map: std.StringArrayHashMapUnmanaged(Value) = .empty,

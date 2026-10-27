@@ -397,12 +397,12 @@ const Machine = struct {
                 },
                 .for_list_iter => {
                     const i = m.slot(op.a + 2).int;
-                    if (i >= m.slot(op.a + 1).int) {
+                    // A list `pop` shortened ends the loop at its new end.
+                    if (i >= m.slot(op.a + 1).int or i >= m.slot(op.a).table.list.items.len) {
                         m.pc = op.b;
                         continue;
                     }
                     try r.charge(op.pos, 1);
-                    // A list never shrinks, so the item is there.
                     m.slot(op.c).* = m.slot(op.a).table.list.items[@intCast(i)];
                     m.slot(op.a + 2).* = .{ .int = i + 1 };
                 },

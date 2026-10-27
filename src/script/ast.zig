@@ -70,6 +70,7 @@ pub const Builtin = enum {
     table,
     // lists and maps
     push,
+    pop,
     sort,
     keys,
     has_key,

@@ -100,6 +100,7 @@ const cases = [_]Case{
     .{ .b = .table, .grows = .scales, .setup = "local rows = {} for i = 1, N do push(rows, {a = i}) end", .call = "local x = table(rows, {\"a\"})" },
     // lists and maps
     .{ .b = .push, .grows = .constant, .why = "one item, amortized" },
+    .{ .b = .pop, .grows = .constant, .why = "one item, as push" },
     .{ .b = .sort, .grows = .scales, .setup = "local l = {} for i = 1, N do push(l, N - i) end", .call = "sort(l)" },
     .{ .b = .keys, .grows = .scales, .setup = "local m = {} for i = 1, N do m[\"k\" .. i] = i end", .call = "local x = keys(m)" },
     .{ .b = .has_key, .grows = .scales, .setup = "local m = {a = 1} local k = rep(\"k\", N)", .call = "local x = has_key(m, k)" },
