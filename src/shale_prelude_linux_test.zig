@@ -464,3 +464,13 @@ test "linux prelude: http_get keeps a folded header's continued value, never pas
     }
     try testing.expectEqualStrings("200\tone two\tok\n", r.output);
 }
+
+test "linux prelude: sleep waits without a program, so a run sleeps more often than it may run programs; its ms from 0 to ten minutes" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.expectOutput("local n = 0 for i = 1, 100 do sleep(1) n = n + 1 end sleep(0) print(n, sleep(1) == nil)", "100\ttrue\n");
+    try t.expectStop("sleep(-1)", .atomic, .argument, "`sleep` takes 0 to 600000 ms, not -1");
+    try t.expectStop("sleep(600001)", .atomic, .argument, "`sleep` takes 0 to 600000 ms, not 600001");
+    try t.expectStop("sleep(\"10\")", .atomic, .type, "`sleep`'s ms must be an integer, not a string");
+}
