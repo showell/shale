@@ -219,3 +219,20 @@ test "jobs: the mistakes a job's call can make, each named" {
     try t.expectStop("job_wait(\"none.log.job\", {})", .atomic, .argument, "`job_wait` needs `timeout_ms`");
     try t.expectStop("job_wait(\"none.log.job\", {timeout_ms = 10, file = \"a\"})", .atomic, .argument, "`file` without `contains`");
 }
+
+test "jobs: a job stopped just after its start is gone when job_stop returns, its leader too, even one that ignores TERM before it made its group" {
+    // The leader makes its group only when it first runs: a stop that
+    // watched the group alone saw nothing, said "stopped", and sent no KILL.
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try testing.expectEqualStrings("0\n", try once(&t,
+        \\local n = 0
+        \\for i = 1, 20 do
+        \\  local j = job_start({"shale-fixture", "ignore-term", "20000"}, {log = "stopped" .. i .. ".log"})
+        \\  job_stop(j)
+        \\  if job_alive(j) then n = n + 1 end
+        \\end
+        \\print(n)
+    ));
+}
