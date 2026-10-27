@@ -120,3 +120,39 @@ test "cli: a script named through a mount (`lib:hi.shale`) is read from the moun
     defer a.free(n.stderr);
     try testing.expect(std.mem.indexOf(u8, n.stderr, "no mount named `nope`") != null);
 }
+
+test "cli: a root spelled with `.`, `..` or a link is the folder itself: a read-only or secrets mount inside it holds, and real(\".\") is the folder" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    try tmp.dir.createDirPath(io, "r/locked");
+    try tmp.dir.createDirPath(io, "r/tok");
+    try tmp.dir.createDirPath(io, "r/sub");
+    try tmp.dir.writeFile(io, .{ .sub_path = "r/locked/a.txt", .data = "orig\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "r/tok/t", .data = "secret\n" });
+    try tmp.dir.symLink(io, "r", "link", .{ .is_directory = true });
+    try tmp.dir.writeFile(io, .{ .sub_path = "p.shale", .data =
+        \\function w() replace("locked/a.txt", "changed\n") end
+        \\function r() return read("tok/t") end
+        \\print(sub(real("."), -2))
+        \\print(attempt(w).class, attempt(r).class)
+        \\
+    });
+    const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(dir);
+    for ([_][]const u8{ "r/.", "r/sub/..", "link" }) |spelled| {
+        const cmd = try std.fmt.allocPrint(a, "printf 'locked = %s/{s}/r/locked ro\\ntok = %s/{s}/r/tok secrets\\n' \"$PWD\" \"$PWD\" > '{s}/mounts' && SHALE_MOUNTS='{s}/mounts' '{s}' --root \"$PWD/{s}/{s}\" '{s}/p.shale'", .{ dir, dir, dir, dir, shale_exe, dir, spelled, dir });
+        defer a.free(cmd);
+        const r = try std.process.run(a, io, .{ .argv = &.{ "sh", "-c", cmd } });
+        defer a.free(r.stdout);
+        defer a.free(r.stderr);
+        errdefer std.debug.print("{s}: {s}{s}\n", .{ spelled, r.stdout, r.stderr });
+        try testing.expectEqualStrings("/r\nrefused\trefused\n", r.stdout);
+        const kept = try tmp.dir.readFileAlloc(io, "r/locked/a.txt", a, .limited(1 << 16));
+        defer a.free(kept);
+        try testing.expectEqualStrings("orig\n", kept);
+    }
+}
