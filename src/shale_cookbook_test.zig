@@ -141,3 +141,58 @@ test "preludes: each one compiled whole, its lines with code written for tools/c
     try std.Io.Dir.cwd().createDirPath(io, ".zig-cache/coverage");
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = ".zig-cache/coverage/prelude_code.txt", .data = out.items });
 }
+
+test "cookbook: syntax.shale gives each file one verdict by its kind, a good file ok and a broken one its first error, then PASS or FAIL" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    const shale_exe = @import("shale_test_options").shale;
+    const files = [_][3][]const u8{
+        .{ "ok.zig", "const a = 1;\n", "ok" },                              .{ "bad.zig", "const a = ;\n", "FAIL" },
+        .{ "fmt.zig", "const a  = 1;\n", "FAIL" },                          .{ "ok.zon", ".{ .a = 1 }\n", "ok" },
+        .{ "ok.js", "let x = 1;\n", "ok" },                                 .{ "bad.mjs", "let x = ;\n", "FAIL" },
+        .{ "ok.shale", "print(1)\n", "ok" },                                .{ "bad.shale", "print((1)\n", "FAIL" },
+        .{ "ok.py", "x = 1\n", "ok" },                                      .{ "bad.py", "x = (\n", "FAIL" },
+        .{ "ok.sh", "echo hi\n", "ok" },                                    .{ "bad.sh", "if then\n", "FAIL" },
+        .{ "Good.roc", "Good := [].{\n\tone : U64\n\tone = 1\n}\n", "ok" }, .{ "Bad.roc", "Bad := [].{\n\tone = (\n}\n", "FAIL" },
+        .{ "a.md", "# a\n", "ok" },
+    };
+    // `roc` is the one tool a box may lack: its pair is checked where it is there.
+    const has_roc = blk: {
+        const r = std.process.run(a, io, .{ .argv = &.{ "roc", "version" } }) catch break :blk false;
+        a.free(r.stdout);
+        a.free(r.stderr);
+        break :blk true;
+    };
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(a);
+    for (files) |f| {
+        if (!has_roc and std.mem.endsWith(u8, f[0], ".roc")) continue;
+        try tmp.dir.writeFile(io, .{ .sub_path = f[0], .data = f[1] });
+        if (list.items.len > 0) try list.append(a, ',');
+        try list.appendSlice(a, f[0]);
+    }
+    const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(root);
+    const files_arg = try std.fmt.allocPrint(a, "files={s}", .{list.items});
+    defer a.free(files_arg);
+    var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_n = try std.Io.Dir.cwd().realPathFile(io, shale_exe, &exe_buf);
+    const shale_arg = try std.fmt.allocPrint(a, "shale={s}", .{exe_buf[0..exe_n]});
+    defer a.free(shale_arg);
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/syntax.shale", files_arg, shale_arg } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+    for (files) |f| {
+        if (!has_roc and std.mem.endsWith(u8, f[0], ".roc")) continue;
+        const want = try std.fmt.allocPrint(a, "{s} {s}{s}", .{ f[2], if (std.mem.eql(u8, f[2], "ok")) "  " else "", f[0] });
+        defer a.free(want);
+        try testing.expect(std.mem.indexOf(u8, r.stdout, want) != null);
+    }
+    try testing.expectEqual(@as(u8, 1), r.term.exited);
+    try testing.expect(std.mem.indexOf(u8, r.stderr, "syntax: FAIL") != null);
+}

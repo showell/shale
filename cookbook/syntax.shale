@@ -1,0 +1,173 @@
+-- **ONE SYNTAX CHECK A FILE, BY KIND** (metal-vmm QUEUE 249): after an edit,
+-- did each file's syntax survive? One line a file, `ok` or its first error,
+-- then PASS or a FAIL that stops the run. No habit reaches for each
+-- language's own command.
+--
+--   shale cookbook:syntax.shale files=src/a.zig,roc/Walk.roc,tools/x.mjs
+--   shale cookbook:syntax.shale rev=HEAD~1..HEAD repo=repos:dog-park
+--
+-- By kind:
+-- - `.zig`: `zig ast-check`, and `zig fmt --check` said apart (`fmt:`);
+-- - `.zon`: `zig fmt --check`;
+-- - `.roc`: `roc check` (an app or a module alike: a module's imports
+--   resolve from its folder); its warnings are no failure;
+-- - `.js`, `.mjs`: `node --check`;
+-- - `.shale`: `shale --check` (`shale=` names the binary, default `shale`);
+-- - `.py`: Python's own parser (`ast.parse`, which writes no `.pyc` as
+--   `py_compile` would), every file in one run, as a tool exception
+--   (`want`);
+-- - `.sh`: `bash -n`, as a tool exception;
+-- - `.md` and any other kind: nothing to check, said.
+--
+-- A run holds 64 programs: one a file, one for every Python file, one
+-- `zig fmt` for every Zig file; more is refused before the first.
+
+const FILES = arg("files", "")
+const REV = arg("rev", "")
+const REPO = arg("repo", ".")
+const SHALE = arg("shale", "shale")
+const MINUTES = arg("minutes", 5)
+
+not_option("syntax", "rev", REV)
+if FILES == "" and REV == "" then fail("syntax: say `files=a,b` or `rev=<range>`") end
+
+local paths = {}
+if FILES ~= "" then
+  for p in split(FILES, ",") do
+    if trim(p) ~= "" then push(paths, trim(p)) end
+  end
+end
+if REV ~= "" then
+  for p in lines(git_call(REPO, {"diff", "--name-only", "--diff-filter=d", REV, "--"}, nil, true, nil).out) do
+    if p ~= "" then push(paths, path_under(REPO, p)) end
+  end
+end
+for p in paths do not_option("syntax", "file", p) end
+
+function kind_of(p)
+  local m = re_find(p, "\\.([A-Za-z0-9]+)$")
+  if m == nil then return "" end
+  return lower(m.group)
+end
+
+-- The line a tool's output says first went wrong: its own marker when it
+-- has one, else the first that says error, else the first at all.
+function first_error(out)
+  local first = ""
+  for l in lines(out) do
+    if first == "" and trim(l) ~= "" then first = trim(l) end
+    if starts_with(l, "── ✗") or starts_with(l, "── stopped") or re_match(l, "[Ee]rror") then return trim(l) end
+  end
+  return first
+end
+
+local by = {zig = {}, zon = {}, roc = {}, js = {}, shale = {}, py = {}, sh = {}, other = {}}
+for p in paths do
+  local k = kind_of(p)
+  if k == "mjs" then k = "js" end
+  if not has_key(by, k) then k = "other" end
+  push(by[k], p)
+end
+local programs = #by.zig + #by.roc + #by.js + #by.shale + #by.sh
+if #by.py > 0 then programs = programs + 1 end
+if #by.zig + #by.zon > 0 then programs = programs + 1 end
+if programs > 64 then fail("syntax: " .. #paths .. " files need " .. programs .. " programs, and a run holds 64: check them in parts") end
+
+local verdict = {}
+function say(verdict, p, bad, why)
+  if bad then verdict[p] = "FAIL " .. p .. ": " .. why else verdict[p] = "ok   " .. p .. why end
+  return nil
+end
+
+-- A file's program, by its kind.
+function argv_of(kind, f)
+  if kind == "zig" then return {"zig", "ast-check", f} end
+  if kind == "js" then return {"node", "--check", f} end
+  if kind == "shale" then return {SHALE, "--check", f} end
+  return {"bash", "-n", f}
+end
+
+-- One program a file, its verdict by its exit.
+function each(verdict, kind, files)
+  for p in files do
+    local opts = {timeout_ms = MINUTES * 60000, tail = 60}
+    if kind == "sh" then opts.want = "tool: a shell script's syntax, by bash's own parser" end
+    if kind == "shale" and contains(SHALE, "/") then opts.want = "tool: the shale binary named by `shale=`" end
+    if kind == "js" then opts.want = "tool: JavaScript's syntax, by node's own parser" end
+    local r = run(argv_of(kind, real(p)), opts)
+    if r.ended ~= "exit" then say(verdict, p, true, "did not finish (" .. r.ended .. ")") elseif r.code == 0 then say(verdict, p, false, "") else say(verdict, p, true, first_error(r.out)) end
+  end
+  return nil
+end
+
+local o = {timeout_ms = MINUTES * 60000, tail = 60}
+each(verdict, "zig", by.zig)
+each(verdict, "js", by.js)
+each(verdict, "shale", by.shale)
+each(verdict, "sh", by.sh)
+
+-- `roc check` exits 2 on warnings alone: its count of errors decides.
+for p in by.roc do
+  local r = run({"roc", "check", real(p)}, o)
+  local clean = contains(r.out, "No errors found") or re_match(r.out, "── 0 errors")
+  if r.ended ~= "exit" then say(verdict, p, true, "did not finish (" .. r.ended .. ")") elseif clean then say(verdict, p, false, "") else say(verdict, p, true, first_error(r.out)) end
+end
+
+-- Every Python file in one run; each failure on a line of its own.
+if #by.py > 0 then
+  local argv = {"python3", "-c", "import ast,sys\nbad=0\nfor p in sys.argv[1:]:\n  try: ast.parse(open(p,'rb').read(), p)\n  except SyntaxError as e:\n    print(p + ':' + str(e.lineno) + ': ' + str(e.msg)); bad=1\nsys.exit(bad)"}
+  local real_of = {}
+  for p in by.py do
+    push(argv, real(p))
+    real_of[real(p)] = p
+  end
+  local r = run(argv, {timeout_ms = o.timeout_ms, tail = o.tail, want = "tool: Python's syntax, by Python's own parser"})
+  for p in by.py do say(verdict, p, false, "") end
+  for l in lines(r.out) do
+    local m = re_find(l, "^([^:]+):")
+    if m ~= nil and has_key(real_of, m.group) then
+      local p = real_of[m.group]
+      verdict[p] = "FAIL " .. p .. ": " .. l
+    end
+  end
+end
+
+-- `zig fmt --check` once for every Zig and ZON file: it names each it would change.
+local fmt = {}
+for p in by.zig do push(fmt, p) end
+for p in by.zon do push(fmt, p) end
+if #fmt > 0 then
+  local argv = {"zig", "fmt", "--check"}
+  local real_of = {}
+  for p in fmt do
+    push(argv, real(p))
+    real_of[real(p)] = p
+  end
+  local r = run(argv, o)
+  for p in by.zon do say(verdict, p, false, "") end
+  for l in lines(r.out) do
+    local f = trim(l)
+    if has_key(real_of, f) then
+      local p = real_of[f]
+      verdict[p] = "FAIL " .. p .. ": fmt: zig fmt would change it"
+    elseif contains(f, ": error:") then
+      for p in by.zon do
+        if contains(f, real(p)) then
+              verdict[p] = "FAIL " .. p .. ": " .. f
+        end
+      end
+    end
+  end
+end
+
+for p in by.other do
+  verdict[p] = "ok   " .. p .. " (no check for this kind)"
+end
+
+local failed = 0
+for p in paths do
+  print(verdict[p])
+  if starts_with(verdict[p], "FAIL") then failed = failed + 1 end
+end
+if failed > 0 then fail("syntax: FAIL, " .. failed .. " of " .. #paths .. " files") end
+print("PASS: " .. #paths .. " files")
