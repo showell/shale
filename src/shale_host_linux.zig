@@ -812,7 +812,7 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
     try t.tmp.dir.createDirPath(t.threaded.io(), "elsewhere/logs");
     const a = t.arena.allocator();
     var why: []const u8 = "";
-    const mounts = try parseMounts(a, try std.fmt.allocPrint(a, "# where things are\n\nruns = {s}/elsewhere\nhome = ~/\ngone = /no/such/folder\n", .{t.root}), "/home/someone", &why);
+    const mounts = try parseMounts(a, try std.fmt.allocPrint(a, "# where things are\n\nruns = {s}/elsewhere\nhome = ~/\ngone = /no/such/folder\nmy-runs = {s}/elsewhere\n", .{ t.root, t.root }), "/home/someone", &why);
     try testing.expectEqualStrings("/home/someone", mounts[1].dir);
     t.host.mounts = mounts;
     try t.expectOutput(
@@ -822,6 +822,8 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
     try t.expectOutput("print(host(\"real\", \".\") == host(\"real\", \"\"), sub(host(\"real\", \".\"), -2) ~= \"/.\")", "true\ttrue\n");
     // A mount's `.` is the mount, as the root's `.` is the root.
     try t.expectOutput("print(host(\"real\", \"runs:.\") == host(\"real\", \"runs:\"), exists(\"runs:.\"), is_dir(\"runs:.\"))", "true\ttrue\ttrue\n");
+    // A mount whose name has a `-` is globbed through, as any other.
+    try t.expectOutput("print(join(glob(\"my-runs:**/*.txt\"), \",\"))", "my-runs:logs/a.txt\n");
     // And what a walk of it gives is spelled as the mount's own paths are.
     try t.expectOutput("local p = {} for e in walk(\"runs:.\") do push(p, e.path) end print(join(p, \",\"))", "runs:logs,runs:logs/a.txt\n");
     try testing.expectEqualStrings("via the mount", try t.file("elsewhere/logs/a.txt"));
