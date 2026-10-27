@@ -28,6 +28,7 @@ pub const usage =
     \\                    budgets where this does not
     \\  -e SOURCE         the script itself, in place of a file (neither: stdin is the script)
     \\  NAME=VALUE        a value the script reads with arg("NAME", default)
+    \\  --help            this, where the docs are, and the mounts in force (alone)
     \\
 ;
 

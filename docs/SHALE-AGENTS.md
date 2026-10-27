@@ -162,7 +162,9 @@ has none of it):
   cookbook's "A symbol renamed across a tree").
   `zig_decls(p)` lists a Zig file's top-level declarations, from Zig's
   own parser, in file order: `{kind, name, name_form, visibility, linkage,
-  first, last, start, stop, uses[, comment_above]}`. A span runs from its
+  first, last, start, stop, uses[, comment_above]}`. `kind` is one of
+  `const`, `var`, `fn`, `test`, `comptime` or `field`; `name_form` is
+  `identifier`, `string` (a test's) or `none`. A span runs from its
   doc comment to the `}`, `;` or field's `,` that ends it (`read(p, start,
   stop - start)` is it); `comment_above` is `{first, last}`, the line
   numbers of the plain `//` lines directly over it; `uses` is the top-level names its span uses (not its own, not a

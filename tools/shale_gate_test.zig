@@ -61,6 +61,11 @@ test "gate: what it refuses, naming both forms" {
     try refuses("cd $HOME && shale x.shale", both);
     try refuses("shale a.shale\nrm x", both);
     try refuses("", both);
+    try refuses("ls -la", "`shale --help`");
+}
+
+test "gate: `shale --help`, which every refusal points to, passes" {
+    try passes("shale --help");
 }
 
 test "gate: a heredoc's failure modes: unquoted, a lower-case tag, no closer, a closer met twice, text after it" {

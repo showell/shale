@@ -26,7 +26,7 @@ pub const Escape = struct { kind: []const u8, tag: []const u8, text: []const u8 
 pub const Verdict = union(enum) { launch, escape: Escape, refused: []const u8 };
 
 /// The two forms, as every refusal names them.
-pub const forms = "a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`";
+pub const forms = "a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs and this box's mounts: `shale --help`)";
 
 var why_buf: [1024]u8 = undefined;
 
@@ -72,7 +72,7 @@ pub fn classify(cmd: []const u8) Verdict {
     while (i < n) : (i += 1) {
         const w = words[i];
         if (!plain(w)) return refuse("`{s}` is not a plain word; ", .{w});
-        if (std.mem.eql(u8, w, "--verbose") or std.mem.eql(u8, w, "--undo-on-stop") or std.mem.eql(u8, w, "--args-stdin")) continue;
+        if (std.mem.eql(u8, w, "--verbose") or std.mem.eql(u8, w, "--undo-on-stop") or std.mem.eql(u8, w, "--args-stdin") or std.mem.eql(u8, w, "--help")) continue;
         if (std.mem.eql(u8, w, "--budget")) {
             if (i + 1 >= n or std.mem.indexOfScalar(u8, words[i + 1], '=') == null or !plain(words[i + 1])) return refuse("`--budget` takes `NAME=N`; ", .{});
             i += 1;

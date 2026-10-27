@@ -19,8 +19,8 @@ const Case = struct {
 };
 
 const cases = [_]Case{
-    .{ .src = "x = 1", .line = 1, .column = 1, .class = .name, .message = "no local `x`: declare it with `local x = ...` (there are no globals)" },
-    .{ .src = "print(y)", .line = 1, .column = 7, .class = .name, .message = "no local `y`: declare it with `local y = ...` (there are no globals)" },
+    .{ .src = "x = 1", .line = 1, .column = 1, .class = .name, .message = "no local `x`: declare it with `local x = ...` (there are no globals; Shale's builtins and preludes: `shale --help`)" },
+    .{ .src = "print(y)", .line = 1, .column = 7, .class = .name, .message = "no local `y`: declare it with `local y = ...` (there are no globals; Shale's builtins and preludes: `shale --help`)" },
     .{ .src = "local a = 1 local a = 2", .line = 1, .column = 13, .class = .name, .message = "`a` is already a local in this block" },
     .{ .src = "function f() end function f() end", .line = 1, .column = 18, .class = .name, .message = "a function `f` is already declared" },
     .{ .src = "nosuch(1)", .line = 1, .column = 1, .class = .name, .message = "no function `nosuch` above this line: a function is called only after it is declared" },

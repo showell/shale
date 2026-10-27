@@ -244,8 +244,8 @@ pub const Parser = struct {
 
     fn unknownName(self: *Parser, name: []const u8, pos: ast.Pos) Error {
         if (lua_names.get(name)) |why| return self.failAt(pos, .refused, why);
-        if (self.in_function) return self.failf(pos, .name, "no local `{s}` here: a function sees only its own parameters and locals, and the script's `const`s declared above it", .{name});
-        return self.failf(pos, .name, "no local `{s}`: declare it with `local {s} = ...` (there are no globals)", .{ name, name });
+        if (self.in_function) return self.failf(pos, .name, "no local `{s}` here: a function sees only its own parameters and locals, and the script's `const`s declared above it (Shale's builtins and preludes: `shale --help`)", .{name});
+        return self.failf(pos, .name, "no local `{s}`: declare it with `local {s} = ...` (there are no globals; Shale's builtins and preludes: `shale --help`)", .{ name, name });
     }
 
     fn blockEnds(tag: Tag) bool {
