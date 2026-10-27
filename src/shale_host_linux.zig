@@ -29,6 +29,9 @@ pub const baseEnv = setup.baseEnv;
 /// The most programs one run may start.
 pub const runs_most = 64;
 
+/// The most a `sleep` waits in one call: ten minutes.
+pub const sleep_most_ms = 600_000;
+
 /// Where a program's output goes as it comes: the scrubber, then the log
 /// and the keep (or `whole`).
 pub const Sink = struct {
@@ -394,6 +397,18 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
         return .{ .string = try osPath(h, run, pos, args[0], true) };
     }
     if (std.mem.eql(u8, name, "run")) return runProgram(h, run, pos, args);
+    // A wait that is no program, so it spends none of `runs_most`.
+    if (std.mem.eql(u8, name, "sleep")) {
+        if (args.len != 1) return run.fail(pos, .argument, "`sleep` takes one argument, the ms, given {d}", .{args.len});
+        const ms = switch (args[0]) {
+            .int => |n| n,
+            else => return run.fail(pos, .type, "`sleep`'s ms must be an integer, not {s}", .{args[0].typeName()}),
+        };
+        if (ms < 0 or ms > sleep_most_ms) return run.fail(pos, .argument, "`sleep` takes 0 to {d} ms, not {d}", .{ sleep_most_ms, ms });
+        try run.charge(pos, 1);
+        run.io.sleep(.fromMilliseconds(ms), .awake) catch {};
+        return .nil;
+    }
     if (std.mem.startsWith(u8, name, "job_")) return @import("shale_host_jobs.zig").call(h, run, pos, name, args);
     if (std.mem.eql(u8, name, "zig_rename")) return @import("shale_host_zig.zig").rename(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "zig_decls")) return @import("shale_host_zig.zig").decls(h.alloc, run, pos, args);

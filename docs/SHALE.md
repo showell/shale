@@ -1135,7 +1135,8 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   On the live site's route a script has no values: `arg` gives its
   default.
 - `now()` is the wall clock **when the run started**, the same at every
-  call (`SHALE_NOW` pins it): to time a program, use `run`'s own `ms`.
+  call (`SHALE_NOW` pins it): to time a program, use `run`'s own `ms`,
+  and to wait, the Linux prelude's `sleep(ms)`.
 - **The Linux host, its mounts and the preludes after the core's** are
   "On Linux: behind the seam", below.
 - The runner sets the store's bases as a server does, so path limits are
@@ -1209,7 +1210,7 @@ three:
   Mounts confine the store's calls, not the programs a script runs:
   `run`'s program reaches wherever its user can.
 - **`Options.preludes`**, the preludes after the core's, in order:
-  - the Linux prelude (`src/shale_prelude_linux.shale`): `run`, `real`,
+  - the Linux prelude (`src/shale_prelude_linux.shale`): `run`, `real`, `sleep`,
     `must`, `http`, `http_get`, `re_lines`, `head_lines`, `tail_lines`,
     `grep_all`, `unique`, `path_under`, `newest`, `create`, `edits_all`; the Zig tools
     `zig_rename`, `zig_renames`, `zig_decls`, `zig_move`, `zig_tokens` and

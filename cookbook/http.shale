@@ -11,11 +11,12 @@
 --
 -- `bearer` is a Shale path (through a mount) whose file holds a token,
 -- sent as `Authorization: Bearer` and never shown. **`wait`**: fetch every
--- `every` seconds (default 20) until the body holds that literal, for at
+-- `every` seconds (default 10) until the body holds that literal, for at
 -- most `minutes` (default 10); a failed fetch meanwhile (the server
--- restarting) is said and tried again. Each try is two programs (the
--- fetch, then `sleep`) and a run holds 64 (`runs_most`), so a wait is at
--- most 32 fetches: `minutes * 60 / every` under 32.
+-- restarting) is said and tried again. Each try is one program (the
+-- fetch; the wait between is `sleep`, none) and a run holds 64
+-- (`runs_most`), so a wait is at most 64 fetches: `minutes * 60 / every`
+-- under 64.
 --
 -- budget: steps=50000000
 
@@ -26,7 +27,7 @@ const STATUS = arg("status", 200)
 const BEARER = arg("bearer", "")
 const WAIT = arg("wait", "")
 const MINUTES = arg("minutes", 10)
-const EVERY = arg("every", 20)
+const EVERY = arg("every", 10)
 
 if URL == "" then fail("http: say `url=`") end
 local opts = {}
@@ -38,9 +39,8 @@ if WAIT == "" then
 else
   local tries = 0
   local most = MINUTES * 60 // EVERY + 1
-  -- A fetch a try and a sleep between: said here, not by the runs budget
-  -- halfway.
-  if 2 * most - 1 > 64 then fail("http: a wait of " .. most .. " fetches is " .. (2 * most - 1) .. " programs, and a run holds 64: raise `every` or lower `minutes` (at most 32 fetches)") end
+  -- A fetch a try: said here, not by the runs budget halfway.
+  if most > 64 then fail("http: a wait of " .. most .. " fetches, and a run holds 64 programs: raise `every` or lower `minutes`") end
   while true do
     tries = tries + 1
     local got = attempt(http_get, URL, opts)
@@ -51,7 +51,7 @@ else
     local said = "status " .. (got.ok and got.value.status or "none: " .. tostring(got.error))
     if tries >= most then fail("http: " .. URL .. " never held `" .. WAIT .. "` in " .. MINUTES .. " minutes (" .. tries .. " fetches; the last: " .. said .. ")") end
     print("waiting (" .. tries .. "): " .. sub(said, 1, 160))
-    run({"sleep", tostring(EVERY)}, {timeout_ms = EVERY * 1000 + 5000, tail = 1})
+    sleep(EVERY * 1000)
   end
 end
 

@@ -553,6 +553,8 @@ the first two can give a quiet wrong answer, an empty list:
   argument a caller may leave out is declared `opts?`.
 - **`now()` is when the run started**, the same at every call, so `now() -
   t0` is always 0: a program's time is `run`'s own `ms` on its answer.
+  To wait, `sleep(ms)` (0 to 600000 a call, Linux): it is no program, so
+  it spends none of a run's 64.
 - **A function sees only its parameters, its locals and the `const`s
   above it**, never the script's `local`s: `const X = 1`, or pass it in.
 - **One name per `local`**: `local a, b = 1, 2` is refused, and so are
