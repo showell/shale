@@ -66,8 +66,9 @@ function dispatch(ref)
 end
 
 -- "status conclusion seconds url", conclusion "-" while it runs;
--- the seconds from its start to its last update.
-const SAY = "\"\\(.status) \\(if .conclusion == \"\" then \"-\" else .conclusion end) \\((.updatedAt | fromdate) - (.startedAt | fromdate)) \\(.url)\""
+-- the seconds from its start to its end, or to now while it runs
+-- (`updatedAt` stands still then).
+const SAY = "\"\\(.status) \\(if .conclusion == \"\" then \"-\" else .conclusion end) \\((if .status == \"completed\" then (.updatedAt | fromdate) else now end) - (.startedAt | fromdate) | floor) \\(.url)\""
 function look(id)
   local w = {}
   for x in words(gh({"gh", "run", "view", id, "--repo", SLUG, "--json", "status,conclusion,startedAt,updatedAt,url", "-q", SAY})) do push(w, x) end
