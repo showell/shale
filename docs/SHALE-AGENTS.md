@@ -173,7 +173,15 @@ has none of it):
   `edits_all({{p, edits}, ...})` checks every file's edits before it writes
   any. `zig_rename(p, from, to, {lines}?)` renames a Zig identifier as
   Zig's tokenizer sees it, giving `{renamed, left_in_comments}` (the
-  cookbook's "A symbol renamed across a tree").
+  cookbook's "A symbol renamed across a tree"). **`{container = "C"}`**
+  renames C's member instead (its declaration, its bare uses inside C, and
+  `C.from`, `self.from`, `Self.from`, `@This().from` there), leaving another
+  container's same name alone and stopping, with the line, at a `.from` it
+  cannot attribute; **`{via = {"search_index", "harness.UidSite"}}`**
+  renames `prefix.from` callers alone, and gives `left`, the lines of every
+  other `.from`. `cookbook/zig/rename_member.shale` is the two across a tree:
+  the declaring file, then every file that imports it, through its import's
+  name.
   `zig_decls(p)` lists a Zig file's top-level declarations, from Zig's
   own parser, in file order: `{kind, name, name_form, visibility, linkage,
   first, last, start, stop, uses[, comment_above]}`. `kind` is one of

@@ -114,6 +114,174 @@ pub fn planMany(a: std.mem.Allocator, src: [:0]const u8, renames: []const Rename
     return .{ .done = .{ .now = out.items, .spans = spans.items, .renamed = renamed, .left_in_comments = left, .tokens = ts.len } };
 }
 
+/// What a scoped rename reaches beyond `plan`'s: a container's member, or
+/// `prefix.from` through the given prefixes (`search_index`,
+/// `harness.UidSite`).
+pub const Scope = union(enum) { container: []const u8, via: []const []const u8 };
+
+/// A scoped plan, or where it stopped: the container is not declared here,
+/// or twice; it declares no `from`; a `.from` at `unattributed`'s line could
+/// be the member and could be something else.
+pub const Scoped = union(enum) {
+    done: struct { plan: Plan, left: []const usize },
+    invalid: usize,
+    no_container: usize,
+    no_member,
+    unattributed: usize,
+};
+
+/// The whole-word `from`s in a file's comments, as `planMany` counts them.
+fn commentsLeft(src: [:0]const u8, ts: []const za.Tok, from: []const u8) !usize {
+    var left: usize = 0;
+    var line: LineCursor = .{ .src = src };
+    var gap: usize = 0;
+    for (ts) |t| {
+        left += try wordsIn(&line, src[gap..t.start], gap, from, null);
+        gap = t.end;
+        if (t.tag == .doc_comment or t.tag == .container_doc_comment) left += try wordsIn(&line, src[t.start..t.end], t.start, from, null);
+    }
+    return left + try wordsIn(&line, src[gap..], gap, from, null);
+}
+
+/// The plan of renaming the tokens at `at` (in order) to `to`.
+fn planAt(a: std.mem.Allocator, src: [:0]const u8, ts: []const za.Tok, at: []const usize, to: []const u8, from: []const u8) !Plan {
+    var out: std.ArrayList(u8) = .empty;
+    var spans: std.ArrayList(Span) = .empty;
+    var copied: usize = 0;
+    for (at) |k| {
+        const t = ts[k];
+        try out.appendSlice(a, src[copied..t.start]);
+        const c0 = out.items.len;
+        try out.appendSlice(a, to);
+        try spans.append(a, .{ .o0 = t.start, .o1 = t.end, .c0 = c0, .c1 = out.items.len });
+        copied = t.end;
+    }
+    try out.appendSlice(a, src[copied..]);
+    return .{ .now = out.items, .spans = spans.items, .renamed = at.len, .left_in_comments = try commentsLeft(src, ts, from), .tokens = ts.len };
+}
+
+fn isContainerKeyword(t: za.Tag) bool {
+    return t == .keyword_struct or t == .keyword_union or t == .keyword_enum or t == .keyword_opaque;
+}
+
+/// Plans renaming member `from` of the container `container` declares in
+/// this file (`const C = struct {...}`): its declaration, the bare uses
+/// inside the container, and `C.from`, `self.from`, `Self.from` and
+/// `@This().from` inside it. A `.from` through another container this file
+/// declares is that one's, left alone; an enum literal `.from` is left
+/// alone unless the container is an enum; any other `.from` stops the plan,
+/// naming its line, rather than be guessed at. Pure.
+pub fn planMember(a: std.mem.Allocator, src: [:0]const u8, from: []const u8, to: []const u8, container: []const u8) error{OutOfMemory}!Scoped {
+    const ts = switch (try za.tokens(a, src)) {
+        .ok => |ok| ok,
+        .invalid => |n| return .{ .invalid = n },
+    };
+    const starts = try za.lineStarts(a, src);
+    // The containers the file declares, and this one's braces.
+    var others: std.StringHashMapUnmanaged(void) = .empty;
+    var open: ?usize = null;
+    var close: usize = 0;
+    var is_enum = false;
+    var found: usize = 0;
+    var i: usize = 0;
+    while (i + 3 < ts.len) : (i += 1) {
+        if (ts[i].tag != .keyword_const or ts[i + 1].tag != .identifier or ts[i + 2].tag != .equal) continue;
+        var j = i + 3;
+        while (j < ts.len and (ts[j].tag == .keyword_extern or ts[j].tag == .keyword_packed)) j += 1;
+        if (j >= ts.len or !isContainerKeyword(ts[j].tag)) continue;
+        const name = src[ts[i + 1].start..ts[i + 1].end];
+        if (!std.mem.eql(u8, name, container)) {
+            try others.put(a, name, {});
+            continue;
+        }
+        found += 1;
+        if (found > 1) return .{ .no_container = 2 };
+        is_enum = ts[j].tag == .keyword_enum;
+        var b = j;
+        while (b < ts.len and ts[b].tag != .l_brace) b += 1;
+        var depth: usize = 0;
+        var e = b;
+        while (e < ts.len) : (e += 1) {
+            if (ts[e].tag == .l_brace) depth += 1;
+            if (ts[e].tag == .r_brace) {
+                depth -= 1;
+                if (depth == 0) break;
+            }
+        }
+        open = b;
+        close = e;
+    }
+    const o = open orelse return .{ .no_container = 0 };
+    var at: std.ArrayList(usize) = .empty;
+    var declared = false;
+    var depth: usize = 0;
+    for (ts, 0..) |t, k| {
+        if (t.tag == .l_brace) depth += 1;
+        if (t.tag == .r_brace) depth -|= 1;
+        if (t.tag != .identifier or !std.mem.eql(u8, src[t.start..t.end], from)) continue;
+        const inside = k > o and k < close;
+        const prev: ?za.Tag = if (k > 0) ts[k - 1].tag else null;
+        if (prev != .period) {
+            if (!inside) continue;
+            // A declaration directly in the container's braces.
+            if (prev == .keyword_fn or prev == .keyword_const or prev == .keyword_var or (k + 1 < ts.len and ts[k + 1].tag == .colon)) declared = true;
+            try at.append(a, k);
+            continue;
+        }
+        // `.from`: through what?
+        const r = if (k >= 2) ts[k - 2] else null;
+        const rname: []const u8 = if (r != null and r.?.tag == .identifier) src[r.?.start..r.?.end] else "";
+        if (std.mem.eql(u8, rname, container)) {
+            try at.append(a, k);
+        } else if (inside and (std.mem.eql(u8, rname, "self") or std.mem.eql(u8, rname, "Self"))) {
+            try at.append(a, k);
+        } else if (inside and r != null and r.?.tag == .r_paren and k >= 4 and ts[k - 3].tag == .l_paren and ts[k - 4].tag == .builtin and std.mem.eql(u8, src[ts[k - 4].start..ts[k - 4].end], "@This")) {
+            try at.append(a, k);
+        } else if (rname.len > 0 and others.contains(rname)) {
+            // Another container's member of the same name.
+        } else if (r == null or (r.?.tag != .identifier and r.?.tag != .r_paren and r.?.tag != .r_bracket and r.?.tag != .question_mark and r.?.tag != .period_asterisk)) {
+            // An enum literal: the container's only if it is an enum.
+            if (is_enum) return .{ .unattributed = za.lineOf(starts, t.start) };
+        } else return .{ .unattributed = za.lineOf(starts, t.start) };
+    }
+    if (!declared) return .no_member;
+    return .{ .done = .{ .plan = try planAt(a, src, ts, at.items, to, from), .left = &.{} } };
+}
+
+/// Plans renaming `from` where it follows one of `via`'s dotted prefixes
+/// (`search_index.from`, `harness.UidSite.from`), the prefix not itself
+/// after a `.`; every other `.from` is left, its line said. Pure.
+pub fn planVia(a: std.mem.Allocator, src: [:0]const u8, from: []const u8, to: []const u8, via: []const []const u8) error{OutOfMemory}!Scoped {
+    const ts = switch (try za.tokens(a, src)) {
+        .ok => |ok| ok,
+        .invalid => |n| return .{ .invalid = n },
+    };
+    const starts = try za.lineStarts(a, src);
+    var at: std.ArrayList(usize) = .empty;
+    var left: std.ArrayList(usize) = .empty;
+    for (ts, 0..) |t, k| {
+        if (t.tag != .identifier or !std.mem.eql(u8, src[t.start..t.end], from)) continue;
+        if (k == 0 or ts[k - 1].tag != .period) continue;
+        var hit = false;
+        for (via) |prefix| {
+            // `a.b` before `.from` is the tokens a, `.`, b, `.`, from.
+            const n = std.mem.count(u8, prefix, ".") + 1;
+            if (k < 2 * n) continue;
+            const first = k - 2 * n;
+            var parts = std.mem.splitScalar(u8, prefix, '.');
+            var ok = true;
+            var m: usize = 0;
+            while (parts.next()) |part| : (m += 1) {
+                const id = ts[first + 2 * m];
+                if (id.tag != .identifier or !std.mem.eql(u8, src[id.start..id.end], part) or ts[first + 2 * m + 1].tag != .period) ok = false;
+            }
+            if (ok and (first == 0 or ts[first - 1].tag != .period)) hit = true;
+        }
+        if (hit) try at.append(a, k) else try left.append(a, za.lineOf(starts, t.start));
+    }
+    return .{ .done = .{ .plan = try planAt(a, src, ts, at.items, to, from), .left = left.items } };
+}
+
 /// Lines counted forward, for offsets that only grow.
 const LineCursor = struct {
     src: []const u8,
@@ -190,7 +358,9 @@ pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
         while (parts.next()) |part| if (!std.zig.isValidId(part))
             return run.fail(pos, .argument, "`zig_rename`'s `to` (\"{s}\") is not a Zig identifier, or names joined by `.`", .{r.to});
     }
-    const lines = try linesOpt(run, pos, args[2]);
+    const opts = try renameOpts(run, pos, args[2]);
+    const lines = opts.lines;
+    if (opts.scope != null and (renames.items.len != 1 or lines != null)) return run.fail(pos, .argument, "`zig_rename`'s `container` or `via` takes one name and no `lines`", .{});
     try hub.countRead(run, pos);
     const size = try rd.fileSize(run, pos, .host, p);
     const was = (try rd.readSized(run, pos, .host, p, size, 0, null)).string;
@@ -200,7 +370,24 @@ pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
     defer scratch.deinit();
     const src = sa.dupeSentinel(u8, was, 0) catch return run.oom(pos);
     try script.builtins.chargeBytes(run, pos, src.len);
-    const got = planMany(sa, src, renames.items, lines) catch return run.oom(pos);
+    var left: []const usize = &.{};
+    const got: Outcome = if (opts.scope) |scope| blk: {
+        const r = renames.items[0];
+        const s = switch (scope) {
+            .container => |c| planMember(sa, src, r.from, r.to, c),
+            .via => |v| planVia(sa, src, r.from, r.to, v),
+        } catch return run.oom(pos);
+        switch (s) {
+            .done => |d| {
+                left = d.left;
+                break :blk .{ .done = d.plan };
+            },
+            .invalid => |n| break :blk .{ .invalid = n },
+            .no_container => |n| return run.fail(pos, .argument, "`zig_rename`: {s} declares no container `{s}` (`const {s} = struct {{...}}`){s}; nothing written", .{ p.rel(), scope.container, scope.container, if (n == 2) ", or declares it twice" else "" }),
+            .no_member => return run.fail(pos, .argument, "`zig_rename`: {s}'s `{s}` declares no member `{s}`; nothing written", .{ p.rel(), scope.container, r.from }),
+            .unattributed => |n| return run.fail(pos, .argument, "`zig_rename`: {s}:{d} has a `.{s}` that may or may not be `{s}`'s member: rename that one yourself, or rename it apart first; nothing written", .{ p.rel(), n, r.from, scope.container }),
+        }
+    } else planMany(sa, src, renames.items, lines) catch return run.oom(pos);
     const done = switch (got) {
         .done => |d| d,
         .declaration => |d| {
@@ -218,7 +405,48 @@ pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
     t.kind = .map;
     t.map.put(a, "renamed", .{ .int = @intCast(done.renamed) }) catch return run.oom(pos);
     t.map.put(a, "left_in_comments", .{ .int = @intCast(done.left_in_comments) }) catch return run.oom(pos);
+    if (opts.scope != null and opts.scope.? == .via) {
+        const l = try run.newTable(pos);
+        l.kind = .list;
+        for (left) |n| l.list.append(a, .{ .int = @intCast(n) }) catch return run.oom(pos);
+        t.map.put(a, "left", .{ .table = l }) catch return run.oom(pos);
+    }
     return .{ .table = t };
+}
+
+/// `zig_rename`'s options: `lines`, `container`, `via` (a prefix or a list).
+fn renameOpts(run: *Run, pos: ast.Pos, v: Value) Error!struct { lines: ?Lines, scope: ?Scope } {
+    const m = switch (v) {
+        .nil => return .{ .lines = null, .scope = null },
+        .table => |t| if (t.kind == .list) return run.fail(pos, .type, "`zig_rename`'s options are a map, not a list", .{}) else t,
+        else => return run.fail(pos, .type, "`zig_rename`'s options are a map, not {s}", .{v.typeName()}),
+    };
+    var scope: ?Scope = null;
+    var only_lines = try run.newTable(pos);
+    only_lines.kind = .map;
+    for (m.map.keys(), m.map.values()) |k, x| {
+        if (std.mem.eql(u8, k, "container")) {
+            if (scope != null) return run.fail(pos, .argument, "`zig_rename` takes `container` or `via`, not both", .{});
+            const c = try script.builtins.stringArg(run, pos, .host, x, "`container`");
+            if (!std.zig.isValidId(c)) return run.fail(pos, .argument, "`zig_rename`'s `container` (\"{s}\") is not a Zig identifier", .{c});
+            scope = .{ .container = c };
+        } else if (std.mem.eql(u8, k, "via")) {
+            if (scope != null) return run.fail(pos, .argument, "`zig_rename` takes `container` or `via`, not both", .{});
+            var list: std.ArrayList([]const u8) = .empty;
+            switch (x) {
+                .string => |s| list.append(run.alloc, s) catch return run.oom(pos),
+                .table => |t| for (t.list.items) |e| list.append(run.alloc, try script.builtins.stringArg(run, pos, .host, e, "a `via` prefix")) catch return run.oom(pos),
+                else => return run.fail(pos, .type, "`zig_rename`'s `via` is a prefix (\"search_index\") or a list of them, not {s}", .{x.typeName()}),
+            }
+            if (list.items.len == 0) return run.fail(pos, .argument, "`zig_rename`'s `via` is empty: give the prefixes the callers use", .{});
+            for (list.items) |pre| {
+                var parts = std.mem.splitScalar(u8, pre, '.');
+                while (parts.next()) |part| if (!std.zig.isValidId(part)) return run.fail(pos, .argument, "`zig_rename`'s `via` prefix \"{s}\" is not names joined by `.`", .{pre});
+            }
+            scope = .{ .via = list.items };
+        } else only_lines.map.put(run.alloc, k, x) catch return run.oom(pos);
+    }
+    return .{ .lines = try linesOpt(run, pos, .{ .table = only_lines }), .scope = scope };
 }
 
 /// `host("zig_decls", path)`: a Zig file's top-level declarations as maps, in
@@ -715,7 +943,7 @@ fn linesOpt(run: *Run, pos: ast.Pos, v: Value) Error!?Lines {
     };
     var got: ?Lines = null;
     for (m.map.keys(), m.map.values()) |k, x| {
-        if (!std.mem.eql(u8, k, "lines")) return run.fail(pos, .argument, "`zig_rename` takes `lines`, not `{s}`", .{k});
+        if (!std.mem.eql(u8, k, "lines")) return run.fail(pos, .argument, "`zig_rename` takes `lines`, `container` and `via`, not `{s}`", .{k});
         const l = switch (x) {
             .table => |t| t,
             else => return run.fail(pos, .argument, "`zig_rename`'s `lines` is `{{first, last}}`", .{}),

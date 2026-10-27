@@ -108,6 +108,10 @@ string's text). Each says its budgets in its `-- budget:` line:
 
 ## Moving along them
 
+- `rename_member.shale` (`file= from= to= [container=] [glob=]`): a
+  declaration, or a container's member, renamed in its file and through
+  every importing file's `alias.from` (`alias.C.from`) across the tree;
+  what reaches it another way is said by line, never guessed.
 - `zig_split.shale` (on stdin: `from= to= as= names=a|b doc=`, and
   optionally `after=<import> uses=alias from_as=X reexport=yes into=yes`):
   declarations moved to a new file and the old one made to use them:
