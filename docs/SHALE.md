@@ -1152,7 +1152,10 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   counts against `output_bytes`); on stderr the report: a stop and its
   trail, the effects, the programs run, and
   `── used:`, which is what the run took of four budgets
-  (steps, reads, read bytes, output bytes) beside each budget. Both
+  (steps, reads, read bytes, output bytes) beside each budget; and
+  `── time:`, once programs, job waits and sleeps took a second or more
+  (always with `--verbose`): how many programs, their wall time, the
+  slowest one's seconds and argv, the job waits and the sleeps. Both
   stream, so `> f 2>&1` keeps them in order.
 - It exits 0 if the script finished, 1 if it stopped, 2 if the run could
   not begin: the command line, the script's file (a `name:` no mount has

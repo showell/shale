@@ -226,6 +226,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     try script.builtins.chargeBytes(run, pos, out.bytes);
     run.read_bytes += out.bytes;
     const joined = std.mem.join(a, " ", argv) catch return run.oom(pos);
+    h.time.ran(h.alloc, joined, outcome.ms);
     h.record("run {s}{s}{s}{s} -> {s}{s} ({d} ms)", .{
         joined,                                 shown_env.items,
         if (o.want != null) " (want: " else "", if (o.want) |w| std.fmt.allocPrint(a, "{s})", .{w}) catch w else "",

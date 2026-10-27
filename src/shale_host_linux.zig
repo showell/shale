@@ -56,7 +56,65 @@ fn realSpawn(_: ?*anyopaque, alloc: std.mem.Allocator, spec: spawn.Spec, sink: *
 /// written.
 pub const Record = struct { line: []const u8 };
 
+/// Where a run's time went, for the line after its report: the programs
+/// it ran, its waits on jobs and its sleeps (`now()` is the run's start, so
+/// a script cannot time itself).
+pub const Time = struct {
+    runs: u32 = 0,
+    run_ms: u64 = 0,
+    slowest_ms: u64 = 0,
+    /// The slowest program's argv, cut short; the host's allocator's.
+    slowest: []const u8 = "",
+    waits: u32 = 0,
+    wait_ms: u64 = 0,
+    sleep_ms: u64 = 0,
+
+    /// Said after the report when it passes a second, or always with `--verbose`.
+    pub fn worthSaying(t: Time, verbose: bool) bool {
+        return (verbose and (t.runs > 0 or t.waits > 0 or t.sleep_ms > 0)) or t.run_ms + t.wait_ms + t.sleep_ms >= 1000;
+    }
+
+    /// `── time: 2 programs, 1.4 s in all; the slowest 1.2 s: zig build test; 1 job wait, 40.0 s; slept 0.3 s`
+    pub fn print(t: Time, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        try w.print("── time: {d} program{s}, ", .{ t.runs, if (t.runs == 1) "" else "s" });
+        try seconds(w, t.run_ms);
+        try w.writeAll(" in all");
+        if (t.runs > 0) {
+            try w.writeAll("; the slowest ");
+            try seconds(w, t.slowest_ms);
+            try w.print(": {s}", .{t.slowest});
+        }
+        if (t.waits > 0) {
+            try w.print("; {d} job wait{s}, ", .{ t.waits, if (t.waits == 1) "" else "s" });
+            try seconds(w, t.wait_ms);
+        }
+        if (t.sleep_ms > 0) {
+            try w.writeAll("; slept ");
+            try seconds(w, t.sleep_ms);
+        }
+        try w.writeAll("\n");
+    }
+
+    fn seconds(w: *std.Io.Writer, ms: u64) std.Io.Writer.Error!void {
+        try w.print("{d}.{d} s", .{ ms / 1000, ms % 1000 / 100 });
+    }
+
+    /// Counts one program's `ms`, keeping its argv if it is the slowest.
+    pub fn ran(t: *Time, alloc: std.mem.Allocator, argv: []const u8, ms: u64) void {
+        t.runs += 1;
+        t.run_ms += ms;
+        if (ms < t.slowest_ms and t.runs > 1) return;
+        const cut = argv[0..@min(argv.len, 80)];
+        const kept = alloc.dupe(u8, cut) catch return;
+        if (t.slowest.len > 0) alloc.free(t.slowest);
+        t.slowest = kept;
+        t.slowest_ms = ms;
+    }
+};
+
 pub const Host = struct {
+    /// Where the run's time went (`Time`).
+    time: Time = .{},
     alloc: std.mem.Allocator,
     /// The root as the CLI was given it, an absolute OS path. A mount inside it
     /// is taken against the run's own root, so each engine of a gated test, in
@@ -81,6 +139,7 @@ pub const Host = struct {
     journal_bytes: usize = 0,
 
     pub fn deinit(h: *Host) void {
+        if (h.time.slowest.len > 0) h.alloc.free(h.time.slowest);
         for (h.records.items) |r| h.alloc.free(r.line);
         h.records.deinit(h.alloc);
         for (h.journal.items) |p| {
@@ -407,6 +466,7 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
         if (ms < 0 or ms > sleep_most_ms) return run.fail(pos, .argument, "`sleep` takes 0 to {d} ms, not {d}", .{ sleep_most_ms, ms });
         try run.charge(pos, 1);
         run.io.sleep(.fromMilliseconds(ms), .awake) catch {};
+        h.time.sleep_ms += @intCast(ms);
         return .nil;
     }
     if (std.mem.startsWith(u8, name, "job_")) return @import("shale_host_jobs.zig").call(h, run, pos, name, args);

@@ -32,7 +32,14 @@ pub fn call(h: *Host, run: *Run, pos: ast.Pos, name: []const u8, args: []const V
         if (was) h.record("job {s} stopped", .{j.shown});
         return .{ .boolean = was };
     }
-    if (std.mem.eql(u8, name, "job_wait")) return wait(h, run, pos, args);
+    if (std.mem.eql(u8, name, "job_wait")) {
+        const began = monoMs();
+        defer {
+            h.time.waits += 1;
+            h.time.wait_ms += monoMs() - began;
+        }
+        return wait(h, run, pos, args);
+    }
     return run.fail(pos, .host, "`{s}`: not on this host", .{name});
 }
 

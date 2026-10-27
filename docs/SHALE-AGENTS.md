@@ -25,7 +25,11 @@ there to stay safe is what an agent wants on Linux too:**
 run used of four, steps, reads, read bytes and output bytes (`── used:
 52374 of 5000000 steps, 12 of 10000 reads, ...`), so a script near an edge
 is known before a bigger run finds it;
-`--verbose` says so always, with the effects and the programs run. The
+`--verbose` says so always, with the effects and the programs run. A run
+that spent a second or more in programs, job waits and sleeps says where,
+the slowest program named (`── time: 3 programs, 52.1 s in all; the
+slowest 51.8 s: roc build ...`): when a step is slow, that line says
+which program to look at. The
 arena is not among the four: a stop on it (`budget arena`, 16 MiB unset)
 says nothing of what it would have needed: raise it and run again
 (`--budget arena_bytes=4000000000`), and if the script is one you keep,
