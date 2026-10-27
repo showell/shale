@@ -210,12 +210,12 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
             const os = try hl.osPath(h, run, pos, file orelse j.log, false);
             if (try scan.look(scratch.allocator(), run, pos, os, c, j.record)) return result(run, pos, "found", null, null);
         }
-        if (j.record.done()) return result(run, pos, "exited", j.record.exit, j.record.signal);
+        if (j.record.done()) return seenEnded(h, run, pos, &scan, scratch.allocator(), file orelse j.log, contains, j.record);
         const gone = !jobs.alive(j.record);
         if (gone and !jobs.reaperAlive(j.record)) {
             // The reaper is gone, so its last write, if any, is there now.
             const again = try find(h, run, pos, args[0], "job_wait");
-            if (again.record.done()) return result(run, pos, "exited", again.record.exit, again.record.signal);
+            if (again.record.done()) return seenEnded(h, run, pos, &scan, scratch.allocator(), file orelse again.log, contains, again.record);
             return result(run, pos, "lost", null, null);
         }
         const spent = monoMs() - began;
@@ -223,6 +223,18 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         sleepMs(@min(if (gone) @as(u64, 10) else nap, limit - spent));
         nap = @min(nap * 2, 1000);
     }
+}
+
+/// A job seen ended: `found` when its log holds `contains` after all, else
+/// `exited`. **THE LAST LOOK**: the record is written after the reap, so the
+/// log is whole now; a line written between the look before and the end
+/// is found, never reported as an end without it.
+fn seenEnded(h: *Host, run: *Run, pos: ast.Pos, scan: *Scan, sa: std.mem.Allocator, log: Value, contains: ?[]const u8, r: jobs.Record) Error!Value {
+    if (contains) |c| {
+        const os = try hl.osPath(h, run, pos, log, false);
+        if (try scan.look(sa, run, pos, os, c, r)) return result(run, pos, "found", null, null);
+    }
+    return result(run, pos, "exited", r.exit, r.signal);
 }
 
 /// A log searched as it grows, never reading again what it already read.

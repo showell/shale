@@ -145,7 +145,9 @@ test "jobs: waiting for a line reads only what the log gained since it last look
     defer t.deinit();
     // A 7 MB log, whose reads would pile up in the run's arena if each look
     // read it whole.
-    try testing.expectEqualStrings("found\n", try once(&t, "local j = job_start({\"shale-fixture\", \"lines\", \"300000\", \"a line of the log\"}, {log = \"big.log\"}) print(job_wait(j, {timeout_ms = 10000, contains = \"log 300000\"}).ended)"));
+    // `code` and `signal` too, so a red names its case: an end with the
+    // line missing (a scan's miss) or an early end (a signal, an exit).
+    try testing.expectEqualStrings("found\t-\t-\n", try once(&t, "local j = job_start({\"shale-fixture\", \"lines\", \"300000\", \"a line of the log\"}, {log = \"big.log\"}) local w = job_wait(j, {timeout_ms = 10000, contains = \"log 300000\"}) print(w.ended, get(w, \"code\", \"-\"), get(w, \"signal\", \"-\"))"));
     // Across pieces: 20 bytes on both sides of where the first read
     // (a piece and the needle's length) ends, so only the overlap finds it.
     {
