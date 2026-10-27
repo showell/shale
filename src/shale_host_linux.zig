@@ -351,7 +351,9 @@ pub fn rootOf(h: *Host, run: *Run, pos: ast.Pos) Error![]const u8 {
 
 fn absolute(h: *Host, run: *Run, pos: ast.Pos, p: []const u8) Error![]const u8 {
     if (std.fs.path.isAbsolute(p)) return p;
-    return std.fmt.allocPrint(run.alloc, "{s}/{s}", .{ h.cwd_abs, p }) catch run.oom(pos);
+    // Resolved, so `.` is the folder itself: a script that takes the folder
+    // above `real(".")` gets its parent, not itself.
+    return std.fs.path.resolve(run.alloc, &.{ h.cwd_abs, p }) catch run.oom(pos);
 }
 
 /// A Shale path's OS path, through the mounts or the root, made absolute.
@@ -813,6 +815,7 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
         \\replace("runs:logs/a.txt", "via the mount")
         \\print(read("runs:logs/a.txt"), exists("runs:"), sub(host("real", "runs:logs"), -14), sub(host("real", ""), 1, 1))
     , "via the mount\ttrue\telsewhere/logs\t/\n");
+    try t.expectOutput("print(host(\"real\", \".\") == host(\"real\", \"\"), sub(host(\"real\", \".\"), -2) ~= \"/.\")", "true\ttrue\n");
     try testing.expectEqualStrings("via the mount", try t.file("elsewhere/logs/a.txt"));
     // A program's cwd and log through a mount.
     try t.expectOutput("print(sub(host(\"run\", {\"shale-fixture\", \"pwd\"}, {timeout_ms = 10000, tail = 1, cwd = \"runs:logs\"}).out, -15))", "elsewhere/logs\n\n");
