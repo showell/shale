@@ -23,6 +23,8 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           path: shale
+          # The git prelude's tests read shale's own history.
+          fetch-depth: 0
 
       # build.zig.zon's `webbox` is the sibling ../zig-webbox; the other
       # path dependency, ../zig-coverage-sdk, is lazy and `test` never
@@ -32,6 +34,8 @@ jobs:
           repository: showell/zig-webbox
           ref: master
           path: zig-webbox
+          # zig_move's tests replay zig-webbox commits by `git show`.
+          fetch-depth: 0
 
       # shale's zig-version names the pin when there is one; otherwise
       # patched-zig-compiler's own zig-version, its newest release.
