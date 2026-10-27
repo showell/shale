@@ -274,6 +274,20 @@ test "linux prelude: edits_all checks every file's edits before it writes any" {
     try testing.expectEqualStrings("thrEE\n", try t.file("b.txt"));
 }
 
+test "linux prelude: edits_all checks a file named twice against its first edits, so nothing is written when the second set fails" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.put("a.txt", "one two\n");
+    // The second set is checked against the first's result, where "one two"
+    // is gone: nothing is written.
+    try t.expectStop("edits_all({{\"a.txt\", {{old = \"one\", new = \"1\"}}}, {\"a.txt\", {{old = \"one two\", new = \"x\"}}}})", .atomic, .fail, "`edits_all`: a.txt's edit 1: `old` is not there; nothing written");
+    try testing.expectEqualStrings("one two\n", try t.file("a.txt"));
+    // And a second set that holds on the first's result is applied after it.
+    try t.expectOutput("print(edits_all({{\"a.txt\", {{old = \"one\", new = \"1\"}}}, {\"a.txt\", {{old = \"1 two\", new = \"12\"}}}}))", "2\n");
+    try testing.expectEqualStrings("12\n", try t.file("a.txt"));
+}
+
 test "linux prelude: edits_all checks a word edit as edit applies it, so the next is checked against its result" {
     var t: T = undefined;
     try init(&t);
