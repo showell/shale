@@ -391,8 +391,9 @@ pub const Run = struct {
         const n = t.list.items.len;
         try self.charge(pos, n);
         for (0..n) |i| {
+            // A list `pop` shortened ends the loop at its new end.
+            if (i >= t.list.items.len) break;
             try self.charge(pos, 1);
-            // A list never shrinks, so the item is there.
             self.slot(f.slot).* = t.list.items[i];
             switch (try self.block(f.body)) {
                 .normal, .@"continue" => {},

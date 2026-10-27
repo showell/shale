@@ -604,6 +604,7 @@ change_bytes` past those budgets.
 | `date(seconds)`, `seconds(text)` | each other's inverse | `argument` out of range or unreadable |
 | `human(bytes)`, `pad(v, width)`, `table(rows, columns)` | text | `index` for a row missing a column |
 | `push(l, x)` | nil | `type` for a map or for nil |
+| `pop(l)` | the last item, removed | `argument` for an empty list |
 | `sort(l[, order])`, `sort(rows, keys[, order])` | `l` (`rows`), sorted in place | `type` for mixed kinds; `index` for a row with no `key`; `argument` for another order |
 | `take(l, n)` | a new list of the first `n` | `argument` for `n` < 0 |
 | `last(l, n)` | a new list of the last `n` | `argument` for `n` < 0 |
@@ -811,6 +812,7 @@ Perl and Python sometimes take one more turn after it, so on "a",
 | builtin | gives |
 |---|---|
 | `push(l, x)` | `x` added to the end |
+| `pop(l)` | the last item, taken off the end: `push`'s other half, charged as it is. An empty list stops, naming the call: never nil, so a loop of `pop` asks `#l > 0` first. A `for` over the list stops at its new end |
 | `sort(l)`, `sort(l, "desc")` | in place, all integers or all strings, and `l` given back, so a sort is an expression: `join(sort(keys(m)), ",")`. No comparator: a list of scalars' second argument is its order, `"asc"` (the default) or `"desc"` |
 | `sort(rows, key)` | a list of maps, in place, by each one's `key`: all integers or all strings. **Stable**: equal keys keep their order |
 | `sort(rows, {k1, k2, ...})` | by several keys, the first deciding first, the next breaking its ties (at most 8): `sort(defs, {"kind", "name"})`. A key is a name, or `{key = name, desc = true}` for its own order: `sort(files, {{key = "size", desc = true}, "path"})` |

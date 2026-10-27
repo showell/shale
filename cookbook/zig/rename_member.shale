@@ -1,0 +1,83 @@
+-- budget: steps=900000000 arena_bytes=4000000000
+-- **A DECLARATION RENAMED WITH ITS CALLERS ACROSS A TREE** (metal-vmm QUEUE
+-- 261): `from` in `file` (a top-level declaration, or with `container=` a
+-- container's member), and in every other file of the tree that imports
+-- `file`, each `alias.from` (or `alias.Container.from`) through the name it
+-- imports it by. What a file reaches some other way (a value of the type,
+-- `@import("root")`) is never guessed at: its lines are said, for a reader.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/rename_member.shale file=src/search_index.zig from=ready to=indexOrBuild
+--   shale <shale>/cookbook/zig/rename_member.shale file=src/router_harness.zig container=UidSite from=marked to=isSigned glob=src/**/*.zig
+--
+-- `glob=` is the tree (default src/**/*.zig). In `file`, a container's
+-- member is renamed by `zig_rename`'s `container` (its uses inside, and
+-- `C.`, `self.`, `@This().` ones); a `.from` there it cannot attribute
+-- stops the run before any file is written.
+
+const FILE = arg("file", "")
+const FROM = arg("from", "")
+const TO = arg("to", "")
+const CONTAINER = arg("container", "")
+const GLOB = arg("glob", "src/**/*.zig")
+if FILE == "" or FROM == "" or TO == "" then fail("rename_member: say `file=`, `from=` and `to=`") end
+
+-- `p` with its `.` and `..` parts resolved: `src/a/../b.zig` is `src/b.zig`.
+function clean(p)
+  local out = {}
+  for part in split(p, "/") do
+    if part == ".." and #out > 0 and out[#out] ~= ".." then
+      out = take(out, #out - 1)
+    elseif part ~= "." and part ~= "" then
+      push(out, part)
+    end
+  end
+  return join(out, "/")
+end
+-- The folder `p` is in, or "".
+function folder(p)
+  local at = 0
+  local i = 1
+  while true do
+    local k = find(p, "/", i)
+    if k == nil then break end
+    at = k
+    i = k + 1
+  end
+  if at == 0 then return "" end
+  return sub(p, 1, at - 1)
+end
+
+const TARGET = clean(FILE)
+-- First the declaring file: a refusal here stops the run with nothing written.
+local own = nil
+if CONTAINER ~= "" then own = zig_rename(TARGET, FROM, TO, {container = CONTAINER}) else own = zig_rename(TARGET, FROM, TO) end
+print(TARGET .. ": " .. own.renamed .. " renamed, " .. own.left_in_comments .. " left in comments")
+local total = own.renamed
+local files = 0
+for p in glob(GLOB) do
+  if clean(p) ~= TARGET and #grep(p, FROM) > 0 then
+    local via = {}
+    for imp in zig_imports(p) do
+      if imp.kind == "import" and imp.file == "found" and imp.name ~= nil and imp.name ~= "" then
+        local dir = folder(p)
+        local path = imp.target
+        if dir ~= "" then path = dir .. "/" .. imp.target end
+        if clean(path) == TARGET then
+          if CONTAINER ~= "" then push(via, imp.name .. "." .. CONTAINER) else push(via, imp.name) end
+        end
+      end
+    end
+    if #via > 0 then
+      local r = zig_rename(p, FROM, TO, {via = via})
+      if r.renamed > 0 or #r.left > 0 then
+        files = files + 1
+        total = total + r.renamed
+        local line = p .. ": " .. r.renamed .. " through " .. join(via, ", ")
+        if #r.left > 0 then line = line .. "; `." .. FROM .. "` left at lines " .. join(r.left, ", ") .. " (not through the import: a reader's)" end
+        print(line)
+      end
+    end
+  end
+  yield()
+end
+print("rename_member: " .. FROM .. " -> " .. TO .. ": " .. total .. " in " .. (files + 1) .. " files")

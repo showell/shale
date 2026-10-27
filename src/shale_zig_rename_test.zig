@@ -233,3 +233,74 @@ test "zig_rename's plan, over this repo's src/*.zig and webbox's: renaming a nam
     try testing.expect(files > 50);
     try testing.expect(renamed > 1000);
 }
+
+const harness =
+    \\pub const UidSite = struct {
+    \\    const Self = @This();
+    \\    pub fn marked(id: []const u8) bool {
+    \\        return id.len > 0;
+    \\    }
+    \\    fn twice(self: Self, id: []const u8) bool {
+    \\        return self.marked(id) and UidSite.marked(id) and marked(id) and @This().marked(id);
+    \\    }
+    \\};
+    \\pub const Other = struct {
+    \\    pub fn marked(id: []const u8) bool {
+    \\        return id.len == 0;
+    \\    }
+    \\};
+    \\test {
+    \\    _ = UidSite.marked("a");
+    \\    _ = Other.marked("b");
+    \\    _ = .marked;
+    \\}
+    \\
+;
+
+test "zig_rename's container: a member's declaration, its bare uses inside, and `C.`, `self.`, `@This().` uses; another container's same name left alone" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const got = try zig.planMember(a, harness, "marked", "isSigned", "UidSite");
+    const d = got.done;
+    try testing.expectEqual(@as(usize, 6), d.plan.renamed);
+    try testing.expect(std.mem.indexOf(u8, d.plan.now, "pub fn isSigned(id: []const u8) bool {\n        return id.len > 0;") != null);
+    try testing.expect(std.mem.indexOf(u8, d.plan.now, "self.isSigned(id) and UidSite.isSigned(id) and isSigned(id) and @This().isSigned(id)") != null);
+    try testing.expect(std.mem.indexOf(u8, d.plan.now, "_ = UidSite.isSigned(\"a\");\n    _ = Other.marked(\"b\");\n    _ = .marked;") != null);
+    try testing.expect(std.mem.indexOf(u8, d.plan.now, "pub fn marked(id: []const u8) bool {\n        return id.len == 0;") != null);
+}
+
+test "zig_rename's container refuses what it cannot attribute, no such container, or no such member" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const loose = harness ++ "fn f(s: UidSite) bool {\n    return s.marked(\"x\");\n}\n";
+    try testing.expectEqual(@as(usize, 21), (try zig.planMember(a, loose, "marked", "isSigned", "UidSite")).unattributed);
+    try testing.expectEqual(@as(usize, 0), (try zig.planMember(a, harness, "marked", "isSigned", "Nowhere")).no_container);
+    try testing.expect((try zig.planMember(a, harness, "closeWindow", "x", "UidSite")) == .no_member);
+}
+
+const callers =
+    \\const search_index = @import("search_index.zig");
+    \\const harness = @import("router_harness.zig");
+    \\fn f() void {
+    \\    _ = search_index.ready(1);
+    \\    _ = other.ready;
+    \\    _ = x.search_index.ready;
+    \\    _ = harness.UidSite.marked("a");
+    \\}
+    \\
+;
+
+test "zig_rename's via: `prefix.from` callers through the given prefixes alone, every other `.from` left and its line said" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d = (try zig.planVia(a, callers, "ready", "indexOrBuild", &.{"search_index"})).done;
+    try testing.expectEqual(@as(usize, 1), d.plan.renamed);
+    try testing.expect(std.mem.indexOf(u8, d.plan.now, "_ = search_index.indexOrBuild(1);\n    _ = other.ready;\n    _ = x.search_index.ready;") != null);
+    try testing.expectEqualSlices(usize, &.{ 5, 6 }, d.left);
+    const m = (try zig.planVia(a, callers, "marked", "isSigned", &.{"harness.UidSite"})).done;
+    try testing.expectEqual(@as(usize, 1), m.plan.renamed);
+    try testing.expect(std.mem.indexOf(u8, m.plan.now, "harness.UidSite.isSigned(\"a\")") != null);
+}
