@@ -40,25 +40,26 @@ pub const Record = struct {
     }
 };
 
-/// Parses a record's text. Returns `null` if it is not a record.
+/// Parses a record's text. Returns `null` if it is not a record: a key
+/// missing (`formatRecord` writes each of the first seven), one it does not
+/// know, or a line that is no `key=value`. A missing `start` read as ""
+/// would make `alive` say false of a job that runs.
 pub fn parseRecord(text: []const u8) ?Record {
     var r: Record = .{};
+    const required = [_][]const u8{ "pid", "pgid", "start", "started", "argv", "reaper", "reaper_start" };
+    var seen: [required.len]bool = @splat(false);
     var it = std.mem.splitScalar(u8, text, '\n');
     while (it.next()) |line| {
-        const eq = std.mem.indexOfScalar(u8, line, '=') orelse continue;
+        if (line.len == 0) continue;
+        const eq = std.mem.indexOfScalar(u8, line, '=') orelse return null;
         const k = line[0..eq];
         const v = line[eq + 1 ..];
-        if (std.mem.eql(u8, k, "pid")) r.pid = std.fmt.parseInt(i32, v, 10) catch return null;
-        if (std.mem.eql(u8, k, "pgid")) r.pgid = std.fmt.parseInt(i32, v, 10) catch return null;
-        if (std.mem.eql(u8, k, "start")) r.start = v;
-        if (std.mem.eql(u8, k, "started")) r.started = std.fmt.parseInt(i64, v, 10) catch return null;
-        if (std.mem.eql(u8, k, "argv")) r.argv = v;
-        if (std.mem.eql(u8, k, "reaper")) r.reaper = std.fmt.parseInt(i32, v, 10) catch return null;
-        if (std.mem.eql(u8, k, "reaper_start")) r.reaper_start = v;
-        if (std.mem.eql(u8, k, "exit")) r.exit = std.fmt.parseInt(u8, v, 10) catch return null;
-        if (std.mem.eql(u8, k, "signal")) r.signal = std.fmt.parseInt(u32, v, 10) catch return null;
-        if (std.mem.eql(u8, k, "ended")) r.ended = std.fmt.parseInt(i64, v, 10) catch return null;
+        for (required, 0..) |name, i| if (std.mem.eql(u8, k, name)) {
+            seen[i] = true;
+        };
+        if (std.mem.eql(u8, k, "pid")) r.pid = std.fmt.parseInt(i32, v, 10) catch return null else if (std.mem.eql(u8, k, "pgid")) r.pgid = std.fmt.parseInt(i32, v, 10) catch return null else if (std.mem.eql(u8, k, "start")) r.start = v else if (std.mem.eql(u8, k, "started")) r.started = std.fmt.parseInt(i64, v, 10) catch return null else if (std.mem.eql(u8, k, "argv")) r.argv = v else if (std.mem.eql(u8, k, "reaper")) r.reaper = std.fmt.parseInt(i32, v, 10) catch return null else if (std.mem.eql(u8, k, "reaper_start")) r.reaper_start = v else if (std.mem.eql(u8, k, "exit")) r.exit = std.fmt.parseInt(u8, v, 10) catch return null else if (std.mem.eql(u8, k, "signal")) r.signal = std.fmt.parseInt(u32, v, 10) catch return null else if (std.mem.eql(u8, k, "ended")) r.ended = std.fmt.parseInt(i64, v, 10) catch return null else return null;
     }
+    for (seen) |s| if (!s) return null;
     if (r.pid <= 0 or r.pgid <= 0) return null;
     return r;
 }
