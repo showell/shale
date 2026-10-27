@@ -196,7 +196,8 @@ fn mountOf(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize) Er
 /// `path` (the mount `m`'s, its `:` at `colon`) as an OS path, the rest
 /// held to the root's rules.
 fn mountPath(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize, m: Mount) Error![]const u8 {
-    const rest = path[colon + 1 ..];
+    // `m:.` is the mount's folder, as `.` is the root.
+    const rest = if (std.mem.eql(u8, path[colon + 1 ..], ".")) "" else path[colon + 1 ..];
     if (rest.len > 0 and rest[0] == '/') return run.fail(pos, .argument, "\"{s}\" is absolute inside its mount: a mount's paths are relative to it", .{path});
     if (rest.len > 0) {
         var it = std.mem.splitScalar(u8, rest, '/');
