@@ -289,3 +289,17 @@ test "git prelude: a value that starts with `-` is refused, never given to git a
     try t.expectStop("git_merge_ff(\"\", \"--help\")", .atomic, .fail, "`git_merge_ff`'s `ref` is \"--help\"");
     try t.expectStop("git_tag(\"\", \"-d\")", .atomic, .fail, "`git_tag`'s `name` is \"-d\"");
 }
+
+test "git prelude: a rename in the work tree (` R`, an intent-to-add file) is one entry with its `from`, not two" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.tmp.dir.createDirPath(t.threaded.io(), "w");
+    try git(&t, "w", &.{ "init", "-q", "-b", "main" });
+    try t.put("w/a.txt", "one\n");
+    try git(&t, "w", &.{ "add", "a.txt" });
+    try git(&t, "w", &.{ "commit", "-q", "-m", "first" });
+    try t.tmp.dir.rename("w/a.txt", t.tmp.dir, "w/b.txt", t.threaded.io());
+    try git(&t, "w", &.{ "add", "-N", "b.txt" });
+    try t.expectOutput("local s = git_status(\"w\") print(#s, s[1].code, s[1].path, get(s[1], \"from\", \"none\"))", "1\t R\tb.txt\ta.txt\n");
+}
