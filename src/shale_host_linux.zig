@@ -679,6 +679,9 @@ test "host: run's options are the script's to say; what it is given wrong stops,
     try t.expectStop("host(\"run\", {\"no-such-program-here\"}, {timeout_ms = 1000, tail = 1})", .atomic, .host, "not found along PATH");
     try t.expectStop("host(\"run\", {\"shale-fixture\"}, {timeout_ms = 10, tail = 1, re = \"a{2}\"})", .atomic, .argument, "`run`'s `re`");
     try t.expectStop("host(\"jobs\", 1)", .atomic, .host, "`jobs`: not on this host");
+    // A path option of another type is named as `run`'s.
+    try t.expectStop("host(\"run\", {\"shale-fixture\"}, {timeout_ms = 10, tail = 1, cwd = 3})", .atomic, .type, "`run`: its `cwd` must be a string, not an integer");
+    try t.expectStop("host(\"run\", {\"shale-fixture\"}, {timeout_ms = 10, tail = 1, log = true})", .atomic, .type, "`run`: its `log` must be a string, not a boolean");
 }
 
 test "host: what run refuses without a want, by name and by an untracked path; a want runs it" {
