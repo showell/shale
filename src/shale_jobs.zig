@@ -338,6 +338,11 @@ test "jobs: a record reads back as it was written, and a broken one is none" {
     try std.testing.expect(r.done());
     try std.testing.expect(parseRecord("pid=x\n") == null);
     try std.testing.expect(parseRecord("") == null);
+    // A record missing a key, holding one it does not know, or a line that
+    // is no `key=value`, is none: never a record with a key read as empty.
+    try std.testing.expect(parseRecord("pid=42\npgid=42\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n") == null);
+    try std.testing.expect(parseRecord("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\nexitt=3\n") == null);
+    try std.testing.expect(parseRecord("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\ngarbage\n") == null);
 }
 
 test "jobs: a reaper gone before its record is NoRecord at once, the pipe's end its word" {
