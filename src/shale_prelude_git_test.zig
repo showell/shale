@@ -274,3 +274,18 @@ test "git prelude: a git that runs out of time, or is ended by a signal, stops s
     defer stuck.deinit();
     try testing.expectEqualStrings("`git merge side` did not finish (timeout)", stuck.stop.?.message);
 }
+
+test "git prelude: a value that starts with `-` is refused, never given to git as an option (`--output` would write a file no mount guards)" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try repo(&t);
+    try t.expectStop("git_show(\"\", \"--output=x.txt\")", .atomic, .fail, "`git_show`'s `what` is \"--output=x.txt\"");
+    try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(t.threaded.io(), "x.txt", .{}));
+    try t.expectStop("git_diff(\"\", {range = \"--output=y.txt\"})", .atomic, .fail, "`git_diff`'s `range` is \"--output=y.txt\"");
+    try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(t.threaded.io(), "y.txt", .{}));
+    try t.expectStop("git_log(\"\", {ref = \"--output=z.txt\"})", .atomic, .fail, "`git_log`'s `ref` is \"--output=z.txt\"");
+    try t.expectStop("git_log(\"\", {range = \"-p\"})", .atomic, .fail, "`git_log`'s `range` is \"-p\"");
+    try t.expectStop("git_merge_ff(\"\", \"--help\")", .atomic, .fail, "`git_merge_ff`'s `ref` is \"--help\"");
+    try t.expectStop("git_tag(\"\", \"-d\")", .atomic, .fail, "`git_tag`'s `name` is \"-d\"");
+}
