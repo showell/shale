@@ -117,7 +117,13 @@ pub fn main(init: std.process.Init) !u8 {
     }
     try cli.printHeaderBudgets(c, err);
     try err.flush();
-    const root = std.mem.trimEnd(u8, c.root, "/");
+    // The root in one spelling, its real path, as the mounts' folders are
+    // (shale_host_setup.zig `loadMounts`): a root given as `<dir>/.`,
+    // `<dir>/sub/..` or through a link still holds a read-only or secrets
+    // mount inside it, and `real(".")` is the folder itself.
+    const given_root = std.mem.trimEnd(u8, c.root, "/");
+    var root_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const root = if (given_root.len == 0) given_root else if (std.Io.Dir.cwd().realPathFile(io, given_root, &root_buf)) |n| try arena.dupe(u8, root_buf[0..n]) else |_| given_root;
     const auth = try std.fs.path.join(gpa, &.{ root, "..", "auth" });
     defer gpa.free(auth);
     webbox.store.setBases(root, auth);
