@@ -236,3 +236,13 @@ test "jobs: a job stopped just after its start is gone when job_stop returns, it
         \\print(n)
     ));
 }
+
+test "jobs: a job whose argument holds a newline is found again by its record; an argv too long for a record is said before it starts" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try testing.expectEqualStrings("exited\t0\n", try once(&t, "local j = job_start({\"shale-fixture\", \"lines\", \"1\", \"one\\ntwo\"}, {log = \"nl.log\"}) local w = job_wait(j, {timeout_ms = 10000}) print(w.ended, w.code)"));
+    var r = t.runOnce("job_start({\"shale-fixture\", \"lines\", \"1\", rep(\"x\", 8000)}, {log = \"long.log\"})", .atomic);
+    defer r.deinit();
+    try testing.expect(std.mem.indexOf(u8, r.stop.?.message, "a record holds 7168") != null);
+}
