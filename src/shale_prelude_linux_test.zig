@@ -319,6 +319,18 @@ test "linux prelude: edits_all checks what edit will refuse or the budgets stop,
     try t.expectStop(try std.fmt.allocPrint(a, "edits_all({{{{\"a.txt\", {{{{old = \"one\", new = \"1\"}}}}}}, {{\"b.txt\", {{{s}}}}}}})", .{many.items}), .atomic, .fail, "`edits_all`: b.txt has 65 edits, and `edit` takes at most 64 a call; nothing written");
     try testing.expectEqualStrings("one\n", try t.file("a.txt"));
     try t.expectStop("edits_all({{\"a.txt\", {{old = \"\", new = \"x\"}}}})", .atomic, .fail, "`edits_all`: a.txt's edit 1: `old` is empty; nothing written");
+    // What `edit` refuses of an edit's shape, refused before the first file.
+    for ([_][2][]const u8{
+        .{ "{}", "`edits_all`: b.txt has no edits; nothing written" },
+        .{ "{{old = \"w0.\", neww = \"W\"}}", "`edits_all`: b.txt's edit 1 takes `old`, `new`, `all` and `word`, not `neww`; nothing written" },
+        .{ "{{old = \"w0.\"}}", "`edits_all`: b.txt's edit 1 has no `new`; nothing written" },
+        .{ "{{old = \"w0.\", new = 3}}", "`edits_all`: b.txt's edit 1's `new` is not a string; nothing written" },
+        .{ "{{old = \"w0.\", new = \"W\", all = 1}}", "`edits_all`: b.txt's edit 1's `all` is not true or false; nothing written" },
+        .{ "{\"w0.\"}", "`edits_all`: b.txt's edit 1 is not a map, `{old = ..., new = ...}`; nothing written" },
+    }) |c| {
+        try t.expectStop(try std.fmt.allocPrint(a, "edits_all({{{{\"a.txt\", {{{{old = \"one\", new = \"1\"}}}}}}, {{\"b.txt\", {s}}}}})", .{c[0]}), .atomic, .fail, c[1]);
+        try testing.expectEqualStrings("one\n", try t.file("a.txt"));
+    }
     // One change left: two files would stop on the second, so neither is written.
     t.budgets.changes = 1;
     try t.put("c.txt", "three\n");
