@@ -1,0 +1,93 @@
+-- **A BUILD ON GITHUB, NOT ON THE BOX**: a `workflow_dispatch` workflow
+-- (shale's .github/workflows/test.yml: `zig build test`) dispatched for
+-- `ref`, its run found, waited on, and its verdict said in one line: PASS
+-- or FAIL, the run's URL and its wall time. A failure prints the failed
+-- step's last 40 lines (`gh run view --log-failed`) and fails the launch.
+-- The workflow runs on no push and no PR: only when this asks.
+--
+--   cd <repo> && shale cookbook:gh_build.shale
+--   shale cookbook:gh_build.shale repo=shale ref=my-branch
+--   shale cookbook:gh_build.shale ref=master wait=no
+--
+-- `repo` is showell/<repo> (default shale), `ref` the branch, tag or
+-- commit the workflow checks out (default the branch checked out here),
+-- `workflow` its file (default test.yml), `wait` yes or no (no: dispatch,
+-- say the run's URL, and end). `every` is the seconds between looks
+-- (default 15). Each look is one `gh` program and a run holds 64
+-- (`runs_most`), so a wait is at most about 50 looks: 12 minutes at 15 s.
+--
+-- budget: steps=50000000
+
+const REPO = arg("repo", "shale")
+const REF = arg("ref", "")
+const WORKFLOW = arg("workflow", "test.yml")
+const WAIT = arg("wait", "yes")
+const EVERY = arg("every", 15)
+
+not_option("gh_build", "repo", REPO)
+not_option("gh_build", "ref", REF)
+not_option("gh_build", "workflow", WORKFLOW)
+if WAIT ~= "yes" and WAIT ~= "no" then fail("gh_build: `wait` is yes or no, not " .. WAIT) end
+local slug = "showell/" .. REPO
+
+-- A `gh` program's output, trimmed; its failure fails the launch. `used`
+-- counts them against the run's 64 (`runs_most`).
+local used = 0
+function gh(argv)
+  used = used + 1
+  local r = run(argv, {tail = 40, timeout_ms = 60000})
+  if not has_key(r, "code") or r.code ~= 0 then fail("gh_build: `" .. join(argv, " ") .. "` failed:\n" .. r.out) end
+  return trim(r.out)
+end
+
+local ref = REF
+if ref == "" then
+  ref = gh({"git", "branch", "--show-current"})
+  if ref == "" then fail("gh_build: no branch checked out here: say `ref=`") end
+end
+
+-- The newest dispatched run's id, or "" when there is none.
+function newest()
+  return gh({"gh", "run", "list", "--repo", slug, "--workflow", WORKFLOW, "--event", "workflow_dispatch", "--limit", "1", "--json", "databaseId", "-q", ".[0].databaseId // \"\""})
+end
+
+local before = newest()
+gh({"gh", "workflow", "run", WORKFLOW, "--repo", slug, "-f", "ref=" .. ref})
+-- The dispatch answers before the run is listed: a new id is this one.
+local id = before
+local looks = 0
+while id == before do
+  looks = looks + 1
+  if looks > 10 then fail("gh_build: no new " .. WORKFLOW .. " run listed for " .. slug .. " after 10 looks") end
+  sleep(3000)
+  id = newest()
+end
+
+-- "status conclusion seconds url", conclusion "-" while it runs.
+local SAY = "\"\\(.status) \\(if .conclusion == \"\" then \"-\" else .conclusion end) \\((.updatedAt | fromdate) - (.startedAt | fromdate)) \\(.url)\""
+function look()
+  local w = {}
+  for x in words(gh({"gh", "run", "view", id, "--repo", slug, "--json", "status,conclusion,startedAt,updatedAt,url", "-q", SAY})) do push(w, x) end
+  return {status = w[1], conclusion = w[2], secs = w[3], url = w[4]}
+end
+
+local v = look()
+if WAIT == "no" then
+  print("dispatched " .. WORKFLOW .. " on " .. ref .. ": " .. v.url)
+else
+  print("waiting on " .. v.url .. " (" .. ref .. ")")
+  while v.status ~= "completed" do
+    -- One program is kept for a failure's log.
+    if used >= 63 then fail("gh_build: still " .. v.status .. " after " .. v.secs .. " s, and this run's 64 programs are spent: " .. v.url) end
+    sleep(EVERY * 1000)
+    v = look()
+  end
+  if v.conclusion == "success" then
+    print("PASS " .. WORKFLOW .. " " .. ref .. " in " .. v.secs .. " s: " .. v.url)
+  else
+    local r = run({"gh", "run", "view", id, "--repo", slug, "--log-failed"}, {tail = 40, timeout_ms = 60000})
+    for l in lines(r.out) do print("   " .. sub(l, 1, 240)) end
+    print("FAIL (" .. v.conclusion .. ") " .. WORKFLOW .. " " .. ref .. " in " .. v.secs .. " s: " .. v.url)
+    fail("gh_build: " .. WORKFLOW .. " on " .. ref .. " " .. v.conclusion)
+  end
+end

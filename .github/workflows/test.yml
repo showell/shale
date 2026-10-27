@@ -1,0 +1,67 @@
+# `zig build test`, on demand only: dispatched by cookbook/gh_build.shale
+# (or `gh workflow run test.yml -f ref=<ref>`), never on a push or a PR.
+name: test
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "The shale branch, tag or commit to test"
+        default: master
+        required: true
+
+concurrency:
+  group: test-${{ inputs.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          path: shale
+
+      # build.zig.zon's `webbox` is the sibling ../zig-webbox; the other
+      # path dependency, ../zig-coverage-sdk, is lazy and `test` never
+      # fetches it.
+      - uses: actions/checkout@v4
+        with:
+          repository: showell/zig-webbox
+          ref: master
+          path: zig-webbox
+
+      # shale's zig-version names the pin when there is one; otherwise
+      # patched-zig-compiler's own zig-version, its newest release.
+      - name: Zig version
+        id: zig
+        run: |
+          if [ -f shale/zig-version ]; then
+            pin=$(tr -d '[:space:]' < shale/zig-version)
+          else
+            pin=$(curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/zig-version | tr -d '[:space:]')
+          fi
+          echo "version=$pin" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        id: zig-cache
+        with:
+          path: ~/zig-${{ steps.zig.outputs.version }}
+          key: zig-${{ steps.zig.outputs.version }}
+
+      - name: Install Zig
+        if: steps.zig-cache.outputs.cache-hit != 'true'
+        working-directory: shale
+        run: curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/tools/get_zig.sh | sh
+
+      - name: Zig on PATH
+        run: |
+          echo "$HOME/zig-${{ steps.zig.outputs.version }}" >> "$GITHUB_PATH"
+
+      - name: zig build test
+        working-directory: shale
+        run: |
+          zig version
+          zig build test --summary failures
