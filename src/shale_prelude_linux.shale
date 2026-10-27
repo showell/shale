@@ -112,14 +112,25 @@ function curl_http(who, method, url, opts?)
     cut = find(r.out, "\r\n\r\n", at)
   end
   if cut == nil then fail("`" .. who .. " " .. url .. "`: curl gave no head") end
+  -- After the status line, each line a `Name: value`, or the one before
+  -- it continued (a folded header, begun by a space or a tab); anything
+  -- else is curl's head misread, said, not passed by.
   local headers = {}
-  for line in lines(sub(r.out, at, cut - 1)) do
+  local prev = nil
+  local head = lines(sub(r.out, at, cut - 1))
+  for i = 2, #head do
+    local line = head[i]
     local colon = find(line, ":")
-    if colon ~= nil then
+    if (starts_with(line, " ") or starts_with(line, "\t")) and prev ~= nil then
+      headers[prev] = headers[prev] .. " " .. trim(line)
+    elseif colon ~= nil then
       local name = lower(sub(line, 1, colon - 1))
       local value = trim(sub(line, colon + 1))
       local had = get(headers, name, nil)
       if had == nil then headers[name] = value else headers[name] = had .. "\n" .. value end
+      prev = name
+    else
+      fail("`" .. who .. " " .. url .. "`: a head line that is no header: " .. line)
     end
   end
   return {status = tonumber(code), headers = headers, body = sub(r.out, cut + 4, #r.out - #code - 1), ms = r.ms}
