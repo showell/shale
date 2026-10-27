@@ -156,3 +156,25 @@ test "cli: a root spelled with `.`, `..` or a link is the folder itself: a read-
         try testing.expectEqualStrings("orig\n", kept);
     }
 }
+
+test "cli: --root / is the filesystem's root: real(\"\") is `/`, not the working folder, and a change below it is made, not refused as an empty part" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(dir);
+    // The path below `/` to the test's folder, without its leading `/`.
+    const cmd = try std.fmt.allocPrint(a, "here=\"$PWD/{s}\"; '{s}' --root / -e \"print(real(''), real('.')) replace('${{here#/}}/made.txt', 'made')\"", .{ dir, shale_exe });
+    defer a.free(cmd);
+    const r = try std.process.run(a, io, .{ .argv = &.{ "sh", "-c", cmd } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+    try testing.expectEqualStrings("/\t/\n", r.stdout);
+    const made = try tmp.dir.readFileAlloc(io, "made.txt", a, .limited(1 << 16));
+    defer a.free(made);
+    try testing.expectEqualStrings("made", made);
+}
