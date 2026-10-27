@@ -422,12 +422,6 @@ const GAlt = []const []const GNode;
 /// capture numbered by its `(`, nested or not.
 const GenGroups = struct { made: u8 = 0, captures: u8 = 0 };
 
-/// Whether `alt` has a group of either kind.
-fn hasGroup(alt: GAlt) bool {
-    for (alt) |seq| for (seq) |node| if (node.kind == .group) return true;
-    return false;
-}
-
 /// How many capture groups `alt` has.
 fn capturesIn(alt: GAlt) u8 {
     var n: u8 = 0;
@@ -492,10 +486,6 @@ fn genSeq(rand: std.Random, arena: std.mem.Allocator, len_most: usize, gen: *Gen
             3 => .opt,
             else => .one,
         };
-        // **A REPEATED GROUP HOLDS NO GROUP**: there the machine and a
-        // backtracker part (regex.zig, "Nested groups under a loop"), so the
-        // property promises nothing of it.
-        if (node.kind == .group and (node.quant == .star or node.quant == .plus) and hasGroup(node.inner)) node.quant = .opt;
     }
     return seq;
 }
@@ -872,8 +862,12 @@ test "expensive fuzz: property: a search's cost is linear in the string, whateve
         try testing.expect(at_4n * 100 >= 4 * at_n * 99);
     }
     // The loop of a loop, which backtracking takes exponential time over,
-    // costs about what `a*b` does: its 9 instructions to 5.
-    try testing.expect(try reSteps(&f, "(a*)*b", n) <= 2 * plain);
+    // costs a few times what `a*b` does: its outer loop's turn can take
+    // nothing, so the states inside it are told apart by its bit (QUEUE
+    // 259), twice its body's instructions, beside `a*b`'s 5.
+    const nested = try reSteps(&f, "(a*)*b", n);
+    errdefer std.debug.print("(a*)*b: {d} steps, a*b {d}\n", .{ nested, plain });
+    try testing.expect(nested <= 4 * plain);
 }
 
 // `edit`'s list form.

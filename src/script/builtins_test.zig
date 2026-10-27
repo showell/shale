@@ -991,10 +991,24 @@ test "builtins: re_find's several groups: in order of their `(`, nested, one not
     // re_replace names each: `\2` and `\1`, swapped; one not taking part is "".
     try f.expectOutput("print(re_replace(\"a=1, b=2\", \"(\\\\w)=(\\\\d)\", \"\\\\2=\\\\1\"))", "1=a, 2=b\n");
     try f.expectOutput("print(re_replace(\"ac\", \"(a)(b)?(c)\", \"[\\\\1\\\\2\\\\3]\"))", "[ac]\n");
-    // **THE ONE PLACE THE MACHINE PARTS FROM A BACKTRACKER** (regex.zig,
-    // "Nested groups under a loop"): a backtracker takes `ab.`. Pinned, so a
-    // fix shows here.
-    try f.expectOutput("print(re_find(\"ab.\", \"(?:\\\\w*(?:|.))*\").text)", "ab\n");
+    // A loop's new turn begun where an earlier one stood (QUEUE 253 found it,
+    // 259 fixed it): `ab.`, as a backtracker takes it, not `ab`.
+    try f.expectOutput("print(re_find(\"ab.\", \"(?:\\\\w*(?:|.))*\").text)", "ab.\n");
+    // Empty turns end a loop; a `+`'s first empty turn goes on past it.
+    try f.expectOutput("print(re_find(\"b\", \"(a|)*b\").text, join(re_find(\"aa\", \"(a|)+\").groups, \"|\"))", "b\ta\n");
+}
+
+test "builtins: same, the contents all the way down: lists in order, maps whatever their order, a table that holds itself an error" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("print(same(1, 1), same(\"a\", \"a\"), same(1, \"1\"), same(nil, nil), same(true, false))", "true\ttrue\tfalse\ttrue\tfalse\n");
+    try f.expectOutput("print(same({1, {a = 2}}, {1, {a = 2}}), same({1, 2}, {2, 1}), same({1}, {1, 2}))", "true\tfalse\tfalse\n");
+    try f.expectOutput("local a = {} a.x = 1 a.y = 2 local b = {} b.y = 2 b.x = 1 print(same(a, b), same(a, {x = 1}), same({}, {}), same({x = 1}, {1}))", "true\tfalse\ttrue\tfalse\n");
+    // A table that is itself is the same at once; two that each hold
+    // themselves would never end, and stop.
+    try f.expectOutput("local a = {} push(a, a) print(same(a, {a}))", "true\n");
+    try f.expectStop("local a = {} push(a, a) local b = {} push(b, b) print(same(a, b))", .argument);
 }
 
 test "builtins: re_find's nocase must be a boolean" {

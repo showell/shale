@@ -107,6 +107,7 @@ const cases = [_]Case{
     .{ .b = .count, .grows = .constant, .why = "a length the table keeps" },
     .{ .b = .reverse, .grows = .scales, .setup = "local l = {} for i = 1, N do push(l, i) end", .call = "reverse(l)" },
     .{ .b = .take, .grows = .scales, .setup = "local l = {} for i = 1, N do push(l, i) end", .call = "local x = take(l, N)" },
+    .{ .b = .same, .grows = .scales, .setup = "local l = {} for i = 1, N do push(l, i) end local m = {} for i = 1, N do push(m, i) end", .call = "local x = same(l, m)" },
     .{ .b = .last, .grows = .scales, .setup = "local l = {} for i = 1, N do push(l, i) end", .call = "local x = last(l, N)" },
     // the host
     .{ .b = .now, .grows = .constant, .why = "an integer the host handed in" },
