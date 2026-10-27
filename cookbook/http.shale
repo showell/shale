@@ -7,13 +7,15 @@
 --
 --   shale cookbook:http.shale url=https://dogpark.lynrummy.com/version
 --   shale cookbook:http.shale url=https://dogpark.lynrummy.com/ grep=Begin,Game
---   shale cookbook:http.shale url=https://dogpark.lynrummy.com/version wait=5419352 minutes=20
+--   shale cookbook:http.shale url=https://dogpark.lynrummy.com/version wait=5419352 minutes=10
 --
 -- `bearer` is a Shale path (through a mount) whose file holds a token,
 -- sent as `Authorization: Bearer` and never shown. **`wait`**: fetch every
--- `every` seconds (default 10) until the body holds that literal, for at
+-- `every` seconds (default 20) until the body holds that literal, for at
 -- most `minutes` (default 10); a failed fetch meanwhile (the server
--- restarting) is said and tried again.
+-- restarting) is said and tried again. Each try is two programs (the
+-- fetch, then `sleep`) and a run holds 64 (`runs_most`), so a wait is at
+-- most 32 fetches: `minutes * 60 / every` under 32.
 --
 -- budget: steps=50000000
 
@@ -24,7 +26,7 @@ const STATUS = arg("status", 200)
 const BEARER = arg("bearer", "")
 const WAIT = arg("wait", "")
 const MINUTES = arg("minutes", 10)
-const EVERY = arg("every", 10)
+const EVERY = arg("every", 20)
 
 if URL == "" then fail("http: say `url=`") end
 local opts = {}
@@ -36,6 +38,9 @@ if WAIT == "" then
 else
   local tries = 0
   local most = MINUTES * 60 // EVERY + 1
+  -- A fetch a try and a sleep between: said here, not by the runs budget
+  -- halfway.
+  if 2 * most - 1 > 64 then fail("http: a wait of " .. most .. " fetches is " .. (2 * most - 1) .. " programs, and a run holds 64: raise `every` or lower `minutes` (at most 32 fetches)") end
   while true do
     tries = tries + 1
     local got = attempt(http_get, URL, opts)
