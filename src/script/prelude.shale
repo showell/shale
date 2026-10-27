@@ -74,13 +74,17 @@ function glob(pattern, opts?)
   -- A mount's name (`m:`) is no part: the parts are what follows it.
   local mount = ""
   local rest = pattern
-  local named = re_find(pattern, "^([A-Za-z0-9_]+:)")
+  local named = re_find(pattern, "^([A-Za-z0-9_-]+:)")
   if named ~= nil then
     mount = named.group
     rest = sub(pattern, #mount + 1)
   end
   local parts = split(rest, "/")
   local base = {}
+  -- A `.` or `..` part names no path: refused, as every store call does.
+  for p in parts do
+    if p == "." or p == ".." then fail("`glob`: \"" .. pattern .. "\" has a part (\"" .. p .. "\") that is not a name") end
+  end
   for p in parts do
     if contains(p, "*") or contains(p, "?") then break end
     push(base, p)
