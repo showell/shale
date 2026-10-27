@@ -816,6 +816,8 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
         \\print(read("runs:logs/a.txt"), exists("runs:"), sub(host("real", "runs:logs"), -14), sub(host("real", ""), 1, 1))
     , "via the mount\ttrue\telsewhere/logs\t/\n");
     try t.expectOutput("print(host(\"real\", \".\") == host(\"real\", \"\"), sub(host(\"real\", \".\"), -2) ~= \"/.\")", "true\ttrue\n");
+    // A mount's `.` is the mount, as the root's `.` is the root.
+    try t.expectOutput("print(host(\"real\", \"runs:.\") == host(\"real\", \"runs:\"), exists(\"runs:.\"), is_dir(\"runs:.\"))", "true\ttrue\ttrue\n");
     try testing.expectEqualStrings("via the mount", try t.file("elsewhere/logs/a.txt"));
     // A program's cwd and log through a mount.
     try t.expectOutput("print(sub(host(\"run\", {\"shale-fixture\", \"pwd\"}, {timeout_ms = 10000, tail = 1, cwd = \"runs:logs\"}).out, -15))", "elsewhere/logs\n\n");
