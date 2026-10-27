@@ -103,7 +103,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
 
     const cwd = if (o.cwd) |c| try hl.osPath(h, run, pos, c, true) else try hl.rootOf(h, run, pos);
     try hl.refuse(h, run, pos, "run", argv[0], cwd, o.want);
-    try hl.refuseSecretArgs(h, run, pos, "run", argv);
+    try hl.refuseSecretArgs(h, run, pos, "run", argv, cwd, o.env);
 
     // The inherited environment, overridden by `env` and `secrets`.
     var env: std.ArrayList([]const u8) = .empty;
