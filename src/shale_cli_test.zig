@@ -217,3 +217,21 @@ test "cli: a run that spent a second or more in programs, waits or sleeps says w
     defer a.free(q.stderr);
     try testing.expect(std.mem.indexOf(u8, q.stderr, "── time:") == null);
 }
+
+test "cli: a recipe's launch value where a program reads options is refused when it starts with `-`, not given to it as one" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    const a = testing.allocator;
+    for ([_]struct { []const []const u8, []const u8 }{
+        // `git grep -O<cmd>` would run a command over the files it found.
+        .{ &.{ shale_exe, "cookbook/look.shale", "find=fn", "rev=--open-files-in-pager=true" }, "`look`'s `rev` is \"--open-files-in-pager=true\"" },
+        .{ &.{ shale_exe, "cookbook/zig_build.shale", "step=--help" }, "`zig_build`'s `step` is \"--help\"" },
+    }) |c| {
+        const r = try std.process.run(a, io, .{ .argv = c[0] });
+        defer a.free(r.stdout);
+        defer a.free(r.stderr);
+        errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+        try testing.expect(std.mem.indexOf(u8, r.stderr, c[1]) != null);
+    }
+}
