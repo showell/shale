@@ -23,6 +23,8 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           path: shale
+          # The git prelude's tests read shale's own history.
+          fetch-depth: 0
 
       # build.zig.zon's `webbox` is the sibling ../zig-webbox; the other
       # path dependency, ../zig-coverage-sdk, is lazy and `test` never
@@ -32,6 +34,8 @@ jobs:
           repository: showell/zig-webbox
           ref: master
           path: zig-webbox
+          # zig_move's tests replay zig-webbox commits by `git show`.
+          fetch-depth: 0
 
       # shale's zig-version names the pin when there is one; otherwise
       # patched-zig-compiler's own zig-version, its newest release.
@@ -45,7 +49,9 @@ jobs:
           fi
           echo "version=$pin" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache@v4
+      # Restore and save apart: actions/cache's own save waits for the
+      # job's success, and a red run would install Zig again every time.
+      - uses: actions/cache/restore@v4
         id: zig-cache
         with:
           path: ~/zig-${{ steps.zig.outputs.version }}
@@ -55,6 +61,12 @@ jobs:
         if: steps.zig-cache.outputs.cache-hit != 'true'
         working-directory: shale
         run: curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/tools/get_zig.sh | sh
+
+      - uses: actions/cache/save@v4
+        if: steps.zig-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/zig-${{ steps.zig.outputs.version }}
+          key: zig-${{ steps.zig.outputs.version }}
 
       - name: Zig on PATH
         run: |
