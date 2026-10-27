@@ -178,3 +178,17 @@ test "cli: --root / is the filesystem's root: real(\"\") is `/`, not the working
     defer a.free(made);
     try testing.expectEqualStrings("made", made);
 }
+
+test "cli: cookbook/http.shale's wait says, by its own words, a wait that a run's 64 programs cannot hold, before it fetches" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    const a = testing.allocator;
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "cookbook/http.shale", "url=http://127.0.0.1:1/", "wait=x", "minutes=1", "every=1" } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+    try testing.expectEqual(@as(u8, 1), r.term.exited);
+    try testing.expect(std.mem.indexOf(u8, r.stderr, "http: a wait of 61 fetches is 121 programs, and a run holds 64") != null);
+    try testing.expectEqualStrings("", r.stdout);
+}
