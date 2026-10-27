@@ -1,14 +1,161 @@
 # shale
 
-**Shale**, a small language for a site's own data, and the box's tool in
-place of bash and Python. You explore and print, read the output, then
-write a script that changes things. It has Lua's look and smaller
-semantics of its own. Every effect goes through
-[zig-webbox](https://github.com/showell/zig-webbox)'s `store`, so a script
-does the same on Linux and on metal, and every run stays inside its
-budgets. A script **just runs**: a stopped run keeps what it already did,
-and its effects log says what.
+**Shale** is a small scripting language that looks like Lua, for reading,
+searching and changing a project's files and for running its programs. On
+the box it is built for, agents use it in place of bash, Python, `sed`,
+`awk` and `grep`: a script is written as a heredoc, run, and its output
+read.
 
+## Why use it instead of bash or Python
+
+Every script runs inside guard rails that a shell does not have:
+
+- **`run` never hangs or floods.** A program runs only with a timeout and a
+  keep (`head`, `tail` or `whole`), so a hung test is stopped and a
+  megabyte of build log comes back as its last 40 lines.
+- **Every run has budgets**: steps, reads, bytes read and bytes printed
+  (64 KiB unset). A run that hits one stops and says which; `--budget
+  NAME=N` raises it.
+- **A stop is one line** that says where and why, with a class (`type`,
+  `index`, `refused`, `budget reads`), not a traceback.
+- **It is confined.** A script reads and writes only under the folder it
+  runs in and the mounts you name (`name:path`): no `..`, no absolute
+  paths.
+- **It refuses the risky shortcut, by name.** `run` refuses a program at a
+  path git does not track (a script just written, not yet read), a shell or
+  an interpreter (`bash`, `python3`, `node`), and a text tool Shale already
+  has (`grep`, `sed`); `{want = "tag: why"}` runs one anyway, logged. A
+  `name=value` the script never reads stops the run before it starts, so a
+  misspelled argument is caught.
+- **Changes are undoable.** Work in a git checkout and `git diff` shows
+  what a run did. `--undo-on-stop` puts back every file a stopped run
+  changed. `git_merge` that hits a conflict aborts the merge and stops,
+  naming the paths, so a checkout is never left half merged.
+
+## Install
+
+Linux on x86-64 and Zig 0.17.0 (`zig version`). Shale builds against
+[zig-webbox](https://github.com/showell/zig-webbox), checked out **beside**
+it:
+
+    git clone https://github.com/showell/shale
+    git clone https://github.com/showell/zig-webbox
+    cd shale && zig build -Doptimize=ReleaseSafe   # zig-out/bin: shale, shale-gate, shale-sign
+
+Put `zig-out/bin` on your PATH, or link `zig-out/bin/shale` into a folder
+that is.
+
+## Run a script
+
+A script's root is the folder `shale` runs in. Three ways to start one:
+
+    shale <<'EOF'                         # a heredoc: the usual way
+    print("hello from " .. #glob("src/**/*") .. " files")
+    EOF
+
+    shale find.shale pattern=job_alive    # a file, with name=value arguments
+
+    shale -e 'print(1 + 1)'               # a one-liner (refused by the gate: outside it only)
+
+A script reads an argument as `arg("pattern", "TODO")`, the second value
+its default. A value that cannot be a plain word (a space, `*`, `|`) goes
+on stdin, one `name=value` a line, after `--args-stdin`.
+
+**Mounts:** a folder outside the root is a mount, listed as `name =
+/abs/path` in `~/.config/shale/mounts` and reached as `name:file`. Add `
+ro` after the path for a read-only mount. With
+
+    cookbook = /ABSOLUTE/PATH/TO/shale/cookbook
+
+the recipes launch from any checkout, as `shale cookbook:look.shale ...`.
+
+## A real task
+
+Every line holding a literal under a tree, with its file and line number,
+saved as a file named find.shale:
+
+```lua
+-- find.shale: every line holding a literal, with its file and line number
+local pat = arg("pattern", "TODO")
+local dir = arg("dir", "src")
+local hits = 0
+for p in glob(dir .. "/**/*.zig") do
+  for g in grep(p, pat) do
+    print(p .. ":" .. g.line .. ": " .. g.text)
+    hits = hits + 1
+  end
+end
+print(hits .. " lines hold " .. pat)
+```
+
+Run in this checkout,
+
+    shale find.shale pattern=job_alive dir=src
+
+prints thirteen lines like `src/shale_host_jobs.zig:21: if (std.mem.eql(u8, name,
+"job_alive")) {`, then `13 lines hold job_alive`. (`shale
+cookbook:look.shale find=job_alive in=src ext=zig` is the same search as a
+ready recipe.)
+
+Running a program and keeping its tail:
+
+```lua
+print(must(run({"git", "log", "--oneline"}, {timeout_ms = 10000, tail = 3})).out)
+```
+
+prints `… 216 lines left out …` and the three oldest commits. `run`
+returns `{code, out, ms, ...}` and does not fail on a non-zero exit;
+`must(r)` does, printing the output and naming the program.
+
+## The traps a newcomer hits first
+
+Each is a one-line stop, so it costs a retry, not a wrong answer:
+
+- **`run` needs `timeout_ms` and a keep**: `run({"zig", "build"},
+  {timeout_ms = 600000, tail = 40})`. Without either it refuses to start.
+- **A function is declared above where it is called.** `print(f(1))` before
+  `function f(x)` stops: "no function `f` above this line". Functions are
+  top-level `function name(...)`; there are no closures.
+- **A long string is `[=[ ... ]=]`.** Lua's `[[ ... ]]` is refused, because
+  code being edited is full of `]]`.
+- **A mount path is not resolved inside argv.** `run({"ls",
+  "cookbook:zig"}, ...)` hands `ls` the literal `cookbook:zig`; use
+  `real("cookbook:zig")` for the OS path.
+- **`for x in` a map is refused**; walk `keys(m)`. And a missing key is a
+  stop, not nil: `has_key(m, k)` or `get(m, k, default)`.
+
+The rest of Lua's habits, the quiet ones first (patterns are regular
+expressions, not Lua's `%d`), are in
+[docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md), "If you write Lua".
+
+## Where to go next
+
+- **[docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)**, for an agent: its
+  "Before you reach for the shell" table gives the Shale form of each shell
+  habit (`grep -rn`, `sed -n`, `git`, `curl`, a build's errors), then the
+  Linux prelude (`run`, jobs, git, http) and the traps.
+- **[cookbook/](cookbook)**, recipes to run or copy: `look.shale` (find,
+  or show line ranges), `run.shale` (a program's verdict and tail),
+  `zig_build.shale`, `rename_words.shale`, `syntax.shale`, `http.shale`.
+  Hunts over a Zig tree are in [cookbook/zig/](cookbook/zig/README.md)
+  (`seams`, `smells`, `dead`, `clones`, ...), and Roc's in
+  [cookbook/roc/](cookbook/roc/README.md).
+- **[The tutorial](https://lynrummy.com/shale/tutorial.html)**: fifteen
+  lessons that run in the browser, the language from the start
+  (`web/lessons.js`).
+- **[docs/SHALE.md](docs/SHALE.md)**, the reference: the language, every
+  builtin with its cost and errors, the budgets, the runner's flags.
+
+---
+
+The rest of this README is for running Shale as Claude Code's shell on your
+own project, and for working on Shale itself.
+
+## Where it runs
+
+- **On the box:** the `shale` CLI is every top-level shell call an agent
+  makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
+  with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`.
 - **On a live site:** a signed script, run by the site itself
   (`script_route`, `zig build shale-sign`):
   [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com) and
@@ -16,61 +163,18 @@ and its effects log says what.
   [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel). The
   two name `.shale` in their `build.zig.zon`s; the kernel takes `-Dshale-root`.
   The installed suite (`shale_suite`) is built and tested, and no site runs
-  it yet.
-- **On the box:** the `shale` CLI, every top-level shell call an agent
-  makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
-  with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`.
-
-**New here, and want Claude to use it on your own project?** Start with the
-next section; the rest of this README is how Shale is built and checked.
+  it yet. Every effect goes through zig-webbox's `store`, so a script does
+  the same on Linux and on metal.
 
 ## Using Shale with Claude Code on your project
 
-**Why:** Claude's shell calls become small scripts with guarantees bash
-does not give:
-
-- **Bounded output.** A run that would print a megabyte stops at its output
-  budget and says so, so a run never floods the context.
-- **One-line stops.** A failure says where and why in one line, with a
-  class (`type`, `budget reads`, `refused`), not a traceback.
-- **Git is the undo.** Every change is checked and logged; an `edit` prints
-  a one-line summary. Work in a checkout, and `git diff` shows what a run
-  did.
-- **Confined.** A script reads and writes only under the folder it runs in
-  (and the mounts you name); no `..`, no absolute paths.
-
-The gate (below) covers only the shell: **Claude's own Read, Edit, Write and
-Grep tools are untouched.**
-
-### Install
-
-Linux on x86-64, and **Zig 0.17.0** exactly (`zig version`). Shale builds
-against [zig-webbox](https://github.com/showell/zig-webbox), which must be
-checked out **beside** it:
-
-    git clone https://github.com/showell/shale
-    git clone https://github.com/showell/zig-webbox
-    cd shale && zig build          # zig-out/bin: shale, shale-gate, shale-sign
-
-Put `zig-out/bin` on your PATH (or link `zig-out/bin/shale` into a folder
-that is), then:
-
-    shale <<'EOF'
-    print("hello from " .. #glob("src/**/*") .. " files")
-    EOF
-
-**Mounts (optional):** a folder outside the one a script runs in is a
-mount: listed as `name = /abs/path` in `~/.config/shale/mounts`, then reached
-as `name:file`. For the recipes, make that file:
-
-    cookbook = /ABSOLUTE/PATH/TO/shale/cookbook
-
-and the recipes below launch as `shale cookbook:look.shale ...` from any
-project. Add ` ro` after a path for a read-only mount, and ` tools` for a
-toolchain whose programs a script may run by path (a newer compiler, a
-project's `.venv`); adding a `tools` line is a decision you make once, by
-hand. ` secrets` marks a folder of tokens: no script reads its files, and
-only `run`'s `secrets` (and `http_get`'s `bearer`) hands one to a program.
+Build it and set up the cookbook mount as above. The gate below covers only
+the shell: **Claude's own Read, Edit, Write and Grep tools are untouched.**
+Mount lines also take ` tools`, for a toolchain whose programs a script may
+run by path (a newer compiler, a project's `.venv`), a decision you make once,
+by hand; and ` secrets`, for a folder of tokens: no script reads its files,
+and only `run`'s `secrets` (and `http_get`'s `bearer`) hands one to a
+program.
 
 ### Hook it into Claude Code
 
