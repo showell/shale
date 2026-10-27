@@ -417,3 +417,50 @@ test "linux prelude: the repo's and the user's preludes come after it, SHALE_PRE
     t.preludes = try host_linux.loadPreludes(a, io, t.root, "", "/h", &why);
     try t.expectStop("print(1)", .atomic, .name, ".shale/prelude.shale's `unique` is the Linux prelude's already");
 }
+
+/// One HTTP request answered on 127.0.0.1 with `answer`, as it is.
+const RawAnswer = struct {
+    listener: std.Io.net.Server,
+    answer: []const u8,
+
+    fn serve(self: *RawAnswer, io: std.Io) void {
+        const stream = self.listener.accept(io) catch return;
+        defer stream.close(io);
+        var rb: [4096]u8 = undefined;
+        var r = stream.reader(io, &rb);
+        while (true) {
+            const line = r.interface.takeDelimiterInclusive('\n') catch return;
+            if (std.mem.eql(u8, line, "\r\n")) break;
+        }
+        var w = stream.writer(io, &.{});
+        w.interface.writeAll(self.answer) catch return;
+    }
+};
+
+test "linux prelude: http_get keeps a folded header's continued value, never passing a head line by" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const io = t.threaded.io();
+    const any: std.Io.net.IpAddress = try .parse("127.0.0.1", 0);
+    var one: RawAnswer = .{ .listener = try any.listen(io, .{ .reuse_address = true }), .answer = "HTTP/1.1 200 OK\r\nX-Long: one\r\n two\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok" };
+    const port = one.listener.socket.address.getPort();
+    const served = try std.Thread.spawn(.{}, RawAnswer.serve, .{ &one, io });
+    const a = t.arena.allocator();
+    var r = t.runOnce(try std.fmt.allocPrint(a, "local r = http_get(\"http://127.0.0.1:{d}/\") print(r.status, r.headers[\"x-long\"], r.body)", .{port}), .atomic);
+    defer r.deinit();
+    if (r.stop != null) {
+        if (one.listener.socket.address.connect(io, .{ .mode = .stream })) |s| {
+            var w = s.writer(io, &.{});
+            w.interface.writeAll("\r\n") catch {};
+            s.close(io);
+        } else |_| {}
+    }
+    served.join();
+    one.listener.deinit(io);
+    if (r.stop) |s| {
+        std.debug.print("stopped: {s}\n", .{s.message});
+        return error.TestUnexpectedResult;
+    }
+    try testing.expectEqualStrings("200\tone two\tok\n", r.output);
+}
