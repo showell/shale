@@ -87,8 +87,11 @@ function git_status(repo)
     local e = parts[i]
     if e ~= "" then
       local item = {code = sub(e, 1, 2), path = sub(e, 4)}
+      -- A rename or copy in the index (`R `) or the work tree (` R`)
+      -- has its old path in the next field.
       local x = sub(e, 1, 1)
-      if x == "R" or x == "C" then
+      local y = sub(e, 2, 2)
+      if x == "R" or x == "C" or y == "R" or y == "C" then
         i = i + 1
         item.from = parts[i]
       end
