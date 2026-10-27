@@ -46,6 +46,9 @@ pub fn main(init: std.process.Init) !u8 {
         const env = try shale_host.baseEnv(arena, init.environ_map);
         return linux.shale_jobs.reapMain(arena, argv[2..], env);
     }
+    if (argv.len == 2 and (std.mem.eql(u8, argv[1], "--help") or std.mem.eql(u8, argv[1], "-h"))) {
+        return help(arena, io, init.environ_map.get("SHALE_MOUNTS"), init.environ_map.get("HOME") orelse "/", err);
+    }
     var args_buf: [64]script.Arg = undefined;
     var why_buf: [512]u8 = undefined;
     var c = switch (cli.parse(argv[1..], init.environ_map.get("SHALE_ROOT"), &args_buf, &why_buf)) {
@@ -186,6 +189,48 @@ pub fn main(init: std.process.Init) !u8 {
     // either way: the run stopped, and what could not be put back is said.
     if (c.undo_on_stop and !result.finished()) _ = try shale_host.undoChanges(&host, io, err);
     return if (result.finished()) 0 else 1;
+}
+
+/// `shale --help`: the usage, where the docs are, and the mounts in force, on
+/// stdout. The docs are named in this binary's checkout when it runs from one
+/// (`<checkout>/zig-out/bin/shale`), else by the repository's URL.
+fn help(arena: std.mem.Allocator, io: std.Io, pinned: ?[]const u8, home: []const u8, err: *std.Io.Writer) !u8 {
+    var out_buf: [4096]u8 = undefined;
+    var ow = std.Io.File.stdout().writerStreaming(io, &out_buf);
+    const w = &ow.interface;
+    defer w.flush() catch {};
+    try w.writeAll(cli.usage);
+    try w.writeAll("\nThe docs (start with the first):\n");
+    const checkout: ?[]const u8 = if (reaperPath(arena)) |exe| blk: {
+        const up = std.fs.path.dirname(std.fs.path.dirname(std.fs.path.dirname(exe) orelse break :blk null) orelse break :blk null) orelse break :blk null;
+        const agents = try std.fs.path.join(arena, &.{ up, "docs", "SHALE-AGENTS.md" });
+        std.Io.Dir.cwd().access(io, agents, .{}) catch break :blk null;
+        break :blk up;
+    } else null;
+    if (checkout) |c| {
+        try w.print("  {s}/docs/SHALE-AGENTS.md\n  {s}/docs/SHALE.md\n", .{ c, c });
+    } else {
+        try w.writeAll("  docs/SHALE-AGENTS.md and docs/SHALE.md at github.com/showell/shale\n");
+    }
+    var why: []const u8 = "";
+    const mounts = shale_host.loadMounts(arena, io, pinned, home, &why) catch |e| switch (e) {
+        error.Malformed => {
+            try w.flush();
+            try err.print("shale: the mounts: {s}\n", .{why});
+            return 2;
+        },
+        else => return e,
+    };
+    try w.print("\nThe mounts, `name:path` in a script ({s}):\n", .{mounts.from});
+    if (mounts.mounts.len == 0) try w.writeAll("  none\n");
+    for (mounts.mounts) |m| {
+        try w.print("  {s}:  {s}", .{ m.name, m.dir });
+        if (m.access == .read_only) try w.writeAll("  ro");
+        if (m.tools) try w.writeAll("  tools");
+        if (m.secrets) try w.writeAll("  secrets");
+        try w.writeAll("\n");
+    }
+    return 0;
 }
 
 /// This program's own path, for the jobs' reaper: `/proc/self/exe`.

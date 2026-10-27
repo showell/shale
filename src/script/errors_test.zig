@@ -19,8 +19,8 @@ const Case = struct {
 };
 
 const cases = [_]Case{
-    .{ .src = "x = 1", .line = 1, .column = 1, .class = .name, .message = "no local `x`: declare it with `local x = ...` (there are no globals)" },
-    .{ .src = "print(y)", .line = 1, .column = 7, .class = .name, .message = "no local `y`: declare it with `local y = ...` (there are no globals)" },
+    .{ .src = "x = 1", .line = 1, .column = 1, .class = .name, .message = "no local `x`: declare it with `local x = ...` (there are no globals; Shale's builtins and preludes: `shale --help`)" },
+    .{ .src = "print(y)", .line = 1, .column = 7, .class = .name, .message = "no local `y`: declare it with `local y = ...` (there are no globals; Shale's builtins and preludes: `shale --help`)" },
     .{ .src = "local a = 1 local a = 2", .line = 1, .column = 13, .class = .name, .message = "`a` is already a local in this block" },
     .{ .src = "function f() end function f() end", .line = 1, .column = 18, .class = .name, .message = "a function `f` is already declared" },
     .{ .src = "nosuch(1)", .line = 1, .column = 1, .class = .name, .message = "no function `nosuch` above this line: a function is called only after it is declared" },
@@ -169,6 +169,8 @@ const cases = [_]Case{
     .{ .src = "local m = re_find(\"x\", \"a\\\\b+\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 4: `^`, `$`, `\\b` and `\\B` are places, not bytes: they cannot repeat" },
     .{ .src = "local m = re_find(\"x\", \"x\", {nocase = true, wide = true})", .line = 1, .column = 11, .class = .argument, .message = "`re_find` takes `nocase`, not `wide`" },
     .{ .src = "local m = re_match(\"x\", rep(\"a\", 257))", .line = 1, .column = 11, .class = .argument, .message = "`re_match`'s pattern is 257 bytes, and one may be at most 256" },
+    .{ .src = "local m = re_replace(\"x\", \"a{2}\", \"b\")", .line = 1, .column = 11, .class = .argument, .message = "`re_replace`'s pattern, at its byte 2: `{n,m}` is not in this subset: write the part out as often as it must come (`\\d\\d\\d?`), or `\\{` for the byte" },
+    .{ .src = "local m = re_replace(\"x\", \"x\", \"\\\\1\")", .line = 1, .column = 11, .class = .argument, .message = "`re_replace`'s replacement has `\\1`, and its pattern has no capture group" },
 };
 
 var out_buf: [4096]u8 = undefined;

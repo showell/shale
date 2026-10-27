@@ -121,6 +121,30 @@ test "cli: a script named through a mount (`lib:hi.shale`) is read from the moun
     try testing.expect(std.mem.indexOf(u8, n.stderr, "no mount named `nope`") != null);
 }
 
+test "cli: `shale --help` prints the usage, where the docs are, and each mount in force with its flags" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    try tmp.dir.createDirPath(io, "libdir");
+    const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(dir);
+    const cmd = try std.fmt.allocPrint(a, "printf 'lib = %s/{s}/libdir ro\\n' \"$PWD\" > '{s}/mounts' && SHALE_MOUNTS='{s}/mounts' '{s}' --help", .{ dir, dir, dir, shale_exe });
+    defer a.free(cmd);
+    const r = try std.process.run(a, io, .{ .argv = &.{ "sh", "-c", cmd } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}\n{s}\n", .{ r.stdout, r.stderr });
+    try testing.expectEqual(std.process.Child.Term{ .exited = 0 }, r.term);
+    try testing.expect(std.mem.startsWith(u8, r.stdout, "usage: shale "));
+    try testing.expect(std.mem.indexOf(u8, r.stdout, "SHALE-AGENTS.md") != null);
+    const at = std.mem.indexOf(u8, r.stdout, "  lib:  ") orelse return error.NoMountLine;
+    const end = std.mem.indexOfScalarPos(u8, r.stdout, at, '\n').?;
+    try testing.expect(std.mem.endsWith(u8, r.stdout[at..end], "/libdir  ro"));
+}
+
 test "cli: a root spelled with `.`, `..` or a link is the folder itself: a read-only or secrets mount inside it holds, and real(\".\") is the folder" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();

@@ -164,7 +164,9 @@ has none of it):
   cookbook's "A symbol renamed across a tree").
   `zig_decls(p)` lists a Zig file's top-level declarations, from Zig's
   own parser, in file order: `{kind, name, name_form, visibility, linkage,
-  first, last, start, stop, uses[, comment_above]}`. A span runs from its
+  first, last, start, stop, uses[, comment_above]}`. `kind` is one of
+  `const`, `var`, `fn`, `test`, `comptime` or `field`; `name_form` is
+  `identifier`, `string` (a test's) or `none`. A span runs from its
   doc comment to the `}`, `;` or field's `,` that ends it (`read(p, start,
   stop - start)` is it); `comment_above` is `{first, last}`, the line
   numbers of the plain `//` lines directly over it; `uses` is the top-level names its span uses (not its own, not a
@@ -219,7 +221,8 @@ runs git under `run`. A `repo` is a Shale path, `""`
 or `"."` for the root and `repos:dog-park` for a mount.
 - **Reading:** `git_status(repo)` gives `{code, path[, from]}`.
   `git_log(repo, {n, range, ref, fields})` gives `{hash, subject, date,
-  author}`. `git_diff(repo, {range, paths, stat})` and `git_show(repo,
+  author}`, `date` in ISO 8601 with a numeric offset (`+00:00`, never `Z`,
+  whatever the git). `git_diff(repo, {range, paths, stat})` and `git_show(repo,
   "rev:path")` give text. `git_ls_files(repo)`, `git_is_clean(repo)` and
   `git_head(repo)` give the tracked paths, whether the tree is clean, and
   the head's short hash. `git_upstream(repo)` gives `{name, ahead,
@@ -544,7 +547,9 @@ the first two can give a quiet wrong answer, an empty list:
 - **Patterns are regular expressions, not Lua's.** The escape is `\`
   (`"\\."` in a string), and `%` is a plain character, so Lua's `%d+` or
   `[%w_]` matches nothing it should and finds nothing, quietly. One capture
-  group at most, and no `(?:`. A match is `{at, text, group}`.
+  group at most, and no `(?:`. A match is `{at, text, group}`. Lua's
+  `gsub` is `re_replace(s, pattern, replacement)`: every match replaced,
+  `\1` (`"\\1"` in a string) the group's text, not `%1`.
 - **`grep(p, text)` is plain text**, and finding nothing is an empty list,
   not an error. So `grep(p, "edit%(")` quietly finds nothing. A pattern over
   a file is `re_lines(read(p), pattern)`.
