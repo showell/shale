@@ -75,6 +75,8 @@ test "builtins: the store's reads: ls sorted, stat, exists, is_dir, read" {
     try f.expectOutput("print(join(ls(\"\"), \",\"), join(ls(\"chat\"), \",\"))", "chat,top.txt\ta.md,b.md\n");
     try f.expectOutput("local s = stat(\"chat/b.md\") print(s.size, s.kind, stat(\"chat\").kind)", "6\tfile\tdirectory\n");
     try f.expectOutput("print(exists(\"chat/a.md\"), exists(\"chat/nope\"), exists(\"\"), is_dir(\"chat\"), is_dir(\"top.txt\"), is_dir(\"none\"))", "true\tfalse\ttrue\ttrue\tfalse\tfalse\n");
+    // The root only looked at, as `exists` and `ls` take it: a folder.
+    try f.expectOutput("print(is_dir(\"\"), is_dir(\".\"))", "true\ttrue\n");
     try f.expectOutput("print(read(\"chat/a.md\") .. \" \" .. read(\"chat/b.md\"))", "hello world!\n");
 }
 
@@ -129,7 +131,6 @@ test "builtins: every way out of the root is refused before the store is asked (
         "remove_tree(\"..\")",
         "remove(\"../auth/secret\")",
         "print(read(\"\"))",
-        "print(is_dir(\"\"))",
         "print(read(\"a\\\\b\"))",
         "print(read(\"chat/a.md:x\"))",
     };
