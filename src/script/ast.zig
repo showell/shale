@@ -78,6 +78,7 @@ pub const Builtin = enum {
     reverse,
     take,
     last,
+    same,
     // the host
     now,
     arg,

@@ -23,6 +23,7 @@ pub const specs = [_]bi.Spec{
     spec(.has_key, 2, 2, hasKey),
     spec(.get, 2, 3, get),
     spec(.count, 1, 1, count),
+    spec(.same, 2, 2, same),
 };
 
 fn push(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
@@ -39,6 +40,53 @@ fn reverse(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     run.tally(t.list.items.len);
     std.mem.reverse(Value, t.list.items);
     return .nil;
+}
+
+/// `same(a, b)` returns whether two values are the same all the way down:
+/// scalars as `==` has them, lists item by item in order, maps key by key
+/// whatever their order. `==` is identity's question, an error on two
+/// tables; this is the contents'. A step per item visited, a string's bytes
+/// at the bulk price, and nesting past `same_depth_most` is an error (a
+/// table that holds itself never ends).
+fn same(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+    return .{ .boolean = try sameAt(run, pos, args[0], args[1], 0) };
+}
+
+pub const same_depth_most = 200;
+
+fn sameAt(run: *Run, pos: ast.Pos, a: Value, b: Value, depth: usize) Error!bool {
+    if (depth == same_depth_most) return run.fail(pos, .argument, "`same`: tables nested more than {d} deep (does one hold itself?)", .{same_depth_most});
+    try run.charge(pos, 1);
+    run.tally(1);
+    switch (a) {
+        .nil => return b == .nil,
+        .boolean => |x| return b == .boolean and b.boolean == x,
+        .int => |x| return b == .int and b.int == x,
+        .string => |x| {
+            if (b != .string or b.string.len != x.len) return false;
+            try bi.chargeBytes(run, pos, x.len);
+            return std.mem.eql(u8, x, b.string);
+        },
+        .table => |t| {
+            if (b != .table) return false;
+            const u = b.table;
+            if (t == u) return true;
+            const t_n = if (t.kind == .map) t.map.count() else t.list.items.len;
+            const u_n = if (u.kind == .map) u.map.count() else u.list.items.len;
+            if (t_n == 0 and u_n == 0) return true;
+            if (t.kind != u.kind or t_n != u_n) return false;
+            if (t.kind == .list) {
+                for (t.list.items, u.list.items) |x, y| if (!try sameAt(run, pos, x, y, depth + 1)) return false;
+                return true;
+            }
+            for (t.map.keys(), t.map.values()) |k, x| {
+                try bi.chargeBytes(run, pos, k.len);
+                const y = u.map.get(k) orelse return false;
+                if (!try sameAt(run, pos, x, y, depth + 1)) return false;
+            }
+            return true;
+        },
+    }
 }
 
 /// `take(l, n)` returns a new list of the first `n` items of `l`, or all of

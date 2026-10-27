@@ -305,7 +305,10 @@ From the loosest to the tightest:
   `m == nil` and `nil ~= m` are as for any value, so a result
   that is a map or nil (`re_find`) is told by `if m == nil`. A local that
   holds nil is still a value: `m == x` with a map stops whatever `x` is.
-  Strings compare byte by byte.
+  Strings compare byte by byte. **Two tables' contents are `same(a, b)`'s
+  question, never `==`'s**: `==` stays a constant-time answer, and a
+  table's contents can be large or hold itself, so their compare is a
+  builtin charged by what it visits.
 - **A chain of `..` is joined once.** `a .. b .. c` evaluates every part
   left to right, then makes one string. When the first part is the string
   the previous chain made, and its buffer has room, the rest is written
@@ -604,6 +607,7 @@ change_bytes` past those budgets.
 | `sort(l[, order])`, `sort(rows, keys[, order])` | `l` (`rows`), sorted in place | `type` for mixed kinds; `index` for a row with no `key`; `argument` for another order |
 | `take(l, n)` | a new list of the first `n` | `argument` for `n` < 0 |
 | `last(l, n)` | a new list of the last `n` | `argument` for `n` < 0 |
+| `same(a, b)` | a boolean: whether `a` and `b` are the same all the way down | `argument` for tables nested more than 200 deep |
 | `reverse(l)` | nil: in place | |
 | `keys(m)`, `has_key(m, k)`, `count(t)` | a list; a boolean; an integer | |
 | `get(t, k[, default])` | `t[k]`, or `default` where there is none | `type` for a key of the wrong kind |
@@ -813,6 +817,7 @@ Perl and Python sometimes take one more turn after it, so on "a",
 | `sort(rows, keys, "desc")` | the same, descending (each key without its own `desc`), **still stable**: rows equal in every key keep their order. An empty list is given back, whatever its second argument |
 | `take(l, n)` | a new list of `l`'s first `n` items, or all of a shorter one: the top N of a sorted list |
 | `last(l, n)` | a new list of `l`'s last `n` items, in order, or all of a shorter one: the tail of a log's lines. A count below 0 is an error, as `take`'s: a count gone negative never quietly becomes a tail |
+| `same(a, b)` | whether two values are the same all the way down: scalars as `==` has them, lists item by item in order, maps key by key whatever the order they were set in, `{}` the same as any empty table: `same({1, {a = 2}}, {1, {a = 2}})` is true. A step per item visited (a string's bytes at the bulk price); nesting past 200 stops, so a table that holds itself is an error, not a hang |
 | `reverse(l)` | in place |
 | `keys(m)` | a map's keys, in the order first set |
 | `has_key(m, k)` | whether `m` has `k` |
