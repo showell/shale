@@ -55,8 +55,8 @@ fn readFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
 /// Returns the size of the file at `p`, failing if it is missing or a folder.
 /// One store call, counted as part of the read.
 pub fn fileSize(run: *Run, pos: ast.Pos, b: B, p: Path) Error!u64 {
-    const st = (store.statOrNull(run.io, run.alloc, p.full) catch |e| return storeFailed(run, pos, b, p.rel, e)) orelse return storeFailed(run, pos, b, p.rel, error.FileNotFound);
-    if (st.kind != .file) return storeFailed(run, pos, b, p.rel, error.IsDir);
+    const st = (store.statOrNull(run.io, run.alloc, p.full()) catch |e| return storeFailed(run, pos, b, p.rel(), e)) orelse return storeFailed(run, pos, b, p.rel(), error.FileNotFound);
+    if (st.kind != .file) return storeFailed(run, pos, b, p.rel(), error.IsDir);
     return st.size;
 }
 
@@ -72,8 +72,8 @@ fn readPart(run: *Run, pos: ast.Pos, p: Path, offset: u64, n: ?u64) Error!Value 
 fn readOr(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const p = try pathArg(run, pos, .read_or, args[0], false);
     try countRead(run, pos);
-    const st = (store.statOrNull(run.io, run.alloc, p.full) catch |e| return storeFailed(run, pos, .read_or, p.rel, e)) orelse return args[1];
-    if (st.kind != .file) return storeFailed(run, pos, .read_or, p.rel, error.IsDir);
+    const st = (store.statOrNull(run.io, run.alloc, p.full()) catch |e| return storeFailed(run, pos, .read_or, p.rel(), e)) orelse return args[1];
+    if (st.kind != .file) return storeFailed(run, pos, .read_or, p.rel(), error.IsDir);
     return readSized(run, pos, .read_or, p, st.size, 0, null);
 }
 
@@ -91,7 +91,7 @@ pub fn readSizedIn(into: std.mem.Allocator, run: *Run, pos: ast.Pos, b: B, p: Pa
     if (want > run.budgets.call_bytes) return run.fail(pos, .argument, "`{s}` brings at most {d} bytes in one call, and this would be {d}: read it in parts, `read(p, offset, n)`", .{ @tagName(b), run.budgets.call_bytes, want });
     if (want > run.budgets.read_bytes -| run.read_bytes) return run.budgetStop(pos, .read_bytes);
     const buf = into.alloc(u8, @intCast(want)) catch return run.oom(pos);
-    const got = store.readAt(run.io, run.alloc, p.full, offset, buf) catch |e| return storeFailed(run, pos, b, p.rel, e);
+    const got = store.readAt(run.io, run.alloc, p.full(), offset, buf) catch |e| return storeFailed(run, pos, b, p.rel(), e);
     run.tally(got);
     run.read_bytes += got;
     try bi.chargeBytes(run, pos, got);
@@ -179,7 +179,7 @@ fn grepFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (needle.len == 0) return run.fail(pos, .argument, "`grep` of \"\" is an error: there is nothing to look for", .{});
     try countRead(run, pos);
     const size = try fileSize(run, pos, b, p);
-    if (size > run.budgets.call_bytes) return run.fail(pos, .argument, "`grep` reads a file whole, at most {d} bytes in one call, and {s} is {d}: `read_lines` and `contains` go through it a part at a time", .{ run.budgets.call_bytes, p.rel, size });
+    if (size > run.budgets.call_bytes) return run.fail(pos, .argument, "`grep` reads a file whole, at most {d} bytes in one call, and {s} is {d}: `read_lines` and `contains` go through it a part at a time", .{ run.budgets.call_bytes, p.rel(), size });
     const whole = (try readSized(run, pos, b, p, size, 0, null)).string;
     const a = run.alloc;
     const finder = try text.Finder.init(run, pos, needle);
@@ -331,7 +331,7 @@ fn scan(run: *Run, pos: ast.Pos, b: B, p: Path, needle: []const u8, first_only: 
     while (at < size) {
         const want: usize = @intCast(@min(size - at, buf.len - kept));
         if (want > run.budgets.read_bytes -| run.read_bytes) return run.budgetStop(pos, .read_bytes);
-        const got = store.readAt(run.io, run.alloc, p.full, at, buf[kept..][0..want]) catch |e| return storeFailed(run, pos, b, p.rel, e);
+        const got = store.readAt(run.io, run.alloc, p.full(), at, buf[kept..][0..want]) catch |e| return storeFailed(run, pos, b, p.rel(), e);
         run.read_bytes += got;
         try bi.chargeBytes(run, pos, got);
         run.tally(got);

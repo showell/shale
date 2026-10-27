@@ -208,9 +208,9 @@ pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
             for (renames.items) |r| if (std.mem.eql(u8, r.from, d.name)) {
                 to = r.to;
             };
-            return run.fail(pos, .argument, "`zig_rename`: {s} declares `{s}` at line {d}, and `{s}` is qualified, which cannot be declared: rename the declaration itself, or leave it out with `lines`; nothing written", .{ p.rel, d.name, d.line, to });
+            return run.fail(pos, .argument, "`zig_rename`: {s} declares `{s}` at line {d}, and `{s}` is qualified, which cannot be declared: rename the declaration itself, or leave it out with `lines`; nothing written", .{ p.rel(), d.name, d.line, to });
         },
-        .invalid => |n| return run.fail(pos, .argument, "`zig_rename`: {s} does not tokenize as Zig at line {d}; nothing written", .{ p.rel, n }),
+        .invalid => |n| return run.fail(pos, .argument, "`zig_rename`: {s} does not tokenize as Zig at line {d}; nothing written", .{ p.rel(), n }),
     };
     try run.charge(pos, done.tokens);
     if (done.renamed > 0) try script.builtins_change.rewrite(run, pos, p, was, try keep(run, pos, done.now), a.dupe(Span, done.spans) catch return run.oom(pos));
@@ -254,13 +254,13 @@ pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const 
     try script.builtins.chargeBytes(run, pos, src.len);
     const root = switch (za.decls(sa, src) catch return run.oom(pos)) {
         .ok => |ok| ok,
-        .parse_error => |e| return run.fail(pos, .argument, "`zig_decls`: {s} does not parse as Zig: line {d} ({s})", .{ p.rel, e.line, e.tag }),
+        .parse_error => |e| return run.fail(pos, .argument, "`zig_decls`: {s} does not parse as Zig: line {d} ({s})", .{ p.rel(), e.line, e.tag }),
     };
     try run.charge(pos, root.tokens + root.nodes);
     const got = if (container) |name| switch (za.members(sa, src, name) catch return run.oom(pos)) {
         .ok => |ok| ok,
         .parse_error => unreachable, // the root parsed
-        .no_container => return run.fail(pos, .argument, "`zig_decls`: {s} has no container `{s}` (a top-level `const {s} = struct {{...}}`, or a union's, an enum's, an opaque's)", .{ p.rel, name, name }),
+        .no_container => return run.fail(pos, .argument, "`zig_decls`: {s} has no container `{s}` (a top-level `const {s} = struct {{...}}`, or a union's, an enum's, an opaque's)", .{ p.rel(), name, name }),
     } else root;
     if (container != null) try run.charge(pos, got.tokens + got.nodes);
     // Each declaration's `uses`: the top-level names in its span other than its
@@ -268,7 +268,7 @@ pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const 
     // field, a member after `.`, a comment and a string never count.
     const toks = switch (za.tokens(sa, src) catch return run.oom(pos)) {
         .ok => |ok| ok,
-        .invalid => |n| return run.fail(pos, .argument, "`zig_decls`: {s} does not tokenize as Zig at line {d}", .{ p.rel, n }),
+        .invalid => |n| return run.fail(pos, .argument, "`zig_decls`: {s} does not tokenize as Zig at line {d}", .{ p.rel(), n }),
     };
     const ids = za.identifiers(sa, toks) catch return run.oom(pos);
     try run.charge(pos, ids.len);
@@ -390,7 +390,7 @@ pub fn tokens(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
     try script.builtins.chargeBytes(run, pos, src.len);
     const toks = switch (za.tokens(sa, src) catch return run.oom(pos)) {
         .ok => |ok| ok,
-        .invalid => |n| return run.fail(pos, .argument, "`zig_tokens`: {s} does not tokenize as Zig at line {d}", .{ p.rel, n }),
+        .invalid => |n| return run.fail(pos, .argument, "`zig_tokens`: {s} does not tokenize as Zig at line {d}", .{ p.rel(), n }),
     };
     try run.charge(pos, toks.len);
     const starts = za.lineStarts(sa, src) catch return run.oom(pos);
@@ -508,7 +508,7 @@ fn readZig(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, p: script.builtins_st
     const hub = script.builtins_store;
     try hub.countRead(run, pos);
     if (missing_ok) {
-        const st = webbox.store.statOrNull(run.io, run.alloc, p.full) catch |e| return hub.storeFailed(run, pos, .host, p.rel, e);
+        const st = webbox.store.statOrNull(run.io, run.alloc, p.full()) catch |e| return hub.storeFailed(run, pos, .host, p.rel(), e);
         if (st == null) return null;
     }
     const size = try script.builtins_read.fileSize(run, pos, .host, p);
@@ -550,7 +550,7 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
     const a = run.alloc;
     const p = try hub.pathArg(run, pos, .host, args[0], false);
     const q = try hub.pathArg(run, pos, .host, args[1], false);
-    if (std.mem.eql(u8, p.full, q.full)) return run.fail(pos, .argument, "`zig_move`: `from` and `to` are one file", .{});
+    if (std.mem.eql(u8, p.full(), q.full())) return run.fail(pos, .argument, "`zig_move`: `from` and `to` are one file", .{});
     const packed_args = switch (args[2]) {
         .table => |t| if (t.kind == .map) t else return run.fail(pos, .type, "`zig_move`'s names are a list", .{}),
         else => return run.fail(pos, .type, "`zig_move`'s names are a list", .{}),
@@ -612,7 +612,7 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
     const to_src = to_read.was;
     const done = switch (zm.move(sa, from_read.src, to_read.src, wants.items, mode, after) catch return run.oom(pos)) {
         .done => |d| d,
-        .refused => |why| return run.fail(pos, .argument, "`zig_move` {s} to {s}: {s}", .{ p.rel, q.rel, try keep(run, pos, why) }),
+        .refused => |why| return run.fail(pos, .argument, "`zig_move` {s} to {s}: {s}", .{ p.rel(), q.rel(), try keep(run, pos, why) }),
     };
     try run.charge(pos, done.work);
     // Check both files may change before writing either.
@@ -627,7 +627,7 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
     }.of;
     // `from_as` rewrites are planned before anything is written.
     var reach: ?FromAs = null;
-    if (from_as) |fa| reach = try fromAs(sa, run, pos, done, fa, std.fs.path.basename(p.rel));
+    if (from_as) |fa| reach = try fromAs(sa, run, pos, done, fa, std.fs.path.basename(p.rel()));
     const writes: u64 = if (reach != null) 5 else 2;
     // Check the budgets for every write up front, so a budget never stops a
     // move halfway.
@@ -642,7 +642,7 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
     // message then says `to` already holds the copies.
     script.builtins_change.rewrite(run, pos, p, from_src, try keep(run, pos, done.from_now), from_spans) catch |e| {
         if (e == error.Stop) if (run.stop) |*s| {
-            s.message = std.fmt.allocPrint(a, "{s}; `zig_move` wrote {s} first, so it holds the moved declarations, which {s} still has: take {s} back (`git checkout --`) before moving again", .{ s.message, q.rel, p.rel, q.rel }) catch s.message;
+            s.message = std.fmt.allocPrint(a, "{s}; `zig_move` wrote {s} first, so it holds the moved declarations, which {s} still has: take {s} back (`git checkout --`) before moving again", .{ s.message, q.rel(), p.rel(), q.rel() }) catch s.message;
         };
         return e;
     };
@@ -683,10 +683,10 @@ pub fn imports(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []cons
     const src = (try readZig(sa, run, pos, p, false, false)).?.src;
     const got = switch (webbox.zig_refs.refs(sa, src) catch return run.oom(pos)) {
         .ok => |ok| ok,
-        .parse_error => |line| return run.fail(pos, .argument, "`zig_imports`: {s} does not parse as Zig: line {d}", .{ p.rel, line }),
+        .parse_error => |line| return run.fail(pos, .argument, "`zig_imports`: {s} does not parse as Zig: line {d}", .{ p.rel(), line }),
     };
     try run.charge(pos, got.tokens + got.nodes + got.refs.len);
-    const dir = std.fs.path.dirnamePosix(p.full) orelse ".";
+    const dir = std.fs.path.dirnamePosix(p.full()) orelse ".";
     const list = try run.newTable(pos);
     list.kind = .list;
     for (got.refs) |r| {

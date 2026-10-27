@@ -1,3 +1,4 @@
+-- budget: steps=500000000
 -- **A SEALED VALUE IS MADE BY ITS CHECK ALONE** (metal-vmm QUEUE 250): a
 -- value checked once and passed on as a type only its check can make, so a
 -- caller that skips the check does not compile. Zig has no private fields,
@@ -17,46 +18,73 @@
 --
 -- A literal without the seal does not compile; this refuses one that sets
 -- it, `.id_seal =` read from Zig's tokens (a string or a comment is never
--- code), anywhere but the seal's own file, its tests too.
+-- code), anywhere but the seal's own file, its tests too. **A PAYLOAD IS
+-- SEALED THE SAME WAY** (the box's review): name it as only its file does
+-- (`player_id`, not `text`), read it by a method, and list it as a seal,
+-- so a change to a value already made (`id.player_id = raw`) is refused too.
 --
---   shale cookbook:sealed.shale dir=zig-server/src seals=id_seal:player.zig,uid_seal:users.zig
+--   shale cookbook:sealed.shale dir=zig-server/src seals=id_seal:zig-server/src/player.zig
+--   shale cookbook:sealed.shale dir=zig-webbox/src,dog-park/src seals=target_path:zig-webbox/src/http.zig headers=location:zig-webbox/src/http.zig
 --
--- A seal's file is named from `dir`. One line a finding, then PASS or a FAIL
--- that stops the run. What it cannot see: `@bitCast`, `std.mem.zeroes` or
--- `undefined` for a whole value; each is a review's to refuse.
+-- `dir` is one tree or several (a consumer's beside its library's), and a
+-- seal's file is named from the root. **`headers=name:file`**: a header of
+-- that name is set (`.name = "location"`, any case) in that file only, so a
+-- response cannot carry one its checked helper did not make.
+--
+-- One line a finding, then PASS or a FAIL that stops the run. What it cannot
+-- see: `@bitCast`, `@field`, `std.mem.zeroes` or `undefined` for a whole
+-- value, and a header named through a variable; each is a review's to
+-- refuse.
 
 const DIR = arg("dir", "")
 const SEALS = arg("seals", "")
+const HEADERS = arg("headers", "")
 
-if DIR == "" or SEALS == "" then fail("sealed: say `dir=<tree>` and `seals=field:file,...`") end
--- `dir=.` is the root, whose paths carry no folder before them.
-const PREFIX = DIR == "." and "" or DIR .. "/"
+if DIR == "" or (SEALS == "" and HEADERS == "") then fail("sealed: say `dir=<tree>[,<tree>...]` and `seals=field:file,...` or `headers=name:file,...`") end
 
-local owner = {}
-for s in split(SEALS, ",") do
-  local parts = split(trim(s), ":")
-  if #parts ~= 2 or parts[1] == "" or parts[2] == "" then fail("sealed: `" .. s .. "` is not `field:file`") end
-  if not exists(PREFIX .. parts[2]) then fail("sealed: " .. parts[1] .. "'s file " .. PREFIX .. parts[2] .. " is not there") end
-  owner[parts[1]] = parts[2]
+-- `field:file` pairs, each file there.
+function pairs_of(spec, what)
+  local out = {}
+  if spec == "" then return out end
+  for s in split(spec, ",") do
+    local parts = split(trim(s), ":")
+    if #parts ~= 2 or parts[1] == "" or parts[2] == "" then fail("sealed: `" .. s .. "` is not `" .. what .. ":file`") end
+    if not exists(parts[2]) then fail("sealed: " .. parts[1] .. "'s file " .. parts[2] .. " is not there") end
+    out[parts[1]] = parts[2]
+  end
+  return out
 end
+local owner = pairs_of(SEALS, "field")
+local header_owner = {}
+for name in keys(pairs_of(HEADERS, "name")) do header_owner["\"" .. lower(name) .. "\""] = pairs_of(HEADERS, "name")[name] end
 
--- The seals `path` sets outside their own file, a line each; how many.
-function scan(path, rel, owner)
-  -- Zig's tokens only for a file that names a seal at all.
+-- The seals and headers `path` sets outside their own file, a line each; how many.
+function scan(path, owner, header_owner)
+  -- Zig's tokens only for a file that names one at all.
   local text = read(path)
+  local low = lower(text)
   local named = false
   for field in keys(owner) do
     if find(text, field) ~= nil then named = true end
   end
+  for h in keys(header_owner) do
+    if find(low, h) ~= nil then named = true end
+  end
   if not named then return 0 end
   local found = 0
+  local p3 = nil
   local p2 = nil
   local p1 = nil
   for t in zig_tokens(path) do
-    if p2 ~= nil and p2.tag == "period" and p1.tag == "identifier" and t.tag == "equal" and has_key(owner, p1.text) and owner[p1.text] ~= rel then
-      print("FAIL " .. rel .. ":" .. t.line .. ": sets `" .. p1.text .. "`, which only " .. owner[p1.text] .. " may")
+    if p2 ~= nil and p2.tag == "period" and p1.tag == "identifier" and t.tag == "equal" and has_key(owner, p1.text) and owner[p1.text] ~= path then
+      print("FAIL " .. path .. ":" .. t.line .. ": sets `" .. p1.text .. "`, which only " .. owner[p1.text] .. " may")
       found = found + 1
     end
+    if p3 ~= nil and p3.tag == "period" and p2.text == "name" and p1.tag == "equal" and t.tag == "string_literal" and has_key(header_owner, lower(t.text)) and header_owner[lower(t.text)] ~= path then
+      print("FAIL " .. path .. ":" .. t.line .. ": sets a " .. t.text .. " header, which only " .. header_owner[lower(t.text)] .. " may")
+      found = found + 1
+    end
+    p3 = p2
     p2 = p1
     p1 = t
   end
@@ -65,13 +93,15 @@ end
 
 local found = 0
 local files = 0
-for e in walk_all(DIR, {like = "*.zig"}) do
-  if e.kind == "file" then
-    files = files + 1
-    found = found + scan(e.path, sub(e.path, #PREFIX + 1), owner)
-    -- A file's tokens are done with: a tree of any size fits.
-    yield()
+for d in split(DIR, ",") do
+  for e in walk_all(trim(d), {like = "*.zig"}) do
+    if e.kind == "file" then
+      files = files + 1
+      found = found + scan(e.path, owner, header_owner)
+      -- A file's tokens are done with: a tree of any size fits.
+      yield()
+    end
   end
 end
-if found > 0 then fail("sealed: FAIL: " .. found .. " seal(s) set outside their file: make the value with its check") end
+if found > 0 then fail("sealed: FAIL: " .. found .. " set outside their file: make the value with its check, and a header with its helper") end
 print("sealed: PASS (" .. files .. " files)")
