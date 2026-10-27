@@ -1,0 +1,327 @@
+-- **WHERE CODE COPIES ALIGNMENT ARITHMETIC INSTEAD OF ASKING**: a hunt
+-- for one shape in a Zig compiler. The alignment is known in one place (a
+-- layout store, `@alignOf(T)`, a string blob's `strings.alignment(id)`),
+-- and code that copies the arithmetic uses a stand-in or forgets to ask.
+-- The archetype is roc-lang/roc#12641: `addAllocation(.u8, len,
+-- self.word_size, ...)` where the blob needed `@max(word,
+-- strings.alignment(id))`. Written for the Roc compiler; each check is a
+-- few lines, to copy and change for another tree.
+--
+--   cd <roc> && shale <shale>/cookbook/zig/align_hunt.shale
+--   cd <shale> && shale cookbook/zig/align_hunt.shale self_test=1
+--
+-- The checks, each by name:
+--   stand_in_alignment         an allocation's alignment argument is the word
+--                              (`word_size`, `@alignOf(usize)`, `@sizeOf(usize)`)
+--                              or a literal 8 or 16
+--   backing_without_alignment  a function reads a string backing
+--                              (`getString(`, `getStringLiteralBacking(`),
+--                              copies, allocates or emits it, and never
+--                              asks `strings.alignment(`
+--   duplicated_header_formula  `alignForward` of a word, a header or extra
+--                              bytes: the refcount and blob header rule, copied;
+--                              all of them, to read side by side
+--   duplicated_arg_layout      a comparator ordering by alignment, and each
+--                              `entrypointParamSlotSize` / `computeArgOffsets`:
+--                              copies of one layout rule
+--   dealloc_ignores_alignment  a dealloc callback (`roc*Dealloc`, an
+--                              allocator's `free`) whose alignment is `_`
+--   unchecked_aligncast        `@alignCast` of a base plus an offset, in a
+--                              function with no `% @alignOf` or `isAligned`
+--   host_size_in_target_code   `@sizeOf(usize)` / `@alignOf(usize)` in
+--                              `layout/`, or in a function with a `Target` or
+--                              `target_usize` parameter
+--
+-- A finding is a question for a reader, not a verdict. Everything is read
+-- from Zig's tokenizer, so a comment or a string never counts. Output:
+-- `path:line: <check>: <why>`, then a count per check.
+--
+-- `glob=` (default src/**/*.zig) holds a `*`: on stdin, `--args-stdin`.
+-- `self_test=1` runs on the plants in cookbook/zig/plants/align_hunt/
+-- (from the shale checkout): each `<check>.zig` must fire its check, and
+-- `clean.zig` nothing; then PASS or FAIL.
+--
+-- Each file's tokens are walked whole, so a compiler-sized tree needs room:
+--
+-- budget: steps=4000000000 read_bytes=500000000 arena_bytes=4000000000 output_bytes=1000000
+
+const SELF_TEST = arg("self_test", "0") == "1"
+const PLANTS = "cookbook/zig/plants/align_hunt"
+const GLOB = SELF_TEST and (PLANTS .. "/*.zig") or arg("glob", "src/**/*.zig")
+
+const CHECKS = {"stand_in_alignment", "backing_without_alignment", "duplicated_header_formula", "duplicated_arg_layout", "dealloc_ignores_alignment", "unchecked_aligncast", "host_size_in_target_code"}
+
+-- Which argument of each call is its alignment, counted as written
+-- (`self.addAllocation(.u8, len, align, ...)`: the third).
+const ALIGN_ARG = {addAllocation = 3, reserveAllocation = 3, allocateWithRefcount = 2, unsafeReallocate = 2, allocStackMemory = 2, setAlignment = 1, alignedAlloc = 2}
+
+-- An alignment argument that is a stand-in, not an answer: the whole
+-- argument, its spaces gone.
+const STAND_INS = {"^([\\w.()]+\\.)?word_size$", "^@intCast\\(([\\w.()]+\\.)?word_size\\)$", "^@alignOf\\(usize\\)$", "^@sizeOf\\(usize\\)$", "^(8|16)$", "^@as\\(u\\d+,(8|16)\\)$", "^\\.@\"(8|16)\"$", "fromByteUnits\\((8|16)\\)$"}
+
+-- What a function calls to turn a string backing into data.
+const DATA_SINKS = {"@memcpy(", "addAllocation(", "appendSlice(", "dupe(", "alignedAlloc(", "allocStackMemory(", "setAlignment(", "setInitializer("}
+
+-- Every finding: {check, at, line, why}.
+const FOUND = {}
+
+function report(check, p, line, why)
+  push(FOUND, {check = check, at = p, line = line, why = why})
+end
+
+-- Tokens a..b as text, a space only where two words would run together:
+-- `lhs.alignment > rhs.alignment` reads `lhs.alignment>rhs.alignment`.
+function text_of(toks, a, b)
+  local parts = {}
+  local prev = ""
+  for k = a, b do
+    local t = toks[k].text
+    if prev ~= "" and re_match(sub(prev, -1) .. sub(t, 1, 1), "^\\w\\w$") then push(parts, " ") end
+    push(parts, t)
+    prev = t
+  end
+  return join(parts, "")
+end
+
+-- The token closing the bracket opened at k.
+function close_of(toks, k)
+  local depth = 0
+  for j = k, #toks do
+    local tag = toks[j].tag
+    if tag == "l_paren" or tag == "l_brace" or tag == "l_bracket" then depth = depth + 1 end
+    if tag == "r_paren" or tag == "r_brace" or tag == "r_bracket" then
+      depth = depth - 1
+      if depth == 0 then return j end
+    end
+  end
+  return #toks
+end
+
+-- The arguments of the call whose `(` is at k, each as text.
+function args_of(toks, k)
+  local last = close_of(toks, k)
+  local args = {}
+  local from = k + 1
+  local depth = 0
+  for j = k + 1, last - 1 do
+    local tag = toks[j].tag
+    if tag == "l_paren" or tag == "l_brace" or tag == "l_bracket" then depth = depth + 1 end
+    if tag == "r_paren" or tag == "r_brace" or tag == "r_bracket" then depth = depth - 1 end
+    if depth == 0 and tag == "comma" then
+      push(args, text_of(toks, from, j - 1))
+      from = j + 1
+    end
+  end
+  if from <= last - 1 then push(args, text_of(toks, from, last - 1)) end
+  return args
+end
+
+-- Each `fn name(...) ... { ... }` with a body: {name, first, last (tokens),
+-- line, params, sig}. The body is the first `{` after the parameters that
+-- does not open a return type's `struct`, `union`, `enum` or error set.
+function functions_of(toks)
+  local fns = {}
+  for k = 1, #toks - 2 do
+    if toks[k].tag == "keyword_fn" and toks[k + 1].tag == "identifier" and toks[k + 2].tag == "l_paren" then
+      local params_end = close_of(toks, k + 2)
+      local j = params_end + 1
+      local body = 0
+      while j <= #toks and body == 0 do
+        local tag = toks[j].tag
+        if tag == "semicolon" then break end
+        if tag == "l_brace" then
+          local before = toks[j - 1].tag
+          if before == "keyword_struct" or before == "keyword_union" or before == "keyword_enum" or before == "keyword_opaque" or before == "keyword_error" or before == "r_paren" and j - params_end > 1 then
+            j = close_of(toks, j)
+          else
+            body = j
+          end
+        elseif tag == "l_paren" or tag == "l_bracket" then
+          j = close_of(toks, j)
+        end
+        j = j + 1
+      end
+      if body > 0 then
+        push(fns, {name = toks[k + 1].text, first = k, last = close_of(toks, body), line = toks[k].line, params = args_of(toks, k + 2), sig = text_of(toks, k, body - 1)})
+      end
+    end
+  end
+  return fns
+end
+
+-- The innermost function holding token k, or nil.
+function fn_at(fns, k)
+  local found = nil
+  for f in fns do
+    if f.first <= k and k <= f.last then found = f end
+  end
+  return found
+end
+
+function stand_in(a)
+  for pat in STAND_INS do
+    if re_match(a, pat) then return true end
+  end
+  return false
+end
+
+-- Whether a parameter is a target: its type a `Target` (`std.Target`,
+-- `RocTarget`), or its name the target's word (`target_usize`,
+-- `target_word_size`). Parameters read `name:type`.
+function takes_target(f)
+  for q in f.params do
+    local named = substitute(q, "comptime ", "")
+    if re_match(q, ":[\\w.*]*\\b(std\\.Target|RocTarget|Target|TargetUsize)$") or starts_with(named, "target_usize") or starts_with(named, "target_word") then return true end
+  end
+  return false
+end
+
+-- Whether a function body turns bytes into data: copies, allocates or
+-- emits them. A backing only read (an identifier's text) is no blob.
+function makes_data(body)
+  for s in DATA_SINKS do
+    if contains(body, s) then return true end
+  end
+  return false
+end
+
+-- One file's findings into FOUND.
+function scan(p)
+  local toks = zig_tokens(p)
+  local fns = functions_of(toks)
+  -- A function's body text, made once and only when a check asks.
+  local bodies = {}
+
+  -- stand_in_alignment, duplicated_header_formula, duplicated_arg_layout's
+  -- sorts, unchecked_aligncast, host_size_in_target_code: by call.
+  for k = 1, #toks - 1 do
+    local t = toks[k]
+    local name = t.text
+    local calls = toks[k + 1].tag == "l_paren" and (k == 1 or toks[k - 1].tag ~= "keyword_fn")
+
+    if calls and has_key(ALIGN_ARG, name) then
+      local a = get(args_of(toks, k + 1), ALIGN_ARG[name])
+      if a ~= nil and stand_in(a) then
+        report("stand_in_alignment", p, t.line, name .. "(...) aligned at `" .. a .. "`, not the value's own alignment")
+      end
+    end
+
+    if calls and name == "alignForward" then
+      local args = args_of(toks, k + 1)
+      -- `std.mem.alignForward(usize, x, a)`: the value is after the type.
+      local v = get(args, 1, "")
+      if #args == 3 then v = args[2] end
+      if re_match(v, "word|header|required_space|extra_bytes", {nocase = true}) then
+        local f = fn_at(fns, k)
+        report("duplicated_header_formula", p, t.line, "alignForward(" .. join(args, ", ") .. ") in " .. (f and f.name or "a top-level declaration"))
+      end
+    end
+
+    if t.tag == "angle_bracket_right" or t.tag == "angle_bracket_left" then
+      local lhs = toks[k - 1].text
+      local rhs = toks[k + 1].text
+      if k + 3 <= #toks and toks[k + 2].tag == "period" then rhs = toks[k + 3].text end
+      local f = fn_at(fns, k)
+      -- A comparator (a function giving `bool`) that orders by alignment.
+      if f ~= nil and re_match(f.sig, "\\)bool$") and re_match(lhs, "^(alignment|\\w+_alignment|\\w+_align)$") and re_match(rhs, "^(alignment|\\w+_alignment|\\w+_align)$") then
+        report("duplicated_arg_layout", p, t.line, "a sort by alignment (`" .. text_of(toks, k - 3, k + 3) .. "`) in " .. f.name)
+      end
+    end
+
+    if calls and name == "@alignCast" then
+      local a = text_of(toks, k + 2, close_of(toks, k + 1) - 1)
+      if contains(a, "+") or re_match(a, "\\[[^0\\]][^\\]]*\\.\\.") then
+        local f = fn_at(fns, k)
+        if f ~= nil then
+          if not has_key(bodies, f.name .. f.first) then bodies[f.name .. f.first] = text_of(toks, f.first, f.last) end
+          local body = bodies[f.name .. f.first]
+          if not contains(body, "%@alignOf") and not contains(body, "isAligned") then
+            report("unchecked_aligncast", p, t.line, "@alignCast(" .. a .. ") in " .. f.name .. ", which never checks the offset's alignment")
+          end
+        end
+      end
+    end
+
+    if calls and (name == "@sizeOf" or name == "@alignOf") and k + 3 <= #toks and toks[k + 2].text == "usize" and toks[k + 3].tag == "r_paren" then
+      local f = fn_at(fns, k)
+      if re_match(p, "(^|/)layout/") then
+        report("host_size_in_target_code", p, t.line, name .. "(usize) in layout/: the host's word, not the target's")
+      elseif f ~= nil and takes_target(f) then
+        report("host_size_in_target_code", p, t.line, name .. "(usize) in " .. f.name .. ", which takes a target")
+      end
+    end
+  end
+
+  -- backing_without_alignment, duplicated_arg_layout's copies,
+  -- dealloc_ignores_alignment: by function.
+  for f in fns do
+    if f.name == "entrypointParamSlotSize" or f.name == "computeArgOffsets" then
+      report("duplicated_arg_layout", p, f.line, "fn " .. f.name .. ": one copy of the argument layout rule")
+    end
+
+    if re_match(f.name, "^roc\\w*Dealloc") and #f.params >= 3 and starts_with(f.params[3], "_:") then
+      report("dealloc_ignores_alignment", p, f.line, "fn " .. f.name .. " takes its alignment as `" .. f.params[3] .. "`")
+    end
+    if f.name == "free" then
+      for q in f.params do
+        if starts_with(q, "_:") and contains(q, "Alignment") then
+          report("dealloc_ignores_alignment", p, f.line, "fn free takes its alignment as `" .. q .. "`")
+        end
+      end
+    end
+
+    -- Only the function's own tokens: a nested function is judged alone.
+    for k = f.first, f.last - 1 do
+      local name = toks[k].text
+      if (name == "getString" or name == "getStringLiteralBacking") and toks[k + 1].tag == "l_paren" and fn_at(fns, k).first == f.first then
+        if not has_key(bodies, f.name .. f.first) then bodies[f.name .. f.first] = text_of(toks, f.first, f.last) end
+        local body = bodies[f.name .. f.first]
+        if makes_data(body) and not contains(body, "strings.alignment(") then
+          report("backing_without_alignment", p, toks[k].line, name .. "(...) in " .. f.name .. ", which never asks strings.alignment(")
+        end
+        break
+      end
+    end
+  end
+end
+
+-- A file's tokens are done with once it is scanned: yield lets them go,
+-- so a tree of any size fits.
+const files = {}
+for p in glob(GLOB) do push(files, p) end
+for p in files do
+  scan(p)
+  yield()
+end
+
+-- The findings, check by check, then the counts.
+const counts = {}
+for c in CHECKS do counts[c] = 0 end
+for c in CHECKS do
+  for x in FOUND do
+    if x.check == c then
+      counts[c] = counts[c] + 1
+      print(x.at .. ":" .. x.line .. ": " .. c .. ": " .. x.why)
+    end
+  end
+end
+print("")
+print("align_hunt: " .. #files .. " files")
+for c in CHECKS do print(pad(tostring(counts[c]), 6) .. "  " .. c) end
+
+if SELF_TEST then
+  -- Each plant fires its own check; clean.zig fires none.
+  local bad = {}
+  for c in CHECKS do
+    local fired = false
+    for x in FOUND do
+      if x.check == c and x.at == PLANTS .. "/" .. c .. ".zig" then fired = true end
+    end
+    if not fired then push(bad, c .. " did not fire on its plant") end
+  end
+  for x in FOUND do
+    if x.at == PLANTS .. "/clean.zig" then push(bad, "clean.zig:" .. x.line .. " fired " .. x.check) end
+  end
+  for b in bad do print("  " .. b) end
+  if #bad == 0 then print("PASS: each check fired on its plant, none on clean.zig") else fail("FAIL: " .. #bad .. " self-test failures") end
+end
