@@ -42,7 +42,9 @@ pub const Path = struct { full: []const u8, rel: []const u8 };
 
 pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!Path {
     const given = try bi.stringArg(run, pos, b, v, "its path");
-    const rel = if (std.mem.eql(u8, given, ".")) "" else given;
+    // `.` is the root and `m:.` the mount `m`, each spelled as its own
+    // paths are, so a walk of it gives the paths every call takes.
+    const rel = if (std.mem.eql(u8, given, ".")) "" else if (std.mem.endsWith(u8, given, ":.") and std.mem.indexOfScalar(u8, given, '/') == null) given[0 .. given.len - 1] else given;
     try run.charge(pos, given.len);
     // A path the host's hook resolves (a mount's, on Linux) is the host's; any other
     // follows the root's rules.
