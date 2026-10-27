@@ -596,17 +596,30 @@ fn numberAfter(output: []const u8, key: []const u8) !u64 {
     return std.fmt.parseInt(u64, rest[0..n], 10);
 }
 
+/// The site's budgets, with fewer reads: a fixture of a size a test can
+/// afford still runs past them.
+const parts_budgets: script.Budgets = blk: {
+    var b = site_budgets;
+    b.reads = 200;
+    break :blk b;
+};
+
 test "every cookbook script that walks, past what the site's reads reach, goes on from where it says and adds up to the whole run" {
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
     const a = f.arena.allocator();
     const io = f.threaded.io();
-    // 300 topics in one channel, each with its count cache, and 300 big
-    // files beside them: more than 500 reads walk.
+    // 130 topics in one channel, each with its count cache, and 130 big
+    // files beside them: more reads than `parts_budgets` allows, so every
+    // script resumes, and 260 entries in the sessions folder, past
+    // `call_entries`' 256, so a walk gives its `more` part too. **TRIMMED,
+    // STILL RED** (QUEUE 252): 300 of each under the site's 500 reads was
+    // 10 s; a walk resumed one entry late (walkResume's `top.at = i + 2`,
+    // clamped to the folder) fails it: the parts add to 132, the whole 131.
     try f.tmp.dir.createDirPath(io, "data/chat/channels/bulk/sessions");
     try f.tmp.dir.createDirPath(io, "data/bulk");
-    for (0..300) |k| {
+    for (0..130) |k| {
         const sid = try std.fmt.allocPrint(a, "t{d:0>3}", .{k});
         const text = try transcript(a, sid, 2);
         try f.tmp.dir.writeFile(io, .{ .sub_path = try std.fmt.allocPrint(a, "data/chat/channels/bulk/sessions/{s}.md", .{sid}), .data = text });
@@ -632,7 +645,7 @@ test "every cookbook script that walks, past what the site's reads reach, goes o
         var runs: usize = 0;
         while (true) : (runs += 1) {
             if (runs == 20) return error.NeverEnds;
-            var r = script.run(io, testing.allocator, f.root, try startingAt(a, c.src, start), site_budgets, 1791936000, &whole_buf);
+            var r = script.run(io, testing.allocator, f.root, try startingAt(a, c.src, start), parts_budgets, 1791936000, &whole_buf);
             defer r.deinit();
             errdefer std.debug.print("run {d} from \"{s}\":\n{s}\n", .{ runs, start, r.output });
             try finished(&r);
