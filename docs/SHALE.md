@@ -1090,7 +1090,7 @@ run: each stops on its budget, says what it found, and where to resume.
 ## The runner
 
 ```sh
-shale [--root DIR] [--verbose] [--undo-on-stop] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
+shale [--root DIR] [--verbose] [--undo-on-stop] [--check] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
 shale <<'SHALE'                  # no FILE, no -e: the script is stdin
 shale split.shale --args-stdin <<'ARGS'   # a FILE's values on stdin, one a line, raw
 SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
@@ -1100,6 +1100,9 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   directory.
 - **A run makes its changes and runs its programs**: on Linux, git is
   the undo ("What was decided": no dry run).
+- **`--check`**: the script is parsed and compiled with its preludes, its
+  names resolved, and nothing runs: `── checked: ...` and exit 0, or its
+  first stop and exit 1 (`cookbook:syntax.shale` uses it).
 - **`--undo-on-stop`**: a run that stops puts back every path it changed,
   the last first: a file's bytes and mode as they were, a file or folder
   it made taken away again (a folder with all in it). The Linux host keeps
@@ -1222,8 +1225,8 @@ three:
     `must`, `http`, `http_get`, `re_lines`, `head_lines`, `tail_lines`,
     `grep_all`, `unique`, `path_under`, `newest`, `create`, `edits_all`; the Zig tools
     `zig_rename`, `zig_renames`, `zig_decls`, `zig_move`, `zig_tokens` and
-    `zig_imports`; and the jobs, `job_start`, `job_alive`, `job_stop` and
-    `job_wait` (its helpers `curl_http`, `edit_words` and `edit_word_byte`
+    `zig_imports`; the jobs, `job_start`, `job_alive`, `job_stop` and
+    `job_wait`; and the processes, `procs` and `proc_stop` (`job_wait`'s helpers `curl_http`, `edit_words` and `edit_word_byte`
     take their names too);
   - the git prelude (`src/shale_prelude_git.shale`): `git_status`,
     `git_log`, `git_commit`, ...;
@@ -1411,7 +1414,8 @@ script's.
 
 - **What a yield keeps:** the values the run still reaches are copied
   into a fresh arena: every local of every frame, the parts of an
-  expression half evaluated, a loop's list, the `const`s, `attempt`'s
+  expression half evaluated, the list of a loop still running (a
+  loop that has ended or broken off has let go of it), the `const`s, `attempt`'s
   answers being made, and the effects log. The old arena is then freed
   whole, so whatever the script made and let go of goes with it. A run
   that yields every minute holds what it keeps, not what it ever made.

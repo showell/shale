@@ -141,3 +141,108 @@ test "preludes: each one compiled whole, its lines with code written for tools/c
     try std.Io.Dir.cwd().createDirPath(io, ".zig-cache/coverage");
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = ".zig-cache/coverage/prelude_code.txt", .data = out.items });
 }
+
+test "cookbook: syntax.shale gives each file one verdict by its kind, a good file ok and a broken one its first error, then PASS or FAIL" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    const shale_exe = @import("shale_test_options").shale;
+    const files = [_][3][]const u8{
+        .{ "ok.zig", "const a = 1;\n", "ok" },                              .{ "bad.zig", "const a = ;\n", "FAIL" },
+        .{ "fmt.zig", "const a  = 1;\n", "FAIL" },                          .{ "ok.zon", ".{ .a = 1 }\n", "ok" },
+        .{ "ok.js", "let x = 1;\n", "ok" },                                 .{ "bad.mjs", "let x = ;\n", "FAIL" },
+        .{ "ok.shale", "print(1)\n", "ok" },                                .{ "bad.shale", "print((1)\n", "FAIL" },
+        .{ "ok.py", "x = 1\n", "ok" },                                      .{ "bad.py", "x = (\n", "FAIL" },
+        .{ "ok.sh", "echo hi\n", "ok" },                                    .{ "bad.sh", "if then\n", "FAIL" },
+        .{ "Good.roc", "Good := [].{\n\tone : U64\n\tone = 1\n}\n", "ok" }, .{ "Bad.roc", "Bad := [].{\n\tone = (\n}\n", "FAIL" },
+        .{ "a.md", "# a\n", "ok" },
+    };
+    // `roc` and `node` a machine may lack (GitHub's runner has no roc): the
+    // recipe says so of their files, and the test holds it to that.
+    const has = struct {
+        fn tool(al: std.mem.Allocator, i: std.Io, argv: []const []const u8) bool {
+            const r = std.process.run(al, i, .{ .argv = argv }) catch return false;
+            al.free(r.stdout);
+            al.free(r.stderr);
+            return true;
+        }
+    };
+    const has_roc = has.tool(a, io, &.{ "roc", "version" });
+    const has_node = has.tool(a, io, &.{ "node", "--version" });
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(a);
+    for (files) |f| {
+        try tmp.dir.writeFile(io, .{ .sub_path = f[0], .data = f[1] });
+        if (list.items.len > 0) try list.append(a, ',');
+        try list.appendSlice(a, f[0]);
+    }
+    const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(root);
+    const files_arg = try std.fmt.allocPrint(a, "files={s}", .{list.items});
+    defer a.free(files_arg);
+    var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_n = try std.Io.Dir.cwd().realPathFile(io, shale_exe, &exe_buf);
+    const shale_arg = try std.fmt.allocPrint(a, "shale={s}", .{exe_buf[0..exe_n]});
+    defer a.free(shale_arg);
+    // The zig that builds this test, never the one on PATH.
+    const zig_arg = try std.fmt.allocPrint(a, "zig={s}", .{@import("shale_test_options").zig});
+    defer a.free(zig_arg);
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/syntax.shale", files_arg, shale_arg, zig_arg } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+    for (files) |f| {
+        const roc_file = std.mem.endsWith(u8, f[0], ".roc");
+        const js_file = std.mem.endsWith(u8, f[0], ".js") or std.mem.endsWith(u8, f[0], ".mjs");
+        if ((roc_file and !has_roc) or (js_file and !has_node)) {
+            const skip = try std.fmt.allocPrint(a, "skip {s}: no ", .{f[0]});
+            defer a.free(skip);
+            try testing.expect(std.mem.indexOf(u8, r.stdout, skip) != null);
+            continue;
+        }
+        const want = try std.fmt.allocPrint(a, "{s} {s}{s}", .{ f[2], if (std.mem.eql(u8, f[2], "ok")) "  " else "", f[0] });
+        defer a.free(want);
+        try testing.expect(std.mem.indexOf(u8, r.stdout, want) != null);
+    }
+    if (!has_roc) try testing.expect(std.mem.indexOf(u8, r.stdout, "no roc: .roc files not checked") != null);
+    if (!has_node) try testing.expect(std.mem.indexOf(u8, r.stdout, "no node: .js and .mjs files not checked") != null);
+    try testing.expectEqual(@as(u8, 1), r.term.exited);
+    try testing.expect(std.mem.indexOf(u8, r.stderr, "syntax: FAIL") != null);
+}
+
+test "cookbook: sealed.shale passes this tree's seals, and a plant that sets one outside its file fails by its line" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    const a = testing.allocator;
+    const shale_exe = @import("shale_test_options").shale;
+    // This tree: a script's `Path` is made by `pathArg` alone (metal-vmm QUEUE 250).
+    {
+        const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "cookbook/sealed.shale", "dir=src", "seals=path_seal:script/builtins_store.zig" } });
+        defer a.free(r.stdout);
+        defer a.free(r.stderr);
+        errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+        try testing.expectEqual(@as(u8, 0), r.term.exited);
+        try testing.expect(std.mem.indexOf(u8, r.stdout, "sealed: PASS") != null);
+    }
+    // A plant: the seal's own file sets it, its test too; another file, a
+    // string and a comment that name it, and a read of it, do not count; one
+    // literal and one assignment do.
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(io, "sub");
+    try tmp.dir.writeFile(io, .{ .sub_path = "id.zig", .data = "const Seal = struct {};\npub const Id = struct { text: []const u8, id_seal: Seal };\npub fn of(s: []const u8) Id {\n    return .{ .text = s, .id_seal = .{} };\n}\ntest {\n    _ = Id{ .text = \"\", .id_seal = .{} };\n}\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "ok.zig", .data = "const id = @import(\"id.zig\");\n// .id_seal = .{}\nconst s = \".id_seal = .{}\";\nfn f(i: id.Id) void {\n    _ = i.id_seal;\n}\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "sub/forge.zig", .data = "const id = @import(\"../id.zig\");\nfn f() id.Id {\n    return .{ .text = \"..\", .id_seal = .{} };\n}\nfn g(i: *id.Id) void {\n    i.id_seal = .{};\n}\n" });
+    const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(root);
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/sealed.shale", "dir=.", "seals=id_seal:id.zig" } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+    try testing.expectEqualStrings("FAIL sub/forge.zig:3: sets `id_seal`, which only id.zig may\nFAIL sub/forge.zig:6: sets `id_seal`, which only id.zig may\n", r.stdout);
+    try testing.expectEqual(@as(u8, 1), r.term.exited);
+}

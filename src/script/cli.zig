@@ -17,8 +17,9 @@ const script = @import("script.zig");
 const diag = @import("diag.zig");
 
 pub const usage =
-    \\usage: shale [--root DIR] [--verbose] [--undo-on-stop] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
+    \\usage: shale [--root DIR] [--verbose] [--undo-on-stop] [--check] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
     \\  --root DIR        the folder the script's paths are relative to (SHALE_ROOT, or here)
+    \\  --check           parse and compile the script, with its preludes, and run nothing
     \\  --verbose         the effects, the programs run and what the run used, always
     \\  --undo-on-stop    a run that stops puts back every path it changed (not a program's)
     \\  --args-stdin      the FILE's NAME=VALUEs on stdin, one a line, each value raw to its end
@@ -52,6 +53,9 @@ pub const Command = struct {
     undo_on_stop: bool = false,
     /// `--args-stdin`: the FILE's values are read from stdin (`argLines`).
     args_stdin: bool = false,
+    /// `--check`: the script is parsed and compiled, with its preludes, and
+    /// nothing runs.
+    check: bool = false,
     budgets: interp.Budgets = defaults,
     /// The budgets `--budget` set, indexed as `settable`. A script's header
     /// never overrides these (`headerBudgets`).
@@ -83,6 +87,8 @@ pub fn parse(argv: []const []const u8, env_root: ?[]const u8, args_buf: []interp
             c.undo_on_stop = true;
         } else if (std.mem.eql(u8, a, "--args-stdin")) {
             c.args_stdin = true;
+        } else if (std.mem.eql(u8, a, "--check")) {
+            c.check = true;
         } else if (std.mem.eql(u8, a, "--root") or std.mem.eql(u8, a, "--budget") or std.mem.eql(u8, a, "-e")) {
             if (i + 1 == argv.len) return refuse(why_buf, "{s} needs a value", .{a});
             i += 1;

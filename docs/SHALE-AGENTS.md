@@ -73,11 +73,14 @@ Each has a Shale form, most of them one launch:
 | the habit | in Shale |
 |---|---|
 | `sed -n 40,80p f; sed -n 5,9p g` | `shale cookbook:look.shale at=f:40-80,g:5-9` |
+| `pkill -f pat`, `ps aux \| grep pat \| xargs kill` | `for p in procs() do if find(p.args, "pat") ~= nil then proc_stop(p) end end`: never this run or its shell |
 | `grep -rn 'text' src build.zig` | `shale cookbook:look.shale find=text in=src,build.zig ext=zig` (a value with `(`, `*` or a space: `--args-stdin`) |
 | grep in Zig's std, a sibling repo | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:dog-park/src` |
 | `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
 | `zig build fuzz 2>&1 \| grep FAIL` | the same with `grep=FAIL,hunts ran` (a value with a space: on stdin, `--args-stdin`): every output line holding one of the literals, after the summary |
 | `roc check f && roc test f 2>&1 \| tail`, any other program and its verdict | `shale cookbook:run.shale` with `cmd=roc check f && roc test f` on stdin (`--args-stdin`): each command in order until one fails, how it ended and its time, its last lines (`tail=`), lines holding `grep=` literals, the whole output in `.zig-cache/run.log` where that folder is (else `log=PATH`, or not kept, said); `want=tag: why` for a program `run` refuses (`node`, `sh`) |
+| `python3 -m py_compile f`, `node --check f`, `zig ast-check f`, `bash -n f`: did an edit's syntax survive? | `shale cookbook:syntax.shale files=f,g` (or `rev=HEAD~1..HEAD`): one verdict a file by its kind (`.zig`, `.zon`, `.roc`, `.js`, `.mjs`, `.shale`, `.py`, `.sh`), then PASS or FAIL |
+| `grep -rn ".field =" src`: does anything but its own file make a sealed value (a checked id, a path)? | `shale cookbook:sealed.shale dir=src seals=path_seal:script/builtins_store.zig`: Zig's tokens, so a comment or a string never counts; one line a forger, then PASS or FAIL |
 | `curl -s URL \| grep X`, a wait for a deploy | `shale cookbook:http.shale url=URL grep=X` (`wait=LITERAL minutes=N`: until the body holds it; `bearer=` a Shale path to a token file) |
 | `curl -X POST --data ... -c jar -b jar`, a response's headers | in a heredoc, `http("POST", url, {body, headers})`: `{status, headers, body}`, the headers by lowercased name (`r.headers["set-cookie"]`), a cookie sent back as a `"Cookie: ..."` header |
 | `git tag -a v6 X -m ... && git push origin v6`, `git commit --amend`, ahead/behind | `git_tag(repo, "v6", {rev, msg})`, `git_push(repo, {tag = "v6"})`; `git_commit(repo, msg, {amend = true})`; `git_upstream(repo)` |
@@ -155,6 +158,17 @@ has none of it):
     run, named.
   - **Keep `timeout_ms` under the Bash call's own timeout** (120 s unless
     raised), because Shale cannot see it.
+- **Processes that are not your jobs:** `procs()` lists each as `{pid,
+  ppid, uid, name, args, start}` (`args_cut = true` past 1 MiB of command
+  line), **never this run or a process above it**, so a filter of `args`
+  cannot match the shell that ran you, which `pkill -f` and `ps | grep` +
+  `kill` do whenever the command line holds the pattern. Match the one you
+  mean exactly (`p.args == ...`, `p.name == ...`): a substring also names
+  a decoy whose argv mentions it. `proc_stop(p)` takes one entry (TERM, 2
+  seconds, then KILL) through a pidfd, refuses this run and those above
+  it, leaves alone a pid the kernel has since given to another process
+  (its `start` differs: false), and stops the run when a signal is refused
+  (EPERM) or the process outlives KILL: never a success with it there.
 - **Files:** `create(p, text)` refuses a file already there.
   `edits_all({{p, edits}, ...})` checks every file's edits before it writes
   any. `zig_rename(p, from, to, {lines}?)` renames a Zig identifier as

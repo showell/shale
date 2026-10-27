@@ -83,6 +83,22 @@ test "yield: what is kept past the kept budget stops the run, by name" {
     try testing.expectEqual(@as(u32, 4), r.stop.?.line);
 }
 
+test "yield: a loop that has ended, or broken off, keeps its list no longer: a script yields after a big one and goes on" {
+    var r = runWith(
+        \\function big() local l = {} for i = 1, 20000 do push(l, "item " .. i) end return l end
+        \\local n = 0
+        \\for x in big() do n = n + 1 end
+        \\yield()
+        \\for x in big() do if n > 0 then break end end
+        \\yield()
+        \\print(n)
+    , .{ .kept_bytes = 64 * 1024, .steps = 100_000_000 });
+    defer r.deinit();
+    if (r.stop) |s| std.debug.print("{d}:{d} {s}\n", .{ s.line, s.column, s.message });
+    try testing.expect(r.finished());
+    try testing.expectEqualStrings("20000\n", r.output);
+}
+
 test "yield: every root survives it: locals, operands of a `..` chain, a loop's list, a const, a function's frame, attempt's answer" {
     try expectOutput(
         \\const NAMES = {"ann", "bo"}

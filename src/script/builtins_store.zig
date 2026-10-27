@@ -38,7 +38,13 @@ pub const specs = [_]bi.Spec{
 /// so is `"."`, for the calls that only look (`allow_root`); every change needs at least
 /// one part. `full` is the path joined to the root (or the host hook's), `rel` the
 /// script's own.
-pub const Path = struct { full: []const u8, rel: []const u8 };
+///
+/// **SEALED** (metal-vmm QUEUE 250): only `pathArg` makes one, so a call that
+/// takes a `Path` took a checked one. A literal without `path_seal` does not
+/// compile, and cookbook/sealed.shale refuses one that sets it outside this file.
+pub const Path = struct { full: []const u8, rel: []const u8, path_seal: Seal };
+
+const Seal = struct {};
 
 pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!Path {
     const given = try bi.stringArg(run, pos, b, v, "its path");
@@ -48,10 +54,10 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     try run.charge(pos, given.len);
     // A path the host's hook resolves (a mount's, on Linux) is the host's; any other
     // follows the root's rules.
-    if (run.path_hook) |h| if (try h.resolve(h.ctx, run, pos, rel)) |full| return .{ .full = full, .rel = rel };
+    if (run.path_hook) |h| if (try h.resolve(h.ctx, run, pos, rel)) |full| return .{ .full = full, .rel = rel, .path_seal = .{} };
     if (rel.len == 0) {
         if (!allow_root) return run.fail(pos, .argument, "`{s}(\"\")` would act on the whole root: name a path of at least one part", .{@tagName(b)});
-        return .{ .full = run.root, .rel = "" };
+        return .{ .full = run.root, .rel = "", .path_seal = .{} };
     }
     if (rel[0] == '/') return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root", .{ @tagName(b), rel });
     var it = std.mem.splitScalar(u8, rel, '/');
@@ -61,7 +67,7 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     // A root of `/` takes no second `/`: `//x` is an empty part to the store.
     const sep = if (std.mem.endsWith(u8, run.root, "/")) "" else "/";
     const full = std.fmt.allocPrint(run.alloc, "{s}{s}{s}", .{ run.root, sep, rel }) catch return run.oom(pos);
-    return .{ .full = full, .rel = rel };
+    return .{ .full = full, .rel = rel, .path_seal = .{} };
 }
 
 /// A store error in plain words; its name follows in parentheses.
