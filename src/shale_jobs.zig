@@ -128,10 +128,9 @@ fn sleepMs(ms: u64) void {
 /// with a reused pid; it does not close it.
 pub fn stop(r: Record, grace_ms: u64) bool {
     if (!alive(r)) return false;
-    var buf_for_kill: [1024]u8 = undefined;
     _ = signalGroup(r.pgid, @backingInt(linux.SIG.TERM));
     // A leader that has not made its group yet is not reached by it.
-    _ = linux.kill(r.pid, .TERM);
+    signalLeader(r, .TERM);
     // Gone is `alive`'s word, the leader's and the group's alike: the
     // group alone may not be made yet.
     var waited: u64 = 0;
@@ -140,13 +139,19 @@ pub fn stop(r: Record, grace_ms: u64) bool {
         sleepMs(50);
     }
     _ = signalGroup(r.pgid, @backingInt(linux.SIG.KILL));
-    if (startOf(&buf_for_kill, r.pid)) |s| if (std.mem.eql(u8, s, r.start)) {
-        _ = linux.kill(r.pid, .KILL);
-    };
+    signalLeader(r, .KILL);
     // The reaper reaps the leader; wait a little for it and the group to go.
     waited = 0;
     while (waited < 2000 and alive(r)) : (waited += 20) sleepMs(20);
     return true;
+}
+
+/// Signals the job's leader, only while `r.pid` is still it by its start
+/// time: a pid the kernel gave to another process since is never signalled.
+fn signalLeader(r: Record, sig: linux.SIG) void {
+    var buf: [1024]u8 = undefined;
+    const s = startOf(&buf, r.pid) orelse return;
+    if (std.mem.eql(u8, s, r.start)) _ = linux.kill(r.pid, sig);
 }
 
 /// Finds argv[0] as `execve` would: a path (relative to `cwd`), or along PATH.
