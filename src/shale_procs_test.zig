@@ -74,3 +74,120 @@ test "procs: proc_stop stops the process it names by pid and start, and a stale 
         \\print(#found, stale, ran, w.ended == "exited")
     ));
 }
+
+test "procs: a process the run may not signal stops proc_stop, named, never a success with it still there (the box's review)" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    if (linux.getuid() != 0) {
+        // Not root: a process of root's (there is always one beside pid 1)
+        // answers EPERM.
+        var r = t.runOnce(
+            \\for p in procs() do
+            \\  if p.uid == 0 and p.pid > 1 then proc_stop(p) end
+            \\end
+        , .atomic);
+        defer r.deinit();
+        const s = r.stop orelse return error.TestUnexpectedResult;
+        errdefer std.debug.print("{s}\n", .{s.message});
+        try testing.expect(std.mem.indexOf(u8, s.message, "refused TERM") != null);
+        return;
+    }
+    // Root: the target is root's, and the run that stops it is nobody's.
+    const got = try once(&t,
+        \\local j = job_start({"shale-fixture", "sleep", "20000"}, {log = "e.log"})
+        \\for i = 1, 50 do
+        \\  for p in procs() do
+        \\    if p.pid == j.pid and find(p.args, "sleep 20000") ~= nil then print(p.pid .. " " .. p.start) end
+        \\  end
+        \\  sleep(20)
+        \\  if exists("e.log.job") then break end
+        \\end
+    );
+    var it = std.mem.tokenizeAny(u8, got, " \n");
+    const pid = it.next() orelse return error.TestUnexpectedResult;
+    const start = it.next() orelse return error.TestUnexpectedResult;
+    const src = try std.fmt.allocPrint(a, "print(proc_stop({{pid = {s}, start = \"{s}\"}}))", .{ pid, start });
+    // The build's shale, as an absolute path (the reaper's).
+    const r = try std.process.run(a, t.threaded.io(), .{ .argv = &.{ "setpriv", "--reuid=65534", "--regid=65534", "--clear-groups", "env", "-i", "HOME=/tmp", "SHALE_PRELUDE=", "SHALE_MOUNTS=/dev/null", t.host.reaper.?, "--root", "/tmp", "-e", src } });
+    errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+    try testing.expectEqual(@as(u8, 1), r.term.exited);
+    try testing.expect(std.mem.indexOf(u8, r.stderr, "refused TERM") != null);
+    // Still there, and stopped now by one that may.
+    try testing.expectEqualStrings("true\n", try once(&t, "print(job_stop(\"e.log.job\"))"));
+}
+
+test "procs: a command line is read whole, and one past args_most says it was cut" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    // Past one read of 4096 bytes: read to its end.
+    try testing.expectEqualStrings("true\tfalse\ttrue\n", try once(&t,
+        \\local long = ""
+        \\for i = 1, 600 do long = long .. "0123456789" end
+        \\local j = job_start({"shale-fixture", "sleep", "20000", long}, {log = "l.log"})
+        \\local whole = false
+        \\local cut = true
+        \\for i = 1, 50 do
+        \\  for p in procs() do
+        \\    if p.pid == j.pid and find(p.args, "sleep 20000") ~= nil then
+        \\      whole = #p.args == #"shale-fixture sleep 20000 " + #long
+        \\      cut = get(p, "args_cut", false)
+        \\    end
+        \\  end
+        \\  if whole then break end
+        \\  sleep(20)
+        \\end
+        \\print(whole, cut, job_stop(j))
+    ));
+    // Past args_most (more than a job's record holds, so spawned here): said.
+    const fixture = @import("shale_test_options").fixture;
+    var argv: std.ArrayList([]const u8) = .empty;
+    try argv.appendSlice(a, &.{ fixture, "sleep", "20000" });
+    const part: []const u8 = &@as([120 * 1024]u8, @splat('x'));
+    for (0..9) |_| try argv.append(a, part);
+    var child = try std.process.spawn(t.threaded.io(), .{ .argv = argv.items, .stdin = .ignore, .stdout = .ignore, .stderr = .ignore });
+    defer child.kill(t.threaded.io());
+    const src = try std.fmt.allocPrint(a,
+        \\local cut = nil
+        \\for i = 1, 50 do
+        \\  for p in procs() do
+        \\    if p.pid == {d} and find(p.args, "sleep 20000") ~= nil then cut = get(p, "args_cut", false) end
+        \\  end
+        \\  if cut then break end
+        \\  sleep(20)
+        \\end
+        \\print(cut)
+    , .{child.id.?});
+    try testing.expectEqualStrings("true\n", try once(&t, src));
+}
+
+test "procs: the decoys the pattern also names survive: one whose argv holds the target's command line, one whose name is a prefix of the target's" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    // The second decoy is a shale of its own: `shale` is a prefix of
+    // `shale-fixture`, as `zig` is of `zig-server`.
+    const src = try std.fmt.allocPrint(a,
+        \\local target = job_start({{"shale-fixture", "sleep", "20000"}}, {{log = "t.log"}})
+        \\local decoy = job_start({{"shale-fixture", "sleep", "20000", "shale-fixture sleep 20000"}}, {{log = "d.log"}})
+        \\local prefix = job_start({{"{s}", "--root", "/tmp", "-e", "sleep(20000)"}}, {{log = "p.log", want = "a shale of its own, the decoy"}})
+        \\local stopped = false
+        \\for i = 1, 50 do
+        \\  for p in procs() do
+        \\    -- What `pkill -f "shale-fixture sleep 20000"` matches is both
+        \\    -- fixtures, and `pkill shale` all three: the one meant is the one
+        \\    -- whose name and command line are exactly its own.
+        \\    if p.args == "shale-fixture sleep 20000" and p.name == "shale-fixture" then stopped = proc_stop(p) end
+        \\  end
+        \\  if stopped then break end
+        \\  sleep(20)
+        \\end
+        \\local w = job_wait(target, {{timeout_ms = 10000}})
+        \\print(stopped, w.ended == "exited", job_alive(decoy), job_alive(prefix), job_stop(decoy), job_stop(prefix))
+    , .{t.host.reaper.?});
+    try testing.expectEqualStrings("true\ttrue\ttrue\ttrue\ttrue\ttrue\n", try once(&t, src));
+}

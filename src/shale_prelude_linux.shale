@@ -57,15 +57,17 @@ function job_stop(job)
 end
 
 -- **THE PROCESSES, NEVER THIS ONE** (`src/shale_host_procs.zig`): each
--- `{pid, ppid, name, args, start}` but this run's and those above it, so a
--- filter of `args` cannot match the shell that ran it, as `pkill -f` does.
+-- `{pid, ppid, uid, name, args, start}` (and `args_cut` past 1 MiB) but
+-- this run's and those above it, so a filter of `args` cannot match the
+-- shell that ran it, as `pkill -f` does.
 function procs()
   return host("procs")
 end
 
 -- One entry of `procs()` stopped: TERM, 2 seconds, then KILL; whether it
 -- ran. Refused for this run and those above it; a pid since given to
--- another process (its start differs) is left alone.
+-- another process (its start differs) is left alone; a signal refused
+-- stops the run.
 function proc_stop(p)
   return host("proc_stop", p)
 end

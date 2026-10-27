@@ -159,12 +159,16 @@ has none of it):
   - **Keep `timeout_ms` under the Bash call's own timeout** (120 s unless
     raised), because Shale cannot see it.
 - **Processes that are not your jobs:** `procs()` lists each as `{pid,
-  ppid, name, args, start}`, **never this run or a process above it**, so a
-  filter of `args` cannot match the shell that ran you, which `pkill -f`
-  and `ps | grep` + `kill` do whenever the command line holds the pattern.
-  `proc_stop(p)` takes one entry (TERM, 2 seconds, then KILL), refuses
-  this run and those above it, and leaves alone a pid the kernel has since
-  given to another process (its `start` differs).
+  ppid, uid, name, args, start}` (`args_cut = true` past 1 MiB of command
+  line), **never this run or a process above it**, so a filter of `args`
+  cannot match the shell that ran you, which `pkill -f` and `ps | grep` +
+  `kill` do whenever the command line holds the pattern. Match the one you
+  mean exactly (`p.args == ...`, `p.name == ...`): a substring also names
+  a decoy whose argv mentions it. `proc_stop(p)` takes one entry (TERM, 2
+  seconds, then KILL) through a pidfd, refuses this run and those above
+  it, leaves alone a pid the kernel has since given to another process
+  (its `start` differs: false), and stops the run when a signal is refused
+  (EPERM) or the process outlives KILL: never a success with it there.
 - **Files:** `create(p, text)` refuses a file already there.
   `edits_all({{p, edits}, ...})` checks every file's edits before it writes
   any. `zig_rename(p, from, to, {lines}?)` renames a Zig identifier as
