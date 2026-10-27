@@ -44,15 +44,22 @@ function gh(argv)
   return trim(r.out)
 end
 
+-- **GITHUB'S REST API, NEVER ITS GRAPHQL**: `gh workflow run` and `gh run
+-- list` ask GraphQL, which a Claude Code session is refused; `gh api` on
+-- the REST paths works wherever `gh` does.
+
 -- The newest dispatched run's id, or "" when there is none.
 function newest()
-  return gh({"gh", "run", "list", "--repo", SLUG, "--workflow", WORKFLOW, "--event", "workflow_dispatch", "--limit", "1", "--json", "databaseId", "-q", ".[0].databaseId // \"\""})
+  return gh({"gh", "api", "repos/" .. SLUG .. "/actions/workflows/" .. WORKFLOW .. "/runs?event=workflow_dispatch&per_page=1", "-q", ".workflow_runs[0].id // \"\""})
 end
 
 -- The workflow dispatched on `ref`, and its run's id once listed.
 function dispatch(ref)
   local before = newest()
-  gh({"gh", "workflow", "run", WORKFLOW, "--repo", SLUG, "-f", "ref=" .. ref})
+  -- The workflow's own file is the default branch's; `ref` is its input,
+  -- the commit it checks out.
+  local home = gh({"gh", "api", "repos/" .. SLUG, "-q", ".default_branch"})
+  gh({"gh", "api", "-X", "POST", "repos/" .. SLUG .. "/actions/workflows/" .. WORKFLOW .. "/dispatches", "-f", "ref=" .. home, "-f", "inputs[ref]=" .. ref})
   -- The dispatch answers before the run is listed: a new id is this one.
   local id = before
   local looks = 0
@@ -68,10 +75,10 @@ end
 -- "status conclusion seconds url", conclusion "-" while it runs;
 -- the seconds from its start to its end, or to now while it runs
 -- (`updatedAt` stands still then).
-const SAY = "\"\\(.status) \\(if .conclusion == \"\" then \"-\" else .conclusion end) \\((if .status == \"completed\" then (.updatedAt | fromdate) else now end) - (.startedAt | fromdate) | floor) \\(.url)\""
+const SAY = "\"\\(.status) \\(.conclusion // \"-\") \\((if .status == \"completed\" then (.updated_at | fromdate) else now end) - (.run_started_at | fromdate) | floor) \\(.html_url)\""
 function look(id)
   local w = {}
-  for x in words(gh({"gh", "run", "view", id, "--repo", SLUG, "--json", "status,conclusion,startedAt,updatedAt,url", "-q", SAY})) do push(w, x) end
+  for x in words(gh({"gh", "api", "repos/" .. SLUG .. "/actions/runs/" .. id, "-q", SAY})) do push(w, x) end
   return {id = id, status = w[1], conclusion = w[2], secs = w[3], url = w[4]}
 end
 
