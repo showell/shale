@@ -73,6 +73,7 @@ Each has a Shale form, most of them one launch:
 | the habit | in Shale |
 |---|---|
 | `sed -n 40,80p f; sed -n 5,9p g` | `shale cookbook:look.shale at=f:40-80,g:5-9` |
+| `pkill -f pat`, `ps aux \| grep pat \| xargs kill` | `for p in procs() do if find(p.args, "pat") ~= nil then proc_stop(p) end end`: never this run or its shell |
 | `grep -rn 'text' src build.zig` | `shale cookbook:look.shale find=text in=src,build.zig ext=zig` (a value with `(`, `*` or a space: `--args-stdin`) |
 | grep in Zig's std, a sibling repo | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:dog-park/src` |
 | `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
@@ -157,6 +158,13 @@ has none of it):
     run, named.
   - **Keep `timeout_ms` under the Bash call's own timeout** (120 s unless
     raised), because Shale cannot see it.
+- **Processes that are not your jobs:** `procs()` lists each as `{pid,
+  ppid, name, args, start}`, **never this run or a process above it**, so a
+  filter of `args` cannot match the shell that ran you, which `pkill -f`
+  and `ps | grep` + `kill` do whenever the command line holds the pattern.
+  `proc_stop(p)` takes one entry (TERM, 2 seconds, then KILL), refuses
+  this run and those above it, and leaves alone a pid the kernel has since
+  given to another process (its `start` differs).
 - **Files:** `create(p, text)` refuses a file already there.
   `edits_all({{p, edits}, ...})` checks every file's edits before it writes
   any. `zig_rename(p, from, to, {lines}?)` renames a Zig identifier as
