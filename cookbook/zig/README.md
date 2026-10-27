@@ -100,6 +100,16 @@ string's text). Each says its budgets in its `-- budget:` line:
 - `comment_census.shale` (`dir=`, `files=`, `top=`): per Zig file, its
   code, doc and plain comment lines, comment lines per 100 of code, words
   a comment line, and the loud and dated comments.
+- `align_hunt.shale` (`glob=`, `self_test=1`): where a compiler copies
+  alignment arithmetic instead of asking the one place that knows it,
+  in seven named checks (a word or a literal 8 or 16 as an allocation's
+  alignment, a string backing copied with no `strings.alignment`, header
+  formulas and argument-layout sorts copied, a dealloc that drops its
+  alignment, an unchecked `@alignCast` of base plus offset, the host's
+  `usize` in target code): `path:line: <check>: <why>`, then a count per
+  check. Written for the Roc compiler (roc-lang/roc#12641 is its
+  archetype); `self_test=1`, from this checkout, runs the plants in
+  `plants/align_hunt/`, one a check and a clean one, then PASS or FAIL.
 
 ## Moving along them
 
