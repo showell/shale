@@ -262,6 +262,8 @@ const work_per_step_most = 40;
 /// misses, many pieces.
 const hard_cases = [_]struct { name: []const u8, store: Setup = .none, setup: []const u8, call: []const u8 }{
     .{ .name = "substitute, a match a byte", .setup = "local s = rep(\"a\", N)", .call = "local x = substitute(s, \"a\", \"\")" },
+    // No match: the scan's own charge is all that grows (QUEUE 255).
+    .{ .name = "substitute, no match", .setup = "local s = rep(\"a\", N)", .call = "local x = substitute(s, \"b\", \"c\")" },
     .{ .name = "split, a piece a byte", .setup = "local s = rep(\"a\", N)", .call = "local x = split(s, \"a\")" },
     .{ .name = "find, a near-match at every byte", .setup = "local s = rep(\"a\", N)", .call = "local x = find(s, \"aaaab\")" },
     .{ .name = "contains, a long near-match", .setup = "local s = rep(\"a\", N)", .call = "local x = contains(s, rep(\"a\", 40) .. \"b\")" },
