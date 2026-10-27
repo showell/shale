@@ -1,9 +1,18 @@
 //! A linear-time regular expression engine, behind `re_find` and `re_match`.
 //! Supports literals, `.`, classes (`[a-z]`, `[^...]`, `\d \w \s` and their
 //! negations), `*`, `+`, `?`, `^`, `$`, alternation (lowest precedence,
-//! leftmost preferred), `\b \B` (ASCII word edges), and one capture group;
+//! leftmost preferred), `\b \B` (ASCII word edges), capture groups (up to
+//! nine, nested or not, numbered by their `(` left to right) and groups that
+//! do not capture (`(?:...)`);
 //! `nocase` folds ASCII letters at compile time. Counted repetition,
 //! backreferences and lookaround are refused with a message.
+//!
+//! **Nested groups under a loop:** where a repeated group holds another
+//! group whose first way matches nothing (`(\w*(|.))*`), a turn of the loop
+//! that would reach an instruction an earlier turn reached at the same place
+//! is dropped, so the match can end sooner than a backtracker's (QUEUE 253,
+//! found by the reference property). Everywhere else the match is the
+//! backtracker's, groups and all.
 //!
 //! A pattern compiles to a Pike VM program of a few instructions per byte. A
 //! search advances all threads one byte at a time in order of preference,
@@ -17,6 +26,9 @@ const std = @import("std");
 /// The longest pattern accepted; a longer one is refused before it is read.
 pub const pattern_most = 256;
 
+/// The most capture groups a pattern may have: `\1` to `\9` in a replacement.
+pub const groups_most = 9;
+
 pub const Op = enum(u8) {
     /// The byte `c`.
     byte,
@@ -28,7 +40,8 @@ pub const Op = enum(u8) {
     split,
     /// Continue at `x`.
     jmp,
-    /// Record the position in capture slot `x` (0 the group's start, 1 its end).
+    /// Record the position in capture slot `x` (`2k` group k+1's start, `2k+1`
+    /// its end).
     save,
     /// Matches only at the start of the string.
     start,
@@ -48,8 +61,8 @@ pub const Set = std.StaticBitSet(256);
 pub const Program = struct {
     insts: []Inst,
     sets: []Set,
-    /// Whether the pattern has a capture group.
-    group: bool,
+    /// How many capture groups the pattern has.
+    groups: u8,
     /// Whether the pattern begins with `^`, so it can only match at the start.
     anchored: bool,
 
@@ -84,6 +97,8 @@ const Node = struct {
     quant: Quant = .one,
     /// The group's alternatives.
     inner: Alt = &.{},
+    /// The group's number, from 1; 0 for one that does not capture.
+    index: u8 = 0,
 };
 
 const Reader = struct {
@@ -96,7 +111,7 @@ const Reader = struct {
     refused: *Refusal,
     options: Options,
     sets: std.ArrayList(Set) = .empty,
-    group: bool = false,
+    groups: u8 = 0,
 
     fn refuse(r: *Reader, at: usize, message: []const u8) Error {
         r.refused.* = .{ .at = at, .message = message };
@@ -129,14 +144,20 @@ const Reader = struct {
                 },
                 '|' => return list.items,
                 '(' => blk: {
-                    if (r.at + 1 < r.p.len and r.p[r.at + 1] == '?') return r.refuse(at, "`(?` is not in this subset: no lookaround and no groups that do not capture");
-                    if (in_group or r.group) return r.refuse(at, "one capture group a pattern: a second `(` is not in this subset (`\\(` is the byte)");
-                    r.group = true;
-                    r.at += 1;
+                    var index: u8 = 0;
+                    if (r.at + 1 < r.p.len and r.p[r.at + 1] == '?') {
+                        if (r.at + 2 >= r.p.len or r.p[r.at + 2] != ':') return r.refuse(at, "`(?` is not in this subset but for `(?:...)`, a group that does not capture: no lookaround, no named groups");
+                        r.at += 3;
+                    } else {
+                        if (r.groups == groups_most) return r.refuse(at, "a tenth capture group: nine is the most (`\\9` is the last), so write this one `(?:...)` if it need not capture");
+                        r.groups += 1;
+                        index = r.groups;
+                        r.at += 1;
+                    }
                     const inner = try r.alt(true);
                     if (r.at >= r.p.len) return r.refuse(at, "a `(` that is never closed");
                     r.at += 1; // )
-                    break :blk .{ .kind = .group, .inner = inner };
+                    break :blk .{ .kind = .group, .inner = inner, .index = index };
                 },
                 '{' => return r.refuse(at, "`{n,m}` is not in this subset: write the part out as often as it must come (`\\d\\d\\d?`), or `\\{` for the byte"),
                 '*', '+', '?' => return r.refuse(at, "a `*`, `+` or `?` with nothing before it to repeat"),
@@ -351,9 +372,11 @@ const Emitter = struct {
             .boundary => _ = try e.emit(.{ .op = .boundary, .c = 0 }),
             .not_boundary => _ = try e.emit(.{ .op = .boundary, .c = 1 }),
             .group => {
-                _ = try e.emit(.{ .op = .save, .x = 0 });
+                if (n.index == 0) return e.alt(n.inner);
+                const k: u16 = n.index - 1;
+                _ = try e.emit(.{ .op = .save, .x = 2 * k });
                 try e.alt(n.inner);
-                _ = try e.emit(.{ .op = .save, .x = 1 });
+                _ = try e.emit(.{ .op = .save, .x = 2 * k + 1 });
             },
         }
     }
@@ -407,18 +430,34 @@ pub fn compile(alloc: std.mem.Allocator, pattern: []const u8, options: Options, 
     return .{
         .insts = insts,
         .sets = try r.sets.toOwnedSlice(alloc),
-        .group = r.group,
+        .groups = r.groups,
         .anchored = top.len == 1 and top[0].len > 0 and top[0][0].kind == .start,
     };
+}
+
+/// A new thread's captures, its match begun at `pos`.
+fn startCaps(pos: usize) Caps {
+    var c: Caps = @splat(unset);
+    c[0] = pos;
+    return c;
+}
+
+/// The groups a match's captures recorded, start and end both.
+fn groupsOf(caps: Caps) [groups_most]?[2]usize {
+    var g: [groups_most]?[2]usize = @splat(null);
+    for (&g, 0..) |*x, k| {
+        if (caps[1 + 2 * k] != unset and caps[2 + 2 * k] != unset) x.* = .{ caps[1 + 2 * k], caps[2 + 2 * k] };
+    }
+    return g;
 }
 
 fn wordByte(c: u8) bool {
     return std.ascii.isAlphanumeric(c) or c == '_';
 }
 
-/// A thread's captures: the match's start, then the group's start and end,
+/// A thread's captures: the match's start, then each group's start and end,
 /// each `unset` until recorded.
-const Caps = [3]usize;
+const Caps = [1 + 2 * groups_most]usize;
 const unset = std.math.maxInt(usize);
 
 const Thread = struct { pc: u16, caps: Caps };
@@ -475,8 +514,9 @@ pub const Found = struct {
     /// The match is `s[start..end]`.
     start: usize,
     end: usize,
-    /// The group's `[start, end]`, if the match passed through it.
-    group: ?[2]usize,
+    /// Each group's `[start, end]`, if the match passed through it, group 1
+    /// first; those past the pattern's `groups` are null.
+    groups: [groups_most]?[2]usize,
 };
 
 pub const Searched = struct {
@@ -561,7 +601,7 @@ pub fn searchFrom(p: *const Program, sc: *Scratch, s: []const u8, from: usize, p
         positions += 1;
         // A new start at each position, least preferred, until a match.
         if (matched == null and (!p.anchored or pos == 0))
-            add(p, sc, clist, .{ .pc = 0, .caps = .{ pos, unset, unset } }, pos, s, &work);
+            add(p, sc, clist, .{ .pc = 0, .caps = startCaps(pos) }, pos, s, &work);
         nlist.reset();
         for (clist.threads[0..clist.len]) |t| {
             work += 1;
@@ -590,7 +630,7 @@ pub fn searchFrom(p: *const Program, sc: *Scratch, s: []const u8, from: usize, p
     }
     const caps = matched orelse return .{ .found = null, .positions = positions, .work = work, .finished = true };
     return .{
-        .found = .{ .start = caps[0], .end = match_end, .group = if (caps[1] != unset and caps[2] != unset) .{ caps[1], caps[2] } else null },
+        .found = .{ .start = caps[0], .end = match_end, .groups = groupsOf(caps) },
         .positions = positions,
         .work = work,
         .finished = true,

@@ -955,7 +955,9 @@ test "builtins: re_replace: every match, `\\1`, anchors over the whole text, emp
     // `\\1` is the group's text; "" where the match did not pass through it.
     try f.expectOutput("print(re_replace(\"x=1, y=22\", \"(\\\\w)=\", \"\\\\1:\"), re_replace(\"b\", \"(a)?b\", \"<\\\\1>\"))", "x:1, y:22\t<>\n");
     // The rest of the replacement is literal.
-    try f.expectOutput("print(re_replace(\"ab\", \"(a)\", \"[\\\\2$1&%1]\"))", "[\\2$1&%1]b\n");
+    try f.expectOutput("print(re_replace(\"ab\", \"(a)\", \"[$1&%1]\"))", "[$1&%1]b\n");
+    // A group the pattern does not have is a mistake, never the bytes.
+    try f.expectStop("print(re_replace(\"ab\", \"(a)\", \"\\\\2\"))", .argument);
     // `^`, `$` and `\\b` see the whole text, not what is left of it.
     try f.expectOutput("print(re_replace(\"aaa\", \"^a\", \"b\"), re_replace(\"abab\", \"b$\", \"\"), re_replace(\"ab ab xab\", \"\\\\bab\", \"X\"))", "baa\taba\tX X xab\n");
     // An empty match moves on a byte, the byte kept.
@@ -964,6 +966,35 @@ test "builtins: re_replace: every match, `\\1`, anchors over the whole text, emp
     // `\\1` with no group to fill it is a mistake, not literal text.
     try f.expectStop("print(re_replace(\"a\", \"a\", \"\\\\1\"))", .argument);
     try f.expectStop("print(re_replace(\"a\", \"a\", \"b\", {nocase = 1}))", .type);
+}
+
+test "builtins: re_find's several groups: in order of their `(`, nested, one not taking part, and `(?:...)` capturing nothing" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    // Two and three groups; `group` is still the first.
+    try f.expectOutput("local m = re_find(\"key=value\", \"(\\\\w+)=(\\\\w+)\") print(m.group, join(m.groups, \"|\"))", "key\tkey|value\n");
+    try f.expectOutput("print(join(re_find(\"2026-10-27\", \"(\\\\d+)-(\\\\d+)-(\\\\d+)\").groups, \"|\"))", "2026|10|27\n");
+    // An optional group that does not take part is "", and keeps its place.
+    try f.expectOutput("print(join(re_find(\"ac\", \"(a)(b)?(c)\").groups, \"|\"))", "a||c\n");
+    // Nested: numbered by their `(`, the outer first.
+    try f.expectOutput("print(join(re_find(\"x=12;\", \"x=((\\\\d)\\\\d*);\").groups, \"|\"))", "12|1\n");
+    // A repeated group keeps its last turn.
+    try f.expectOutput("print(join(re_find(\"abcabd\", \"(ab(c|d))*\").groups, \"|\"))", "abd|d\n");
+    // `(?:...)` groups and repeats without a number: the next `(` is 1.
+    try f.expectOutput("local m = re_find(\"replacement\", \"re(?:place)?(ment)?\") print(m.text, join(m.groups, \"|\"))", "replacement\tment\n");
+    try f.expectOutput("print(has_key(re_find(\"aa\", \"(?:a)+\"), \"groups\"))", "false\n");
+    // Nine is the most; lookaround is still not in the subset.
+    try f.expectOutput("print(#re_find(\"abcdefghi\", \"(a)(b)(c)(d)(e)(f)(g)(h)(i)\").groups)", "9\n");
+    try f.expectStop("print(re_find(\"abcdefghij\", \"(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\"))", .argument);
+    try f.expectStop("print(re_find(\"ab\", \"a(?=b)\"))", .argument);
+    // re_replace names each: `\2` and `\1`, swapped; one not taking part is "".
+    try f.expectOutput("print(re_replace(\"a=1, b=2\", \"(\\\\w)=(\\\\d)\", \"\\\\2=\\\\1\"))", "1=a, 2=b\n");
+    try f.expectOutput("print(re_replace(\"ac\", \"(a)(b)?(c)\", \"[\\\\1\\\\2\\\\3]\"))", "[ac]\n");
+    // **THE ONE PLACE THE MACHINE PARTS FROM A BACKTRACKER** (regex.zig,
+    // "Nested groups under a loop"): a backtracker takes `ab.`. Pinned, so a
+    // fix shows here.
+    try f.expectOutput("print(re_find(\"ab.\", \"(?:\\\\w*(?:|.))*\").text)", "ab\n");
 }
 
 test "builtins: re_find's nocase must be a boolean" {

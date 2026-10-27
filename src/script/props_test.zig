@@ -413,8 +413,30 @@ const GNode = struct {
     set: usize = 0,
     quant: enum { one, star, plus, opt } = .one,
     inner: GAlt = &.{},
+    /// A group's number, from 1; 0 for `(?:...)`.
+    index: u8 = 0,
 };
 const GAlt = []const []const GNode;
+
+/// The groups a pattern has had made: at most three of either kind, a
+/// capture numbered by its `(`, nested or not.
+const GenGroups = struct { made: u8 = 0, captures: u8 = 0 };
+
+/// Whether `alt` has a group of either kind.
+fn hasGroup(alt: GAlt) bool {
+    for (alt) |seq| for (seq) |node| if (node.kind == .group) return true;
+    return false;
+}
+
+/// How many capture groups `alt` has.
+fn capturesIn(alt: GAlt) u8 {
+    var n: u8 = 0;
+    for (alt) |seq| for (seq) |node| if (node.kind == .group) {
+        if (node.index > 0) n += 1;
+        n += capturesIn(node.inner);
+    };
+    return n;
+}
 
 /// The classes the generator writes: each a base and whether it is
 /// negated, so a case folded under `nocase` is folded before the negation
@@ -436,14 +458,14 @@ const gen_sets = [_]struct { text: []const u8, base: []const u8, negated: bool =
 /// `A` against `a` is what `nocase` changes.
 const gen_alphabet = "ab1 .\nA";
 
-fn genAlt(rand: std.Random, arena: std.mem.Allocator, len_most: usize, group_left: *bool) error{OutOfMemory}!GAlt {
+fn genAlt(rand: std.Random, arena: std.mem.Allocator, len_most: usize, gen: *GenGroups) error{OutOfMemory}!GAlt {
     const n: usize = if (rand.uintLessThan(u8, 3) == 0) 2 + rand.uintAtMost(usize, 1) else 1;
     const alt = try arena.alloc([]const GNode, n);
-    for (alt) |*seq| seq.* = try genSeq(rand, arena, len_most, group_left);
+    for (alt) |*seq| seq.* = try genSeq(rand, arena, len_most, gen);
     return alt;
 }
 
-fn genSeq(rand: std.Random, arena: std.mem.Allocator, len_most: usize, group_left: *bool) error{OutOfMemory}![]const GNode {
+fn genSeq(rand: std.Random, arena: std.mem.Allocator, len_most: usize, gen: *GenGroups) error{OutOfMemory}![]const GNode {
     const n = rand.uintAtMost(usize, len_most);
     const seq = try arena.alloc(GNode, n);
     for (seq) |*node| {
@@ -454,10 +476,14 @@ fn genSeq(rand: std.Random, arena: std.mem.Allocator, len_most: usize, group_lef
             11 => .{ .kind = .start },
             12 => .{ .kind = .end },
             13 => .{ .kind = .boundary },
-            else => if (group_left.*) blk: {
-                group_left.* = false;
-                var none = false;
-                break :blk .{ .kind = .group, .inner = try genAlt(rand, arena, 3, &none) };
+            else => if (gen.made < 3) blk: {
+                gen.made += 1;
+                var index: u8 = 0;
+                if (rand.uintLessThan(u8, 3) != 0) {
+                    gen.captures += 1;
+                    index = gen.captures;
+                }
+                break :blk .{ .kind = .group, .index = index, .inner = try genAlt(rand, arena, 3, gen) };
             } else .{ .kind = .lit, .c = 'a' },
         };
         if (node.kind != .start and node.kind != .end and node.kind != .boundary) node.quant = switch (rand.uintLessThan(u8, 8)) {
@@ -466,6 +492,10 @@ fn genSeq(rand: std.Random, arena: std.mem.Allocator, len_most: usize, group_lef
             3 => .opt,
             else => .one,
         };
+        // **A REPEATED GROUP HOLDS NO GROUP**: there the machine and a
+        // backtracker part (regex.zig, "Nested groups under a loop"), so the
+        // property promises nothing of it.
+        if (node.kind == .group and (node.quant == .star or node.quant == .plus) and hasGroup(node.inner)) node.quant = .opt;
     }
     return seq;
 }
@@ -487,7 +517,7 @@ fn render(out: *std.ArrayList(u8), alt: GAlt) error{OutOfMemory}!void {
                 .end => try out.append(a, '$'),
                 .boundary => try out.appendSlice(a, "\\b"),
                 .group => {
-                    try out.append(a, '(');
+                    try out.appendSlice(a, if (node.index == 0) "(?:" else "(");
                     try render(out, node.inner);
                     try out.append(a, ')');
                 },
@@ -521,12 +551,13 @@ const Ref = struct {
     s: []const u8,
     nocase: bool = false,
 
-    const Caps = struct { gs: ?usize = null, ge: ?usize = null };
+    const Caps = struct { g: [regex.groups_most][2]?usize = @splat(.{ null, null }) };
     const Hit = struct { end: usize, caps: Caps };
     const Cont = union(enum) {
         done,
         seq: struct { rest: []const GNode, next: *const Cont },
-        close: *const Cont,
+        /// A capture group's end: its number less one.
+        close: struct { next: *const Cont, k: usize },
         /// After a `*` turn begun at `start`: another turn, or on.
         again: struct { node: *const GNode, start: usize, next: *const Cont },
         /// After a `+`'s first turn, begun at `start`: more turns, or on;
@@ -538,7 +569,11 @@ const Ref = struct {
         return switch (k.*) {
             .done => .{ .end = pos, .caps = caps },
             .seq => |q| r.seqAt(q.rest, q.next, pos, caps),
-            .close => |next| r.go(next, pos, .{ .gs = caps.gs, .ge = pos }),
+            .close => |q| blk: {
+                var c = caps;
+                c.g[q.k][1] = pos;
+                break :blk r.go(q.next, pos, c);
+            },
             .again => |q| if (pos == q.start) null else r.star(q.node, q.next, pos, caps),
             .more => |q| if (pos == q.start) r.go(q.next, pos, caps) else r.star(q.node, q.next, pos, caps),
         };
@@ -580,7 +615,14 @@ const Ref = struct {
             .start => if (pos == 0) r.go(k, pos, caps) else null,
             .end => if (pos == r.s.len) r.go(k, pos, caps) else null,
             .boundary => if ((pos > 0 and wordByte(r.s[pos - 1])) != (at != null and wordByte(at.?))) r.go(k, pos, caps) else null,
-            .group => r.alts(n.inner, &Cont{ .close = k }, pos, .{ .gs = pos, .ge = null }),
+            .group => if (n.index == 0) r.alts(n.inner, k, pos, caps) else blk: {
+                // The start is recorded at the `(`, the end at the `)`, as the
+                // machine records them: a turn that never closes leaves both
+                // as an earlier turn had them.
+                var c = caps;
+                c.g[n.index - 1][0] = pos;
+                break :blk r.alts(n.inner, &Cont{ .close = .{ .next = k, .k = n.index - 1 } }, pos, c);
+            },
         };
     }
 
@@ -596,15 +638,32 @@ const Ref = struct {
             if (r.alts(alt, &Cont{ .done = {} }, start, .{})) |h| return .{
                 .start = start,
                 .end = h.end,
-                .group = if (h.caps.gs != null and h.caps.ge != null) .{ h.caps.gs.?, h.caps.ge.? } else null,
+                .groups = groupsOf(h.caps),
             };
         }
         return null;
     }
 };
 
-fn groupText(s: []const u8, f: regex.Found) []const u8 {
-    return if (f.group) |g| s[g[0]..g[1]] else "";
+fn groupsOf(caps: Ref.Caps) [regex.groups_most]?[2]usize {
+    var g: [regex.groups_most]?[2]usize = @splat(null);
+    for (&g, caps.g) |*x, c| {
+        if (c[0] != null and c[1] != null) x.* = .{ c[0].?, c[1].? };
+    }
+    return g;
+}
+
+/// Group `k`'s text (from 1), "" where the match did not pass through it.
+fn groupText(s: []const u8, f: regex.Found, k: usize) []const u8 {
+    return if (f.groups[k - 1]) |g| s[g[0]..g[1]] else "";
+}
+
+/// Every capture group's text, `|` between, as the scripts join them.
+fn groupsText(out: *std.ArrayList(u8), s: []const u8, f: regex.Found, n: usize) !void {
+    for (1..n + 1) |k| {
+        if (k > 1) try out.append(testing.allocator, '|');
+        try out.appendSlice(testing.allocator, groupText(s, f, k));
+    }
 }
 
 test "expensive fuzz: property: re_find's machine finds what a backtracking matcher finds, on random patterns of the subset and random strings, `|`, `\\b` and `nocase` among them" {
@@ -618,8 +677,8 @@ test "expensive fuzz: property: re_find's machine finds what a backtracking matc
     for (0..20_000) |round| {
         var arena = std.heap.ArenaAllocator.init(testing.allocator);
         defer arena.deinit();
-        var group_left = true;
-        const tree = try genAlt(rand, arena.allocator(), 6, &group_left);
+        var gen: GenGroups = .{};
+        const tree = try genAlt(rand, arena.allocator(), 6, &gen);
         pattern.clearRetainingCapacity();
         try render(&pattern, tree);
         s.clearRetainingCapacity();
@@ -643,7 +702,7 @@ test "expensive fuzz: property: re_find's machine finds what a backtracking matc
             matched += 1;
             try testing.expectEqual(w.start, got.found.?.start);
             try testing.expectEqual(w.end, got.found.?.end);
-            try testing.expectEqualStrings(groupText(s.items, w), groupText(s.items, got.found.?));
+            try testing.expectEqualDeep(w.groups, got.found.?.groups);
         }
     }
     // The rounds are not all misses.
@@ -678,8 +737,8 @@ test "expensive fuzz: property: re_find and re_match in a script say what the ba
     for (0..300) |round| {
         var arena = std.heap.ArenaAllocator.init(testing.allocator);
         defer arena.deinit();
-        var group_left = true;
-        const tree = try genAlt(rand, arena.allocator(), 6, &group_left);
+        var gen: GenGroups = .{};
+        const tree = try genAlt(rand, arena.allocator(), 6, &gen);
         pattern.clearRetainingCapacity();
         try render(&pattern, tree);
         const nocase = rand.boolean();
@@ -695,12 +754,14 @@ test "expensive fuzz: property: re_find and re_match in a script say what the ba
         try src.appendSlice(testing.allocator,
             \\"
             \\local m = re_find(s, p, o)
-            \\if m then print(m.at, "[" .. m.text .. "]", "[" .. get(m, "group", "-") .. "]", re_match(s, p, o)) else print("none", re_match(s, p, o)) end
+            \\if m then print(m.at, "[" .. m.text .. "]", "[" .. get(m, "group", "-") .. "]", "[" .. (has_key(m, "groups") and join(m.groups, "|") or "-") .. "]", re_match(s, p, o)) else print("none", re_match(s, p, o)) end
         );
-        const has_group = std.mem.indexOfScalar(u8, pattern.items, '(') != null;
+        const captures = capturesIn(tree);
         want.clearRetainingCapacity();
         if ((Ref{ .s = s, .nocase = nocase }).find(tree)) |w| {
-            try want.print(testing.allocator, "{d}\t[{s}]\t[{s}]\ttrue\n", .{ w.start + 1, s[w.start..w.end], if (has_group) groupText(s, w) else "-" });
+            try want.print(testing.allocator, "{d}\t[{s}]\t[{s}]\t[", .{ w.start + 1, s[w.start..w.end], if (captures > 0) groupText(s, w, 1) else "-" });
+            if (captures > 0) try groupsText(&want, s, w, captures) else try want.append(testing.allocator, '-');
+            try want.appendSlice(testing.allocator, "]\ttrue\n");
         } else try want.appendSlice(testing.allocator, "none\tfalse\n");
         const out = try f.output(src.items);
         defer testing.allocator.free(out);
@@ -725,20 +786,32 @@ test "expensive fuzz: property: re_replace in a script says what repeated search
     for (0..300) |round| {
         var arena = std.heap.ArenaAllocator.init(testing.allocator);
         defer arena.deinit();
-        var group_left = true;
-        const tree = try genAlt(rand, arena.allocator(), 6, &group_left);
+        var gen: GenGroups = .{};
+        const tree = try genAlt(rand, arena.allocator(), 6, &gen);
         pattern.clearRetainingCapacity();
         try render(&pattern, tree);
         const nocase = rand.boolean();
         const s = s_buf[0..rand.uintAtMost(usize, s_buf.len)];
         for (s) |*c| c.* = gen_alphabet[rand.uintLessThan(usize, gen_alphabet.len)];
-        const has_group = std.mem.indexOfScalar(u8, pattern.items, '(') != null;
+        // The replacement names every capture group: `<\1|\2>`.
+        const captures = capturesIn(tree);
+        var with_buf: [32]u8 = undefined;
+        var with: std.ArrayList(u8) = .initBuffer(&with_buf);
+        with.appendAssumeCapacity('<');
+        for (1..@as(usize, captures) + 1) |k| {
+            if (k > 1) with.appendAssumeCapacity('|');
+            with.appendSliceAssumeCapacity("\\\\");
+            with.appendAssumeCapacity('0' + @as(u8, @intCast(k)));
+        }
+        with.appendAssumeCapacity('>');
         src.clearRetainingCapacity();
         try src.appendSlice(testing.allocator, "local s = \"");
         try appendShaleString(&src, s);
         try src.appendSlice(testing.allocator, if (nocase) "\"\nlocal o = {nocase = true}\nlocal p = \"" else "\"\nlocal o = {nocase = false}\nlocal p = \"");
         try appendShaleString(&src, pattern.items);
-        try src.appendSlice(testing.allocator, if (has_group) "\"\nprint(\"[\" .. re_replace(s, p, \"<\\\\1>\", o) .. \"]\")" else "\"\nprint(\"[\" .. re_replace(s, p, \"<>\", o) .. \"]\")");
+        try src.appendSlice(testing.allocator, "\"\nprint(\"[\" .. re_replace(s, p, \"");
+        try src.appendSlice(testing.allocator, with.items);
+        try src.appendSlice(testing.allocator, "\", o) .. \"]\")");
         // The oracle: search from the end of the last match (a byte on
         // after an empty one), over the whole of `s`.
         const ref: Ref = .{ .s = s, .nocase = nocase };
@@ -747,7 +820,9 @@ test "expensive fuzz: property: re_replace in a script says what repeated search
         var at: usize = 0;
         while (at <= s.len) {
             const w = ref.findFrom(tree, at) orelse break;
-            try want.print(testing.allocator, "{s}<{s}>", .{ s[at..w.start], groupText(s, w) });
+            try want.print(testing.allocator, "{s}<", .{s[at..w.start]});
+            try groupsText(&want, s, w, captures);
+            try want.append(testing.allocator, '>');
             if (w.end > w.start) {
                 at = w.end;
             } else {

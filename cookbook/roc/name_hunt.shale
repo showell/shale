@@ -71,15 +71,15 @@ function hunt(p)
   local i = 0
   for l in lines(read(p)) do
     i = i + 1
-    local m = re_find(l, "^([a-z][a-z0-9_]*!?) [:=] ")
+    -- The name (its `!` too), `:` or `=`, and what follows.
+    local m = re_find(l, "^([a-z][a-z0-9_]*)(!?) ([:=]) (.*)$")
     if m ~= nil then
-      local full = m.group
-      local effect = ends_with(full, "!")
-      local name = full
-      if effect then name = sub(full, 1, #full - 1) end
+      local name = m.groups[1]
+      local effect = m.groups[2] == "!"
+      local full = name .. m.groups[2]
       local ws = split(name, "_")
-      local is_annotation = sub(l, #full + 2, #full + 2) == ":"
-      local t = trim(sub(l, #full + 4))
+      local is_annotation = m.groups[3] == ":"
+      local t = trim(m.groups[4])
       if effect and not is_annotation and is_participle(ws[1]) then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
       local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
       if asks and not is_annotation and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end

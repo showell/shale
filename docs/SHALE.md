@@ -586,9 +586,9 @@ change_bytes` past those budgets.
 | `like(s, pattern)` | a boolean | |
 | `match_path(path, pattern)` | a boolean | `argument` past 64 parts |
 | `between(s, a, b)` | the text between, or nil | |
-| `re_find(s, pattern[, {nocase}])` | the leftmost match, `{at, text[, group]}`, or nil | `argument` for a pattern past 256 bytes or with what the subset leaves out |
+| `re_find(s, pattern[, {nocase}])` | the leftmost match, `{at, text[, groups, group]}`, or nil | `argument` for a pattern past 256 bytes or with what the subset leaves out |
 | `re_match(s, pattern[, {nocase}])` | a boolean: whether `s` holds a match | as `re_find` |
-| `re_replace(s, pattern, replacement[, {nocase}])` | `s` with every match replaced | as `re_find`; `argument` for `\1` in the replacement with no group in the pattern |
+| `re_replace(s, pattern, replacement[, {nocase}])` | `s` with every match replaced | as `re_find`; `argument` for a `\N` in the replacement past the pattern's groups |
 | `rep(s, n)` | `s`, `n` times | `argument` for `n` < 0 |
 | `substitute(s, old, new)` | `s` with each `old` replaced | `argument` for `old` = "" |
 | `path(a, b, ...)` | the parts joined with `/` | |
@@ -743,9 +743,9 @@ error
 
 | builtin | gives |
 |---|---|
-| `re_find(s, pattern[, {nocase = true}])` | the leftmost match: `at` (1-based, as `find`) and `text`, and `group`, the capture group's text, when the pattern has one ("" where the match did not go through it); nil when there is none: `if m == nil` (or `if m then`). `nocase`: ASCII letters match either case |
+| `re_find(s, pattern[, {nocase = true}])` | the leftmost match: `at` (1-based, as `find`) and `text`, and, when the pattern has capture groups, `groups`, each one's text in the order of its `(` ("" where the match did not go through it), and `group`, the first's (`m.groups[1]`), so a one-group pattern reads as it always has; nil when there is none: `if m == nil` (or `if m then`). `nocase`: ASCII letters match either case |
 | `re_match(s, pattern[, {nocase = true}])` | whether `s` holds a match, anywhere, as `grep` says of a line; `^` and `$` pin it to the whole |
-| `re_replace(s, pattern, replacement[, {nocase = true}])` | `s` with every non-overlapping match replaced, left to right; each search sees the whole of `s`, so `^`, `$` and `\b` mean its real edges. The replacement is literal but for `\1` (`"\\1"` in a string), the group's text ("" where the match did not go through it); `\1` with no group in the pattern stops. After an empty match the next search starts a byte on, that byte kept: `re_replace("ab", "", "-")` is `-a-b-`. Each search is charged as `re_find`'s, so a pattern whose search looks past each short match to the end of `s` costs steps in the square of the length |
+| `re_replace(s, pattern, replacement[, {nocase = true}])` | `s` with every non-overlapping match replaced, left to right; each search sees the whole of `s`, so `^`, `$` and `\b` mean its real edges. The replacement is literal but for `\1` to `\9` (`"\\1"` in a string), that group's text ("" where the match did not go through it): `re_replace("a=1", "(\\w)=(\\d)", "\\2=\\1")` is `1=a`. A `\N` past the pattern's groups stops. After an empty match the next search starts a byte on, that byte kept: `re_replace("ab", "", "-")` is `-a-b-`. Each search is charged as `re_find`'s, so a pattern whose search looks past each short match to the end of `s` costs steps in the square of the length |
 
 | in a pattern | is |
 |---|---|
@@ -758,7 +758,8 @@ error
 | `^`, `$` | the string's start, its end |
 | `\b`, `\B` | a word's edge (a letter, digit or `_` on one side and not the other, or the string's end), and a place that is not one |
 | `a\|b` | either, **the loosest** (`^error\|warn` is `^error` or `warn`), the leftmost alternative that matches taken first |
-| `( ... )` | **one capture group a pattern**, which may hold alternatives, `(info\|warn)`; it may repeat, `(ab)*`, and keeps its last turn |
+| `( ... )` | **a capture group**, up to nine a pattern, numbered by their `(` left to right, nested or not; one may hold alternatives, `(info\|warn)`, and repeat, `(ab)*`, keeping its last turn |
+| `(?: ... )` | a group that does not capture: alternatives or a repetition with no number, `re(?:place)?(ment)?`. `(?=`, `(?!` and other `(?` forms are refused |
 
 **`{nocase = true}`** folds ASCII letters when the pattern compiles (a step
 a byte more), so the search costs what it would without; a class is
@@ -1497,7 +1498,7 @@ holds every source of the module.
 - **No remove from a list or a map.** A list only grows, which is what
   lets `for x in` walk it in place.
 - **No floats, no closures.** Patterns only as the regular expressions'
-  linear subset, `re_find` and `re_match`: one group, no backreferences,
+  linear subset, `re_find` and `re_match`: nine groups, no backreferences,
   no backtracking.
 - **Offsets in files are 0-based; positions in strings are 1-based.** The
   first are the site's (sidecars count bytes from 0); the second are
