@@ -391,7 +391,10 @@ function edits_all(list)
   -- A file named twice, by any spelling (a mount's, the root's), is checked
   -- against its earlier edits' result, as `edit` will meet it.
   local checked = {}
+  -- Each item is one `edit`: a change, its bytes the file as written.
+  local bytes = 0
   for item in list do
+    if #item[2] > 64 then fail("`edits_all`: " .. item[1] .. " has " .. #item[2] .. " edits, and `edit` takes at most 64 a call; nothing written") end
     local key = real(item[1])
     local text = get(checked, key, nil)
     if text == nil then text = read(item[1]) end
@@ -400,6 +403,7 @@ function edits_all(list)
       j = j + 1
       local where = "`edits_all`: " .. item[1] .. "'s edit " .. j .. ": "
       local all = get(e, "all", false)
+      if e.old == "" then fail(where .. "`old` is empty; nothing written") end
       if get(e, "word", false) then
         local r = edit_words(text, e.old, e.new)
         if r.n == 0 then fail(where .. "`old` is not there as a whole word; nothing written") end
@@ -413,7 +417,11 @@ function edits_all(list)
       end
     end
     checked[key] = text
+    bytes = bytes + #text
   end
+  local left = budget()
+  if #list > left.changes then fail("`edits_all`: " .. #list .. " files to write, and the budget has " .. left.changes .. " change" .. (left.changes == 1 and "" or "s") .. " left; nothing written") end
+  if bytes > left.change_bytes then fail("`edits_all`: " .. bytes .. " bytes to write, and the budget has " .. left.change_bytes .. " left; nothing written") end
   -- A file that may not change (a read-only mount's) stops it here,
   -- before any is written.
   for item in list do host("may_change", item[1]) end
