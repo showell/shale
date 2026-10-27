@@ -7,12 +7,11 @@
 //! `nocase` folds ASCII letters at compile time. Counted repetition,
 //! backreferences and lookaround are refused with a message.
 //!
-//! **Nested groups under a loop:** where a repeated group holds another
-//! group whose first way matches nothing (`(\w*(|.))*`), a turn of the loop
-//! that would reach an instruction an earlier turn reached at the same place
-//! is dropped, so the match can end sooner than a backtracker's (QUEUE 253,
-//! found by the reference property). Everywhere else the match is the
-//! backtracker's, groups and all.
+//! A loop whose turn can match nothing (`(\w*(|.))*`, `(a*)*`) ends at a turn
+//! that took nothing, as a backtracker's does: its threads carry a bit for
+//! it, so a state is an instruction and those bits (at most four loops deep,
+//! sixteen states an instruction), and the match is the backtracker's, groups
+//! and all (QUEUE 253 found where it was not; 259 made it so).
 //!
 //! A pattern compiles to a Pike VM program of a few instructions per byte. A
 //! search advances all threads one byte at a time in order of preference,
@@ -50,6 +49,14 @@ pub const Op = enum(u8) {
     /// Matches only at a word edge (`c` 0) or only not at one (`c` 1). An edge
     /// has a word byte on one side and none on the other.
     boundary,
+    /// A turn of loop `x` begins: its "took something" bit is cleared.
+    turn,
+    /// A turn of loop `x` ends: one that took nothing ends the loop here, as
+    /// a backtracker's empty turn does.
+    again,
+    /// A `+`'s first turn ends: one that took nothing goes on to `y`, past the
+    /// loop, as a backtracker's does; one that took something, on.
+    first,
     /// The pattern has matched.
     match,
 };
@@ -65,12 +72,32 @@ pub const Program = struct {
     groups: u8,
     /// Whether the pattern begins with `^`, so it can only match at the start.
     anchored: bool,
+    /// Each instruction's loops whose turn can take nothing, the ones its
+    /// thread's bits are told apart by.
+    encl: []Encl,
+    /// Where each instruction's states start: one for each setting of its
+    /// `encl` bits.
+    base: []u32,
+    /// The states a position can hold: the instructions, each times two to
+    /// the loops around it whose turn can take nothing.
+    states: u32,
 
     pub fn deinit(p: *Program, alloc: std.mem.Allocator) void {
         alloc.free(p.insts);
         alloc.free(p.sets);
+        alloc.free(p.encl);
+        alloc.free(p.base);
     }
 };
+
+/// The loops (by number) whose turn can take nothing around one instruction.
+pub const Encl = struct { n: u8 = 0, ids: [nest_most]u8 = undefined };
+
+/// Loops whose turn can take nothing: at most this many a pattern, nested at
+/// most `nest_most` deep, so a position's states are at most sixteen times
+/// the instructions.
+pub const empty_loops_most = 16;
+pub const nest_most = 4;
 
 /// Why a pattern was refused: the offending byte offset, and a message saying
 /// what to write instead.
@@ -325,9 +352,59 @@ const Reader = struct {
     }
 };
 
+/// Whether `n` can match without taking a byte.
+fn nullable(n: Node) bool {
+    if (n.quant == .star or n.quant == .opt) return true;
+    return switch (n.kind) {
+        .byte, .any, .set => false,
+        .start, .end, .boundary, .not_boundary => true,
+        .group => nullableAlt(n.inner),
+    };
+}
+
+fn nullableAlt(a: Alt) bool {
+    for (a) |s| {
+        var all = true;
+        for (s) |n| if (!nullable(n)) {
+            all = false;
+            break;
+        };
+        if (all) return true;
+    }
+    return false;
+}
+
+/// A loop's turn, instructions `from` to `to`: the instructions whose
+/// threads loop `id`'s bit tells apart.
+const Range = struct { id: u8, from: u16, to: u16 };
+
 const Emitter = struct {
     insts: std.ArrayList(Inst) = .empty,
     alloc: std.mem.Allocator,
+    refused: *Refusal,
+    /// Loops whose turn can take nothing, numbered as they are emitted.
+    loops: u8 = 0,
+    ranges: std.ArrayList(Range) = .empty,
+
+    /// A new loop whose turn can take nothing.
+    fn emptyLoop(e: *Emitter) Error!u8 {
+        if (e.loops == empty_loops_most) {
+            e.refused.* = .{ .at = 0, .message = "more than 16 loops whose turn can match nothing (`(a*)*`, `(a|)+`): write some so a turn takes a byte" };
+            return error.Refused;
+        }
+        e.loops += 1;
+        return e.loops - 1;
+    }
+
+    /// One turn of loop `id`, `turn`, the atom, and its end (`op`, `again`
+    /// or `first`), recorded as a range: the end's index.
+    fn turnOf(e: *Emitter, n: Node, id: u8, op: Op) Error!u16 {
+        const from = try e.emit(.{ .op = .turn, .x = id });
+        try e.atom(n);
+        const end = try e.emit(.{ .op = op, .x = id });
+        try e.ranges.append(e.alloc, .{ .id = id, .from = from, .to = end });
+        return end;
+    }
 
     fn emit(e: *Emitter, i: Inst) Error!u16 {
         try e.insts.append(e.alloc, i);
@@ -384,6 +461,24 @@ const Emitter = struct {
     /// Thompson's construction. Each split prefers its first way, so every
     /// repetition is greedy.
     fn node(e: *Emitter, n: Node) Error!void {
+        // **A LOOP WHOSE TURN CAN TAKE NOTHING** (QUEUE 259): its threads
+        // carry a bit, "this turn took something", and states are told
+        // apart by it, so a new turn begun where an earlier one stood is not
+        // lost to that one's visit. A turn that took nothing ends the loop
+        // (`again`); a `+`'s first such turn goes on past it (`first`), as a
+        // backtracker's do.
+        if ((n.quant == .star or n.quant == .plus) and nullable(.{ .kind = n.kind, .c = n.c, .set = n.set, .inner = n.inner, .index = n.index })) {
+            const id = try e.emptyLoop();
+            var first: ?u16 = null;
+            if (n.quant == .plus) first = try e.turnOf(n, id, .first);
+            const loop = try e.emit(.{ .op = .split });
+            _ = try e.turnOf(n, id, .again);
+            _ = try e.emit(.{ .op = .jmp, .x = loop });
+            e.insts.items[loop].x = loop + 1;
+            e.insts.items[loop].y = e.here();
+            if (first) |f| e.insts.items[f].y = e.here();
+            return;
+        }
         switch (n.quant) {
             .one => try e.atom(n),
             .star => {
@@ -421,13 +516,37 @@ pub fn compile(alloc: std.mem.Allocator, pattern: []const u8, options: Options, 
     var r: Reader = .{ .p = pattern, .alloc = alloc, .tree = tree.allocator(), .refused = refused, .options = options };
     errdefer r.sets.deinit(alloc);
     const top = try r.alt(false);
-    var e: Emitter = .{ .alloc = alloc };
+    var e: Emitter = .{ .alloc = alloc, .refused = refused };
     errdefer e.insts.deinit(alloc);
+    defer e.ranges.deinit(alloc);
     try e.alt(top);
     _ = try e.emit(.{ .op = .match });
     const insts = try e.insts.toOwnedSlice(alloc);
     errdefer alloc.free(insts);
+    // Each instruction's loops, from the turns' ranges, and its states.
+    const encl = try alloc.alloc(Encl, insts.len);
+    errdefer alloc.free(encl);
+    @memset(encl, .{});
+    for (e.ranges.items) |rg| for (encl[rg.from .. rg.to + 1]) |*en| {
+        if (std.mem.indexOfScalar(u8, en.ids[0..en.n], rg.id) != null) continue;
+        if (en.n == nest_most) {
+            refused.* = .{ .at = 0, .message = "loops whose turn can match nothing (`(a*)*`), nested more than four deep" };
+            return error.Refused;
+        }
+        en.ids[en.n] = rg.id;
+        en.n += 1;
+    };
+    const base = try alloc.alloc(u32, insts.len);
+    errdefer alloc.free(base);
+    var states: u32 = 0;
+    for (encl, base) |en, *b| {
+        b.* = states;
+        states += @as(u32, 1) << @intCast(en.n);
+    }
     return .{
+        .encl = encl,
+        .base = base,
+        .states = states,
         .insts = insts,
         .sets = try r.sets.toOwnedSlice(alloc),
         .groups = r.groups,
@@ -460,7 +579,20 @@ fn wordByte(c: u8) bool {
 const Caps = [1 + 2 * groups_most]usize;
 const unset = std.math.maxInt(usize);
 
-const Thread = struct { pc: u16, caps: Caps };
+/// `flags`: bit `k` set when loop `k`'s turn has taken a byte (every bit is
+/// set by a byte taken; a turn clears its own).
+const Thread = struct { pc: u16, caps: Caps, flags: u16 = 0 };
+
+/// The state a thread is in: its instruction and the bits of the loops
+/// around it.
+fn stateOf(p: *const Program, pc: u16, flags: u16) u32 {
+    const en = p.encl[pc];
+    var k: u32 = 0;
+    for (en.ids[0..en.n], 0..) |id, i| {
+        if (flags & (@as(u16, 1) << @intCast(id)) != 0) k |= @as(u32, 1) << @intCast(i);
+    }
+    return p.base[pc] + k;
+}
 
 /// The threads at one position, in order of preference. `stamp[pc] == now`
 /// marks an instruction already visited at this position; `reset` clears all
@@ -486,7 +618,7 @@ pub const Scratch = struct {
     stack: []Thread,
 
     pub fn init(alloc: std.mem.Allocator, p: *const Program) error{OutOfMemory}!Scratch {
-        const n = p.insts.len;
+        const n = p.states;
         const a_threads = try alloc.alloc(Thread, n);
         errdefer alloc.free(a_threads);
         const a_stamp = try alloc.alloc(u64, n);
@@ -545,13 +677,22 @@ fn add(p: *const Program, sc: *Scratch, list: *List, first: Thread, pos: usize, 
         var t = sc.stack[top];
         while (true) {
             work.* += 1;
-            if (list.stamp[t.pc] == list.now) break;
-            list.stamp[t.pc] = list.now;
+            const st = stateOf(p, t.pc, t.flags);
+            if (list.stamp[st] == list.now) break;
+            list.stamp[st] = list.now;
             const i = p.insts[t.pc];
             switch (i.op) {
+                .turn => {
+                    t.flags &= ~(@as(u16, 1) << @intCast(i.x));
+                    t.pc += 1;
+                },
+                .again => if (t.flags & (@as(u16, 1) << @intCast(i.x)) != 0) {
+                    t.pc += 1;
+                } else break,
+                .first => t.pc = if (t.flags & (@as(u16, 1) << @intCast(i.x)) != 0) t.pc + 1 else i.y,
                 .jmp => t.pc = i.x,
                 .split => {
-                    sc.stack[top] = .{ .pc = i.y, .caps = t.caps };
+                    sc.stack[top] = .{ .pc = i.y, .caps = t.caps, .flags = t.flags };
                     top += 1;
                     t.pc = i.x;
                 },
@@ -622,7 +763,7 @@ pub fn searchFrom(p: *const Program, sc: *Scratch, s: []const u8, from: usize, p
                     break :set p.sets[i.x].isSet(s[pos]);
                 },
             };
-            if (ok) add(p, sc, nlist, .{ .pc = t.pc + 1, .caps = t.caps }, pos + 1, s, &work);
+            if (ok) add(p, sc, nlist, .{ .pc = t.pc + 1, .caps = t.caps, .flags = std.math.maxInt(u16) }, pos + 1, s, &work);
         }
         std.mem.swap(*List, &clist, &nlist);
         if (pos == s.len) break;

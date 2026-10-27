@@ -672,9 +672,8 @@ what the gate refuses with what to do instead.
 - **Regular expressions are a subset**: up to nine capture groups (and
   `(?:...)`), no `{n,m}`, no lookaround, no backreferences (each refused by
   name). In return no pattern makes a search slower than linear, and its
-  cost is known before it runs. One shape parts from a backtracker: a
-  repeated group holding a group whose first way is empty (`(\w*(|.))*`)
-  can end its match sooner (regex.zig's header says why).
+  cost is known before it runs, and the match is the one a backtracker
+  would find, loops whose turn can take nothing among them.
 - **A file is read whole by `grep` and `edit`**, at most the call-bytes cap
   (64 MiB under `shale`, `--budget call_bytes=N`; 1 MiB on a site): a
   bigger one goes through `read_lines` a part at a time.

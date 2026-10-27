@@ -66,7 +66,7 @@ fn searched(run: *Run, pos: ast.Pos, b: B, s: []const u8, pattern: []const u8, a
 
 /// One search of `s` from byte `from`, charged as `searched` charges.
 fn searchedFrom(run: *Run, pos: ast.Pos, c: *regex.Cached, s: []const u8, from: usize) Error!?regex.Found {
-    const per: u64 = c.program.insts.len;
+    const per: u64 = c.program.states;
     const most = (run.budgets.steps -| run.steps) / per + 1;
     const r = regex.searchFrom(&c.program, &c.scratch, s, from, most);
     run.tally(r.work);
