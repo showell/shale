@@ -232,6 +232,8 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&b.addRunArtifact(gate_test).step);
     test_step.dependOn(&web_smoke.step);
+    // The format is checked with the tests: by hand, build.zig went unformatted.
+    test_step.dependOn(&b.addFmt(.{ .paths = &.{ b.path("src"), b.path("tools"), b.path("build.zig") }, .check = true }).step);
     // The script fuzzer's count (src/script/fuzz_test.zig): a few hundred
     // sources by default, as many as asked for with -Dscript-fuzz.
     const fuzz_runs = b.option(u32, "script-fuzz", "how many random and mutated sources the script fuzzer runs (default 400)") orelse 400;
