@@ -382,6 +382,36 @@ function edit_word_byte(c)
   return c ~= "" and re_find(c, "^[A-Za-z0-9_]$") ~= nil
 end
 
+-- **INTERNAL to `edits_all`**: whether `x` is a list (`#` takes one, and
+-- refuses a map).
+function edit_list_len(x)
+  return #x
+end
+
+-- **INTERNAL to `edits_all`**: whether `x` is a map (`keys` takes one).
+function edit_keys(x)
+  return keys(x)
+end
+
+-- **INTERNAL to `edits_all`**: an edit's shape, as `edit` will hold it,
+-- refused before any file is written: a map of `old` and `new` (strings)
+-- and `all` and `word` (booleans), no other key.
+function edit_shape(p, j, e)
+  local where = "`edits_all`: " .. p .. "'s edit " .. j
+  if attempt(edit_list_len, e).ok or not attempt(edit_keys, e).ok then fail(where .. " is not a map, `{old = ..., new = ...}`; nothing written") end
+  for k in keys(e) do
+    if k ~= "old" and k ~= "new" and k ~= "all" and k ~= "word" then fail(where .. " takes `old`, `new`, `all` and `word`, not `" .. k .. "`; nothing written") end
+  end
+  for k in {"old", "new"} do
+    if not has_key(e, k) then fail(where .. " has no `" .. k .. "`; nothing written") end
+    if not attempt(option_text, e[k]).ok then fail(where .. "'s `" .. k .. "` is not a string; nothing written") end
+  end
+  for k in {"all", "word"} do
+    if has_key(e, k) and e[k] ~= true and e[k] ~= false then fail(where .. "'s `" .. k .. "` is not true or false; nothing written") end
+  end
+  return nil
+end
+
 -- **INTERNAL to `edits_all`**: `text` with each whole-word `old` replaced
 -- by `new`, as `edit`'s `{word = true, all = true}` does: `{text, n}`.
 function edit_words(text, old, new)
@@ -433,8 +463,10 @@ function edits_all(list)
     local text = get(checked, key, nil)
     if text == nil then text = read(item[1]) end
     local j = 0
+    if #item[2] == 0 then fail("`edits_all`: " .. item[1] .. " has no edits; nothing written") end
     for e in item[2] do
       j = j + 1
+      edit_shape(item[1], j, e)
       local where = "`edits_all`: " .. item[1] .. "'s edit " .. j .. ": "
       local all = get(e, "all", false)
       if e.old == "" then fail(where .. "`old` is empty; nothing written") end
