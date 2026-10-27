@@ -2,7 +2,7 @@
 // writes and walks it, and the tree read back. `zig build web-test`, which
 // passes the module's path.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { loadShale } from "./shale.js";
 import { sample, first } from "./sample.js";
 import { lessons } from "./lessons.js";
@@ -113,14 +113,29 @@ expect("runaway says why", r.report.includes("stopped at scripts/runaway.shale:6
 expect("first is a script", sample[first] !== undefined, true);
 
 // The tutorial's lessons, every cell in order on one tree, as the page
-// replays them: each finishes, or stops where it says it stops on purpose.
+// replays them: each prints its `out` exactly, and finishes, or stops with
+// its `stops` line (where and why, without the steps). `--rewrite` writes
+// what they print now into lessons.js instead, for a human to read in the
+// diff; the test itself never rewrites.
+const rewrite = process.argv.includes("--rewrite");
+const pins = [];
 shale.clear();
 lessons.forEach((l, i) => {
   l.cells.forEach((c, j) => {
-    r = shale.run(c.code, {}, `lesson ${i + 1}, script ${j + 1}`);
-    expect(`lesson ${i + 1} script ${j + 1} ${c.stops ? "stops" : "finishes"}: ${r.report.trim().split("\n").at(-1)}`, r.finished, !c.stops);
+    const name = `lesson ${i + 1}, script ${j + 1}`;
+    r = shale.run(c.code, {}, name);
+    const stops = r.finished ? undefined : stopLine(r.report, name);
+    pins.push({ out: r.output, stops });
+    if (rewrite) return;
+    expect(`${name} prints its out (node web/smoke_test.mjs <shale.wasm> --rewrite)`, r.output, c.out);
+    expect(`${name} ${c.stops ? "stops" : "finishes"} as it says`, stops, c.stops);
   });
 });
+if (rewrite) {
+  const file = new URL("./lessons.js", import.meta.url);
+  writeFileSync(file, pinned(readFileSync(file, "utf8"), pins));
+  console.log(`web smoke test: pinned ${pins.length} cells in web/lessons.js; read the diff`);
+}
 expect("the lessons build the blog", shale.read("index.md")?.startsWith("# Field Notes\n\n- 2026-10-11: [Field notes on crows]"), true);
 expect("the lessons' tags", shale.read("tags.md"), "# Tags\n\n- birds (1)\n- coast (1)\n- meta (1)\n- walking (2)\n- weather (1)\n");
 expect("fifteen lessons", lessons.length, 15);
@@ -136,3 +151,50 @@ if (failed) {
   process.exit(1);
 }
 console.log("web smoke test: ok");
+
+// A report's stop as a cell's `stops` pins it: `3:13: refused: ...`, the
+// script's name and the steps left off.
+function stopLine(report, name) {
+  const line = report.split("\n").find((s) => s.startsWith("── stopped at ")) ?? report.trim().split("\n").at(-1);
+  return line.replace(`── stopped at ${name}:`, "").replace(/ \(\d+ steps\)$/, "");
+}
+
+// lessons.js's text with each cell's `out` and `stops` set from `pins`, in
+// order, just after its `code`: the old pins go, nothing else changes.
+function pinned(src, pins) {
+  const code = /^( *)code: R`/gm;
+  let text = "";
+  let from = 0;
+  let n = 0;
+  for (let m; (m = code.exec(src)) !== null; n++) {
+    const end = valueEnd(src, m.index + m[0].length - 2);
+    let rest = end;
+    for (let old; (old = /^\n *(out|stops): /.exec(src.slice(rest))) !== null; ) rest = valueEnd(src, rest + old[0].length);
+    const p = pins[n];
+    text += src.slice(from, end) + `\n${m[1]}out: ${literal(p.out)},`;
+    if (p.stops !== undefined) text += `\n${m[1]}stops: ${JSON.stringify(p.stops)},`;
+    from = rest;
+    code.lastIndex = rest;
+  }
+  if (n !== pins.length) throw new Error(`lessons.js: ${n} cells' code found, ${pins.length} run`);
+  return text + src.slice(from);
+}
+
+// Where the value at `i` (R`...`, "...", or true) and its comma end.
+function valueEnd(src, i) {
+  if (src.startsWith("true", i)) i += 4;
+  else {
+    const close = src.startsWith("R`", i) ? "`" : '"';
+    i += close === "`" ? 2 : 1;
+    while (src[i] !== close) i += src[i] === "\\" ? 2 : 1;
+    i += 1;
+  }
+  if (src[i] !== ",") throw new Error(`lessons.js: no comma after the value ending at ${i}`);
+  return i + 1;
+}
+
+// An output as lessons.js writes it: raw, as it prints, when nothing in it
+// would end or escape the template; JSON otherwise.
+function literal(s) {
+  return /[`\\\r]|\$\{/.test(s) ? JSON.stringify(s) : "R`" + s + "`";
+}

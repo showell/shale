@@ -2,9 +2,13 @@
 // each cell is a whole Shale script, run against the project's files. A
 // lesson starts from the files the cells of every lesson before it make, as
 // written here, so a reader's own edits never break a later lesson.
-// web/smoke_test.mjs runs every cell, in order.
+// web/smoke_test.mjs runs every cell, in order, and holds each to its `out`
+// (what it prints, exactly) and, for a cell meant to stop, its `stops` (the
+// stop's line: where and why, without the steps). When an output changes on
+// purpose, `node web/smoke_test.mjs zig-out/web/shale.wasm --rewrite` writes
+// the new pins here; read the diff, and the prose beside it.
 //
-// Prose: `code`, **bold**; a cell with `stops` is meant to stop.
+// Prose: `code`, **bold**.
 
 const R = String.raw;
 
@@ -21,6 +25,10 @@ export const lessons = [
 print("Hello, Shale")
 print("two and two make " .. 2 + 2)
 print("print joins several values with tabs:", 42, true)`,
+        out: R`Hello, Shale
+two and two make 4
+print joins several values with tabs:	42	true
+`,
       },
       {
         say: [
@@ -29,6 +37,10 @@ print("print joins several values with tabs:", 42, true)`,
         ],
         code: R`print('single quotes work too')
 print("a line\nand another")`,
+        out: R`single quotes work too
+a line
+and another
+`,
       },
     ],
   },
@@ -46,6 +58,10 @@ print("words a post:", words // posts)
 print("left over:", words % posts)
 posts = posts + 1
 print("posts now:", posts)`,
+        out: R`words a post:	416
+left over:	2
+posts now:	4
+`,
       },
       {
         say: [
@@ -54,12 +70,15 @@ print("posts now:", posts)`,
         code: R`local words = 1250
 local posts = 3
 print(words / posts)`,
-        stops: true,
+        out: R``,
+        stops: "3:13: refused: `/` divides into a float, and this language has no floats: use `//` (integer division)",
       },
       {
         say: ["`const` names a value that never changes. A script's constants usually sit at the top."],
         code: R`const BLOG = "Field Notes"
 print("This blog is called " .. BLOG .. ", " .. #BLOG .. " letters long.")`,
+        out: R`This blog is called Field Notes, 11 letters long.
+`,
       },
     ],
   },
@@ -74,11 +93,18 @@ print("This blog is called " .. BLOG .. ", " .. #BLOG .. " letters long.")`,
         ],
         code: R`replace("posts/hello.md", "Hello, world!\n")
 print(read("posts/hello.md"))`,
+        out: R`Hello, world!
+
+`,
       },
       {
         say: ["`append` adds to the end of a file. Run this one twice and look at the file on the right."],
         code: R`append("posts/hello.md", "This blog is written with Shale.\n")
 print(read("posts/hello.md"))`,
+        out: R`Hello, world!
+This blog is written with Shale.
+
+`,
       },
     ],
   },
@@ -95,6 +121,11 @@ print(#titles .. " titles; the first is " .. titles[1])
 for t in titles do
   print("- " .. t)
 end`,
+        out: R`3 titles; the first is Hello, world
+- Hello, world
+- Tide pools
+- A walk in the fog
+`,
       },
       {
         say: ["`push` adds an item. `for i = 1, n` counts. `join` makes one string of a list."],
@@ -104,6 +135,12 @@ for i = 1, #titles do
   print(i, titles[i])
 end
 print(join(titles, " / "))`,
+        out: R`1	Hello, world
+2	Tide pools
+3	A walk in the fog
+4	Field notes on crows
+Hello, world / Tide pools / A walk in the fog / Field notes on crows
+`,
       },
     ],
   },
@@ -124,6 +161,9 @@ end
 
 print(slug("A walk in the fog"))
 print(slug("Hello, world"))`,
+        out: R`a-walk-in-the-fog
+hello-world
+`,
       },
       {
         say: [
@@ -144,6 +184,11 @@ post("Hello, world", "2026-09-01", "meta", "Field notes from short outings, most
 post("Tide pools", "2026-09-14", "coast, walks", "Anemones close when the water leaves. The pools at the north end hold the most, and the gulls know it. Go an hour before low tide and the rocks are still dry enough to stand on.")
 post("A walk in the fog", "2026-10-02", "walks, weather", "The fog came in at noon. By two the far side of the bay was gone, and the foghorn started. The sidewalks were wet without a drop of rain.")
 post("Field notes on crows", "2026-10-11", "birds", "Seven crows on the wire at dawn, the same seven as yesterday. One of them carries a bottle cap from roof to roof and never drops it. They leave together when the bus comes, and come back one at a time.")`,
+        out: R`wrote posts/hello-world.md
+wrote posts/tide-pools.md
+wrote posts/a-walk-in-the-fog.md
+wrote posts/field-notes-on-crows.md
+`,
       },
     ],
   },
@@ -157,6 +202,13 @@ post("Field notes on crows", "2026-10-11", "birds", "Seven crows on the wire at 
   print(name)
 end
 print(exists("posts/hello.md"), exists("posts/goodbye.md"), is_dir("posts"))`,
+        out: R`a-walk-in-the-fog.md
+field-notes-on-crows.md
+hello-world.md
+hello.md
+tide-pools.md
+true	false	true
+`,
       },
       {
         say: [
@@ -168,6 +220,9 @@ replace("drafts/owls.md", "title: Owls at dusk\ndate: 2026-10-20\ntags: birds\n-
 for name in ls("") do
   print(name)
 end`,
+        out: R`drafts
+posts
+`,
       },
     ],
   },
@@ -189,6 +244,11 @@ end`,
     print(name, size, "short")
   end
 end`,
+        out: R`a-walk-in-the-fog.md	205	medium
+field-notes-on-crows.md	263	long
+hello-world.md	100	short
+tide-pools.md	236	medium
+`,
       },
       {
         say: ["`and`, `or` and `not` combine conditions. Only `nil` and `false` count as false."],
@@ -198,6 +258,8 @@ end`,
     print(name .. " is a walk without fog")
   end
 end`,
+        out: R`tide-pools.md is a walk without fog
+`,
       },
     ],
   },
@@ -216,6 +278,12 @@ for k in keys(post) do
   print(k, post[k])
 end
 print(has_key(post, "tags"), get(post, "tags", "(no tags)"))`,
+        out: R`Tide pools	2026-09-14
+title	Tide pools
+date	2026-09-14
+words	39
+false	(no tags)
+`,
       },
       {
         say: ["Maps are good counters. `words` splits text at spaces."],
@@ -226,6 +294,12 @@ end
 for w in keys(counts) do
   print(w, counts[w])
 end`,
+        out: R`the	3
+fog	1
+and	2
+crows	1
+tide	1
+`,
       },
     ],
   },
@@ -255,6 +329,11 @@ print(m.date)
 for tag in split(m.tags, ", ") do
   print("tag: " .. tag)
 end`,
+        out: R`Tide pools
+2026-09-14
+tag: coast
+tag: walks
+`,
       },
     ],
   },
@@ -269,6 +348,12 @@ end`,
         code: R`for e in walk_all("", {kind = "file"}) do
   print(e.path, e.size)
 end`,
+        out: R`drafts/owls.md	67
+posts/a-walk-in-the-fog.md	205
+posts/field-notes-on-crows.md	263
+posts/hello-world.md	100
+posts/tide-pools.md	236
+`,
       },
       {
         say: ["`table` lines up a list of maps in columns, numbers to the right."],
@@ -280,6 +365,14 @@ for e in walk_all("", {kind = "file"}) do
 end
 print(table(rows, {"file", "bytes"}))
 print(#rows .. " files, " .. total .. " bytes")`,
+        out: R`file                           bytes
+drafts/owls.md                    67
+posts/a-walk-in-the-fog.md       205
+posts/field-notes-on-crows.md    263
+posts/hello-world.md             100
+posts/tide-pools.md              236
+5 files, 871 bytes
+`,
       },
     ],
   },
@@ -310,6 +403,14 @@ sort(posts, "date", "desc")
 print(table(posts, {"date", "title"}))
 print()
 print("newest: " .. posts[1].title)`,
+        out: R`date        title
+2026-10-11  Field notes on crows
+2026-10-02  A walk in the fog
+2026-09-14  Tide pools
+2026-09-01  Hello, world
+
+newest: Field notes on crows
+`,
       },
     ],
   },
@@ -324,6 +425,9 @@ print("newest: " .. posts[1].title)`,
     print(name .. ":" .. hit.line, hit.text)
   end
 end`,
+        out: R`a-walk-in-the-fog.md:1	title: A walk in the fog
+a-walk-in-the-fog.md:5	The fog came in at noon. By two the far side of the bay was gone, and the foghorn started. The sidewalks were wet without a drop of rain.
+`,
       },
       {
         say: [
@@ -334,6 +438,11 @@ end`,
   local m = re_find(read(p), [=[date: (\d+-\d+)]=])
   print(name, "'the' " .. count_in(p, "the") .. " times", "month " .. m.group)
 end`,
+        out: R`a-walk-in-the-fog.md	'the' 5 times	month 2026-10
+field-notes-on-crows.md	'the' 5 times	month 2026-10
+hello-world.md	'the' 0 times	month 2026-09
+tide-pools.md	'the' 5 times	month 2026-09
+`,
       },
     ],
   },
@@ -347,6 +456,12 @@ end`,
           "Run it a second time and it stops: the old text is gone, and `edit` will not guess. A change you meant to make once fails loudly the second time.",
         ],
         code: R`edit("posts/tide-pools.md", "Anemones close", "Sea anemones close")`,
+        out: R`--- a/posts/tide-pools.md
++++ b/posts/tide-pools.md
+@@ -5,1 +5,1 @@
+-Anemones close when the water leaves. The pools at the north end hold the most, and the gulls know it. Go an hour before low tide and the rocks are still dry enough to stand on.
++Sea anemones close when the water leaves. The pools at the north end hold the most, and the gulls know it. Go an hour before low tide and the rocks are still dry enough to stand on.
+`,
       },
       {
         say: [
@@ -358,6 +473,17 @@ end`,
     edit(p, "walks", "walking", {all = true, word = true})
   end
 end`,
+        out: R`--- a/posts/a-walk-in-the-fog.md
++++ b/posts/a-walk-in-the-fog.md
+@@ -3,1 +3,1 @@
+-tags: walks, weather
++tags: walking, weather
+--- a/posts/tide-pools.md
++++ b/posts/tide-pools.md
+@@ -3,1 +3,1 @@
+-tags: coast, walks
++tags: coast, walking
+`,
       },
     ],
   },
@@ -395,6 +521,14 @@ for p in posts do
 end
 replace("index.md", page)
 print(page)`,
+        out: R`# Field Notes
+
+- 2026-10-11: [Field notes on crows](posts/field-notes-on-crows.md)
+- 2026-10-02: [A walk in the fog](posts/a-walk-in-the-fog.md)
+- 2026-09-14: [Tide pools](posts/tide-pools.md)
+- 2026-09-01: [Hello, world](posts/hello-world.md)
+
+`,
       },
       {
         say: ["And a page of tags, each with how many posts carry it."],
@@ -412,6 +546,15 @@ for t in sort(keys(tags)) do
 end
 replace("tags.md", page)
 print(page)`,
+        out: R`# Tags
+
+- birds (1)
+- coast (1)
+- meta (1)
+- walking (2)
+- weather (1)
+
+`,
       },
     ],
   },
@@ -424,7 +567,8 @@ print(page)`,
           "A mistake stops the run, with the line, the column, a class (here `store`) and what to do about it. Nothing is guessed: a missing file is never an empty string.",
         ],
         code: R`print(read("posts/missing.md"))`,
-        stops: true,
+        out: R``,
+        stops: "1:7: store: `read(\"posts/missing.md\")`: not found (FileNotFound): `exists(p)` asks first",
       },
       {
         say: [
@@ -446,6 +590,10 @@ for p in {"posts/tide-pools.md", "index.md", "drafts/owls.md"} do
     print(p, "skipped: " .. r.error)
   end
 end`,
+        out: R`posts/tide-pools.md	Tide pools
+index.md	skipped: index.md has no title line
+drafts/owls.md	Owls at dusk
+`,
       },
       {
         say: [
@@ -459,7 +607,10 @@ local n = 0
 while true do
   n = n + 1
 end`,
-        stops: true,
+        out: R`steps left:	4999998
+changes left:	1000
+`,
+        stops: "7:9: budget steps: the step budget (5000000 steps) ran out",
       },
     ],
     end: [

@@ -230,10 +230,21 @@ pub fn build(b: *std.Build) void {
     gate_test.root_module.addImport("shale_gate_options", gate_options.createModule());
 
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&b.addRunArtifact(gate_test).step);
+    // **CHEAP FIRST** (metal-vmm QUEUE 252): the format, then every test
+    // binary compiled, then the small tests: `quick`, in seconds. Nothing
+    // costly starts until it passes: a compile waits on the format, every
+    // unit run and the browser's smoke test on `quick`, so a format slip or
+    // a compile error is said before any test runs. The format is checked
+    // with the tests: by hand, build.zig went unformatted.
+    const fmt_check = b.addFmt(.{ .paths = &.{ b.path("src"), b.path("tools"), b.path("build.zig") }, .check = true });
+    const quick = b.step("quick", "The cheap checks, in seconds: the format, every test binary compiled, and shale-gate's and the signer's tests (no unit test runs: `test` runs them after these pass)");
+    quick.dependOn(&fmt_check.step);
+    for ([_]*std.Build.Step.Compile{ gate_test, signer_test, wasm, runner }) |c| c.step.dependOn(&fmt_check.step);
+    quick.dependOn(&b.addRunArtifact(gate_test).step);
+    quick.dependOn(&b.addRunArtifact(signer_test).step);
+    web_smoke.step.dependOn(quick);
+    test_step.dependOn(quick);
     test_step.dependOn(&web_smoke.step);
-    // The format is checked with the tests: by hand, build.zig went unformatted.
-    test_step.dependOn(&b.addFmt(.{ .paths = &.{ b.path("src"), b.path("tools"), b.path("build.zig") }, .check = true }).step);
     // The script fuzzer's count (src/script/fuzz_test.zig): a few hundred
     // sources by default, as many as asked for with -Dscript-fuzz.
     const fuzz_runs = b.option(u32, "script-fuzz", "how many random and mutated sources the script fuzzer runs (default 400)") orelse 400;
@@ -292,7 +303,9 @@ pub fn build(b: *std.Build) void {
     // `zig build test -Dtest-llvm --fuzz=N` fuzzes the `std.testing.fuzz`
     // tests (241 D2); without --fuzz they run their corpus, as any test.
     const test_llvm = b.option(bool, "test-llvm", "build the unit tests with LLVM, which `--fuzz` needs in Zig 0.17") orelse false;
-    const unit_roots = [_][]const u8{ "src/shale.zig", "src/shale_linux.zig" };
+    // Three roots, so three processes: the Zig tools' tests, the longest,
+    // run beside the Linux host's (QUEUE 252).
+    const unit_roots = [_][]const u8{ "src/shale.zig", "src/shale_linux.zig", "src/shale_zig_tools_test.zig" };
     var coverage_units: [unit_roots.len]*std.Build.Step.Compile = undefined;
     for (unit_roots, &coverage_units) |path, *for_coverage| for ([_]bool{ false, true }) |measured| {
         const unit = b.addTest(.{ .root_module = b.createModule(.{
@@ -310,8 +323,11 @@ pub fn build(b: *std.Build) void {
         if (measured) {
             for_coverage.* = unit;
         } else {
+            unit.step.dependOn(&fmt_check.step);
+            quick.dependOn(&unit.step);
             const unit_run = b.addRunArtifact(unit);
             unit_run.has_side_effects = true;
+            unit_run.step.dependOn(quick);
             test_step.dependOn(&unit_run.step);
         }
     };
@@ -360,11 +376,11 @@ pub fn build(b: *std.Build) void {
         hunt.root_module.addImport("script_test_options", script_options.createModule());
         hunt.root_module.addImport("coverage", sdk.module("coverage"));
         hunt.root_module.addImport("explore", sdk.module("explore"));
-        // Compiled by `test`, so a hunt cannot rot between expeditions.
-        test_step.dependOn(&hunt.step);
+        // Compiled by `test` (in `quick`), so a hunt cannot rot between expeditions.
+        hunt.step.dependOn(&fmt_check.step);
+        quick.dependOn(&hunt.step);
         fuzz_step.dependOn(&b.addRunArtifact(hunt).step);
     }
-    test_step.dependOn(&b.addRunArtifact(signer_test).step);
 
     // Checks the docs' cited paths and names: tools/doc_check.shale, by this
     // tree's own `shale`, from the folder that holds the repos, its fixtures

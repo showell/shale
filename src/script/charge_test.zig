@@ -176,7 +176,11 @@ const Fixture = struct {
         defer testing.allocator.free(text);
         const out = try testing.allocator.alloc(u8, 256 * 1024);
         defer testing.allocator.free(out);
-        var r = script.run(self.threaded.io(), testing.allocator, self.root, text, .{}, 0, out);
+        // **THE VM ALONE** (QUEUE 252): what is measured is the VM's charges;
+        // the gate holds the walker's steps to the VM's in every other test.
+        // Through the gate these two tests took 11 s; on the VM, 1.6 s, and a
+        // trim without its charge fails both still.
+        var r = script.runOn(.vm, self.threaded.io(), testing.allocator, self.root, text, .{}, 0, out, .{});
         defer r.deinit();
         if (r.stop) |s| {
             std.debug.print("{s}\n  stopped {d}:{d}: {s}\n", .{ text, s.line, s.column, s.message });

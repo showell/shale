@@ -311,13 +311,18 @@ test "gate: when the walker's arena runs out in a change, that change is refused
     const io = threaded.io();
     const root = try std.fs.path.join(std.testing.allocator, &.{ ".zig-cache", "tmp", &tmp.sub_path, "data" });
     defer std.testing.allocator.free(root);
-    const source = "for i = 1, 40 do local s = rep(\"x\", 300) yield() replace(\"f\" .. (i % 3), s .. i) end";
+    const source = "for i = 1, 20 do local s = rep(\"x\", 300) yield() replace(\"f\" .. (i % 3), s .. i) end";
     var out_v: [4096]u8 = undefined;
     var out_w: [4096]u8 = undefined;
-    // Every arena from 4 KiB to 32 KiB, so some budget runs out inside a change.
+    // Every arena from 4 KiB to 16 KiB, a step of 64, so some budget runs out
+    // inside a change. **TRIMMED, STILL RED** (QUEUE 252): 40 rounds to 32
+    // KiB was 10 s; with 584b42c's firstChanges undone, 7 of these sizes
+    // fail the gate (7680 7744 7808 13888 13952 15424 16128), so the sweep
+    // keeps its catch at a quarter of the cost. A coarser step would not: the
+    // red sizes are few and scattered.
     var refused_in_a_change = false;
     var n: usize = 4096;
-    while (n <= 32 * 1024) : (n += 64) {
+    while (n <= 16 * 1024) : (n += 64) {
         try tmp.dir.deleteTree(io, "data");
         try tmp.dir.createDirPath(io, "data");
         var v = script.runOn(.vm, io, std.testing.allocator, root, source, .{ .arena_bytes = n }, 0, &out_v, .{});

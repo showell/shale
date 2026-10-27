@@ -45,3 +45,18 @@ pub fn main(init: std.process.Init.Minimal) !void {
     std.debug.print("{d:>9.3} s  total, {d} tests, {d} failed, {d} leaked\n", .{ @as(f64, @floatFromInt(total)) / 1e9, fns.len, failed, leaks });
     if (failed != 0 or leaks != 0) std.process.exit(1);
 }
+
+/// `std.testing.fuzz`'s entry, as zig's runner has it outside fuzz mode: the
+/// corpus, then an empty input, each once.
+pub fn fuzz(
+    context: anytype,
+    comptime testOne: fn (context: @TypeOf(context), *testing.Smith) anyerror!void,
+    options: testing.FuzzInputOptions,
+) anyerror!void {
+    for (options.corpus) |input| {
+        var smith: testing.Smith = .{ .in = input };
+        try testOne(context, &smith);
+    }
+    var smith: testing.Smith = .{ .in = "" };
+    try testOne(context, &smith);
+}

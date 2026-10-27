@@ -200,6 +200,10 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     var scratch = std.heap.ArenaAllocator.init(h.alloc);
     defer scratch.deinit();
     var scan: Scan = .{};
+    // **SOON, THEN ONCE A SECOND**: the first look after 20 ms, each next
+    // one twice as late, to a second, so a job that ends at once is seen at
+    // once and a long one costs a look a second.
+    var nap: u64 = 20;
     while (true) {
         const j = try find(h, run, pos, args[0], "job_wait");
         if (contains) |c| {
@@ -216,7 +220,8 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         }
         const spent = monoMs() - began;
         if (spent >= limit) return result(run, pos, "timeout", null, null);
-        sleepMs(@min(if (gone) @as(u64, 10) else 1000, limit - spent));
+        sleepMs(@min(if (gone) @as(u64, 10) else nap, limit - spent));
+        nap = @min(nap * 2, 1000);
     }
 }
 
