@@ -116,6 +116,7 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
     const a = t.arena.allocator();
     try t.tmp.dir.createDirPath(t.threaded.io(), "keys");
     try t.put("keys/tok", "s3cret\n");
+    try t.tmp.dir.symLink(t.threaded.io(), "keys", "alias", .{ .is_directory = true });
     var why: []const u8 = "";
     t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/keys secrets\nall = {s}\n", .{ t.root, t.root }), "/home/x", &why);
     try testing.expectEqual(host_linux.Mount.Access.read_only, t.host.mounts[0].access);
@@ -134,6 +135,15 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
         .{ "run({\"shale-fixture\", \"cat\"}, {timeout_ms = 10000, tail = 5, cwd = \"k:\"})", "the mount `k` holds secrets" },
         .{ "run({\"shale-fixture\", \"lines\", \"1\", real(\"\") .. \"/keys/tok\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 names the mount `k`'s folder" },
         .{ "run({\"shale-fixture\", \"lines\", \"1\", real(\"\") .. \"/keys/tok\"}, {timeout_ms = 10000, tail = 5, want = \"x: y\"})", "names the mount `k`'s folder" },
+        // By any other spelling: relative to the program's folder, with `.`
+        // or `..`, after an option's `=`, through a link, in `env`, or to a job.
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", \"keys/tok\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 names the mount `k`'s folder" },
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", \"./keys/../keys/tok\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 names the mount `k`'s folder" },
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", \"--file=keys/tok\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 names the mount `k`'s folder" },
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", \"alias/tok\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 names the mount `k`'s folder" },
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", \"tok\"}, {timeout_ms = 10000, tail = 5, cwd = \"all:keys\"})", "the mount `k`" },
+        .{ "run({\"shale-fixture\", \"env\", \"F\"}, {timeout_ms = 10000, tail = 5, env = {F = \"keys/tok\"}})", "`run`'s `env` F names the mount `k`'s folder" },
+        .{ "job_start({\"shale-fixture\", \"lines\", \"1\", \"keys/tok\"}, {log = \"j.log\"})", "`job_start`'s argument 4 names the mount `k`'s folder" },
     }) |c| try t.expectStop(c[0], .atomic, .refused, c[1]);
     try testing.expectEqualStrings("s3cret\n", try t.file("keys/tok"));
     // `secrets` takes one, the value scrubbed; the mount itself is no secret.
