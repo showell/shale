@@ -144,6 +144,9 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
         .{ "run({\"shale-fixture\", \"lines\", \"1\", \"tok\"}, {timeout_ms = 10000, tail = 5, cwd = \"all:keys\"})", "the mount `k`" },
         .{ "run({\"shale-fixture\", \"env\", \"F\"}, {timeout_ms = 10000, tail = 5, env = {F = \"keys/tok\"}})", "`run`'s `env` F names the mount `k`'s folder" },
         .{ "job_start({\"shale-fixture\", \"lines\", \"1\", \"keys/tok\"}, {log = \"j.log\"})", "`job_start`'s argument 4 names the mount `k`'s folder" },
+        // A folder that holds it: `cp -r . out`, `tar` of a parent.
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", \".\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 holds the mount `k`'s folder" },
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", real(\"\")}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 holds the mount `k`'s folder" },
     }) |c| try t.expectStop(c[0], .atomic, .refused, c[1]);
     try testing.expectEqualStrings("s3cret\n", try t.file("keys/tok"));
     // `secrets` takes one, the value scrubbed; the mount itself is no secret.
