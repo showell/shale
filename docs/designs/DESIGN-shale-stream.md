@@ -1,11 +1,8 @@
 # Design: a background run's output, streamed (proposed)
 
-**Parked** (metal-vmm QUEUE, "Parked": "216's output ring and SSE stream",
-Steve, 2026-10-16: revisit when a script needs to report as it runs).
-Today `GET /admin/script` shows a background run's output after it ends.
-This is what was proposed, kept from the old SHALE-TASKS.md (its other
-sections are built and described in SHALE.md, "The contract: a run as a
-host sees it" and "The VM").
+**Parked** (metal-vmm QUEUE, "Parked"): revisit when a script needs to
+report as it runs. Today `GET /admin/script` shows a background run's
+output after it ends.
 
 A background run's output is a kept stream, served between handlers:
 

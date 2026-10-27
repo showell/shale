@@ -63,9 +63,8 @@ script names one by a value made as it runs, which cannot be checked.
 ## Before you reach for the shell
 
 **Most escapes past the gate are a shell habit for something Shale already
-does.** On 2026-10-19 and 20, 694 escapes broke down as: `grep -n` 195, `sed -n
-a,bp` 120, `git` 98, `zig build | grep` about 70. Every one of these has a
-Shale form, most of them one launch:
+does** (`grep -n`, `sed -n a,bp`, `git` and `zig build | grep` above all).
+Each has a Shale form, most of them one launch:
 
 | the habit | in Shale |
 |---|---|
@@ -107,8 +106,11 @@ whole language is [`SHALE.md`](SHALE.md).
 
 **On Linux, the Linux prelude** (`src/shale_prelude_linux.shale`; metal
 has none of it):
-- **Programs:** `run(argv, opts)` runs one (`timeout_ms` and a keep, `head`
-  or `tail` or `whole`, are required; see SHALE.md, "The runner"). Its
+- **Programs:** `run(argv, opts)` runs one and gives `{argv, code, ended,
+  ms, out, ...}`. `timeout_ms` and a keep, `head` or `tail` (lines) or
+  `whole` (bytes), are required; the rest are `cwd`, `stdin`, `env`,
+  `secrets`, `log`, `want`, and the filters `re`, `not_re`, `nocase`,
+  `before`, `after` and `width` (`Opts` in `src/shale_host_run.zig`). Its
   `cwd` is a path as every path is: under the root, or through a mount
   (`cwd = "repos:shale"` runs a sibling repo's step from another's
   checkout); `..` and an absolute path are refused. **What `run` refuses**
@@ -418,8 +420,7 @@ uses get their own `edit`, and `zig build` judges after, with
 `cookbook/zig/move_judge.shale` (and `same_tests.shale` for the test
 names). `opts.lines = {first, last}` limits it to a range.
 
-**Moving a block to another file, then its uses** (zig-webbox's linux_host split):
-move the declarations, then rename what the old file still says to the
+**Moving a block to another file, then its uses:** move the declarations, then rename what the old file still says to the
 qualified name:
 
 ```shale-linux
@@ -529,7 +530,7 @@ match.
 ## If you write Lua
 
 Shale reads like Lua, and an agent's Lua habits are most of its first
-stops (essay `essay-repl-server/notes/shale-from-the-inside.md`). Most are a clear stop;
+stops. Most are a clear stop;
 the first two can give a quiet wrong answer, an empty list:
 
 - **Patterns are regular expressions, not Lua's.** The escape is `\`
@@ -614,24 +615,14 @@ failure, a missing binary included, into a refusal). It passes exactly:
   that fails) is refused, not run. `shale cookbook:wants.shale` reads it
   back (today's, or `since=`, with counts by kind, tag and session),
   through a mount over that folder (`state = ~/.local/state/shale ro`);
-- **a subagent's call.** Its hook input carries an `agent_id` (the hooks
-  reference, "Common input fields"), and local cold agents are exempt. A
-  subagent's Bash call carries `agent_id` and `agent_type`; the top-level
-  session's calls carry neither.
+- **a subagent's call:** its hook input carries an `agent_id` (the
+  top-level session's carries none), so subagents are not gated.
 
 Anything else is refused, with one line naming both forms. Put `shale` on
 `PATH` as a link to `zig-out/bin/shale`, so a rebuild is what every launch
-runs. The hook, in `~/.claude/settings.json` or a project's
-`.claude/settings.json`, the path absolute:
-
-```json
-{"hooks": {"PreToolUse": [{"matcher": "Bash|Monitor",
-  "hooks": [{"type": "command", "command": "/ABSOLUTE/PATH/TO/shale/tools/shale-gate.sh"}]}]}}
-```
-
-The README's "Using Shale with Claude Code on your project" walks through
-installing it, turning it off, a block for `<project>/CLAUDE.md`, and what the gate refuses
-with what to do instead.
+runs. The README's "Using Shale with Claude Code on your project" has the
+hook's settings, how to turn it off, a block for `<project>/CLAUDE.md`, and
+what the gate refuses with what to do instead.
 
 ## Where Shale is worse, said plainly
 
