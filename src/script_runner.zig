@@ -156,7 +156,21 @@ pub fn main(init: std.process.Init) !u8 {
 
     const out = try gpa.alloc(u8, c.budgets.output_bytes);
     defer gpa.free(out);
-    var result = script.runWith(io, gpa, if (root.len == 0) "/" else root, source, c.budgets, now, out, .{ .args = args, .host = seam.host, .path_hook = seam.path_hook, .preludes = preludes, .diffs = if (c.verbose) .full else .summary });
+    const options: script.Options = .{ .args = args, .host = seam.host, .path_hook = seam.path_hook, .preludes = preludes, .diffs = if (c.verbose) .full else .summary };
+    // `--check`: the run made ready (parsed, its names resolved, compiled)
+    // and handed back before its first step.
+    if (c.check) {
+        const p = try script.process.Process.startWith(io, gpa, if (root.len == 0) "/" else root, source, options, c.budgets, now, out.len);
+        var checked = p.intoResult(script.Result, out);
+        defer checked.deinit();
+        if (checked.stop != null) {
+            try cli.printReport(&checked, cli.scriptName(c), preludes, .{ .budgets = c.budgets }, err);
+            return 1;
+        }
+        try err.writeAll("── checked: it parses and compiles; nothing ran\n");
+        return 0;
+    }
+    var result = script.runWith(io, gpa, if (root.len == 0) "/" else root, source, c.budgets, now, out, options);
     defer result.deinit();
 
     var out_buf: [4096]u8 = undefined;

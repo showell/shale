@@ -1088,7 +1088,7 @@ run: each stops on its budget, says what it found, and where to resume.
 ## The runner
 
 ```sh
-shale [--root DIR] [--verbose] [--undo-on-stop] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
+shale [--root DIR] [--verbose] [--undo-on-stop] [--check] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
 shale <<'SHALE'                  # no FILE, no -e: the script is stdin
 shale split.shale --args-stdin <<'ARGS'   # a FILE's values on stdin, one a line, raw
 SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
@@ -1098,6 +1098,9 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   directory.
 - **A run makes its changes and runs its programs**: on Linux, git is
   the undo ("What was decided": no dry run).
+- **`--check`**: the script is parsed and compiled with its preludes, its
+  names resolved, and nothing runs: `── checked: ...` and exit 0, or its
+  first stop and exit 1 (`cookbook:syntax.shale` uses it).
 - **`--undo-on-stop`**: a run that stops puts back every path it changed,
   the last first: a file's bytes and mode as they were, a file or folder
   it made taken away again (a folder with all in it). The Linux host keeps
