@@ -814,6 +814,10 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
     var why: []const u8 = "";
     const mounts = try parseMounts(a, try std.fmt.allocPrint(a, "# where things are\n\nruns = {s}/elsewhere\nhome = ~/\ngone = /no/such/folder\nmy-runs = {s}/elsewhere\n", .{ t.root, t.root }), "/home/someone", &why);
     try testing.expectEqualStrings("/home/someone", mounts[1].dir);
+    // The filesystem's root is a folder too: its `/` is kept, not trimmed away.
+    const top = try parseMounts(a, "top = /\nslash = /tmp/\n", "/home/someone", &why);
+    try testing.expectEqualStrings("/", top[0].dir);
+    try testing.expectEqualStrings("/tmp", top[1].dir);
     t.host.mounts = mounts;
     try t.expectOutput(
         \\replace("runs:logs/a.txt", "via the mount")
