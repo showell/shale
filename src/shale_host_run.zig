@@ -53,6 +53,12 @@ const Opts = struct {
     want: ?[]const u8 = null,
 };
 
+/// A path option (`cwd`, `log`): a string, named as `run`'s when it is not.
+fn pathOpt(run: *Run, pos: ast.Pos, k: []const u8, x: Value) Error!Value {
+    _ = try hl.strOpt(run, pos, k, x);
+    return x;
+}
+
 fn readOpts(run: *Run, pos: ast.Pos, v: Value) Error!Opts {
     var o: Opts = .{};
     const m = switch (v) {
@@ -63,7 +69,7 @@ fn readOpts(run: *Run, pos: ast.Pos, v: Value) Error!Opts {
         if (std.mem.eql(u8, k, "timeout_ms")) o.timeout_ms = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "re")) o.re = try hl.strOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "not_re")) o.not_re = try hl.strOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "nocase")) o.nocase = switch (x) {
             .boolean => |b| b,
             else => return run.fail(pos, .type, "`run`: its `nocase` must be true or false, not {s}", .{x.typeName()}),
-        } else if (std.mem.eql(u8, k, "before")) o.before = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "after")) o.after = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "head")) o.head = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "tail")) o.tail = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "width")) o.width = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "whole")) o.whole = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "log")) o.log = x else if (std.mem.eql(u8, k, "cwd")) o.cwd = x else if (std.mem.eql(u8, k, "stdin")) o.stdin = x else if (std.mem.eql(u8, k, "env")) o.env = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "secrets")) o.secrets = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "want")) o.want = try hl.strOpt(run, pos, k, x) else return run.fail(pos, .argument, "`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets and want, not `{s}`", .{k});
+        } else if (std.mem.eql(u8, k, "before")) o.before = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "after")) o.after = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "head")) o.head = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "tail")) o.tail = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "width")) o.width = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "whole")) o.whole = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "log")) o.log = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "cwd")) o.cwd = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "stdin")) o.stdin = x else if (std.mem.eql(u8, k, "env")) o.env = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "secrets")) o.secrets = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "want")) o.want = try hl.strOpt(run, pos, k, x) else return run.fail(pos, .argument, "`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets and want, not `{s}`", .{k});
     }
     if (o.timeout_ms == null) return run.fail(pos, .argument, "`run` needs `timeout_ms`: how long the program may take is the script's to say", .{});
     if (o.whole) |_| {
