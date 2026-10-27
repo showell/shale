@@ -196,3 +196,37 @@ test "cookbook: syntax.shale gives each file one verdict by its kind, a good fil
     try testing.expectEqual(@as(u8, 1), r.term.exited);
     try testing.expect(std.mem.indexOf(u8, r.stderr, "syntax: FAIL") != null);
 }
+
+test "cookbook: sealed.shale passes this tree's seals, and a plant that sets one outside its file fails by its line" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    const a = testing.allocator;
+    const shale_exe = @import("shale_test_options").shale;
+    // This tree: a script's `Path` is made by `pathArg` alone (metal-vmm QUEUE 250).
+    {
+        const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "cookbook/sealed.shale", "dir=src", "seals=path_seal:script/builtins_store.zig" } });
+        defer a.free(r.stdout);
+        defer a.free(r.stderr);
+        errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+        try testing.expectEqual(@as(u8, 0), r.term.exited);
+        try testing.expect(std.mem.indexOf(u8, r.stdout, "sealed: PASS") != null);
+    }
+    // A plant: the seal's own file sets it, its test too; another file, a
+    // string and a comment that name it, and a read of it, do not count; one
+    // literal and one assignment do.
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(io, "sub");
+    try tmp.dir.writeFile(io, .{ .sub_path = "id.zig", .data = "const Seal = struct {};\npub const Id = struct { text: []const u8, id_seal: Seal };\npub fn of(s: []const u8) Id {\n    return .{ .text = s, .id_seal = .{} };\n}\ntest {\n    _ = Id{ .text = \"\", .id_seal = .{} };\n}\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "ok.zig", .data = "const id = @import(\"id.zig\");\n// .id_seal = .{}\nconst s = \".id_seal = .{}\";\nfn f(i: id.Id) void {\n    _ = i.id_seal;\n}\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "sub/forge.zig", .data = "const id = @import(\"../id.zig\");\nfn f() id.Id {\n    return .{ .text = \"..\", .id_seal = .{} };\n}\nfn g(i: *id.Id) void {\n    i.id_seal = .{};\n}\n" });
+    const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(root);
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/sealed.shale", "dir=.", "seals=id_seal:id.zig" } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+    try testing.expectEqualStrings("FAIL sub/forge.zig:3: sets `id_seal`, which only id.zig may\nFAIL sub/forge.zig:6: sets `id_seal`, which only id.zig may\n", r.stdout);
+    try testing.expectEqual(@as(u8, 1), r.term.exited);
+}
