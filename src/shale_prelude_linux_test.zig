@@ -243,6 +243,11 @@ test "linux prelude: newest, a folder's names by when they changed, newest first
     }
     try t.expectOutput("print(join(newest(\"logs\", 3), \",\"), #newest(\"logs\", 9))", "a,d,c\t4\n");
     try t.expectOutput("print(join(newest(\".\", 99), \",\") == join(newest(\"\", 99), \",\"), #newest(\".\", 99) > 0)", "true\ttrue\n");
+    // A mount's folder as `m:` or `m:.`, as the root is.
+    const a = t.arena.allocator();
+    var why: []const u8 = "";
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "lg = {s}/logs\n", .{t.root}), "/home/someone", &why);
+    try t.expectOutput("print(join(newest(\"lg:\", 3), \",\"), join(newest(\"lg:.\", 3), \",\"))", "a,d,c\ta,d,c\n");
 }
 
 test "linux prelude: create refuses a file already there" {
