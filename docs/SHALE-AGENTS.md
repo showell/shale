@@ -694,6 +694,7 @@ what the gate refuses with what to do instead.
   program (`env`, `secrets`).
 - **Git is a prelude over `git`**, not a library: each call is a program
   run, about as fast as typing it, and its errors are git's first line.
-- **Jobs are polled:** `job_wait` looks once a second, and nothing tells a
-  script the moment a job ends.
+- **Jobs are polled:** `job_wait` looks after 20 ms, then twice as late
+  each time, to once a second; nothing tells a script the moment a job
+  ends.
 - **Integers only, bytes only**: no floats, and a string is its bytes.
