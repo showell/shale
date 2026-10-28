@@ -1,13 +1,21 @@
 -- **AWKWARD NAMES IN ROC, A QUESTION EACH** (metal-vmm QUEUE 256): the
--- same five heuristics as `cookbook/zig/name_hunt.shale`, read from Roc's
--- top-level annotations (`name : Type`) and definitions (`name = ...`).
+-- same five heuristics as `cookbook/zig/name_hunt.shale`, over Roc's
+-- annotations (`name : Type`) and definitions (`name = ...`): the top
+-- level's and a module type's members (`Html := [].{ ... }`, `X :: [].{
+-- ... }`), never a local's. They are read from Roc's own parser's tree
+-- (roc-ast, at `tools:roc-ast/bin/roc-ast`, which roc-webbox's
+-- `tools/roc_ast/install.shale` builds), so an annotation broken after its
+-- colon and a `where` clause's arrows read as Roc reads them, and a file
+-- that does not parse is a failure, never a pass.
 -- A finding is a question for a reader, never a verdict:
 --
 --   state_effect  an effect (`!`) named as a state: `held_raw!`, a past
 --                 participle first, `done!`, `ready!`
 --   question      `is_*`, `has_*`, `can_*`, `should_*` that returns no
 --                 `Bool`, or that has an effect (`is_open!`), or a `Bool`
---                 named as a state (`marked : Str -> Bool`)
+--                 named as a state (`marked : Str -> Bool`; a name holding
+--                 `_is_` or `_has_` asks, `unsigned_is_even`). An inferred
+--                 type (`is_eq : _`) is not judged.
 --   vague         a name of nothing but vague words: `handle_data`,
 --                 `process!`, `do_it`
 --   name_type     a `*_count` value that is no integer, a `*_path` one
@@ -21,16 +29,18 @@
 --   cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob=chat/**/*.roc
 --   shale cookbook:roc/name_hunt.shale self_test=1
 --
--- `self_test=1` runs it over `cookbook/roc/plants/name_hunt/`, one plant a
--- check, each named for its check: every check must fire on its own plant
--- and on no other. Only top-level names (column 1) are read.
+-- `self_test=1` runs it over `cookbook/roc/plants/name_hunt/`, each plant
+-- named for the check it holds (`question.roc`, `question_where.roc`):
+-- every check must fire on its own plants and on no other, and a
+-- `quiet_*.roc` plant (a false positive once) on none.
 --
 -- budget: steps=200000000
 
 const SELF = arg("self_test", "") == "1"
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
+const ROC_AST = "tools:roc-ast/bin/roc-ast"
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect"}
-const VERBS = {fail = true, pin = true, unpin = true, bookmark = true, receive = true, fan = true, get = true, set = true, load = true, save = true, read = true, write = true, send = true, serve = true, fetch = true, make = true, build = true, run = true, handle = true, find = true, add = true, remove = true, delete = true, create = true, update = true, store = true, announce = true, react = true, act = true, render = true, parse = true, check = true, open = true, close = true, start = true, stop = true, post = true, put = true, show = true, list = true, resume = true, append = true, replace = true, drain = true, flush = true, wait = true, reap = true, spawn = true, kill = true, lock = true, unlock = true, join = true, split = true, walk = true, scan = true, emit = true, log = true, print = true, count = true, mark = true, clear = true, reset = true, init = true, deinit = true, free = true, alloc = true, grow = true, take = true, give = true, keep = true, drop = true, move = true, copy = true, rename = true, sync = true, poll = true, accept = true, connect = true, listen = true, bind = true, refuse = true, answer = true, reply = true, respond = true, retire = true, revoke = true, sign = true, verify = true, hash = true, encode = true, decode = true, format = true, call = true, apply = true, ensure = true, try = true, ask = true, tell = true, sweep = true, prune = true, trim = true, push = true, pop = true, insert = true, index = true, search = true, match = true, route = true, dispatch = true, redirect = true, upload = true, download = true, back = true, restore = true, rotate = true, touch = true, bump = true, note = true, record = true, report = true, pick = true, choose = true, sort = true, merge = true, mount = true, unmount = true, watch = true, tick = true, step = true, advance = true, feed = true, main = true}
+const VERBS = {fail = true, pin = true, unpin = true, bookmark = true, receive = true, fan = true, get = true, set = true, load = true, save = true, read = true, write = true, send = true, serve = true, fetch = true, make = true, build = true, run = true, handle = true, find = true, add = true, remove = true, delete = true, create = true, update = true, store = true, announce = true, react = true, act = true, render = true, parse = true, check = true, open = true, close = true, start = true, stop = true, post = true, put = true, show = true, list = true, resume = true, append = true, replace = true, drain = true, flush = true, wait = true, reap = true, spawn = true, kill = true, lock = true, unlock = true, join = true, split = true, walk = true, scan = true, emit = true, log = true, print = true, count = true, mark = true, clear = true, reset = true, init = true, deinit = true, free = true, alloc = true, grow = true, take = true, give = true, keep = true, drop = true, move = true, copy = true, rename = true, sync = true, poll = true, accept = true, connect = true, listen = true, bind = true, refuse = true, answer = true, reply = true, respond = true, retire = true, revoke = true, sign = true, verify = true, hash = true, encode = true, decode = true, format = true, call = true, apply = true, ensure = true, try = true, ask = true, tell = true, sweep = true, prune = true, trim = true, push = true, pop = true, insert = true, index = true, search = true, match = true, route = true, dispatch = true, redirect = true, upload = true, download = true, back = true, restore = true, rotate = true, touch = true, bump = true, note = true, record = true, report = true, pick = true, choose = true, sort = true, merge = true, mount = true, unmount = true, watch = true, tick = true, step = true, advance = true, feed = true, main = true, map = true, fold = true, ["for"] = true}
 
 const PARTICIPLES = {held = true, done = true, ready = true, kept = true, gone = true, sent = true, made = true, found = true, taken = true, given = true, shown = true, built = true, seen = true, known = true, stale = true, dirty = true}
 const ED_VERBS = {need = true, feed = true, seed = true, embed = true, speed = true, shed = true, bleed = true, proceed = true, exceed = true, succeed = true, breed = true}
@@ -54,66 +64,179 @@ function is_participle(w)
   return #w > 3 and ends_with(w, "ed") and not has_key(ED_VERBS, w)
 end
 
--- A type's result: what follows its last `->` or `=>`, or the whole.
-function result_of(t)
-  local at = 0
-  local i = 1
-  while true do
-    local a = find(t, "->", i)
-    local b = find(t, "=>", i)
-    local next = a
-    if next == nil or (b ~= nil and b < next) then next = b end
-    if next == nil then break end
-    at = next
-    i = next + 2
-  end
-  if at == 0 then return trim(t) end
-  return trim(sub(t, at + 2))
+-- ── the tree ─────────────────────────────────────────────────────────────
+
+-- roc-ast's output: a node a line, its depth its leading tabs, its first
+-- line `(kind @line.col-line.col ...)`.
+
+-- A line's depth.
+function depth_of(l)
+  local d = 0
+  while sub(l, d + 1, d + 1) == "\t" do d = d + 1 end
+  return d
 end
 
-function hunt(p)
-  local i = 0
-  for l in lines(read(p)) do
+-- The lines of the node at `at`'s children.
+function children(tree, at)
+  local out = {}
+  local i = at + 1
+  while i <= #tree.text and tree.depth[i] > tree.depth[at] do
+    if tree.depth[i] == tree.depth[at] + 1 then push(out, i) end
     i = i + 1
-    -- The name (its `!` too), `:` or `=`, and what follows.
-    local m = re_find(l, "^([a-z][a-z0-9_]*)(!?) ([:=]) (.*)$")
-    if m ~= nil then
-      local name = m.groups[1]
-      local effect = m.groups[2] == "!"
-      local full = name .. m.groups[2]
-      local ws = split(name, "_")
-      local is_annotation = m.groups[3] == ":"
-      local t = trim(m.groups[4])
-      if effect and not is_annotation and not is_participle(ws[1]) and not has_key(VERBS, ws[1]) and not has_key(VAGUE, ws[1]) and ws[1] ~= "is" and ws[1] ~= "has" then say(p, i, "noun_effect", "`" .. full .. "` has an effect but its first word, `" .. ws[1] .. "`, is no verb: it reads as a value, not an act") end
-      if effect and not is_annotation and is_participle(ws[1]) then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
-      local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
-      if asks and not is_annotation and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end
-      if is_annotation and result_of(t) == "Bool" and contains(t, "->") and is_participle(ws[1]) then say(p, i, "question", "`" .. full .. "` gives a `Bool` but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
-      if asks and is_annotation and not effect and result_of(t) ~= "Bool" then say(p, i, "question", "`" .. full .. "` asks a question but gives `" .. result_of(t) .. "`") end
-      if not is_annotation then
-        local all_vague = true
-        for w in ws do
-          if not has_key(VAGUE, w) then all_vague = false end
+  end
+  return out
+end
+
+function head(tree, at)
+  return trim(tree.text[at])
+end
+
+-- The type at `at`, as Roc writes it: `List(U8)`, `{ id : U8 }`, `[A, B]`,
+-- `(U8 -> Bool)`. roc-ast writes `->` and `=>` alike.
+function render(tree, at)
+  local t = head(tree, at)
+  local kids = children(tree, at)
+  local name = between(t, "(name \"", "\")")
+  if starts_with(t, "(ty-apply ") then
+    local args = {}
+    for k in drop(kids, 1) do push(args, render(tree, k)) end
+    return render(tree, kids[1]) .. "(" .. join(args, ", ") .. ")"
+  end
+  if starts_with(t, "(ty-fn ") then
+    local args = {}
+    for k in take(kids, #kids - 1) do push(args, render(tree, k)) end
+    return "(" .. join(args, ", ") .. " -> " .. render(tree, kids[#kids]) .. ")"
+  end
+  if starts_with(t, "(ty-record ") or starts_with(t, "(ty-tuple ") or starts_with(t, "(tags") then
+    local parts = {}
+    for k in kids do push(parts, render(tree, k)) end
+    if starts_with(t, "(ty-record ") then return "{ " .. join(parts, ", ") .. " }" end
+    if starts_with(t, "(ty-tuple ") then return "(" .. join(parts, ", ") .. ")" end
+    return join(parts, ", ")
+  end
+  if starts_with(t, "(ty-tag-union ") then return "[" .. render(tree, kids[1]) .. "]" end
+  if starts_with(t, "(anno-record-field ") then return name .. " : " .. render(tree, kids[1]) end
+  if name ~= nil and name ~= "" then return name end
+  -- An inferred type, `name : _`.
+  if starts_with(t, "(_)") then return "_" end
+  local raw = between(t, "(raw \"", "\")")
+  if raw ~= nil and raw ~= "" then return raw end
+  return split(t, " ")[1] .. ")"
+end
+
+-- The nodes a definition may sit in and still be a top-level or a module
+-- member's: a module type (`Html := [].{ ... }`, `X :: [].{ ... }`) holds
+-- its members in `associated`. Any other (a lambda's block) makes it a
+-- local, which is never a finding.
+const OUTER = {["(file"] = true, ["(statements"] = true, ["(s-type-decl"] = true, ["(associated"] = true}
+
+-- **EVERY TOP-LEVEL AND MODULE-MEMBER DEFINITION** in `paths`, by roc-ast
+-- (Roc's own parser), each `{path, line, name, annotation, fn, whole,
+-- result}`: an annotation's type rendered whole, and when it is a function
+-- its result (a `where` clause is no part of either). The tree, not the
+-- lines: an annotation broken after its colon, a member indented in a
+-- module type, and a `where` clause's arrows all read as Roc reads them.
+function definitions(paths)
+  if not exists(ROC_AST) then fail("name_hunt: no " .. ROC_AST .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it") end
+  local shown = {}
+  local reals = {}
+  for p in paths do
+    local r = real(p)
+    push(reals, r)
+    shown[r] = p
+  end
+  local out = {}
+  if #reals == 0 then return out end
+  local dump = run({real(ROC_AST)}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
+  -- A file that does not parse stops roc-ast there, its trees so far
+  -- printed: hunting those would pass the rest unread.
+  if dump.ended ~= "exit" or dump.code ~= 0 then
+    local said = lines(trim(dump.out))
+    fail("name_hunt: roc-ast: " .. (said[#said] or dump.ended))
+  end
+  local tree = {text = lines(dump.out), depth = {}}
+  for l in tree.text do push(tree.depth, depth_of(l)) end
+  local path = ""
+  local kinds = {}
+  for i = 1, #tree.text do
+    local h = head(tree, i)
+    local d = tree.depth[i]
+    if starts_with(h, "== ") then
+      path = shown[sub(h, 4)] or sub(h, 4)
+    else
+      kinds[d + 1] = split(h, " ")[1]
+      local outer = true
+      for k = 1, d do
+        if not has_key(OUTER, kinds[k]) then outer = false end
+      end
+      local line = between(h, "@", ".")
+      if outer and starts_with(h, "(s-type-anno ") then
+        local def = {path = path, line = line, name = between(h, "(name \"", "\")"), annotation = true, fn = false}
+        local kids = children(tree, i)
+        if #kids > 0 and not starts_with(head(tree, kids[1]), "(where") then
+          def.whole = render(tree, kids[1])
+          def.result = def.whole
+          if starts_with(head(tree, kids[1]), "(ty-fn ") then
+            local parts = children(tree, kids[1])
+            def.fn = true
+            def.result = render(tree, parts[#parts])
+          end
+          push(out, def)
         end
-        if #ws == 1 and has_key(ENTRY, ws[1]) then all_vague = false end
-        if all_vague then say(p, i, "vague", "`" .. full .. "` is only vague words: what does it handle, and how?") end
       end
-      if is_annotation and not contains(t, "->") and not contains(t, "=>") then
-        local last = ws[#ws]
-        if last == "count" and not has_key(INTS, t) then say(p, i, "name_type", "`" .. full .. "` is a count of type `" .. t .. "`") end
-        if last == "path" and t ~= "Str" and not contains(t, "Path") then say(p, i, "name_type", "`" .. full .. "` is a path of type `" .. t .. "`") end
-        if t == "Bool" and (ws[1] == "no" or ws[1] == "not") and #ws > 1 then say(p, i, "negative", "`" .. full .. "` is a negative flag: `" .. full .. " = Bool.false` reads twice") end
+      if outer and starts_with(h, "(s-decl ") and i < #tree.text and starts_with(head(tree, i + 1), "(p-ident ") then
+        push(out, {path = path, line = line, name = between(head(tree, i + 1), "(raw \"", "\")"), annotation = false, fn = false})
       end
-      if is_annotation and #ws > 2 and ws[1] == "is" and ws[2] == "not" then say(p, i, "negative", "`" .. full .. "` asks a negative: `!" .. full .. "(...)` reads twice") end
     end
   end
+  return out
+end
+
+-- ── the checks ───────────────────────────────────────────────────────────
+
+function hunt(def)
+  local p = def.path
+  local i = def.line
+  local effect = ends_with(def.name, "!")
+  local full = def.name
+  local name = effect and sub(full, 1, #full - 1) or full
+  local ws = split(name, "_")
+  local is_annotation = def.annotation
+  -- An `_is_` or `_has_` name asks, whatever its first word:
+  -- `unsigned_is_multiple_of` is no state named `unsigned`.
+  local asks_inside = contains(name, "_is_") or contains(name, "_has_")
+  local state = is_participle(ws[1]) and not asks_inside
+  if effect and not is_annotation and not is_participle(ws[1]) and not has_key(VERBS, ws[1]) and not has_key(VAGUE, ws[1]) and ws[1] ~= "is" and ws[1] ~= "has" then say(p, i, "noun_effect", "`" .. full .. "` has an effect but its first word, `" .. ws[1] .. "`, is no verb: it reads as a value, not an act") end
+  if effect and not is_annotation and state then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
+  local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
+  if asks and not is_annotation and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end
+  if is_annotation and def.fn and def.result == "Bool" and state then say(p, i, "question", "`" .. full .. "` gives a `Bool` but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
+  -- An inferred type (`is_eq : _`) gives what the compiler says: no
+  -- finding.
+  if asks and is_annotation and not effect and def.result ~= "Bool" and def.result ~= "_" then say(p, i, "question", "`" .. full .. "` asks a question but gives `" .. def.result .. "`") end
+  if not is_annotation then
+    local all_vague = true
+    for w in ws do
+      if not has_key(VAGUE, w) then all_vague = false end
+    end
+    if #ws == 1 and has_key(ENTRY, ws[1]) then all_vague = false end
+    if all_vague then say(p, i, "vague", "`" .. full .. "` is only vague words: what does it handle, and how?") end
+  end
+  if is_annotation and not def.fn and def.whole ~= "_" then
+    local t = def.whole
+    local last = ws[#ws]
+    if last == "count" and not has_key(INTS, t) then say(p, i, "name_type", "`" .. full .. "` is a count of type `" .. t .. "`") end
+    if last == "path" and t ~= "Str" and not contains(t, "Path") then say(p, i, "name_type", "`" .. full .. "` is a path of type `" .. t .. "`") end
+    if t == "Bool" and (ws[1] == "no" or ws[1] == "not") and #ws > 1 then say(p, i, "negative", "`" .. full .. "` is a negative flag: `" .. full .. " = Bool.false` reads twice") end
+  end
+  if is_annotation and #ws > 2 and ws[1] == "is" and ws[2] == "not" then say(p, i, "negative", "`" .. full .. "` asks a negative: `!" .. full .. "(...)` reads twice") end
   return nil
 end
 
-local files = 0
-for p in glob(GLOB) do
-  files = files + 1
-  hunt(p)
+local paths = glob(GLOB)
+local files = #paths
+for def in definitions(paths) do
+  hunt(def)
   yield()
 end
 
@@ -122,13 +245,19 @@ for c in CHECKS do push(counts, c .. " " .. found[c]) end
 print("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "))
 
 if SELF then
+  -- Every plant is judged before a failure stops the run, so one run shows
+  -- each plant that is wrong.
+  local wrong = {}
   for c in CHECKS do
     for p in glob(GLOB) do
-      local mine = contains(p, "/" .. c .. ".roc")
+      local base = sub(p, #"cookbook:roc/plants/name_hunt/" + 1)
+      local mine = base == c .. ".roc" or starts_with(base, c .. "_")
       local fired = has_key(per_file, p .. "|" .. c)
-      if mine and not fired then fail("name_hunt self_test: `" .. c .. "` does not fire on its plant " .. p) end
-      if fired and not mine then fail("name_hunt self_test: `" .. c .. "` fires on " .. p .. ", another check's plant") end
+      if mine and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. p) end
+      if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
     end
   end
-  print("name_hunt (Roc) self_test: PASS (each check fires on its plant alone)")
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail("name_hunt self_test: " .. #wrong .. " plants wrong") end
+  print("name_hunt (Roc) self_test: PASS (each check fires on its plants alone, and the quiet_ plants on none)")
 end
