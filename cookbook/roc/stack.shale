@@ -14,7 +14,9 @@
 -- three gets its widest group of two, as `roc_commas.shale` does. A second
 -- run changes nothing. **STRINGS AND COMMENTS ARE NEVER TOUCHED**: the
 -- scan steps over `"..."` (escapes and all), `'x'`, a `\\` line and a `#`
--- comment, so a comma or bracket in one is no item. What it can't reach is
+-- comment, so a comma or bracket in one is no item. A `where` clause's
+-- items are its method constraints (`k.is_eq : k, k -> Bool` is one), and
+-- a record or list pattern's rest (`..`) is no item. What it can't reach is
 -- listed: a long line with no group, and **AN ANNOTATION'S THREE OR MORE
 -- BARE ARGUMENTS** (`three : U8, U8, U8 -> U8`), a finding of its own that
 -- no comma stacks: `roc fmt` refuses a trailing one there (`U8, U8, U8, ->
@@ -46,26 +48,37 @@ function before(l, i)
   return sub(l, j, j)
 end
 
--- One group closed: its items, by the commas at its depth.
-function close_group(l, open, close, commas, depth)
+-- One group closed: its items, by the commas at its depth. A last item
+-- that is a rest pattern (`{ a, b, .. }`, `[x, .. as more]`) is no item:
+-- it names nothing that would stack.
+function close_group(l, open, close, commas, last_comma, depth)
   local inner = trim(sub(l, open + 1, close - 1))
   local trailing = ends_with(inner, ",")
   local items = commas + 1
   if trailing then items = commas end
   if inner == "" then items = 0 end
+  local last = trim(sub(l, last_comma + 1, close - 1))
+  if not trailing and commas > 0 and (last == ".." or starts_with(last, ".. as ")) then items = items - 1 end
   return {open = open, close = close, items = items, trailing = trailing, depth = depth}
 end
 
+-- A method constraint's start (`k.is_eq :`), after a comma in a `where`
+-- clause's brackets: only these commas part its items, the rest are its
+-- constraints' own (`k.is_eq : k, k -> Bool` is one item).
+const CONSTRAINT = "^ *[a-z_][A-Za-z0-9_]*\\.[a-z_][A-Za-z0-9_]*!? *:"
+
 -- **THE GROUPS THAT OPEN AND CLOSE ON `l`**, each `{open, close, items,
 -- trailing, depth}`: brackets and a lambda's `|...|`, items counted by the
--- commas at the group's own depth. Strings, characters and the comment
--- are stepped over. A group that runs onto another line is no group here.
+-- commas at the group's own depth, and in a `where [...]` by its method
+-- constraints. Strings, characters and the comment are stepped over. A
+-- group that runs onto another line is no group here.
 function groups(l)
   local out = {}
   if starts_with(trim(l), "\\\\") then return out end
-  local opens = {}
-  local kinds = {}
-  local commas = {}
+  -- The open groups, innermost last: where each opened, what closes it,
+  -- its commas so far and the last one's place, and whether it is a
+  -- `where` clause's brackets.
+  local open = {}
   local i = 1
   local n = #l
   while i <= n do
@@ -85,39 +98,33 @@ function groups(l)
     elseif c == "#" then
       break
     elseif has_key(OPENERS, c) then
-      push(opens, i)
-      push(kinds, OPENERS[c])
-      push(commas, 0)
+      push(open, {at = i, kind = OPENERS[c], commas = 0, last = i, where = c == "[" and (trim(sub(l, 1, i - 1)) == "where" or ends_with(trim(sub(l, 1, i - 1)), " where"))})
     elseif c == "|" and sub(l, i + 1, i + 1) ~= ">" and sub(l, i + 1, i + 1) ~= "|" and sub(l, i - 1, i - 1) ~= "|" then
-      if #kinds > 0 and kinds[#kinds] == "|" then
-        push(out, close_group(l, opens[#opens], i, commas[#commas], #opens - 1))
-        opens = take(opens, #opens - 1)
-        kinds = take(kinds, #kinds - 1)
-        commas = take(commas, #commas - 1)
+      if #open > 0 and open[#open].kind == "|" then
+        local g = open[#open]
+        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1))
+        open = take(open, #open - 1)
       else
         local b = before(l, i)
         if b == "" or b == "=" or b == "(" or b == "," or b == "[" or b == "{" or b == ":" then
-          push(opens, i)
-          push(kinds, "|")
-          push(commas, 0)
+          push(open, {at = i, kind = "|", commas = 0, last = i, where = false})
         end
       end
     elseif has_key(CLOSERS, c) then
       -- Pop to the opener this closes; one left open by a `|` that was
       -- no lambda is dropped with it.
-      while #kinds > 0 and kinds[#kinds] ~= c do
-        opens = take(opens, #opens - 1)
-        kinds = take(kinds, #kinds - 1)
-        commas = take(commas, #commas - 1)
+      while #open > 0 and open[#open].kind ~= c do open = take(open, #open - 1) end
+      if #open > 0 then
+        local g = open[#open]
+        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1))
+        open = take(open, #open - 1)
       end
-      if #kinds > 0 then
-        push(out, close_group(l, opens[#opens], i, commas[#commas], #opens - 1))
-        opens = take(opens, #opens - 1)
-        kinds = take(kinds, #kinds - 1)
-        commas = take(commas, #commas - 1)
+    elseif c == "," and #open > 0 then
+      local g = open[#open]
+      if not g.where or re_find(sub(l, i + 1), CONSTRAINT) ~= nil then
+        g.commas = g.commas + 1
+        g.last = i
       end
-    elseif c == "," and #commas > 0 then
-      commas[#commas] = commas[#commas] + 1
     end
     i = i + 1
   end

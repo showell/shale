@@ -13,8 +13,11 @@ it works on, `<shale>` being the shale checkout:
   top level's and module types' members (`held_raw!` named as a state).
   It reads Roc's own parser's tree (roc-ast, `tools:roc-ast/bin/roc-ast`,
   built by roc-webbox's `tools/roc_ast/install.shale`), so a broken
-  annotation or a `where` clause reads as Roc reads it. `self_test=1` runs
-  its plants (`plants/name_hunt/`).
+  annotation or a `where` clause reads as Roc reads it. A name is judged
+  once, from its annotation when it has one (a hosted effect has nothing
+  else); a `!` that names a callback's effect (`map2!`) and a name the
+  language fixes (`is_eq`, `subscript`) are not judged as the author's.
+  `self_test=1` runs its plants (`plants/name_hunt/`).
 - [roc_commas.shale](roc_commas.shale): **long lines laid out by `roc fmt`.**
   `roc fmt` never wraps a line, and it joins hand-made breaks back. A
   trailing comma after a record's, call's or lambda's last item makes it
@@ -29,7 +32,9 @@ it works on, `<shale>` being the shale checkout:
   which no trailing comma stacks.
   `write=1` gives each a trailing comma, outermost first, and runs `roc fmt`
   until nothing changes; a second run changes nothing. Strings and comments
-  are never read as items. `self_test=1` runs its plants (`plants/stack/`).
+  are never read as items, nor is a record pattern's `..`; a `where`
+  clause's items are its method constraints. `self_test=1` runs its
+  plants (`plants/stack/`).
 - [same_code.shale](same_code.shale): **the same machine code.** Two builds
   of an archive, compared instruction by instruction with Roc's hashed
   procedure names (`roc__p` and 32 hex digits, which move with the source's
