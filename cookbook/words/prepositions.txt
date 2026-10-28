@@ -1,0 +1,26 @@
+-- The prepositions a name may end in (`load_rosters_from!`, `numberIn`) or,
+-- wrongly for an effect, start with (`of!`). Read by both name hunts:
+-- `preposition_split` (one noun, several prepositions, in one file) and the
+-- `noun_effect` message for an effect that starts with one.
+-- 2026-10-28, from the prepositions survey (Steve: "generally in favor of
+-- adding prepositions to names"):
+about
+after
+at
+before
+between
+by
+for
+from
+in
+into
+of
+on
+onto
+over
+per
+to
+under
+via
+with
+without

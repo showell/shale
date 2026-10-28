@@ -23,6 +23,10 @@
 --   noun_effect   an effect whose first word is no verb this knows: a plain
 --                 noun (`links!`, `page!`), which reads as a value, not an act
 --   negative      a `no_*`/`not_*` `Bool`, an `is_not_*`
+--   preposition_split  one noun given different trailing prepositions in one
+--                 file (`blocks_of`, `blocks_in`, `blocks_from`): one
+--                 relation should keep one preposition, or the names should
+--                 say how they differ. Reported once, at the first.
 --   command_tense an effect that takes a tag union (written in place, or a
 --                 type declared in any file hunted) whose tags all start
 --                 with a past participle and none carries a payload (`pin! :
@@ -76,7 +80,7 @@ const SELF = arg("self_test", "") == "1"
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
 const ROC_AST = "tools:roc-ast/bin/roc-ast"
 const WORDS = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "preposition_split"}
 
 -- A word table of cookbook/words/, the name hunts' one home for them: a
 -- word a line, `--` starting a note. A word twice, or a line of two, is a
@@ -95,6 +99,10 @@ const VERBS = word_table("verbs.txt")
 const PARTICIPLES = word_table("participles.txt")
 const ED_VERBS = word_table("ed_verbs.txt")
 const VAGUE = word_table("vague.txt")
+const PREPS = word_table("prepositions.txt")
+-- Each file's names that end in a preposition, by the noun before it:
+-- `path|base` -> {line, preps (a set), names}.
+const SPLITS = {}
 const ENTRY = {handle = true, run = true, main = true}
 -- The names Roc's syntax and builtins call a method by, which the author
 -- does not choose (the header says where the list comes from).
@@ -321,6 +329,7 @@ function definitions(paths)
           if starts_with(head(tree, kids[1]), "(ty-fn ") then
             local parts = children(tree, kids[1])
             def.fn = true
+            def.arity = #parts - 1
             def.result = render(tree, parts[#parts])
             for a in take(parts, #parts - 1) do
               if contains(span_text(src, head(tree, a)), "=>") then def.callback = true end
@@ -407,7 +416,19 @@ function hunt(def)
     if not has_key(census, ws[1]) then census[ws[1]] = {word = ws[1], count = 0, verdict = verdict(ws[1])} end
     census[ws[1]].count = census[ws[1]].count + 1
   end
-  if effect and judged and verdict(ws[1]) == "refused" then say(p, i, "noun_effect", "`" .. full .. "` has an effect but its first word, `" .. ws[1] .. "`, is no verb: it reads as a value, not an act") end
+  if effect and judged and verdict(ws[1]) == "refused" then
+    if has_key(PREPS, ws[1]) then say(p, i, "noun_effect", "`" .. full .. "` has an effect but starts with a preposition, `" .. ws[1] .. "`: an effect is named for its act")
+    else say(p, i, "noun_effect", "`" .. full .. "` has an effect but its first word, `" .. ws[1] .. "`, is no verb: it reads as a value, not an act") end
+  end
+  if judged and #ws > 1 and has_key(PREPS, ws[#ws]) then
+    local base = join(take(ws, #ws - 1), "_")
+    local key = p .. "|" .. base
+    if not has_key(SPLITS, key) then SPLITS[key] = {path = p, line = i, base = base, preps = {}, names = {}} end
+    local s = SPLITS[key]
+    if not has_key(s.preps, ws[#ws]) then
+      s.preps[ws[#ws]] = {name = full, arity = get(def, "arity", -1)}
+    end
+  end
   if effect and judged and state then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
   local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
   if asks and judged and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end
@@ -449,6 +470,32 @@ local files = #paths
 -- 1 MiB it allows on the chat. The arena the header sets holds it.
 for def in definitions(paths) do
   hunt(def)
+end
+-- Two opposite prepositions on one noun name a matched pair on purpose
+-- (`insert_before` and `insert_after`): no split.
+const OPPOSITES = {["after|before"] = true, ["from|to"] = true, ["with|without"] = true, ["over|under"] = true, ["into|onto"] = false}
+
+-- **THE HOUSE'S `_from` WORKER IS NO SPLIT**: a recursion's helper that
+-- resumes at an index (`has_from` beside `has_at`, `blocks_from` beside
+-- `blocks_in`) takes more arguments than its siblings, and its `from` names
+-- that index. It is left out before the prepositions are counted.
+for key in sort(keys(SPLITS)) do
+  local s = SPLITS[key]
+  local least = -1
+  for prep in keys(s.preps) do
+    local a = s.preps[prep].arity
+    if a >= 0 and (least < 0 or a < least) then least = a end
+  end
+  local kept = {}
+  local kept_preps = {}
+  for prep in sort(keys(s.preps)) do
+    local e = s.preps[prep]
+    if not (prep == "from" and least >= 0 and e.arity > least) then
+      push(kept, e.name)
+      push(kept_preps, prep)
+    end
+  end
+  if #kept > 1 and not (#kept == 2 and get(OPPOSITES, join(kept_preps, "|"), false)) then say(s.path, s.line, "preposition_split", "`" .. s.base .. "` takes " .. #kept .. " prepositions here (" .. join(kept, ", ") .. "): one relation keeps one preposition, or the names say how they differ") end
 end
 
 local counts = {}
