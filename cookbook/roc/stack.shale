@@ -1,0 +1,247 @@
+-- **THREE OR MORE, ONE A LINE** (metal-vmm QUEUE 296): any list, record,
+-- tuple, call's arguments, tag payload or lambda's arguments holding three
+-- or more items on one line is a finding, `path:line: stack: ...`, and so
+-- is a line wider than `width` (100) with nothing to stack, `long: ...`.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc
+--   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc write=1
+--   shale cookbook:roc/stack.shale self_test=1
+--
+-- **THE REWRITE** (`write=1`) gives each such group a trailing comma after
+-- its last item, outermost first, and runs `roc fmt` on the files it
+-- changed, which lays a group with a trailing comma out one item a line;
+-- then again, until a pass changes nothing. A long line with no group of
+-- three gets its widest group of two, as `roc_commas.shale` does. A second
+-- run changes nothing. **STRINGS AND COMMENTS ARE NEVER TOUCHED**: the
+-- scan steps over `"..."` (escapes and all), `'x'`, a `\\` line and a `#`
+-- comment, so a comma or bracket in one is no item. What it can't reach is
+-- listed: a long line with no group (a function type's bare arguments).
+--
+-- `self_test=1` reads `cookbook/roc/plants/stack/`: each plant named for
+-- what it holds must give a finding of its kind, and `clean.roc` none.
+--
+-- budget: steps=900000000 arena_bytes=2000000000
+
+const SELF = arg("self_test", "") == "1"
+const GLOB = SELF and "cookbook:roc/plants/stack/*.roc" or arg("glob", "**/*.roc")
+const WIDTH = arg("width", 100)
+const WRITE = arg("write", "") == "1"
+const PASSES = 12
+const OPENERS = {["("] = ")", ["{"] = "}", ["["] = "]"}
+const CLOSERS = {[")"] = true, ["}"] = true, ["]"] = true}
+
+-- A line's width, a tab four columns.
+function width(l)
+  return #l + 3 * (#split(l, "\t") - 1)
+end
+
+-- The last character before `i` that is not a space, or "".
+function before(l, i)
+  local j = i - 1
+  while j > 0 and sub(l, j, j) == " " do j = j - 1 end
+  if j == 0 then return "" end
+  return sub(l, j, j)
+end
+
+-- One group closed: its items, by the commas at its depth.
+function close_group(l, open, close, commas, depth)
+  local inner = trim(sub(l, open + 1, close - 1))
+  local trailing = ends_with(inner, ",")
+  local items = commas + 1
+  if trailing then items = commas end
+  if inner == "" then items = 0 end
+  return {open = open, close = close, items = items, trailing = trailing, depth = depth}
+end
+
+-- **THE GROUPS THAT OPEN AND CLOSE ON `l`**, each `{open, close, items,
+-- trailing, depth}`: brackets and a lambda's `|...|`, items counted by the
+-- commas at the group's own depth. Strings, characters and the comment
+-- are stepped over. A group that runs onto another line is no group here.
+function groups(l)
+  local out = {}
+  if starts_with(trim(l), "\\\\") then return out end
+  local opens = {}
+  local kinds = {}
+  local commas = {}
+  local i = 1
+  local n = #l
+  while i <= n do
+    local c = sub(l, i, i)
+    if c == "\"" then
+      i = i + 1
+      while i <= n and sub(l, i, i) ~= "\"" do
+        if sub(l, i, i) == "\\" then i = i + 1 end
+        i = i + 1
+      end
+    elseif c == "'" then
+      i = i + 1
+      while i <= n and sub(l, i, i) ~= "'" do
+        if sub(l, i, i) == "\\" then i = i + 1 end
+        i = i + 1
+      end
+    elseif c == "#" then
+      break
+    elseif has_key(OPENERS, c) then
+      push(opens, i)
+      push(kinds, OPENERS[c])
+      push(commas, 0)
+    elseif c == "|" and sub(l, i + 1, i + 1) ~= ">" and sub(l, i + 1, i + 1) ~= "|" and sub(l, i - 1, i - 1) ~= "|" then
+      if #kinds > 0 and kinds[#kinds] == "|" then
+        push(out, close_group(l, opens[#opens], i, commas[#commas], #opens - 1))
+        opens = take(opens, #opens - 1)
+        kinds = take(kinds, #kinds - 1)
+        commas = take(commas, #commas - 1)
+      else
+        local b = before(l, i)
+        if b == "" or b == "=" or b == "(" or b == "," or b == "[" or b == "{" or b == ":" then
+          push(opens, i)
+          push(kinds, "|")
+          push(commas, 0)
+        end
+      end
+    elseif has_key(CLOSERS, c) then
+      -- Pop to the opener this closes; one left open by a `|` that was
+      -- no lambda is dropped with it.
+      while #kinds > 0 and kinds[#kinds] ~= c do
+        opens = take(opens, #opens - 1)
+        kinds = take(kinds, #kinds - 1)
+        commas = take(commas, #commas - 1)
+      end
+      if #kinds > 0 then
+        push(out, close_group(l, opens[#opens], i, commas[#commas], #opens - 1))
+        opens = take(opens, #opens - 1)
+        kinds = take(kinds, #kinds - 1)
+        commas = take(commas, #commas - 1)
+      end
+    elseif c == "," and #commas > 0 then
+      commas[#commas] = commas[#commas] + 1
+    end
+    i = i + 1
+  end
+  return out
+end
+
+-- The group to stack on `l`: the outermost (then widest) of three or more
+-- items with no trailing comma; else, on a line over WIDTH, the widest of
+-- two or more. nil when there is none.
+function pick(l)
+  local best = nil
+  for g in groups(l) do
+    if g.items >= 3 and not g.trailing then
+      if best == nil or g.depth < best.depth or (g.depth == best.depth and g.close - g.open > best.close - best.open) then best = g end
+    end
+  end
+  if best ~= nil or width(l) <= WIDTH then return best end
+  for g in groups(l) do
+    if g.items >= 2 and not g.trailing then
+      if best == nil or g.close - g.open > best.close - best.open then best = g end
+    end
+  end
+  return best
+end
+
+-- `l` with a comma after the last item of `g`, before the spaces that
+-- `roc fmt` puts there.
+function with_comma(l, g)
+  local j = g.close - 1
+  while j > g.open and sub(l, j, j) == " " do j = j - 1 end
+  return sub(l, 1, j) .. "," .. sub(l, j + 1)
+end
+
+function snip(l, g)
+  local s = sub(l, g.open, g.close)
+  if #s > 60 then s = sub(s, 1, 57) .. "..." end
+  return s
+end
+
+-- Every finding in the files, `{path, line, kind, what}`.
+function findings(files)
+  local out = {}
+  for p in files do
+    local ls = split(read(p), "\n")
+    for i = 1, #ls do
+      local g = nil
+      for h in groups(ls[i]) do
+        if h.items >= 3 and not h.trailing and (g == nil or h.depth < g.depth) then g = h end
+      end
+      if g ~= nil then
+        push(out, {path = p, line = i, kind = "stack", what = g.items .. " items in " .. snip(ls[i], g)})
+      elseif width(ls[i]) > WIDTH then
+        local why = starts_with(trim(ls[i]), "#") and "a comment" or (pick(ls[i]) ~= nil and "a group of two to stack" or "nothing to stack")
+        push(out, {path = p, line = i, kind = "long", what = width(ls[i]) .. " columns, " .. why})
+      end
+    end
+  end
+  return out
+end
+
+function fmt(files)
+  local argv = {"roc", "fmt"}
+  for p in files do push(argv, real(p)) end
+  local r = run(argv, {timeout_ms = 120000, tail = 20})
+  if r.code ~= 0 then
+    print(r.out)
+    fail("roc fmt failed")
+  end
+end
+
+local files = glob(GLOB)
+
+if SELF then
+  local seen = {}
+  for f in findings(files) do
+    local name = sub(f.path, #"cookbook:roc/plants/stack/" + 1)
+    seen[name] = (has_key(seen, name) and seen[name] or "") .. f.kind .. " "
+  end
+  local bad = 0
+  for p in files do
+    local name = sub(p, #"cookbook:roc/plants/stack/" + 1)
+    local want = starts_with(name, "long") and "long" or "stack"
+    local got = has_key(seen, name) and seen[name] or ""
+    local ok = (name == "clean.roc" and got == "") or (name ~= "clean.roc" and contains(got, want))
+    print((ok and "ok   " or "FAIL ") .. name .. ": " .. (got == "" and "no finding" or got))
+    if not ok then bad = bad + 1 end
+  end
+  if bad > 0 then fail(bad .. " plants wrong") end
+  print("PASS: every plant gives its finding, clean.roc none")
+elseif WRITE then
+  local pass = 1
+  local changed = 1
+  while changed > 0 and pass <= PASSES do
+    changed = 0
+    local touched = {}
+    for p in files do
+      local ls = split(read(p), "\n")
+      local n = 0
+      for i = 1, #ls do
+        if not starts_with(trim(ls[i]), "#") then
+          local g = pick(ls[i])
+          if g ~= nil then
+            ls[i] = with_comma(ls[i], g)
+            n = n + 1
+          end
+        end
+      end
+      if n > 0 then
+        replace(p, join(ls, "\n"))
+        push(touched, p)
+        changed = changed + n
+      end
+    end
+    print("pass " .. pass .. ": " .. changed .. " groups given a trailing comma, in " .. #touched .. " files")
+    if #touched > 0 then fmt(touched) end
+    pass = pass + 1
+  end
+  if changed > 0 then fail("still changing after " .. PASSES .. " passes") end
+  local left = findings(files)
+  for f in left do print(f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what) end
+  print(#left .. " left, each a line the rewrite can't reach")
+else
+  local all = findings(files)
+  local stack = 0
+  for f in all do
+    print(f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what)
+    if f.kind == "stack" then stack = stack + 1 end
+  end
+  print(#all .. " findings in " .. #files .. " files: " .. stack .. " to stack, " .. (#all - stack) .. " long")
+end

@@ -70,6 +70,15 @@ leaves them as they were:
 Lists, not verdicts, read from Zig's tokenizer (never a comment's or a
 string's text). Each says its budgets in its `-- budget:` line:
 
+- `stack.shale` (`glob=`, `width=`, `write=1`, `self_test=1`): **three
+  or more, one a line**: a struct, tuple or array literal, a call's or a
+  function's arguments, a container or error set of three or more items on
+  one line, and any line over 100 columns. `write=1` gives each a trailing
+  comma, outermost first, and runs `zig fmt` until nothing changes. Unlike
+  the lists here it reads characters, not the tokenizer, as the Roc twin
+  must; strings, `'x'`, `\\` lines and comments are stepped over, and
+  `plants/stack/clean.zig` holds each. A `for`'s operands and a capture are
+  no group.
 - `smells.shale` (`glob=`, `tests=yes`, `long=`, `params=`, `top=`): long
   functions (a `fn X(...) type` marked a type, not a function to cut),
   long parameter lists, `bool` parameters and fields, `catch {}` (one in
