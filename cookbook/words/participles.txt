@@ -1,19 +1,242 @@
--- Past participles and states a name hunt cannot find by its rule (more
--- than three letters ending in `ed`, ed_verbs.txt excepted). A first word
--- here names a state, not an act. One word a line; `--` starts a note.
-held
+-- Past participles a name hunt cannot find by its rule (more than three
+-- letters ending in `ed`, ed_verbs.txt excepted): English's irregular
+-- ones, a closed set, written out by hand. A first word here names a state,
+-- not an act: `blown : Str -> Bool` asks no question, `held_raw!` does no
+-- deed. One word a line; `--` starts a note.
+--
+-- Left out, so a name starting with one is never taken for a state:
+--   a participle that is its own base form, which names the act: bet, bid,
+--   broadcast, burst, cast, come, become, overcome, cost, cut, fit,
+--   forecast, hit, hurt, input, knit, let, offset, output, preset, put,
+--   quit, read, reread, reset, rid, run, outrun, overrun, set, upset,
+--   shed, shut, slit, split, spread, thrust, typeset, wed, wet (`read!`
+--   reads; `reset!` resets);
+--   a form that is also another word's base or a common noun or
+--   adjective: bound (to bound), felt (the cloth), found (to found),
+--   ground (to ground, the ground), left (the side), rent (to rent),
+--   rung (a ladder's), shot (a shot), smelt (to smelt), spelt (the
+--   grain), thought (a thought), wound (to wound, a wound);
+--   a form that is only a past tense, never a participle (forgot, hid,
+--   lay, wrote).
+--
+-- -en and -n:
+arisen
+awoken
+beaten
+been
+befallen
+begotten
+bidden
+bitten
+blown
+born
+borne
+broken
+chosen
+cloven
 done
-ready
-kept
-gone
-sent
-made
-found
-taken
+drawn
+driven
+eaten
+fallen
+flown
+forbidden
+forborne
+foregone
+foreseen
+forgiven
+forgotten
+forsaken
+forsworn
+frozen
 given
-shown
-built
-seen
+gone
+gotten
+grown
+hewn
+hidden
 known
-stale
+laden
+lain
+misspoken
+mistaken
+mown
+outdone
+outgrown
+overdone
+overdrawn
+overgrown
+overlain
+overridden
+overseen
+overtaken
+overthrown
+overwritten
+partaken
+proven
+redone
+redrawn
+regrown
+retaken
+rewoven
+rewritten
+ridden
+risen
+riven
+sawn
+seen
+sewn
+shaken
+shaven
+shorn
+shown
+slain
+smitten
+sown
+spoken
+stolen
+strewn
+stricken
+stridden
+striven
+swollen
+sworn
+taken
+thriven
+thrown
+torn
+trodden
+undergone
+undertaken
+underwritten
+undone
+uprisen
+withdrawn
+woken
+worn
+woven
+written
+-- -ought and -aught:
+besought
+bought
+brought
+caught
+fought
+sought
+taught
+wrought
+-- -t:
+bent
+built
+burnt
+crept
+dealt
+dreamt
+dwelt
+kept
+knelt
+leant
+leapt
+learnt
+lent
+meant
+misdealt
+misspelt
+misspent
+outspent
+overslept
+overspent
+rebuilt
+sent
+slept
+spent
+spilt
+spoilt
+swept
+unbent
+wept
+-- -d, and -id and -old:
+beheld
+bled
+bred
+clad
+fed
+fled
+foretold
+had
+heard
+held
+inlaid
+laid
+led
+misheard
+mislaid
+misled
+outsold
+overfed
+overheard
+overpaid
+oversold
+paid
+prepaid
+relaid
+repaid
+resold
+retold
+said
+shod
+slid
+sold
+sped
+told
+undersold
+upheld
+waylaid
+withheld
+-- -u-, -o- and the rest:
+begun
+clung
+drunk
+dug
+flung
+got
+hung
+lit
+lost
+made
+met
+misunderstood
+outfought
+outshone
+overhung
+overwrought
+relit
+remade
+sat
+shone
+shrunk
+slung
+slunk
+spat
+sprung
+spun
+stood
+struck
+strung
+stuck
+stung
+stunk
+sung
+sunk
+swum
+swung
+understood
+unmade
+withstood
+won
+wrung
+-- States, not participles, kept from the hunts' first table: a first word
+-- here reads as a state just the same (`ready!`, `stale()`).
 dirty
+ready
+stale
