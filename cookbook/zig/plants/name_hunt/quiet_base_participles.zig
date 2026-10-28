@@ -16,10 +16,3 @@ pub fn splitLines(io: std.Io, text: []const u8) !void {
     _ = io;
     _ = text;
 }
-
-// Zig has no `noun_effect`, so a noun first is quiet here; the census
-// calls `links` refused.
-pub fn links(io: std.Io, path: []const u8) !void {
-    _ = io;
-    _ = path;
-}

@@ -155,3 +155,32 @@ seed
 -- 2026-10-28, from the chat's word report (Steve: read as verbs, especially in context):
 corrupt -- `corrupt!` (Last.roc: a stored author that is no uid)
 welcome -- `welcome!`, `welcome_pending!`, `welcome_done!`
+-- 2026-10-28, from the Zig hunt's census on angry-gopher's zig-server
+-- (`noun_effect` comes to Zig), each a verb the table lacked, named by a
+-- function of src/ that does it:
+allocate -- `allocateUser` (users.zig)
+archive -- `archive` (admin_backup.zig: writes the roots' archive)
+backfill -- `backfillSidecars` (chat_count.zig)
+capture -- `capture` (markdown_regression_test.zig: writes the gold)
+collect -- `collectSources` (markdown_regression_test.zig)
+describe -- `describeStart` (app_start.zig)
+fire -- `fireBurst` (stress.zig)
+hammer -- `hammer` (stress.zig: drives one scenario's bursts)
+issue -- `issue` (uid_cookie.zig: a signed Set-Cookie)
+login -- `loginAsMember` (login.zig); closed like setup and lookup
+lookup -- `lookupAuthor` (chat_count.zig)
+measure -- `measure` (game_limits.zig)
+migrate -- `migrateSecret` (roots.zig)
+mirror -- `mirror` (player.zig: writes the name's row)
+plan -- `plan` (chat_retire.zig: builds, and may carry out, a retirement)
+rebaseline -- `rebaselineFile` (markdown_regression_test.zig)
+rebuild -- `rebuild` (search_index.zig)
+refresh -- `refresh` (app_start.zig)
+register -- `registerMember` (login.zig)
+reissue -- `reissue` (uid_cookie.zig)
+require -- `requireAdmin` (admin_ui.zig)
+reserve -- `reserveUploadBytes` (users.zig)
+resolve -- `resolveChatDir` (markdown_bench.zig)
+setup -- `setup` (app_start.zig)
+stage -- `stage` (chat_retire.zig: a test's fixture)
+stream -- `streamTranscript` (chat_sse.zig)
