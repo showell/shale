@@ -194,7 +194,7 @@ function findings(files)
       if g ~= nil then
         push(out, {path = p, line = i, kind = "stack", what = g.items .. " items in " .. snip(ls[i], g)})
       elseif bare ~= nil and bare.items >= 3 then
-        push(out, {path = p, line = i, kind = "stack", what = bare.items .. " bare arguments in " .. bare.what .. ", which no comma stacks"})
+        push(out, {path = p, line = i, kind = "stack", what = bare.items .. " bare arguments in " .. bare.what .. ", which no comma stacks: take a record (roc-style.md, Name what travels together)"})
       elseif width(ls[i]) > WIDTH then
         local why = starts_with(trim(ls[i]), "#") and "a comment" or (pick(ls[i]) ~= nil and "a group of two to stack" or "nothing to stack")
         push(out, {path = p, line = i, kind = "long", what = width(ls[i]) .. " columns, " .. why})
