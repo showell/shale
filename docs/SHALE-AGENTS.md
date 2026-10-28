@@ -75,6 +75,7 @@ Each has a Shale form, most of them one launch:
 | `sed -n 40,80p f; sed -n 5,9p g` | `shale cookbook:look.shale at=f:40-80,g:5-9` |
 | `pkill -f pat`, `ps aux \| grep pat \| xargs kill` | `for p in procs() do if find(p.args, "pat") ~= nil then proc_stop(p) end end`: never this run or its shell |
 | `grep -rn 'text' src build.zig` | `shale cookbook:look.shale find=text in=src,build.zig ext=zig` (a value with `(`, `*` or a space: `--args-stdin`) |
+| `grep -rn 'a phrase' docs` over prose, which misses one a line break splits | `shale cookbook:prose.shale find="a phrase" in=docs` (phrase on stdin with `--args-stdin`): each paragraph, list item, quote and comment block read whole (never a code fence), so a break, an indent or a run of spaces inside the phrase is one space; a hit says `path:line` where it starts, `(N lines)` when it crosses breaks, `(markup inside)` when only `*` or a backtick splits it; `new=` shows the edit and `write=1` makes it, rewrapping only the lines the edit moves |
 | grep in Zig's std, a sibling repo | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:dog-park/src` |
 | `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
 | `zig build fuzz 2>&1 \| grep FAIL` | the same with `grep=FAIL,hunts ran` (a value with a space: on stdin, `--args-stdin`): every output line holding one of the literals, after the summary |
@@ -308,8 +309,9 @@ prints is in the box after it, exactly.
 
 The short recipes are here, each tested as written. **The longer ones are
 files** in `cookbook/`: `look.shale` (lines by number, and a literal's
-lines across folders, mounts or a git revision) and `zig_build.shale` (a
-build's verdict without its noise) for any project; the Zig ones in
+lines across folders, mounts or a git revision), `prose.shale` (a phrase
+in wrapped prose, found and edited) and `zig_build.shale` (a build's
+verdict without its noise) for any project; the Zig ones in
 [`cookbook/zig/`](../cookbook/zig/README.md) find a file's seams, move
 declarations along them and judge the move; `roc/` and `zig17/` are those
 work's. Copy one and change it; not everything is a builtin.

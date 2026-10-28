@@ -1,0 +1,577 @@
+-- **A PHRASE IN WRAPPED PROSE, WHEREVER A LINE BREAK SPLITS IT** (metal-vmm
+-- QUEUE 298): a line-by-line search never sees `*(not yet` at the end of
+-- one line and `settled)*` at the start of the next. This reads prose the
+-- way a reader does, a paragraph at a time, and finds the phrase in it:
+--
+--   shale <cookbook>/prose.shale find="(not yet settled)" in=docs
+--   shale <cookbook>/prose.shale find="*(not yet settled)*" new="" in=docs/roc-style.md
+--   shale <cookbook>/prose.shale find="*(not yet settled)*" new="" in=docs write=1
+--   shale <cookbook>/prose.shale self_test=1
+--
+-- **WHAT IS PROSE:** in a Markdown file (`.md`), its paragraphs, list items
+-- (a continuation line belongs to its item), block quotes and headings,
+-- each its own; a blank line ends one, and a fenced code block (``` or
+-- ~~~), a table row (`|`) and an HTML line (`<`) are never prose. In a
+-- code file, its comment blocks: consecutive whole-line comments with one
+-- marker (`//`, `///`, `//!` in Zig; `##`, `#` in Roc; `--` in Shale; `#`
+-- in a shell script), an empty comment line ending one.
+--
+-- **HOW IT MATCHES:** each paragraph's words joined by one space, the
+-- phrase's too, so a line break, indentation or a run of spaces inside the
+-- phrase is one space. A hit is said as `path:line`, the line it starts on,
+-- with `(N lines)` when it crosses breaks. **MARKUP INSIDE IT**: a phrase
+-- that matches only with `*` and a backtick taken out of both (`**a
+-- phrase\nsplit**`) is said as a hit `(markup inside)`, and never edited:
+-- which `*` goes with the edit is the reader's call (find it again with the
+-- markup in the phrase, `*(not yet settled)*`, and that hit is plain).
+--
+-- **AN EDIT** (`new=`, shown, written with `write=1`) replaces each plain
+-- hit and rewraps its paragraph **from the hit's line only until the line
+-- breaks fall back into step**: lines before it are kept, and once a line
+-- would start at a word that started a line before, the rest are kept as
+-- they were, so the diff is the lines the edit moved. The width is the
+-- paragraph's widest line; a continuation line takes the paragraph's
+-- second line's prefix (a list item's hanging indent, a comment's marker).
+-- **THE TRADE-OFFS:** a rewrap moves words, so a paragraph whose breaks
+-- mean something (a poem, a hand-aligned table in prose) is the reader's to
+-- edit by hand; a phrase inside an inline code span is prose here.
+--
+-- `in` is a comma-separated list of files and folders (folders walked for
+-- `.md` and the code files above, their .git, .zig-cache, zig-out and
+-- node_modules passed by); `nocase=1` matches without case.
+--
+-- budget: steps=2000000000 arena_bytes=4000000000
+
+const markup = "*`"
+
+-- Whether `c` (one character) is a space or a tab.
+function is_blank_char(c)
+  return c == " " or c == "\t"
+end
+
+-- How many leading spaces and tabs `l` has.
+function indent_of(l)
+  local i = 1
+  while i <= #l and is_blank_char(sub(l, i, i)) do i = i + 1 end
+  return i - 1
+end
+
+-- A Markdown list item's prefix length (its indent, marker and the spaces
+-- after), or 0 for a line that starts none: `- `, `* `, `+ `, `1. `, `2) `.
+function item_prefix(l)
+  local i = indent_of(l) + 1
+  local c = sub(l, i, i)
+  local j = i
+  if c == "-" or c == "*" or c == "+" then
+    j = i + 1
+  else
+    while j <= #l and sub(l, j, j) >= "0" and sub(l, j, j) <= "9" do j = j + 1 end
+    if j == i or (sub(l, j, j) ~= "." and sub(l, j, j) ~= ")") then return 0 end
+    j = j + 1
+  end
+  if not is_blank_char(sub(l, j, j)) then return 0 end
+  while j <= #l and is_blank_char(sub(l, j, j)) do j = j + 1 end
+  return j - 1
+end
+
+-- The comment markers of a code file, by its extension, longest first; nil
+-- for a file this does not read.
+function markers_of(path)
+  if ends_with(path, ".zig") then return {"///", "//!", "//"} end
+  if ends_with(path, ".roc") then return {"##", "#"} end
+  if ends_with(path, ".shale") then return {"--"} end
+  if ends_with(path, ".sh") or ends_with(path, ".py") or ends_with(path, ".toml") then return {"#"} end
+  return nil
+end
+
+-- A new block whose first line is `n`, with its prefix and content.
+function block(n, prefix, content)
+  return {first = n, prefixes = {prefix}, contents = {content}, quote = false, marker = "", indent = -1}
+end
+
+function add_line(b, prefix, content)
+  push(b.prefixes, prefix)
+  push(b.contents, content)
+end
+
+-- A Markdown text's prose blocks.
+function md_blocks(text)
+  local out = {}
+  local cur = nil
+  local fence = false
+  local n = 0
+  for l in lines(text) do
+    n = n + 1
+    local t = trim(l)
+    local ip = item_prefix(l)
+    if starts_with(t, "```") or starts_with(t, "~~~") then
+      if cur ~= nil then push(out, cur) end
+      cur = nil
+      fence = not fence
+    elseif fence then
+      -- code, never prose
+    elseif t == "" or starts_with(t, "|") or starts_with(t, "<") then
+      if cur ~= nil then push(out, cur) end
+      cur = nil
+    elseif starts_with(t, "#") then
+      if cur ~= nil then push(out, cur) end
+      local h = indent_of(l) + 1
+      while sub(l, h, h) == "#" do h = h + 1 end
+      while is_blank_char(sub(l, h, h)) do h = h + 1 end
+      push(out, block(n, sub(l, 1, h - 1), sub(l, h, #l)))
+      cur = nil
+    elseif ip > 0 then
+      if cur ~= nil then push(out, cur) end
+      cur = block(n, sub(l, 1, ip), sub(l, ip + 1, #l))
+    elseif starts_with(t, ">") then
+      local q = find(l, ">")
+      local e = q + 1
+      if is_blank_char(sub(l, e, e)) then e = e + 1 end
+      if cur ~= nil and cur.quote then
+        add_line(cur, sub(l, 1, e - 1), sub(l, e, #l))
+      else
+        if cur ~= nil then push(out, cur) end
+        cur = block(n, sub(l, 1, e - 1), sub(l, e, #l))
+        cur.quote = true
+      end
+    else
+      local d = indent_of(l)
+      if cur ~= nil and not cur.quote then
+        add_line(cur, sub(l, 1, d), sub(l, d + 1, #l))
+      else
+        if cur ~= nil then push(out, cur) end
+        cur = block(n, sub(l, 1, d), sub(l, d + 1, #l))
+      end
+    end
+  end
+  if cur ~= nil then push(out, cur) end
+  return out
+end
+
+-- A code file's comment blocks: whole-line comments with one marker at one
+-- indent, an empty one ending a block.
+function comment_blocks(text, markers)
+  local out = {}
+  local cur = nil
+  local n = 0
+  for l in lines(text) do
+    n = n + 1
+    local d = indent_of(l)
+    local rest = sub(l, d + 1, #l)
+    local m = nil
+    for mk in markers do
+      if m == nil and starts_with(rest, mk) then m = mk end
+    end
+    if m == nil then
+      if cur ~= nil then push(out, cur) end
+      cur = nil
+    else
+      local e = d + #m + 1
+      if sub(l, e, e) == " " then e = e + 1 end
+      local prefix = sub(l, 1, e - 1)
+      local content = sub(l, e, #l)
+      if trim(content) == "" then
+        if cur ~= nil then push(out, cur) end
+        cur = nil
+      elseif cur ~= nil and cur.marker == m and cur.indent == d then
+        add_line(cur, prefix, content)
+      else
+        if cur ~= nil then push(out, cur) end
+        cur = block(n, prefix, content)
+        cur.marker = m
+        cur.indent = d
+      end
+    end
+  end
+  if cur ~= nil then push(out, cur) end
+  return out
+end
+
+-- `path`'s prose blocks, or nil for a file this does not read.
+function blocks_of(path, text)
+  if ends_with(path, ".md") then return md_blocks(text) end
+  local markers = markers_of(path)
+  if markers == nil then return nil end
+  return comment_blocks(text, markers)
+end
+
+-- A block's words, each with its line (1 for the block's first) and its
+-- offset in `raw`, the words joined by one space.
+function words_of(b)
+  local ws = {}
+  local raw = ""
+  local k = 1
+  while k <= #b.contents do
+    for w in words(b.contents[k]) do
+      if raw ~= "" then raw = raw .. " " end
+      push(ws, {text = w, k = k, at = #raw + 1})
+      raw = raw .. w
+    end
+    k = k + 1
+  end
+  return {list = ws, raw = raw}
+end
+
+-- `s` without markup: {key, from}, `from[i]` the place in `s` of `key`'s i-th.
+function stripped(s)
+  local key = ""
+  local from = {}
+  local i = 1
+  while i <= #s do
+    local c = sub(s, i, i)
+    if not contains(markup, c) then
+      key = key .. c
+      push(from, i)
+    end
+    i = i + 1
+  end
+  return {key = key, from = from}
+end
+
+-- The index of the word holding offset `at` of the block's raw text.
+function word_at(ws, at)
+  local i = #ws
+  while i > 1 and ws[i].at > at do i = i - 1 end
+  return i
+end
+
+-- Every start of `needle` in `hay`, 1-based.
+function starts_of(hay, needle)
+  local out = {}
+  if needle == "" then return out end
+  local at = find(hay, needle)
+  while at ~= nil do
+    push(out, at)
+    at = find(hay, needle, at + 1)
+  end
+  return out
+end
+
+-- Every hit of `phrase` in `text` (a file at `path`): {line, lines, at,
+-- stop, block, plain}: plain hits as written, then the hits only markup
+-- hides, each said once.
+function hits_in(path, text, phrase, nocase)
+  local out = {}
+  local bs = blocks_of(path, text)
+  if bs == nil then return out end
+  local p = join(words(phrase), " ")
+  if nocase then p = lower(p) end
+  local pk = stripped(p).key
+  local bi = 1
+  while bi <= #bs do
+    local b = bs[bi]
+    local w = words_of(b)
+    local raw = w.raw
+    if nocase then raw = lower(raw) end
+    local taken = {}
+    for at in starts_of(raw, p) do
+      local s = word_at(w.list, at)
+      local e = word_at(w.list, at + #p - 1)
+      push(out, {line = b.first + w.list[s].k - 1, lines = w.list[e].k - w.list[s].k + 1, at = at, stop = at + #p - 1, block = bi, plain = true})
+      push(taken, at)
+    end
+    local st = stripped(raw)
+    for at in starts_of(st.key, pk) do
+      local ra = st.from[at]
+      local seen = false
+      for t in taken do
+        if ra >= t and ra <= t + #p then seen = true end
+      end
+      if not seen and pk ~= "" then
+        local re = st.from[at + #pk - 1]
+        local s = word_at(w.list, ra)
+        local e = word_at(w.list, re)
+        push(out, {line = b.first + w.list[s].k - 1, lines = w.list[e].k - w.list[s].k + 1, at = ra, stop = re, block = bi, plain = false})
+      end
+    end
+    bi = bi + 1
+  end
+  return out
+end
+
+-- `ws` laid on lines no wider than `width`, the first after `first` and
+-- the rest after `cont`: the lines' words, each line a list.
+function laid(ws, width, first, cont)
+  local out = {}
+  local cur = {}
+  local len = 0
+  local prefix = first
+  for x in ws do
+    if #cur > 0 and #prefix + len + 1 + #x > width then
+      push(out, cur)
+      cur = {}
+      len = 0
+      prefix = cont
+    end
+    if #cur > 0 then len = len + 1 end
+    push(cur, x)
+    len = len + #x
+  end
+  if #cur > 0 then push(out, cur) end
+  return out
+end
+
+-- `contents` (each line's text after its prefix) laid again from line
+-- `a`, onto `out`: a line too wide gives its last words to the head of
+-- the next, and once past line `upto` (the last the edit touched) a line
+-- with nothing carried into it is kept as it was, and so is the rest.
+function relaid(prefixes, contents, a, upto, width, cont, out)
+  local carry = {}
+  local k = a
+  while k <= #contents do
+    if #carry == 0 and k > upto then
+      push(out, prefixes[k] .. contents[k])
+    else
+      local cur = carry
+      for x in words(contents[k]) do push(cur, x) end
+      local ls = laid(cur, width, prefixes[k], cont)
+      local j = 1
+      while j < #ls do
+        if j == 1 then push(out, prefixes[k] .. join(ls[j], " ")) else push(out, cont .. join(ls[j], " ")) end
+        j = j + 1
+      end
+      carry = {}
+      if #ls == 1 then
+        push(out, prefixes[k] .. join(ls[1], " "))
+      elseif #ls > 1 then
+        if k == #contents then push(out, cont .. join(ls[#ls], " ")) else carry = ls[#ls] end
+      end
+    end
+    k = k + 1
+  end
+  return out
+end
+
+-- Block `b`'s lines (its words `w`) with raw[at..stop] replaced by `new`,
+-- the block's new lines, whole, prefixes and all. **ONLY THE LINES THE
+-- EDIT MOVES**: a replacement of as many words as the hit takes their
+-- places, line by line; any other is the hit's line's text, the hit's
+-- later lines folded into it. Either way a line too wide gives its last
+-- words to the next, and the first line that fits past the edit ends it.
+-- A line an edit made shorter stays short: nothing is pulled up.
+function rewrapped(b, w, at, stop, new)
+  local ws = w.list
+  local s = word_at(ws, at)
+  local e = word_at(ws, stop)
+  local a = ws[s].k
+  local z = ws[e].k
+  local width = 0
+  local k = 1
+  while k <= #b.contents do
+    local len = #b.prefixes[k] + #b.contents[k]
+    if len > width then width = len end
+    k = k + 1
+  end
+  local cont = b.prefixes[1]
+  if #b.prefixes >= 2 then cont = b.prefixes[2] elseif item_prefix(b.prefixes[1] .. "x") > 0 then cont = rep(" ", #b.prefixes[1]) end
+  local head = sub(ws[s].text, 1, at - ws[s].at)
+  local tail = sub(ws[e].text, stop - ws[e].at + 2, #ws[e].text)
+  local texts = {}
+  for x in ws do push(texts, x.text) end
+  -- A removal that leaves only what followed the hit in its last word
+  -- (`settled)*.` less the hit is `.`) gives that to the word before.
+  if trim(head .. new) == "" and tail ~= "" and s > 1 then
+    texts[s - 1] = texts[s - 1] .. tail
+    tail = ""
+  end
+  local nw = words(head .. new .. tail)
+  -- Each line's words, the hit's replaced.
+  local per = {}
+  k = 1
+  while k <= #b.contents do
+    push(per, {})
+    k = k + 1
+  end
+  local prefixes = {}
+  local contents = {}
+  local out = {}
+  if #nw == e - s + 1 then
+    local i = 1
+    while i <= #ws do
+      local x = texts[i]
+      if i >= s and i <= e then x = nw[i - s + 1] end
+      push(per[ws[i].k], x)
+      i = i + 1
+    end
+    k = 1
+    while k <= #b.contents do
+      push(prefixes, b.prefixes[k])
+      if k >= a and k <= z then push(contents, join(per[k], " ")) else push(contents, b.contents[k]) end
+      k = k + 1
+    end
+  else
+    local i = 1
+    while i <= #ws do
+      if i < s or i > e then push(per[ws[i].k], texts[i]) end
+      if i == s then
+        for x in nw do push(per[a], x) end
+      end
+      i = i + 1
+    end
+    -- The hit's later lines fold into its first.
+    k = a + 1
+    while k <= z do
+      for x in per[k] do push(per[a], x) end
+      k = k + 1
+    end
+    k = 1
+    while k <= #b.contents do
+      if k <= a or k > z then
+        push(prefixes, b.prefixes[k])
+        if k == a then push(contents, join(per[k], " ")) else push(contents, b.contents[k]) end
+      end
+      k = k + 1
+    end
+    z = a
+  end
+  k = 1
+  while k < a do
+    push(out, prefixes[k] .. contents[k])
+    k = k + 1
+  end
+  return relaid(prefixes, contents, a, z, width, cont, out)
+end
+
+-- `text` (at `path`) with every plain hit of `phrase` replaced by `new`:
+-- {text, edited, skipped}, the hits markup hides skipped and counted.
+function edited(path, text, phrase, new, nocase)
+  local hs = hits_in(path, text, phrase, nocase)
+  local skipped = 0
+  local plain = {}
+  for h in hs do
+    if h.plain then push(plain, h) else skipped = skipped + 1 end
+  end
+  -- From the last hit back: an edit moves only the lines after it.
+  local ls = lines(text)
+  local i = #plain
+  while i >= 1 do
+    local h = plain[i]
+    local bs = blocks_of(path, join(ls, "\n"))
+    local b = bs[h.block]
+    local w = words_of(b)
+    local now = rewrapped(b, w, h.at, h.stop, new)
+    local first = b.first
+    local last = b.first + #b.contents - 1
+    local rebuilt = {}
+    local k = 1
+    while k < first do
+      push(rebuilt, ls[k])
+      k = k + 1
+    end
+    for l in now do push(rebuilt, l) end
+    k = last + 1
+    while k <= #ls do
+      push(rebuilt, ls[k])
+      k = k + 1
+    end
+    ls = rebuilt
+    i = i - 1
+  end
+  local out = join(ls, "\n")
+  if ends_with(text, "\n") and not ends_with(out, "\n") then out = out .. "\n" end
+  return {text = out, edited = #plain, skipped = skipped}
+end
+
+-- A hit as a reader sees it: `path:line: ...the phrase...` and its notes.
+function said(path, h, text)
+  local b = blocks_of(path, text)[h.block]
+  local raw = words_of(b).raw
+  local from = h.at - 20
+  if from < 1 then from = 1 end
+  local to = h.stop + 20
+  if to > #raw then to = #raw end
+  local notes = ""
+  if h.lines > 1 then notes = notes .. " (" .. tostring(h.lines) .. " lines)" end
+  if not h.plain then notes = notes .. " (markup inside)" end
+  return path .. ":" .. tostring(h.line) .. ": " .. sub(raw, from, to) .. notes
+end
+
+-- The files of `in`: each named file, and each folder's prose files.
+function files_of(spec)
+  local out = {}
+  for p in split(spec, ",") do
+    local q = trim(p)
+    if ends_with(q, ".md") or markers_of(q) ~= nil then
+      push(out, q)
+    else
+      for e in walk(q, {skip = ".git,.zig-cache,zig-out,node_modules"}) do
+        if e.kind == "file" and (ends_with(e.path, ".md") or markers_of(e.path) ~= nil) then push(out, e.path) end
+      end
+    end
+  end
+  return out
+end
+
+if arg("self_test", "") ~= "" then
+  local P = "cookbook/plants/prose/"
+  local wrong = {}
+  local cases = {
+    {"notyet.md", "(not yet settled)", "4 2 plain"},
+    {"notyet.md", "*(not yet settled)*", "4 2 plain"},
+    {"notyet.md", "(not yet settled) by", "4 2 markup"},
+    {"bold.md", "a phrase split", "1 2 markup"},
+    {"item.md", "the first part of the phrase", "2 2 plain"},
+    {"fence.md", "phrase in a fence", ""},
+    {"blank.md", "one paragraph", ""},
+    {"comment.zig", "that wraps here", "1 2 plain"},
+    {"comment.zig", "in a string", ""},
+  }
+  for c in cases do
+    local text = read(P .. c[1])
+    local got = {}
+    for h in hits_in(P .. c[1], text, c[2], false) do
+      local kind = "markup"
+      if h.plain then kind = "plain" end
+      push(got, tostring(h.line) .. " " .. tostring(h.lines) .. " " .. kind)
+    end
+    if join(got, "; ") ~= c[3] then push(wrong, c[1] .. " \"" .. c[2] .. "\": want [" .. c[3] .. "], got [" .. join(got, "; ") .. "]") end
+  end
+  local edits = {
+    {"notyet.md", "*(not yet settled)*", "", "notyet.edited.md"},
+    {"punct.md", "*(not yet settled)*", "", "punct.edited.md"},
+    {"item.md", "first part", "very first and longest part", "item.edited.md"},
+    {"comment.zig", "that wraps here", "that bends here", "comment.edited.zig"},
+  }
+  for e in edits do
+    local r = edited(P .. e[1], read(P .. e[1]), e[2], e[3], false)
+    local want = read(P .. e[4])
+    if r.text ~= want then push(wrong, e[1] .. " edited: want\n" .. want .. "got\n" .. r.text) end
+  end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail(tostring(#wrong) .. " prose plants wrong") end
+  print("prose: " .. tostring(#cases) .. " finds and " .. tostring(#edits) .. " edits as their plants say")
+else
+  local phrase = arg("find", "")
+  if phrase == "" then fail("prose: find= the phrase (see the header)") end
+  local new = arg("new", nil)
+  local write = arg("write", false)
+  local nocase = arg("nocase", false)
+  local total = 0
+  local hidden = 0
+  for f in files_of(arg("in", ".")) do
+    local text = read(f)
+    for h in hits_in(f, text, phrase, nocase) do
+      print(said(f, h, text))
+      total = total + 1
+      if not h.plain then hidden = hidden + 1 end
+    end
+    if new ~= nil then
+      local r = edited(f, text, phrase, new, nocase)
+      if r.edited > 0 then
+        if write then
+          replace(f, r.text)
+        else
+          local before = lines(text)
+          local after = lines(r.text)
+          print("-- " .. f .. ": " .. tostring(r.edited) .. " edited (write=1 writes it); its lines now:")
+          local k = 1
+          while k <= #after do
+            if before[k] ~= after[k] then print("  " .. tostring(k) .. ": " .. after[k]) end
+            k = k + 1
+          end
+        end
+      end
+    end
+  end
+  print("prose: " .. tostring(total) .. " hits of \"" .. phrase .. "\", " .. tostring(hidden) .. " with markup inside")
+end
