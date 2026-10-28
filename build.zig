@@ -404,6 +404,40 @@ pub fn build(b: *std.Build) void {
         }
     }.run;
 
+    // Every cookbook recipe's self-test (`self_test=1`: its plants each give
+    // their finding, its quiet ones none), by this tree's own `shale`, so a
+    // recipe's plants are gated, not run when someone remembers. A recipe is
+    // one that reads `arg("self_test"`, found as the step runs (a list made
+    // when the build is configured would be cached, and a recipe added since
+    // would pass unrun); none found fails. Each runs from this tree with the
+    // mounts pinned (SHALE_MOUNTS), `cookbook` this tree's own, read-only, so
+    // a worktree or CI checkout tests its own plants, and `tools` `~/tools`
+    // (an empty folder when there is none), where roc-ast lives: the Roc name
+    // hunt fails without it, saying how to install it; CI installs the
+    // release asset there. After `quick`.
+    {
+        const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt(
+            "bin=\"$(cd \"$(dirname \"$0\")\" && pwd)/$(basename \"$0\")\"; cd '{s}' || exit 1; " ++
+                "tmp=$(mktemp -d) || exit 1; trap 'rm -rf \"$tmp\"' EXIT; " ++
+                "tools=\"$HOME/tools\"; [ -d \"$tools\" ] || {{ tools=\"$tmp/tools\"; mkdir \"$tools\"; }}; " ++
+                "printf 'cookbook = %s/cookbook ro\\ntools = %s ro tools\\n' \"$(pwd)\" \"$tools\" > \"$tmp/mounts\"; " ++
+                "recipes=$(grep -rl --include='*.shale' 'arg(\"self_test\"' cookbook | sort); " ++
+                "[ -n \"$recipes\" ] || {{ echo 'cookbook-test: no recipe in cookbook/ reads arg(\"self_test\")'; exit 1; }}; " ++
+                "n=0; bad=''; for r in $recipes; do n=$((n+1)); " ++
+                "if SHALE_MOUNTS=\"$tmp/mounts\" \"$bin\" \"$r\" self_test=1 > \"$tmp/out\" 2>&1; then echo \"cookbook-test: ok   $r: $(tail -n 1 \"$tmp/out\")\"; " ++
+                "else echo \"cookbook-test: FAIL $r, its last lines:\"; tail -n 30 \"$tmp/out\" | sed 's/^/    /'; bad=\"$bad $r\"; fi; done; " ++
+                "[ -z \"$bad\" ] || {{ echo \"cookbook-test: self-test failed:$bad\"; exit 1; }}; " ++
+                "echo \"cookbook-test: $n recipes' self-tests passed\"",
+            .{here},
+        ) });
+        run.addFileArg(runner.getEmittedBin());
+        run.has_side_effects = true;
+        run.stdio = .inherit;
+        run.step.dependOn(quick);
+        test_step.dependOn(&run.step);
+        b.step("cookbook-test", "Every cookbook recipe's self-test (`self_test=1`), each recipe that reads arg(\"self_test\"), by this tree's `shale` (the Roc name hunt needs ~/tools/roc-ast/bin/roc-ast)").dependOn(&run.step);
+    }
+
     // `zig build consumers` runs each application's own checks against
     // this checkout (they name it by path, `../shale`), one at a time,
     // cheapest first, so a check downstream cannot quietly stop checking
