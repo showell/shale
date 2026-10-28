@@ -152,3 +152,6 @@ catch
 gather
 publish
 seed
+-- 2026-10-28, from the chat's word report (Steve: read as verbs, especially in context):
+corrupt -- `corrupt!` (Last.roc: a stored author that is no uid)
+welcome -- `welcome!`, `welcome_pending!`, `welcome_done!`
