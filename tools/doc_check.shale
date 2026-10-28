@@ -163,9 +163,23 @@ function joined(dir, p)
   return join(parts, "/")
 end
 
+-- A sibling repo that is there: a folder, not a symbolic link. The store
+-- follows no link, so a link to a repo (the roc-clean layout's roc-webbox,
+-- a link to its one checkout) is not this layout's: the repo it names is
+-- checked where it is.
+function folder_at(path)
+  return is_dir(path)
+end
+
+function repo_here(path)
+  local r = attempt(folder_at, path)
+  return r.ok and r.value
+end
+
 -- Where `p` is, as a repo-relative path in `repo` under `at`, or nil.
 function in_repo(at, repo, p)
   if p == nil then return nil end
+  if not repo_here(at .. repo) then return nil end
   p = joined("", p)
   if p == nil then return nil end
   local full = at .. repo
@@ -458,7 +472,7 @@ function check_all(at, repos)
   local tracked = {}
   local ignores = {}
   for repo in repos do
-    if is_dir(at .. repo) then
+    if repo_here(at .. repo) then
       local set = {}
       tracked[repo] = git_ls_files(at .. repo)
       for p in tracked[repo] do
@@ -474,7 +488,7 @@ function check_all(at, repos)
     local r = fresh()
     r.bases = bases
     r.ignores = ignores
-    if is_dir(at .. repo) and (ONLY == "" or repo == ONLY) then
+    if repo_here(at .. repo) and (ONLY == "" or repo == ONLY) then
       for p in tracked[repo] do
         if ends_with(p, ".md") and not history(p) then
           r.docs = r.docs + 1
@@ -496,7 +510,7 @@ function check_all(at, repos)
   end
   local ig = {}
   for t in keys(asks) do
-    if is_dir(at .. t) then ig[t] = ignored(at, t, unique(asks[t])) else ig[t] = {} end
+    if repo_here(at .. t) then ig[t] = ignored(at, t, unique(asks[t])) else ig[t] = {} end
   end
   for repo in keys(all) do
     local r = all[repo]
