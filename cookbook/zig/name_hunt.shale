@@ -18,9 +18,20 @@
 --   cd <repo> && shale <shale>/cookbook/zig/name_hunt.shale glob=src/**/*.zig
 --   shale cookbook:zig/name_hunt.shale self_test=1
 --
--- `self_test=1` runs it over `cookbook/zig/plants/name_hunt/`, one plant
--- a check, each named for its check: every check must fire on its own
--- plant and on no other. `glob2=` is a second glob.
+-- **THE WORDS** it judges by are cookbook/words/'s tables, the Roc hunt's
+-- too: participles.txt (English's irregular ones; the rule takes `-ed`),
+-- ed_verbs.txt (the rule's exceptions), vague.txt, and verbs.txt for the
+-- census. `words=1` gives the census instead of the findings: every first
+-- word a function with effects (as `state_effect` decides) starts with,
+-- its count and its verdict, `verb`, `participle`, `vague`, `asks` (`is*`,
+-- `has*`) or `refused` (no word of the tables: the Roc hunt's
+-- `noun_effect` would fire), then the totals.
+--
+-- `self_test=1` runs it over `cookbook/zig/plants/name_hunt/`, each plant
+-- named for the check it holds (`question.zig`, `question_irregular.zig`):
+-- every check must fire on its own plants and on no other, a `quiet_*.zig`
+-- plant on none, and the census must give a known word of the plants each
+-- verdict but `asks`. `glob2=` is a second glob.
 --
 -- budget: steps=900000000 arena_bytes=4000000000
 
@@ -29,10 +40,26 @@ const GLOB = SELF and "cookbook:zig/plants/name_hunt/*.zig" or arg("glob", "src/
 const GLOB2 = arg("glob2", "")
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative"}
 
-const PARTICIPLES = {held = true, done = true, ready = true, kept = true, gone = true, sent = true, made = true, found = true, taken = true, given = true, shown = true, built = true, seen = true, known = true, stale = true, dirty = true}
--- Words ending in `ed` that are verbs, not participles.
-const ED_VERBS = {need = true, feed = true, seed = true, embed = true, speed = true, shed = true, bleed = true, proceed = true, exceed = true, succeed = true, breed = true}
-const VAGUE = {handle = true, process = true, ["do"] = true, manage = true, perform = true, run = true, data = true, info = true, stuff = true, tmp = true, temp = true, helper = true, thing = true, things = true, it = true, misc = true, util = true, item = true, value = true, all = true, ["object"] = true}
+const WORDS = arg("words", "") == "1"
+
+-- A word table of cookbook/words/, the name hunts' one home for them: a
+-- word a line, `--` starting a note. A word twice, or a line of two, is a
+-- mistake in the table: it fails.
+function word_table(file)
+  local t = {}
+  for l in lines(read("cookbook:words/" .. file)) do
+    local w = trim(split(l, "--")[1])
+    if contains(w, " ") or has_key(t, w) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. w .. "` is no single new word") end
+    if w ~= "" then t[w] = true end
+  end
+  return t
+end
+
+-- VERBS only for the census: Zig has no `noun_effect`.
+const VERBS = word_table("verbs.txt")
+const PARTICIPLES = word_table("participles.txt")
+const ED_VERBS = word_table("ed_verbs.txt")
+const VAGUE = word_table("vague.txt")
 const ENTRY = {handle = true, run = true}
 const INTS = {usize = true, isize = true, comptime_int = true}
 
@@ -50,6 +77,22 @@ end
 function is_participle(w)
   if has_key(PARTICIPLES, w) then return true end
   return #w > 3 and ends_with(w, "ed") and not has_key(ED_VERBS, w)
+end
+
+-- A verb that reads as a participle would make its functions states.
+for w in keys(VERBS) do
+  if is_participle(w) then fail("name_hunt: `" .. w .. "` is in cookbook/words/verbs.txt and reads as a participle") end
+end
+
+-- What an effect's first word says, as the Roc hunt judges it:
+-- `participle` (a state: `state_effect` fires), `verb`, `vague`, `asks`
+-- (`is`, `has`), or `refused`, a word Roc's `noun_effect` would fire on.
+function verdict(w)
+  if is_participle(w) then return "participle" end
+  if has_key(VERBS, w) then return "verb" end
+  if has_key(VAGUE, w) then return "vague" end
+  if w == "is" or w == "has" then return "asks" end
+  return "refused"
 end
 
 function is_int(t)
@@ -70,9 +113,12 @@ end
 const found = {}
 for c in CHECKS do found[c] = 0 end
 const per_file = {}
+-- Each first word an effect starts with, by word: `{word, count,
+-- verdict}`, for the census (`words=1`).
+const census = {}
 
 function say(p, line, check, why)
-  print(p .. ":" .. line .. ": " .. check .. ": " .. why)
+  if not WORDS then print(p .. ":" .. line .. ": " .. check .. ": " .. why) end
   found[check] = found[check] + 1
   per_file[p .. "|" .. check] = true
   return nil
@@ -115,6 +161,10 @@ function hunt(p)
       local effect = false
       for q in params do
         if q.name == "io" or contains(q.type, "Io") or contains(lower(q.type), "store") then effect = true end
+      end
+      if effect and #ws > 0 then
+        if not has_key(census, ws[1]) then census[ws[1]] = {word = ws[1], count = 0, verdict = verdict(ws[1])} end
+        census[ws[1]].count = census[ws[1]].count + 1
       end
       local gives_bool = ret == "bool" or ret == "!bool"
       if gives_bool and #ws > 0 and is_participle(ws[1]) then say(p, line, "question", "`" .. name .. "` gives a bool but is named as a state, `" .. ws[1] .. "`: ask it (`is*`, `has*`)") end
@@ -161,16 +211,44 @@ end
 
 local counts = {}
 for c in CHECKS do push(counts, c .. " " .. found[c]) end
-print("name_hunt: " .. files .. " files; " .. join(counts, ", "))
+if WORDS then
+  local rows = {}
+  local by = {}
+  local total = 0
+  for w in keys(census) do
+    push(rows, census[w])
+    by[census[w].verdict] = get(by, census[w].verdict, 0) + census[w].count
+    total = total + census[w].count
+  end
+  sort(rows, {{key = "count", desc = true}, "word"})
+  for r in rows do print(pad(r.count, -4) .. " " .. pad(r.word, 12) .. " " .. r.verdict) end
+  local verdicts = {}
+  for v in {"verb", "participle", "vague", "asks", "refused"} do push(verdicts, v .. " " .. get(by, v, 0)) end
+  print("name_hunt census: " .. files .. " files; " .. total .. " effects, " .. #rows .. " first words; effects by verdict: " .. join(verdicts, ", "))
+else
+  print("name_hunt: " .. files .. " files; " .. join(counts, ", "))
+end
 
 if SELF then
+  -- Every plant is judged before a failure stops the run, so one run shows
+  -- each plant that is wrong.
+  local wrong = {}
   for c in CHECKS do
     for p in glob(GLOB) do
-      local mine = contains(p, "/" .. c .. ".zig")
+      local base = sub(p, #"cookbook:zig/plants/name_hunt/" + 1)
+      local mine = base == c .. ".zig" or starts_with(base, c .. "_")
       local fired = has_key(per_file, p .. "|" .. c)
-      if mine and not fired then fail("name_hunt self_test: `" .. c .. "` does not fire on its plant " .. p) end
-      if fired and not mine then fail("name_hunt self_test: `" .. c .. "` fires on " .. p .. ", another check's plant") end
+      if mine and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. p) end
+      if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
     end
   end
-  print("name_hunt self_test: PASS (each check fires on its plant alone)")
+  -- The census: a known word of the plants in each verdict.
+  for want in {{word = "read", verdict = "verb"}, {word = "held", verdict = "participle"}, {word = "process", verdict = "vague"}, {word = "links", verdict = "refused"}} do
+    local got = get(census, want.word)
+    if got == nil then push(wrong, "the census has no `" .. want.word .. "`")
+    elseif got.verdict ~= want.verdict then push(wrong, "the census calls `" .. want.word .. "` " .. got.verdict .. ", not " .. want.verdict) end
+  end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail("name_hunt self_test: " .. #wrong .. " plants wrong") end
+  print("name_hunt self_test: PASS (each check fires on its plants alone, the quiet_ plants on none, and the census gives each verdict its known word)")
 end

@@ -1,0 +1,154 @@
+-- Verbs: an effect whose first word is one of these is named for its act.
+-- The Roc name hunt's `noun_effect` fires on an effect whose first word is
+-- no verb here, no participle and no vague word; both name hunts' census
+-- (`words=1`) calls these `verb`. A word missing here shows in the census
+-- as `refused` before it is a false positive: add it with a note saying
+-- where it came from. No word here may be a participle (participles.txt,
+-- or `ed` by the rule ed_verbs.txt excepts): the hunts fail if one is.
+-- One word a line; `--` starts a note.
+--
+-- 2026-10-27, the first table, with `noun_effect` (metal-vmm QUEUE 260):
+accept
+act
+add
+advance
+alloc
+announce
+answer
+append
+apply
+ask
+back
+bind
+build
+bump
+call
+check
+choose
+clear
+close
+connect
+copy
+count
+create
+decode
+deinit
+delete
+dispatch
+download
+drain
+drop
+emit
+encode
+ensure
+feed
+fetch
+find
+flush
+format
+free
+get
+give
+grow
+handle
+hash
+index
+init
+insert
+join
+keep
+kill
+list
+listen
+load
+lock
+log
+main
+make
+mark
+match
+merge
+mount
+move
+note
+open
+parse
+pick
+poll
+pop
+post
+print
+prune
+push
+put
+react
+read
+reap
+record
+redirect
+refuse
+remove
+rename
+render
+replace
+reply
+report
+reset
+respond
+restore
+resume
+retire
+revoke
+rotate
+route
+run
+save
+scan
+search
+send
+serve
+set
+show
+sign
+sort
+spawn
+split
+start
+step
+stop
+store
+sweep
+sync
+take
+tell
+tick
+touch
+trim
+try
+unlock
+unmount
+update
+upload
+verify
+wait
+walk
+watch
+write
+-- 2026-10-27, flagged on the chat's renames (roc-webbox f794030), each a
+-- verb the table lacked:
+bookmark
+fail
+fan
+pin
+receive
+unpin
+-- 2026-10-28, when the Roc hunt read roc-ast's tree:
+fold
+for -- `for_each_line!`
+map
+-- 2026-10-28, when the Roc hunt judged hosted effects (quiet_verbs.roc):
+admit
+catch
+gather
+publish
+seed

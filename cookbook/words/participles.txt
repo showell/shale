@@ -1,0 +1,19 @@
+-- Past participles and states a name hunt cannot find by its rule (more
+-- than three letters ending in `ed`, ed_verbs.txt excepted). A first word
+-- here names a state, not an act. One word a line; `--` starts a note.
+held
+done
+ready
+kept
+gone
+sent
+made
+found
+taken
+given
+shown
+built
+seen
+known
+stale
+dirty

@@ -52,10 +52,21 @@
 --   cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob=chat/**/*.roc
 --   shale cookbook:roc/name_hunt.shale self_test=1
 --
+-- **THE WORDS** it judges by are cookbook/words/'s tables, which the Zig
+-- hunt reads too: verbs.txt, participles.txt (English's irregular ones;
+-- the rule takes `-ed`), ed_verbs.txt (the rule's exceptions) and
+-- vague.txt. `words=1` gives their census instead of the findings: every
+-- first word an effect judged here starts with, its count and its verdict,
+-- `verb`, `participle`, `vague`, `asks` (`is_`, `has_`) or `refused` (what
+-- `noun_effect` fires on), then the totals. A missing verb shows there as
+-- `refused` before it is taken for a noun, and each `verb` is a word that
+-- passes because verbs.txt lists it.
+--
 -- `self_test=1` runs it over `cookbook/roc/plants/name_hunt/`, each plant
 -- named for the check it holds (`question.roc`, `question_where.roc`):
--- every check must fire on its own plants and on no other, and a
--- `quiet_*.roc` plant (a false positive once) on none.
+-- every check must fire on its own plants and on no other, a
+-- `quiet_*.roc` plant (a false positive once) on none, and the census
+-- must give a known word of the plants each verdict but `asks`.
 --
 -- Each file's source is read too, for the arrows roc-ast writes alike (a
 -- callback's `=>`), which outgrows the default 16 MiB arena on the chat.
@@ -64,12 +75,26 @@
 const SELF = arg("self_test", "") == "1"
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
 const ROC_AST = "tools:roc-ast/bin/roc-ast"
+const WORDS = arg("words", "") == "1"
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense"}
-const VERBS = {fail = true, pin = true, unpin = true, bookmark = true, receive = true, fan = true, get = true, set = true, load = true, save = true, read = true, write = true, send = true, serve = true, fetch = true, make = true, build = true, run = true, handle = true, find = true, add = true, remove = true, delete = true, create = true, update = true, store = true, announce = true, react = true, act = true, render = true, parse = true, check = true, open = true, close = true, start = true, stop = true, post = true, put = true, show = true, list = true, resume = true, append = true, replace = true, drain = true, flush = true, wait = true, reap = true, spawn = true, kill = true, lock = true, unlock = true, join = true, split = true, walk = true, scan = true, emit = true, log = true, print = true, count = true, mark = true, clear = true, reset = true, init = true, deinit = true, free = true, alloc = true, grow = true, take = true, give = true, keep = true, drop = true, move = true, copy = true, rename = true, sync = true, poll = true, accept = true, connect = true, listen = true, bind = true, refuse = true, answer = true, reply = true, respond = true, retire = true, revoke = true, sign = true, verify = true, hash = true, encode = true, decode = true, format = true, call = true, apply = true, ensure = true, try = true, ask = true, tell = true, sweep = true, prune = true, trim = true, push = true, pop = true, insert = true, index = true, search = true, match = true, route = true, dispatch = true, redirect = true, upload = true, download = true, back = true, restore = true, rotate = true, touch = true, bump = true, note = true, record = true, report = true, pick = true, choose = true, sort = true, merge = true, mount = true, unmount = true, watch = true, tick = true, step = true, advance = true, feed = true, main = true, map = true, fold = true, ["for"] = true, catch = true, admit = true, publish = true, gather = true, seed = true}
 
-const PARTICIPLES = {held = true, done = true, ready = true, kept = true, gone = true, sent = true, made = true, found = true, taken = true, given = true, shown = true, built = true, seen = true, known = true, stale = true, dirty = true}
-const ED_VERBS = {need = true, feed = true, seed = true, embed = true, speed = true, shed = true, bleed = true, proceed = true, exceed = true, succeed = true, breed = true}
-const VAGUE = {handle = true, process = true, ["do"] = true, manage = true, perform = true, run = true, data = true, info = true, stuff = true, tmp = true, temp = true, helper = true, thing = true, things = true, it = true, misc = true, util = true, item = true, value = true, all = true, ["object"] = true}
+-- A word table of cookbook/words/, the name hunts' one home for them: a
+-- word a line, `--` starting a note. A word twice, or a line of two, is a
+-- mistake in the table: it fails.
+function word_table(file)
+  local t = {}
+  for l in lines(read("cookbook:words/" .. file)) do
+    local w = trim(split(l, "--")[1])
+    if contains(w, " ") or has_key(t, w) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. w .. "` is no single new word") end
+    if w ~= "" then t[w] = true end
+  end
+  return t
+end
+
+const VERBS = word_table("verbs.txt")
+const PARTICIPLES = word_table("participles.txt")
+const ED_VERBS = word_table("ed_verbs.txt")
+const VAGUE = word_table("vague.txt")
 const ENTRY = {handle = true, run = true, main = true}
 -- The names Roc's syntax and builtins call a method by, which the author
 -- does not choose (the header says where the list comes from).
@@ -84,8 +109,12 @@ const found = {}
 for c in CHECKS do found[c] = 0 end
 const per_file = {}
 
+-- Each first word an effect starts with, by word: `{word, count,
+-- verdict}`, for the census (`words=1`).
+const census = {}
+
 function say(p, line, check, why)
-  print(p .. ":" .. line .. ": " .. check .. ": " .. why)
+  if not WORDS then print(p .. ":" .. line .. ": " .. check .. ": " .. why) end
   found[check] = found[check] + 1
   per_file[p .. "|" .. check] = true
   return nil
@@ -94,6 +123,22 @@ end
 function is_participle(w)
   if has_key(PARTICIPLES, w) then return true end
   return #w > 3 and ends_with(w, "ed") and not has_key(ED_VERBS, w)
+end
+
+-- A verb that reads as a participle would make its effects states.
+for w in keys(VERBS) do
+  if is_participle(w) then fail("name_hunt: `" .. w .. "` is in cookbook/words/verbs.txt and reads as a participle") end
+end
+
+-- What an effect's first word says: `participle` (a state: `state_effect`
+-- fires), `verb`, `vague`, `asks` (`is`, `has`: `question` judges it), or
+-- `refused`, which `noun_effect` fires on.
+function verdict(w)
+  if is_participle(w) then return "participle" end
+  if has_key(VERBS, w) then return "verb" end
+  if has_key(VAGUE, w) then return "vague" end
+  if w == "is" or w == "has" then return "asks" end
+  return "refused"
 end
 
 -- ── the tree ─────────────────────────────────────────────────────────────
@@ -358,7 +403,11 @@ function hunt(def)
   -- `unsigned_is_multiple_of` is no state named `unsigned`.
   local asks_inside = contains(name, "_is_") or contains(name, "_has_")
   local state = is_participle(ws[1]) and not asks_inside
-  if effect and judged and not is_participle(ws[1]) and not has_key(VERBS, ws[1]) and not has_key(VAGUE, ws[1]) and ws[1] ~= "is" and ws[1] ~= "has" then say(p, i, "noun_effect", "`" .. full .. "` has an effect but its first word, `" .. ws[1] .. "`, is no verb: it reads as a value, not an act") end
+  if effect and judged then
+    if not has_key(census, ws[1]) then census[ws[1]] = {word = ws[1], count = 0, verdict = verdict(ws[1])} end
+    census[ws[1]].count = census[ws[1]].count + 1
+  end
+  if effect and judged and verdict(ws[1]) == "refused" then say(p, i, "noun_effect", "`" .. full .. "` has an effect but its first word, `" .. ws[1] .. "`, is no verb: it reads as a value, not an act") end
   if effect and judged and state then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
   local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
   if asks and judged and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end
@@ -404,7 +453,23 @@ end
 
 local counts = {}
 for c in CHECKS do push(counts, c .. " " .. found[c]) end
-print("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "))
+if WORDS then
+  local rows = {}
+  local by = {}
+  local total = 0
+  for w in keys(census) do
+    push(rows, census[w])
+    by[census[w].verdict] = get(by, census[w].verdict, 0) + census[w].count
+    total = total + census[w].count
+  end
+  sort(rows, {{key = "count", desc = true}, "word"})
+  for r in rows do print(pad(r.count, -4) .. " " .. pad(r.word, 12) .. " " .. r.verdict) end
+  local verdicts = {}
+  for v in {"verb", "participle", "vague", "asks", "refused"} do push(verdicts, v .. " " .. get(by, v, 0)) end
+  print("name_hunt (Roc) census: " .. files .. " files; " .. total .. " effects, " .. #rows .. " first words; effects by verdict: " .. join(verdicts, ", "))
+else
+  print("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "))
+end
 
 if SELF then
   -- Every plant is judged before a failure stops the run, so one run shows
@@ -419,7 +484,13 @@ if SELF then
       if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
     end
   end
+  -- The census: a known word of the plants in each verdict.
+  for want in {{word = "read", verdict = "verb"}, {word = "held", verdict = "participle"}, {word = "process", verdict = "vague"}, {word = "links", verdict = "refused"}} do
+    local got = get(census, want.word)
+    if got == nil then push(wrong, "the census has no `" .. want.word .. "`")
+    elseif got.verdict ~= want.verdict then push(wrong, "the census calls `" .. want.word .. "` " .. got.verdict .. ", not " .. want.verdict) end
+  end
   for w in wrong do print("FAIL " .. w) end
   if #wrong > 0 then fail("name_hunt self_test: " .. #wrong .. " plants wrong") end
-  print("name_hunt (Roc) self_test: PASS (each check fires on its plants alone, and the quiet_ plants on none)")
+  print("name_hunt (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none, and the census gives each verdict its known word)")
 end

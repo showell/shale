@@ -1,0 +1,15 @@
+-- Words ending in `ed` that are verbs, not past participles: the name
+-- hunts take a word of more than three letters ending in `ed` for a
+-- participle (`loaded`, `pinned`) unless it is here. One word a line;
+-- `--` starts a note.
+need
+feed
+seed
+embed
+speed
+shed
+bleed
+proceed
+exceed
+succeed
+breed
