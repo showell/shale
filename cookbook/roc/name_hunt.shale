@@ -23,6 +23,17 @@
 --   noun_effect   an effect whose first word is no verb this knows: a plain
 --                 noun (`links!`, `page!`), which reads as a value, not an act
 --   negative      a `no_*`/`not_*` `Bool`, an `is_not_*`
+--   command_tense an effect that takes a tag union (written in place, or a
+--                 type declared in any file hunted) whose tags all start
+--                 with a past participle and none carries a payload (`pin! :
+--                 ..., [Pinned, Unpinned]`): an instruction named like an
+--                 event. A tag with a payload holds a state's data
+--                 (`[Known(accounts), Unasked]`), so a union with one is a
+--                 state carried along, not an order. A command is a verb
+--                 (`[Pin, Unpin]`); an event is past tense where it is
+--                 recorded or replayed (a plain function, a record's field),
+--                 never as what an effect is told to do (roc-apps
+--                 docs/roc-style.md, naming).
 --
 -- **A NAME IS JUDGED ONCE**, from its annotation when it has one (a hosted
 -- effect, `links! : Str => Str` in a platform's `Host.roc`, has nothing
@@ -53,7 +64,7 @@
 const SELF = arg("self_test", "") == "1"
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
 const ROC_AST = "tools:roc-ast/bin/roc-ast"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense"}
 const VERBS = {fail = true, pin = true, unpin = true, bookmark = true, receive = true, fan = true, get = true, set = true, load = true, save = true, read = true, write = true, send = true, serve = true, fetch = true, make = true, build = true, run = true, handle = true, find = true, add = true, remove = true, delete = true, create = true, update = true, store = true, announce = true, react = true, act = true, render = true, parse = true, check = true, open = true, close = true, start = true, stop = true, post = true, put = true, show = true, list = true, resume = true, append = true, replace = true, drain = true, flush = true, wait = true, reap = true, spawn = true, kill = true, lock = true, unlock = true, join = true, split = true, walk = true, scan = true, emit = true, log = true, print = true, count = true, mark = true, clear = true, reset = true, init = true, deinit = true, free = true, alloc = true, grow = true, take = true, give = true, keep = true, drop = true, move = true, copy = true, rename = true, sync = true, poll = true, accept = true, connect = true, listen = true, bind = true, refuse = true, answer = true, reply = true, respond = true, retire = true, revoke = true, sign = true, verify = true, hash = true, encode = true, decode = true, format = true, call = true, apply = true, ensure = true, try = true, ask = true, tell = true, sweep = true, prune = true, trim = true, push = true, pop = true, insert = true, index = true, search = true, match = true, route = true, dispatch = true, redirect = true, upload = true, download = true, back = true, restore = true, rotate = true, touch = true, bump = true, note = true, record = true, report = true, pick = true, choose = true, sort = true, merge = true, mount = true, unmount = true, watch = true, tick = true, step = true, advance = true, feed = true, main = true, map = true, fold = true, ["for"] = true, catch = true, admit = true, publish = true, gather = true, seed = true}
 
 const PARTICIPLES = {held = true, done = true, ready = true, kept = true, gone = true, sent = true, made = true, found = true, taken = true, given = true, shown = true, built = true, seen = true, known = true, stale = true, dirty = true}
@@ -64,6 +75,10 @@ const ENTRY = {handle = true, run = true, main = true}
 -- does not choose (the header says where the list comes from).
 const FIXED = {to_inspect = true, is_eq = true, to_hash = true, plus = true, minus = true, times = true, div_by = true, div_trunc_by = true, rem_by = true, is_lt = true, is_lte = true, is_gt = true, is_gte = true, range_exclusive_to = true, range_inclusive_to = true, range_exclusive_from = true, range_inclusive_from = true, range_iter = true, range_len_if_known = true, negate = true, ["not"] = true, from_numeral = true, from_quote = true, from_interpolation = true, iter = true, next = true, parser_for = true, encoder_for = true, map = true, ["map!"] = true, subscript = true, encode = true, decode = true}
 const INTS = {U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true}
+
+-- Every tag union a type declaration names, by its name (`Edit` of
+-- `Edit : [Opened, Closed]`): its tags' names, for `command_tense`.
+const ALIASES = {}
 
 const found = {}
 for c in CHECKS do found[c] = 0 end
@@ -163,6 +178,37 @@ function span_text(src, h)
   return join(parts, "\n")
 end
 
+-- The tags of the tag union at `at` (`ty-tag-union`), by name: `Unpinned`
+-- of `Unpinned(Str)` too. A union in which any tag carries a payload
+-- (`Known(List(Account))`) holds a state's data: it is no command, so it
+-- gives none.
+function tag_names(tree, at)
+  local out = {}
+  for t in children(tree, at) do
+    if head(tree, t) == "(tags" then
+      for g in children(tree, t) do
+        local h = head(tree, g)
+        if starts_with(h, "(ty-apply ") then return {} end
+        local n = between(h, "(name \"", "\")")
+        if n ~= nil and n ~= "" then push(out, n) end
+      end
+    end
+  end
+  return out
+end
+
+-- An argument's type, as `command_tense` needs it: the tags written in
+-- place, or the name of a declared type (its last part: `ChatState.PinEdit`
+-- is `PinEdit`).
+function arg_shape(tree, at)
+  local h = head(tree, at)
+  if starts_with(h, "(ty-tag-union ") then return {tags = tag_names(tree, at)} end
+  local n = between(h, "(name \"", "\")")
+  if n == nil or n == "" then return {} end
+  local parts = split(n, ".")
+  return {ref = parts[#parts]}
+end
+
 -- **EVERY TOP-LEVEL AND MODULE-MEMBER DEFINITION** in `paths`, by roc-ast
 -- (Roc's own parser), each `{path, line, name, annotation, fn, whole,
 -- result, callback, paired}`: an annotation's type rendered whole, and when
@@ -216,6 +262,11 @@ function definitions(paths)
       end
       local line = between(h, "@", ".")
       local anno = ""
+      if outer and starts_with(h, "(s-type-decl ") then
+        local kids = children(tree, i)
+        local decl = between(head(tree, kids[1]), "(name \"", "\")")
+        if #kids > 1 and decl ~= nil and starts_with(head(tree, kids[2]), "(ty-tag-union ") then ALIASES[decl] = tag_names(tree, kids[2]) end
+      end
       if outer and starts_with(h, "(s-type-anno ") then
         local def = {path = path, line = line, name = between(h, "(name \"", "\")"), annotation = true, fn = false, callback = false, paired = false}
         local kids = children(tree, i)
@@ -228,6 +279,13 @@ function definitions(paths)
             def.result = render(tree, parts[#parts])
             for a in take(parts, #parts - 1) do
               if contains(span_text(src, head(tree, a)), "=>") then def.callback = true end
+              -- Only an effect's arguments are judged (`command_tense`), and
+              -- what the run keeps at a `yield` is capped (1 MiB): keep none
+              -- for the rest.
+              if ends_with(def.name, "!") then
+                if not has_key(def, "args") then def.args = {} end
+                push(def.args, arg_shape(tree, a))
+              end
             end
           end
           push(out, def)
@@ -261,6 +319,26 @@ function definitions(paths)
 end
 
 -- ── the checks ───────────────────────────────────────────────────────────
+
+-- A tag's first word, lowered: `Unpinned` is `unpinned`, `AddedTo` is
+-- `added`.
+function first_word(tag)
+  local w = lower(sub(tag, 1, 1))
+  local k = 2
+  while k <= #tag and sub(tag, k, k) == lower(sub(tag, k, k)) do
+    w = w .. sub(tag, k, k)
+    k = k + 1
+  end
+  return w
+end
+
+-- Whether every tag starts with a past participle.
+function all_past(tags)
+  for t in tags do
+    if not is_participle(first_word(t)) then return false end
+  end
+  return true
+end
 
 function hunt(def)
   local p = def.path
@@ -303,15 +381,25 @@ function hunt(def)
     if last == "path" and t ~= "Str" and not contains(t, "Path") then say(p, i, "name_type", "`" .. full .. "` is a path of type `" .. t .. "`") end
     if t == "Bool" and (ws[1] == "no" or ws[1] == "not") and #ws > 1 then say(p, i, "negative", "`" .. full .. "` is a negative flag: `" .. full .. " = Bool.false` reads twice") end
   end
+  if is_annotation and effect and def.fn then
+    for a in (get(def, "args") or {}) do
+      local tags = get(a, "tags")
+      local ref = get(a, "ref")
+      if tags == nil and ref ~= nil then tags = get(ALIASES, ref) end
+      if tags ~= nil and #tags >= 2 and all_past(tags) then say(p, i, "command_tense", "`" .. full .. "` takes `[" .. join(tags, ", ") .. "]`, an instruction named like an event: name its tags as commands (`Pinned` is `Pin`)") end
+    end
+  end
   if is_annotation and #ws > 2 and ws[1] == "is" and ws[2] == "not" then say(p, i, "negative", "`" .. full .. "` asks a negative: `!" .. full .. "(...)` reads twice") end
   return nil
 end
 
 local paths = glob(GLOB)
 local files = #paths
+-- No `yield` here: each definition's garbage is small, and what a yield
+-- keeps (every definition, and the declared types' tags) passes the fixed
+-- 1 MiB it allows on the chat. The arena the header sets holds it.
 for def in definitions(paths) do
   hunt(def)
-  yield()
 end
 
 local counts = {}
