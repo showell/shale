@@ -19,6 +19,12 @@ it works on, `<shale>` being the shale checkout:
   widest group, runs `roc fmt`, and repeats until nothing changes. It lists
   what it can't reach: strings, long conditions, a function type's bare
   arguments.
+- [stack.shale](stack.shale): **three or more, one a line.** Any list,
+  record, tuple, call's or lambda's arguments or tag payload of three or
+  more items on one line is a finding, and so is a line over 100 columns.
+  `write=1` gives each a trailing comma, outermost first, and runs `roc fmt`
+  until nothing changes; a second run changes nothing. Strings and comments
+  are never read as items. `self_test=1` runs its plants (`plants/stack/`).
 - [same_code.shale](same_code.shale): **the same machine code.** Two builds
   of an archive, compared instruction by instruction with Roc's hashed
   procedure names (`roc__p` and 32 hex digits, which move with the source's
