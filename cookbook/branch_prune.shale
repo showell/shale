@@ -1,0 +1,168 @@
+-- **MERGED WORK BRANCHES, FOUND AND (WHEN ASKED) DELETED**: in each repo,
+-- every branch on `origin` whose name starts with one of `prefixes`
+-- (`claude/` and `box/`: CC's and the box's), judged against `origin`'s
+-- default branch, one line each:
+--
+--   delete  roc-chat claude/roc-chat   merged into main
+--   keep    shale    claude/x          3 commits not in master
+--   keep    roc-chat box/auth          origin's default branch
+--
+-- **MERGED IS ANCESTRY, NEVER A NAME**: a branch is merged only when its
+-- tip is an ancestor of the default branch's (`git merge-base
+-- --is-ancestor`), so a branch with even one commit the default lacks is
+-- kept, with the count. **The default branch is never deleted**, whatever
+-- its name. **Nothing is deleted without `delete=1`**: the plain run is a
+-- report, and with `delete=1` each `delete` line is a `git push origin
+-- --delete`, said as it is done. Run it yourself (Steve), or let an agent
+-- run the report and hand you the `delete=1` line.
+--
+--   shale cookbook:branch_prune.shale
+--   shale cookbook:branch_prune.shale delete=1
+--   shale cookbook:branch_prune.shale repos=roc-chat,shale prefixes=claude/
+--   shale cookbook:branch_prune.shale self_test=1
+--
+-- `repos` are folders under `repos:` (comma-separated; the default the
+-- repos CC and the box branch in). Each is fetched with `--prune` first, so
+-- a branch already gone is not reported.
+--
+-- budget: steps=200000000
+
+const DEFAULT_REPOS = "roc-chat,roc-markdown,chat-client,chat-markdown,roc-webbox,roc-apps,shale,metal-vmm,angry-gopher,zig-metal-unikernel,zig-webbox,zig-coverage-sdk,dog-park"
+const REPOS = arg("repos", DEFAULT_REPOS)
+const PREFIXES = arg("prefixes", "claude/,box/")
+const DELETE = arg("delete", "0") == "1"
+const SELF_TEST = arg("self_test", "0") == "1"
+
+function git(dir, args)
+  local argv = {"git", "-C", dir}
+  for a in args do argv[#argv + 1] = a end
+  return run(argv, {timeout_ms = 60000, whole = 1000000})
+end
+
+-- As `git`, for a call whose nonzero exit is an answer, not a failure.
+function git_may_fail(dir, args, why)
+  local argv = {"git", "-C", dir}
+  for a in args do argv[#argv + 1] = a end
+  return run(argv, {timeout_ms = 60000, whole = 1000000, want = why})
+end
+
+-- The default branch's name on origin, asked of origin itself (`remote
+-- set-head --auto`), never a checkout's old note of it, which outlives a
+-- default changed or a branch deleted.
+function default_branch(dir)
+  local r = git_may_fail(dir, {"remote", "set-head", "origin", "--auto"}, "nonzero: said by the caller")
+  if r.code ~= 0 then return nil end
+  local s = git_may_fail(dir, {"symbolic-ref", "--short", "refs/remotes/origin/HEAD"}, "nonzero: said by the caller")
+  local target = trim(s.out)
+  if s.code ~= 0 or not starts_with(target, "origin/") then return nil end
+  return sub(target, #"origin/" + 1, #target)
+end
+
+function prefixed(name, prefixes)
+  for p in prefixes do
+    if starts_with(name, p) then return true end
+  end
+  return false
+end
+
+-- One repo's verdicts, a list of {act, repo, branch, why}: four programs
+-- (fetch, set-head, symbolic-ref, one for-each-ref with each branch's commits ahead of
+-- the default), whatever the branches.
+function judge(dir, label, prefixes)
+  local out = {}
+  git(dir, {"fetch", "-q", "--prune", "origin"})
+  local main = default_branch(dir)
+  if main == nil then
+    out[#out + 1] = {act = "skip", repo = label, branch = "", why = "origin's default branch is not known here"}
+    return out
+  end
+  local refs = git(dir, {"for-each-ref", "--format=%(refname:short) %(ahead-behind:origin/" .. main .. ")", "refs/remotes/origin"})
+  for line in lines(refs.out) do
+    local parts = split(trim(line), " ")
+    if #parts == 3 and starts_with(parts[1], "origin/") then
+      local name = sub(parts[1], #"origin/" + 1, #parts[1])
+      if name ~= "HEAD" and prefixed(name, prefixes) then
+        if name == main then
+          out[#out + 1] = {act = "keep", repo = label, branch = name, why = "origin's default branch"}
+        elseif parts[2] == "0" then
+          out[#out + 1] = {act = "delete", repo = label, branch = name, why = "merged into " .. main}
+        else
+          out[#out + 1] = {act = "keep", repo = label, branch = name, why = parts[2] .. " commits not in " .. main}
+        end
+      end
+    end
+  end
+  return out
+end
+
+function say(v)
+  print(v.act .. "\t" .. v.repo .. "\t" .. v.branch .. "\t" .. v.why)
+end
+
+if SELF_TEST then
+  -- A bare origin with main; `merged` (merged), `ahead` (one commit more),
+  -- and `box/default` made origin's default; the judge must keep and
+  -- delete exactly as planted.
+  local T = "build:branch_prune_self_test"
+  if exists(T) then remove_tree(T) end
+  mkdir(T)
+  local root = real(T)
+  run({"git", "init", "-q", "--bare", "-b", "main", root .. "/origin.git"}, {timeout_ms = 30000, whole = 10000})
+  run({"git", "clone", "-q", root .. "/origin.git", root .. "/work"}, {timeout_ms = 30000, whole = 10000})
+  local w = root .. "/work"
+  git(w, {"-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "base"})
+  git(w, {"push", "-q", "origin", "HEAD:main"})
+  git(w, {"push", "-q", "origin", "HEAD:refs/heads/claude/merged"})
+  git(w, {"-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "more"})
+  git(w, {"push", "-q", "origin", "HEAD:refs/heads/claude/ahead"})
+  git(w, {"push", "-q", "origin", "HEAD:refs/heads/other/ignored"})
+  git(w, {"remote", "set-head", "origin", "main"})
+  local got = {}
+  for v in judge(w, "t", {"claude/", "box/"}) do got[v.branch] = v.act; say(v) end
+  if got["claude/merged"] ~= "delete" then fail("self_test: claude/merged should be delete, is " .. tostring(got["claude/merged"])) end
+  if got["claude/ahead"] ~= "keep" then fail("self_test: claude/ahead (one commit more) should be keep") end
+  if has_key(got, "other/ignored") then fail("self_test: a branch outside the prefixes was judged") end
+  -- The default branch itself, under a work prefix, is kept.
+  git(w, {"push", "-q", "origin", "HEAD:refs/heads/box/default"})
+  run({"git", "--git-dir", root .. "/origin.git", "symbolic-ref", "HEAD", "refs/heads/box/default"}, {timeout_ms = 30000, whole = 10000})
+  git(w, {"remote", "set-head", "origin", "--auto"})
+  got = {}
+  for v in judge(w, "t", {"claude/", "box/"}) do got[v.branch] = v.why end
+  if got["box/default"] ~= "origin's default branch" then fail("self_test: the default branch box/default was not kept as the default") end
+  remove_tree(T)
+  print("branch_prune self_test: PASS (merged deleted, one commit ahead kept, the default kept, other prefixes untouched)")
+else
+  local prefixes = split(PREFIXES, ",")
+  local deleted = 0
+  local kept = 0
+  for name in split(REPOS, ",") do
+    local label = trim(name)
+    if not exists("repos:" .. label .. "/.git") then
+      print("skip\t" .. label .. "\t\tno checkout at repos:" .. label)
+    else
+      local dir = real("repos:" .. label)
+      local doomed = {}
+      for v in judge(dir, label, prefixes) do
+        say(v)
+        if v.act == "delete" then doomed[#doomed + 1] = v.branch elseif v.act == "keep" then kept = kept + 1 end
+      end
+      if DELETE and #doomed > 0 then
+        local argv = {"push", "origin", "--delete"}
+        for d in doomed do argv[#argv + 1] = d end
+        local pushed = git_may_fail(dir, argv, "nonzero: said below")
+        if pushed.code == 0 then
+          print("  deleted on origin: " .. join(doomed, ", "))
+        else
+          print("  NOT deleted (" .. label .. "): " .. trim(pushed.out))
+          doomed = {}
+        end
+      end
+      deleted = deleted + #doomed
+    end
+  end
+  if DELETE then
+    print("branch_prune: " .. deleted .. " deleted, " .. kept .. " kept")
+  else
+    print("branch_prune: " .. deleted .. " to delete, " .. kept .. " kept; nothing deleted (delete=1 deletes them)")
+  end
+end
