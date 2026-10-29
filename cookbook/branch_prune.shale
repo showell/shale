@@ -50,12 +50,12 @@ end
 -- set-head --auto`), never a checkout's old note of it, which outlives a
 -- default changed or a branch deleted.
 function default_branch(dir)
+  -- It says the name it set: "origin/HEAD set to main".
   local r = git_may_fail(dir, {"remote", "set-head", "origin", "--auto"}, "nonzero: said by the caller")
-  if r.code ~= 0 then return nil end
-  local s = git_may_fail(dir, {"symbolic-ref", "--short", "refs/remotes/origin/HEAD"}, "nonzero: said by the caller")
-  local target = trim(s.out)
-  if s.code ~= 0 or not starts_with(target, "origin/") then return nil end
-  return sub(target, #"origin/" + 1, #target)
+  local said = trim(r.out)
+  local prefix = "origin/HEAD set to "
+  if r.code ~= 0 or not starts_with(said, prefix) then return nil end
+  return sub(said, #prefix + 1, #said)
 end
 
 function prefixed(name, prefixes)
@@ -65,8 +65,8 @@ function prefixed(name, prefixes)
   return false
 end
 
--- One repo's verdicts, a list of {act, repo, branch, why}: four programs
--- (fetch, set-head, symbolic-ref, one for-each-ref with each branch's commits ahead of
+-- One repo's verdicts, a list of {act, repo, branch, why}: three programs
+-- (fetch, set-head, one for-each-ref with each branch's commits ahead of
 -- the default), whatever the branches.
 function judge(dir, label, prefixes)
   local out = {}
