@@ -184,3 +184,13 @@ resolve -- `resolveChatDir` (markdown_bench.zig)
 setup -- `setup` (app_start.zig)
 stage -- `stage` (chat_retire.zig: a test's fixture)
 stream -- `streamTranscript` (chat_sse.zig)
+-- 2026-10-29, from a review of roc-chat, each a verb the table lacked:
+mint -- `mint!` (Agents.roc: mints an invite code)
+invite -- `invite!`, `invite_refused!` (Agents.roc)
+redeem -- `redeem!` (Agents.roc: redeems an invite)
+audit -- `audit_invite!`, `audit_grant!` (Agents.roc), `audit_use!` (Credentials.roc)
+spend -- `spend_nonce!` (Store.roc)
+echo -- `echo!` (test/probe.roc)
+-- and their neighbors in that domain, verbs before a hunt meets them:
+grant -- `grant!`, as `revoke` is
+subscribe -- `subscribe!`, as `publish` is
