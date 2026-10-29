@@ -37,7 +37,21 @@
 
 -- The essays (`notes/*.md`, history, so its own are passed by) are
 -- essay-repl-server's: listed so the others' citations of them resolve.
-const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "dog-park", "observatory", "zig-coverage-sdk", "essay-repl-server", "cobble-webbox", "roc-webbox"}
+const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "dog-park", "observatory", "zig-coverage-sdk", "essay-repl-server", "cobble-webbox", "roc-webbox", "roc-chat", "roc-markdown", "chat-client"}
+-- **THE OPTIONAL SIBLINGS** (metal-vmm QUEUE 313): the Roc chat's repos,
+-- which many machines have not checked out. One that is not here is said
+-- once (`not_checked_out`), and a path cited as its own (`../roc-chat/x`,
+-- `roc-chat/x`, or on a line naming it) is passed by, never `gone`: that
+-- machine cannot tell. Where it is here, its paths are checked like any
+-- sibling's, and one not written yet is a finding.
+const OPTIONAL = {"roc-chat", "roc-markdown", "chat-client"}
+
+function optional(repo)
+  for r in OPTIONAL do
+    if r == repo then return true end
+  end
+  return false
+end
 const EXTS = {".zig", ".shale", ".md", ".sh", ".py", ".json", ".zon", ".js", ".html", ".css", ".txt", ".conf", ".toml"}
 const SHOW = parse_int(arg("show", "20"))
 -- `only=<repo>`: that repo's docs alone, still resolved against every
@@ -220,12 +234,16 @@ function resolve(at, repo, docdir, c, kind, text, bases, ignores)
     for r in named(text) do
       if has_key(ignores, r) and has_key(ignores[r], p) then return {ignored = true} end
     end
-    local where = {}
-    for r in REPOS do
-      if has_key(bases, r) and has_key(bases[r], p) then push(where, r) end
+    -- The optional siblings are asked last, so whether one is checked out
+    -- never turns a citation another repo answers ambiguous.
+    for late in {false, true} do
+      local where = {}
+      for r in REPOS do
+        if optional(r) == late and has_key(bases, r) and has_key(bases[r], p) then push(where, r) end
+      end
+      if #where == 1 then return {found = bases[where[1]][p]} end
+      if #where > 1 then return {ambiguous = join(where, ", ")} end
     end
-    if #where == 1 then return {found = bases[where[1]][p]} end
-    if #where > 1 then return {ambiguous = join(where, ", ")} end
   end
   -- `../sibling/x` and `sibling/x`: the sibling's.
   local first = split(p, "/")[1]
@@ -260,19 +278,28 @@ function resolve(at, repo, docdir, c, kind, text, bases, ignores)
     f = in_repo(at, r, p)
     if f ~= nil then return {found = f} end
   end
-  local where = {}
-  local found = nil
-  for r in REPOS do
-    f = in_repo(at, r, p)
-    if f ~= nil then
-      push(where, r)
-      found = f
+  for late in {false, true} do
+    local where = {}
+    local found = nil
+    for r in REPOS do
+      if optional(r) == late then
+        f = in_repo(at, r, p)
+        if f ~= nil then
+          push(where, r)
+          found = f
+        end
+      end
     end
+    if #where == 1 then return {found = found} end
+    if #where > 1 then return {ambiguous = join(where, ", ")} end
   end
-  if #where == 1 then return {found = found} end
-  if #where > 1 then return {ambiguous = join(where, ", ")} end
   -- An untracked `*.conf` is a host's config (`zig-metal-unikernel.conf`).
   if ends_with(p, ".conf") then return {skip = "a host's config"} end
+  -- An optional sibling not checked out here, cited as its own: not here
+  -- to say.
+  for r in OPTIONAL do
+    if not repo_here(at .. r) and (first == r or contains(text, r)) then return {skip = "in an optional sibling not checked out here"} end
+  end
   -- Not here; what the repo's `.gitignore` covers, or a sibling's the line
   -- names, is asked after, all at once (`ignored`).
   local asks = {p}
@@ -529,6 +556,15 @@ function check_all(at, repos)
   return all
 end
 
+-- The optional siblings in `repos` not checked out under `at`.
+function not_checked_out(at, repos)
+  local out = {}
+  for r in repos do
+    if optional(r) and not repo_here(at .. r) then push(out, r) end
+  end
+  return out
+end
+
 function findings(r)
   return #r.gone + #r.ambiguous + #r.gone_names
 end
@@ -553,7 +589,7 @@ function report(all, repos)
         end
         if i > SHOW then print("  " .. k .. "  ... and " .. (i - SHOW) .. " more") end
       end
-    elseif ONLY == "" then
+    elseif ONLY == "" and not optional(repo) then
       print(repo .. ": not here")
     end
   end
@@ -603,6 +639,10 @@ function self_test()
       "Built by whom: `probe/out.elf`.\n" ..
       "Run `./ops/check_x`, and `./ops/missing_x`.\n",
     ["docs/here.md"] = "Back to [the readme](../README.md); `../zig-webbox/src/w.zig` by path.\n",
+    ["docs/roc.md"] = "roc-markdown's `judge/answers.roc` is there, and `../roc-markdown/judge/answers.roc` by path.\n" ..
+      "Not written yet in roc-markdown: `judge/made_up.roc`.\n" ..
+      "Not checked out here: roc-chat's `app/Session.roc`, and `../roc-chat/app/Gone.roc`.\n" ..
+      "Bare, one regular repo's alone but for an optional sibling: `server.zig`.\n",
     ["FEEDBACK.md"] = "`src/history_only.zig` is gone and that is fine.\n",
     ["notes/essay.md"] = "`src/essay_only.zig` too.\n",
     ["docs/reviews/old.md"] = "`src/review_only.zig`, reviewed once.\n",
@@ -619,16 +659,23 @@ function self_test()
     ["docs/x.md"] = "Our `src/both.zig`, and metal-vmm's `src/a.zig`.\n",
     [".gitignore"] = "probe/*.elf\n",
   })
-  fixture_repo("angry-gopher", {["src/both.zig"] = ""})
-  local all = check_all(FIX .. "/", {"metal-vmm", "zig-webbox", "angry-gopher"})
+  fixture_repo("angry-gopher", {["src/both.zig"] = "", ["src/server.zig"] = ""})
+  -- An optional sibling that is here (QUEUE 313); roc-chat is not.
+  fixture_repo("roc-markdown", {["judge/answers.roc"] = "", ["host/server.zig"] = ""})
+  local all = check_all(FIX .. "/", {"metal-vmm", "zig-webbox", "angry-gopher", "roc-markdown", "roc-chat"})
   local m = all["metal-vmm"]
   local gone = join(m.gone, "\n")
-  expect(#m.gone == 4 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
+  expect(#m.gone == 5 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
+  expect(not contains(gone, "answers.roc"), "a path real in an optional sibling that is here passes, by the line's naming and by `../`")
+  expect(contains(gone, "docs/roc.md:2: `judge/made_up.roc`"), "a made-up path in an optional sibling that is here is gone: not written yet is a finding")
+  expect(not contains(gone, "Session.roc") and not contains(gone, "Gone.roc") and get(m.skipped, "in an optional sibling not checked out here", 0) == 2, "a path in an optional sibling not checked out is passed by, never gone")
+  local absent = not_checked_out(FIX .. "/", {"metal-vmm", "roc-chat", "roc-markdown"})
+  expect(#absent == 1 and absent[1] == "roc-chat", "an optional sibling not checked out is named once; one that is here is not")
   expect(contains(gone, "README.md:14: `ops/missing_x`") and not contains(gone, "check_"), "a `./` path with no extension is read whole, never one character short")
   expect(contains(gone, "README.md:11: `random1.md`"), "a data file's name with no data root is a finding")
   expect(contains(gone, "README.md:13: `probe/out.elf`"), "a path a sibling ignores, on a line naming no sibling, is a finding")
   expect(not contains(gone, "w.zig"), "a sibling-named path is found there, by the line's naming and by `../`")
-  expect(#m.ambiguous == 0, "a path in this repo is this repo's, though siblings have it")
+  expect(#m.ambiguous == 0, "a path in this repo is this repo's, though siblings have it; a name another repo answers, an optional sibling's too, is the other repo's")
   local z = all["zig-webbox"]
   expect(#z.gone == 0 and #z.ambiguous == 0, "a sibling's path the line names is found")
   expect(not contains(gone, "here.md") and not contains(gone, "README.md`"), "a link to a doc resolves from the doc's folder")
@@ -675,6 +722,9 @@ else
   local checked = check_all(arg("at", ""), REPOS)
   if ONLY ~= "" and not has_key(checked, ONLY) then fail("doc check: `only=" .. ONLY .. "` is not one of the repos beside it") end
   local total = report(checked, REPOS)
+  for r in not_checked_out(arg("at", ""), REPOS) do
+    print(r .. ": not checked out here, so its paths are passed by (an optional sibling)")
+  end
   if total > 0 then fail("doc check: " .. total .. " findings") end
   print("doc check: every cited path resolves and every cited name is there")
 end
