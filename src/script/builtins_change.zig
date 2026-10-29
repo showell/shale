@@ -187,9 +187,23 @@ fn missHint(a: std.mem.Allocator, file: []const u8, old: []const u8) error{OutOf
 /// The file is read whole, so it is limited by the call-bytes cap.
 /// Returns the number of occurrences replaced.
 fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+    const p = try pathArg(run, pos, .edit, args[0], false);
+    const plan = try planEdits(run, pos, p, try editsArg(run, pos, args));
+    // These duplicate `rewrite` so that `rewrite` stays unreferenced, and
+    // out of the image, on metal.
+    try writeDiff(run, pos, p.rel(), plan.was, plan.now, plan.spans);
+    _ = try changeAt(run, pos, .edit, .replace, p, plan.now);
+    return .{ .int = @intCast(plan.n) };
+}
+
+/// One file's edits worked out and not yet written: what it was, what it
+/// becomes, where, and how many replacements.
+pub const Plan = struct { p: Path, was: []const u8, now: []const u8, spans: []const Span, n: usize };
+
+/// Reads `p` and applies `edits` to it in sequence, as `edit` does, charging
+/// the scans; writes nothing. Each refusal is `edit`'s.
+fn planEdits(run: *Run, pos: ast.Pos, p: Path, edits: []const Edit) Error!Plan {
     const b: B = .edit;
-    const p = try pathArg(run, pos, b, args[0], false);
-    const edits = try editsArg(run, pos, args);
     try countRead(run, pos);
     const size = try fileSize(run, pos, b, p);
     const was = (try readSized(run, pos, b, p, size, 0, null)).string;
@@ -236,11 +250,45 @@ fn editFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         now = next.items;
         replaced_n += at.items.len;
     }
-    // These duplicate `rewrite` so that `rewrite` stays unreferenced, and
-    // out of the image, on metal.
-    try writeDiff(run, pos, p.rel(), was, now, spans.items);
-    _ = try changeAt(run, pos, b, .replace, p, now);
-    return .{ .int = @intCast(replaced_n) };
+    return .{ .p = p, .was = was, .now = now, .spans = spans.items, .n = replaced_n };
+}
+
+/// **`edit` OVER SEVERAL FILES, AS ONE** (the Linux host's `edits_write`,
+/// under the prelude's `edits_all`): `list` is `{{p, {edits}}, ...}`. Every
+/// file is planned, then every diff printed, then every change admitted (the
+/// host's `may_change`, the change budgets, and its steps charged), and only
+/// then is any written. A stop of any kind, a budget's or a refusal's, comes
+/// before the first write, so it leaves every file as it was. What can still
+/// part them is the store itself failing a write after the first: that stops
+/// the run, and the effects say which were made. A file named twice is
+/// refused: join its edits into one list, which `edit` applies in sequence.
+/// The replacements made in all.
+pub fn editsWrite(run: *Run, pos: ast.Pos, list: Value) Error!Value {
+    const b: B = .edit;
+    const items = (try bi.listArg(run, pos, b, list)).list.items;
+    const a = run.alloc;
+    const plans = a.alloc(Plan, items.len) catch return run.oom(pos);
+    for (items, plans, 1..) |item, *plan, k| {
+        const pair = switch (item) {
+            .table => |t| if (t.kind == .list and t.list.items.len == 2) t.list.items else null,
+            else => null,
+        } orelse return run.fail(pos, .type, "`edits_write`: item {d} must be `{{p, {{edits}}}}`, not {s}", .{ k, item.typeName() });
+        const p = try pathArg(run, pos, b, pair[0], false);
+        for (plans[0 .. k - 1]) |earlier| {
+            if (std.mem.eql(u8, earlier.p.full(), p.full())) return run.fail(pos, .argument, "`edits_write`: {s} is named twice: one list of its edits, which apply in sequence", .{p.rel()});
+        }
+        plan.* = try planEdits(run, pos, p, try editsArg(run, pos, &.{ pair[0], pair[1] }));
+    }
+    for (plans) |plan| try writeDiff(run, pos, plan.p.rel(), plan.was, plan.now, plan.spans);
+    // Every file's log entry at once, so no `make` waits on the arena.
+    run.effects.ensureUnusedCapacity(a, plans.len) catch return run.oom(pos);
+    for (plans) |plan| try admit(run, pos, b, plan.p, plan.now);
+    var n: usize = 0;
+    for (plans) |plan| {
+        try make(run, pos, b, .replace, plan.p, plan.now);
+        n += plan.n;
+    }
+    return .{ .int = @intCast(n) };
 }
 
 /// Writes a file rewritten by a host: `was` became `now`, `spans` saying
@@ -367,6 +415,15 @@ pub fn mayChange(run: *Run, pos: ast.Pos, p: Path) Error!void {
 
 /// A change to `p` with `data`, logged under `b`'s name.
 fn changeAt(run: *Run, pos: ast.Pos, b: B, c: Change, p: Path, data: []const u8) Error!Value {
+    try admit(run, pos, b, p, data);
+    try make(run, pos, b, c, p, data);
+    return .nil;
+}
+
+/// Everything a change asks before it is made: the run may change the store,
+/// the host lets `p` change, the change budgets hold it; then it is counted,
+/// its bytes charged and its log entry reserved. A stop here changes nothing.
+fn admit(run: *Run, pos: ast.Pos, b: B, p: Path, data: []const u8) Error!void {
     // A background run never changes the store. `call` already refuses the
     // change builtins by name; this also holds a host's writes (`rewrite`).
     run.tried_change = true;
@@ -377,12 +434,17 @@ fn changeAt(run: *Run, pos: ast.Pos, b: B, c: Change, p: Path, data: []const u8)
     run.changes += 1;
     run.change_bytes += data.len;
     try run.charge(pos, data.len);
-    const io = run.io;
-    const a = run.alloc;
     // Reserve the log entry first: a change made but not logged (arena full)
     // would be on disk yet missing from `effects`, which is how a host knows
     // to rebuild what it remembers.
-    run.effects.ensureUnusedCapacity(a, 1) catch return run.oom(pos);
+    run.effects.ensureUnusedCapacity(run.alloc, 1) catch return run.oom(pos);
+}
+
+/// Makes a change `admit` let through, and logs it with its outcome; a
+/// failed one also stops the run.
+fn make(run: *Run, pos: ast.Pos, b: B, c: Change, p: Path, data: []const u8) Error!void {
+    const io = run.io;
+    const a = run.alloc;
     // The store treats removing a missing path as done; for a script it is
     // an error, logged (docs/SHALE.md, "The store"). Only `null` means
     // missing: any other failure to stat is the store's own error, logged,
@@ -402,5 +464,4 @@ fn changeAt(run: *Run, pos: ast.Pos, b: B, c: Change, p: Path, data: []const u8)
     // stops the run.
     run.effects.appendAssumeCapacity(.{ .op = @tagName(b), .path = p.rel(), .outcome = if (outcome) |e| @errorName(e) else "ok" });
     if (outcome) |e| return storeFailed(run, pos, b, p.rel(), e);
-    return .nil;
 }

@@ -483,6 +483,12 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
     if (std.mem.eql(u8, name, "zig_move")) return @import("shale_host_zig.zig").move(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "zig_imports")) return @import("shale_host_zig.zig").imports(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "zig_tokens")) return @import("shale_host_zig.zig").tokens(h.alloc, run, pos, args);
+    // `edits_all`'s write: every file planned and admitted before any is
+    // written (`builtins_change.editsWrite`).
+    if (std.mem.eql(u8, name, "edits_write")) {
+        if (args.len != 1) return run.fail(pos, .argument, "`edits_write` takes one list, given {d}", .{args.len});
+        return script.builtins_change.editsWrite(run, pos, args[0]);
+    }
     // `edits_all` asks this of every file before it changes any.
     if (std.mem.eql(u8, name, "may_change")) {
         if (args.len != 1) return run.fail(pos, .argument, "`may_change` takes one path, given {d}", .{args.len});

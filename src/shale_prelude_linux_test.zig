@@ -303,6 +303,48 @@ test "linux prelude: edits_all checks a file named twice against its first edits
     try testing.expectEqualStrings("12\n", try t.file("a.txt"));
 }
 
+// **A STOP AT ANY STEP LEAVES BOTH FILES OR NEITHER** (metal-vmm QUEUE 304:
+// `queue_done` ran out of steps after writing QUEUE.md and before the
+// archive). Every step budget from too few to enough: each run either
+// finishes with both files written or stops with neither, never one.
+test "linux prelude: edits_all under any step budget writes both files or neither" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    var big: std.ArrayList(u8) = .empty;
+    for (0..2000) |i| try big.print(a, "line {d} of the archive\n", .{i});
+    const src = "edits_all({{\"q.txt\", {{old = \"item 7\\n\", new = \"\"}}}, {\"arch.txt\", {{old = \"line 0 \", new = \"- 7 done\\nline 0 \"}}}})";
+    try t.put("q.txt", "item 6\nitem 7\nitem 8\n");
+    try t.put("arch.txt", big.items);
+    t.budgets.steps = 1 << 40;
+    var whole = t.run(src, .atomic);
+    const enough = whole.steps;
+    try testing.expect(whole.stop == null);
+    whole.deinit();
+    var stopped: usize = 0;
+    var k: u64 = 0;
+    while (k <= enough) : (k += @max(enough / 400, 1)) {
+        try t.put("q.txt", "item 6\nitem 7\nitem 8\n");
+        try t.put("arch.txt", big.items);
+        t.budgets.steps = k;
+        var r = t.run(src, .atomic);
+        defer r.deinit();
+        const q_moved = !std.mem.eql(u8, "item 6\nitem 7\nitem 8\n", try t.file("q.txt"));
+        const a_moved = !std.mem.eql(u8, big.items, try t.file("arch.txt"));
+        if (q_moved != a_moved) {
+            std.debug.print("at {d} of {d} steps: q.txt {s}, arch.txt {s}\n", .{ k, enough, if (q_moved) "written" else "not", if (a_moved) "written" else "not" });
+            return error.OneFileWritten;
+        }
+        if (r.stop != null) {
+            stopped += 1;
+            try testing.expect(!q_moved);
+        } else try testing.expect(q_moved);
+    }
+    // The sweep reached the write phase's own steps, not only the checks'.
+    try testing.expect(stopped > 300);
+}
+
 test "linux prelude: edits_all checks what edit will refuse or the budgets stop, before it writes any: more than 64 edits to a file, an empty `old`, the changes and their bytes" {
     var t: T = undefined;
     try init(&t);

@@ -461,18 +461,22 @@ end
 
 -- **EDITS TO SEVERAL FILES** (`{{p, {{old, new[, all][, word]}, ...}}, ...}`):
 -- every file's edits checked against it first, in sequence as `edit`'s
--- list form applies them, and nothing written unless all hold; then each
--- file is edited, atomically. The set is not atomic: a file changed
--- between the check and its edit stops there, the files before it
--- written. A `word` edit is checked as `edit` applies it, whole words
--- only, so the edits after it are checked against its result. The
--- replacements made in all.
+-- list form applies them, and nothing written unless all hold. Then the
+-- host writes them as one: every file planned, every diff printed and
+-- every change admitted (the budgets' steps, changes and bytes) before
+-- the first is written, so a stop of any kind leaves every file as it
+-- was. Only the store failing a write after the first can part them, and
+-- that stops the run with its effects saying which were made. A `word`
+-- edit is checked as `edit` applies it, whole words only, so the edits
+-- after it are checked against its result. A file named twice is one
+-- write of both sets in order. The replacements made in all.
 function edits_all(list)
   -- A file named twice, by any spelling (a mount's, the root's), is checked
   -- against its earlier edits' result, as `edit` will meet it.
   local checked = {}
-  -- Each item is one `edit`: a change, its bytes the file as written.
-  local bytes = 0
+  -- One write a file, its sets of edits joined in order.
+  local writes = {}
+  local at = {}
   for item in list do
     if #item[2] > 64 then fail("`edits_all`: " .. item[1] .. " has " .. #item[2] .. " edits, and `edit` takes at most 64 a call; nothing written") end
     local key = real(item[1])
@@ -498,16 +502,26 @@ function edits_all(list)
         text = substitute(text, e.old, e.new)
       end
     end
+    if has_key(at, key) then
+      local joined = writes[at[key]][2]
+      for e in item[2] do push(joined, e) end
+      if #joined > 64 then fail("`edits_all`: " .. item[1] .. " has " .. #joined .. " edits in all, and `edit` takes at most 64 a call; nothing written") end
+    else
+      local own = {}
+      for e in item[2] do push(own, e) end
+      push(writes, {item[1], own})
+      at[key] = #writes
+    end
     checked[key] = text
-    bytes = bytes + #text
   end
+  -- Each write is one change, its bytes the file as written.
+  local bytes = 0
+  for w in writes do bytes = bytes + #checked[real(w[1])] end
   local left = budget()
-  if #list > left.changes then fail("`edits_all`: " .. #list .. " files to write, and the budget has " .. left.changes .. " change" .. (left.changes == 1 and "" or "s") .. " left; nothing written") end
+  if #writes > left.changes then fail("`edits_all`: " .. #writes .. " files to write, and the budget has " .. left.changes .. " change" .. (left.changes == 1 and "" or "s") .. " left; nothing written") end
   if bytes > left.change_bytes then fail("`edits_all`: " .. bytes .. " bytes to write, and the budget has " .. left.change_bytes .. " left; nothing written") end
   -- A file that may not change (a read-only mount's) stops it here,
   -- before any is written.
-  for item in list do host("may_change", item[1]) end
-  local n = 0
-  for item in list do n = n + edit(item[1], item[2]) end
-  return n
+  for w in writes do host("may_change", w[1]) end
+  return host("edits_write", writes)
 end
