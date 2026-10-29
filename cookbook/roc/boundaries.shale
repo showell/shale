@@ -5,7 +5,10 @@
 -- `tools:roc-ast/bin/roc-ast`, as `name_hunt.shale` reads it). A finding
 -- is a question for a reader, never a verdict:
 --
---   single  a wrapper of a line or two (`lines`, 2) with exactly one
+--   single  a wrapper (a body of one statement: an expression of at most
+--           `nodes`, 24, of the tree's nodes, however many lines a stacked
+--           record spreads it over; a `match` or `if` of a line or two,
+--           `lines`, 2) with exactly one
 --           production reference outside its own body, a call, which no
 --           `expect` and no test file reaches and no `##` doc explains:
 --           read better inline (roc-apps docs/roc-style.md, "A function
@@ -52,6 +55,7 @@ const SELF = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/boundaries/"
 const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const LINES = arg("lines", 2)
+const NODES = arg("nodes", 24)
 const ROC_AST = "tools:roc-ast/bin/roc-ast"
 const CHECKS = {"single", "fixed"}
 const T = {text = {}, depth = {}, l1 = {}, l2 = {}}
@@ -180,6 +184,39 @@ function doc_lines(src, name, line)
   return n
 end
 
+-- The number of nodes in the subtree at `at`, itself included.
+function subtree_nodes(at)
+  local i = at + 1
+  while i <= #T.text and T.depth[i] > T.depth[at] do i = i + 1 end
+  return i - at
+end
+
+-- **WHETHER THE LAMBDA AT `at` IS A WRAPPER**, `{wrapper, size}`, `size`
+-- what a finding says of it. Its body is one statement (a block of one, or
+-- an expression), measured by the tree's nodes (`NODES`), never its lines,
+-- so `stack.shale write=1` laying a call's record out a field a line
+-- changes nothing. A body that decides (a `match`, an `if`) is measured by
+-- its lines (`LINES`, the definition's own): a branch's arms are its rule,
+-- and only a decision of a line or two reads as a wrapper.
+function wrapper_size(at, lines)
+  local kids = children(at)
+  local body = kids[#kids]
+  if starts_with(head(body), "(e-block ") then
+    local stmts = {}
+    for k in children(body) do
+      if head(k) == "(statements" then stmts = children(k) end
+    end
+    if #stmts ~= 1 then return {wrapper = false, size = #stmts .. " statements"} end
+    body = stmts[1]
+  end
+  local n = subtree_nodes(body)
+  for k = body, body + n - 1 do
+    local kd = split(head(k), " ")[1]
+    if kd == "(e-match" or kd == "(e-if-then-else" then return {wrapper = lines <= LINES, size = "a decision of " .. lines .. " line" .. (lines == 1 and "" or "s")} end
+  end
+  return {wrapper = n <= NODES, size = "one expression of " .. n .. " nodes"}
+end
+
 -- ── pass 1: the functions ────────────────────────────────────────────────
 -- By key `owner|name`, the owner a module type's name, or `@path` for a
 -- top-level one.
@@ -207,7 +244,8 @@ for i = 1, #T.text do
       if #kids > 1 and starts_with(head(kids[2]), "(e-lambda ") then
         local name = raw(i + 1)
         local key = owner .. "|" .. name
-        defs[key] = {key = key, path = path, owner = owner, name = name, line = T.l1[i], last = T.l2[i], body = T.l2[i] - T.l1[i] + 1, doc = doc_lines(SRC[path], name, T.l1[i]), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, values = 0, ambiguous = false}
+        local size = wrapper_size(kids[2], T.l2[i] - T.l1[i] + 1)
+        defs[key] = {key = key, path = path, owner = owner, name = name, line = T.l1[i], last = T.l2[i], wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, T.l1[i]), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, values = 0, ambiguous = false}
         if sub(owner, 1, 1) ~= "@" then
           if not has_key(members, name) then members[name] = {} end
           push(members[name], key)
@@ -351,8 +389,8 @@ end
 const DIFFERS = "\n differs"
 for key in sort(keys(defs)) do
   local def = defs[key]
-  if not def.ambiguous and def.prod == 1 and def.values == 0 and def.expects == 0 and def.tests == 0 and def.doc == 0 and def.body <= LINES and not is_question(def.name) then
-    say(def.path, def.line, "single", "`" .. shown_name(def) .. "` (" .. def.body .. " line" .. (def.body == 1 and "" or "s") .. ") has one caller, " .. def.callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
+  if not def.ambiguous and def.prod == 1 and def.values == 0 and def.expects == 0 and def.tests == 0 and def.doc == 0 and def.wrapper and not is_question(def.name) then
+    say(def.path, def.line, "single", "`" .. shown_name(def) .. "` (" .. def.size .. ") has one caller, " .. def.callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
   end
   if #def.calls >= 2 and def.values == 0 and not def.ambiguous then
     local seen = {}

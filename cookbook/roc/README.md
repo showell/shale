@@ -47,7 +47,8 @@ it works on, `<shale>` being the shale checkout:
   record or list argument starts again (`loose=1` passes depth through the
   last two). `self_test=1` runs its plants (`plants/nest_depth/`).
 - [boundaries.shale](boundaries.shale): **a function's boundary, from its
-  references.** `single`: a wrapper of a line or two with one production
+  references.** `single`: a wrapper (one small expression, by its tree,
+  not its lines; a decision of a line or two) with one production
   caller, which no `expect`, test file or `##` doc keeps (a rule of thumb,
   not a gate); `fixed`: a parameter every production call fills with the
   same literal (`at: 0`), never context passed down (`me`, `req.me`).
