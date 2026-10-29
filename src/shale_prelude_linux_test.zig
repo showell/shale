@@ -528,3 +528,77 @@ test "linux prelude: sleep waits without a program, so a run sleeps more often t
     try t.expectStop("sleep(600001)", .atomic, .argument, "`sleep` takes 0 to 600000 ms, not 600001");
     try t.expectStop("sleep(\"10\")", .atomic, .type, "`sleep`'s ms must be an integer, not a string");
 }
+
+test "linux prelude: edit_between replaces what lies between two markers, or from one to the end" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    // Both markers there: the text between them replaced, both kept.
+    try t.put("a.md", "# A\n<!-- begin -->\nold\nlines\n<!-- end -->\ntail\n");
+    try t.expectOutput("print(edit_between(\"a.md\", \"<!-- begin -->\\n\", \"<!-- end -->\", \"new\\n\"))", "--- a/a.md\n+++ b/a.md\n@@ -2,4 +2,3 @@\n-<!-- begin -->\n-old\n-lines\n-<!-- end -->\n+<!-- begin -->\n+new\n+<!-- end -->\n1\n");
+    try testing.expectEqualStrings("# A\n<!-- begin -->\nnew\n<!-- end -->\ntail\n", try t.file("a.md"));
+    // The end-of-file form: `to` of nil.
+    try t.put("b.md", "keep\n## Generated\nstale\nstale\n");
+    try t.expectOutput("edit_between(\"b.md\", \"## Generated\\n\", nil, \"fresh\\n\")", "--- a/b.md\n+++ b/b.md\n@@ -2,3 +2,2 @@\n-## Generated\n-stale\n-stale\n+## Generated\n+fresh\n");
+    try testing.expectEqualStrings("keep\n## Generated\nfresh\n", try t.file("b.md"));
+    // A marker missing: named, nothing written.
+    try t.put("c.md", "one\n[x]\nmid\n");
+    try t.expectStop("edit_between(\"c.md\", \"[x]\", \"[y]\", \"z\")", .atomic, .fail, "`edit_between`: c.md: `[y]` is not after `[x]`; nothing written");
+    try t.expectStop("edit_between(\"c.md\", \"[w]\", nil, \"z\")", .atomic, .fail, "`edit_between`: c.md: `[w]` is not there; nothing written");
+    // A `to` before `from` is not after it.
+    try t.put("d.md", "END\nBEGIN\nx\n");
+    try t.expectStop("edit_between(\"d.md\", \"BEGIN\", \"END\", \"y\")", .atomic, .fail, "`edit_between`: d.md: `END` is not after `BEGIN`; nothing written");
+    try testing.expectEqualStrings("END\nBEGIN\nx\n", try t.file("d.md"));
+    // A marker found twice: named, nothing written.
+    try t.put("e.md", "[x]\n[x]\n[y]\n");
+    try t.expectStop("edit_between(\"e.md\", \"[x]\", \"[y]\", \"z\")", .atomic, .fail, "`edit_between`: e.md: `[x]` is there 2 times: a longer marker picks one; nothing written");
+    try t.put("f.md", "[x]\n[y]\n[y]\n");
+    try t.expectStop("edit_between(\"f.md\", \"[x]\", \"[y]\", \"z\")", .atomic, .fail, "`edit_between`: f.md: `[y]` is after `[x]` 2 times: a longer marker picks one; nothing written");
+    try testing.expectEqualStrings("[x]\n[y]\n[y]\n", try t.file("f.md"));
+    try t.expectStop("edit_between(\"f.md\", \"\", nil, \"z\")", .atomic, .fail, "`edit_between`: f.md: a marker is empty");
+}
+
+test "linux prelude: json_read gives Shale's values, and json_write gives them back" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.expectOutput(
+        \\local v = json_read("{\"result\": \"success\", \"messages\": [{\"id\": 7, \"flags\": [\"read\"], \"r\": 1.5e3, \"neg\": -12}], \"ok\": true, \"gone\": null, \"s\": \"a\\u00e9\\ud83d\\ude00\\n\"}")
+        \\print(v.result, #v.messages, v.messages[1].id, v.messages[1].flags[1], v.messages[1].r, v.messages[1].neg, v.ok, has_key(v, "gone"), v.s)
+        \\print(json_write(v))
+        \\print(json_write(json_read("[]")), json_write({a = {}, b = {1, "x"}}), json_write(json_read("[1, null]", {null = 0})))
+    ,
+        "success\t1\t7\tread\t1.5e3\t-12\ttrue\tfalse\taé😀\n\n" ++
+            "{\"result\":\"success\",\"messages\":[{\"id\":7,\"flags\":[\"read\"],\"r\":\"1.5e3\",\"neg\":-12}],\"ok\":true,\"s\":\"aé😀\\n\"}\n" ++
+            "[]\t{\"a\":[],\"b\":[1,\"x\"]}\t[1,0]\n",
+    );
+}
+
+test "linux prelude: json_read refuses a malformed text by what is wrong and where, and its budgets" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    for ([_][2][]const u8{
+        .{ "{\\\"a\\\": 1,}", "`json_read`: a member's name, a string, was expected at byte 8 (line 1, column 9)" },
+        .{ "[1 2]", "`json_read`: a comma or `]` was expected, not a byte at byte 3 (line 1, column 4)" },
+        .{ "{\\\"a\\\": 1}\\n{}", "`json_read`: more after the value: one text is one value at byte 9 (line 2, column 1)" },
+        .{ "[\\\"x", "`json_read`: a string that never closes at byte 1 (line 1, column 2)" },
+        .{ "[01]", "`json_read`: a number with a leading zero at byte 1" },
+        .{ "[1, null]", "`json_read`: a null in an array, which a Shale list cannot hold: `{null = v}` names a value to stand for it at byte 4" },
+        .{ "{\\\"k\\\": 1, \\\"k\\\": 2}", "`json_read`: the key \"k\" is in this object twice at byte 9" },
+        .{ "[99999999999999999999]", "`json_read`: the integer 99999999999999999999 is past 64 bits at byte 1" },
+        .{ "\\\"\\\\q\\\"", "`json_read`: the escape `\\q`, which JSON has not at byte 1" },
+        .{ "\\\"\\\\ud800\\\"", "`json_read`: a high surrogate with no low one after it at byte 1" },
+        .{ "", "`json_read`: a value was expected and the text ended at byte 0" },
+        .{ "tru", "`json_read`: `true` was expected at byte 0" },
+    }) |c| {
+        const src = try std.fmt.allocPrint(t.arena.allocator(), "json_read(\"{s}\")", .{c[0]});
+        try t.expectStop(src, .atomic, .argument, c[1]);
+    }
+    try t.expectStop("json_read(\"[[[1]]]\", {depth = 2})", .atomic, .argument, "`json_read`: the text nests past its depth budget at byte 2");
+    try t.expectOutput("print(#json_read(\"[[[1]]]\", {depth = 3}))", "1\n");
+    try t.expectStop("json_read(\"[1, 2]\", {size = 3})", .atomic, .argument, "`json_read`: the text is 6 bytes, past its size budget of 3");
+    try t.expectStop("json_read(\"[]\", {deep = 1})", .atomic, .argument, "`json_read` takes `depth`, `size` and `null`, not `deep`");
+    try t.expectStop("local l = {} push(l, l) json_write(l)", .atomic, .argument, "`json_write`: the value nests past 512 deep (or holds itself)");
+    try t.expectStop("json_write(\"\\xff\")", .atomic, .argument, "`json_write`: a string that is not UTF-8");
+}

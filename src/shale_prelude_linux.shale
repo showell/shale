@@ -385,6 +385,58 @@ function zig_imports(path)
   return host("zig_imports", path)
 end
 
+-- **JSON IN** (metal-vmm QUEUE 304): text `s` as Shale's values, an
+-- object a map and an array a list. Where Shale's values are not JSON's it
+-- says so: a number with a fraction or an exponent is its text, a string;
+-- an integer past 64 bits is refused; a member that is `null` is left out
+-- of its object and a `null` in an array refused, unless `{null = v}` names
+-- a value to stand for it; a key twice in one object is refused. A
+-- malformed text stops with what is wrong, its byte, line and column.
+-- `{depth = n}` bounds the nesting (64 unless given, at most 512) and
+-- `{size = n}` the text (the call bytes cap unless given smaller).
+function json_read(s, opts?)
+  if opts == nil then return host("json_read", s) end
+  return host("json_read", s, opts)
+end
+
+-- **JSON OUT**: `v` as compact JSON, a map's members in its keys' order, an
+-- empty table as `[]`. A string that is not UTF-8 is refused, as is a table
+-- nested past 512 (or holding itself).
+function json_write(v)
+  return host("json_write", v)
+end
+
+-- **INTERNAL to `edit_between`**: a marker as its failure shows it, its
+-- first 40 bytes on one line.
+function edit_marker_shown(s)
+  local one = substitute(s, "\n", "\\n")
+  if #one > 40 then return sub(one, 1, 40) .. "..." end
+  return one
+end
+
+-- **THE TEXT BETWEEN TWO MARKERS REPLACED** (metal-vmm QUEUE 304): what
+-- lies after marker `from` and before marker `to` becomes `new`, both
+-- markers kept; `to` of nil replaces from `from` to the end of the file. No
+-- offsets to work out (`find` is 1-based, `sub` takes its end inclusive),
+-- and its diff is `edit`'s. Each marker must be there once, `from` in the
+-- file and `to` after it: one missing or found twice is a named failure,
+-- and nothing is written. The replacements made, 1.
+function edit_between(p, from, to, new)
+  local where = "`edit_between`: " .. p .. ": "
+  if from == "" or to == "" then fail(where .. "a marker is empty: nil for `to` replaces to the end of the file") end
+  local text = read(p)
+  local n = #split(text, from) - 1
+  if n == 0 then fail(where .. "`" .. edit_marker_shown(from) .. "` is not there; nothing written") end
+  if n > 1 then fail(where .. "`" .. edit_marker_shown(from) .. "` is there " .. n .. " times: a longer marker picks one; nothing written") end
+  local after = sub(text, find(text, from) + #from)
+  if to == nil then return edit(p, from .. after, from .. new) end
+  local m = #split(after, to) - 1
+  if m == 0 then fail(where .. "`" .. edit_marker_shown(to) .. "` is not after `" .. edit_marker_shown(from) .. "`; nothing written") end
+  if m > 1 then fail(where .. "`" .. edit_marker_shown(to) .. "` is after `" .. edit_marker_shown(from) .. "` " .. m .. " times: a longer marker picks one; nothing written") end
+  local inside = sub(after, 1, find(after, to) - 1)
+  return edit(p, from .. inside .. to, from .. new .. to)
+end
+
 -- A new file: refused if one is there already.
 function create(p, text)
   if exists(p) then fail("`create`: " .. p .. " is there already: `edit` or `replace` it") end

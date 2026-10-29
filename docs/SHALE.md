@@ -1231,10 +1231,10 @@ three:
 - **`Options.preludes`**, the preludes after the core's, in order:
   - the Linux prelude (`src/shale_prelude_linux.shale`): `run`, `real`, `sleep`, `not_option`,
     `must`, `http`, `http_get`, `re_lines`, `head_lines`, `tail_lines`,
-    `grep_all`, `unique`, `path_under`, `newest`, `create`, `edits_all`; the Zig tools
+    `grep_all`, `unique`, `path_under`, `newest`, `create`, `edits_all`, `edit_between`, `json_read`, `json_write`; the Zig tools
     `zig_rename`, `zig_renames`, `zig_decls`, `zig_move`, `zig_tokens` and
     `zig_imports`; the jobs, `job_start`, `job_alive`, `job_stop` and
-    `job_wait`; and the processes, `procs` and `proc_stop` (`job_wait`'s helpers `curl_http`, `edit_words` and `edit_word_byte`
+    `job_wait`; and the processes, `procs` and `proc_stop` (`job_wait`'s helpers `curl_http`, `edit_words`, `edit_word_byte` and `edit_marker_shown`
     take their names too);
   - the git prelude (`src/shale_prelude_git.shale`): `git_status`,
     `git_log`, `git_commit`, ...;

@@ -8,6 +8,12 @@
 --   shale cookbook:http.shale url=https://dogpark.lynrummy.com/version
 --   shale cookbook:http.shale url=https://dogpark.lynrummy.com/ grep=Begin,Game
 --   shale cookbook:http.shale url=https://dogpark.lynrummy.com/version wait=5419352 minutes=10
+--   shale cookbook:http.shale url=https://chat.example/api/v1/messages json=messages.1.id
+--
+-- **`json`** reads the body as JSON (`json_read`) and prints the value at a
+-- dotted path, a list's items by number from 1 (`messages.1.id`); `json=.`
+-- is the whole body, compact. A path that is not there fails, naming the
+-- part that was not.
 --
 -- `bearer` is a Shale path (through a mount) whose file holds a token,
 -- sent as `Authorization: Bearer` and never shown. **`wait`**: fetch every
@@ -28,6 +34,12 @@ const BEARER = arg("bearer", "")
 const WAIT = arg("wait", "")
 const MINUTES = arg("minutes", 10)
 const EVERY = arg("every", 10)
+const JSON = arg("json", "")
+
+-- What `json` walks: a table, or a scalar (whose `tostring` is itself),
+-- and a table a map when `keys` takes it.
+function text_of(v) return tostring(v) end
+function keys_of(v) return keys(v) end
 
 if URL == "" then fail("http: say `url=`") end
 local opts = {}
@@ -56,7 +68,29 @@ else
 end
 
 local body = lines(r.body)
-if GREP ~= "" then
+if JSON ~= "" then
+  local v = json_read(r.body)
+  local walked = ""
+  if JSON ~= "." then
+    for part in split(JSON, ".") do
+      local n = parse_int(part)
+      local next = nil
+      local table = not attempt(text_of, v).ok
+      local map = table and attempt(keys_of, v).ok
+      if table and not map and n ~= nil then
+        if n >= 1 and n <= #v then next = v[n] end
+      elseif map and has_key(v, part) then
+        next = v[part]
+      end
+      if next == nil then fail("http: the body has no `" .. part .. "`" .. (walked == "" and "" or " in `" .. walked .. "`")) end
+      v = next
+      walked = walked == "" and part or walked .. "." .. part
+    end
+  end
+  local shown = v
+  if not attempt(text_of, v).ok then shown = json_write(v) end
+  print("json: " .. JSON .. " = " .. sub(tostring(shown), 1, 2000))
+elseif GREP ~= "" then
   local held = 0
   for l in body do
     for w in split(GREP, ",") do

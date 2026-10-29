@@ -82,6 +82,7 @@ Each has a Shale form, most of them one launch:
 | `roc check f && roc test f 2>&1 \| tail`, any other program and its verdict | `shale cookbook:run.shale` with `cmd=roc check f && roc test f` on stdin (`--args-stdin`): each command in order until one fails, how it ended and its time, its last lines (`tail=`), lines holding `grep=` literals, the whole output in `.zig-cache/run.log` where that folder is (else `log=PATH`, or not kept, said); `want=tag: why` for a program `run` refuses (`node`, `sh`) |
 | `python3 -m py_compile f`, `node --check f`, `zig ast-check f`, `bash -n f`: did an edit's syntax survive? | `shale cookbook:syntax.shale files=f,g` (or `rev=HEAD~1..HEAD`): one verdict a file by its kind (`.zig`, `.zon`, `.roc`, `.js`, `.mjs`, `.shale`, `.py`, `.sh`), then PASS or FAIL |
 | `grep -rn ".field =" src`: does anything but its own file make a sealed value (a checked id, a path)? | `shale cookbook:sealed.shale dir=src seals=path_seal:src/script/builtins_store.zig` (several trees: `dir=a,b`; a header only one file sets: `headers=location:<file>`): Zig's tokens, so a comment or a string never counts; one line a forger, then PASS or FAIL |
+| `curl -s URL \| jq .messages[0].id`, an API's JSON | in a heredoc, `json_read(http_get(url).body).messages[1].id` (an object a map, an array a list, from 1); `json_write(v)` back |
 | `curl -s URL \| grep X`, a wait for a deploy | `shale cookbook:http.shale url=URL grep=X` (`wait=LITERAL minutes=N`: until the body holds it; `bearer=` a Shale path to a token file) |
 | `curl -X POST --data ... -c jar -b jar`, a response's headers | in a heredoc, `http("POST", url, {body, headers})`: `{status, headers, body}`, the headers by lowercased name (`r.headers["set-cookie"]`), a cookie sent back as a `"Cookie: ..."` header |
 | `git tag -a v6 X -m ... && git push origin v6`, `git commit --amend`, ahead/behind | `git_tag(repo, "v6", {rev, msg})`, `git_push(repo, {tag = "v6"})`; `git_commit(repo, msg, {amend = true})`; `git_upstream(repo)` |
@@ -131,6 +132,14 @@ has none of it):
   `must(r)` gives `r` if it exited 0; otherwise it prints its output and
   fails, naming the program and how it ended. `real(p)` gives a path's OS
   path, for an argv.
+- **JSON:** `json_read(s, opts?)` gives Shale's values (an object a map,
+  an array a list). Where they are not JSON's it says so: a number with a
+  fraction or an exponent is its text, a string; an integer past 64 bits is
+  refused; a member that is `null` is left out of its object and a `null` in
+  an array refused unless `{null = v}` stands a value in; a key twice is
+  refused. A malformed text stops naming what is wrong at its byte, line and
+  column; `depth` (64) and `size` (the call-bytes cap) bound it.
+  `json_write(v)` is compact JSON, an empty table `[]`.
 - **Text:** `re_lines(s, pattern, opts?)` gives `{line, text}`, with
   `invert` and `nocase`. `head_lines(p, n)` and `tail_lines(p, n)` take a
   file of any size and give nil for a missing one. `grep_all(p, lit)` is
@@ -171,8 +180,13 @@ has none of it):
   (its `start` differs: false), and stops the run when a signal is refused
   (EPERM) or the process outlives KILL: never a success with it there.
 - **Files:** `create(p, text)` refuses a file already there.
-  `edits_all({{p, edits}, ...})` checks every file's edits before it writes
-  any. `zig_rename(p, from, to, {lines}?)` renames a Zig identifier as
+  `edits_all({{p, edits}, ...})` checks every file's edits, then writes
+  them as one: a stop of any kind, a budget's included, comes before the
+  first file is written, so the files change all together or not at all.
+  `edit_between(p, from, to, new)` replaces what lies between two markers,
+  both kept, or from `from` to the end of the file when `to` is nil: no
+  offsets to work out, and a marker missing or found twice is a named
+  failure with nothing written. `zig_rename(p, from, to, {lines}?)` renames a Zig identifier as
   Zig's tokenizer sees it, giving `{renamed, left_in_comments}` (the
   cookbook's "A symbol renamed across a tree"). **`{container = "C"}`**
   renames C's member instead (its declaration, its bare uses inside C, and
@@ -611,7 +625,7 @@ the first two can give a quiet wrong answer, an empty list:
   box's are in `~/.config/shale/mounts`. An absolute path is refused.
   A mount line ending in ` ro` is read-only: every change through it
   (`edit`, `replace`, `create`, `append`, `remove`, `mkdir`,
-  `remove_tree`, `edits_all`, `zig_rename`, `zig_move`) stops, `refused:
+  `remove_tree`, `edits_all`, `edit_between`, `zig_rename`, `zig_move`) stops, `refused:
   ... mount `x` is read-only`, before anything is written; reads work. A
   writable mount inside a read-only one decides for its own folder
   (`memory:` inside `projects:`), and through the read-only one's name
