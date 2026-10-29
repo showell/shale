@@ -21,6 +21,7 @@ pub const unreachable_from_requests = [_]Site{
     .{ .file = "shale_host_procs.zig", .func = "uidOf", .why = "the kernel's /proc/<pid>/status Uid line, read by the Linux shale CLI's `procs`, not the server" },
     .{ .file = "shale_sign.zig", .func = "lastFor", .why = "the signer, on the box, not the server" },
     .{ .file = "script/lex.zig", .func = "number", .why = "an integer literal in a script's text, which only the admin's signed script brings (no edge request is signed); errors_test sends it the 64-bit edges" },
+    .{ .file = "shale_host_json.zig", .func = "hex4", .why = "a `\\u` escape in the JSON text a script hands json_read: Linux host only, so the server never compiles it, and only the admin's signed script brings a script; its tests send the edges" },
     .{ .file = "script/builtins.zig", .func = "parseInteger", .why = "parse_int's text, from a script, which only the admin's signed script brings; builtins_test sends it the edges, past 64 bits among them" },
 };
 
