@@ -5,15 +5,22 @@
 -- `name_hunt.shale` reads it), so a comment or a string never counts. A
 -- finding is a question for a reader, never a verdict:
 --
---   error_alias   a function whose result holds a `Try` whose error is a
---                 name (`Try(Str, ReadError)`, `Accounts.Unreadable`), not
---                 the tags written in place: "a `Try`'s error lists the
---                 tags that function can return, in place; no shared error
---                 alias", since an alias of several makes every caller of
---                 each handle a tag that can't happen. Quiet: an alias in
---                 an argument (a handler's input, `fail_unreadable! :
---                 Try(a, Unreadable) => ...`), an error left to inference
---                 (`_`) or a type variable (`Try(a, e)`).
+--   error_alias   a function whose result holds a `Try` whose error names
+--                 an alias of tags (`ReadError : [Missing, Failed]`, or
+--                 `Accounts.Unreadable`, a module type's), not the tags
+--                 written in place: "a `Try`'s error lists the tags that
+--                 function can return, in place; no shared error alias",
+--                 since an alias of several makes every caller of each
+--                 handle a tag that can't happen. The name is looked up in
+--                 the files hunted (bare in its own file, qualified by its
+--                 module type or file anywhere), through an alias of an
+--                 alias. Quiet: an error that is no tag union (a record
+--                 carried as an early answer, `Chat.Answer`; a `Str`), an
+--                 alias in an argument (a handler's input,
+--                 `fail_unreadable! : Try(a, Unreadable) => ...`), an
+--                 error left to inference (`_`) or a type variable
+--                 (`Try(a, e)`). A name declared outside the files hunted
+--                 cannot be judged: the counts line names each.
 --   optional_tag  a tag named as an optional (cookbook/words/optionals.txt:
 --                 `Some`, `None`, `Nothing`, ...), which says only that a
 --                 value may be missing: "a value that may be absent is
@@ -162,6 +169,62 @@ function is_outer(kinds, d)
   return true
 end
 
+-- **EVERY TYPE DECLARED IN THE FILES HUNTED**, by the names a `Try` may
+-- give it, each the node of what it is declared as: `QUAL` by its
+-- qualified name (the module types around it, `Stored.Problem`, and for a
+-- file's top level the file's own, `Access.Answer`), `BARE` by file and
+-- bare name (`Problem` inside Stored.roc).
+const QUAL = {}
+const BARE = {}
+do
+  local around = {}
+  for i = 1, #H do
+    local d = DEP[i]
+    if starts_with(H[i], "== ") then
+      around = {}
+    else
+      around[d + 1] = ""
+      if kind(i) == "(s-type-decl" then
+        local ks = kids(i)
+        local n = nm(ks[1])
+        if n ~= "" and #ks > 1 then
+          local chain = {}
+          for k = 1, d do
+            if around[k] ~= "" then push(chain, around[k]) end
+          end
+          push(chain, n)
+          QUAL[join(chain, ".")] = ks[2]
+          if #chain == 1 then
+            local base = split(FILE[i], "/")
+            base = base[#base]
+            QUAL[sub(base, 1, #base - 4) .. "." .. n] = ks[2]
+          end
+          BARE[FILE[i] .. "|" .. n] = ks[2]
+          around[d + 1] = n
+        end
+      end
+    end
+  end
+end
+
+-- What the error named `n` in `file` is: `union` (an alias of tags, `[A,
+-- B]`, followed through an alias of an alias), `other` (a record, a
+-- builtin like `Str`, an empty module type) or `unknown` (declared outside
+-- the files hunted).
+const BUILTIN = {Str = true, Bool = true, U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true, F32 = true, F64 = true, Dec = true, List = true, Dict = true, Set = true, Box = true}
+function error_kind(file, n, hops)
+  if has_key(BUILTIN, n) then return "other" end
+  local at = get(BARE, file .. "|" .. n) or get(QUAL, n)
+  if at == nil then return "unknown" end
+  if kind(at) == "(ty-tag-union" then return #union_tags(at) > 0 and "union" or "other" end
+  if kind(at) == "(ty" and nm(at) ~= "" and hops < 8 then return error_kind(file, nm(at), hops + 1) end
+  return "other"
+end
+
+-- The errors named by a type declared outside the files hunted, which
+-- `error_alias` cannot judge, by name: said in the counts, never dropped.
+const unjudged = {}
+
 do
   local kinds = {}
   for i = 1, #H do
@@ -179,7 +242,11 @@ do
               if #tk == 3 and nm(tk[1]) == "Try" then
                 local e = tk[3]
                 local n = nm(e)
-                if n ~= "" and kind(e) ~= "(ty-tag-union" and kind(e) ~= "(ty-var" then say(FILE[i], line(i), "error_alias", "`" .. nm(i) .. "` fails with `" .. n .. "`, a shared error alias: list the tags it can return in place, or leave the error to inference (`_`)") end
+                if n ~= "" and kind(e) == "(ty" then
+                  local ek = error_kind(FILE[i], n, 0)
+                  if ek == "union" then say(FILE[i], line(i), "error_alias", "`" .. nm(i) .. "` fails with `" .. n .. "`, a shared alias of tags: list the tags it can return in place, or leave the error to inference (`_`)") end
+                  if ek == "unknown" then unjudged[n] = get(unjudged, n, 0) + 1 end
+                end
               end
             end
           end
@@ -217,7 +284,10 @@ end
 
 local counts = {}
 for c in CHECKS do push(counts, c .. " " .. found[c]) end
-print("errors (Roc): " .. #paths .. " files; " .. join(counts, ", "))
+local unseen = {}
+for n in sort(keys(unjudged)) do push(unseen, n .. " (" .. unjudged[n] .. ")") end
+local unseen_said = #unseen > 0 and ("; error_alias not judged, declared outside the files hunted: " .. join(unseen, ", ")) or ""
+print("errors (Roc): " .. #paths .. " files; " .. join(counts, ", ") .. unseen_said)
 
 if SELF then
   local wrong = {}
@@ -233,6 +303,9 @@ if SELF then
     end
     if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
   end
+  -- A plant's every error is declared beside it: one left unjudged would
+  -- pass quiet without the rule being asked.
+  for n in sort(keys(unjudged)) do push(wrong, "`error_alias` cannot judge `" .. n .. "`, declared in no plant") end
   for w in wrong do print("FAIL " .. w) end
   if #wrong > 0 then fail("errors self_test: " .. #wrong .. " plants wrong") end
   print("errors (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none)")
