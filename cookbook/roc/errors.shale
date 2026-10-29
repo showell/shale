@@ -1,0 +1,239 @@
+-- **A FAILURE SAID BY ITS TAGS, IN PLACE** (metal-vmm QUEUE 303, from the
+-- Roc style review's S9 and S5): Roc's errors as roc-apps
+-- docs/roc-style.md ("Errors and failure") writes them, read from Roc's
+-- own parser's tree (roc-ast, at `tools:roc-ast/bin/roc-ast`, as
+-- `name_hunt.shale` reads it), so a comment or a string never counts. A
+-- finding is a question for a reader, never a verdict:
+--
+--   error_alias   a function whose result holds a `Try` whose error is a
+--                 name (`Try(Str, ReadError)`, `Accounts.Unreadable`), not
+--                 the tags written in place: "a `Try`'s error lists the
+--                 tags that function can return, in place; no shared error
+--                 alias", since an alias of several makes every caller of
+--                 each handle a tag that can't happen. Quiet: an alias in
+--                 an argument (a handler's input, `fail_unreadable! :
+--                 Try(a, Unreadable) => ...`), an error left to inference
+--                 (`_`) or a type variable (`Try(a, e)`).
+--   optional_tag  a tag named as an optional (cookbook/words/optionals.txt:
+--                 `Some`, `None`, `Nothing`, ...), which says only that a
+--                 value may be missing: "a value that may be absent is
+--                 tagged by what it is, and its absence by why"
+--                 (`[Latest(Message), NoMessage]`). Each type that names
+--                 one is a finding; a pattern or an expression only where
+--                 no type of the files hunted names the tag (an `Err(None)`
+--                 whose error is inferred), once a file. A tag is matched
+--                 whole: `NoneChosen` is no `None`.
+--
+-- Only a top-level or module-member annotation is read (a local's is its
+-- definition's). One line a finding, `path:line: <check>: <why>`, then the
+-- counts.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/errors.shale glob=chat/**/*.roc
+--   shale cookbook:roc/errors.shale self_test=1
+--
+-- `self_test=1` runs it over `cookbook/roc/plants/errors/`, each plant
+-- named for the check it holds: every check must fire on its own plants and
+-- on no other, a `quiet_*.roc` plant on none.
+-- budget: steps=400000000 arena_bytes=1500000000
+
+const SELF = arg("self_test", "") == "1"
+const PLANTS = "cookbook:roc/plants/errors/"
+const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
+const ROC_AST = "tools:roc-ast/bin/roc-ast"
+const CHECKS = {"error_alias", "optional_tag"}
+const OUTER = {["(file"] = true, ["(statements"] = true, ["(s-type-decl"] = true, ["(associated"] = true}
+
+-- A word table of cookbook/words/, the hunts' one home for them: a word a
+-- line, `--` starting a note.
+function word_table(file)
+  local t = {}
+  for l in lines(read("cookbook:words/" .. file)) do
+    local w = trim(split(l, "--")[1])
+    if contains(w, " ") or has_key(t, w) then fail("errors: cookbook/words/" .. file .. ": `" .. w .. "` is no single new word") end
+    if w ~= "" then t[w] = true end
+  end
+  return t
+end
+const OPTIONALS = word_table("optionals.txt")
+
+const found = {}
+for c in CHECKS do found[c] = 0 end
+const per_file = {}
+
+function say(p, line, check, why)
+  print(p .. ":" .. line .. ": " .. check .. ": " .. why)
+  found[check] = found[check] + 1
+  per_file[p .. "|" .. check] = true
+  return nil
+end
+
+function depth_of(l)
+  local d = 0
+  while sub(l, d + 1, d + 1) == "\t" do d = d + 1 end
+  return d
+end
+
+if not exists(ROC_AST) then fail("errors: no " .. ROC_AST .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it (see name_hunt.shale)") end
+const paths = glob(GLOB)
+const shown = {}
+const reals = {}
+for p in paths do
+  push(reals, real(p))
+  shown[real(p)] = p
+end
+const H = {}
+const DEP = {}
+const FILE = {}
+if #reals > 0 then
+  local dump = run({real(ROC_AST)}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
+  -- A file that does not parse stops roc-ast there: hunting the trees so
+  -- far would pass the rest unread.
+  if dump.ended ~= "exit" or dump.code ~= 0 then
+    local said = lines(trim(dump.out))
+    fail("errors: roc-ast: " .. (said[#said] or dump.ended))
+  end
+  local f = ""
+  for l in lines(dump.out) do
+    push(DEP, depth_of(l))
+    local h = trim(l)
+    push(H, h)
+    if starts_with(h, "== ") then f = shown[sub(h, 4)] or sub(h, 4) end
+    push(FILE, f)
+  end
+end
+
+function kids(at)
+  local out = {}
+  local i = at + 1
+  while i <= #H and DEP[i] > DEP[at] do
+    if DEP[i] == DEP[at] + 1 then push(out, i) end
+    i = i + 1
+  end
+  return out
+end
+
+function last_of(at)
+  local i = at + 1
+  while i <= #H and DEP[i] > DEP[at] do i = i + 1 end
+  return i - 1
+end
+
+function kind(at)
+  return split(H[at], " ")[1]
+end
+
+function nm(at)
+  return between(H[at], "(name \"", "\")") or ""
+end
+
+function raw(at)
+  return between(H[at], "(raw \"", "\")") or ""
+end
+
+-- A node's line; one with no span of its own is placed by the first below
+-- it that has one.
+function line(at)
+  local i = at
+  while i <= #H and between(H[i], "@", ".") == nil do i = i + 1 end
+  return between(H[i], "@", ".") or "?"
+end
+
+-- The tags of a `ty-tag-union`, by name (`Some` of `Some(U64)` too).
+function union_tags(at)
+  local out = {}
+  for t in kids(at) do
+    if starts_with(H[t], "(tags") then
+      for g in kids(t) do
+        if starts_with(H[g], "(ty-apply ") then push(out, nm(kids(g)[1])) else push(out, nm(g)) end
+      end
+    end
+  end
+  return out
+end
+
+-- ── error_alias: a function's result, its every `Try` ────────────────────
+
+-- Whether the node at depth `d` sits where a top-level or module member's
+-- annotation does, from the kinds above it.
+function is_outer(kinds, d)
+  for k = 1, d do
+    if not has_key(OUTER, kinds[k]) then return false end
+  end
+  return true
+end
+
+do
+  local kinds = {}
+  for i = 1, #H do
+    local d = DEP[i]
+    if not starts_with(H[i], "== ") then
+      kinds[d + 1] = kind(i)
+      if starts_with(H[i], "(s-type-anno ") and is_outer(kinds, d) then
+        local ks = kids(i)
+        if #ks > 0 and starts_with(H[ks[1]], "(ty-fn ") then
+          local parts = kids(ks[1])
+          local res = parts[#parts]
+          for j = res, last_of(res) do
+            if starts_with(H[j], "(ty-apply ") then
+              local tk = kids(j)
+              if #tk == 3 and nm(tk[1]) == "Try" then
+                local e = tk[3]
+                local n = nm(e)
+                if n ~= "" and kind(e) ~= "(ty-tag-union" and kind(e) ~= "(ty-var" then say(FILE[i], line(i), "error_alias", "`" .. nm(i) .. "` fails with `" .. n .. "`, a shared error alias: list the tags it can return in place, or leave the error to inference (`_`)") end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+-- ── optional_tag ─────────────────────────────────────────────────────────
+
+-- The optional tags each type names, by tag, and the expressions' and
+-- patterns' by file and tag.
+const typed = {}
+const used = {}
+for i = 1, #H do
+  local k = kind(i)
+  if k == "(ty-tag-union" then
+    for t in union_tags(i) do
+      if has_key(OPTIONALS, t) then
+        typed[t] = true
+        say(FILE[i], line(i), "optional_tag", "`" .. t .. "` names an optional: tag what the value is, and its absence by why (`[Latest(Message), NoMessage]`)")
+      end
+    end
+  elseif k == "(e-tag" or k == "(p-tag" then
+    local n = raw(i)
+    local key = FILE[i] .. "|" .. n
+    if has_key(OPTIONALS, n) and not has_key(used, key) then used[key] = {path = FILE[i], line = line(i), tag = n} end
+  end
+end
+for key in sort(keys(used)) do
+  local u = used[key]
+  if not has_key(typed, u.tag) then say(u.path, u.line, "optional_tag", "`" .. u.tag .. "` names an optional, and no type here says what it is: tag the value by what it is, and its absence by why") end
+end
+
+local counts = {}
+for c in CHECKS do push(counts, c .. " " .. found[c]) end
+print("errors (Roc): " .. #paths .. " files; " .. join(counts, ", "))
+
+if SELF then
+  local wrong = {}
+  for c in CHECKS do
+    local planted = 0
+    for p in paths do
+      local base = sub(p, #PLANTS + 1)
+      local mine = base == c .. ".roc" or starts_with(base, c .. "_")
+      if mine then planted = planted + 1 end
+      local fired = has_key(per_file, p .. "|" .. c)
+      if mine and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. p) end
+      if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
+    end
+    if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
+  end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail("errors self_test: " .. #wrong .. " plants wrong") end
+  print("errors (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none)")
+end

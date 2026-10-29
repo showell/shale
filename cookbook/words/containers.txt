@@ -1,0 +1,18 @@
+-- Container words: a name of nothing but these (and vague.txt's) says only
+-- that a value sits in a list or a tree, not what it holds (`Entry`,
+-- `Items`, `NodeInfo`). roc-apps docs/roc-style.md, naming: "A type is
+-- named for what it holds, not where it sits"; one DM's row is a
+-- `DmSummary`, not an `Entry`. The Roc name hunt's `vague_type` check reads
+-- them beside vague.txt (which holds `item`, `data`, `info`, `thing`,
+-- `value`), for a type's or a record field's name only: a function's name
+-- is `vague`'s, by vague.txt alone. One word a line; `--` starts a note.
+entry
+entries
+items
+node
+nodes
+infos
+datum
+elem
+element
+elements

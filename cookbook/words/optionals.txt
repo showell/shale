@@ -1,0 +1,17 @@
+-- Optionals: a tag of one of these names says only that a value may be
+-- missing, never what it is or why it is absent (`[Some(x), None]`,
+-- `Nothing`, `Try(x, [None])`). roc-apps docs/roc-style.md, errors: "No
+-- optionals: a value that may be absent is tagged by what it is, and its
+-- absence by why" (`[Latest(Message), NoMessage]`). The Roc errors
+-- recipe's `optional_tag` check, cookbook/roc/errors.shale, reads it; a tag
+-- is matched whole, as written, so `NoneChosen` is no `None`.
+-- One tag a line; `--` starts a note.
+Some
+None
+Nothing
+Just
+Maybe
+Option
+Optional
+Present
+Absent

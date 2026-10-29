@@ -1,0 +1,208 @@
+-- **A CALL NESTED THREE DEEP IS READ INSIDE OUT** (metal-vmm QUEUE 303,
+-- from the Roc style review's S3): every call whose argument is a call
+-- whose argument is a call, `f(g(h(x)))`, read from Roc's own parser's
+-- tree (roc-ast, at `tools:roc-ast/bin/roc-ast`, as `name_hunt.shale`
+-- reads it). roc-apps docs/roc-style.md, layout: write it left to right, a
+-- method chain where the values carry methods, a pipe where the steps are
+-- module functions, else a named middle step.
+--
+--   nested  a call `min` (3) or more deep, the outermost of each nest only:
+--           `path:line: nested: depth N: <its first source line>`
+--
+-- **A CALL'S DEPTH** is 1 + the deepest call among its arguments. What
+-- reads left to right is no level: a method's receiver (`a.f().g()`) and a
+-- pipe's or an arrow call's left side (`x |> f`, `x->f()`) carry their
+-- depth through. A tag or a nominal wrapper (`Ok(...)`, `ChatPath.(...)`),
+-- `?` and parentheses are no call and pass their argument's depth through.
+-- A lambda argument starts again at 0: its body is read on its own. A
+-- record, list or tuple argument starts again too (`f({ a: g(h(x)) })`
+-- names its parts), unless `loose=1`, which passes depth through them.
+--
+-- One line a finding, then the count by depth.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/nest_depth.shale glob=chat/**/*.roc min=4
+--   shale cookbook:roc/nest_depth.shale self_test=1
+--
+-- `self_test=1` runs it at `min=3` over `cookbook/roc/plants/nest_depth/`:
+-- a plant line ending `# depth N` must give a finding of depth N, and no
+-- other line any; a `quiet_*.roc` plant holds no such line.
+-- budget: steps=900000000 arena_bytes=3000000000
+
+const SELF = arg("self_test", "") == "1"
+const PLANTS = "cookbook:roc/plants/nest_depth/"
+const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
+const LOOSE = arg("loose", "") == "1"
+const MIN = SELF and 3 or arg("min", 3)
+const ROC_AST = "tools:roc-ast/bin/roc-ast"
+
+function depth_of(l)
+  local d = 0
+  while sub(l, d + 1, d + 1) == "\t" do d = d + 1 end
+  return d
+end
+
+if not exists(ROC_AST) then fail("nest_depth: no " .. ROC_AST .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it (see name_hunt.shale)") end
+const paths = glob(GLOB)
+const shown = {}
+const reals = {}
+for p in paths do
+  push(reals, real(p))
+  shown[real(p)] = p
+end
+
+const T = {}
+const D = {}
+const H = {}
+if #reals > 0 then
+  local dump = run({real(ROC_AST)}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
+  -- A file that does not parse stops roc-ast there: hunting the trees so
+  -- far would pass the rest unread.
+  if dump.ended ~= "exit" or dump.code ~= 0 then
+    local said = lines(trim(dump.out))
+    fail("nest_depth: roc-ast: " .. (said[#said] or dump.ended))
+  end
+  for l in lines(dump.out) do
+    push(T, l)
+    push(D, depth_of(l))
+    push(H, trim(l))
+  end
+end
+const N = #T
+
+-- Each node's children and parent, in one pass with a stack.
+const KIDS = {}
+const PARENT = {}
+do
+  local stack = {}
+  for i = 1, N do
+    push(KIDS, {})
+    push(PARENT, 0)
+    while #stack > 0 and D[stack[#stack]] >= D[i] do stack = take(stack, #stack - 1) end
+    if #stack > 0 then
+      PARENT[i] = stack[#stack]
+      push(KIDS[stack[#stack]], i)
+    end
+    push(stack, i)
+  end
+end
+
+function kind(i)
+  return split(H[i], " ")[1]
+end
+
+-- What passes its parts' depth through unchanged: no call of its own, and
+-- read left to right.
+function passes(k)
+  if k == "(e-arrow-call" or k == "(e-question-suffix" or k == "(e-nominal-apply" or k == "(mapper" then return true end
+  return LOOSE and (k == "(e-record" or k == "(e-list" or k == "(e-tuple" or k == "(field")
+end
+
+const MEMO = {}
+-- The call depth at node `i`.
+function cd(i)
+  if has_key(MEMO, tostring(i)) then return MEMO[tostring(i)] end
+  local k = kind(i)
+  local kids = KIDS[i]
+  local v = 0
+  if k == "(e-apply" then
+    local best = 0
+    for a in drop(kids, 1) do
+      local x = cd(a)
+      if x > best then best = x end
+    end
+    -- A tag's payload (`Ok(...)`) is no call.
+    if kind(kids[1]) == "(e-tag" then v = best else v = 1 + best end
+  elseif k == "(e-method-call" then
+    local recv = 0
+    local best = 0
+    for c in kids do
+      if H[c] == "(receiver" then recv = cd(KIDS[c][1]) end
+      if starts_with(H[c], "(args") then
+        for a in KIDS[c] do
+          local x = cd(a)
+          if x > best then best = x end
+        end
+      end
+    end
+    v = 1 + best
+    if recv > v then v = recv end
+  elseif passes(k) or (k == "(e-tuple" and #kids == 1) then
+    -- A one-item tuple is parentheses.
+    for c in kids do
+      local x = cd(c)
+      if x > v then v = x end
+    end
+  end
+  MEMO[tostring(i)] = v
+  return v
+end
+
+function is_call(i)
+  local k = kind(i)
+  return k == "(e-apply" or k == "(e-method-call"
+end
+
+-- `i` is the outermost of its nest unless, climbing through what passes
+-- depth on, the first call above it is as deep.
+function outermost(i)
+  local p = PARENT[i]
+  while p > 0 do
+    local k = kind(p)
+    if is_call(p) then return cd(p) < cd(i) end
+    if k == "(receiver" or starts_with(k, "(args") or passes(k) or k == "(e-tuple" then
+      p = PARENT[p]
+    else
+      return true
+    end
+  end
+  return true
+end
+
+local path = ""
+local src = {}
+local count = 0
+local by = {}
+-- Each finding's `path:line` and depth, for the self-test.
+const at = {}
+for i = 1, N do
+  if starts_with(H[i], "== ") then
+    path = shown[sub(H[i], 4)] or sub(H[i], 4)
+    src = split(read(path), "\n")
+  elseif is_call(i) and cd(i) >= MIN and outermost(i) then
+    local line = tonumber(between(H[i], "@", "."))
+    local d = cd(i)
+    print(path .. ":" .. line .. ": nested: depth " .. d .. ": " .. trim(src[line]))
+    by[tostring(d)] = get(by, tostring(d), 0) + 1
+    at[path .. ":" .. line] = d
+    count = count + 1
+  end
+end
+local counts = {}
+for k in sort(keys(by)) do push(counts, "depth " .. k .. " " .. by[k]) end
+print("nest_depth (Roc): " .. #paths .. " files; nested " .. count .. " (min " .. MIN .. ", " .. (LOOSE and "loose" or "strict") .. ")" .. (#counts > 0 and ("; " .. join(counts, ", ")) or ""))
+
+if SELF then
+  local wrong = {}
+  local marks = 0
+  for p in paths do
+    local n = 0
+    for l in lines(read(p)) do
+      n = n + 1
+      local m = re_find(l, "# depth ([0-9]+)$")
+      local key = p .. ":" .. n
+      if m ~= nil then
+        marks = marks + 1
+        if starts_with(sub(p, #PLANTS + 1), "quiet_") then push(wrong, key .. ": a quiet plant holds a `# depth` mark") end
+        local want = tonumber(m.groups[1])
+        if not has_key(at, key) then push(wrong, key .. ": no finding, want depth " .. want)
+        elseif at[key] ~= want then push(wrong, key .. ": depth " .. at[key] .. ", want " .. want) end
+      elseif has_key(at, key) then
+        push(wrong, key .. ": a finding (depth " .. at[key] .. ") on a line not marked for one")
+      end
+    end
+  end
+  if marks == 0 then push(wrong, "no plant holds a `# depth` mark") end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail("nest_depth self_test: " .. #wrong .. " plants wrong") end
+  print("nest_depth (Roc) self_test: PASS (each marked line gives its depth, the outermost only, and no other line a finding)")
+end

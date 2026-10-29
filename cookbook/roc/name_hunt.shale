@@ -37,7 +37,30 @@
 --                 (`[Pin, Unpin]`); an event is past tense where it is
 --                 recorded or replayed (a plain function, a record's field),
 --                 never as what an effect is told to do (roc-apps
---                 docs/roc-style.md, naming).
+--                 docs/roc-style.md, naming). A `List(T)` argument is
+--                 judged as `T`: a plan handed in is its steps' commands.
+--   mixed_tense   an effect that takes a tag union (as `command_tense`
+--                 reads one, payloads and all) with a tag that starts with a
+--                 verb beside one that starts with a past participle
+--                 (`apply! : [Pin, Unpinned]`): an instruction list with an
+--                 event in it, or an event list with an order, one of them
+--                 named in the wrong mood. Only what an effect is handed
+--                 is judged: a union it answers, a record's field and a
+--                 pure function's argument are the domain's words for a
+--                 state (an answer's `Redirect` beside `Found`, a route's
+--                 `Upload` beside `Saved`), which the guide keeps.
+--   container     a type's name (`Entry`, `NodeInfo`) or a record field's
+--                 typed in place (`items : List(Str)`) made only of
+--                 container words (cookbook/words/containers.txt) and
+--                 vague.txt's: it says where a value sits, not what it
+--                 holds (docs/roc-style.md: "A type is named for what it
+--                 holds"; a DM's row is a `DmSummary`, not an `Entry`).
+--                 **WHERE THE CONTAINER WORD IS THE DOMAIN'S** (a folder
+--                 listing's entry) it stays, said so in the doc comment over
+--                 its declaration, as whose: `## A folder's entry` keeps
+--                 `Entry`, and `## A listing's entries` keeps a field
+--                 `entries`. A type is split at its capitals, a field at
+--                 its `_`s; a local's annotation is never read.
 --
 -- **A NAME IS JUDGED ONCE**, from its annotation when it has one (a hosted
 -- effect, `links! : Str => Str` in a platform's `Host.roc`, has nothing
@@ -68,7 +91,7 @@
 --
 -- `self_test=1` runs it over `cookbook/roc/plants/name_hunt/`, each plant
 -- named for the check it holds (`question.roc`, `question_where.roc`):
--- every check must fire on its own plants and on no other, a
+-- every check must have one, fire on its own plants and on no other, a
 -- `quiet_*.roc` plant (a false positive once) on none, and the census
 -- must give a known word of the plants each verdict but `asks`.
 --
@@ -80,7 +103,7 @@ const SELF = arg("self_test", "") == "1"
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
 const ROC_AST = "tools:roc-ast/bin/roc-ast"
 const WORDS = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "preposition_split"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split"}
 
 -- A word table of cookbook/words/, the name hunts' one home for them: a
 -- word a line, `--` starting a note. A word twice, or a line of two, is a
@@ -99,6 +122,7 @@ const VERBS = word_table("verbs.txt")
 const PARTICIPLES = word_table("participles.txt")
 const ED_VERBS = word_table("ed_verbs.txt")
 const VAGUE = word_table("vague.txt")
+const CONTAINERS = word_table("containers.txt")
 const PREPS = word_table("prepositions.txt")
 -- Each file's names that end in a preposition, by the noun before it:
 -- `path|base` -> {line, preps (a set), names}.
@@ -110,8 +134,14 @@ const FIXED = {to_inspect = true, is_eq = true, to_hash = true, plus = true, min
 const INTS = {U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true}
 
 -- Every tag union a type declaration names, by its name (`Edit` of
--- `Edit : [Opened, Closed]`): its tags' names, for `command_tense`.
+-- `Edit : [Opened, Closed]`): its `union_shape`, for `command_tense` and
+-- `mixed_tense`.
 const ALIASES = {}
+
+-- Every type's and record field's name `container` judges, `{path, line,
+-- name, words, field, doc}`, `doc` the comment lines over its
+-- declaration, lowered.
+const HOLDERS = {}
 
 const found = {}
 for c in CHECKS do found[c] = 0 end
@@ -231,35 +261,96 @@ function span_text(src, h)
   return join(parts, "\n")
 end
 
--- The tags of the tag union at `at` (`ty-tag-union`), by name: `Unpinned`
--- of `Unpinned(Str)` too. A union in which any tag carries a payload
--- (`Known(List(Account))`) holds a state's data: it is no command, so it
--- gives none.
-function tag_names(tree, at)
-  local out = {}
+-- The tags of the tag union at `at` (`ty-tag-union`): `{names, payload}`,
+-- `names` by name (`Unpinned` of `Unpinned(Str)` too), `payload` whether
+-- any tag carries one. A union with a payload (`Known(List(Account))`)
+-- holds a state's data: no command for `command_tense`, though
+-- `mixed_tense` reads its names.
+function union_shape(tree, at)
+  local out = {names = {}, payload = false}
   for t in children(tree, at) do
     if head(tree, t) == "(tags" then
       for g in children(tree, t) do
         local h = head(tree, g)
-        if starts_with(h, "(ty-apply ") then return {} end
         local n = between(h, "(name \"", "\")")
-        if n ~= nil and n ~= "" then push(out, n) end
+        if starts_with(h, "(ty-apply ") then
+          out.payload = true
+          n = between(head(tree, children(tree, g)[1]), "(name \"", "\")")
+        end
+        if n ~= nil and n ~= "" then push(out.names, n) end
       end
     end
   end
   return out
 end
 
--- An argument's type, as `command_tense` needs it: the tags written in
--- place, or the name of a declared type (its last part: `ChatState.PinEdit`
--- is `PinEdit`).
+-- An argument's type, as `command_tense` and `mixed_tense` need it: the
+-- union written in place, or the name of a declared type (its last part:
+-- `ChatState.PinEdit` is `PinEdit`); a `List(T)` as `T`, marked `list`.
 function arg_shape(tree, at)
   local h = head(tree, at)
-  if starts_with(h, "(ty-tag-union ") then return {tags = tag_names(tree, at)} end
+  if starts_with(h, "(ty-tag-union ") then return {union = union_shape(tree, at)} end
+  if starts_with(h, "(ty-apply ") then
+    local kids = children(tree, at)
+    if #kids == 2 and between(head(tree, kids[1]), "(name \"", "\")") == "List" then
+      local inner = arg_shape(tree, kids[2])
+      inner.list = true
+      return inner
+    end
+    return {}
+  end
   local n = between(h, "(name \"", "\")")
   if n == nil or n == "" then return {} end
   local parts = split(n, ".")
   return {ref = parts[#parts]}
+end
+
+-- The comment lines directly over line `line` of `src`, lowered and
+-- joined: a declaration's doc.
+function doc_over(src, line)
+  local parts = {}
+  local k = line - 1
+  while k >= 1 and starts_with(trim(src[k]), "#") do
+    push(parts, lower(trim(src[k])))
+    k = k - 1
+  end
+  return join(parts, " ")
+end
+
+-- A name's words, lowered: a type's at its capitals (`NodeInfo` is
+-- `node`, `info`), a field's at its `_`s.
+function words_of(name)
+  local out = {}
+  local cur = ""
+  for i = 1, #name do
+    local c = sub(name, i, i)
+    if c == "_" then
+      if cur ~= "" then push(out, lower(cur)) end
+      cur = ""
+    elseif c ~= lower(c) and cur ~= "" then
+      push(out, lower(cur))
+      cur = c
+    else
+      cur = cur .. c
+    end
+  end
+  if cur ~= "" then push(out, lower(cur)) end
+  return out
+end
+
+-- The line of the declaration a record field at depth `d` is part of, or
+-- "" for a local's: the nearest top-level or member annotation or type
+-- above it (`decl_line`), with only types between (no expression, pattern
+-- or definition, which would make it a local's).
+function holder_decl(kinds, decl_line, d)
+  local k = d - 1
+  while k >= 0 do
+    local kd = kinds[k + 1]
+    if starts_with(kd, "(e-") or starts_with(kd, "(p-") or kd == "(s-decl" then return "" end
+    if kd == "(s-type-anno" or kd == "(s-type-decl" then return get(decl_line, tostring(k), "") end
+    k = k - 1
+  end
+  return ""
 end
 
 -- **EVERY TOP-LEVEL AND MODULE-MEMBER DEFINITION** in `paths`, by roc-ast
@@ -299,6 +390,7 @@ function definitions(paths)
   -- ("" when that node is none), and the annotation.
   local anno_name = {}
   local anno_at = {}
+  local decl_line = {}
   for i = 1, #tree.text do
     local h = head(tree, i)
     local d = tree.depth[i]
@@ -307,6 +399,7 @@ function definitions(paths)
       src = split(read(path), "\n")
       anno_name = {}
       anno_at = {}
+      decl_line = {}
     else
       kinds[d + 1] = split(h, " ")[1]
       local outer = true
@@ -318,7 +411,16 @@ function definitions(paths)
       if outer and starts_with(h, "(s-type-decl ") then
         local kids = children(tree, i)
         local decl = between(head(tree, kids[1]), "(name \"", "\")")
-        if #kids > 1 and decl ~= nil and starts_with(head(tree, kids[2]), "(ty-tag-union ") then ALIASES[decl] = tag_names(tree, kids[2]) end
+        if #kids > 1 and decl ~= nil and starts_with(head(tree, kids[2]), "(ty-tag-union ") then ALIASES[decl] = union_shape(tree, kids[2]) end
+        if decl ~= nil and decl ~= "" then push(HOLDERS, {path = path, line = line, name = decl, words = words_of(decl), field = false, doc = doc_over(src, tonumber(line))}) end
+      end
+      -- The declaration (a top-level or member annotation or type) each
+      -- depth's node is, by its line, for a record field's doc.
+      decl_line[tostring(d)] = (outer and (starts_with(h, "(s-type-anno ") or starts_with(h, "(s-type-decl "))) and line or ""
+      if starts_with(h, "(anno-record-field ") then
+        local at = holder_decl(kinds, decl_line, d)
+        local field = between(h, "(name \"", "\")")
+        if at ~= "" and field ~= nil and field ~= "" then push(HOLDERS, {path = path, line = line, name = field, words = words_of(field), field = true, doc = doc_over(src, tonumber(at))}) end
       end
       if outer and starts_with(h, "(s-type-anno ") then
         local def = {path = path, line = line, name = between(h, "(name \"", "\")"), annotation = true, fn = false, callback = false, paired = false}
@@ -453,10 +555,20 @@ function hunt(def)
   end
   if is_annotation and effect and def.fn then
     for a in (get(def, "args") or {}) do
-      local tags = get(a, "tags")
+      local u = get(a, "union")
       local ref = get(a, "ref")
-      if tags == nil and ref ~= nil then tags = get(ALIASES, ref) end
-      if tags ~= nil and #tags >= 2 and all_past(tags) then say(p, i, "command_tense", "`" .. full .. "` takes `[" .. join(tags, ", ") .. "]`, an instruction named like an event: name its tags as commands (`Pinned` is `Pin`)") end
+      if u == nil and ref ~= nil then u = get(ALIASES, ref) end
+      if u ~= nil then
+        local shown = (get(a, "list") and "a list of " or "") .. "`[" .. join(u.names, ", ") .. "]`"
+        if not u.payload and #u.names >= 2 and all_past(u.names) then say(p, i, "command_tense", "`" .. full .. "` takes " .. shown .. ", an instruction named like an event: name its tags as commands (`Pinned` is `Pin`)") end
+        local verbs = {}
+        local pasts = {}
+        for t in u.names do
+          local w = first_word(t)
+          if is_participle(w) then push(pasts, t) elseif has_key(VERBS, w) then push(verbs, t) end
+        end
+        if #verbs > 0 and #pasts > 0 then say(p, i, "mixed_tense", "`" .. full .. "` takes " .. shown .. ": commands (" .. join(verbs, ", ") .. ") beside events (" .. join(pasts, ", ") .. "): name what it is told to do in one mood") end
+      end
     end
   end
   if is_annotation and #ws > 2 and ws[1] == "is" and ws[2] == "not" then say(p, i, "negative", "`" .. full .. "` asks a negative: `!" .. full .. "(...)` reads twice") end
@@ -470,6 +582,29 @@ local files = #paths
 -- 1 MiB it allows on the chat. The arena the header sets holds it.
 for def in definitions(paths) do
   hunt(def)
+end
+
+-- Whether a doc says whose a container word is (`a folder's entry`, `a
+-- listing's entries`): the domain's word, kept.
+function owned(doc, w)
+  local forms = {w, w .. "s"}
+  if ends_with(w, "ies") then push(forms, sub(w, 1, #w - 3) .. "y") end
+  if ends_with(w, "y") then push(forms, sub(w, 1, #w - 1) .. "ies") end
+  if ends_with(w, "s") then push(forms, sub(w, 1, #w - 1)) end
+  for f in forms do
+    if contains(doc, "'s " .. f) then return true end
+  end
+  return false
+end
+
+for h in HOLDERS do
+  local all = #h.words > 0
+  local kept = false
+  for w in h.words do
+    if not has_key(VAGUE, w) and not has_key(CONTAINERS, w) then all = false end
+    if owned(h.doc, w) then kept = true end
+  end
+  if all and not kept then say(h.path, h.line, "container", (h.field and "the field `" or "the type `") .. h.name .. "` is only container words: name it for what it holds, or say whose it is in its doc (`## A folder's entry`)") end
 end
 -- Two opposite prepositions on one noun name a matched pair on purpose
 -- (`insert_before` and `insert_after`): no split.
@@ -523,13 +658,16 @@ if SELF then
   -- each plant that is wrong.
   local wrong = {}
   for c in CHECKS do
+    local planted = 0
     for p in glob(GLOB) do
       local base = sub(p, #"cookbook:roc/plants/name_hunt/" + 1)
       local mine = base == c .. ".roc" or starts_with(base, c .. "_")
+      if mine then planted = planted + 1 end
       local fired = has_key(per_file, p .. "|" .. c)
       if mine and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. p) end
       if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
     end
+    if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
   end
   -- The census: a known word of the plants in each verdict.
   for want in {{word = "read", verdict = "verb"}, {word = "held", verdict = "participle"}, {word = "process", verdict = "vague"}, {word = "links", verdict = "refused"}} do

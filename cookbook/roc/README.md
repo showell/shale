@@ -17,6 +17,11 @@ it works on, `<shale>` being the shale checkout:
   once, from its annotation when it has one (a hosted effect has nothing
   else); a `!` that names a callback's effect (`map2!`) and a name the
   language fixes (`is_eq`, `subscript`) are not judged as the author's.
+  Beside the names: `command_tense` and `mixed_tense` (the tags an effect
+  is handed, a `List(T)` judged as `T`, named as events, or as commands
+  and events at once) and `container` (a type or record field named only
+  by container words, cookbook/words/containers.txt, unless its doc says
+  whose: `## A folder's entry`).
   `self_test=1` runs its plants (`plants/name_hunt/`).
 - [roc_commas.shale](roc_commas.shale): **long lines laid out by `roc fmt`.**
   `roc fmt` never wraps a line, and it joins hand-made breaks back. A
@@ -35,6 +40,24 @@ it works on, `<shale>` being the shale checkout:
   are never read as items, nor is a record pattern's `..`; a `where`
   clause's items are its method constraints. `self_test=1` runs its
   plants (`plants/stack/`).
+- [nest_depth.shale](nest_depth.shale): **a call nested three deep**,
+  `f(g(h(x)))`, read inside out: the outermost call of each nest `min`
+  (3) or more deep, from roc-ast's tree. A method's receiver, a pipe's or
+  an arrow's left side, a tag, `?` and parentheses are no level; a lambda,
+  record or list argument starts again (`loose=1` passes depth through the
+  last two). `self_test=1` runs its plants (`plants/nest_depth/`).
+- [boundaries.shale](boundaries.shale): **a function's boundary, from its
+  references.** `single`: a wrapper of a line or two with one production
+  caller, which no `expect`, test file or `##` doc keeps (a rule of thumb,
+  not a gate); `fixed`: a parameter every production call fills with the
+  same literal (`at: 0`), never context passed down (`me`, `req.me`).
+  `self_test=1` runs its plants (`plants/boundaries/`).
+- [errors.shale](errors.shale): **a failure said by its tags.**
+  `error_alias`: a function whose result's `Try` names a shared error
+  alias, not its tags in place (an alias in an argument, a handler's
+  input, is fine); `optional_tag`: a tag named as an optional (`None`,
+  `Some`: cookbook/words/optionals.txt). `self_test=1` runs its plants
+  (`plants/errors/`).
 - [same_code.shale](same_code.shale): **the same machine code.** Two builds
   of an archive, compared instruction by instruction with Roc's hashed
   procedure names (`roc__p` and 32 hex digits, which move with the source's

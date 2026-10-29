@@ -1,0 +1,403 @@
+-- **A FUNCTION'S BOUNDARY, AND A PARAMETER THAT IS NONE** (metal-vmm QUEUE
+-- 303, from the Roc style review's S6 and S7): every top-level and
+-- module-member function (`f = |...| ...` outside any lambda) and every
+-- reference to it, read from Roc's own parser's tree (roc-ast, at
+-- `tools:roc-ast/bin/roc-ast`, as `name_hunt.shale` reads it). A finding
+-- is a question for a reader, never a verdict:
+--
+--   single  a wrapper of a line or two (`lines`, 2) with exactly one
+--           production reference outside its own body, a call, which no
+--           `expect` and no test file reaches and no `##` doc explains:
+--           read better inline (roc-apps docs/roc-style.md, "A function
+--           earns its boundary"). Quiet: a pure decision an `expect`
+--           reaches, the public name a twin holds to its Zig (a test file
+--           reaches it), a function passed as a value (`map_ok(Uid.to_str)`),
+--           a question (`is_*`, `has_*`), whose name is the concept its
+--           test stands for (`is_message`), and one whose `##` doc says
+--           why it stands alone (a rule's one home), as the guide's
+--           one-caller module is kept when its reason is written down. The
+--           guide calls this a rule of thumb, not a gate.
+--   fixed   a parameter (a position, or a field of a record argument) that
+--           every production call, two or more, fills with the same
+--           **literal**: a number, a string, a character, a tag
+--           (`Begin`, `Bool.true`) or a module's constant (`Limits.max`). A
+--           recursion's start (`at: 0`) belongs to an entry function that
+--           takes only what varies ("A parameter every caller passes the
+--           same value is no parameter"). **CONTEXT PASSED DOWN IS NO
+--           CONSTANT**: the same variable (`me`, `accounts`, `at`), field
+--           (`req.me`) or call (`Host.list_srcs!({})`) at every call is the
+--           caller's value handed on, never a finding.
+--
+-- **A REFERENCE** is a bare `name` in the defining file, `Type.name`
+-- anywhere, or a method call `.name(...)`, attributed to every member of
+-- that name: a function so reached by a name two types share is
+-- ambiguous and judged by neither check. An arrow call's receiver
+-- (`x->f(a)`) and a method's are the first argument. **A TEST FILE** is a
+-- twin (`twin.roc`, a name ending `twin.roc`, a `twin/` folder) or under
+-- `test/`: it reaches code as an `expect` does, so its references are no
+-- production caller. A finding names its file and the definition's line.
+--
+-- One line a finding, `path:line: <check>: <why>`, then the counts.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/boundaries.shale glob=chat/**/*.roc
+--   shale cookbook:roc/boundaries.shale self_test=1
+--
+-- Read the whole tree, tests too: a twin's reference is what keeps a
+-- function quiet. `self_test=1` runs it over `cookbook/roc/plants/
+-- boundaries/`, each plant named for the check it holds: every check must
+-- fire on its own plants and on no other, a `quiet_*.roc` plant on none.
+-- budget: steps=400000000 arena_bytes=3000000000
+
+const SELF = arg("self_test", "") == "1"
+const PLANTS = "cookbook:roc/plants/boundaries/"
+const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
+const LINES = arg("lines", 2)
+const ROC_AST = "tools:roc-ast/bin/roc-ast"
+const CHECKS = {"single", "fixed"}
+const T = {text = {}, depth = {}, l1 = {}, l2 = {}}
+const SRC = {}
+const OUTER = {["(file"] = true, ["(statements"] = true, ["(s-type-decl"] = true, ["(associated"] = true}
+
+const found = {}
+for c in CHECKS do found[c] = 0 end
+const per_file = {}
+
+function say(p, line, check, why)
+  print(p .. ":" .. line .. ": " .. check .. ": " .. why)
+  found[check] = found[check] + 1
+  per_file[p .. "|" .. check] = true
+  return nil
+end
+
+function depth_of(l)
+  local d = 0
+  while sub(l, d + 1, d + 1) == "\t" do d = d + 1 end
+  return d
+end
+
+function children(at)
+  local out = {}
+  local i = at + 1
+  while i <= #T.text and T.depth[i] > T.depth[at] do
+    if T.depth[i] == T.depth[at] + 1 then push(out, i) end
+    i = i + 1
+  end
+  return out
+end
+
+function head(at)
+  return trim(T.text[at])
+end
+
+function raw(at)
+  return between(head(at), "(raw \"", "\")") or ""
+end
+
+-- A node's source text, from its span `@l1.c1-l2.c2` (the end column one
+-- past the last), squeezed to one line.
+function text_of(path, at)
+  local m = re_find(head(at), "@([0-9]+)\\.([0-9]+)-([0-9]+)\\.([0-9]+)")
+  if m == nil then return "?" end
+  local src = SRC[path]
+  local l1 = tonumber(m.groups[1])
+  local c1 = tonumber(m.groups[2])
+  local l2 = tonumber(m.groups[3])
+  local c2 = tonumber(m.groups[4])
+  if l1 == l2 then return sub(src[l1], c1, c2 - 1) end
+  local parts = {trim(sub(src[l1], c1))}
+  for l = l1 + 1, l2 - 1 do push(parts, trim(src[l])) end
+  push(parts, trim(sub(src[l2], 1, c2 - 1)))
+  return join(parts, " ")
+end
+
+-- A literal: a string, a character, a number, a tag alone or a module's
+-- constant (`Begin`, `Bool.true`, `Limits.max`).
+function is_literal(s)
+  local c = sub(s, 1, 1)
+  if c == "\"" or c == "'" then return true end
+  if re_find(s, "^-?[0-9]") ~= nil then return true end
+  if re_find(s, "^[A-Z][A-Za-z0-9]*(\\.[a-z_][a-z0-9_]*)?$") ~= nil then return true end
+  return false
+end
+
+-- A question's name: what it tests is a concept named, not a wrapper.
+function is_question(name)
+  return starts_with(name, "is_") or starts_with(name, "has_")
+end
+
+function is_test_file(p)
+  return ends_with(p, "twin.roc") or contains(p, "/test/") or contains(p, "/twin/") or starts_with(p, "test/") or starts_with(p, "twin/")
+end
+
+-- ── the tree ─────────────────────────────────────────────────────────────
+
+if not exists(ROC_AST) then fail("boundaries: no " .. ROC_AST .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it (see name_hunt.shale)") end
+local fs = glob(GLOB)
+local reals = {}
+local shown = {}
+for f in fs do
+  local r = real(f)
+  push(reals, r)
+  shown[r] = f
+  SRC[f] = split(read(f), "\n")
+end
+if #reals > 0 then
+  local dump = run({real(ROC_AST)}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
+  -- A file that does not parse stops roc-ast there: hunting the trees so
+  -- far would pass the rest unread.
+  if dump.ended ~= "exit" or dump.code ~= 0 then
+    local said = lines(trim(dump.out))
+    fail("boundaries: roc-ast: " .. (said[#said] or dump.ended))
+  end
+  for l in lines(dump.out) do
+    push(T.text, l)
+    push(T.depth, depth_of(l))
+    local m = re_find(l, "@([0-9]+)\\.[0-9]+-([0-9]+)\\.")
+    if m == nil then
+      push(T.l1, 0)
+      push(T.l2, 0)
+    else
+      push(T.l1, tonumber(m.groups[1]))
+      push(T.l2, tonumber(m.groups[2]))
+    end
+  end
+end
+
+-- How many `##` lines stand just above the function at `line`, over its
+-- annotation (`name : ...`, one line or several) when it has one.
+function doc_lines(src, name, line)
+  local top = line - 1
+  local k = top
+  while k >= 1 and k > line - 12 and trim(src[k]) ~= "" and not starts_with(trim(src[k]), "#") do
+    if starts_with(trim(src[k]), name .. " :") then top = k - 1 end
+    k = k - 1
+  end
+  local n = 0
+  while top >= 1 and starts_with(trim(src[top]), "##") do
+    n = n + 1
+    top = top - 1
+  end
+  return n
+end
+
+-- ── pass 1: the functions ────────────────────────────────────────────────
+-- By key `owner|name`, the owner a module type's name, or `@path` for a
+-- top-level one.
+local defs = {}
+local members = {}
+local path = ""
+local kinds = {}
+local types = {}
+for i = 1, #T.text do
+  local h = head(i)
+  local d = T.depth[i]
+  if starts_with(h, "== ") then
+    path = shown[sub(h, 4)] or sub(h, 4)
+  else
+    kinds[d + 1] = split(h, " ")[1]
+    if starts_with(h, "(s-type-decl ") then types[tostring(d + 1)] = between(head(i + 1), "(name \"", "\")") end
+    local outer = true
+    local owner = "@" .. path
+    for k = 1, d do
+      if not has_key(OUTER, kinds[k]) then outer = false end
+      if kinds[k] == "(s-type-decl" then owner = types[tostring(k)] end
+    end
+    if outer and starts_with(h, "(s-decl ") and starts_with(head(i + 1), "(p-ident ") then
+      local kids = children(i)
+      if #kids > 1 and starts_with(head(kids[2]), "(e-lambda ") then
+        local name = raw(i + 1)
+        local key = owner .. "|" .. name
+        defs[key] = {key = key, path = path, owner = owner, name = name, line = T.l1[i], last = T.l2[i], body = T.l2[i] - T.l1[i] + 1, doc = doc_lines(SRC[path], name, T.l1[i]), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, values = 0, ambiguous = false}
+        if sub(owner, 1, 1) ~= "@" then
+          if not has_key(members, name) then members[name] = {} end
+          push(members[name], key)
+        end
+      end
+    end
+  end
+end
+
+-- ── pass 2: the references ───────────────────────────────────────────────
+-- A call is `{path, args, pre}`: `args` the argument nodes, `pre` an arrow
+-- or method call's receiver, the hidden first argument (0 for none). A
+-- reference with no call is the function passed as a value.
+function note(def, ctx, call)
+  if ctx.path == def.path and ctx.line >= def.line and ctx.line <= def.last then return nil end
+  if is_test_file(ctx.path) then
+    def.tests = def.tests + 1
+  elseif ctx.expect then
+    def.expects = def.expects + 1
+  else
+    def.prod = def.prod + 1
+    push(def.callers, ctx.path .. ":" .. ctx.line .. " in " .. ctx.caller)
+    if call == nil then def.values = def.values + 1 else push(def.calls, call) end
+  end
+  return nil
+end
+
+path = ""
+kinds = {}
+types = {}
+local names = {}
+for i = 1, #T.text do
+  local h = head(i)
+  local d = T.depth[i]
+  if starts_with(h, "== ") then
+    path = shown[sub(h, 4)] or sub(h, 4)
+  else
+    kinds[d + 1] = split(h, " ")[1]
+    if starts_with(h, "(s-type-decl ") then types[tostring(d + 1)] = between(head(i + 1), "(name \"", "\")") end
+    if starts_with(h, "(p-ident ") and d >= 1 and kinds[d] == "(s-decl" then names[tostring(d)] = raw(i) end
+    local owner = ""
+    local caller = "?"
+    local in_expect = false
+    for k = 1, d do
+      if kinds[k] == "(s-type-decl" then owner = types[tostring(k)] end
+      if kinds[k] == "(s-expect" then in_expect = true end
+      if kinds[k] == "(s-decl" and caller == "?" then caller = get(names, tostring(k), "?") end
+    end
+    local ctx = {path = path, line = T.l1[i], expect = in_expect, caller = caller}
+    local call = nil
+    local target = ""
+    local method = false
+    if starts_with(h, "(e-ident ") then
+      target = raw(i)
+      -- The head of an apply: its siblings are the arguments.
+      if d >= 1 and kinds[d] == "(e-apply" then
+        local parent = i - 1
+        while T.depth[parent] ~= d - 1 do parent = parent - 1 end
+        local kids = children(parent)
+        if kids[1] == i then
+          call = {path = path, args = drop(kids, 1), pre = 0}
+          -- `x->f(a)`: the apply is the arrow call's second child.
+          if d >= 2 and kinds[d - 1] == "(e-arrow-call" then
+            local gp = parent - 1
+            while T.depth[gp] ~= d - 2 do gp = gp - 1 end
+            local gk = children(gp)
+            if gk[2] == parent then call.pre = gk[1] end
+          end
+        end
+      end
+    elseif starts_with(h, "(e-method-call ") then
+      target = sub(between(h, "(method \"", "\")") or "", 2)
+      method = true
+      local args = {}
+      local pre = 0
+      for k in children(i) do
+        if head(k) == "(receiver" then pre = children(k)[1] end
+        if starts_with(head(k), "(args") then args = children(k) end
+      end
+      call = {path = path, args = args, pre = pre}
+    end
+    if target ~= "" then
+      if method then
+        local ks = get(members, target, {})
+        for key in ks do
+          note(defs[key], ctx, call)
+          if #ks > 1 then defs[key].ambiguous = true end
+        end
+      elseif contains(target, ".") then
+        local parts = split(target, ".")
+        local key = parts[#parts - 1] .. "|" .. parts[#parts]
+        if has_key(defs, key) then note(defs[key], ctx, call) end
+      else
+        local key = ""
+        if owner ~= "" and has_key(defs, owner .. "|" .. target) then key = owner .. "|" .. target
+        elseif has_key(defs, "@" .. path .. "|" .. target) then key = "@" .. path .. "|" .. target
+        else
+          for m in get(members, target, {}) do
+            if defs[m].path == path then key = m end
+          end
+        end
+        if key ~= "" then note(defs[key], ctx, call) end
+      end
+    end
+  end
+end
+
+-- ── the checks ───────────────────────────────────────────────────────────
+
+function shown_name(def)
+  if sub(def.owner, 1, 1) == "@" then return def.name end
+  return def.owner .. "." .. def.name
+end
+
+-- A call's arguments by position, `pre` first: a record argument's fields
+-- as `N.field`, so `{ needle, at: 0 }` is judged field by field.
+function arg_texts(call)
+  local out = {}
+  local list = {}
+  if call.pre ~= 0 then push(list, call.pre) end
+  for a in call.args do push(list, a) end
+  local n = 0
+  for a in list do
+    n = n + 1
+    if starts_with(head(a), "(e-record ") then
+      for f in children(a) do
+        local fname = between(head(f), "(field (field \"", "\")")
+        if fname ~= nil and fname ~= "" then
+          local v = children(f)
+          out[n .. "." .. fname] = #v > 0 and text_of(call.path, v[1]) or fname
+        end
+      end
+    else
+      out[tostring(n)] = text_of(call.path, a)
+    end
+  end
+  return out
+end
+
+-- No argument's text: the marker of a slot whose calls differ.
+const DIFFERS = "\n differs"
+for key in sort(keys(defs)) do
+  local def = defs[key]
+  if not def.ambiguous and def.prod == 1 and def.values == 0 and def.expects == 0 and def.tests == 0 and def.doc == 0 and def.body <= LINES and not is_question(def.name) then
+    say(def.path, def.line, "single", "`" .. shown_name(def) .. "` (" .. def.body .. " line" .. (def.body == 1 and "" or "s") .. ") has one caller, " .. def.callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
+  end
+  if #def.calls >= 2 and def.values == 0 and not def.ambiguous then
+    local seen = {}
+    local first = true
+    for c in def.calls do
+      local a = arg_texts(c)
+      if first then
+        for k in keys(a) do seen[k] = a[k] end
+        first = false
+      else
+        for k in keys(seen) do
+          if seen[k] ~= DIFFERS and (not has_key(a, k) or a[k] ~= seen[k]) then seen[k] = DIFFERS end
+        end
+        for k in keys(a) do
+          if not has_key(seen, k) then seen[k] = DIFFERS end
+        end
+      end
+    end
+    for k in sort(keys(seen)) do
+      if seen[k] ~= DIFFERS and is_literal(seen[k]) then say(def.path, def.line, "fixed", "`" .. shown_name(def) .. "`'s argument " .. k .. " is `" .. seen[k] .. "` in all " .. #def.calls .. " production calls: no parameter, or an entry function that takes only what varies") end
+    end
+  end
+end
+
+local total = 0
+for k in keys(defs) do total = total + 1 end
+local counts = {}
+for c in CHECKS do push(counts, c .. " " .. found[c]) end
+print("boundaries (Roc): " .. #fs .. " files, " .. total .. " functions; " .. join(counts, ", "))
+
+if SELF then
+  local wrong = {}
+  for c in CHECKS do
+    local planted = 0
+    for p in fs do
+      local base = sub(p, #PLANTS + 1)
+      local mine = base == c .. ".roc" or starts_with(base, c .. "_")
+      if mine then planted = planted + 1 end
+      local fired = has_key(per_file, p .. "|" .. c)
+      if mine and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. p) end
+      if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
+    end
+    if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
+  end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail("boundaries self_test: " .. #wrong .. " plants wrong") end
+  print("boundaries (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none)")
+end
