@@ -103,7 +103,7 @@ if SELF_TEST then
   -- A bare origin with main; `merged` (merged), `ahead` (one commit more),
   -- and `box/default` made origin's default; the judge must keep and
   -- delete exactly as planted.
-  local T = "build:branch_prune_self_test"
+  local T = "scratch:branch_prune_self_test"
   if exists(T) then remove_tree(T) end
   mkdir(T)
   local root = real(T)

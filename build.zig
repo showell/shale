@@ -414,13 +414,15 @@ pub fn build(b: *std.Build) void {
     // a worktree or CI checkout tests its own plants, and `tools` `~/tools`
     // (an empty folder when there is none), where roc-ast lives: the Roc name
     // hunt fails without it, saying how to install it; CI installs the
-    // release asset there. After `quick`.
+    // release asset there. `scratch`, a fresh folder deleted after, is where
+    // a self-test plants what it writes (branch_prune's repos). After `quick`.
     {
         const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt(
             "bin=\"$(cd \"$(dirname \"$0\")\" && pwd)/$(basename \"$0\")\"; cd '{s}' || exit 1; " ++
                 "tmp=$(mktemp -d) || exit 1; trap 'rm -rf \"$tmp\"' EXIT; " ++
                 "tools=\"$HOME/tools\"; [ -d \"$tools\" ] || {{ tools=\"$tmp/tools\"; mkdir \"$tools\"; }}; " ++
-                "printf 'cookbook = %s/cookbook ro\\ntools = %s ro tools\\n' \"$(pwd)\" \"$tools\" > \"$tmp/mounts\"; " ++
+                "mkdir \"$tmp/scratch\" || exit 1; " ++
+                "printf 'cookbook = %s/cookbook ro\\ntools = %s ro tools\\nscratch = %s/scratch\\n' \"$(pwd)\" \"$tools\" \"$tmp\" > \"$tmp/mounts\"; " ++
                 "recipes=$(grep -rl --include='*.shale' 'arg(\"self_test\"' cookbook | sort); " ++
                 "[ -n \"$recipes\" ] || {{ echo 'cookbook-test: no recipe in cookbook/ reads arg(\"self_test\")'; exit 1; }}; " ++
                 "n=0; bad=''; for r in $recipes; do n=$((n+1)); " ++
