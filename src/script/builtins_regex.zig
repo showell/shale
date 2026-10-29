@@ -33,7 +33,7 @@ fn program(run: *Run, pos: ast.Pos, b: B, pattern: []const u8, options: regex.Op
     try run.charge(pos, cost);
     run.tally(cost);
     var refused: regex.Refusal = undefined;
-    return run.patterns.put(run.machine, pattern, options, &refused) catch |e| switch (e) {
+    return run.patterns.put(run.machine_heap, pattern, options, &refused) catch |e| switch (e) {
         error.OutOfMemory => run.machineOom(pos),
         error.Refused => run.fail(pos, .argument, "`{s}`'s pattern, at its byte {d}: {s}", .{ @tagName(b), refused.at + 1, refused.message }),
     };

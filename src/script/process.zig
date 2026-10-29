@@ -146,6 +146,7 @@ pub const Process = struct {
             .io = io,
             .alloc = p.values.allocator(),
             .machine = mm.budget.allocator(),
+            .machine_heap = mm.budget.heap(),
             .budgeted = &p.values,
             .budgets = budgets,
             .root = root,
@@ -168,7 +169,7 @@ pub const Process = struct {
     fn ready(p: *Process, source: []const u8) error{Stop}!void {
         const budgets = p.run.budgets;
         if (source.len > budgets.source_bytes) return p.stopWith(.{ .line = 1, .column = 1, .class = .budget, .budget = .source, .message = "the source is larger than the source budget" });
-        const machine_stop: Stop = .{ .line = 1, .column = 1, .class = .budget, .budget = .machine, .message = "the machine's memory (the code, the frames, the operands) is past its budget" };
+        const machine_stop: Stop = .{ .line = 1, .column = 1, .class = .budget, .budget = .machine, .message = "the machine's memory (the code, the frames, the operands) is past its budget: raise it with `--budget machine_bytes=N` or the script's `-- budget: machine_bytes=N` line" };
         const tree = p.machine.tree.allocator();
         // The tree points into the source, so the process keeps its own copy.
         const own = tree.dupe(u8, source) catch return p.stopWith(machine_stop);

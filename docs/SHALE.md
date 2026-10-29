@@ -1026,10 +1026,10 @@ default, the machine's included.
 | read bytes | what the reads bring; `read` gets what remains as its limit | 64 MiB | 16 MiB |
 | changes | each change | 1,000 | 100 |
 | change bytes | what the changes write | 16 MiB | 16 MiB |
-| machine | the machine's own memory: the tree the source parses to, the compiled code, the frames' slots, the operands, the `..` chains' parts and a yield's copying, from one arena of its own beside the values'. With the arena, the whole of what a run can take from the host. **Every source within the source budget compiles in half of it**; the other half is for the frames and the operands | 16 MiB | 16 MiB (the route sets none; with its 8 MiB arena, a run takes at most 24 MiB of the host's memory) |
+| machine | the machine's own memory: the tree the source parses to, the compiled code, the frames' slots, the operands, the `..` chains' parts and a yield's copying, from one arena of its own beside the values'. With the arena, the whole of what a run can take from the host. **Every source within the source budget compiles in half of it**; the other half is for the frames and the operands. What is made and dropped over and over (the regex cache's compiled patterns, a long call's arguments) is given back when it is dropped, so a loop over more patterns than the cache holds runs in it. **`--budget machine_bytes=N` or a `-- budget:` line raises it, up to 1 GiB** | 16 MiB | 16 MiB (the route sets none; with its 8 MiB arena, a run takes at most 24 MiB of the host's memory) |
 | call bytes | **what one builtin call brings from the store** (a builtin is never cut, so its work is bounded instead). A `read` or a scan past it is an `argument` error; a bigger file is read or scanned in parts, `read(p, offset, n)` or `count_in(p, s, offset, n)`, a call each, so a host can let a request in between | 1 MiB | 1 MiB |
 | call entries | **what one `walk` call considers:** its folders' entries, each a stat if it is kept. A walk with more ends its part with a `more` entry and goes on from it | 256 | 256 |
-| kept | what a `yield` keeps: the arena it copies the reachable values into (see "The VM") | 1 MiB | 1 MiB |
+| kept | what a `yield` keeps: the arena it copies the reachable values into (see "The VM"). **`--budget kept_bytes=N` or a `-- budget:` line raises it, up to 256 MiB** | 1 MiB | 1 MiB |
 | source | | 64 KiB | 64 KiB |
 | nesting | how deep the source nests when parsed (a parenthesis costs two: an expression and its operand) | 200 | 200 |
 
@@ -1129,8 +1129,9 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   by, a name given twice refused. For a value a launch's plain words
   cannot carry (`names=a|b|a test's name, with a comma`), under a heredoc.
 - `--budget NAME=N` sets one budget: `steps`, `reads`, `read_bytes`,
-  `output_bytes`, `changes`, `change_bytes`, `arena_bytes`, `call_bytes`
-  or `call_entries`. **The runner's own defaults:**
+  `output_bytes`, `changes`, `change_bytes`, `arena_bytes`, `call_bytes`,
+  `call_entries`, `kept_bytes` (at most 256 MiB) or `machine_bytes` (at
+  most 1 GiB). **The runner's own defaults:**
   output 64 KiB, `call_bytes` 64 MiB, 64 programs a run; the rest the
   core's.
 - **A script says its own budgets** in a line among the comments that

@@ -24,7 +24,8 @@ pub const usage =
     \\  --undo-on-stop    a run that stops puts back every path it changed (not a program's)
     \\  --args-stdin      the FILE's NAME=VALUEs on stdin, one a line, each value raw to its end
     \\  --budget NAME=N   one budget: steps, reads, read_bytes, output_bytes, changes,
-    \\                    change_bytes, arena_bytes, call_bytes, call_entries; a
+    \\                    change_bytes, arena_bytes, call_bytes, call_entries,
+    \\                    kept_bytes (at most 256 MiB), machine_bytes (at most 1 GiB); a
     \\                    script's own `-- budget: NAME=N ...` line sets its
     \\                    budgets where this does not
     \\  -e SOURCE         the script itself, in place of a file (neither: stdin is the script)
@@ -70,7 +71,7 @@ pub const Command = struct {
 pub const Refused = struct { why: []const u8 };
 
 /// The budgets a command line may set, by name.
-const settable = [_][]const u8{ "steps", "reads", "read_bytes", "output_bytes", "changes", "change_bytes", "arena_bytes", "call_bytes", "call_entries" };
+const settable = [_][]const u8{ "steps", "reads", "read_bytes", "output_bytes", "changes", "change_bytes", "arena_bytes", "call_bytes", "call_entries", "kept_bytes", "machine_bytes" };
 
 /// Parses `argv` (without the program's name) and the caller's `SHALE_ROOT`,
 /// if any. The `NAME=VALUE` arguments go into `args_buf`; a refusal's message
@@ -105,6 +106,7 @@ pub fn parse(argv: []const []const u8, env_root: ?[]const u8, args_buf: []interp
                 const n = builtins.parseInteger(v[eq + 1 ..]) orelse return refuse(why_buf, "--budget {s}: {s} is not a number", .{ v, v[eq + 1 ..] });
                 if (n < 1) return refuse(why_buf, "--budget {s}: a budget is at least 1", .{v});
                 const k = budgetIndex(name) orelse return refuse(why_buf, "--budget {s}: no budget is called {s}", .{ v, name });
+                if (mostOf(k)) |most| if (n > most) return refuse(why_buf, "--budget {s}: {s} is at most {d}", .{ v, name, most });
                 setBudget(&c.budgets, k, @intCast(n));
                 c.flagged[k] = true;
             }
@@ -193,6 +195,7 @@ pub fn headerBudgets(source: []const u8, c: *Command, why_buf: []u8) ?Refused {
             const n = builtins.parseInteger(v[eq + 1 ..]) orelse return said(why_buf, "`-- budget:` {s}: {s} is not a number", .{ v, v[eq + 1 ..] });
             if (n < 1) return said(why_buf, "`-- budget:` {s}: a budget is at least 1", .{v});
             const k = budgetIndex(name) orelse return said(why_buf, "`-- budget:` {s}: no budget is called {s}", .{ v, name });
+            if (mostOf(k)) |most| if (n > most) return said(why_buf, "`-- budget:` {s}: {s} is at most {d}", .{ v, name, most });
             if (c.flagged[k]) continue;
             setBudget(&c.budgets, k, @intCast(n));
             c.from_header[k] = true;
@@ -284,6 +287,14 @@ fn refuse(buf: []u8, comptime fmt: []const u8, args: anytype) @typeInfo(@TypeOf(
 
 fn budgetIndex(name: []const u8) ?usize {
     for (settable, 0..) |field, k| if (std.mem.eql(u8, name, field)) return k;
+    return null;
+}
+
+/// The most budget `k` may be set to, when it has a ceiling: the kept and the
+/// machine budgets hold memory the host gives the run whole.
+fn mostOf(k: usize) ?u64 {
+    if (std.mem.eql(u8, settable[k], "kept_bytes")) return interp.Budgets.kept_bytes_most;
+    if (std.mem.eql(u8, settable[k], "machine_bytes")) return interp.Budgets.machine_bytes_most;
     return null;
 }
 
@@ -463,4 +474,21 @@ test "cli: used: past half of a budget" {
     try testing.expect(pastHalf(.{ .reads = 6 }, b));
     try testing.expect(pastHalf(.{ .read_bytes = 501 }, b));
     try testing.expect(pastHalf(.{ .output = 26 }, b));
+}
+
+test "cli: the kept and machine budgets are set by --budget and a `-- budget:` line, each up to its ceiling (metal-vmm QUEUE 307)" {
+    var why: [256]u8 = undefined;
+    const flagged = try parsed(&.{ "--budget", "kept_bytes=2000000", "--budget", "machine_bytes=33554432", "a.shale" }, null);
+    try testing.expectEqual(@as(usize, 2_000_000), flagged.budgets.kept_bytes);
+    try testing.expectEqual(@as(usize, 33_554_432), flagged.budgets.machine_bytes);
+    var c = try parsed(&.{"a.shale"}, null);
+    try testing.expect(headerBudgets("-- budget: kept_bytes=3000000 machine_bytes=50000000\nprint(1)\n", &c, &why) == null);
+    try testing.expectEqual(@as(usize, 3_000_000), c.budgets.kept_bytes);
+    try testing.expectEqual(@as(usize, 50_000_000), c.budgets.machine_bytes);
+    // Past the ceiling is refused, by either door, naming it.
+    try testing.expectError(error.Refused, parsed(&.{ "--budget", "machine_bytes=1073741825", "a.shale" }, null));
+    try testing.expectError(error.Refused, parsed(&.{ "--budget", "kept_bytes=268435457", "a.shale" }, null));
+    var d = try parsed(&.{"a.shale"}, null);
+    const over = headerBudgets("-- budget: kept_bytes=268435457\n", &d, &why).?;
+    try testing.expect(std.mem.indexOf(u8, over.why, "at most 268435456") != null);
 }

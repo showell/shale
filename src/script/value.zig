@@ -93,6 +93,53 @@ pub const Budgeted = struct {
         return .{ .ptr = self, .vtable = &vtable };
     }
 
+    /// **AN ALLOCATOR WHOSE FREE GIVES THE BYTES BACK**, charged to the same limit
+    /// as the arena's chunks. The arena reclaims a freed allocation only when it
+    /// was the last one made, so memory that is made and dropped over and over (a
+    /// compiled pattern the regex cache evicts, a long call's arguments) would
+    /// otherwise pile up until the budget stops the run: a script calling `re_find`
+    /// with 25 patterns line by line stopped at the machine budget after about 745
+    /// lines (metal-vmm QUEUE 307). Each allocation goes to the backing allocator
+    /// whole and is freed whole; whoever takes one frees it before `deinit`.
+    pub fn heap(self: *Budgeted) std.mem.Allocator {
+        return .{ .ptr = self, .vtable = &heap_vtable };
+    }
+
+    const heap_vtable: std.mem.Allocator.VTable = .{ .alloc = heapAlloc, .resize = heapResize, .remap = heapRemap, .free = heapFree };
+
+    fn heapAlloc(ctx: *anyopaque, len: usize, a: Alignment, ra: usize) ?[*]u8 {
+        const self: *Budgeted = @ptrCast(@alignCast(ctx));
+        if (len > self.limit -| self.held) {
+            self.hit = true;
+            return null;
+        }
+        const p = self.backing.rawAlloc(len, a, ra) orelse {
+            self.hit = true;
+            return null;
+        };
+        self.held += len;
+        self.used += len;
+        return p;
+    }
+
+    fn heapResize(ctx: *anyopaque, m: []u8, a: Alignment, new_len: usize, ra: usize) bool {
+        const self: *Budgeted = @ptrCast(@alignCast(ctx));
+        if (new_len > m.len and new_len - m.len > self.limit -| self.held) return false;
+        if (!self.backing.rawResize(m, a, new_len, ra)) return false;
+        self.held = self.held - m.len + new_len;
+        return true;
+    }
+
+    fn heapRemap(ctx: *anyopaque, m: []u8, a: Alignment, new_len: usize, ra: usize) ?[*]u8 {
+        return if (heapResize(ctx, m, a, new_len, ra)) m.ptr else null;
+    }
+
+    fn heapFree(ctx: *anyopaque, m: []u8, a: Alignment, ra: usize) void {
+        const self: *Budgeted = @ptrCast(@alignCast(ctx));
+        self.held -= m.len;
+        self.backing.rawFree(m, a, ra);
+    }
+
     /// Every chunk back to the backing allocator.
     pub fn deinit(self: *Budgeted) void {
         for ([_]?*Chunk{ self.chunk, self.bigs }) |first| {

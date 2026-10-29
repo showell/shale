@@ -61,6 +61,11 @@ pub const Budgets = struct {
     /// kept. A walk with more ends its list with a `more` entry, and goes on from it with
     /// `walk(p, {after = its path})`.
     call_entries: u64 = 256,
+
+    /// The most `kept_bytes` may be set to (`--budget`, a `-- budget:` line).
+    pub const kept_bytes_most: usize = 256 * 1024 * 1024;
+    /// The most `machine_bytes` may be set to (`--budget`, a `-- budget:` line).
+    pub const machine_bytes_most: usize = 1024 * 1024 * 1024;
 };
 
 /// One value given to the run by name: `shale script.shale name=value`, read with
@@ -126,6 +131,10 @@ pub const Run = struct {
     /// Bounded by `Budgets.machine_bytes`, with the tree and the code. No value points
     /// into it.
     machine: std.mem.Allocator,
+    /// The machine's budget again, for what is made and dropped over and over: a
+    /// free gives the bytes back (`value.Budgeted.heap`). The regex cache and a long
+    /// call's arguments.
+    machine_heap: std.mem.Allocator,
     budgeted: *value.Budgeted,
     budgets: Budgets,
     /// The data root the script's paths are confined to.
@@ -210,7 +219,7 @@ pub const Run = struct {
         self.chain_parts.deinit(self.machine);
         self.chain_ops.deinit(self.machine);
         self.collecting.deinit(self.machine);
-        self.patterns.deinit(self.machine);
+        self.patterns.deinit(self.machine_heap);
     }
 
     pub fn fail(self: *Run, pos: ast.Pos, class: diag.Class, comptime fmt: []const u8, args: anytype) Error {
@@ -232,8 +241,8 @@ pub const Run = struct {
             .source => "the source is larger than the source budget",
             .nesting => "the source nests deeper than the nesting budget",
             .depth => "calls and the expressions inside them nest deeper than the depth budget",
-            .machine => std.fmt.allocPrint(self.alloc, "the machine's memory (the code, the frames, the operands) is past its budget ({d} bytes)", .{self.budgets.machine_bytes}) catch "the machine's memory is past its budget",
-            .kept => std.fmt.allocPrint(self.alloc, "what the run keeps at a `yield` is past the kept budget ({d} bytes)", .{self.budgets.kept_bytes}) catch "what the run keeps at a `yield` is past the kept budget",
+            .machine => std.fmt.allocPrint(self.alloc, "the machine's memory (the code, the frames, the operands) is past its budget ({d} bytes): raise it with `--budget machine_bytes=N` or the script's `-- budget: machine_bytes=N` line, up to {d}", .{ self.budgets.machine_bytes, Budgets.machine_bytes_most }) catch "the machine's memory is past its budget",
+            .kept => std.fmt.allocPrint(self.alloc, "what the run keeps at a `yield` is past the kept budget ({d} bytes): raise it with `--budget kept_bytes=N` or the script's `-- budget: kept_bytes=N` line, up to {d}", .{ self.budgets.kept_bytes, Budgets.kept_bytes_most }) catch "what the run keeps at a `yield` is past the kept budget",
             .runs => "the run's programs are past their cap",
         } };
         return error.Stop;
@@ -784,8 +793,8 @@ pub const Run = struct {
     /// the effects log.
     noinline fn attempt(self: *Run, pos: ast.Pos, index: u32, arg_exprs: []const *ast.Expr) Error!Value {
         var small: [8]Value = undefined;
-        const vals = if (arg_exprs.len <= small.len) small[0..arg_exprs.len] else self.machine.alloc(Value, arg_exprs.len) catch return self.machineOom(pos);
-        defer if (arg_exprs.len > small.len) self.machine.free(vals);
+        const vals = if (arg_exprs.len <= small.len) small[0..arg_exprs.len] else self.machine_heap.alloc(Value, arg_exprs.len) catch return self.machineOom(pos);
+        defer if (arg_exprs.len > small.len) self.machine_heap.free(vals);
         for (arg_exprs, vals) |a, *v| v.* = try self.eval(a);
         const out = try self.attemptTable(pos);
         const calls = self.calls.items.len;
@@ -855,8 +864,8 @@ pub const Run = struct {
     /// tabs, and a newline.
     fn print(self: *Run, pos: ast.Pos, arg_exprs: []const *ast.Expr) Error!Value {
         var small: [8]Value = undefined;
-        const vals = if (arg_exprs.len <= small.len) small[0..arg_exprs.len] else self.machine.alloc(Value, arg_exprs.len) catch return self.machineOom(pos);
-        defer if (arg_exprs.len > small.len) self.machine.free(vals);
+        const vals = if (arg_exprs.len <= small.len) small[0..arg_exprs.len] else self.machine_heap.alloc(Value, arg_exprs.len) catch return self.machineOom(pos);
+        defer if (arg_exprs.len > small.len) self.machine_heap.free(vals);
         for (arg_exprs, vals) |a, *v| v.* = try self.eval(a);
         for (vals, arg_exprs, 0..) |v, a, i| {
             if (i > 0) try self.write(pos, "\t");

@@ -106,8 +106,10 @@ function as_path(w)
   local inner = w
   while starts_with(inner, "../") do inner = sub(inner, 4) end
   if contains(inner, "/../") or ends_with(inner, "/..") then return {skip = "a traversal example"} end
+  -- `./auth` with no extension is a folder too, but only a trailing `/` comes
+  -- off: `./ops/check_zig` is the file `ops/check_zig` (metal-vmm QUEUE 307).
   local folder = ends_with(w, "/") or (dotted and not has_ext(w))
-  if folder and #w > 1 then w = sub(w, 1, -2) end
+  if ends_with(w, "/") and #w > 1 then w = sub(w, 1, -2) end
   if w == "" or w == "." or w == ".." then return nil end
   -- a folder named alone (`data/`, `auth/`): the host's data, or a
   -- placeholder, far more often than this repo's.
@@ -598,7 +600,8 @@ function self_test()
       "```\nsrc/in_a_fence.zig\n```\n" ..
       "A host's: `data/chat/x.md`, `claude-steve/random1.md`, `zig-metal-unikernel.conf`; but a data file alone, `random1.md`.\n" ..
       "zig-webbox builds `probe/out.elf`.\n" ..
-      "Built by whom: `probe/out.elf`.\n",
+      "Built by whom: `probe/out.elf`.\n" ..
+      "Run `./ops/check_x`, and `./ops/missing_x`.\n",
     ["docs/here.md"] = "Back to [the readme](../README.md); `../zig-webbox/src/w.zig` by path.\n",
     ["FEEDBACK.md"] = "`src/history_only.zig` is gone and that is fine.\n",
     ["notes/essay.md"] = "`src/essay_only.zig` too.\n",
@@ -607,6 +610,7 @@ function self_test()
     ["src/a.zig"] = "const std = @import(\"std\");\n\npub const alpha = 1;\n\nconst Inner = struct {\n    depth: u8,\n};\n\nfn beta() void {}\n\n// ghost bogus\n\n\n",
     ["src/bad.zig"] = "const = ;\n",
     ["src/both.zig"] = "",
+    ["ops/check_x"] = "#!/bin/sh\n",
     [".gitignore"] = "zig-out/\n",
   })
   fixture_repo("zig-webbox", {
@@ -619,7 +623,8 @@ function self_test()
   local all = check_all(FIX .. "/", {"metal-vmm", "zig-webbox", "angry-gopher"})
   local m = all["metal-vmm"]
   local gone = join(m.gone, "\n")
-  expect(#m.gone == 3 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
+  expect(#m.gone == 4 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
+  expect(contains(gone, "README.md:14: `ops/missing_x`") and not contains(gone, "check_"), "a `./` path with no extension is read whole, never one character short")
   expect(contains(gone, "README.md:11: `random1.md`"), "a data file's name with no data root is a finding")
   expect(contains(gone, "README.md:13: `probe/out.elf`"), "a path a sibling ignores, on a line naming no sibling, is a finding")
   expect(not contains(gone, "w.zig"), "a sibling-named path is found there, by the line's naming and by `../`")

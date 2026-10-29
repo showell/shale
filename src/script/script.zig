@@ -163,7 +163,7 @@ pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u
     }
     var stop: ?Stop = null;
     const top = @frameAddress();
-    const machine_stop: Stop = .{ .line = 1, .column = 1, .class = .budget, .budget = .machine, .message = "the machine's memory (the code, the frames, the operands) is past its budget" };
+    const machine_stop: Stop = .{ .line = 1, .column = 1, .class = .budget, .budget = .machine, .message = "the machine's memory (the code, the frames, the operands) is past its budget: raise it with `--budget machine_bytes=N` or the script's `-- budget: machine_bytes=N` line" };
     const mm = backing.create(MachineMemory) catch {
         result.stop = machine_stop;
         return result;
@@ -194,6 +194,7 @@ pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u
         .io = io,
         .alloc = alloc,
         .machine = mm.budget.allocator(),
+        .machine_heap = mm.budget.heap(),
         .budgeted = budgeted,
         .budgets = budgets,
         .root = root,
@@ -245,6 +246,7 @@ test {
     _ = @import("gate_test.zig");
     _ = @import("errors_test.zig");
     _ = @import("yield_test.zig");
+    _ = @import("budget_test.zig");
     _ = @import("process_test.zig");
     _ = @import("agent_test.zig");
     _ = @import("host_test.zig");

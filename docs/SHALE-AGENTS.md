@@ -705,7 +705,10 @@ what the gate refuses with what to do instead.
   over every line in Shale rather than in a builtin, runs out of the
   5,000,000 steps a run has unset; `--budget steps=N`, or the script's own
   `-- budget: steps=N` line, raises them, and the stop says which one ran
-  out.
+  out. The two memory budgets beside the arena are raised the same way,
+  and their stops say how: `kept_bytes` (what a `yield` keeps, 1 MiB unset,
+  at most 256 MiB) and `machine_bytes` (the code, the frames and the
+  operands, 16 MiB unset, at most 1 GiB).
 - **Paths are a store's**: every part must be a name FAT holds, so a file
   whose name has `:` or `"` cannot be named, and hidden folders are left
   out of a `glob` unless `{hidden = true}`.
