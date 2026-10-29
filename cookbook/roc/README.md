@@ -54,9 +54,9 @@ it works on, `<shale>` being the shale checkout:
   same literal (`at: 0`), never context passed down (`me`, `req.me`).
   `self_test=1` runs its plants (`plants/boundaries/`).
 - [errors.shale](errors.shale): **a failure said by its tags.**
-  `error_alias`: a function whose result's `Try` names a shared error
-  alias, not its tags in place (an alias in an argument, a handler's
-  input, is fine); `optional_tag`: a tag named as an optional (`None`,
+  `error_alias`: a function whose result's `Try` names a shared alias of
+  tags, not its tags in place (an alias in an argument, a handler's input,
+  is fine; a record or `Str` error is no alias of tags); `optional_tag`: a tag named as an optional (`None`,
   `Some`: cookbook/words/optionals.txt). `self_test=1` runs its plants
   (`plants/errors/`).
 - [same_code.shale](same_code.shale): **the same machine code.** Two builds
