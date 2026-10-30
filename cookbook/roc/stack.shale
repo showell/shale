@@ -17,10 +17,12 @@
 -- comment, so a comma or bracket in one is no item. A `where` clause's
 -- items are its method constraints (`k.is_eq : k, k -> Bool` is one), and
 -- a record or list pattern's rest (`..`) is no item. What it can't reach is
--- listed: a long line with no group, and **AN ANNOTATION'S THREE OR MORE
--- BARE ARGUMENTS** (`three : U8, U8, U8 -> U8`), a finding of its own that
--- no comma stacks: `roc fmt` refuses a trailing one there (`U8, U8, U8, ->
--- U8` does not parse).
+-- listed: a long line with no group, and **A FUNCTION TYPE'S THREE OR MORE
+-- ARGUMENTS**, bare (`three : U8, U8, U8 -> U8`) or in parentheses
+-- (`apply : (U8, U8, U8 -> U8) -> U8`), a finding of its own that no comma
+-- stacks: Roc refuses a trailing one there (`U8, U8, U8, -> U8` and
+-- `(A, B => C,)` do not parse), so a function type's arguments are never
+-- given one, on a long line either.
 --
 -- **ROC IS THE TREE'S OWN PIN**: `write=1` runs `tools:roc-<pin>/roc`,
 -- the pin read from the `roc-version` file where the run starts (the
@@ -62,8 +64,10 @@ end
 
 -- One group closed: its items, by the commas at its depth. A last item
 -- that is a rest pattern (`{ a, b, .. }`, `[x, .. as more]`) is no item:
--- it names nothing that would stack.
-function close_group(l, open, close, commas, last_comma, depth)
+-- it names nothing that would stack. Parentheses holding an arrow at
+-- their own depth are a function type (`(A, B => C)`), whose arguments
+-- take no trailing comma: `fn_type`.
+function close_group(l, open, close, commas, last_comma, depth, arrow)
   local inner = trim(sub(l, open + 1, close - 1))
   local trailing = ends_with(inner, ",")
   local items = commas + 1
@@ -71,7 +75,7 @@ function close_group(l, open, close, commas, last_comma, depth)
   if inner == "" then items = 0 end
   local last = trim(sub(l, last_comma + 1, close - 1))
   if not trailing and commas > 0 and (last == ".." or starts_with(last, ".. as ")) then items = items - 1 end
-  return {open = open, close = close, items = items, trailing = trailing, depth = depth}
+  return {open = open, close = close, items = items, trailing = trailing, depth = depth, fn_type = arrow and sub(l, open, open) == "("}
 end
 
 -- A method constraint's start (`k.is_eq :`), after a comma in a `where`
@@ -80,7 +84,7 @@ end
 const CONSTRAINT = "^ *[a-z_][A-Za-z0-9_]*\\.[a-z_][A-Za-z0-9_]*!? *:"
 
 -- **THE GROUPS THAT OPEN AND CLOSE ON `l`**, each `{open, close, items,
--- trailing, depth}`: brackets and a lambda's `|...|`, items counted by the
+-- trailing, depth, fn_type}`: brackets and a lambda's `|...|`, items counted by the
 -- commas at the group's own depth, and in a `where [...]` by its method
 -- constraints. Strings, characters and the comment are stepped over. A
 -- group that runs onto another line is no group here.
@@ -88,8 +92,9 @@ function groups(l)
   local out = {}
   if starts_with(trim(l), "\\\\") then return out end
   -- The open groups, innermost last: where each opened, what closes it,
-  -- its commas so far and the last one's place, and whether it is a
-  -- `where` clause's brackets.
+  -- its commas so far and the last one's place, whether it is a `where`
+  -- clause's brackets, and whether a ` ->` or ` =>` is at its own depth
+  -- (an arrow call, `x->f()`, has no space before it).
   local open = {}
   local i = 1
   local n = #l
@@ -110,16 +115,19 @@ function groups(l)
     elseif c == "#" then
       break
     elseif has_key(OPENERS, c) then
-      push(open, {at = i, kind = OPENERS[c], commas = 0, last = i, where = c == "[" and (trim(sub(l, 1, i - 1)) == "where" or ends_with(trim(sub(l, 1, i - 1)), " where"))})
+      push(open, {at = i, kind = OPENERS[c], commas = 0, last = i, arrow = false, where = c == "[" and (trim(sub(l, 1, i - 1)) == "where" or ends_with(trim(sub(l, 1, i - 1)), " where"))})
+    elseif (c == "-" or c == "=") and sub(l, i + 1, i + 1) == ">" and sub(l, i - 1, i - 1) == " " and #open > 0 then
+      open[#open].arrow = true
+      i = i + 1
     elseif c == "|" and sub(l, i + 1, i + 1) ~= ">" and sub(l, i + 1, i + 1) ~= "|" and sub(l, i - 1, i - 1) ~= "|" then
       if #open > 0 and open[#open].kind == "|" then
         local g = open[#open]
-        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1))
+        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1, g.arrow))
         open = take(open, #open - 1)
       else
         local b = before(l, i)
         if b == "" or b == "=" or b == "(" or b == "," or b == "[" or b == "{" or b == ":" then
-          push(open, {at = i, kind = "|", commas = 0, last = i, where = false})
+          push(open, {at = i, kind = "|", commas = 0, last = i, arrow = false, where = false})
         end
       end
     elseif has_key(CLOSERS, c) then
@@ -128,7 +136,7 @@ function groups(l)
       while #open > 0 and open[#open].kind ~= c do open = take(open, #open - 1) end
       if #open > 0 then
         local g = open[#open]
-        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1))
+        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1, g.arrow))
         open = take(open, #open - 1)
       end
     elseif c == "," and #open > 0 then
@@ -145,17 +153,17 @@ end
 
 -- The group to stack on `l`: the outermost (then widest) of three or more
 -- items with no trailing comma; else, on a line over WIDTH, the widest of
--- two or more. nil when there is none.
+-- two or more. Never a function type's arguments. nil when there is none.
 function pick(l)
   local best = nil
   for g in groups(l) do
-    if g.items >= 3 and not g.trailing then
+    if g.items >= 3 and not g.trailing and not g.fn_type then
       if best == nil or g.depth < best.depth or (g.depth == best.depth and g.close - g.open > best.close - best.open) then best = g end
     end
   end
   if best ~= nil or width(l) <= WIDTH then return best end
   for g in groups(l) do
-    if g.items >= 2 and not g.trailing then
+    if g.items >= 2 and not g.trailing and not g.fn_type then
       if best == nil or g.close - g.open > best.close - best.open then best = g end
     end
   end
@@ -206,10 +214,13 @@ function findings(files)
     local ls = split(read(p), "\n")
     for i = 1, #ls do
       local g = nil
+      local fn_type = nil
       for h in groups(ls[i]) do
-        if h.items >= 3 and not h.trailing and (g == nil or h.depth < g.depth) then g = h end
+        if h.items >= 3 and not h.trailing and not h.fn_type and (g == nil or h.depth < g.depth) then g = h end
+        if h.items >= 3 and h.fn_type and (fn_type == nil or h.depth < fn_type.depth) then fn_type = h end
       end
       local bare = bare_args(ls[i])
+      if fn_type ~= nil and (bare == nil or bare.items < 3) then bare = {items = fn_type.items, what = snip(ls[i], fn_type)} end
       if g ~= nil then
         push(out, {path = p, line = i, kind = "stack", what = g.items .. " items in " .. snip(ls[i], g)})
       elseif bare ~= nil and bare.items >= 3 then
