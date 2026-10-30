@@ -73,7 +73,7 @@ const PLANTS = "cookbook:roc/plants/methods"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
 const ROC_AST = "tools:roc-ast/bin/roc-ast"
-const SELF_TEST_PIN = "nightly-2026-10-29-a0a9fc2"
+const SELF_TEST_PIN = "nightly-2026-10-30-0602c5f"
 const ROUNDS = 4
 const FROM = tonumber(arg("from", "1"))
 -- A run starts at most 64 programs (Shale's `runs`); a file may take

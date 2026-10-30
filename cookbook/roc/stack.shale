@@ -44,7 +44,7 @@ const SCRATCH = "scratch:stack"
 const GLOB = SELF and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
 const WIDTH = arg("width", 100)
 const WRITE = arg("write", "") == "1"
-const SELF_TEST_PIN = "nightly-2026-10-29-a0a9fc2"
+const SELF_TEST_PIN = "nightly-2026-10-30-0602c5f"
 const PASSES = 12
 const OPENERS = {["("] = ")", ["{"] = "}", ["["] = "]"}
 const CLOSERS = {[")"] = true, ["}"] = true, ["]"] = true}
