@@ -5,7 +5,8 @@
 //! the leader and then waits without bound, so we fork ourselves. The child
 //! sets a death signal (and checks its parent is still the one that forked
 //! it), takes a process group of its own, unblocks signals, gets stdin from
-//! the given bytes or /dev/null and stdout and stderr on one pipe, then
+//! the given bytes or /dev/null and stdout and stderr on one pipe (stdout to
+//! a given file instead, for `run`'s `stdout_secret`), then
 //! `chdir`s and `execve`s along PATH. A failed exec reports its errno through a
 //! close-on-exec pipe, so "not found" is an answer, not a hang.
 //!
@@ -29,6 +30,9 @@ pub const Spec = struct {
     env: []const []const u8,
     /// The bytes for stdin; `null` for /dev/null.
     stdin: ?[]const u8 = null,
+    /// An open file stdout goes to instead of the pipe (`run`'s
+    /// `stdout_secret`); stderr stays on the pipe. `null` for the pipe.
+    stdout_fd: ?i32 = null,
     /// When the program's group gets TERM.
     timeout_ms: u64,
     /// The time between TERM and KILL.
@@ -126,7 +130,7 @@ fn setNonblocking(fd: i32) void {
 /// The child between fork and exec. Uses raw system calls only and allocates
 /// nothing; on failure, writes the errno to `err_w` and exits 127. A `chdir`
 /// failure is written as 1000 plus its errno.
-fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, out_w: i32, err_w: i32, paths: []const [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) noreturn { // coverage: not run, the forked child's: linecov lets a child go before it runs a line
+fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, stdout_fd: ?i32, out_w: i32, err_w: i32, paths: []const [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) noreturn { // coverage: not run, the forked child's: linecov lets a child go before it runs a line
     _ = linux.prctl(@backingInt(linux.PR.SET_PDEATHSIG), @backingInt(linux.SIG.KILL), 0, 0, 0);
     if (linux.getppid() != parent) linux.exit_group(127);
     _ = linux.setpgid(0, 0);
@@ -134,7 +138,7 @@ fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, out_w: i32
     _ = linux.sigprocmask(linux.SIG.SETMASK, &none, null);
     const in_fd: i32 = if (stdin_r >= 0) stdin_r else @intCast(linux.open("/dev/null", .{ .ACCMODE = .RDONLY }, 0));
     _ = linux.dup2(in_fd, 0);
-    _ = linux.dup2(out_w, 1);
+    _ = linux.dup2(stdout_fd orelse out_w, 1);
     _ = linux.dup2(out_w, 2);
     if (spec_cwd) |c| {
         const rc = linux.chdir(c);
@@ -200,7 +204,7 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     const fork_rc = linux.fork();
     if (linux.errno(fork_rc) != .SUCCESS) return error.Spawn;
     const pid: linux.pid_t = @intCast(fork_rc);
-    if (pid == 0) child(parent, cwd, in_pipe[0], out_pipe[1], err_pipe[1], paths, argv, envp);
+    if (pid == 0) child(parent, cwd, in_pipe[0], spec.stdout_fd, out_pipe[1], err_pipe[1], paths, argv, envp);
 
     // A word on the error pipe means the exec failed.
     closeFd(&out_pipe[1]);

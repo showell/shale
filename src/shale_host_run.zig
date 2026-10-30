@@ -8,6 +8,7 @@ const Run = interp.Run;
 const ast = script.ast;
 const Error = interp.Error;
 const std = @import("std");
+const linux = std.os.linux;
 const keep = @import("shale_keep.zig");
 const shale = @import("shale");
 const interp = script.interp;
@@ -51,7 +52,21 @@ const Opts = struct {
     secrets: ?*script.value.Table = null,
     /// `"tag: why"`, to run a program `refuse` would refuse.
     want: ?[]const u8 = null,
+    /// A file directly in a `secrets` mount (`"keys:NAME"`) the program's
+    /// stdout goes to, never to the script: a secret received is stored
+    /// without passing through a variable.
+    stdout_secret: ?Value = null,
+    /// With `stdout_secret`, a file already there is replaced.
+    secret_replace: bool = false,
+    /// Whether the script gave `width`, which `stdout_secret` refuses.
+    width_given: bool = false,
 };
+
+/// With `stdout_secret`, `out` is stderr's last lines, this many.
+const secret_err_tail = 20;
+
+/// The most bytes `stdout_secret` stores: what `secrets` reads of a file.
+const secret_most = 64 * 1024;
 
 /// A path option (`cwd`, `log`): a string, named as `run`'s when it is not.
 fn pathOpt(run: *Run, pos: ast.Pos, k: []const u8, x: Value) Error!Value {
@@ -69,9 +84,22 @@ fn readOpts(run: *Run, pos: ast.Pos, v: Value) Error!Opts {
         if (std.mem.eql(u8, k, "timeout_ms")) o.timeout_ms = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "re")) o.re = try hl.strOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "not_re")) o.not_re = try hl.strOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "nocase")) o.nocase = switch (x) {
             .boolean => |b| b,
             else => return run.fail(pos, .type, "`run`: its `nocase` must be true or false, not {s}", .{x.typeName()}),
-        } else if (std.mem.eql(u8, k, "before")) o.before = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "after")) o.after = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "head")) o.head = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "tail")) o.tail = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "width")) o.width = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "whole")) o.whole = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "log")) o.log = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "cwd")) o.cwd = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "stdin")) o.stdin = x else if (std.mem.eql(u8, k, "env")) o.env = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "secrets")) o.secrets = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "want")) o.want = try hl.strOpt(run, pos, k, x) else return run.fail(pos, .argument, "`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets and want, not `{s}`", .{k});
+        } else if (std.mem.eql(u8, k, "before")) o.before = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "after")) o.after = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "head")) o.head = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "tail")) o.tail = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "width")) {
+            o.width = try hl.intOpt(run, pos, k, x);
+            o.width_given = true;
+        } else if (std.mem.eql(u8, k, "stdout_secret")) o.stdout_secret = x else if (std.mem.eql(u8, k, "secret_replace")) o.secret_replace = switch (x) {
+            .boolean => |b| b,
+            else => return run.fail(pos, .type, "`run`: its `secret_replace` must be true or false, not {s}", .{x.typeName()}),
+        } else if (std.mem.eql(u8, k, "whole")) o.whole = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "log")) o.log = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "cwd")) o.cwd = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "stdin")) o.stdin = x else if (std.mem.eql(u8, k, "env")) o.env = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "secrets")) o.secrets = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "want")) o.want = try hl.strOpt(run, pos, k, x) else return run.fail(pos, .argument, "`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret and secret_replace, not `{s}`", .{k});
     }
     if (o.timeout_ms == null) return run.fail(pos, .argument, "`run` needs `timeout_ms`: how long the program may take is the script's to say", .{});
+    if (o.stdout_secret != null) {
+        if (o.whole != null or o.re != null or o.not_re != null or o.head != null or o.tail != null or o.before > 0 or o.after > 0 or o.nocase or o.width_given or o.log != null)
+            return run.fail(pos, .argument, "`run`'s `stdout_secret` sends stdout to the secret alone, so it takes no keep, filter or log (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`, `width`, `log`): its `out` is stderr's last {d} lines", .{secret_err_tail});
+        o.tail = secret_err_tail;
+        return o;
+    }
+    if (o.secret_replace) return run.fail(pos, .argument, "`run`'s `secret_replace` is `stdout_secret`'s: it says a stored secret may be replaced", .{});
     if (o.whole) |_| {
         if (o.re != null or o.not_re != null or o.head != null or o.tail != null or o.before > 0 or o.after > 0 or o.nocase)
             return run.fail(pos, .argument, "`run`'s `whole` keeps everything, and takes no filter or keep (`re`, `not_re`, `nocase`, `before`, `after`, `head`, `tail`)", .{});
@@ -155,6 +183,10 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     } else null;
     if (o.stdin != null and stdin == null) return run.fail(pos, .argument, "`run`'s stdin is a kept result: its `out` is not the program's output (lines left out, lines cut); run it with `whole = N` to pipe it", .{});
 
+    var secret: ?SecretFile = null;
+    defer if (secret) |*s| s.discard();
+    if (o.stdout_secret) |v| secret = try SecretFile.open(h, run, pos, v, o.secret_replace);
+
     // What grows as output arrives (the keep, `whole`'s buffer, the scrub's
     // carry) grows by how the pipe's reads fall, which the scheduler decides.
     // In the run's arena that would make the arena's size nondeterministic,
@@ -212,7 +244,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     var sink: hl.Sink = .{ .host = h, .scrub = &scrub };
 
     run.host_runs += 1;
-    const outcome = h.spawn_fn(h.spawn_ctx, h.alloc, .{ .argv = argv, .cwd = cwd, .env = env.items, .stdin = stdin, .timeout_ms = o.timeout_ms.? }, &sink) catch |e| switch (e) {
+    const outcome = h.spawn_fn(h.spawn_ctx, h.alloc, .{ .argv = argv, .cwd = cwd, .env = env.items, .stdin = stdin, .stdout_fd = if (secret) |s| s.fd else null, .timeout_ms = o.timeout_ms.? }, &sink) catch |e| switch (e) {
         error.OutOfMemory => return if (capped.hit) streamOver(run, pos, capped.most) else run.oom(pos),
         error.NotFound => return run.fail(pos, .host, "`run`: `{s}` is not found{s}", .{ argv[0], if (std.mem.indexOfScalar(u8, argv[0], '/') == null) " along PATH" else "" }),
         error.NotRunnable => return run.fail(pos, .host, "`run`: `{s}` is there but cannot be run (its permissions, or not a program)", .{argv[0]}),
@@ -227,11 +259,17 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     run.read_bytes += out.bytes;
     const joined = std.mem.join(a, " ", argv) catch return run.oom(pos);
     h.time.ran(h.alloc, joined, outcome.ms);
-    h.record("run {s}{s}{s}{s} -> {s}{s} ({d} ms)", .{
+    // Stored only on exit 0, so a failed program leaves nothing half made.
+    var secret_bytes: ?u64 = null;
+    if (secret) |*s| {
+        if (outcome.ended == .exit and outcome.code == 0) secret_bytes = try s.store(run, pos, argv[0], o.secret_replace);
+    }
+    const secret_said: []const u8 = if (secret) |s| (if (secret_bytes) |n| std.fmt.allocPrint(a, ", stdout to {s} ({d} bytes)", .{ s.shown, n }) catch "" else std.fmt.allocPrint(a, ", stdout to {s} (not written)", .{s.shown}) catch "") else "";
+    h.record("run {s}{s}{s}{s} -> {s}{s} ({d} ms){s}", .{
         joined,                                 shown_env.items,
         if (o.want != null) " (want: " else "", if (o.want) |w| std.fmt.allocPrint(a, "{s})", .{w}) catch w else "",
         @tagName(outcome.ended),                if (outcome.code) |c| std.fmt.allocPrint(a, " {d}", .{c}) catch "" else "",
-        outcome.ms,
+        outcome.ms,                             secret_said,
     });
     // Flush before the record says whether the log is whole.
     if (log_file != null) log_writer.interface.flush() catch {
@@ -268,11 +306,72 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
         r.map.put(a, "matched_lines", .{ .int = @intCast(kept.matched) }) catch return run.oom(pos);
         r.map.put(a, "kept_lines", .{ .int = @intCast(kept.kept) }) catch return run.oom(pos);
     }
+    if (secret != null) {
+        r.map.put(a, "secret_written", .{ .boolean = secret_bytes != null }) catch return run.oom(pos);
+        r.map.put(a, "secret_bytes", .{ .int = @intCast(secret_bytes orelse 0) }) catch return run.oom(pos);
+    }
     if (run.read_bytes > run.budgets.read_bytes) return run.budgetStop(pos, .read_bytes);
     // An interrupted `shale` stops here, once the program's group is gone.
     if (outcome.ended == .interrupted) return run.fail(pos, .host, "`run`: shale was told to stop (TERM or HUP) while `{s}` ran; it was ended", .{argv[0]});
     return .{ .table = r };
 }
+
+/// `stdout_secret`'s file while the program runs: a temporary file beside
+/// the secret, mode 0600, renamed over it by `store`, or removed.
+const SecretFile = struct {
+    /// The script's path, `keys:NAME`, for messages.
+    shown: []const u8,
+    path: [:0]const u8,
+    tmp: [:0]const u8,
+    fd: i32,
+    /// Whether `tmp` is there to remove.
+    made: bool = true,
+
+    fn open(h: *hl.Host, run: *Run, pos: ast.Pos, v: Value, replace: bool) Error!SecretFile {
+        const a = run.alloc;
+        const path = try hl.secretTarget(h, run, pos, v);
+        const shown = v.string;
+        if (std.Io.Dir.cwd().statFile(run.io, path, .{ .follow_symlinks = false })) |st| {
+            if (st.kind != .file) return run.fail(pos, .refused, "`run`'s `stdout_secret` {s} is there and is not a file", .{shown});
+            if (!replace) return run.fail(pos, .refused, "`run`'s `stdout_secret` {s} is there already: `secret_replace = true` to replace it", .{shown});
+        } else |e| switch (e) {
+            error.FileNotFound => {},
+            else => return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be looked at: {s}", .{ shown, @errorName(e) }),
+        }
+        const tmp = std.fmt.allocPrintSentinel(a, "{s}/.{s}.{d}.shale-tmp", .{ std.fs.path.dirname(path) orelse "/", std.fs.path.basename(path), linux.getpid() }, 0) catch return run.oom(pos);
+        const rc = linux.open(tmp, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .CLOEXEC = true, .NOFOLLOW = true }, 0o600);
+        if (linux.errno(rc) != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}", .{ shown, @tagName(linux.errno(rc)) });
+        const fd: i32 = @intCast(rc);
+        // The mode whatever the umask.
+        _ = linux.fchmod(fd, 0o600);
+        return .{ .shown = shown, .path = a.dupeSentinel(u8, path, 0) catch return run.oom(pos), .tmp = tmp, .fd = fd };
+    }
+
+    /// Renames what the program printed over the secret; its bytes.
+    fn store(s: *SecretFile, run: *Run, pos: ast.Pos, program: []const u8, replace: bool) Error!u64 {
+        const size = linux.lseek(s.fd, 0, linux.SEEK.END);
+        if (linux.errno(size) != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}", .{ s.shown, program, @tagName(linux.errno(size)) });
+        if (size == 0) return run.fail(pos, .argument, "`run`: `{s}` exited 0 and printed nothing: nothing is stored in {s}", .{ program, s.shown });
+        if (size > secret_most) return run.fail(pos, .argument, "`run`: `{s}` printed {d} bytes, past the {d} `secrets` reads: nothing is stored in {s}", .{ program, size, secret_most, s.shown });
+        if (linux.errno(linux.fsync(s.fd)) != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be synced: nothing is stored", .{s.shown});
+        _ = linux.close(s.fd);
+        s.fd = -1;
+        const rc = linux.renameat2(linux.AT.FDCWD, s.tmp, linux.AT.FDCWD, s.path, .{ .NOREPLACE = !replace });
+        switch (linux.errno(rc)) {
+            .SUCCESS => s.made = false,
+            .EXIST => return run.fail(pos, .refused, "`run`'s `stdout_secret` {s} was made while `{s}` ran: nothing is stored; `secret_replace = true` to replace it", .{ s.shown, program }),
+            else => |e| return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be written: {s}", .{ s.shown, @tagName(e) }),
+        }
+        return size;
+    }
+
+    fn discard(s: *SecretFile) void {
+        if (s.fd >= 0) _ = linux.close(s.fd);
+        s.fd = -1;
+        if (s.made) _ = linux.unlink(s.tmp);
+        s.made = false;
+    }
+};
 
 fn streamOver(run: *Run, pos: ast.Pos, most: usize) Error {
     run.stop = .{ .line = pos.line, .column = pos.column, .class = .budget, .budget = .arena, .function = run.function, .trail = run.calls.items, .message = std.fmt.allocPrint(run.alloc, "`run`: what it holds of the output is past the arena budget ({d} bytes live): a smaller `before`, `head`, `tail` or `whole`", .{most}) catch "`run`: what it holds of the output is past the arena budget" };

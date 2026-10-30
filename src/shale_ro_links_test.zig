@@ -156,6 +156,78 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
     try t.expectOutput("print(contains(join(ls(\"\"), \",\"), \"keys\"))", "true\n");
 }
 
+test "secrets mounts: run's stdout_secret stores stdout in one, 0600, never seen; only directly in a secrets mount, never over a file unasked, never with a keep, never on a failure" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const io = t.threaded.io();
+    const a = t.arena.allocator();
+    try t.tmp.dir.createDirPath(io, "keys/sub");
+    try t.tmp.dir.createDirPath(io, "plain");
+    try t.put("keys/old", "was\n");
+    try t.tmp.dir.symLink(io, "old", "keys/ln", .{});
+    var why: []const u8 = "";
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/keys secrets\np = {s}/plain\n", .{ t.root, t.root }), "/home/x", &why);
+
+    // Stored: exactly the bytes printed, mode 0600, and the token in neither
+    // the result, the output nor the run's records (`ms` set aside: its
+    // digits would make the gate's engines differ in work).
+    try t.expectOutput("local r = run({\"shale-fixture\", \"cat\"}, {timeout_ms = 10000, stdin = \"tok-7f3a9c\\n\", stdout_secret = \"k:new\"}) r.ms = 0 print(r.code, r.secret_written, r.secret_bytes, r.out, contains(json_write(r), \"7f3a9c\"))", "0\ttrue\t11\t\tfalse\n");
+    try testing.expectEqualStrings("tok-7f3a9c\n", try t.file("keys/new"));
+    const st = try t.tmp.dir.statFile(io, "keys/new", .{});
+    try testing.expectEqual(@as(u32, 0o600), @as(u32, @intCast(st.permissions.toMode() & 0o777)));
+    for (t.host.records.items) |r| try testing.expect(std.mem.indexOf(u8, r.line, "7f3a9c") == null);
+    // stderr comes back as `out`; stdout does not.
+    try t.expectOutput("local r = run({\"shale-fixture\", \"both\", \"tok-b\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:b\"}) print(r.out, r.secret_bytes)", "on stderr\n\t5\n");
+    try testing.expectEqualStrings("tok-b", try t.file("keys/b"));
+
+    // A file there is refused, the program not run; `secret_replace` replaces it.
+    try t.expectStop("run({\"shale-fixture\", \"both\", \"tok-o\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:old\"})", .atomic, .refused, "`run`'s `stdout_secret` k:old is there already: `secret_replace = true` to replace it");
+    try testing.expectEqualStrings("was\n", try t.file("keys/old"));
+    try t.expectOutput("print(run({\"shale-fixture\", \"both\", \"tok-o\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:old\", secret_replace = true}).secret_written)", "true\n");
+    try testing.expectEqualStrings("tok-o", try t.file("keys/old"));
+
+    // A failure stores nothing, and leaves no temporary file; so does a
+    // program that prints nothing.
+    try t.expectOutput("local r = run({\"shale-fixture\", \"both\", \"tok-c\", \"3\"}, {timeout_ms = 10000, stdout_secret = \"k:c\"}) print(r.code, r.secret_written, r.secret_bytes, r.out)", "3\tfalse\t0\ton stderr\n\n");
+    try t.expectStop("run({\"shale-fixture\", \"exit\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:c\"})", .atomic, .argument, "printed nothing: nothing is stored in k:c");
+    var names: std.ArrayList([]const u8) = .empty;
+    var d = try t.tmp.dir.openDir(io, "keys", .{ .iterate = true });
+    defer d.close(io);
+    var it = d.iterate();
+    while (try it.next(io)) |e| try names.append(a, try a.dupe(u8, e.name));
+    std.mem.sort([]const u8, names.items, {}, struct {
+        fn lt(_: void, x: []const u8, y: []const u8) bool {
+            return std.mem.lessThan(u8, x, y);
+        }
+    }.lt);
+    try testing.expectEqualStrings("b,ln,new,old,sub", try std.mem.join(a, ",", names.items));
+
+    // Anywhere but directly in a secrets mount, or with a keep, a filter or
+    // a log: refused before the program runs.
+    for ([_]struct { []const u8, script_class, []const u8 }{
+        .{ "stdout_secret = \"p:x\"", .refused, "the mount `p` does not hold secrets" },
+        .{ "stdout_secret = \"x\"", .refused, "is not in a mount" },
+        .{ "stdout_secret = \"k:sub/x\"", .refused, "is in a folder of the mount" },
+        .{ "stdout_secret = \"k:../x\"", .refused, "is in a folder of the mount" },
+        .{ "stdout_secret = \"k:..\"", .argument, "is not a name" },
+        .{ "stdout_secret = \"k:\"", .argument, "a secret is a file in the mount, not the mount" },
+        .{ "stdout_secret = \"k:ln\", secret_replace = true", .refused, "is a symbolic link" },
+        .{ "stdout_secret = \"k:x\", tail = 5", .argument, "takes no keep, filter or log" },
+        .{ "stdout_secret = \"k:x\", whole = 100", .argument, "takes no keep, filter or log" },
+        .{ "stdout_secret = \"k:x\", re = \"t\"", .argument, "takes no keep, filter or log" },
+        .{ "stdout_secret = \"k:x\", log = \"out.log\"", .argument, "takes no keep, filter or log" },
+        .{ "tail = 5, secret_replace = true", .argument, "`secret_replace` is `stdout_secret`'s" },
+    }) |c| try t.expectStop(try std.fmt.allocPrint(a, "run({{\"shale-fixture\", \"both\", \"tok-x\", \"0\"}}, {{timeout_ms = 10000, {s}}})", .{c[0]}), .atomic, c[1], c[2]);
+    try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(io, "keys/x", .{}));
+
+    // Reads stay refused; `secrets` hands the stored value to a program.
+    try t.expectStop("read(\"k:new\")", .atomic, .refused, "the mount `k` holds secrets");
+    try t.expectOutput("print(run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:new\"}}).out)", "<secret X>\n\n");
+}
+
+const script_class = @import("shale").script.diag.Class;
+
 test "the store follows no link: to a file, to a folder, in the middle of a path, in a mount, out of the root: refused for reads, changes, exists, stat and listings" {
     var t: T = undefined;
     try init(&t);

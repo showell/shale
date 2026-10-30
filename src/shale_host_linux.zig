@@ -201,6 +201,25 @@ pub fn secretPath(h: *Host, run: *Run, pos: ast.Pos, v: Value) Error![]const u8 
     return absolute(h, run, pos, try mountPath(h, run, pos, path, colon, m));
 }
 
+/// Where `run`'s `stdout_secret` writes: a file directly in a `secrets`
+/// mount (`keys:NAME`), its OS path. A path anywhere else, the mount
+/// itself, a folder in it, `..` or a link is refused.
+pub fn secretTarget(h: *Host, run: *Run, pos: ast.Pos, v: Value) Error![]const u8 {
+    const path = switch (v) {
+        .string => |s| s,
+        else => return run.fail(pos, .type, "`run`'s `stdout_secret` is a path in a `secrets` mount, `\"keys:NAME\"`, not {s}", .{v.typeName()}),
+    };
+    const first_end = std.mem.indexOfScalar(u8, path, '/') orelse path.len;
+    const colon = std.mem.indexOfScalar(u8, path[0..first_end], ':') orelse
+        return run.fail(pos, .refused, "`run`'s `stdout_secret` \"{s}\" is not in a mount: a secret is stored only in a `secrets` mount, `\"keys:NAME\"`", .{path});
+    const m = try mountOf(h, run, pos, path, colon);
+    if (!m.secrets) return run.fail(pos, .refused, "`run`'s `stdout_secret` \"{s}\": the mount `{s}` does not hold secrets: a secret is stored only in a `secrets` mount", .{ path, m.name });
+    const rest = path[colon + 1 ..];
+    if (rest.len == 0 or std.mem.eql(u8, rest, ".")) return run.fail(pos, .argument, "\"{s}\": a secret is a file in the mount, not the mount", .{path});
+    if (std.mem.indexOfScalar(u8, rest, '/') != null) return run.fail(pos, .refused, "`run`'s `stdout_secret` \"{s}\" is in a folder of the mount: a secret is a file directly in it, `\"{s}:NAME\"`", .{ path, m.name });
+    return absolute(h, run, pos, try mountPath(h, run, pos, path, colon, m));
+}
+
 /// A mount's folder as this run sees it: one inside the root is taken
 /// against the run's own root (each engine of a gated test has its copy).
 fn runDirOf(h: *Host, run: *Run, pos: ast.Pos, m: Mount) Error![]const u8 {

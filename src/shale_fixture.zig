@@ -9,6 +9,8 @@
 //!     shale-fixture sleep MS         sleeps, then prints "woke"
 //!     shale-fixture pwd              the working directory
 //!     shale-fixture stderr TEXT      TEXT on stderr
+//!     shale-fixture both TEXT CODE   TEXT on stdout as given, "on stderr"
+//!                                    on stderr, then exits CODE
 //!     shale-fixture kill-self        ends by SIGKILL, its own
 //!     shale-fixture ignore-term MS   TERM ignored, then sleeps
 //!     shale-fixture pid-sleep MS     "pid N", its own, then sleeps
@@ -52,6 +54,14 @@ pub fn main(init: std.process.Init) !u8 {
         var ew = std.Io.File.stderr().writer(io, &eb);
         try ew.interface.print("{s}\n", .{arg});
         try ew.interface.flush();
+    } else if (std.mem.eql(u8, verb, "both")) {
+        try w.writeAll(arg);
+        try w.flush();
+        var eb: [256]u8 = undefined;
+        var ew = std.Io.File.stderr().writer(io, &eb);
+        try ew.interface.writeAll("on stderr\n");
+        try ew.interface.flush();
+        return try std.fmt.parseInt(u8, argv[3], 10);
     } else if (std.mem.eql(u8, verb, "pid-sleep")) {
         try w.print("pid {d}\n", .{std.os.linux.getpid()});
         try w.flush();

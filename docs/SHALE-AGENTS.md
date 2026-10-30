@@ -118,8 +118,9 @@ whole language is [`SHALE.md`](SHALE.md).
 has none of it):
 - **Programs:** `run(argv, opts)` runs one and gives `{argv, code, ended,
   ms, out, ...}`. `timeout_ms` and a keep, `head` or `tail` (lines) or
-  `whole` (bytes), are required; the rest are `cwd`, `stdin`, `env`,
-  `secrets`, `log`, `want`, and the filters `re`, `not_re`, `nocase`,
+  `whole` (bytes), are required (unless `stdout_secret`); the rest are
+  `cwd`, `stdin`, `env`, `secrets`, `stdout_secret`, `secret_replace`,
+  `log`, `want`, and the filters `re`, `not_re`, `nocase`,
   `before`, `after` and `width` (`Opts` in `src/shale_host_run.zig`). Its
   `cwd` is a path as every path is: under the root, or through a mount
   (`cwd = "repos:shale"` runs a sibling repo's step from another's
@@ -647,7 +648,19 @@ the first two can give a quiet wrong answer, an empty list:
   `want`). Only `run`'s `secrets = {NAME = "keys:file"}` takes one, the
   value in the program's environment and scrubbed from its output as
   `<secret NAME>`; `http_get`'s `bearer` and `cookbook:http.shale`'s
-  `bearer=keys:file` use it. A link to the file from elsewhere (an old
+  `bearer=keys:file` use it. **The one write path is `run`'s
+  `stdout_secret = "keys:NAME"`:** the program's stdout goes straight to
+  that file, never to the script, so a secret received is stored without
+  passing through a variable. The file is directly in a `secrets` mount
+  (no folder in it, no `..`, no link), made 0600 beside it and renamed
+  into place only on exit 0: a failed program leaves nothing, and one that
+  prints nothing, or past 64 KiB, stops the run with nothing stored. A
+  file already there is refused before the program runs, unless
+  `secret_replace = true`. `stdout_secret` takes no keep, filter or log
+  (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`,
+  `width`, `log`): stdout has one destination, and the result's `out` is
+  stderr's last 20 lines, scrubbed as ever, beside `secret_written` and
+  `secret_bytes`. A link to the file from elsewhere (an old
   `~/.token`) is not the mount's and is not guarded. **What this guard
   is:** it stops Shale's own reads, and a program handed an obvious path
   to a secret, or to a folder that holds one; **a program is not
@@ -660,6 +673,43 @@ the first two can give a quiet wrong answer, an empty list:
   <path> is a symbolic link`, for a read, a change, `exists`, `stat` and
   a listing alike. A mount's own path is resolved once, when the mounts
   are read.
+
+## Setting up your own secrets folder
+
+A token an agent receives (an API key redeemed over HTTP) belongs in a
+`secrets` mount, and reaches a program only through `run`.
+
+1. **The folder:** `mkdir -m 700 ~/.shale-keys`. In a cloud session where
+   git runs as root and builds run as another user, the folder belongs to
+   the build user, the one `shale` runs as.
+2. **The mount:** a line in the mounts file (`~/.config/shale/mounts`,
+   or the file `SHALE_MOUNTS` names), `name = path` then its words:
+   `keys = ~/.shale-keys secrets`.
+3. **Storing a secret received:** `run`'s `stdout_secret`, the program's
+   stdout written to the file and never to the script. Where the service
+   answers with the secret alone:
+
+   ```lua
+   local r = run({"curl", "-s", "https://example.org/redeem", "-d", "code=..."},
+     {timeout_ms = 30000, stdout_secret = "keys:example_key"})
+   if not r.secret_written then fail("not stored: curl exited " .. r.code .. ", " .. r.out) end
+   ```
+
+   A service that wraps the secret in JSON or other text needs a program
+   that prints the secret alone; the script never takes it apart.
+4. **Using it:** `run`'s `secrets`, the value in the program's environment
+   and scrubbed from its output. curl reads it there with `--variable`,
+   as `cookbook/zulip.shale` does:
+
+   ```lua
+   run({"curl", "-s", "--variable", "%EXAMPLE_KEY",
+     "--expand-header", "Authorization: Bearer {{EXAMPLE_KEY:trim}}",
+     "https://example.org/api/me"},
+     {timeout_ms = 30000, tail = 20, secrets = {EXAMPLE_KEY = "keys:example_key"}})
+   ```
+
+**Never print a secret, and never write one anywhere else**: not to
+scratch, a log or a file to move later. `stdout_secret` is the one way in.
 
 ## The gate: `shale-gate` (in `~/.claude/settings.json`)
 

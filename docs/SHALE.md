@@ -1209,7 +1209,10 @@ three:
   `~/.config/shale/mounts`: `name = /abs/path` or `name = ~/path` a line,
   then any of ` ro` (read-only), ` tools` (a toolchain whose programs `run`
   takes by path though git does not track them) and ` secrets` (a folder
-  of tokens only `run`'s `secrets` may name, read-only too: it stops
+  of tokens only `run`'s `secrets` may name, read-only too, but for one
+  write path, `run`'s `stdout_secret = "keys:NAME"`: a program's stdout
+  goes straight to a file directly in the folder, mode 0600, renamed into
+  place on exit 0, never seen by the script; it stops
   Shale's own reads and a program handed an obvious path to it or to a
   folder holding it, but **a program is not sandboxed**, and one that
   builds a path itself can reach a secret), each once,
