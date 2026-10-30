@@ -597,7 +597,20 @@ function report(all, repos)
 end
 
 -- **THE FIXTURES**: two repos, each rule's case, each finding expected.
-const FIX = "shale/zig-out/doc_check"
+-- Each run builds them in a folder of its own, `mktemp -d` under ZIG_OUT,
+-- removed when every expectation holds (left for a look when one fails):
+-- two self-tests at once (`zig build consumers` beside a `doc-check`) at
+-- one fixed folder removed and rebuilt each other's trees mid-check.
+const ZIG_OUT = "shale/zig-out"
+
+function fresh_fixture_dir()
+  if not exists(ZIG_OUT) then mkdir(ZIG_OUT) end
+  local r = must(run({"mktemp", "-d", "-p", real(ZIG_OUT), "doc_check.XXXXXX"}, {timeout_ms = 30000, whole = 4096}))
+  local parts = split(trim(r.out), "/")
+  local name = parts[#parts]
+  if not starts_with(name, "doc_check.") or not exists(ZIG_OUT .. "/" .. name) then fail("doc check self test: `mktemp` gave " .. r.out .. ", not a folder in " .. ZIG_OUT) end
+  return ZIG_OUT .. "/" .. name
+end
 
 function expect(cond, what)
   if not cond then fail("doc check self test: " .. what) end
@@ -605,8 +618,8 @@ function expect(cond, what)
   return nil
 end
 
-function fixture_repo(name, files)
-  local dir = FIX .. "/" .. name
+function fixture_repo(fix, name, files)
+  local dir = fix .. "/" .. name
   mkdir(dir)
   for p in keys(files) do
     local parts = split(p, "/")
@@ -623,9 +636,8 @@ function fixture_repo(name, files)
 end
 
 function self_test()
-  if exists(FIX) then remove_tree(FIX) end
-  mkdir(FIX)
-  fixture_repo("metal-vmm", {
+  local fix = fresh_fixture_dir()
+  fixture_repo(fix, "metal-vmm", {
     ["README.md"] = "See `docs/here.md` and [the guide](docs/here.md), `src/a.zig:3`'s `alpha` (and `src/a.zig:9`'s `alpha`, a wrong line), and `beta` (src/a.zig).\n" ..
       "Gone: `src/gone.zig`. Sibling: zig-webbox's `src/w.zig`. Both have `src/both.zig`.\n" ..
       "A name gone: `src/a.zig`'s `nothing_here`. Nested: `src/a.zig`'s `Inner.depth`, and `depth` (src/a.zig) alone.\n" ..
@@ -653,23 +665,23 @@ function self_test()
     ["ops/check_x"] = "#!/bin/sh\n",
     [".gitignore"] = "zig-out/\n",
   })
-  fixture_repo("zig-webbox", {
+  fixture_repo(fix, "zig-webbox", {
     ["src/w.zig"] = "pub const w = 1;\n",
     ["src/both.zig"] = "",
     ["docs/x.md"] = "Our `src/both.zig`, and metal-vmm's `src/a.zig`.\n",
     [".gitignore"] = "probe/*.elf\n",
   })
-  fixture_repo("angry-gopher", {["src/both.zig"] = "", ["src/server.zig"] = ""})
+  fixture_repo(fix, "angry-gopher", {["src/both.zig"] = "", ["src/server.zig"] = ""})
   -- An optional sibling that is here (QUEUE 313); roc-chat is not.
-  fixture_repo("roc-markdown", {["judge/answers.roc"] = "", ["host/server.zig"] = ""})
-  local all = check_all(FIX .. "/", {"metal-vmm", "zig-webbox", "angry-gopher", "roc-markdown", "roc-chat"})
+  fixture_repo(fix, "roc-markdown", {["judge/answers.roc"] = "", ["host/server.zig"] = ""})
+  local all = check_all(fix .. "/", {"metal-vmm", "zig-webbox", "angry-gopher", "roc-markdown", "roc-chat"})
   local m = all["metal-vmm"]
   local gone = join(m.gone, "\n")
   expect(#m.gone == 5 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
   expect(not contains(gone, "answers.roc"), "a path real in an optional sibling that is here passes, by the line's naming and by `../`")
   expect(contains(gone, "docs/roc.md:2: `judge/made_up.roc`"), "a made-up path in an optional sibling that is here is gone: not written yet is a finding")
   expect(not contains(gone, "Session.roc") and not contains(gone, "Gone.roc") and get(m.skipped, "in an optional sibling not checked out here", 0) == 2, "a path in an optional sibling not checked out is passed by, never gone")
-  local absent = not_checked_out(FIX .. "/", {"metal-vmm", "roc-chat", "roc-markdown"})
+  local absent = not_checked_out(fix .. "/", {"metal-vmm", "roc-chat", "roc-markdown"})
   expect(#absent == 1 and absent[1] == "roc-chat", "an optional sibling not checked out is named once; one that is here is not")
   expect(contains(gone, "README.md:14: `ops/missing_x`") and not contains(gone, "check_"), "a `./` path with no extension is read whole, never one character short")
   expect(contains(gone, "README.md:11: `random1.md`"), "a data file's name with no data root is a finding")
@@ -689,8 +701,8 @@ function self_test()
   expect(m.ignored == 2, "a path the repo's .gitignore covers, or a named sibling's, is a build's, passed by")
   expect(get(m.skipped, "an extension or a suffix", 0) == 2 and get(m.skipped, "Zig's std", 0) == 1 and get(m.skipped, "a traversal example", 0) == 1 and get(m.skipped, "a folder named alone", 0) == 2 and get(m.skipped, "a host's data", 0) == 2 and get(m.skipped, "a host's config", 0) == 1, "each rule passes its own by, and counts it")
   expect(m.lines == 2 and m.line_named == 2 and m.line_wrong == 1, "`file:N` counted, and its line checked beside a name")
-  remove(FIX .. "/metal-vmm/src/both.zig")
-  local again = check_all(FIX .. "/", {"metal-vmm", "zig-webbox", "angry-gopher"})
+  remove(fix .. "/metal-vmm/src/both.zig")
+  local again = check_all(fix .. "/", {"metal-vmm", "zig-webbox", "angry-gopher"})
   local amb = again["metal-vmm"].ambiguous
   expect(#amb == 1 and contains(amb[1], "README.md:6: `src/both.zig` is in zig-webbox, angry-gopher"), "a path only in two siblings, the line naming neither, is ambiguous; the line naming one is that one's")
   -- One doc, two layouts (QUEUE 264): plain checkouts with an unrelated
@@ -700,18 +712,18 @@ function self_test()
     [".gitignore"] = "/games/elm/engine.js\n*.wasm\n",
     ["games/README.md"] = "The `engine.js` bundle is built; `gone.js` is not.\n",
   }
-  mkdir(FIX .. "/plain")
-  fixture_repo("plain/angry-gopher", game)
-  fixture_repo("plain/dog-park", {["solo/engine.js"] = ""})
-  mkdir(FIX .. "/main")
-  fixture_repo("main/angry-gopher", game)
-  must(run({"git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "t"}, {cwd = FIX .. "/main/angry-gopher", timeout_ms = 30000, whole = 4096}))
-  must(run({"git", "worktree", "add", "-q", "../../wt/angry-gopher"}, {cwd = FIX .. "/main/angry-gopher", timeout_ms = 30000, whole = 4096}))
+  mkdir(fix .. "/plain")
+  fixture_repo(fix, "plain/angry-gopher", game)
+  fixture_repo(fix, "plain/dog-park", {["solo/engine.js"] = ""})
+  mkdir(fix .. "/main")
+  fixture_repo(fix, "main/angry-gopher", game)
+  must(run({"git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "t"}, {cwd = fix .. "/main/angry-gopher", timeout_ms = 30000, whole = 4096}))
+  must(run({"git", "worktree", "add", "-q", "../../wt/angry-gopher"}, {cwd = fix .. "/main/angry-gopher", timeout_ms = 30000, whole = 4096}))
   for layout in {"plain", "wt"} do
-    local g = check_all(FIX .. "/" .. layout .. "/", {"angry-gopher", "dog-park"})["angry-gopher"]
+    local g = check_all(fix .. "/" .. layout .. "/", {"angry-gopher", "dog-park"})["angry-gopher"]
     expect(#g.gone == 1 and contains(g.gone[1], "`gone.js`") and g.ignored == 1, layout .. ": a bare name the repo's .gitignore names outright is a build's, wherever it lands; one really gone is a finding; no sibling's file of that name decides it")
   end
-  remove_tree(FIX)
+  remove_tree(fix)
   print("doc check: its fixtures each come out as they should")
   return nil
 end
