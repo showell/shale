@@ -84,6 +84,16 @@ jobs:
           tar -xzf /tmp/roc-ast.tar.gz -C ~/tools/roc-ast
           test -x ~/tools/roc-ast/bin/roc-ast
 
+      # The Roc rewrite's self-test (cookbook/roc/methods.shale) is judged by
+      # the compiler itself, `roc check` and `roc test`, the same release's
+      # (70 MB), from tools:roc-nightly-2026-10-09-258ab27/roc.
+      - name: Install Roc
+        run: |
+          curl -fsSL -o /tmp/roc.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-27/roc-nightly-2026-10-09-258ab27-linux-x86_64.tar.gz
+          echo "83255f79ad3043925b96f39319b6c1aa21547f4ab2177c80b445c3b05e11f928  /tmp/roc.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/roc.tar.gz -C ~/tools
+          test -x ~/tools/roc-nightly-2026-10-09-258ab27/roc
+
       - name: zig build test
         working-directory: shale
         run: |
