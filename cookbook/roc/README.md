@@ -90,3 +90,12 @@ it works on, `<shale>` being the shale checkout:
   stops, since method lookup has changed between nightlies. `self_test=1`
   runs its plants (`plants/methods/`, copied to `scratch:`) with the
   recipe's `SELF_TEST_PIN`.
+
+**Writing a recipe that edits Roc.** roc-ast's columns are bytes, and a
+span's end is exclusive. Spans overlap: `type-mod` and `s-type-decl` both
+start at the type's name. The file node starts after the leading comments,
+and a `|>` is `e-arrow-call`. When the compiler judges an edit, `roc check`
+can report two errors on one line, or report an error at the line of the
+definition around it, so match its errors to an edit by span, not by
+line alone. A recipe that compiles once per file meets the 64-program limit
+and must stop and resume, as `methods.shale`'s `from=` does.
