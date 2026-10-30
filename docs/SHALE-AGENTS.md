@@ -679,34 +679,36 @@ the first two can give a quiet wrong answer, an empty list:
 A token an agent receives (an API key redeemed over HTTP) belongs in a
 `secrets` mount, and reaches a program only through `run`.
 
-1. **The folder:** `mkdir -m 700 ~/.shale-keys`. In a cloud session where
-   git runs as root and builds run as another user, the folder belongs to
-   the build user, the one `shale` runs as.
-2. **The mount:** a line in the mounts file (`~/.config/shale/mounts`,
-   or the file `SHALE_MOUNTS` names), `name = path` then its words:
-   `keys = ~/.shale-keys secrets`.
-3. **Storing a secret received:** `run`'s `stdout_secret`, the program's
-   stdout written to the file and never to the script. Where the service
-   answers with the secret alone:
+- **The folder:** `mkdir -m 700 ~/.shale-keys`. In a cloud session where
+  git runs as root and builds run as another user, the folder belongs to
+  the build user, the one `shale` runs as.
+- **The mount:** a line in the mounts file (`~/.config/shale/mounts`, or
+  the file `SHALE_MOUNTS` names), `name = path` then its words:
+  `keys = ~/.shale-keys secrets`.
 
-   ```lua
-   local r = run({"curl", "-s", "https://example.org/redeem", "-d", "code=..."},
-     {timeout_ms = 30000, stdout_secret = "keys:example_key"})
-   if not r.secret_written then fail("not stored: curl exited " .. r.code .. ", " .. r.out) end
-   ```
+**Storing a secret received** is `run`'s `stdout_secret`, the program's
+stdout written to the file and never to the script. Where the service
+answers with the secret alone:
 
-   A service that wraps the secret in JSON or other text needs a program
-   that prints the secret alone; the script never takes it apart.
-4. **Using it:** `run`'s `secrets`, the value in the program's environment
-   and scrubbed from its output. curl reads it there with `--variable`,
-   as `cookbook/zulip.shale` does:
+```lua
+local r = run({"curl", "-s", "https://example.org/redeem", "-d", "code=..."},
+  {timeout_ms = 30000, stdout_secret = "keys:example_key"})
+if not r.secret_written then fail("not stored: curl exited " .. r.code .. ", " .. r.out) end
+```
 
-   ```lua
-   run({"curl", "-s", "--variable", "%EXAMPLE_KEY",
-     "--expand-header", "Authorization: Bearer {{EXAMPLE_KEY:trim}}",
-     "https://example.org/api/me"},
-     {timeout_ms = 30000, tail = 20, secrets = {EXAMPLE_KEY = "keys:example_key"}})
-   ```
+A service that wraps the secret in JSON or other text needs a program
+that prints the secret alone; the script never takes it apart.
+
+**Using it** is `run`'s `secrets`, the value in the program's environment
+and scrubbed from its output. curl reads it there with `--variable`, as
+`cookbook/zulip.shale` does:
+
+```lua
+run({"curl", "-s", "--variable", "%EXAMPLE_KEY",
+  "--expand-header", "Authorization: Bearer {{EXAMPLE_KEY:trim}}",
+  "https://example.org/api/me"},
+  {timeout_ms = 30000, tail = 20, secrets = {EXAMPLE_KEY = "keys:example_key"}})
+```
 
 **Never print a secret, and never write one anywhere else**: not to
 scratch, a log or a file to move later. `stdout_secret` is the one way in.
