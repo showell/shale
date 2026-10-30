@@ -85,6 +85,8 @@ it works on, `<shale>` being the shale checkout:
   keeps them. Out: a line each call left, `path:line: why`, then the
   counts. A run holds 64 programs: on a bigger tree it stops before a file
   and says `go on with from=N`, the glob's file to start the next at.
-  `self_test=1`
+  The compiler is the tree's own pin, `tools:roc-<pin>/roc` with the pin
+  read from the `roc-version` where the run starts; a run without one
+  stops, since method lookup has changed between nightlies. `self_test=1`
   runs its plants (`plants/methods/`, copied to `scratch:`) with the
-  compiler, from `tools:roc-nightly-2026-10-09-258ab27/roc` or the PATH.
+  recipe's `SELF_TEST_PIN`.
