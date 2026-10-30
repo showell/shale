@@ -17,20 +17,34 @@
 -- comment, so a comma or bracket in one is no item. A `where` clause's
 -- items are its method constraints (`k.is_eq : k, k -> Bool` is one), and
 -- a record or list pattern's rest (`..`) is no item. What it can't reach is
--- listed: a long line with no group, and **AN ANNOTATION'S THREE OR MORE
--- BARE ARGUMENTS** (`three : U8, U8, U8 -> U8`), a finding of its own that
--- no comma stacks: `roc fmt` refuses a trailing one there (`U8, U8, U8, ->
--- U8` does not parse).
+-- listed: a long line with no group, and **A FUNCTION TYPE'S THREE OR MORE
+-- ARGUMENTS**, bare (`three : U8, U8, U8 -> U8`) or in parentheses
+-- (`apply : (U8, U8, U8 -> U8) -> U8`), a finding of its own that no comma
+-- stacks: Roc refuses a trailing one there (`U8, U8, U8, -> U8` and
+-- `(A, B => C,)` do not parse), so a function type's arguments are never
+-- given one, on a long line either.
+--
+-- **ROC IS THE TREE'S OWN PIN**: `write=1` runs `tools:roc-<pin>/roc`,
+-- the pin read from the `roc-version` file where the run starts (the
+-- repository's root), and stops before any change with no `roc-version`
+-- there: `roc fmt`'s layout moves between nightlies, so a tree is laid out
+-- only by the Roc it is built with, never by whichever `roc` is on PATH.
 --
 -- `self_test=1` reads `cookbook/roc/plants/stack/`: each plant named for
 -- what it holds must give a finding of its kind, and a `clean*.roc` none.
+-- Then it copies the plants to `scratch:stack/` and rewrites them there
+-- with `SELF_TEST_PIN`'s Roc: the rewrite must end, a second one change
+-- nothing, and every file still parse (`roc fmt` takes them all).
 --
 -- budget: steps=900000000 arena_bytes=2000000000
 
 const SELF = arg("self_test", "") == "1"
-const GLOB = SELF and "cookbook:roc/plants/stack/*.roc" or arg("glob", "**/*.roc")
+const PLANTS = "cookbook:roc/plants/stack"
+const SCRATCH = "scratch:stack"
+const GLOB = SELF and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
 const WIDTH = arg("width", 100)
 const WRITE = arg("write", "") == "1"
+const SELF_TEST_PIN = "nightly-2026-10-29-a0a9fc2"
 const PASSES = 12
 const OPENERS = {["("] = ")", ["{"] = "}", ["["] = "]"}
 const CLOSERS = {[")"] = true, ["}"] = true, ["]"] = true}
@@ -50,8 +64,10 @@ end
 
 -- One group closed: its items, by the commas at its depth. A last item
 -- that is a rest pattern (`{ a, b, .. }`, `[x, .. as more]`) is no item:
--- it names nothing that would stack.
-function close_group(l, open, close, commas, last_comma, depth)
+-- it names nothing that would stack. Parentheses holding an arrow at
+-- their own depth are a function type (`(A, B => C)`), whose arguments
+-- take no trailing comma: `fn_type`.
+function close_group(l, open, close, commas, last_comma, depth, arrow)
   local inner = trim(sub(l, open + 1, close - 1))
   local trailing = ends_with(inner, ",")
   local items = commas + 1
@@ -59,7 +75,7 @@ function close_group(l, open, close, commas, last_comma, depth)
   if inner == "" then items = 0 end
   local last = trim(sub(l, last_comma + 1, close - 1))
   if not trailing and commas > 0 and (last == ".." or starts_with(last, ".. as ")) then items = items - 1 end
-  return {open = open, close = close, items = items, trailing = trailing, depth = depth}
+  return {open = open, close = close, items = items, trailing = trailing, depth = depth, fn_type = arrow and sub(l, open, open) == "("}
 end
 
 -- A method constraint's start (`k.is_eq :`), after a comma in a `where`
@@ -68,7 +84,7 @@ end
 const CONSTRAINT = "^ *[a-z_][A-Za-z0-9_]*\\.[a-z_][A-Za-z0-9_]*!? *:"
 
 -- **THE GROUPS THAT OPEN AND CLOSE ON `l`**, each `{open, close, items,
--- trailing, depth}`: brackets and a lambda's `|...|`, items counted by the
+-- trailing, depth, fn_type}`: brackets and a lambda's `|...|`, items counted by the
 -- commas at the group's own depth, and in a `where [...]` by its method
 -- constraints. Strings, characters and the comment are stepped over. A
 -- group that runs onto another line is no group here.
@@ -76,8 +92,9 @@ function groups(l)
   local out = {}
   if starts_with(trim(l), "\\\\") then return out end
   -- The open groups, innermost last: where each opened, what closes it,
-  -- its commas so far and the last one's place, and whether it is a
-  -- `where` clause's brackets.
+  -- its commas so far and the last one's place, whether it is a `where`
+  -- clause's brackets, and whether a ` ->` or ` =>` is at its own depth
+  -- (an arrow call, `x->f()`, has no space before it).
   local open = {}
   local i = 1
   local n = #l
@@ -98,16 +115,19 @@ function groups(l)
     elseif c == "#" then
       break
     elseif has_key(OPENERS, c) then
-      push(open, {at = i, kind = OPENERS[c], commas = 0, last = i, where = c == "[" and (trim(sub(l, 1, i - 1)) == "where" or ends_with(trim(sub(l, 1, i - 1)), " where"))})
+      push(open, {at = i, kind = OPENERS[c], commas = 0, last = i, arrow = false, where = c == "[" and (trim(sub(l, 1, i - 1)) == "where" or ends_with(trim(sub(l, 1, i - 1)), " where"))})
+    elseif (c == "-" or c == "=") and sub(l, i + 1, i + 1) == ">" and sub(l, i - 1, i - 1) == " " and #open > 0 then
+      open[#open].arrow = true
+      i = i + 1
     elseif c == "|" and sub(l, i + 1, i + 1) ~= ">" and sub(l, i + 1, i + 1) ~= "|" and sub(l, i - 1, i - 1) ~= "|" then
       if #open > 0 and open[#open].kind == "|" then
         local g = open[#open]
-        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1))
+        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1, g.arrow))
         open = take(open, #open - 1)
       else
         local b = before(l, i)
         if b == "" or b == "=" or b == "(" or b == "," or b == "[" or b == "{" or b == ":" then
-          push(open, {at = i, kind = "|", commas = 0, last = i, where = false})
+          push(open, {at = i, kind = "|", commas = 0, last = i, arrow = false, where = false})
         end
       end
     elseif has_key(CLOSERS, c) then
@@ -116,7 +136,7 @@ function groups(l)
       while #open > 0 and open[#open].kind ~= c do open = take(open, #open - 1) end
       if #open > 0 then
         local g = open[#open]
-        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1))
+        push(out, close_group(l, g.at, i, g.commas, g.last, #open - 1, g.arrow))
         open = take(open, #open - 1)
       end
     elseif c == "," and #open > 0 then
@@ -133,17 +153,17 @@ end
 
 -- The group to stack on `l`: the outermost (then widest) of three or more
 -- items with no trailing comma; else, on a line over WIDTH, the widest of
--- two or more. nil when there is none.
+-- two or more. Never a function type's arguments. nil when there is none.
 function pick(l)
   local best = nil
   for g in groups(l) do
-    if g.items >= 3 and not g.trailing then
+    if g.items >= 3 and not g.trailing and not g.fn_type then
       if best == nil or g.depth < best.depth or (g.depth == best.depth and g.close - g.open > best.close - best.open) then best = g end
     end
   end
   if best ~= nil or width(l) <= WIDTH then return best end
   for g in groups(l) do
-    if g.items >= 2 and not g.trailing then
+    if g.items >= 2 and not g.trailing and not g.fn_type then
       if best == nil or g.close - g.open > best.close - best.open then best = g end
     end
   end
@@ -194,10 +214,13 @@ function findings(files)
     local ls = split(read(p), "\n")
     for i = 1, #ls do
       local g = nil
+      local fn_type = nil
       for h in groups(ls[i]) do
-        if h.items >= 3 and not h.trailing and (g == nil or h.depth < g.depth) then g = h end
+        if h.items >= 3 and not h.trailing and not h.fn_type and (g == nil or h.depth < g.depth) then g = h end
+        if h.items >= 3 and h.fn_type and (fn_type == nil or h.depth < fn_type.depth) then fn_type = h end
       end
       local bare = bare_args(ls[i])
+      if fn_type ~= nil and (bare == nil or bare.items < 3) then bare = {items = fn_type.items, what = snip(ls[i], fn_type)} end
       if g ~= nil then
         push(out, {path = p, line = i, kind = "stack", what = g.items .. " items in " .. snip(ls[i], g)})
       elseif bare ~= nil and bare.items >= 3 then
@@ -211,37 +234,29 @@ function findings(files)
   return out
 end
 
-function fmt(files)
-  local argv = {"roc", "fmt"}
-  for p in files do push(argv, real(p)) end
-  local r = run(argv, {timeout_ms = 120000, tail = 20})
-  if r.code ~= 0 then
-    print(r.out)
-    fail("roc fmt failed")
+function roc_bin()
+  local pin = SELF_TEST_PIN
+  if not SELF then
+    if not exists("roc-version") then fail("stack: no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc") end
+    pin = trim(read("roc-version"))
   end
+  local roc = "tools:roc-" .. pin .. "/roc"
+  if not exists(roc) then fail("stack: no " .. roc .. ": install Roc " .. pin .. " into ~/tools/roc-" .. pin .. "/ (roc-apps's toolchain release carries it)") end
+  return real(roc)
 end
 
-local files = glob(GLOB)
+-- `roc fmt` on `files`: the run's answer, its code not 0 for a file that
+-- does not parse.
+function fmt(files)
+  local argv = {roc_bin(), "fmt"}
+  for p in files do push(argv, real(p)) end
+  return run(argv, {timeout_ms = 120000, tail = 20})
+end
 
-if SELF then
-  local seen = {}
-  for f in findings(files) do
-    local name = sub(f.path, #"cookbook:roc/plants/stack/" + 1)
-    seen[name] = (has_key(seen, name) and seen[name] or "") .. f.kind .. " "
-  end
-  local bad = 0
-  for p in files do
-    local name = sub(p, #"cookbook:roc/plants/stack/" + 1)
-    local want = starts_with(name, "long") and "long" or "stack"
-    local got = has_key(seen, name) and seen[name] or ""
-    local clean = starts_with(name, "clean")
-    local ok = (clean and got == "") or (not clean and contains(got, want))
-    print((ok and "ok   " or "FAIL ") .. name .. ": " .. (got == "" and "no finding" or got))
-    if not ok then bad = bad + 1 end
-  end
-  if bad > 0 then fail(bad .. " plants wrong") end
-  print("PASS: every plant gives its finding, the clean ones none")
-elseif WRITE then
+-- **THE REWRITE**, pass after pass until one changes nothing: the groups
+-- given a trailing comma in the first pass.
+function rewrite(files)
+  local first = 0
   local pass = 1
   local changed = 1
   while changed > 0 and pass <= PASSES do
@@ -266,14 +281,68 @@ elseif WRITE then
       end
     end
     print("pass " .. pass .. ": " .. changed .. " groups given a trailing comma, in " .. #touched .. " files")
-    if #touched > 0 then fmt(touched) end
+    if pass == 1 then first = changed end
+    if #touched > 0 then
+      local r = fmt(touched)
+      if r.code ~= 0 then
+        print(r.out)
+        fail("roc fmt failed")
+      end
+    end
     pass = pass + 1
   end
   if changed > 0 then fail("still changing after " .. PASSES .. " passes") end
+  return first
+end
+
+function self_test()
+  local files = glob(GLOB)
+  local seen = {}
+  for f in findings(files) do
+    local name = sub(f.path, #PLANTS + 2)
+    seen[name] = (has_key(seen, name) and seen[name] or "") .. f.kind .. " "
+  end
+  local bad = 0
+  for p in files do
+    local name = sub(p, #PLANTS + 2)
+    local want = starts_with(name, "long") and "long" or "stack"
+    local got = has_key(seen, name) and seen[name] or ""
+    local clean = starts_with(name, "clean")
+    local ok = (clean and got == "") or (not clean and contains(got, want))
+    print((ok and "ok   " or "FAIL ") .. name .. ": " .. (got == "" and "no finding" or got))
+    if not ok then bad = bad + 1 end
+  end
+  if bad > 0 then fail(bad .. " plants wrong") end
+  if is_dir(SCRATCH) then remove_tree(SCRATCH) end
+  mkdir(SCRATCH)
+  local copies = {}
+  for p in files do
+    local to = SCRATCH .. "/" .. sub(p, #PLANTS + 2)
+    replace(to, read(p))
+    push(copies, to)
+  end
+  rewrite(copies)
+  local again = rewrite(copies)
+  if again > 0 then fail("stack: a second rewrite gave " .. again .. " more trailing commas") end
+  local r = fmt(copies)
+  if r.code ~= 0 then
+    print(r.out)
+    fail("stack: a rewritten plant no longer parses")
+  end
+  print("PASS: every plant gives its finding, the clean ones none; the rewrite ends, a second changes nothing, and every plant parses")
+end
+
+if SELF then
+  self_test()
+elseif WRITE then
+  roc_bin()
+  local files = glob(GLOB)
+  rewrite(files)
   local left = findings(files)
   for f in left do print(f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what) end
   print(#left .. " left, each a line the rewrite can't reach")
 else
+  local files = glob(GLOB)
   local all = findings(files)
   local stack = 0
   for f in all do

@@ -33,13 +33,18 @@ it works on, `<shale>` being the shale checkout:
 - [stack.shale](stack.shale): **three or more, one a line.** Any list,
   record, tuple, call's or lambda's arguments or tag payload of three or
   more items on one line is a finding, and so is a line over 100 columns,
-  and an annotation's three or more bare arguments (`U8, U8, U8 -> U8`),
-  which no trailing comma stacks.
-  `write=1` gives each a trailing comma, outermost first, and runs `roc fmt`
-  until nothing changes; a second run changes nothing. Strings and comments
-  are never read as items, nor is a record pattern's `..`; a `where`
-  clause's items are its method constraints. `self_test=1` runs its
-  plants (`plants/stack/`).
+  and a function type's three or more arguments, bare (`U8, U8, U8 -> U8`)
+  or in parentheses (`(U8, U8, U8 -> U8)`), which no trailing comma stacks.
+  `write=1` gives each a trailing comma, outermost first (never a function
+  type's arguments), and runs `roc fmt` until nothing changes; a second run
+  changes nothing. Strings and comments are never read as items, nor is a
+  record pattern's `..`; a `where` clause's items are its method
+  constraints. The Roc is the tree's own pin, `tools:roc-<pin>/roc` with
+  the pin read from the `roc-version` where the run starts; `write=1`
+  without one stops before any change. `self_test=1` runs its plants
+  (`plants/stack/`), then rewrites copies of them in `scratch:` with the
+  recipe's `SELF_TEST_PIN`: each must still parse, and a second rewrite
+  change nothing.
 - [nest_depth.shale](nest_depth.shale): **a call nested three deep**,
   `f(g(h(x)))`, read inside out: the outermost call of each nest `min`
   (3) or more deep, from roc-ast's tree. A method's receiver, a pipe's or
