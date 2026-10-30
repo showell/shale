@@ -364,7 +364,7 @@ end
 -- says which) or a lambda argument named with a `!`. `paired`: a
 -- definition whose annotation is just above it, which judges its name.
 function definitions(paths)
-  if not exists(ROC_AST) then fail("name_hunt: no " .. ROC_AST .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it, or unpack roc-apps's release asset roc-ast-258ab27-linux-x86_64.tar.gz (github.com/showell/roc-apps/releases/tag/toolchain-2026-10-27) into ~/tools/roc-ast/, the `tools` mount (`tools = ~/tools ro tools`)") end
+  if not exists(ROC_AST) then fail("name_hunt: no " .. ROC_AST .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it, or unpack roc-apps's release asset roc-ast-258ab27-linux-x86_64.tar.gz (github.com/showell/roc-apps/releases/tag/toolchain-2026-10-30) into ~/tools/roc-ast/, the `tools` mount (`tools = ~/tools ro tools`)") end
   local shown = {}
   local reals = {}
   for p in paths do

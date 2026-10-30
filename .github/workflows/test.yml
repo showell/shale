@@ -78,7 +78,7 @@ jobs:
       # here; without it the step fails, never skips.
       - name: Install roc-ast
         run: |
-          curl -fsSL -o /tmp/roc-ast.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-27/roc-ast-258ab27-linux-x86_64.tar.gz
+          curl -fsSL -o /tmp/roc-ast.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-30/roc-ast-258ab27-linux-x86_64.tar.gz
           echo "0f92336c8a7d7976ea80684a473c2cf3fe882d6cf64b2133c239a70023818a2f  /tmp/roc-ast.tar.gz" | sha256sum -c -
           mkdir -p ~/tools/roc-ast
           tar -xzf /tmp/roc-ast.tar.gz -C ~/tools/roc-ast
@@ -86,13 +86,14 @@ jobs:
 
       # The Roc rewrite's self-test (cookbook/roc/methods.shale) is judged by
       # the compiler itself, `roc check` and `roc test`, the same release's
-      # (70 MB), from tools:roc-nightly-2026-10-09-258ab27/roc.
+      # (70 MB), tools:roc-nightly-2026-10-29-a0a9fc2/roc (the recipe's
+      # SELF_TEST_PIN).
       - name: Install Roc
         run: |
-          curl -fsSL -o /tmp/roc.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-27/roc-nightly-2026-10-09-258ab27-linux-x86_64.tar.gz
-          echo "83255f79ad3043925b96f39319b6c1aa21547f4ab2177c80b445c3b05e11f928  /tmp/roc.tar.gz" | sha256sum -c -
+          curl -fsSL -o /tmp/roc.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-30/roc-nightly-2026-10-29-a0a9fc2-linux-x86_64.tar.gz
+          echo "6b6d97f2b9678bc59ab8ffaea3de99c30686a24a7b173e07ef993a0dbd42c0a1  /tmp/roc.tar.gz" | sha256sum -c -
           tar -xzf /tmp/roc.tar.gz -C ~/tools
-          test -x ~/tools/roc-nightly-2026-10-09-258ab27/roc
+          test -x ~/tools/roc-nightly-2026-10-29-a0a9fc2/roc
 
       - name: zig build test
         working-directory: shale

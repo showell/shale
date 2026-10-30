@@ -57,8 +57,13 @@
 -- `<Name>.want` must come out as that text, and each one's count of calls
 -- left, and a reason, is as the table below says.
 --
--- Roc is `tools:roc-nightly-2026-10-09-258ab27/roc` (roc-apps's release
--- asset, as CI installs it), else `roc` on the PATH.
+-- **ROC IS THE TREE'S OWN PIN**: `tools:roc-<pin>/roc`, the pin read from
+-- the `roc-version` file where the run starts (the repository's root), and
+-- a run with no `roc-version` there stops. The compiler's method lookup
+-- has changed between nightlies (before 2026-10-28 a function in one
+-- module could become a method on another module's type), so a rewrite is
+-- judged only by the Roc the tree is built with. The self-test uses
+-- `SELF_TEST_PIN`, as CI installs it from roc-apps's release asset.
 -- budget: steps=900000000 output_bytes=4000000 arena_bytes=2000000000 changes=100000 change_bytes=2000000000
 
 const SELF = arg("self_test", "") == "1"
@@ -68,7 +73,7 @@ const SCRATCH = "scratch:methods"
 const GLOB = SELF and (SCRATCH .. "/*.roc") or arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
 const ROC_AST = "tools:roc-ast/bin/roc-ast"
-const PINNED_ROC = "tools:roc-nightly-2026-10-09-258ab27/roc"
+const SELF_TEST_PIN = "nightly-2026-10-29-a0a9fc2"
 const ROUNDS = 4
 const FROM = tonumber(arg("from", "1"))
 -- A run starts at most 64 programs (Shale's `runs`); a file may take
@@ -84,8 +89,14 @@ const FILE_MOST = ROUNDS + 5
 const ATOMS = {["(e-ident"] = true, ["(e-apply"] = true, ["(e-method-call"] = true, ["(e-field-access"] = true, ["(e-string"] = true, ["(e-list"] = true, ["(e-record"] = true, ["(e-tuple"] = true, ["(e-tag"] = true}
 
 function roc_bin()
-  if exists(PINNED_ROC) then return real(PINNED_ROC) end
-  return "roc"
+  local pin = SELF_TEST_PIN
+  if not SELF then
+    if not exists("roc-version") then fail("methods: no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc") end
+    pin = trim(read("roc-version"))
+  end
+  local roc = "tools:roc-" .. pin .. "/roc"
+  if not exists(roc) then fail("methods: no " .. roc .. ": install Roc " .. pin .. " into ~/tools/roc-" .. pin .. "/ (roc-apps's toolchain release carries it)") end
+  return real(roc)
 end
 
 -- ── the tree ─────────────────────────────────────────────────────────────
@@ -123,7 +134,7 @@ end
 -- spanned, kids, parent}` (`spanned` false for a node with no span, `kids` its children's
 -- indexes, in order, `parent` 0 at the top).
 function trees(paths)
-  if not exists(ROC_AST) then fail("methods: no " .. ROC_AST .. ": unpack roc-apps's release asset roc-ast-258ab27-linux-x86_64.tar.gz (github.com/showell/roc-apps/releases/tag/toolchain-2026-10-27) into ~/tools/roc-ast/, the `tools` mount") end
+  if not exists(ROC_AST) then fail("methods: no " .. ROC_AST .. ": unpack roc-apps's release asset roc-ast-258ab27-linux-x86_64.tar.gz (github.com/showell/roc-apps/releases/tag/toolchain-2026-10-30) into ~/tools/roc-ast/, the `tools` mount") end
   local shown = {}
   local reals = {}
   for p in paths do
