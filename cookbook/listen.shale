@@ -9,8 +9,11 @@
 --
 -- **A POST IS FOR THE AGENT** when all three hold (`for_me`, pure):
 --   1. it is not the agent's own (`by` is not `me`);
---   2. its markdown names the agent as a word: `@<name>` anywhere, or
---      `<name>` leading the post (`CC, ...`); `@CCX` and `a@CC.com` do not;
+--   2. it names the agent: the server's `mentions` holds `me` (roc-chat
+--      parses them, so every listener agrees); from a server that sends
+--      none, its markdown names the agent as a word, `@<name>` anywhere or
+--      `<name>` leading the post (`CC, ...`), and `@CCX` and `a@CC.com` do
+--      not;
 --   3. a post by an agent counts only while fewer than two hops came
 --      since a human's post: a hop is an agent's post that names another
 --      agent of the conversation (an agent answering an agent); an
@@ -83,12 +86,28 @@ function is_human(principal)
   return starts_with(principal, "human:")
 end
 
+function contains_item(list, x)
+  for v in list do
+    if v == x then return true end
+  end
+  return false
+end
+
+-- **WHO A POST NAMES**: the server's `mentions` (roc-chat's
+-- app/Mentions.roc, the one home of the rule) when the message carries
+-- them; for a server too old to, the same rule here, over the
+-- conversation's own names.
+function names(msg, id, name)
+  if has_key(msg, "mentions") then return contains_item(msg.mentions, id) end
+  return mentions(msg.markdown, name)
+end
+
 -- Whether a post is a hop: an agent's, naming another of `agents` (each
 -- `{id, name}`, the conversation's agents).
 function is_hop(msg, agents)
   if is_human(msg.by) then return false end
   for a in agents do
-    if a.id ~= msg.by and mentions(msg.markdown, a.name) then return true end
+    if a.id ~= msg.by and names(msg, a.id, a.name) then return true end
   end
   return false
 end
@@ -97,7 +116,7 @@ end
 -- before this one.
 function for_me(msg, me, name, hops)
   if msg.by == me then return false end
-  if not mentions(msg.markdown, name) then return false end
+  if not names(msg, me, name) then return false end
   if not is_human(msg.by) and hops >= 2 then return false end
   return true
 end
@@ -212,12 +231,14 @@ function self_test()
   expect(tally, join(resumed.lines, " | ") == "#8 by agent:1: @CC and a second hop", "after=5 gives #8 alone: " .. join(resumed.lines, " | "))
   local gap = replay({"gap.sse"}, 0)
   expect(tally, gap.err ~= "" and contains(gap.err, "posts before 40") and #gap.lines == 0, "a gap is an error, named")
+  local served = replay({"served.sse"}, 0)
+  expect(tally, join(served.lines, " | ") == "#2 by human:7: the server says this one names CC", "the server's mentions decide, over the markdown: " .. join(served.lines, " | "))
   local status = replay({"status.sse"}, 0)
   expect(tally, join(status.lines, " | ") == "#4 by agent:1: @CC a question, after two status posts", "an agent's status posts are no hops, so the question after them is heard: " .. join(status.lines, " | "))
   local quiet = replay({"pings.sse"}, 0)
   expect(tally, #quiet.lines == 0 and quiet.state.last == 0, "pings alone are nothing")
   if tally.bad > 0 then fail("listen: self-test: " .. tally.bad .. " failed") end
-  print("listen self_test: PASS (mentions as words, own posts, a third hop and pings give none, status posts are no hops, after= and a repeated window print nothing twice, a gap is named)")
+  print("listen self_test: PASS (mentions as words, own posts, a third hop and pings give none, status posts are no hops, the server's mentions decide, after= and a repeated window print nothing twice, a gap is named)")
 end
 
 -- ── the live path ────────────────────────────────────────────────────────

@@ -1,0 +1,8 @@
+event: message
+id: 1
+data: {"id":1,"at":1793400001,"by":"human:7","markdown":"@CC in the markdown, but the server names nobody","mentions":[],"html":"<p>@CC in the markdown, but the server names nobody</p>\n"}
+
+event: message
+id: 2
+data: {"id":2,"at":1793400002,"by":"human:7","markdown":"the server says this one names CC","mentions":["agent:2"],"html":"<p>the server says this one names CC</p>\n"}
+
