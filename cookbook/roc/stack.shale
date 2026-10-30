@@ -22,15 +22,27 @@
 -- no comma stacks: `roc fmt` refuses a trailing one there (`U8, U8, U8, ->
 -- U8` does not parse).
 --
+-- **ROC IS THE TREE'S OWN PIN**: `write=1` runs `tools:roc-<pin>/roc`,
+-- the pin read from the `roc-version` file where the run starts (the
+-- repository's root), and stops before any change with no `roc-version`
+-- there: `roc fmt`'s layout moves between nightlies, so a tree is laid out
+-- only by the Roc it is built with, never by whichever `roc` is on PATH.
+--
 -- `self_test=1` reads `cookbook/roc/plants/stack/`: each plant named for
 -- what it holds must give a finding of its kind, and a `clean*.roc` none.
+-- Then it copies the plants to `scratch:stack/` and rewrites them there
+-- with `SELF_TEST_PIN`'s Roc: the rewrite must end, a second one change
+-- nothing, and every file still parse (`roc fmt` takes them all).
 --
 -- budget: steps=900000000 arena_bytes=2000000000
 
 const SELF = arg("self_test", "") == "1"
-const GLOB = SELF and "cookbook:roc/plants/stack/*.roc" or arg("glob", "**/*.roc")
+const PLANTS = "cookbook:roc/plants/stack"
+const SCRATCH = "scratch:stack"
+const GLOB = SELF and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
 const WIDTH = arg("width", 100)
 const WRITE = arg("write", "") == "1"
+const SELF_TEST_PIN = "nightly-2026-10-29-a0a9fc2"
 const PASSES = 12
 const OPENERS = {["("] = ")", ["{"] = "}", ["["] = "]"}
 const CLOSERS = {[")"] = true, ["}"] = true, ["]"] = true}
@@ -211,37 +223,29 @@ function findings(files)
   return out
 end
 
-function fmt(files)
-  local argv = {"roc", "fmt"}
-  for p in files do push(argv, real(p)) end
-  local r = run(argv, {timeout_ms = 120000, tail = 20})
-  if r.code ~= 0 then
-    print(r.out)
-    fail("roc fmt failed")
+function roc_bin()
+  local pin = SELF_TEST_PIN
+  if not SELF then
+    if not exists("roc-version") then fail("stack: no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc") end
+    pin = trim(read("roc-version"))
   end
+  local roc = "tools:roc-" .. pin .. "/roc"
+  if not exists(roc) then fail("stack: no " .. roc .. ": install Roc " .. pin .. " into ~/tools/roc-" .. pin .. "/ (roc-apps's toolchain release carries it)") end
+  return real(roc)
 end
 
-local files = glob(GLOB)
+-- `roc fmt` on `files`: the run's answer, its code not 0 for a file that
+-- does not parse.
+function fmt(files)
+  local argv = {roc_bin(), "fmt"}
+  for p in files do push(argv, real(p)) end
+  return run(argv, {timeout_ms = 120000, tail = 20})
+end
 
-if SELF then
-  local seen = {}
-  for f in findings(files) do
-    local name = sub(f.path, #"cookbook:roc/plants/stack/" + 1)
-    seen[name] = (has_key(seen, name) and seen[name] or "") .. f.kind .. " "
-  end
-  local bad = 0
-  for p in files do
-    local name = sub(p, #"cookbook:roc/plants/stack/" + 1)
-    local want = starts_with(name, "long") and "long" or "stack"
-    local got = has_key(seen, name) and seen[name] or ""
-    local clean = starts_with(name, "clean")
-    local ok = (clean and got == "") or (not clean and contains(got, want))
-    print((ok and "ok   " or "FAIL ") .. name .. ": " .. (got == "" and "no finding" or got))
-    if not ok then bad = bad + 1 end
-  end
-  if bad > 0 then fail(bad .. " plants wrong") end
-  print("PASS: every plant gives its finding, the clean ones none")
-elseif WRITE then
+-- **THE REWRITE**, pass after pass until one changes nothing: the groups
+-- given a trailing comma in the first pass.
+function rewrite(files)
+  local first = 0
   local pass = 1
   local changed = 1
   while changed > 0 and pass <= PASSES do
@@ -266,14 +270,68 @@ elseif WRITE then
       end
     end
     print("pass " .. pass .. ": " .. changed .. " groups given a trailing comma, in " .. #touched .. " files")
-    if #touched > 0 then fmt(touched) end
+    if pass == 1 then first = changed end
+    if #touched > 0 then
+      local r = fmt(touched)
+      if r.code ~= 0 then
+        print(r.out)
+        fail("roc fmt failed")
+      end
+    end
     pass = pass + 1
   end
   if changed > 0 then fail("still changing after " .. PASSES .. " passes") end
+  return first
+end
+
+function self_test()
+  local files = glob(GLOB)
+  local seen = {}
+  for f in findings(files) do
+    local name = sub(f.path, #PLANTS + 2)
+    seen[name] = (has_key(seen, name) and seen[name] or "") .. f.kind .. " "
+  end
+  local bad = 0
+  for p in files do
+    local name = sub(p, #PLANTS + 2)
+    local want = starts_with(name, "long") and "long" or "stack"
+    local got = has_key(seen, name) and seen[name] or ""
+    local clean = starts_with(name, "clean")
+    local ok = (clean and got == "") or (not clean and contains(got, want))
+    print((ok and "ok   " or "FAIL ") .. name .. ": " .. (got == "" and "no finding" or got))
+    if not ok then bad = bad + 1 end
+  end
+  if bad > 0 then fail(bad .. " plants wrong") end
+  if is_dir(SCRATCH) then remove_tree(SCRATCH) end
+  mkdir(SCRATCH)
+  local copies = {}
+  for p in files do
+    local to = SCRATCH .. "/" .. sub(p, #PLANTS + 2)
+    replace(to, read(p))
+    push(copies, to)
+  end
+  rewrite(copies)
+  local again = rewrite(copies)
+  if again > 0 then fail("stack: a second rewrite gave " .. again .. " more trailing commas") end
+  local r = fmt(copies)
+  if r.code ~= 0 then
+    print(r.out)
+    fail("stack: a rewritten plant no longer parses")
+  end
+  print("PASS: every plant gives its finding, the clean ones none; the rewrite ends, a second changes nothing, and every plant parses")
+end
+
+if SELF then
+  self_test()
+elseif WRITE then
+  roc_bin()
+  local files = glob(GLOB)
+  rewrite(files)
   local left = findings(files)
   for f in left do print(f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what) end
   print(#left .. " left, each a line the rewrite can't reach")
 else
+  local files = glob(GLOB)
   local all = findings(files)
   local stack = 0
   for f in all do
