@@ -70,3 +70,21 @@ it works on, `<shale>` being the shale checkout:
   patch with `a/` and `b/` paths that `patch -p1` applies from the repo's
   root. Dog Park's new-kind proof (`test/new_kind/sheep.patch`) is rebuilt
   this way whenever the Roc it patches moves.
+- [methods.shale](methods.shale): **old-style calls as method calls.**
+  `Module.fn(first, rest...)` becomes `first.fn(rest...)` where that is the
+  same call (`List.map(xs, f)` is `xs.map(f)`), a chain from the inside out
+  (`List.len(List.keep_if(xs, p))` is `xs.keep_if(p).len()`). The calls are
+  roc-ast's; **the compiler is the judge**, since a tree can't say a type:
+  each file's rewrite is kept only when `roc check` on `root=` passes and
+  `roc test`'s summary is unchanged. An error on a rewritten call's line
+  leaves that call, its reason the error's title, and the file is tried
+  again; any other error puts the file back. No candidate: a call used as a
+  function value, a module's own call in its file; the right of a `|>` is
+  listed and left. A dry run by default (each trial put back; run it with
+  `--undo-on-stop`, so a stop mid-trial puts that back too); `apply=1`
+  keeps them. Out: a line each call left, `path:line: why`, then the
+  counts. A run holds 64 programs: on a bigger tree it stops before a file
+  and says `go on with from=N`, the glob's file to start the next at.
+  `self_test=1`
+  runs its plants (`plants/methods/`, copied to `scratch:`) with the
+  compiler, from `tools:roc-nightly-2026-10-09-258ab27/roc` or the PATH.

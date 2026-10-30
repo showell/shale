@@ -1,0 +1,12 @@
+## A first argument of another type (a list, for `Str`) must stay, the
+## compiler saying why; the file's other call is still turned.
+OtherType := [].{
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+
+	text : List(U8) -> Str
+	text = |bytes| Str.from_utf8(bytes) ?? ""
+}
+
+expect OtherType.size([1]) == 1
+expect OtherType.text([97]) == "a"

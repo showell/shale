@@ -1,0 +1,483 @@
+-- **OLD-STYLE ROC CALLS AS METHOD CALLS**: `Module.fn(first, rest...)`
+-- becomes `first.fn(rest...)` (static dispatch) where that is the same
+-- call, the first argument's type being `Module`'s own: `List.map(xs, f)`
+-- is `xs.map(f)`, `Str.concat(a, b)` is `a.concat(b)`, and a chain turns
+-- from the inside out, `List.len(List.keep_if(xs, p))` being
+-- `xs.keep_if(p).len()`.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/methods.shale glob=app/*.roc root=app/main.roc
+--   cd <repo> && shale <shale>/cookbook/roc/methods.shale glob=app/*.roc root=app/main.roc apply=1
+--   shale cookbook:roc/methods.shale self_test=1
+--
+-- **THE COMPILER IS THE JUDGE**: a syntax tree cannot say a value's type,
+-- so each file's candidates (from roc-ast, Roc's own parser's tree, as
+-- name_hunt.shale reads it) are written in, and `roc check` on `root`
+-- (default: the file itself) must pass and `roc test`'s summary (its
+-- expects' count and results) must be what it was. An error `roc check`
+-- puts on a rewritten call's lines leaves that call as it was, with the
+-- error's title as its reason, and the file is tried again; an error
+-- anywhere else (an import a rewrite left unused), or a changed `roc test`,
+-- puts the whole file back and leaves all its candidates, that the reason.
+-- A file kept is laid out by `roc fmt` when it was clean before, and
+-- checked again.
+--
+-- **NO CANDIDATE**:
+--   - a call used as a function value: `List.map(xs, Str.trim)` turns the
+--     outer call, and `Str.trim` stays, being no call;
+--   - the right of a `|>`, whose first argument the pipe gives:
+--     `x |> List.concat(y)` is `List.concat(x, y)`, never `y.concat()`;
+--   - **A MODULE'S OWN CALL** inside its file (`Store.load!(id)` in
+--     Store.roc, an `expect`'s `Rewrite.count(xs)` in Rewrite.roc): no
+--     candidate, by choice, and not listed. In its own body a type's
+--     functions are what is being written, and the qualified name says
+--     which one is meant where a method's name would be resolved from the
+--     type being defined; a reader sees the call written the way it is
+--     declared beside it. Every module calls itself so, and listing each
+--     would bury the calls that need a hand.
+--   A call whose first argument's type is not the module's
+--   (`Str.from_utf8(bytes)`, a list) is a candidate the compiler refuses
+--   (`missing method`): it stays, that its reason.
+--
+-- **A DRY RUN BY DEFAULT**: every trial is written in place and the file
+-- put back byte for byte before the next, so the tree ends as it began;
+-- `apply=1` keeps what passes. Run it with `--undo-on-stop`: a run that
+-- stops mid-trial (a budget, Ctrl-C) leaves the trial's text otherwise.
+-- Out: a line a call left, `path:line: why`, then `candidates N,
+-- rewritten N, left N`.
+--
+-- A run holds 64 programs, and a tree of files takes more: the run stops
+-- before a file it could not finish, says `go on with from=N`, and the
+-- next run, given `from=N`, starts at the glob's Nth file. A file whose
+-- every call stays as it is takes none, and does not stop it.
+--
+-- `self_test=1` copies `cookbook/roc/plants/methods/` to `scratch:methods/`
+-- and runs `apply=1` there, each plant on its own: a plant with a
+-- `<Name>.want` must come out as that text, and each one's count of calls
+-- left, and a reason, is as the table below says.
+--
+-- Roc is `tools:roc-nightly-2026-10-09-258ab27/roc` (roc-apps's release
+-- asset, as CI installs it), else `roc` on the PATH.
+-- budget: steps=900000000 output_bytes=4000000 arena_bytes=2000000000 changes=100000 change_bytes=2000000000
+
+const SELF = arg("self_test", "") == "1"
+const APPLY = SELF or arg("apply", "") == "1"
+const PLANTS = "cookbook:roc/plants/methods"
+const SCRATCH = "scratch:methods"
+const GLOB = SELF and (SCRATCH .. "/*.roc") or arg("glob", "**/*.roc")
+const ROOT = arg("root", "")
+const ROC_AST = "tools:roc-ast/bin/roc-ast"
+const PINNED_ROC = "tools:roc-nightly-2026-10-09-258ab27/roc"
+const ROUNDS = 4
+const FROM = tonumber(arg("from", "1"))
+-- A run starts at most 64 programs (Shale's `runs`); a file may take
+-- `ROUNDS` checks, the test, and under `apply=1` two `roc fmt`s, and a
+-- root's first file its baseline's two: a file is begun only while that
+-- many are left.
+const RUNS_MOST = 64
+const FILE_MOST = ROUNDS + 5
+
+-- The kinds a first argument may be without parentheses: `f(x).len()`,
+-- `"a".to_utf8()`; any other (a number, a sum, a lambda, an `if`) is put in
+-- them, `(a + b).to_str()`.
+const ATOMS = {["(e-ident"] = true, ["(e-apply"] = true, ["(e-method-call"] = true, ["(e-field-access"] = true, ["(e-string"] = true, ["(e-list"] = true, ["(e-record"] = true, ["(e-tuple"] = true, ["(e-tag"] = true}
+
+function roc_bin()
+  if exists(PINNED_ROC) then return real(PINNED_ROC) end
+  return "roc"
+end
+
+-- ── the tree ─────────────────────────────────────────────────────────────
+
+function depth_of(l)
+  local d = 0
+  while sub(l, d + 1, d + 1) == "\t" do d = d + 1 end
+  return d
+end
+
+function kind_of(h)
+  return split(h, " ")[1]
+end
+
+-- A node's span, `@l1.c1-l2.c2` (the end column one past the last), as
+-- byte offsets into the file's text (1-based, the end one past).
+function span_of(h, starts)
+  local m = re_find(h, "@([0-9]+)\\.([0-9]+)-([0-9]+)\\.([0-9]+)")
+  if m == nil then return nil end
+  return {from = starts[tonumber(m.groups[1])] + tonumber(m.groups[2]) - 1, to = starts[tonumber(m.groups[3])] + tonumber(m.groups[4]) - 1}
+end
+
+-- Each line's first byte's offset.
+function line_starts(text)
+  local out = {1}
+  local at = 1
+  for l in split(text, "\n") do
+    at = at + #l + 1
+    push(out, at)
+  end
+  return out
+end
+
+-- Every file's tree, by path: `{nodes, text}`, a node `{kind, head, span,
+-- spanned, kids, parent}` (`spanned` false for a node with no span, `kids` its children's
+-- indexes, in order, `parent` 0 at the top).
+function trees(paths)
+  if not exists(ROC_AST) then fail("methods: no " .. ROC_AST .. ": unpack roc-apps's release asset roc-ast-258ab27-linux-x86_64.tar.gz (github.com/showell/roc-apps/releases/tag/toolchain-2026-10-27) into ~/tools/roc-ast/, the `tools` mount") end
+  local shown = {}
+  local reals = {}
+  for p in paths do
+    push(reals, real(p))
+    shown[real(p)] = p
+  end
+  local out = {}
+  if #reals == 0 then return out end
+  local dump = run({real(ROC_AST)}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
+  if dump.ended ~= "exit" or dump.code ~= 0 then
+    local said = lines(trim(dump.out))
+    fail("methods: roc-ast: " .. (said[#said] or dump.ended))
+  end
+  local t = nil
+  local stack = {}
+  for l in lines(dump.out) do
+    local h = trim(l)
+    if starts_with(h, "== ") then
+      local p = get(shown, sub(h, 4), sub(h, 4))
+      local text = read(p)
+      t = {nodes = {}, text = text, starts = line_starts(text)}
+      out[p] = t
+      stack = {}
+    elseif t ~= nil and h ~= "" then
+      local d = depth_of(l)
+      local span = span_of(h, t.starts)
+      local n = {kind = kind_of(h), head = h, span = span or {from = 0, to = 0}, spanned = span ~= nil, kids = {}, parent = 0}
+      push(t.nodes, n)
+      local i = #t.nodes
+      stack[d + 1] = i
+      if d > 0 and d <= #stack then
+        push(t.nodes[stack[d]].kids, i)
+        n.parent = stack[d]
+      end
+    end
+  end
+  return out
+end
+
+-- The nodes that carry an expression's span: a node with none (`args`,
+-- `receiver`) stands for its children.
+function spanned(t, i)
+  local n = t.nodes[i]
+  if n.spanned then return {i} end
+  local out = {}
+  for k in n.kids do for j in spanned(t, k) do push(out, j) end end
+  return out
+end
+
+function line_of(t, offset)
+  local l = 1
+  while l < #t.starts and t.starts[l + 1] <= offset do l = l + 1 end
+  return l
+end
+
+-- **THE CANDIDATES**: each `Module.fn(first, ...)` call, `{at, module, fn,
+-- line, left}` (`left` a reason, or ""), but the file's own module's
+-- (`own`).
+function candidates(t, own)
+  local out = {}
+  for i = 1, #t.nodes do
+    local n = t.nodes[i]
+    if n.kind == "(e-apply" and #n.kids >= 2 then
+      local callee = t.nodes[n.kids[1]]
+      local raw = between(callee.head, "(raw \"", "\")")
+      local m = raw and re_find(raw, "^([A-Z][A-Za-z0-9]*)\\.([a-z][A-Za-z0-9_]*!?)$")
+      if callee.kind == "(e-ident" and m ~= nil then
+        local c = {at = i, module = m.groups[1], fn = m.groups[2], line = line_of(t, n.span.from), left = "", from_line = 0, to_line = 0}
+        local p = n.parent > 0 and t.nodes[n.parent] or nil
+        if p ~= nil and p.kind == "(e-arrow-call" and p.kids[2] == i then
+          c.left = "the right of a `|>`, whose first argument the pipe gives"
+        end
+        if m.groups[1] ~= own then push(out, c) end
+      end
+    end
+  end
+  return out
+end
+
+function emit(st, s)
+  push(st.out, s)
+  st.line = st.line + #split(s, "\n") - 1
+end
+
+-- The node at `i`'s text onto `st`, from `start` on (a byte offset): a
+-- candidate turned, any other as it is with each spanned child's text
+-- turned in place. Spans may overlap (a type module's `type-mod` and its
+-- declaration both start at its name): a child is emitted from where the
+-- text so far ends, and one wholly before it is skipped.
+function emit_node(st, i, start)
+  local t = st.t
+  local n = t.nodes[i]
+  if has_key(st.on, "" .. i) then
+    local c = st.on["" .. i]
+    c.from_line = st.line
+    local args = drop(n.kids, 1)
+    local bare = has_key(ATOMS, t.nodes[args[1]].kind)
+    if not bare then emit(st, "(") end
+    emit_node(st, args[1], 0)
+    if not bare then emit(st, ")") end
+    emit(st, "." .. c.fn .. "(")
+    local k = 2
+    while k <= #args do
+      if k > 2 then emit(st, ", ") end
+      emit_node(st, args[k], 0)
+      k = k + 1
+    end
+    emit(st, ")")
+    c.to_line = st.line
+    return nil
+  end
+  local at = n.span.from
+  if start > at then at = start end
+  for k in n.kids do
+    for j in spanned(t, k) do
+      local s = t.nodes[j].span
+      if s.to > at then
+        if s.from > at then emit(st, sub(t.text, at, s.from - 1)) end
+        emit_node(st, j, at)
+        at = s.to
+      end
+    end
+  end
+  emit(st, sub(t.text, at, n.span.to - 1))
+  return nil
+end
+
+-- **THE FILE REWRITTEN**: every candidate in `on` (by node) turned, from the
+-- inside out, the rest of the text as it is; each turned call's lines in the
+-- new text are recorded on it (`from_line`, `to_line`).
+function rewrite(t, on)
+  local st = {out = {}, line = line_of(t, t.nodes[1].span.from), t = t, on = on}
+  -- The file node spans what roc-ast parsed; the bytes around it (a final
+  -- newline) are kept.
+  emit_node(st, 1, 0)
+  local whole = join(st.out, "")
+  return sub(t.text, 1, t.nodes[1].span.from - 1) .. whole .. sub(t.text, t.nodes[1].span.to)
+end
+
+-- ── the compiler ─────────────────────────────────────────────────────────
+
+-- `roc check` on `root`: `{ok, errors}`, each error `{title, file, line}`,
+-- a warning too (`●`), since a warning fails the build.
+function check(ctx, root)
+  ctx.used = ctx.used + 1
+  local r = run({roc_bin(), "check", real(root)}, {timeout_ms = 900000, whole = 64000000})
+  local errs = {}
+  for l in lines(r.out) do
+    -- `── ✗ <title> ───── <path>:<line>:<col>` (`●` a warning), the rule's
+    -- dashes and the marks matched as text, being more than a byte each.
+    local mark = starts_with(l, "── ✗ ") or starts_with(l, "── ● ")
+    local at = mark and re_find(l, " ([^ ]+):([0-9]+):([0-9]+)$") or nil
+    if at ~= nil then
+      local title = trim(split(sub(l, #"── ✗ " + 1), " ─")[1])
+      push(errs, {title = title, file = basename(at.groups[1]), line = tonumber(at.groups[2])})
+    end
+  end
+  return {ok = r.ended == "exit" and r.code == 0, errors = errs, out = r.out}
+end
+
+-- The first line `out` says, for a failure no error names (a crash).
+function said_first(out)
+  for l in lines(out) do
+    if trim(l) ~= "" then return trim(l) end
+  end
+  return "nothing said"
+end
+
+-- `roc test` on `root`'s summary, its time dropped: what may not change.
+function tested(ctx, root)
+  ctx.used = ctx.used + 1
+  local r = run({roc_bin(), "test", real(root)}, {timeout_ms = 900000, whole = 64000000})
+  local said = lines(trim(r.out))
+  local last = said[#said] or ""
+  local m = re_find(last, "^(.*) in [0-9.]+ ms\\.")
+  return (m ~= nil and m.groups[1] or last) .. " (exit " .. r.code .. ")"
+end
+
+function fmt_clean(ctx, p)
+  ctx.used = ctx.used + 1
+  return run({roc_bin(), "fmt", "--check", real(p)}, {timeout_ms = 120000, tail = 20}).code == 0
+end
+
+-- **ONE FILE TRIED**: its candidates written in, round by round, until the
+-- check passes or nothing is left to try; then the test. Gives the file's
+-- calls kept (`kept`); each left call has its `left` set. The file ends as
+-- it began unless `APPLY` and some call is kept.
+function try_file(ctx, p, t, cands, root, want_test)
+  local was = t.text
+  -- `roc fmt` lays out what is kept, so only under `apply=1`.
+  local clean = APPLY and fmt_clean(ctx, p)
+  for round = 1, ROUNDS do
+    local on = {}
+    local n = 0
+    for c in cands do
+      if c.left == "" then
+        on["" .. c.at] = c
+        n = n + 1
+      end
+    end
+    if n == 0 then
+      replace(p, was)
+      return 0
+    end
+    replace(p, rewrite(t, on))
+    local r = check(ctx, root)
+    if r.ok then
+      if clean then
+        -- Layout only; the test after it would fail on a file that no
+        -- longer checks.
+        ctx.used = ctx.used + 1
+        run({roc_bin(), "fmt", real(p)}, {timeout_ms = 120000, tail = 20})
+      end
+      local got = tested(ctx, root)
+      if got ~= want_test then
+        local why = "roc test changed: " .. got .. ", was " .. want_test
+        for c in cands do if c.left == "" then c.left = why .. "; the file is put back" end end
+        replace(p, was)
+        return 0
+      end
+      if not APPLY then replace(p, was) end
+      return n
+    end
+    -- Each error on a turned call's lines leaves that call; one on no
+    -- turned call puts the file back.
+    local stray = nil
+    for e in r.errors do
+      if e.file == basename(p) then
+        local hit = false
+        for c in cands do
+          -- A line may carry two errors, or one for two calls.
+          if c.from_line > 0 and e.line >= c.from_line and e.line <= c.to_line then
+            if c.left == "" then c.left = "roc check: " .. e.title end
+            hit = true
+          end
+        end
+        if not hit and stray == nil then stray = e end
+      elseif stray == nil then
+        stray = e
+      end
+    end
+    if stray ~= nil or #r.errors == 0 then
+      local why = stray and ("roc check: " .. stray.title .. " at " .. stray.file .. ":" .. stray.line .. ", on no rewritten call") or ("roc check failed, naming no line: " .. said_first(r.out))
+      for c in cands do if c.left == "" then c.left = why .. "; the file is put back" end end
+      replace(p, was)
+      return 0
+    end
+    for c in cands do c.from_line = 0 end
+  end
+  for c in cands do if c.left == "" then c.left = "still failing after " .. ROUNDS .. " rounds; the file is put back" end end
+  replace(p, was)
+  return 0
+end
+
+-- **EVERY FILE OF `paths`**, each judged on `root` (its own file when
+-- `root` is ""): `{candidates, rewritten, left, lines}`, `lines` a
+-- `path:line: why` each call left.
+function run_all(paths, root, from)
+  local ctx = {used = 1}
+  local ts = trees(paths)
+  local total = {candidates = 0, rewritten = 0, left = 0, lines = {}, files = 0, next = 0}
+  local baseline = {}
+  for k = from, #paths do
+    local p = paths[k]
+    if not has_key(ts, p) then fail("methods: roc-ast gave no tree for " .. p) end
+    local t = ts[p]
+    local own = strip_suffix(basename(p), ".roc")
+    local cands = candidates(t, own)
+    local open = 0
+    for c in cands do if c.left == "" then open = open + 1 end end
+    if open > 0 and ctx.used + FILE_MOST > RUNS_MOST then
+      total.next = k
+      return total
+    end
+    total.files = total.files + 1
+    if #cands > 0 then
+      local r = root ~= "" and root or p
+      if open > 0 and not has_key(baseline, r) then
+        local b = check(ctx, r)
+        if not b.ok then fail("methods: `roc check " .. r .. "` fails before any rewrite: fix it first") end
+        baseline[r] = tested(ctx, r)
+      end
+      local kept = open > 0 and try_file(ctx, p, t, cands, r, baseline[r]) or 0
+      total.candidates = total.candidates + #cands
+      total.rewritten = total.rewritten + kept
+      for c in cands do
+        if c.left ~= "" then
+          total.left = total.left + 1
+          push(total.lines, p .. ":" .. c.line .. ": " .. c.module .. "." .. c.fn .. ": " .. c.left)
+        end
+      end
+    end
+  end
+  return total
+end
+
+-- ── the self-test ────────────────────────────────────────────────────────
+
+function judged(tally, cond, what)
+  if cond then
+    print("ok    " .. what)
+  else
+    print("FAIL  " .. what)
+    tally.bad = tally.bad + 1
+  end
+  return nil
+end
+
+-- Each plant's calls left, and a reason one of them must give (nil: none
+-- left), judged on `root` (default the plant). A plant with a `.want` must
+-- come out as that text; one with calls left and none, as it was.
+const EXPECT = {
+  Rewrite = {left = 0},
+  Chained = {left = 0},
+  FunctionValue = {left = 0},
+  Pipe = {left = 1, why = "the right of a `|>`"},
+  Own = {left = 0},
+  OtherType = {left = 1, why = "roc check: missing method"},
+  Decode = {left = 1, why = "on no rewritten call; the file is put back", root = "Breaks"},
+  Breaks = {left = 1, why = "roc check: missing method"},
+}
+
+function self_test()
+  if is_dir(SCRATCH) then remove_tree(SCRATCH) end
+  mkdir(SCRATCH)
+  for name in ls(PLANTS) do replace(SCRATCH .. "/" .. name, read(PLANTS .. "/" .. name)) end
+  local tally = {bad = 0}
+  for name in keys(EXPECT) do
+    local want = EXPECT[name]
+    local p = SCRATCH .. "/" .. name .. ".roc"
+    local got = run_all({p}, has_key(want, "root") and (SCRATCH .. "/" .. want.root .. ".roc") or "", 1)
+    local mine = {}
+    for l in got.lines do push(mine, l) end
+    judged(tally, #mine == want.left, name .. ": " .. #mine .. " left, want " .. want.left .. (#mine > 0 and (" (" .. join(mine, "; ") .. ")") or ""))
+    if has_key(want, "why") then judged(tally, #mine > 0 and contains(join(mine, "\n"), want.why), name .. ": left because " .. want.why) end
+    local wantp = PLANTS .. "/" .. name .. ".want"
+    if exists(wantp) then judged(tally, read(p) == read(wantp), name .. ": comes out as " .. name .. ".want") end
+    if want.left > 0 and not exists(wantp) then judged(tally, read(p) == read(PLANTS .. "/" .. name .. ".roc"), name .. ": put back as it was") end
+  end
+  for name in ls(PLANTS) do
+    if ends_with(name, ".roc") and not has_key(EXPECT, strip_suffix(name, ".roc")) then judged(tally, false, name .. ": a plant the table does not judge") end
+  end
+  if tally.bad > 0 then fail("methods: self-test: " .. tally.bad .. " failed") end
+  print("methods: self-test: every plant as it says")
+end
+
+if SELF then
+  self_test()
+else
+  local paths = glob(GLOB)
+  local got = run_all(paths, ROOT, FROM)
+  for l in got.lines do print(l) end
+  local said = (APPLY and "" or "dry run: ") .. "candidates " .. got.candidates .. ", rewritten " .. got.rewritten .. ", left " .. got.left
+  if got.next > 0 then
+    print(said .. ", in files " .. FROM .. " to " .. (got.next - 1) .. " of " .. #paths .. ": a run holds 64 programs; go on with from=" .. got.next)
+  else
+    print(said)
+  end
+end

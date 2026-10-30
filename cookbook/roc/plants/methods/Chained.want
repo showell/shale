@@ -1,0 +1,7 @@
+## A chained call, turned from the inside out.
+Chained := [].{
+	big : List(U64) -> U64
+	big = |xs| xs.keep_if(|x| x > 1).len()
+}
+
+expect Chained.big([1, 2, 3]) == 2
