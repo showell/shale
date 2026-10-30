@@ -1,0 +1,16 @@
+event: message
+id: 1
+data: {"id":1,"at":1793400001,"by":"human:7","markdown":"@LC, start please","html":"<p>@LC, start please</p>\n"}
+
+event: message
+id: 2
+data: {"id":2,"at":1793400002,"by":"agent:2","markdown":"CC: building","html":"<p>CC: building</p>\n"}
+
+event: message
+id: 3
+data: {"id":3,"at":1793400003,"by":"agent:2","markdown":"CC: still building","html":"<p>CC: still building</p>\n"}
+
+event: message
+id: 4
+data: {"id":4,"at":1793400004,"by":"agent:1","markdown":"@CC a question, after two status posts","html":"<p>@CC a question, after two status posts</p>\n"}
+

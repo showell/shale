@@ -11,10 +11,15 @@
 --   1. it is not the agent's own (`by` is not `me`);
 --   2. its markdown names the agent as a word: `@<name>` anywhere, or
 --      `<name>` leading the post (`CC, ...`); `@CCX` and `a@CC.com` do not;
---   3. a post by an agent counts only while fewer than two agent posts
---      came since a human's: at most two agent hops before a human
---      speaks, counted from the conversation's own posts, so a listener
---      started again counts the same.
+--   3. a post by an agent counts only while fewer than two hops came
+--      since a human's post: a hop is an agent's post that names another
+--      agent of the conversation (an agent answering an agent); an
+--      agent's post that names no other agent (a status, an answer to a
+--      human) is none, and a human's post starts the count again. At
+--      most two hops before a human speaks, counted from the
+--      conversation's own posts, so a listener started again counts the
+--      same. The agents and their names are the conversation's own
+--      (`GET /conversations`), read once at the start.
 -- `after=` is the last id already handled: nothing at or before it is
 -- printed, though the posts before it are still counted for rule 3.
 --
@@ -48,8 +53,9 @@ const AFTER = tonumber(arg("after", "0"))
 const ONCE = arg("once", "") == "1"
 const LOG = arg("log", "")
 const WINDOW_S = tonumber(arg("window", "20"))
--- Of a run's 64 programs, the windows take all but one, left spare.
-const WINDOWS_MOST = 63
+-- Of a run's 64 programs, one reads the conversation's agents, and the
+-- windows take all but one of the rest, left spare.
+const WINDOWS_MOST = 62
 const LINE_MOST = 200
 const WORD = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
 
@@ -77,12 +83,22 @@ function is_human(principal)
   return starts_with(principal, "human:")
 end
 
--- Rules 1 to 3; `agents_in_a_row` is how many agent posts came since the
--- last human's, before this one.
-function for_me(msg, me, name, agents_in_a_row)
+-- Whether a post is a hop: an agent's, naming another of `agents` (each
+-- `{id, name}`, the conversation's agents).
+function is_hop(msg, agents)
+  if is_human(msg.by) then return false end
+  for a in agents do
+    if a.id ~= msg.by and mentions(msg.markdown, a.name) then return true end
+  end
+  return false
+end
+
+-- Rules 1 to 3; `hops` is how many hops came since the last human post,
+-- before this one.
+function for_me(msg, me, name, hops)
   if msg.by == me then return false end
   if not mentions(msg.markdown, name) then return false end
-  if not is_human(msg.by) and agents_in_a_row >= 2 then return false end
+  if not is_human(msg.by) and hops >= 2 then return false end
   return true
 end
 
@@ -100,8 +116,8 @@ end
 
 -- ── the frames, pure ─────────────────────────────────────────────────────
 
-function new_state(me, name, after)
-  return {me = me, name = name, after = after, last = 0, seen = {}, agents_in_a_row = 0}
+function new_state(me, name, after, agents)
+  return {me = me, name = name, after = after, agents = agents, last = 0, seen = {}, hops = 0}
 end
 
 -- The whole frames of a stretch of the stream, each `{event, id, data}`:
@@ -145,8 +161,12 @@ function consume(state, text)
       local key = tostring(msg.id)
       if not has_key(state.seen, key) then
         state.seen[key] = true
-        local mine = for_me(msg, state.me, state.name, state.agents_in_a_row)
-        if is_human(msg.by) then state.agents_in_a_row = 0 else state.agents_in_a_row = state.agents_in_a_row + 1 end
+        local mine = for_me(msg, state.me, state.name, state.hops)
+        if is_human(msg.by) then
+          state.hops = 0
+        elseif is_hop(msg, state.agents) then
+          state.hops = state.hops + 1
+        end
         if msg.id > state.last then state.last = msg.id end
         if mine and msg.id > state.after then push(out, "#" .. msg.id .. " by " .. msg.by .. ": " .. first_line(msg.markdown)) end
       end
@@ -166,7 +186,7 @@ end
 
 -- The windows in order, each a plant file, through one state.
 function replay(files, after)
-  local state = new_state("agent:2", "CC", after)
+  local state = new_state("agent:2", "CC", after, {{id = "agent:1", name = "LC"}, {id = "agent:2", name = "CC"}})
   local all = {}
   for f in files do
     local r = consume(state, read(PLANTS .. "/" .. f))
@@ -192,10 +212,12 @@ function self_test()
   expect(tally, join(resumed.lines, " | ") == "#8 by agent:1: @CC and a second hop", "after=5 gives #8 alone: " .. join(resumed.lines, " | "))
   local gap = replay({"gap.sse"}, 0)
   expect(tally, gap.err ~= "" and contains(gap.err, "posts before 40") and #gap.lines == 0, "a gap is an error, named")
+  local status = replay({"status.sse"}, 0)
+  expect(tally, join(status.lines, " | ") == "#4 by agent:1: @CC a question, after two status posts", "an agent's status posts are no hops, so the question after them is heard: " .. join(status.lines, " | "))
   local quiet = replay({"pings.sse"}, 0)
   expect(tally, #quiet.lines == 0 and quiet.state.last == 0, "pings alone are nothing")
   if tally.bad > 0 then fail("listen: self-test: " .. tally.bad .. " failed") end
-  print("listen self_test: PASS (mentions as words, own posts, a third agent hop and pings give none, after= and a repeated window print nothing twice, a gap is named)")
+  print("listen self_test: PASS (mentions as words, own posts, a third hop and pings give none, status posts are no hops, after= and a repeated window print nothing twice, a gap is named)")
 end
 
 -- ── the live path ────────────────────────────────────────────────────────
@@ -206,12 +228,32 @@ function heard(l)
   return nil
 end
 
+-- The conversation's agents, `{id, name}`, from the key's own list.
+function conversation_agents()
+  local r = run({"curl", "-s", "-w", "\n%{http_code}", "--variable", "%LISTEN_KEY",
+    "--expand-header", "Authorization: Bearer {{LISTEN_KEY:trim}}", SITE .. "/conversations"},
+    {timeout_ms = 30000, whole = 4194304, secrets = {LISTEN_KEY = KEY}})
+  local cut = #r.out
+  while cut > 0 and sub(r.out, cut, cut) ~= "\n" do cut = cut - 1 end
+  if sub(r.out, cut + 1) ~= "200" then fail("listen: /conversations answered " .. sub(r.out, cut + 1) .. " (curl exited " .. r.code .. "): the key refused") end
+  for c in json_read(sub(r.out, 1, cut - 1)).conversations do
+    if tostring(c.id) == CONV then
+      local agents = {}
+      for p in c.with do
+        if not is_human(p.id) then push(agents, {id = p.id, name = p.name}) end
+      end
+      return agents
+    end
+  end
+  fail("listen: conversation " .. CONV .. " is not among the key's own")
+end
+
 function listen()
   if SITE == "" or CONV == "" or ME == "" or NAME == "" or KEY == "" then
     fail("listen: site=, conv=, me=, name= and key=keys:<file> are each needed")
   end
   if not ONCE and LOG == "" then fail("listen: without once=1, log= is needed: a run's output shows only when it ends, and the lines are appended there as they are heard") end
-  local state = new_state(ME, NAME, AFTER)
+  local state = new_state(ME, NAME, AFTER, conversation_agents())
   for w = 1, WINDOWS_MOST do
     local argv = {"curl", "-sN", "--max-time", tostring(WINDOW_S), "-w", "\n%{http_code}",
       "--variable", "%LISTEN_KEY", "--expand-header", "Authorization: Bearer {{LISTEN_KEY:trim}}"}
