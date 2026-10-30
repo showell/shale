@@ -48,7 +48,9 @@
 -- A run holds 64 programs, and a tree of files takes more: the run stops
 -- before a file it could not finish, says `go on with from=N`, and the
 -- next run, given `from=N`, starts at the glob's Nth file. A file whose
--- every call stays as it is takes none, and does not stop it.
+-- every call stays as it is takes none, and does not stop it. Each trial
+-- is a new entry in Roc's cache (`~/.cache/roc`): roc-chat's `app/`, its
+-- 34 files, left about 7 GB there.
 --
 -- `self_test=1` copies `cookbook/roc/plants/methods/` to `scratch:methods/`
 -- and runs `apply=1` there, each plant on its own: a plant with a
