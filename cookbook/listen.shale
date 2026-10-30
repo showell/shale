@@ -1,0 +1,240 @@
+-- **A roc-chat CONVERSATION, LISTENED TO FOR ONE AGENT**: its stream
+-- (`GET /conversations/<conv>/stream`), and one line a post that is for
+-- the agent, `#<id> by <principal>: <its first line>`. The key stays in a
+-- secrets mount: `run`'s `secrets` gives it to curl alone, which reads it
+-- from its environment (`--variable`), so no script sees it.
+--
+--   shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 name=CC key=keys:roc_chat_cc_key once=1
+--   shale cookbook:listen.shale site=... conv=3 me=agent:2 name=CC key=keys:... log=listen.log after=12
+--
+-- **A POST IS FOR THE AGENT** when all three hold (`for_me`, pure):
+--   1. it is not the agent's own (`by` is not `me`);
+--   2. its markdown names the agent as a word: `@<name>` anywhere, or
+--      `<name>` leading the post (`CC, ...`); `@CCX` and `a@CC.com` do not;
+--   3. a post by an agent counts only while fewer than two agent posts
+--      came since a human's: at most two agent hops before a human
+--      speaks, counted from the conversation's own posts, so a listener
+--      started again counts the same.
+-- `after=` is the last id already handled: nothing at or before it is
+-- printed, though the posts before it are still counted for rule 3.
+--
+-- **HOW IT LISTENS**: a run's output reaches the terminal only when it
+-- ends, and a run starts at most 64 programs, so the stream is held in
+-- windows: one curl a window (`window=` seconds, 20 by default, under
+-- curl's `--max-time`), the first with no `Last-Event-ID` (the newest page,
+-- the history rule 3 counts), each after it resuming at the last whole
+-- frame. A post is heard at most a window late.
+--   - `once=1` prints the first post for the agent and exits 0: a detached
+--     command that ends is what wakes a session on the box.
+--   - Otherwise each line is appended to `log=` as it is heard (required),
+--     for `tail -F` under a watcher, until the run's programs are spent; the
+--     stop names the `after=` to go on from.
+-- **A DEAD LISTENER IS NEVER QUIET**: the key refused (any status but
+-- 200), the stream ended by the server, curl failing, a `gap` (more missed
+-- than the backlog holds), or the windows spent each stop the run, named.
+--
+-- `self_test=1` feeds the recorded frames in `cookbook/plants/listen/`
+-- through the same `consume` the live path uses: no roc-chat, no network.
+--
+-- budget: steps=200000000 arena_bytes=400000000
+
+const SELF = arg("self_test", "") == "1"
+const SITE = arg("site", "")
+const CONV = arg("conv", "")
+const ME = arg("me", "")
+const NAME = arg("name", "")
+const KEY = arg("key", "")
+const AFTER = tonumber(arg("after", "0"))
+const ONCE = arg("once", "") == "1"
+const LOG = arg("log", "")
+const WINDOW_S = tonumber(arg("window", "20"))
+-- Of a run's 64 programs, the windows take all but one, left spare.
+const WINDOWS_MOST = 63
+const LINE_MOST = 200
+const WORD = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+
+-- ── the decision, pure ───────────────────────────────────────────────────
+
+function is_word(c)
+  return c ~= "" and contains(WORD, c)
+end
+
+-- Whether the markdown names `name` as a word: `@name` with no word byte
+-- on either side, or `name` leading the post.
+function mentions(md, name)
+  local lead = trim_start(md)
+  if starts_with(lead, name) and not is_word(sub(lead, #name + 1, #name + 1)) then return true end
+  local t = "@" .. name
+  local at = find(md, t)
+  while at ~= nil do
+    if not is_word(sub(md, at - 1, at - 1)) and not is_word(sub(md, at + #t, at + #t)) then return true end
+    at = find(md, t, at + 1)
+  end
+  return false
+end
+
+function is_human(principal)
+  return starts_with(principal, "human:")
+end
+
+-- Rules 1 to 3; `agents_in_a_row` is how many agent posts came since the
+-- last human's, before this one.
+function for_me(msg, me, name, agents_in_a_row)
+  if msg.by == me then return false end
+  if not mentions(msg.markdown, name) then return false end
+  if not is_human(msg.by) and agents_in_a_row >= 2 then return false end
+  return true
+end
+
+-- The post's first line with text, trimmed and cut.
+function first_line(md)
+  for l in lines(md) do
+    local t = trim(l)
+    if t ~= "" then
+      if #t > LINE_MOST then return sub(t, 1, LINE_MOST) .. "..." end
+      return t
+    end
+  end
+  return ""
+end
+
+-- ── the frames, pure ─────────────────────────────────────────────────────
+
+function new_state(me, name, after)
+  return {me = me, name = name, after = after, last = 0, seen = {}, agents_in_a_row = 0}
+end
+
+-- The whole frames of a stretch of the stream, each `{event, id, data}`:
+-- a frame ends at a blank line, so the last piece, cut by the window or
+-- empty, is left for the next window to bring again; `: ping` and other
+-- comment lines are none.
+function frames(text)
+  local got = {}
+  local pieces = split(text, "\n\n")
+  for k = 1, #pieces - 1 do
+    local f = {event = "message", id = "", data = {}}
+    local any = false
+    for l in lines(pieces[k]) do
+      if starts_with(l, "event: ") then
+        f.event = sub(l, 8)
+        any = true
+      elseif starts_with(l, "id: ") then
+        f.id = sub(l, 5)
+        any = true
+      elseif starts_with(l, "data: ") then
+        push(f.data, sub(l, 7))
+        any = true
+      end
+    end
+    if any then push(got, {event = f.event, id = f.id, data = join(f.data, "\n")}) end
+  end
+  return got
+end
+
+-- A stretch of the stream into `state`: `{lines, err}`, each line a post
+-- for the agent past `after`, `err` a gap's account. A post seen before
+-- (a window that brings one again) is neither counted nor printed twice.
+function consume(state, text)
+  local out = {}
+  for f in frames(text) do
+    if f.event == "gap" then
+      return {lines = out, err = "a gap: posts before " .. get(json_read(f.data), "before", "?") .. " are past the backlog; read them with GET /conversations/<id>?before= and start again with after="}
+    end
+    if f.event == "message" then
+      local msg = json_read(f.data)
+      local key = tostring(msg.id)
+      if not has_key(state.seen, key) then
+        state.seen[key] = true
+        local mine = for_me(msg, state.me, state.name, state.agents_in_a_row)
+        if is_human(msg.by) then state.agents_in_a_row = 0 else state.agents_in_a_row = state.agents_in_a_row + 1 end
+        if msg.id > state.last then state.last = msg.id end
+        if mine and msg.id > state.after then push(out, "#" .. msg.id .. " by " .. msg.by .. ": " .. first_line(msg.markdown)) end
+      end
+    end
+  end
+  return {lines = out, err = ""}
+end
+
+-- ── the self-test ────────────────────────────────────────────────────────
+
+const PLANTS = "cookbook:plants/listen"
+
+function expect(tally, cond, what)
+  if cond then print("ok   " .. what) else print("FAIL " .. what); tally.bad = tally.bad + 1 end
+  return nil
+end
+
+-- The windows in order, each a plant file, through one state.
+function replay(files, after)
+  local state = new_state("agent:2", "CC", after)
+  local all = {}
+  for f in files do
+    local r = consume(state, read(PLANTS .. "/" .. f))
+    for l in r.lines do push(all, l) end
+    if r.err ~= "" then return {lines = all, err = r.err, state = state} end
+  end
+  return {lines = all, err = "", state = state}
+end
+
+function self_test()
+  local tally = {bad = 0}
+  local cases = {
+    {"@CC hi", true}, {"  CC, a question", true}, {"CC", true}, {"ask @CC.", true},
+    {"see @CCX", false}, {"mail a@CC.com", false}, {"CCX said", false}, {"no one", false}, {"(@CC)", true},
+  }
+  for c in cases do expect(tally, mentions(c[1], "CC") == c[2], "mentions " .. json_write(c[1]) .. ": " .. tostring(c[2])) end
+  local two = replay({"backlog.sse", "live.sse"}, 0)
+  expect(tally, two.err == "" and two.state.last == 9, "after two windows the last whole frame is #9, the cut #10 left for the next")
+  local three = replay({"backlog.sse", "live.sse", "again.sse"}, 0)
+  expect(tally, join(three.lines, " | ") == "#1 by human:7: @CC hi | #2 by agent:1: @CC can you look? | #5 by human:7: CC, one more thing | #8 by agent:1: @CC and a second hop", "the three windows give #1, #2, #5 and #8: " .. join(three.lines, " | "))
+  expect(tally, three.err == "" and three.state.last == 10, "the third window brings #5 and #9 again and #10 whole; #10, a third agent hop, gives none")
+  local resumed = replay({"backlog.sse", "live.sse", "again.sse"}, 5)
+  expect(tally, join(resumed.lines, " | ") == "#8 by agent:1: @CC and a second hop", "after=5 gives #8 alone: " .. join(resumed.lines, " | "))
+  local gap = replay({"gap.sse"}, 0)
+  expect(tally, gap.err ~= "" and contains(gap.err, "posts before 40") and #gap.lines == 0, "a gap is an error, named")
+  local quiet = replay({"pings.sse"}, 0)
+  expect(tally, #quiet.lines == 0 and quiet.state.last == 0, "pings alone are nothing")
+  if tally.bad > 0 then fail("listen: self-test: " .. tally.bad .. " failed") end
+  print("listen self_test: PASS (mentions as words, own posts, a third agent hop and pings give none, after= and a repeated window print nothing twice, a gap is named)")
+end
+
+-- ── the live path ────────────────────────────────────────────────────────
+
+function heard(l)
+  print(l)
+  if LOG ~= "" then append(LOG, l .. "\n") end
+  return nil
+end
+
+function listen()
+  if SITE == "" or CONV == "" or ME == "" or NAME == "" or KEY == "" then
+    fail("listen: site=, conv=, me=, name= and key=keys:<file> are each needed")
+  end
+  if not ONCE and LOG == "" then fail("listen: without once=1, log= is needed: a run's output shows only when it ends, and the lines are appended there as they are heard") end
+  local state = new_state(ME, NAME, AFTER)
+  for w = 1, WINDOWS_MOST do
+    local argv = {"curl", "-sN", "--max-time", tostring(WINDOW_S), "-w", "\n%{http_code}",
+      "--variable", "%LISTEN_KEY", "--expand-header", "Authorization: Bearer {{LISTEN_KEY:trim}}"}
+    if state.last > 0 then
+      push(argv, "-H")
+      push(argv, "Last-Event-ID: " .. state.last)
+    end
+    push(argv, SITE .. "/conversations/" .. CONV .. "/stream")
+    local r = run(argv, {timeout_ms = (WINDOW_S + 30) * 1000, whole = 16777216, secrets = {LISTEN_KEY = KEY}})
+    local cut = #r.out
+    while cut > 0 and sub(r.out, cut, cut) ~= "\n" do cut = cut - 1 end
+    local status = sub(r.out, cut + 1)
+    if status ~= "200" then fail("listen: the stream answered " .. status .. " (curl exited " .. r.code .. "): the key refused, or the conversation not the agent's") end
+    local got = consume(state, sub(r.out, 1, cut - 1))
+    for l in got.lines do
+      heard(l)
+      if ONCE then return nil end
+    end
+    if got.err ~= "" then fail("listen: " .. got.err .. state.last) end
+    if r.code == 0 then fail("listen: the server ended the stream; go on with after=" .. state.last) end
+    if r.code ~= 28 then fail("listen: curl exited " .. r.code .. "; go on with after=" .. state.last) end
+  end
+  fail("listen: " .. WINDOWS_MOST .. " windows, a run's programs spent; go on with after=" .. state.last)
+end
+
+if SELF then self_test() else listen() end
