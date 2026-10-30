@@ -36,20 +36,21 @@ const FLOOR = "coverage/lines.txt"
 const MARK = "// coverage: not run,"
 -- A prelude's lines are Shale's, so its mark is a Shale comment.
 const SHALE_MARK = "-- coverage: not run,"
-const HITS = ".zig-cache/coverage/prelude_hits"
 const FIRST = arg("first", 3)
 const ZIG = arg("zig", "zig")
 
 -- `from=<log>` reads a build's output kept before, not building again.
 local FROM = arg("from", "")
 local r = {code = 0, out = ""}
+local hits = ""
 if FROM ~= "" then
   r.out = read(FROM)
 else
-  -- The preludes' hits are written by the unit runs: a run's own, not an
-  -- older one's.
-  if exists(HITS) then remove_tree(HITS) end
-  r = run({ZIG, "build", "script-coverage"}, {timeout_ms = 20 * 60000, whole = 16777216})
+  -- The preludes' hits are written by the unit runs into a folder of this
+  -- run's own (`SHALE_PRELUDE_HITS`), so a run beside it, or an older one,
+  -- never adds to them; removed once read.
+  hits = fresh_dir(".zig-cache/coverage", "prelude_hits")
+  r = run({ZIG, "build", "script-coverage"}, {timeout_ms = 20 * 60000, whole = 16777216, env = {SHALE_PRELUDE_HITS = real(hits)}})
   replace(".zig-cache/coverage/build.log", r.out)
 end
 if r.code ~= 0 then
@@ -156,19 +157,29 @@ end
 -- **THE PRELUDES** (metal-vmm QUEUE 241 F), from the engine: the unit tests
 -- write each prelude's lines with code, compiled whole
 -- (`.zig-cache/coverage/prelude_code.txt`), and each line a test's run took
--- (`prelude_hits/`, a file a process). A function's own `function` line is
--- not counted, as a Zig `}` is not: its code is the return a function that
+-- (a file a process, in this run's own folder, merged into
+-- `.zig-cache/coverage/prelude_hits.txt` for `from=`). A function's own
+-- `function` line is not counted, as a Zig `}` is not: its code is the return a function that
 -- ends in `return` never reaches.
 local code = {}
 local hit = {}
 for l in lines(read(".zig-cache/coverage/prelude_code.txt")) do
   if l ~= "" then code[l] = true end
 end
-if exists(HITS) then
-  for e in ls(HITS) do
-    for l in lines(read(HITS .. "/" .. e)) do
+const HITS_KEPT = ".zig-cache/coverage/prelude_hits.txt"
+if hits ~= "" then
+  for e in ls(hits) do
+    for l in lines(read(hits .. "/" .. e)) do
       if l ~= "" then hit[l] = true end
     end
+  end
+  remove_tree(hits)
+  local kept = keys(hit)
+  sort(kept)
+  replace(HITS_KEPT, join(kept, "\n") .. "\n")
+elseif exists(HITS_KEPT) then
+  for l in lines(read(HITS_KEPT)) do
+    if l ~= "" then hit[l] = true end
   end
 end
 for path in {"src/shale_prelude_linux.shale", "src/shale_prelude_git.shale"} do

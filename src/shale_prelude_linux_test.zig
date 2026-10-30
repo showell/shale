@@ -257,6 +257,34 @@ test "linux prelude: path_under spells a name below a folder as every call takes
     try t.expectOutput("print(path_under(\"\", \"a\"), path_under(\".\", \"a\"), path_under(\"m:\", \"a\"), path_under(\"m:.\", \"a\"), path_under(\"m:d\", \"a\"), path_under(\"d/e\", \"a/b\"))", "a\ta\tm:a\tm:a\tm:d/a\td/e/a/b\n");
 }
 
+/// Once, not through the gate: a folder's random name differs run to run.
+fn expectOnce(t: *T, src: []const u8, want: []const u8) !void {
+    var r = t.runOnce(src, .atomic);
+    defer r.deinit();
+    if (r.stop) |s| {
+        std.debug.print("{s}\n  stopped {d}:{d} {s}: {s}\n", .{ src, s.line, s.column, @tagName(s.class), s.message });
+        return error.TestUnexpectedResult;
+    }
+    try testing.expectEqualStrings(want, r.output);
+}
+
+test "linux prelude: fresh_dir gives each call a folder of its own, made below a parent made when missing, spelled as path_under spells it" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try expectOnce(&t, "local a = fresh_dir(\"work\", \"run\") local b = fresh_dir(\"work\", \"run\") print(a ~= b, starts_with(a, \"work/run.\"), exists(a), exists(b)) remove_tree(a) remove_tree(b) print(exists(a), #ls(\"work\"))", "true\ttrue\ttrue\ttrue\nfalse\t0\n");
+    try expectOnce(&t, "local a = fresh_dir(\".\", \"top\") print(starts_with(a, \"top.\"), exists(a)) remove_tree(a)", "true\ttrue\n");
+    // In a mount's root, `m:name`.
+    const a = t.arena.allocator();
+    var why: []const u8 = "";
+    try t.tmp.dir.createDirPath(t.threaded.io(), "sc");
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "sc = {s}/sc\n", .{t.root}), "/home/someone", &why);
+    try expectOnce(&t, "local d = fresh_dir(\"sc:\", \"m\") print(starts_with(d, \"sc:m.\"), exists(d)) remove_tree(d)", "true\ttrue\n");
+    try t.expectStop("fresh_dir(\"sc:\", \"a/b\")", .atomic, .fail, "`fresh_dir` prefix a/b");
+    try t.expectStop("fresh_dir(\"sc:\", \"\")", .atomic, .fail, "`fresh_dir` prefix");
+    try t.expectStop("fresh_dir(\"sc:\", \"-x\")", .atomic, .fail, "`fresh_dir` prefix -x");
+}
+
 test "linux prelude: create refuses a file already there" {
     var t: T = undefined;
     try init(&t);

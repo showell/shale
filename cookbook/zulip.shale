@@ -9,8 +9,8 @@
 -- (A value with a space works on the launch line only through
 -- `--args-stdin`, one `NAME=VALUE` a line.) `site` is the realm's host,
 -- `email` the account the key belongs to, `key` a secrets-mount path to a
--- file holding only the key. The body lands in `scratch:zulip_topic.json`
--- first; a status other than 200, or a `result` other than `success`,
+-- file holding only the key. The body lands in a folder of this run's own
+-- under `scratch:` first, removed after; a status other than 200, or a `result` other than `success`,
 -- fails the launch with Zulip's own message.
 --
 -- budget: steps=50000000 arena_bytes=500000000
@@ -21,7 +21,6 @@ const KEY = arg("key", "")
 const STREAM = arg("stream", "")
 const TOPIC = arg("topic", "")
 const NUM = arg("num", 100)
-const BODY = "scratch:zulip_topic.json"
 
 if SITE == "" or EMAIL == "" or KEY == "" or STREAM == "" or TOPIC == "" then
   fail("zulip: site=, email=, key=keys:<file>, stream= and topic= are each needed")
@@ -32,6 +31,8 @@ function quoted(s)
   return "\"" .. substitute(substitute(s, "\\", "\\\\"), "\"", "\\\"") .. "\""
 end
 
+local scratch = fresh_dir("scratch:", "zulip")
+local BODY = scratch .. "/topic.json"
 local narrow = "[{\"operator\":\"channel\",\"operand\":" .. quoted(STREAM) .. "},{\"operator\":\"topic\",\"operand\":" .. quoted(TOPIC) .. "}]"
 local r = run({"curl", "-sS", "-G", "https://" .. SITE .. "/api/v1/messages",
   "--variable", "%ZULIP_KEY",
@@ -43,9 +44,10 @@ local r = run({"curl", "-sS", "-G", "https://" .. SITE .. "/api/v1/messages",
   "--data-urlencode", "apply_markdown=false",
   "-o", real(BODY), "-w", "%{http_code}"},
   {timeout_ms = 60000, whole = 2000, secrets = {ZULIP_KEY = KEY}})
-if r.code ~= 0 then fail("zulip: curl exited " .. r.code .. ": " .. r.out) end
+if r.code ~= 0 then remove_tree(scratch) fail("zulip: curl exited " .. r.code .. ": " .. r.out) end
 
 local j = json_read(read(BODY))
+remove_tree(scratch)
 if r.out ~= "200" or j.result ~= "success" then
   fail("zulip: " .. SITE .. " answered " .. r.out .. ": " .. get(j, "msg", "(no message)"))
 end

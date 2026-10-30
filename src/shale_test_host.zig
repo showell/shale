@@ -31,14 +31,17 @@ fn preludeHit(_: *anyopaque, function: []const u8, line: u32) void {
 
 const line_hook: script.interp.LineHook = .{ .ctx = @ptrCast(&prelude_hits), .hit = preludeHit };
 
-/// This process's hits, `<path> <line>` a line, to `.zig-cache/coverage/prelude_hits/<pid>.txt`.
+/// This process's hits, `<path> <line>` a line, to `<dir>/<pid>.txt`: `dir` the
+/// `SHALE_PRELUDE_HITS` folder tools/coverage.shale made for its run alone, else
+/// `.zig-cache/coverage/prelude_hits`.
 fn writeHits(io: std.Io) void {
     var text: std.ArrayList(u8) = .empty;
     defer text.deinit(std.heap.page_allocator);
     for (prelude_hits.keys()) |k| text.print(std.heap.page_allocator, "{s} {d}\n", .{ prelude_files[@intCast(k >> 32)].path, @as(u32, @truncate(k)) }) catch return;
-    var name: [96]u8 = undefined;
-    const path = std.fmt.bufPrint(&name, ".zig-cache/coverage/prelude_hits/{d}.txt", .{std.os.linux.getpid()}) catch return;
-    std.Io.Dir.cwd().createDirPath(io, ".zig-cache/coverage/prelude_hits") catch return;
+    const dir: []const u8 = std.testing.environ.getPosix("SHALE_PRELUDE_HITS") orelse ".zig-cache/coverage/prelude_hits";
+    var name: [std.fs.max_path_bytes]u8 = undefined;
+    const path = std.fmt.bufPrint(&name, "{s}/{d}.txt", .{ dir, std.os.linux.getpid() }) catch return;
+    std.Io.Dir.cwd().createDirPath(io, dir) catch return;
     std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = text.items }) catch return;
 }
 

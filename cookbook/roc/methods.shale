@@ -52,10 +52,11 @@
 -- is a new entry in Roc's cache (`~/.cache/roc`): roc-chat's `app/`, its
 -- 34 files, left about 7 GB there.
 --
--- `self_test=1` copies `cookbook/roc/plants/methods/` to `scratch:methods/`
--- and runs `apply=1` there, each plant on its own: a plant with a
--- `<Name>.want` must come out as that text, and each one's count of calls
--- left, and a reason, is as the table below says.
+-- `self_test=1` copies `cookbook/roc/plants/methods/` to a folder of the
+-- run's own under `scratch:` (removed when every plant holds) and runs
+-- `apply=1` there, each plant on its own: a plant with a `<Name>.want` must
+-- come out as that text, and each one's count of calls left, and a reason,
+-- is as the table below says.
 --
 -- **ROC IS THE TREE'S OWN PIN**: `tools:roc-<pin>/roc`, the pin read from
 -- the `roc-version` file where the run starts (the repository's root), and
@@ -69,8 +70,7 @@
 const SELF = arg("self_test", "") == "1"
 const APPLY = SELF or arg("apply", "") == "1"
 const PLANTS = "cookbook:roc/plants/methods"
-const SCRATCH = "scratch:methods"
-const GLOB = SELF and (SCRATCH .. "/*.roc") or arg("glob", "**/*.roc")
+const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
 const ROC_AST = "tools:roc-ast/bin/roc-ast"
 const SELF_TEST_PIN = "nightly-2026-10-29-a0a9fc2"
@@ -458,14 +458,13 @@ const EXPECT = {
 }
 
 function self_test()
-  if is_dir(SCRATCH) then remove_tree(SCRATCH) end
-  mkdir(SCRATCH)
-  for name in ls(PLANTS) do replace(SCRATCH .. "/" .. name, read(PLANTS .. "/" .. name)) end
+  local scratch = fresh_dir("scratch:", "methods")
+  for name in ls(PLANTS) do replace(scratch .. "/" .. name, read(PLANTS .. "/" .. name)) end
   local tally = {bad = 0}
   for name in keys(EXPECT) do
     local want = EXPECT[name]
-    local p = SCRATCH .. "/" .. name .. ".roc"
-    local got = run_all({p}, has_key(want, "root") and (SCRATCH .. "/" .. want.root .. ".roc") or "", 1)
+    local p = scratch .. "/" .. name .. ".roc"
+    local got = run_all({p}, has_key(want, "root") and (scratch .. "/" .. want.root .. ".roc") or "", 1)
     local mine = {}
     for l in got.lines do push(mine, l) end
     judged(tally, #mine == want.left, name .. ": " .. #mine .. " left, want " .. want.left .. (#mine > 0 and (" (" .. join(mine, "; ") .. ")") or ""))
@@ -478,6 +477,7 @@ function self_test()
     if ends_with(name, ".roc") and not has_key(EXPECT, strip_suffix(name, ".roc")) then judged(tally, false, name .. ": a plant the table does not judge") end
   end
   if tally.bad > 0 then fail("methods: self-test: " .. tally.bad .. " failed") end
+  remove_tree(scratch)
   print("methods: self-test: every plant as it says")
 end
 

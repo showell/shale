@@ -149,6 +149,9 @@ has none of it):
   gives the names that changed last (the root as `""` or `"."`).
   `path_under(dir, name)` spells a name below a folder as every call takes
   it: `name` in the root, `m:name` in a mount's folder, else `dir/name`.
+  `fresh_dir(parent, prefix)` makes a folder of the run's own below
+  `parent` (`mktemp -d`, `<prefix>.XXXXXX`), so two runs at once never
+  share a scratch folder; the caller removes it.
 - **Jobs**, programs that outlive the call:
   - `job_start(argv, {log, cwd, env, want})` starts one under a detached
     reaper (`want` as `run`'s, for a program `run` would refuse).

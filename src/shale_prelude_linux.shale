@@ -318,6 +318,20 @@ function path_under(dir, name)
   return dir .. "/" .. name
 end
 
+-- **A FOLDER OF THIS RUN'S OWN** below `parent` (made when missing), its
+-- name `<prefix>.` and six random characters (`mktemp -d`), spelled as
+-- `path_under` spells it. Two runs at once never share one, as they would
+-- a fixed name each removes and rebuilds; the caller removes it when done.
+function fresh_dir(parent, prefix)
+  if prefix == "" or contains(prefix, "/") or starts_with(prefix, "-") then fail("`fresh_dir` prefix " .. prefix .. ": a name, no `/`, not starting with `-`") end
+  if not exists(parent) then mkdir(parent) end
+  local r = must(run({"mktemp", "-d", "-p", real(parent), prefix .. ".XXXXXX"}, {timeout_ms = 30000, whole = 4096}))
+  local parts = split(trim(r.out), "/")
+  local dir = path_under(parent, parts[#parts])
+  if not starts_with(parts[#parts], prefix .. ".") or not exists(dir) then fail("`fresh_dir`: `mktemp` gave " .. r.out .. ", not a folder in " .. parent) end
+  return dir
+end
+
 -- The names of the `n` entries of a folder that changed last, newest
 -- first (`ls -t | head`); names that changed at once, by name. The root is
 -- `""` or `"."`.

@@ -103,9 +103,7 @@ if SELF_TEST then
   -- A bare origin with main; `merged` (merged), `ahead` (one commit more),
   -- and `box/default` made origin's default; the judge must keep and
   -- delete exactly as planted.
-  local T = "scratch:branch_prune_self_test"
-  if exists(T) then remove_tree(T) end
-  mkdir(T)
+  local T = fresh_dir("scratch:", "branch_prune_self_test")
   local root = real(T)
   run({"git", "init", "-q", "--bare", "-b", "main", root .. "/origin.git"}, {timeout_ms = 30000, whole = 10000})
   run({"git", "clone", "-q", root .. "/origin.git", root .. "/work"}, {timeout_ms = 30000, whole = 10000})
