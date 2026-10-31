@@ -368,7 +368,9 @@ The short recipes are here, each tested as written. **The longer ones are
 files** in `cookbook/`: `look.shale` (lines by number, and a literal's
 lines across folders, mounts or a git revision), `prose.shale` (a phrase
 in wrapped prose, found and edited) and `zig_build.shale` (a build's
-verdict without its noise) for any project; the Zig ones in
+verdict without its noise) for any project; `disk.shale` (a run stopped
+under a floor of free disk, `report=1` the growth spots' sizes, each verify's
+first check); the Zig ones in
 [`cookbook/zig/`](../cookbook/zig/README.md) find a file's seams, move
 declarations along them and judge the move; `roc/` and `zig17/` are those
 work's. Copy one and change it; not everything is a builtin.

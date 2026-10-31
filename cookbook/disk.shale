@@ -1,0 +1,150 @@
+-- **THE DISK'S FREE SPACE, A RUN STOPPED BEFORE IT FILLS**: `df` on the
+-- filesystem holding the working directory.
+--
+--   shale cookbook:disk.shale                 disk: 52 GB free
+--   shale cookbook:disk.shale floor=60        stops: disk: 52 GB free, under the floor of 60 GB; the biggest: ...
+--   shale cookbook:disk.shale report=1        the growth spots' sizes, biggest first
+--   shale cookbook:disk.shale self_test=1
+--
+-- **GUARD, THE DEFAULT**: under `floor=` GB free (20) it stops, exit
+-- nonzero, with one line naming the three biggest growth spots; otherwise
+-- it prints `disk: N GB free`. A verify runs it as its first check, so a
+-- full disk fails at the start and never mid-run. Fail, never warn: there
+-- is no warning band.
+--
+-- **REPORT** (`report=1`): the sizes of the spots that grow, each by
+-- `du -sk`, biggest first, those under 0.1 GB counted on one line; sizes
+-- only, never a file's name or contents below a spot:
+--   - each folder of `build:lanes/` (a lane's Roc and Zig caches);
+--   - `~/.cache/roc` and `~/.cache/zig` (`$HOME`'s, as `printenv` says);
+--   - each top folder of `scratch:`.
+-- A spot that is not there is passed by, and so is a mount this box's
+-- mounts file lacks: the recipe runs anywhere Shale does.
+--
+-- GB here is 2^30 bytes, `df`'s and `du`'s kibibytes over 1,048,576.
+--
+-- budget: steps=20000000
+
+const FLOOR = tonumber(arg("floor", "20"))
+const REPORT = arg("report", "0") == "1"
+const SELF_TEST = arg("self_test", "0") == "1"
+const KIB_PER_GB = 1048576
+
+-- Free kibibytes on the working directory's filesystem: `df -Pk .`'s
+-- second line, its fourth field (Available). `.`, never an absolute path,
+-- so a working directory that holds the `keys:` mount is not refused.
+function free_kib()
+  local r = must(run({"df", "-Pk", "."}, {cwd = ".", timeout_ms = 30000, whole = 4000}))
+  local rows = split(trim(r.out), "\n")
+  if #rows < 2 then fail("disk: `df -Pk .` gave no filesystem line: " .. trim(r.out)) end
+  local cols = words(rows[#rows])
+  if #cols < 4 then fail("disk: `df -Pk .` gave a short line: " .. rows[#rows]) end
+  return tonumber(cols[4])
+end
+
+-- The verdict, kept apart from the stop so the self-test asserts both
+-- sides: `{ok, line}`. A failing line ends `the biggest: `, for the caller
+-- to finish, so the spots' `du`s (seconds) run only on a failure.
+function guard(free_gb, floor)
+  if free_gb < floor then
+    return {ok = false, line = "disk: " .. free_gb .. " GB free, under the floor of " .. floor .. " GB; the biggest: "}
+  end
+  return {ok = true, line = "disk: " .. free_gb .. " GB free"}
+end
+
+function gb_text(kib)
+  local tenths = kib * 10 // KIB_PER_GB
+  return (tenths // 10) .. "." .. (tenths % 10) .. " GB"
+end
+
+-- Each path's kibibytes by one `du -sk` of them all (a run has 64
+-- programs; a box has more lanes): a map, a path that is not there left
+-- out. A file `du` could not read (exit 1) still leaves the total it could.
+function du_kib(paths)
+  local argv = {"du", "-sk"}
+  for p in paths do argv[#argv + 1] = p end
+  local r = run(argv, {timeout_ms = 600000, whole = 1000000})
+  local out = {}
+  for line in split(r.out, "\n") do
+    local m = re_find(line, "^(\\d+)\t(.*)$")
+    if m ~= nil then out[m.groups[2]] = tonumber(m.groups[1]) end
+  end
+  return out
+end
+
+function is_dir_at(p) return is_dir(p) end
+
+-- The folders below a mount's folder, as OS paths; none when the mount
+-- is not in this box's mounts file or the folder is not there.
+function folders_under(mounted)
+  local here = attempt(is_dir_at, mounted)
+  if not here.ok or not here.value then return {} end
+  local out = {}
+  for name in ls(mounted) do
+    local p = path_under(mounted, name)
+    if is_dir(p) then out[#out + 1] = real(p) end
+  end
+  return out
+end
+
+-- Every growth spot with its size, biggest first: `{path, label, kib}`.
+function spots()
+  local home = trim(must(run({"printenv", "HOME"}, {timeout_ms = 10000, whole = 4000})).out)
+  local paths = {}
+  for p in folders_under("build:lanes") do paths[#paths + 1] = p end
+  paths[#paths + 1] = home .. "/.cache/roc"
+  paths[#paths + 1] = home .. "/.cache/zig"
+  for p in folders_under("scratch:.") do paths[#paths + 1] = p end
+  local sizes = du_kib(paths)
+  local out = {}
+  for p in paths do
+    local kib = sizes[p]
+    if kib ~= nil then
+      local label = p
+      if home ~= "" and starts_with(p, home .. "/") then label = "~" .. sub(p, #home + 1) end
+      out[#out + 1] = {path = p, label = label, kib = kib}
+    end
+  end
+  return sort(out, {{key = "kib", desc = true}, "label"})
+end
+
+function biggest_three()
+  local parts = {}
+  for s in spots() do
+    if #parts < 3 then parts[#parts + 1] = s.label .. " " .. gb_text(s.kib) end
+  end
+  if #parts == 0 then return "no growth spot found" end
+  return join(parts, ", ")
+end
+
+if SELF_TEST then
+  -- The floors chosen from the real free space, so the box's own disk
+  -- never decides the outcome: one above it fails, it and one below pass.
+  local free = free_kib() // KIB_PER_GB
+  local under = guard(free, free + 1)
+  if under.ok then fail("disk self_test: " .. free .. " GB free passed a floor of " .. (free + 1)) end
+  local want = "disk: " .. free .. " GB free, under the floor of " .. (free + 1) .. " GB; the biggest: "
+  if under.line ~= want then fail("disk self_test: the failing line is `" .. under.line .. "`, want `" .. want .. "`") end
+  local at = guard(free, free)
+  if not at.ok or at.line ~= "disk: " .. free .. " GB free" then fail("disk self_test: a floor equal to the free space (" .. free .. ") did not pass: " .. at.line) end
+  if free > 0 then
+    local over = guard(free, free - 1)
+    if not over.ok then fail("disk self_test: " .. free .. " GB free failed a floor of " .. (free - 1)) end
+  end
+  if gb_text(0) ~= "0.0 GB" or gb_text(KIB_PER_GB * 3 // 2) ~= "1.5 GB" or gb_text(KIB_PER_GB - 1) ~= "0.9 GB" then
+    fail("disk self_test: gb_text is " .. gb_text(0) .. ", " .. gb_text(KIB_PER_GB * 3 // 2) .. ", " .. gb_text(KIB_PER_GB - 1))
+  end
+  print("disk self_test: PASS (" .. free .. " GB free: a floor of " .. (free + 1) .. " fails with the line, " .. free .. " and " .. (free - 1) .. " pass)")
+elseif REPORT then
+  print("disk: " .. (free_kib() // KIB_PER_GB) .. " GB free")
+  -- A spot under a tenth of a GB is counted, not listed.
+  local small = 0
+  for s in spots() do
+    if s.kib * 10 < KIB_PER_GB then small = small + 1 else print(gb_text(s.kib) .. "\t" .. s.label) end
+  end
+  if small > 0 then print("and " .. small .. " spots under 0.1 GB each") end
+else
+  local v = guard(free_kib() // KIB_PER_GB, FLOOR)
+  if not v.ok then fail(v.line .. biggest_three()) end
+  print(v.line)
+end
