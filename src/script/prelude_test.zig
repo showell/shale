@@ -183,6 +183,102 @@ test "prelude: drop gives all but the first n items, in order; a part of a list 
     try testing.expect(std.mem.indexOf(u8, bad.stop.?.message, "`drop`: a count of -1") != null);
 }
 
+/// A run of `src` stops with class `fail`, its message holding `says`.
+fn expectFail(f: *Fixture, src: []const u8, says: []const u8) !void {
+    var r = f.run(src, .{});
+    defer r.deinit();
+    errdefer std.debug.print("{s}: {s}\n", .{ src, if (r.stop) |s| s.message else "(no stop)" });
+    const s = r.stop orelse return error.TestUnexpectedResult;
+    try testing.expectEqual(script.diag.Class.fail, s.class);
+    try testing.expect(std.mem.indexOf(u8, s.message, says) != null);
+}
+
+test "prelude: opts_only passes the names it lists and nil, and stops on any other key, naming it and the call" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("opts_only({a = 1, b = 2}, {\"a\", \"b\", \"c\"}, \"f\") opts_only(nil, {\"a\"}, \"f\") opts_only({}, {}, \"f\") print(\"on\")", "on\n");
+    try expectFail(&f, "opts_only({a = 1, z = 2}, {\"a\", \"b\"}, \"f\")", "`f` takes `a`, `b`, not `z`");
+    try expectFail(&f, "opts_only({z = 2}, {}, \"f\")", "`f` takes no options, not `z`");
+}
+
+test "prelude: slice gives items from to to, both kept; none when from > to; an end past the list is cut; a start below 1 is a stop" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("print(join(slice({\"a\", \"b\", \"c\", \"d\"}, 2, 3), \",\"), join(slice({\"a\", \"b\"}, 1, 2), \",\"))", "b,c\ta,b\n");
+    try f.expectOutput("print(#slice({1, 2}, 3, 2), #slice({1, 2}, 2, 1), join(slice({1, 2, 3}, 2, 9), \",\"), #slice({}, 1, 5))", "0\t0\t2,3\t0\n");
+    try expectFail(&f, "print(slice({1}, 0, 1))", "`slice`: a start of 0");
+}
+
+test "prelude: push_at makes the list at a key on its first push and adds to it after" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("local m = {} push_at(m, \"x\", 1) push_at(m, \"x\", 2) push_at(m, \"y\", 3) print(join(m.x, \",\"), join(m.y, \",\"), count(m))", "1,2\t3\t2\n");
+    // A key already holding a list is added to, not replaced.
+    try f.expectOutput("local m = {x = {9}} push_at(m, \"x\", 1) print(join(m.x, \",\"))", "9,1\n");
+}
+
+test "prelude: incr counts a key up by 1 or by n, from 0 when it is not there, and gives the new count" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("local c = {} print(incr(c, \"a\"), incr(c, \"a\"), incr(c, \"b\", 5), incr(c, \"b\", -5), c.a, c.b)", "1\t2\t5\t0\t2\t0\n");
+}
+
+test "prelude: set_of maps each string item to true, once each; an empty list is an empty map; an item not a string is a stop" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("local s = set_of({\"a\", \"b\", \"a\"}) print(count(s), has_key(s, \"a\"), has_key(s, \"z\"), count(set_of({})))", "2\ttrue\tfalse\t0\n");
+    try expectFail(&f, "print(set_of({\"a\", 3}))", "`set_of`: an item 3 is not a string");
+}
+
+test "prelude: has_item asks whether a list holds an item, of any type; an empty list holds none" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("print(has_item({\"a\", \"b\"}, \"b\"), has_item({\"a\"}, \"c\"), has_item({}, \"a\"), has_item({1, 2}, 2), has_item({1}, \"1\"))", "true\tfalse\tfalse\ttrue\tfalse\n");
+}
+
+test "prelude: find_all gives every start of t in s, overlapping ones too; no match is {}; an empty t is a stop" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("print(join(find_all(\"aaa\", \"aa\"), \",\"), join(find_all(\"a.b.c\", \".\"), \",\"), join(find_all(\"ab\", \"b\"), \",\"))", "1,2\t2,4\t2\n");
+    try f.expectOutput("print(#find_all(\"abc\", \"z\"), #find_all(\"\", \"a\"), #find_all(\"a\", \"ab\"))", "0\t0\t0\n");
+    try expectFail(&f, "print(find_all(\"abc\", \"\"))", "`find_all`: an empty string");
+}
+
+test "prelude: re_find_all gives every match as re_find does, not overlapping, edges the whole string's, empty matches a byte apart" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("for m in re_find_all(\"x=1, yy=22\", \"(\\\\w+)=(\\\\d+)\") do print(m.at, m.text, m.group, m.groups[2]) end", "1\tx=1\tx\t1\n6\tyy=22\tyy\t22\n");
+    // No match; empty matches, as re_replace takes them; a group-less match has no `group`.
+    try f.expectOutput("print(#re_find_all(\"abc\", \"z\"), #re_find_all(\"ab\", \"\"), #re_find_all(\"\", \"x*\"), has_key(re_find_all(\"a\", \"a\")[1], \"group\"))", "0\t3\t1\tfalse\n");
+    // `^` and `\b` see the whole string, never the part after a match.
+    try f.expectOutput("print(#re_find_all(\"aaa\", \"^a\"), #re_find_all(\"ab ab xab\", \"\\\\bab\"), #re_find_all(\"Ab ab\", \"ab\", {nocase = true}))", "1\t2\t2\n");
+    try expectFail(&f, "print(re_find_all(\"a\", \"a\", {from = 2}))", "`re_find_all` takes `nocase`, not `from`");
+}
+
+test "prelude: dirname gives what precedes the last /, \"\" for a name at the root" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("print(dirname(\"a/b/c.md\"), \"[\" .. dirname(\"top.txt\") .. \"]\", dirname(\"m:a/b\"), \"[\" .. dirname(\"\") .. \"]\", dirname(\"a/\"))", "a/b\t[]\tm:a\t[]\ta\n");
+}
+
+test "prelude: path_normal drops . and empty parts, takes .. back, keeps a mount's prefix; nil climbing above its start; absolute is a stop" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("print(path_normal(\"a/./b/../c\"), path_normal(\"a//b/\"), path_normal(\"m:x/../y\"), \"[\" .. path_normal(\"a/..\") .. \"]\", \"[\" .. path_normal(\"\") .. \"]\")", "a/c\ta/b\tm:y\t[]\t[]\n");
+    try f.expectOutput("print(path_normal(\"..\"), path_normal(\"a/../..\"), path_normal(\"../a\"), path_normal(\"m:..\"))", "nil\tnil\tnil\tnil\n");
+    try expectFail(&f, "print(path_normal(\"/etc\"))", "`path_normal`: \"/etc\" is absolute");
+}
+
 test "prelude: assert stops with its reason when false, does nothing when true, and takes nothing but a boolean" {
     var f: Fixture = undefined;
     try f.init();
@@ -231,6 +327,16 @@ test "prelude: every prelude function is reached when a script calls it, one scr
         .{ "find_next", "print(find_next(\"top.txt\", \"p\", 3))" },
         .{ "drop", "print(#drop({1, 2, 3}, 1))" },
         .{ "assert", "assert(true, \"never\") print(1)" },
+        .{ "opts_only", "opts_only({a = 1}, {\"a\"}, \"f\") print(1)" },
+        .{ "slice", "print(#slice({1, 2, 3}, 1, 2))" },
+        .{ "push_at", "local m = {} push_at(m, \"k\", 1) print(#m.k)" },
+        .{ "incr", "print(incr({}, \"k\"))" },
+        .{ "set_of", "print(count(set_of({\"a\"})))" },
+        .{ "has_item", "print(has_item({1}, 1))" },
+        .{ "find_all", "print(#find_all(\"aa\", \"a\"))" },
+        .{ "re_find_all", "print(#re_find_all(\"aa\", \"a\"))" },
+        .{ "dirname", "print(dirname(\"a/b\"))" },
+        .{ "path_normal", "print(path_normal(\"a/../b\"))" },
     };
     try testing.expectEqual(script.parse.prelude_index.len, calls.len);
     for (script.parse.prelude_index, calls) |at, c| {

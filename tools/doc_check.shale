@@ -140,25 +140,17 @@ end
 -- words: a span's words, a link's target alone.
 function cited(text)
   local out = {}
-  local rest = text
-  while true do
-    local a = find(rest, "`")
-    if a == nil then break end
-    local after = sub(rest, a + 1)
-    local b = find(after, "`")
-    if b == nil then break end
-    push(out, {kind = "code", text = sub(after, 1, b - 1)})
-    rest = sub(after, b + 1)
+  -- The backticks pair up in order, each pair a span. Literals first: a
+  -- `find` is far cheaper than a pattern's search, so the links' pattern
+  -- runs only on a line holding `](`.
+  local ticks = find_all(text, "`")
+  local k = 2
+  while k <= #ticks do
+    push(out, {kind = "code", text = sub(text, ticks[k - 1] + 1, ticks[k] - 1)})
+    k = k + 2
   end
-  rest = text
-  while true do
-    local a = find(rest, "](")
-    if a == nil then break end
-    local after = sub(rest, a + 2)
-    local b = find(after, ")")
-    if b == nil then break end
-    push(out, {kind = "link", text = sub(after, 1, b - 1)})
-    rest = sub(after, b + 1)
+  if contains(text, "](") then
+    for m in re_find_all(text, "\\]\\(([^)]*)\\)") do push(out, {kind = "link", text = m.group}) end
   end
   return out
 end
@@ -166,17 +158,8 @@ end
 -- `p` joined to folder `dir` ("" the repo's root), `..` taken back; nil
 -- when it climbs out of the repo.
 function joined(dir, p)
-  local parts = {}
-  if dir ~= "" then parts = split(dir, "/") end
-  for x in split(p, "/") do
-    if x == ".." then
-      if #parts == 0 then return nil end
-      parts = take(parts, #parts - 1)
-    elseif x ~= "." and x ~= "" then
-      push(parts, x)
-    end
-  end
-  return join(parts, "/")
+  if dir == "" then return path_normal(p) end
+  return path_normal(dir .. "/" .. p)
 end
 
 -- A sibling repo that is there: a folder, not a symbolic link. The store
@@ -382,27 +365,15 @@ end
 -- `` `n` (f) `` (and `(in f)`, `(f:N)`).
 function name_cites(text)
   local out = {}
-  local rest = text
-  while true do
-    local m = re_find(rest, "`([^`]+)`'s `")
-    if m == nil then break end
-    local after = sub(rest, m.at + #m.text)
-    local e = find(after, "`")
-    if e == nil then break end
-    push(out, {file = m.group, name = sub(after, 1, e - 1)})
-    rest = sub(after, e + 1)
+  if contains(text, "`'s `") then
+    for m in re_find_all(text, "`([^`]+)`'s `([^`]*)`") do push(out, {file = m.groups[1], name = m.groups[2]}) end
   end
-  rest = text
-  while true do
-    local m = re_find(rest, "`([A-Za-z_][A-Za-z0-9_.]*)` \\(")
-    if m == nil then break end
-    local after = sub(rest, m.at + #m.text)
-    local e = find(after, ")")
-    if e == nil then break end
-    local f = sub(after, 1, e - 1)
-    if starts_with(f, "in ") then f = sub(f, 4) end
-    push(out, {file = f, name = m.group})
-    rest = sub(after, e + 1)
+  if contains(text, "` (") then
+    for m in re_find_all(text, "`([A-Za-z_][A-Za-z0-9_.]*)` \\(([^)]*)\\)") do
+      local f = m.groups[2]
+      if starts_with(f, "in ") then f = sub(f, 4) end
+      push(out, {file = f, name = m.group})
+    end
   end
   return out
 end

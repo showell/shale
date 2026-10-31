@@ -151,3 +151,132 @@ function assert(ok, why)
   if ok == false then fail(why) end
   if ok ~= true then fail("`assert`: its first argument must be true or false, not " .. tostring(ok)) end
 end
+
+-- **A CALL'S OPTIONS, HELD TO ITS NAMES**: a stop naming the first key of
+-- `opts` (nil: none) that `names` does not list, and the call `who` whose
+-- it is, so a misspelt option is never passed by.
+function opts_only(opts, names, who)
+  if opts == nil then return nil end
+  for k in keys(opts) do
+    local known = false
+    for n in names do
+      if n == k then known = true end
+    end
+    if not known then
+      local said = {}
+      for n in names do push(said, "`" .. n .. "`") end
+      local list = "no options"
+      if #said > 0 then list = join(said, ", ") end
+      fail("`" .. who .. "` takes " .. list .. ", not `" .. k .. "`")
+    end
+  end
+end
+
+-- Items `from` to `to` of `l`, both kept, as a new list: none when `from >
+-- to`, and an end past the list is cut at it. Items count from 1, so a
+-- `from` below 1 is a stop.
+function slice(l, from, to)
+  if from < 1 then fail("`slice`: a start of " .. from .. "; items count from 1") end
+  return take(drop(l, from - 1), max(0, to - from + 1))
+end
+
+-- `v` pushed onto the list at `m[k]`, made empty first if `k` is not there:
+-- a map of lists, grown an item at a time.
+function push_at(m, k, v)
+  if not has_key(m, k) then m[k] = {} end
+  push(m[k], v)
+end
+
+-- `m[k]` counted up by `n` (1 unless given), from 0 if `k` is not there;
+-- the new count.
+function incr(m, k, n?)
+  if n == nil then n = 1 end
+  m[k] = get(m, k, 0) + n
+  return m[k]
+end
+
+-- A map of each of `list`'s items to true, so `has_key(set, x)` asks
+-- whether `x` is among them. A map's keys are strings, so an item that is
+-- not one is a stop; `has_item` asks a list of any items.
+function set_of(list)
+  local set = {}
+  for x in list do
+    if tostring(x) ~= x then fail("`set_of`: an item " .. tostring(x) .. " is not a string; a map's keys are strings (`has_item` takes any)") end
+    set[x] = true
+  end
+  return set
+end
+
+-- Whether `x` is one of `list`'s items (`==`), looked for in order.
+function has_item(list, x)
+  for y in list do
+    if y == x then return true end
+  end
+  return false
+end
+
+-- Every 1-based position where `t` starts in `s`, in order, overlapping
+-- ones too (`find_all("aaa", "aa")` is `{1, 2}`); none is `{}`. An empty `t`
+-- is a stop: it is found everywhere.
+function find_all(s, t)
+  if t == "" then fail("`find_all`: an empty string is found at every position; look for one that is not empty") end
+  local got = {}
+  local at = find(s, t)
+  while at ~= nil do
+    push(got, at)
+    if at + 1 > #s then break end
+    at = find(s, t, at + 1)
+  end
+  return got
+end
+
+-- Every match of `pattern` in `s`, left to right and not overlapping, each
+-- as `re_find` gives it (`{at, text[, groups, group]}`); none is `{}`. Each
+-- search sees the whole of `s` (`re_find`'s `from`), so `^` and `\b` mean
+-- its real edges; after an empty match the next search starts a byte on.
+-- `opts` takes `nocase`.
+function re_find_all(s, pattern, opts?)
+  opts_only(opts, {"nocase"}, "re_find_all")
+  local o = {from = 1}
+  if opts ~= nil and has_key(opts, "nocase") then o.nocase = opts.nocase end
+  local got = {}
+  while o.from <= #s + 1 do
+    local m = re_find(s, pattern, o)
+    if m == nil then break end
+    push(got, m)
+    o.from = m.at + max(1, #m.text)
+  end
+  return got
+end
+
+-- What precedes `p`'s last `/`: its folder, "" (the root) when it has
+-- none. `basename`'s other half.
+function dirname(p)
+  local m = re_find(p, "^(.*)/")
+  if m == nil then return "" end
+  return m.group
+end
+
+-- `p` with its `.` and empty parts left out and each `..` taking back the
+-- part before it (`a/./b/../c` is `a/c`, a mount's `m:` kept in front); nil
+-- when a `..` would climb above where `p` starts (`..`, `a/../..`). An
+-- absolute path is a stop: a path is the root's.
+function path_normal(p)
+  if starts_with(p, "/") then fail("`path_normal`: \"" .. p .. "\" is absolute; a path is the root's, or a mount's (`m:path`)") end
+  local mount = ""
+  local named = re_find(p, "^([A-Za-z0-9_-]+:)")
+  if named ~= nil then
+    mount = named.group
+    p = sub(p, #mount + 1)
+  end
+  local parts = {}
+  for x in split(p, "/") do
+    if x == ".." then
+      if #parts == 0 then return nil end
+      parts = take(parts, #parts - 1)
+    elseif x ~= "." and x ~= "" then
+      push(parts, x)
+    end
+  end
+  return mount .. join(parts, "/")
+end

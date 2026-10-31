@@ -39,7 +39,8 @@ fn program(run: *Run, pos: ast.Pos, b: B, pattern: []const u8, options: regex.Op
     };
 }
 
-/// Parses the options map a call may end with: `{nocase = true}`.
+/// Parses the options map a call may end with: `{nocase = true}`, and for
+/// `re_find` `from`, which `fromArg` reads.
 fn optionsArg(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!regex.Options {
     var o: regex.Options = .{};
     // The options follow the string and the pattern, and `re_replace`'s
@@ -48,13 +49,29 @@ fn optionsArg(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!regex.Op
     if (args.len <= at) return o;
     const m = try bi.mapArg(run, pos, b, args[at]);
     for (m.map.keys(), m.map.values()) |k, x| {
-        if (!std.mem.eql(u8, k, "nocase")) return run.fail(pos, .argument, "`{s}` takes `nocase`, not `{s}`", .{ @tagName(b), k });
+        if (b == .re_find and std.mem.eql(u8, k, "from")) continue;
+        if (!std.mem.eql(u8, k, "nocase")) return run.fail(pos, .argument, "`{s}` takes `{s}`, not `{s}`", .{ @tagName(b), if (b == .re_find) "nocase` or `from" else "nocase", k });
         o.nocase = switch (x) {
             .boolean => |v| v,
             else => return run.fail(pos, .type, "`{s}`: its `nocase` must be true or false, not {s}", .{ @tagName(b), x.typeName() }),
         };
     }
     return o;
+}
+
+/// `re_find`'s `from` (1-based, 1 to `#s + 1`, as `find`'s): the byte its
+/// search starts at, 0-based. The search still sees the whole of `s`, so `^`
+/// and `\b` mean its real edges.
+fn fromArg(run: *Run, pos: ast.Pos, args: []const Value, len: usize) Error!usize {
+    if (args.len <= 2) return 0;
+    const m = try bi.mapArg(run, pos, .re_find, args[2]);
+    const x = m.map.get("from") orelse return 0;
+    const n = switch (x) {
+        .int => |v| v,
+        else => return run.fail(pos, .type, "`re_find`: its `from` must be an integer, not {s}", .{x.typeName()}),
+    };
+    if (n < 1 or n > @as(i64, @intCast(len)) + 1) return run.fail(pos, .argument, "`re_find`: a `from` of {d}, and it must be 1 to {d} (the string's length and one)", .{ n, len + 1 });
+    return @intCast(n - 1);
 }
 
 /// Runs the search, charged as it goes: when the steps left would not cover
@@ -75,16 +92,17 @@ fn searchedFrom(run: *Run, pos: ast.Pos, c: *regex.Cached, s: []const u8, from: 
     return r.found;
 }
 
-/// `re_find(s, pattern[, {nocase}])` returns the leftmost match of `pattern` in
-/// `s`, the one a backtracking matcher would find first, as `{at, text}` with
+/// `re_find(s, pattern[, {nocase, from}])` returns the leftmost match of
+/// `pattern` in `s` at or after `from`, the one a backtracking matcher would find first, as `{at, text}` with
 /// `at` 1-based, or nil. When the pattern has capture groups, also `groups`,
 /// each one's text in order of its `(` ("" where the match did not pass
 /// through it), and `group`, the first's: a one-group pattern reads as it did.
 fn reFind(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const s = try bi.stringArg(run, pos, .re_find, args[0], "its first argument");
     const pattern = try bi.stringArg(run, pos, .re_find, args[1], "its pattern");
-    const found, const c = try searched(run, pos, .re_find, s, pattern, args);
-    const f = found orelse return .nil;
+    const from = try fromArg(run, pos, args, s.len);
+    const c = try program(run, pos, .re_find, pattern, try optionsArg(run, pos, .re_find, args));
+    const f = try searchedFrom(run, pos, c, s, from) orelse return .nil;
     const a = run.alloc;
     const m = try run.newTable(pos);
     m.kind = .map;

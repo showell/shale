@@ -113,6 +113,15 @@ printed) and `edit(p, {{old = ..., new = ...}, ...})` (several in sequence,
 one diff, one write, none made if any fails), long strings (`[=[ ... ]=]`,
 raw, for text that holds quotes and lines), `walk` with `skip`, and the
 language's own `split`, `words`, `contains`, `sort`, `table` and maps. The
+prelude adds the small helpers scripts kept writing out: `slice(l, from,
+to)`, `push_at(m, k, v)` (a map of lists), `incr(m, k[, n])`,
+`set_of(list)` and `has_item(list, x)`, `find_all(s, t)`,
+`re_find_all(s, pattern)` (each match as `re_find` gives it; `re_find`'s
+own `{from = n}` starts a search there), `dirname(p)`, `path_normal(p)`
+(`a/./b/../c` is `a/c`) and `opts_only(opts, {"a", "b"}, who)` (a stop on
+any other key). **Already there, and still rewritten:** `drop(l, n)`,
+`basename(p)`, `find(s, t[, from])`, `fresh_dir(parent, prefix)`, and
+`mkdir`, which makes the parents. The
 whole language is [`SHALE.md`](SHALE.md).
 
 **On Linux, the Linux prelude** (`src/shale_prelude_linux.shale`; metal

@@ -1028,6 +1028,22 @@ test "builtins: re_find's nocase must be a boolean" {
     try f.expectStop("print(re_match(\"a\", \"a\", {nocase = \"yes\"}))", .type);
 }
 
+test "builtins: re_find's from starts the search there, 1 to #s + 1, and the search still sees the whole string's edges" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("local m = re_find(\"a1b22\", \"\\\\d+\", {from = 3}) print(m.at, m.text)", "4\t22\n");
+    try f.expectOutput("print(re_find(\"abc\", \"c\", {from = 4}), re_find(\"abc\", \"$\", {from = 4}).at)", "nil\t4\n");
+    // `^` is the string's start and `\b` sees the byte before `from`.
+    try f.expectOutput("print(re_find(\"aa\", \"^a\", {from = 2}), re_find(\"xab ab\", \"\\\\bab\", {from = 2}).at)", "nil\t5\n");
+    try f.expectOutput("print(re_find(\"aB\", \"b\", {from = 2, nocase = true}).at)", "2\n");
+    try f.expectStop("print(re_find(\"abc\", \"a\", {from = 0}))", .argument);
+    try f.expectStop("print(re_find(\"abc\", \"a\", {from = 5}))", .argument);
+    try f.expectStop("print(re_find(\"abc\", \"a\", {from = \"1\"}))", .type);
+    // Only `re_find` takes it.
+    try f.expectStop("print(re_match(\"abc\", \"a\", {from = 1}))", .argument);
+}
+
 test "builtins: patterns whose programs do not fit the machine's memory stop on that budget, at the call" {
     var f: Fixture = undefined;
     try f.init();

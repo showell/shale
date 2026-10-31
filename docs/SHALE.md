@@ -589,7 +589,7 @@ change_bytes` past those budgets.
 | `like(s, pattern)` | a boolean | |
 | `match_path(path, pattern)` | a boolean | `argument` past 64 parts |
 | `between(s, a, b)` | the text between, or nil | |
-| `re_find(s, pattern[, {nocase}])` | the leftmost match, `{at, text[, groups, group]}`, or nil | `argument` for a pattern past 256 bytes or with what the subset leaves out |
+| `re_find(s, pattern[, {nocase, from}])` | the leftmost match at or after `from`, `{at, text[, groups, group]}`, or nil | `argument` for a pattern past 256 bytes or with what the subset leaves out, or a `from` outside 1 to `#s + 1` |
 | `re_match(s, pattern[, {nocase}])` | a boolean: whether `s` holds a match | as `re_find` |
 | `re_replace(s, pattern, replacement[, {nocase}])` | `s` with every match replaced | as `re_find`; `argument` for a `\N` in the replacement past the pattern's groups |
 | `rep(s, n)` | `s`, `n` times | `argument` for `n` < 0 |
@@ -619,7 +619,7 @@ change_bytes` past those budgets.
 | `arg(name[, default])` | the run's value by that name, or `default` | `argument` for a value not of an integer or boolean default's kind |
 | `fail(msg)` | never returns: the run stops | `fail`, with `msg` |
 | `attempt(f, ...)` | `{ok, value}` or `{ok = false, error, class, line, column, in_function, trail}` | (the language's own: see `attempt`) |
-| the prelude's `walk_all(p[, opts])`, `walk_upto(p, opts, keep)`, `count_all(p, s)`, `find_next(p, s, at)`, `room_for(need)`, `glob(pattern[, {hidden}])`, `drop(l, n)`, `assert(ok, why)` | every entry; as many as the reads allow; every occurrence; the next one; whether the budgets hold `need`; the files a glob names; all but the first `n`; nothing, or a stop naming `why` | as `walk`, `count_in`, `find_in`, `match_path` |
+| the prelude's `walk_all(p[, opts])`, `walk_upto(p, opts, keep)`, `count_all(p, s)`, `find_next(p, s, at)`, `room_for(need)`, `glob(pattern[, {hidden}])`, `drop(l, n)`, `assert(ok, why)`, `slice(l, from, to)`, `push_at(m, k, v)`, `incr(m, k[, n])`, `set_of(list)`, `has_item(list, x)`, `find_all(s, t)`, `re_find_all(s, pattern[, {nocase}])`, `dirname(p)`, `path_normal(p)`, `opts_only(opts, names, who)` | every entry; as many as the reads allow; every occurrence; the next one; whether the budgets hold `need`; the files a glob names; all but the first `n`; nothing, or a stop naming `why`; items `from` to `to`; nothing (a map of lists grown); the new count; a map of each item to true; whether it is there; every start of `t`; every match; the folder; the path with `.` and `..` taken out, or nil; nothing, or a stop naming the key | as `walk`, `count_in`, `find_in`, `match_path` |
 
 ### The store
 
@@ -748,7 +748,7 @@ error
 
 | builtin | gives |
 |---|---|
-| `re_find(s, pattern[, {nocase = true}])` | the leftmost match: `at` (1-based, as `find`) and `text`, and, when the pattern has capture groups, `groups`, each one's text in the order of its `(` ("" where the match did not go through it), and `group`, the first's (`m.groups[1]`), so a one-group pattern reads as it always has; nil when there is none: `if m == nil` (or `if m then`). `nocase`: ASCII letters match either case |
+| `re_find(s, pattern[, {nocase = true, from = n}])` | the leftmost match, from `from` on when it is given (1 to `#s + 1`, as `find`'s; the search still sees the whole of `s`, so `^`, `$` and `\b` mean its real edges): `at` (1-based, as `find`) and `text`, and, when the pattern has capture groups, `groups`, each one's text in the order of its `(` ("" where the match did not go through it), and `group`, the first's (`m.groups[1]`), so a one-group pattern reads as it always has; nil when there is none: `if m == nil` (or `if m then`). `nocase`: ASCII letters match either case |
 | `re_match(s, pattern[, {nocase = true}])` | whether `s` holds a match, anywhere, as `grep` says of a line; `^` and `$` pin it to the whole |
 | `re_replace(s, pattern, replacement[, {nocase = true}])` | `s` with every non-overlapping match replaced, left to right; each search sees the whole of `s`, so `^`, `$` and `\b` mean its real edges. The replacement is literal but for `\1` to `\9` (`"\\1"` in a string), that group's text ("" where the match did not go through it): `re_replace("a=1", "(\\w)=(\\d)", "\\2=\\1")` is `1=a`. A `\N` past the pattern's groups stops. After an empty match the next search starts a byte on, that byte kept: `re_replace("ab", "", "-")` is `-a-b-`. Each search is charged as `re_find`'s, so a pattern whose search looks past each short match to the end of `s` costs steps in the square of the length |
 
@@ -859,6 +859,16 @@ are the prelude's, whatever the script has declared.
 | `room_for(need)` | whether what is left of the budgets holds `need`, a map of `budget()`'s names: `room_for({reads = 3, read_bytes = n})`; a name not among them is an `index` stop | a `budget()` |
 | `drop(l, n)` | a new list of all but `l`'s first `n` items, in order (none of a list no longer than `n`), so a part of a list is `take(drop(l, from), count)`; a count below 0 is a stop (class `fail`) | a `last` |
 | `assert(ok, why)` | nothing when `ok` is true; when it is false, a stop (class `fail`) whose message is `why`; anything but a boolean is a stop of its own, never true by default | a comparison or two |
+| `slice(l, from, to)` | a new list of `l`'s items `from` to `to`, both kept: none when `from > to`, an end past the list cut at it; a `from` below 1 is a stop (class `fail`) | a `drop` and a `take` |
+| `push_at(m, k, v)` | nothing: `v` pushed onto the list `m[k]`, made `{}` first when `k` is not there (a map of lists) | a `has_key` and a `push` |
+| `incr(m, k[, n])` | `m[k]` counted up by `n` (1 unless given), from 0 when `k` is not there; the new count | a `get` |
+| `set_of(list)` | a map of each item to true, so `has_key(set, x)` asks whether `x` is among them; an item that is not a string is a stop (class `fail`): a map's keys are strings | a step an item |
+| `has_item(list, x)` | whether `x` is one of `list`'s items (`==`), of any type | a step an item, to the first match |
+| `find_all(s, t)` | every 1-based position where `t` starts in `s`, overlapping ones too (`find_all("aaa", "aa")` is `{1, 2}`); none is `{}`; an empty `t` is a stop (class `fail`) | a `find` a match, and one more |
+| `re_find_all(s, pattern[, {nocase}])` | every match, left to right and not overlapping, each as `re_find` gives it (`{at, text[, groups, group]}`); none is `{}`. Each search sees the whole of `s` (`re_find`'s `from`), so `^` and `\b` mean its real edges; after an empty match the next search starts a byte on, as `re_replace`'s | a `re_find` a match, and one more; a line that a literal rules out is cheaper asked with `contains` first |
+| `dirname(p)` | what precedes `p`'s last `/`, "" (the root) when it has none: `basename`'s other half | a `re_find` |
+| `path_normal(p)` | `p` with `.` and empty parts left out and each `..` taking back the part before it (`a/./b/../c` is `a/c`), a mount's `m:` kept in front; nil when a `..` would climb above where `p` starts (`..`, `a/../..`); an absolute path is a stop (class `fail`) | a `split`, a step a part |
+| `opts_only(opts, names, who)` | nothing when every key of `opts` (nil: none) is in `names`; else a stop (class `fail`) naming the call and the key: `` `f` takes `a`, `b`, not `z` `` | a step a key and name |
 
 **A walk past what the budget walks, told in parts:** `walk_upto` walks as far as the reads allow, keeping `keep` for what
 the script does next, and says where it stopped; the script prints what it
