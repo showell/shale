@@ -1,0 +1,23 @@
+-- THE ROC A TREE PINS: a library (`use("cookbook:roc/pinned.shale")`) for
+-- the Roc recipes that run the compiler. A tree is judged and laid out only
+-- by the Roc it is built with: `roc fmt`'s layout and the compiler's method
+-- lookup move between nightlies, so never whichever `roc` is on PATH.
+--
+-- `SELF_TEST_PIN` is the Roc every recipe's self-test runs, as CI installs
+-- it from roc-apps's release asset: one pin for all of them, kept here.
+
+const SELF_TEST_PIN = "nightly-2026-10-30-0602c5f"
+
+-- The OS path of the pinned `roc`: `tools:roc-<pin>/roc`, the pin read from
+-- the `roc-version` file where the run starts (the repository's root), or
+-- `SELF_TEST_PIN` under a self-test. `who` names the recipe in a stop.
+function roc_bin(who, self_test)
+  local pin = SELF_TEST_PIN
+  if not self_test then
+    if not exists("roc-version") then fail(who .. ": no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc") end
+    pin = trim(read("roc-version"))
+  end
+  local roc = "tools:roc-" .. pin .. "/roc"
+  if not exists(roc) then fail(who .. ": no " .. roc .. ": install Roc " .. pin .. " into ~/tools/roc-" .. pin .. "/ (roc-apps's toolchain release carries it)") end
+  return real(roc)
+end

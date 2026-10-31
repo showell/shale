@@ -30,6 +30,8 @@ const interp = @import("interp.zig");
 const builtins = @import("builtins.zig");
 const compile = @import("compile.zig");
 const vm = @import("vm.zig");
+const builtins_store = @import("builtins_store.zig");
+const builtins_read = @import("builtins_read.zig");
 
 pub const Budgets = interp.Budgets;
 pub const Stop = diag.Stop;
@@ -90,6 +92,34 @@ pub const MachineMemory = struct {
     /// The source's copy and the tree.
     tree: std.heap.ArenaAllocator,
 };
+
+/// The reader of a `use`d library for a parse, over `run`, which is made
+/// before its parse: the path checked and resolved as any path a script gives
+/// (`pathArg`, the host's mounts), the file read and charged as a `read` of
+/// it is, under the source budget.
+pub fn libraryLoader(run: *interp.Run) parse.Loader {
+    return .{ .ctx = run, .load = loadLibrary };
+}
+
+fn loadLibrary(ctx: *anyopaque, into: std.mem.Allocator, path: []const u8, why: *[]const u8) error{OutOfMemory}!?[]const u8 {
+    const run: *interp.Run = @ptrCast(@alignCast(ctx));
+    const pos: ast.Pos = .{ .line = 1, .column = 1 };
+    const said = struct {
+        fn stop(r: *interp.Run, w: *[]const u8) ?[]const u8 {
+            w.* = if (r.stop) |s| s.message else "it could not be read";
+            r.stop = null;
+            return null;
+        }
+    };
+    const p = builtins_store.pathArg(run, pos, .read, .{ .string = path }, false) catch return said.stop(run, why);
+    builtins_store.countRead(run, pos) catch return said.stop(run, why);
+    const size = builtins_read.fileSize(run, pos, .read, p) catch return said.stop(run, why);
+    if (size > run.budgets.source_bytes) {
+        why.* = "the library is larger than the source budget";
+        return null;
+    }
+    return builtins_read.readSizedIn(into, run, pos, .read, p, size, 0, null) catch return said.stop(run, why);
+}
 
 pub const Process = struct {
     /// The allocator `start` is handed; everything below comes from it.
@@ -175,7 +205,7 @@ pub const Process = struct {
         const own = tree.dupe(u8, source) catch return p.stopWith(machine_stop);
         const program = tree.create(ast.Program) catch return p.stopWith(machine_stop);
         var stop: ?Stop = null;
-        program.* = parse.parseMeasured(tree, p.machine.budget.allocator(), own, budgets.nesting, &stop, &p.parse_stack, p.preludes) catch |e| return p.stopWith(switch (e) {
+        program.* = parse.parseWith(tree, p.machine.budget.allocator(), own, budgets.nesting, &stop, &p.parse_stack, p.preludes, libraryLoader(&p.run)) catch |e| return p.stopWith(switch (e) {
             error.Parse => stop.?,
             error.OutOfMemory => machine_stop,
         });

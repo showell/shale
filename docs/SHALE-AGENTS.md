@@ -330,6 +330,19 @@ take an earlier prelude's name. A stop in one names it:
 be optional (`function f(a, opts?)`): a call that leaves them out gives
 them nil.
 
+**A library is a file of functions and `const`s that a script names**,
+`use("cookbook:roc/pinned.shale")`, a top-level statement: its names are
+the script's from that line on. **Reach for one when recipes copy a
+helper**: a recipe runs from other repositories' roots, so a repo's prelude
+cannot serve it, and a library is found through a mount wherever it runs.
+A repo's prelude stays the tool for what every script at that root wants.
+The path is a mount's, never the root's or an absolute one; the file is a
+read of the run's. It holds functions and literal `const`s only, each from
+the start of its line, and uses no other library; a name it shares with a
+builtin, a prelude, another library or the script's own function or local
+is refused at the `use`, naming both places. A stop inside it names its
+file and line. SHALE.md, "Libraries: `use`", has the rules.
+
 Every block of Shale below runs as a test (`src/script/agent_test.zig`), on
 a small checkout shaped like zig-metal-unikernel's, a fresh one each. What it
 prints is in the box after it, exactly.
