@@ -74,15 +74,16 @@ end
 
 function is_dir_at(p) return is_dir(p) end
 
--- The folders below a mount's folder, as OS paths; none when the mount
--- is not in this box's mounts file or the folder is not there.
-function folders_under(mounted)
+-- The folders below a mount's folder, as `{path, label}`: the OS path and
+-- `prefix` and the name, the mount's spelling; none when the mount is not
+-- in this box's mounts file or the folder is not there.
+function folders_under(mounted, prefix)
   local here = attempt(is_dir_at, mounted)
   if not here.ok or not here.value then return {} end
   local out = {}
   for name in ls(mounted) do
     local p = path_under(mounted, name)
-    if is_dir(p) then out[#out + 1] = real(p) end
+    if is_dir(p) then out[#out + 1] = {path = real(p), label = prefix .. name} end
   end
   return out
 end
@@ -90,20 +91,17 @@ end
 -- Every growth spot with its size, biggest first: `{path, label, kib}`.
 function spots()
   local home = trim(must(run({"printenv", "HOME"}, {timeout_ms = 10000, whole = 4000})).out)
+  local found = folders_under("build:lanes", "build:lanes/")
+  found[#found + 1] = {path = home .. "/.cache/roc", label = "~/.cache/roc"}
+  found[#found + 1] = {path = home .. "/.cache/zig", label = "~/.cache/zig"}
+  for f in folders_under("scratch:.", "scratch:") do found[#found + 1] = f end
   local paths = {}
-  for p in folders_under("build:lanes") do paths[#paths + 1] = p end
-  paths[#paths + 1] = home .. "/.cache/roc"
-  paths[#paths + 1] = home .. "/.cache/zig"
-  for p in folders_under("scratch:.") do paths[#paths + 1] = p end
+  for f in found do paths[#paths + 1] = f.path end
   local sizes = du_kib(paths)
   local out = {}
-  for p in paths do
-    local kib = sizes[p]
-    if kib ~= nil then
-      local label = p
-      if home ~= "" and starts_with(p, home .. "/") then label = "~" .. sub(p, #home + 1) end
-      out[#out + 1] = {path = p, label = label, kib = kib}
-    end
+  for f in found do
+    local kib = sizes[f.path]
+    if kib ~= nil then out[#out + 1] = {path = f.path, label = f.label, kib = kib} end
   end
   return sort(out, {{key = "kib", desc = true}, "label"})
 end
