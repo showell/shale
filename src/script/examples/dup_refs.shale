@@ -1,0 +1,117 @@
+-- Message references (MSG_<topic>_<n> written in a message, not a block's
+-- own MSG_ header) that name a topic whose name is in more than one
+-- conversation: the ones production's lookup could send to the wrong place.
+-- Reads every transcript, a chunk at a time. Prints each reference's place
+-- and target only, never message text.
+
+-- The topic names in more than one conversation: fill it from
+-- `dup_topics.shale`'s output (its `topic` column). Empty, the run stops.
+const DUPS = {}
+
+-- {conv, sid} from a transcript's path, or nil when it is no topic.
+function place(path)
+  local parts = split(path, "/")
+  local n = #parts
+  if n < 4 or parts[n - 1] ~= "sessions" or not like(parts[n], "*.md") then return nil end
+  local sid = strip_suffix(parts[n], ".md")
+  if n == 4 then return {conv = "dm " .. parts[2], sid = sid} end
+  if n == 5 and parts[2] == "channels" then return {conv = "#" .. parts[3], sid = sid} end
+  return nil
+end
+
+if #DUPS == 0 then fail("DUPS is empty: fill it with the topic names dup_topics.shale lists") end
+
+local all = {}
+local part = {done = false, more = ""}
+while not part.done and room_for({reads = 40}) do
+  part = walk_upto("chat", {like = "*.md", kind = "file", after = part.more}, 32)
+  for e in part.entries do push(all, e) end
+end
+if not part.done then fail("the walk did not finish: resume after " .. part.more) end
+
+-- Each conversation's topics, to say whether a reference's topic is its own.
+local topics_of = {}
+local transcripts = {}
+for e in all do
+  local p = place(e.path)
+  if p ~= nil then
+    local list = get(topics_of, p.conv, nil)
+    if list == nil then
+      list = {}
+      topics_of[p.conv] = list
+    end
+    push(list, p.sid)
+    push(transcripts, {path = e.path, size = e.size, conv = p.conv, sid = p.sid})
+  end
+end
+
+function has(list, x)
+  for y in list do
+    if y == x then return true end
+  end
+  return false
+end
+
+-- Each transcript read once, a chunk at a time (the call-bytes cap), each
+-- chunk overlapping the next by OVERLAP so a reference across a seam is
+-- seen whole, and a hit counted only in the chunk where it starts before
+-- the overlap.
+const OVERLAP = 128
+
+local total = 0
+for t in transcripts do total = total + t.size end
+local rows = {}
+local refs = 0
+local headers = 0
+local scanned = 0
+for t in transcripts do
+  local chunk = call_bytes()
+  if not room_for({reads = 2 + t.size // (chunk - OVERLAP), read_bytes = t.size + (t.size // (chunk - OVERLAP) + 1) * OVERLAP}) then
+    fail("the read budget ran out after " .. scanned .. " of " .. #transcripts .. " transcripts (" .. total .. " bytes in all)")
+  end
+  scanned = scanned + 1
+  -- The number of the message being read, from its own header: a reference
+  -- inside its own topic to this message or a later one points forward, so
+  -- it likely meant another conversation's topic of the same name.
+  local current = 0
+  local offset = 0
+  while offset < t.size do
+    local text = read(t.path, offset, chunk)
+    local last = offset + #text >= t.size
+    local limit = #text
+    if not last then limit = #text - OVERLAP end
+    -- Only the repeated names are looked for: a header elsewhere costs nothing.
+    for target in DUPS do
+      local needle = "MSG_" .. target .. "_"
+      local i = find(text, needle, 1)
+      while i ~= nil and i <= limit do
+        local m = re_find(sub(text, i, i + 99), "^MSG_[A-Za-z0-9-]+_[0-9]+")
+        -- `MSG_general-2_5` starts with the needle's letters but is another topic.
+        if m ~= nil and #m.text > #needle then
+          if sub(text, i + #m.text, i + #m.text + 5) == "\nfrom:" then
+            headers = headers + 1
+            if target == t.sid then current = parse_int(sub(m.text, #needle + 1)) or current end
+          elseif sub(m.text, 1, #needle) == needle and parse_int(sub(m.text, #needle + 1)) ~= nil then
+            refs = refs + 1
+            local how = "another topic of this conversation, via /chat/msg"
+            local n = parse_int(sub(m.text, #needle + 1)) or 0
+            if target == t.sid and n >= current then how = "its own topic, but message " .. n .. " is not before #" .. current .. ": meant elsewhere?"
+            elseif target == t.sid then how = "its own topic: resolved on the page"
+            elseif not has(topics_of[t.conv], target) then how = "no such topic here: /chat/msg picks a conversation" end
+            push(rows, {written_in = t.conv .. " " .. t.sid, reference = m.text, resolves = how})
+          end
+        end
+        i = find(text, needle, i + #needle)
+      end
+    end
+    if last then break end
+    offset = offset + #text - OVERLAP
+  end
+end
+print("transcripts " .. scanned .. " (" .. human(total) .. "); the repeated topics' own message headers " .. headers .. "; references to a repeated topic name: " .. #rows)
+local odd = {}
+for r in rows do
+  if not contains(r.resolves, "resolved on the page") then push(odd, r) end
+end
+print("of those, resolved on their own page as written: " .. (#rows - #odd) .. "; worth a look: " .. #odd)
+if #odd > 0 then print(table(odd, {"written_in", "reference", "resolves"})) end

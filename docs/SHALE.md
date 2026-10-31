@@ -1073,6 +1073,8 @@ budgets, and changes nothing.
 | `topics.shale` | every topic with its message count | `count_in` of `MSG_` a transcript, `count_all` past the cap: none held |
 | `big_files.shale` | files over a size | `walk_upto`, files only, then `resume after` |
 | `bad_utf8.shale` | every text file (by extension) that is not valid UTF-8, with where its first bad byte is | a read a text file, and the walk; past the budgets, `resume after` |
+| `dup_topics.shale` | the topic names in more than one conversation (a DM or a channel), with where each is; no message text | reads no transcript: the walk alone, as far as the reads go, then `resume after` |
+| `dup_refs.shale` | the message references (`MSG_<topic>_<n>` in a message) to the topic names in `DUPS`, filled from `dup_topics`' output, each with how it resolves; no message text | each transcript read a chunk (the call-bytes cap) at a time, the chunks overlapping; stops, named, when the reads have no room for the next |
 | `delete_topic.shale` | one topic deleted, as `chat_retire.zig` does: its transcript, sidecars and uploads | a change each |
 | `first_change.shale` | one small change, a folder and a file, easy to check and to undo | |
 | `stale_topics.shale` | every topic untouched for 30 days (its transcript's modified time), with its message count and that time | as `topics.shale` |

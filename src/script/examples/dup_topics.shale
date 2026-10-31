@@ -1,0 +1,52 @@
+-- Topic names that appear in more than one conversation (a DM or a channel),
+-- from the folder walk alone: no transcript is read. A topic is
+-- chat/<a>_<b>/sessions/<sid>.md (a DM) or chat/channels/<name>/sessions/<sid>.md.
+-- Prints counts and conversation labels only, never message text. A topic
+-- name found here is one `dup_refs.shale` checks the references to.
+-- Past the read budget it lists what the walk reached and says where the
+-- next run goes on (`resume after <path>`: set START to it).
+
+const START = ""
+
+-- {conv, sid} from a transcript's path, or nil when it is no topic.
+function place(path)
+  local parts = split(path, "/")
+  local n = #parts
+  if n < 4 or parts[n - 1] ~= "sessions" or not like(parts[n], "*.md") then return nil end
+  local sid = strip_suffix(parts[n], ".md")
+  if n == 4 then return {conv = "dm " .. parts[2], sid = sid} end
+  if n == 5 and parts[2] == "channels" then return {conv = "#" .. parts[3], sid = sid} end
+  return nil
+end
+
+local by_sid = {}
+local topics = 0
+local convs = {}
+local all = {}
+local part = {done = false, more = START}
+while not part.done and room_for({reads = 40}) do
+  part = walk_upto("chat", {like = "*.md", kind = "file", after = part.more}, 32)
+  for e in part.entries do push(all, e) end
+end
+for e in all do
+  local p = place(e.path)
+  if p ~= nil then
+    topics = topics + 1
+    convs[p.conv] = true
+    local list = get(by_sid, p.sid, nil)
+    if list == nil then
+      list = {}
+      by_sid[p.sid] = list
+    end
+    push(list, p.conv)
+  end
+end
+local rows = {}
+for sid in keys(by_sid) do
+  local list = by_sid[sid]
+  if #list > 1 then push(rows, {topic = sid, conversations = #list, where = join(list, ", ")}) end
+end
+sort(rows, "conversations", "desc")
+print("topics " .. topics .. " in " .. #keys(convs) .. " conversations; names in more than one: " .. #rows)
+if #rows > 0 then print(table(rows, {"topic", "conversations", "where"})) end
+if not part.done then print("a part only: resume after " .. part.more) end

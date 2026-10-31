@@ -16,6 +16,8 @@ const find_message = @embedFile("examples/find_message.shale");
 const stale_topics = @embedFile("examples/stale_topics.shale");
 const delete_stale_topics = @embedFile("examples/delete_stale_topics.shale");
 const bad_utf8 = @embedFile("examples/bad_utf8.shale");
+const dup_topics = @embedFile("examples/dup_topics.shale");
+const dup_refs = @embedFile("examples/dup_refs.shale");
 
 const sep = "\n\n-------------\n";
 
@@ -197,6 +199,50 @@ test "example: chat topics from their count caches, the quiet ones, the caches s
     try testing.expect(std.mem.indexOf(u8, today.output, "): 0\n") != null);
 }
 
+test "example: a topic name in two conversations is listed by dup_topics, and dup_refs finds a reference to it from a conversation without it, reading no message text out" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena.allocator();
+    const io = f.threaded.io();
+    // `hello` in #random too, and #general's lunch naming MSG_hello_2,
+    // a topic #general does not have.
+    try f.tmp.dir.writeFile(io, .{ .sub_path = "data/chat/channels/random/sessions/hello.md", .data = try transcript(a, "hello", 1) });
+    try f.tmp.dir.writeFile(io, .{ .sub_path = "data/chat/channels/general/sessions/lunch.md", .data = try std.fmt.allocPrint(a, "{s}\nsee MSG_hello_2 for it", .{try transcript(a, "lunch", 1)}) });
+
+    var topics_run = script.run(io, testing.allocator, f.root, dup_topics, site_budgets, 1791936000, &out_buf);
+    defer topics_run.deinit();
+    errdefer std.debug.print("{s}", .{topics_run.output});
+    try finished(&topics_run);
+    try testing.expectEqual(@as(usize, 0), topics_run.effects.len);
+    try testing.expectEqualStrings(
+        "topics 5 in 3 conversations; names in more than one: 1\n" ++
+            "topic  conversations  where\n" ++
+            "hello              2  dm 1_2, #random\n",
+        topics_run.output,
+    );
+
+    // DUPS filled from that output, as its comment says.
+    const empty = "const DUPS = {}";
+    const at = std.mem.indexOf(u8, dup_refs, empty) orelse return error.NoDups;
+    const filled = try std.fmt.allocPrint(a, "{s}const DUPS = {{\"hello\"}}{s}", .{ dup_refs[0..at], dup_refs[at + empty.len ..] });
+    var refs_run = script.run(io, testing.allocator, f.root, filled, site_budgets, 1791936000, &out_buf);
+    defer refs_run.deinit();
+    errdefer std.debug.print("{s}", .{refs_run.output});
+    try finished(&refs_run);
+    try testing.expectEqual(@as(usize, 0), refs_run.effects.len);
+    try testing.expect(std.mem.indexOf(u8, refs_run.output, "the repeated topics' own message headers 4; references to a repeated topic name: 1\n") != null);
+    try testing.expect(std.mem.indexOf(u8, refs_run.output, "resolved on their own page as written: 0; worth a look: 1\n") != null);
+    try testing.expect(std.mem.indexOf(u8, refs_run.output, "#general lunch  MSG_hello_2  no such topic here: /chat/msg picks a conversation\n") != null);
+    try testing.expect(std.mem.indexOf(u8, refs_run.output, "see") == null);
+
+    // As shipped, DUPS is empty, and the run says to fill it.
+    var unfilled = script.run(io, testing.allocator, f.root, dup_refs, site_budgets, 1791936000, &out_buf);
+    defer unfilled.deinit();
+    try testing.expect(unfilled.stop != null);
+    try testing.expect(std.mem.indexOf(u8, unfilled.stop.?.message, "DUPS is empty") != null);
+}
+
 test "example: the first change makes one folder and one file, and says what the last run wrote" {
     var f: Fixture = undefined;
     try f.init();
@@ -282,6 +328,7 @@ test "every read-only script of the cookbook finishes on the site-shaped store i
         .{ .name = "stale_caches", .src = stale_caches },
         .{ .name = "find_message", .src = find_message },
         .{ .name = "bad_utf8", .src = bad_utf8 },
+        .{ .name = "dup_topics", .src = dup_topics },
     };
     for (read_only) |ex| {
         var r = script.run(f.threaded.io(), testing.allocator, f.root, ex.src, site_budgets, 1791936000, &out_buf);
@@ -297,7 +344,7 @@ test "every cookbook script that walks gives the same answer walking in parts of
     try f.init();
     defer f.deinit();
     var whole_buf: [64 * 1024]u8 = undefined;
-    for ([_][]const u8{ where_the_bytes_are, chat_topics, stale_caches, find_message, bad_utf8 }) |src| {
+    for ([_][]const u8{ where_the_bytes_are, chat_topics, stale_caches, find_message, bad_utf8, dup_topics }) |src| {
         var whole = script.run(f.threaded.io(), testing.allocator, f.root, src, .{}, 1791936000, &whole_buf);
         defer whole.deinit();
         try finished(&whole);
