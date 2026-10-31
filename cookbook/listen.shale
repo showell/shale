@@ -34,10 +34,22 @@
 --   - Otherwise each line is appended to `log=` as it is heard (required),
 --     for `tail -F` under a watcher, until the run's programs are spent; the
 --     stop names the `after=` to go on from.
--- **A DEAD LISTENER IS NEVER QUIET**: the key refused (any status but
--- 200), the stream ended by the server, curl failing, a `gap` (more missed
--- than the backlog holds), a message without `mentions` (a server older
--- than them), or the windows spent each stop the run, named.
+-- **IT RECONNECTS BY ITSELF** (`after_window`, pure): a deploy restarts
+-- roc-chat and ends every stream, so the stream ended by the server, no
+-- connection, curl failing mid-stream, or any status but 200, 401, 403
+-- and 404 (a 502 from the proxy while the server is down) is a reconnect,
+-- never a stop. Each prints one line, `reconnecting after <reason>, from
+-- after=<id>, in <n> s`, (to `log=` too), waits (`backoff_s`: 2, 5, 15,
+-- 30, then 60 s between attempts, back to 2 after a window that ran its
+-- length) and resumes from the last id seen, so nothing is missed or
+-- heard twice. A reconnect is a curl, one of the run's 63: a long outage
+-- (about an hour at 60 s) spends them, and the stop says so.
+-- **A DEAD LISTENER IS NEVER QUIET**: a refusal, 401 or 403 (the key
+-- revoked or wrong) or 404 (no such conversation, or not the agent's),
+-- a `gap` (more missed than the backlog holds), a message without
+-- `mentions` (a server older than them), or the run's programs spent
+-- (windows and reconnects together: start it again with the `after=`
+-- the stop names) each stop the run nonzero, named.
 --
 -- `self_test=1` feeds the recorded frames in `cookbook/plants/listen/`
 -- through the same `consume` the live path uses: no roc-chat, no network.
@@ -118,6 +130,46 @@ function first_line(md)
     end
   end
   return ""
+end
+
+-- ── the reconnect, pure ──────────────────────────────────────────────────
+
+-- What a window's answer means, `{act, reason}`: `go` (it ran its
+-- length, curl's `--max-time`, code 28: listen on), `stop` (a refusal,
+-- which no retry mends) or `reconnect` (anything else, an outage).
+-- `status` is curl's `%{http_code}`, "000" when nothing answered.
+function after_window(status, code)
+  if status == "401" or status == "403" then
+    return {act = "stop", reason = "the stream answered " .. status .. ": the key refused (revoked or wrong)"}
+  end
+  if status == "404" then
+    return {act = "stop", reason = "the stream answered 404: no such conversation, or not the agent's"}
+  end
+  if status == "200" then
+    if code == 28 then return {act = "go", reason = ""} end
+    if code == 0 then return {act = "reconnect", reason = "the server ended the stream"} end
+    return {act = "reconnect", reason = "curl exited " .. code .. " mid-stream"}
+  end
+  if status == "000" or status == "" then
+    return {act = "reconnect", reason = "no connection (curl exited " .. code .. ")"}
+  end
+  return {act = "reconnect", reason = "the stream answered " .. status}
+end
+
+-- Seconds to wait before the `n`th reconnect in a row.
+function backoff_s(n)
+  if n <= 1 then return 2 end
+  if n == 2 then return 5 end
+  if n == 3 then return 15 end
+  if n == 4 then return 30 end
+  return 60
+end
+
+-- The `after=` a caller goes on from: the last id seen, or the one it
+-- gave if nothing newer came.
+function resume_id(state)
+  if state.last > state.after then return state.last end
+  return state.after
 end
 
 -- ── the frames, pure ─────────────────────────────────────────────────────
@@ -242,8 +294,29 @@ function self_test()
   expect(tally, #old.warns == 0, "posts older than the hour count for nothing: " .. join(old.warns, " | "))
   local quiet = replay({"pings.sse"}, 0)
   expect(tally, #quiet.lines == 0 and quiet.state.last == 0, "pings alone are nothing")
+  for s in {"401", "403", "404"} do
+    local d = after_window(s, 0)
+    expect(tally, d.act == "stop" and contains(d.reason, s), "a " .. s .. " stops the run, naming it: " .. d.reason)
+  end
+  local full = after_window("200", 28)
+  expect(tally, full.act == "go", "a window that ran its length (200, curl 28) listens on")
+  local ended = after_window("200", 0)
+  expect(tally, ended.act == "reconnect" and ended.reason == "the server ended the stream", "a stream the server ended (200, curl 0) reconnects: " .. ended.reason)
+  local cut = after_window("200", 56)
+  expect(tally, cut.act == "reconnect" and contains(cut.reason, "56"), "curl failing mid-stream reconnects: " .. cut.reason)
+  local down = after_window("000", 7)
+  expect(tally, down.act == "reconnect" and contains(down.reason, "no connection"), "no connection (000, curl 7) reconnects: " .. down.reason)
+  local slow = after_window("000", 28)
+  expect(tally, slow.act == "reconnect", "nothing answering within the window (000, curl 28) reconnects, never a go")
+  for s in {"500", "502", "503", "504", "429", "400", "410"} do
+    expect(tally, after_window(s, 0).act == "reconnect", "a " .. s .. " is no refusal: it reconnects")
+  end
+  local waits = {}
+  for n = 1, 7 do push(waits, tostring(backoff_s(n))) end
+  expect(tally, join(waits, " ") == "2 5 15 30 60 60 60", "the waits back off 2, 5, 15, 30, then 60 s: " .. join(waits, " "))
+  expect(tally, resume_id(new_state("agent:2", 12, "3")) == 12 and resume_id(three.state) == 10, "a reconnect goes on from the after= given until a newer id is seen")
   if tally.bad > 0 then fail("listen: self-test: " .. tally.bad .. " failed") end
-  print("listen self_test: PASS (own posts and pings give none, an agent's every mention is heard, the server's mentions decide, a message without them stops the run, after= and a repeated window print nothing twice, a gap is named, the budget warns once at 12 in the hour since a human spoke)")
+  print("listen self_test: PASS (own posts and pings give none, an agent's every mention is heard, the server's mentions decide, a message without them stops the run, after= and a repeated window print nothing twice, a gap is named, the budget warns once at 12 in the hour since a human spoke, 401, 403 and 404 stop, an ended stream, no connection and every other status reconnect, backing off 2 to 60 s)")
 end
 
 -- ── the live path ────────────────────────────────────────────────────────
@@ -260,6 +333,8 @@ function listen()
   end
   if not ONCE and LOG == "" then fail("listen: without once=1, log= is needed: a run's output shows only when it ends, and the lines are appended there as they are heard") end
   local state = new_state(ME, AFTER, CONV)
+  -- Reconnects in a row, since the last window that ran its length.
+  local tries = 0
   for w = 1, WINDOWS_MOST do
     local argv = {"curl", "-sN", "--max-time", tostring(WINDOW_S), "-w", "\n%{http_code}",
       "--variable", "%LISTEN_KEY", "--expand-header", "Authorization: Bearer {{LISTEN_KEY:trim}}"}
@@ -272,18 +347,26 @@ function listen()
     local cut = #r.out
     while cut > 0 and sub(r.out, cut, cut) ~= "\n" do cut = cut - 1 end
     local status = sub(r.out, cut + 1)
-    if status ~= "200" then fail("listen: the stream answered " .. status .. " (curl exited " .. r.code .. "): the key refused, or the conversation not the agent's") end
-    local got = consume(state, sub(r.out, 1, cut - 1))
-    for w in got.warns do heard(w) end
-    for l in got.lines do
-      heard(l)
-      if ONCE then return nil end
+    local next = after_window(status, r.code)
+    if next.act == "stop" then fail("listen: " .. next.reason .. "; nothing to retry") end
+    if status == "200" then
+      local got = consume(state, sub(r.out, 1, cut - 1))
+      for w in got.warns do heard(w) end
+      for l in got.lines do
+        heard(l)
+        if ONCE then return nil end
+      end
+      if got.err ~= "" then fail("listen: " .. got.err .. resume_id(state)) end
     end
-    if got.err ~= "" then fail("listen: " .. got.err .. state.last) end
-    if r.code == 0 then fail("listen: the server ended the stream; go on with after=" .. state.last) end
-    if r.code ~= 28 then fail("listen: curl exited " .. r.code .. "; go on with after=" .. state.last) end
+    if next.act == "go" then
+      tries = 0
+    elseif w < WINDOWS_MOST then
+      tries = tries + 1
+      heard("reconnecting after " .. next.reason .. ", from after=" .. resume_id(state) .. ", in " .. backoff_s(tries) .. " s")
+      sleep(backoff_s(tries) * 1000)
+    end
   end
-  fail("listen: " .. WINDOWS_MOST .. " windows, a run's programs spent; go on with after=" .. state.last)
+  fail("listen: " .. WINDOWS_MOST .. " curls, windows and reconnects together, a run's programs spent; start it again with after=" .. resume_id(state))
 end
 
 if SELF then self_test() else listen() end
