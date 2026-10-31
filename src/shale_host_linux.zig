@@ -502,6 +502,7 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
     if (std.mem.eql(u8, name, "zig_move")) return @import("shale_host_zig.zig").move(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "zig_imports")) return @import("shale_host_zig.zig").imports(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "zig_tokens")) return @import("shale_host_zig.zig").tokens(h.alloc, run, pos, args);
+    if (std.mem.eql(u8, name, "roc_tree")) return @import("shale_host_roc.zig").call(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "json_read")) return @import("shale_host_json.zig").read(run, pos, args);
     if (std.mem.eql(u8, name, "json_write")) return @import("shale_host_json.zig").write(run, pos, args);
     // `edits_all`'s write: every file planned and admitted before any is
