@@ -399,6 +399,87 @@ function zig_imports(path)
   return host("zig_imports", path)
 end
 
+-- **ROC FILES' TREES, FROM ROC'S OWN PARSER**: each path run through
+-- roc-ast (`tools:roc-ast/bin/roc-ast`, roc-webbox's tools/roc_ast) and its
+-- dump read in the host: one `{path, nodes, err}` a path, in order. A node
+-- is `{kind, depth, parent, kids, line, col, end_line, end_col}` and the
+-- attributes the dump gives it (`raw`, `name`, `method`, `op`, `type`,
+-- `field`, a positional string as `value`), `parent` and `kids` indices
+-- into `nodes`. A missing file's `err` is "no such file", and no program
+-- runs for it. roc-ast stops at a file it refuses: that file's `err` says
+-- why, its `nodes` empty, and the rest run again; `err` is "" for a file
+-- read.
+function roc_tree(paths)
+  local exe = "tools:roc-ast/bin/roc-ast"
+  if not exists(exe) then fail("`roc_tree`: no " .. exe .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it") end
+  local out = {}
+  local i = 1
+  while i <= #paths do
+    if not exists(paths[i]) then
+      push(out, {path = paths[i], nodes = {}, err = "no such file"})
+      i = i + 1
+    else
+      -- One run over the files up to the next missing one.
+      local base = i
+      local reals = {}
+      local j = i
+      while j <= #paths and exists(paths[j]) do
+        push(reals, real(paths[j]))
+        j = j + 1
+      end
+      local r = run({real(exe)}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
+      local got = host("roc_tree", r.out)
+      local kept = {}
+      for f in got.files do
+        if i >= j or f.path ~= reals[i - base + 1] then fail("`roc_tree`: roc-ast's tree " .. (i - base + 1) .. " is " .. f.path .. "'s, not the path given there") end
+        push(kept, {path = paths[i], nodes = f.nodes, err = ""})
+        i = i + 1
+      end
+      if r.ended == "exit" and r.code == 0 then
+        if has_key(got, "said") then fail("`roc_tree`: roc-ast exited 0 and printed past its trees: " .. got.said) end
+        if i < j then fail("`roc_tree`: roc-ast exited 0 with " .. (j - i) .. " paths unread") end
+        for f in kept do push(out, f) end
+      else
+        local said = get(got, "said", "roc-ast " .. r.ended)
+        if i < j and starts_with(said, reals[i - base + 1] .. ": ") then
+          -- A parse problem: roc-ast flushed every tree before it, so they
+          -- are whole, and named the file after them.
+          for f in kept do push(out, f) end
+          push(out, {path = paths[i], nodes = {}, err = paths[i] .. sub(said, #reals[i - base + 1] + 1)})
+          i = i + 1
+        else
+          -- Any other stop leaves its output unflushed: the last tree may
+          -- be cut short and the culprit is unnamed, so the last tree's
+          -- file runs again alone, and its run says whose stop it was.
+          if #kept > 0 then
+            kept = take(kept, #kept - 1)
+            i = i - 1
+          end
+          for f in kept do push(out, f) end
+          -- Each file alone from there, until the one that stops it: what
+          -- was left unflushed is at most roc-ast's buffer of trees.
+          local found = false
+          while not found and i < j do
+            local one = run({real(exe)}, {timeout_ms = 300000, stdin = real(paths[i]), whole = 64000000})
+            local alone = host("roc_tree", one.out)
+            if one.ended == "exit" and one.code == 0 and #alone.files == 1 and not has_key(alone, "said") then
+              push(out, {path = paths[i], nodes = alone.files[1].nodes, err = ""})
+            else
+              local why = get(alone, "said", "roc-ast " .. one.ended)
+              if starts_with(why, reals[i - base + 1] .. ": ") then why = paths[i] .. sub(why, #reals[i - base + 1] + 1) end
+              push(out, {path = paths[i], nodes = {}, err = why})
+              found = true
+            end
+            i = i + 1
+          end
+          if not found then fail("`roc_tree`: roc-ast " .. r.ended .. " (" .. said .. "), and each file alone ran clean") end
+        end
+      end
+    end
+  end
+  return out
+end
+
 -- **JSON IN** (metal-vmm QUEUE 304): text `s` as Shale's values, an
 -- object a map and an array a list. Where Shale's values are not JSON's it
 -- says so: a number with a fraction or an exponent is its text, a string;

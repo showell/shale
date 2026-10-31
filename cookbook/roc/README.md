@@ -47,7 +47,7 @@ it works on, `<shale>` being the shale checkout:
   change nothing.
 - [nest_depth.shale](nest_depth.shale): **a call nested three deep**,
   `f(g(h(x)))`, read inside out: the outermost call of each nest `min`
-  (3) or more deep, from roc-ast's tree. A method's receiver, a pipe's or
+  (3) or more deep, from `roc_tree` (roc-ast's tree, read in the host). A method's receiver, a pipe's or
   an arrow's left side, a tag, `?` and parentheses are no level; a lambda,
   record or list argument starts again (`loose=1` passes depth through the
   last two). `self_test=1` runs its plants (`plants/nest_depth/`).
