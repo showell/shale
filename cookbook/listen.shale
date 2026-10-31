@@ -11,8 +11,9 @@
 -- **`conv=all`, EVERY CONVERSATION THE AGENT IS IN**: roc-chat's one
 -- stream per agent (`GET /stream`, its app/AgentStream.roc), each message
 -- naming its conversation. A post is heard as
--- `#<id> in conversation <c> by <principal>: <its first line>`. `after=`
--- is then an event's place, `<at>.<conversation>.<message>`, as the stream
+-- `#<id> in conversation <c> by <principal>: <its first line>`, or for a
+-- channel topic that names the agent `#<id> in topic <channel>/<topic> by
+-- ...`. `after=` is then an event's place, `<at>.<spot>.<message>`, as the stream
 -- writes its ids (the stop names the one to go on from); none, or `0`, is
 -- live only, nothing before the run. The server's resume may send another
 -- conversation's post of the last second again; a run drops a repeat by
@@ -176,10 +177,12 @@ function first_line(md)
   return ""
 end
 
--- **AN EVENT'S PLACE** on the one stream, `<at>.<conversation>.<message>`
--- (roc-chat's AgentStream): `{at, conv, id}`, or nil for text that is none.
+-- **AN EVENT'S PLACE** on the one stream, `<at>.<spot>.<message>`
+-- (roc-chat's AgentStream), the spot a conversation's number or a channel
+-- topic's `<channel key>/<topic key>`: `{at, conv, id}`, or nil for text
+-- that is none.
 function place_of(text)
-  local m = re_find(text, "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+  local m = re_find(text, "^([0-9]+)\\.([0-9]+|[a-z0-9-]+/[a-z0-9-]+)\\.([0-9]+)$")
   if m == nil then return nil end
   return {at = tonumber(m.groups[1]), conv = m.groups[2], id = tonumber(m.groups[3])}
 end
@@ -357,14 +360,22 @@ function consume(state, text)
       if not has_key(msg, "mentions") then
         return {lines = out, warns = warns, err = "the server sent no mentions with #" .. msg.id .. ": is it a roc-chat older than 2026-10-30, when every message began to carry them? Who a post names is the server's to say, never guessed here; with a server that sends them, go on with after="}
       end
+      -- Where the post is: its spot (a conversation's number, or a
+      -- channel topic's keys, as a place writes them) and its label.
       local conv = state.conv
+      local label = "conversation " .. state.conv
       if state.all then
-        if not has_key(msg, "conversation") then
-          return {lines = out, warns = warns, err = "the one stream sent #" .. msg.id .. " naming no conversation: is it a roc-chat without GET /stream? Go on with after="}
+        if has_key(msg, "conversation") then
+          conv = tostring(msg.conversation)
+          label = "conversation " .. conv
+        elseif has_key(msg, "channel") and has_key(msg, "topic") then
+          conv = lower(msg.channel) .. "/" .. lower(msg.topic)
+          label = "topic " .. msg.channel .. "/" .. msg.topic
+        else
+          return {lines = out, warns = warns, err = "the one stream sent #" .. msg.id .. " naming no conversation or topic: is it a roc-chat without GET /stream? Go on with after="}
         end
-        conv = tostring(msg.conversation)
       end
-      local key = conv .. "/" .. tostring(msg.id)
+      local key = conv .. "#" .. tostring(msg.id)
       if not has_key(state.seen, key) then
         state.seen[key] = true
         local mine = for_me(msg, state.me)
@@ -377,13 +388,13 @@ function consume(state, text)
         end
         local used = budget_used(b.mine_ats, b.newest)
         if used >= WARN_AT and not b.warned then
-          push(warns, "budget: " .. used .. " of " .. AGENT_POSTS_MOST .. " agent-to-agent posts this hour; ask a human to post in conversation " .. conv .. " to reset it")
+          push(warns, "budget: " .. used .. " of " .. AGENT_POSTS_MOST .. " agent-to-agent posts this hour; ask a human to post in " .. label .. " to reset it")
         end
         b.warned = used >= WARN_AT
         if state.all then
           if f.id ~= "" then state.last_place = f.id end
           local p = {at = msg.at, conv = conv, id = msg.id}
-          if mine and after_start(state, p) then push(out, "#" .. msg.id .. " in conversation " .. conv .. " by " .. msg.by .. ": " .. first_line(msg.markdown)) end
+          if mine and after_start(state, p) then push(out, "#" .. msg.id .. " in " .. label .. " by " .. msg.by .. ": " .. first_line(msg.markdown)) end
         else
           if msg.id > state.last then state.last = msg.id end
           if mine and msg.id > state.after then push(out, "#" .. msg.id .. " by " .. msg.by .. ": " .. first_line(msg.markdown)) end
@@ -515,6 +526,12 @@ function self_test()
   local all_budget = replay_all({"all_budget.sse"}, "")
   expect(tally, join(all_budget.warns, " | ") == "budget: 12 of 15 agent-to-agent posts this hour; ask a human to post in conversation 5 to reset it", "the budget is counted per conversation, its warning naming it, another's post not counted: " .. join(all_budget.warns, " | "))
   expect(tally, place_of("1793400003.5.2").conv == "5" and place_of("1.2") == nil and place_of("1.2.3.4") == nil and place_of("a.2.3") == nil, "a place is three counts, dots between")
+  local topics = replay_all({"all_topic.sse"}, "")
+  expect(tally, join(topics.lines, " | ") == "#1 in topic Workshop/Desk by human:7: a job for you | #4 in conversation 3 by human:7: @Cloud hi | #3 in topic Workshop/Desk by human:7: and another", "a channel topic's posts are heard as the topic's, beside a conversation's, a repeat once, the agent's own not: " .. join(topics.lines, " | "))
+  expect(tally, topics.state.last_place == "1793400013.workshop/desk.3", "a topic's place is where it goes on from: " .. topics.state.last_place)
+  local from_topic = replay_all({"all_topic.sse"}, "1793400012.workshop/desk.2")
+  expect(tally, join(from_topic.lines, " | ") == "#3 in topic Workshop/Desk by human:7: and another", "after=<a topic's place> drops its topic's earlier posts and others' of earlier seconds: " .. join(from_topic.lines, " | "))
+  expect(tally, place_of("1.workshop/desk.2").conv == "workshop/desk" and place_of("1.Workshop/Desk.2") == nil and place_of("1.a/b/c.2") == nil and place_of("1.desk.2") == nil, "a topic's spot is two lowercase keys, a slash between")
   local place_spent = after_batch({code = 0, ended = "exit", out = SPENT .. "1793400005.5.3\n"}, false)
   expect(tally, place_spent.act == "next" and place_spent.after == "1793400005.5.3", "a batch on the one stream starts the next from its place")
   if tally.bad > 0 then fail("listen: self-test: " .. tally.bad .. " failed") end

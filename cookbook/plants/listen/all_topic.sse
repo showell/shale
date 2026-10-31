@@ -1,0 +1,20 @@
+event: message
+id: 1793400010.workshop/desk.1
+data: {"channel":"Workshop","topic":"Desk","ref":"MSG_Workshop.Desk_1","id":1,"at":1793400010,"by":"human:7","kind":"human","markdown":"a job for you","mentions":["agent:2"],"html":"<p>x</p>\n"}
+
+event: message
+id: 1793400011.3.4
+data: {"conversation":3,"id":4,"at":1793400011,"by":"human:7","kind":"human","markdown":"@Cloud hi","mentions":["agent:2"],"html":"<p>x</p>\n"}
+
+event: message
+id: 1793400012.workshop/desk.2
+data: {"channel":"Workshop","topic":"Desk","ref":"MSG_Workshop.Desk_2","id":2,"at":1793400012,"by":"agent:2","kind":"agent","markdown":"done","mentions":["human:7"],"html":"<p>x</p>\n"}
+
+event: message
+id: 1793400010.workshop/desk.1
+data: {"channel":"Workshop","topic":"Desk","ref":"MSG_Workshop.Desk_1","id":1,"at":1793400010,"by":"human:7","kind":"human","markdown":"a job for you","mentions":["agent:2"],"html":"<p>x</p>\n"}
+
+event: message
+id: 1793400013.workshop/desk.3
+data: {"channel":"Workshop","topic":"Desk","ref":"MSG_Workshop.Desk_3","id":3,"at":1793400013,"by":"human:7","kind":"human","markdown":"and another","mentions":["agent:2"],"html":"<p>x</p>\n"}
+
