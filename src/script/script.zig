@@ -176,20 +176,7 @@ pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u
         result.stop = machine_stop;
         return result;
     };
-    program.* = parse.parseMeasured(tree, mm.budget.allocator(), source, budgets.nesting, &stop, &result.stack_bytes, options.preludes) catch |e| {
-        result.stop = switch (e) {
-            error.Parse => stop.?,
-            error.OutOfMemory => machine_stop,
-        };
-        return result;
-    };
-    if (parse.unreadArgStop(tree, program, options.args) catch {
-        result.stop = machine_stop;
-        return result;
-    }) |s| {
-        result.stop = s;
-        return result;
-    }
+    // The run is made before the parse, which reads a `use`d library through it.
     var r: interp.Run = .{
         .io = io,
         .alloc = alloc,
@@ -210,9 +197,18 @@ pub fn runOn(engine: Engine, io: Io, backing: std.mem.Allocator, root: []const u
         .diffs = options.diffs,
     };
     defer r.deinit();
+    // A stop before the first step still says what the parse's reads of a
+    // library cost, as the VM's run does.
+    const before: ?Stop = blk: {
+        program.* = parse.parseWith(tree, mm.budget.allocator(), source, budgets.nesting, &stop, &result.stack_bytes, options.preludes, process.libraryLoader(&r)) catch |e| break :blk switch (e) {
+            error.Parse => stop.?,
+            error.OutOfMemory => machine_stop,
+        };
+        break :blk parse.unreadArgStop(tree, program, options.args) catch machine_stop;
+    };
     std.debug.assert(engine == .walker);
     // A stop is the run's answer, in `r.stop`.
-    r.main() catch {};
+    if (before) |s| r.stop = s else r.main() catch {};
     result.stop = r.stop;
     result.output = out[0..r.out_len];
     result.effects = r.effects.items;

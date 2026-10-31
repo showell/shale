@@ -271,13 +271,15 @@ pub fn printReport(r: *const script.Result, name: []const u8, preludes: []const 
         try w.print("── used: {d} of {d} steps, {d} of {d} reads, {d} of {d} read bytes, {d} of {d} output bytes\n", .{ r.steps, b.steps, r.reads, b.reads, r.read_bytes, b.read_bytes, r.output.len, b.output_bytes });
 }
 
-/// Names the source `function` is in: the core's prelude, a later prelude (its
-/// functions are shown as `<its name>'s f`), or the script.
+/// Names the source `function` is in: the core's prelude, a later prelude or a
+/// `use`d library (its functions are shown as `<its name>'s f`, and no
+/// script's function has a `'` in its name), or the script.
 fn placeOf(function: []const u8, name: []const u8, preludes: []const parse_mod.Prelude) []const u8 {
     if (diag.inPrelude(function)) return "the prelude";
     for (preludes) |p| {
         if (function.len > p.name.len + 3 and std.mem.startsWith(u8, function, p.name) and std.mem.startsWith(u8, function[p.name.len..], "'s ")) return p.name;
     }
+    if (std.mem.indexOf(u8, function, "'s ")) |i| return function[0..i];
     return name;
 }
 

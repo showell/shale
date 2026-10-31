@@ -8,6 +8,25 @@ const testing = std.testing;
 const script = @import("shale").script;
 const host_linux = @import("shale_host_linux.zig");
 
+/// Reads a `use`d library as the cookbook-test's mounts would, `cookbook:`
+/// being this tree's `cookbook/`; any other mount is refused.
+const CookbookLoader = struct {
+    io: std.Io,
+    dir: std.Io.Dir,
+
+    fn load(ctx: *anyopaque, into: std.mem.Allocator, path: []const u8, why: *[]const u8) error{OutOfMemory}!?[]const u8 {
+        const l: *CookbookLoader = @ptrCast(@alignCast(ctx));
+        if (!std.mem.startsWith(u8, path, "cookbook:")) {
+            why.* = "a recipe's library is the cookbook's own (`cookbook:`)";
+            return null;
+        }
+        return l.dir.readFileAlloc(l.io, path["cookbook:".len..], into, .limited(1 << 20)) catch |e| {
+            why.* = @errorName(e);
+            return null;
+        };
+    }
+};
+
 test "cookbook: every recipe parses, with the Linux and git preludes" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -18,12 +37,13 @@ test "cookbook: every recipe parses, with the Linux and git preludes" {
     var dir = try std.Io.Dir.cwd().openDir(io, "cookbook", .{ .iterate = true });
     defer dir.close(io);
     var walker = try dir.walk(a);
+    var loader: CookbookLoader = .{ .io = io, .dir = dir };
     var recipes: usize = 0;
     while (try walker.next(io)) |e| {
         if (e.kind != .file or !std.mem.endsWith(u8, e.basename, ".shale")) continue;
         const source = try dir.readFileAlloc(io, e.path, a, .limited(1 << 20));
         var stop: ?script.diag.Stop = null;
-        _ = script.parse.parseMeasured(a, a, source, 64, &stop, null, &.{ host_linux.linux_prelude, host_linux.git_prelude }) catch {
+        _ = script.parse.parseWith(a, a, source, 64, &stop, null, &.{ host_linux.linux_prelude, host_linux.git_prelude }, .{ .ctx = &loader, .load = CookbookLoader.load }) catch {
             if (stop) |s| std.debug.print("cookbook/{s}:{d}:{d}: {s}\n", .{ e.path, s.line, s.column, s.message });
             return error.TestUnexpectedResult;
         };

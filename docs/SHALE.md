@@ -216,6 +216,8 @@ The host chooses, not the script; a signed request names it
   again, and the functions declared after it see it. A table it names can
   still change. No const is read before its line has run: the top level
   below it and the functions declared after it are all that see it.
+- `use("mount:path.shale")`, at the top level only: a library's functions
+  and `const`s, the script's from that line on ("Libraries: `use`").
 
 
 **No separator is needed** between statements: `local x = 1 local y = 2`
@@ -352,7 +354,8 @@ From the loosest to the tightest:
   - Lua's library names (`pairs`, `pcall`, `string`, ...): no function
     takes one, and a call by one is refused, kept to say what to write
     instead;
-  - `attempt`: no function takes it, and a call by it is the language's.
+  - `attempt`: no function takes it, and a call by it is the language's;
+  - `use`: no function takes it, and a statement by it loads a library.
 
   **`table` is both** a builtin and one of Lua's library names, and the
   order above settles it: `table(rows, columns)` is the builtin (step 3),
@@ -966,6 +969,54 @@ print(line_at("chat/channels/general/sessions/plans.md", at))
 200	nil	none
 message 7, a line of it
 ```
+
+## Libraries: `use`
+
+**A file of functions and `const`s a script loads by name**, so recipes
+that need one helper share it rather than copying it:
+
+```lua
+use("cookbook:roc/pinned.shale")
+local roc = roc_bin("stack", SELF)   -- the library's function
+print(SELF_TEST_PIN)                 -- and its const
+```
+
+- **A statement at the top level**, with one string literal: never inside
+  a block or a function, never a value.
+- **The path is a mount's** (`cookbook:...`, `repos:...`), never the
+  root's or an absolute one: a recipe runs from other repositories' roots,
+  where the root's paths are theirs. The file is read as `read` reads it,
+  through the same mounts and their rules (no link, no secrets folder),
+  and is one of the run's reads, its bytes among its read bytes, under
+  the source budget. A file that cannot be read stops the script, named.
+- **It holds functions and `const`s only**, each from the start of its
+  line, as a prelude holds functions. A `const` is a literal: a string, a
+  number, a boolean, or a list or map of them, so a library runs nothing
+  and reads no launch value where it is used. A statement, a `local`, a
+  `const` with a call or a name in it, and a `use` are refused, naming the
+  library's line: a library's own needs are its user's to `use`.
+- **Its names are checked at the `use`:** a name that a builtin, the
+  language (`attempt`, `use`, Lua's library), a prelude's function,
+  another library, the script's function or the script's local above
+  already has is refused, naming both places; and a script's function
+  declared below it by one of its names is refused too. **Its names bind
+  only below the `use` line**, as a declaration's do: above it, a call by
+  one is `no function above this line`. So a builtin added to the language
+  still never changes what a script does.
+- **Its functions load as a prelude's do**, at their first call, and call
+  builtins, the preludes and the library's own (in any order), never the
+  script's or another library's. They see the library's `const`s, which
+  are bound on the `use` line as if the script declared them there, so the
+  script's top level below and its functions declared after see them too.
+- **A stop inside one names the library**, its file and line
+  (`stopped at cookbook:roc/pinned.shale:<line>:<column>`), in the
+  function shown as `cookbook:roc/pinned.shale's roc_bin`, then the
+  script's line that called it.
+- **A library or a prelude?** A repo's prelude (`.shale/prelude.shale`) is
+  every script's that runs at that root, without a word; a library is the
+  script's that names it, wherever the script runs. A recipe that runs
+  from other repositories' roots uses a library. Metal's host loads none:
+  `use` stops there, class `host`.
 
 ## The store
 

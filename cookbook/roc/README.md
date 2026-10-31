@@ -93,8 +93,13 @@ it works on, `<shale>` being the shale checkout:
   The compiler is the tree's own pin, `tools:roc-<pin>/roc` with the pin
   read from the `roc-version` where the run starts; a run without one
   stops, since method lookup has changed between nightlies. `self_test=1`
-  runs its plants (`plants/methods/`, copied to `scratch:`) with the
-  recipe's `SELF_TEST_PIN`.
+  runs its plants (`plants/methods/`, copied to `scratch:`) with
+  `SELF_TEST_PIN`.
+- [pinned.shale](pinned.shale): **the Roc a tree pins**, a library, not a
+  recipe: `use("cookbook:roc/pinned.shale")` gives `roc_bin(who,
+  self_test)`, the pinned `roc`'s path (`tools:roc-<pin>/roc`, the pin from
+  `roc-version` where the run starts), and `SELF_TEST_PIN`, the one Roc
+  every self-test runs. `methods.shale` and `stack.shale` use it.
 
 **Writing a recipe that edits Roc.** roc-ast's columns are bytes, and a
 span's end is exclusive. Spans overlap: `type-mod` and `s-type-decl` both

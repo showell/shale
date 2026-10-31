@@ -64,7 +64,8 @@
 -- has changed between nightlies (before 2026-10-28 a function in one
 -- module could become a method on another module's type), so a rewrite is
 -- judged only by the Roc the tree is built with. The self-test uses
--- `SELF_TEST_PIN`, as CI installs it from roc-apps's release asset.
+-- `SELF_TEST_PIN`, as CI installs it from roc-apps's release asset. Both
+-- are `roc_bin`'s, from the library cookbook/roc/pinned.shale.
 -- budget: steps=900000000 output_bytes=4000000 arena_bytes=2000000000 changes=100000 change_bytes=2000000000
 
 const SELF = arg("self_test", "") == "1"
@@ -73,7 +74,7 @@ const PLANTS = "cookbook:roc/plants/methods"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
 const ROC_AST = "tools:roc-ast/bin/roc-ast"
-const SELF_TEST_PIN = "nightly-2026-10-30-0602c5f"
+use("cookbook:roc/pinned.shale")
 const ROUNDS = 4
 const FROM = tonumber(arg("from", "1"))
 -- A run starts at most 64 programs (Shale's `runs`); a file may take
@@ -87,17 +88,6 @@ const FILE_MOST = ROUNDS + 5
 -- `"a".to_utf8()`; any other (a number, a sum, a lambda, an `if`) is put in
 -- them, `(a + b).to_str()`.
 const ATOMS = {["(e-ident"] = true, ["(e-apply"] = true, ["(e-method-call"] = true, ["(e-field-access"] = true, ["(e-string"] = true, ["(e-list"] = true, ["(e-record"] = true, ["(e-tuple"] = true, ["(e-tag"] = true}
-
-function roc_bin()
-  local pin = SELF_TEST_PIN
-  if not SELF then
-    if not exists("roc-version") then fail("methods: no roc-version where the run starts: run it from the repository's root, whose roc-version pins its Roc") end
-    pin = trim(read("roc-version"))
-  end
-  local roc = "tools:roc-" .. pin .. "/roc"
-  if not exists(roc) then fail("methods: no " .. roc .. ": install Roc " .. pin .. " into ~/tools/roc-" .. pin .. "/ (roc-apps's toolchain release carries it)") end
-  return real(roc)
-end
 
 -- ── the tree ─────────────────────────────────────────────────────────────
 
@@ -280,7 +270,7 @@ end
 -- a warning too (`●`), since a warning fails the build.
 function check(ctx, root)
   ctx.used = ctx.used + 1
-  local r = run({roc_bin(), "check", real(root)}, {timeout_ms = 900000, whole = 64000000})
+  local r = run({roc_bin("methods", SELF), "check", real(root)}, {timeout_ms = 900000, whole = 64000000})
   local errs = {}
   for l in lines(r.out) do
     -- `── ✗ <title> ───── <path>:<line>:<col>` (`●` a warning), the rule's
@@ -306,7 +296,7 @@ end
 -- `roc test` on `root`'s summary, its time dropped: what may not change.
 function tested(ctx, root)
   ctx.used = ctx.used + 1
-  local r = run({roc_bin(), "test", real(root)}, {timeout_ms = 900000, whole = 64000000})
+  local r = run({roc_bin("methods", SELF), "test", real(root)}, {timeout_ms = 900000, whole = 64000000})
   local said = lines(trim(r.out))
   local last = said[#said] or ""
   local m = re_find(last, "^(.*) in [0-9.]+ ms\\.")
@@ -315,7 +305,7 @@ end
 
 function fmt_clean(ctx, p)
   ctx.used = ctx.used + 1
-  return run({roc_bin(), "fmt", "--check", real(p)}, {timeout_ms = 120000, tail = 20}).code == 0
+  return run({roc_bin("methods", SELF), "fmt", "--check", real(p)}, {timeout_ms = 120000, tail = 20}).code == 0
 end
 
 -- **ONE FILE TRIED**: its candidates written in, round by round, until the
@@ -346,7 +336,7 @@ function try_file(ctx, p, t, cands, root, want_test)
         -- Layout only; the test after it would fail on a file that no
         -- longer checks.
         ctx.used = ctx.used + 1
-        run({roc_bin(), "fmt", real(p)}, {timeout_ms = 120000, tail = 20})
+        run({roc_bin("methods", SELF), "fmt", real(p)}, {timeout_ms = 120000, tail = 20})
       end
       local got = tested(ctx, root)
       if got ~= want_test then

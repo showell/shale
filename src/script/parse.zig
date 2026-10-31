@@ -57,6 +57,13 @@ const Frame = struct {
 /// function's name, which only the language can parse.
 const reserved_call = "attempt";
 
+/// The statement that loads a library: `use("mount:path.shale")`, at the top
+/// level. Its name is the language's, as `attempt`'s is.
+const use_statement = "use";
+
+/// The most libraries one script may `use`.
+const libraries_most = 16;
+
 pub const Parser = struct {
     /// Owns the tree the parse returns.
     alloc: std.mem.Allocator,
@@ -97,6 +104,8 @@ pub const Parser = struct {
     /// user's. Each is indexed when the parse starts and loaded like the
     /// core's, at a function's first call. Empty on metal.
     extra: []Extra = &.{},
+    /// How many `extra` may grow to: the preludes, then `libraries_most`.
+    extra_cap: usize = 0,
     /// Which prelude is being parsed (0 for the core's, then `extra`'s), or
     /// null for the script. A prelude calls only its own functions, earlier
     /// preludes' and the builtins, never the script's or a later prelude's.
@@ -104,6 +113,12 @@ pub const Parser = struct {
     /// The top-level `const`s declared so far, which a function declared
     /// after them sees.
     consts: std.ArrayList([]const u8) = .empty,
+    /// Who declared each of `consts`: null for the script, else the library's
+    /// place among the preludes, as `in_prelude` counts them. A library's
+    /// functions see only its own; the script sees every one above it.
+    const_owner: std.ArrayList(?usize) = .empty,
+    /// Reads the library a `use` names. Null where the host loads none.
+    loader: ?Loader = null,
     /// The lowest frame address the parse reached (docs/SHALE.md, "The Zig stack").
     stack_low: usize = std.math.maxInt(usize),
 
@@ -231,7 +246,11 @@ pub const Parser = struct {
 
     /// A top-level `const` by name, among those declared so far.
     fn constant(self: *const Parser, name: []const u8) ?u16 {
-        for (self.consts.items, 0..) |c, i| if (std.mem.eql(u8, c, name)) return @intCast(i);
+        for (self.consts.items, self.const_owner.items, 0..) |c, owner, i| {
+            if (!std.mem.eql(u8, c, name)) continue;
+            if (self.in_prelude) |k| if (owner != k) continue;
+            return @intCast(i);
+        }
         return null;
     }
 
@@ -317,6 +336,7 @@ pub const Parser = struct {
                 if (self.consts.items.len == std.math.maxInt(u16)) return self.failAt(pos, .syntax, "too many constants");
                 const index: u16 = @intCast(self.consts.items.len);
                 try self.consts.append(self.scratch, name);
+                try self.const_owner.append(self.scratch, self.in_prelude);
                 return .{ .pos = pos, .kind = .{ .constant = .{ .slot = slot, .index = index, .value = value } } };
             },
             .kw_if => return self.ifStatement(pos),
@@ -362,6 +382,7 @@ pub const Parser = struct {
                 return .{ .pos = pos, .kind = .{ .do = &.{} } };
             },
             else => {
+                if (self.tok.tag == .name and std.mem.eql(u8, self.tok.text, use_statement) and (try self.peek()).tag == .lparen) return self.useStatement(pos);
                 const target = try self.suffixed();
                 if (self.tok.tag == .assign) {
                     switch (target.kind) {
@@ -465,6 +486,10 @@ pub const Parser = struct {
         // A builtin's name is allowed: the script's calls by it are then
         // to this function.
         if (std.mem.eql(u8, name, reserved_call)) return self.failAt(pos, .name, "`attempt` is the language's own: name the function otherwise");
+        if (std.mem.eql(u8, name, use_statement)) return self.failAt(pos, .name, "`use` is the language's own: name the function otherwise");
+        // A name a library brought is the script's from its `use` on, and
+        // is not declared again, whichever comes first.
+        if (self.in_prelude == null) if (self.libraryHaving(name)) |x| return self.failf(pos, .name, "a function `{s}` is already `use`d: {s}'s (its line {d}), by the `use` at line {d}", .{ name, x.prelude.name, x.index[indexAt(x.index, name).?].line, x.library.?.use_line });
         if (lua_names.get(name) != null) return self.failf(pos, .name, "`{s}` is a name of Lua's library, kept to say what to write instead: name the function otherwise", .{name});
         // A prelude function's name is allowed too, and from this line on the
         // script's calls by it are to this function, so a function added to
@@ -696,6 +721,7 @@ pub const Parser = struct {
                 if (self.tok.tag == .rparen) return self.failAt(self.here(), .syntax, "expected a value after `,`, found `)`");
             } else if (self.tok.tag != .rparen) return self.failf(self.here(), .syntax, "expected `,` or `)` after the function's name, found {s}", .{self.describe(self.tok)});
         } else {
+            if (std.mem.eql(u8, name, use_statement)) return self.failAt(pos, .refused, "`use` is a statement of its own at the top level, `use(\"mount:path.shale\")`, never a value or a call inside a function");
             if (self.lookup(name) != null or (self.in_function and self.constant(name) != null))
                 return self.failf(pos, .refused, "`{s}` is a value here, not a function: a local, a parameter or a `const` of that name hides the function or builtin; name it otherwise", .{name});
             if (try self.functionNamed(name)) |i| {
@@ -750,6 +776,8 @@ pub const Parser = struct {
         if (comptime !preludes_on) return null;
         const last = if (self.in_prelude) |k| k else self.extra.len;
         for (self.extra[0..@min(last, self.extra.len)], 1..) |*x, k| if (indexAt(x.index, name)) |i| {
+            // A library calls the preludes and itself, never another library.
+            if (x.library != null and self.in_prelude != null and self.in_prelude.? != k) continue;
             if (x.loaded[i] == null) try self.loadPrelude(k, i);
             return x.loaded[i].?;
         };
@@ -772,24 +800,135 @@ pub const Parser = struct {
         const saved_ahead = self.ahead;
         const saved_in_prelude = self.in_prelude;
         const saved_nesting = self.nesting;
-        const saved_consts = self.consts;
         const src = if (k == 0) prelude else self.extra[k - 1].prelude.source;
         const at = if (k == 0) prelude_index[i] else self.extra[k - 1].index[i];
         self.lexer = .{ .src = src, .at = at.at, .line = at.line, .alloc = self.alloc };
         self.ahead = null;
         self.in_prelude = k;
         self.nesting = 0;
-        self.consts = .empty;
         defer {
             self.lexer = saved_lexer;
             self.tok = saved_tok;
             self.ahead = saved_ahead;
             self.in_prelude = saved_in_prelude;
             self.nesting = saved_nesting;
-            self.consts = saved_consts;
         }
         try self.advance();
         try self.function(self.here());
+    }
+
+    /// The library that brought `name`, among those `use`d above, or null.
+    fn libraryHaving(self: *const Parser, name: []const u8) ?*const Extra {
+        for (self.extra) |*x| {
+            const lib = x.library orelse continue;
+            if (indexAt(x.index, name) != null or indexAt(lib.consts, name) != null) return x;
+        }
+        return null;
+    }
+
+    /// `use("mount:path.shale")`: reads the library through the host's
+    /// `Loader`, checks it as a prelude is checked, and adds it after the
+    /// preludes, so its functions load at their first call as a prelude's
+    /// do. Its `const`s are bound here, as if the script declared them on
+    /// this line. Below this line its names are the script's; above it they
+    /// are unknown.
+    fn useStatement(self: *Parser, pos: ast.Pos) Error!ast.Stmt {
+        if (self.in_function or self.frame.depth > 1) return self.failAt(pos, .refused, "`use` is a top-level statement only: a library's names are the whole script's, from its line on");
+        try self.advance(); // use
+        try self.advance(); // (
+        if (self.tok.tag != .string) return self.failAt(self.here(), .syntax, "`use` takes one string literal, a library's path through a mount: `use(\"cookbook:roc/pinned.shale\")`");
+        const path = self.tok.text;
+        try self.advance();
+        _ = try self.expect(.rparen, "`)` after the library's path: `use` takes one");
+        if (comptime !preludes_on) return self.failAt(pos, .host, "`use`: this host loads no library");
+        const loader = self.loader orelse return self.failAt(pos, .host, "`use`: this host loads no library");
+        const colon = std.mem.indexOfScalar(u8, path, ':') orelse 0;
+        const mount_ok = colon > 0 and for (path[0..colon]) |c| (if (!(std.ascii.isAlphanumeric(c) or c == '_' or c == '-')) break false) else true;
+        if (!mount_ok or colon + 1 == path.len or path[colon + 1] == '/')
+            return self.failf(pos, .argument, "`use(\"{s}\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), never by an absolute path or the root's: a script runs from other repositories' roots", .{path});
+        for (self.extra) |x| if (x.library) |lib| if (std.mem.eql(u8, x.prelude.name, path))
+            return self.failf(pos, .name, "`use(\"{s}\")` again: it is used at line {d}", .{ path, lib.use_line });
+        if (self.extra.len == self.extra_cap) return self.failf(pos, .argument, "`use(\"{s}\")`: more than {d} libraries", .{ path, libraries_most });
+        var why: []const u8 = "";
+        const source = (try loader.load(loader.ctx, self.alloc, path, &why)) orelse return self.failf(pos, .store, "`use(\"{s}\")`: {s}", .{ path, why });
+        // Indexed as a prelude is: each `function` and `const` from the start
+        // of its line.
+        var functions: std.ArrayList(PreludeFunction) = .empty;
+        var consts: std.ArrayList(PreludeFunction) = .empty;
+        defer functions.deinit(self.scratch);
+        defer consts.deinit(self.scratch);
+        {
+            var at: usize = 0;
+            var line: u32 = 1;
+            while (nextFunction(source, &at, &line)) |f| try functions.append(self.scratch, f);
+            at = 0;
+            line = 1;
+            while (nextConst(source, &at, &line)) |c| try consts.append(self.scratch, c);
+        }
+        const k = self.extra.len + 1;
+        const lib: Library = .{ .use_line = pos.line, .consts = try self.alloc.dupe(PreludeFunction, consts.items) };
+        try self.libraryNames(pos, path, functions.items, lib.consts);
+        const loaded = try self.scratch.alloc(?u32, functions.items.len);
+        @memset(loaded, null);
+        self.extra = self.extra.ptr[0..k];
+        self.extra[k - 1] = .{ .prelude = .{ .name = path, .source = source }, .index = try self.scratch.dupe(PreludeFunction, functions.items), .loaded = loaded, .library = lib };
+        try checkLibrary(self, k, pos);
+        // Each `const`, bound on this line: its literal parsed from the
+        // library, its name the script's from here on.
+        const at = self.stmts.items.len;
+        defer self.stmts.shrinkRetainingCapacity(at);
+        for (lib.consts) |c| {
+            const saved_lexer = self.lexer;
+            const saved_tok = self.tok;
+            const saved_ahead = self.ahead;
+            self.lexer = .{ .src = source, .at = c.at, .line = c.line, .alloc = self.alloc };
+            self.ahead = null;
+            self.in_prelude = k;
+            try self.advance(); // const
+            try self.advance(); // its name
+            try self.advance(); // =
+            try self.advance(); // the value's first token
+            const value = try self.expr();
+            self.in_prelude = null;
+            self.lexer = saved_lexer;
+            self.tok = saved_tok;
+            self.ahead = saved_ahead;
+            const slot = try self.declare(c.name, pos);
+            self.frame.locals.items[self.frame.locals.items.len - 1].constant = true;
+            if (self.consts.items.len == std.math.maxInt(u16)) return self.failAt(pos, .syntax, "too many constants");
+            const index: u16 = @intCast(self.consts.items.len);
+            try self.consts.append(self.scratch, c.name);
+            try self.const_owner.append(self.scratch, k);
+            try self.stmts.append(self.scratch, .{ .pos = pos, .kind = .{ .constant = .{ .slot = slot, .index = index, .value = value } } });
+        }
+        return .{ .pos = pos, .kind = .{ .do = try self.alloc.dupe(ast.Stmt, self.stmts.items[at..]) } };
+    }
+
+    /// Refuses a library's name that is already something here: a builtin,
+    /// the language's own, a prelude's function, another library's, the
+    /// script's function or local, or the library's own twice. Each refusal
+    /// names both places.
+    fn libraryNames(self: *Parser, pos: ast.Pos, path: []const u8, functions: []const PreludeFunction, consts: []const PreludeFunction) Error!void {
+        for ([_][]const PreludeFunction{ functions, consts }, 0..) |list, kind| for (list, 0..) |f, i| {
+            const what = if (kind == 0) "function" else "const";
+            const was: ?[]const u8 = if (std.meta.stringToEnum(ast.Builtin, f.name) != null)
+                "a builtin"
+            else if (std.mem.eql(u8, f.name, reserved_call) or std.mem.eql(u8, f.name, use_statement) or lua_names.get(f.name) != null)
+                "the language's own"
+            else if (preludeAt(f.name) != null)
+                "the prelude's"
+            else blk: {
+                for (self.extra) |e| if (indexAt(e.index, f.name) != null or (e.library != null and indexAt(e.library.?.consts, f.name) != null)) {
+                    break :blk if (e.library) |l| try std.fmt.allocPrint(self.alloc, "{s}'s, by the `use` at line {d}", .{ e.prelude.name, l.use_line }) else try std.fmt.allocPrint(self.alloc, "{s}'s", .{e.prelude.name});
+                };
+                if (self.function_names.get(f.name)) |fi| break :blk try std.fmt.allocPrint(self.alloc, "the script's function at line {d}", .{self.functions.items[fi].pos.line});
+                if (self.lookup(f.name) != null) break :blk "a local or `const` of the script above this line";
+                if (indexAt(functions[0..if (kind == 0) i else functions.len], f.name) != null or (kind == 1 and indexAt(consts[0..i], f.name) != null))
+                    break :blk try std.fmt.allocPrint(self.alloc, "{s}'s own, twice", .{path});
+                break :blk null;
+            };
+            if (was) |w| return self.failf(pos, .name, "`use(\"{s}\")`: its {s} `{s}` ({s}:{d}) is {s} already", .{ path, what, f.name, path, f.line, w });
+        };
     }
 
     fn table(self: *Parser, pos: ast.Pos) Error!*ast.Expr {
@@ -856,7 +995,40 @@ pub const Prelude = struct { name: []const u8, source: []const u8 };
 const preludes_on = @hasDecl(@import("host_io"), "shale_preludes") and @import("host_io").shale_preludes;
 
 /// A later prelude as a parse holds it: its functions, and which are loaded.
-const Extra = struct { prelude: Prelude, index: []const PreludeFunction, loaded: []?u32 };
+/// A `use`d library is one too, with `library` set.
+const Extra = struct { prelude: Prelude, index: []const PreludeFunction, loaded: []?u32, library: ?Library = null };
+
+/// What a library has beyond a prelude: the line of its `use`, and its
+/// `const`s, each from the start of its line.
+const Library = struct { use_line: u32, consts: []const PreludeFunction };
+
+/// The host's reader of a `use`d library: the source at `path` (a mount's,
+/// `cookbook:roc/pinned.shale`), its bytes from `into`, charged as the run's
+/// reads are and under the rules every path of the script's follows; null
+/// when it cannot be read, with `why` said.
+pub const Loader = struct {
+    ctx: *anyopaque,
+    load: *const fn (ctx: *anyopaque, into: std.mem.Allocator, path: []const u8, why: *[]const u8) error{OutOfMemory}!?[]const u8,
+};
+
+/// Returns the next line from `at` on that begins `const NAME`, as
+/// `nextFunction` does for functions: a library's `const`s.
+fn nextConst(src: []const u8, at: *usize, line: *u32) ?PreludeFunction {
+    while (at.* < src.len) {
+        const start = at.*;
+        const end = std.mem.indexOfScalarPos(u8, src, start, '\n') orelse src.len;
+        const text = src[start..end];
+        const this_line = line.*;
+        at.* = end + 1;
+        line.* += 1;
+        if (std.mem.startsWith(u8, text, "const ")) {
+            const rest = text["const ".len..];
+            const stop = std.mem.indexOfAny(u8, rest, " =") orelse rest.len;
+            return .{ .name = rest[0..stop], .at = start, .line = this_line };
+        }
+    }
+    return null;
+}
 
 /// Returns the next line from `at` on that begins `function name(`, or null
 /// at the end. Indexes every prelude: at comptime for the core's, at runtime
@@ -914,18 +1086,8 @@ fn checkPrelude(p: *Parser, k: usize) Error!void {
     }
     var arena = std.heap.ArenaAllocator.init(p.scratch);
     defer arena.deinit();
-    const a = arena.allocator();
-    var q: Parser = .{ .alloc = a, .scratch = a, .lexer = lex.Lexer.init(a, x.prelude.source), .tok = undefined, .max_nesting = p.max_nesting, .extra = p.extra, .in_prelude = k };
-    // Its own loaded slots, so the check leaves the real parse's alone.
-    var own: [16]Extra = undefined;
-    if (p.extra.len > own.len) return p.failAt(.{ .line = 1, .column = 1 }, .argument, "more than 16 preludes");
-    for (p.extra, own[0..p.extra.len]) |e, *o| {
-        o.* = e;
-        o.loaded = try a.alloc(?u32, e.loaded.len);
-        @memset(o.loaded, null);
-    }
-    q.extra = own[0..p.extra.len];
-    q.frame.depth = 0;
+    var own: [extras_most]Extra = undefined;
+    var q = try throwaway(p, k, arena.allocator(), &own);
     onlyFunctions(&q, x.prelude.name) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         error.Parse => {
@@ -933,6 +1095,88 @@ fn checkPrelude(p: *Parser, k: usize) Error!void {
             const message = if (std.mem.indexOf(u8, s.message, x.prelude.name) != null) try p.alloc.dupe(u8, s.message) else try std.fmt.allocPrint(p.alloc, "{s}: {s}", .{ x.prelude.name, s.message });
             return p.failAt(.{ .line = s.line, .column = s.column }, s.class, message);
         },
+    };
+}
+
+/// The most preludes and libraries one parse holds.
+const extras_most = 16 + libraries_most;
+
+/// A parser of prelude or library `k`'s source alone, from `a`, to check it
+/// and be thrown away: its own loaded slots in `own`, so the check leaves the
+/// real parse's alone.
+fn throwaway(p: *Parser, k: usize, a: std.mem.Allocator, own: *[extras_most]Extra) Error!Parser {
+    if (p.extra.len > own.len) return p.failAt(.{ .line = 1, .column = 1 }, .argument, "more than 16 preludes");
+    var q: Parser = .{ .alloc = a, .scratch = a, .lexer = lex.Lexer.init(a, p.extra[k - 1].prelude.source), .tok = undefined, .max_nesting = p.max_nesting, .in_prelude = k };
+    for (p.extra, own[0..p.extra.len]) |e, *o| {
+        o.* = e;
+        o.loaded = try a.alloc(?u32, e.loaded.len);
+        @memset(o.loaded, null);
+    }
+    q.extra = own[0..p.extra.len];
+    q.frame.depth = 0;
+    return q;
+}
+
+/// Checks library `k` where it is used: function after function and `const`
+/// after `const`, each from the start of its line, a `const` a literal, in a
+/// parse of its own thrown away after. A failure is a stop at the `use`,
+/// naming the library's line.
+fn checkLibrary(p: *Parser, k: usize, pos: ast.Pos) Error!void {
+    const x = p.extra[k - 1];
+    var arena = std.heap.ArenaAllocator.init(p.scratch);
+    defer arena.deinit();
+    var own: [extras_most]Extra = undefined;
+    var q = try throwaway(p, k, arena.allocator(), &own);
+    librarySource(&q, k) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.Parse => {
+            const s = q.stop.?;
+            return p.failf(pos, s.class, "`use(\"{s}\")`: {s}:{d}:{d}: {s}", .{ x.prelude.name, x.prelude.name, s.line, s.column, s.message });
+        },
+    };
+}
+
+/// A library's source from its start: functions and `const`s to its end.
+fn librarySource(q: *Parser, k: usize) Error!void {
+    const x = q.extra[k - 1];
+    var functions: usize = 0;
+    var consts: usize = 0;
+    try q.advance();
+    while (q.tok.tag != .eof) {
+        const pos = q.here();
+        if (q.tok.tag == .name and std.mem.eql(u8, q.tok.text, use_statement)) return q.failAt(pos, .refused, "a library uses no other library: its user `use`s each one it needs");
+        if (q.tok.tag != .kw_function and q.tok.tag != .kw_const) return q.failf(pos, .syntax, "a library holds only functions and `const`s, found {s}", .{q.describe(q.tok)});
+        if (pos.column != 1) return q.failAt(pos, .syntax, "a library's functions and `const`s each begin at the start of a line");
+        if (q.tok.tag == .kw_function) {
+            try q.function(pos);
+            functions += 1;
+            continue;
+        }
+        try q.advance();
+        const name = (try q.expect(.name, "a name after `const`")).text;
+        if (q.tok.tag != .assign) return q.failAt(q.here(), .syntax, "a `const` needs its value: `const NAME = ...`");
+        try q.advance();
+        const value = try q.expr();
+        if (!literal(value)) return q.failf(pos, .refused, "a library's `const {s}` is a literal (a string, a number, a boolean, or a list or map of them): a library runs nothing and reads no launch value where it is used", .{name});
+        try q.consts.append(q.scratch, name);
+        try q.const_owner.append(q.scratch, k);
+        consts += 1;
+    }
+    // The index found each by the start of its line; a long string's line
+    // that begins `function ` or `const ` would be one it finds and the
+    // parse does not.
+    if (functions != x.index.len or consts != x.library.?.consts.len)
+        return q.failAt(.{ .line = 1, .column = 1 }, .syntax, "a line inside a long string begins `function ` or `const `, which marks a library's own: begin it otherwise");
+}
+
+/// Whether `e` is a literal: a string, a number, a boolean, or a list or map
+/// of them.
+fn literal(e: *const ast.Expr) bool {
+    return switch (e.kind) {
+        .boolean, .int, .string, .empty_table => true,
+        .list => |items| for (items) |i| (if (!literal(i)) break false) else true,
+        .map => |entries| for (entries) |en| (if (!literal(en.value)) break false) else true,
+        else => false,
     };
 }
 
@@ -964,8 +1208,14 @@ pub fn unreadArgStop(alloc: std.mem.Allocator, program: *const ast.Program, give
 }
 
 pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, source: []const u8, max_nesting: u32, stop: *?diag.Stop, stack_used: ?*usize, preludes: []const Prelude) Error!ast.Program {
+    return parseWith(alloc, scratch, source, max_nesting, stop, stack_used, preludes, null);
+}
+
+/// `parseMeasured`, with the host's reader of `use`d libraries (none: a `use`
+/// is refused).
+pub fn parseWith(alloc: std.mem.Allocator, scratch: std.mem.Allocator, source: []const u8, max_nesting: u32, stop: *?diag.Stop, stack_used: ?*usize, preludes: []const Prelude, loader: ?Loader) Error!ast.Program {
     const top = @frameAddress();
-    var p: Parser = .{ .alloc = alloc, .scratch = scratch, .lexer = lex.Lexer.init(alloc, source), .tok = undefined, .max_nesting = max_nesting };
+    var p: Parser = .{ .alloc = alloc, .scratch = scratch, .lexer = lex.Lexer.init(alloc, source), .tok = undefined, .max_nesting = max_nesting, .loader = loader };
     defer if (stack_used) |u| {
         u.* = top -| p.stack_low;
     };
@@ -978,11 +1228,13 @@ pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, sourc
         p.function_names.deinit(scratch);
         p.functions.deinit(scratch);
         p.consts.deinit(scratch);
+        p.const_owner.deinit(scratch);
         p.args_read.deinit(scratch);
     }
     errdefer stop.* = p.stop;
     p.frame.depth = 0;
-    const extra: []Extra = if (comptime preludes_on) try scratch.alloc(Extra, preludes.len) else &.{};
+    const extra: []Extra = if (comptime preludes_on) try scratch.alloc(Extra, preludes.len + libraries_most) else &.{};
+    p.extra_cap = extra.len;
     defer if (comptime preludes_on) {
         for (extra[0..p.extra.len]) |x| {
             scratch.free(x.index);
@@ -991,7 +1243,8 @@ pub fn parseMeasured(alloc: std.mem.Allocator, scratch: std.mem.Allocator, sourc
         scratch.free(extra);
     };
     if (comptime preludes_on) {
-        for (preludes, extra) |pre, *x| {
+        p.extra = extra[0..0];
+        for (preludes, extra[0..preludes.len]) |pre, *x| {
             var index: std.ArrayList(PreludeFunction) = .empty;
             errdefer index.deinit(scratch);
             var at: usize = 0;

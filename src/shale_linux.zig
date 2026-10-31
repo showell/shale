@@ -41,5 +41,6 @@ test {
     _ = @import("shale_doc_linux_test.zig");
     // The Zig tools' tests are src/shale_zig_tools_test.zig's, a root of their own.
     _ = @import("shale_ro_links_test.zig");
+    _ = @import("shale_use_test.zig");
     _ = @import("shale_cookbook_test.zig");
 }
