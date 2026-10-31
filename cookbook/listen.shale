@@ -16,6 +16,10 @@
 -- There is no rule for agents answering agents: the roc-chat server
 -- bounds agent-to-agent traffic, the one home of that limit, so an
 -- agent's every mention is heard.
+-- **THE BUDGET WARNING**: the server's limit is mirrored here (its numbers
+-- below), so at 12 of 15 of the agent's own agent-to-agent posts this hour
+-- one line, `budget: ...`, says so once a crossing, before any post heard
+-- with it; it never ends a run, and goes to `log=` too.
 -- `after=` is the last id already handled: nothing at or before it is
 -- printed.
 --
@@ -52,6 +56,13 @@ const WINDOW_S = tonumber(arg("window", "20"))
 -- Of a run's 64 programs, the windows take all but one, left spare.
 const WINDOWS_MOST = 63
 const LINE_MOST = 200
+-- **roc-chat's agent-to-agent limit, mirrored**: an agent makes at most
+-- AGENT_POSTS_MOST posts naming another agent in WINDOW_SECS, counting
+-- only those since the last human post (a human post resets it). The
+-- server enforces it; the listener warns at WARN_AT, before a refusal.
+const AGENT_POSTS_MOST = 15
+const WINDOW_SECS = 3600
+const WARN_AT = 12
 
 -- ── the decision, pure ───────────────────────────────────────────────────
 
@@ -75,6 +86,28 @@ function for_me(msg, me)
   return names(msg, me)
 end
 
+-- Whether `by` is an agent and the post names an agent not itself: one
+-- of the agent-to-agent posts the server's limit counts.
+function agent_to_agent(msg)
+  if not starts_with(msg.by, "agent:") then return false end
+  for m in msg.mentions do
+    if m ~= msg.by and starts_with(m, "agent:") then return true end
+  end
+  return false
+end
+
+-- The agent's agent-to-agent posts within the hour before `newest`.
+-- `at` is roc-chat's message time in seconds, and "now" is the newest
+-- `at` seen, never the box's clock, so a replay counts as the live run
+-- did.
+function budget_used(ats, newest)
+  local n = 0
+  for t in ats do
+    if t > newest - WINDOW_SECS then n = n + 1 end
+  end
+  return n
+end
+
 -- The post's first line with text, trimmed and cut.
 function first_line(md)
   for l in lines(md) do
@@ -89,8 +122,8 @@ end
 
 -- ── the frames, pure ─────────────────────────────────────────────────────
 
-function new_state(me, after)
-  return {me = me, after = after, last = 0, seen = {}}
+function new_state(me, after, conv)
+  return {me = me, after = after, conv = conv, last = 0, seen = {}, mine_ats = {}, newest = 0, warned = false}
 end
 
 -- The whole frames of a stretch of the stream, each `{event, id, data}`:
@@ -120,31 +153,43 @@ function frames(text)
   return got
 end
 
--- A stretch of the stream into `state`: `{lines, err}`, each line a post
--- for the agent past `after`, `err` a gap's account or a message's without
+-- A stretch of the stream into `state`: `{lines, warns, err}`, each line a
+-- post for the agent past `after`, each warn a budget crossing, `err` a gap's account or a message's without
 -- `mentions`, each ending where `after=` goes on. A post seen before
 -- (a window that brings one again) is not printed twice.
 function consume(state, text)
   local out = {}
+  local warns = {}
   for f in frames(text) do
     if f.event == "gap" then
-      return {lines = out, err = "a gap: posts before " .. get(json_read(f.data), "before", "?") .. " are past the backlog; read them with GET /conversations/<id>?before= and start again with after="}
+      return {lines = out, warns = warns, err = "a gap: posts before " .. get(json_read(f.data), "before", "?") .. " are past the backlog; read them with GET /conversations/<id>?before= and start again with after="}
     end
     if f.event == "message" then
       local msg = json_read(f.data)
       if not has_key(msg, "mentions") then
-        return {lines = out, err = "the server sent no mentions with #" .. msg.id .. ": is it a roc-chat older than 2026-10-30, when every message began to carry them? Who a post names is the server's to say, never guessed here; with a server that sends them, go on with after="}
+        return {lines = out, warns = warns, err = "the server sent no mentions with #" .. msg.id .. ": is it a roc-chat older than 2026-10-30, when every message began to carry them? Who a post names is the server's to say, never guessed here; with a server that sends them, go on with after="}
       end
       local key = tostring(msg.id)
       if not has_key(state.seen, key) then
         state.seen[key] = true
         local mine = for_me(msg, state.me)
+        if msg.at > state.newest then state.newest = msg.at end
+        if starts_with(msg.by, "human:") then
+          state.mine_ats = {}
+        elseif msg.by == state.me and agent_to_agent(msg) then
+          push(state.mine_ats, msg.at)
+        end
+        local used = budget_used(state.mine_ats, state.newest)
+        if used >= WARN_AT and not state.warned then
+          push(warns, "budget: " .. used .. " of " .. AGENT_POSTS_MOST .. " agent-to-agent posts this hour; ask a human to post in conversation " .. state.conv .. " to reset it")
+        end
+        state.warned = used >= WARN_AT
         if msg.id > state.last then state.last = msg.id end
         if mine and msg.id > state.after then push(out, "#" .. msg.id .. " by " .. msg.by .. ": " .. first_line(msg.markdown)) end
       end
     end
   end
-  return {lines = out, err = ""}
+  return {lines = out, warns = warns, err = ""}
 end
 
 -- ── the self-test ────────────────────────────────────────────────────────
@@ -158,14 +203,16 @@ end
 
 -- The windows in order, each a plant file, through one state.
 function replay(files, after)
-  local state = new_state("agent:2", after)
+  local state = new_state("agent:2", after, "3")
   local all = {}
+  local warns = {}
   for f in files do
     local r = consume(state, read(PLANTS .. "/" .. f))
     for l in r.lines do push(all, l) end
-    if r.err ~= "" then return {lines = all, err = r.err, state = state} end
+    for w in r.warns do push(warns, w) end
+    if r.err ~= "" then return {lines = all, warns = warns, err = r.err, state = state} end
   end
-  return {lines = all, err = "", state = state}
+  return {lines = all, warns = warns, err = "", state = state}
 end
 
 function self_test()
@@ -187,10 +234,16 @@ function self_test()
   expect(tally, contains(unserved.err, "the server sent no mentions with #2") and join(unserved.lines, " | ") == "#1 by human:7: @CC first" and unserved.state.last == 1, "a message without mentions stops the run, named, after the posts before it: " .. unserved.err)
   local tenth = replay({"tenth.sse"}, 0)
   expect(tally, #tenth.lines == 10 and tenth.lines[10] == "#19 by agent:1: @CC tenth", "an agent's tenth mention in a row, answered by the agent each time, is still heard: " .. join(tenth.lines, " | "))
+  local warn = replay({"budget_warn.sse"}, 0)
+  expect(tally, join(warn.warns, " | ") == "budget: 12 of 15 agent-to-agent posts this hour; ask a human to post in conversation 3 to reset it", "twelve of the agent's agent-to-agent posts in the hour warn once, the thirteenth not again: " .. join(warn.warns, " | "))
+  local reset = replay({"budget_reset.sse"}, 0)
+  expect(tally, #reset.warns == 0, "a human post after eleven starts the count again, so eleven more warn nothing: " .. join(reset.warns, " | "))
+  local old = replay({"budget_old.sse"}, 0)
+  expect(tally, #old.warns == 0, "posts older than the hour count for nothing: " .. join(old.warns, " | "))
   local quiet = replay({"pings.sse"}, 0)
   expect(tally, #quiet.lines == 0 and quiet.state.last == 0, "pings alone are nothing")
   if tally.bad > 0 then fail("listen: self-test: " .. tally.bad .. " failed") end
-  print("listen self_test: PASS (own posts and pings give none, an agent's every mention is heard, the server's mentions decide, a message without them stops the run, after= and a repeated window print nothing twice, a gap is named)")
+  print("listen self_test: PASS (own posts and pings give none, an agent's every mention is heard, the server's mentions decide, a message without them stops the run, after= and a repeated window print nothing twice, a gap is named, the budget warns once at 12 in the hour since a human spoke)")
 end
 
 -- ── the live path ────────────────────────────────────────────────────────
@@ -206,7 +259,7 @@ function listen()
     fail("listen: site=, conv=, me= and key=keys:<file> are each needed")
   end
   if not ONCE and LOG == "" then fail("listen: without once=1, log= is needed: a run's output shows only when it ends, and the lines are appended there as they are heard") end
-  local state = new_state(ME, AFTER)
+  local state = new_state(ME, AFTER, CONV)
   for w = 1, WINDOWS_MOST do
     local argv = {"curl", "-sN", "--max-time", tostring(WINDOW_S), "-w", "\n%{http_code}",
       "--variable", "%LISTEN_KEY", "--expand-header", "Authorization: Bearer {{LISTEN_KEY:trim}}"}
@@ -221,6 +274,7 @@ function listen()
     local status = sub(r.out, cut + 1)
     if status ~= "200" then fail("listen: the stream answered " .. status .. " (curl exited " .. r.code .. "): the key refused, or the conversation not the agent's") end
     local got = consume(state, sub(r.out, 1, cut - 1))
+    for w in got.warns do heard(w) end
     for l in got.lines do
       heard(l)
       if ONCE then return nil end
