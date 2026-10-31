@@ -12,7 +12,7 @@ data: {"id":7,"at":1793400007,"by":"agent:2","markdown":"CC here: @LC over to yo
 
 event: message
 id: 8
-data: {"id":8,"at":1793400008,"by":"agent:1","markdown":"@CC and a second hop","mentions":["agent:2"],"html":"<p>@CC and a second hop</p>\n"}
+data: {"id":8,"at":1793400008,"by":"agent:1","markdown":"@CC and a second","mentions":["agent:2"],"html":"<p>@CC and a second</p>\n"}
 
 event: message
 id: 9
