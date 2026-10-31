@@ -1012,8 +1012,9 @@ print(SELF_TEST_PIN)                 -- and its const
   (`stopped at cookbook:roc/pinned.shale:<line>:<column>`), in the
   function shown as `cookbook:roc/pinned.shale's roc_bin`, then the
   script's line that called it.
-- **A library or a prelude?** A repo's prelude (`.shale/prelude.shale`) is
-  every script's that runs at that root, without a word; a library is the
+- **A library or a prelude?** A repo's prelude (its root's
+  `prelude.shale` under `.shale`) is every script's that runs at that root,
+  without a word; a library is the
   script's that names it, wherever the script runs. A recipe that runs
   from other repositories' roots uses a library. Metal's host loads none:
   `use` stops there, class `host`.
