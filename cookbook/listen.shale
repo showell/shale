@@ -29,10 +29,22 @@
 -- curl's `--max-time`), the first with no `Last-Event-ID` (the newest page),
 -- each after it resuming at the last whole frame. A post is heard at most
 -- a window late.
+-- **IN BATCHES** (`after_batch`, pure): the windows run in a batch, a
+-- child run of this script (`batch=1`, every value passed on) with its own
+-- 64 programs: 63 curls, about 21 minutes of quiet at 20 s windows. It
+-- ends one of three ways: a post heard with `once=1`, which the caller
+-- prints and exits 0 on; a stop (a refusal, a gap), which stops the caller
+-- with the batch's own line; or its curls spent, which it ends with
+-- `listen batch spent: after=<id>`, and the caller starts the next batch
+-- from that id. Any other end stops the caller, named, never a quiet loop.
+-- A batch is one of the caller's programs, so a run listens through 63
+-- batches, about 22 hours of quiet; then it stops, naming the `after=` to
+-- start it again with. The batch's lines (posts, `budget:`, reconnects)
+-- reach the caller's output when the batch ends, and `log=` as heard.
 --   - `once=1` prints the first post for the agent and exits 0: a detached
 --     command that ends is what wakes a session on the box.
 --   - Otherwise each line is appended to `log=` as it is heard (required),
---     for `tail -F` under a watcher, until the run's programs are spent; the
+--     for `tail -F` under a watcher, until the run's batches are spent; the
 --     stop names the `after=` to go on from.
 -- **IT RECONNECTS BY ITSELF** (`after_window`, pure): a deploy restarts
 -- roc-chat and ends every stream, so the stream ended by the server, no
@@ -42,17 +54,21 @@
 -- after=<id>, in <n> s`, (to `log=` too), waits (`backoff_s`: 2, 5, 15,
 -- 30, then 60 s between attempts, back to 2 after a window that ran its
 -- length) and resumes from the last id seen, so nothing is missed or
--- heard twice. A reconnect is a curl, one of the run's 63: a long outage
--- (about an hour at 60 s) spends them, and the stop says so.
+-- heard twice. A reconnect is a curl, one of its batch's 63, and each
+-- batch begins its waits again at 2 s.
 -- **A DEAD LISTENER IS NEVER QUIET**: a refusal, 401 or 403 (the key
 -- revoked or wrong) or 404 (no such conversation, or not the agent's),
 -- a `gap` (more missed than the backlog holds), a message without
--- `mentions` (a server older than them), or the run's programs spent
--- (windows and reconnects together: start it again with the `after=`
--- the stop names) each stop the run nonzero, named.
+-- `mentions` (a server older than them), or the run's batches spent
+-- (start it again with the `after=` the stop names) each stop the run
+-- nonzero, named.
 --
 -- `self_test=1` feeds the recorded frames in `cookbook/plants/listen/`
--- through the same `consume` the live path uses: no roc-chat, no network.
+-- through the same `consume` the live path uses, and a batch's every end
+-- through `after_batch`: no roc-chat, no network. Two hidden knobs serve a
+-- live test against a local server: `curls=` (1 to 63) a batch's curls,
+-- to roll batches over quickly, and `self=` the script a batch runs
+-- (`cookbook:listen.shale`, as no builtin names a script's own path).
 --
 -- budget: steps=200000000 arena_bytes=400000000
 
@@ -65,8 +81,19 @@ const AFTER = tonumber(arg("after", "0"))
 const ONCE = arg("once", "") == "1"
 const LOG = arg("log", "")
 const WINDOW_S = tonumber(arg("window", "20"))
--- Of a run's 64 programs, the windows take all but one, left spare.
-const WINDOWS_MOST = 63
+-- A batch, the child run that holds the windows (see HOW IT LISTENS).
+const BATCH = arg("batch", "") == "1"
+-- How the parent runs itself: no builtin names a script's own path, so
+-- it is said here, and `self=` (a hidden test knob) runs a lane's copy.
+const SELF_PATH = arg("self", "cookbook:listen.shale")
+-- Of a run's 64 programs, a batch's windows take all but one, left
+-- spare; `curls=` (a hidden test knob) takes fewer, to roll batches over.
+const WINDOWS_MOST = tonumber(arg("curls", "63"))
+-- The parent's programs: one a batch, all but one, left spare.
+const BATCHES_MOST = 63
+-- The line a batch ends with when its curls are spent: the parent goes
+-- on from its id. Never a post's line, which starts with `#`.
+const SPENT = "listen batch spent: after="
 const LINE_MOST = 200
 -- **roc-chat's agent-to-agent limit, mirrored**: an agent makes at most
 -- AGENT_POSTS_MOST posts naming another agent in WINDOW_SECS, counting
@@ -170,6 +197,56 @@ end
 function resume_id(state)
   if state.last > state.after then return state.last end
   return state.after
+end
+
+-- ── the batches, pure ────────────────────────────────────────────────────
+
+-- What a batch's end means, `{act, lines, after, reason}`, from `run`'s
+-- answer (`code`, `ended`, `out`): `lines` are the batch's own (posts,
+-- `budget:` and reconnect lines), to pass through; `act` is `done` (a
+-- post heard with `once`), `next` (its curls spent: go on from `after`)
+-- or `stop` (its own stop, a refusal or a gap, or an end that is none of
+-- these, so a broken batch never loops quietly).
+function after_batch(r, once)
+  local out = {}
+  local after = ""
+  local stopped = ""
+  local post = false
+  -- Shale's footers (`── time:`, `── used:`, a stop's `called from`)
+  -- end a run, and a footer can run over lines; only `── budgets` comes
+  -- first.
+  local footer = false
+  for l in lines(r.out) do
+    if starts_with(l, "──") and not starts_with(l, "── budgets") then
+      footer = true
+      local at = find(l, ": fail: ")
+      if starts_with(l, "── stopped at ") then
+        if at ~= nil then stopped = sub(l, at + 8) else stopped = l end
+      end
+    elseif footer or starts_with(l, "──") then
+      -- not the batch's
+    elseif starts_with(l, SPENT) then
+      after = sub(l, #SPENT + 1)
+    elseif l ~= "" then
+      push(out, l)
+      if starts_with(l, "#") then post = true end
+    end
+  end
+  if stopped ~= "" then
+    -- The stop's own step count is the child's, not the line's.
+    local m = re_find(stopped, " \\([0-9]+ steps\\)$")
+    if m ~= nil then stopped = sub(stopped, 1, m.at - 1) end
+  end
+  if r.ended ~= "exit" then
+    return {act = "stop", lines = out, after = "", reason = "listen: a batch ended by " .. r.ended .. ", not by itself"}
+  end
+  if r.code ~= 0 then
+    if stopped == "" then stopped = "listen: a batch exited " .. r.code .. " naming no stop" end
+    return {act = "stop", lines = out, after = "", reason = stopped}
+  end
+  if once and post then return {act = "done", lines = out, after = "", reason = ""} end
+  if re_find(after, "^[0-9]+$") ~= nil then return {act = "next", lines = out, after = after, reason = ""} end
+  return {act = "stop", lines = out, after = "", reason = "listen: a batch exited 0 with no post and no `" .. SPENT .. "<id>` line"}
 end
 
 -- ── the frames, pure ─────────────────────────────────────────────────────
@@ -315,8 +392,28 @@ function self_test()
   for n = 1, 7 do push(waits, tostring(backoff_s(n))) end
   expect(tally, join(waits, " ") == "2 5 15 30 60 60 60", "the waits back off 2, 5, 15, 30, then 60 s: " .. join(waits, " "))
   expect(tally, resume_id(new_state("agent:2", 12, "3")) == 12 and resume_id(three.state) == 10, "a reconnect goes on from the after= given until a newer id is seen")
+  local heard_once = after_batch({code = 0, ended = "exit", out = "reconnecting after the server ended the stream, from after=7, in 2 s\nbudget: 12 of 15 agent-to-agent posts this hour; ask a human\n#9 by human:7: @CC hi\n── time: 4 s\n"}, true)
+  expect(tally, heard_once.act == "done" and join(heard_once.lines, " | ") == "reconnecting after the server ended the stream, from after=7, in 2 s | budget: 12 of 15 agent-to-agent posts this hour; ask a human | #9 by human:7: @CC hi", "a batch that heard a post with once=1 is done, its lines passed through, the footer not: " .. join(heard_once.lines, " | "))
+  local refused = after_batch({code = 1, ended = "exit", out = "reconnecting after no connection (curl exited 7), from after=7, in 2 s\n── stopped at cookbook:listen.shale:470:43: fail: listen: the stream answered 401: the key refused (revoked or wrong); nothing to retry (812 steps)\n── used: 812 of 200000000 steps\n"}, true)
+  expect(tally, refused.act == "stop" and refused.reason == "listen: the stream answered 401: the key refused (revoked or wrong); nothing to retry" and #refused.lines == 1, "a batch's refusal stops the parent with the batch's own line: " .. refused.reason)
+  local spent = after_batch({code = 0, ended = "exit", out = "reconnecting after the stream answered 502, from after=12, in 2 s\n" .. SPENT .. "12\n── time: 1260 s\n"}, true)
+  expect(tally, spent.act == "next" and spent.after == "12" and join(spent.lines, " | ") == "reconnecting after the stream answered 502, from after=12, in 2 s", "a batch with its curls spent starts the next from its id, the spent line not passed through: " .. spent.after)
+  local logged = after_batch({code = 0, ended = "exit", out = "#9 by human:7: @CC hi\n" .. SPENT .. "9\n"}, false)
+  expect(tally, logged.act == "next" and logged.after == "9" and logged.lines[1] == "#9 by human:7: @CC hi", "without once=1 a post heard is passed through and the next batch goes on from its id")
+  local wrapped = after_batch({code = 0, ended = "exit", out = "── budgets from the script's header: steps=200000000\n#9 by human:7: @CC hi\n── time: 5 programs, 10.1 s in all; the slowest 2.0 s: curl -sN -w\n%{http_code} --variable; slept 2.0 s\n   called from x\n"}, true)
+  expect(tally, wrapped.act == "done" and join(wrapped.lines, " | ") == "#9 by human:7: @CC hi", "the budgets header and a footer running over lines are not the batch's: " .. join(wrapped.lines, " | "))
+  local silent = after_batch({code = 0, ended = "exit", out = "reconnecting after the server ended the stream, from after=3, in 2 s\n"}, true)
+  expect(tally, silent.act == "stop" and contains(silent.reason, "no post and no"), "a batch that exits 0 with neither a post nor a spent line stops, never loops: " .. silent.reason)
+  local bare = after_batch({code = 0, ended = "exit", out = ""}, false)
+  expect(tally, bare.act == "stop", "a batch with no output at all stops")
+  local crashed = after_batch({code = 2, ended = "exit", out = "shale: cookbook:nope.shale: not found\n"}, true)
+  expect(tally, crashed.act == "stop" and contains(crashed.reason, "exited 2") and crashed.lines[1] == "shale: cookbook:nope.shale: not found", "a batch that dies naming no stop stops the parent with its code, its output passed through: " .. crashed.reason)
+  local killed = after_batch({code = 0, ended = "timeout", out = SPENT .. "4\n"}, true)
+  expect(tally, killed.act == "stop" and contains(killed.reason, "timeout"), "a batch ended by its timeout stops, even with a spent line: " .. killed.reason)
+  local junk = after_batch({code = 0, ended = "exit", out = SPENT .. "x\n"}, true)
+  expect(tally, junk.act == "stop", "a spent line whose id is no number stops")
   if tally.bad > 0 then fail("listen: self-test: " .. tally.bad .. " failed") end
-  print("listen self_test: PASS (own posts and pings give none, an agent's every mention is heard, the server's mentions decide, a message without them stops the run, after= and a repeated window print nothing twice, a gap is named, the budget warns once at 12 in the hour since a human spoke, 401, 403 and 404 stop, an ended stream, no connection and every other status reconnect, backing off 2 to 60 s)")
+  print("listen self_test: PASS (own posts and pings give none, an agent's every mention is heard, the server's mentions decide, a message without them stops the run, after= and a repeated window print nothing twice, a gap is named, the budget warns once at 12 in the hour since a human spoke, 401, 403 and 404 stop, an ended stream, no connection and every other status reconnect, backing off 2 to 60 s, and a batch heard, refused, spent or broken each decides the caller: done, stop, the next batch, stop)")
 end
 
 -- ── the live path ────────────────────────────────────────────────────────
@@ -327,16 +424,23 @@ function heard(l)
   return nil
 end
 
-function listen()
+function needed()
   if SITE == "" or CONV == "" or ME == "" or KEY == "" then
     fail("listen: site=, conv=, me= and key=keys:<file> are each needed")
   end
   if not ONCE and LOG == "" then fail("listen: without once=1, log= is needed: a run's output shows only when it ends, and the lines are appended there as they are heard") end
+  return nil
+end
+
+-- One batch: its windows, until a post with `once`, a stop, or its curls
+-- spent, which it ends with the `SPENT` line.
+function listen()
+  needed()
   local state = new_state(ME, AFTER, CONV)
   -- Reconnects in a row, since the last window that ran its length.
   local tries = 0
   for w = 1, WINDOWS_MOST do
-    local argv = {"curl", "-sN", "--max-time", tostring(WINDOW_S), "-w", "\n%{http_code}",
+    local argv = {"curl", "-sN", "--max-time", tostring(WINDOW_S), "-w", "\\n%{http_code}",
       "--variable", "%LISTEN_KEY", "--expand-header", "Authorization: Bearer {{LISTEN_KEY:trim}}"}
     if state.last > 0 then
       push(argv, "-H")
@@ -366,7 +470,32 @@ function listen()
       sleep(backoff_s(tries) * 1000)
     end
   end
-  fail("listen: " .. WINDOWS_MOST .. " curls, windows and reconnects together, a run's programs spent; start it again with after=" .. resume_id(state))
+  print(SPENT .. resume_id(state))
+  return nil
 end
 
-if SELF then self_test() else listen() end
+-- The listener a caller starts: batches, each a child run of this script
+-- with its own 64 programs, one of the parent's each.
+function listen_batches()
+  needed()
+  if WINDOWS_MOST < 1 or WINDOWS_MOST > 63 then fail("listen: curls= is 1 to 63, a batch's programs") end
+  local after = tostring(AFTER)
+  for b = 1, BATCHES_MOST do
+    local argv = {"shale", "--root", ".", SELF_PATH, "batch=1", "site=" .. SITE, "conv=" .. CONV, "me=" .. ME,
+      "key=" .. KEY, "after=" .. after, "window=" .. WINDOW_S, "curls=" .. WINDOWS_MOST}
+    if ONCE then push(argv, "once=1") end
+    if LOG ~= "" then push(argv, "log=" .. LOG) end
+    -- The longest a batch can take: each curl its window and slack, and
+    -- the longest wait after it.
+    local r = run(argv, {timeout_ms = WINDOWS_MOST * (WINDOW_S + 90) * 1000 + 60000, tail = 2000, width = 4096})
+    local d = after_batch(r, ONCE)
+    -- The batch wrote its lines to `log=` as it heard them.
+    for l in d.lines do print(l) end
+    if d.act == "done" then return nil end
+    if d.act == "stop" then fail(d.reason) end
+    after = d.after
+  end
+  fail("listen: " .. BATCHES_MOST .. " batches of " .. WINDOWS_MOST .. " curls, a run's programs spent; start it again with after=" .. after)
+end
+
+if SELF then self_test() elseif BATCH then listen() else listen_batches() end
