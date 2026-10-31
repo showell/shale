@@ -1,8 +1,8 @@
 -- **A FAILURE SAID BY ITS TAGS, IN PLACE** (metal-vmm QUEUE 303, from the
 -- Roc style review's S9 and S5): Roc's errors as roc-apps
 -- docs/roc-style.md ("Errors and failure") writes them, read from Roc's
--- own parser's tree (roc-ast, at `tools:roc-ast/bin/roc-ast`, as
--- `name_hunt.shale` reads it), so a comment or a string never counts. A
+-- own parser's tree (`roc_tree`, the Linux prelude's, over roc-ast at
+-- `tools:roc-ast/bin/roc-ast`), so a comment or a string never counts. A
 -- finding is a question for a reader, never a verdict:
 --
 --   error_alias   a function whose result holds a `Try` whose error names
@@ -46,9 +46,8 @@
 const SELF = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/errors/"
 const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
-const ROC_AST = "tools:roc-ast/bin/roc-ast"
 const CHECKS = {"error_alias", "optional_tag"}
-const OUTER = {["(file"] = true, ["(statements"] = true, ["(s-type-decl"] = true, ["(associated"] = true}
+const OUTER = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
 
 -- A word table of cookbook/words/, the hunts' one home for them: a word a
 -- line, `--` starting a note.
@@ -74,84 +73,70 @@ function say(p, line, check, why)
   return nil
 end
 
-function depth_of(l)
-  local d = 0
-  while sub(l, d + 1, d + 1) == "\t" do d = d + 1 end
-  return d
-end
-
-if not exists(ROC_AST) then fail("errors: no " .. ROC_AST .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it (see name_hunt.shale)") end
+-- Every file's tree as one list `N`, each node's `parent` and `kids`
+-- moved to their place in it (`parent` 0 for a root), and `FILE` the path
+-- of each.
 const paths = glob(GLOB)
-const shown = {}
-const reals = {}
-for p in paths do
-  push(reals, real(p))
-  shown[real(p)] = p
-end
-const H = {}
-const DEP = {}
+const N = {}
 const FILE = {}
-if #reals > 0 then
-  local dump = run({real(ROC_AST)}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
-  -- A file that does not parse stops roc-ast there: hunting the trees so
-  -- far would pass the rest unread.
-  if dump.ended ~= "exit" or dump.code ~= 0 then
-    local said = lines(trim(dump.out))
-    fail("errors: roc-ast: " .. (said[#said] or dump.ended))
+do
+  local refused = {}
+  for f in roc_tree(paths) do
+    if f.err ~= "" then push(refused, f.err) end
+    local base = #N
+    for n in f.nodes do
+      local ks = {}
+      for k in n.kids do push(ks, k + base) end
+      n.kids = ks
+      if n.parent > 0 then n.parent = n.parent + base end
+      push(N, n)
+      push(FILE, f.path)
+    end
   end
-  local f = ""
-  for l in lines(dump.out) do
-    push(DEP, depth_of(l))
-    local h = trim(l)
-    push(H, h)
-    if starts_with(h, "== ") then f = shown[sub(h, 4)] or sub(h, 4) end
-    push(FILE, f)
-  end
+  -- A file that does not parse has no tree: hunting the rest would pass it
+  -- unread.
+  if #refused > 0 then fail("errors: roc-ast refused " .. #refused .. " files: " .. join(refused, "; ")) end
 end
 
 function kids(at)
-  local out = {}
-  local i = at + 1
-  while i <= #H and DEP[i] > DEP[at] do
-    if DEP[i] == DEP[at] + 1 then push(out, i) end
-    i = i + 1
-  end
-  return out
+  return N[at].kids
 end
 
+-- The last node of the subtree at `at`: nodes run in source order, each
+-- before its kids.
 function last_of(at)
-  local i = at + 1
-  while i <= #H and DEP[i] > DEP[at] do i = i + 1 end
-  return i - 1
+  local i = at
+  while #N[i].kids > 0 do i = N[i].kids[#N[i].kids] end
+  return i
 end
 
 function kind(at)
-  return split(H[at], " ")[1]
+  return N[at].kind
 end
 
 function nm(at)
-  return between(H[at], "(name \"", "\")") or ""
+  return get(N[at], "name", "")
 end
 
 function raw(at)
-  return between(H[at], "(raw \"", "\")") or ""
+  return get(N[at], "raw", "")
 end
 
 -- A node's line; one with no span of its own is placed by the first below
 -- it that has one.
 function line(at)
   local i = at
-  while i <= #H and between(H[i], "@", ".") == nil do i = i + 1 end
-  return between(H[i], "@", ".") or "?"
+  while i <= #N and N[i].line == 0 do i = i + 1 end
+  return i <= #N and N[i].line or "?"
 end
 
 -- The tags of a `ty-tag-union`, by name (`Some` of `Some(U64)` too).
 function union_tags(at)
   local out = {}
   for t in kids(at) do
-    if starts_with(H[t], "(tags") then
+    if kind(t) == "tags" then
       for g in kids(t) do
-        if starts_with(H[g], "(ty-apply ") then push(out, nm(kids(g)[1])) else push(out, nm(g)) end
+        if kind(g) == "ty-apply" then push(out, nm(kids(g)[1])) else push(out, nm(g)) end
       end
     end
   end
@@ -160,11 +145,13 @@ end
 
 -- ── error_alias: a function's result, its every `Try` ────────────────────
 
--- Whether the node at depth `d` sits where a top-level or module member's
--- annotation does, from the kinds above it.
-function is_outer(kinds, d)
-  for k = 1, d do
-    if not has_key(OUTER, kinds[k]) then return false end
+-- Whether node `at` sits where a top-level or module member's annotation
+-- does, from the kinds above it.
+function is_outer(at)
+  local p = N[at].parent
+  while p > 0 do
+    if not has_key(OUTER, kind(p)) then return false end
+    p = N[p].parent
   end
   return true
 end
@@ -176,34 +163,32 @@ end
 -- bare name (`Problem` inside Stored.roc).
 const QUAL = {}
 const BARE = {}
-do
-  local around = {}
-  for i = 1, #H do
-    local d = DEP[i]
-    if starts_with(H[i], "== ") then
-      around = {}
-    else
-      around[d + 1] = ""
-      if kind(i) == "(s-type-decl" then
-        local ks = kids(i)
-        local n = nm(ks[1])
-        if n ~= "" and #ks > 1 then
-          local chain = {}
-          for k = 1, d do
-            if around[k] ~= "" then push(chain, around[k]) end
-          end
-          push(chain, n)
-          QUAL[join(chain, ".")] = ks[2]
-          if #chain == 1 then
-            local base = split(FILE[i], "/")
-            base = base[#base]
-            QUAL[sub(base, 1, #base - 4) .. "." .. n] = ks[2]
-          end
-          BARE[FILE[i] .. "|" .. n] = ks[2]
-          around[d + 1] = n
-        end
-      end
+-- The name a type declaration at `at` declares, or "".
+function decl_name(at)
+  local ks = kids(at)
+  if kind(at) ~= "s-type-decl" or #ks < 2 then return "" end
+  return nm(ks[1])
+end
+
+for i = 1, #N do
+  local n = decl_name(i)
+  if n ~= "" then
+    local up = {n}
+    local p = N[i].parent
+    while p > 0 do
+      if decl_name(p) ~= "" then push(up, decl_name(p)) end
+      p = N[p].parent
     end
+    local chain = {}
+    for k = #up, 1, -1 do push(chain, up[k]) end
+    local at = kids(i)[2]
+    QUAL[join(chain, ".")] = at
+    if #chain == 1 then
+      local base = split(FILE[i], "/")
+      base = base[#base]
+      QUAL[sub(base, 1, #base - 4) .. "." .. n] = at
+    end
+    BARE[FILE[i] .. "|" .. n] = at
   end
 end
 
@@ -216,8 +201,8 @@ function error_kind(file, n, hops)
   if has_key(BUILTIN, n) then return "other" end
   local at = get(BARE, file .. "|" .. n) or get(QUAL, n)
   if at == nil then return "unknown" end
-  if kind(at) == "(ty-tag-union" then return #union_tags(at) > 0 and "union" or "other" end
-  if kind(at) == "(ty" and nm(at) ~= "" and hops < 8 then return error_kind(file, nm(at), hops + 1) end
+  if kind(at) == "ty-tag-union" then return #union_tags(at) > 0 and "union" or "other" end
+  if kind(at) == "ty" and nm(at) ~= "" and hops < 8 then return error_kind(file, nm(at), hops + 1) end
   return "other"
 end
 
@@ -225,29 +210,22 @@ end
 -- `error_alias` cannot judge, by name: said in the counts, never dropped.
 const unjudged = {}
 
-do
-  local kinds = {}
-  for i = 1, #H do
-    local d = DEP[i]
-    if not starts_with(H[i], "== ") then
-      kinds[d + 1] = kind(i)
-      if starts_with(H[i], "(s-type-anno ") and is_outer(kinds, d) then
-        local ks = kids(i)
-        if #ks > 0 and starts_with(H[ks[1]], "(ty-fn ") then
-          local parts = kids(ks[1])
-          local res = parts[#parts]
-          for j = res, last_of(res) do
-            if starts_with(H[j], "(ty-apply ") then
-              local tk = kids(j)
-              if #tk == 3 and nm(tk[1]) == "Try" then
-                local e = tk[3]
-                local n = nm(e)
-                if n ~= "" and kind(e) == "(ty" then
-                  local ek = error_kind(FILE[i], n, 0)
-                  if ek == "union" then say(FILE[i], line(i), "error_alias", "`" .. nm(i) .. "` fails with `" .. n .. "`, a shared alias of tags: list the tags it can return in place, or leave the error to inference (`_`)") end
-                  if ek == "unknown" then unjudged[n] = get(unjudged, n, 0) + 1 end
-                end
-              end
+for i = 1, #N do
+  if kind(i) == "s-type-anno" and is_outer(i) then
+    local ks = kids(i)
+    if #ks > 0 and kind(ks[1]) == "ty-fn" then
+      local parts = kids(ks[1])
+      local res = parts[#parts]
+      for j = res, last_of(res) do
+        if kind(j) == "ty-apply" then
+          local tk = kids(j)
+          if #tk == 3 and nm(tk[1]) == "Try" then
+            local e = tk[3]
+            local n = nm(e)
+            if n ~= "" and kind(e) == "ty" then
+              local ek = error_kind(FILE[i], n, 0)
+              if ek == "union" then say(FILE[i], line(i), "error_alias", "`" .. nm(i) .. "` fails with `" .. n .. "`, a shared alias of tags: list the tags it can return in place, or leave the error to inference (`_`)") end
+              if ek == "unknown" then unjudged[n] = get(unjudged, n, 0) + 1 end
             end
           end
         end
@@ -262,16 +240,16 @@ end
 -- patterns' by file and tag.
 const typed = {}
 const used = {}
-for i = 1, #H do
+for i = 1, #N do
   local k = kind(i)
-  if k == "(ty-tag-union" then
+  if k == "ty-tag-union" then
     for t in union_tags(i) do
       if has_key(OPTIONALS, t) then
         typed[t] = true
         say(FILE[i], line(i), "optional_tag", "`" .. t .. "` names an optional: tag what the value is, and its absence by why (`[Latest(Message), NoMessage]`)")
       end
     end
-  elseif k == "(e-tag" or k == "(p-tag" then
+  elseif k == "e-tag" or k == "p-tag" then
     local n = raw(i)
     local key = FILE[i] .. "|" .. n
     if has_key(OPTIONALS, n) and not has_key(used, key) then used[key] = {path = FILE[i], line = line(i), tag = n} end
