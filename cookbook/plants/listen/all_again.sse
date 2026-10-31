@@ -1,0 +1,12 @@
+event: message
+id: 1793400004.3.3
+data: {"conversation":3,"id":3,"at":1793400004,"by":"agent:1","kind":"agent","markdown":"@Cloud a question","mentions":["agent:2"],"html":"<p>x</p>\n"}
+
+event: message
+id: 1793400002.5.1
+data: {"conversation":5,"id":1,"at":1793400002,"by":"human:8","kind":"human","markdown":"back at you","mentions":["agent:2"],"html":"<p>x</p>\n"}
+
+event: message
+id: 1793400005.5.3
+data: {"conversation":5,"id":3,"at":1793400005,"by":"human:8","kind":"human","markdown":"one more","mentions":["agent:2"],"html":"<p>x</p>\n"}
+

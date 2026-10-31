@@ -6,6 +6,18 @@
 --
 --   shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 key=keys:roc_chat_cc_key once=1
 --   shale cookbook:listen.shale site=... conv=3 me=agent:2 key=keys:... log=listen.log after=12
+--   shale cookbook:listen.shale site=... conv=all me=agent:2 key=keys:... log=listen.log
+--
+-- **`conv=all`, EVERY CONVERSATION THE AGENT IS IN**: roc-chat's one
+-- stream per agent (`GET /stream`, its app/AgentStream.roc), each message
+-- naming its conversation. A post is heard as
+-- `#<id> in conversation <c> by <principal>: <its first line>`. `after=`
+-- is then an event's place, `<at>.<conversation>.<message>`, as the stream
+-- writes its ids (the stop names the one to go on from); none, or `0`, is
+-- live only, nothing before the run. The server's resume may send another
+-- conversation's post of the last second again; a run drops a repeat by
+-- conversation and id, so only a start from `after=` may print one twice.
+-- The budget warning is per conversation, as the server's limit is.
 --
 -- **A POST IS FOR THE AGENT** when both hold (`for_me`, pure):
 --   1. it is not the agent's own (`by` is not `me`);
@@ -77,7 +89,12 @@ const SITE = arg("site", "")
 const CONV = arg("conv", "")
 const ME = arg("me", "")
 const KEY = arg("key", "")
-const AFTER = tonumber(arg("after", "0"))
+-- `conv=all`: the agent's one stream, every conversation it is in.
+const ALL = CONV == "all"
+-- Where a run starts: a message id, or with `conv=all` an event's place
+-- (empty: live only).
+const AFTER_TEXT = arg("after", "0")
+const AFTER = parse_int(AFTER_TEXT) or 0
 const ONCE = arg("once", "") == "1"
 const LOG = arg("log", "")
 const WINDOW_S = tonumber(arg("window", "20"))
@@ -159,6 +176,14 @@ function first_line(md)
   return ""
 end
 
+-- **AN EVENT'S PLACE** on the one stream, `<at>.<conversation>.<message>`
+-- (roc-chat's AgentStream): `{at, conv, id}`, or nil for text that is none.
+function place_of(text)
+  local m = re_find(text, "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+  if m == nil then return nil end
+  return {at = tonumber(m.groups[1]), conv = m.groups[2], id = tonumber(m.groups[3])}
+end
+
 -- ── the reconnect, pure ──────────────────────────────────────────────────
 
 -- What a window's answer means, `{act, reason}`: `go` (it ran its
@@ -170,7 +195,7 @@ function after_window(status, code)
     return {act = "stop", reason = "the stream answered " .. status .. ": the key refused (revoked or wrong)"}
   end
   if status == "404" then
-    return {act = "stop", reason = "the stream answered 404: no such conversation, or not the agent's"}
+    return {act = "stop", reason = "the stream answered 404: no such conversation, or not the agent's (with conv=all, a server without /stream)"}
   end
   if status == "200" then
     if code == 28 then return {act = "go", reason = ""} end
@@ -193,8 +218,13 @@ function backoff_s(n)
 end
 
 -- The `after=` a caller goes on from: the last id seen, or the one it
--- gave if nothing newer came.
+-- gave if nothing newer came; with `conv=all`, the last event's place, or
+-- the one it gave.
 function resume_id(state)
+  if state.all then
+    if state.last_place ~= "" then return state.last_place end
+    return state.after_place
+  end
   if state.last > state.after then return state.last end
   return state.after
 end
@@ -245,14 +275,40 @@ function after_batch(r, once)
     return {act = "stop", lines = out, after = "", reason = stopped}
   end
   if once and post then return {act = "done", lines = out, after = "", reason = ""} end
-  if re_find(after, "^[0-9]+$") ~= nil then return {act = "next", lines = out, after = after, reason = ""} end
+  if re_find(after, "^[0-9]+$") ~= nil or place_of(after) ~= nil then return {act = "next", lines = out, after = after, reason = ""} end
   return {act = "stop", lines = out, after = "", reason = "listen: a batch exited 0 with no post and no `" .. SPENT .. "<id>` line"}
 end
 
 -- ── the frames, pure ─────────────────────────────────────────────────────
 
+-- `after` is a message id; with `conv` "all", `after_place` an event's
+-- place (or empty, for live only). The budget's count is kept a
+-- conversation each (`budgets`).
 function new_state(me, after, conv)
-  return {me = me, after = after, conv = conv, last = 0, seen = {}, mine_ats = {}, newest = 0, warned = false}
+  return {me = me, after = after, conv = conv, all = conv == "all", after_place = "", last_place = "", last = 0, seen = {}, budgets = {}}
+end
+
+-- The state for `conv=all`, resuming after `place` (empty: live only).
+function new_all_state(me, place)
+  local s = new_state(me, 0, "all")
+  s.after_place = place
+  return s
+end
+
+-- Conversation `conv`'s budget count, made at its first post.
+function budget_of(state, conv)
+  if not has_key(state.budgets, conv) then state.budgets[conv] = {mine_ats = {}, newest = 0, warned = false} end
+  return state.budgets[conv]
+end
+
+-- Whether a post at `p` comes after the run's start: always for a live
+-- run; past the start's id in its conversation; another conversation's
+-- of that second or later (AgentStream.is_after, the server's own rule).
+function after_start(state, p)
+  local start = place_of(state.after_place)
+  if start == nil then return true end
+  if p.conv == start.conv then return p.id > start.id end
+  return p.at >= start.at
 end
 
 -- The whole frames of a stretch of the stream, each `{event, id, data}`:
@@ -291,30 +347,47 @@ function consume(state, text)
   local warns = {}
   for f in frames(text) do
     if f.event == "gap" then
-      return {lines = out, warns = warns, err = "a gap: posts before " .. get(json_read(f.data), "before", "?") .. " are past the backlog; read them with GET /conversations/<id>?before= and start again with after="}
+      local g = json_read(f.data)
+      local where = "<id>"
+      if has_key(g, "conversation") then where = tostring(g.conversation) end
+      return {lines = out, warns = warns, err = "a gap: posts before " .. get(g, "before", "?") .. " are past the backlog; read them with GET /conversations/" .. where .. "?before= and start again with after="}
     end
     if f.event == "message" then
       local msg = json_read(f.data)
       if not has_key(msg, "mentions") then
         return {lines = out, warns = warns, err = "the server sent no mentions with #" .. msg.id .. ": is it a roc-chat older than 2026-10-30, when every message began to carry them? Who a post names is the server's to say, never guessed here; with a server that sends them, go on with after="}
       end
-      local key = tostring(msg.id)
+      local conv = state.conv
+      if state.all then
+        if not has_key(msg, "conversation") then
+          return {lines = out, warns = warns, err = "the one stream sent #" .. msg.id .. " naming no conversation: is it a roc-chat without GET /stream? Go on with after="}
+        end
+        conv = tostring(msg.conversation)
+      end
+      local key = conv .. "/" .. tostring(msg.id)
       if not has_key(state.seen, key) then
         state.seen[key] = true
         local mine = for_me(msg, state.me)
-        if msg.at > state.newest then state.newest = msg.at end
+        local b = budget_of(state, conv)
+        if msg.at > b.newest then b.newest = msg.at end
         if starts_with(msg.by, "human:") then
-          state.mine_ats = {}
+          b.mine_ats = {}
         elseif msg.by == state.me and agent_to_agent(msg) then
-          push(state.mine_ats, msg.at)
+          push(b.mine_ats, msg.at)
         end
-        local used = budget_used(state.mine_ats, state.newest)
-        if used >= WARN_AT and not state.warned then
-          push(warns, "budget: " .. used .. " of " .. AGENT_POSTS_MOST .. " agent-to-agent posts this hour; ask a human to post in conversation " .. state.conv .. " to reset it")
+        local used = budget_used(b.mine_ats, b.newest)
+        if used >= WARN_AT and not b.warned then
+          push(warns, "budget: " .. used .. " of " .. AGENT_POSTS_MOST .. " agent-to-agent posts this hour; ask a human to post in conversation " .. conv .. " to reset it")
         end
-        state.warned = used >= WARN_AT
-        if msg.id > state.last then state.last = msg.id end
-        if mine and msg.id > state.after then push(out, "#" .. msg.id .. " by " .. msg.by .. ": " .. first_line(msg.markdown)) end
+        b.warned = used >= WARN_AT
+        if state.all then
+          if f.id ~= "" then state.last_place = f.id end
+          local p = {at = msg.at, conv = conv, id = msg.id}
+          if mine and after_start(state, p) then push(out, "#" .. msg.id .. " in conversation " .. conv .. " by " .. msg.by .. ": " .. first_line(msg.markdown)) end
+        else
+          if msg.id > state.last then state.last = msg.id end
+          if mine and msg.id > state.after then push(out, "#" .. msg.id .. " by " .. msg.by .. ": " .. first_line(msg.markdown)) end
+        end
       end
     end
   end
@@ -333,6 +406,20 @@ end
 -- The windows in order, each a plant file, through one state.
 function replay(files, after)
   local state = new_state("agent:2", after, "3")
+  local all = {}
+  local warns = {}
+  for f in files do
+    local r = consume(state, read(PLANTS .. "/" .. f))
+    for l in r.lines do push(all, l) end
+    for w in r.warns do push(warns, w) end
+    if r.err ~= "" then return {lines = all, warns = warns, err = r.err, state = state} end
+  end
+  return {lines = all, warns = warns, err = "", state = state}
+end
+
+-- The same, on the one stream (`conv=all`), from `place`.
+function replay_all(files, place)
+  local state = new_all_state("agent:2", place)
   local all = {}
   local warns = {}
   for f in files do
@@ -412,8 +499,26 @@ function self_test()
   expect(tally, killed.act == "stop" and contains(killed.reason, "timeout"), "a batch ended by its timeout stops, even with a spent line: " .. killed.reason)
   local junk = after_batch({code = 0, ended = "exit", out = SPENT .. "x\n"}, true)
   expect(tally, junk.act == "stop", "a spent line whose id is no number stops")
+  -- ── conv=all: the one stream ──
+  local all2 = replay_all({"all.sse", "all_again.sse"}, "")
+  expect(tally, join(all2.lines, " | ") == "#1 in conversation 3 by human:7: @Cloud hi | #1 in conversation 5 by human:8: back at you | #3 in conversation 3 by agent:1: @Cloud a question | #3 in conversation 5 by human:8: one more", "the one stream gives each conversation's posts for the agent, each naming its conversation, a repeat (5/1, sent again on resume) once, its own and others' not: " .. join(all2.lines, " | "))
+  expect(tally, all2.state.last_place == "1793400005.5.3" and resume_id(all2.state) == "1793400005.5.3", "the last whole frame's place is where it goes on from: " .. resume_id(all2.state))
+  local cut_first = replay_all({"all.sse"}, "")
+  expect(tally, cut_first.state.last_place == "1793400003.5.2", "a frame the window cut is left for the next: " .. cut_first.state.last_place)
+  local from = replay_all({"all.sse", "all_again.sse"}, "1793400003.3.2")
+  expect(tally, join(from.lines, " | ") == "#3 in conversation 3 by agent:1: @Cloud a question | #3 in conversation 5 by human:8: one more", "after=<place> drops its conversation's earlier posts and others' of earlier seconds: " .. join(from.lines, " | "))
+  expect(tally, resume_id(new_all_state("agent:2", "1.2.3")) == "1.2.3" and resume_id(new_all_state("agent:2", "")) == "", "with nothing newer seen, it goes on from the place it was given, or live")
+  local all_gap = replay_all({"all_gap.sse"}, "")
+  expect(tally, contains(all_gap.err, "posts before 40") and contains(all_gap.err, "/conversations/5?before="), "a gap on the one stream names its conversation: " .. all_gap.err)
+  local unnamed = replay_all({"all_unnamed.sse"}, "")
+  expect(tally, contains(unnamed.err, "naming no conversation") and #unnamed.lines == 0, "a message on the one stream naming no conversation stops the run, named: " .. unnamed.err)
+  local all_budget = replay_all({"all_budget.sse"}, "")
+  expect(tally, join(all_budget.warns, " | ") == "budget: 12 of 15 agent-to-agent posts this hour; ask a human to post in conversation 5 to reset it", "the budget is counted per conversation, its warning naming it, another's post not counted: " .. join(all_budget.warns, " | "))
+  expect(tally, place_of("1793400003.5.2").conv == "5" and place_of("1.2") == nil and place_of("1.2.3.4") == nil and place_of("a.2.3") == nil, "a place is three counts, dots between")
+  local place_spent = after_batch({code = 0, ended = "exit", out = SPENT .. "1793400005.5.3\n"}, false)
+  expect(tally, place_spent.act == "next" and place_spent.after == "1793400005.5.3", "a batch on the one stream starts the next from its place")
   if tally.bad > 0 then fail("listen: self-test: " .. tally.bad .. " failed") end
-  print("listen self_test: PASS (own posts and pings give none, an agent's every mention is heard, the server's mentions decide, a message without them stops the run, after= and a repeated window print nothing twice, a gap is named, the budget warns once at 12 in the hour since a human spoke, 401, 403 and 404 stop, an ended stream, no connection and every other status reconnect, backing off 2 to 60 s, and a batch heard, refused, spent or broken each decides the caller: done, stop, the next batch, stop)")
+  print("listen self_test: PASS (own posts and pings give none, an agent's every mention is heard, the server's mentions decide, a message without them stops the run, after= and a repeated window print nothing twice, a gap is named, the budget warns once at 12 in the hour since a human spoke, 401, 403 and 404 stop, an ended stream, no connection and every other status reconnect, backing off 2 to 60 s, and a batch heard, refused, spent or broken each decides the caller: done, stop, the next batch, stop; and conv=all hears every conversation's, each named, a repeat once, from a place, its gaps and budgets per conversation)")
 end
 
 -- ── the live path ────────────────────────────────────────────────────────
@@ -426,7 +531,7 @@ end
 
 function needed()
   if SITE == "" or CONV == "" or ME == "" or KEY == "" then
-    fail("listen: site=, conv=, me= and key=keys:<file> are each needed")
+    fail("listen: site=, conv= (an id, or all), me= and key=keys:<file> are each needed")
   end
   if not ONCE and LOG == "" then fail("listen: without once=1, log= is needed: a run's output shows only when it ends, and the lines are appended there as they are heard") end
   return nil
@@ -437,16 +542,32 @@ end
 function listen()
   needed()
   local state = new_state(ME, AFTER, CONV)
+  if ALL then
+    local start = AFTER_TEXT
+    if start == "0" then start = "" end
+    if start ~= "" and place_of(start) == nil then fail("listen: with conv=all, after= is an event's place, <at>.<conversation>.<message>, or 0 for live only: " .. start) end
+    state = new_all_state(ME, start)
+  end
   -- Reconnects in a row, since the last window that ran its length.
   local tries = 0
   for w = 1, WINDOWS_MOST do
     local argv = {"curl", "-sN", "--max-time", tostring(WINDOW_S), "-w", "\\n%{http_code}",
       "--variable", "%LISTEN_KEY", "--expand-header", "Authorization: Bearer {{LISTEN_KEY:trim}}"}
-    if state.last > 0 then
-      push(argv, "-H")
-      push(argv, "Last-Event-ID: " .. state.last)
+    local resume = ""
+    if state.all then
+      resume = resume_id(state)
+    elseif state.last > 0 then
+      resume = tostring(state.last)
     end
-    push(argv, SITE .. "/conversations/" .. CONV .. "/stream")
+    if resume ~= "" then
+      push(argv, "-H")
+      push(argv, "Last-Event-ID: " .. resume)
+    end
+    if state.all then
+      push(argv, SITE .. "/stream")
+    else
+      push(argv, SITE .. "/conversations/" .. CONV .. "/stream")
+    end
     local r = run(argv, {timeout_ms = (WINDOW_S + 30) * 1000, whole = 16777216, secrets = {LISTEN_KEY = KEY}})
     local cut = #r.out
     while cut > 0 and sub(r.out, cut, cut) ~= "\n" do cut = cut - 1 end
@@ -480,6 +601,7 @@ function listen_batches()
   needed()
   if WINDOWS_MOST < 1 or WINDOWS_MOST > 63 then fail("listen: curls= is 1 to 63, a batch's programs") end
   local after = tostring(AFTER)
+  if ALL then after = AFTER_TEXT end
   for b = 1, BATCHES_MOST do
     local argv = {"shale", "--root", ".", SELF_PATH, "batch=1", "site=" .. SITE, "conv=" .. CONV, "me=" .. ME,
       "key=" .. KEY, "after=" .. after, "window=" .. WINDOW_S, "curls=" .. WINDOWS_MOST}

@@ -1,0 +1,4 @@
+event: message
+id: 1793400001.3.1
+data: {"id":1,"at":1793400001,"by":"human:7","markdown":"@Cloud hi","mentions":["agent:2"],"html":"<p>x</p>\n"}
+
