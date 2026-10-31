@@ -373,6 +373,13 @@ verdict without its noise) for any project; the Zig ones in
 declarations along them and judge the move; `roc/` and `zig17/` are those
 work's. Copy one and change it; not everything is a builtin.
 
+**Where a script lives:** a script starts in the repository that uses it,
+in that repo's own scripts folder. It moves to the cookbook lazily, once it
+has proven itself and a second repository wants it; reuse is never forced,
+and a near-copy that fits its repo is fine. A repository that isn't
+Shale's keeps its custom scripts, with a short README in their folder
+naming them and the cookbook recipes it relies on.
+
 **A recipe over a whole tree** keeps each file's work in a function and
 calls `yield()` after each file, as `cookbook/sealed.shale` and the name
 hunts do: what a file's call made (its tokens, its lines) is let go there,
