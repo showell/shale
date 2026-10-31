@@ -88,6 +88,16 @@ function folders_under(mounted, prefix)
   return out
 end
 
+-- The spots `du` sized, biggest first: one it left out (a cache never
+-- made, or deleted) is no spot, never a stop.
+function sized(found, sizes)
+  local out = {}
+  for f in found do
+    if has_key(sizes, f.path) then out[#out + 1] = {path = f.path, label = f.label, kib = sizes[f.path]} end
+  end
+  return sort(out, {{key = "kib", desc = true}, "label"})
+end
+
 -- Every growth spot with its size, biggest first: `{path, label, kib}`.
 function spots()
   local home = trim(must(run({"printenv", "HOME"}, {timeout_ms = 10000, whole = 4000})).out)
@@ -97,13 +107,7 @@ function spots()
   for f in folders_under("scratch:.", "scratch:") do found[#found + 1] = f end
   local paths = {}
   for f in found do paths[#paths + 1] = f.path end
-  local sizes = du_kib(paths)
-  local out = {}
-  for f in found do
-    local kib = sizes[f.path]
-    if kib ~= nil then out[#out + 1] = {path = f.path, label = f.label, kib = kib} end
-  end
-  return sort(out, {{key = "kib", desc = true}, "label"})
+  return sized(found, du_kib(paths))
 end
 
 function biggest_three()
@@ -132,7 +136,9 @@ if SELF_TEST then
   if gb_text(0) ~= "0.0 GB" or gb_text(KIB_PER_GB * 3 // 2) ~= "1.5 GB" or gb_text(KIB_PER_GB - 1) ~= "0.9 GB" then
     fail("disk self_test: gb_text is " .. gb_text(0) .. ", " .. gb_text(KIB_PER_GB * 3 // 2) .. ", " .. gb_text(KIB_PER_GB - 1))
   end
-  print("disk self_test: PASS (" .. free .. " GB free: a floor of " .. (free + 1) .. " fails with the line, " .. free .. " and " .. (free - 1) .. " pass)")
+  local some = sized({{path = "/a", label = "a"}, {path = "/gone", label = "gone"}, {path = "/b", label = "b"}}, {["/a"] = 5, ["/b"] = 9})
+  if #some ~= 2 or some[1].label ~= "b" or some[2].label ~= "a" then fail("disk self_test: a spot du left out (deleted) is not skipped, or the rest are out of order") end
+  print("disk self_test: PASS (" .. free .. " GB free: a floor of " .. (free + 1) .. " fails with the line, " .. free .. " and " .. (free - 1) .. " pass; a spot du left out is skipped)")
 elseif REPORT then
   print("disk: " .. (free_kib() // KIB_PER_GB) .. " GB free")
   -- A spot under a tenth of a GB is counted, not listed.
