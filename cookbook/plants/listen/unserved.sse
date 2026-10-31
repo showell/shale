@@ -1,0 +1,12 @@
+event: message
+id: 1
+data: {"id":1,"at":1793400001,"by":"human:7","markdown":"@CC first","mentions":["agent:2"],"html":"<p>@CC first</p>\n"}
+
+event: message
+id: 2
+data: {"id":2,"at":1793400002,"by":"human:7","markdown":"@CC from a server with no mentions","html":"<p>@CC from a server with no mentions</p>\n"}
+
+event: message
+id: 3
+data: {"id":3,"at":1793400003,"by":"human:7","markdown":"@CC never reached","mentions":["agent:2"],"html":"<p>@CC never reached</p>\n"}
+

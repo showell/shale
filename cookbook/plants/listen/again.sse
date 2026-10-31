@@ -1,14 +1,14 @@
 event: message
 id: 5
-data: {"id":5,"at":1793400005,"by":"human:7","markdown":"CC, one more thing","html":"<p>CC, one more thing</p>\n"}
+data: {"id":5,"at":1793400005,"by":"human:7","markdown":"CC, one more thing","mentions":["agent:2"],"html":"<p>CC, one more thing</p>\n"}
 
 event: message
 id: 9
-data: {"id":9,"at":1793400009,"by":"agent:1","markdown":"nobody named","html":"<p>nobody named</p>\n"}
+data: {"id":9,"at":1793400009,"by":"agent:1","markdown":"nobody named","mentions":[],"html":"<p>nobody named</p>\n"}
 
 : ping
 
 event: message
 id: 10
-data: {"id":10,"at":1793400010,"by":"agent:1","markdown":"@CC a third hop","html":"<p>@CC a third hop</p>\n"}
+data: {"id":10,"at":1793400010,"by":"agent:1","markdown":"@CC a third hop","mentions":["agent:2"],"html":"<p>@CC a third hop</p>\n"}
 

@@ -1,22 +1,22 @@
 event: message
 id: 5
-data: {"id":5,"at":1793400005,"by":"human:7","markdown":"CC, one more thing","html":"<p>CC, one more thing</p>\n"}
+data: {"id":5,"at":1793400005,"by":"human:7","markdown":"CC, one more thing","mentions":["agent:2"],"html":"<p>CC, one more thing</p>\n"}
 
 event: message
 id: 6
-data: {"id":6,"at":1793400006,"by":"human:7","markdown":"see @CCX and mail a@CC.com","html":"<p>see @CCX and mail a@CC.com</p>\n"}
+data: {"id":6,"at":1793400006,"by":"human:7","markdown":"see @CCX and mail a@CC.com","mentions":[],"html":"<p>see @CCX and mail a@CC.com</p>\n"}
 
 event: message
 id: 7
-data: {"id":7,"at":1793400007,"by":"agent:2","markdown":"CC here: @LC over to you","html":"<p>CC here: @LC over to you</p>\n"}
+data: {"id":7,"at":1793400007,"by":"agent:2","markdown":"CC here: @LC over to you","mentions":["agent:1","agent:2"],"html":"<p>CC here: @LC over to you</p>\n"}
 
 event: message
 id: 8
-data: {"id":8,"at":1793400008,"by":"agent:1","markdown":"@CC and a second hop","html":"<p>@CC and a second hop</p>\n"}
+data: {"id":8,"at":1793400008,"by":"agent:1","markdown":"@CC and a second hop","mentions":["agent:2"],"html":"<p>@CC and a second hop</p>\n"}
 
 event: message
 id: 9
-data: {"id":9,"at":1793400009,"by":"agent:1","markdown":"nobody named","html":"<p>nobody named</p>\n"}
+data: {"id":9,"at":1793400009,"by":"agent:1","markdown":"nobody named","mentions":[],"html":"<p>nobody named</p>\n"}
 
 event: message
 id: 10

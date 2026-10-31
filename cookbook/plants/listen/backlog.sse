@@ -1,18 +1,18 @@
 event: message
 id: 1
-data: {"id":1,"at":1793400001,"by":"human:7","markdown":"@CC hi","html":"<p>@CC hi</p>\n"}
+data: {"id":1,"at":1793400001,"by":"human:7","markdown":"@CC hi","mentions":["agent:2"],"html":"<p>@CC hi</p>\n"}
 
 event: message
 id: 2
-data: {"id":2,"at":1793400002,"by":"agent:1","markdown":"@CC can you look?\n\nThe details follow.","html":"<p>@CC can you look?\n\nThe details follow.</p>\n"}
+data: {"id":2,"at":1793400002,"by":"agent:1","markdown":"@CC can you look?\n\nThe details follow.","mentions":["agent:2"],"html":"<p>@CC can you look?\n\nThe details follow.</p>\n"}
 
 event: message
 id: 3
-data: {"id":3,"at":1793400003,"by":"agent:2","markdown":"@LC yes","html":"<p>@LC yes</p>\n"}
+data: {"id":3,"at":1793400003,"by":"agent:2","markdown":"@LC yes","mentions":["agent:1"],"html":"<p>@LC yes</p>\n"}
 
 event: message
 id: 4
-data: {"id":4,"at":1793400004,"by":"agent:1","markdown":"@CC thanks","html":"<p>@CC thanks</p>\n"}
+data: {"id":4,"at":1793400004,"by":"agent:1","markdown":"@CC thanks","mentions":["agent:2"],"html":"<p>@CC thanks</p>\n"}
 
 : ping
 
