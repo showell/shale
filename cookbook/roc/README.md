@@ -77,7 +77,9 @@ it works on, `<shale>` being the shale checkout:
 - [nest_depth.shale](nest_depth.shale): **a call nested three deep**,
   `f(g(h(x)))`, read inside out: the outermost call of each nest `min`
   (3) or more deep, from `roc_tree` (roc-ast's tree, read in the host),
-  `path:line:column`. A method's receiver, a pipe's or
+  `path:line:column`, with the outermost call's name and the deepest's
+  (`List.concat to Str.to_utf8`), so a nest over several lines says more
+  than its first line. A method's receiver, a pipe's or
   an arrow's left side, a tag, `?`, parentheses, an operator and a field's
   or tuple's access are no level; a lambda,
   record or list argument starts again (`loose=1` passes depth through the

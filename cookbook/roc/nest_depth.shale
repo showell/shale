@@ -7,9 +7,12 @@
 -- module functions, else a named middle step.
 --
 --   nested  a call `min` (3) or more deep, the outermost of each nest only:
---           `path:line:column: nested: depth N: <its first source line>`,
---           the column the call's own, so two nests on a line are two
---           findings told apart
+--           `path:line:column: nested: depth N, <outer> to <deepest>: <its
+--           first source line>`, the column the call's own, so two nests on
+--           a line are two findings told apart, and the outermost call's
+--           name and the deepest's (`List.concat to Str.to_utf8`; a method
+--           by its method, `.concat`), so a nest over several lines says
+--           more than its first (`List.concat(`)
 --
 -- **A CALL'S DEPTH** is 1 + the deepest call among its arguments. What
 -- reads left to right is no level: a method's receiver (`a.f().g()`) and a
@@ -114,6 +117,39 @@ function outermost(ns, memo, i, loose)
   return true
 end
 
+-- A call's name: an apply's head (`List.concat`), a method call's method
+-- (`.concat`).
+function call_name(ns, i)
+  local n = ns[i]
+  if n.kind == "e-method-call" then return get(n, "method", "?") end
+  local h = ns[n.kids[1]]
+  return get(h, "raw", get(h, "name", h.kind))
+end
+
+-- Whether the call at `j` is inside the nest of the call at `top`: every
+-- node between them passes depth on (an argument list, a receiver, a call,
+-- what `passes`, a tuple), none a lambda or (strict) a record or list.
+function in_nest(ns, top, j, loose)
+  local p = ns[j].parent
+  while p > 0 and p ~= top do
+    local k = ns[p].kind
+    if not (is_call(ns[p]) or k == "args" or k == "receiver" or k == "e-tuple" or passes(k, loose)) then return false end
+    p = ns[p].parent
+  end
+  return p == top
+end
+
+-- The nest's deepest call: the first, in source order, of depth 1 inside
+-- the nest of the call at `top`.
+function deepest_call(ns, memo, top, loose)
+  local j = top + 1
+  while j <= #ns and ns[j].depth > ns[top].depth do
+    if is_call(ns[j]) and cd(ns, memo, j, loose) == 1 and in_nest(ns, top, j, loose) then return j end
+    j = j + 1
+  end
+  return top
+end
+
 const paths = glob(GLOB)
 local count = 0
 local by = {}
@@ -134,11 +170,15 @@ for f in parsed.files do
         if #src == 0 then src = split(read(f.path), "\n") end
         local line = ns[i].line
         local d = cd(ns, memo, i, LOOSE)
-        local l = f.path .. ":" .. line .. ":" .. ns[i].col .. ": nested: depth " .. d .. ": " .. trim(src[line])
+        -- The nest named outside in, so a finding over several lines says
+        -- more than its first (`List.concat(`).
+        local span = call_name(ns, i) .. " to " .. call_name(ns, deepest_call(ns, memo, i, LOOSE))
+        local head = f.path .. ":" .. line .. ":" .. ns[i].col .. ": nested: depth " .. d .. ", " .. span
+        local l = head .. ": " .. trim(src[line])
         push(said, l)
         incr(printed, l)
         by[tostring(d)] = get(by, tostring(d), 0) + 1
-        push_at(at, f.path .. ":" .. line, {col = ns[i].col, depth = d})
+        push_at(at, f.path .. ":" .. line, {col = ns[i].col, depth = d, text = head})
         count = count + 1
       end
     end
@@ -155,16 +195,27 @@ if SELF then
     local n = 0
     for l in lines(read(p)) do
       n = n + 1
-      local m = re_find(l, "# depth ([0-9]+(?:, [0-9]+)*)$")
+      local m = re_find(l, "# depth ([0-9]+(?:, [0-9]+)*)(?: from ([A-Za-z0-9_.]+) to ([A-Za-z0-9_.]+))?$")
       local key = p .. ":" .. n
       local got = {}
+      local texts = {}
       if has_key(at, key) then
-        for g in sort(at[key], "col") do push(got, tostring(g.depth)) end
+        for g in sort(at[key], "col") do
+          push(got, tostring(g.depth))
+          push(texts, g.text)
+        end
       end
       if m ~= nil then
         marks = marks + 1
         if starts_with(sub(p, #PLANTS + 1), "quiet_") then push(wrong, key .. ": a quiet plant holds a `# depth` mark") end
         local want = m.groups[1]
+        -- `from A to B`: the finding names its outermost call and its
+        -- deepest.
+        local span = get(m.groups, 2, "")
+        if span ~= nil and span ~= "" then
+          local says = span .. " to " .. m.groups[3]
+          if #texts == 0 or not contains(texts[1], says) then push(wrong, key .. ": the finding does not say `" .. says .. "`") end
+        end
         if #got == 0 then push(wrong, key .. ": no finding, want depth " .. want)
         elseif join(got, ", ") ~= want then push(wrong, key .. ": depth " .. join(got, ", ") .. ", want " .. want) end
       elseif #got > 0 then
