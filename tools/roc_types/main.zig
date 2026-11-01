@@ -12,8 +12,8 @@
 //!   `== <path>`
 //!   `t<TAB>expr|pat<TAB>tag<TAB>line<TAB>col<TAB>end_line<TAB>end_col<TAB>type`
 //! The path is absolute and holds no `.` or `..` part. A `t` record is a
-//! node of the module's canonical tree: `tag` is its kind (`e_call`,
-//! `p_assign`), the span is its region (lines and columns from 1, columns in
+//! node of the module's canonical tree: `tag` is its kind (`e_call`, a
+//! pattern's `assign`), the span is its region (lines and columns from 1, columns in
 //! bytes, the end one past, as roc-ast's), and `type` is the checker's, on
 //! one line as its type writer prints it, with `\`, tab, newline and carriage
 //! return escaped as `\\`, `\t`, `\n`, `\r`. Records come in the visitor's
