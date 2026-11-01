@@ -15,7 +15,9 @@
 -- (default: the file itself) must pass and `roc test`'s summary (its
 -- expects' count and results) must be what it was. An error `roc check`
 -- puts on a rewritten call's lines leaves that call as it was, with the
--- error's title as its reason, and the file is tried again; an error
+-- error's title as its reason, and the file is tried again (a `missing
+-- method` on `name = <value>`, a value whose type never resolved, is the
+-- error of the turned calls on the plain `name` in its scope); an error
 -- anywhere else (an import a rewrite left unused), or a changed `roc test`,
 -- puts the whole file back and leaves all its candidates, that the reason.
 -- A file kept is laid out by `roc fmt` when it was clean before, and
@@ -187,6 +189,7 @@ end
 function emit_node(st, i, start)
   local t = st.t
   local n = t.nodes[i]
+  st.at["" .. i] = st.line
   if has_key(st.on, "" .. i) then
     local c = st.on["" .. i]
     c.from_line = st.line
@@ -224,14 +227,50 @@ end
 
 -- **THE FILE REWRITTEN**: every candidate in `on` (by node) turned, from the
 -- inside out, the rest of the text as it is; each turned call's lines in the
--- new text are recorded on it (`from_line`, `to_line`).
+-- new text are recorded on it (`from_line`, `to_line`), and each node's
+-- first line in the new text on `t.trial_at` (by node).
 function rewrite(t, on)
-  local st = {out = {}, line = line_of(t, t.nodes[1].span.from), t = t, on = on}
+  local st = {out = {}, line = line_of(t, t.nodes[1].span.from), t = t, on = on, at = {}}
   -- The file node spans what roc-ast parsed; the bytes around it (a final
   -- newline) are kept.
   emit_node(st, 1, 0)
   local whole = join(st.out, "")
+  t.trial_at = st.at
   return sub(t.text, 1, t.nodes[1].span.from - 1) .. whole .. sub(t.text, t.nodes[1].span.to)
+end
+
+-- Whether node `i` is below node `top`.
+function within(t, i, top)
+  local at = t.nodes[i].parent
+  while at > 0 do
+    if at == top then return true end
+    at = t.nodes[at].parent
+  end
+  return false
+end
+
+-- **A VALUE'S DEFINITION BLAMED**: a `missing method` the compiler puts on
+-- `name = <value>`'s value (a string whose type never resolved, its only
+-- use `name.fn()`), not on the call, is the turned calls' whose first
+-- argument is the plain `name` in that definition's scope (the statements
+-- holding it). Gives whether any was.
+function blame_definition(t, e, cands)
+  if e.title ~= "missing method" then return false end
+  local hit = false
+  for d = 1, #t.nodes do
+    local n = t.nodes[d]
+    if n.kind == "s-decl" and #n.kids == 2 and t.nodes[n.kids[1]].kind == "p-ident" and get(t.trial_at, "" .. n.kids[2], 0) == e.line then
+      local name = t.nodes[n.kids[1]].raw
+      for c in cands do
+        local first = t.nodes[t.nodes[c.at].kids[2]]
+        if c.from_line > 0 and first.kind == "e-ident" and first.raw == name and within(t, c.at, n.parent) then
+          if c.left == "" then c.left = "roc check: " .. e.title .. " (on `" .. name .. "`'s definition)" end
+          hit = true
+        end
+      end
+    end
+  end
+  return hit
 end
 
 -- ── the compiler ─────────────────────────────────────────────────────────
@@ -331,6 +370,7 @@ function try_file(ctx, p, t, cands, root, want_test)
             hit = true
           end
         end
+        if not hit then hit = blame_definition(t, e, cands) end
         if not hit and stray == nil then stray = e end
       elseif stray == nil then
         stray = e
@@ -416,6 +456,8 @@ const EXPECT = {
   Decode = {left = 1, why = "on no rewritten call; the file is put back", root = "Breaks"},
   Breaks = {left = 1, why = "roc check: missing method"},
   Matched = {left = 1, why = "an argument with no span"},
+  Ref = {left = 0},
+  Scrutinee = {left = 1, why = "roc check: missing method (on `text`'s definition)"},
 }
 
 function self_test()

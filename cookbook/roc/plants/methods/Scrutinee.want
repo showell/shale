@@ -1,0 +1,23 @@
+## A turned call that is a `match`'s scrutinee, its argument a local Str
+## (roc-chat's `Topics.ref_text`): `text.from_str()` asks a Str for Ref's
+## method, and the compiler puts the error on the line defining `text`, not
+## on the call. It is that call's error: the call stays, and the file's
+## other call is still turned.
+import Ref
+
+Scrutinee := [].{
+	label : U64 -> Str
+	label = |n| {
+		text = "R${n.to_str()}"
+		match Ref.from_str(text) {
+			Ok(r) => r.to_str()
+			Err(NotAReference) => crash "Scrutinee.label: R<n> is a reference"
+		}
+	}
+
+	size : List(U8) -> U64
+	size = |bytes| bytes.len()
+}
+
+expect Scrutinee.label(3) == "R3"
+expect Scrutinee.size([1]) == 1
