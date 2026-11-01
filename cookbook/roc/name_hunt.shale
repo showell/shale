@@ -51,11 +51,13 @@
 --                 say how they differ. Reported once, at the first.
 --                 **A PACKAGE'S SUFFIX CONVENTION IS NO SPLIT**: a
 --                 preposition on three or more stems in the files read
---                 whose annotations give one result (roc-markdown's
---                 `*_onto` writers, each `List(U8)`) is one role, so
---                 `run_onto` beside `run_at` is left out before the count;
---                 the shared result is what tells a convention from a
---                 common preposition (`_of`, `_in`) in any large package.
+--                 whose annotations share one shape, the first argument's
+--                 type and the result (roc-markdown's `*_onto` writers,
+--                 each taking a `List(U8)` and giving it back), is one
+--                 role, so `run_onto` beside `run_at` is left out before
+--                 the count; the shared shape is what tells a convention
+--                 from a common preposition (`_of`, `_in`) in any large
+--                 package.
 --                 **A FILE'S DECLARED KEYWORDS ARE NO PREPOSITIONS**: an
 --                 interpreter names its statements for its language's
 --                 keywords (BASIC's `do_for`, `do_on`), which the file

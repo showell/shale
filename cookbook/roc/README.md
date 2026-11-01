@@ -26,7 +26,8 @@ it works on, `<shale>` being the shale checkout:
   none), and an effect that gives a `Bool` (`is_playing! : Sound => Bool`)
   asks the host about live state. `preposition_split` leaves out a
   package's suffix convention (a preposition on three or more stems whose
-  annotations give one result, roc-markdown's `*_onto` writers) and a
+  annotations share a first argument's type and a result, roc-markdown's
+  `*_onto` writers) and a
   file's declared keywords (a comment line `# keywords: for, on`, for an
   interpreter's `do_for`, `do_on`).
   Beside the names: `command_tense` and `mixed_tense` (the tags an effect
