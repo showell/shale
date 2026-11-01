@@ -8,7 +8,11 @@
 -- or tuple whose items are all literals (numbers, plain strings,
 -- characters, bare tags), on a line that fits `width`, is one thing to
 -- scan, a table's row (`[0, 0, 0]`, `(0.0, 0.0, 1.5)`); a call's
--- arguments are never one.
+-- arguments are never one. **A RUN OF FLAGS WANTS A TAG**: a group whose
+-- items are all `Bool` or Bool literals is told "a flag a caller passes is
+-- a tag", the guide's rule, never "take a record". **ONE FUNCTION, ONE
+-- FINDING**: a lambda's arguments on the line under its own annotation,
+-- already a finding for its bare arguments, are not said again.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc
 --   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc write=1
@@ -230,16 +234,32 @@ function bare_args(l)
     if depth == 0 and c == "," then commas = commas + 1 end
     if depth == 0 and (sub(ty, i, i + 1) == "->" or sub(ty, i, i + 1) == "=>") then
       local what = trim(sub(ty, 1, i - 1))
+      local inner = what
       if #what > 60 then what = sub(what, 1, 57) .. "..." end
-      return {items = commas + 1, what = what}
+      return {items = commas + 1, what = what, inner = inner, name = split(trim(l), " :")[1]}
     end
   end
   return nil
 end
 
--- A function type's arguments, which no comma stacks.
-function fn_args(p, i, items, what)
-  return {path = p, line = i, kind = "stack", what = items .. " bare arguments in " .. what .. ", which no comma stacks: take a record (roc-style.md, Name what travels together)"}
+-- Whether every item of a group's text is a `Bool` or a Bool literal
+-- (`Bool, Bool, Bool`; `Bool.true, Bool.false, Bool.true`): a run of flags.
+const FLAGS = {Bool = true, ["Bool.true"] = true, ["Bool.false"] = true, ["Bool.True"] = true, ["Bool.False"] = true}
+function all_flags(text)
+  for item in split(text, ",") do
+    if not has_key(FLAGS, trim(item)) then return false end
+  end
+  return true
+end
+
+-- The advice for a run of flags: the guide's, a tag.
+const FLAG_ADVICE = ": a flag a caller passes is a tag, not a Bool (roc-style.md)"
+
+-- A function type's arguments, which no comma stacks: a record for what
+-- travels together, a tag for a run of flags.
+function fn_args(p, i, items, what, inner)
+  local advice = all_flags(inner) and FLAG_ADVICE or ": take a record (roc-style.md, Name what travels together)"
+  return {path = p, line = i, kind = "stack", what = items .. " bare arguments in " .. what .. ", which no comma stacks" .. advice}
 end
 
 -- Every finding in the files, `{path, line, kind, what}`: each group of
@@ -249,20 +269,32 @@ function findings(files)
   local out = {}
   for p in files do
     local ls = split(read(p), "\n")
+    -- The name whose annotation, on the line before, was a finding for
+    -- its bare arguments: its lambda's arguments, the same function's,
+    -- are not said again.
+    local said_fn = ""
     for i = 1, #ls do
       local n = 0
+      local own_lambda = said_fn ~= "" and starts_with(trim(ls[i]), said_fn .. " = |")
+      said_fn = ""
       for h in sort(groups(ls[i]), "open") do
+        local inner = sub(ls[i], h.open + 1, h.close - 1)
         if h.items >= 3 and h.fn_type then
-          push(out, fn_args(p, i, h.items, snip(ls[i], h)))
+          local args = split(split(inner, "->")[1], "=>")[1]
+          push(out, fn_args(p, i, h.items, snip(ls[i], h), args))
           n = n + 1
+        elseif own_lambda and sub(ls[i], h.open, h.open) == "|" then
+          own_lambda = false
         elseif h.items >= 3 and not h.trailing and not literal_row(ls[i], h) then
-          push(out, {path = p, line = i, kind = "stack", what = h.items .. " items in " .. snip(ls[i], h)})
+          local advice = all_flags(inner) and FLAG_ADVICE or ""
+          push(out, {path = p, line = i, kind = "stack", what = h.items .. " items in " .. snip(ls[i], h) .. advice})
           n = n + 1
         end
       end
       local bare = bare_args(ls[i])
       if bare ~= nil and bare.items >= 3 then
-        push(out, fn_args(p, i, bare.items, bare.what))
+        push(out, fn_args(p, i, bare.items, bare.what, bare.inner))
+        said_fn = bare.name
         n = n + 1
       end
       if n == 0 and width(ls[i]) > WIDTH then
@@ -328,20 +360,29 @@ function self_test()
   local files = glob(GLOB)
   local seen = {}
   local per_line = {}
+  local whats = {}
   for f in findings(files) do
     local name = sub(f.path, #PLANTS + 2)
     seen[name] = (has_key(seen, name) and seen[name] or "") .. f.kind .. " "
     incr(per_line, f.path .. ":" .. f.line)
+    push_at(whats, f.path .. ":" .. f.line, f.what)
   end
   local bad = 0
   for p in files do
     local n = 0
     for l in lines(read(p)) do
       n = n + 1
-      local m = re_find(l, "# findings ([0-9]+)$")
+      -- `# findings N`, and with `advice W` each of them must say `W`.
+      local m = re_find(l, "# findings ([0-9]+)(?: advice ([a-z]+))?$")
       if m ~= nil then
         local got = get(per_line, p .. ":" .. n, 0)
         local ok = got == tonumber(m.groups[1])
+        local word = get(m.groups, 2, "")
+        if word ~= nil and word ~= "" then
+          for w in get(whats, p .. ":" .. n, {}) do
+            if not contains(w, word) then ok = false end
+          end
+        end
         print((ok and "ok   " or "FAIL ") .. sub(p, #PLANTS + 2) .. ":" .. n .. ": " .. got .. " findings, want " .. m.groups[1])
         if not ok then bad = bad + 1 end
       end
