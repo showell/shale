@@ -1,7 +1,10 @@
 -- **THREE OR MORE, ONE A LINE** (metal-vmm QUEUE 296): any list, record,
 -- tuple, call's arguments, tag payload or lambda's arguments holding three
--- or more items on one line is a finding, `path:line: stack: ...`, and so
--- is a line wider than `width` (100) with nothing to stack, `long: ...`.
+-- or more items on one line is a finding, `path:line: stack: ...`, each
+-- such group on a line its own, left to right; and a line wider than
+-- `width` (100) with no such group is a finding, `long: ...`. The counts
+-- print first, then the findings, then the counts again
+-- (cookbook/roc/summed.shale).
 --
 --   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc
 --   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc write=1
@@ -31,12 +34,12 @@
 -- only by the Roc it is built with, never by whichever `roc` is on PATH.
 --
 -- `self_test=1` reads `cookbook/roc/plants/stack/`: each plant named for
--- what it holds must give a finding of its kind, and a `clean*.roc` none.
--- Then it copies the plants to `scratch:stack/` and rewrites them there
+-- what it holds must give a finding of its kind, and a `clean*.roc` none;
+-- a plant line ending `# findings N` must give exactly N. Then it copies the plants to `scratch:stack/` and rewrites them there
 -- with `SELF_TEST_PIN`'s Roc (cookbook/roc/pinned.shale): the rewrite must end, a second one change
 -- nothing, and every file still parse (`roc fmt` takes them all).
 --
--- budget: steps=900000000 arena_bytes=2000000000
+-- budget: steps=900000000 arena_bytes=2000000000 output_bytes=4000000
 
 const SELF = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/stack"
@@ -45,6 +48,7 @@ const GLOB = SELF and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
 const WIDTH = arg("width", 100)
 const WRITE = arg("write", "") == "1"
 use("cookbook:roc/pinned.shale")
+use("cookbook:roc/summed.shale")
 const PASSES = 12
 const OPENERS = {["("] = ")", ["{"] = "}", ["["] = "]"}
 const CLOSERS = {[")"] = true, ["}"] = true, ["]"] = true}
@@ -207,25 +211,35 @@ function bare_args(l)
   return nil
 end
 
--- Every finding in the files, `{path, line, kind, what}`.
+-- A function type's arguments, which no comma stacks.
+function fn_args(p, i, items, what)
+  return {path = p, line = i, kind = "stack", what = items .. " bare arguments in " .. what .. ", which no comma stacks: take a record (roc-style.md, Name what travels together)"}
+end
+
+-- Every finding in the files, `{path, line, kind, what}`: each group of
+-- three or more on a line, left to right, and a function type's bare
+-- arguments; else a long line.
 function findings(files)
   local out = {}
   for p in files do
     local ls = split(read(p), "\n")
     for i = 1, #ls do
-      local g = nil
-      local fn_type = nil
-      for h in groups(ls[i]) do
-        if h.items >= 3 and not h.trailing and not h.fn_type and (g == nil or h.depth < g.depth) then g = h end
-        if h.items >= 3 and h.fn_type and (fn_type == nil or h.depth < fn_type.depth) then fn_type = h end
+      local n = 0
+      for h in sort(groups(ls[i]), "open") do
+        if h.items >= 3 and h.fn_type then
+          push(out, fn_args(p, i, h.items, snip(ls[i], h)))
+          n = n + 1
+        elseif h.items >= 3 and not h.trailing then
+          push(out, {path = p, line = i, kind = "stack", what = h.items .. " items in " .. snip(ls[i], h)})
+          n = n + 1
+        end
       end
       local bare = bare_args(ls[i])
-      if fn_type ~= nil and (bare == nil or bare.items < 3) then bare = {items = fn_type.items, what = snip(ls[i], fn_type)} end
-      if g ~= nil then
-        push(out, {path = p, line = i, kind = "stack", what = g.items .. " items in " .. snip(ls[i], g)})
-      elseif bare ~= nil and bare.items >= 3 then
-        push(out, {path = p, line = i, kind = "stack", what = bare.items .. " bare arguments in " .. bare.what .. ", which no comma stacks: take a record (roc-style.md, Name what travels together)"})
-      elseif width(ls[i]) > WIDTH then
+      if bare ~= nil and bare.items >= 3 then
+        push(out, fn_args(p, i, bare.items, bare.what))
+        n = n + 1
+      end
+      if n == 0 and width(ls[i]) > WIDTH then
         local why = starts_with(trim(ls[i]), "#") and "a comment" or (pick(ls[i]) ~= nil and "a group of two to stack" or "nothing to stack")
         push(out, {path = p, line = i, kind = "long", what = width(ls[i]) .. " columns, " .. why})
       end
@@ -287,11 +301,26 @@ end
 function self_test()
   local files = glob(GLOB)
   local seen = {}
+  local per_line = {}
   for f in findings(files) do
     local name = sub(f.path, #PLANTS + 2)
     seen[name] = (has_key(seen, name) and seen[name] or "") .. f.kind .. " "
+    incr(per_line, f.path .. ":" .. f.line)
   end
   local bad = 0
+  for p in files do
+    local n = 0
+    for l in lines(read(p)) do
+      n = n + 1
+      local m = re_find(l, "# findings ([0-9]+)$")
+      if m ~= nil then
+        local got = get(per_line, p .. ":" .. n, 0)
+        local ok = got == tonumber(m.groups[1])
+        print((ok and "ok   " or "FAIL ") .. sub(p, #PLANTS + 2) .. ":" .. n .. ": " .. got .. " findings, want " .. m.groups[1])
+        if not ok then bad = bad + 1 end
+      end
+    end
+  end
   for p in files do
     local name = sub(p, #PLANTS + 2)
     local want = starts_with(name, "long") and "long" or "stack"
@@ -327,16 +356,16 @@ elseif WRITE then
   roc_bin("stack", SELF)
   local files = glob(GLOB)
   rewrite(files)
-  local left = findings(files)
-  for f in left do print(f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what) end
-  print(#left .. " left, each a line the rewrite can't reach")
+  local left = {}
+  for f in findings(files) do push(left, f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what) end
+  print_summed(#left .. " left, each a line the rewrite can't reach", left)
 else
   local files = glob(GLOB)
-  local all = findings(files)
+  local all = {}
   local stack = 0
-  for f in all do
-    print(f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what)
+  for f in findings(files) do
+    push(all, f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what)
     if f.kind == "stack" then stack = stack + 1 end
   end
-  print(#all .. " findings in " .. #files .. " files: " .. stack .. " to stack, " .. (#all - stack) .. " long")
+  print_summed(#all .. " findings in " .. #files .. " files: " .. stack .. " to stack, " .. (#all - stack) .. " long", all)
 end

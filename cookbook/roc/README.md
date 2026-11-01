@@ -36,8 +36,9 @@ it works on, `<shale>` being the shale checkout:
   arguments.
 - [stack.shale](stack.shale): **three or more, one a line.** Any list,
   record, tuple, call's or lambda's arguments or tag payload of three or
-  more items on one line is a finding, and so is a line over 100 columns,
-  and a function type's three or more arguments, bare (`U8, U8, U8 -> U8`)
+  more items on one line is a finding, each group its own, and so is a line
+  over 100 columns with none, and a function type's three or more
+  arguments, bare (`U8, U8, U8 -> U8`)
   or in parentheses (`(U8, U8, U8 -> U8)`), which no trailing comma stacks.
   `write=1` gives each a trailing comma, outermost first (never a function
   type's arguments), and runs `roc fmt` until nothing changes; a second run
@@ -51,8 +52,10 @@ it works on, `<shale>` being the shale checkout:
   change nothing.
 - [nest_depth.shale](nest_depth.shale): **a call nested three deep**,
   `f(g(h(x)))`, read inside out: the outermost call of each nest `min`
-  (3) or more deep, from `roc_tree` (roc-ast's tree, read in the host). A method's receiver, a pipe's or
-  an arrow's left side, a tag, `?` and parentheses are no level; a lambda,
+  (3) or more deep, from `roc_tree` (roc-ast's tree, read in the host),
+  `path:line:column`. A method's receiver, a pipe's or
+  an arrow's left side, a tag, `?`, parentheses, an operator and a field's
+  or tuple's access are no level; a lambda,
   record or list argument starts again (`loose=1` passes depth through the
   last two). `self_test=1` runs its plants (`plants/nest_depth/`).
 - [boundaries.shale](boundaries.shale): **a function's boundary, from its
@@ -114,6 +117,12 @@ it works on, `<shale>` being the shale checkout:
   self_test)`, the pinned `roc`'s path (`tools:roc-<pin>/roc`, the pin from
   `roc-version` where the run starts), and `SELF_TEST_PIN`, the one Roc
   every self-test runs. `methods.shale` and `stack.shale` use it.
+- [summed.shale](summed.shale): **a list of findings between its
+  summary**, a library: `print_summed(summary, lines)` prints the summary,
+  the lines, then the summary again. Every recipe here whose list no tree
+  bounds uses it and says `output_bytes=4000000` in its `-- budget:` line,
+  so a run the output budget stops still says its totals, and a verify
+  reading the last line still finds them.
 
 **Writing a recipe that edits Roc.** roc-ast's columns are bytes, and a
 span's end is exclusive. Spans overlap: `type-mod` and `s-type-decl` both
