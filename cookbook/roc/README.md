@@ -101,8 +101,13 @@ it works on, `<shale>` being the shale checkout:
   entry is its one outside call); `constant`: a function of
   `{}` alone with no `!` in its name, which gives the same value every
   call. A count of callers is of the files the glob reads, and a finding
-  says how many.
-  `self_test=1` runs its plants (`plants/boundaries/`).
+  says how many. Under the types (`types=1 root=<app>`, `types.shale`),
+  `bool_param`: a parameter whose type is `Bool` by the checker, beside
+  others, that some call passes as `Bool.True` or `Bool.False` ("a flag a
+  caller passes is a tag", roc-apps docs/roc-style.md); its home is here,
+  beside the calls `fixed` reads.
+  `self_test=1` runs its plants (`plants/boundaries/`, the typed ones
+  under `typed/`, root `QuietApp.roc`).
 - [errors.shale](errors.shale): **a failure said by its tags.**
   `error_alias`: a function whose result's `Try` names a shared alias of
   tags, not its tags in place (an alias in an argument, a handler's input,

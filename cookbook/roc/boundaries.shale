@@ -59,6 +59,29 @@
 --           variable (`{} -> Viewer(id)`) keeps it quiet, as Roc refuses
 --           that constant ("value is not polymorphic... make it a function
 --           that takes {}"); an unannotated one shows no type, and fires.
+--   bool_param  **UNDER THE TYPES ONLY** (`types=1 root=<an app>`, below):
+--           a parameter (by position, a method's or arrow's receiver the
+--           first) whose type is `Bool` by Roc's own checker, which some
+--           call passes as a literal, `Bool.True` or `Bool.False` (or a
+--           bare `True`, `False`; the pin's `Bool := [False, True]`):
+--           "a flag a caller passes is a tag" (roc-apps docs/roc-style.md),
+--           so the call says what it means (`Loud`, not `Bool.True`). Every
+--           call counts, an `expect`'s, a test file's and its own too: each
+--           reads the flag as a literal. A parameter only ever passed a
+--           value computed is quiet, and so is a literal of another type
+--           (a tag of the function's own union, a generic parameter), and
+--           a function's one parameter, the value it converts (JSON's
+--           `bool : Bool -> JsonOut`), no flag. A record argument's field
+--           is not judged. A tree only syntax reads cannot know a
+--           parameter is a `Bool`, so without `types=1` it never fires.
+--
+-- **THE CHECKER'S TYPES** (`types=1`, off by default; cookbook/roc/
+-- types.shale) need `root=`, an app importing the files of the glob (or
+-- several, `root=a.roc,b.roc`), and the tree's `roc-version`; a file no
+-- root reaches is judged without them, named after the counts, and fails
+-- the run (cookbook/roc/parsed.shale). The self-test judges
+-- `plants/boundaries/typed/` (type modules, `BoolParam` read as
+-- `bool_param`, root `QuietApp.roc`) with the types, the rest without.
 --
 -- **WHAT A COUNT COUNTS**: `single`'s one caller and `fixed`'s and `entry`'s calls are
 -- those in the files the glob reads, and a finding says how many: a sweep
@@ -87,7 +110,8 @@
 -- function quiet. `self_test=1` runs it over `cookbook/roc/plants/
 -- boundaries/`, each plant named for the check it holds: every check must
 -- fire on its own plants and on no other, a `quiet_*.roc` plant on none
--- (`quiet_WalkSpec.roc` a test file among them).
+-- (`quiet_WalkSpec.roc` a test file among them). A missing roc-types
+-- fails it.
 -- budget: steps=800000000 arena_bytes=3000000000
 
 const SELF = arg("self_test", "") == "1"
@@ -95,8 +119,18 @@ const PLANTS = "cookbook:roc/plants/boundaries/"
 const GLOB = SELF and (PLANTS .. "**/*.roc") or arg("glob", "**/*.roc")
 const WAYS = arg("ways", 2)
 const NODES = arg("nodes", 24)
-const CHECKS = {"single", "fixed", "entry", "constant"}
+const CHECKS = {"single", "fixed", "entry", "constant", "bool_param"}
 use("cookbook:roc/parsed.shale")
+use("cookbook:roc/pinned.shale")
+use("cookbook:roc/types.shale")
+const TYPES_SAID = arg("types", "0")
+if TYPES_SAID ~= "0" and TYPES_SAID ~= "1" then fail("boundaries: types=" .. TYPES_SAID .. ": 0 (the default) or 1") end
+-- A self-test judges its typed plants (`plants/boundaries/typed/`, under
+-- their app) with the types, and the rest without.
+const TYPED = SELF or TYPES_SAID == "1"
+const ROOT = SELF and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
+-- A `Bool` literal at the pin, whose `Bool := [False, True]`.
+const BOOL_LITERALS = {["Bool.True"] = true, ["Bool.False"] = true, True = true, False = true}
 -- Every file's nodes in one list, in order: `NODE[g]` a node of `roc_tree`,
 -- `PATH[g]` its file, `BASE[g]` the index before its file's first node, so
 -- a node's `parent` and `kids` are `BASE[g] +` theirs.
@@ -216,6 +250,15 @@ end
 -- ── the tree ─────────────────────────────────────────────────────────────
 
 local fs = glob(GLOB)
+-- The checker's types (`types=1`): the self-test's untyped plants are its
+-- root's none.
+local untyped = {}
+if SELF then
+  for p in fs do
+    if not starts_with(p, PLANTS .. "typed/") then untyped[p] = true end
+  end
+end
+local types = TYPED and roc_types_hunted("boundaries", ROOT, roc_bin("boundaries", SELF), fs, untyped) or {real = {}, pats = {}, exprs = {}, unreached = {}}
 -- A file that does not parse would pass its references unread: it is
 -- named, and fails the run, after the rest are judged
 -- (cookbook/roc/parsed.shale).
@@ -364,6 +407,14 @@ function takes_unit(g, name)
   return true
 end
 
+-- The lambda at `g`'s parameter patterns, by position.
+function lambda_params(g)
+  for k in children(g) do
+    if kind(k) == "args" then return children(k) end
+  end
+  return {}
+end
+
 -- ── pass 1: the functions ────────────────────────────────────────────────
 -- By key `owner|name`, the owner a module type's name, or `@path` for a
 -- top-level one.
@@ -380,7 +431,7 @@ for g = 1, #NODE do
         local name = raw(kids[1])
         local key = owner .. "|" .. name
         local size = wrapper_size(kids[2])
-        defs[key] = {key = key, path = path, owner = owner, name = name, line = n.line, last = n.end_line, wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, n.line), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, self_calls = {}, values = 0, ambiguous = false, recursive = false, entry = false, unit = takes_unit(g, name)}
+        defs[key] = {key = key, path = path, owner = owner, name = name, line = n.line, last = n.end_line, wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, n.line), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, self_calls = {}, values = 0, ambiguous = false, recursive = false, entry = false, unit = takes_unit(g, name), params = lambda_params(kids[2]), tested_calls = {}}
         if sub(owner, 1, 1) ~= "@" then
           if not has_key(members, name) then members[name] = {} end
           push(members[name], key)
@@ -400,6 +451,9 @@ function note(def, ctx, call)
     def.recursive = true
     if call ~= nil then push(def.self_calls, call) end
     return nil
+  end
+  if is_test_file(ctx.path) or ctx.expect then
+    if call ~= nil then push(def.tested_calls, call) end
   end
   if is_test_file(ctx.path) then
     def.tests = def.tests + 1
@@ -577,6 +631,26 @@ for key in sort(keys(defs)) do
   if def.unit and not contains(def.name, "!") and not is_test_file(def.path) then
     say(def.path, def.line, "constant", "`" .. shown_name(def) .. "` takes `{}` alone and names no effect, so it gives the same value every call: a constant (`" .. def.name .. " = ...`), or a `!` if it has an effect")
   end
+  -- Under the types: each `Bool` parameter some call passes as a literal.
+  -- A function's one parameter is the value it converts, no flag.
+  if judged and #def.params > 1 and has_key(types.real, def.path) then
+    local every = {}
+    for c in def.calls do push(every, c) end
+    for c in def.self_calls do push(every, c) end
+    for c in def.tested_calls do push(every, c) end
+    for i = 1, #def.params do
+      local q = def.params[i]
+      local ty = kind(q) == "p-ident" and roc_type_at(types, "pat", def.path, NODE[q]) or nil
+      if ty == "Bool" then
+        local lits = {}
+        for c in every do
+          local v = get(arg_texts(c), tostring(i), "")
+          if has_key(BOOL_LITERALS, v) then push(lits, c.path .. ":" .. c.line .. " `" .. v .. "`") end
+        end
+        if #lits > 0 then say(def.path, def.line, "bool_param", "`" .. shown_name(def) .. "`'s parameter " .. i .. ", `" .. raw(q) .. "`, is a `Bool` (the checker's type) passed as a literal at " .. #lits .. " of its " .. #every .. " calls (" .. join(take(lits, 3), ", ") .. (#lits > 3 and ", ..." or "") .. "): a flag a caller passes is a tag, named for what it means (roc-apps docs/roc-style.md)") end
+      end
+    end
+  end
 end
 
 local total = 0
@@ -584,15 +658,22 @@ for k in keys(defs) do total = total + 1 end
 local counts = {}
 for c in CHECKS do push(counts, c .. " " .. found[c]) end
 print("boundaries (Roc): " .. #fs .. " files, " .. total .. " functions; " .. join(counts, ", "))
-fail_if_refused("boundaries", parsed.refused)
+fail_if_refused("boundaries", parsed.refused, types.unreached)
+
+-- A plant's name as the self-test's table reads it, by its own name (a
+-- plant may sit in `lib/` or a package's folder); a typed plant's, a type
+-- module's (`typed/BoolParam.roc`), as `bool_param.roc`.
+function plant_base(p)
+  if starts_with(p, PLANTS .. "typed/") then return roc_plant_name(basename(p)) end
+  return basename(p)
+end
 
 if SELF then
   local wrong = {}
   for c in CHECKS do
     local planted = 0
     for p in fs do
-      -- By its own name: a plant may sit in `lib/` or a package's folder.
-      local base = basename(p)
+      local base = plant_base(p)
       local mine = base == c .. ".roc" or starts_with(base, c .. "_")
       if mine then planted = planted + 1 end
       local fired = has_key(per_file, p .. "|" .. c)
