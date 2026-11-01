@@ -31,6 +31,11 @@
 //! refuses a relative entry ("Import Path Case Mismatch"). It must be an
 //! app: a type module (no app header) is refused, `NotAnAppHeader`, so a
 //! type module's types are read through an app that imports it.
+//!
+//! **A HEADER'S SPECS AS THE `roc` CLI TAKES THEM** (`discover`): a spec
+//! holding `://` is a URL, refused, as nothing is downloaded here; any other
+//! is a path from the app's folder, `platform "platform/main.roc"` as
+//! `"./platform/main.roc"`; a platform's absolute path is refused.
 
 const std = @import("std");
 const base = @import("base");
@@ -40,7 +45,8 @@ const types = @import("types");
 const roc_target = @import("roc_target");
 const roc_build_options = @import("roc_build_options");
 const build_options = @import("build_options");
-const Coordinator = @import("compile").coordinator.Coordinator;
+const compile = @import("compile");
+const Coordinator = compile.coordinator.Coordinator;
 const CoreCtx = @import("ctx").CoreCtx;
 const CirVisitor = @import("cir_visitor.zig").CirVisitor;
 const VisitAction = @import("cir_visitor.zig").VisitAction;
@@ -153,6 +159,97 @@ fn dumpModule(gpa: std.mem.Allocator, out: *std.Io.Writer, path: []const u8, env
     }
 }
 
+/// A spec the `roc` CLI reads as a URL (compile/package_resolution.zig's
+/// `specIsUrlLike`); any other is a local path from the app's folder.
+fn isUrlSpec(spec: []const u8) bool {
+    return std.mem.find(u8, spec, "://") != null;
+}
+
+/// A spec the coordinator's own discovery takes (coordinator.zig's
+/// `isRelativeSpec`).
+fn isDotSpec(spec: []const u8) bool {
+    return std.mem.startsWith(u8, spec, "./") or std.mem.startsWith(u8, spec, "../");
+}
+
+/// A local spec the CLI takes and the coordinator's discovery refuses.
+fn isBareLocalSpec(spec: []const u8) bool {
+    return !isUrlSpec(spec) and !isDotSpec(spec) and !std.fs.path.isAbsolute(spec);
+}
+
+/// **THE APP, ITS PLATFORM AND PACKAGES REGISTERED** with `coord` as the `roc`
+/// CLI takes the header. `Coordinator.discoverAppFromPath` takes a local
+/// spec only with `./` or `../` (compile/coordinator.zig:2081, its
+/// `isRelativeSpec`), where the CLI's resolver reads any spec without `://`
+/// as a path from the app's folder (compile/package_resolution.zig:984 and
+/// :1073, `specIsUrlLike` then `resolveLocalPath`). A header the coordinator
+/// takes, or one it cannot read (its reports are the coordinator's), goes
+/// to `discoverAppFromPath`; one with a bare local spec is registered here,
+/// step for step as `discoverAppFromPath` and `registerPlatformPackage` do,
+/// the spec joined to the app's folder.
+fn discover(coord: *Coordinator, arena: std.mem.Allocator, entry: []const u8) !void {
+    const opts: Coordinator.AppDiscoveryOptions = .{ .entry_path = entry };
+    const header = compile.app_header.parseAppHeader(coord.roc_ctx, coord.gpa, arena, entry) catch
+        return coord.discoverAppFromPath(arena, opts);
+    var bare = switch (header.platform_ref) {
+        .path_or_url => |spec| isBareLocalSpec(spec),
+        .none, .compiler_owned => false,
+    };
+    for (header.non_platform_packages) |p| {
+        if (!isUrlSpec(p.spec) and !isDotSpec(p.spec)) bare = true;
+    }
+    if (!bare) return coord.discoverAppFromPath(arena, opts);
+
+    const app_dir = std.fs.path.dirname(entry) orelse ".";
+    const app_identity = try compile.package_identity.packageIdentityFor(coord.gpa, coord.roc_ctx, .{ .local_path = entry });
+    defer coord.gpa.free(app_identity);
+    const app_pkg = try coord.ensurePackage(app_identity, app_dir);
+    coord.markAppPackage(app_pkg.name);
+    const app_module_id = try app_pkg.ensureModule(coord.gpa, base.module_path.getModuleName(entry), entry);
+    app_pkg.root_module_id = app_module_id;
+    app_pkg.modules.items[app_module_id].depth = 0;
+    app_pkg.remaining_modules += 1;
+    coord.total_remaining += 1;
+    // Read again into the app module's reports, as the coordinator does: it
+    // read above, so a failure here is the file changed under the run.
+    const info = try compile.app_header.parseAppHeaderReporting(coord.roc_ctx, coord.gpa, arena, entry, &app_pkg.modules.items[app_module_id].reports);
+
+    switch (info.platform_ref) {
+        .none => {},
+        .path_or_url => |spec| {
+            if (std.fs.path.isAbsolute(spec)) return error.AbsolutePlatformPath;
+            if (isUrlSpec(spec)) return error.UnsupportedPlatformSpec;
+            const main_path = try std.fs.path.join(arena, &.{ app_dir, spec });
+            const pf_dir = std.fs.path.dirname(main_path) orelse return error.InvalidPlatformPath;
+            // registerPlatformPackage's steps: its identity (the local path),
+            // package, public modules and the app's shorthand, then the
+            // platform's mark and its `main` module enqueued.
+            const pf_pkg = try coord.registerInlinePackageWithRootFile(main_path, pf_dir, app_pkg, info.platform_qualifier);
+            coord.markPlatformPackage(pf_pkg.name);
+            const pf_module_id = try pf_pkg.ensureModule(coord.gpa, "main", main_path);
+            pf_pkg.root_module_id = pf_module_id;
+            pf_pkg.modules.items[pf_module_id].depth = 1;
+            pf_pkg.remaining_modules += 1;
+            coord.total_remaining += 1;
+            try coord.enqueueParseTask(pf_pkg.name, pf_module_id);
+        },
+        .compiler_owned => {
+            // Its materialising is the coordinator's own (private) path, and
+            // only a bare package spec brings such a header here.
+            std.debug.print("roc-types: {s}: a compiler-owned platform beside a package spec without `./`: give the package spec a `./`\n", .{entry});
+            std.process.exit(1);
+        },
+    }
+
+    for (info.non_platform_packages) |p| {
+        if (isUrlSpec(p.spec)) return error.UnsupportedPackageSpec;
+        const pkg_main_path = try std.fs.path.join(arena, &.{ app_dir, p.spec });
+        const pkg_dir = std.fs.path.dirname(pkg_main_path) orelse ".";
+        _ = try coord.registerInlinePackageWithRootFile(pkg_main_path, pkg_dir, app_pkg, p.shorthand);
+    }
+
+    try coord.enqueueParseTask(app_pkg.name, app_module_id);
+}
+
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const gpa = init.gpa;
@@ -194,7 +291,7 @@ pub fn main(init: std.process.Init) !void {
     defer coord.deinit();
     coord.enable_hosted_transform = true;
     try coord.start();
-    coord.discoverAppFromPath(arena, .{ .entry_path = entry }) catch |e| switch (e) {
+    discover(&coord, arena, entry) catch |e| switch (e) {
         error.NotAnAppHeader => {
             std.debug.print("roc-types: {s} is not an app (NotAnAppHeader): read a type module through an app that imports it\n", .{entry});
             std.process.exit(1);

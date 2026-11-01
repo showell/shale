@@ -61,6 +61,16 @@ jobs:
           test "$(head -n 1 /tmp/types.out)" = "roc-types $format $version"
           grep -q '^== /.*/cookbook/roc/plants/methods/Typed.roc$' /tmp/types.out
           grep -cP '^t\t' /tmp/types.out
+          # Platform and package specs without `./`, as the `roc` CLI takes
+          # them (roc-markdown's apps): the compiler's own discovery refuses
+          # them, and roc-types registers them itself (main.zig's `discover`).
+          "$GITHUB_WORKSPACE/out/bin/roc-types" tools/roc_types/smoke/app.roc > /tmp/bare.out
+          test "$(head -n 1 /tmp/bare.out)" = "roc-types $format $version"
+          grep -q '^== /.*/tools/roc_types/smoke/app.roc$' /tmp/bare.out
+          grep -q '^== /.*/tools/roc_types/smoke/platform/main.roc$' /tmp/bare.out
+          grep -q '^== /.*/tools/roc_types/smoke/lib/Greet.roc$' /tmp/bare.out
+          grep -qP '^t\texpr\t.*\tStr -> Str$' /tmp/bare.out
+          grep -cP '^t\t' /tmp/bare.out
 
       - name: Tarball
         id: tarball
