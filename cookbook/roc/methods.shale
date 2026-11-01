@@ -17,9 +17,16 @@
 -- puts on a rewritten call's lines leaves that call as it was, with the
 -- error's title as its reason, and the file is tried again (a `missing
 -- method` on `name = <value>`, a value whose type never resolved, is the
--- error of the turned calls on the plain `name` in its scope); an error
--- anywhere else (an import a rewrite left unused), or a changed `roc test`,
--- puts the whole file back and leaves all its candidates, that the reason.
+-- error of the turned calls on the plain `name` in its scope). An error
+-- anywhere else (a warning too, `●`) is a stray, and is judged only in a
+-- round where no error left a call: a refused call's value can draw
+-- errors where it is used (an `if` it decides, `unconditional condition`),
+-- so a round that leaves a call sets its strays aside, and the next,
+-- without that call, sees whether they stay. A stray in a round that
+-- leaves none (an unannotated function's turned call refused at its
+-- caller), or a changed `roc test`, puts the whole file back and leaves
+-- all its candidates, that the reason; so does a file still failing after
+-- `ROUNDS` rounds.
 -- A file kept is laid out by `roc fmt` when it was clean before, and
 -- checked again.
 --
@@ -78,7 +85,10 @@ const PLANTS = "cookbook:roc/plants/methods"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
 use("cookbook:roc/pinned.shale")
-const ROUNDS = 4
+-- A round's refused calls leave it, and the next, without them, may find
+-- more that their errors hid: roc-chat's Topics.roc, 137 candidates, takes
+-- 5 rounds to its verdict, and a sixth is room.
+const ROUNDS = 6
 const FROM = tonumber(arg("from", "1"))
 -- A run starts at most 64 programs (Shale's `runs`); a file may take
 -- `ROUNDS` checks, the test, and under `apply=1` two `roc fmt`s, and a
@@ -358,8 +368,12 @@ function try_file(ctx, p, t, cands, root, want_test)
       return n
     end
     -- Each error on a turned call's lines leaves that call; one on no
-    -- turned call puts the file back.
+    -- turned call is a stray, judged only in a round that leaves none: a
+    -- refused call's value is unknown to the compiler, which may then
+    -- complain where it is used (`unconditional condition`), and the next
+    -- round, without that call, says whether the stray was its.
     local stray = nil
+    local refused = false
     for e in r.errors do
       if e.file == basename(p) then
         local hit = false
@@ -371,12 +385,13 @@ function try_file(ctx, p, t, cands, root, want_test)
           end
         end
         if not hit then hit = blame_definition(t, e, cands) end
+        if hit then refused = true end
         if not hit and stray == nil then stray = e end
       elseif stray == nil then
         stray = e
       end
     end
-    if stray ~= nil or #r.errors == 0 then
+    if not refused and (stray ~= nil or #r.errors == 0) then
       local why = stray and ("roc check: " .. stray.title .. " at " .. stray.file .. ":" .. stray.line .. ", on no rewritten call") or ("roc check failed, naming no line: " .. said_first(r.out))
       for c in cands do if c.left == "" then c.left = why .. "; the file is put back" end end
       replace(p, was)
@@ -391,10 +406,14 @@ end
 
 -- **EVERY FILE OF `paths`**, each judged on `root` (its own file when
 -- `root` is ""): `{candidates, rewritten, left, lines}`, `lines` a
--- `path:line: why` each call left.
-function run_all(paths, root, from)
-  local ctx = {used = 1}
-  local ts = trees(paths)
+-- `path:line: why` each call left. `ts` is their trees, or nil to read
+-- them here, one program (`roc_tree`).
+function run_all(paths, root, from, ts)
+  local ctx = {used = 0}
+  if ts == nil then
+    ts = trees(paths)
+    ctx.used = 1
+  end
   local total = {candidates = 0, rewritten = 0, left = 0, lines = {}, files = 0, next = 0}
   local baseline = {}
   for k = from, #paths do
@@ -458,16 +477,23 @@ const EXPECT = {
   Matched = {left = 1, why = "an argument with no span"},
   Ref = {left = 0},
   Scrutinee = {left = 1, why = "roc check: missing method (on `text`'s definition)"},
+  Knock = {left = 2, why = "roc check: missing method"},
+  Header = {left = 0},
 }
 
 function self_test()
   local scratch = fresh_dir("scratch:", "methods")
   for name in ls(PLANTS) do replace(scratch .. "/" .. name, read(PLANTS .. "/" .. name)) end
   local tally = {bad = 0}
+  -- Every plant's tree read at once: a tree each would spend a program
+  -- each of the run's 64.
+  local all = {}
+  for name in keys(EXPECT) do push(all, scratch .. "/" .. name .. ".roc") end
+  local ts = trees(all)
   for name in keys(EXPECT) do
     local want = EXPECT[name]
     local p = scratch .. "/" .. name .. ".roc"
-    local got = run_all({p}, has_key(want, "root") and (scratch .. "/" .. want.root .. ".roc") or "", 1)
+    local got = run_all({p}, has_key(want, "root") and (scratch .. "/" .. want.root .. ".roc") or "", 1, ts)
     local mine = {}
     for l in got.lines do push(mine, l) end
     judged(tally, #mine == want.left, name .. ": " .. #mine .. " left, want " .. want.left .. (#mine > 0 and (" (" .. join(mine, "; ") .. ")") or ""))
@@ -488,7 +514,7 @@ if SELF then
   self_test()
 else
   local paths = glob(GLOB)
-  local got = run_all(paths, ROOT, FROM)
+  local got = run_all(paths, ROOT, FROM, nil)
   for l in got.lines do print(l) end
   local said = (APPLY and "" or "dry run: ") .. "candidates " .. got.candidates .. ", rewritten " .. got.rewritten .. ", left " .. got.left
   if got.next > 0 then
