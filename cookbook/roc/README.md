@@ -60,7 +60,10 @@ it works on, `<shale>` being the shale checkout:
   `<Module>Spec.roc`) or `##` doc keeps, and which is neither a recursion
   nor an entry into one (a rule of thumb, not a gate); `fixed`: a
   parameter every production call fills with the same literal (`at: 0`),
-  never context passed down (`me`, `req.me`).
+  never context passed down (`me`, `req.me`); `constant`: a function of
+  `{}` alone with no `!` in its name, which gives the same value every
+  call. A count of callers is of the files the glob reads, and a finding
+  says how many.
   `self_test=1` runs its plants (`plants/boundaries/`).
 - [errors.shale](errors.shale): **a failure said by its tags.**
   `error_alias`: a function whose result's `Try` names a shared alias of

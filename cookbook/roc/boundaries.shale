@@ -35,6 +35,15 @@
 --           CONSTANT**: the same variable (`me`, `accounts`, `at`), field
 --           (`req.me`) or call (`Host.list_srcs!({})`) at every call is the
 --           caller's value handed on, never a finding.
+--   constant  a function of `{}` alone (its annotation's one argument, or
+--           its lambda's one pattern, is `{}`) whose name has no `!`: it
+--           gives the same value every call, and a constant says so
+--           (`board = ...`, not `board = |{}| ...`). An effect needs the
+--           call, and its `!` keeps it quiet.
+--
+-- **WHAT A COUNT COUNTS**: `single`'s one caller and `fixed`'s calls are
+-- those in the files the glob reads, and a finding says how many: a sweep
+-- of one folder never sees a caller in its siblings.
 --
 -- **A REFERENCE** is a bare `name` in the defining file, `Type.name`
 -- anywhere, or a method call `.name(...)`, attributed to every member of
@@ -65,7 +74,7 @@ const PLANTS = "cookbook:roc/plants/boundaries/"
 const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const WAYS = arg("ways", 2)
 const NODES = arg("nodes", 24)
-const CHECKS = {"single", "fixed"}
+const CHECKS = {"single", "fixed", "constant"}
 -- Every file's nodes in one list, in order: `NODE[g]` a node of `roc_tree`,
 -- `PATH[g]` its file, `BASE[g]` the index before its file's first node, so
 -- a node's `parent` and `kids` are `BASE[g] +` theirs.
@@ -260,6 +269,32 @@ function wrapper_size(g)
   return {wrapper = small, size = "one expression of " .. #all .. " nodes"}
 end
 
+-- **WHETHER THE DECLARATION AT `g` TAKES `{}` ALONE**: its lambda's one
+-- pattern is an empty record, or the annotation just above it, by its name,
+-- has an empty record as its one argument.
+function takes_unit(g, name)
+  local lam = children(g)[2]
+  for k in children(lam) do
+    if kind(k) == "args" then
+      local ps = children(k)
+      if #ps == 1 and kind(ps[1]) == "p-record" and #children(ps[1]) == 0 then return true end
+    end
+  end
+  local p = parent(g)
+  if p == 0 then return false end
+  local before = 0
+  local prev = 0
+  for k in children(p) do
+    if k == g then before = prev end
+    prev = k
+  end
+  if before == 0 or kind(before) ~= "s-type-anno" or get(NODE[before], "name", "") ~= name then return false end
+  local ty = children(before)
+  if #ty == 0 or kind(ty[1]) ~= "ty-fn" then return false end
+  local parts = children(ty[1])
+  return #parts == 2 and kind(parts[1]) == "ty-record" and #children(parts[1]) == 0
+end
+
 -- ── pass 1: the functions ────────────────────────────────────────────────
 -- By key `owner|name`, the owner a module type's name, or `@path` for a
 -- top-level one.
@@ -276,7 +311,7 @@ for g = 1, #NODE do
         local name = raw(kids[1])
         local key = owner .. "|" .. name
         local size = wrapper_size(kids[2])
-        defs[key] = {key = key, path = path, owner = owner, name = name, line = n.line, last = n.end_line, wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, n.line), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, values = 0, ambiguous = false, recursive = false, entry = false}
+        defs[key] = {key = key, path = path, owner = owner, name = name, line = n.line, last = n.end_line, wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, n.line), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, values = 0, ambiguous = false, recursive = false, entry = false, unit = takes_unit(g, name)}
         if sub(owner, 1, 1) ~= "@" then
           if not has_key(members, name) then members[name] = {} end
           push(members[name], key)
@@ -423,7 +458,7 @@ for key in sort(keys(defs)) do
   local def = defs[key]
   local judged = not def.ambiguous and not is_test_file(def.path)
   if judged and def.prod == 1 and def.values == 0 and def.expects == 0 and def.tests == 0 and def.doc == 0 and def.wrapper and not def.recursive and not def.entry and not is_question(def.name) then
-    say(def.path, def.line, "single", "`" .. shown_name(def) .. "` (" .. def.size .. ") has one caller, " .. def.callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
+    say(def.path, def.line, "single", "`" .. shown_name(def) .. "` (" .. def.size .. ") has one caller in the " .. #fs .. " files read, " .. def.callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
   end
   if judged and #def.calls >= 2 and def.values == 0 then
     local seen = {}
@@ -443,8 +478,11 @@ for key in sort(keys(defs)) do
       end
     end
     for k in sort(keys(seen)) do
-      if seen[k] ~= DIFFERS and is_literal(seen[k]) then say(def.path, def.line, "fixed", "`" .. shown_name(def) .. "`'s argument " .. k .. " is `" .. seen[k] .. "` in all " .. #def.calls .. " production calls: no parameter, or an entry function that takes only what varies") end
+      if seen[k] ~= DIFFERS and is_literal(seen[k]) then say(def.path, def.line, "fixed", "`" .. shown_name(def) .. "`'s argument " .. k .. " is `" .. seen[k] .. "` in all " .. #def.calls .. " production calls in the " .. #fs .. " files read: no parameter, or an entry function that takes only what varies") end
     end
+  end
+  if def.unit and not contains(def.name, "!") and not is_test_file(def.path) then
+    say(def.path, def.line, "constant", "`" .. shown_name(def) .. "` takes `{}` alone and names no effect, so it gives the same value every call: a constant (`" .. def.name .. " = ...`), or a `!` if it has an effect")
   end
 end
 
