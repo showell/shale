@@ -1,28 +1,20 @@
-//! `roc_tree`'s reading: roc-ast's dump (Shale's tools/roc_ast, Roc's
-//! own parser printing `AST.toSExprStr`) turned into nodes, so a Roc recipe
-//! walks a list rather than re-parsing tabs, spans and `(raw "...")` itself.
-//! The prelude's `roc_tree(paths)` runs roc-ast and calls `host("roc_tree",
-//! out)` with what it printed.
+//! `roc_tree`'s reading: `roc-ast --tree` (Shale's tools/roc_ast, Roc's own
+//! parser's tree, walked in memory and written for a program) turned into
+//! nodes, so a Roc recipe walks a list. The prelude's `roc_tree(paths)` runs
+//! roc-ast and calls `host("roc_tree", out)` with what it wrote.
 //!
-//! **THE DUMP'S SHAPE**: `== <path>` starts a file; each line below it is a
-//! node, its tabs its depth, `(kind @l1.c1-l2.c2 (attr "value") ...` with the
-//! span and attributes optional and the node's closing `)`s at the end of its
-//! last line. A node may hold a child on its own line (`(mapper (e-tag @...
-//! (raw "X")))`): that child is a node too, one deeper. A child may also stay
-//! open on its parent's line (`(backing (e-record @55.8-58.4`): both stay open,
-//! and the lines below, a tab past the inner one, are the inner one's. A
-//! positional string (`(unary "!"`, `(text "f")` on its own line) is the
-//! attribute `value`, and so is a string or bare atom alone on an indented
-//! line (a tuple access's `".0"))))`, an open tag union's `..))`), its
-//! parent's: Roc's printer (base/SExprTree.zig) puts a node's head items on its
-//! line and each other child, of any kind, on a line of its own. Every other
-//! line's first `(` is a node.
-//! A string is printed raw, unescaped, so it ends at the first `"` followed by
-//! `)`, a space and `(`, or the line's end. An unindented line that is none of
-//! these ends the trees: roc-ast's refusal, given back as `said`.
+//! **THE FORMAT** (tools/roc_ast/main.zig says how it is made): `== <path>`
+//! starts a file; then one fact a line, tab-separated:
+//!   `n<TAB>parent<TAB>kind<TAB>line<TAB>col<TAB>end_line<TAB>end_col`
+//!   `a<TAB>node<TAB>name<TAB>value`
+//! Nodes are numbered from 1 in each file in the order they come; `parent`
+//! 0 is a root's, and an attribute names its node. A kind, name or value
+//! escapes `\`, tab, newline and carriage return as `\\`, `\t`, `\n`, `\r`.
+//! A line that is none of these ends the trees: roc-ast's refusal, given
+//! back as `said`.
 //!
-//! Reading is pure (`parse`); `call` makes Shale's values and charges a step
-//! per node.
+//! Reading is pure (`parseTree`); `call` makes Shale's values and charges a
+//! step per node.
 
 const std = @import("std");
 const shale = @import("shale");
@@ -41,7 +33,7 @@ pub const Node = struct {
     /// 1-based within its file; 0 for a root.
     parent: usize,
     kids: std.ArrayList(usize) = .empty,
-    /// 0 for a node the dump gives no span (`(args`, `(statements`).
+    /// 0 for a node Roc gives no span (`args`, `statements`).
     line: usize = 0,
     col: usize = 0,
     end_line: usize = 0,
@@ -57,7 +49,7 @@ pub const Dump = struct {
     said: ?[]const u8,
 };
 
-/// Where the dump does not read as a tree: its line and why.
+/// Where the text does not read as trees: its line and why.
 pub const Bad = struct { line: usize, why: []const u8 };
 
 pub const Outcome = union(enum) { ok: Dump, bad: Bad };
@@ -65,146 +57,48 @@ pub const Outcome = union(enum) { ok: Dump, bad: Bad };
 /// The names a node's own fields take, which no attribute may.
 const reserved = [_][]const u8{ "kind", "depth", "parent", "kids", "line", "col", "end_line", "end_col" };
 
-const Line = struct {
-    s: []const u8,
-    i: usize = 0,
+/// An attribute on node `at` (1-based) of `file`: `-` in its name read as
+/// `_`, never a node field's name, never twice on one node.
+fn addAttr(a: std.mem.Allocator, file: *File, at: usize, name: []const u8, value: []const u8) error{OutOfMemory}!?[]const u8 {
+    const nd = &file.nodes.items[at - 1];
+    const shown = try a.dupe(u8, name);
+    std.mem.replaceScalar(u8, shown, '-', '_');
+    for (reserved) |w| if (std.mem.eql(u8, w, shown)) return "an attribute takes a node field's name";
+    for (nd.attrs.items) |x| if (std.mem.eql(u8, x.name, shown)) return "an attribute twice in one node";
+    try nd.attrs.append(a, .{ .name = shown, .value = value });
+    return null;
+}
 
-    fn at(l: *Line, c: u8) bool {
-        return l.i < l.s.len and l.s[l.i] == c;
-    }
-
-    fn word(l: *Line) []const u8 {
-        const from = l.i;
-        while (l.i < l.s.len and l.s[l.i] != ' ' and l.s[l.i] != ')' and l.s[l.i] != '(' and l.s[l.i] != '"') l.i += 1;
-        return l.s[from..l.i];
-    }
-
-    fn int(l: *Line) ?usize {
-        const from = l.i;
-        while (l.i < l.s.len and std.ascii.isDigit(l.s[l.i])) l.i += 1;
-        return std.fmt.parseInt(usize, l.s[from..l.i], 10) catch null;
-    }
-
-    /// A raw string at `"`: to the first `"` followed by the line's end, or by
-    /// `)`s then the end or ` (` (the next attribute or node). A raw string
-    /// holds quotes and `)` (`getElementById("said"), x`), so a `")` alone
-    /// does not end it.
-    fn string(l: *Line) ?[]const u8 {
-        const from = l.i + 1;
-        var j = from;
-        while (j < l.s.len) : (j += 1) {
-            if (l.s[j] != '"') continue;
-            const rest = l.s[j + 1 ..];
-            const past = std.mem.trimStart(u8, rest, ")");
-            if (past.len == 0 or std.mem.startsWith(u8, past, " (")) {
-                l.i = j + 1;
-                return l.s[from..j];
-            }
+fn unescape(a: std.mem.Allocator, s: []const u8) error{ OutOfMemory, Bad }![]const u8 {
+    if (std.mem.indexOfScalar(u8, s, '\\') == null) return s;
+    var out: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < s.len) : (i += 1) {
+        if (s[i] != '\\') {
+            try out.append(a, s[i]);
+            continue;
         }
-        return null;
+        i += 1;
+        if (i >= s.len) return error.Bad;
+        try out.append(a, switch (s[i]) {
+            '\\' => '\\',
+            't' => '\t',
+            'n' => '\n',
+            'r' => '\r',
+            else => return error.Bad,
+        });
     }
+    return out.items;
+}
 
-    /// `(word "value")` or `(word bare)` at `(`: an attribute, not a node.
-    fn attrAhead(l: *Line) bool {
-        var k = l.i + 1;
-        while (k < l.s.len and l.s[k] != ' ' and l.s[k] != ')' and l.s[k] != '(') k += 1;
-        if (k >= l.s.len or l.s[k] != ' ') return false;
-        k += 1;
-        if (k < l.s.len and l.s[k] == '"') return true;
-        // A bare value (`(rest false)`): a word, then `)`.
-        const from = k;
-        while (k < l.s.len and l.s[k] != ' ' and l.s[k] != ')' and l.s[k] != '(' and l.s[k] != '@' and l.s[k] != '"') k += 1;
-        return k > from and k < l.s.len and l.s[k] == ')';
-    }
-};
+fn num(s: []const u8) ?usize {
+    return std.fmt.parseInt(usize, s, 10) catch null;
+}
 
-const Reader = struct {
-    a: std.mem.Allocator,
-    file: *File,
-    n: usize,
-    bad: ?Bad = null,
-    /// The nodes this line leaves open, innermost first.
-    open: std.ArrayList(usize) = .empty,
-
-    fn fail(r: *Reader, why: []const u8) error{Bad} {
-        r.bad = .{ .line = r.n, .why = why };
-        return error.Bad;
-    }
-
-    fn addAttr(r: *Reader, at: usize, name: []const u8, value: []const u8) error{ Bad, OutOfMemory }!void {
-        const nd = &r.file.nodes.items[at - 1];
-        const shown = try r.a.dupe(u8, name);
-        std.mem.replaceScalar(u8, shown, '-', '_');
-        for (reserved) |w| if (std.mem.eql(u8, w, shown)) return r.fail("an attribute takes a node field's name");
-        for (nd.attrs.items) |x| if (std.mem.eql(u8, x.name, shown)) return r.fail("an attribute twice in one node");
-        try nd.attrs.append(r.a, .{ .name = shown, .value = value });
-    }
-
-    /// One node at `(`; returns its index and whether it closed on this line.
-    fn node(r: *Reader, l: *Line, depth: usize, parent: usize) error{ Bad, OutOfMemory }!struct { index: usize, closed: bool } {
-        l.i += 1;
-        const kind = l.word();
-        if (kind.len == 0) return r.fail("a node with no kind");
-        try r.file.nodes.append(r.a, .{ .kind = kind, .depth = depth, .parent = parent });
-        const me = r.file.nodes.items.len;
-        if (parent > 0) try r.file.nodes.items[parent - 1].kids.append(r.a, me);
-        while (true) {
-            while (l.at(' ')) l.i += 1;
-            if (l.i >= l.s.len) {
-                try r.open.append(r.a, me);
-                return .{ .index = me, .closed = false };
-            }
-            switch (l.s[l.i]) {
-                ')' => {
-                    l.i += 1;
-                    return .{ .index = me, .closed = true };
-                },
-                '@' => {
-                    l.i += 1;
-                    const nd = &r.file.nodes.items[me - 1];
-                    nd.line = l.int() orelse return r.fail("a span's line");
-                    if (!l.at('.')) return r.fail("a span without `.`");
-                    l.i += 1;
-                    nd.col = l.int() orelse return r.fail("a span's column");
-                    if (!l.at('-')) return r.fail("a span without `-`");
-                    l.i += 1;
-                    nd.end_line = l.int() orelse return r.fail("a span's end line");
-                    if (!l.at('.')) return r.fail("a span's end without `.`");
-                    l.i += 1;
-                    nd.end_col = l.int() orelse return r.fail("a span's end column");
-                },
-                '"' => {
-                    const v = l.string() orelse return r.fail("a string that does not end");
-                    try r.addAttr(me, "value", v);
-                },
-                '(' => if (l.attrAhead()) {
-                    l.i += 1;
-                    const name = l.word();
-                    l.i += 1;
-                    const v = if (l.at('"')) l.string() orelse return r.fail("a string that does not end") else l.word();
-                    if (!l.at(')')) return r.fail("an attribute not closed");
-                    l.i += 1;
-                    try r.addAttr(me, name, v);
-                } else {
-                    const kid = try r.node(l, depth + 1, me);
-                    // Open, the kid ended the line: this node stays open too.
-                    if (!kid.closed) {
-                        try r.open.append(r.a, me);
-                        return .{ .index = me, .closed = false };
-                    }
-                },
-                else => return r.fail("an unexpected byte in a node"),
-            }
-        }
-    }
-};
-
-/// Reads roc-ast's output: each `== path` and its tree, and the first line past
-/// the trees, if any. Strings point into `text`.
-pub fn parse(a: std.mem.Allocator, text: []const u8) error{OutOfMemory}!Outcome {
+/// Reads `roc-ast --tree`'s output: each `== path` and its nodes, and the
+/// first line past the trees, if any. Strings point into `text` or `a`.
+pub fn parseTree(a: std.mem.Allocator, text: []const u8) error{OutOfMemory}!Outcome {
     var files: std.ArrayList(File) = .empty;
-    // The open line heads, by depth: a line's parent is the nearest shallower.
-    var stack: std.ArrayList(usize) = .empty;
     var it = std.mem.splitScalar(u8, text, '\n');
     var n: usize = 0;
     while (it.next()) |raw| {
@@ -212,50 +106,43 @@ pub fn parse(a: std.mem.Allocator, text: []const u8) error{OutOfMemory}!Outcome 
         if (raw.len == 0) continue;
         if (std.mem.startsWith(u8, raw, "== ")) {
             try files.append(a, .{ .path = raw[3..] });
-            stack.clearRetainingCapacity();
             continue;
         }
-        var depth: usize = 0;
-        while (depth < raw.len and raw[depth] == '\t') depth += 1;
-        // A child alone on its line that is no node: a string or a bare atom.
-        const value_line = depth > 0 and depth < raw.len and raw[depth] != '(' and raw[depth] != ' ' and raw[depth] != ')';
-        if (!value_line and (depth >= raw.len or raw[depth] != '(')) {
-            if (depth > 0) return .{ .bad = .{ .line = n, .why = "an indented line that is no node" } };
-            return .{ .ok = .{ .files = files.items, .said = raw } };
-        }
-        if (files.items.len == 0) return .{ .bad = .{ .line = n, .why = "a node before any `== path`" } };
-        const file = &files.items[files.items.len - 1];
-        while (stack.items.len > 0 and file.nodes.items[stack.items[stack.items.len - 1] - 1].depth >= depth) _ = stack.pop();
-        const parent: usize = if (stack.items.len > 0) stack.items[stack.items.len - 1] else 0;
-        var l: Line = .{ .s = raw, .i = depth };
-        var r: Reader = .{ .a = a, .file = file, .n = n };
-        if (value_line) {
-            // A positional value on its own line: its parent's `value`.
-            if (parent == 0) return .{ .bad = .{ .line = n, .why = "a value with no node to hold it" } };
-            const v = if (raw[depth] == '"') l.string() orelse return .{ .bad = .{ .line = n, .why = "a string that does not end" } } else l.word();
-            if (std.mem.trimEnd(u8, raw[l.i..], ")").len != 0) return .{ .bad = .{ .line = n, .why = "more after a value's line" } };
-            r.addAttr(parent, "value", v) catch |e| switch (e) {
-                error.Bad => return .{ .bad = r.bad.? },
-                error.OutOfMemory => return error.OutOfMemory,
-            };
-            continue;
-        }
-        const got = r.node(&l, depth, parent) catch |e| switch (e) {
-            error.Bad => return .{ .bad = r.bad.? },
-            error.OutOfMemory => return error.OutOfMemory,
-        };
-        // What follows a closed head is its ancestors' `)`s, nothing else.
-        if (got.closed and std.mem.trimEnd(u8, raw[l.i..], ")").len != 0) return .{ .bad = .{ .line = n, .why = "more after a node closed" } };
-        if (got.closed) {
-            try stack.append(a, got.index);
-        } else {
-            // Every node the line leaves open, outermost first: the lines
-            // below belong to the deepest one their tabs allow.
-            var k = r.open.items.len;
-            while (k > 0) {
-                k -= 1;
-                try stack.append(a, r.open.items[k]);
+        const node_line = std.mem.startsWith(u8, raw, "n\t");
+        if (!node_line and !std.mem.startsWith(u8, raw, "a\t")) return .{ .ok = .{ .files = files.items, .said = raw } };
+        const bad = struct {
+            fn at(line: usize, why: []const u8) Outcome {
+                return .{ .bad = .{ .line = line, .why = why } };
             }
+        }.at;
+        if (files.items.len == 0) return bad(n, "a node before any `== path`");
+        const file = &files.items[files.items.len - 1];
+        var f: [6][]const u8 = undefined;
+        var count: usize = 0;
+        var fit = std.mem.splitScalar(u8, raw[2..], '\t');
+        while (fit.next()) |x| {
+            if (count == f.len) return bad(n, "a line with too many fields");
+            f[count] = x;
+            count += 1;
+        }
+        if (node_line) {
+            if (count != 6) return bad(n, "a node line without its six fields");
+            const parent = num(f[0]) orelse return bad(n, "a node's parent");
+            if (parent > file.nodes.items.len) return bad(n, "a node's parent not yet read");
+            const kind = unescape(a, f[1]) catch return bad(n, "a bad escape");
+            if (kind.len == 0) return bad(n, "a node with no kind");
+            var span: [4]usize = undefined;
+            for (f[2..6], 0..) |x, k| span[k] = num(x) orelse return bad(n, "a span's number");
+            const depth = if (parent == 0) 0 else file.nodes.items[parent - 1].depth + 1;
+            try file.nodes.append(a, .{ .kind = kind, .depth = depth, .parent = parent, .line = span[0], .col = span[1], .end_line = span[2], .end_col = span[3] });
+            if (parent > 0) try file.nodes.items[parent - 1].kids.append(a, file.nodes.items.len);
+        } else {
+            if (count != 3) return bad(n, "an attribute line without its three fields");
+            const at = num(f[0]) orelse return bad(n, "an attribute's node");
+            if (at == 0 or at > file.nodes.items.len) return bad(n, "an attribute's node not yet read");
+            const name = unescape(a, f[1]) catch return bad(n, "a bad escape");
+            const value = unescape(a, f[2]) catch return bad(n, "a bad escape");
+            if (try addAttr(a, file, at, name, value)) |why| return bad(n, why);
         }
     }
     return .{ .ok = .{ .files = files.items, .said = null } };
@@ -281,7 +168,7 @@ pub fn call(backing: std.mem.Allocator, run: *Run, pos: Pos, args: []const Value
     try script.builtins.chargeBytes(run, pos, text.len);
     var arena = std.heap.ArenaAllocator.init(backing);
     defer arena.deinit();
-    const dump = switch (parse(arena.allocator(), text) catch return run.oom(pos)) {
+    const dump = switch (parseTree(arena.allocator(), text) catch return run.oom(pos)) {
         .ok => |d| d,
         .bad => |b| return run.fail(pos, .argument, "`roc_tree`: roc-ast's output line {d} is not a tree's: {s}", .{ b.line, b.why }),
     };
@@ -322,135 +209,66 @@ pub fn call(backing: std.mem.Allocator, run: *Run, pos: Pos, args: []const Value
     return .{ .table = out };
 }
 
-test "parse: a same-line child, a positional string, a string-only line's node, a bare attribute, a refusal after" {
+test "parseTree: nodes, parents, depths, kids, spans and attributes, two files, a refusal after" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const text =
         "== /x/a.roc\n" ++
-        "(file @1.1-2.9\n" ++
-        "\t(mapper (e-tag @1.2-1.4 (raw \"Ok\")))\n" ++
-        "\t(unary \"!\"\n" ++
-        "\t\t(e-ident @2.1-2.2 (raw \"'\"'\") (type \"U8\")))\n" ++
-        "\t(exposed-lower-ident @2.3-2.4\n" ++
-        "\t\t(text \"f\"))\n" ++
-        "\t(field @2.5-2.6 (name \"p\") (rest false)))\n" ++
-        "\n" ++
-        "/x/b.roc: 1 parse problem(s): no tree\n";
-    const got = (try parse(arena.allocator(), text)).ok;
-    try std.testing.expectEqual(@as(usize, 1), got.files.len);
-    try std.testing.expectEqualStrings("/x/b.roc: 1 parse problem(s): no tree", got.said.?);
-    const ns = got.files[0].nodes.items;
-    try std.testing.expectEqual(@as(usize, 8), ns.len);
-    try std.testing.expectEqualStrings("mapper", ns[1].kind);
-    try std.testing.expectEqualStrings("e-tag", ns[2].kind);
-    try std.testing.expectEqual(@as(usize, 2), ns[2].depth);
-    try std.testing.expectEqual(@as(usize, 2), ns[2].parent);
-    try std.testing.expectEqualStrings("Ok", ns[2].attrs.items[0].value);
-    try std.testing.expectEqualStrings("value", ns[3].attrs.items[0].name);
-    try std.testing.expectEqualStrings("'\"'", ns[4].attrs.items[0].value);
-    try std.testing.expectEqualStrings("type", ns[4].attrs.items[1].name);
-    try std.testing.expectEqual(@as(usize, 4), ns[4].parent);
-    try std.testing.expectEqualStrings("text", ns[6].kind);
-    try std.testing.expectEqualStrings("f", ns[6].attrs.items[0].value);
-    try std.testing.expectEqual(@as(usize, 6), ns[6].parent);
-    try std.testing.expectEqualStrings("false", ns[7].attrs.items[1].value);
-    try std.testing.expectEqual(@as(usize, 1), ns[7].parent);
-    try std.testing.expectEqual(@as(usize, 4), ns[0].kids.items.len);
-}
-
-test "parse: a raw string holding quotes and `)`s ends only where the line's parens do" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const got = (try parse(arena.allocator(), "== /x\n(e-string-part @1.1-1.9 (raw \"f(\"a\"), g(\"b\")\"))\n")).ok;
-    try std.testing.expectEqualStrings("f(\"a\"), g(\"b\")", got.files[0].nodes.items[0].attrs.items[0].value);
-}
-
-test "parse: a node left open on its parent's line keeps both open, the lines below the inner one's (roc-apps Paddle.roc)" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const text =
-        "== /x/Paddle.roc\n" ++
-        "(e-nominal-record @55.3-58.4\n" ++
-        "\t(mapper (e-tag @55.3-55.7 (raw \"Ball\")))\n" ++
-        "\t(backing (e-record @55.8-58.4\n" ++
-        "\t\t\t(field (field \"pos\")\n" ++
-        "\t\t\t\t(e-ident @56.9-56.12 (raw \"p\")))\n" ++
-        "\t\t\t(field (field \"v\")\n" ++
-        "\t\t\t\t(e-ident @57.9-57.10 (raw \"v\")))))\n" ++
-        "\t(after @59.1-59.2))\n";
-    const ns = (try parse(arena.allocator(), text)).ok.files[0].nodes.items;
-    // 1 nominal, 2 mapper, 3 e-tag, 4 backing, 5 e-record, 6 field, 7 e-ident, 8 field, 9 e-ident, 10 after
-    try std.testing.expectEqual(@as(usize, 10), ns.len);
-    try std.testing.expectEqualStrings("e-record", ns[4].kind);
-    try std.testing.expectEqual(@as(usize, 4), ns[4].parent);
-    try std.testing.expectEqual(@as(usize, 2), ns[4].depth);
-    try std.testing.expectEqual(@as(usize, 55), ns[4].line);
-    // The record's fields are the record's, not the backing's.
-    try std.testing.expectEqual(@as(usize, 5), ns[5].parent);
-    try std.testing.expectEqual(@as(usize, 5), ns[7].parent);
-    try std.testing.expectEqual(@as(usize, 2), ns[4].kids.items.len);
-    try std.testing.expectEqual(@as(usize, 1), ns[3].kids.items.len);
-    // A line back at the backing's depth is the nominal's again.
-    try std.testing.expectEqualStrings("after", ns[9].kind);
-    try std.testing.expectEqual(@as(usize, 1), ns[9].parent);
-    try std.testing.expectEqual(@as(usize, 3), ns[0].kids.items.len);
-}
-
-test "parse: a string alone on an indented line is its parent's value (roc-markdown MdHtml.roc's tuple access)" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const text =
-        "== /x/MdHtml.roc\n" ++
-        "(e-record @207.80-207.103\n" ++
-        "\t(field (field \"prefix\")\n" ++
-        "\t\t(e-tuple-access @207.98-207.101\n" ++
-        "\t\t\t(e-ident @207.98-207.99 (raw \"e\"))\n" ++
-        "\t\t\t\".0\")))\n" ++
-        "\t(next @208.1-208.2))\n";
-    const ns = (try parse(arena.allocator(), text)).ok.files[0].nodes.items;
-    try std.testing.expectEqual(@as(usize, 5), ns.len);
-    try std.testing.expectEqualStrings("e-tuple-access", ns[2].kind);
-    try std.testing.expectEqualStrings("value", ns[2].attrs.items[0].name);
-    try std.testing.expectEqualStrings(".0", ns[2].attrs.items[0].value);
-    // Not the ident's, the line above it at the string's own depth.
-    try std.testing.expectEqual(@as(usize, 1), ns[3].attrs.items.len);
-    try std.testing.expectEqual(@as(usize, 1), ns[4].parent);
-}
-
-test "parse: a bare atom alone on a line is its parent's value (roc-apps CanvasAppRunner.roc's open tag union)" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const text =
-        "== /x/CanvasAppRunner.roc\n" ++
-        "(ty-tag-union @192.146-192.161\n" ++
-        "\t(tags\n" ++
-        "\t\t(ty-apply @192.147-192.156\n" ++
-        "\t\t\t(ty @192.147-192.151 (name \"Exit\"))))\n" ++
-        "\t..)\n" ++
+        "n\t0\tfile\t1\t1\t5\t14\n" ++
+        "n\t1\tstatements\t0\t0\t0\t0\n" ++
+        "n\t2\te-binop\t5\t8\t5\t14\n" ++
+        "a\t3\top\t==\n" ++
+        "n\t3\te-ident\t5\t8\t5\t9\n" ++
+        "a\t4\traw\tx\n" ++
+        "n\t3\te-tuple-access\t5\t13\t5\t16\n" ++
+        "a\t5\tvalue\t.0\n" ++
         "== /x/b.roc\n" ++
-        "(s-decl @193.2-211.3)\n";
-    const got = (try parse(arena.allocator(), text)).ok;
-    const ns = got.files[0].nodes.items;
-    try std.testing.expectEqual(@as(usize, 4), ns.len);
-    try std.testing.expectEqualStrings("value", ns[0].attrs.items[0].name);
-    try std.testing.expectEqualStrings("..", ns[0].attrs.items[0].value);
-    try std.testing.expectEqual(@as(usize, 0), ns[1].attrs.items.len);
+        "n\t0\tfile\t1\t1\t1\t2\n" ++
+        "a\t1\tline-doc\tkept\n" ++
+        "/x/c.roc: 1 parse problem(s): no tree\n";
+    const got = (try parseTree(arena.allocator(), text)).ok;
     try std.testing.expectEqual(@as(usize, 2), got.files.len);
+    try std.testing.expectEqualStrings("/x/c.roc: 1 parse problem(s): no tree", got.said.?);
+    const ns = got.files[0].nodes.items;
+    try std.testing.expectEqual(@as(usize, 5), ns.len);
+    try std.testing.expectEqual(@as(usize, 0), ns[1].line);
+    try std.testing.expectEqual(@as(usize, 2), ns[2].depth);
+    try std.testing.expectEqual(@as(usize, 3), ns[3].depth);
+    try std.testing.expectEqual(@as(usize, 3), ns[4].parent);
+    try std.testing.expectEqual(@as(usize, 2), ns[2].kids.items.len);
+    try std.testing.expectEqual(@as(usize, 5), ns[2].kids.items[1]);
+    try std.testing.expectEqualStrings("==", ns[2].attrs.items[0].value);
+    try std.testing.expectEqualStrings(".0", ns[4].attrs.items[0].value);
+    try std.testing.expectEqual(@as(usize, 16), ns[4].end_col);
+    // Numbering starts again in each file, and `-` in a name reads as `_`.
+    try std.testing.expectEqual(@as(usize, 0), got.files[1].nodes.items[0].parent);
+    try std.testing.expectEqualStrings("line_doc", got.files[1].nodes.items[0].attrs.items[0].name);
 }
 
-test "parse: still refused: a node before a path, a value with no node, more after a value, an indented line that is neither" {
+test "parseTree: escapes undone, so a string holding quotes, parens, tabs and backslashes reads whole" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const early = try parse(arena.allocator(), "(file)\n");
-    try std.testing.expectEqualStrings("a node before any `== path`", early.bad.why);
-    const orphan = try parse(arena.allocator(), "== /x\n\t\".0\"\n");
-    try std.testing.expectEqualStrings("a value with no node to hold it", orphan.bad.why);
-    const trailing = try parse(arena.allocator(), "== /x\n(a @1.1-1.2\n\t\".0\" (x)\n");
-    try std.testing.expectEqualStrings("more after a value's line", trailing.bad.why);
-    const wordy = try parse(arena.allocator(), "== /x\n(a @1.1-1.2\n\tnot a node\n");
-    try std.testing.expectEqualStrings("more after a value's line", wordy.bad.why);
-    const neither = try parse(arena.allocator(), "== /x\n(a @1.1-1.2\n\t x\n");
-    try std.testing.expectEqualStrings("an indented line that is no node", neither.bad.why);
-    const twice = try parse(arena.allocator(), "== /x\n(a \"v\"\n\t\"w\")\n");
-    try std.testing.expectEqualStrings("an attribute twice in one node", twice.bad.why);
+    // roc-ast's own line for `x = "a\") (b"`: the source's backslash escaped.
+    const got = (try parseTree(arena.allocator(), "== /x\nn\t0\te-string-part\t3\t6\t3\t13\na\t1\traw\ta\\\\\") (b\\tc\\nd\\r\n")).ok;
+    try std.testing.expectEqualStrings("a\\\") (b\tc\nd\r", got.files[0].nodes.items[0].attrs.items[0].value);
+}
+
+test "parseTree: refused: a node before a path, short or long lines, a parent or node not yet read, a bad escape, no kind, an attribute twice or on a field's name" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const cases = [_]struct { text: []const u8, why: []const u8 }{
+        .{ .text = "n\t0\tfile\t1\t1\t1\t2\n", .why = "a node before any `== path`" },
+        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\n", .why = "a node line without its six fields" },
+        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\t9\n", .why = "a line with too many fields" },
+        .{ .text = "== /x\nn\t1\tfile\t1\t1\t1\t2\n", .why = "a node's parent not yet read" },
+        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t2\traw\tx\n", .why = "an attribute's node not yet read" },
+        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\n", .why = "an attribute line without its three fields" },
+        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\tx\\q\n", .why = "a bad escape" },
+        .{ .text = "== /x\nn\t0\t\t1\t1\t1\t2\n", .why = "a node with no kind" },
+        .{ .text = "== /x\nn\t0\tfile\tx\t1\t1\t2\n", .why = "a span's number" },
+        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\tx\na\t1\traw\ty\n", .why = "an attribute twice in one node" },
+        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\tkind\tx\n", .why = "an attribute takes a node field's name" },
+    };
+    for (cases) |c| try std.testing.expectEqualStrings(c.why, (try parseTree(a, c.text)).bad.why);
 }

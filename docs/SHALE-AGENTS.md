@@ -267,13 +267,14 @@ has none of it):
   `[]const X` is a use of `X`.
   `roc_tree(paths)` is Roc's own parser's tree of each file, in order:
   `{path, nodes, err}`, from roc-ast (Shale's `tools/roc_ast`,
-  installed under the `tools` mount as `roc-ast/bin/roc-ast`), its dump
-  read in the host. A node is `{kind, depth, parent, kids, line, col,
-  end_line, end_col}` and the attributes the dump gives it, by their names
-  (`raw`, `name`, `method`, `op`, `type`, `field`, ...; `module-of` as
-  `module_of`; a positional string, `(unary "!"`, as `value`): absent where
-  the dump has none, so `get(n, "raw", "")`. `kind` is the dump's word
-  without its `(` (`e-apply`, `e-method-call`, `args`); `parent` and `kids`
+  installed under the `tools` mount as `roc-ast/bin/roc-ast`), its `--tree`
+  lines read in the host, every string whole however it is quoted. A node is
+  `{kind, depth, parent, kids, line, col, end_line, end_col}` and the
+  attributes Roc's tree gives it, by their names (`raw`, `name`, `method`,
+  `op`, `type`, `field`, ...; `module-of` as `module_of`; a positional value,
+  `(unary "!"` or a tuple access's `.0`, as `value`): absent where the tree
+  has none, so `get(n, "raw", "")`. `kind` is Roc's name for the node
+  (`e-apply`, `e-method-call`, `args`); `parent` and `kids`
   are indices into `nodes`, `parent` 0 for the root; a node with no span
   (`args`, `statements`) has `line` 0. A file roc-ast refuses (a parse
   problem) is that file's `err`, its `nodes` empty, and the files after it
