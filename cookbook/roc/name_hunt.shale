@@ -3,8 +3,8 @@
 -- annotations (`name : Type`) and definitions (`name = ...`): the top
 -- level's and a module type's members (`Html := [].{ ... }`, `X :: [].{
 -- ... }`), never a local's. They are read from Roc's own parser's tree
--- (roc-ast, at `tools:roc-ast/bin/roc-ast`, which Shale's
--- `tools/roc_ast/install.shale` builds), so an annotation broken after its
+-- (`roc_tree`, the Linux prelude's, over roc-ast at `tools:roc-ast/bin/
+-- roc-ast`), so an annotation broken after its
 -- colon and a `where` clause's arrows read as Roc reads them, and a file
 -- that does not parse is a failure, never a pass.
 -- A finding is a question for a reader, never a verdict:
@@ -97,11 +97,10 @@
 --
 -- Each file's source is read too, for the arrows roc-ast writes alike (a
 -- callback's `=>`), which outgrows the default 16 MiB arena on the chat.
--- budget: steps=200000000 arena_bytes=1000000000
+-- budget: steps=800000000 arena_bytes=3000000000
 
 const SELF = arg("self_test", "") == "1"
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
-const ROC_AST = "tools:roc-ast/bin/roc-ast"
 const WORDS = arg("words", "") == "1"
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split"}
 
@@ -181,83 +180,65 @@ end
 
 -- ── the tree ─────────────────────────────────────────────────────────────
 
--- roc-ast's output: a node a line, its depth its leading tabs, its first
--- line `(kind @line.col-line.col ...)`.
+-- A file's tree is `roc_tree`'s `nodes`: each `{kind, parent, kids, line,
+-- col, end_line, end_col}` and its attributes (`name`, `raw`).
 
--- A line's depth.
-function depth_of(l)
-  local d = 0
-  while sub(l, d + 1, d + 1) == "\t" do d = d + 1 end
-  return d
-end
-
--- The lines of the node at `at`'s children.
 function children(tree, at)
-  local out = {}
-  local i = at + 1
-  while i <= #tree.text and tree.depth[i] > tree.depth[at] do
-    if tree.depth[i] == tree.depth[at] + 1 then push(out, i) end
-    i = i + 1
-  end
-  return out
+  return tree[at].kids
 end
 
-function head(tree, at)
-  return trim(tree.text[at])
+function attr(tree, at, name)
+  return get(tree[at], name, "")
 end
 
 -- The type at `at`, as Roc writes it: `List(U8)`, `{ id : U8 }`, `[A, B]`,
 -- `(U8 -> Bool)`. roc-ast writes `->` and `=>` alike.
 function render(tree, at)
-  local t = head(tree, at)
+  local k = tree[at].kind
   local kids = children(tree, at)
-  local name = between(t, "(name \"", "\")")
-  if starts_with(t, "(ty-apply ") then
+  local name = attr(tree, at, "name")
+  if k == "ty-apply" then
     local args = {}
-    for k in drop(kids, 1) do push(args, render(tree, k)) end
+    for c in drop(kids, 1) do push(args, render(tree, c)) end
     return render(tree, kids[1]) .. "(" .. join(args, ", ") .. ")"
   end
-  if starts_with(t, "(ty-fn ") then
+  if k == "ty-fn" then
     local args = {}
-    for k in take(kids, #kids - 1) do push(args, render(tree, k)) end
+    for c in take(kids, #kids - 1) do push(args, render(tree, c)) end
     return "(" .. join(args, ", ") .. " -> " .. render(tree, kids[#kids]) .. ")"
   end
-  if starts_with(t, "(ty-record ") or starts_with(t, "(ty-tuple ") or starts_with(t, "(tags") then
+  if k == "ty-record" or k == "ty-tuple" or k == "tags" then
     local parts = {}
-    for k in kids do push(parts, render(tree, k)) end
-    if starts_with(t, "(ty-record ") then return "{ " .. join(parts, ", ") .. " }" end
-    if starts_with(t, "(ty-tuple ") then return "(" .. join(parts, ", ") .. ")" end
+    for c in kids do push(parts, render(tree, c)) end
+    if k == "ty-record" then return "{ " .. join(parts, ", ") .. " }" end
+    if k == "ty-tuple" then return "(" .. join(parts, ", ") .. ")" end
     return join(parts, ", ")
   end
-  if starts_with(t, "(ty-tag-union ") then return "[" .. render(tree, kids[1]) .. "]" end
-  if starts_with(t, "(anno-record-field ") then return name .. " : " .. render(tree, kids[1]) end
-  if name ~= nil and name ~= "" then return name end
+  if k == "ty-tag-union" then return "[" .. render(tree, kids[1]) .. "]" end
+  if k == "anno-record-field" then return name .. " : " .. render(tree, kids[1]) end
+  if name ~= "" then return name end
   -- An inferred type, `name : _`.
-  if starts_with(t, "(_)") then return "_" end
-  local raw = between(t, "(raw \"", "\")")
-  if raw ~= nil and raw ~= "" then return raw end
-  return split(t, " ")[1] .. ")"
+  if k == "_" then return "_" end
+  local raw = attr(tree, at, "raw")
+  if raw ~= "" then return raw end
+  return "(" .. k .. ")"
 end
 
 -- The nodes a definition may sit in and still be a top-level or a module
 -- member's: a module type (`Html := [].{ ... }`, `X :: [].{ ... }`) holds
 -- its members in `associated`. Any other (a lambda's block) makes it a
 -- local, which is never a finding.
-const OUTER = {["(file"] = true, ["(statements"] = true, ["(s-type-decl"] = true, ["(associated"] = true}
+const OUTER = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
 
--- The source text a node spans, `@l1.c1-l2.c2` (the end column one past
--- the last), from the file's lines `src`.
-function span_text(src, h)
-  local m = re_find(h, "@([0-9]+)\\.([0-9]+)-([0-9]+)\\.([0-9]+)")
-  if m == nil then return "" end
-  local l1 = tonumber(m.groups[1])
-  local c1 = tonumber(m.groups[2])
-  local l2 = tonumber(m.groups[3])
-  local c2 = tonumber(m.groups[4])
-  if l1 == l2 then return sub(src[l1], c1, c2 - 1) end
-  local parts = {sub(src[l1], c1)}
-  for l = l1 + 1, l2 - 1 do push(parts, src[l]) end
-  push(parts, sub(src[l2], 1, c2 - 1))
+-- The source text the node at `at` spans (the end column one past the
+-- last), from the file's lines `src`.
+function span_text(src, tree, at)
+  local n = tree[at]
+  if n.line == 0 then return "" end
+  if n.line == n.end_line then return sub(src[n.line], n.col, n.end_col - 1) end
+  local parts = {sub(src[n.line], n.col)}
+  for l = n.line + 1, n.end_line - 1 do push(parts, src[l]) end
+  push(parts, sub(src[n.end_line], 1, n.end_col - 1))
   return join(parts, "\n")
 end
 
@@ -269,15 +250,14 @@ end
 function union_shape(tree, at)
   local out = {names = {}, payload = false}
   for t in children(tree, at) do
-    if head(tree, t) == "(tags" then
+    if tree[t].kind == "tags" then
       for g in children(tree, t) do
-        local h = head(tree, g)
-        local n = between(h, "(name \"", "\")")
-        if starts_with(h, "(ty-apply ") then
+        local n = attr(tree, g, "name")
+        if tree[g].kind == "ty-apply" then
           out.payload = true
-          n = between(head(tree, children(tree, g)[1]), "(name \"", "\")")
+          n = attr(tree, children(tree, g)[1], "name")
         end
-        if n ~= nil and n ~= "" then push(out.names, n) end
+        if n ~= "" then push(out.names, n) end
       end
     end
   end
@@ -288,19 +268,19 @@ end
 -- union written in place, or the name of a declared type (its last part:
 -- `ChatState.PinEdit` is `PinEdit`); a `List(T)` as `T`, marked `list`.
 function arg_shape(tree, at)
-  local h = head(tree, at)
-  if starts_with(h, "(ty-tag-union ") then return {union = union_shape(tree, at)} end
-  if starts_with(h, "(ty-apply ") then
+  local k = tree[at].kind
+  if k == "ty-tag-union" then return {union = union_shape(tree, at)} end
+  if k == "ty-apply" then
     local kids = children(tree, at)
-    if #kids == 2 and between(head(tree, kids[1]), "(name \"", "\")") == "List" then
+    if #kids == 2 and attr(tree, kids[1], "name") == "List" then
       local inner = arg_shape(tree, kids[2])
       inner.list = true
       return inner
     end
     return {}
   end
-  local n = between(h, "(name \"", "\")")
-  if n == nil or n == "" then return {} end
+  local n = attr(tree, at, "name")
+  if n == "" then return {} end
   local parts = split(n, ".")
   return {ref = parts[#parts]}
 end
@@ -338,139 +318,131 @@ function words_of(name)
   return out
 end
 
--- The line of the declaration a record field at depth `d` is part of, or
--- "" for a local's: the nearest top-level or member annotation or type
--- above it (`decl_line`), with only types between (no expression, pattern
--- or definition, which would make it a local's).
-function holder_decl(kinds, decl_line, d)
-  local k = d - 1
-  while k >= 0 do
-    local kd = kinds[k + 1]
-    if starts_with(kd, "(e-") or starts_with(kd, "(p-") or kd == "(s-decl" then return "" end
-    if kd == "(s-type-anno" or kd == "(s-type-decl" then return get(decl_line, tostring(k), "") end
-    k = k - 1
+-- The line of the declaration a record field at `at` is part of, or ""
+-- for a local's: the nearest top-level or member annotation or type above
+-- it (`decl_line`), with only types between (no expression, pattern or
+-- definition, which would make it a local's).
+function holder_decl(tree, decl_line, at)
+  local k = tree[at].parent
+  while k ~= 0 do
+    local kd = tree[k].kind
+    if starts_with(kd, "e-") or starts_with(kd, "p-") or kd == "s-decl" then return "" end
+    if kd == "s-type-anno" or kd == "s-type-decl" then return decl_line[k] end
+    k = tree[k].parent
   end
   return ""
 end
 
--- **EVERY TOP-LEVEL AND MODULE-MEMBER DEFINITION** in `paths`, by roc-ast
--- (Roc's own parser), each `{path, line, name, annotation, fn, whole,
--- result, callback, paired}`: an annotation's type rendered whole, and when
--- it is a function its result (a `where` clause is no part of either). The
--- tree, not the lines: an annotation broken after its colon, a member
--- indented in a module type, and a `where` clause's arrows all read as Roc
--- reads them. `callback`: it takes an effectful function, an argument's
--- type holding a `=>` (roc-ast writes `->` and `=>` alike, so the source
--- says which) or a lambda argument named with a `!`. `paired`: a
+-- The sibling just before the node at `at`, or 0.
+function before(tree, at)
+  local p = tree[at].parent
+  if p == 0 then return 0 end
+  local prev = 0
+  for k in tree[p].kids do
+    if k == at then return prev end
+    prev = k
+  end
+  return 0
+end
+
+-- **EVERY TOP-LEVEL AND MODULE-MEMBER DEFINITION** in `paths`, by
+-- `roc_tree` (Roc's own parser), each `{path, line, name, annotation, fn,
+-- whole, result, callback, paired}`: an annotation's type rendered whole,
+-- and when it is a function its result (a `where` clause is no part of
+-- either). The tree, not the lines: an annotation broken after its colon, a
+-- member indented in a module type, and a `where` clause's arrows all read
+-- as Roc reads them. `callback`: it takes an effectful function, an
+-- argument's type holding a `=>` (roc-ast writes `->` and `=>` alike, so the
+-- source says which) or a lambda argument named with a `!`. `paired`: a
 -- definition whose annotation is just above it, which judges its name.
 function definitions(paths)
-  if not exists(ROC_AST) then fail("name_hunt: no " .. ROC_AST .. ": Shale's `shale tools/roc_ast/install.shale` builds it, or unpack roc-apps's release asset roc-ast-258ab27-linux-x86_64.tar.gz (github.com/showell/roc-apps/releases/tag/toolchain-2026-10-30) into ~/tools/roc-ast/, the `tools` mount (`tools = ~/tools ro tools`)") end
-  local shown = {}
-  local reals = {}
-  for p in paths do
-    local r = real(p)
-    push(reals, r)
-    shown[r] = p
-  end
   local out = {}
-  if #reals == 0 then return out end
-  local dump = run({real(ROC_AST)}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
-  -- A file that does not parse stops roc-ast there, its trees so far
-  -- printed: hunting those would pass the rest unread.
-  if dump.ended ~= "exit" or dump.code ~= 0 then
-    local said = lines(trim(dump.out))
-    fail("name_hunt: roc-ast: " .. (said[#said] or dump.ended))
-  end
-  local tree = {text = lines(dump.out), depth = {}}
-  for l in tree.text do push(tree.depth, depth_of(l)) end
-  local path = ""
-  local src = {}
-  local kinds = {}
-  -- The name of the annotation that is the last node seen at each depth
-  -- ("" when that node is none), and the annotation.
-  local anno_name = {}
-  local anno_at = {}
-  local decl_line = {}
-  for i = 1, #tree.text do
-    local h = head(tree, i)
-    local d = tree.depth[i]
-    if starts_with(h, "== ") then
-      path = shown[sub(h, 4)] or sub(h, 4)
-      src = split(read(path), "\n")
-      anno_name = {}
-      anno_at = {}
-      decl_line = {}
+  local refused = 0
+  for f in roc_tree(paths) do
+    if f.err ~= "" then
+      print(f.path .. ": roc-ast: " .. f.err)
+      refused = refused + 1
     else
-      kinds[d + 1] = split(h, " ")[1]
-      local outer = true
-      for k = 1, d do
-        if not has_key(OUTER, kinds[k]) then outer = false end
-      end
-      local line = between(h, "@", ".")
-      local anno = ""
-      if outer and starts_with(h, "(s-type-decl ") then
-        local kids = children(tree, i)
-        local decl = between(head(tree, kids[1]), "(name \"", "\")")
-        if #kids > 1 and decl ~= nil and starts_with(head(tree, kids[2]), "(ty-tag-union ") then ALIASES[decl] = union_shape(tree, kids[2]) end
-        if decl ~= nil and decl ~= "" then push(HOLDERS, {path = path, line = line, name = decl, words = words_of(decl), field = false, doc = doc_over(src, tonumber(line))}) end
-      end
-      -- The declaration (a top-level or member annotation or type) each
-      -- depth's node is, by its line, for a record field's doc.
-      decl_line[tostring(d)] = (outer and (starts_with(h, "(s-type-anno ") or starts_with(h, "(s-type-decl "))) and line or ""
-      if starts_with(h, "(anno-record-field ") then
-        local at = holder_decl(kinds, decl_line, d)
-        local field = between(h, "(name \"", "\")")
-        if at ~= "" and field ~= nil and field ~= "" then push(HOLDERS, {path = path, line = line, name = field, words = words_of(field), field = true, doc = doc_over(src, tonumber(at))}) end
-      end
-      if outer and starts_with(h, "(s-type-anno ") then
-        local def = {path = path, line = line, name = between(h, "(name \"", "\")"), annotation = true, fn = false, callback = false, paired = false}
-        local kids = children(tree, i)
-        if #kids > 0 and not starts_with(head(tree, kids[1]), "(where") then
-          def.whole = render(tree, kids[1])
-          def.result = def.whole
-          if starts_with(head(tree, kids[1]), "(ty-fn ") then
-            local parts = children(tree, kids[1])
-            def.fn = true
-            def.arity = #parts - 1
-            def.result = render(tree, parts[#parts])
-            for a in take(parts, #parts - 1) do
-              if contains(span_text(src, head(tree, a)), "=>") then def.callback = true end
-              -- Only an effect's arguments are judged (`command_tense`), and
-              -- what the run keeps at a `yield` is capped (1 MiB): keep none
-              -- for the rest.
-              if ends_with(def.name, "!") then
-                if not has_key(def, "args") then def.args = {} end
-                push(def.args, arg_shape(tree, a))
+      local path = f.path
+      local tree = f.nodes
+      local src = split(read(path), "\n")
+      -- Each node's facts from its parent's, once (a parent comes first):
+      -- `outer` every ancestor one of OUTER; `decl_line` its line when it is
+      -- a top-level or member annotation or type, else "".
+      local outer = {}
+      local decl_line = {}
+      -- The annotation each node is, when it is one (its def), by index.
+      local anno_def = {}
+      for i = 1, #tree do
+        local n = tree[i]
+        local p = n.parent
+        push(outer, p == 0 or (outer[p] and has_key(OUTER, tree[p].kind)))
+        local line = tostring(n.line)
+        local k = n.kind
+        push(decl_line, (outer[i] and (k == "s-type-anno" or k == "s-type-decl")) and line or "")
+        if outer[i] and k == "s-type-decl" then
+          local kids = children(tree, i)
+          local decl = #kids > 0 and attr(tree, kids[1], "name") or ""
+          if #kids > 1 and decl ~= "" and tree[kids[2]].kind == "ty-tag-union" then ALIASES[decl] = union_shape(tree, kids[2]) end
+          if decl ~= "" then push(HOLDERS, {path = path, line = line, name = decl, words = words_of(decl), field = false, doc = doc_over(src, n.line)}) end
+        end
+        if k == "anno-record-field" then
+          local at = holder_decl(tree, decl_line, i)
+          local field = attr(tree, i, "name")
+          if at ~= "" and field ~= "" then push(HOLDERS, {path = path, line = line, name = field, words = words_of(field), field = true, doc = doc_over(src, tonumber(at))}) end
+        end
+        if outer[i] and k == "s-type-anno" then
+          local def = {path = path, line = line, name = attr(tree, i, "name"), annotation = true, fn = false, callback = false, paired = false}
+          local kids = children(tree, i)
+          if #kids > 0 and tree[kids[1]].kind ~= "where" then
+            def.whole = render(tree, kids[1])
+            def.result = def.whole
+            if tree[kids[1]].kind == "ty-fn" then
+              local parts = children(tree, kids[1])
+              def.fn = true
+              def.arity = #parts - 1
+              def.result = render(tree, parts[#parts])
+              for a in take(parts, #parts - 1) do
+                if contains(span_text(src, tree, a), "=>") then def.callback = true end
+                -- Only an effect's arguments are judged (`command_tense`), and
+                -- what the run keeps at a `yield` is capped (1 MiB): keep none
+                -- for the rest.
+                if ends_with(def.name, "!") then
+                  if not has_key(def, "args") then def.args = {} end
+                  push(def.args, arg_shape(tree, a))
+                end
               end
             end
+            push(out, def)
+            anno_def[tostring(i)] = def
           end
-          push(out, def)
-          anno = def.name
-          anno_at[tostring(d)] = def
         end
-      end
-      if outer and starts_with(h, "(s-decl ") and i < #tree.text and starts_with(head(tree, i + 1), "(p-ident ") then
-        local def = {path = path, line = line, name = between(head(tree, i + 1), "(raw \"", "\")"), annotation = false, fn = false, callback = false, paired = false}
-        local kids = children(tree, i)
-        if #kids > 1 and starts_with(head(tree, kids[2]), "(e-lambda ") then
-          for part in children(tree, kids[2]) do
-            if head(tree, part) == "(args" then
-              for a in children(tree, part) do
-                if ends_with(between(head(tree, a), "(raw \"", "\")") or "", "!") then def.callback = true end
+        if outer[i] and k == "s-decl" then
+          local kids = children(tree, i)
+          if #kids > 0 and tree[kids[1]].kind == "p-ident" then
+            local def = {path = path, line = line, name = attr(tree, kids[1], "raw"), annotation = false, fn = false, callback = false, paired = false}
+            if #kids > 1 and tree[kids[2]].kind == "e-lambda" then
+              for part in children(tree, kids[2]) do
+                if tree[part].kind == "args" then
+                  for a in children(tree, part) do
+                    if ends_with(attr(tree, a, "raw"), "!") then def.callback = true end
+                  end
+                end
               end
             end
+            local above = get(anno_def, tostring(before(tree, i)))
+            if above ~= nil and above.name == def.name then
+              def.paired = true
+              if def.callback then above.callback = true end
+            end
+            push(out, def)
           end
         end
-        local above = get(anno_name, tostring(d))
-        if above ~= nil and above ~= "" and above == def.name then
-          def.paired = true
-          if def.callback then anno_at[tostring(d)].callback = true end
-        end
-        push(out, def)
       end
-      anno_name[tostring(d)] = anno
     end
   end
+  -- A file that does not parse would pass its names unread.
+  if refused > 0 then fail("name_hunt: roc-ast refused " .. refused .. " files: a file that does not parse has no tree to hunt") end
   return out
 end
 
