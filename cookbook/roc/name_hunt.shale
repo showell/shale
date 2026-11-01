@@ -82,7 +82,8 @@
 -- operators.md's `subscript`) and the encoding protocol's `encode` and
 -- `decode`, which a format calls by name.
 --
--- One line a finding, `path:line: <check>: <why>`, then the counts.
+-- The counts, then one line a finding, `path:line: <check>: <why>`, then
+-- the counts again (cookbook/roc/summed.shale).
 --
 --   cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob=chat/**/*.roc
 --   shale cookbook:roc/name_hunt.shale self_test=1
@@ -93,7 +94,7 @@
 -- vague.txt. `words=1` gives their census instead of the findings: every
 -- first word an effect judged here starts with, its count and its verdict,
 -- `verb`, `participle`, `vague`, `asks` (`is_`, `has_`) or `refused` (what
--- `noun_effect` fires on), then the totals. A missing verb shows there as
+-- `noun_effect` fires on), between the totals. A missing verb shows there as
 -- `refused` before it is taken for a noun, and each `verb` is a word that
 -- passes because verbs.txt lists it.
 --
@@ -106,9 +107,10 @@
 --
 -- Each file's source is read too, for the arrows roc-ast writes alike (a
 -- callback's `=>`), which outgrows the default 16 MiB arena on the chat.
--- budget: steps=800000000 arena_bytes=3000000000
+-- budget: steps=800000000 arena_bytes=3000000000 output_bytes=4000000
 
 const SELF = arg("self_test", "") == "1"
+use("cookbook:roc/summed.shale")
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
 const WORDS = arg("words", "") == "1"
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name"}
@@ -159,8 +161,11 @@ const per_file = {}
 -- verdict}`, for the census (`words=1`).
 const census = {}
 
+-- Each finding's line, printed after the counts.
+const said = {}
+
 function say(p, line, check, why)
-  if not WORDS then print(p .. ":" .. line .. ": " .. check .. ": " .. why) end
+  if not WORDS then push(said, p .. ":" .. line .. ": " .. check .. ": " .. why) end
   found[check] = found[check] + 1
   per_file[p .. "|" .. check] = true
   return nil
@@ -652,12 +657,13 @@ if WORDS then
     total = total + census[w].count
   end
   sort(rows, {{key = "count", desc = true}, "word"})
-  for r in rows do print(pad(r.count, -4) .. " " .. pad(r.word, 12) .. " " .. r.verdict) end
+  local census_lines = {}
+  for r in rows do push(census_lines, pad(r.count, -4) .. " " .. pad(r.word, 12) .. " " .. r.verdict) end
   local verdicts = {}
   for v in {"verb", "participle", "vague", "asks", "refused"} do push(verdicts, v .. " " .. get(by, v, 0)) end
-  print("name_hunt (Roc) census: " .. files .. " files; " .. total .. " effects, " .. #rows .. " first words; effects by verdict: " .. join(verdicts, ", "))
+  print_summed("name_hunt (Roc) census: " .. files .. " files; " .. total .. " effects, " .. #rows .. " first words; effects by verdict: " .. join(verdicts, ", "), census_lines)
 else
-  print("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "))
+  print_summed("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "), said)
 end
 
 if SELF then

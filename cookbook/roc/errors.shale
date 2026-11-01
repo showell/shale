@@ -44,8 +44,9 @@
 --                 that can happen keeps its handling, as a tag.
 --
 -- `error_alias` reads only a top-level or module-member annotation (a
--- local's is its definition's); the two `??` checks read every one. One line a finding, `path:line: <check>: <why>`, then the
--- counts.
+-- local's is its definition's); the two `??` checks read every one. The
+-- counts, then one line a finding, `path:line: <check>: <why>`, then the
+-- counts again (cookbook/roc/summed.shale).
 --
 --   cd <repo> && shale <shale>/cookbook/roc/errors.shale glob=chat/**/*.roc
 --   shale cookbook:roc/errors.shale self_test=1
@@ -54,13 +55,14 @@
 -- named for the check it holds: every check must fire on its own plants and
 -- on no other, a `quiet_*.roc` plant on none, a plant named for no check is
 -- a failure, and each `optional_tag` finding's line must name its tag.
--- budget: steps=400000000 arena_bytes=3000000000
+-- budget: steps=400000000 arena_bytes=3000000000 output_bytes=4000000
 
 const SELF = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/errors/"
 const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const CHECKS = {"error_alias", "optional_tag", "set_fallback", "placeholder"}
 const OUTER = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
+use("cookbook:roc/summed.shale")
 
 -- A word table of cookbook/words/, the hunts' one home for them: a word a
 -- line, `--` starting a note.
@@ -78,9 +80,11 @@ const OPTIONALS = word_table("optionals.txt")
 const found = {}
 for c in CHECKS do found[c] = 0 end
 const per_file = {}
+-- Each finding's line, printed after the counts.
+const said = {}
 
 function say(p, line, check, why)
-  print(p .. ":" .. line .. ": " .. check .. ": " .. why)
+  push(said, p .. ":" .. line .. ": " .. check .. ": " .. why)
   found[check] = found[check] + 1
   per_file[p .. "|" .. check] = true
   return nil
@@ -347,7 +351,7 @@ for c in CHECKS do push(counts, c .. " " .. found[c]) end
 local unseen = {}
 for n in sort(keys(unjudged)) do push(unseen, n .. " (" .. unjudged[n] .. ")") end
 local unseen_said = #unseen > 0 and ("; error_alias not judged, declared outside the files hunted: " .. join(unseen, ", ")) or ""
-print("errors (Roc): " .. #paths .. " files; " .. join(counts, ", ") .. unseen_said)
+print_summed("errors (Roc): " .. #paths .. " files; " .. join(counts, ", ") .. unseen_said, said)
 
 if SELF then
   local wrong = {}

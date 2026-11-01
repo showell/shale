@@ -104,8 +104,8 @@ it works on, `<shale>` being the shale checkout:
   function value, a module's own call in its file; the right of a `|>` is
   listed and left. A dry run by default (each trial put back; run it with
   `--undo-on-stop`, so a stop mid-trial puts that back too); `apply=1`
-  keeps them. Out: a line each call left, `path:line: why`, then the
-  counts. A run holds 64 programs: on a bigger tree it stops before a file
+  keeps them. Out: the counts, a line each call left, `path:line: why`,
+  then the counts again. A run holds 64 programs: on a bigger tree it stops before a file
   and says `go on with from=N`, the glob's file to start the next at.
   The compiler is the tree's own pin, `tools:roc-<pin>/roc` with the pin
   read from the `roc-version` where the run starts; a run without one

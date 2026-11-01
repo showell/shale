@@ -4,12 +4,14 @@
 -- `width`, this puts a comma after the last item of the line's widest
 -- group of two or more items that closes on it, then runs `roc fmt`, and
 -- again until no line changes. What it can't reach is listed: comments, and
--- lines with no such group (a function type's bare arguments).
+-- lines with no such group (a function type's bare arguments). The list
+-- comes between its counts (cookbook/roc/summed.shale).
 --
 --   cd <repo> && shale roc_commas.shale dir=roc width=100
 --
--- budget: steps=400000000 arena_bytes=2000000000
+-- budget: steps=400000000 arena_bytes=2000000000 output_bytes=4000000
 
+use("cookbook:roc/summed.shale")
 const DIR = arg("dir", "roc")
 not_option("roc_commas", "dir", DIR)
 const WIDTH = arg("width", 100)
@@ -134,7 +136,7 @@ while changed > 0 and pass <= PASSES do
 end
 
 local comments = 0
-local code = 0
+local over = {}
 for p in roc_files() do
   local ls = split(read(p), "\n")
   for i = 1, #ls do
@@ -142,10 +144,9 @@ for p in roc_files() do
       if starts_with(trim(ls[i]), "#") then
         comments = comments + 1
       else
-        code = code + 1
-        print(p .. ":" .. i .. " (" .. width(ls[i]) .. "): " .. trim(sub(ls[i], 1, 140)))
+        push(over, p .. ":" .. i .. " (" .. width(ls[i]) .. "): " .. trim(sub(ls[i], 1, 140)))
       end
     end
   end
 end
-print("still over " .. WIDTH .. ": " .. code .. " code lines, " .. comments .. " comment lines")
+print_summed("still over " .. WIDTH .. ": " .. #over .. " code lines, " .. comments .. " comment lines", over)

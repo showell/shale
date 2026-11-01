@@ -53,8 +53,8 @@
 -- put back byte for byte before the next, so the tree ends as it began;
 -- `apply=1` keeps what passes. Run it with `--undo-on-stop`: a run that
 -- stops mid-trial (a budget, Ctrl-C) leaves the trial's text otherwise.
--- Out: a line a call left, `path:line: why`, then `candidates N,
--- rewritten N, left N`.
+-- Out: `candidates N, rewritten N, left N`, a line a call left,
+-- `path:line: why`, then the counts again (cookbook/roc/summed.shale).
 --
 -- A run holds 64 programs, and a tree of files takes more: the run stops
 -- before a file it could not finish, says `go on with from=N`, and the
@@ -85,6 +85,7 @@ const PLANTS = "cookbook:roc/plants/methods"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
 use("cookbook:roc/pinned.shale")
+use("cookbook:roc/summed.shale")
 -- A round's refused calls leave it, and the next, without them, may find
 -- more that their errors hid: roc-chat's Topics.roc, 137 candidates, takes
 -- 5 rounds to its verdict, and a sixth is room.
@@ -515,11 +516,7 @@ if SELF then
 else
   local paths = glob(GLOB)
   local got = run_all(paths, ROOT, FROM, nil)
-  for l in got.lines do print(l) end
   local said = (APPLY and "" or "dry run: ") .. "candidates " .. got.candidates .. ", rewritten " .. got.rewritten .. ", left " .. got.left
-  if got.next > 0 then
-    print(said .. ", in files " .. FROM .. " to " .. (got.next - 1) .. " of " .. #paths .. ": a run holds 64 programs; go on with from=" .. got.next)
-  else
-    print(said)
-  end
+  if got.next > 0 then said = said .. ", in files " .. FROM .. " to " .. (got.next - 1) .. " of " .. #paths .. ": a run holds 64 programs; go on with from=" .. got.next end
+  print_summed(said, got.lines)
 end
