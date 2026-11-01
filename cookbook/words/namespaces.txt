@@ -1,0 +1,18 @@
+-- Namespace prefixes: a device's or a firmware's name that starts an
+-- effect's name (`block_read_sector!`, `uefi_read_key!`, `port_out_32!`),
+-- with its act after it. The Roc name hunt's `noun_effect` and
+-- `state_effect` judge the word after the prefix, as they judge an
+-- effect's first word: the prefix is a namespace, and the act follows it.
+-- A name that is the prefix alone (`port!`) is judged as it stands.
+--
+-- One prefix a line, then the namespace's own acts, if any: words that
+-- are no verb in English but are this device's instructions, so that
+-- `port_out_32!` (x86's OUT) is an act and `port_status!` still a noun.
+-- 2026-11-01, from the sweep's roc-apps machine, floor and framebuffer
+-- trees (Steve: "Go with your recommendations"):
+block
+ide
+net
+ne2k
+port in out
+uefi

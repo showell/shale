@@ -26,7 +26,13 @@
 --   name_type     a `*_count` value that is no integer, a `*_path` one
 --                 that is no `Str`
 --   noun_effect   an effect whose first word is no verb this knows: a plain
---                 noun (`links!`, `page!`), which reads as a value, not an act
+--                 noun (`links!`, `page!`), which reads as a value, not an act.
+--                 **A NAMESPACE PREFIX** (cookbook/words/namespaces.txt:
+--                 `block_`, `port_`, `uefi_`, a device's or firmware's name)
+--                 is no act: the word after it is judged, here and by
+--                 `state_effect` (`block_read_sector!` reads; `port_status!`
+--                 does not), and the namespace's own instructions listed
+--                 beside it are acts (`port_out_32!`, x86's OUT).
 --   negative      a `no_*`/`not_*` `Bool`, an `is_not_*`
 --   preposition_split  one noun given different trailing prepositions in one
 --                 file (`blocks_of`, `blocks_in`, `blocks_from`): one
@@ -165,6 +171,21 @@ const ED_VERBS = word_table("ed_verbs.txt")
 const VAGUE = word_table("vague.txt")
 const CONTAINERS = word_table("containers.txt")
 const PREPS = word_table("prepositions.txt")
+
+-- cookbook/words/namespaces.txt: a prefix a line, then the namespace's own
+-- acts (`port in out`), by prefix: `{port = {["in"] = true, out = true}}`.
+function namespace_table(file)
+  local t = {}
+  for l in lines(read("cookbook:words/" .. file)) do
+    local ws = words(trim(split(l, "--")[1]))
+    if #ws > 0 then
+      if has_key(t, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. ws[1] .. "` twice") end
+      t[ws[1]] = set_of(drop(ws, 1))
+    end
+  end
+  return t
+end
+const NAMESPACES = namespace_table("namespaces.txt")
 -- Each file's names that end in a preposition, by the noun before it:
 -- `path|base` -> {line, preps (a set), names}.
 const SPLITS = {}
@@ -568,14 +589,22 @@ function hunt(def)
   -- An `_is_` or `_has_` name asks, whatever its first word:
   -- `unsigned_is_multiple_of` is no state named `unsigned`.
   local asks_inside = contains(name, "_is_") or contains(name, "_has_")
-  local state = is_participle(ws[1]) and not asks_inside
+  -- The word that names the act: the first, or the one after a namespace
+  -- prefix (`block_read_sector!`'s `read`; cookbook/words/namespaces.txt),
+  -- where the namespace's own acts (`port_out_32!`'s `out`) are verbs.
+  local spaced = effect and #ws > 1 and has_key(NAMESPACES, ws[1])
+  local act = spaced and ws[2] or ws[1]
+  local act_verdict = verdict(act)
+  if spaced and act_verdict == "refused" and has_key(NAMESPACES[ws[1]], act) then act_verdict = "verb" end
+  local where_said = spaced and ("the word after its namespace `" .. ws[1] .. "_`") or "its first word"
+  local state = is_participle(act) and not asks_inside
   if effect and judged then
-    if not has_key(census, ws[1]) then census[ws[1]] = {word = ws[1], count = 0, verdict = verdict(ws[1])} end
-    census[ws[1]].count = census[ws[1]].count + 1
+    if not has_key(census, act) then census[act] = {word = act, count = 0, verdict = act_verdict} end
+    census[act].count = census[act].count + 1
   end
-  if effect and judged and verdict(ws[1]) == "refused" then
-    if has_key(PREPS, ws[1]) then say(p, i, "noun_effect", "`" .. full .. "` has an effect but starts with a preposition, `" .. ws[1] .. "`: an effect is named for its act")
-    else say(p, i, "noun_effect", "`" .. full .. "` has an effect but its first word, `" .. ws[1] .. "`, is no verb: it reads as a value, not an act") end
+  if effect and judged and act_verdict == "refused" then
+    if has_key(PREPS, act) then say(p, i, "noun_effect", "`" .. full .. "` has an effect but " .. where_said .. " is a preposition, `" .. act .. "`: an effect is named for its act")
+    else say(p, i, "noun_effect", "`" .. full .. "` has an effect but " .. where_said .. ", `" .. act .. "`, is no verb: it reads as a value, not an act") end
   end
   if judged and #ws > 1 and has_key(PREPS, ws[#ws]) then
     local base = join(take(ws, #ws - 1), "_")
@@ -590,7 +619,7 @@ function hunt(def)
   -- (`rounded_rectangle! : Frame, RoundedRectangle => {}`) modifies what
   -- it makes: no state.
   local makes = #ws > 1 and has_key(get(def, "types") or {}, camel(ws))
-  if effect and judged and state and not makes then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
+  if effect and judged and state and not makes then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. act .. "`: a verb says what it does") end
   local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
   if asks and judged and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end
   if is_annotation and def.fn and def.result == "Bool" and state then say(p, i, "question", "`" .. full .. "` gives a `Bool` but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
