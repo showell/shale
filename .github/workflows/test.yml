@@ -72,14 +72,15 @@ jobs:
         run: |
           echo "$HOME/zig-${{ steps.zig.outputs.version }}" >> "$GITHUB_PATH"
 
-      # `test`'s cookbook-test runs the Roc name hunt's self-test, which reads
-      # Roc's parser's tree from ~/tools/roc-ast/bin/roc-ast: roc-apps's
-      # release asset (5 MB, static), its checksum checked, so it always runs
-      # here; without it the step fails, never skips.
+      # `test`'s roc_tree tests and the Roc recipes' self-tests read Roc's
+      # parser's tree from ~/tools/roc-ast/bin/roc-ast (its --tree):
+      # roc-apps's release asset, built from Shale's tools/roc_ast at
+      # roc-chat's pin (8 MB, static, baseline CPU), its checksum checked, so
+      # it always runs here; without it the step fails, never skips.
       - name: Install roc-ast
         run: |
-          curl -fsSL -o /tmp/roc-ast.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-30-0602c5f/roc-ast-258ab27-linux-x86_64.tar.gz
-          echo "0f92336c8a7d7976ea80684a473c2cf3fe882d6cf64b2133c239a70023818a2f  /tmp/roc-ast.tar.gz" | sha256sum -c -
+          curl -fsSL -o /tmp/roc-ast.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-30-0602c5f/roc-ast-0602c5f-linux-x86_64.tar.gz
+          echo "9777c235ebdaaa3afc299268d842caf6647444f4b38a999c8080f6f45ef683be  /tmp/roc-ast.tar.gz" | sha256sum -c -
           mkdir -p ~/tools/roc-ast
           tar -xzf /tmp/roc-ast.tar.gz -C ~/tools/roc-ast
           test -x ~/tools/roc-ast/bin/roc-ast
