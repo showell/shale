@@ -85,7 +85,9 @@ it works on, `<shale>` being the shale checkout:
   nor an entry into one (a rule of thumb, not a gate); `fixed`: a
   parameter every production call fills with the same literal, a
   recursion's own calls counted, never context passed down (`me`,
-  `req.me`); `entry`: a recursion's start, the same literal at every
+  `req.me`), and never a library's API (a module type's member under
+  `lib/`, or in a module a `package` main.roc exposes); `entry`: a
+  recursion's start, the same literal at every
   production call that its own calls vary (`at + 1`), which wants an entry
   function that takes only what varies, not dropping (quiet once that
   entry is its one outside call); `constant`: a function of

@@ -35,7 +35,13 @@
 --           the same literal too. **CONTEXT PASSED DOWN IS NO
 --           CONSTANT**: the same variable (`me`, `accounts`, `at`), field
 --           (`req.me`) or call (`Host.list_srcs!({})`) at every call is the
---           caller's value handed on, never a finding.
+--           caller's value handed on, never a finding. **A LIBRARY'S API
+--           IS NO CONSTANT**: a module type's member in a library module,
+--           a file under a `lib/` folder or a module that a `package`
+--           header's `main.roc` beside it exposes, keeps its parameters,
+--           whatever this tree's callers pass (a math helper's `k` is its
+--           API; the fix is at the caller). A file's own top-level
+--           function there, and a package's unexposed module, are judged.
 --   entry   **A RECURSION'S START**: the same literal at every production
 --           call, two or more, that the recursion's own calls vary (`at:
 --           0` outside, `at + 1` inside). It is a parameter, as the
@@ -86,7 +92,7 @@
 
 const SELF = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/boundaries/"
-const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
+const GLOB = SELF and (PLANTS .. "**/*.roc") or arg("glob", "**/*.roc")
 const WAYS = arg("ways", 2)
 const NODES = arg("nodes", 24)
 const CHECKS = {"single", "fixed", "entry", "constant"}
@@ -163,6 +169,41 @@ end
 function is_test_file(p)
   if re_find(basename(p), "[A-Z][A-Za-z0-9]*Spec\\.roc$") ~= nil then return true end
   return ends_with(p, "twin.roc") or contains(p, "/twin/") or contains(p, "/test/") or starts_with(p, "test/") or starts_with(p, "twin/")
+end
+
+-- The modules a folder's `main.roc` exposes when its header is `package`
+-- (`package [Md, MdFence] {}`), by name; none for any other folder.
+const PACKAGES = {}
+function package_exposes(dir)
+  if has_key(PACKAGES, dir) then return PACKAGES[dir] end
+  local main = (dir == "" or dir == ".") and "main.roc" or (dir .. "/main.roc")
+  local out = {}
+  if exists(main) then
+    local code = {}
+    for l in lines(read(main)) do
+      if not starts_with(trim(l), "#") then push(code, l) end
+    end
+    local text = join(code, "\n")
+    if starts_with(trim(text), "package") then
+      for m in split(between(text, "[", "]") or "", ",") do
+        if trim(m) ~= "" then push(out, trim(m)) end
+      end
+    end
+  end
+  PACKAGES[dir] = out
+  return out
+end
+
+-- **A LIBRARY'S API**: a module type's member (never a file's own
+-- top-level function) in a file under a `lib/` folder, or in a module a
+-- package's `main.roc` exposes, beside it. Its parameters are its API,
+-- whatever this tree's callers pass: `fixed` skips it.
+function is_library_api(def)
+  if sub(def.owner, 1, 1) == "@" then return false end
+  local p = def.path
+  if starts_with(p, "lib/") or contains(p, "/lib/") or contains(p, ":lib/") then return true end
+  local b = basename(p)
+  return has_item(package_exposes(dirname(p)), sub(b, 1, #b - 4))
 end
 
 -- A module type's name: its `s-type-decl`'s header's.
@@ -526,7 +567,7 @@ for key in sort(keys(defs)) do
       if v ~= DIFFERS and is_literal(v) then
         local said = "`" .. shown_name(def) .. "`'s argument " .. k .. " is `" .. v .. "` in all " .. #def.calls .. " production calls"
         if all[k] ~= DIFFERS then
-          say(def.path, def.line, "fixed", said .. own .. " in the " .. #fs .. " files read: no parameter, or an entry function that takes only what varies")
+          if not is_library_api(def) then say(def.path, def.line, "fixed", said .. own .. " in the " .. #fs .. " files read: no parameter, or an entry function that takes only what varies") end
         else
           say(def.path, def.line, "entry", said .. " in the " .. #fs .. " files read, and its own calls vary it: an entry function that takes only what varies and passes `" .. v .. "` itself, its one outside call")
         end
@@ -550,7 +591,8 @@ if SELF then
   for c in CHECKS do
     local planted = 0
     for p in fs do
-      local base = sub(p, #PLANTS + 1)
+      -- By its own name: a plant may sit in `lib/` or a package's folder.
+      local base = basename(p)
       local mine = base == c .. ".roc" or starts_with(base, c .. "_")
       if mine then planted = planted + 1 end
       local fired = has_key(per_file, p .. "|" .. c)
