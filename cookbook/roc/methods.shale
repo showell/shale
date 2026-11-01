@@ -34,6 +34,8 @@
 --     type being defined; a reader sees the call written the way it is
 --     declared beside it. Every module calls itself so, and listing each
 --     would bury the calls that need a hand.
+--   - a call with an argument the tree gives no span (the compiler's
+--     `match`): its text cannot be moved, so the call stays, named;
 --   A call whose first argument's type is not the module's
 --   (`Str.from_utf8(bytes)`, a list) is a candidate the compiler refuses
 --   (`missing method`): it stays, that its reason.
@@ -158,6 +160,12 @@ function candidates(t, own)
         local p = n.parent > 0 and t.nodes[n.parent] or nil
         if p ~= nil and p.kind == "e-arrow-call" and p.kids[2] == i then
           c.left = "the right of a `|>`, whose first argument the pipe gives"
+        end
+        -- An argument the tree gives no span (the compiler's `e-match`): its
+        -- text begins before any node it holds (at `match`), so it cannot be
+        -- moved, and writing it from no span would copy the whole file.
+        for a in drop(n.kids, 1) do
+          if c.left == "" and not t.nodes[a].spanned then c.left = "an argument with no span in the tree (" .. t.nodes[a].kind .. "), whose text cannot be moved" end
         end
         if m.groups[1] ~= own then push(out, c) end
       end
@@ -407,6 +415,7 @@ const EXPECT = {
   OtherType = {left = 1, why = "roc check: missing method"},
   Decode = {left = 1, why = "on no rewritten call; the file is put back", root = "Breaks"},
   Breaks = {left = 1, why = "roc check: missing method"},
+  Matched = {left = 1, why = "an argument with no span"},
 }
 
 function self_test()

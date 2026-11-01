@@ -1,0 +1,13 @@
+## A call whose first argument is a `match`, which the compiler's tree gives
+## no span: its text cannot be moved, so the call stays, named, and the
+## file's other call is still turned.
+Matched := [].{
+	word : U64 -> Str
+	word = |n| Str.concat(match n { 0 => "none", _ => "some" }, "!")
+
+	size : List(U8) -> U64
+	size = |bytes| List.len(bytes)
+}
+
+expect Matched.word(0) == "none!"
+expect Matched.size([1]) == 1
