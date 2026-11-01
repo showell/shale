@@ -24,7 +24,11 @@ it works on, `<shale>` being the shale checkout:
   `Canvas`: `circle! : Frame, Circle => {}`) is named for what it draws.
   `question` judges functions only (a value `has_got : List(Bool)` is
   none), and an effect that gives a `Bool` (`is_playing! : Sound => Bool`)
-  asks the host about live state.
+  asks the host about live state. `preposition_split` leaves out a
+  package's suffix convention (a preposition on three or more stems whose
+  annotations give one result, roc-markdown's `*_onto` writers) and a
+  file's declared keywords (a comment line `# keywords: for, on`, for an
+  interpreter's `do_for`, `do_on`).
   Beside the names: `command_tense` and `mixed_tense` (the tags an effect
   is handed, a `List(T)` judged as `T`, named as events, or as commands
   and events at once) and `container` (a type or record field named only

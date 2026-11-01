@@ -49,6 +49,18 @@
 --                 file (`blocks_of`, `blocks_in`, `blocks_from`): one
 --                 relation should keep one preposition, or the names should
 --                 say how they differ. Reported once, at the first.
+--                 **A PACKAGE'S SUFFIX CONVENTION IS NO SPLIT**: a
+--                 preposition on three or more stems in the files read
+--                 whose annotations give one result (roc-markdown's
+--                 `*_onto` writers, each `List(U8)`) is one role, so
+--                 `run_onto` beside `run_at` is left out before the count;
+--                 the shared result is what tells a convention from a
+--                 common preposition (`_of`, `_in`) in any large package.
+--                 **A FILE'S DECLARED KEYWORDS ARE NO PREPOSITIONS**: an
+--                 interpreter names its statements for its language's
+--                 keywords (BASIC's `do_for`, `do_on`), which the file
+--                 says in a comment line, `# keywords: for, on`, read
+--                 where the names are, so the exemption moves with them.
 --   command_tense an effect that takes a tag union (written in place, or a
 --                 type declared in any file hunted) whose tags all start
 --                 with a past participle and none carries a payload (`pin! :
@@ -203,6 +215,18 @@ const SURFACES = {Frame = true, Canvas = true}
 -- Each file's names that end in a preposition, by the noun before it:
 -- `path|base` -> {line, preps (a set), names}.
 const SPLITS = {}
+-- Every stem each trailing preposition is put on, in all the files read,
+-- by the result its annotation gives: `prep|result` -> {stem -> true}. A
+-- preposition on `CONVENTION` or more stems that give one result is the
+-- package's suffix convention, one role (roc-markdown's `*_onto`, a writer
+-- onto a buffer, each giving `List(U8)`), not one relation's word:
+-- `CONVENTIONS` holds it. A bare count would make every common
+-- preposition (`_of`, `_in`) a convention in any package of size.
+const PREP_STEMS = {}
+const CONVENTION = 3
+const CONVENTIONS = {}
+-- Each file's declared keywords (`# keywords: for, on`), by path.
+const KEYWORDS = {}
 const ENTRY = {handle = true, run = true, main = true}
 -- The names Roc's syntax and builtins call a method by, which the author
 -- does not choose (the header says where the list comes from).
@@ -482,6 +506,17 @@ function definitions(parsed_files)
       local path = f.path
       local tree = f.nodes
       local src = split(read(path), "\n")
+      -- The interpreted language's keywords a file declares, `# keywords:
+      -- for, on`: words of that language, not prepositions
+      -- (`preposition_split`).
+      for l in src do
+        local kw = re_find(trim(l), "^# keywords: (.*)$")
+        if kw ~= nil then
+          for w in split(kw.groups[1], ",") do
+            if trim(w) ~= "" then push_at(KEYWORDS, path, lower(trim(w))) end
+          end
+        end
+      end
       -- Each node's facts from its parent's, once (a parent comes first):
       -- `outer` every ancestor one of OUTER; `decl_line` its line when it is
       -- a top-level or member annotation or type, else "".
@@ -630,6 +665,12 @@ function hunt(def)
     local key = p .. "|" .. base
     if not has_key(SPLITS, key) then SPLITS[key] = {path = p, line = i, base = base, preps = {}, names = {}} end
     local s = SPLITS[key]
+    if is_annotation and def.fn then
+      local rk = ws[#ws] .. "|" .. def.result
+      if not has_key(PREP_STEMS, rk) then PREP_STEMS[rk] = {} end
+      PREP_STEMS[rk][base] = true
+      if #keys(PREP_STEMS[rk]) >= CONVENTION then CONVENTIONS[ws[#ws]] = true end
+    end
     if not has_key(s.preps, ws[#ws]) then
       s.preps[ws[#ws]] = {name = full, arity = get(def, "arity", -1)}
     end
@@ -753,7 +794,9 @@ for key in sort(keys(SPLITS)) do
   local kept_preps = {}
   for prep in sort(keys(s.preps)) do
     local e = s.preps[prep]
-    if not (prep == "from" and least >= 0 and e.arity > least) then
+    local convention = has_key(CONVENTIONS, prep)
+    local keyword = has_item(get(KEYWORDS, s.path, {}), prep)
+    if not (prep == "from" and least >= 0 and e.arity > least) and not convention and not keyword then
       push(kept, e.name)
       push(kept_preps, prep)
     end
