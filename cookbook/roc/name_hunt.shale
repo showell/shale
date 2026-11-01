@@ -88,7 +88,9 @@
 --                 what it gives (`rest`, `tail_after`), the worker what it
 --                 adds (`rest_onto`) (roc-apps docs/roc-style.md). The
 --                 prepositions are cookbook/words/prepositions.txt's, as
---                 `preposition_split`'s.
+--                 `preposition_split`'s. A word that is no preposition
+--                 must come before the two: a name made only of them
+--                 (`at_of`, `via_from`) uses its first as a noun.
 --
 -- **A NAME IS JUDGED ONCE**, from its annotation when it has one (a hosted
 -- effect, `links! : Str => Str` in a platform's `Host.roc`, has nothing
@@ -606,7 +608,11 @@ function hunt(def)
     if #ws == 1 and has_key(ENTRY, ws[1]) then all_vague = false end
     if all_vague then say(p, i, "vague", "`" .. full .. "` is only vague words: what does it handle, and how?") end
     if #name == 1 then say(p, i, "short_name", "`" .. full .. "` is one letter, read far from where it is defined: name what it holds") end
-    if #ws > 1 and has_key(PREPS, ws[#ws]) and has_key(PREPS, ws[#ws - 1]) then say(p, i, "stacked_preposition", "`" .. full .. "` stacks two prepositions, `_" .. ws[#ws - 1] .. "_" .. ws[#ws] .. "`: let each read once, the entry named for what it gives (`rest`, `tail_after`) and the worker for what it adds (`rest_onto`)") end
+    local named = false
+    for w in take(ws, max(#ws - 2, 0)) do
+      if not has_key(PREPS, w) then named = true end
+    end
+    if named and has_key(PREPS, ws[#ws]) and has_key(PREPS, ws[#ws - 1]) then say(p, i, "stacked_preposition", "`" .. full .. "` stacks two prepositions, `_" .. ws[#ws - 1] .. "_" .. ws[#ws] .. "`: let each read once, the entry named for what it gives (`rest`, `tail_after`) and the worker for what it adds (`rest_onto`)") end
   end
   -- Judged at the definition, which knows whether it calls itself; an
   -- annotation with none below it (a hosted effect) by its name alone.

@@ -29,7 +29,8 @@ it works on, `<shale>` being the shale checkout:
   `_walk` or `_go` that calls itself: name the worker for the parameter it adds,
   `_from`, `_onto`, `_with`, and give the entry function the plain name),
   and `stacked_preposition` (a name whose last two words are both
-  prepositions, `rest_from_onto`: a worker's suffix on an entry that
+  prepositions after a word that is none, `rest_from_onto`, never
+  `at_of`, whose `at` is a noun: a worker's suffix on an entry that
   already ends in one; the entry says what it gives, `rest`, the worker
   what it adds, `rest_onto`).
   `self_test=1` runs its plants (`plants/name_hunt/`), and fails on a
