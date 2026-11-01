@@ -37,6 +37,16 @@ Both sides ran the same recipe files from this branch. The baseline's
 `methods.shale` had its `call_depth=1000` budget removed, because that
 older binary does not know the budget; nothing else differed.
 
+## Checks on this branch
+
+- `zig build test` here: 458 of 461 unit tests pass, and five cookbook
+  self-tests (the Roc recipes) fail.
+- Each failure is a test or self-test that runs the installed roc-ast. That
+  roc-ast predates `--flat`, so each stops at "no `roc-ast flat 1` header",
+  as master does in this container.
+- The new reader tests pass (both headers, `roc-parser flat 2` refused).
+- With the box's roc-ast these should all pass. That is unchecked here.
+
 ## The two recipes, old vs new
 
 | Recipe | Repo | roc-ast | roc-parser | Difference |
