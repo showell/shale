@@ -208,3 +208,20 @@ halt
 paint
 play
 preview
+--
+-- 2026-11-01, the sweep's third stage, over roc-webbox and roc-ray's platform
+-- and examples (sleep!, begin!, end!, suggest_size!, change!).
+begin
+change
+end
+execute
+generate
+light
+pause
+prepare
+query
+sample
+scale
+seek
+sleep
+suggest
