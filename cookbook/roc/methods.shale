@@ -47,6 +47,12 @@
 --     would bury the calls that need a hand.
 --   - a call with an argument the tree gives no span (the compiler's
 --     `match`): its text cannot be moved, so the call stays, named;
+--   - a call whose first argument is a number literal (`5`, `-3`, `1.5`,
+--     `'a'`, in parentheses or not): the module call fixes its type, and
+--     as a receiver it defaults, `U64.to_str(5)` "5" but `(5).to_str()` a
+--     `Dec`, "5.0". Both check, and the checker calls the literal a `U64`,
+--     so only an `expect` would see it: the call stays, named. A typed
+--     literal (`5.U64`) has its type, and is a candidate;
 --   A call whose first argument's type is not the module's
 --   (`Str.from_utf8(bytes)`, a list) is left by the types, that its
 --   reason; under `types=0`, it is a candidate the compiler refuses
@@ -89,8 +95,8 @@
 -- aside. A file set aside, and every file with a call the types cannot
 -- settle, goes through the trial above, alone, as without types. A proof
 -- is not a pass: `U8.to(0, 3)`'s first argument is a U8 by the checker,
--- the literal the call makes one, and `(0).to(3)` leaves its type to the
--- method. On roc-chat's `app/` the types leave most candidates before any
+-- the literal the call makes one, and `(0).to(3)` would leave its type to
+-- default, which is why a number literal is no candidate (above). On roc-chat's `app/` the types leave most candidates before any
 -- trial, and the confirm takes the place of most files' checks.
 --   **A TREE THE TYPES CANNOT READ STOPS THE RUN**, never a run without
 -- them: no `root=` (roc-types reads an app, and a type module only through
@@ -151,6 +157,11 @@ const FILE_MOST = ROUNDS + 5
 -- `"a".to_utf8()`; any other (a number, a sum, a lambda, an `if`) is put in
 -- them, `(a + b).to_str()`.
 const ATOMS = {["e-ident"] = true, ["e-apply"] = true, ["e-method-call"] = true, ["e-field-access"] = true, ["e-string"] = true, ["e-list"] = true, ["e-record"] = true, ["e-tuple"] = true, ["e-tag"] = true}
+
+-- The literals whose type only their use fixes (`5`, `-3`, `0x1F`, `1.5`,
+-- `1e3`, `'a'`): as a method's receiver nothing fixes it, and it defaults.
+-- `5.U64` (`e-typed-int`, `e-typed-frac`) is not among them.
+const NUMBER_LITERALS = {["e-int"] = true, ["e-frac"] = true, ["e-single-quote"] = true}
 
 -- ── the tree ─────────────────────────────────────────────────────────────
 
@@ -229,6 +240,14 @@ function candidates(t, own)
         for a in drop(n.kids, 1) do
           if c.left == "" and not t.nodes[a].spanned then c.left = "an argument with no span in the tree (" .. t.nodes[a].kind .. "), whose text cannot be moved" end
         end
+        -- A number literal first (parenthesized or not): the module call
+        -- fixes its type, and as a receiver it defaults, `U64.to_str(5)`
+        -- "5" but `(5).to_str()` a `Dec`, "5.0"; both check, so neither
+        -- the compiler nor the types can tell. A typed literal (`5.U64`)
+        -- has its type, and may turn.
+        local first = t.nodes[n.kids[2]]
+        while first.kind == "e-tuple" and #first.kids == 1 do first = t.nodes[first.kids[1]] end
+        if c.left == "" and has_key(NUMBER_LITERALS, first.kind) then c.left = "a number literal's type would default as a receiver (`(" .. first.raw .. ")." .. c.fn .. "()` is no longer a " .. c.module .. ")" end
         if m.groups[1] ~= own then push(out, c) end
       end
     end
@@ -731,6 +750,7 @@ const EXPECT = {
   Decode = {left = 1, why = "on no rewritten call; the file is put back", root = "Breaks"},
   Breaks = {left = 1, why = "roc check: missing method"},
   Matched = {left = 1, why = "an argument with no span"},
+  Literal = {left = 1, why = "a number literal's type would default as a receiver"},
   Ref = {left = 0},
   Scrutinee = {left = 1, why = "roc check: missing method (on `text`'s definition)"},
   Knock = {left = 2, why = "roc check: missing method"},
