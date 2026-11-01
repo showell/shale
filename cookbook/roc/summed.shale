@@ -1,0 +1,17 @@
+-- A LIST OF FINDINGS BETWEEN ITS SUMMARY: a library
+-- (`use("cookbook:roc/summed.shale")`) for the Roc recipes that print a
+-- list no tree bounds. Each such recipe says `output_bytes=4000000` in its
+-- `-- budget:` line, since 64 KiB unset holds a few hundred findings, and
+-- prints its summary both first and last: first, so a run the output
+-- budget stops still says its totals; last, because a verify reads a
+-- recipe's last line (roc-chat's tools/verify_hunts.shale).
+
+-- `summary`, then each line of `found`, then `summary` again (once, when
+-- `found` is empty).
+function print_summed(summary, found)
+  print(summary)
+  if #found == 0 then return nil end
+  for l in found do print(l) end
+  print(summary)
+  return nil
+end
