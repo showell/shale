@@ -27,7 +27,11 @@ it works on, `<shale>` being the shale checkout:
   parameter's never), and `worker_name` (a definition named only as a
   helper, `_acc`, `_loop`, `_go`, `_inner`, `_helper`, `_rec`, or a `_step`
   or `_walk` that calls itself: name the worker for the parameter it adds,
-  `_from`, `_onto`, `_with`, and give the entry function the plain name).
+  `_from`, `_onto`, `_with`, and give the entry function the plain name),
+  and `stacked_preposition` (a name whose last two words are both
+  prepositions, `rest_from_onto`: a worker's suffix on an entry that
+  already ends in one; the entry says what it gives, `rest`, the worker
+  what it adds, `rest_onto`).
   `self_test=1` runs its plants (`plants/name_hunt/`), and fails on a
   plant named for no check.
 - [roc_commas.shale](roc_commas.shale): **long lines laid out by `roc fmt`.**

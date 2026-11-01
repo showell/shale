@@ -80,6 +80,14 @@
 --                 `_walk` are words of their own (a fold's step,
 --                 `List.walk`), so they are judged only where the
 --                 definition calls itself: there they are the worker's.
+--   stacked_preposition  a top-level or member name whose last two words
+--                 are both prepositions (`rest_from_onto`, `x_in_at`): a
+--                 worker's suffix appended to an entry whose name already
+--                 ends in one. Each preposition reads once: the entry says
+--                 what it gives (`rest`, `tail_after`), the worker what it
+--                 adds (`rest_onto`) (roc-apps docs/roc-style.md). The
+--                 prepositions are cookbook/words/prepositions.txt's, as
+--                 `preposition_split`'s.
 --
 -- **A NAME IS JUDGED ONCE**, from its annotation when it has one (a hosted
 -- effect, `links! : Str => Str` in a platform's `Host.roc`, has nothing
@@ -124,7 +132,7 @@ const SELF = arg("self_test", "") == "1"
 use("cookbook:roc/summed.shale")
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
 const WORDS = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition"}
 -- The last words `worker_name` judges: only a helper's, always; a word of
 -- its own, only on a definition that calls itself.
 const HELPER_WORDS = {acc = true, loop = true, go = true, inner = true, helper = true, rec = true}
@@ -595,6 +603,7 @@ function hunt(def)
     if #ws == 1 and has_key(ENTRY, ws[1]) then all_vague = false end
     if all_vague then say(p, i, "vague", "`" .. full .. "` is only vague words: what does it handle, and how?") end
     if #name == 1 then say(p, i, "short_name", "`" .. full .. "` is one letter, read far from where it is defined: name what it holds") end
+    if #ws > 1 and has_key(PREPS, ws[#ws]) and has_key(PREPS, ws[#ws - 1]) then say(p, i, "stacked_preposition", "`" .. full .. "` stacks two prepositions, `_" .. ws[#ws - 1] .. "_" .. ws[#ws] .. "`: let each read once, the entry named for what it gives (`rest`, `tail_after`) and the worker for what it adds (`rest_onto`)") end
   end
   -- Judged at the definition, which knows whether it calls itself; an
   -- annotation with none below it (a hosted effect) by its name alone.
