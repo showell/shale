@@ -33,7 +33,7 @@
 --   set_fallback  a store whose fallback is the list it stores into,
 --                 `List.set(l, i, v) ?? l` (or `l.set(i, v) ?? l`, `l` any
 --                 one value written twice, `game.cells` too): "the fallback
---                 names `l`, so every store copies. Write `?? crash("...")`
+--                 names `l`, so every store copies. Write `?? crash "..."`
 --                 instead" (roc-apps CLAUDE.md, "Six shapes copy";
 --                 docs/roc-notes.md, "Speed and copying", the first shape).
 --   placeholder   a `??` whose fallback is a string literal with nothing
@@ -337,7 +337,7 @@ for i = 1, #N do
   local ks = kids(i)
   if kind(i) == "e-binop" and get(N[i], "op", "") == "??" and #ks == 2 then
     local target = set_target(ks[1])
-    if target > 0 and same_expr(target, ks[2]) then say(FILE[i], line(ks[2]), "set_fallback", "`List.set(l, i, v) ?? l`: the fallback names `l`, so every store copies; write `?? crash(\"...\")` instead (roc-apps CLAUDE.md, \"Six shapes copy\")") end
+    if target > 0 and same_expr(target, ks[2]) then say(FILE[i], line(ks[2]), "set_fallback", "`List.set(l, i, v) ?? l`: the fallback names `l`, so every store copies; write `?? crash \"...\"` instead (roc-apps CLAUDE.md, \"Six shapes copy\")") end
     if is_literal_str(ks[2]) then
       local text = ""
       for k in kids(ks[2]) do text = text .. raw(k) end

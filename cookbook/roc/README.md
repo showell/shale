@@ -24,7 +24,10 @@ it works on, `<shale>` being the shale checkout:
   by container words, cookbook/words/containers.txt, unless its doc says
   whose: `## A folder's entry`), and `short_name` (a top-level or
   module-member name of one letter, `w : F64`; a local's or a lambda
-  parameter's never).
+  parameter's never), and `worker_name` (a definition named only as a
+  helper, `_acc`, `_loop`, `_go`, `_inner`, `_helper`, `_rec`, or a `_step`
+  or `_walk` that calls itself: name the worker for the parameter it adds,
+  `_from`, `_onto`, `_with`, and give the entry function the plain name).
   `self_test=1` runs its plants (`plants/name_hunt/`), and fails on a
   plant named for no check.
 - [roc_commas.shale](roc_commas.shale): **long lines laid out by `roc fmt`.**

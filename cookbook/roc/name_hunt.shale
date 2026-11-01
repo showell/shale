@@ -69,6 +69,17 @@
 --                 defined, a letter says nothing of what it holds, and a
 --                 local of the same letter shadows it. A local's and a
 --                 lambda's parameters (`|x, y|`) are never judged.
+--   worker_name   a definition whose last word only says it is a helper:
+--                 `_acc`, `_loop`, `_go`, `_inner`, `_helper`, `_rec`
+--                 (`count_acc`). A recursion's worker is named for the
+--                 parameter it adds, so a call reads as a sentence:
+--                 `count_from(xs, at)` a start point, `render_onto(out,
+--                 node)` an output being built, `walk_with(tree, seen)`
+--                 other carried state; its entry function takes the plain
+--                 name, `count` (roc-apps docs/roc-style.md). `_step` and
+--                 `_walk` are words of their own (a fold's step,
+--                 `List.walk`), so they are judged only where the
+--                 definition calls itself: there they are the worker's.
 --
 -- **A NAME IS JUDGED ONCE**, from its annotation when it has one (a hosted
 -- effect, `links! : Str => Str` in a platform's `Host.roc`, has nothing
@@ -113,7 +124,11 @@ const SELF = arg("self_test", "") == "1"
 use("cookbook:roc/summed.shale")
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
 const WORDS = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name"}
+-- The last words `worker_name` judges: only a helper's, always; a word of
+-- its own, only on a definition that calls itself.
+const HELPER_WORDS = {acc = true, loop = true, go = true, inner = true, helper = true, rec = true}
+const WORKER_WORDS = {step = true, walk = true}
 
 -- A word table of cookbook/words/, the name hunts' one home for them: a
 -- word a line, `--` starting a note. A word twice, or a line of two, is a
@@ -379,6 +394,23 @@ function before(tree, at)
   return 0
 end
 
+-- Whether the definition at `at` names `name` below it: an identifier
+-- (`name`, `Tree.name`) or a method call (`x.name(...)`). The tree is in
+-- order, a node's descendants just after it and deeper.
+function names_itself(tree, at, name)
+  local j = at + 1
+  while j <= #tree and tree[j].depth > tree[at].depth do
+    local n = tree[j]
+    if n.kind == "e-ident" then
+      local raw = attr(tree, j, "raw")
+      if raw == name or ends_with(raw, "." .. name) then return true end
+    end
+    if n.kind == "e-method-call" and attr(tree, j, "method") == name then return true end
+    j = j + 1
+  end
+  return false
+end
+
 -- **EVERY TOP-LEVEL AND MODULE-MEMBER DEFINITION** in `paths`, by
 -- `roc_tree` (Roc's own parser), each `{path, line, name, annotation, fn,
 -- whole, result, callback, paired}`: an annotation's type rendered whole,
@@ -389,6 +421,9 @@ end
 -- argument's type holding a `=>` (roc-ast writes `->` and `=>` alike, so the
 -- source says which) or a lambda argument named with a `!`. `paired`: a
 -- definition whose annotation is just above it, which judges its name.
+-- `has_def`: an annotation with its definition just below it. `recurses`:
+-- a `_step` or `_walk` definition that names itself in its body (`step(...)`,
+-- `Tree.step(...)`, `x.step(...)`), for `worker_name`.
 function definitions(paths)
   local out = {}
   local refused = 0
@@ -465,9 +500,12 @@ function definitions(paths)
                 end
               end
             end
+            local ws = split(ends_with(def.name, "!") and sub(def.name, 1, #def.name - 1) or def.name, "_")
+            if #ws > 1 and has_key(WORKER_WORDS, ws[#ws]) then def.recurses = names_itself(tree, i, def.name) end
             local above = get(anno_def, tostring(before(tree, i)))
             if above ~= nil and above.name == def.name then
               def.paired = true
+              above.has_def = true
               if def.callback then above.callback = true end
             end
             push(out, def)
@@ -558,6 +596,13 @@ function hunt(def)
     if all_vague then say(p, i, "vague", "`" .. full .. "` is only vague words: what does it handle, and how?") end
     if #name == 1 then say(p, i, "short_name", "`" .. full .. "` is one letter, read far from where it is defined: name what it holds") end
   end
+  -- Judged at the definition, which knows whether it calls itself; an
+  -- annotation with none below it (a hosted effect) by its name alone.
+  local lone = is_annotation and not get(def, "has_def", false)
+  local last = ws[#ws]
+  local helper = has_key(HELPER_WORDS, last) and (lone or not is_annotation)
+  local worker = has_key(WORKER_WORDS, last) and get(def, "recurses", false)
+  if #ws > 1 and (helper or worker) then say(p, i, "worker_name", "`" .. full .. "` is named only as a helper, `_" .. last .. "`: name the worker for the parameter it adds (`_from` a start point, `_onto` an output built, `_with` other carried state) and give the entry function the plain name") end
   if is_annotation and not def.fn and def.whole ~= "_" then
     local t = def.whole
     local last = ws[#ws]
