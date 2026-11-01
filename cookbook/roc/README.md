@@ -59,6 +59,8 @@ it works on, `<shale>` being the shale checkout:
   over 100 columns with none, and a function type's three or more
   arguments, bare (`U8, U8, U8 -> U8`)
   or in parentheses (`(U8, U8, U8 -> U8)`), which no trailing comma stacks.
+  A list or tuple of literals alone that fits the line (`[0, 0, 0]`,
+  `(0.0, 0.0, 1.5)`) is a table's row, one thing to scan, and no finding.
   `write=1` gives each a trailing comma, outermost first (never a function
   type's arguments), and runs `roc fmt` until nothing changes; a second run
   changes nothing. Strings and comments are never read as items, nor is a

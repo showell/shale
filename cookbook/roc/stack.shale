@@ -4,7 +4,11 @@
 -- such group on a line its own, left to right; and a line wider than
 -- `width` (100) with no such group is a finding, `long: ...`. The counts
 -- print first, then the findings, then the counts again
--- (cookbook/roc/summed.shale).
+-- (cookbook/roc/summed.shale). **A ROW OF LITERALS IS NO FINDING**: a list
+-- or tuple whose items are all literals (numbers, plain strings,
+-- characters, bare tags), on a line that fits `width`, is one thing to
+-- scan, a table's row (`[0, 0, 0]`, `(0.0, 0.0, 1.5)`); a call's
+-- arguments are never one.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc
 --   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc write=1
@@ -155,13 +159,35 @@ function groups(l)
   return out
 end
 
+-- **A ROW OF LITERALS IS ONE THING**: a list or tuple (`[`, or a `(` that
+-- follows no name, `)` or `!`: no call's arguments) whose items are all
+-- literals, a number, a string with nothing interpolated, a character or
+-- a bare tag, on a line within WIDTH: `[0, 0, 0]`, `(0.0, 0.0, 1.5)`, a
+-- table's row read at a glance. A string holding a comma is never split
+-- as one, so it is no row here.
+const LITERAL_ITEM = [=[^(-?[0-9][0-9A-Za-z_.]*|"[^"\\$]*"|'[^']+'|[A-Z][A-Za-z0-9]*)$]=]
+function literal_row(l, g)
+  if width(l) > WIDTH then return false end
+  local c = sub(l, g.open, g.open)
+  if c == "(" then
+    local b = before(l, g.open)
+    if g.open > 1 and sub(l, g.open - 1, g.open - 1) ~= " " and re_find(b, "[A-Za-z0-9_)!]") ~= nil then return false end
+  elseif c ~= "[" then
+    return false
+  end
+  for item in split(trim(sub(l, g.open + 1, g.close - 1)), ",") do
+    if trim(item) ~= "" and re_find(trim(item), LITERAL_ITEM) == nil then return false end
+  end
+  return true
+end
+
 -- The group to stack on `l`: the outermost (then widest) of three or more
 -- items with no trailing comma; else, on a line over WIDTH, the widest of
 -- two or more. Never a function type's arguments. nil when there is none.
 function pick(l)
   local best = nil
   for g in groups(l) do
-    if g.items >= 3 and not g.trailing and not g.fn_type then
+    if g.items >= 3 and not g.trailing and not g.fn_type and not literal_row(l, g) then
       if best == nil or g.depth < best.depth or (g.depth == best.depth and g.close - g.open > best.close - best.open) then best = g end
     end
   end
@@ -229,7 +255,7 @@ function findings(files)
         if h.items >= 3 and h.fn_type then
           push(out, fn_args(p, i, h.items, snip(ls[i], h)))
           n = n + 1
-        elseif h.items >= 3 and not h.trailing then
+        elseif h.items >= 3 and not h.trailing and not literal_row(ls[i], h) then
           push(out, {path = p, line = i, kind = "stack", what = h.items .. " items in " .. snip(ls[i], h)})
           n = n + 1
         end
