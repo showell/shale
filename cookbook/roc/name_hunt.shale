@@ -70,16 +70,17 @@
 --                 local of the same letter shadows it. A local's and a
 --                 lambda's parameters (`|x, y|`) are never judged.
 --   worker_name   a definition whose last word only says it is a helper:
---                 `_acc`, `_loop`, `_go`, `_inner`, `_helper`, `_rec`
+--                 `_acc`, `_loop`, `_inner`, `_helper`, `_rec`
 --                 (`count_acc`). A recursion's worker is named for the
 --                 parameter it adds, so a call reads as a sentence:
 --                 `count_from(xs, at)` a start point, `render_onto(out,
 --                 node)` an output being built, `walk_with(tree, seen)`
 --                 other carried state; its entry function takes the plain
---                 name, `count` (roc-apps docs/roc-style.md). `_step` and
---                 `_walk` are words of their own (a fold's step,
---                 `List.walk`), so they are judged only where the
---                 definition calls itself: there they are the worker's.
+--                 name, `count` (roc-apps docs/roc-style.md). `_step`,
+--                 `_walk` and `_go` are words of their own (a fold's step,
+--                 `List.walk`, a piece that `can_go`), so they are judged
+--                 only where the definition calls itself: there they are
+--                 the worker's.
 --   stacked_preposition  a top-level or member name whose last two words
 --                 are both prepositions (`rest_from_onto`, `x_in_at`): a
 --                 worker's suffix appended to an entry whose name already
@@ -135,8 +136,10 @@ const WORDS = arg("words", "") == "1"
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition"}
 -- The last words `worker_name` judges: only a helper's, always; a word of
 -- its own, only on a definition that calls itself.
-const HELPER_WORDS = {acc = true, loop = true, go = true, inner = true, helper = true, rec = true}
-const WORKER_WORDS = {step = true, walk = true}
+-- `loop` stays a helper's: it names a shape, never an act of the domain's,
+-- where `go` is a verb (`can_go`), as `step` and `walk` are words.
+const HELPER_WORDS = {acc = true, loop = true, inner = true, helper = true, rec = true}
+const WORKER_WORDS = {step = true, walk = true, go = true}
 
 -- A word table of cookbook/words/, the name hunts' one home for them: a
 -- word a line, `--` starting a note. A word twice, or a line of two, is a

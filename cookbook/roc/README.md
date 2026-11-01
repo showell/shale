@@ -25,8 +25,8 @@ it works on, `<shale>` being the shale checkout:
   whose: `## A folder's entry`), and `short_name` (a top-level or
   module-member name of one letter, `w : F64`; a local's or a lambda
   parameter's never), and `worker_name` (a definition named only as a
-  helper, `_acc`, `_loop`, `_go`, `_inner`, `_helper`, `_rec`, or a `_step`
-  or `_walk` that calls itself: name the worker for the parameter it adds,
+  helper, `_acc`, `_loop`, `_inner`, `_helper`, `_rec`, or a `_step`,
+  `_walk` or `_go` that calls itself: name the worker for the parameter it adds,
   `_from`, `_onto`, `_with`, and give the entry function the plain name),
   and `stacked_preposition` (a name whose last two words are both
   prepositions, `rest_from_onto`: a worker's suffix on an entry that
