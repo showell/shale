@@ -65,8 +65,11 @@ it works on, `<shale>` being the shale checkout:
   `<Module>Spec.roc`) or `##` doc keeps, and which is neither a recursion
   nor an entry into one (a rule of thumb, not a gate); `fixed`: a
   parameter every production call fills with the same literal, a
-  recursion's own calls counted (a start its own call varies, `at + 1`,
-  is quiet), never context passed down (`me`, `req.me`); `constant`: a function of
+  recursion's own calls counted, never context passed down (`me`,
+  `req.me`); `entry`: a recursion's start, the same literal at every
+  production call that its own calls vary (`at + 1`), which wants an entry
+  function that takes only what varies, not dropping (quiet once that
+  entry is its one outside call); `constant`: a function of
   `{}` alone with no `!` in its name, which gives the same value every
   call. A count of callers is of the files the glob reads, and a finding
   says how many.

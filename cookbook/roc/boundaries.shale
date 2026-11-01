@@ -23,20 +23,27 @@
 --           **A RECURSION IS NO WRAPPER**: a function whose body
 --           references itself cannot be read inline, and nor can an entry
 --           into one, a wrapper whose body calls such a function: the
---           shape `fixed` asks for, so the two checks never disagree. The
---           guide calls this a rule of thumb, not a gate.
+--           shape `fixed` and `entry` ask for, so the checks never
+--           disagree. The guide calls this a rule of thumb, not a gate.
 --   fixed   a parameter (a position, or a field of a record argument) that
 --           every production call, two or more, fills with the same
 --           **literal**: a number, a string, a character, a tag
 --           (`Begin`, `Bool.true`) or a module's constant (`Limits.max`)
 --           ("A parameter every caller passes the same value is no
---           parameter"). **A RECURSION'S OWN CALLS COUNT**: a start every
---           caller passes (`at: 0`) that its own call varies (`at + 1`)
---           is a parameter, though its own calls are no caller for
---           `single`. **CONTEXT PASSED DOWN IS NO
+--           parameter"): no parameter, or an entry function that takes
+--           only what varies. A recursion's own calls count, and must pass
+--           the same literal too. **CONTEXT PASSED DOWN IS NO
 --           CONSTANT**: the same variable (`me`, `accounts`, `at`), field
 --           (`req.me`) or call (`Host.list_srcs!({})`) at every call is the
 --           caller's value handed on, never a finding.
+--   entry   **A RECURSION'S START**: the same literal at every production
+--           call, two or more, that the recursion's own calls vary (`at:
+--           0` outside, `at + 1` inside). It is a parameter, as the
+--           recursion needs it, so only `fixed`'s second half holds: an
+--           entry function that takes only what varies (`count = |xs|
+--           count_from(xs, 0)`). Where one is there already it is the one
+--           outside call, fewer than two, and never judged. Its own calls
+--           are no caller for `single`.
 --   constant  a function of `{}` alone (its annotation's one argument, or
 --           its lambda's one pattern, is `{}`) whose name has no `!`: it
 --           gives the same value every call, and a constant says so
@@ -47,7 +54,7 @@
 --           that constant ("value is not polymorphic... make it a function
 --           that takes {}"); an unannotated one shows no type, and fires.
 --
--- **WHAT A COUNT COUNTS**: `single`'s one caller and `fixed`'s calls are
+-- **WHAT A COUNT COUNTS**: `single`'s one caller and `fixed`'s and `entry`'s calls are
 -- those in the files the glob reads, and a finding says how many: a sweep
 -- of one folder never sees a caller in its siblings.
 --
@@ -80,7 +87,7 @@ const PLANTS = "cookbook:roc/plants/boundaries/"
 const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const WAYS = arg("ways", 2)
 const NODES = arg("nodes", 24)
-const CHECKS = {"single", "fixed", "constant"}
+const CHECKS = {"single", "fixed", "entry", "constant"}
 -- Every file's nodes in one list, in order: `NODE[g]` a node of `roc_tree`,
 -- `PATH[g]` its file, `BASE[g]` the index before its file's first node, so
 -- a node's `parent` and `kids` are `BASE[g] +` theirs.
@@ -477,6 +484,29 @@ end
 
 -- No argument's text: the marker of a slot whose calls differ.
 const DIFFERS = "\n differs"
+
+-- **EACH SLOT'S ONE TEXT ACROSS `calls`**, by `arg_texts`'s keys: the text
+-- every call gives it, or `DIFFERS`. `fixed` and `entry` both ask it.
+function same_slots(calls)
+  local seen = {}
+  local first = true
+  for c in calls do
+    local a = arg_texts(c)
+    if first then
+      for k in keys(a) do seen[k] = a[k] end
+      first = false
+    else
+      for k in keys(seen) do
+        if seen[k] ~= DIFFERS and (not has_key(a, k) or a[k] ~= seen[k]) then seen[k] = DIFFERS end
+      end
+      for k in keys(a) do
+        if not has_key(seen, k) then seen[k] = DIFFERS end
+      end
+    end
+  end
+  return seen
+end
+
 for key in sort(keys(defs)) do
   local def = defs[key]
   local judged = not def.ambiguous and not is_test_file(def.path)
@@ -484,28 +514,24 @@ for key in sort(keys(defs)) do
     say(def.path, def.line, "single", "`" .. shown_name(def) .. "` (" .. def.size .. ") has one caller in the " .. #fs .. " files read, " .. def.callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
   end
   if judged and #def.calls >= 2 and def.values == 0 then
-    local seen = {}
-    local first = true
+    -- The outside calls alone, then with its own: a slot the outside calls
+    -- agree on is `fixed` when its own calls agree too, else `entry`.
+    local outside = same_slots(def.calls)
     local every = {}
     for c in def.calls do push(every, c) end
     for c in def.self_calls do push(every, c) end
-    for c in every do
-      local a = arg_texts(c)
-      if first then
-        for k in keys(a) do seen[k] = a[k] end
-        first = false
-      else
-        for k in keys(seen) do
-          if seen[k] ~= DIFFERS and (not has_key(a, k) or a[k] ~= seen[k]) then seen[k] = DIFFERS end
-        end
-        for k in keys(a) do
-          if not has_key(seen, k) then seen[k] = DIFFERS end
+    local all = same_slots(every)
+    local own = #def.self_calls > 0 and (" and " .. #def.self_calls .. " of its own") or ""
+    for k in sort(keys(outside)) do
+      local v = outside[k]
+      if v ~= DIFFERS and is_literal(v) then
+        local said = "`" .. shown_name(def) .. "`'s argument " .. k .. " is `" .. v .. "` in all " .. #def.calls .. " production calls"
+        if all[k] ~= DIFFERS then
+          say(def.path, def.line, "fixed", said .. own .. " in the " .. #fs .. " files read: no parameter, or an entry function that takes only what varies")
+        else
+          say(def.path, def.line, "entry", said .. " in the " .. #fs .. " files read, and its own calls vary it: an entry function that takes only what varies and passes `" .. v .. "` itself, its one outside call")
         end
       end
-    end
-    local own = #def.self_calls > 0 and (" and " .. #def.self_calls .. " of its own") or ""
-    for k in sort(keys(seen)) do
-      if seen[k] ~= DIFFERS and is_literal(seen[k]) then say(def.path, def.line, "fixed", "`" .. shown_name(def) .. "`'s argument " .. k .. " is `" .. seen[k] .. "` in all " .. #def.calls .. " production calls" .. own .. " in the " .. #fs .. " files read: no parameter, or an entry function that takes only what varies") end
     end
   end
   if def.unit and not contains(def.name, "!") and not is_test_file(def.path) then
