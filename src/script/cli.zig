@@ -71,7 +71,10 @@ pub const Command = struct {
 pub const Refused = struct { why: []const u8 };
 
 /// The budgets a command line may set, by name.
-const settable = [_][]const u8{ "steps", "reads", "read_bytes", "output_bytes", "changes", "change_bytes", "arena_bytes", "call_bytes", "call_entries", "kept_bytes", "machine_bytes" };
+/// `call_depth` too: the Zig stack's guard is `depth`, which stays, so a
+/// box-side tool walking a deep tree may raise it (the bare-metal route
+/// sets its own budgets, never through here).
+const settable = [_][]const u8{ "steps", "reads", "read_bytes", "output_bytes", "changes", "change_bytes", "arena_bytes", "call_bytes", "call_entries", "kept_bytes", "machine_bytes", "call_depth" };
 
 /// Parses `argv` (without the program's name) and the caller's `SHALE_ROOT`,
 /// if any. The `NAME=VALUE` arguments go into `args_buf`; a refusal's message
@@ -493,4 +496,16 @@ test "cli: the kept and machine budgets are set by --budget and a `-- budget:` l
     var d = try parsed(&.{"a.shale"}, null);
     const over = headerBudgets("-- budget: kept_bytes=268435457\n", &d, &why).?;
     try testing.expect(std.mem.indexOf(u8, over.why, "at most 268435456") != null);
+}
+
+test "cli: call_depth is set by --budget and a `-- budget:` line; unset, it is 64; `depth`, the Zig stack's guard, is no budget a command line sets" {
+    var why: [256]u8 = undefined;
+    const unset = try parsed(&.{"a.shale"}, null);
+    try testing.expectEqual(@as(u32, 64), unset.budgets.call_depth);
+    const flagged = try parsed(&.{ "--budget", "call_depth=1000", "a.shale" }, null);
+    try testing.expectEqual(@as(u32, 1000), flagged.budgets.call_depth);
+    var c = try parsed(&.{"a.shale"}, null);
+    try testing.expect(headerBudgets("-- budget: call_depth=500\nprint(1)\n", &c, &why) == null);
+    try testing.expectEqual(@as(u32, 500), c.budgets.call_depth);
+    try testing.expectError(error.Refused, parsed(&.{ "--budget", "depth=10000", "a.shale" }, null));
 }

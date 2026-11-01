@@ -40,7 +40,9 @@ bare metal, where a runaway script takes a site's server down, and there
 they hold. A refactoring or lint tool on the box (the cookbook's recipes, a
 one-off hunt or rewrite) may raise steps, reads and read bytes as far as its
 job needs: a stop on one says how big the job is, not that it is wrong.
-What still binds is the machine itself:
+So may `call_depth` (64 unset), for a recursion over a deep tree: the Zig
+stack's guard is `depth`, which no command line sets. What still binds is
+the machine itself:
 - **memory**: keep `arena_bytes` well under the RAM that is free (`free -m`;
   this box has 8 GB and no swap, and a 12 GB arena hung it on 2026-11-01);
 - **CPU**: run heavy jobs one at a time, never beside a timing gate;
