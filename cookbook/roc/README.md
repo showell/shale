@@ -141,9 +141,15 @@ it works on, `<shale>` being the shale checkout:
   and says `go on with from=N`, the glob's file to start the next at.
   The compiler is the tree's own pin, `tools:roc-<pin>/roc` with the pin
   read from the `roc-version` where the run starts; a run without one
-  stops, since method lookup has changed between nightlies. `types=1`
-  asks the checker first (`types.shale`, below): a candidate whose first
-  argument is a concrete other type is left untried. `self_test=1` runs its
+  stops, since method lookup has changed between nightlies. **The
+  checker's types come first** (`types.shale`, below; `types=0` turns
+  them off): a candidate whose first argument is a concrete other type is
+  left untried, and the files whose calls are all of the module's own type
+  are written at once and confirmed by one `roc check` and `roc test`, a
+  file the confirm refuses going to the trial. A tree the types cannot
+  read stops the run, naming why, never a run without them: no `root=`
+  (an app importing the glob's files), a root that is no app, a roc-types
+  of another pin than `roc-version`'s. `self_test=1` runs its
   plants (`plants/methods/`, copied to `scratch:`) with `SELF_TEST_PIN`,
   each in a child run of its own, so each has a run's 64 programs.
 - [pinned.shale](pinned.shale): **the Roc a tree pins**, a library, not a
@@ -165,11 +171,12 @@ it works on, `<shale>` being the shale checkout:
   old-syntax probe in a tree never hides the other files' findings, and is
   never passed unread.
 - [types.shale](types.shale): **Roc's own checker's types**, a library:
-  `use("cookbook:roc/types.shale")` gives `roc_types(root)`, every module
-  the app `root` reaches, by real path, each a list of its expressions'
-  and patterns' types with their regions, from roc-types
+  `use("cookbook:roc/types.shale")` gives `roc_types(root, roc)`, every
+  module the app `root` reaches, by real path, each a list of its
+  expressions' and patterns' types with their regions, from roc-types
   (`tools:roc-types/bin/roc-types`, Shale's `tools/roc_types`). A root the
-  checker refuses, a missing roc-types and an unknown header each stop the
+  checker refuses, a missing roc-types, an unknown header and a roc-types
+  whose pin is not the tree's Roc (`roc`, `roc_bin`'s path) each stop the
   run. `methods.shale` uses it.
 
 **Writing a recipe that edits Roc.** roc-ast's columns are bytes, and a

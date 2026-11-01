@@ -306,7 +306,8 @@ has none of it):
   `shale tools/roc_types/install.shale` as `roc-types/bin/roc-types` under
   the `tools` mount. Its format's home is `tools/roc_types/main.zig`'s
   header; the library `cookbook:roc/types.shale` reads it,
-  `roc_types(root)`.
+  `roc_types(root, roc)`, `roc` the tree's Roc, whose pin roc-types' must
+  be.
 
 **Git, in the git prelude** (`src/shale_prelude_git.shale`). Every call
 runs git under `run`. A `repo` is a Shale path, `""`

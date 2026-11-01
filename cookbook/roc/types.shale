@@ -1,5 +1,5 @@
 -- ROC'S OWN CHECKER'S TYPES: a library (`use("cookbook:roc/types.shale")`)
--- for the Roc recipes that judge by type. `roc_types(root)` runs roc-types
+-- for the Roc recipes that judge by type. `roc_types(root, roc)` runs roc-types
 -- (Shale's tools/roc_types, installed under the `tools` mount by its
 -- install.shale) on the app `root` and gives every module the checker
 -- reached, its types read from roc-types' format. The format's home is
@@ -39,8 +39,11 @@ function roc_types_unescaped(s)
 end
 
 -- `roc_types`'s reading (below) of roc-types' run `r` on `root`: `run`'s
--- answer, or one made as it would be, `{out, ended, code}`.
-function roc_types_read(r, root)
+-- answer, or one made as it would be, `{out, ended, code}`. `roc` is the
+-- OS path of the Roc the tree is built with; the header's pin is judged
+-- against it before roc-types' verdict, since another pin's errors (or
+-- its silence) say nothing of this tree.
+function roc_types_read(r, root, roc)
   local all = lines(r.out)
   local head = ""
   if #all > 0 then head = all[1] end
@@ -48,6 +51,8 @@ function roc_types_read(r, root)
   local said = words(head)
   if #said < 2 or said[2] ~= ROC_TYPES_FORMAT then fail("`roc_types`: roc-types' header is `" .. head .. "`, not format " .. ROC_TYPES_FORMAT .. "'s, the one this reads: Shale's `shale tools/roc_types/install.shale` installs the matching roc-types") end
   if #said ~= 3 then fail("`roc_types`: a header that is not `roc-types <N> <pin>`: " .. head) end
+  local own = "tools:roc-" .. said[3] .. "/roc"
+  if not exists(own) or real(own) ~= roc then fail("`roc_types`: roc-types reads Roc " .. said[3] .. ", and " .. root .. "'s tree is built with " .. roc .. ": its types would be another compiler's. Install the roc-types of the tree's pin (Shale's tools/roc_types), or move the tree to " .. said[3]) end
   if r.ended ~= "exit" or r.code ~= 0 then
     local why = slice(all, 2, 61)
     if #all > 61 then push(why, "(" .. (#all - 61) .. " lines more)") end
@@ -96,8 +101,10 @@ end
 -- roc-types said on stderr before the first module. A root the checker
 -- refuses (an error, a module unchecked, not an app) stops the run with
 -- what roc-types said: its types would be guesses. So does a missing
--- roc-types, an unknown header, and any line the format does not hold.
-function roc_types(root)
+-- roc-types, an unknown header, any line the format does not hold, and a
+-- roc-types of another pin than the tree's Roc, `roc` (its OS path, as
+-- cookbook/roc/pinned.shale's `roc_bin` gives it).
+function roc_types(root, roc)
   if not exists(ROC_TYPES_EXE) then fail("`roc_types`: no " .. ROC_TYPES_EXE .. ": Shale's `shale tools/roc_types/install.shale` installs it") end
-  return roc_types_read(run({real(ROC_TYPES_EXE), real(root)}, {timeout_ms = 300000, whole = 64000000}), root)
+  return roc_types_read(run({real(ROC_TYPES_EXE), real(root)}, {timeout_ms = 300000, whole = 64000000}), root, roc)
 end

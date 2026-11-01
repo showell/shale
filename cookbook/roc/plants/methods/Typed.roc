@@ -1,4 +1,4 @@
-## Under `types=1` (root TypedApp, an app, as `roc-types` takes one): a first
+## Under the types (root TypedApp, an app, as `roc-types` takes one): a first
 ## argument whose type is another module's (a list, for `Str`) is left
 ## untried, the type the reason; one whose type is the module's is turned.
 Typed := [].{
