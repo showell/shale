@@ -19,7 +19,9 @@ it works on, `<shale>` being the shale checkout:
   else); a `!` that names a callback's effect (`map2!`) and a name the
   language fixes (`is_eq`, `subscript`) are not judged as the author's.
   An effect that starts with a namespace prefix (cookbook/words/namespaces.txt,
-  `block_read_sector!`, `port_out_32!`) is judged by the word after it.
+  `block_read_sector!`, `port_out_32!`) is judged by the word after it,
+  and one whose first argument is a surface it draws on (`Frame`,
+  `Canvas`: `circle! : Frame, Circle => {}`) is named for what it draws.
   Beside the names: `command_tense` and `mixed_tense` (the tags an effect
   is handed, a `List(T)` judged as `T`, named as events, or as commands
   and events at once) and `container` (a type or record field named only

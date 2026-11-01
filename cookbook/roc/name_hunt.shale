@@ -32,7 +32,13 @@
 --                 is no act: the word after it is judged, here and by
 --                 `state_effect` (`block_read_sector!` reads; `port_status!`
 --                 does not), and the namespace's own instructions listed
---                 beside it are acts (`port_out_32!`, x86's OUT).
+--                 beside it are acts (`port_out_32!`, x86's OUT). **AN
+--                 EFFECT WHOSE FIRST ARGUMENT IS A SURFACE** (a `Frame` or
+--                 `Canvas`, by its type's last part: `Draw.Frame`) is named
+--                 for what it draws there (`circle! : Frame, Circle => {}`,
+--                 read `frame.circle!(...)`, roc-ray's API), and is no noun;
+--                 a shape's name on anything else (`line! : Writer, Str`)
+--                 still is. An unannotated effect shows no types, and fires.
 --   negative      a `no_*`/`not_*` `Bool`, an `is_not_*`
 --   preposition_split  one noun given different trailing prepositions in one
 --                 file (`blocks_of`, `blocks_in`, `blocks_from`): one
@@ -186,6 +192,9 @@ function namespace_table(file)
   return t
 end
 const NAMESPACES = namespace_table("namespaces.txt")
+-- The surfaces an effect draws on: one that takes one first is named for
+-- what it draws (`noun_effect`).
+const SURFACES = {Frame = true, Canvas = true}
 -- Each file's names that end in a preposition, by the noun before it:
 -- `path|base` -> {line, preps (a set), names}.
 const SPLITS = {}
@@ -602,7 +611,12 @@ function hunt(def)
     if not has_key(census, act) then census[act] = {word = act, count = 0, verdict = act_verdict} end
     census[act].count = census[act].count + 1
   end
-  if effect and judged and act_verdict == "refused" then
+  -- An effect whose first argument is the surface it draws on (`Frame`,
+  -- `Canvas`, by the type's last part) is named for what it draws there:
+  -- `frame.circle!(...)`, the platform's API (roc-ray's Draw.roc).
+  local first_arg = (get(def, "args") or {})
+  local drawn = #first_arg > 0 and has_key(SURFACES, get(first_arg[1], "ref", ""))
+  if effect and judged and act_verdict == "refused" and not drawn then
     if has_key(PREPS, act) then say(p, i, "noun_effect", "`" .. full .. "` has an effect but " .. where_said .. " is a preposition, `" .. act .. "`: an effect is named for its act")
     else say(p, i, "noun_effect", "`" .. full .. "` has an effect but " .. where_said .. ", `" .. act .. "`, is no verb: it reads as a value, not an act") end
   end
