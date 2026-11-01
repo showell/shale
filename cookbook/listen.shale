@@ -243,6 +243,7 @@ end
 function after_batch(r, once)
   local out = {}
   local after = ""
+  local spent = false
   local stopped = ""
   local post = false
   -- Shale's footers (`── time:`, `── used:`, a stop's `called from`)
@@ -259,6 +260,7 @@ function after_batch(r, once)
     elseif footer or starts_with(l, "──") then
       -- not the batch's
     elseif starts_with(l, SPENT) then
+      spent = true
       after = sub(l, #SPENT + 1)
     elseif l ~= "" then
       push(out, l)
@@ -278,7 +280,8 @@ function after_batch(r, once)
     return {act = "stop", lines = out, after = "", reason = stopped}
   end
   if once and post then return {act = "done", lines = out, after = "", reason = ""} end
-  if re_find(after, "^[0-9]+$") ~= nil or place_of(after) ~= nil then return {act = "next", lines = out, after = after, reason = ""} end
+  -- An empty id is the one stream before its first event: still live only.
+  if spent and (after == "" or re_find(after, "^[0-9]+$") ~= nil or place_of(after) ~= nil) then return {act = "next", lines = out, after = after, reason = ""} end
   return {act = "stop", lines = out, after = "", reason = "listen: a batch exited 0 with no post and no `" .. SPENT .. "<id>` line"}
 end
 
@@ -534,6 +537,10 @@ function self_test()
   expect(tally, place_of("1.workshop/desk.2").conv == "workshop/desk" and place_of("1.Workshop/Desk.2") == nil and place_of("1.a/b/c.2") == nil and place_of("1.desk.2") == nil, "a topic's spot is two lowercase keys, a slash between")
   local place_spent = after_batch({code = 0, ended = "exit", out = SPENT .. "1793400005.5.3\n"}, false)
   expect(tally, place_spent.act == "next" and place_spent.after == "1793400005.5.3", "a batch on the one stream starts the next from its place")
+  local quiet_all = after_batch({code = 0, ended = "exit", out = SPENT .. "\n── time: 1260 s\n"}, true)
+  expect(tally, quiet_all.act == "next" and quiet_all.after == "", "a quiet batch on the one stream, nothing heard yet, starts the next live only")
+  local no_spent = after_batch({code = 0, ended = "exit", out = "── time: 1260 s\n"}, true)
+  expect(tally, no_spent.act == "stop", "a batch with no spent line at all still stops, an empty id or not")
   if tally.bad > 0 then fail("listen: self-test: " .. tally.bad .. " failed") end
   print("listen self_test: PASS (own posts and pings give none, an agent's every mention is heard, the server's mentions decide, a message without them stops the run, after= and a repeated window print nothing twice, a gap is named, the budget warns once at 12 in the hour since a human spoke, 401, 403 and 404 stop, an ended stream, no connection and every other status reconnect, backing off 2 to 60 s, and a batch heard, refused, spent or broken each decides the caller: done, stop, the next batch, stop; and conv=all hears every conversation's, each named, a repeat once, from a place, its gaps and budgets per conversation)")
 end
