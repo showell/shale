@@ -39,13 +39,12 @@ older binary does not know the budget; nothing else differed.
 
 ## Checks on this branch
 
-- `zig build test` here: 458 of 461 unit tests pass, and five cookbook
-  self-tests (the Roc recipes) fail.
-- Each failure is a test or self-test that runs the installed roc-ast. That
-  roc-ast predates `--flat`, so each stops at "no `roc-ast flat 1` header",
-  as master does in this container.
-- The new reader tests pass (both headers, `roc-parser flat 2` refused).
-- With the box's roc-ast these should all pass. That is unchecked here.
+- Later, the box's `--flat` roc-ast (roc-apps's release asset
+  roc-ast-flat1-0602c5f, as CI installs it) was installed here.
+- `zig build test` now passes whole, with all 13 cookbook self-tests.
+- `nest_depth` was run again on master's reader with that roc-ast. Every
+  repo's findings equal the `d1fe92a` baseline's, line for line. So the
+  baseline stands.
 
 ## The two recipes, old vs new
 
