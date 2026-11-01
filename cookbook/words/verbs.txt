@@ -194,3 +194,17 @@ echo -- `echo!` (test/probe.roc)
 -- and their neighbors in that domain, verbs before a hunt meets them:
 grant -- `grant!`, as `revoke` is
 subscribe -- `subscribe!`, as `publish` is
+--
+-- 2026-11-01, the Roc sweep over dog-park, roc-webbox and roc-ray's
+-- examples (draw_*! alone was 66 false noun_effects in graphics code),
+-- and over roc-apps' machine, floor and framebuffer (boot!, halt!, exchange!).
+boot
+bundle
+carry
+draw
+exchange
+expand
+halt
+paint
+play
+preview
