@@ -158,11 +158,13 @@
 -- passes because verbs.txt lists it.
 --
 -- **THE CHECKER'S TYPES** (`types=1`, off by default; cookbook/roc/
--- types.shale) need `root=`, an app importing every file of the glob, and
--- the tree's `roc-version`; a file the root does not reach, a root the
--- checker refuses and a roc-types of another pin each stop the run, never
--- a run half typed. Off by default: roc-chat's verify runs this with no
--- root, and holds `question` at zero.
+-- types.shale) need `root=`, an app importing the files of the glob (or
+-- several, `root=a.roc,b.roc`, a module two reach typed by the first), and
+-- the tree's `roc-version`; a root the checker refuses and a roc-types of
+-- another pin each stop the run. A file no root reaches is judged without
+-- types, named after the findings (`not reached by <root>: <path>`), and
+-- fails the run (cookbook/roc/parsed.shale). Off by default: roc-chat's
+-- verify runs this with no root, and holds `question` at zero.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob=app/*.roc root=app/main.roc types=1
 --
@@ -195,7 +197,7 @@ const TYPED = SELF or TYPES_SAID == "1"
 const ROOT = SELF and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
 -- The checker's types, `roc_types_hunted`'s, filled once the files are
 -- known (below); empty without `types=1`.
-const TYPES = {real = {}, pats = {}, exprs = {}}
+const TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
 const WORDS = arg("words", "") == "1"
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition"}
 -- The last words `worker_name` judges: only a helper's, always; a word of
@@ -814,6 +816,7 @@ if TYPED then
   TYPES.real = got.real
   TYPES.pats = got.pats
   TYPES.exprs = got.exprs
+  TYPES.unreached = got.unreached
 end
 -- A file roc-ast refuses is named, and fails the run, after the rest are
 -- judged (cookbook/roc/parsed.shale).
@@ -896,7 +899,7 @@ if WORDS then
 else
   print_summed("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "), said)
 end
-fail_if_refused("name_hunt", parsed.refused)
+fail_if_refused("name_hunt", parsed.refused, TYPES.unreached)
 
 -- A plant's name as the self-test's table reads it: a typed plant's, a
 -- type module's (`typed/QuestionInferred.roc`), as `question_inferred.roc`.

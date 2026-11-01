@@ -50,8 +50,10 @@
 --                 0`): an index past the end is a bug. A key never seen
 --                 (`KeyNotFound`) or an empty list (`ListWasEmpty`) is
 --                 left: a count's or a total's zero is often the answer.
---                 A file of the glob the root does not reach stops the
---                 run. The self-test judges `plants/errors/typed/` (type
+--                 `root=a.roc,b.roc` names several apps. A file of the
+--                 glob no root reaches is judged without types, named
+--                 after the findings, and fails the run
+--                 (cookbook/roc/parsed.shale). The self-test judges `plants/errors/typed/` (type
 --                 modules, `PlaceholderIndex` read as
 --                 `placeholder_index`, root `QuietApp.roc`) with the types.
 --
@@ -122,7 +124,7 @@ if SELF then
 end
 -- The checker's types (`types=1`): the self-test's untyped plants are its
 -- root's none.
-const TYPES = TYPED and roc_types_hunted("errors", ROOT, roc_bin("errors", SELF), paths, SELF and set_of(glob(PLANTS .. "*.roc")) or {}) or {real = {}, pats = {}, exprs = {}}
+const TYPES = TYPED and roc_types_hunted("errors", ROOT, roc_bin("errors", SELF), paths, SELF and set_of(glob(PLANTS .. "*.roc")) or {}) or {real = {}, pats = {}, exprs = {}, unreached = {}}
 const N = {}
 const FILE = {}
 -- A file that does not parse has no tree: it is named, and fails the run,
@@ -396,7 +398,7 @@ local unseen = {}
 for n in sort(keys(unjudged)) do push(unseen, n .. " (" .. unjudged[n] .. ")") end
 local unseen_said = #unseen > 0 and ("; error_alias not judged, declared outside the files hunted: " .. join(unseen, ", ")) or ""
 print_summed("errors (Roc): " .. #paths .. " files; " .. join(counts, ", ") .. unseen_said, said)
-fail_if_refused("errors", PARSED.refused)
+fail_if_refused("errors", PARSED.refused, TYPES.unreached)
 
 -- A plant's name as the self-test's table reads it: a typed plant's, a
 -- type module's (`typed/PlaceholderIndex.roc`), as `placeholder_index.roc`.

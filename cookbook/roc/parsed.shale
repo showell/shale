@@ -27,9 +27,17 @@ function roc_parsed(paths)
 end
 
 -- The run's last word, after its findings: each refused file on a line of
--- its own, then a failure that counts them. Nothing when none was refused.
-function fail_if_refused(who, refused)
-  if #refused == 0 then return nil end
+-- its own, then, under the types, each file no root reached (`unreached`,
+-- cookbook/roc/types.shale's `roc_types_hunted` lines, `not reached by
+-- <root>: <path>`, judged without types), then a failure that counts them.
+-- Nothing when none was refused or unreached.
+function fail_if_refused(who, refused, unreached?)
+  local missed = unreached or {}
+  if #refused == 0 and #missed == 0 then return nil end
   for r in refused do print("refused: " .. r) end
-  fail(who .. ": roc-ast refused " .. #refused .. " files (named above), which have no tree to judge; every other file was judged")
+  for m in missed do print(m) end
+  local why = {}
+  if #refused > 0 then push(why, "roc-ast refused " .. #refused .. " files (named above), which have no tree to judge") end
+  if #missed > 0 then push(why, #missed .. " files (named above) are reached by no root of the types, so were judged without them") end
+  fail(who .. ": " .. join(why, "; ") .. "; every other file was judged")
 end

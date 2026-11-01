@@ -173,7 +173,9 @@ it works on, `<shale>` being the shale checkout:
   word, names each refused file with its reason and exits non-zero.
   `errors`, `boundaries`, `name_hunt` and `nest_depth` use it, so one
   old-syntax probe in a tree never hides the other files' findings, and is
-  never passed unread.
+  never passed unread. Under the types it names each file no root reached
+  too (`not reached by <root>: <path>`, `roc_types_hunted`'s), judged
+  without them, and fails the run the same way.
 - [types.shale](types.shale): **Roc's own checker's types**, a library:
   `use("cookbook:roc/types.shale")` gives `roc_types(root, roc)`, every
   module the app `root` reaches, by real path, each a list of its
@@ -181,7 +183,15 @@ it works on, `<shale>` being the shale checkout:
   (`tools:roc-types/bin/roc-types`, Shale's `tools/roc_types`). A root the
   checker refuses, a missing roc-types, an unknown header and a roc-types
   whose pin is not the tree's Roc (`roc`, `roc_bin`'s path) each stop the
-  run. `methods.shale` uses it.
+  run. `methods.shale` uses it. For the hunts (`types=1` on `name_hunt`,
+  `errors` and `boundaries`), `roc_types_hunted` takes `root=` as one app
+  or several (`root=a.roc,b.roc`, one roc-types run each, a module two
+  reach typed by the first) and judges what they reach: a file of the glob
+  none reaches is judged without types, named, and fails the run at its
+  end (`parsed.shale`). roc-types reads only an `app [...]` header, so a
+  headerless script (`main! = ...`, roc-apps' `basic/roc/BasicRun.roc`)
+  is no root. `methods` keeps its own stop on a file the root does not
+  reach: a rewrite runs fully typed or not at all.
 
 **Writing a recipe that edits Roc.** roc-ast's columns are bytes, and a
 span's end is exclusive. Spans overlap: `type-mod` and `s-type-decl` both

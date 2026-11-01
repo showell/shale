@@ -111,44 +111,64 @@ end
 
 -- ── for the hunts: `types=1` on name_hunt, errors and boundaries ─────────
 
--- **THE TYPES OF THE FILES A HUNT READS**: `roc_types` on the app `root`,
--- each pattern's and expression's type by `<real path>|line:col:end_line:
--- end_col` (`pats`, `exprs`; of several at one region the outermost, the
--- first roc-types gives), and each reached path's real one (`real`: a file
--- it holds is typed). `who` names
--- the hunt in a stop. Every file of `paths` the root does not reach stops
--- the run, named, unless `exempt` holds it (a self-test's untyped plants):
--- a file judged without types beside files judged with them would pass
--- the typed rule silently. No `root` stops it too: roc-types reads an app.
+-- The apps `root=` names, `a.roc,b.roc` in order: several where no one
+-- app reaches the whole glob (roc-apps' basic/roc holds four apps).
+function roc_types_roots(who, root)
+  local out = {}
+  for r in split(root, ",") do
+    if trim(r) ~= "" then push(out, trim(r)) end
+  end
+  if #out == 0 then fail(who .. ": types=1 needs root=, an app (or several, `root=a.roc,b.roc`) importing the files of the glob: roc-types reads an app, and a type module only through one") end
+  return out
+end
+
+-- **THE TYPES OF THE FILES A HUNT READS**: `roc_types` on each app of
+-- `root` (`a.roc,b.roc`, one program each), each pattern's and
+-- expression's type by `<real path>|line:col:end_line:end_col` (`pats`,
+-- `exprs`; of several at one region the outermost, the first roc-types
+-- gives; a module two roots reach has the first root's), and each reached
+-- path's real one (`real`: a file it holds is typed). `who` names the hunt
+-- in a stop. **A FILE NO ROOT REACHES IS NAMED, NEVER A STOP**: each file
+-- of `paths` that none reaches, unless `exempt` holds it (a self-test's
+-- untyped plants), is a line of `unreached`, `not reached by <root>:
+-- <path>`. The hunt judges it as it would without types, every reached
+-- file with them, and hands `unreached` to `fail_if_refused`
+-- (cookbook/roc/parsed.shale), which names each after the findings and
+-- fails the run: a file judged without types beside files judged with them
+-- would otherwise pass the typed rules silently. No `root` stops it.
 function roc_types_hunted(who, root, roc, paths, exempt)
-  if root == "" then fail(who .. ": types=1 needs root=, an app importing every file of the glob: roc-types reads an app, and a type module only through one") end
-  local got = roc_types(root, roc)
+  local roots = roc_types_roots(who, root)
   local pats = {}
   local exprs = {}
-  for path in got.paths do
-    for rec in got.modules[path] do
-      local key = path .. "|" .. rec.line .. ":" .. rec.col .. ":" .. rec.end_line .. ":" .. rec.end_col
-      if rec.kind == "pat" then
-        if not has_key(pats, key) then pats[key] = rec.type end
-      elseif not has_key(exprs, key) then
-        exprs[key] = rec.type
+  local reached = {}
+  for one in roots do
+    local got = roc_types(one, roc)
+    for path in got.paths do
+      if not has_key(reached, path) then
+        reached[path] = true
+        for rec in got.modules[path] do
+          local key = path .. "|" .. rec.line .. ":" .. rec.col .. ":" .. rec.end_line .. ":" .. rec.end_col
+          if rec.kind == "pat" then
+            if not has_key(pats, key) then pats[key] = rec.type end
+          elseif not has_key(exprs, key) then
+            exprs[key] = rec.type
+          end
+        end
       end
     end
+    for l in got.warnings do print(who .. ": roc-types " .. one .. ": " .. l) end
   end
-  local reached = set_of(got.paths)
   local reals = {}
-  local missed = {}
+  local unreached = {}
   for p in paths do
     local r = real(p)
     if has_key(reached, r) then
       reals[p] = r
     elseif not has_key(exempt, p) then
-      push(missed, p)
+      push(unreached, "not reached by " .. join(roots, ",") .. ": " .. p)
     end
   end
-  if #missed > 0 then fail(who .. ": types=1: " .. #missed .. " files of the glob are none of the modules roc-types checked from " .. root .. ", so they would be judged without types: " .. join(take(missed, 20), ", ") .. (#missed > 20 and ", ..." or "") .. ". Narrow the glob to what the root imports, or give another root") end
-  for l in got.warnings do print(who .. ": roc-types " .. root .. ": " .. l) end
-  return {pats = pats, exprs = exprs, real = reals}
+  return {pats = pats, exprs = exprs, real = reals, unreached = unreached}
 end
 
 -- The type at a roc_tree node `n` of the file `path` (`kind` "pat" or
