@@ -1,0 +1,51 @@
+-- **ROC-TYPES, DOWNLOADED AND INSTALLED** where Shale may run it
+-- (~/tools/roc-types/bin/roc-types, under the `tools` mount). The checker is
+-- roc-lang/roc's at the commit roc-version names, linked whole: building it
+-- takes more than the box holds beside its other work, so it is built on
+-- GitHub and installed from its published asset, never built here. The
+-- asset's URL and sha256 are tools/roc_types/release, CI's too; the
+-- download is held to the sha256 before anything is unpacked. Run from
+-- Shale's checkout:
+--   shale tools/roc_types/install.shale
+--
+-- **A NEW PIN OR FORMAT IS A NEW ASSET**: run the roc-types workflow
+-- (`gh workflow run roc-types.yml -f ref=<ref>`), which builds it static
+-- for a baseline CPU and tars `bin/roc-types` as
+-- `roc-types-<N>-<pin>-linux-x86_64.tar.gz`, printing its sha256; upload
+-- it under that new name (a published asset never changes) and put its URL
+-- and sha256 in tools/roc_types/release.
+
+const RELEASE = "tools/roc_types/release"
+
+local version = trim(read("tools/roc_types/roc-version"))
+local parts = split(version, "-")
+local short = parts[#parts]
+
+local url = ""
+local sha = ""
+for l in lines(read(RELEASE)) do
+  if starts_with(l, "url ") then url = trim(sub(l, 5)) end
+  if starts_with(l, "sha256 ") then sha = trim(sub(l, 8)) end
+end
+if url == "" or sha == "" then fail("roc-types: " .. RELEASE .. " lacks its `url` or `sha256` line") end
+if starts_with(url, "TODO") or starts_with(sha, "TODO") then
+  fail("roc-types: " .. RELEASE .. " holds a placeholder: publish the roc-types workflow's asset and put its URL and sha256 there")
+end
+if find(url, "-" .. short .. "-") == nil then
+  fail("roc-types: roc-version pins Roc " .. short .. ", and " .. RELEASE .. "'s asset is not that pin's (" .. url .. "): publish the pin's asset")
+end
+
+if not exists("tools:roc-types") then mkdir("tools:roc-types") end
+local dir = fresh_dir("tools:roc-types", "download")
+local tarball = real(dir) .. "/roc-types.tar.gz"
+must(run({"curl", "-fsSL", "-o", tarball, url}, {timeout_ms = 600000, tail = 20}))
+local summed = must(run({"sha256sum", tarball}, {timeout_ms = 60000, tail = 2}))
+local got = words(summed.out)[1]
+if got ~= sha then
+  remove_tree(dir)
+  fail("roc-types: the download's sha256 is " .. got .. ", not " .. RELEASE .. "'s " .. sha .. "; nothing installed")
+end
+must(run({"tar", "-xzf", tarball, "-C", real("tools:roc-types")}, {timeout_ms = 60000, tail = 20}))
+remove_tree(dir)
+if not exists("tools:roc-types/bin/roc-types") then fail("roc-types: the asset held no bin/roc-types; nothing installed at ~/tools/roc-types/bin/roc-types") end
+print("roc-types: Roc " .. short .. "'s checker, installed at ~/tools/roc-types/bin/roc-types")

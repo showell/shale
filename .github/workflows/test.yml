@@ -85,6 +85,24 @@ jobs:
           tar -xzf /tmp/roc-ast.tar.gz -C ~/tools/roc-ast
           test -x ~/tools/roc-ast/bin/roc-ast
 
+      # methods.shale's typed plant reads Roc's checker's types from
+      # ~/tools/roc-types/bin/roc-types: the asset built by roc-types.yml from
+      # Shale's tools/roc_types, its URL and sha256 read from
+      # tools/roc_types/release (install.shale's too), the checksum checked.
+      # TODO: release holds placeholders until the asset is published, and
+      # this step fails on them, never skips.
+      - name: Install roc-types
+        working-directory: shale
+        run: |
+          url=$(sed -n 's/^url //p' tools/roc_types/release)
+          sha=$(sed -n 's/^sha256 //p' tools/roc_types/release)
+          case "$url $sha" in *TODO*) echo "tools/roc_types/release holds a placeholder: publish the roc-types asset first"; exit 1;; esac
+          curl -fsSL -o /tmp/roc-types.tar.gz "$url"
+          echo "$sha  /tmp/roc-types.tar.gz" | sha256sum -c -
+          mkdir -p ~/tools/roc-types
+          tar -xzf /tmp/roc-types.tar.gz -C ~/tools/roc-types
+          test -x ~/tools/roc-types/bin/roc-types
+
       # The Roc rewrites' self-tests (cookbook/roc/methods.shale and
       # stack.shale) are judged by the compiler itself, the same release's
       # (70 MB), tools:roc-nightly-2026-10-30-0602c5f/roc (each recipe's

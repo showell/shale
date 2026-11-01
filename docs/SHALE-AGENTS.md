@@ -298,6 +298,15 @@ has none of it):
   are still read; a missing file's `err` is `no such file`; `err` is `""`
   for a file read. A step is charged a node; one program runs for the
   paths, and one more for each refusal.
+  **The types beside the tree:** roc-types (Shale's `tools/roc_types`) is
+  Roc's own checker at the same pin, through the compiler's embedding API:
+  given an app, it writes every expression's and pattern's type, by
+  region, for every module the app reaches, and fails on any error. It
+  links most of the compiler, so it is built on GitHub and installed by
+  `shale tools/roc_types/install.shale` as `roc-types/bin/roc-types` under
+  the `tools` mount. Its format's home is `tools/roc_types/main.zig`'s
+  header; the library `cookbook:roc/types.shale` reads it,
+  `roc_types(root)`.
 
 **Git, in the git prelude** (`src/shale_prelude_git.shale`). Every call
 runs git under `run`. A `repo` is a Shale path, `""`

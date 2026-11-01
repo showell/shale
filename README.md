@@ -304,8 +304,9 @@ no `host` there, so `run`, git and jobs are not in it.
 sample's scripts and every lesson's cell, each held to the output it pins;
 and `cookbook-test`: every cookbook recipe that reads `arg("self_test")`,
 run with `self_test=1` on its plants, a failure named by recipe. The Roc
-name hunt needs roc-ast at `~/tools/roc-ast/bin/roc-ast` and fails, saying
-how to install it, without it; CI unpacks roc-apps's release asset there. The
+name hunt needs roc-ast at `~/tools/roc-ast/bin/roc-ast`, and the method
+rewrite roc-types at `~/tools/roc-types/bin/roc-types`; each fails, saying
+how to install it, without it, and CI unpacks the release assets there. The
 Zig tools' tests read zig-webbox's checkout too: they replay splits from its
 history and walk its sources beside this repo's. **`consumers`** runs this
 repo's own docs check, metal-vmm's queue tool by this tree's `shale`, then

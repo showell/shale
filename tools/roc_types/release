@@ -1,0 +1,4 @@
+# The published roc-types asset, read by install.shale and CI (test.yml):
+# its URL and its sha256, each `key value` on a line. A TODO is refused.
+url TODO: the published roc-types-1-0602c5f-linux-x86_64.tar.gz's URL
+sha256 TODO: its sha256, as the roc-types workflow printed it

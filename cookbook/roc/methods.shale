@@ -64,23 +64,31 @@
 -- 34 files, left about 7 GB there.
 --
 -- **`types=1`: THE CHECKER'S TYPES FIRST**: `roc-types` (Roc's own checker
--- at roc-chat's pin, `tools:roc-types/roc-types`; Shale's `tools/roc_types`)
--- runs once a run on `root`, which must then be an app, and gives each
--- expression's type by its region, the same compiler's regions roc_tree's
--- nodes carry. A candidate whose first argument's type is a concrete other
--- type (`List(U8)` for `Str.x`, a record, a tag union, a function) is left
--- untried, `the first argument is a List, not a Str`; one whose type's head
--- names the module (`Str`, `List(...)`, `MessageRef` or `X.MessageRef`) is
--- tried, and so is one the types cannot settle (a type variable, no type at
--- that region, or two), as without types. The summary counts each kind. On
--- roc-chat's `app/` it leaves most candidates before any trial.
+-- at roc-chat's pin, `tools:roc-types/bin/roc-types`; Shale's
+-- `tools/roc_types`, read by the library cookbook/roc/types.shale) runs
+-- once a run on `root`, which must then be an app importing every file of
+-- the glob, and gives each expression's type by its region, the same
+-- compiler's regions roc_tree's nodes carry. A candidate whose first
+-- argument's type is a concrete other type (`List(U8)` for `Str.x`, a
+-- record, a tag union, a function) is left untried, `the first argument is
+-- a List, not a Str`; one whose type's head names the module (`Str`,
+-- `List(...)`, `MessageRef` or `X.MessageRef`) is tried, and so is one the
+-- types cannot settle (a type variable, or no type at that region), as
+-- without types. Where several expressions share the region, the outermost
+-- is the argument's (`types_of` says why). The summary counts each kind.
+-- On roc-chat's `app/` it leaves most candidates before any trial.
 --
--- `self_test=1` copies `cookbook/roc/plants/methods/` to a folder of the
--- run's own under `scratch:` (removed when every plant holds) and runs
--- `apply=1` there, each plant on its own: a plant with a `<Name>.want` must
--- come out as that text, and each one's count of calls left, and a reason,
--- is as the table below says. A plant the table marks `types` runs under
--- `types=1`, its root an app plant (`ROOTS`) that holds no call.
+-- `self_test=1` judges each plant of `cookbook/roc/plants/methods/` in a
+-- child run of its own (`plant=<Name>`, by the `shale` on PATH: this
+-- tree's, under `zig build cookbook-test`), so each has a run's 64
+-- programs and a plant added never crowds the others out. The child copies
+-- the plants to a folder of its own under `scratch:` (removed when the
+-- plant holds) and runs `apply=1` there: a plant with a `<Name>.want` must
+-- come out as that text, and its count of calls left, and a reason, is as
+-- the table below says. A plant the table marks `types` runs under
+-- `types=1`, its root an app plant (`ROOTS`) that holds no call; a
+-- missing roc-types fails the self-test before any plant, naming its
+-- install.
 --
 -- **ROC IS THE TREE'S OWN PIN**: `tools:roc-<pin>/roc`, the pin read from
 -- the `roc-version` file where the run starts (the repository's root), and
@@ -95,11 +103,14 @@
 const SELF = arg("self_test", "") == "1"
 const APPLY = SELF or arg("apply", "") == "1"
 const TYPES = arg("types", "") == "1"
+const PLANT = arg("plant", "")
 const PLANTS = "cookbook:roc/plants/methods"
+const SELF_PATH = "cookbook:roc/methods.shale"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/summed.shale")
+use("cookbook:roc/types.shale")
 -- A round's refused calls leave it, and the next, without them, may find
 -- more that their errors hid: roc-chat's Topics.roc, 137 candidates, takes
 -- 5 rounds to its verdict, and a sixth is room.
@@ -344,43 +355,29 @@ end
 
 -- ── the types (`types=1`) ────────────────────────────────────────────────
 
--- An absolute path with its `.` and `..` resolved: `roc-types` names a
--- module as its import reached it (`app/../platform/Chat.roc`).
-function abs_normal(p)
-  local out = {}
-  for part in split(p, "/") do
-    if part == ".." then
-      if #out > 0 then out = take(out, #out - 1) end
-    elseif part ~= "" and part ~= "." then
-      push(out, part)
-    end
-  end
-  return "/" .. join(out, "/")
-end
-
--- **EVERY EXPRESSION'S TYPE**: `roc-types` on `root` (one program), each
--- expression's type by `<absolute path>|line:col:end_line:end_col`; a
--- region given two different types is in `ambiguous`. A root the checker
--- refuses stops the run: its types would be guesses.
+-- **EVERY EXPRESSION'S TYPE**: `roc_types` on `root` (one program, the
+-- library's: it stops the run on a root the checker refuses, whose types
+-- would be guesses), each expression's type by
+-- `<real path>|line:col:end_line:end_col`, and the modules' paths
+-- (`modules`). Of the expressions at one region the outermost is kept,
+-- the first roc-types gives (its pre-order): the value written there.
+-- Several share a region where the compiler desugars (`x?` is a `match`
+-- over `x`, `Ok(x)` a nominal over a tag, `a and b` an `if`), and the
+-- inner ones are the desugaring's parts, not the argument's value.
 function types_of(ctx, root)
   ctx.used = ctx.used + 1
-  local r = run({real("tools:roc-types/roc-types"), real(root)}, {timeout_ms = 300000, whole = 64000000})
-  if r.ended ~= "exit" or r.code ~= 0 then fail("methods: roc-types " .. root .. " ended " .. r.ended .. " " .. r.code .. ": " .. said_first(r.out)) end
-  if not contains(said_first(r.out), "user_errors=false") then fail("methods: roc-types " .. root .. ": " .. said_first(r.out)) end
+  local got = roc_types(root)
   local by = {}
-  local ambiguous = {}
-  local path = ""
-  for l in lines(r.out) do
-    if starts_with(l, "== ") then
-      path = abs_normal(sub(l, 4))
-    elseif starts_with(l, "t\texpr\t") then
-      local f = split(l, "\t")
-      local key = path .. "|" .. f[4] .. ":" .. f[5] .. ":" .. f[6] .. ":" .. f[7]
-      if has_key(by, key) and by[key] ~= f[8] then ambiguous[key] = true end
-      by[key] = f[8]
+  for path in got.paths do
+    for rec in got.modules[path] do
+      if rec.kind == "expr" then
+        local key = path .. "|" .. rec.line .. ":" .. rec.col .. ":" .. rec.end_line .. ":" .. rec.end_col
+        if not has_key(by, key) then by[key] = rec.type end
+      end
     end
   end
-  return {by = by, ambiguous = ambiguous}
+  for l in got.warnings do print("methods: roc-types " .. root .. ": " .. l) end
+  return {by = by, modules = set_of(got.paths)}
 end
 
 -- A type's head, `{head}` or `{var = true}`: `List(U8)` is `List`,
@@ -410,16 +407,18 @@ end
 
 -- **THE TYPES' VERDICT** on each open candidate of the file at `p`: one
 -- whose first argument's type is a concrete other type is left, that its
--- reason; the rest stay for the trial. Each kind is counted on `tally`.
-function by_type(tally, t, cands, p, types)
-  local abs = abs_normal(real(p))
+-- reason; the rest stay for the trial. Each kind is counted on `tally`. A
+-- file that is none of the root's modules stops the run: the types cannot
+-- judge it, and a path spelled two ways (a link) would have every
+-- candidate's type missing, quietly.
+function by_type(tally, t, cands, p, types, root)
+  local abs = real(p)
+  if not has_key(types.modules, abs) then fail("methods: types=1: " .. p .. " (" .. abs .. ") is none of the modules roc-types checked from " .. root .. ": a file the root does not import, or a path through a link") end
   for c in cands do
     if c.left == "" then
       local key = abs .. "|" .. t.nodes[t.nodes[c.at].kids[2]].region
       if not has_key(types.by, key) then
         incr(tally, "no type")
-      elseif has_key(types.ambiguous, key) then
-        incr(tally, "ambiguous")
       else
         local h = type_head(types.by[key])
         if has_key(h, "var") then
@@ -550,7 +549,7 @@ function run_all(paths, root, from, ts, types)
         end
         ctx.types[r] = types_of(ctx, r)
       end
-      by_type(tally, t, cands, p, ctx.types[r])
+      by_type(tally, t, cands, p, ctx.types[r], r)
       open = 0
       for c in cands do if c.left == "" then open = open + 1 end end
     end
@@ -616,40 +615,59 @@ const EXPECT = {
 -- `roc-types` reads an app, and an app names its platform.
 const ROOTS = {TypedApp = true, TypedPf = true}
 
-function self_test()
+-- **ONE PLANT JUDGED**, the child run `plant=<name>`: the plants copied to
+-- a scratch folder of its own, the one plant run under `apply=1`.
+function self_test_plant(name)
+  if not has_key(EXPECT, name) then fail("methods: self-test: no plant " .. name .. " in the table") end
+  local want = EXPECT[name]
   local scratch = fresh_dir("scratch:", "methods")
-  for name in ls(PLANTS) do replace(scratch .. "/" .. name, read(PLANTS .. "/" .. name)) end
+  for f in ls(PLANTS) do replace(scratch .. "/" .. f, read(PLANTS .. "/" .. f)) end
   local tally = {bad = 0}
-  -- Every plant's tree read at once: a tree each would spend a program
-  -- each of the run's 64.
-  local all = {}
-  for name in keys(EXPECT) do push(all, scratch .. "/" .. name .. ".roc") end
-  local ts = trees(all)
-  for name in keys(EXPECT) do
-    local want = EXPECT[name]
-    local p = scratch .. "/" .. name .. ".roc"
-    local typed = has_key(want, "types")
-    local got = run_all({p}, has_key(want, "root") and (scratch .. "/" .. want.root .. ".roc") or "", 1, ts, typed)
-    local mine = {}
-    for l in got.lines do push(mine, l) end
-    judged(tally, #mine == want.left, name .. ": " .. #mine .. " left, want " .. want.left .. (#mine > 0 and (" (" .. join(mine, "; ") .. ")") or ""))
-    if has_key(want, "why") then judged(tally, #mine > 0 and contains(join(mine, "\n"), want.why), name .. ": left because " .. want.why) end
-    local wantp = PLANTS .. "/" .. name .. ".want"
-    if exists(wantp) then judged(tally, read(p) == read(wantp), name .. ": comes out as " .. name .. ".want") end
-    -- Under types, the turned call was the types' to keep, the left one
-    -- theirs to leave: one each, none to the trial alone.
-    if typed then judged(tally, #keys(got.ctx.typed) == 2 and get(got.ctx.typed, "another type", 0) == 1 and get(got.ctx.typed, "the module's type", 0) == 1, name .. ": by type, " .. json_write(got.ctx.typed)) end
-    if want.left > 0 and not exists(wantp) then judged(tally, read(p) == read(PLANTS .. "/" .. name .. ".roc"), name .. ": put back as it was") end
-  end
-  for name in ls(PLANTS) do
-    if ends_with(name, ".roc") and not has_key(EXPECT, strip_suffix(name, ".roc")) and not has_key(ROOTS, strip_suffix(name, ".roc")) then judged(tally, false, name .. ": a plant the table does not judge") end
-  end
-  if tally.bad > 0 then fail("methods: self-test: " .. tally.bad .. " failed") end
+  local p = scratch .. "/" .. name .. ".roc"
+  local typed = has_key(want, "types")
+  local got = run_all({p}, has_key(want, "root") and (scratch .. "/" .. want.root .. ".roc") or "", 1, nil, typed)
+  local mine = {}
+  for l in got.lines do push(mine, l) end
+  judged(tally, #mine == want.left, name .. ": " .. #mine .. " left, want " .. want.left .. (#mine > 0 and (" (" .. join(mine, "; ") .. ")") or ""))
+  if has_key(want, "why") then judged(tally, #mine > 0 and contains(join(mine, "\n"), want.why), name .. ": left because " .. want.why) end
+  local wantp = PLANTS .. "/" .. name .. ".want"
+  if exists(wantp) then judged(tally, read(p) == read(wantp), name .. ": comes out as " .. name .. ".want") end
+  -- Under types, the turned call was the types' to keep, the left one
+  -- theirs to leave: one each, none to the trial alone.
+  if typed then judged(tally, #keys(got.ctx.typed) == 2 and get(got.ctx.typed, "another type", 0) == 1 and get(got.ctx.typed, "the module's type", 0) == 1, name .. ": by type, " .. json_write(got.ctx.typed)) end
+  if want.left > 0 and not exists(wantp) then judged(tally, read(p) == read(PLANTS .. "/" .. name .. ".roc"), name .. ": put back as it was") end
+  if tally.bad > 0 then fail("methods: self-test: " .. name .. ": " .. tally.bad .. " failed") end
   remove_tree(scratch)
+  return nil
+end
+
+-- **EVERY PLANT**, each a child run (`self_test_plant`), one program of
+-- this run's each; a child that fails is named, and the rest still run.
+function self_test()
+  if not exists(ROC_TYPES_EXE) then fail("methods: self-test: no " .. ROC_TYPES_EXE .. ", which the plants marked `types` are judged by: Shale's `shale tools/roc_types/install.shale` installs it") end
+  local bad = {}
+  for name in ls(PLANTS) do
+    if ends_with(name, ".roc") and not has_key(EXPECT, strip_suffix(name, ".roc")) and not has_key(ROOTS, strip_suffix(name, ".roc")) then
+      print("FAIL  " .. name .. ": a plant the table does not judge")
+      push(bad, name)
+    end
+  end
+  for name in sort(keys(EXPECT)) do
+    local r = run({"shale", "--root", ".", SELF_PATH, "self_test=1", "plant=" .. name}, {timeout_ms = 3600000, tail = 200})
+    for l in lines(r.out) do
+      if not starts_with(l, "── budgets") then print(l) end
+    end
+    if r.ended ~= "exit" or r.code ~= 0 then push(bad, name) end
+  end
+  if #bad > 0 then fail("methods: self-test: " .. #bad .. " plant(s) failed: " .. join(bad, ", ")) end
   print("methods: self-test: every plant as it says")
 end
 
-if SELF then
+if PLANT ~= "" and not SELF then
+  fail("methods: plant= is the self-test's child run's, with self_test=1")
+elseif SELF and PLANT ~= "" then
+  self_test_plant(PLANT)
+elseif SELF then
   self_test()
 else
   local paths = glob(GLOB)

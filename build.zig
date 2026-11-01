@@ -236,9 +236,10 @@ pub fn build(b: *std.Build) void {
     // unit run and the browser's smoke test on `quick`, so a format slip or
     // a compile error is said before any test runs. The format is checked
     // with the tests: by hand, build.zig went unformatted.
-    // roc-ast's own build (tools/roc_ast) fetches Roc and its packages beside
-    // it; they are Roc's to format, not ours.
-    const fmt_check = b.addFmt(.{ .paths = &.{ b.path("src"), b.path("tools"), b.path("build.zig") }, .exclude_paths = &.{ b.path("tools/roc_ast/zig-pkg"), b.path("tools/roc_ast/.zig-cache") }, .check = true });
+    // roc-ast's and roc-types' own builds (tools/roc_ast, tools/roc_types)
+    // fetch Roc and its packages beside them; they are Roc's to format, not
+    // ours.
+    const fmt_check = b.addFmt(.{ .paths = &.{ b.path("src"), b.path("tools"), b.path("build.zig") }, .exclude_paths = &.{ b.path("tools/roc_ast/zig-pkg"), b.path("tools/roc_ast/.zig-cache"), b.path("tools/roc_types/zig-pkg"), b.path("tools/roc_types/.zig-cache") }, .check = true });
     const quick = b.step("quick", "The cheap checks, in seconds: the format, every test binary compiled, and shale-gate's and the signer's tests (no unit test runs: `test` runs them after these pass)");
     quick.dependOn(&fmt_check.step);
     for ([_]*std.Build.Step.Compile{ gate_test, signer_test, wasm, runner }) |c| c.step.dependOn(&fmt_check.step);
@@ -414,13 +415,17 @@ pub fn build(b: *std.Build) void {
     // would pass unrun); none found fails. Each runs from this tree with the
     // mounts pinned (SHALE_MOUNTS), `cookbook` this tree's own, read-only, so
     // a worktree or CI checkout tests its own plants, and `tools` `~/tools`
-    // (an empty folder when there is none), where roc-ast lives: the Roc name
-    // hunt fails without it, saying how to install it; CI installs the
-    // release asset there. `scratch`, a fresh folder deleted after, is where
-    // a self-test plants what it writes (branch_prune's repos). After `quick`.
+    // (an empty folder when there is none), where roc-ast and roc-types live:
+    // the Roc name hunt and the method rewrite fail without them, saying how
+    // to install them; CI installs the release assets there. `scratch`, a
+    // fresh folder deleted after, is where a self-test plants what it writes
+    // (branch_prune's repos). This `shale` is first on PATH, so a self-test
+    // that judges each plant in a child run (methods') runs this tree's
+    // too. After `quick`.
     {
         const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt(
             "bin=\"$(cd \"$(dirname \"$0\")\" && pwd)/$(basename \"$0\")\"; cd '{s}' || exit 1; " ++
+                "PATH=\"$(dirname \"$bin\"):$PATH\"; export PATH; " ++
                 "tmp=$(mktemp -d) || exit 1; trap 'rm -rf \"$tmp\"' EXIT; " ++
                 "tools=\"$HOME/tools\"; [ -d \"$tools\" ] || {{ tools=\"$tmp/tools\"; mkdir \"$tools\"; }}; " ++
                 "mkdir \"$tmp/scratch\" || exit 1; " ++
@@ -439,7 +444,7 @@ pub fn build(b: *std.Build) void {
         run.stdio = .inherit;
         run.step.dependOn(quick);
         test_step.dependOn(&run.step);
-        b.step("cookbook-test", "Every cookbook recipe's self-test (`self_test=1`), each recipe that reads arg(\"self_test\"), by this tree's `shale` (the Roc name hunt needs ~/tools/roc-ast/bin/roc-ast)").dependOn(&run.step);
+        b.step("cookbook-test", "Every cookbook recipe's self-test (`self_test=1`), each recipe that reads arg(\"self_test\"), by this tree's `shale` (the Roc name hunt needs ~/tools/roc-ast/bin/roc-ast, the method rewrite ~/tools/roc-types/bin/roc-types)").dependOn(&run.step);
     }
 
     // `zig build consumers` runs each application's own checks against

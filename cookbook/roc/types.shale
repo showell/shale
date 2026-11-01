@@ -1,0 +1,103 @@
+-- ROC'S OWN CHECKER'S TYPES: a library (`use("cookbook:roc/types.shale")`)
+-- for the Roc recipes that judge by type. `roc_types(root)` runs roc-types
+-- (Shale's tools/roc_types, installed under the `tools` mount by its
+-- install.shale) on the app `root` and gives every module the checker
+-- reached, its types read from roc-types' format. The format's home is
+-- tools/roc_types/main.zig's header; this reads number 1.
+
+const ROC_TYPES_EXE = "tools:roc-types/bin/roc-types"
+const ROC_TYPES_FORMAT = "1"
+
+-- A type's text as the checker wrote it: roc-types escapes `\`, tab,
+-- newline and carriage return.
+function roc_types_unescaped(s)
+  local out = {}
+  local i = 1
+  while i <= #s do
+    local ch = sub(s, i, i)
+    if ch == "\\" and i < #s then
+      local esc = sub(s, i + 1, i + 1)
+      if esc == "t" then
+        push(out, "\t")
+      elseif esc == "n" then
+        push(out, "\n")
+      elseif esc == "r" then
+        push(out, "\r")
+      elseif esc == "\\" then
+        push(out, "\\")
+      else
+        fail("`roc_types`: a type with a bad escape, `\\" .. esc .. "`: " .. s)
+      end
+      i = i + 2
+    else
+      if ch == "\\" then fail("`roc_types`: a type ending in a lone `\\`: " .. s) end
+      push(out, ch)
+      i = i + 1
+    end
+  end
+  return join(out, "")
+end
+
+-- `roc_types`'s reading (below) of roc-types' run `r` on `root`: `run`'s
+-- answer, or one made as it would be, `{out, ended, code}`.
+function roc_types_read(r, root)
+  local all = lines(r.out)
+  local head = ""
+  if #all > 0 then head = all[1] end
+  if not starts_with(head, "roc-types ") then fail("`roc_types`: no `roc-types " .. ROC_TYPES_FORMAT .. "` header (" .. root .. ", the first line `" .. head .. "`): an older roc-types, or not roc-types; Shale's `shale tools/roc_types/install.shale` installs the one this reads") end
+  local said = words(head)
+  if #said < 2 or said[2] ~= ROC_TYPES_FORMAT then fail("`roc_types`: roc-types' header is `" .. head .. "`, not format " .. ROC_TYPES_FORMAT .. "'s, the one this reads: Shale's `shale tools/roc_types/install.shale` installs the matching roc-types") end
+  if #said ~= 3 then fail("`roc_types`: a header that is not `roc-types <N> <pin>`: " .. head) end
+  if r.ended ~= "exit" or r.code ~= 0 then
+    local why = slice(all, 2, 61)
+    if #all > 61 then push(why, "(" .. (#all - 61) .. " lines more)") end
+    fail("`roc_types`: roc-types " .. root .. " " .. (r.ended == "exit" and ("exited " .. r.code) or r.ended) .. ", what it said:\n" .. join(why, "\n"))
+  end
+  local out = {pin = said[3], paths = {}, modules = {}, warnings = {}}
+  local path = ""
+  for k = 2, #all do
+    local l = all[k]
+    if starts_with(l, "== ") then
+      path = sub(l, 4)
+      if not starts_with(path, "/") then fail("`roc_types`: line " .. k .. ", a module path that is not absolute: " .. path) end
+      if has_key(out.modules, path) then fail("`roc_types`: line " .. k .. ", module " .. path .. " twice") end
+      out.modules[path] = {}
+      push(out.paths, path)
+    elseif path == "" then
+      push(out.warnings, l)
+    elseif starts_with(l, "t\t") then
+      local f = split(l, "\t")
+      if #f ~= 8 then fail("`roc_types`: line " .. k .. ", a record of " .. #f .. " fields, not 8: " .. l) end
+      if f[2] ~= "expr" and f[2] ~= "pat" then fail("`roc_types`: line " .. k .. ", a record of kind `" .. f[2] .. "`") end
+      local ty = f[8]
+      if find(ty, "\\") ~= nil then ty = roc_types_unescaped(ty) end
+      local span = {}
+      for x in slice(f, 4, 7) do
+        local n = parse_int(x)
+        if n == nil then fail("`roc_types`: line " .. k .. ", a span's number `" .. x .. "`") end
+        push(span, n)
+      end
+      push(out.modules[path], {kind = f[2], tag = f[3], line = span[1], col = span[2], end_line = span[3], end_col = span[4], type = ty})
+    else
+      fail("`roc_types`: line " .. k .. " is no record of roc-types' format: " .. l)
+    end
+  end
+  return out
+end
+
+-- **EVERY MODULE'S TYPES**: roc-types on the app `root` (one program; the
+-- path is passed as the OS spells it, and roc-types resolves it to its
+-- real one, so a module's path is its real path).
+-- `{pin, paths, modules, warnings}`: `paths` the modules' paths in
+-- roc-types' order, each absolute with no `.` or `..` part; `modules` by
+-- path, each a list of records `{kind, tag, line, col, end_line, end_col,
+-- type}` (`kind` "expr" or "pat") in the checker's pre-order, so of several
+-- nodes with one region the outermost comes first; `warnings` the lines
+-- roc-types said on stderr before the first module. A root the checker
+-- refuses (an error, a module unchecked, not an app) stops the run with
+-- what roc-types said: its types would be guesses. So does a missing
+-- roc-types, an unknown header, and any line the format does not hold.
+function roc_types(root)
+  if not exists(ROC_TYPES_EXE) then fail("`roc_types`: no " .. ROC_TYPES_EXE .. ": Shale's `shale tools/roc_types/install.shale` installs it") end
+  return roc_types_read(run({real(ROC_TYPES_EXE), real(root)}, {timeout_ms = 300000, whole = 64000000}), root)
+end

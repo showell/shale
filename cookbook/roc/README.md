@@ -109,9 +109,11 @@ it works on, `<shale>` being the shale checkout:
   and says `go on with from=N`, the glob's file to start the next at.
   The compiler is the tree's own pin, `tools:roc-<pin>/roc` with the pin
   read from the `roc-version` where the run starts; a run without one
-  stops, since method lookup has changed between nightlies. `self_test=1`
-  runs its plants (`plants/methods/`, copied to `scratch:`) with
-  `SELF_TEST_PIN`.
+  stops, since method lookup has changed between nightlies. `types=1`
+  asks the checker first (`types.shale`, below): a candidate whose first
+  argument is a concrete other type is left untried. `self_test=1` runs its
+  plants (`plants/methods/`, copied to `scratch:`) with `SELF_TEST_PIN`,
+  each in a child run of its own, so each has a run's 64 programs.
 - [pinned.shale](pinned.shale): **the Roc a tree pins**, a library, not a
   recipe: `use("cookbook:roc/pinned.shale")` gives `roc_bin(who,
   self_test)`, the pinned `roc`'s path (`tools:roc-<pin>/roc`, the pin from
@@ -123,6 +125,13 @@ it works on, `<shale>` being the shale checkout:
   bounds uses it and says `output_bytes=4000000` in its `-- budget:` line,
   so a run the output budget stops still says its totals, and a verify
   reading the last line still finds them.
+- [types.shale](types.shale): **Roc's own checker's types**, a library:
+  `use("cookbook:roc/types.shale")` gives `roc_types(root)`, every module
+  the app `root` reaches, by real path, each a list of its expressions'
+  and patterns' types with their regions, from roc-types
+  (`tools:roc-types/bin/roc-types`, Shale's `tools/roc_types`). A root the
+  checker refuses, a missing roc-types and an unknown header each stop the
+  run. `methods.shale` uses it.
 
 **Writing a recipe that edits Roc.** roc-ast's columns are bytes, and a
 span's end is exclusive. Spans overlap: `type-mod` and `s-type-decl` both
