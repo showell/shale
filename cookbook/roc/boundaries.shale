@@ -28,10 +28,12 @@
 --   fixed   a parameter (a position, or a field of a record argument) that
 --           every production call, two or more, fills with the same
 --           **literal**: a number, a string, a character, a tag
---           (`Begin`, `Bool.true`) or a module's constant (`Limits.max`). A
---           recursion's start (`at: 0`) belongs to an entry function that
---           takes only what varies ("A parameter every caller passes the
---           same value is no parameter"). **CONTEXT PASSED DOWN IS NO
+--           (`Begin`, `Bool.true`) or a module's constant (`Limits.max`)
+--           ("A parameter every caller passes the same value is no
+--           parameter"). **A RECURSION'S OWN CALLS COUNT**: a start every
+--           caller passes (`at: 0`) that its own call varies (`at + 1`)
+--           is a parameter, though its own calls are no caller for
+--           `single`. **CONTEXT PASSED DOWN IS NO
 --           CONSTANT**: the same variable (`me`, `accounts`, `at`), field
 --           (`req.me`) or call (`Host.list_srcs!({})`) at every call is the
 --           caller's value handed on, never a finding.
@@ -311,7 +313,7 @@ for g = 1, #NODE do
         local name = raw(kids[1])
         local key = owner .. "|" .. name
         local size = wrapper_size(kids[2])
-        defs[key] = {key = key, path = path, owner = owner, name = name, line = n.line, last = n.end_line, wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, n.line), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, values = 0, ambiguous = false, recursive = false, entry = false, unit = takes_unit(g, name)}
+        defs[key] = {key = key, path = path, owner = owner, name = name, line = n.line, last = n.end_line, wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, n.line), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, self_calls = {}, values = 0, ambiguous = false, recursive = false, entry = false, unit = takes_unit(g, name)}
         if sub(owner, 1, 1) ~= "@" then
           if not has_key(members, name) then members[name] = {} end
           push(members[name], key)
@@ -329,6 +331,7 @@ end
 function note(def, ctx, call)
   if ctx.path == def.path and ctx.line >= def.line and ctx.line <= def.last then
     def.recursive = true
+    if call ~= nil then push(def.self_calls, call) end
     return nil
   end
   if is_test_file(ctx.path) then
@@ -463,7 +466,10 @@ for key in sort(keys(defs)) do
   if judged and #def.calls >= 2 and def.values == 0 then
     local seen = {}
     local first = true
-    for c in def.calls do
+    local every = {}
+    for c in def.calls do push(every, c) end
+    for c in def.self_calls do push(every, c) end
+    for c in every do
       local a = arg_texts(c)
       if first then
         for k in keys(a) do seen[k] = a[k] end
@@ -477,8 +483,9 @@ for key in sort(keys(defs)) do
         end
       end
     end
+    local own = #def.self_calls > 0 and (" and " .. #def.self_calls .. " of its own") or ""
     for k in sort(keys(seen)) do
-      if seen[k] ~= DIFFERS and is_literal(seen[k]) then say(def.path, def.line, "fixed", "`" .. shown_name(def) .. "`'s argument " .. k .. " is `" .. seen[k] .. "` in all " .. #def.calls .. " production calls in the " .. #fs .. " files read: no parameter, or an entry function that takes only what varies") end
+      if seen[k] ~= DIFFERS and is_literal(seen[k]) then say(def.path, def.line, "fixed", "`" .. shown_name(def) .. "`'s argument " .. k .. " is `" .. seen[k] .. "` in all " .. #def.calls .. " production calls" .. own .. " in the " .. #fs .. " files read: no parameter, or an entry function that takes only what varies") end
     end
   end
   if def.unit and not contains(def.name, "!") and not is_test_file(def.path) then

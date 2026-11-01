@@ -1,5 +1,5 @@
-# A plant for boundaries' `fixed`: a recursion's start, `at: 0`, passed by
-# every caller.
+# Quiet for boundaries' `fixed`: both callers start the recursion at
+# `at: 0`, but its own call passes `at + 1`, so `at` varies.
 count_from : List(U8), { at : U64 } -> U64
 count_from = |s, { at }| if at >= List.len(s) at else count_from(s, { at: at + 1 })
 
