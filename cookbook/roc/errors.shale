@@ -41,7 +41,7 @@
 -- `self_test=1` runs it over `cookbook/roc/plants/errors/`, each plant
 -- named for the check it holds: every check must fire on its own plants and
 -- on no other, a `quiet_*.roc` plant on none.
--- budget: steps=400000000 arena_bytes=1500000000
+-- budget: steps=400000000 arena_bytes=3000000000
 
 const SELF = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/errors/"
