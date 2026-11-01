@@ -41,7 +41,11 @@
 --           its lambda's one pattern, is `{}`) whose name has no `!`: it
 --           gives the same value every call, and a constant says so
 --           (`board = ...`, not `board = |{}| ...`). An effect needs the
---           call, and its `!` keeps it quiet.
+--           call, and its `!` keeps it quiet. **A CONSTANT CANNOT BE
+--           GENERIC**: an annotation whose return type holds a type
+--           variable (`{} -> Viewer(id)`) keeps it quiet, as Roc refuses
+--           that constant ("value is not polymorphic... make it a function
+--           that takes {}"); an unannotated one shows no type, and fires.
 --
 -- **WHAT A COUNT COUNTS**: `single`'s one caller and `fixed`'s calls are
 -- those in the files the glob reads, and a finding says how many: a sweep
@@ -271,30 +275,46 @@ function wrapper_size(g)
   return {wrapper = small, size = "one expression of " .. #all .. " nodes"}
 end
 
--- **WHETHER THE DECLARATION AT `g` TAKES `{}` ALONE**: its lambda's one
--- pattern is an empty record, or the annotation just above it, by its name,
--- has an empty record as its one argument.
-function takes_unit(g, name)
-  local lam = children(g)[2]
-  for k in children(lam) do
-    if kind(k) == "args" then
-      local ps = children(k)
-      if #ps == 1 and kind(ps[1]) == "p-record" and #children(ps[1]) == 0 then return true end
-    end
-  end
+-- The function type of the annotation just above the declaration at `g`,
+-- by its name, or 0 for none.
+function anno_fn(g, name)
   local p = parent(g)
-  if p == 0 then return false end
+  if p == 0 then return 0 end
   local before = 0
   local prev = 0
   for k in children(p) do
     if k == g then before = prev end
     prev = k
   end
-  if before == 0 or kind(before) ~= "s-type-anno" or get(NODE[before], "name", "") ~= name then return false end
+  if before == 0 or kind(before) ~= "s-type-anno" or get(NODE[before], "name", "") ~= name then return 0 end
   local ty = children(before)
-  if #ty == 0 or kind(ty[1]) ~= "ty-fn" then return false end
-  local parts = children(ty[1])
-  return #parts == 2 and kind(parts[1]) == "ty-record" and #children(parts[1]) == 0
+  if #ty == 0 or kind(ty[1]) ~= "ty-fn" then return 0 end
+  return ty[1]
+end
+
+-- **WHETHER THE DECLARATION AT `g` TAKES `{}` ALONE AND COULD BE A
+-- CONSTANT**: its lambda's one pattern is an empty record, or its
+-- annotation has an empty record as its one argument; and no type variable
+-- (`ty-var`) is in the annotation's return type, which a constant cannot
+-- hold. Unannotated, its type is not seen, so it counts.
+function takes_unit(g, name)
+  local unit = false
+  local lam = children(g)[2]
+  for k in children(lam) do
+    if kind(k) == "args" then
+      local ps = children(k)
+      if #ps == 1 and kind(ps[1]) == "p-record" and #children(ps[1]) == 0 then unit = true end
+    end
+  end
+  local fn = anno_fn(g, name)
+  if fn == 0 then return unit end
+  local parts = children(fn)
+  if #parts == 2 and kind(parts[1]) == "ty-record" and #children(parts[1]) == 0 then unit = true end
+  if not unit then return false end
+  for k in subtree(parts[#parts]) do
+    if kind(k) == "ty-var" then return false end
+  end
+  return true
 end
 
 -- ── pass 1: the functions ────────────────────────────────────────────────
