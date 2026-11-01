@@ -114,7 +114,8 @@ end
 -- **THE TYPES OF THE FILES A HUNT READS**: `roc_types` on the app `root`,
 -- each pattern's and expression's type by `<real path>|line:col:end_line:
 -- end_col` (`pats`, `exprs`; of several at one region the outermost, the
--- first roc-types gives), and each path's real one (`real`). `who` names
+-- first roc-types gives), and each reached path's real one (`real`: a file
+-- it holds is typed). `who` names
 -- the hunt in a stop. Every file of `paths` the root does not reach stops
 -- the run, named, unless `exempt` holds it (a self-test's untyped plants):
 -- a file judged without types beside files judged with them would pass
@@ -138,8 +139,12 @@ function roc_types_hunted(who, root, roc, paths, exempt)
   local reals = {}
   local missed = {}
   for p in paths do
-    reals[p] = real(p)
-    if not has_key(exempt, p) and not has_key(reached, reals[p]) then push(missed, p) end
+    local r = real(p)
+    if has_key(reached, r) then
+      reals[p] = r
+    elseif not has_key(exempt, p) then
+      push(missed, p)
+    end
   end
   if #missed > 0 then fail(who .. ": types=1: " .. #missed .. " files of the glob are none of the modules roc-types checked from " .. root .. ", so they would be judged without types: " .. join(take(missed, 20), ", ") .. (#missed > 20 and ", ..." or "") .. ". Narrow the glob to what the root imports, or give another root") end
   for l in got.warnings do print(who .. ": roc-types " .. root .. ": " .. l) end
