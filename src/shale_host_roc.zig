@@ -8,12 +8,18 @@
 //! node, its tabs its depth, `(kind @l1.c1-l2.c2 (attr "value") ...` with the
 //! span and attributes optional and the node's closing `)`s at the end of its
 //! last line. A node may hold a child on its own line (`(mapper (e-tag @...
-//! (raw "X")))`): that child is a node too, one deeper. A positional string
-//! (`(unary "!"`, `(text "f")` on its own line) is the attribute `value`;
-//! every line's first `(` is a node. A string is printed raw, unescaped, so
-//! it ends at the first `"` followed by `)`, a space and `(`, or the line's end.
-//! A line that is none of these ends the trees: roc-ast's refusal, given back
-//! as `said`.
+//! (raw "X")))`): that child is a node too, one deeper. A child may also stay
+//! open on its parent's line (`(backing (e-record @55.8-58.4`): both stay open,
+//! and the lines below, a tab past the inner one, are the inner one's. A
+//! positional string (`(unary "!"`, `(text "f")` on its own line) is the
+//! attribute `value`, and so is a string or bare atom alone on an indented
+//! line (a tuple access's `".0"))))`, an open tag union's `..))`), its
+//! parent's: Roc's printer (base/SExprTree.zig) puts a node's head items on its
+//! line and each other child, of any kind, on a line of its own. Every other
+//! line's first `(` is a node.
+//! A string is printed raw, unescaped, so it ends at the first `"` followed by
+//! `)`, a space and `(`, or the line's end. An unindented line that is none of
+//! these ends the trees: roc-ast's refusal, given back as `said`.
 //!
 //! Reading is pure (`parse`); `call` makes Shale's values and charges a step
 //! per node.
@@ -117,6 +123,8 @@ const Reader = struct {
     file: *File,
     n: usize,
     bad: ?Bad = null,
+    /// The nodes this line leaves open, innermost first.
+    open: std.ArrayList(usize) = .empty,
 
     fn fail(r: *Reader, why: []const u8) error{Bad} {
         r.bad = .{ .line = r.n, .why = why };
@@ -142,7 +150,10 @@ const Reader = struct {
         if (parent > 0) try r.file.nodes.items[parent - 1].kids.append(r.a, me);
         while (true) {
             while (l.at(' ')) l.i += 1;
-            if (l.i >= l.s.len) return .{ .index = me, .closed = false };
+            if (l.i >= l.s.len) {
+                try r.open.append(r.a, me);
+                return .{ .index = me, .closed = false };
+            }
             switch (l.s[l.i]) {
                 ')' => {
                     l.i += 1;
@@ -176,7 +187,11 @@ const Reader = struct {
                     try r.addAttr(me, name, v);
                 } else {
                     const kid = try r.node(l, depth + 1, me);
-                    if (!kid.closed) return r.fail("a node left open on another's line");
+                    // Open, the kid ended the line: this node stays open too.
+                    if (!kid.closed) {
+                        try r.open.append(r.a, me);
+                        return .{ .index = me, .closed = false };
+                    }
                 },
                 else => return r.fail("an unexpected byte in a node"),
             }
@@ -202,7 +217,9 @@ pub fn parse(a: std.mem.Allocator, text: []const u8) error{OutOfMemory}!Outcome 
         }
         var depth: usize = 0;
         while (depth < raw.len and raw[depth] == '\t') depth += 1;
-        if (depth >= raw.len or raw[depth] != '(') {
+        // A child alone on its line that is no node: a string or a bare atom.
+        const value_line = depth > 0 and depth < raw.len and raw[depth] != '(' and raw[depth] != ' ' and raw[depth] != ')';
+        if (!value_line and (depth >= raw.len or raw[depth] != '(')) {
             if (depth > 0) return .{ .bad = .{ .line = n, .why = "an indented line that is no node" } };
             return .{ .ok = .{ .files = files.items, .said = raw } };
         }
@@ -212,13 +229,34 @@ pub fn parse(a: std.mem.Allocator, text: []const u8) error{OutOfMemory}!Outcome 
         const parent: usize = if (stack.items.len > 0) stack.items[stack.items.len - 1] else 0;
         var l: Line = .{ .s = raw, .i = depth };
         var r: Reader = .{ .a = a, .file = file, .n = n };
+        if (value_line) {
+            // A positional value on its own line: its parent's `value`.
+            if (parent == 0) return .{ .bad = .{ .line = n, .why = "a value with no node to hold it" } };
+            const v = if (raw[depth] == '"') l.string() orelse return .{ .bad = .{ .line = n, .why = "a string that does not end" } } else l.word();
+            if (std.mem.trimEnd(u8, raw[l.i..], ")").len != 0) return .{ .bad = .{ .line = n, .why = "more after a value's line" } };
+            r.addAttr(parent, "value", v) catch |e| switch (e) {
+                error.Bad => return .{ .bad = r.bad.? },
+                error.OutOfMemory => return error.OutOfMemory,
+            };
+            continue;
+        }
         const got = r.node(&l, depth, parent) catch |e| switch (e) {
             error.Bad => return .{ .bad = r.bad.? },
             error.OutOfMemory => return error.OutOfMemory,
         };
         // What follows a closed head is its ancestors' `)`s, nothing else.
         if (got.closed and std.mem.trimEnd(u8, raw[l.i..], ")").len != 0) return .{ .bad = .{ .line = n, .why = "more after a node closed" } };
-        try stack.append(a, got.index);
+        if (got.closed) {
+            try stack.append(a, got.index);
+        } else {
+            // Every node the line leaves open, outermost first: the lines
+            // below belong to the deepest one their tabs allow.
+            var k = r.open.items.len;
+            while (k > 0) {
+                k -= 1;
+                try stack.append(a, r.open.items[k]);
+            }
+        }
     }
     return .{ .ok = .{ .files = files.items, .said = null } };
 }
@@ -327,11 +365,92 @@ test "parse: a raw string holding quotes and `)`s ends only where the line's par
     try std.testing.expectEqualStrings("f(\"a\"), g(\"b\")", got.files[0].nodes.items[0].attrs.items[0].value);
 }
 
-test "parse: a node left open on another's line, a node before a path" {
+test "parse: a node left open on its parent's line keeps both open, the lines below the inner one's (roc-apps Paddle.roc)" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const open = try parse(arena.allocator(), "== /x\n(file (args\n");
-    try std.testing.expectEqualStrings("a node left open on another's line", open.bad.why);
+    const text =
+        "== /x/Paddle.roc\n" ++
+        "(e-nominal-record @55.3-58.4\n" ++
+        "\t(mapper (e-tag @55.3-55.7 (raw \"Ball\")))\n" ++
+        "\t(backing (e-record @55.8-58.4\n" ++
+        "\t\t\t(field (field \"pos\")\n" ++
+        "\t\t\t\t(e-ident @56.9-56.12 (raw \"p\")))\n" ++
+        "\t\t\t(field (field \"v\")\n" ++
+        "\t\t\t\t(e-ident @57.9-57.10 (raw \"v\")))))\n" ++
+        "\t(after @59.1-59.2))\n";
+    const ns = (try parse(arena.allocator(), text)).ok.files[0].nodes.items;
+    // 1 nominal, 2 mapper, 3 e-tag, 4 backing, 5 e-record, 6 field, 7 e-ident, 8 field, 9 e-ident, 10 after
+    try std.testing.expectEqual(@as(usize, 10), ns.len);
+    try std.testing.expectEqualStrings("e-record", ns[4].kind);
+    try std.testing.expectEqual(@as(usize, 4), ns[4].parent);
+    try std.testing.expectEqual(@as(usize, 2), ns[4].depth);
+    try std.testing.expectEqual(@as(usize, 55), ns[4].line);
+    // The record's fields are the record's, not the backing's.
+    try std.testing.expectEqual(@as(usize, 5), ns[5].parent);
+    try std.testing.expectEqual(@as(usize, 5), ns[7].parent);
+    try std.testing.expectEqual(@as(usize, 2), ns[4].kids.items.len);
+    try std.testing.expectEqual(@as(usize, 1), ns[3].kids.items.len);
+    // A line back at the backing's depth is the nominal's again.
+    try std.testing.expectEqualStrings("after", ns[9].kind);
+    try std.testing.expectEqual(@as(usize, 1), ns[9].parent);
+    try std.testing.expectEqual(@as(usize, 3), ns[0].kids.items.len);
+}
+
+test "parse: a string alone on an indented line is its parent's value (roc-markdown MdHtml.roc's tuple access)" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const text =
+        "== /x/MdHtml.roc\n" ++
+        "(e-record @207.80-207.103\n" ++
+        "\t(field (field \"prefix\")\n" ++
+        "\t\t(e-tuple-access @207.98-207.101\n" ++
+        "\t\t\t(e-ident @207.98-207.99 (raw \"e\"))\n" ++
+        "\t\t\t\".0\")))\n" ++
+        "\t(next @208.1-208.2))\n";
+    const ns = (try parse(arena.allocator(), text)).ok.files[0].nodes.items;
+    try std.testing.expectEqual(@as(usize, 5), ns.len);
+    try std.testing.expectEqualStrings("e-tuple-access", ns[2].kind);
+    try std.testing.expectEqualStrings("value", ns[2].attrs.items[0].name);
+    try std.testing.expectEqualStrings(".0", ns[2].attrs.items[0].value);
+    // Not the ident's, the line above it at the string's own depth.
+    try std.testing.expectEqual(@as(usize, 1), ns[3].attrs.items.len);
+    try std.testing.expectEqual(@as(usize, 1), ns[4].parent);
+}
+
+test "parse: a bare atom alone on a line is its parent's value (roc-apps CanvasAppRunner.roc's open tag union)" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const text =
+        "== /x/CanvasAppRunner.roc\n" ++
+        "(ty-tag-union @192.146-192.161\n" ++
+        "\t(tags\n" ++
+        "\t\t(ty-apply @192.147-192.156\n" ++
+        "\t\t\t(ty @192.147-192.151 (name \"Exit\"))))\n" ++
+        "\t..)\n" ++
+        "== /x/b.roc\n" ++
+        "(s-decl @193.2-211.3)\n";
+    const got = (try parse(arena.allocator(), text)).ok;
+    const ns = got.files[0].nodes.items;
+    try std.testing.expectEqual(@as(usize, 4), ns.len);
+    try std.testing.expectEqualStrings("value", ns[0].attrs.items[0].name);
+    try std.testing.expectEqualStrings("..", ns[0].attrs.items[0].value);
+    try std.testing.expectEqual(@as(usize, 0), ns[1].attrs.items.len);
+    try std.testing.expectEqual(@as(usize, 2), got.files.len);
+}
+
+test "parse: still refused: a node before a path, a value with no node, more after a value, an indented line that is neither" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
     const early = try parse(arena.allocator(), "(file)\n");
     try std.testing.expectEqualStrings("a node before any `== path`", early.bad.why);
+    const orphan = try parse(arena.allocator(), "== /x\n\t\".0\"\n");
+    try std.testing.expectEqualStrings("a value with no node to hold it", orphan.bad.why);
+    const trailing = try parse(arena.allocator(), "== /x\n(a @1.1-1.2\n\t\".0\" (x)\n");
+    try std.testing.expectEqualStrings("more after a value's line", trailing.bad.why);
+    const wordy = try parse(arena.allocator(), "== /x\n(a @1.1-1.2\n\tnot a node\n");
+    try std.testing.expectEqualStrings("more after a value's line", wordy.bad.why);
+    const neither = try parse(arena.allocator(), "== /x\n(a @1.1-1.2\n\t x\n");
+    try std.testing.expectEqualStrings("an indented line that is no node", neither.bad.why);
+    const twice = try parse(arena.allocator(), "== /x\n(a \"v\"\n\t\"w\")\n");
+    try std.testing.expectEqualStrings("an attribute twice in one node", twice.bad.why);
 }
