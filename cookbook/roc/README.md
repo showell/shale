@@ -12,7 +12,7 @@ it works on, `<shale>` being the shale checkout:
   the Zig hunt's five checks over Roc's annotations and definitions, the
   top level's and module types' members (`held_raw!` named as a state).
   It reads Roc's own parser's tree (roc-ast, `tools:roc-ast/bin/roc-ast`,
-  built by roc-webbox's `tools/roc_ast/install.shale`), so a broken
+  built by Shale's `tools/roc_ast/install.shale`), so a broken
   annotation or a `where` clause reads as Roc reads it. A name is judged
   once, from its annotation when it has one (a hosted effect has nothing
   else); a `!` that names a callback's effect (`map2!`) and a name the

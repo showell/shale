@@ -400,7 +400,7 @@ function zig_imports(path)
 end
 
 -- **ROC FILES' TREES, FROM ROC'S OWN PARSER**: each path run through
--- roc-ast (`tools:roc-ast/bin/roc-ast`, roc-webbox's tools/roc_ast) and its
+-- roc-ast (`tools:roc-ast/bin/roc-ast`, Shale's tools/roc_ast) and its
 -- dump read in the host: one `{path, nodes, err}` a path, in order. A node
 -- is `{kind, depth, parent, kids, line, col, end_line, end_col}` and the
 -- attributes the dump gives it (`raw`, `name`, `method`, `op`, `type`,
@@ -411,7 +411,7 @@ end
 -- read.
 function roc_tree(paths)
   local exe = "tools:roc-ast/bin/roc-ast"
-  if not exists(exe) then fail("`roc_tree`: no " .. exe .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it") end
+  if not exists(exe) then fail("`roc_tree`: no " .. exe .. ": Shale's `shale tools/roc_ast/install.shale` builds it") end
   local out = {}
   local i = 1
   while i <= #paths do

@@ -40,6 +40,25 @@ test "hunt guard: a skip anywhere, or a hunt outside the hunt files, is found wi
     try testing.expectEqual(@as(?Finding, null), finding("src/script/fuzz_test.zig", hunt_test ++ " fuzz: x\" {}\n", hunts));
 }
 
+/// A build's output, not a source: tools/roc_ast's own build fetches Roc and
+/// its packages beside it (zig-pkg) and caches there, as .gitignore says.
+fn buildOutput(path: []const u8) bool {
+    var it = std.mem.splitScalar(u8, path, '/');
+    while (it.next()) |part| {
+        for ([_][]const u8{ ".zig-cache", "zig-pkg", "zig-out" }) |o| if (std.mem.eql(u8, part, o)) return true;
+    }
+    return false;
+}
+
+test "hunt guard: a build's output is skipped, every source read" {
+    try testing.expect(buildOutput("roc_ast/zig-pkg/x/build.zig.zon"));
+    try testing.expect(buildOutput("roc_ast/.zig-cache/o/abc/test"));
+    try testing.expect(buildOutput("zig-out/bin/roc-ast"));
+    try testing.expect(!buildOutput("roc_ast/main.zig"));
+    try testing.expect(!buildOutput("script/zig-pkgs.zig"));
+    try testing.expect(!buildOutput("shale_gate.zig"));
+}
+
 test "hunt guard: no file of src/ or tools/ carries a skip, and every hunt is in hunt_files" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -54,7 +73,7 @@ test "hunt guard: no file of src/ or tools/ carries a skip, and every hunt is in
         defer dir.close(io);
         var walker = try dir.walk(a);
         while (try walker.next(io)) |e| {
-            if (e.kind != .file) continue;
+            if (e.kind != .file or buildOutput(e.path)) continue;
             const path = try std.fmt.allocPrint(a, "{s}/{s}", .{ root, e.path });
             const text = try dir.readFileAlloc(io, e.path, a, .limited(8 << 20));
             for (hunt_files) |h| {

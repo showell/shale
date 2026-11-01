@@ -135,7 +135,7 @@ end
 
 -- ── the tree ─────────────────────────────────────────────────────────────
 
-if not exists(ROC_AST) then fail("boundaries: no " .. ROC_AST .. ": roc-webbox's `shale tools/roc_ast/install.shale` builds it (see name_hunt.shale)") end
+if not exists(ROC_AST) then fail("boundaries: no " .. ROC_AST .. ": Shale's `shale tools/roc_ast/install.shale` builds it (see name_hunt.shale)") end
 local fs = glob(GLOB)
 local reals = {}
 local shown = {}

@@ -266,7 +266,7 @@ has none of it):
   container's own declaration of the name is another thing, and
   `[]const X` is a use of `X`.
   `roc_tree(paths)` is Roc's own parser's tree of each file, in order:
-  `{path, nodes, err}`, from roc-ast (roc-webbox's `tools/roc_ast`,
+  `{path, nodes, err}`, from roc-ast (Shale's `tools/roc_ast`,
   installed under the `tools` mount as `roc-ast/bin/roc-ast`), its dump
   read in the host. A node is `{kind, depth, parent, kids, line, col,
   end_line, end_col}` and the attributes the dump gives it, by their names

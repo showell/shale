@@ -18,7 +18,7 @@ fn init(t: *T) !void {
     t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "tools = {s}/tools ro tools\n", .{home}), home, &why);
     const exe = try std.fmt.allocPrint(a, "{s}/tools/roc-ast/bin/roc-ast", .{home});
     std.Io.Dir.cwd().access(t.threaded.io(), exe, .{}) catch {
-        std.debug.print("roc_tree's tests need {s}: roc-webbox's `shale tools/roc_ast/install.shale` builds it\n", .{exe});
+        std.debug.print("roc_tree's tests need {s}: Shale's `shale tools/roc_ast/install.shale` builds it\n", .{exe});
         return error.NoRocAst;
     };
 }

@@ -1,4 +1,4 @@
-//! `roc_tree`'s reading: roc-ast's dump (roc-webbox's tools/roc_ast, Roc's
+//! `roc_tree`'s reading: roc-ast's dump (Shale's tools/roc_ast, Roc's
 //! own parser printing `AST.toSExprStr`) turned into nodes, so a Roc recipe
 //! walks a list rather than re-parsing tabs, spans and `(raw "...")` itself.
 //! The prelude's `roc_tree(paths)` runs roc-ast and calls `host("roc_tree",

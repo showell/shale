@@ -236,7 +236,9 @@ pub fn build(b: *std.Build) void {
     // unit run and the browser's smoke test on `quick`, so a format slip or
     // a compile error is said before any test runs. The format is checked
     // with the tests: by hand, build.zig went unformatted.
-    const fmt_check = b.addFmt(.{ .paths = &.{ b.path("src"), b.path("tools"), b.path("build.zig") }, .check = true });
+    // roc-ast's own build (tools/roc_ast) fetches Roc and its packages beside
+    // it; they are Roc's to format, not ours.
+    const fmt_check = b.addFmt(.{ .paths = &.{ b.path("src"), b.path("tools"), b.path("build.zig") }, .exclude_paths = &.{ b.path("tools/roc_ast/zig-pkg"), b.path("tools/roc_ast/.zig-cache") }, .check = true });
     const quick = b.step("quick", "The cheap checks, in seconds: the format, every test binary compiled, and shale-gate's and the signer's tests (no unit test runs: `test` runs them after these pass)");
     quick.dependOn(&fmt_check.step);
     for ([_]*std.Build.Step.Compile{ gate_test, signer_test, wasm, runner }) |c| c.step.dependOn(&fmt_check.step);
