@@ -108,3 +108,93 @@ function roc_types(root, roc)
   if not exists(ROC_TYPES_EXE) then fail("`roc_types`: no " .. ROC_TYPES_EXE .. ": Shale's `shale tools/roc_types/install.shale` installs it") end
   return roc_types_read(run({real(ROC_TYPES_EXE), real(root)}, {timeout_ms = 300000, whole = 64000000}), root, roc)
 end
+
+-- ── for the hunts: `types=1` on name_hunt, errors and boundaries ─────────
+
+-- **THE TYPES OF THE FILES A HUNT READS**: `roc_types` on the app `root`,
+-- each pattern's and expression's type by `<real path>|line:col:end_line:
+-- end_col` (`pats`, `exprs`; of several at one region the outermost, the
+-- first roc-types gives), and each path's real one (`real`). `who` names
+-- the hunt in a stop. Every file of `paths` the root does not reach stops
+-- the run, named, unless `exempt` holds it (a self-test's untyped plants):
+-- a file judged without types beside files judged with them would pass
+-- the typed rule silently. No `root` stops it too: roc-types reads an app.
+function roc_types_hunted(who, root, roc, paths, exempt)
+  if root == "" then fail(who .. ": types=1 needs root=, an app importing every file of the glob: roc-types reads an app, and a type module only through one") end
+  local got = roc_types(root, roc)
+  local pats = {}
+  local exprs = {}
+  for path in got.paths do
+    for rec in got.modules[path] do
+      local key = path .. "|" .. rec.line .. ":" .. rec.col .. ":" .. rec.end_line .. ":" .. rec.end_col
+      if rec.kind == "pat" then
+        if not has_key(pats, key) then pats[key] = rec.type end
+      elseif not has_key(exprs, key) then
+        exprs[key] = rec.type
+      end
+    end
+  end
+  local reached = set_of(got.paths)
+  local reals = {}
+  local missed = {}
+  for p in paths do
+    reals[p] = real(p)
+    if not has_key(exempt, p) and not has_key(reached, reals[p]) then push(missed, p) end
+  end
+  if #missed > 0 then fail(who .. ": types=1: " .. #missed .. " files of the glob are none of the modules roc-types checked from " .. root .. ", so they would be judged without types: " .. join(take(missed, 20), ", ") .. (#missed > 20 and ", ..." or "") .. ". Narrow the glob to what the root imports, or give another root") end
+  for l in got.warnings do print(who .. ": roc-types " .. root .. ": " .. l) end
+  return {pats = pats, exprs = exprs, real = reals}
+end
+
+-- The type at a roc_tree node `n` of the file `path` (`kind` "pat" or
+-- "expr"), or nil where the checker gave none.
+function roc_type_at(types, kind, path, n)
+  local key = types.real[path] .. "|" .. n.line .. ":" .. n.col .. ":" .. n.end_line .. ":" .. n.end_col
+  return get(kind == "pat" and types.pats or types.exprs, key)
+end
+
+-- A type's shape: `{fn, effect, result, args}`. A function's (an arrow
+-- outside every bracket, its `where` clause dropped) `fn` is true, `effect`
+-- its arrow is `=>`, `result` what follows the arrow; anything else is its
+-- own `result`.
+function roc_type_shape(ty)
+  local depth = 0
+  local body = ty
+  for i = 1, #ty do
+    local ch = sub(ty, i, i)
+    if ch == "(" or ch == "[" or ch == "{" then depth = depth + 1 end
+    if ch == ")" or ch == "]" or ch == "}" then depth = depth - 1 end
+    if depth == 0 and sub(ty, i, i + 6) == " where " then
+      body = sub(ty, 1, i - 1)
+      break
+    end
+  end
+  depth = 0
+  for i = 1, #body - 1 do
+    local ch = sub(body, i, i)
+    if ch == "(" or ch == "[" or ch == "{" then depth = depth + 1 end
+    if ch == ")" or ch == "]" or ch == "}" then depth = depth - 1 end
+    local two = sub(body, i, i + 1)
+    if depth == 0 and (two == "->" or two == "=>") then
+      return {fn = true, effect = two == "=>", result = trim(sub(body, i + 2)), args = trim(sub(body, 1, i - 1))}
+    end
+  end
+  return {fn = false, effect = false, result = trim(body), args = ""}
+end
+
+-- A typed plant's file name (`QuestionInferred.roc`, a type module's,
+-- which Roc names in CamelCase) as a plant's (`question_inferred.roc`),
+-- so a self-test judges it by the check its name starts with.
+function roc_plant_name(base)
+  local out = ""
+  for i = 1, #base do
+    local ch = sub(base, i, i)
+    if re_find(ch, "^[A-Z]$") ~= nil then
+      if i > 1 then out = out .. "_" end
+      out = out .. lower(ch)
+    else
+      out = out .. ch
+    end
+  end
+  return out
+end

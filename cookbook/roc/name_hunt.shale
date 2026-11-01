@@ -25,7 +25,11 @@
 --                 List(Bool)`, a test table's column): only a function
 --                 asks. An effect that gives a `Bool` (`is_playing! : Sound
 --                 => Bool`) asks the host about live state, which has to
---                 be effectful.
+--                 be effectful. **UNDER THE TYPES** (`types=1 root=<an
+--                 app>`, below) a definition's type is Roc's checker's:
+--                 an unannotated `is_ready = |n| n + 1` is judged, and an
+--                 annotation naming an alias of `Bool` (`Answer : Bool`)
+--                 gives a `Bool`.
 --   vague         a name of nothing but vague words: `handle_data`,
 --                 `process!`, `do_it`
 --   name_type     a `*_count` value that is no integer, a `*_path` one
@@ -153,12 +157,24 @@
 -- `refused` before it is taken for a noun, and each `verb` is a word that
 -- passes because verbs.txt lists it.
 --
+-- **THE CHECKER'S TYPES** (`types=1`, off by default; cookbook/roc/
+-- types.shale) need `root=`, an app importing every file of the glob, and
+-- the tree's `roc-version`; a file the root does not reach, a root the
+-- checker refuses and a roc-types of another pin each stop the run, never
+-- a run half typed. Off by default: roc-chat's verify runs this with no
+-- root, and holds `question` at zero.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob=app/*.roc root=app/main.roc types=1
+--
 -- `self_test=1` runs it over `cookbook/roc/plants/name_hunt/`, each plant
 -- named for the check it holds (`question.roc`, `question_where.roc`):
 -- every check must have one, fire on its own plants and on no other, a
 -- `quiet_*.roc` plant (a false positive once) on none, a plant named for
 -- no check is a failure, and the census
--- must give a known word of the plants each verdict but `asks`.
+-- must give a known word of the plants each verdict but `asks`. The typed
+-- plants (`typed/`, type modules named in CamelCase, `QuestionInferred`
+-- read as `question_inferred`) are judged with the types, their root
+-- `typed/QuietApp.roc`; the rest without. A missing roc-types fails it.
 --
 -- Each file's source is read too, for the arrows roc-ast writes alike (a
 -- callback's `=>`), which outgrows the default 16 MiB arena on the chat.
@@ -167,7 +183,19 @@
 const SELF = arg("self_test", "") == "1"
 use("cookbook:roc/summed.shale")
 use("cookbook:roc/parsed.shale")
-const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
+use("cookbook:roc/pinned.shale")
+use("cookbook:roc/types.shale")
+const PLANTS = "cookbook:roc/plants/name_hunt/"
+const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
+const TYPES_SAID = arg("types", "0")
+if TYPES_SAID ~= "0" and TYPES_SAID ~= "1" then fail("name_hunt: types=" .. TYPES_SAID .. ": 0 (the default) or 1") end
+-- A self-test judges its typed plants (`plants/name_hunt/typed/`, under
+-- their app) with the types, and the rest without.
+const TYPED = SELF or TYPES_SAID == "1"
+const ROOT = SELF and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
+-- The checker's types, `roc_types_hunted`'s, filled once the files are
+-- known (below); empty without `types=1`.
+const TYPES = {real = {}, pats = {}, exprs = {}}
 const WORDS = arg("words", "") == "1"
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition"}
 -- The last words `worker_name` judges: only a helper's, always; a word of
@@ -241,6 +269,9 @@ const INTS = {U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = t
 -- `Edit : [Opened, Closed]`): its `union_shape`, for `command_tense` and
 -- `mixed_tense`.
 const ALIASES = {}
+-- The aliases of `Bool` in the files hunted, by the names the checker
+-- writes them (`Answer`, `Owner.Answer`), for `question` under the types.
+const BOOL_ALIASES = {}
 
 -- Every type's and record field's name `container` judges, `{path, line,
 -- name, words, field, doc}`, `doc` the comment lines over its
@@ -540,6 +571,16 @@ function definitions(parsed_files)
           local decl = #kids > 0 and attr(tree, kids[1], "name") or ""
           if #kids > 1 and decl ~= "" and tree[kids[2]].kind == "ty-tag-union" then ALIASES[decl] = union_shape(tree, kids[2]) end
           if decl ~= "" then push(HOLDERS, {path = path, line = line, name = decl, words = words_of(decl), field = false, doc = doc_over(src, n.line)}) end
+          -- An alias of `Bool` (`Answer : Bool`), by the names the checker
+          -- writes it: bare, and as its module type's member.
+          if #kids > 1 and decl ~= "" and tree[kids[2]].kind == "ty" and attr(tree, kids[2], "name") == "Bool" then
+            BOOL_ALIASES[decl] = true
+            if p > 0 and tree[p].kind == "associated" and tree[p].parent > 0 then
+              local owner_kids = children(tree, tree[p].parent)
+              local owner = #owner_kids > 0 and attr(tree, owner_kids[1], "name") or ""
+              if owner ~= "" then BOOL_ALIASES[owner .. "." .. decl] = true end
+            end
+          end
         end
         if k == "anno-record-field" then
           local at = holder_decl(tree, decl_line, i)
@@ -589,10 +630,15 @@ function definitions(parsed_files)
             end
             local ws = split(ends_with(def.name, "!") and sub(def.name, 1, #def.name - 1) or def.name, "_")
             if #ws > 1 and has_key(WORKER_WORDS, ws[#ws]) then def.recurses = names_itself(tree, i, def.name) end
+            if TYPED and has_key(TYPES.real, path) then
+              local ty = roc_type_at(TYPES, "pat", path, tree[kids[1]])
+              if ty ~= nil then def.typed = ty end
+            end
             local above = get(anno_def, tostring(before(tree, i)))
             if above ~= nil and above.name == def.name then
               def.paired = true
               above.has_def = true
+              if has_key(def, "typed") then above.typed = def.typed end
               if def.callback then above.callback = true end
             end
             push(out, def)
@@ -688,14 +734,24 @@ function hunt(def)
   local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
   -- An effect that asks the host about live state (`is_playing! : Sound =>
   -- Bool`) has to be effectful: its annotation's `Bool` says it asks.
-  local asks_host = is_annotation and def.fn and def.result == "Bool"
-  if asks and judged and effect and not asks_host then say(p, i, "question", "`" .. full .. "` asks a question but has an effect" .. (is_annotation and def.fn and (" and gives `" .. def.result .. "`") or "")) end
-  if is_annotation and def.fn and def.result == "Bool" and state then say(p, i, "question", "`" .. full .. "` gives a `Bool` but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
+  -- **UNDER THE TYPES** (`types=1`) a definition's type is the checker's,
+  -- so an unannotated function is judged too, and a result that names an
+  -- alias of `Bool` (`Answer : Bool`) gives a `Bool`; a definition the
+  -- checker gave no type (a hosted effect's annotation) is read as written.
+  local shape = {fn = is_annotation and def.fn, result = get(def, "result", ""), known = is_annotation, said = ""}
+  if has_key(def, "typed") then
+    local s = roc_type_shape(def.typed)
+    shape = {fn = s.fn, result = s.result, known = true, said = " (the checker's type)"}
+    if has_key(BOOL_ALIASES, s.result) then shape.result = "Bool" end
+  end
+  local asks_host = shape.fn and shape.result == "Bool"
+  if asks and judged and effect and not asks_host then say(p, i, "question", "`" .. full .. "` asks a question but has an effect" .. (shape.fn and (" and gives `" .. shape.result .. "`" .. shape.said) or "")) end
+  if shape.fn and shape.result == "Bool" and state and judged then say(p, i, "question", "`" .. full .. "` gives a `Bool`" .. shape.said .. " but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
   -- An inferred type (`is_eq : _`) gives what the compiler says: no
   -- finding.
   -- Only a function asks: a value (`has_got : List(Bool)`, a test table's
   -- column) is named for what it holds.
-  if asks and is_annotation and def.fn and not effect and def.result ~= "Bool" and def.result ~= "_" then say(p, i, "question", "`" .. full .. "` asks a question but gives `" .. def.result .. "`") end
+  if asks and judged and shape.known and shape.fn and not effect and shape.result ~= "Bool" and shape.result ~= "_" then say(p, i, "question", "`" .. full .. "` asks a question but gives `" .. shape.result .. "`" .. shape.said) end
   if judged then
     local all_vague = true
     for w in ws do
@@ -747,7 +803,18 @@ function hunt(def)
 end
 
 local paths = glob(GLOB)
+if SELF then
+  for q in glob(PLANTS .. "typed/*.roc") do push(paths, q) end
+end
 local files = #paths
+-- The self-test's untyped plants are the root's none.
+const UNTYPED = SELF and set_of(glob(PLANTS .. "*.roc")) or {}
+if TYPED then
+  local got = roc_types_hunted("name_hunt", ROOT, roc_bin("name_hunt", SELF), paths, UNTYPED)
+  TYPES.real = got.real
+  TYPES.pats = got.pats
+  TYPES.exprs = got.exprs
+end
 -- A file roc-ast refuses is named, and fails the run, after the rest are
 -- judged (cookbook/roc/parsed.shale).
 local parsed = roc_parsed(paths)
@@ -831,14 +898,22 @@ else
 end
 fail_if_refused("name_hunt", parsed.refused)
 
+-- A plant's name as the self-test's table reads it: a typed plant's, a
+-- type module's (`typed/QuestionInferred.roc`), as `question_inferred.roc`.
+function plant_base(p)
+  local base = sub(p, #PLANTS + 1)
+  if starts_with(base, "typed/") then return roc_plant_name(sub(base, 7)) end
+  return base
+end
+
 if SELF then
   -- Every plant is judged before a failure stops the run, so one run shows
   -- each plant that is wrong.
   local wrong = {}
   for c in CHECKS do
     local planted = 0
-    for p in glob(GLOB) do
-      local base = sub(p, #"cookbook:roc/plants/name_hunt/" + 1)
+    for p in paths do
+      local base = plant_base(p)
       local mine = base == c .. ".roc" or starts_with(base, c .. "_")
       if mine then planted = planted + 1 end
       local fired = has_key(per_file, p .. "|" .. c)
@@ -848,8 +923,8 @@ if SELF then
     if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
   end
   -- A plant named for no check is read by none, so it could never fail.
-  for p in glob(GLOB) do
-    local base = sub(p, #"cookbook:roc/plants/name_hunt/" + 1)
+  for p in paths do
+    local base = plant_base(p)
     local named = starts_with(base, "quiet_")
     for c in CHECKS do
       if base == c .. ".roc" or starts_with(base, c .. "_") then named = true end
