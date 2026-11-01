@@ -16,11 +16,16 @@
 --                 starts the name of a type the effect's annotation names
 --                 (`rounded_rectangle! : Frame, RoundedRectangle => {}`)
 --                 modifies the thing it makes or draws, and is no state.
---   question      `is_*`, `has_*`, `can_*`, `should_*` that returns no
---                 `Bool`, or that has an effect (`is_open!`), or a `Bool`
---                 named as a state (`marked : Str -> Bool`; a name holding
---                 `_is_` or `_has_` asks, `unsigned_is_even`). An inferred
---                 type (`is_eq : _`) is not judged.
+--   question      a function `is_*`, `has_*`, `can_*`, `should_*` that
+--                 returns no `Bool`, or that has an effect and gives no
+--                 `Bool` (`is_open! : Str => Str`), or a `Bool` named as a
+--                 state (`marked : Str -> Bool`; a name holding `_is_` or
+--                 `_has_` asks, `unsigned_is_even`). An inferred type
+--                 (`is_eq : _`) is not judged, nor is a value (`has_got :
+--                 List(Bool)`, a test table's column): only a function
+--                 asks. An effect that gives a `Bool` (`is_playing! : Sound
+--                 => Bool`) asks the host about live state, which has to
+--                 be effectful.
 --   vague         a name of nothing but vague words: `handle_data`,
 --                 `process!`, `do_it`
 --   name_type     a `*_count` value that is no integer, a `*_path` one
@@ -635,11 +640,16 @@ function hunt(def)
   local makes = #ws > 1 and has_key(get(def, "types") or {}, camel(ws))
   if effect and judged and state and not makes then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. act .. "`: a verb says what it does") end
   local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
-  if asks and judged and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end
+  -- An effect that asks the host about live state (`is_playing! : Sound =>
+  -- Bool`) has to be effectful: its annotation's `Bool` says it asks.
+  local asks_host = is_annotation and def.fn and def.result == "Bool"
+  if asks and judged and effect and not asks_host then say(p, i, "question", "`" .. full .. "` asks a question but has an effect" .. (is_annotation and def.fn and (" and gives `" .. def.result .. "`") or "")) end
   if is_annotation and def.fn and def.result == "Bool" and state then say(p, i, "question", "`" .. full .. "` gives a `Bool` but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
   -- An inferred type (`is_eq : _`) gives what the compiler says: no
   -- finding.
-  if asks and is_annotation and not effect and def.result ~= "Bool" and def.result ~= "_" then say(p, i, "question", "`" .. full .. "` asks a question but gives `" .. def.result .. "`") end
+  -- Only a function asks: a value (`has_got : List(Bool)`, a test table's
+  -- column) is named for what it holds.
+  if asks and is_annotation and def.fn and not effect and def.result ~= "Bool" and def.result ~= "_" then say(p, i, "question", "`" .. full .. "` asks a question but gives `" .. def.result .. "`") end
   if judged then
     local all_vague = true
     for w in ws do

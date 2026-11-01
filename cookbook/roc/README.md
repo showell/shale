@@ -22,6 +22,9 @@ it works on, `<shale>` being the shale checkout:
   `block_read_sector!`, `port_out_32!`) is judged by the word after it,
   and one whose first argument is a surface it draws on (`Frame`,
   `Canvas`: `circle! : Frame, Circle => {}`) is named for what it draws.
+  `question` judges functions only (a value `has_got : List(Bool)` is
+  none), and an effect that gives a `Bool` (`is_playing! : Sound => Bool`)
+  asks the host about live state.
   Beside the names: `command_tense` and `mixed_tense` (the tags an effect
   is handed, a `List(T)` judged as `T`, named as events, or as commands
   and events at once) and `container` (a type or record field named only
