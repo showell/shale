@@ -708,7 +708,7 @@ end
 -- `path:line: why` each call left. `ts` is their trees, or nil to read
 -- them here, one program (`roc_tree`). With `types`, which need `root`,
 -- `roc-types` runs once on it, before any file, when a file from `from` on
--- has a candidate open, and every file's candidates go through `by_type`;
+-- has a candidate open, and then every file's candidates go through `by_type`;
 -- the files whose open calls are all proven go through `confirm`, together,
 -- before the first of them is tried, the rest through `try_file`. `roc`
 -- is the OS path of the tree's Roc, which roc-types' pin must be.
@@ -730,11 +730,14 @@ function run_all(paths, root, from, ts, types, roc)
     for c in cands do if c.left == "" then any_open = true end end
     ctx.judged[p] = {cands = cands, tally = {}, open = 0, proven = false}
   end
-  if types and any_open then ctx.types[root] = types_of(ctx, root) end
+  -- No candidate open, no types read, and none to judge by: by_type
+  -- judges only open candidates.
+  local typed = types and any_open
+  if typed then ctx.types[root] = types_of(ctx, root) end
   for k = from, #paths do
     local p = paths[k]
     local j = ctx.judged[p]
-    if types then by_type(j.tally, ts[p], j.cands, p, ctx.types[root], root) end
+    if typed then by_type(j.tally, ts[p], j.cands, p, ctx.types[root], root) end
     j.proven = true
     for c in j.cands do
       if c.left == "" then
@@ -837,6 +840,7 @@ const EXPECT = {
   Header = {left = 0},
   Typed = {left = 1, why = "the first argument is a List, not a Str", root = "TypedApp", types = true, confirms = 1, rounds = 0},
   Proven = {left = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
+  NoCalls = {left = 0, root = "TypedApp", types = true, confirms = 0, rounds = 0, no_types_run = true},
   ProvenFails = {left = 2, why = "roc check: type mismatch", root = "TypedApp", types = true, confirms = 1, rounds = 2},
   Unrooted = {stop = "the types need root=", types = true},
   NotApp = {stop = "is not an app", root = "Proven", types = true},
@@ -879,6 +883,13 @@ function self_test_plant(name)
   judged(tally, confirms == want_confirms, name .. ": " .. confirms .. " confirm(s), want " .. want_confirms)
   if has_key(want, "rounds") then judged(tally, rounds == want.rounds, name .. ": " .. rounds .. " round(s), want " .. want.rounds) end
   if not typed then judged(tally, #keys(got.ctx.typed) == 0 and #keys(got.ctx.types) == 0, name .. ": under types=0, no roc-types run") end
+  -- Under types, roc-types runs once when a candidate is open, and never
+  -- on a file with none (`no_types_run`).
+  if typed then
+    local runs = #keys(got.ctx.types)
+    local want_runs = has_key(want, "no_types_run") and 0 or 1
+    judged(tally, runs == want_runs, name .. ": " .. runs .. " roc-types run(s), want " .. want_runs)
+  end
   if want.left > 0 and not exists(wantp) then judged(tally, read(p) == read(PLANTS .. "/" .. name .. ".roc"), name .. ": put back as it was") end
   if tally.bad > 0 then fail("methods: self-test: " .. name .. ": " .. tally.bad .. " failed") end
   remove_tree(scratch)
