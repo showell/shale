@@ -6,7 +6,9 @@
 -- (`roc_tree`, the Linux prelude's, over roc-ast at `tools:roc-ast/bin/
 -- roc-ast`), so an annotation broken after its
 -- colon and a `where` clause's arrows read as Roc reads them, and a file
--- that does not parse is a failure, never a pass.
+-- that does not parse is a failure, never a pass: named, after every
+-- other file is judged, and the run exits non-zero
+-- (cookbook/roc/parsed.shale).
 -- A finding is a question for a reader, never a verdict:
 --
 --   state_effect  an effect (`!`) named as a state: `held_raw!`, a past
@@ -133,6 +135,7 @@
 
 const SELF = arg("self_test", "") == "1"
 use("cookbook:roc/summed.shale")
+use("cookbook:roc/parsed.shale")
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
 const WORDS = arg("words", "") == "1"
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition"}
@@ -437,14 +440,10 @@ end
 -- `has_def`: an annotation with its definition just below it. `recurses`:
 -- a `_step` or `_walk` definition that names itself in its body (`step(...)`,
 -- `Tree.step(...)`, `x.step(...)`), for `worker_name`.
-function definitions(paths)
+function definitions(parsed_files)
   local out = {}
-  local refused = 0
-  for f in roc_tree(paths) do
-    if f.err ~= "" then
-      print(f.path .. ": roc-ast: " .. f.err)
-      refused = refused + 1
-    else
+  for f in parsed_files do
+    do
       local path = f.path
       local tree = f.nodes
       local src = split(read(path), "\n")
@@ -527,8 +526,6 @@ function definitions(paths)
       end
     end
   end
-  -- A file that does not parse would pass its names unread.
-  if refused > 0 then fail("name_hunt: roc-ast refused " .. refused .. " files: a file that does not parse has no tree to hunt") end
   return out
 end
 
@@ -652,10 +649,13 @@ end
 
 local paths = glob(GLOB)
 local files = #paths
+-- A file roc-ast refuses is named, and fails the run, after the rest are
+-- judged (cookbook/roc/parsed.shale).
+local parsed = roc_parsed(paths)
 -- No `yield` here: each definition's garbage is small, and what a yield
 -- keeps (every definition, and the declared types' tags) passes the fixed
 -- 1 MiB it allows on the chat. The arena the header sets holds it.
-for def in definitions(paths) do
+for def in definitions(parsed.files) do
   hunt(def)
 end
 
@@ -728,6 +728,7 @@ if WORDS then
 else
   print_summed("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "), said)
 end
+fail_if_refused("name_hunt", parsed.refused)
 
 if SELF then
   -- Every plant is judged before a failure stops the run, so one run shows

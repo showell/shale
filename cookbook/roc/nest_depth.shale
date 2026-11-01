@@ -24,8 +24,9 @@
 -- })` names its parts), unless `loose=1`, which passes depth through them.
 --
 -- The count by depth first, then one line a finding, then the count again
--- (cookbook/roc/summed.shale). A file roc-ast refuses is a line of its
--- own, and fails the run after the rest are hunted.
+-- (cookbook/roc/summed.shale). A file roc-ast refuses is named after
+-- them, and fails the run after the rest are hunted
+-- (cookbook/roc/parsed.shale).
 --
 --   cd <repo> && shale <shale>/cookbook/roc/nest_depth.shale glob=chat/**/*.roc min=4
 --   shale cookbook:roc/nest_depth.shale self_test=1
@@ -43,6 +44,7 @@ const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const LOOSE = arg("loose", "") == "1"
 const MIN = SELF and 3 or arg("min", 3)
 use("cookbook:roc/summed.shale")
+use("cookbook:roc/parsed.shale")
 
 -- What passes its parts' depth through unchanged: no call of its own.
 -- `unary` is `!x` and `-x`; `receiver` is a field's access's value.
@@ -115,17 +117,14 @@ end
 const paths = glob(GLOB)
 local count = 0
 local by = {}
-local refused = 0
 local said = {}
 -- Each line's findings for the self-test, `path:line` -> `{col, depth}`
 -- in column order, and each printed line, to catch two alike.
 const at = {}
 const printed = {}
-for f in roc_tree(paths) do
-  if f.err ~= "" then
-    push(said, f.path .. ": roc-ast: " .. f.err)
-    refused = refused + 1
-  else
+local parsed = roc_parsed(paths)
+for f in parsed.files do
+  do
     local ns = f.nodes
     local memo = {}
     for n in ns do push(memo, -1) end
@@ -148,7 +147,7 @@ end
 local counts = {}
 for k in sort(keys(by)) do push(counts, "depth " .. k .. " " .. by[k]) end
 print_summed("nest_depth (Roc): " .. #paths .. " files; nested " .. count .. " (min " .. MIN .. ", " .. (LOOSE and "loose" or "strict") .. ")" .. (#counts > 0 and ("; " .. join(counts, ", ")) or ""), said)
-if refused > 0 then fail("nest_depth: roc-ast refused " .. refused .. " files: a file that does not parse has no tree to hunt") end
+fail_if_refused("nest_depth", parsed.refused)
 if SELF then
   local wrong = {}
   local marks = 0

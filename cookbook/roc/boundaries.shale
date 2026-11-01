@@ -70,7 +70,9 @@
 -- production caller and its own functions are never judged. A finding
 -- names its file and the definition's line.
 --
--- One line a finding, `path:line: <check>: <why>`, then the counts.
+-- One line a finding, `path:line: <check>: <why>`, then the counts. A file
+-- roc-ast refuses is judged by none: named after the counts, it fails the
+-- run, every other file judged first (cookbook/roc/parsed.shale).
 --
 --   cd <repo> && shale <shale>/cookbook/roc/boundaries.shale glob=chat/**/*.roc
 --   shale cookbook:roc/boundaries.shale self_test=1
@@ -88,6 +90,7 @@ const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const WAYS = arg("ways", 2)
 const NODES = arg("nodes", 24)
 const CHECKS = {"single", "fixed", "entry", "constant"}
+use("cookbook:roc/parsed.shale")
 -- Every file's nodes in one list, in order: `NODE[g]` a node of `roc_tree`,
 -- `PATH[g]` its file, `BASE[g]` the index before its file's first node, so
 -- a node's `parent` and `kids` are `BASE[g] +` theirs.
@@ -172,23 +175,19 @@ end
 -- ── the tree ─────────────────────────────────────────────────────────────
 
 local fs = glob(GLOB)
-local refused = 0
-for f in roc_tree(fs) do
-  if f.err ~= "" then
-    print(f.path .. ": roc-ast: " .. f.err)
-    refused = refused + 1
-  else
-    SRC[f.path] = split(read(f.path), "\n")
-    local base = #NODE
-    for n in f.nodes do
-      push(NODE, n)
-      push(PATH, f.path)
-      push(BASE, base)
-    end
+-- A file that does not parse would pass its references unread: it is
+-- named, and fails the run, after the rest are judged
+-- (cookbook/roc/parsed.shale).
+local parsed = roc_parsed(fs)
+for f in parsed.files do
+  SRC[f.path] = split(read(f.path), "\n")
+  local base = #NODE
+  for n in f.nodes do
+    push(NODE, n)
+    push(PATH, f.path)
+    push(BASE, base)
   end
 end
--- A file that does not parse would pass its references unread.
-if refused > 0 then fail("boundaries: roc-ast refused " .. refused .. " files: a file that does not parse has no tree to hunt") end
 
 -- **WHAT A NODE'S ANCESTORS SAY**, each node's from its parent's, once (a
 -- parent comes before its children): `OUTER_ALL[g]` every ancestor a file,
@@ -544,6 +543,7 @@ for k in keys(defs) do total = total + 1 end
 local counts = {}
 for c in CHECKS do push(counts, c .. " " .. found[c]) end
 print("boundaries (Roc): " .. #fs .. " files, " .. total .. " functions; " .. join(counts, ", "))
+fail_if_refused("boundaries", parsed.refused)
 
 if SELF then
   local wrong = {}
