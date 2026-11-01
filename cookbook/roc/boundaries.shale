@@ -5,12 +5,13 @@
 -- prelude's, over roc-ast at `tools:roc-ast/bin/roc-ast`). A finding
 -- is a question for a reader, never a verdict:
 --
---   single  a wrapper (a body of one statement: an expression of at most
---           `nodes`, 24, of the tree's nodes, however many lines a stacked
---           record spreads it over; a `match` or `if` of a line or two,
---           `lines`, 2) with exactly one
---           production reference outside its own body, a call, which no
---           `expect` and no test file reaches and no `##` doc explains:
+--   single  a wrapper (a body of one statement of at most `nodes`, 24, of
+--           the tree's nodes and at most `ways`, 2, ways through it: an
+--           `if` and its `else`, or a `match` of two arms; the tree
+--           measures it, so no layout of its lines changes the verdict)
+--           with exactly one production reference outside its own body,
+--           a call, which no `expect` and no test file reaches and no `##`
+--           doc explains:
 --           read better inline (roc-apps docs/roc-style.md, "A function
 --           earns its boundary"). Quiet: a pure decision an `expect`
 --           reaches, the public name a twin holds to its Zig (a test file
@@ -18,7 +19,11 @@
 --           a question (`is_*`, `has_*`), whose name is the concept its
 --           test stands for (`is_message`), and one whose `##` doc says
 --           why it stands alone (a rule's one home), as the guide's
---           one-caller module is kept when its reason is written down. The
+--           one-caller module is kept when its reason is written down.
+--           **A RECURSION IS NO WRAPPER**: a function whose body
+--           references itself cannot be read inline, and nor can an entry
+--           into one, a wrapper whose body calls such a function: the
+--           shape `fixed` asks for, so the two checks never disagree. The
 --           guide calls this a rule of thumb, not a gate.
 --   fixed   a parameter (a position, or a field of a record argument) that
 --           every production call, two or more, fills with the same
@@ -36,9 +41,12 @@
 -- that name: a function so reached by a name two types share is
 -- ambiguous and judged by neither check. An arrow call's receiver
 -- (`x->f(a)`) and a method's are the first argument. **A TEST FILE** is a
--- twin (`twin.roc`, a name ending `twin.roc`, a `twin/` folder) or under
--- `test/`: it reaches code as an `expect` does, so its references are no
--- production caller. A finding names its file and the definition's line.
+-- twin (`twin.roc`, a name ending `twin.roc`, a `twin/` folder), under
+-- `test/`, or a spec app, a name ending `<Module>Spec.roc` (`BlitSpec.roc`,
+-- a `main!` that grades `Blit`: roc-apps canvas_apps/safari/README.md, "The
+-- map"): it reaches code as an `expect` does, so its references are no
+-- production caller and its own functions are never judged. A finding
+-- names its file and the definition's line.
 --
 -- One line a finding, `path:line: <check>: <why>`, then the counts.
 --
@@ -48,13 +56,14 @@
 -- Read the whole tree, tests too: a twin's reference is what keeps a
 -- function quiet. `self_test=1` runs it over `cookbook/roc/plants/
 -- boundaries/`, each plant named for the check it holds: every check must
--- fire on its own plants and on no other, a `quiet_*.roc` plant on none.
+-- fire on its own plants and on no other, a `quiet_*.roc` plant on none
+-- (`quiet_WalkSpec.roc` a test file among them).
 -- budget: steps=800000000 arena_bytes=3000000000
 
 const SELF = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/boundaries/"
 const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
-const LINES = arg("lines", 2)
+const WAYS = arg("ways", 2)
 const NODES = arg("nodes", 24)
 const CHECKS = {"single", "fixed"}
 -- Every file's nodes in one list, in order: `NODE[g]` a node of `roc_tree`,
@@ -125,7 +134,9 @@ function is_question(name)
   return starts_with(name, "is_") or starts_with(name, "has_")
 end
 
+-- The header's test file, its one home.
 function is_test_file(p)
+  if re_find(basename(p), "[A-Z][A-Za-z0-9]*Spec\\.roc$") ~= nil then return true end
   return ends_with(p, "twin.roc") or contains(p, "/twin/") or contains(p, "/test/") or starts_with(p, "test/") or starts_with(p, "twin/")
 end
 
@@ -219,10 +230,12 @@ end
 -- what a finding says of it. Its body is one statement (a block of one, or
 -- an expression), measured by the tree's nodes (`NODES`), never its lines,
 -- so `stack.shale write=1` laying a call's record out a field a line
--- changes nothing. A body that decides (a `match`, an `if`) is measured by
--- its lines (`LINES`, the definition's own): a branch's arms are its rule,
--- and only a decision of a line or two reads as a wrapper.
-function wrapper_size(g, lines)
+-- changes nothing. A body that decides is measured by its ways too
+-- (`WAYS`): one, and one more for each `if` and for each `match` arm past
+-- its first. A decision's arms are its rule, and only a two-way choice
+-- reads as a wrapper; an `else if` chain or a nested `if` is a rule of its
+-- own however few lines it is written on.
+function wrapper_size(g)
   local kids = children(g)
   local body = kids[#kids]
   if kind(body) == "e-block" then
@@ -234,10 +247,17 @@ function wrapper_size(g, lines)
     body = stmts[1]
   end
   local all = subtree(body)
+  local ways = 1
   for k in all do
-    if kind(k) == "e-match" or kind(k) == "e-if-then-else" then return {wrapper = lines <= LINES, size = "a decision of " .. lines .. " line" .. (lines == 1 and "" or "s")} end
+    if kind(k) == "e-if-then-else" then ways = ways + 1 end
+    if kind(k) == "branches" then
+      local arms = children(k)
+      ways = ways + #arms - 1
+    end
   end
-  return {wrapper = #all <= NODES, size = "one expression of " .. #all .. " nodes"}
+  local small = #all <= NODES
+  if ways > 1 then return {wrapper = small and ways <= WAYS, size = "a decision of " .. ways .. " ways, " .. #all .. " nodes"} end
+  return {wrapper = small, size = "one expression of " .. #all .. " nodes"}
 end
 
 -- ── pass 1: the functions ────────────────────────────────────────────────
@@ -255,8 +275,8 @@ for g = 1, #NODE do
         local n = NODE[g]
         local name = raw(kids[1])
         local key = owner .. "|" .. name
-        local size = wrapper_size(kids[2], n.end_line - n.line + 1)
-        defs[key] = {key = key, path = path, owner = owner, name = name, line = n.line, last = n.end_line, wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, n.line), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, values = 0, ambiguous = false}
+        local size = wrapper_size(kids[2])
+        defs[key] = {key = key, path = path, owner = owner, name = name, line = n.line, last = n.end_line, wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, n.line), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, values = 0, ambiguous = false, recursive = false, entry = false}
         if sub(owner, 1, 1) ~= "@" then
           if not has_key(members, name) then members[name] = {} end
           push(members[name], key)
@@ -267,11 +287,15 @@ for g = 1, #NODE do
 end
 
 -- ── pass 2: the references ───────────────────────────────────────────────
--- A call is `{path, args, pre}`: `args` the argument nodes, `pre` an arrow
--- or method call's receiver, the hidden first argument (0 for none). A
--- reference with no call is the function passed as a value.
+-- A call is `{path, line, args, pre}`: `args` the argument nodes, `pre` an
+-- arrow or method call's receiver, the hidden first argument (0 for none). A
+-- reference with no call is the function passed as a value. A reference
+-- inside its own body makes it a recursion.
 function note(def, ctx, call)
-  if ctx.path == def.path and ctx.line >= def.line and ctx.line <= def.last then return nil end
+  if ctx.path == def.path and ctx.line >= def.line and ctx.line <= def.last then
+    def.recursive = true
+    return nil
+  end
   if is_test_file(ctx.path) then
     def.tests = def.tests + 1
   elseif ctx.expect then
@@ -300,7 +324,7 @@ for g = 1, #NODE do
       if p ~= 0 and kind(p) == "e-apply" then
         local kids = children(p)
         if kids[1] == g then
-          call = {path = path, args = drop(kids, 1), pre = 0}
+          call = {path = path, line = ctx.line, args = drop(kids, 1), pre = 0}
           -- `x->f(a)`: the apply is the arrow call's second child.
           local gp = parent(p)
           if gp ~= 0 and kind(gp) == "e-arrow-call" then
@@ -318,7 +342,7 @@ for g = 1, #NODE do
         if kind(k) == "receiver" then pre = children(k)[1] end
         if starts_with(kind(k), "args") then args = children(k) end
       end
-      call = {path = path, args = args, pre = pre}
+      call = {path = path, line = ctx.line, args = args, pre = pre}
     end
     if target ~= "" then
       if method then
@@ -341,6 +365,21 @@ for g = 1, #NODE do
           end
         end
         if key ~= "" then note(defs[key], ctx, call) end
+      end
+    end
+  end
+end
+
+-- **AN ENTRY INTO A RECURSION**: a function holding a production call of a
+-- recursive one.
+local by_path = {}
+for key in keys(defs) do push_at(by_path, defs[key].path, defs[key]) end
+for key in keys(defs) do
+  local worker = defs[key]
+  if worker.recursive then
+    for c in worker.calls do
+      for d in get(by_path, c.path, {}) do
+        if c.line >= d.line and c.line <= d.last then d.entry = true end
       end
     end
   end
@@ -382,10 +421,11 @@ end
 const DIFFERS = "\n differs"
 for key in sort(keys(defs)) do
   local def = defs[key]
-  if not def.ambiguous and def.prod == 1 and def.values == 0 and def.expects == 0 and def.tests == 0 and def.doc == 0 and def.wrapper and not is_question(def.name) then
+  local judged = not def.ambiguous and not is_test_file(def.path)
+  if judged and def.prod == 1 and def.values == 0 and def.expects == 0 and def.tests == 0 and def.doc == 0 and def.wrapper and not def.recursive and not def.entry and not is_question(def.name) then
     say(def.path, def.line, "single", "`" .. shown_name(def) .. "` (" .. def.size .. ") has one caller, " .. def.callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
   end
-  if #def.calls >= 2 and def.values == 0 and not def.ambiguous then
+  if judged and #def.calls >= 2 and def.values == 0 then
     local seen = {}
     local first = true
     for c in def.calls do

@@ -53,10 +53,12 @@ it works on, `<shale>` being the shale checkout:
   last two). `self_test=1` runs its plants (`plants/nest_depth/`).
 - [boundaries.shale](boundaries.shale): **a function's boundary, from its
   references.** `single`: a wrapper (one small expression, by its tree,
-  not its lines; a decision of a line or two) with one production
-  caller, which no `expect`, test file or `##` doc keeps (a rule of thumb,
-  not a gate); `fixed`: a parameter every production call fills with the
-  same literal (`at: 0`), never context passed down (`me`, `req.me`).
+  not its lines; a decision of two ways at most) with one production
+  caller, which no `expect`, test file (a twin, `test/`, a
+  `<Module>Spec.roc`) or `##` doc keeps, and which is neither a recursion
+  nor an entry into one (a rule of thumb, not a gate); `fixed`: a
+  parameter every production call fills with the same literal (`at: 0`),
+  never context passed down (`me`, `req.me`).
   `self_test=1` runs its plants (`plants/boundaries/`).
 - [errors.shale](errors.shale): **a failure said by its tags.**
   `error_alias`: a function whose result's `Try` names a shared alias of

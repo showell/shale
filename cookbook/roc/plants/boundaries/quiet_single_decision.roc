@@ -1,13 +1,14 @@
-# Quiet for boundaries' `single`: a `match` laid out an arm a line is the
-# function's own rule, not a wrapper, however few its nodes.
-word_of : [Yes, No] -> Str
+# Quiet for boundaries' `single`: a `match` of three arms is the function's
+# own rule, not a wrapper, however few its nodes.
+word_of : [Yes, No, Maybe] -> Str
 word_of = |b|
 	match b {
 		Yes => "yes"
 		No => "no"
+		Maybe => "maybe"
 	}
 
-said : [Yes, No] -> Str
+said : [Yes, No, Maybe] -> Str
 said = |b| {
 	w = word_of(b)
 	Str.concat(w, "!")
