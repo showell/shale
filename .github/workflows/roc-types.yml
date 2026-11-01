@@ -1,0 +1,80 @@
+# tools/roc_types built into the asset tools/roc_types/install.shale
+# installs, on demand only (`gh workflow run roc-types.yml -f ref=<ref>`),
+# never on a push or a PR: it links most of Roc's compiler, which the box
+# cannot build beside its other work. The tarball is the run's artifact
+# (`gh run download`), its sha256 in the log; publishing it, and moving
+# tools/roc_types/release to it, is by hand.
+name: roc-types
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "The shale branch, tag or commit to build roc-types from"
+        default: master
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          path: shale
+
+      - name: Install Zig
+        working-directory: shale
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/tools/get_zig.sh | sh
+          ls -d "$HOME"/zig-* | head -1 > /tmp/zigdir
+          echo "$(cat /tmp/zigdir)" >> "$GITHUB_PATH"
+
+      # The archive build.zig.zon pins leaves out vendor/, which Roc's
+      # modules import, so the build forks to a full checkout of the commit.
+      - name: Roc at the pin
+        run: |
+          commit=$(grep -o 'archive/[0-9a-f]*' shale/tools/roc_types/build.zig.zon | cut -d/ -f2)
+          git init -q roc && cd roc
+          git remote add origin https://github.com/roc-lang/roc.git
+          git fetch -q --depth 1 origin "$commit"
+          git checkout -q FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$commit"
+
+      - name: Build roc-types
+        working-directory: shale/tools/roc_types
+        run: |
+          zig version
+          zig build --fork="$GITHUB_WORKSPACE/roc" -Dtarget=x86_64-linux-musl -Dcpu=baseline -Doptimize=ReleaseSafe --prefix "$GITHUB_WORKSPACE/out"
+          test -x "$GITHUB_WORKSPACE/out/bin/roc-types"
+
+      # The plant methods.shale's self-test reads types through, by a
+      # relative path: the header is the format's and the pin's, and the
+      # imported type module has its types.
+      - name: Smoke
+        working-directory: shale
+        run: |
+          format=$(sed -n 's/^const format = \([0-9]*\);$/\1/p' tools/roc_types/main.zig)
+          version=$(tr -d '[:space:]' < tools/roc_types/roc-version)
+          "$GITHUB_WORKSPACE/out/bin/roc-types" cookbook/roc/plants/methods/TypedApp.roc > /tmp/types.out
+          test "$(head -n 1 /tmp/types.out)" = "roc-types $format $version"
+          grep -q '^== /.*/cookbook/roc/plants/methods/Typed.roc$' /tmp/types.out
+          grep -cP '^t\t' /tmp/types.out
+
+      - name: Tarball
+        id: tarball
+        working-directory: shale
+        run: |
+          format=$(sed -n 's/^const format = \([0-9]*\);$/\1/p' tools/roc_types/main.zig)
+          test -n "$format"
+          short=$(tr -d '[:space:]' < tools/roc_types/roc-version | sed 's/.*-//')
+          name="roc-types-$format-$short-linux-x86_64.tar.gz"
+          tar -czf "$GITHUB_WORKSPACE/$name" -C "$GITHUB_WORKSPACE/out" bin/roc-types
+          cd "$GITHUB_WORKSPACE" && sha256sum "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.tarball.outputs.name }}
+          path: ${{ steps.tarball.outputs.name }}
