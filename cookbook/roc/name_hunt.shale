@@ -216,12 +216,14 @@ const SURFACES = {Frame = true, Canvas = true}
 -- `path|base` -> {line, preps (a set), names}.
 const SPLITS = {}
 -- Every stem each trailing preposition is put on, in all the files read,
--- by the result its annotation gives: `prep|result` -> {stem -> true}. A
--- preposition on `CONVENTION` or more stems that give one result is the
--- package's suffix convention, one role (roc-markdown's `*_onto`, a writer
--- onto a buffer, each giving `List(U8)`), not one relation's word:
--- `CONVENTIONS` holds it. A bare count would make every common
--- preposition (`_of`, `_in`) a convention in any package of size.
+-- by the shape its annotation gives, its first argument's type and its
+-- result: `prep|first|result` -> {stem -> true}. A preposition on
+-- `CONVENTION` or more stems of one shape is the package's suffix
+-- convention, one role (roc-markdown's `*_onto`, a writer that takes a
+-- `List(U8)` and gives it back), not one relation's word: `CONVENTIONS`
+-- holds it. A bare count, or the result alone, makes a common preposition
+-- a convention in any package of size (roc-chat's `name_of`, `text_of`
+-- and `inviter_name_of` all give `Str`).
 const PREP_STEMS = {}
 const CONVENTION = 3
 const CONVENTIONS = {}
@@ -553,6 +555,7 @@ function definitions(parsed_files)
               def.fn = true
               def.arity = #parts - 1
               def.result = render(tree, parts[#parts])
+              def.first = #parts > 1 and render(tree, parts[1]) or ""
               if ends_with(def.name, "!") then def.types = type_names(tree, kids[1], {}) end
               for a in take(parts, #parts - 1) do
                 if contains(span_text(src, tree, a), "=>") then def.callback = true end
@@ -666,7 +669,7 @@ function hunt(def)
     if not has_key(SPLITS, key) then SPLITS[key] = {path = p, line = i, base = base, preps = {}, names = {}} end
     local s = SPLITS[key]
     if is_annotation and def.fn then
-      local rk = ws[#ws] .. "|" .. def.result
+      local rk = ws[#ws] .. "|" .. def.first .. "|" .. def.result
       if not has_key(PREP_STEMS, rk) then PREP_STEMS[rk] = {} end
       PREP_STEMS[rk][base] = true
       if #keys(PREP_STEMS[rk]) >= CONVENTION then CONVENTIONS[ws[#ws]] = true end

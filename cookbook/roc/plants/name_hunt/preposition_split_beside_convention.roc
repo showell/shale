@@ -11,4 +11,10 @@ Tree := [].{
 	node_of : Str -> Str
 
 	node_in : Str -> Str
+
+	## `_of` on three stems that give one result, `Str`, but take three
+	## types: no convention, so no exemption for `node_of`.
+	name_of : U64 -> Str
+
+	text_of : Bool -> Str
 }
