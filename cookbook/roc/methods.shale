@@ -63,11 +63,24 @@
 -- is a new entry in Roc's cache (`~/.cache/roc`): roc-chat's `app/`, its
 -- 34 files, left about 7 GB there.
 --
+-- **`types=1`: THE CHECKER'S TYPES FIRST**: `roc-types` (Roc's own checker
+-- at roc-chat's pin, `tools:roc-types/roc-types`; Shale's `tools/roc_types`)
+-- runs once a run on `root`, which must then be an app, and gives each
+-- expression's type by its region, the same compiler's regions roc_tree's
+-- nodes carry. A candidate whose first argument's type is a concrete other
+-- type (`List(U8)` for `Str.x`, a record, a tag union, a function) is left
+-- untried, `the first argument is a List, not a Str`; one whose type's head
+-- names the module (`Str`, `List(...)`, `MessageRef` or `X.MessageRef`) is
+-- tried, and so is one the types cannot settle (a type variable, no type at
+-- that region, or two), as without types. The summary counts each kind. On
+-- roc-chat's `app/` it leaves most candidates before any trial.
+--
 -- `self_test=1` copies `cookbook/roc/plants/methods/` to a folder of the
 -- run's own under `scratch:` (removed when every plant holds) and runs
 -- `apply=1` there, each plant on its own: a plant with a `<Name>.want` must
 -- come out as that text, and each one's count of calls left, and a reason,
--- is as the table below says.
+-- is as the table below says. A plant the table marks `types` runs under
+-- `types=1`, its root an app plant (`ROOTS`) that holds no call.
 --
 -- **ROC IS THE TREE'S OWN PIN**: `tools:roc-<pin>/roc`, the pin read from
 -- the `roc-version` file where the run starts (the repository's root), and
@@ -81,6 +94,7 @@
 
 const SELF = arg("self_test", "") == "1"
 const APPLY = SELF or arg("apply", "") == "1"
+const TYPES = arg("types", "") == "1"
 const PLANTS = "cookbook:roc/plants/methods"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
@@ -135,7 +149,7 @@ function trees(paths)
     local t = {nodes = {}, text = text, starts = line_starts(text)}
     for n in f.nodes do
       local span = span_of(n, t.starts)
-      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), span = span or {from = 0, to = 0}, spanned = span ~= nil, kids = n.kids, parent = n.parent})
+      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), span = span or {from = 0, to = 0}, spanned = span ~= nil, kids = n.kids, parent = n.parent, region = n.line .. ":" .. n.col .. ":" .. n.end_line .. ":" .. n.end_col})
     end
     out[f.path] = t
   end
@@ -328,6 +342,103 @@ function fmt_clean(ctx, p)
   return run({roc_bin("methods", SELF), "fmt", "--check", real(p)}, {timeout_ms = 120000, tail = 20}).code == 0
 end
 
+-- ── the types (`types=1`) ────────────────────────────────────────────────
+
+-- An absolute path with its `.` and `..` resolved: `roc-types` names a
+-- module as its import reached it (`app/../platform/Chat.roc`).
+function abs_normal(p)
+  local out = {}
+  for part in split(p, "/") do
+    if part == ".." then
+      if #out > 0 then out = take(out, #out - 1) end
+    elseif part ~= "" and part ~= "." then
+      push(out, part)
+    end
+  end
+  return "/" .. join(out, "/")
+end
+
+-- **EVERY EXPRESSION'S TYPE**: `roc-types` on `root` (one program), each
+-- expression's type by `<absolute path>|line:col:end_line:end_col`; a
+-- region given two different types is in `ambiguous`. A root the checker
+-- refuses stops the run: its types would be guesses.
+function types_of(ctx, root)
+  ctx.used = ctx.used + 1
+  local r = run({real("tools:roc-types/roc-types"), real(root)}, {timeout_ms = 300000, whole = 64000000})
+  if r.ended ~= "exit" or r.code ~= 0 then fail("methods: roc-types " .. root .. " ended " .. r.ended .. " " .. r.code .. ": " .. said_first(r.out)) end
+  if not contains(said_first(r.out), "user_errors=false") then fail("methods: roc-types " .. root .. ": " .. said_first(r.out)) end
+  local by = {}
+  local ambiguous = {}
+  local path = ""
+  for l in lines(r.out) do
+    if starts_with(l, "== ") then
+      path = abs_normal(sub(l, 4))
+    elseif starts_with(l, "t\texpr\t") then
+      local f = split(l, "\t")
+      local key = path .. "|" .. f[4] .. ":" .. f[5] .. ":" .. f[6] .. ":" .. f[7]
+      if has_key(by, key) and by[key] ~= f[8] then ambiguous[key] = true end
+      by[key] = f[8]
+    end
+  end
+  return {by = by, ambiguous = ambiguous}
+end
+
+-- A type's head, `{head}` or `{var = true}`: `List(U8)` is `List`,
+-- `Access.Viewer(Topic.At)` is `Access.Viewer`, a function's (an arrow
+-- outside every bracket) `function`, `{...}` a record, `[...]` a tag
+-- union, `(a, b)` a tuple; a type variable (`a`, `_a`, `a where [...]`)
+-- is none.
+function type_head(ty)
+  if find(ty, "->") ~= nil or find(ty, "=>") ~= nil then
+    local depth = 0
+    for i = 1, #ty - 1 do
+      local ch = sub(ty, i, i)
+      if ch == "(" or ch == "[" or ch == "{" then depth = depth + 1 end
+      if ch == ")" or ch == "]" or ch == "}" then depth = depth - 1 end
+      local two = sub(ty, i, i + 1)
+      if depth == 0 and (two == "->" or two == "=>") then return {head = "function"} end
+    end
+  end
+  local first = sub(ty, 1, 1)
+  if first == "{" then return {head = "record"} end
+  if first == "[" then return {head = "tag union"} end
+  if first == "(" then return {head = "tuple"} end
+  if re_find(first, "^[A-Z]$") == nil then return {var = true} end
+  local m = re_find(ty, "^([A-Za-z0-9_.]+)")
+  return {head = m.groups[1]}
+end
+
+-- **THE TYPES' VERDICT** on each open candidate of the file at `p`: one
+-- whose first argument's type is a concrete other type is left, that its
+-- reason; the rest stay for the trial. Each kind is counted on `tally`.
+function by_type(tally, t, cands, p, types)
+  local abs = abs_normal(real(p))
+  for c in cands do
+    if c.left == "" then
+      local key = abs .. "|" .. t.nodes[t.nodes[c.at].kids[2]].region
+      if not has_key(types.by, key) then
+        incr(tally, "no type")
+      elseif has_key(types.ambiguous, key) then
+        incr(tally, "ambiguous")
+      else
+        local h = type_head(types.by[key])
+        if has_key(h, "var") then
+          incr(tally, "a type variable")
+        else
+          local segs = split(h.head, ".")
+          if h.head == c.module or segs[#segs] == c.module then
+            incr(tally, "the module's type")
+          else
+            incr(tally, "another type")
+            c.left = "the first argument is a " .. h.head .. ", not a " .. c.module
+          end
+        end
+      end
+    end
+  end
+  return nil
+end
+
 -- **ONE FILE TRIED**: its candidates written in, round by round, until the
 -- check passes or nothing is left to try; then the test. Gives the file's
 -- calls kept (`kept`); each left call has its `left` set. The file ends as
@@ -408,14 +519,16 @@ end
 -- **EVERY FILE OF `paths`**, each judged on `root` (its own file when
 -- `root` is ""): `{candidates, rewritten, left, lines}`, `lines` a
 -- `path:line: why` each call left. `ts` is their trees, or nil to read
--- them here, one program (`roc_tree`).
-function run_all(paths, root, from, ts)
-  local ctx = {used = 0}
+-- them here, one program (`roc_tree`). With `types`, each file's candidates
+-- go through `by_type` first, `roc-types` run on a root the first time a
+-- file there has a candidate open.
+function run_all(paths, root, from, ts, types)
+  local ctx = {used = 0, typed = {}, types = {}}
   if ts == nil then
     ts = trees(paths)
     ctx.used = 1
   end
-  local total = {candidates = 0, rewritten = 0, left = 0, lines = {}, files = 0, next = 0}
+  local total = {candidates = 0, rewritten = 0, left = 0, lines = {}, files = 0, next = 0, ctx = ctx}
   local baseline = {}
   for k = from, #paths do
     local p = paths[k]
@@ -423,15 +536,31 @@ function run_all(paths, root, from, ts)
     local t = ts[p]
     local own = strip_suffix(basename(p), ".roc")
     local cands = candidates(t, own)
+    local r = root ~= "" and root or p
     local open = 0
     for c in cands do if c.left == "" then open = open + 1 end end
+    -- A file's tally counts once it is begun: a run that stops before it
+    -- leaves it to the next.
+    local tally = {}
+    if types and open > 0 then
+      if not has_key(ctx.types, r) then
+        if ctx.used + 1 + FILE_MOST > RUNS_MOST then
+          total.next = k
+          return total
+        end
+        ctx.types[r] = types_of(ctx, r)
+      end
+      by_type(tally, t, cands, p, ctx.types[r])
+      open = 0
+      for c in cands do if c.left == "" then open = open + 1 end end
+    end
     if open > 0 and ctx.used + FILE_MOST > RUNS_MOST then
       total.next = k
       return total
     end
     total.files = total.files + 1
+    for kind in keys(tally) do incr(ctx.typed, kind, tally[kind]) end
     if #cands > 0 then
-      local r = root ~= "" and root or p
       if open > 0 and not has_key(baseline, r) then
         local b = check(ctx, r)
         if not b.ok then fail("methods: `roc check " .. r .. "` fails before any rewrite: fix it first") end
@@ -480,7 +609,12 @@ const EXPECT = {
   Scrutinee = {left = 1, why = "roc check: missing method (on `text`'s definition)"},
   Knock = {left = 2, why = "roc check: missing method"},
   Header = {left = 0},
+  Typed = {left = 1, why = "the first argument is a List, not a Str", root = "TypedApp", types = true},
 }
+
+-- The plants that are only a root another is judged on, holding no call:
+-- `roc-types` reads an app, and an app names its platform.
+const ROOTS = {TypedApp = true, TypedPf = true}
 
 function self_test()
   local scratch = fresh_dir("scratch:", "methods")
@@ -494,17 +628,21 @@ function self_test()
   for name in keys(EXPECT) do
     local want = EXPECT[name]
     local p = scratch .. "/" .. name .. ".roc"
-    local got = run_all({p}, has_key(want, "root") and (scratch .. "/" .. want.root .. ".roc") or "", 1, ts)
+    local typed = has_key(want, "types")
+    local got = run_all({p}, has_key(want, "root") and (scratch .. "/" .. want.root .. ".roc") or "", 1, ts, typed)
     local mine = {}
     for l in got.lines do push(mine, l) end
     judged(tally, #mine == want.left, name .. ": " .. #mine .. " left, want " .. want.left .. (#mine > 0 and (" (" .. join(mine, "; ") .. ")") or ""))
     if has_key(want, "why") then judged(tally, #mine > 0 and contains(join(mine, "\n"), want.why), name .. ": left because " .. want.why) end
     local wantp = PLANTS .. "/" .. name .. ".want"
     if exists(wantp) then judged(tally, read(p) == read(wantp), name .. ": comes out as " .. name .. ".want") end
+    -- Under types, the turned call was the types' to keep, the left one
+    -- theirs to leave: one each, none to the trial alone.
+    if typed then judged(tally, #keys(got.ctx.typed) == 2 and get(got.ctx.typed, "another type", 0) == 1 and get(got.ctx.typed, "the module's type", 0) == 1, name .. ": by type, " .. json_write(got.ctx.typed)) end
     if want.left > 0 and not exists(wantp) then judged(tally, read(p) == read(PLANTS .. "/" .. name .. ".roc"), name .. ": put back as it was") end
   end
   for name in ls(PLANTS) do
-    if ends_with(name, ".roc") and not has_key(EXPECT, strip_suffix(name, ".roc")) then judged(tally, false, name .. ": a plant the table does not judge") end
+    if ends_with(name, ".roc") and not has_key(EXPECT, strip_suffix(name, ".roc")) and not has_key(ROOTS, strip_suffix(name, ".roc")) then judged(tally, false, name .. ": a plant the table does not judge") end
   end
   if tally.bad > 0 then fail("methods: self-test: " .. tally.bad .. " failed") end
   remove_tree(scratch)
@@ -515,8 +653,15 @@ if SELF then
   self_test()
 else
   local paths = glob(GLOB)
-  local got = run_all(paths, ROOT, FROM, nil)
-  local said = (APPLY and "" or "dry run: ") .. "candidates " .. got.candidates .. ", rewritten " .. got.rewritten .. ", left " .. got.left
+  local got = run_all(paths, ROOT, FROM, nil, TYPES)
+  local said = (APPLY and "" or "dry run: ") .. "candidates " .. got.candidates .. ", rewritten " .. got.rewritten .. ", left " .. got.left .. ", programs " .. got.ctx.used
   if got.next > 0 then said = said .. ", in files " .. FROM .. " to " .. (got.next - 1) .. " of " .. #paths .. ": a run holds 64 programs; go on with from=" .. got.next end
-  print_summed(said, got.lines)
+  local out = {}
+  for l in got.lines do push(out, l) end
+  if TYPES then
+    local kinds = {}
+    for kind in sort(keys(got.ctx.typed)) do push(kinds, kind .. " " .. got.ctx.typed[kind]) end
+    push(out, "types: the first arguments of the candidates the types judged: " .. join(kinds, ", "))
+  end
+  print_summed(said, out)
 end
