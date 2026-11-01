@@ -6,9 +6,11 @@
 //!
 //! A file that does not parse cleanly is a failure, named, never a tree.
 //!
-//! **`--tree`: THE SAME TREE, FOR A PROGRAM** (Shale's `roc_tree` reads it):
+//! **`--flat`: THE SAME TREE, WRITTEN FLAT FOR A PROGRAM** (Shale's `roc_tree` reads it):
 //! the tree Roc's printer would print, walked in memory and written one fact
-//! a line, so nothing is guessed back out of a layout made for eyes:
+//! a line, so nothing is guessed back out of a layout made for eyes. The first
+//! line says the format and whose parser: `roc-ast flat 1 <roc-version>`; a
+//! change a reader must know of is a new number. Then:
 //!   `n<TAB>parent<TAB>kind<TAB>line<TAB>col<TAB>end_line<TAB>end_col`
 //!   `a<TAB>node<TAB>name<TAB>value`
 //! Nodes are numbered from 1 in each file, in the order the printer prints
@@ -24,6 +26,10 @@
 const std = @import("std");
 const base = @import("base");
 const parse = @import("parse");
+const build_options = @import("build_options");
+
+/// The `--flat` format's number, in its first line.
+const flat_format = 1;
 
 const SExprTree = base.SExprTree;
 const Node = @typeInfo(@FieldType(@FieldType(SExprTree, "children"), "items")).pointer.child;
@@ -127,9 +133,9 @@ pub fn main(init: std.process.Init) !void {
     const arena = arena_state.allocator();
 
     const args = try init.minimal.args.toSlice(arena);
-    const as_tree = args.len == 2 and std.mem.eql(u8, args[1], "--tree");
-    if (args.len > 2 or (args.len == 2 and !as_tree)) {
-        std.debug.print("roc-ast: the paths come on stdin; the one argument is --tree\n", .{});
+    const as_flat = args.len == 2 and std.mem.eql(u8, args[1], "--flat");
+    if (args.len > 2 or (args.len == 2 and !as_flat)) {
+        std.debug.print("roc-ast: the paths come on stdin; the one argument is --flat\n", .{});
         std.process.exit(2);
     }
 
@@ -140,6 +146,13 @@ pub fn main(init: std.process.Init) !void {
     var out_buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &out_buf);
     const out = &stdout.interface;
+
+    if (as_flat) {
+        try out.print("roc-ast flat {d} {s}\n", .{ flat_format, build_options.roc_pin });
+        // Out at once: a crash later (a path that is a folder) loses what is
+        // buffered, and a reader must still see whose format follows.
+        try out.flush();
+    }
 
     var it = std.mem.splitScalar(u8, list, '\n');
     while (it.next()) |raw| {
@@ -161,7 +174,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         try out.print("== {s}\n", .{path});
-        if (as_tree) {
+        if (as_flat) {
             // As AST.toSExprStr builds it, walked instead of printed.
             var tree = SExprTree.init(gpa);
             defer tree.deinit();

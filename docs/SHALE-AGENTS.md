@@ -284,7 +284,7 @@ has none of it):
   `[]const X` is a use of `X`.
   `roc_tree(paths)` is Roc's own parser's tree of each file, in order:
   `{path, nodes, err}`, from roc-ast (Shale's `tools/roc_ast`,
-  installed under the `tools` mount as `roc-ast/bin/roc-ast`), its `--tree`
+  installed under the `tools` mount as `roc-ast/bin/roc-ast`), its `--flat`
   lines read in the host, every string whole however it is quoted. A node is
   `{kind, depth, parent, kids, line, col, end_line, end_col}` and the
   attributes Roc's tree gives it, by their names (`raw`, `name`, `method`,

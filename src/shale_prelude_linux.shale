@@ -400,7 +400,7 @@ function zig_imports(path)
 end
 
 -- **ROC FILES' TREES, FROM ROC'S OWN PARSER**: each path run through
--- roc-ast (`tools:roc-ast/bin/roc-ast --tree`, Shale's tools/roc_ast) and
+-- roc-ast (`tools:roc-ast/bin/roc-ast --flat`, Shale's tools/roc_ast) and
 -- its lines read in the host: one `{path, nodes, err}` a path, in order. A node
 -- is `{kind, depth, parent, kids, line, col, end_line, end_col}` and the
 -- attributes Roc's tree gives it (`raw`, `name`, `method`, `op`, `type`,
@@ -427,7 +427,7 @@ function roc_tree(paths)
         push(reals, real(paths[j]))
         j = j + 1
       end
-      local r = run({real(exe), "--tree"}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
+      local r = run({real(exe), "--flat"}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
       local got = host("roc_tree", r.out)
       local kept = {}
       for f in got.files do
@@ -460,7 +460,7 @@ function roc_tree(paths)
           -- was left unflushed is at most roc-ast's buffer of trees.
           local found = false
           while not found and i < j do
-            local one = run({real(exe), "--tree"}, {timeout_ms = 300000, stdin = real(paths[i]), whole = 64000000})
+            local one = run({real(exe), "--flat"}, {timeout_ms = 300000, stdin = real(paths[i]), whole = 64000000})
             local alone = host("roc_tree", one.out)
             if one.ended == "exit" and one.code == 0 and #alone.files == 1 and not has_key(alone, "said") then
               push(out, {path = paths[i], nodes = alone.files[1].nodes, err = ""})

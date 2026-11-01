@@ -15,7 +15,11 @@ comptime {
 }
 
 pub fn build(b: *std.Build) void {
-    checkPin(b);
+    const pin = checkPin(b);
+    // The pin roc-ast says in its `--flat` header, so a reader knows whose
+    // parser wrote the tree.
+    const options = b.addOptions();
+    options.addOption([]const u8, "roc_pin", pin);
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const roc = b.dependency("roc", .{ .target = target, .optimize = optimize });
@@ -28,6 +32,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "base", .module = roc.module("base") },
                 .{ .name = "parse", .module = roc.module("parse") },
+                .{ .name = "build_options", .module = options.createModule() },
             },
         }),
     });
@@ -37,7 +42,8 @@ pub fn build(b: *std.Build) void {
 /// **THE PARSER IS THE COMPILER'S**: build.zig.zon's roc must be the commit
 /// the roc-version beside it names, or the tree is of a language our compiler may
 /// not speak. A roc-version bump fails here until the dependency moves too.
-fn checkPin(b: *std.Build) void {
+/// Gives the pin, the whole `roc-version` line.
+fn checkPin(b: *std.Build) []const u8 {
     const io = b.graph.io;
     const dir = b.root.root_dir.handle;
     const here = b.root.subPathOrDot();
@@ -46,4 +52,5 @@ fn checkPin(b: *std.Build) void {
     const zon = dir.readFileAlloc(io, b.pathJoin(&.{ here, "build.zig.zon" }), b.allocator, .limited(64 * 1024)) catch |e| std.process.fatal("roc-ast: cannot read build.zig.zon ({t})", .{e});
     if (std.mem.indexOf(u8, zon, b.fmt("/archive/{s}", .{commit})) == null)
         std.process.fatal("roc-ast: roc-version pins Roc {s}, and build.zig.zon's roc is another commit: `zig fetch --save=roc https://github.com/roc-lang/roc/archive/<that commit, in full>.tar.gz`", .{commit});
+    return version;
 }

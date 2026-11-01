@@ -1,10 +1,12 @@
-//! `roc_tree`'s reading: `roc-ast --tree` (Shale's tools/roc_ast, Roc's own
+//! `roc_tree`'s reading: `roc-ast --flat` (Shale's tools/roc_ast, Roc's own
 //! parser's tree, walked in memory and written for a program) turned into
 //! nodes, so a Roc recipe walks a list. The prelude's `roc_tree(paths)` runs
 //! roc-ast and calls `host("roc_tree", out)` with what it wrote.
 //!
-//! **THE FORMAT** (tools/roc_ast/main.zig says how it is made): `== <path>`
-//! starts a file; then one fact a line, tab-separated:
+//! **THE FORMAT** (tools/roc_ast/main.zig says how it is made): first
+//! `roc-ast flat 1 <roc-version>`, its number the one this reader knows
+//! (`flat_format`), else refused, naming the fix; `== <path>` starts a file;
+//! then one fact a line, tab-separated:
 //!   `n<TAB>parent<TAB>kind<TAB>line<TAB>col<TAB>end_line<TAB>end_col`
 //!   `a<TAB>node<TAB>name<TAB>value`
 //! Nodes are numbered from 1 in each file in the order they come; `parent`
@@ -13,7 +15,7 @@
 //! A line that is none of these ends the trees: roc-ast's refusal, given
 //! back as `said`.
 //!
-//! Reading is pure (`parseTree`); `call` makes Shale's values and charges a
+//! Reading is pure (`parseFlat`); `call` makes Shale's values and charges a
 //! step per node.
 
 const std = @import("std");
@@ -91,19 +93,32 @@ fn unescape(a: std.mem.Allocator, s: []const u8) error{ OutOfMemory, Bad }![]con
     return out.items;
 }
 
+/// The `--flat` format this reader knows, as roc-ast's header says it.
+const flat_format = "1";
+
 fn num(s: []const u8) ?usize {
     return std.fmt.parseInt(usize, s, 10) catch null;
 }
 
-/// Reads `roc-ast --tree`'s output: each `== path` and its nodes, and the
+/// Reads `roc-ast --flat`'s output: each `== path` and its nodes, and the
 /// first line past the trees, if any. Strings point into `text` or `a`.
-pub fn parseTree(a: std.mem.Allocator, text: []const u8) error{OutOfMemory}!Outcome {
+pub fn parseFlat(a: std.mem.Allocator, text: []const u8) error{OutOfMemory}!Outcome {
     var files: std.ArrayList(File) = .empty;
     var it = std.mem.splitScalar(u8, text, '\n');
     var n: usize = 0;
+    var header = false;
     while (it.next()) |raw| {
         n += 1;
         if (raw.len == 0) continue;
+        if (!header) {
+            // Whose format, before anything is read as a tree.
+            const said = "roc-ast flat ";
+            if (!std.mem.startsWith(u8, raw, said)) return .{ .bad = .{ .line = n, .why = "no `roc-ast flat 1` header: an older roc-ast, or not its --flat; Shale's `shale tools/roc_ast/install.shale` installs the one this Shale reads" } };
+            var words = std.mem.splitScalar(u8, raw[said.len..], ' ');
+            if (!std.mem.eql(u8, words.first(), flat_format)) return .{ .bad = .{ .line = n, .why = "roc-ast's --flat is another format than 1, the one this Shale reads: Shale's `shale tools/roc_ast/install.shale` installs the matching roc-ast" } };
+            header = true;
+            continue;
+        }
         if (std.mem.startsWith(u8, raw, "== ")) {
             try files.append(a, .{ .path = raw[3..] });
             continue;
@@ -168,7 +183,7 @@ pub fn call(backing: std.mem.Allocator, run: *Run, pos: Pos, args: []const Value
     try script.builtins.chargeBytes(run, pos, text.len);
     var arena = std.heap.ArenaAllocator.init(backing);
     defer arena.deinit();
-    const dump = switch (parseTree(arena.allocator(), text) catch return run.oom(pos)) {
+    const dump = switch (parseFlat(arena.allocator(), text) catch return run.oom(pos)) {
         .ok => |d| d,
         .bad => |b| return run.fail(pos, .argument, "`roc_tree`: roc-ast's output line {d} is not a tree's: {s}", .{ b.line, b.why }),
     };
@@ -209,10 +224,11 @@ pub fn call(backing: std.mem.Allocator, run: *Run, pos: Pos, args: []const Value
     return .{ .table = out };
 }
 
-test "parseTree: nodes, parents, depths, kids, spans and attributes, two files, a refusal after" {
+test "parseFlat: nodes, parents, depths, kids, spans and attributes, two files, a refusal after" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const text =
+        "roc-ast flat 1 nightly-x-abc\n" ++
         "== /x/a.roc\n" ++
         "n\t0\tfile\t1\t1\t5\t14\n" ++
         "n\t1\tstatements\t0\t0\t0\t0\n" ++
@@ -226,7 +242,7 @@ test "parseTree: nodes, parents, depths, kids, spans and attributes, two files, 
         "n\t0\tfile\t1\t1\t1\t2\n" ++
         "a\t1\tline-doc\tkept\n" ++
         "/x/c.roc: 1 parse problem(s): no tree\n";
-    const got = (try parseTree(arena.allocator(), text)).ok;
+    const got = (try parseFlat(arena.allocator(), text)).ok;
     try std.testing.expectEqual(@as(usize, 2), got.files.len);
     try std.testing.expectEqualStrings("/x/c.roc: 1 parse problem(s): no tree", got.said.?);
     const ns = got.files[0].nodes.items;
@@ -245,30 +261,48 @@ test "parseTree: nodes, parents, depths, kids, spans and attributes, two files, 
     try std.testing.expectEqualStrings("line_doc", got.files[1].nodes.items[0].attrs.items[0].name);
 }
 
-test "parseTree: escapes undone, so a string holding quotes, parens, tabs and backslashes reads whole" {
+test "parseFlat: escapes undone, so a string holding quotes, parens, tabs and backslashes reads whole" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     // roc-ast's own line for `x = "a\") (b"`: the source's backslash escaped.
-    const got = (try parseTree(arena.allocator(), "== /x\nn\t0\te-string-part\t3\t6\t3\t13\na\t1\traw\ta\\\\\") (b\\tc\\nd\\r\n")).ok;
+    const got = (try parseFlat(arena.allocator(), "roc-ast flat 1 nightly-x-abc\n== /x\nn\t0\te-string-part\t3\t6\t3\t13\na\t1\traw\ta\\\\\") (b\\tc\\nd\\r\n")).ok;
     try std.testing.expectEqualStrings("a\\\") (b\tc\nd\r", got.files[0].nodes.items[0].attrs.items[0].value);
 }
 
-test "parseTree: refused: a node before a path, short or long lines, a parent or node not yet read, a bad escape, no kind, an attribute twice or on a field's name" {
+test "parseFlat: refused: a node before a path, short or long lines, a parent or node not yet read, a bad escape, no kind, an attribute twice or on a field's name" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const cases = [_]struct { text: []const u8, why: []const u8 }{
-        .{ .text = "n\t0\tfile\t1\t1\t1\t2\n", .why = "a node before any `== path`" },
-        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\n", .why = "a node line without its six fields" },
-        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\t9\n", .why = "a line with too many fields" },
-        .{ .text = "== /x\nn\t1\tfile\t1\t1\t1\t2\n", .why = "a node's parent not yet read" },
-        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t2\traw\tx\n", .why = "an attribute's node not yet read" },
-        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\n", .why = "an attribute line without its three fields" },
-        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\tx\\q\n", .why = "a bad escape" },
-        .{ .text = "== /x\nn\t0\t\t1\t1\t1\t2\n", .why = "a node with no kind" },
-        .{ .text = "== /x\nn\t0\tfile\tx\t1\t1\t2\n", .why = "a span's number" },
-        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\tx\na\t1\traw\ty\n", .why = "an attribute twice in one node" },
-        .{ .text = "== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\tkind\tx\n", .why = "an attribute takes a node field's name" },
+        .{ .text = "roc-ast flat 1 p\nn\t0\tfile\t1\t1\t1\t2\n", .why = "a node before any `== path`" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\n", .why = "a node line without its six fields" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\t2\t9\n", .why = "a line with too many fields" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t1\tfile\t1\t1\t1\t2\n", .why = "a node's parent not yet read" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\t2\na\t2\traw\tx\n", .why = "an attribute's node not yet read" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\n", .why = "an attribute line without its three fields" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\tx\\q\n", .why = "a bad escape" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\t\t1\t1\t1\t2\n", .why = "a node with no kind" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\tx\t1\t1\t2\n", .why = "a span's number" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\tx\na\t1\traw\ty\n", .why = "an attribute twice in one node" },
+        .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\tkind\tx\n", .why = "an attribute takes a node field's name" },
     };
-    for (cases) |c| try std.testing.expectEqualStrings(c.why, (try parseTree(a, c.text)).bad.why);
+    for (cases) |c| try std.testing.expectEqualStrings(c.why, (try parseFlat(a, c.text)).bad.why);
+}
+
+test "parseFlat: the header first: format 1 read and passed over; none, or another number, refused naming the install" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ok = (try parseFlat(a, "roc-ast flat 1 nightly-2026-10-30-0602c5f\n== /x\nn\t0\tfile\t1\t1\t1\t2\n")).ok;
+    try std.testing.expectEqual(@as(usize, 1), ok.files.len);
+    try std.testing.expectEqual(@as(usize, 1), ok.files[0].nodes.items.len);
+    // An older roc-ast's --flat, no header: its first line is a file's.
+    const old = (try parseFlat(a, "== /x\nn\t0\tfile\t1\t1\t1\t2\n")).bad;
+    try std.testing.expect(std.mem.indexOf(u8, old.why, "no `roc-ast flat 1` header") != null);
+    try std.testing.expect(std.mem.indexOf(u8, old.why, "install.shale") != null);
+    const next = (try parseFlat(a, "roc-ast flat 2 nightly-2027-01-01-abc\n== /x\n")).bad;
+    try std.testing.expect(std.mem.indexOf(u8, next.why, "another format than 1") != null);
+    try std.testing.expectEqual(@as(usize, 1), next.line);
+    // `1` must be the whole word, never a prefix (`10`).
+    try std.testing.expect((try parseFlat(a, "roc-ast flat 10 p\n")) == .bad);
 }
