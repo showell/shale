@@ -137,7 +137,8 @@ it works on, `<shale>` being the shale checkout:
   listed and left, and so is a call whose first argument is only number
   literals, operators and parentheses (`U64.to_str(5)`, `U64.to_str(2 + 3)`:
   as a receiver its type defaults, `(5).to_str()` being a `Dec`'s "5.0",
-  which checks; `5.U64` and `n + 1` turn). A dry run by default (each trial put back; run it with
+  which checks; `5.U64` and `n + 1` turn), or a name bound to such
+  without an annotation (`n = 5`, a top-level `top = 7`; `m : U64` turns). A dry run by default (each trial put back; run it with
   `--undo-on-stop`, so a stop mid-trial puts that back too); `apply=1`
   keeps them. Out: the counts, a line each call left, `path:line: why`,
   then the counts again. A run holds 64 programs: on a bigger tree it stops before a file

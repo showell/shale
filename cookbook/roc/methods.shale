@@ -54,9 +54,14 @@
 --     `(5).to_str()` a `Dec`, "5.0". Both check, and the checker calls the
 --     literal a `U64`, so only an `expect` would see it: the call stays,
 --     named. A name, call, field or typed literal (`5.U64`) anywhere in it
---     fixes its type, and it is a candidate (`n + 1`). A name bound to a
---     literal (`start = 0`) is one too, and defaults the same: the
---     compiler sees it only where the default clashes (ProvenFails);
+--     fixes its type, and it is a candidate (`n + 1`). So is a plain name
+--     bound to one without an annotation, the nearest definition up the
+--     tree (`n = 5` earlier in a block, or a top-level `top = 7`); one
+--     annotated (`m : U64`) or a parameter has its type, and is a
+--     candidate. A name bound to anything else whose type only literals
+--     give (`start = if c 1 else 0`) is a candidate, and defaults the
+--     same: the compiler sees it only where the default clashes
+--     (ProvenFails), else only an `expect`;
 --   A call whose first argument's type is not the module's
 --   (`Str.from_utf8(bytes)`, a list) is left by the types, that its
 --   reason; under `types=0`, it is a candidate the compiler refuses
@@ -183,6 +188,52 @@ function constant_numeric(t, i)
   return true
 end
 
+-- **A NAME BOUND TO ONE**: whether the plain name `name`, used at node
+-- `at`, is defined without an annotation as a constant numeric expression
+-- (or as another such name): `n = 5` before `U64.to_str(n)` in an
+-- enclosing block, or a top-level `top = 7`, either defaulting as a
+-- receiver as the literal would. The nearest definition up the tree is
+-- the one: in a block the last before the statement holding the use, at
+-- the top level (`associated`, the file's statements; order-free) any. An
+-- annotation of the name beside it (`n : U64`), or a lambda's parameter
+-- of that name met first, fixes the type, and it is not.
+function bound_numeric(t, at, name, depth)
+  if depth > 8 then return false end
+  local child = at
+  local up = t.nodes[at].parent
+  while up > 0 do
+    local u = t.nodes[up]
+    if u.kind == "e-lambda" then
+      for p in u.kids do
+        if t.nodes[p].kind == "args" then
+          for a in t.nodes[p].kids do
+            if t.nodes[a].kind == "p-ident" and t.nodes[a].raw == name then return false end
+          end
+        end
+      end
+    end
+    local block = u.kind == "statements" and u.parent > 0 and t.nodes[u.parent].kind == "e-block"
+    local decl = 0
+    local annotated = false
+    for k in u.kids do
+      if block and k == child then break end
+      local s = t.nodes[k]
+      if s.kind == "s-decl" and #s.kids == 2 and t.nodes[s.kids[1]].kind == "p-ident" and t.nodes[s.kids[1]].raw == name then decl = k end
+      if s.kind == "s-type-anno" and s.name == name then annotated = true end
+    end
+    if decl > 0 then
+      if annotated then return false end
+      local v = t.nodes[decl].kids[2]
+      if constant_numeric(t, v) then return true end
+      local vn = t.nodes[v]
+      return vn.kind == "e-ident" and find(vn.raw, ".") == nil and bound_numeric(t, v, vn.raw, depth + 1)
+    end
+    child = up
+    up = u.parent
+  end
+  return false
+end
+
 -- ── the tree ─────────────────────────────────────────────────────────────
 
 -- A node's span (the end column one past the last), as byte offsets into
@@ -215,7 +266,7 @@ function trees(paths)
     local t = {nodes = {}, text = text, starts = line_starts(text)}
     for n in f.nodes do
       local span = span_of(n, t.starts)
-      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), span = span or {from = 0, to = 0}, spanned = span ~= nil, kids = n.kids, parent = n.parent, region = n.line .. ":" .. n.col .. ":" .. n.end_line .. ":" .. n.end_col})
+      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), name = get(n, "name", ""), span = span or {from = 0, to = 0}, spanned = span ~= nil, kids = n.kids, parent = n.parent, region = n.line .. ":" .. n.col .. ":" .. n.end_line .. ":" .. n.end_col})
     end
     out[f.path] = t
   end
@@ -270,6 +321,12 @@ function candidates(t, own)
           local text = sub(t.text, t.nodes[first].span.from, t.nodes[first].span.to - 1)
           if t.nodes[first].kind ~= "e-tuple" then text = "(" .. text .. ")" end
           c.left = "a number literal's type would default as a receiver (`" .. text .. "." .. c.fn .. "()` is no longer a " .. c.module .. ")"
+        end
+        -- The same through a plain name bound, unannotated, to one
+        -- (`n = 5`, then `U64.to_str(n)`).
+        local fnode = t.nodes[first]
+        if c.left == "" and fnode.kind == "e-ident" and find(fnode.raw, ".") == nil and bound_numeric(t, first, fnode.raw, 0) then
+          c.left = "a number literal's type would default as a receiver (`" .. fnode.raw .. "` is bound to a number literal, unannotated, and `" .. fnode.raw .. "." .. c.fn .. "()` is no longer a " .. c.module .. ")"
         end
         if m.groups[1] ~= own then push(out, c) end
       end
@@ -773,7 +830,7 @@ const EXPECT = {
   Decode = {left = 1, why = "on no rewritten call; the file is put back", root = "Breaks"},
   Breaks = {left = 1, why = "roc check: missing method"},
   Matched = {left = 1, why = "an argument with no span"},
-  Literal = {left = 2, why = "a number literal's type would default as a receiver"},
+  Literal = {left = 4, why = "a number literal's type would default as a receiver"},
   Ref = {left = 0},
   Scrutinee = {left = 1, why = "roc check: missing method (on `text`'s definition)"},
   Knock = {left = 2, why = "roc check: missing method"},
