@@ -1,0 +1,20 @@
+-- **EACH FILE'S NODES, ONE A LINE**, for comparing two parsers' trees
+-- (docs/designs/roc-parser-experiment.md): path, kind, span, the `raw`,
+-- `method` and `field` attributes, and the parent's kind, tab-separated; a
+-- file refused is `ERR`, its path and why. Run it once each way and compare
+-- the lines:
+--   shale tools/roc_parser_flat/tree_dump.shale glob=app/**/*.roc
+--   shale tools/roc_parser_flat/tree_dump.shale glob=app/**/*.roc parser=roc-parser
+-- budget: steps=2000000000 arena_bytes=3000000000 output_bytes=900000000 read_bytes=2000000000
+const paths = glob(arg("glob", "**/*.roc"))
+for f in roc_tree(paths) do
+  if f.err ~= "" then
+    print("ERR\t" .. f.path .. "\t" .. f.err)
+  else
+    for n in f.nodes do
+      local pk = "-"
+      if n.parent > 0 then pk = f.nodes[n.parent].kind end
+      print(f.path .. "\t" .. n.kind .. "\t" .. n.line .. "." .. n.col .. "-" .. n.end_line .. "." .. n.end_col .. "\t" .. get(n, "raw", "") .. "\t" .. get(n, "method", "") .. "\t" .. get(n, "field", "") .. "\t" .. pk)
+    end
+  end
+end

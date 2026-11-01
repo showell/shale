@@ -5,7 +5,10 @@
 //!
 //! **THE FORMAT** (tools/roc_ast/main.zig says how it is made): first
 //! `roc-ast flat 1 <roc-version>`, its number the one this reader knows
-//! (`flat_format`), else refused, naming the fix; `== <path>` starts a file;
+//! (`flat_format`), else refused, naming the fix; or `roc-parser flat 1
+//! <roc-parser version>`, the same format from roc-parser's tree
+//! (tools/roc_parser_flat, an experiment: `roc_tree` reads it under the
+//! `parser=roc-parser` argument); `== <path>` starts a file;
 //! then one fact a line, tab-separated:
 //!   `n<TAB>parent<TAB>kind<TAB>line<TAB>col<TAB>end_line<TAB>end_col`
 //!   `a<TAB>node<TAB>name<TAB>value`
@@ -111,9 +114,11 @@ pub fn parseFlat(a: std.mem.Allocator, text: []const u8) error{OutOfMemory}!Outc
         n += 1;
         if (raw.len == 0) continue;
         if (!header) {
-            // Whose format, before anything is read as a tree.
-            const said = "roc-ast flat ";
-            if (!std.mem.startsWith(u8, raw, said)) return .{ .bad = .{ .line = n, .why = "no `roc-ast flat 1` header: an older roc-ast, or not its --flat; Shale's `shale tools/roc_ast/install.shale` installs the one this Shale reads" } };
+            // Whose format, before anything is read as a tree: roc-ast's,
+            // or roc-parser's in the same shape.
+            const said = for ([_][]const u8{ "roc-ast flat ", "roc-parser flat " }) |h| {
+                if (std.mem.startsWith(u8, raw, h)) break h;
+            } else return .{ .bad = .{ .line = n, .why = "no `roc-ast flat 1` header: an older roc-ast, or not its --flat; Shale's `shale tools/roc_ast/install.shale` installs the one this Shale reads" } };
             var words = std.mem.splitScalar(u8, raw[said.len..], ' ');
             if (!std.mem.eql(u8, words.first(), flat_format)) return .{ .bad = .{ .line = n, .why = "roc-ast's --flat is another format than 1, the one this Shale reads: Shale's `shale tools/roc_ast/install.shale` installs the matching roc-ast" } };
             header = true;
@@ -305,4 +310,9 @@ test "parseFlat: the header first: format 1 read and passed over; none, or anoth
     try std.testing.expectEqual(@as(usize, 1), next.line);
     // `1` must be the whole word, never a prefix (`10`).
     try std.testing.expect((try parseFlat(a, "roc-ast flat 10 p\n")) == .bad);
+    // roc-parser's, the same format, read alike; its other numbers refused.
+    const rp = (try parseFlat(a, "roc-parser flat 1 3.0.0-3-gbafa803\n== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\trp\tFile\n")).ok;
+    try std.testing.expectEqualStrings("File", rp.files[0].nodes.items[0].attrs.items[0].value);
+    try std.testing.expect((try parseFlat(a, "roc-parser flat 2 x\n")) == .bad);
+    try std.testing.expect((try parseFlat(a, "roc-parsers flat 1 x\n")) == .bad);
 }

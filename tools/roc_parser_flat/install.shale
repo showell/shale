@@ -1,0 +1,21 @@
+-- **roc-parser-flat, BUILT AND INSTALLED** where Shale may run it
+-- (~/tools/roc-parser-flat/bin/roc-parser-flat, under the `tools` mount):
+-- tools/roc_parser_flat/main.roc, on basic-cli 0.25.0, with roc-parser
+-- checked out beside Shale (`../roc-parser`, the version main.roc names),
+-- built by the Roc roc-ast pins (tools/roc_ast/roc-version). An experiment
+-- (`roc_tree` reads it under `parser=roc-parser`). Run from Shale's checkout:
+--   shale tools/roc_parser_flat/install.shale
+
+local version = trim(read("tools/roc_ast/roc-version"))
+local roc = real("tools:roc-" .. version .. "/roc")
+if not exists("repos:roc-parser/package/RocSyntax.roc") then fail("roc-parser-flat: no roc-parser beside Shale: git clone https://github.com/lukewilliamboswell/roc-parser") end
+mkdir("tools:roc-parser-flat/bin")
+local built = run({roc, "build", "main.roc", "--output=" .. real("tools:roc-parser-flat/bin") .. "/roc-parser-flat"}, {timeout_ms = 1800000, tail = 20, cwd = "tools/roc_parser_flat"})
+-- `roc build` exits 2 for warnings alone, and basic-cli 0.25.0 brings one
+-- of its own (Tcp.roc's `Stream` shadows a builtin): 0 errors is a build.
+local clean = built.ended == "exit" and (built.code == 0 or (built.code == 2 and find(built.out, "0 errors and ") ~= nil))
+if not clean then
+  print(built.out)
+  fail("roc-parser-flat: the build " .. (built.ended == "exit" and ("exited " .. built.code) or built.ended) .. "; nothing installed")
+end
+print("roc-parser-flat: installed at ~/tools/roc-parser-flat/bin/roc-parser-flat")

@@ -409,9 +409,37 @@ end
 -- runs for it. roc-ast stops at a file it refuses: that file's `err` says
 -- why, its `nodes` empty, and the rest run again; `err` is "" for a file
 -- read.
+--
+-- **`parser=roc-parser`, AN EXPERIMENT**: the run's argument reads the
+-- trees from roc-parser instead (`tools:roc-parser-flat/bin/roc-parser-flat`,
+-- Shale's tools/roc_parser_flat), the same format, its kinds mapped onto
+-- the compiler's where the recipes read them (that tool's header says
+-- where the mapping guesses). roc-ast stays the default.
 function roc_tree(paths)
+  local parser = arg("parser", "roc-ast")
   local exe = "tools:roc-ast/bin/roc-ast"
-  if not exists(exe) then fail("`roc_tree`: no " .. exe .. ": Shale's `shale tools/roc_ast/install.shale` builds it") end
+  local flags = {"--flat"}
+  if parser == "roc-parser" then
+    exe = "tools:roc-parser-flat/bin/roc-parser-flat"
+    flags = {}
+  elseif parser ~= "roc-ast" then
+    fail("`roc_tree`: parser=" .. parser .. " is neither roc-ast (the default) nor roc-parser")
+  end
+  if not exists(exe) then fail("`roc_tree`: no " .. exe .. ": Shale's `shale tools/roc_ast/install.shale` (or, for parser=roc-parser, tools/roc_parser_flat/install.shale) builds it") end
+  -- roc-parser's lines carry each node's own kind besides (`rp`), about
+  -- twice roc-ast's: a tree of many files runs 200 at a time, so one run's
+  -- output stays under `run`'s whole.
+  if parser == "roc-parser" and #paths > 200 then
+    local all = {}
+    local k = 0
+    while k < #paths do
+      for f in roc_tree(take(drop(paths, k), 200)) do push(all, f) end
+      k = k + 200
+    end
+    return all
+  end
+  local argv = {real(exe)}
+  for f in flags do push(argv, f) end
   local out = {}
   local i = 1
   while i <= #paths do
@@ -427,7 +455,7 @@ function roc_tree(paths)
         push(reals, real(paths[j]))
         j = j + 1
       end
-      local r = run({real(exe), "--flat"}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
+      local r = run(argv, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
       local got = host("roc_tree", r.out)
       local kept = {}
       for f in got.files do
@@ -460,7 +488,7 @@ function roc_tree(paths)
           -- was left unflushed is at most roc-ast's buffer of trees.
           local found = false
           while not found and i < j do
-            local one = run({real(exe), "--flat"}, {timeout_ms = 300000, stdin = real(paths[i]), whole = 64000000})
+            local one = run(argv, {timeout_ms = 300000, stdin = real(paths[i]), whole = 64000000})
             local alone = host("roc_tree", one.out)
             if one.ended == "exit" and one.code == 0 and #alone.files == 1 and not has_key(alone, "said") then
               push(out, {path = paths[i], nodes = alone.files[1].nodes, err = ""})
