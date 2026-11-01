@@ -10,8 +10,8 @@
 --   shale cookbook:roc/methods.shale self_test=1
 --
 -- **THE COMPILER IS THE JUDGE**: a syntax tree cannot say a value's type,
--- so each file's candidates (from roc-ast, Roc's own parser's tree, as
--- name_hunt.shale reads it) are written in, and `roc check` on `root`
+-- so each file's candidates (from `roc_tree`, Roc's own parser's tree) are
+-- written in, and `roc check` on `root`
 -- (default: the file itself) must pass and `roc test`'s summary (its
 -- expects' count and results) must be what it was. An error `roc check`
 -- puts on a rewritten call's lines leaves that call as it was, with the
@@ -66,14 +66,13 @@
 -- judged only by the Roc the tree is built with. The self-test uses
 -- `SELF_TEST_PIN`, as CI installs it from roc-apps's release asset. Both
 -- are `roc_bin`'s, from the library cookbook/roc/pinned.shale.
--- budget: steps=900000000 output_bytes=4000000 arena_bytes=2000000000 changes=100000 change_bytes=2000000000
+-- budget: steps=900000000 output_bytes=4000000 arena_bytes=2000000000 changes=100000 change_bytes=2000000000 call_depth=1000
 
 const SELF = arg("self_test", "") == "1"
 const APPLY = SELF or arg("apply", "") == "1"
 const PLANTS = "cookbook:roc/plants/methods"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
-const ROC_AST = "tools:roc-ast/bin/roc-ast"
 use("cookbook:roc/pinned.shale")
 const ROUNDS = 4
 const FROM = tonumber(arg("from", "1"))
@@ -87,26 +86,15 @@ const FILE_MOST = ROUNDS + 5
 -- The kinds a first argument may be without parentheses: `f(x).len()`,
 -- `"a".to_utf8()`; any other (a number, a sum, a lambda, an `if`) is put in
 -- them, `(a + b).to_str()`.
-const ATOMS = {["(e-ident"] = true, ["(e-apply"] = true, ["(e-method-call"] = true, ["(e-field-access"] = true, ["(e-string"] = true, ["(e-list"] = true, ["(e-record"] = true, ["(e-tuple"] = true, ["(e-tag"] = true}
+const ATOMS = {["e-ident"] = true, ["e-apply"] = true, ["e-method-call"] = true, ["e-field-access"] = true, ["e-string"] = true, ["e-list"] = true, ["e-record"] = true, ["e-tuple"] = true, ["e-tag"] = true}
 
 -- ── the tree ─────────────────────────────────────────────────────────────
 
-function depth_of(l)
-  local d = 0
-  while sub(l, d + 1, d + 1) == "\t" do d = d + 1 end
-  return d
-end
-
-function kind_of(h)
-  return split(h, " ")[1]
-end
-
--- A node's span, `@l1.c1-l2.c2` (the end column one past the last), as
--- byte offsets into the file's text (1-based, the end one past).
-function span_of(h, starts)
-  local m = re_find(h, "@([0-9]+)\\.([0-9]+)-([0-9]+)\\.([0-9]+)")
-  if m == nil then return nil end
-  return {from = starts[tonumber(m.groups[1])] + tonumber(m.groups[2]) - 1, to = starts[tonumber(m.groups[3])] + tonumber(m.groups[4]) - 1}
+-- A node's span (the end column one past the last), as byte offsets into
+-- the file's text (1-based, the end one past); nil for a node with none.
+function span_of(n, starts)
+  if n.line == 0 then return nil end
+  return {from = starts[n.line] + n.col - 1, to = starts[n.end_line] + n.end_col - 1}
 end
 
 -- Each line's first byte's offset.
@@ -120,46 +108,21 @@ function line_starts(text)
   return out
 end
 
--- Every file's tree, by path: `{nodes, text}`, a node `{kind, head, span,
+-- Every file's tree, by path: `{nodes, text}`, a node `{kind, raw, span,
 -- spanned, kids, parent}` (`spanned` false for a node with no span, `kids` its children's
--- indexes, in order, `parent` 0 at the top).
+-- indexes, in order, `parent` 0 at the top), from `roc_tree`.
 function trees(paths)
-  if not exists(ROC_AST) then fail("methods: no " .. ROC_AST .. ": unpack roc-apps's release asset roc-ast-258ab27-linux-x86_64.tar.gz (github.com/showell/roc-apps/releases/tag/toolchain-2026-10-30) into ~/tools/roc-ast/, the `tools` mount") end
-  local shown = {}
-  local reals = {}
-  for p in paths do
-    push(reals, real(p))
-    shown[real(p)] = p
-  end
   local out = {}
-  if #reals == 0 then return out end
-  local dump = run({real(ROC_AST)}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
-  if dump.ended ~= "exit" or dump.code ~= 0 then
-    local said = lines(trim(dump.out))
-    fail("methods: roc-ast: " .. (said[#said] or dump.ended))
-  end
-  local t = nil
-  local stack = {}
-  for l in lines(dump.out) do
-    local h = trim(l)
-    if starts_with(h, "== ") then
-      local p = get(shown, sub(h, 4), sub(h, 4))
-      local text = read(p)
-      t = {nodes = {}, text = text, starts = line_starts(text)}
-      out[p] = t
-      stack = {}
-    elseif t ~= nil and h ~= "" then
-      local d = depth_of(l)
-      local span = span_of(h, t.starts)
-      local n = {kind = kind_of(h), head = h, span = span or {from = 0, to = 0}, spanned = span ~= nil, kids = {}, parent = 0}
-      push(t.nodes, n)
-      local i = #t.nodes
-      stack[d + 1] = i
-      if d > 0 and d <= #stack then
-        push(t.nodes[stack[d]].kids, i)
-        n.parent = stack[d]
-      end
+  for f in roc_tree(paths) do
+    -- A file that does not parse has no calls to judge.
+    if f.err ~= "" then fail("methods: roc-ast: " .. f.path .. ": " .. f.err) end
+    local text = read(f.path)
+    local t = {nodes = {}, text = text, starts = line_starts(text)}
+    for n in f.nodes do
+      local span = span_of(n, t.starts)
+      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), span = span or {from = 0, to = 0}, spanned = span ~= nil, kids = n.kids, parent = n.parent})
     end
+    out[f.path] = t
   end
   return out
 end
@@ -187,14 +150,13 @@ function candidates(t, own)
   local out = {}
   for i = 1, #t.nodes do
     local n = t.nodes[i]
-    if n.kind == "(e-apply" and #n.kids >= 2 then
+    if n.kind == "e-apply" and #n.kids >= 2 then
       local callee = t.nodes[n.kids[1]]
-      local raw = between(callee.head, "(raw \"", "\")")
-      local m = raw and re_find(raw, "^([A-Z][A-Za-z0-9]*)\\.([a-z][A-Za-z0-9_]*!?)$")
-      if callee.kind == "(e-ident" and m ~= nil then
+      local m = re_find(callee.raw, "^([A-Z][A-Za-z0-9]*)\\.([a-z][A-Za-z0-9_]*!?)$")
+      if callee.kind == "e-ident" and m ~= nil then
         local c = {at = i, module = m.groups[1], fn = m.groups[2], line = line_of(t, n.span.from), left = "", from_line = 0, to_line = 0}
         local p = n.parent > 0 and t.nodes[n.parent] or nil
-        if p ~= nil and p.kind == "(e-arrow-call" and p.kids[2] == i then
+        if p ~= nil and p.kind == "e-arrow-call" and p.kids[2] == i then
           c.left = "the right of a `|>`, whose first argument the pipe gives"
         end
         if m.groups[1] ~= own then push(out, c) end
