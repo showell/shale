@@ -136,6 +136,13 @@ it works on, `<shale>` being the shale checkout:
   bounds uses it and says `output_bytes=4000000` in its `-- budget:` line,
   so a run the output budget stops still says its totals, and a verify
   reading the last line still finds them.
+- [parsed.shale](parsed.shale): **every file that parses is judged**, a
+  library: `roc_parsed(paths)` splits `roc_tree`'s files that parse from
+  those roc-ast refuses, and `fail_if_refused(who, refused)`, a run's last
+  word, names each refused file with its reason and exits non-zero.
+  `errors`, `boundaries`, `name_hunt` and `nest_depth` use it, so one
+  old-syntax probe in a tree never hides the other files' findings, and is
+  never passed unread.
 - [types.shale](types.shale): **Roc's own checker's types**, a library:
   `use("cookbook:roc/types.shale")` gives `roc_types(root)`, every module
   the app `root` reaches, by real path, each a list of its expressions'
