@@ -33,7 +33,22 @@ which program to look at. The
 arena is not among the four: a stop on it (`budget arena`, 16 MiB unset)
 says nothing of what it would have needed: raise it and run again
 (`--budget arena_bytes=4000000000`), and if the script is one you keep,
-put it in its `-- budget:` line. An
+put it in its `-- budget:` line.
+
+**On the box, a budget is not sacred.** The budgets are there for Shale on
+bare metal, where a runaway script takes a site's server down, and there
+they hold. A refactoring or lint tool on the box (the cookbook's recipes, a
+one-off hunt or rewrite) may raise steps, reads and read bytes as far as its
+job needs: a stop on one says how big the job is, not that it is wrong.
+What still binds is the machine itself:
+- **memory**: keep `arena_bytes` well under the RAM that is free (`free -m`;
+  this box has 8 GB and no swap, and a 12 GB arena hung it on 2026-11-01);
+- **CPU**: run heavy jobs one at a time, never beside a timing gate;
+- **one huge input**: split it into chunks, each its own run, rather than
+  holding it all at once.
+
+The output budget is a different case: it guards your context, so raise it
+for a run whose output goes to a file, not to your console. An
 `edit`'s diff is one line, `edit p: 3 hunks, -4 +5 lines`, unless
 `--verbose`, which prints it in full. With
 no file and no `-e`, the script is stdin (`shale <<'SHALE'`).
