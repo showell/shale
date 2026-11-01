@@ -134,9 +134,10 @@ it works on, `<shale>` being the shale checkout:
   leaves that call, its reason the error's title, and the file is tried
   again; any other error puts the file back. No candidate: a call used as a
   function value, a module's own call in its file; the right of a `|>` is
-  listed and left, and so is a call whose first argument is a number
-  literal (`U64.to_str(5)`: as a receiver the literal's type defaults,
-  `(5).to_str()` being a `Dec`'s "5.0", which checks; `5.U64` turns). A dry run by default (each trial put back; run it with
+  listed and left, and so is a call whose first argument is only number
+  literals, operators and parentheses (`U64.to_str(5)`, `U64.to_str(2 + 3)`:
+  as a receiver its type defaults, `(5).to_str()` being a `Dec`'s "5.0",
+  which checks; `5.U64` and `n + 1` turn). A dry run by default (each trial put back; run it with
   `--undo-on-stop`, so a stop mid-trial puts that back too); `apply=1`
   keeps them. Out: the counts, a line each call left, `path:line: why`,
   then the counts again. A run holds 64 programs: on a bigger tree it stops before a file
