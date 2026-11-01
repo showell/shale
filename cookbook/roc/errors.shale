@@ -26,7 +26,7 @@
 --                 value may be missing: "a value that may be absent is
 --                 tagged by what it is, and its absence by why"
 --                 (`[Latest(Message), NoMessage]`). Each type that names
---                 one is a finding; a pattern or an expression only where
+--                 one is a finding, at the tag's own line; a pattern or an expression only where
 --                 no type of the files hunted names the tag (an `Err(None)`
 --                 whose error is inferred), once a file. A tag is matched
 --                 whole: `NoneChosen` is no `None`.
@@ -40,7 +40,8 @@
 --
 -- `self_test=1` runs it over `cookbook/roc/plants/errors/`, each plant
 -- named for the check it holds: every check must fire on its own plants and
--- on no other, a `quiet_*.roc` plant on none.
+-- on no other, a `quiet_*.roc` plant on none, and each `optional_tag`
+-- finding's line must name its tag.
 -- budget: steps=400000000 arena_bytes=3000000000
 
 const SELF = arg("self_test", "") == "1"
@@ -130,16 +131,27 @@ function line(at)
   return i <= #N and N[i].line or "?"
 end
 
--- The tags of a `ty-tag-union`, by name (`Some` of `Some(U64)` too).
-function union_tags(at)
+-- The tags of a `ty-tag-union`, each its node (`Some(U64)` whole).
+function union_tag_nodes(at)
   local out = {}
   for t in kids(at) do
     if kind(t) == "tags" then
-      for g in kids(t) do
-        if kind(g) == "ty-apply" then push(out, nm(kids(g)[1])) else push(out, nm(g)) end
-      end
+      for g in kids(t) do push(out, g) end
     end
   end
+  return out
+end
+
+-- A tag's name: `Some` of `Some(U64)` too.
+function tag_name(g)
+  if kind(g) == "ty-apply" then return nm(kids(g)[1]) end
+  return nm(g)
+end
+
+-- The tags of a `ty-tag-union`, by name.
+function union_tags(at)
+  local out = {}
+  for g in union_tag_nodes(at) do push(out, tag_name(g)) end
   return out
 end
 
@@ -240,13 +252,18 @@ end
 -- patterns' by file and tag.
 const typed = {}
 const used = {}
+-- Each `optional_tag` finding, `{path, line, tag}`: the self-test holds
+-- every one to a line that names its tag.
+const tag_lines = {}
 for i = 1, #N do
   local k = kind(i)
   if k == "ty-tag-union" then
-    for t in union_tags(i) do
+    for g in union_tag_nodes(i) do
+      local t = tag_name(g)
       if has_key(OPTIONALS, t) then
         typed[t] = true
-        say(FILE[i], line(i), "optional_tag", "`" .. t .. "` names an optional: tag what the value is, and its absence by why (`[Latest(Message), NoMessage]`)")
+        push(tag_lines, {path = FILE[i], line = line(g), tag = t})
+        say(FILE[i], line(g), "optional_tag", "`" .. t .. "` names an optional: tag what the value is, and its absence by why (`[Latest(Message), NoMessage]`)")
       end
     end
   elseif k == "e-tag" or k == "p-tag" then
@@ -257,7 +274,10 @@ for i = 1, #N do
 end
 for key in sort(keys(used)) do
   local u = used[key]
-  if not has_key(typed, u.tag) then say(u.path, u.line, "optional_tag", "`" .. u.tag .. "` names an optional, and no type here says what it is: tag the value by what it is, and its absence by why") end
+  if not has_key(typed, u.tag) then
+    push(tag_lines, u)
+    say(u.path, u.line, "optional_tag", "`" .. u.tag .. "` names an optional, and no type here says what it is: tag the value by what it is, and its absence by why")
+  end
 end
 
 local counts = {}
@@ -284,7 +304,11 @@ if SELF then
   -- A plant's every error is declared beside it: one left unjudged would
   -- pass quiet without the rule being asked.
   for n in sort(keys(unjudged)) do push(wrong, "`error_alias` cannot judge `" .. n .. "`, declared in no plant") end
+  for f in tag_lines do
+    local src = split(read(f.path), "\n")
+    if f.line == "?" or not contains(src[f.line], f.tag) then push(wrong, "`optional_tag` says " .. f.path .. ":" .. f.line .. ", a line that does not name `" .. f.tag .. "`") end
+  end
   for w in wrong do print("FAIL " .. w) end
   if #wrong > 0 then fail("errors self_test: " .. #wrong .. " plants wrong") end
-  print("errors (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none)")
+  print("errors (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none, each optional at its tag's line)")
 end

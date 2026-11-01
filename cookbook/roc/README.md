@@ -21,7 +21,9 @@ it works on, `<shale>` being the shale checkout:
   is handed, a `List(T)` judged as `T`, named as events, or as commands
   and events at once) and `container` (a type or record field named only
   by container words, cookbook/words/containers.txt, unless its doc says
-  whose: `## A folder's entry`).
+  whose: `## A folder's entry`), and `short_name` (a top-level or
+  module-member name of one letter, `w : F64`; a local's or a lambda
+  parameter's never).
   `self_test=1` runs its plants (`plants/name_hunt/`).
 - [roc_commas.shale](roc_commas.shale): **long lines laid out by `roc fmt`.**
   `roc fmt` never wraps a line, and it joins hand-made breaks back. A

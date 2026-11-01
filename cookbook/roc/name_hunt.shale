@@ -61,6 +61,11 @@
 --                 `Entry`, and `## A listing's entries` keeps a field
 --                 `entries`. A type is split at its capitals, a field at
 --                 its `_`s; a local's annotation is never read.
+--   short_name    a top-level or module-member name of one letter (`w :
+--                 F64`, `m = Tree.metrics(...)`): read far from where it is
+--                 defined, a letter says nothing of what it holds, and a
+--                 local of the same letter shadows it. A local's and a
+--                 lambda's parameters (`|x, y|`) are never judged.
 --
 -- **A NAME IS JUDGED ONCE**, from its annotation when it has one (a hosted
 -- effect, `links! : Str => Str` in a platform's `Host.roc`, has nothing
@@ -102,7 +107,7 @@
 const SELF = arg("self_test", "") == "1"
 const GLOB = SELF and "cookbook:roc/plants/name_hunt/*.roc" or arg("glob", "**/*.roc")
 const WORDS = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name"}
 
 -- A word table of cookbook/words/, the name hunts' one home for them: a
 -- word a line, `--` starting a note. A word twice, or a line of two, is a
@@ -517,6 +522,7 @@ function hunt(def)
     end
     if #ws == 1 and has_key(ENTRY, ws[1]) then all_vague = false end
     if all_vague then say(p, i, "vague", "`" .. full .. "` is only vague words: what does it handle, and how?") end
+    if #name == 1 then say(p, i, "short_name", "`" .. full .. "` is one letter, read far from where it is defined: name what it holds") end
   end
   if is_annotation and not def.fn and def.whole ~= "_" then
     local t = def.whole
