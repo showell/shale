@@ -7,6 +7,14 @@
 -- why). The pin is tools/roc_ast/roc-version, roc-chat's Roc: the Roc the
 -- code Shale's Roc recipes judge is built with. Run from Shale's checkout:
 --   shale tools/roc_ast/install.shale
+--
+-- **A NEW PIN IS ALSO A NEW CI ASSET**: CI (.github/workflows/test.yml)
+-- downloads roc-ast from roc-apps's toolchain release. Build it static for
+-- a baseline CPU (`zig build --fork=<the pin's worktree>
+-- -Dtarget=x86_64-linux-musl -Dcpu=baseline -Doptimize=ReleaseSafe`), tar
+-- `bin/roc-ast` as `roc-ast-flat<N>-<pin>-linux-x86_64.tar.gz`, upload it
+-- under a new name (a published asset never changes), and move test.yml's
+-- URL and sha256 to it.
 
 local version = trim(read("tools/roc_ast/roc-version"))
 local parts = split(version, "-")
