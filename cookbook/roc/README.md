@@ -10,7 +10,8 @@ it works on, `<shale>` being the shale checkout:
 
 - [name_hunt.shale](name_hunt.shale): **awkward names, a question each**,
   the Zig hunt's five checks over Roc's annotations and definitions, the
-  top level's and module types' members (`held_raw!` named as a state).
+  top level's and module types' members (`held_raw!` named as a state;
+  `rounded_rectangle!`, whose annotation names `RoundedRectangle`, is not).
   It reads Roc's own parser's tree (roc-ast, `tools:roc-ast/bin/roc-ast`,
   built by Shale's `tools/roc_ast/install.shale`), so a broken
   annotation or a `where` clause reads as Roc reads it. A name is judged
@@ -24,7 +25,8 @@ it works on, `<shale>` being the shale checkout:
   whose: `## A folder's entry`), and `short_name` (a top-level or
   module-member name of one letter, `w : F64`; a local's or a lambda
   parameter's never).
-  `self_test=1` runs its plants (`plants/name_hunt/`).
+  `self_test=1` runs its plants (`plants/name_hunt/`), and fails on a
+  plant named for no check.
 - [roc_commas.shale](roc_commas.shale): **long lines laid out by `roc fmt`.**
   `roc fmt` never wraps a line, and it joins hand-made breaks back. A
   trailing comma after a record's, call's or lambda's last item makes it
@@ -70,8 +72,12 @@ it works on, `<shale>` being the shale checkout:
   `error_alias`: a function whose result's `Try` names a shared alias of
   tags, not its tags in place (an alias in an argument, a handler's input,
   is fine; a record or `Str` error is no alias of tags); `optional_tag`: a tag named as an optional (`None`,
-  `Some`: cookbook/words/optionals.txt). `self_test=1` runs its plants
-  (`plants/errors/`).
+  `Some`: cookbook/words/optionals.txt); `set_fallback`: `List.set(l, i,
+  v) ?? l`, the copying shape roc-apps CLAUDE.md names first ("Six shapes
+  copy"); `placeholder`: a `??` falling back to a string literal (`??
+  "bogus"`), where the guide says to crash on the impossible. `self_test=1`
+  runs its plants (`plants/errors/`), and fails on a plant named for no
+  check.
 - [same_code.shale](same_code.shale): **the same machine code.** Two builds
   of an archive, compared instruction by instruction with Roc's hashed
   procedure names (`roc__p` and 32 hex digits, which move with the source's

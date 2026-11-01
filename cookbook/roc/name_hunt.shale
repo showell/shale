@@ -10,7 +10,10 @@
 -- A finding is a question for a reader, never a verdict:
 --
 --   state_effect  an effect (`!`) named as a state: `held_raw!`, a past
---                 participle first, `done!`, `ready!`
+--                 participle first, `done!`, `ready!`. A participle that
+--                 starts the name of a type the effect's annotation names
+--                 (`rounded_rectangle! : Frame, RoundedRectangle => {}`)
+--                 modifies the thing it makes or draws, and is no state.
 --   question      `is_*`, `has_*`, `can_*`, `should_*` that returns no
 --                 `Bool`, or that has an effect (`is_open!`), or a `Bool`
 --                 named as a state (`marked : Str -> Bool`; a name holding
@@ -97,7 +100,8 @@
 -- `self_test=1` runs it over `cookbook/roc/plants/name_hunt/`, each plant
 -- named for the check it holds (`question.roc`, `question_where.roc`):
 -- every check must have one, fire on its own plants and on no other, a
--- `quiet_*.roc` plant (a false positive once) on none, and the census
+-- `quiet_*.roc` plant (a false positive once) on none, a plant named for
+-- no check is a failure, and the census
 -- must give a known word of the plants each verdict but `asks`.
 --
 -- Each file's source is read too, for the arrows roc-ast writes alike (a
@@ -338,6 +342,26 @@ function holder_decl(tree, decl_line, at)
   return ""
 end
 
+-- The types the type at `at` names, into the set `into`, each by its last
+-- part (`Draw.RoundedRectangle` is `RoundedRectangle`).
+function type_names(tree, at, into)
+  local n = attr(tree, at, "name")
+  if starts_with(tree[at].kind, "ty") and n ~= "" then
+    local parts = split(n, ".")
+    into[parts[#parts]] = true
+  end
+  for c in children(tree, at) do type_names(tree, c, into) end
+  return into
+end
+
+-- A name's words as one type's name: `rounded_rectangle` is
+-- `RoundedRectangle`.
+function camel(ws)
+  local out = ""
+  for w in ws do out = out .. upper(sub(w, 1, 1)) .. sub(w, 2) end
+  return out
+end
+
 -- The sibling just before the node at `at`, or 0.
 function before(tree, at)
   local p = tree[at].parent
@@ -407,6 +431,7 @@ function definitions(paths)
               def.fn = true
               def.arity = #parts - 1
               def.result = render(tree, parts[#parts])
+              if ends_with(def.name, "!") then def.types = type_names(tree, kids[1], {}) end
               for a in take(parts, #parts - 1) do
                 if contains(span_text(src, tree, a), "=>") then def.callback = true end
                 -- Only an effect's arguments are judged (`command_tense`), and
@@ -508,7 +533,11 @@ function hunt(def)
       s.preps[ws[#ws]] = {name = full, arity = get(def, "arity", -1)}
     end
   end
-  if effect and judged and state then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
+  -- A participle that begins the name of a type the effect takes or gives
+  -- (`rounded_rectangle! : Frame, RoundedRectangle => {}`) modifies what
+  -- it makes: no state.
+  local makes = #ws > 1 and has_key(get(def, "types") or {}, camel(ws))
+  if effect and judged and state and not makes then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. ws[1] .. "`: a verb says what it does") end
   local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
   if asks and judged and effect then say(p, i, "question", "`" .. full .. "` asks a question but has an effect") end
   if is_annotation and def.fn and def.result == "Bool" and state then say(p, i, "question", "`" .. full .. "` gives a `Bool` but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
@@ -646,6 +675,15 @@ if SELF then
       if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
     end
     if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
+  end
+  -- A plant named for no check is read by none, so it could never fail.
+  for p in glob(GLOB) do
+    local base = sub(p, #"cookbook:roc/plants/name_hunt/" + 1)
+    local named = starts_with(base, "quiet_")
+    for c in CHECKS do
+      if base == c .. ".roc" or starts_with(base, c .. "_") then named = true end
+    end
+    if not named then push(wrong, p .. ": a plant the table does not judge") end
   end
   -- The census: a known word of the plants in each verdict.
   for want in {{word = "read", verdict = "verb"}, {word = "held", verdict = "participle"}, {word = "process", verdict = "vague"}, {word = "links", verdict = "refused"}} do
