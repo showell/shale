@@ -60,7 +60,7 @@
 -- `error_alias` reads only a top-level or module-member annotation (a
 -- local's is its definition's); the two `??` checks read every one. The
 -- counts, then one line a finding, `path:line: <check>: <why>`, then the
--- counts again (cookbook/roc/summed.shale). A file roc-ast refuses is
+-- counts again (cookbook/roc/findings.shale). A file roc-ast refuses is
 -- named after them and fails the run, every other file hunted first
 -- (cookbook/roc/parsed.shale).
 --
@@ -78,7 +78,7 @@ const PLANTS = "cookbook:roc/plants/errors/"
 const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const CHECKS = {"error_alias", "optional_tag", "set_fallback", "placeholder"}
 const OUTER = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
-use("cookbook:roc/summed.shale")
+use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
@@ -397,7 +397,7 @@ for c in CHECKS do push(counts, c .. " " .. found[c]) end
 local unseen = {}
 for n in sort(keys(unjudged)) do push(unseen, n .. " (" .. unjudged[n] .. ")") end
 local unseen_said = #unseen > 0 and ("; error_alias not judged, declared outside the files hunted: " .. join(unseen, ", ")) or ""
-print_summed("errors (Roc): " .. #paths .. " files; " .. join(counts, ", ") .. unseen_said, said)
+print_findings("errors (Roc): " .. #paths .. " files; " .. join(counts, ", ") .. unseen_said, said)
 fail_if_refused("errors", PARSED.refused, TYPES.unreached)
 
 -- A plant's name as the self-test's table reads it: a typed plant's, a

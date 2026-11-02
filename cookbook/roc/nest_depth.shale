@@ -27,7 +27,7 @@
 -- })` names its parts), unless `loose=1`, which passes depth through them.
 --
 -- The count by depth first, then one line a finding, then the count again
--- (cookbook/roc/summed.shale). A file roc-ast refuses is named after
+-- (cookbook/roc/findings.shale). A file roc-ast refuses is named after
 -- them, and fails the run after the rest are hunted
 -- (cookbook/roc/parsed.shale).
 --
@@ -46,7 +46,7 @@ const PLANTS = "cookbook:roc/plants/nest_depth/"
 const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const LOOSE = arg("loose", "") == "1"
 const MIN = SELF and 3 or arg("min", 3)
-use("cookbook:roc/summed.shale")
+use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 
 -- What passes its parts' depth through unchanged: no call of its own.
@@ -186,7 +186,7 @@ for f in parsed.files do
 end
 local counts = {}
 for k in sort(keys(by)) do push(counts, "depth " .. k .. " " .. by[k]) end
-print_summed("nest_depth (Roc): " .. #paths .. " files; nested " .. count .. " (min " .. MIN .. ", " .. (LOOSE and "loose" or "strict") .. ")" .. (#counts > 0 and ("; " .. join(counts, ", ")) or ""), said)
+print_findings("nest_depth (Roc): " .. #paths .. " files; nested " .. count .. " (min " .. MIN .. ", " .. (LOOSE and "loose" or "strict") .. ")" .. (#counts > 0 and ("; " .. join(counts, ", ")) or ""), said)
 fail_if_refused("nest_depth", parsed.refused)
 if SELF then
   local wrong = {}

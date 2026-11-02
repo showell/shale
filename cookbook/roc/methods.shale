@@ -72,7 +72,7 @@
 -- `apply=1` keeps what passes. Run it with `--undo-on-stop`: a run that
 -- stops mid-trial (a budget, Ctrl-C) leaves the trial's text otherwise.
 -- Out: `candidates N, rewritten N, left N`, a line a call left,
--- `path:line: why`, then the counts again (cookbook/roc/summed.shale).
+-- `path:line: why`, then the counts again (cookbook/roc/findings.shale).
 --
 -- A run holds 64 programs, and a tree of files takes more: the run stops
 -- before a file it could not finish, says `go on with from=N`, and the
@@ -149,7 +149,7 @@ const SELF_PATH = "cookbook:roc/methods.shale"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
 use("cookbook:roc/pinned.shale")
-use("cookbook:roc/summed.shale")
+use("cookbook:roc/findings.shale")
 use("cookbook:roc/types.shale")
 -- A round's refused calls leave it, and the next, without them, may find
 -- more that their errors hid: roc-chat's Topics.roc, 137 candidates, takes
@@ -944,5 +944,5 @@ else
     for kind in sort(keys(got.ctx.typed)) do push(kinds, kind .. " " .. got.ctx.typed[kind]) end
     push(out, "types: the first arguments of the candidates the types judged: " .. join(kinds, ", "))
   end
-  print_summed(said, out)
+  print_findings(said, out)
 end

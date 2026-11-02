@@ -4,7 +4,7 @@
 -- such group on a line its own, left to right; and a line wider than
 -- `width` (100) with no such group is a finding, `long: ...`. The counts
 -- print first, then the findings, then the counts again
--- (cookbook/roc/summed.shale). **A ROW OF LITERALS IS NO FINDING**: a list
+-- (cookbook/roc/findings.shale). **A ROW OF LITERALS IS NO FINDING**: a list
 -- or tuple whose items are all literals (numbers, plain strings,
 -- characters, bare tags), on a line that fits `width`, is one thing to
 -- scan, a table's row (`[0, 0, 0]`, `(0.0, 0.0, 1.5)`); a call's
@@ -56,7 +56,7 @@ const GLOB = SELF and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
 const WIDTH = arg("width", 100)
 const WRITE = arg("write", "") == "1"
 use("cookbook:roc/pinned.shale")
-use("cookbook:roc/summed.shale")
+use("cookbook:roc/findings.shale")
 const PASSES = 12
 const OPENERS = {["("] = ")", ["{"] = "}", ["["] = "]"}
 const CLOSERS = {[")"] = true, ["}"] = true, ["]"] = true}
@@ -425,7 +425,7 @@ elseif WRITE then
   rewrite(files)
   local left = {}
   for f in findings(files) do push(left, f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what) end
-  print_summed(#left .. " left, each a line the rewrite can't reach", left)
+  print_findings(#left .. " left, each a line the rewrite can't reach", left)
 else
   local files = glob(GLOB)
   local all = {}
@@ -434,5 +434,5 @@ else
     push(all, f.path .. ":" .. f.line .. ": " .. f.kind .. ": " .. f.what)
     if f.kind == "stack" then stack = stack + 1 end
   end
-  print_summed(#all .. " findings in " .. #files .. " files: " .. stack .. " to stack, " .. (#all - stack) .. " long", all)
+  print_findings(#all .. " findings in " .. #files .. " files: " .. stack .. " to stack, " .. (#all - stack) .. " long", all)
 end

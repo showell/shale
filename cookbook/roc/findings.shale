@@ -1,0 +1,20 @@
+-- findings.shale: print_findings(summary, lines) prints the summary, then
+-- each line, then the summary again (just once when there are no lines).
+--
+--   use("cookbook:roc/findings.shale")
+--   print_findings("errors (Roc): 12 files; 3 errors", lines)
+--
+-- Why twice: Shale stops printing at a script's output budget (64 KiB by
+-- default, a few hundred lines), so the first copy survives a long list;
+-- and roc-chat's verify checks only the last line. A script whose list
+-- can be long raises its budget to 4 MB with this line at its top:
+--
+--   -- budget: output_bytes=4000000
+
+function print_findings(summary, lines)
+  print(summary)
+  if #lines == 0 then return nil end
+  for line in lines do print(line) end
+  print(summary)
+  return nil
+end

@@ -5,13 +5,13 @@
 -- group of two or more items that closes on it, then runs `roc fmt`, and
 -- again until no line changes. What it can't reach is listed: comments, and
 -- lines with no such group (a function type's bare arguments). The list
--- comes between its counts (cookbook/roc/summed.shale).
+-- comes between its counts (cookbook/roc/findings.shale).
 --
 --   cd <repo> && shale roc_commas.shale dir=roc width=100
 --
 -- budget: steps=400000000 arena_bytes=2000000000 output_bytes=4000000
 
-use("cookbook:roc/summed.shale")
+use("cookbook:roc/findings.shale")
 const DIR = arg("dir", "roc")
 not_option("roc_commas", "dir", DIR)
 const WIDTH = arg("width", 100)
@@ -149,4 +149,4 @@ for p in roc_files() do
     end
   end
 end
-print_summed("still over " .. WIDTH .. ": " .. #over .. " code lines, " .. comments .. " comment lines", over)
+print_findings("still over " .. WIDTH .. ": " .. #over .. " code lines, " .. comments .. " comment lines", over)

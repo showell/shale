@@ -166,12 +166,12 @@ it works on, `<shale>` being the shale checkout:
   self_test)`, the pinned `roc`'s path (`tools:roc-<pin>/roc`, the pin from
   `roc-version` where the run starts), and `SELF_TEST_PIN`, the one Roc
   every self-test runs. `methods.shale` and `stack.shale` use it.
-- [summed.shale](summed.shale): **a list of findings between its
-  summary**, a library: `print_summed(summary, lines)` prints the summary,
-  the lines, then the summary again. Every recipe here whose list no tree
-  bounds uses it and says `output_bytes=4000000` in its `-- budget:` line,
-  so a run the output budget stops still says its totals, and a verify
-  reading the last line still finds them.
+- [findings.shale](findings.shale): **prints a summary, a list of
+  findings, and the summary again**. A library: `print_findings(summary,
+  lines)`. The first summary survives when Shale's output budget cuts a
+  long list off; the last is the line roc-chat's verify checks. Used by
+  name_hunt, errors, stack, methods, nest_depth and roc_commas, each of
+  which raises its budget to 4 MB (`output_bytes=4000000`).
 - [parsed.shale](parsed.shale): **every file that parses is judged**, a
   library: `roc_parsed(paths)` splits `roc_tree`'s files that parse from
   those roc-ast refuses, and `fail_if_refused(who, refused)`, a run's last

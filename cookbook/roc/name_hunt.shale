@@ -142,7 +142,7 @@
 -- `decode`, which a format calls by name.
 --
 -- The counts, then one line a finding, `path:line: <check>: <why>`, then
--- the counts again (cookbook/roc/summed.shale).
+-- the counts again (cookbook/roc/findings.shale).
 --
 --   cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob=chat/**/*.roc
 --   shale cookbook:roc/name_hunt.shale self_test=1
@@ -183,7 +183,7 @@
 -- budget: steps=800000000 arena_bytes=3000000000 output_bytes=4000000
 
 const SELF = arg("self_test", "") == "1"
-use("cookbook:roc/summed.shale")
+use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
@@ -895,9 +895,9 @@ if WORDS then
   for r in rows do push(census_lines, pad(r.count, -4) .. " " .. pad(r.word, 12) .. " " .. r.verdict) end
   local verdicts = {}
   for v in {"verb", "participle", "vague", "asks", "refused"} do push(verdicts, v .. " " .. get(by, v, 0)) end
-  print_summed("name_hunt (Roc) census: " .. files .. " files; " .. total .. " effects, " .. #rows .. " first words; effects by verdict: " .. join(verdicts, ", "), census_lines)
+  print_findings("name_hunt (Roc) census: " .. files .. " files; " .. total .. " effects, " .. #rows .. " first words; effects by verdict: " .. join(verdicts, ", "), census_lines)
 else
-  print_summed("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "), said)
+  print_findings("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "), said)
 end
 fail_if_refused("name_hunt", parsed.refused, TYPES.unreached)
 
