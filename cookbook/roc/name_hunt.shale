@@ -128,6 +128,19 @@
 --                 `preposition_split`'s. A word that is no preposition
 --                 must come before the two: a name made only of them
 --                 (`at_of`, `via_from`) uses its first as a noun.
+--   taken_word    a top-level or member name that is one taken word whole
+--                 (cookbook/words/taken.txt): a function named by Roc's own
+--                 word (`record`, `tag`, `union`, `alias`, `opaque`,
+--                 `nominal`, `module`), which reads as Roc's and not the
+--                 domain's (`Html.tag` builds an element), or a value named
+--                 by a cardinal, `one` to `twelve` (`three : List(Fields)`),
+--                 which says how many, not what it holds. A function that
+--                 gives that very thing, its result's last part the word
+--                 capitalized (`record : ApiKey.Key -> ApiKey.Record`), is
+--                 honest; a function named by a number (`Time.two : I64 ->
+--                 Str`), a name of more words (`tag_name`), a record's field
+--                 and a local are never judged (roc-apps docs/roc-style.md,
+--                 naming: "keep Roc's words for Roc").
 --
 -- **A NAME IS JUDGED ONCE**, from its annotation when it has one (a hosted
 -- effect, `links! : Str => Str` in a platform's `Host.roc`, has nothing
@@ -150,7 +163,7 @@
 -- **THE WORDS** it judges by are cookbook/words/'s tables, which the Zig
 -- hunt reads too: verbs.txt, participles.txt (English's irregular ones;
 -- the rule takes `-ed`), ed_verbs.txt (the rule's exceptions) and
--- vague.txt. `words=1` gives their census instead of the findings: every
+-- vague.txt; taken.txt is this hunt's alone. `words=1` gives their census instead of the findings: every
 -- first word an effect judged here starts with, its count and its verdict,
 -- `verb`, `participle`, `vague`, `asks` (`is_`, `has_`) or `refused` (what
 -- `noun_effect` fires on), between the totals. A missing verb shows there as
@@ -199,7 +212,7 @@ const ROOT = SELF and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
 -- known (below); empty without `types=1`.
 const TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
 const WORDS = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word"}
 -- The last words `worker_name` judges: only a helper's, always; a word of
 -- its own, only on a definition that calls itself.
 -- `loop` stays a helper's: it names a shape, never an act of the domain's,
@@ -241,6 +254,21 @@ function namespace_table(file)
   return t
 end
 const NAMESPACES = namespace_table("namespaces.txt")
+
+-- cookbook/words/taken.txt: a word and its kind a line, `roc` or
+-- `cardinal`, by word: `{record = "roc", two = "cardinal"}`.
+function taken_table(file)
+  local t = {}
+  for l in lines(read("cookbook:words/" .. file)) do
+    local ws = words(trim(split(l, "--")[1]))
+    if #ws > 0 then
+      if #ws ~= 2 or (ws[2] ~= "roc" and ws[2] ~= "cardinal") or has_key(t, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `roc` or `cardinal`") end
+      t[ws[1]] = ws[2]
+    end
+  end
+  return t
+end
+const TAKEN = taken_table("taken.txt")
 -- The surfaces an effect draws on: one that takes one first is named for
 -- what it draws (`noun_effect`).
 const SURFACES = {Frame = true, Canvas = true}
@@ -622,6 +650,9 @@ function definitions(parsed_files)
           if #kids > 0 and tree[kids[1]].kind == "p-ident" then
             local def = {path = path, line = line, name = attr(tree, kids[1], "raw"), annotation = false, fn = false, callback = false, paired = false}
             if #kids > 1 and tree[kids[2]].kind == "e-lambda" then
+              -- A function by its definition, for `taken_word` on a name
+              -- with no annotation.
+              def.lambda = true
               for part in children(tree, kids[2]) do
                 if tree[part].kind == "args" then
                   for a in children(tree, part) do
@@ -767,6 +798,21 @@ function hunt(def)
       if not has_key(PREPS, w) then named = true end
     end
     if named and has_key(PREPS, ws[#ws]) and has_key(PREPS, ws[#ws - 1]) then say(p, i, "stacked_preposition", "`" .. full .. "` stacks two prepositions, `_" .. ws[#ws - 1] .. "_" .. ws[#ws] .. "`: let each read once, the entry named for what it gives (`rest`, `tail_after`) and the worker for what it adds (`rest_onto`)") end
+    -- What the name is: a function by its type (written or the checker's),
+    -- else by a lambda definition; a value by a type that is none, or a
+    -- definition that is no lambda. An inferred annotation (`two : _`)
+    -- with no checker's type is neither.
+    local typed = shape.known and not (is_annotation and get(def, "whole", "") == "_" and not has_key(def, "typed"))
+    local is_fn = shape.fn or (not shape.known and get(def, "lambda", false))
+    local is_value = (typed and not shape.fn) or (not shape.known and not get(def, "lambda", false))
+    local taken = get(TAKEN, name, "")
+    if taken == "roc" and is_fn then
+      -- A function that gives the very thing it is named for is honest:
+      -- `record : ApiKey.Key -> ApiKey.Record`.
+      local parts = split(shape.result, ".")
+      if not (shape.fn and parts[#parts] == camel({name})) then say(p, i, "taken_word", "`" .. full .. "` is Roc's own word, `" .. name .. "`, for a function that gives no `" .. camel({name}) .. "`: name it for the domain's thing (`element`, `append`), and keep Roc's words for Roc") end
+    end
+    if taken == "cardinal" and is_value then say(p, i, "taken_word", "`" .. full .. "` is a number's name for a value: it says how many, not what it holds") end
   end
   -- Judged at the definition, which knows whether it calls itself; an
   -- annotation with none below it (a hosted effect) by its name alone.

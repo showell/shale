@@ -44,7 +44,10 @@ it works on, `<shale>` being the shale checkout:
   prepositions after a word that is none, `rest_from_onto`, never
   `at_of`, whose `at` is a noun: a worker's suffix on an entry that
   already ends in one; the entry says what it gives, `rest`, the worker
-  what it adds, `rest_onto`).
+  what it adds, `rest_onto`), and `taken_word` (a function named only by
+  one of Roc's words, `record` or `tag`, unless it gives that very thing,
+  `record : Key -> Api.Record`; a value named only by a number, `three`;
+  the words in cookbook/words/taken.txt).
   `self_test=1` runs its plants (`plants/name_hunt/`), and fails on a
   plant named for no check.
 - [roc_commas.shale](roc_commas.shale): **long lines laid out by `roc fmt`.**

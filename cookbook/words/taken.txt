@@ -1,0 +1,31 @@
+-- Taken words: a top-level or member name that is one of these whole is
+-- read as the word's own meaning, not the author's. The Roc name hunt's
+-- `taken_word` reads them, a word and its kind a line:
+--   roc       Roc's own word for a kind of type or a file: a function
+--             named so (`tag`, `record`) reads as Roc's, not the domain's
+--             (roc-apps docs/roc-style.md, naming: "keep Roc's words for
+--             Roc"). A function that gives that very thing (`record :
+--             ApiKey.Key -> ApiKey.Record`) is honest, and passes.
+--   cardinal  a number's name: a value named `two` says how many, not what
+--             it holds (`three : List(Fields)`). A function so named
+--             (`Time.two : I64 -> Str`, a two-digit field) is no count.
+-- `--` starts a note.
+record roc
+tag roc
+union roc
+alias roc
+opaque roc
+nominal roc
+module roc
+one cardinal
+two cardinal
+three cardinal
+four cardinal
+five cardinal
+six cardinal
+seven cardinal
+eight cardinal
+nine cardinal
+ten cardinal
+eleven cardinal
+twelve cardinal
