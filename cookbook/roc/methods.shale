@@ -7,6 +7,7 @@
 --
 --   cd <repo> && shale <shale>/cookbook/roc/methods.shale glob=app/*.roc root=app/main.roc
 --   cd <repo> && shale <shale>/cookbook/roc/methods.shale glob=app/*.roc root=app/main.roc apply=1
+--   cd <repo> && shale <shale>/cookbook/roc/methods.shale glob=app/*.roc root=app/main.roc,app/specs.roc
 --   cd <repo> && shale <shale>/cookbook/roc/methods.shale glob=src/*.roc root=src/Lib.roc types=0
 --   shale cookbook:roc/methods.shale self_test=1
 --
@@ -86,8 +87,12 @@
 -- **THE CHECKER'S TYPES FIRST** (on by default; `types=0` turns them
 -- off): `roc-types` (Roc's own checker, `tools:roc-types/bin/roc-types`;
 -- Shale's `tools/roc_types`, read by the library cookbook/roc/types.shale)
--- runs once a run on `root`, before any file, and gives each expression's
--- type by its region, the same compiler's regions roc_tree's nodes carry.
+-- runs once a run on each app of `root`, before any file, and gives each
+-- expression's type by its region, the same compiler's regions roc_tree's
+-- nodes carry. **SEVERAL ROOTS** (`root=a.roc,b.roc`, as the hunts take
+-- them) are for a tree no one app reaches (test-only modules an app of
+-- their own imports): each file is judged on the first root that reaches
+-- it, its types, its checks and its tests that root's.
 -- A candidate whose first argument's type is a concrete other type
 -- (`List(U8)` for `Str.x`, a record, a tag union, a function) is left
 -- untried, `the first argument is a List, not a Str`. One whose type's
@@ -111,9 +116,10 @@
 --   **A TREE THE TYPES CANNOT READ STOPS THE RUN**, never a run without
 -- them: no `root=` (roc-types reads an app, and a type module only through
 -- one), a root that is no app or that the checker refuses, a file of the
--- glob the root does not import, and a roc-types whose pin is not the
--- tree's Roc (`roc-version`), each name their reason. `types=0` runs
--- without them, every candidate tried, as `root` may then be any file.
+-- glob no root reaches, and a roc-types whose pin is not the tree's Roc
+-- (`roc-version`), each name their reason. `types=0` runs without them,
+-- every candidate tried, as `root` may then be any one file: without the
+-- types no run can say which of several roots reaches a file.
 --
 -- `self_test=1` judges each plant of `cookbook/roc/plants/methods/` in a
 -- child run of its own (`plant=<Name>`, by the `shale` on PATH: this
@@ -531,13 +537,10 @@ end
 -- **THE TYPES' VERDICT** on each open candidate of the file at `p`: one
 -- whose first argument's type is a concrete other type is left, that its
 -- reason; one whose type's head is the module's is `proven`; the rest stay
--- for the trial. Each kind is counted on `tally`. A
--- file that is none of the root's modules stops the run: the types cannot
--- judge it, and a path spelled two ways (a link) would have every
--- candidate's type missing, quietly.
-function by_type(tally, t, cands, p, types, root)
+-- for the trial. Each kind is counted on `tally`. `types` is the
+-- types of the root that reaches the file (`roots_of`).
+function by_type(tally, t, cands, p, types)
   local abs = real(p)
-  if not has_key(types.modules, abs) then fail("methods: the types: " .. p .. " (" .. abs .. ") is none of the modules roc-types checked from " .. root .. ": a file the root does not import, or a path through a link") end
   for c in cands do
     if c.left == "" then
       local key = abs .. "|" .. t.nodes[t.nodes[c.at].kids[2]].region
@@ -703,8 +706,31 @@ function confirm(ctx, root, files, want_test)
   return nil
 end
 
--- **EVERY FILE OF `paths`**, each judged on `root` (its own file when
--- `root` is ""): `{candidates, rewritten, left, lines}`, `lines` a
+-- **EACH FILE'S ROOT**, by path: under the types (`typed`, each root's
+-- in `ctx.types`), the first of `roots` whose app reaches it; else the one
+-- root, or the file itself when there is none. A file no root reaches
+-- stops the run: the types cannot judge it, and a path spelled two ways (a
+-- link) would have every candidate's type missing, quietly.
+function roots_of(ctx, paths, from, roots, typed)
+  local out = {}
+  for k = from, #paths do
+    local p = paths[k]
+    out[p] = #roots > 0 and roots[1] or p
+    if typed then
+      local abs = real(p)
+      local found = ""
+      for r in roots do
+        if found == "" and has_key(ctx.types[r].modules, abs) then found = r end
+      end
+      if found == "" then fail("methods: the types: no root reaches " .. p .. ": roc-types checked " .. join(roots, ",") .. ", and none imports " .. abs .. " (or the path goes through a link)") end
+      out[p] = found
+    end
+  end
+  return out
+end
+
+-- **EVERY FILE OF `paths`**, each judged on its root (`roots_of`: `root`
+-- may name several, `a.roc,b.roc`, under the types): `{candidates, rewritten, left, lines}`, `lines` a
 -- `path:line: why` each call left. `ts` is their trees, or nil to read
 -- them here, one program (`roc_tree`). With `types`, which need `root`,
 -- `roc-types` runs once on it, before any file, when a file from `from` on
@@ -714,6 +740,8 @@ end
 -- is the OS path of the tree's Roc, which roc-types' pin must be.
 function run_all(paths, root, from, ts, types, roc)
   if types and root == "" then fail("methods: the types need root=, an app importing every file of the glob: roc-types reads an app, and a type module only through one. Give root=, or types=0 to run without them, every candidate tried") end
+  if not types and find(root, ",") ~= nil then fail("methods: root=" .. root .. ": several roots need the types, which say which root reaches a file; give one root, or run with the types") end
+  local roots = root == "" and {} or roc_types_roots("methods", root)
   local ctx = {used = 0, typed = {}, types = {}, roc = roc, rounds = 0, confirms = 0, confirmed = {}, judged = {}}
   if ts == nil then
     ts = trees(paths)
@@ -733,11 +761,14 @@ function run_all(paths, root, from, ts, types, roc)
   -- No candidate open, no types read, and none to judge by: by_type
   -- judges only open candidates.
   local typed = types and any_open
-  if typed then ctx.types[root] = types_of(ctx, root) end
+  if typed then
+    for r in roots do ctx.types[r] = types_of(ctx, r) end
+  end
+  local root_of = roots_of(ctx, paths, from, roots, typed)
   for k = from, #paths do
     local p = paths[k]
     local j = ctx.judged[p]
-    if typed then by_type(j.tally, ts[p], j.cands, p, ctx.types[root], root) end
+    if typed then by_type(j.tally, ts[p], j.cands, p, ctx.types[root_of[p]]) end
     j.proven = true
     for c in j.cands do
       if c.left == "" then
@@ -753,7 +784,7 @@ function run_all(paths, root, from, ts, types, roc)
     local t = ts[p]
     local j = ctx.judged[p]
     local cands = j.cands
-    local r = root ~= "" and root or p
+    local r = root_of[p]
     local open = j.open
     if j.proven and not has_key(ctx.confirmed, p) then
       -- Room for the confirm's checks and test, and for this file's trial
@@ -764,7 +795,7 @@ function run_all(paths, root, from, ts, types, roc)
       for m = k, #paths do
         local q = paths[m]
         local jq = ctx.judged[q]
-        if jq.proven and not has_key(ctx.confirmed, q) and (not APPLY or 2 * (#files + 1) <= room) then push(files, {p = q, t = ts[q], cands = jq.cands}) end
+        if jq.proven and root_of[q] == r and not has_key(ctx.confirmed, q) and (not APPLY or 2 * (#files + 1) <= room) then push(files, {p = q, t = ts[q], cands = jq.cands}) end
       end
       if room < 0 or #files == 0 then
         total.next = k
@@ -845,11 +876,13 @@ const EXPECT = {
   Unrooted = {stop = "the types need root=", types = true},
   NotApp = {stop = "is not an app", root = "Proven", types = true},
   Pin = {stop = "roc-types reads Roc nightly-2026-10-30-0602c5f", root = "TypedApp", types = true, tree_pin = "nightly-2026-10-29-a0a9fc2"},
+  Second = {left = 0, root = "TypedApp,SecondApp", types = true, confirms = 1, rounds = 0},
+  Unreached = {stop = "no root reaches", root = "TypedApp,SecondApp", types = true},
 }
 
 -- The plants that are only a root another is judged on, holding no call:
 -- `roc-types` reads an app, and an app names its platform.
-const ROOTS = {TypedApp = true, TypedPf = true}
+const ROOTS = {TypedApp = true, TypedPf = true, SecondApp = true}
 
 -- **ONE PLANT JUDGED**, the child run `plant=<name>`: the plants copied to
 -- a scratch folder of its own, the one plant run under `apply=1`.
@@ -864,7 +897,11 @@ function self_test_plant(name)
   -- A stop plant's child must stop in `run_all`, the parent judging what
   -- it said (`self_test`); `tree_pin` stands in for the tree's Roc.
   local roc = has_key(want, "tree_pin") and real("tools:roc-" .. want.tree_pin .. "/roc") or roc_bin("methods", SELF)
-  local got = run_all({p}, has_key(want, "root") and (scratch .. "/" .. want.root .. ".roc") or "", 1, nil, typed, roc)
+  local roots = {}
+  for r in split(get(want, "root", ""), ",") do
+    if r ~= "" then push(roots, scratch .. "/" .. r .. ".roc") end
+  end
+  local got = run_all({p}, join(roots, ","), 1, nil, typed, roc)
   if has_key(want, "stop") then fail("methods: self-test: " .. name .. " ran to its end, and was to stop: " .. want.stop) end
   local mine = {}
   for l in got.lines do push(mine, l) end
@@ -887,7 +924,7 @@ function self_test_plant(name)
   -- on a file with none (`no_types_run`).
   if typed then
     local runs = #keys(got.ctx.types)
-    local want_runs = has_key(want, "no_types_run") and 0 or 1
+    local want_runs = has_key(want, "no_types_run") and 0 or #roots
     judged(tally, runs == want_runs, name .. ": " .. runs .. " roc-types run(s), want " .. want_runs)
   end
   if want.left > 0 and not exists(wantp) then judged(tally, read(p) == read(PLANTS .. "/" .. name .. ".roc"), name .. ": put back as it was") end
