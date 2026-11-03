@@ -1,182 +1,162 @@
--- **A FAILURE SAID BY ITS TAGS, IN PLACE** (metal-vmm QUEUE 303, from the
--- Roc style review's S9 and S5): Roc's errors as roc-apps
--- docs/roc-style.md ("Errors and failure") writes them, read from Roc's
--- own parser's tree (`roc_tree`, the Linux prelude's, over roc-ast at
--- `tools:roc-ast/bin/roc-ast`), so a comment or a string never counts. A
--- finding is a question for a reader, never a verdict:
+-- This recipe checks how Roc code reports failure, against the rules in
+-- roc-apps docs/roc-style.md ("Errors and failure"). It reads each .roc
+-- file's parse tree from Roc's own parser, so text in a comment or a string
+-- never matches. A finding is a question for the reader, not a verdict.
+-- There are four checks:
 --
---   error_alias   a function whose result holds a `Try` whose error names
---                 an alias of tags (`ReadError : [Missing, Failed]`, or
---                 `Accounts.Unreadable`, a module type's), not the tags
---                 written in place: "a `Try`'s error lists the tags that
---                 function can return, in place; no shared error alias",
---                 since an alias of several makes every caller of each
---                 handle a tag that can't happen. The name is looked up in
---                 the files hunted (bare in its own file, qualified by its
---                 module type or file anywhere), through an alias of an
---                 alias. Quiet: an error that is no tag union (a record
---                 carried as an early answer, `Chat.Answer`; a `Str`), an
---                 alias in an argument (a handler's input,
---                 `fail_unreadable! : Try(a, Unreadable) => ...`), an
---                 error left to inference (`_`) or a type variable
---                 (`Try(a, e)`). A name declared outside the files hunted
---                 cannot be judged: the counts line names each.
---   optional_tag  a tag named as an optional (cookbook/words/optionals.txt:
---                 `Some`, `None`, `Nothing`, ...), which says only that a
---                 value may be missing: "a value that may be absent is
---                 tagged by what it is, and its absence by why"
---                 (`[Latest(Message), NoMessage]`). Each type that names
---                 one is a finding, at the tag's own line; a pattern or an expression only where
---                 no type of the files hunted names the tag (an `Err(None)`
---                 whose error is inferred), once a file. A tag is matched
---                 whole: `NoneChosen` is no `None`.
---   set_fallback  a store whose fallback is the list it stores into,
---                 `List.set(l, i, v) ?? l` (or `l.set(i, v) ?? l`, `l` any
---                 one value written twice, `game.cells` too): "the fallback
---                 names `l`, so every store copies. Write `?? crash "..."`
---                 instead" (roc-apps CLAUDE.md, "Six shapes copy";
---                 docs/roc-notes.md, "Speed and copying", the first shape).
---   placeholder   a `??` whose fallback is a string literal with nothing
---                 interpolated (`List.get(colors, seat) ?? "bogus"`, `?? ""`):
---                 "`crash`, with a reason, on the impossible; never a silent
---                 `?? default`" (docs/roc-style.md, "Errors and failure").
---                 Whether the lookup can fail is the reader's to say: a case
---                 that can happen keeps its handling, as a tag.
---                 **UNDER THE TYPES** (`types=1 root=<an app>`, off by
---                 default; cookbook/roc/types.shale) a finding names the
---                 fallback's type and what the lookup fails with, and a
---                 number literal is one too where the lookup's `Try` fails
---                 with `[OutOfBounds]` alone (`List.get(counts, seat) ??
---                 0`): an index past the end is a bug. A key never seen
---                 (`KeyNotFound`) or an empty list (`ListWasEmpty`) is
---                 left: a count's or a total's zero is often the answer.
---                 `root=a.roc,b.roc` names several apps. A file of the
---                 glob no root reaches is judged without types, named
---                 after the findings, and fails the run
---                 (cookbook/roc/parsed.shale). The self-test judges `plants/errors/typed/` (type
---                 modules, `PlaceholderIndex` read as
---                 `placeholder_index`, root `QuietApp.roc`) with the types.
+--   error_alias   A function's result is a `Try` whose error is an alias of
+--                 tags (`ReadError : [Missing, Failed]`, or a module's
+--                 `Accounts.Unreadable`) instead of the tags written in
+--                 place. A shared alias makes every caller handle tags its
+--                 function can't return. The alias is looked up in the files
+--                 checked, through an alias of an alias. An error that is not
+--                 a tag union (a record, a `Str`), an alias in an argument,
+--                 an inferred error (`_`) and a type variable are all fine.
+--                 An error declared outside the files checked can't be
+--                 judged, so the summary line names it.
+--   optional_tag  A tag named like an optional (`Some`, `None`, `Nothing`;
+--                 the full list is cookbook/words/optionals.txt). A value
+--                 that may be absent should be tagged by what it is, and its
+--                 absence by why (`[Latest(Message), NoMessage]`). Every type
+--                 that names such a tag is a finding at the tag's line. A tag
+--                 in an expression or a pattern is a finding, once per file,
+--                 only when no type in the files checked names it. A tag
+--                 matches by its whole name: `NoneChosen` is not `None`.
+--   set_fallback  `List.set(l, i, v) ?? l`, or `l.set(i, v) ?? l`, where the
+--                 fallback is the list being stored into. Naming `l` there
+--                 makes every store copy the list (roc-apps CLAUDE.md, "Six
+--                 shapes copy").
+--   placeholder   A `??` whose fallback is a string literal with nothing
+--                 interpolated (`?? "bogus"`, `?? ""`). The style guide asks
+--                 for a `crash` with a reason when the lookup can't fail, and
+--                 a tag for the case when it can.
 --
--- `error_alias` reads only a top-level or module-member annotation (a
--- local's is its definition's); the two `??` checks read every one. The
--- counts, then one line a finding, `path:line: <check>: <why>`, then the
--- counts again (cookbook/roc/findings.shale). A file roc-ast refuses is
--- named after them and fails the run, every other file hunted first
--- (cookbook/roc/parsed.shale).
+-- `error_alias` reads only top-level and module-member annotations. The two
+-- `??` checks read every expression.
 --
---   cd <repo> && shale <shale>/cookbook/roc/errors.shale glob=chat/**/*.roc
+-- With `types=1 root=app/main.roc` (or `root=a.roc,b.roc` for several apps)
+-- the recipe also asks Roc's type checker (cookbook/roc/types.shale). A
+-- placeholder finding then names the fallback's type and the tags the lookup
+-- fails with. A number fallback is a placeholder too when the lookup fails
+-- only with `[OutOfBounds]` (`List.get(counts, seat) ?? 0`), because an
+-- index past the end is a bug. A lookup that can fail with `KeyNotFound` or
+-- `ListWasEmpty` may fall back to a number, since zero is often the right
+-- answer for a count or a total. A file that no root reaches is checked
+-- without types, listed after the findings, and fails the run.
+--
+-- The recipe prints a summary line of counts, one line per finding
+-- (`path:line: check: why`), and the summary again. A file that does not
+-- parse is listed after the findings and fails the run, once every other
+-- file has been checked.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/errors.shale glob='app/**/*.roc'
 --   shale cookbook:roc/errors.shale self_test=1
 --
--- `self_test=1` runs it over `cookbook/roc/plants/errors/`, each plant
--- named for the check it holds: every check must fire on its own plants and
--- on no other, a `quiet_*.roc` plant on none, a plant named for no check is
--- a failure, and each `optional_tag` finding's line must name its tag.
+-- `self_test=1` runs the checks over the plants in cookbook/roc/plants/errors/
+-- (and its typed/ folder, with the types and root typed/QuietApp.roc). Each
+-- plant is named for the check it holds, and that check must fire on it and
+-- on no other check's plant. A `quiet_*.roc` plant must draw no finding, and
+-- a plant named for no check is a failure. Every `optional_tag` finding must
+-- point at a line that names its tag.
 -- budget: steps=400000000 arena_bytes=3000000000 output_bytes=4000000
 
-const SELF = arg("self_test", "") == "1"
+const SELF_TEST = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/errors/"
-const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
+const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const CHECKS = {"error_alias", "optional_tag", "set_fallback", "placeholder"}
-const OUTER = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
-const TYPES_SAID = arg("types", "0")
-if TYPES_SAID ~= "0" and TYPES_SAID ~= "1" then fail("errors: types=" .. TYPES_SAID .. ": 0 (the default) or 1") end
--- A self-test judges its typed plants (`plants/errors/typed/`, under
--- their app) with the types, and the rest without.
-const TYPED = SELF or TYPES_SAID == "1"
-const ROOT = SELF and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
+const TYPES_ARG = arg("types", "0")
+if TYPES_ARG ~= "0" and TYPES_ARG ~= "1" then fail("errors: types=" .. TYPES_ARG .. " must be 0 (the default) or 1") end
+-- The self-test checks its typed plants with the types, and the rest without.
+const USE_TYPES = SELF_TEST or TYPES_ARG == "1"
+const ROOT = SELF_TEST and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
 
--- A word table of cookbook/words/, the hunts' one home for them: a word a
--- line, `--` starting a note.
-function word_table(file)
-  local t = {}
+-- The words listed in cookbook/words/<file>, one per line, with `--`
+-- starting a note.
+function read_word_set(file)
+  local words = {}
   for l in lines(read("cookbook:words/" .. file)) do
     local w = trim(split(l, "--")[1])
-    if contains(w, " ") or has_key(t, w) then fail("errors: cookbook/words/" .. file .. ": `" .. w .. "` is no single new word") end
-    if w ~= "" then t[w] = true end
+    if contains(w, " ") or has_key(words, w) then fail("errors: cookbook/words/" .. file .. ": `" .. w .. "` is not a single word, or is listed twice") end
+    if w ~= "" then words[w] = true end
   end
-  return t
+  return words
 end
-const OPTIONALS = word_table("optionals.txt")
+const OPTIONALS = read_word_set("optionals.txt")
 
-const found = {}
-for c in CHECKS do found[c] = 0 end
-const per_file = {}
--- Each finding's line, printed after the counts.
-const said = {}
+const finding_counts = {}
+for c in CHECKS do finding_counts[c] = 0 end
+const fired = {}
+const finding_lines = {}
 
-function say(p, line, check, why)
-  push(said, p .. ":" .. line .. ": " .. check .. ": " .. why)
-  found[check] = found[check] + 1
-  per_file[p .. "|" .. check] = true
+function record_finding(path, line, check, why)
+  push(finding_lines, path .. ":" .. line .. ": " .. check .. ": " .. why)
+  finding_counts[check] = finding_counts[check] + 1
+  fired[path .. "|" .. check] = true
   return nil
 end
 
--- Every file's tree as one list `N`, each node's `parent` and `kids`
--- moved to their place in it (`parent` 0 for a root), and `FILE` the path
--- of each.
 const paths = glob(GLOB)
-if SELF then
+if SELF_TEST then
   for q in glob(PLANTS .. "typed/*.roc") do push(paths, q) end
 end
--- The checker's types (`types=1`): the self-test's untyped plants are its
--- root's none.
-const TYPES = TYPED and roc_types_hunted("errors", ROOT, roc_bin("errors", SELF), paths, SELF and set_of(glob(PLANTS .. "*.roc")) or {}) or {real = {}, pats = {}, exprs = {}, unreached = {}}
-const N = {}
-const FILE = {}
--- A file that does not parse has no tree: it is named, and fails the run,
--- after the rest are hunted (cookbook/roc/parsed.shale).
+-- The self-test's untyped plants are exempt from being reached by its root.
+const TYPES = USE_TYPES and roc_types_hunted("errors", ROOT, roc_bin("errors", SELF_TEST), paths, SELF_TEST and set_of(glob(PLANTS .. "*.roc")) or {}) or {real = {}, pats = {}, exprs = {}, unreached = {}}
 const PARSED = parse_roc_files(paths)
-do
-  for f in PARSED.files do
-    local base = #N
-    for n in f.nodes do
-      local ks = {}
-      for k in n.kids do push(ks, k + base) end
-      n.kids = ks
-      if n.parent > 0 then n.parent = n.parent + base end
-      push(N, n)
-      push(FILE, f.path)
-    end
+
+-- Every parsed file's nodes, in one list. Each node's `parent` and `kids`
+-- are indexes into this list, and a root's `parent` is 0. NODE_PATH holds
+-- each node's file.
+const NODES = {}
+const NODE_PATH = {}
+for f in PARSED.files do
+  local offset = #NODES
+  for n in f.nodes do
+    local ks = {}
+    for k in n.kids do push(ks, k + offset) end
+    n.kids = ks
+    if n.parent > 0 then n.parent = n.parent + offset end
+    push(NODES, n)
+    push(NODE_PATH, f.path)
   end
 end
 
 function kids(at)
-  return N[at].kids
+  return NODES[at].kids
 end
 
--- The last node of the subtree at `at`: nodes run in source order, each
--- before its kids.
-function last_of(at)
+-- Nodes are in source order, each before its kids, so a subtree runs from
+-- its root to this node.
+function last_descendant(at)
   local i = at
-  while #N[i].kids > 0 do i = N[i].kids[#N[i].kids] end
+  while #NODES[i].kids > 0 do i = NODES[i].kids[#NODES[i].kids] end
   return i
 end
 
 function kind(at)
-  return N[at].kind
+  return NODES[at].kind
 end
 
-function nm(at)
-  return get(N[at], "name", "")
+function node_name(at)
+  return get(NODES[at], "name", "")
 end
 
-function raw(at)
-  return get(N[at], "raw", "")
+function node_raw(at)
+  return get(NODES[at], "raw", "")
 end
 
--- A node's line; one with no span of its own is placed by the first below
--- it that has one.
-function line(at)
+-- A node with no line of its own takes the line of the next node that has
+-- one.
+function node_line(at)
   local i = at
-  while i <= #N and N[i].line == 0 do i = i + 1 end
-  return i <= #N and N[i].line or "?"
+  while i <= #NODES and NODES[i].line == 0 do i = i + 1 end
+  return i <= #NODES and NODES[i].line or "?"
 end
 
--- The tags of a `ty-tag-union`, each its node (`Some(U64)` whole).
+-- Each tag of the tag union at `at`, as a whole node (`Some(U64)`).
 function union_tag_nodes(at)
   local out = {}
   for t in kids(at) do
@@ -187,104 +167,115 @@ function union_tag_nodes(at)
   return out
 end
 
--- A tag's name: `Some` of `Some(U64)` too.
+-- The name of a tag node: `Some` for `Some(U64)`.
 function tag_name(g)
-  if kind(g) == "ty-apply" then return nm(kids(g)[1]) end
-  return nm(g)
+  if kind(g) == "ty-apply" then return node_name(kids(g)[1]) end
+  return node_name(g)
 end
 
--- The tags of a `ty-tag-union`, by name.
-function union_tags(at)
+function union_tag_names(at)
   local out = {}
   for g in union_tag_nodes(at) do push(out, tag_name(g)) end
   return out
 end
 
--- ── error_alias: a function's result, its every `Try` ────────────────────
+-- ── error_alias ──────────────────────────────────────────────────────────
 
--- Whether node `at` sits where a top-level or module member's annotation
--- does, from the kinds above it.
-function is_outer(at)
-  local p = N[at].parent
+const TOP_LEVEL_KINDS = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
+
+-- Whether the annotation at `at` is top-level or a module member: every
+-- node above it is a file, its statements, a type declaration, or a type's
+-- associated block.
+function is_top_level(at)
+  local p = NODES[at].parent
   while p > 0 do
-    if not has_key(OUTER, kind(p)) then return false end
-    p = N[p].parent
+    if not has_key(TOP_LEVEL_KINDS, kind(p)) then return false end
+    p = NODES[p].parent
   end
   return true
 end
 
--- **EVERY TYPE DECLARED IN THE FILES HUNTED**, by the names a `Try` may
--- give it, each the node of what it is declared as: `QUAL` by its
--- qualified name (the module types around it, `Stored.Problem`, and for a
--- file's top level the file's own, `Access.Answer`), `BARE` by file and
--- bare name (`Problem` inside Stored.roc).
-const QUAL = {}
-const BARE = {}
--- The name a type declaration at `at` declares, or "".
-function decl_name(at)
+-- The name the type declaration at `at` declares, or "" if `at` is not one.
+function declared_name(at)
   local ks = kids(at)
   if kind(at) ~= "s-type-decl" or #ks < 2 then return "" end
-  return nm(ks[1])
+  return node_name(ks[1])
 end
 
-for i = 1, #N do
-  local n = decl_name(i)
-  if n ~= "" then
-    local up = {n}
-    local p = N[i].parent
-    while p > 0 do
-      if decl_name(p) ~= "" then push(up, decl_name(p)) end
-      p = N[p].parent
+-- The type declaration at `at`'s name, qualified by the declarations
+-- around it (`Stored.Problem`).
+function nested_name(at)
+  local inner_first = {declared_name(at)}
+  local p = NODES[at].parent
+  while p > 0 do
+    if declared_name(p) ~= "" then push(inner_first, declared_name(p)) end
+    p = NODES[p].parent
+  end
+  local outer_first = {}
+  for k = #inner_first, 1, -1 do push(outer_first, inner_first[k]) end
+  return join(outer_first, ".")
+end
+
+-- Every type declared in the files checked, mapped to the node of what it
+-- is declared as. DECLARED_QUALIFIED is keyed by the qualified name, and a
+-- file's top-level types also by the file's module name (`Access.Answer`
+-- for `Answer` in Access.roc). DECLARED_IN_FILE is keyed by path and bare
+-- name.
+const DECLARED_QUALIFIED = {}
+const DECLARED_IN_FILE = {}
+for i = 1, #NODES do
+  local name = declared_name(i)
+  if name ~= "" then
+    local definition = kids(i)[2]
+    local qualified = nested_name(i)
+    DECLARED_QUALIFIED[qualified] = definition
+    if qualified == name then
+      local file_name = split(NODE_PATH[i], "/")
+      file_name = file_name[#file_name]
+      DECLARED_QUALIFIED[sub(file_name, 1, #file_name - 4) .. "." .. name] = definition
     end
-    local chain = {}
-    for k = #up, 1, -1 do push(chain, up[k]) end
-    local at = kids(i)[2]
-    QUAL[join(chain, ".")] = at
-    if #chain == 1 then
-      local base = split(FILE[i], "/")
-      base = base[#base]
-      QUAL[sub(base, 1, #base - 4) .. "." .. n] = at
-    end
-    BARE[FILE[i] .. "|" .. n] = at
+    DECLARED_IN_FILE[NODE_PATH[i] .. "|" .. name] = definition
   end
 end
 
--- What the error named `n` in `file` is: `union` (an alias of tags, `[A,
--- B]`, followed through an alias of an alias), `other` (a record, a
--- builtin like `Str`, an empty module type) or `unknown` (declared outside
--- the files hunted).
-const BUILTIN = {Str = true, Bool = true, U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true, F32 = true, F64 = true, Dec = true, List = true, Dict = true, Set = true, Box = true}
-function error_kind(file, n, hops)
-  if has_key(BUILTIN, n) then return "other" end
-  local at = get(BARE, file .. "|" .. n) or get(QUAL, n)
+const BUILTIN_TYPES = {Str = true, Bool = true, U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true, F32 = true, F64 = true, Dec = true, List = true, Dict = true, Set = true, Box = true}
+
+-- What the error type named `name` in `path` is: "union" for an alias of
+-- tags (followed through up to 8 aliases of aliases), "unknown" for a type
+-- declared outside the files checked, or "other" for anything else (a
+-- record, a builtin, an empty module type).
+function error_kind(path, name, hops)
+  if has_key(BUILTIN_TYPES, name) then return "other" end
+  local at = get(DECLARED_IN_FILE, path .. "|" .. name) or get(DECLARED_QUALIFIED, name)
   if at == nil then return "unknown" end
-  if kind(at) == "ty-tag-union" then return #union_tags(at) > 0 and "union" or "other" end
-  if kind(at) == "ty" and nm(at) ~= "" and hops < 8 then return error_kind(file, nm(at), hops + 1) end
+  if kind(at) == "ty-tag-union" then return #union_tag_names(at) > 0 and "union" or "other" end
+  if kind(at) == "ty" and node_name(at) ~= "" and hops < 8 then return error_kind(path, node_name(at), hops + 1) end
   return "other"
 end
 
--- The errors named by a type declared outside the files hunted, which
--- `error_alias` cannot judge, by name: said in the counts, never dropped.
-const unjudged = {}
+-- The error node of a `Try(ok, error)` type at `at`, or 0 for any other node.
+function try_error_node(at)
+  local ks = kids(at)
+  if kind(at) == "ty-apply" and #ks == 3 and node_name(ks[1]) == "Try" then return ks[3] end
+  return 0
+end
 
-for i = 1, #N do
-  if kind(i) == "s-type-anno" and is_outer(i) then
+-- How many times each error declared outside the files checked is named.
+const unjudged_errors = {}
+
+for i = 1, #NODES do
+  if kind(i) == "s-type-anno" and is_top_level(i) then
     local ks = kids(i)
     if #ks > 0 and kind(ks[1]) == "ty-fn" then
       local parts = kids(ks[1])
-      local res = parts[#parts]
-      for j = res, last_of(res) do
-        if kind(j) == "ty-apply" then
-          local tk = kids(j)
-          if #tk == 3 and nm(tk[1]) == "Try" then
-            local e = tk[3]
-            local n = nm(e)
-            if n ~= "" and kind(e) == "ty" then
-              local ek = error_kind(FILE[i], n, 0)
-              if ek == "union" then say(FILE[i], line(i), "error_alias", "`" .. nm(i) .. "` fails with `" .. n .. "`, a shared alias of tags: list the tags it can return in place, or leave the error to inference (`_`)") end
-              if ek == "unknown" then unjudged[n] = get(unjudged, n, 0) + 1 end
-            end
-          end
+      local result = parts[#parts]
+      for j = result, last_descendant(result) do
+        local err = try_error_node(j)
+        if err > 0 and node_name(err) ~= "" and kind(err) == "ty" then
+          local name = node_name(err)
+          local ek = error_kind(NODE_PATH[i], name, 0)
+          if ek == "union" then record_finding(NODE_PATH[i], node_line(i), "error_alias", "`" .. node_name(i) .. "` fails with `" .. name .. "`, a shared alias of tags: list the tags it can return in place, or leave the error to inference (`_`)") end
+          if ek == "unknown" then unjudged_errors[name] = get(unjudged_errors, name, 0) + 1 end
         end
       end
     end
@@ -293,44 +284,43 @@ end
 
 -- ── optional_tag ─────────────────────────────────────────────────────────
 
--- The optional tags each type names, by tag, and the expressions' and
--- patterns' by file and tag.
-const typed = {}
-const used = {}
--- Each `optional_tag` finding, `{path, line, tag}`: the self-test holds
--- every one to a line that names its tag.
-const tag_lines = {}
-for i = 1, #N do
+-- The optional tags some type names, and the first use of each optional
+-- tag in an expression or pattern, keyed by path and tag.
+const optionals_in_types = {}
+const first_optional_uses = {}
+-- Each `optional_tag` finding as `{path, line, tag}`, for the self-test.
+const optional_findings = {}
+for i = 1, #NODES do
   local k = kind(i)
   if k == "ty-tag-union" then
     for g in union_tag_nodes(i) do
       local t = tag_name(g)
       if has_key(OPTIONALS, t) then
-        typed[t] = true
-        push(tag_lines, {path = FILE[i], line = line(g), tag = t})
-        say(FILE[i], line(g), "optional_tag", "`" .. t .. "` names an optional: tag what the value is, and its absence by why (`[Latest(Message), NoMessage]`)")
+        optionals_in_types[t] = true
+        push(optional_findings, {path = NODE_PATH[i], line = node_line(g), tag = t})
+        record_finding(NODE_PATH[i], node_line(g), "optional_tag", "`" .. t .. "` names an optional: tag what the value is, and its absence by why (`[Latest(Message), NoMessage]`)")
       end
     end
   elseif k == "e-tag" or k == "p-tag" then
-    local n = raw(i)
-    local key = FILE[i] .. "|" .. n
-    if has_key(OPTIONALS, n) and not has_key(used, key) then used[key] = {path = FILE[i], line = line(i), tag = n} end
+    local t = node_raw(i)
+    local key = NODE_PATH[i] .. "|" .. t
+    if has_key(OPTIONALS, t) and not has_key(first_optional_uses, key) then first_optional_uses[key] = {path = NODE_PATH[i], line = node_line(i), tag = t} end
   end
 end
-for key in sort(keys(used)) do
-  local u = used[key]
-  if not has_key(typed, u.tag) then
-    push(tag_lines, u)
-    say(u.path, u.line, "optional_tag", "`" .. u.tag .. "` names an optional, and no type here says what it is: tag the value by what it is, and its absence by why")
+for key in sort(keys(first_optional_uses)) do
+  local first_use = first_optional_uses[key]
+  if not has_key(optionals_in_types, first_use.tag) then
+    push(optional_findings, first_use)
+    record_finding(first_use.path, first_use.line, "optional_tag", "`" .. first_use.tag .. "` names an optional, and no type here says what it is: tag the value by what it is, and its absence by why")
   end
 end
 
--- ── set_fallback and placeholder: what a `??` falls back to ─────────────
+-- ── set_fallback and placeholder: what a `??` falls back to ──────────────
 
--- Whether the expressions at `a` and `b` are one value written twice
+-- Whether the expressions at `a` and `b` are the same value written twice
 -- (`board`, `r.b`): the same kinds, names and fields, all the way down.
 function same_expr(a, b)
-  if kind(a) ~= kind(b) or raw(a) ~= raw(b) or get(N[a], "field", "") ~= get(N[b], "field", "") then return false end
+  if kind(a) ~= kind(b) or node_raw(a) ~= node_raw(b) or get(NODES[a], "field", "") ~= get(NODES[b], "field", "") then return false end
   local ka = kids(a)
   local kb = kids(b)
   if #ka ~= #kb then return false end
@@ -340,12 +330,12 @@ function same_expr(a, b)
   return true
 end
 
--- The list a `List.set` call at `at` stores into (`List.set(l, i, v)`, or
--- `l.set(i, v)`), or 0 for any other expression.
+-- The list that the `List.set(l, i, v)` or `l.set(i, v)` call at `at`
+-- stores into, or 0 for any other expression.
 function set_target(at)
   local ks = kids(at)
-  if kind(at) == "e-apply" and #ks == 4 and kind(ks[1]) == "e-ident" and raw(ks[1]) == "List.set" then return ks[2] end
-  if kind(at) == "e-method-call" and get(N[at], "method", "") == ".set" then
+  if kind(at) == "e-apply" and #ks == 4 and kind(ks[1]) == "e-ident" and node_raw(ks[1]) == "List.set" then return ks[2] end
+  if kind(at) == "e-method-call" and get(NODES[at], "method", "") == ".set" then
     for k in ks do
       if kind(k) == "receiver" and #kids(k) == 1 then return kids(k)[1] end
     end
@@ -353,7 +343,7 @@ function set_target(at)
   return 0
 end
 
--- A string literal with nothing interpolated: its parts are text alone.
+-- Whether `at` is a string literal with nothing interpolated.
 function is_literal_str(at)
   if kind(at) ~= "e-string" then return false end
   for k in kids(at) do
@@ -362,83 +352,86 @@ function is_literal_str(at)
   return true
 end
 
-for i = 1, #N do
+for i = 1, #NODES do
   local ks = kids(i)
-  if kind(i) == "e-binop" and get(N[i], "op", "") == "??" and #ks == 2 then
-    local target = set_target(ks[1])
-    if target > 0 and same_expr(target, ks[2]) then say(FILE[i], line(ks[2]), "set_fallback", "`List.set(l, i, v) ?? l`: the fallback names `l`, so every store copies; write `?? crash \"...\"` instead (roc-apps CLAUDE.md, \"Six shapes copy\")") end
-    -- Under the types, what the lookup fails with: its `Try`'s error.
-    local typed = TYPED and has_key(TYPES.real, FILE[i])
-    local fails = ""
-    if typed then
-      local lt = roc_type_at(TYPES, "expr", FILE[i], N[ks[1]])
-      local m = lt ~= nil and re_find(lt, "^Try\\((.*), (\\[[^\\[\\]]*\\])\\)$") or nil
-      if m ~= nil then fails = m.groups[2] end
+  if kind(i) == "e-binop" and get(NODES[i], "op", "") == "??" and #ks == 2 then
+    local lookup = ks[1]
+    local fallback = ks[2]
+    local path = NODE_PATH[i]
+    local target = set_target(lookup)
+    if target > 0 and same_expr(target, fallback) then record_finding(path, node_line(fallback), "set_fallback", "`List.set(l, i, v) ?? l`: the fallback names `l`, so every store copies; write `?? crash \"...\"` instead (roc-apps CLAUDE.md, \"Six shapes copy\")") end
+    -- With types, the tag union the lookup's `Try` fails with, such as
+    -- `[OutOfBounds]`, or "" when it is unknown.
+    local has_types = USE_TYPES and has_key(TYPES.real, path)
+    local lookup_error = ""
+    if has_types then
+      local lookup_type = roc_type_at(TYPES, "expr", path, NODES[lookup])
+      local m = lookup_type ~= nil and re_find(lookup_type, "^Try\\((.*), (\\[[^\\[\\]]*\\])\\)$") or nil
+      if m ~= nil then lookup_error = m.groups[2] end
     end
-    local why = fails ~= "" and (", for a lookup that fails with `" .. fails .. "`") or ""
-    if is_literal_str(ks[2]) then
+    local lookup_said = lookup_error ~= "" and (", for a lookup that fails with `" .. lookup_error .. "`") or ""
+    if is_literal_str(fallback) then
       local text = ""
-      for k in kids(ks[2]) do text = text .. raw(k) end
-      say(FILE[i], line(ks[2]), "placeholder", "falls back to the literal `\"" .. text .. "\"`" .. (typed and (", a Str" .. why) or "") .. ": if the lookup can't fail, `crash` with a reason, \"never a silent `?? default`\"; if it can, keep that case as a tag (docs/roc-style.md, \"Errors and failure\")")
+      for k in kids(fallback) do text = text .. node_raw(k) end
+      record_finding(path, node_line(fallback), "placeholder", "falls back to the literal `\"" .. text .. "\"`" .. (has_types and (", a Str" .. lookup_said) or "") .. ": if the lookup can't fail, `crash` with a reason, \"never a silent `?? default`\"; if it can, keep that case as a tag (docs/roc-style.md, \"Errors and failure\")")
     end
-    -- A number is a placeholder only where the types say the lookup is an
-    -- index's, failing with `OutOfBounds` alone: a key never seen
-    -- (`KeyNotFound`) or an empty list (`ListWasEmpty`) often has a zero
-    -- for its answer, a count's or a total's.
-    if typed and fails == "[OutOfBounds]" and (kind(ks[2]) == "e-int" or kind(ks[2]) == "e-frac") then
-      local ft = roc_type_at(TYPES, "expr", FILE[i], N[ks[2]]) or "?"
-      say(FILE[i], line(ks[2]), "placeholder", "falls back to `" .. raw(ks[2]) .. "`, a " .. ft .. why .. ": an index past the end is a bug, not a " .. raw(ks[2]) .. "; `crash` with a reason, or keep the case as a tag (docs/roc-style.md, \"Errors and failure\")")
+    if has_types and lookup_error == "[OutOfBounds]" and (kind(fallback) == "e-int" or kind(fallback) == "e-frac") then
+      local fallback_type = roc_type_at(TYPES, "expr", path, NODES[fallback]) or "?"
+      record_finding(path, node_line(fallback), "placeholder", "falls back to `" .. node_raw(fallback) .. "`, a " .. fallback_type .. lookup_said .. ": an index past the end is a bug, not a " .. node_raw(fallback) .. "; `crash` with a reason, or keep the case as a tag (docs/roc-style.md, \"Errors and failure\")")
     end
   end
 end
 
 local counts = {}
-for c in CHECKS do push(counts, c .. " " .. found[c]) end
-local unseen = {}
-for n in sort(keys(unjudged)) do push(unseen, n .. " (" .. unjudged[n] .. ")") end
-local unseen_said = #unseen > 0 and ("; error_alias not judged, declared outside the files hunted: " .. join(unseen, ", ")) or ""
-print_findings("errors (Roc): " .. #paths .. " files; " .. join(counts, ", ") .. unseen_said, said)
+for c in CHECKS do push(counts, c .. " " .. finding_counts[c]) end
+local unjudged = {}
+for n in sort(keys(unjudged_errors)) do push(unjudged, n .. " (" .. unjudged_errors[n] .. ")") end
+local unjudged_said = #unjudged > 0 and ("; error_alias not judged, declared outside the files hunted: " .. join(unjudged, ", ")) or ""
+print_findings("errors (Roc): " .. #paths .. " files; " .. join(counts, ", ") .. unjudged_said, finding_lines)
 fail_if_refused("errors", PARSED.refused, TYPES.unreached)
 
--- A plant's name as the self-test's table reads it: a typed plant's, a
--- type module's (`typed/PlaceholderIndex.roc`), as `placeholder_index.roc`.
-function plant_base(p)
-  local base = sub(p, #PLANTS + 1)
-  if starts_with(base, "typed/") then return roc_plant_name(sub(base, 7)) end
-  return base
+-- A plant's name relative to PLANTS. A typed plant's module name is read
+-- in snake case: `typed/PlaceholderIndex.roc` is `placeholder_index.roc`.
+function plant_name(path)
+  local name = sub(path, #PLANTS + 1)
+  if starts_with(name, "typed/") then return roc_plant_name(sub(name, 7)) end
+  return name
 end
 
-if SELF then
-  local wrong = {}
+function is_plant_for(name, check)
+  return name == check .. ".roc" or starts_with(name, check .. "_")
+end
+
+if SELF_TEST then
+  local failures = {}
   for c in CHECKS do
     local planted = 0
     for p in paths do
-      local base = plant_base(p)
-      local mine = base == c .. ".roc" or starts_with(base, c .. "_")
+      local mine = is_plant_for(plant_name(p), c)
       if mine then planted = planted + 1 end
-      local fired = has_key(per_file, p .. "|" .. c)
-      if mine and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. p) end
-      if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
+      local did_fire = has_key(fired, p .. "|" .. c)
+      if mine and not did_fire then push(failures, "`" .. c .. "` does not fire on its plant " .. p) end
+      if did_fire and not mine then push(failures, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
     end
-    if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
+    if planted == 0 then push(failures, "`" .. c .. "` has no plant") end
   end
-  -- A plant named for no check is read by none, so it could never fail.
+  -- No check would ever fail on a plant named for none of them.
   for p in paths do
-    local base = plant_base(p)
-    local named = starts_with(base, "quiet_")
+    local name = plant_name(p)
+    local named = starts_with(name, "quiet_")
     for c in CHECKS do
-      if base == c .. ".roc" or starts_with(base, c .. "_") then named = true end
+      if is_plant_for(name, c) then named = true end
     end
-    if not named then push(wrong, p .. ": a plant the table does not judge") end
+    if not named then push(failures, p .. ": a plant the table does not judge") end
   end
-  -- A plant's every error is declared beside it: one left unjudged would
-  -- pass quiet without the rule being asked.
-  for n in sort(keys(unjudged)) do push(wrong, "`error_alias` cannot judge `" .. n .. "`, declared in no plant") end
-  for f in tag_lines do
-    local src = split(read(f.path), "\n")
-    if f.line == "?" or not contains(src[f.line], f.tag) then push(wrong, "`optional_tag` says " .. f.path .. ":" .. f.line .. ", a line that does not name `" .. f.tag .. "`") end
+  -- Every error a plant names is declared in a plant; otherwise a quiet
+  -- plant could pass without `error_alias` judging it.
+  for n in sort(keys(unjudged_errors)) do push(failures, "`error_alias` cannot judge `" .. n .. "`, declared in no plant") end
+  for f in optional_findings do
+    local source_lines = split(read(f.path), "\n")
+    if f.line == "?" or not contains(source_lines[f.line], f.tag) then push(failures, "`optional_tag` says " .. f.path .. ":" .. f.line .. ", a line that does not name `" .. f.tag .. "`") end
   end
-  for w in wrong do print("FAIL " .. w) end
-  if #wrong > 0 then fail("errors self_test: " .. #wrong .. " plants wrong") end
+  for w in failures do print("FAIL " .. w) end
+  if #failures > 0 then fail("errors self_test: " .. #failures .. " plants wrong") end
   print("errors (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none, each optional at its tag's line)")
 end
