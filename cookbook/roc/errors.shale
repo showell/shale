@@ -104,7 +104,7 @@ if SELF_TEST then
   for q in glob(PLANTS .. "typed/*.roc") do push(paths, q) end
 end
 -- The self-test's untyped plants are exempt from being reached by its root.
-const TYPES = USE_TYPES and roc_types_hunted("errors", ROOT, roc_bin("errors", SELF_TEST), paths, SELF_TEST and set_of(glob(PLANTS .. "*.roc")) or {}) or {real = {}, pats = {}, exprs = {}, unreached = {}}
+const TYPES = USE_TYPES and roc_types_for_files("errors", ROOT, roc_bin("errors", SELF_TEST), paths, SELF_TEST and set_of(glob(PLANTS .. "*.roc")) or {}) or {real = {}, pats = {}, exprs = {}, unreached = {}}
 const PARSED = parse_roc_files(paths)
 
 -- Every parsed file's nodes, in one list. Each node's `parent` and `kids`
@@ -394,7 +394,7 @@ fail_if_refused("errors", PARSED.refused, TYPES.unreached)
 -- in snake case: `typed/PlaceholderIndex.roc` is `placeholder_index.roc`.
 function plant_name(path)
   local name = sub(path, #PLANTS + 1)
-  if starts_with(name, "typed/") then return roc_plant_name(sub(name, 7)) end
+  if starts_with(name, "typed/") then return snake_case_plant_name(sub(name, 7)) end
   return name
 end
 

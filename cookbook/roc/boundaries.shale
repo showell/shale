@@ -240,7 +240,7 @@ if SELF_TEST then
     if not starts_with(p, TYPED_PLANTS) then untyped_plants[p] = true end
   end
 end
-local checker_types = USE_TYPES and roc_types_hunted("boundaries", ROOT, roc_bin("boundaries", SELF_TEST), ROC_FILES, untyped_plants) or {real = {}, pats = {}, exprs = {}, unreached = {}}
+local checker_types = USE_TYPES and roc_types_for_files("boundaries", ROOT, roc_bin("boundaries", SELF_TEST), ROC_FILES, untyped_plants) or {real = {}, pats = {}, exprs = {}, unreached = {}}
 local parsed = parse_roc_files(ROC_FILES)
 for f in parsed.files do
   SOURCE_LINES[f.path] = split(read(f.path), "\n")
@@ -660,7 +660,7 @@ fail_if_refused("boundaries", parsed.refused, checker_types.unreached)
 -- A plant's file name as the self-test reads it. A typed plant is a type
 -- module, so `typed/BoolParam.roc` reads as `bool_param.roc`.
 function plant_check_name(p)
-  if starts_with(p, TYPED_PLANTS) then return roc_plant_name(basename(p)) end
+  if starts_with(p, TYPED_PLANTS) then return snake_case_plant_name(basename(p)) end
   return basename(p)
 end
 

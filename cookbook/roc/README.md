@@ -183,7 +183,7 @@ it works on, `<shale>` being the shale checkout:
   `errors`, `boundaries`, `name_hunt` and `nest_depth` use it, so one
   old-syntax probe in a tree never hides the other files' findings, and is
   never passed unread. Under the types it names each file no root reached
-  too (`not reached by <root>: <path>`, `roc_types_hunted`'s), judged
+  too (`not reached by <root>: <path>`, `roc_types_for_files`'s), judged
   without them, and fails the run the same way.
 - [types.shale](types.shale): **Roc's own checker's types**, a library:
   `use("cookbook:roc/types.shale")` gives `roc_types(root, roc)`, every
@@ -193,7 +193,7 @@ it works on, `<shale>` being the shale checkout:
   checker refuses, a missing roc-types, an unknown header and a roc-types
   whose pin is not the tree's Roc (`roc`, `roc_bin`'s path) each stop the
   run. `methods.shale` uses it. For the hunts (`types=1` on `name_hunt`,
-  `errors` and `boundaries`), `roc_types_hunted` takes `root=` as one app
+  `errors` and `boundaries`), `roc_types_for_files` takes `root=` as one app
   or several (`root=a.roc,b.roc`, one roc-types run each, a module two
   reach typed by the first) and judges what they reach: a file of the glob
   none reaches is judged without types, named, and fails the run at its

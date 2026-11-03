@@ -720,7 +720,7 @@ end
 function definition_signature(def)
   local signature = {is_function = def.annotation and def.fn, result = get(def, "result", ""), known = def.annotation, source_note = ""}
   if has_key(def, "typed") then
-    local checker = roc_type_shape(def.typed)
+    local checker = roc_type_parts(def.typed)
     signature = {is_function = checker.fn, result = checker.result, known = true, source_note = " (the checker's type)"}
     if has_key(BOOL_ALIASES, checker.result) then signature.result = "Bool" end
   end
@@ -862,7 +862,7 @@ local file_count = #paths
 -- The self-test's untyped plants are imported by no root.
 const UNTYPED_PLANTS = SELF_TEST and set_of(glob(PLANTS .. "*.roc")) or {}
 if USE_TYPES then
-  local got = roc_types_hunted("name_hunt", ROOT, roc_bin("name_hunt", SELF_TEST), paths, UNTYPED_PLANTS)
+  local got = roc_types_for_files("name_hunt", ROOT, roc_bin("name_hunt", SELF_TEST), paths, UNTYPED_PLANTS)
   CHECKER_TYPES.real = got.real
   CHECKER_TYPES.pats = got.pats
   CHECKER_TYPES.exprs = got.exprs
@@ -951,7 +951,7 @@ fail_if_refused("name_hunt", parsed.refused, CHECKER_TYPES.unreached)
 -- (`question_inferred.roc`).
 function plant_name(path)
   local name = sub(path, #PLANTS + 1)
-  if starts_with(name, "typed/") then return roc_plant_name(sub(name, 7)) end
+  if starts_with(name, "typed/") then return snake_case_plant_name(sub(name, 7)) end
   return name
 end
 

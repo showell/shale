@@ -114,7 +114,7 @@ end
 -- The app paths in a recipe's `root=` argument, which may list several,
 -- `root=a.roc,b.roc`, when no one app imports every file the recipe checks.
 -- `who` names the recipe in the failure when `root=` is empty.
-function roc_types_roots(who, root)
+function roc_types_root_apps(who, root)
   local out = {}
   for r in split(root, ",") do
     if trim(r) ~= "" then push(out, trim(r)) end
@@ -123,7 +123,7 @@ function roc_types_roots(who, root)
   return out
 end
 
--- The key under which `roc_types_hunted` stores the type at a region of a
+-- The key under which `roc_types_for_files` stores the type at a region of a
 -- file, given the file's real path and anything with the region's
 -- `line, col, end_line, end_col`.
 function roc_types_region_key(real_path, region)
@@ -131,7 +131,7 @@ function roc_types_region_key(real_path, region)
 end
 
 -- The types a recipe needs for the files `paths`, gathered by running
--- `roc_types` on each app named in `root` (see `roc_types_roots`). `who`
+-- `roc_types` on each app named in `root` (see `roc_types_root_apps`). `who`
 -- names the recipe in failures. The result is a record:
 --   pats, exprs: the type of each pattern and expression, by
 --     `roc_types_region_key`. When several nodes share a region, the
@@ -143,8 +143,8 @@ end
 -- A recipe checks an unreached file without types and passes `unreached`
 -- to `fail_if_refused` (cookbook/roc/parsed.shale), which lists those
 -- files after the findings and fails the run.
-function roc_types_hunted(who, root, roc, paths, exempt)
-  local roots = roc_types_roots(who, root)
+function roc_types_for_files(who, root, roc, paths, exempt)
+  local roots = roc_types_root_apps(who, root)
   local pats = {}
   local exprs = {}
   local reached = {}
@@ -179,7 +179,7 @@ function roc_types_hunted(who, root, roc, paths, exempt)
 end
 
 -- The type of the roc_tree node `n` in the file `path`, from the result of
--- `roc_types_hunted`, or nil where the checker gave none. `kind` is "pat"
+-- `roc_types_for_files`, or nil where the checker gave none. `kind` is "pat"
 -- or "expr".
 function roc_type_at(types, kind, path, n)
   return get(kind == "pat" and types.pats or types.exprs, roc_types_region_key(types.real[path], n))
@@ -191,7 +191,7 @@ end
 -- the arrow is `=>`, `args` is the text before the arrow and `result` the
 -- text after it. For any other type, `result` is the whole type and `args`
 -- is empty.
-function roc_type_shape(ty)
+function roc_type_parts(ty)
   local depth = 0
   local body = ty
   for i = 1, #ty do
@@ -220,7 +220,7 @@ end
 -- plant, `QuestionInferred.roc` to `question_inferred.roc`. A typed plant
 -- is a type module, which Roc names in CamelCase, and a self-test chooses
 -- the check that judges a plant by the start of its snake_case name.
-function roc_plant_name(base)
+function snake_case_plant_name(base)
   local out = ""
   for i = 1, #base do
     local ch = sub(base, i, i)

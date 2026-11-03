@@ -764,7 +764,7 @@ end
 function run_all(paths, root, from, trees, use_types, roc)
   if use_types and root == "" then fail("methods: the types need root=, an app importing every file of the glob: roc-types reads an app, and a type module only through one. Give root=, or types=0 to run without them, every candidate tried") end
   if not use_types and find(root, ",") ~= nil then fail("methods: root=" .. root .. ": several roots need the types, which say which root reaches a file; give one root, or run with the types") end
-  local roots = root == "" and {} or roc_types_roots("methods", root)
+  local roots = root == "" and {} or roc_types_root_apps("methods", root)
   local ctx = {programs_used = 0, type_kind_counts = {}, types_by_root = {}, roc = roc, rounds = 0, confirms = 0, confirmed = {}}
   if trees == nil then
     trees = parse_trees(paths)
