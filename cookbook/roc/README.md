@@ -168,7 +168,8 @@ it works on, `<shale>` being the shale checkout:
   recipe: `use("cookbook:roc/pinned.shale")` gives `roc_bin(who,
   self_test)`, the pinned `roc`'s path (`tools:roc-<pin>/roc`, the pin from
   `roc-version` where the run starts), and `SELF_TEST_PIN`, the one Roc
-  every self-test runs. `methods.shale` and `stack.shale` use it.
+  every self-test runs. `boundaries`, `errors`, `methods`, `name_hunt`
+  and `stack` use it.
 - [findings.shale](findings.shale): **prints a summary, a list of
   findings, and the summary again**. A library: `print_findings(summary,
   lines)`. The first summary survives when Shale's output budget cuts a
