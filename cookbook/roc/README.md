@@ -32,7 +32,8 @@ that doesn't parse is listed at the end, and the run then fails.
 
 - [name_hunt.shale](name_hunt.shale) looks for awkward names: an effect
   named like a state, a question that doesn't return a `Bool`, a name made
-  only of vague words, and eleven other checks. Its word lists are in
+  only of vague words, a pure function named by a bare past participle
+  (`added`, `named`), and eleven other checks. Its word lists are in
   `cookbook/words/`. `words=1` prints a count of the first words of
   effects instead of the findings.
 - [errors.shale](errors.shale) checks how code reports failure: a shared

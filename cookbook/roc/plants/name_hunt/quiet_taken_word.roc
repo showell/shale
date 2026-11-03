@@ -29,8 +29,8 @@ message_record = |text| text
 tag_name : Str
 tag_name = "p"
 
-summed : U64 -> U64
-summed = |n| {
+add_two : U64 -> U64
+add_two = |n| {
 	one = n + 1
 	two = one + 1
 	two

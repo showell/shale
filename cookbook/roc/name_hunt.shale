@@ -138,6 +138,14 @@
 --                 returns the very thing, its result's last part being the
 --                 word capitalized (`record : ApiKey.Key -> ApiKey.Record`),
 --                 is fine.
+--   bare_participle  A pure function whose whole name is one past participle
+--                 (`added`, `joined`, `named`, `chosen`), which reads too
+--                 easily as a `Bool`. Name it by a noun for what it gives
+--                 (`user_by_name`) or a verb for what it does (`add_user`).
+--                 A name of two parts or more (`escaped_text`, `is_added`)
+--                 and a value are not reported. An effect named this way is
+--                 left to `state_effect`, and a function that gives a `Bool`
+--                 to `question`.
 --
 -- Each name is judged once: from its annotation when it has one, else from
 -- its definition. An effect that takes an effectful function (`map2!`,
@@ -202,7 +210,7 @@ const ROOT = SELF_TEST and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
 -- unless USE_TYPES.
 const CHECKER_TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
 const CENSUS_ONLY = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle"}
 -- `worker_name` reports a helper suffix always, and a suffix that is also an
 -- ordinary word (a fold's `step`, `List.walk`, `can_go`) only on a
 -- definition that calls itself.
@@ -818,6 +826,9 @@ function judge_definition(def)
       if not returns_the_word then report(path, line, "taken_word", "`" .. full_name .. "` is Roc's own word, `" .. name .. "`, for a function that gives no `" .. camel_case({name}) .. "`: name it for the domain's thing (`element`, `append`), and keep Roc's words for Roc") end
     end
     if taken_kind == "cardinal" and is_value then report(path, line, "taken_word", "`" .. full_name .. "` is a number's name for a value: it says how many, not what it holds") end
+    -- An effect so named is `state_effect`'s, and a function so named that
+    -- gives a `Bool` is `question`'s, so this check takes the rest.
+    if not has_bang and #ws == 1 and is_participle(name) and is_function and not returns_bool then report(path, line, "bare_participle", "`" .. full_name .. "` is a function named by a bare past participle, which reads as a `Bool`: name it by a noun for what it gives (`user_by_name`) or a verb for what it does (`add_user`)") end
   end
   -- `worker_name` is judged at the definition, which knows whether it calls
   -- itself, and at an annotation only when no definition follows it, as
