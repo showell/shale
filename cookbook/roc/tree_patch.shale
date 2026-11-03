@@ -1,15 +1,14 @@
--- **A TREE'S CHANGE AS A PATCH**: every file under `new` (a copy of
--- `old` with changes made to it) against the same path under `old`, as one
--- unified patch with `a/` and `b/` paths from `under`, which `patch -p1`
--- applies from the repository's root. It is how Dog Park's
--- test/new_kind/sheep.patch was rebuilt after its base changed: copy
--- roc/ aside, make the new kind there (Shale `edit`s), write the patch.
+-- This script turns a changed copy of a folder into a patch. Copy the
+-- folder aside, change the copy, then run this from the repository's root.
+-- It writes one unified patch that `patch -p1` applies from that root.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/tree_patch.shale old=roc new=<copy>/roc under=roc out=test/new_kind/sheep.patch
 --
--- `like=*.roc` (the default) picks the files; one only in `new` is added
--- from /dev/null. A file only in `old` is not looked for: a removal is
--- not a patch this makes.
+-- Give `old` and `new` relative to where the run starts; `under` is the
+-- folder's path in the repository. The patch compares the
+-- files that match `like` (`*.roc` unless you give one). A file that is
+-- only in the copy is added. A file deleted from the copy stays out of the
+-- patch.
 --
 -- budget: steps=100000000
 
@@ -19,7 +18,7 @@ const UNDER = arg("under", "")
 const OUT = arg("out", "")
 const LIKE = arg("like", "*.roc")
 
-if OLD == "" or NEW == "" or UNDER == "" or OUT == "" then fail("old=<dir> new=<dir> under=<path in the repo> out=<patch file>") end
+if OLD == "" or NEW == "" or UNDER == "" or OUT == "" then fail("tree_patch: old=<folder> new=<changed copy> under=<folder's path in the repo> out=<patch file>") end
 
 local patch = ""
 local files = 0
@@ -30,7 +29,7 @@ for e in walk_all(NEW, {kind = "file", like = LIKE}) do
   local from = was
   if not exists(was) then from = "/dev/null" end
   local r = run({"diff", "-u", "--label", "a/" .. path(UNDER, rel), "--label", "b/" .. path(UNDER, rel), from, e.path}, {timeout_ms = 60000, whole = 4000000})
-  -- diff: 0 the same, 1 different, anything else trouble.
+  -- diff exits 0 when the files match, 1 when they differ, and 2 on trouble.
   if r.code > 1 then fail("diff " .. rel .. ": code " .. r.code) end
   if r.code == 1 then
     patch = patch .. r.out
