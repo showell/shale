@@ -1,16 +1,9 @@
--- **EVERY FILE THAT PARSES IS JUDGED; EVERY ONE THAT DOES NOT FAILS THE
--- RUN**: a library (`use("cookbook:roc/parsed.shale")`) for the Roc recipes
--- that hunt over `roc_tree` (the Linux prelude's), its one home for a file
--- roc-ast refuses. `roc_tree` reads past a refusal; a recipe judges the
--- files that parse, prints its findings, and only then fails, naming each
--- refused file with roc-ast's reason. One deliberate old-syntax probe in a
--- tree (roc-webbox's `p7/neg/oldsyntax.roc`) so never hides the findings in
--- every other file, and is never passed unread either: the run exits
--- non-zero.
+-- This library is for the Roc recipes that hunt over `roc_tree`. A file that
+-- roc-ast refuses never hides the findings in the others: the recipe judges
+-- every file that parses, prints its findings, and then fails, naming each
+-- refused file.
 
--- `roc_tree(paths)` split in two: `files`, the trees of the files that
--- parse, in order, and `refused`, a line for each that does not, `path:
--- reason`.
+-- The files that parse, and a `path: reason` line for each that doesn't.
 function roc_parsed(paths)
   local files = {}
   local refused = {}
@@ -26,11 +19,8 @@ function roc_parsed(paths)
   return {files = files, refused = refused}
 end
 
--- The run's last word, after its findings: each refused file on a line of
--- its own, then, under the types, each file no root reached (`unreached`,
--- cookbook/roc/types.shale's `roc_types_hunted` lines, `not reached by
--- <root>: <path>`, judged without types), then a failure that counts them.
--- Nothing when none was refused or unreached.
+-- Prints each refused file, and each file no root of the types reached
+-- (`roc_types_hunted`'s lines), then fails. A recipe calls it last.
 function fail_if_refused(who, refused, unreached?)
   local missed = unreached or {}
   if #refused == 0 and #missed == 0 then return nil end
