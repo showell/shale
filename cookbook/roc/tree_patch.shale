@@ -5,10 +5,9 @@
 --   cd <repo> && shale <shale>/cookbook/roc/tree_patch.shale old=roc new=<copy>/roc under=roc out=test/new_kind/sheep.patch
 --
 -- Give `old` and `new` relative to where the run starts; `under` is the
--- folder's path in the repository. The patch compares the
--- files that match `like` (`*.roc` unless you give one). A file that is
--- only in the copy is added. A file deleted from the copy stays out of the
--- patch.
+-- folder's path in the repository. The patch compares the files that match
+-- `like` (`*.roc` unless you give one). A file that is only in the copy is
+-- added. A file deleted from the copy stays out of the patch.
 --
 -- budget: steps=100000000
 
