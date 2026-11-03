@@ -1,16 +1,17 @@
--- ROC'S OWN CHECKER'S TYPES: a library (`use("cookbook:roc/types.shale")`)
--- for the Roc recipes that judge by type. `roc_types(root, roc)` runs roc-types
--- (Shale's tools/roc_types, installed under the `tools` mount by its
--- install.shale) on the app `root` and gives every module the checker
--- reached, its types read from roc-types' format. The format's home is
--- tools/roc_types/main.zig's header; this reads number 1.
+-- A library for the Roc recipes that check types, loaded with
+-- `use("cookbook:roc/types.shale")`. It runs roc-types, Shale's tool that
+-- asks Roc's own type checker for the type of every expression and pattern
+-- in an app, and reads what the tool prints. The tool's source is
+-- tools/roc_types, and `shale tools/roc_types/install.shale` installs it
+-- under the `tools` mount. Its output format is described at the top of
+-- tools/roc_types/main.zig; this file reads version 1 of that format.
 
 const ROC_TYPES_EXE = "tools:roc-types/bin/roc-types"
 const ROC_TYPES_FORMAT = "1"
 
--- A type's text as the checker wrote it: roc-types escapes `\`, tab,
--- newline and carriage return.
-function roc_types_unescaped(s)
+-- A type's text with roc-types' escapes of `\`, tab, newline and carriage
+-- return undone.
+function unescape_roc_type(s)
   local out = {}
   local i = 1
   while i <= #s do
@@ -38,12 +39,12 @@ function roc_types_unescaped(s)
   return join(out, "")
 end
 
--- `roc_types`'s reading (below) of roc-types' run `r` on `root`: `run`'s
--- answer, or one made as it would be, `{out, ended, code}`. `roc` is the
--- OS path of the Roc the tree is built with; the header's pin is judged
--- against it before roc-types' verdict, since another pin's errors (or
--- its silence) say nothing of this tree.
-function roc_types_read(r, root, roc)
+-- Reads `r`, the result of running roc-types on `root`, into the record
+-- `roc_types` returns. `roc` is the OS path of the Roc compiler the tree is
+-- built with. The pin in roc-types' first line is checked against it before
+-- anything else, because the errors (or the silence) of a checker from
+-- another Roc version say nothing about this tree.
+function parse_roc_types_output(r, root, roc)
   local all = lines(r.out)
   local head = ""
   if #all > 0 then head = all[1] end
@@ -75,7 +76,7 @@ function roc_types_read(r, root, roc)
       if #f ~= 8 then fail("`roc_types`: line " .. k .. ", a record of " .. #f .. " fields, not 8: " .. l) end
       if f[2] ~= "expr" and f[2] ~= "pat" then fail("`roc_types`: line " .. k .. ", a record of kind `" .. f[2] .. "`") end
       local ty = f[8]
-      if find(ty, "\\") ~= nil then ty = roc_types_unescaped(ty) end
+      if find(ty, "\\") ~= nil then ty = unescape_roc_type(ty) end
       local span = {}
       for x in slice(f, 4, 7) do
         local n = parse_int(x)
@@ -90,29 +91,29 @@ function roc_types_read(r, root, roc)
   return out
 end
 
--- **EVERY MODULE'S TYPES**: roc-types on the app `root` (one program; the
--- path is passed as the OS spells it, and roc-types resolves it to its
--- real one, so a module's path is its real path).
--- `{pin, paths, modules, warnings}`: `paths` the modules' paths in
--- roc-types' order, each absolute with no `.` or `..` part; `modules` by
--- path, each a list of records `{kind, tag, line, col, end_line, end_col,
--- type}` (`kind` "expr" or "pat") in the checker's pre-order, so of several
--- nodes with one region the outermost comes first; `warnings` the lines
--- roc-types said on stderr before the first module. A root the checker
--- refuses (an error, a module unchecked, not an app) stops the run with
--- what roc-types said: its types would be guesses. So does a missing
--- roc-types, an unknown header, any line the format does not hold, and a
--- roc-types of another pin than the tree's Roc, `roc` (its OS path, as
--- cookbook/roc/pinned.shale's `roc_bin` gives it).
+-- The types of every module reachable from the app `root`, as roc-types
+-- reports them. `roc` is the OS path of the tree's Roc compiler, as
+-- `roc_bin` in cookbook/roc/pinned.shale gives it. The result is a record:
+--   paths: each module's real, absolute path, in roc-types' order;
+--   modules: for each path, a list of `{kind, tag, line, col, end_line,
+--     end_col, type}`, where `kind` is "expr" or "pat". The list is in the
+--     checker's pre-order, so when several nodes share a region, the
+--     outermost comes first;
+--   warnings: the lines roc-types printed before the first module;
+--   pin: the Roc version roc-types was built from.
+-- The run fails, showing what roc-types said, when the checker rejects the
+-- app (a type error, a module left unchecked, a file that isn't an app),
+-- because the types would then be guesses. It also fails when roc-types is
+-- missing, prints a format this file doesn't read, or was built for a Roc
+-- version other than `roc`'s.
 function roc_types(root, roc)
   if not exists(ROC_TYPES_EXE) then fail("`roc_types`: no " .. ROC_TYPES_EXE .. ": Shale's `shale tools/roc_types/install.shale` installs it") end
-  return roc_types_read(run({real(ROC_TYPES_EXE), real(root)}, {timeout_ms = 300000, whole = 64000000}), root, roc)
+  return parse_roc_types_output(run({real(ROC_TYPES_EXE), real(root)}, {timeout_ms = 300000, whole = 64000000}), root, roc)
 end
 
--- ── for the hunts: `types=1` on name_hunt, errors and boundaries ─────────
-
--- The apps `root=` names, `a.roc,b.roc` in order: several where no one
--- app reaches the whole glob (roc-apps' basic/roc holds four apps).
+-- The app paths in a recipe's `root=` argument, which may list several,
+-- `root=a.roc,b.roc`, when no one app imports every file the recipe checks.
+-- `who` names the recipe in the failure when `root=` is empty.
 function roc_types_roots(who, root)
   local out = {}
   for r in split(root, ",") do
@@ -122,20 +123,26 @@ function roc_types_roots(who, root)
   return out
 end
 
--- **THE TYPES OF THE FILES A HUNT READS**: `roc_types` on each app of
--- `root` (`a.roc,b.roc`, one program each), each pattern's and
--- expression's type by `<real path>|line:col:end_line:end_col` (`pats`,
--- `exprs`; of several at one region the outermost, the first roc-types
--- gives; a module two roots reach has the first root's), and each reached
--- path's real one (`real`: a file it holds is typed). `who` names the hunt
--- in a stop. **A FILE NO ROOT REACHES IS NAMED, NEVER A STOP**: each file
--- of `paths` that none reaches, unless `exempt` holds it (a self-test's
--- untyped plants), is a line of `unreached`, `not reached by <root>:
--- <path>`. The hunt judges it as it would without types, every reached
--- file with them, and hands `unreached` to `fail_if_refused`
--- (cookbook/roc/parsed.shale), which names each after the findings and
--- fails the run: a file judged without types beside files judged with them
--- would otherwise pass the typed rules silently. No `root` stops it.
+-- The key under which `roc_types_hunted` stores the type at a region of a
+-- file, given the file's real path and anything with the region's
+-- `line, col, end_line, end_col`.
+function roc_types_region_key(real_path, region)
+  return real_path .. "|" .. region.line .. ":" .. region.col .. ":" .. region.end_line .. ":" .. region.end_col
+end
+
+-- The types a recipe needs for the files `paths`, gathered by running
+-- `roc_types` on each app named in `root` (see `roc_types_roots`). `who`
+-- names the recipe in failures. The result is a record:
+--   pats, exprs: the type of each pattern and expression, by
+--     `roc_types_region_key`. When several nodes share a region, the
+--     outermost one's type is kept, and when two apps reach one module,
+--     the first app's types are kept;
+--   real: for each file of `paths` that some app reaches, its real path;
+--   unreached: a line `not reached by <root>: <path>` for each file of
+--     `paths` that no app reaches, except those in the set `exempt`.
+-- A recipe checks an unreached file without types and passes `unreached`
+-- to `fail_if_refused` (cookbook/roc/parsed.shale), which lists those
+-- files after the findings and fails the run.
 function roc_types_hunted(who, root, roc, paths, exempt)
   local roots = roc_types_roots(who, root)
   local pats = {}
@@ -147,7 +154,7 @@ function roc_types_hunted(who, root, roc, paths, exempt)
       if not has_key(reached, path) then
         reached[path] = true
         for rec in got.modules[path] do
-          local key = path .. "|" .. rec.line .. ":" .. rec.col .. ":" .. rec.end_line .. ":" .. rec.end_col
+          local key = roc_types_region_key(path, rec)
           if rec.kind == "pat" then
             if not has_key(pats, key) then pats[key] = rec.type end
           elseif not has_key(exprs, key) then
@@ -171,17 +178,19 @@ function roc_types_hunted(who, root, roc, paths, exempt)
   return {pats = pats, exprs = exprs, real = reals, unreached = unreached}
 end
 
--- The type at a roc_tree node `n` of the file `path` (`kind` "pat" or
--- "expr"), or nil where the checker gave none.
+-- The type of the roc_tree node `n` in the file `path`, from the result of
+-- `roc_types_hunted`, or nil where the checker gave none. `kind` is "pat"
+-- or "expr".
 function roc_type_at(types, kind, path, n)
-  local key = types.real[path] .. "|" .. n.line .. ":" .. n.col .. ":" .. n.end_line .. ":" .. n.end_col
-  return get(kind == "pat" and types.pats or types.exprs, key)
+  return get(kind == "pat" and types.pats or types.exprs, roc_types_region_key(types.real[path], n))
 end
 
--- A type's shape: `{fn, effect, result, args}`. A function's (an arrow
--- outside every bracket, its `where` clause dropped) `fn` is true, `effect`
--- its arrow is `=>`, `result` what follows the arrow; anything else is its
--- own `result`.
+-- The parts of a type's text, `{fn, effect, result, args}`. A type is a
+-- function when an arrow appears outside every bracket, after any `where`
+-- clause is dropped. For a function, `fn` is true, `effect` says whether
+-- the arrow is `=>`, `args` is the text before the arrow and `result` the
+-- text after it. For any other type, `result` is the whole type and `args`
+-- is empty.
 function roc_type_shape(ty)
   local depth = 0
   local body = ty
@@ -207,9 +216,10 @@ function roc_type_shape(ty)
   return {fn = false, effect = false, result = trim(body), args = ""}
 end
 
--- A typed plant's file name (`QuestionInferred.roc`, a type module's,
--- which Roc names in CamelCase) as a plant's (`question_inferred.roc`),
--- so a self-test judges it by the check its name starts with.
+-- A typed plant's file name converted to the snake_case of an ordinary
+-- plant, `QuestionInferred.roc` to `question_inferred.roc`. A typed plant
+-- is a type module, which Roc names in CamelCase, and a self-test chooses
+-- the check that judges a plant by the start of its snake_case name.
 function roc_plant_name(base)
   local out = ""
   for i = 1, #base do
