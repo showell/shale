@@ -1,6 +1,7 @@
--- This library finds the `roc` that a repository pins, for the Roc recipes
--- that run the compiler. They never use whichever `roc` is on PATH, because
--- `roc fmt`'s layout and the compiler's method lookup change between nightlies.
+-- Each repository names its Roc version in a `roc-version` file. This
+-- library finds that version's `roc` for the Roc recipes that run the
+-- compiler. The version matters because `roc fmt`'s layout and the
+-- compiler's method lookup change from one nightly to the next.
 
 -- Every recipe's self-test runs this Roc. CI installs it from roc-apps's release.
 const SELF_TEST_PIN = "nightly-2026-10-30-0602c5f"
