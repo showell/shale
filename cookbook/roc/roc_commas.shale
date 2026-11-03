@@ -6,17 +6,20 @@
 -- fmt, and repeats until no line changes. Then it lists the lines still too
 -- wide: comment lines, and code lines with no such group (a function type's
 -- arguments, which have no brackets). The list is printed between its
--- counts, as cookbook/roc/findings.shale describes.
+-- counts, as cookbook/roc/findings.shale describes. It runs the Roc that
+-- the repository's roc-version file names.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
 --
 -- budget: steps=400000000 arena_bytes=2000000000 output_bytes=4000000
 
 use("cookbook:roc/findings.shale")
+use("cookbook:roc/pinned.shale")
 const DIR = arg("dir", "roc")
 not_option("roc_commas", "dir", DIR)
 const WIDTH = arg("width", 100)
 const MAX_PASSES = 8
+const ROC = roc_bin("roc_commas", false)
 
 -- The position of the closing bracket that should get a trailing comma, or
 -- 0 if there is none. Of the groups that open and close on the line, it is
@@ -101,7 +104,7 @@ function roc_files()
 end
 
 function run_roc_fmt()
-  local r = run({"roc", "fmt", DIR}, {timeout_ms = 60000, tail = 20})
+  local r = run({ROC, "fmt", DIR}, {timeout_ms = 60000, tail = 20})
   if r.code ~= 0 then
     print(r.out)
     fail("roc fmt failed")
