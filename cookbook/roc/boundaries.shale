@@ -36,7 +36,7 @@
 --   fixed       Every production call, two or more, passes the same
 --               literal for one parameter, or for one field of a record
 --               argument. A literal is a number, a string, a character, a
---               tag (`Begin`, `Bool.true`) or a module's constant
+--               tag (`Begin`, `Bool.True`) or a module's constant
 --               (`Limits.max`). "A parameter every caller passes the same
 --               value is no parameter": drop it, or add an entry function
 --               that takes only what varies. A recursive function's calls
