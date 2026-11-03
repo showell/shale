@@ -4,7 +4,7 @@
 -- list of the files it couldn't parse and why.
 
 -- The files that parse, and a `path: reason` line for each that doesn't.
-function roc_parsed(paths)
+function parse_roc_files(paths)
   local files = {}
   local refused = {}
   for f in roc_tree(paths) do

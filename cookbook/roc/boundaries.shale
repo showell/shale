@@ -262,7 +262,7 @@ local types = TYPED and roc_types_hunted("boundaries", ROOT, roc_bin("boundaries
 -- A file that does not parse would pass its references unread: it is
 -- named, and fails the run, after the rest are judged
 -- (cookbook/roc/parsed.shale).
-local parsed = roc_parsed(fs)
+local parsed = parse_roc_files(fs)
 for f in parsed.files do
   SRC[f.path] = split(read(f.path), "\n")
   local base = #NODE

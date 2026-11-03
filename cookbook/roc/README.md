@@ -177,7 +177,7 @@ it works on, `<shale>` being the shale checkout:
   name_hunt, errors, stack, methods, nest_depth and roc_commas, each of
   which raises its budget to 4 MB (`output_bytes=4000000`).
 - [parsed.shale](parsed.shale): **every file that parses is judged**, a
-  library: `roc_parsed(paths)` splits `roc_tree`'s files that parse from
+  library: `parse_roc_files(paths)` splits `roc_tree`'s files that parse from
   those roc-ast refuses, and `fail_if_refused(who, refused)`, a run's last
   word, names each refused file with its reason and exits non-zero.
   `errors`, `boundaries`, `name_hunt` and `nest_depth` use it, so one

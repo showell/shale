@@ -129,7 +129,7 @@ const N = {}
 const FILE = {}
 -- A file that does not parse has no tree: it is named, and fails the run,
 -- after the rest are hunted (cookbook/roc/parsed.shale).
-const PARSED = roc_parsed(paths)
+const PARSED = parse_roc_files(paths)
 do
   for f in PARSED.files do
     local base = #N

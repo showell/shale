@@ -866,7 +866,7 @@ if TYPED then
 end
 -- A file roc-ast refuses is named, and fails the run, after the rest are
 -- judged (cookbook/roc/parsed.shale).
-local parsed = roc_parsed(paths)
+local parsed = parse_roc_files(paths)
 -- No `yield` here: each definition's garbage is small, and what a yield
 -- keeps (every definition, and the declared types' tags) passes the fixed
 -- 1 MiB it allows on the chat. The arena the header sets holds it.

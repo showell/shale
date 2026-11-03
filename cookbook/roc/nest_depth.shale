@@ -158,7 +158,7 @@ local said = {}
 -- in column order, and each printed line, to catch two alike.
 const at = {}
 const printed = {}
-local parsed = roc_parsed(paths)
+local parsed = parse_roc_files(paths)
 for f in parsed.files do
   do
     local ns = f.nodes
