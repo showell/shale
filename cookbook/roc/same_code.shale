@@ -1,7 +1,7 @@
 -- Compare two builds of a Roc archive (or of any object file objdump can
 -- disassemble) and say whether they hold the same machine code, and if not,
--- where they first differ. Roc names each procedure `roc__p` followed by 32
--- hex digits that change whenever the source's layout does, so a pure
+-- where they first differ. Roc names each procedure `roc__p` or `roc__proc_`
+-- followed by hex digits that change whenever the source's layout does, so a pure
 -- reformat (roc fmt, a new comment, a renamed local) changes the archive's
 -- bytes without changing its code. This script masks those names before
 -- comparing the two disassemblies line by line.
@@ -16,21 +16,11 @@
 
 const OLD = arg("old", "")
 const NEW = arg("new", "")
-const HASH_DIGITS = 32
 
--- The line with each `roc__p<32 hex digits>` written as `roc__pX`.
+-- The line with each `roc__p<hex>` and `roc__proc_<hex>` written as `roc__pX`.
 function with_roc_names_masked(line)
-  local out = ""
-  local from = 1
-  while true do
-    local at = find(line, "roc__p", from)
-    if at == nil then return out .. sub(line, from) end
-    out = out .. sub(line, from, at + 5) .. "X"
-    local hash_start = at + 6
-    local j = hash_start
-    while j <= #line and j < hash_start + HASH_DIGITS and contains("0123456789abcdef", sub(line, j, j)) do j = j + 1 end
-    from = j
-  end
+  if not contains(line, "roc__p") then return line end
+  return re_replace(line, "roc__p(roc_)?[0-9a-f]+", "roc__pX")
 end
 
 -- The file's disassembly with Roc's names masked. The lines naming the file
