@@ -578,6 +578,13 @@ function type_head(ty)
   return {head = m.groups[1]}
 end
 
+-- `word` after its indefinite article: "an" before a vowel letter, "a"
+-- otherwise (`an Admin`, `a List`).
+function with_article(word)
+  if re_find(sub(word, 1, 1), "^[AEIOUaeiou]$") ~= nil then return "an " .. word end
+  return "a " .. word
+end
+
 -- Judges each open candidate of the file at `p` by its first argument's
 -- type in `types` (from the root that reaches the file). A concrete other
 -- type leaves the call, with that reason; a type whose head is the
@@ -601,7 +608,7 @@ function judge_by_types(kind_counts, t, cands, p, types)
             c.proven = true
           else
             incr(kind_counts, "another type")
-            c.why_left = "the first argument is a " .. h.head .. ", not a " .. c.module
+            c.why_left = "the first argument is " .. with_article(h.head) .. ", not " .. with_article(c.module)
           end
         end
       end
