@@ -1,182 +1,171 @@
--- **A FUNCTION'S BOUNDARY, AND A PARAMETER THAT IS NONE** (metal-vmm QUEUE
--- 303, from the Roc style review's S6 and S7): every top-level and
--- module-member function (`f = |...| ...` outside any lambda) and every
--- reference to it, read from Roc's own parser's tree (`roc_tree`, the Linux
--- prelude's, over roc-ast at `tools:roc-ast/bin/roc-ast`). A finding
--- is a question for a reader, never a verdict:
---
---   single  a wrapper (a body of one statement of at most `nodes`, 24, of
---           the tree's nodes and at most `ways`, 2, ways through it: an
---           `if` and its `else`, or a `match` of two arms; the tree
---           measures it, so no layout of its lines changes the verdict)
---           with exactly one production reference outside its own body,
---           a call, which no `expect` and no test file reaches and no `##`
---           doc explains:
---           read better inline (roc-apps docs/roc-style.md, "A function
---           earns its boundary"). Quiet: a pure decision an `expect`
---           reaches, the public name a twin holds to its Zig (a test file
---           reaches it), a function passed as a value (`map_ok(Uid.to_str)`),
---           a question (`is_*`, `has_*`), whose name is the concept its
---           test stands for (`is_message`), and one whose `##` doc says
---           why it stands alone (a rule's one home), as the guide's
---           one-caller module is kept when its reason is written down.
---           **A RECURSION IS NO WRAPPER**: a function whose body
---           references itself cannot be read inline, and nor can an entry
---           into one, a wrapper whose body calls such a function: the
---           shape `fixed` and `entry` ask for, so the checks never
---           disagree. The guide calls this a rule of thumb, not a gate.
---   fixed   a parameter (a position, or a field of a record argument) that
---           every production call, two or more, fills with the same
---           **literal**: a number, a string, a character, a tag
---           (`Begin`, `Bool.true`) or a module's constant (`Limits.max`)
---           ("A parameter every caller passes the same value is no
---           parameter"): no parameter, or an entry function that takes
---           only what varies. A recursion's own calls count, and must pass
---           the same literal too. **CONTEXT PASSED DOWN IS NO
---           CONSTANT**: the same variable (`me`, `accounts`, `at`), field
---           (`req.me`) or call (`Host.list_srcs!({})`) at every call is the
---           caller's value handed on, never a finding. **A LIBRARY'S API
---           IS NO CONSTANT**: a module type's member in a library module,
---           a file under a `lib/` folder or a module that a `package`
---           header's `main.roc` beside it exposes, keeps its parameters,
---           whatever this tree's callers pass (a math helper's `k` is its
---           API; the fix is at the caller). A file's own top-level
---           function there, and a package's unexposed module, are judged.
---   entry   **A RECURSION'S START**: the same literal at every production
---           call, two or more, that the recursion's own calls vary (`at:
---           0` outside, `at + 1` inside). It is a parameter, as the
---           recursion needs it, so only `fixed`'s second half holds: an
---           entry function that takes only what varies (`count = |xs|
---           count_from(xs, 0)`). Where one is there already it is the one
---           outside call, fewer than two, and never judged. Its own calls
---           are no caller for `single`.
---   constant  a function of `{}` alone (its annotation's one argument, or
---           its lambda's one pattern, is `{}`) whose name has no `!`: it
---           gives the same value every call, and a constant says so
---           (`board = ...`, not `board = |{}| ...`). An effect needs the
---           call, and its `!` keeps it quiet. **A CONSTANT CANNOT BE
---           GENERIC**: an annotation whose return type holds a type
---           variable (`{} -> Viewer(id)`) keeps it quiet, as Roc refuses
---           that constant ("value is not polymorphic... make it a function
---           that takes {}"); an unannotated one shows no type, and fires.
---   bool_param  **UNDER THE TYPES ONLY** (`types=1 root=<an app>`, below):
---           a parameter (by position, a method's or arrow's receiver the
---           first) whose type is `Bool` by Roc's own checker, which some
---           call passes as a literal, `Bool.True` or `Bool.False` (or a
---           bare `True`, `False`; the pin's `Bool := [False, True]`):
---           "a flag a caller passes is a tag" (roc-apps docs/roc-style.md),
---           so the call says what it means (`Loud`, not `Bool.True`). Every
---           call counts, an `expect`'s, a test file's and its own too: each
---           reads the flag as a literal. A parameter only ever passed a
---           value computed is quiet, and so is a literal of another type
---           (a tag of the function's own union, a generic parameter), and
---           a function's one parameter, the value it converts (JSON's
---           `bool : Bool -> JsonOut`), no flag. A record argument's field
---           is not judged. A tree only syntax reads cannot know a
---           parameter is a `Bool`, so without `types=1` it never fires.
---
--- **THE CHECKER'S TYPES** (`types=1`, off by default; cookbook/roc/
--- types.shale) need `root=`, an app importing the files of the glob (or
--- several, `root=a.roc,b.roc`), and the tree's `roc-version`; a file no
--- root reaches is judged without them, named after the counts, and fails
--- the run (cookbook/roc/parsed.shale). The self-test judges
--- `plants/boundaries/typed/` (type modules, `BoolParam` read as
--- `bool_param`, root `QuietApp.roc`) with the types, the rest without.
---
--- **WHAT A COUNT COUNTS**: `single`'s one caller and `fixed`'s and `entry`'s calls are
--- those in the files the glob reads, and a finding says how many: a sweep
--- of one folder never sees a caller in its siblings.
---
--- **A REFERENCE** is a bare `name` in the defining file, `Type.name`
--- anywhere, or a method call `.name(...)`, attributed to every member of
--- that name: a function so reached by a name two types share is
--- ambiguous and judged by neither check. An arrow call's receiver
--- (`x->f(a)`) and a method's are the first argument. **A TEST FILE** is a
--- twin (`twin.roc`, a name ending `twin.roc`, a `twin/` folder), under
--- `test/`, or a spec app, a name ending `<Module>Spec.roc` (`BlitSpec.roc`,
--- a `main!` that grades `Blit`: roc-apps canvas_apps/safari/README.md, "The
--- map"): it reaches code as an `expect` does, so its references are no
--- production caller and its own functions are never judged. A finding
--- names its file and the definition's line.
---
--- One line a finding, `path:line: <check>: <why>`, then the counts. A file
--- roc-ast refuses is judged by none: named after the counts, it fails the
--- run, every other file judged first (cookbook/roc/parsed.shale).
+-- This recipe asks of every function in a tree of .roc files whether its
+-- boundary earns its keep, and whether each of its parameters is really a
+-- parameter. It reads each file's syntax tree from Roc's own parser
+-- (cookbook/roc/parsed.shale), and it checks the functions defined at the
+-- top level of a file or as members of a module type, not those inside
+-- another function. A finding is a question for a reader, not a verdict.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/boundaries.shale glob=chat/**/*.roc
 --   shale cookbook:roc/boundaries.shale self_test=1
 --
--- Read the whole tree, tests too: a twin's reference is what keeps a
--- function quiet. `self_test=1` runs it over `cookbook/roc/plants/
--- boundaries/`, each plant named for the check it holds: every check must
--- fire on its own plants and on no other, a `quiet_*.roc` plant on none
--- (`quiet_WalkSpec.roc` a test file among them). A missing roc-types
--- fails it.
+-- The arguments:
+--   glob   the files to read, `**/*.roc` by default. Read the whole tree,
+--          tests too, because a test that reaches a function keeps it
+--          quiet, and calls are counted only in the files read;
+--   ways   the most ways through a body that `single` still calls a
+--          wrapper, 2 by default;
+--   nodes  the most syntax-tree nodes in such a body, 24 by default;
+--   types  with `types=1`, Roc's checker gives the types
+--          (cookbook/roc/types.shale), which `bool_param` needs. It is off
+--          by default, and needs the tree's `roc-version` file;
+--   root   with `types=1`, the app that imports the files read, or several
+--          apps separated by commas (`root=a.roc,b.roc`).
+--
+-- The checks, each from the Roc style guide (roc-apps docs/roc-style.md):
+--
+--   single      A small function with exactly one production call, and no
+--               `expect`, test file or `##` doc comment that reaches or
+--               explains it, would read better inline at that call ("A
+--               function earns its boundary"; the guide calls it a rule of
+--               thumb). Its body must be one statement of at most `nodes`
+--               nodes and `ways` ways through: an `if` adds a way, and a
+--               `match` adds one for each arm past its first. A function
+--               passed as a value (`map_ok(Uid.to_str)`), a question named
+--               `is_*` or `has_*`, a recursive function and an entry into
+--               one (see `entry`) are quiet.
+--   fixed       Every production call, two or more, passes the same
+--               literal for one parameter, or for one field of a record
+--               argument. A literal is a number, a string, a character, a
+--               tag (`Begin`, `Bool.true`) or a module's constant
+--               (`Limits.max`). "A parameter every caller passes the same
+--               value is no parameter": drop it, or add an entry function
+--               that takes only what varies. A recursive function's calls
+--               to itself must pass the same literal too. The same variable
+--               or call at every call site (`me`, `req.me`,
+--               `Host.list_srcs!({})`) is the caller's own value handed on,
+--               and is not a literal. A library's API keeps its parameters
+--               whatever this tree's callers pass, so `fixed` skips a
+--               module type's member in a file under a `lib/` folder, or in
+--               a module exposed by a `package` header in the `main.roc`
+--               beside it. A file's own top-level functions there are
+--               checked.
+--   entry       Every production call, two or more, passes the same literal
+--               for a parameter that the recursive function's own calls
+--               vary (`at: 0` outside, `at + 1` inside). The recursion
+--               needs the parameter, so the fix is an entry function that
+--               takes only what varies and passes the literal itself
+--               (`count = |xs| count_from(xs, 0)`). That entry function
+--               makes the one outside call, so it does not fire again.
+--   constant    A function whose one argument is `{}`, by its annotation or
+--               its lambda's pattern, and whose name has no `!`, gives the
+--               same value at every call, so it can be a constant
+--               (`board = ...`, not `board = |{}| ...`). A function with an
+--               effect needs a `!` in its name. Roc refuses a generic
+--               constant, so a function whose annotated return type holds a
+--               type variable (`{} -> Viewer(id)`) is quiet. An unannotated
+--               function's type is unknown, so it is checked.
+--   bool_param  With `types=1` only: a parameter whose type is `Bool` is
+--               passed `Bool.True`, `Bool.False`, `True` or `False` by some
+--               call. "A flag a caller passes is a tag", named for what it
+--               means (`Loud`, not `Bool.True`). Every call counts, from an
+--               `expect`, a test file or the function itself too. A
+--               function with one parameter is quiet, as that parameter is
+--               the value it converts (`bool : Bool -> JsonOut`), and so is
+--               a field of a record argument.
+--
+-- A reference to a function is its bare name in the file that defines it,
+-- `Type.name` anywhere, or a method call `.name(...)`. The receiver of a
+-- method call or of an arrow call (`x->f(a)`) is its first argument. A
+-- method call counts for every module type with a member of that name, so
+-- a member whose name another type's member shares is ambiguous, and only
+-- `constant` checks it. A test file is a file whose name ends in
+-- `twin.roc`, a file under a `twin/` or `test/` folder, or a spec app,
+-- named for its module followed by `Spec.roc` (`BlitSpec.roc`). Its
+-- references count as an `expect`'s do, never as production calls, and
+-- its own functions are not checked.
+--
+-- Each finding is one line, `path:line: <check>: <why>`, where the line is
+-- the function's definition, and the findings are followed by a summary
+-- line of the counts. Files that don't parse are listed after the summary,
+-- with the files no root reaches under `types=1`, and then the run fails.
+--
+-- `self_test=1` checks the plants in `cookbook/roc/plants/boundaries/`.
+-- Each plant is named for the check it holds (`fixed_string.roc` holds
+-- `fixed`), and each check must fire on its own plants and on no others; a
+-- `quiet_*.roc` plant must give no finding. The plants under `typed/` are
+-- type modules checked with the types under the app `QuietApp.roc`, and
+-- their names are read in snake case (`BoolParam.roc` as `bool_param`).
+-- The rest are checked without types. The self-test fails if roc-types is
+-- not installed.
 -- budget: steps=800000000 arena_bytes=3000000000
 
-const SELF = arg("self_test", "") == "1"
+const SELF_TEST = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/boundaries/"
-const GLOB = SELF and (PLANTS .. "**/*.roc") or arg("glob", "**/*.roc")
-const WAYS = arg("ways", 2)
-const NODES = arg("nodes", 24)
+const TYPED_PLANTS = PLANTS .. "typed/"
+const GLOB = SELF_TEST and (PLANTS .. "**/*.roc") or arg("glob", "**/*.roc")
+const MAX_WAYS = arg("ways", 2)
+const MAX_NODES = arg("nodes", 24)
 const CHECKS = {"single", "fixed", "entry", "constant", "bool_param"}
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
-const TYPES_SAID = arg("types", "0")
-if TYPES_SAID ~= "0" and TYPES_SAID ~= "1" then fail("boundaries: types=" .. TYPES_SAID .. ": 0 (the default) or 1") end
--- A self-test judges its typed plants (`plants/boundaries/typed/`, under
--- their app) with the types, and the rest without.
-const TYPED = SELF or TYPES_SAID == "1"
-const ROOT = SELF and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
--- A `Bool` literal at the pin, whose `Bool := [False, True]`.
+const TYPES_ARG = arg("types", "0")
+if TYPES_ARG ~= "0" and TYPES_ARG ~= "1" then fail("boundaries: types must be 0 (the default) or 1, not " .. TYPES_ARG) end
+const USE_TYPES = SELF_TEST or TYPES_ARG == "1"
+const ROOT = SELF_TEST and (TYPED_PLANTS .. "QuietApp.roc") or arg("root", "")
+-- The pinned Roc defines `Bool := [False, True]`.
 const BOOL_LITERALS = {["Bool.True"] = true, ["Bool.False"] = true, True = true, False = true}
--- Every file's nodes in one list, in order: `NODE[g]` a node of `roc_tree`,
--- `PATH[g]` its file, `BASE[g]` the index before its file's first node, so
--- a node's `parent` and `kids` are `BASE[g] +` theirs.
-const NODE = {}
-const PATH = {}
-const BASE = {}
-const SRC = {}
-const OUTER = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
 
-const found = {}
-for c in CHECKS do found[c] = 0 end
-const per_file = {}
+-- Every file's syntax-tree nodes in one list, so that one index names a
+-- node anywhere. `NODE_PATH[g]` is node g's file. A node's `parent` and
+-- `kids` count from its own file's first node, so `NODE_OFFSET[g]` is
+-- added to them.
+const NODES = {}
+const NODE_PATH = {}
+const NODE_OFFSET = {}
+const SOURCE_LINES = {}
+-- The kinds of node that can hold a top-level function: a file, its
+-- statements, a module type's declaration, and the block of its members.
+const TOP_LEVEL_KINDS = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
 
-function say(p, line, check, why)
-  print(p .. ":" .. line .. ": " .. check .. ": " .. why)
-  found[check] = found[check] + 1
-  per_file[p .. "|" .. check] = true
+const finding_counts = {}
+for c in CHECKS do finding_counts[c] = 0 end
+-- The self-test's record of which checks fired on which files, by `path|check`.
+const fired = {}
+
+function report(path, line, check, why)
+  print(path .. ":" .. line .. ": " .. check .. ": " .. why)
+  finding_counts[check] = finding_counts[check] + 1
+  fired[path .. "|" .. check] = true
   return nil
 end
 
 function children(g)
   local out = {}
-  for k in NODE[g].kids do push(out, BASE[g] + k) end
+  for k in NODES[g].kids do push(out, NODE_OFFSET[g] + k) end
   return out
 end
 
 function parent(g)
-  local p = NODE[g].parent
+  local p = NODES[g].parent
   if p == 0 then return 0 end
-  return BASE[g] + p
+  return NODE_OFFSET[g] + p
 end
 
 function kind(g)
-  return NODE[g].kind
+  return NODES[g].kind
 end
 
-function raw(g)
-  return get(NODE[g], "raw", "")
+function raw_text(g)
+  return get(NODES[g], "raw", "")
 end
 
--- A node's source text, from its span (the end column one past the last),
--- squeezed to one line.
-function text_of(path, g)
-  local n = NODE[g]
+-- Node g's source text, squeezed onto one line. A node's end column is one
+-- past its last character.
+function source_text(path, g)
+  local n = NODES[g]
   if n.line == 0 then return "?" end
-  local src = SRC[path]
+  local src = SOURCE_LINES[path]
   if n.line == n.end_line then return sub(src[n.line], n.col, n.end_col - 1) end
   local parts = {trim(sub(src[n.line], n.col))}
   for l = n.line + 1, n.end_line - 1 do push(parts, trim(src[l])) end
@@ -184,8 +173,6 @@ function text_of(path, g)
   return join(parts, " ")
 end
 
--- A literal: a string, a character, a number, a tag alone or a module's
--- constant (`Begin`, `Bool.true`, `Limits.max`).
 function is_literal(s)
   local c = sub(s, 1, 1)
   if c == "\"" or c == "'" then return true end
@@ -194,22 +181,20 @@ function is_literal(s)
   return false
 end
 
--- A question's name: what it tests is a concept named, not a wrapper.
-function is_question(name)
+function is_question_name(name)
   return starts_with(name, "is_") or starts_with(name, "has_")
 end
 
--- The header's test file, its one home.
-function is_test_file(p)
-  if re_find(basename(p), "[A-Z][A-Za-z0-9]*Spec\\.roc$") ~= nil then return true end
-  return ends_with(p, "twin.roc") or contains(p, "/twin/") or contains(p, "/test/") or starts_with(p, "test/") or starts_with(p, "twin/")
+function is_test_file(path)
+  if re_find(basename(path), "[A-Z][A-Za-z0-9]*Spec\\.roc$") ~= nil then return true end
+  return ends_with(path, "twin.roc") or contains(path, "/twin/") or contains(path, "/test/") or starts_with(path, "test/") or starts_with(path, "twin/")
 end
 
 -- The modules a folder's `main.roc` exposes when its header is `package`
--- (`package [Md, MdFence] {}`), by name; none for any other folder.
-const PACKAGES = {}
-function package_exposes(dir)
-  if has_key(PACKAGES, dir) then return PACKAGES[dir] end
+-- (`package [Md, MdFence] {}`), or none for any other folder.
+const PACKAGE_MODULES_BY_DIR = {}
+function package_exposed_modules(dir)
+  if has_key(PACKAGE_MODULES_BY_DIR, dir) then return PACKAGE_MODULES_BY_DIR[dir] end
   local main = (dir == "" or dir == ".") and "main.roc" or (dir .. "/main.roc")
   local out = {}
   if exists(main) then
@@ -224,88 +209,84 @@ function package_exposes(dir)
       end
     end
   end
-  PACKAGES[dir] = out
+  PACKAGE_MODULES_BY_DIR[dir] = out
   return out
 end
 
--- **A LIBRARY'S API**: a module type's member (never a file's own
--- top-level function) in a file under a `lib/` folder, or in a module a
--- package's `main.roc` exposes, beside it. Its parameters are its API,
--- whatever this tree's callers pass: `fixed` skips it.
-function is_library_api(def)
-  if sub(def.owner, 1, 1) == "@" then return false end
-  local p = def.path
+-- Whether a function is part of a library's API, which `fixed` skips: a
+-- module type's member in a file under a `lib/` folder, or in a module its
+-- package exposes.
+function is_library_api(func)
+  if sub(func.owner, 1, 1) == "@" then return false end
+  local p = func.path
   if starts_with(p, "lib/") or contains(p, "/lib/") or contains(p, ":lib/") then return true end
   local b = basename(p)
-  return has_item(package_exposes(dirname(p)), sub(b, 1, #b - 4))
+  return has_item(package_exposed_modules(dirname(p)), sub(b, 1, #b - 4))
 end
 
--- A module type's name: its `s-type-decl`'s header's.
-function type_name(g)
+-- The name in the header of the module type declared at `g`.
+function type_decl_name(g)
   local kids = children(g)
   if #kids == 0 then return "" end
-  return get(NODE[kids[1]], "name", "")
+  return get(NODES[kids[1]], "name", "")
 end
 
--- ── the tree ─────────────────────────────────────────────────────────────
+-- ── the syntax trees ─────────────────────────────────────────────────────
 
-local fs = glob(GLOB)
--- The checker's types (`types=1`): the self-test's untyped plants are its
--- root's none.
-local untyped = {}
-if SELF then
-  for p in fs do
-    if not starts_with(p, PLANTS .. "typed/") then untyped[p] = true end
+const ROC_FILES = glob(GLOB)
+local untyped_plants = {}
+if SELF_TEST then
+  for p in ROC_FILES do
+    if not starts_with(p, TYPED_PLANTS) then untyped_plants[p] = true end
   end
 end
-local types = TYPED and roc_types_hunted("boundaries", ROOT, roc_bin("boundaries", SELF), fs, untyped) or {real = {}, pats = {}, exprs = {}, unreached = {}}
--- A file that does not parse would pass its references unread: it is
--- named, and fails the run, after the rest are judged
--- (cookbook/roc/parsed.shale).
-local parsed = parse_roc_files(fs)
+local checker_types = USE_TYPES and roc_types_hunted("boundaries", ROOT, roc_bin("boundaries", SELF_TEST), ROC_FILES, untyped_plants) or {real = {}, pats = {}, exprs = {}, unreached = {}}
+local parsed = parse_roc_files(ROC_FILES)
 for f in parsed.files do
-  SRC[f.path] = split(read(f.path), "\n")
-  local base = #NODE
+  SOURCE_LINES[f.path] = split(read(f.path), "\n")
+  local offset = #NODES
   for n in f.nodes do
-    push(NODE, n)
-    push(PATH, f.path)
-    push(BASE, base)
+    push(NODES, n)
+    push(NODE_PATH, f.path)
+    push(NODE_OFFSET, offset)
   end
 end
 
--- **WHAT A NODE'S ANCESTORS SAY**, each node's from its parent's, once (a
--- parent comes before its children): `OUTER_ALL[g]` every ancestor a file,
--- statements, module type or its members; `OWNER[g]` the nearest module
--- type's name ("" for none); `CALLER[g]` the outermost declaration's name
--- ("?" for none); `IN_EXPECT[g]` inside an `expect`.
-const OUTER_ALL = {}
-const OWNER = {}
-const CALLER = {}
+-- What each node's ancestors say, worked out from its parent's, which
+-- comes before it in the list:
+--   AT_TOP_LEVEL[g]    every ancestor is of a kind in `TOP_LEVEL_KINDS`;
+--   OWNER_TYPE[g]      the name of the nearest module type around it, or "";
+--   ENCLOSING_DECL[g]  the name of the outermost declaration around it, or "?";
+--   IN_EXPECT[g]       it is inside an `expect`.
+const AT_TOP_LEVEL = {}
+const OWNER_TYPE = {}
+const ENCLOSING_DECL = {}
 const IN_EXPECT = {}
-for g = 1, #NODE do
+for g = 1, #NODES do
   local p = parent(g)
   if p == 0 then
-    push(OUTER_ALL, true)
-    push(OWNER, "")
-    push(CALLER, "?")
+    push(AT_TOP_LEVEL, true)
+    push(OWNER_TYPE, "")
+    push(ENCLOSING_DECL, "?")
     push(IN_EXPECT, false)
   else
-    local kp = kind(p)
-    push(OUTER_ALL, OUTER_ALL[p] and has_key(OUTER, kp))
-    push(OWNER, kp == "s-type-decl" and type_name(p) or OWNER[p])
-    local caller = CALLER[p]
-    if caller == "?" and kp == "s-decl" then
-      local pk = children(p)
-      if #pk > 0 and kind(pk[1]) == "p-ident" then caller = raw(pk[1]) end
+    local parent_kind = kind(p)
+    push(AT_TOP_LEVEL, AT_TOP_LEVEL[p] and has_key(TOP_LEVEL_KINDS, parent_kind))
+    push(OWNER_TYPE, parent_kind == "s-type-decl" and type_decl_name(p) or OWNER_TYPE[p])
+    local enclosing = ENCLOSING_DECL[p]
+    if enclosing == "?" and parent_kind == "s-decl" then
+      local pattern = children(p)
+      if #pattern > 0 and kind(pattern[1]) == "p-ident" then enclosing = raw_text(pattern[1]) end
     end
-    push(CALLER, caller)
-    push(IN_EXPECT, IN_EXPECT[p] or kp == "s-expect")
+    push(ENCLOSING_DECL, enclosing)
+    push(IN_EXPECT, IN_EXPECT[p] or parent_kind == "s-expect")
   end
 end
 
--- How many `##` lines stand just above the function at `line`, over its
--- annotation (`name : ...`, one line or several) when it has one.
-function doc_lines(src, name, line)
+-- How many `##` lines stand just above the function defined at `line`,
+-- or above its annotation (`name : ...`, on one line or several) if it
+-- has one.
+function doc_comment_lines(src, name, line)
   local top = line - 1
   local k = top
   while k >= 1 and k > line - 12 and trim(src[k]) ~= "" and not starts_with(trim(src[k]), "#") do
@@ -320,8 +301,8 @@ function doc_lines(src, name, line)
   return n
 end
 
--- The nodes of the subtree at `g`, itself first, in order.
-function subtree(g)
+-- The nodes of the subtree at `g`, `g` first.
+function subtree_nodes(g)
   local out = {g}
   local i = 1
   while i <= #out do
@@ -331,43 +312,39 @@ function subtree(g)
   return out
 end
 
--- **WHETHER THE LAMBDA AT `g` IS A WRAPPER**, `{wrapper, size}`, `size`
--- what a finding says of it. Its body is one statement (a block of one, or
--- an expression), measured by the tree's nodes (`NODES`), never its lines,
--- so `stack.shale write=1` laying a call's record out a field a line
--- changes nothing. A body that decides is measured by its ways too
--- (`WAYS`): one, and one more for each `if` and for each `match` arm past
--- its first. A decision's arms are its rule, and only a two-way choice
--- reads as a wrapper; an `else if` chain or a nested `if` is a rule of its
--- own however few lines it is written on.
-function wrapper_size(g)
+-- Whether the body of the lambda at `g` is small enough for `single` to
+-- call it a wrapper, as `is_wrapper`, and its size in words for the
+-- finding, as `size`. A wrapper's body is one statement: a block of one,
+-- or an expression. Its size counts syntax-tree nodes, so the layout of
+-- its lines changes nothing. It has one way through it, and one more for
+-- each `if` and for each `match` arm past the first. So only a two-way
+-- choice reads as a wrapper, and an `else if` chain or a nested `if` is a
+-- rule of its own however few lines it takes.
+function body_measure(g)
   local kids = children(g)
   local body = kids[#kids]
   if kind(body) == "e-block" then
-    local stmts = {}
+    local statements = {}
     for k in children(body) do
-      if kind(k) == "statements" then stmts = children(k) end
+      if kind(k) == "statements" then statements = children(k) end
     end
-    if #stmts ~= 1 then return {wrapper = false, size = #stmts .. " statements"} end
-    body = stmts[1]
+    if #statements ~= 1 then return {is_wrapper = false, size = #statements .. " statements"} end
+    body = statements[1]
   end
-  local all = subtree(body)
+  local all = subtree_nodes(body)
   local ways = 1
   for k in all do
     if kind(k) == "e-if-then-else" then ways = ways + 1 end
-    if kind(k) == "branches" then
-      local arms = children(k)
-      ways = ways + #arms - 1
-    end
+    if kind(k) == "branches" then ways = ways + #children(k) - 1 end
   end
-  local small = #all <= NODES
-  if ways > 1 then return {wrapper = small and ways <= WAYS, size = "a decision of " .. ways .. " ways, " .. #all .. " nodes"} end
-  return {wrapper = small, size = "one expression of " .. #all .. " nodes"}
+  local small = #all <= MAX_NODES
+  if ways > 1 then return {is_wrapper = small and ways <= MAX_WAYS, size = "a decision of " .. ways .. " ways, " .. #all .. " nodes"} end
+  return {is_wrapper = small, size = "one expression of " .. #all .. " nodes"}
 end
 
--- The function type of the annotation just above the declaration at `g`,
--- by its name, or 0 for none.
-function anno_fn(g, name)
+-- The function type in the annotation just before the declaration at `g`,
+-- if that annotation is for `name`, or 0.
+function annotation_function_type(g, name)
   local p = parent(g)
   if p == 0 then return 0 end
   local before = 0
@@ -376,38 +353,37 @@ function anno_fn(g, name)
     if k == g then before = prev end
     prev = k
   end
-  if before == 0 or kind(before) ~= "s-type-anno" or get(NODE[before], "name", "") ~= name then return 0 end
+  if before == 0 or kind(before) ~= "s-type-anno" or get(NODES[before], "name", "") ~= name then return 0 end
   local ty = children(before)
   if #ty == 0 or kind(ty[1]) ~= "ty-fn" then return 0 end
   return ty[1]
 end
 
--- **WHETHER THE DECLARATION AT `g` TAKES `{}` ALONE AND COULD BE A
--- CONSTANT**: its lambda's one pattern is an empty record, or its
--- annotation has an empty record as its one argument; and no type variable
--- (`ty-var`) is in the annotation's return type, which a constant cannot
--- hold. Unannotated, its type is not seen, so it counts.
-function takes_unit(g, name)
-  local unit = false
-  local lam = children(g)[2]
-  for k in children(lam) do
+-- Whether the function declared at `g` takes `{}` alone, by its lambda's
+-- one pattern or its annotation's one argument, and could be a constant:
+-- an annotated return type holding a type variable (`ty-var`) rules that
+-- out.
+function takes_empty_record_alone(g, name)
+  local takes_it = false
+  local lambda = children(g)[2]
+  for k in children(lambda) do
     if kind(k) == "args" then
-      local ps = children(k)
-      if #ps == 1 and kind(ps[1]) == "p-record" and #children(ps[1]) == 0 then unit = true end
+      local patterns = children(k)
+      if #patterns == 1 and kind(patterns[1]) == "p-record" and #children(patterns[1]) == 0 then takes_it = true end
     end
   end
-  local fn = anno_fn(g, name)
-  if fn == 0 then return unit end
-  local parts = children(fn)
-  if #parts == 2 and kind(parts[1]) == "ty-record" and #children(parts[1]) == 0 then unit = true end
-  if not unit then return false end
-  for k in subtree(parts[#parts]) do
+  local fn_type = annotation_function_type(g, name)
+  if fn_type == 0 then return takes_it end
+  local parts = children(fn_type)
+  if #parts == 2 and kind(parts[1]) == "ty-record" and #children(parts[1]) == 0 then takes_it = true end
+  if not takes_it then return false end
+  for k in subtree_nodes(parts[#parts]) do
     if kind(k) == "ty-var" then return false end
   end
   return true
 end
 
--- The lambda at `g`'s parameter patterns, by position.
+-- The parameter patterns of the lambda at `g`, by position.
 function lambda_params(g)
   for k in children(g) do
     if kind(k) == "args" then return children(k) end
@@ -416,129 +392,144 @@ function lambda_params(g)
 end
 
 -- ── pass 1: the functions ────────────────────────────────────────────────
--- By key `owner|name`, the owner a module type's name, or `@path` for a
--- top-level one.
-local defs = {}
-local members = {}
-for g = 1, #NODE do
+
+-- Each function by `owner|name`, where the owner is its module type's name,
+-- or `@path` for a file's own top-level function.
+const FUNCTIONS = {}
+-- The keys of the module types' members, by name.
+const MEMBER_KEYS = {}
+for g = 1, #NODES do
   if kind(g) == "s-decl" then
     local kids = children(g)
-    if #kids > 1 and kind(kids[1]) == "p-ident" and kind(kids[2]) == "e-lambda" then
-      local path = PATH[g]
-      local owner = OWNER[g] ~= "" and OWNER[g] or ("@" .. path)
-      if OUTER_ALL[g] then
-        local n = NODE[g]
-        local name = raw(kids[1])
-        local key = owner .. "|" .. name
-        local size = wrapper_size(kids[2])
-        defs[key] = {key = key, path = path, owner = owner, name = name, line = n.line, last = n.end_line, wrapper = size.wrapper, size = size.size, doc = doc_lines(SRC[path], name, n.line), prod = 0, tests = 0, expects = 0, callers = {}, calls = {}, self_calls = {}, values = 0, ambiguous = false, recursive = false, entry = false, unit = takes_unit(g, name), params = lambda_params(kids[2]), tested_calls = {}}
-        if sub(owner, 1, 1) ~= "@" then
-          if not has_key(members, name) then members[name] = {} end
-          push(members[name], key)
-        end
+    if #kids > 1 and kind(kids[1]) == "p-ident" and kind(kids[2]) == "e-lambda" and AT_TOP_LEVEL[g] then
+      local path = NODE_PATH[g]
+      local owner = OWNER_TYPE[g] ~= "" and OWNER_TYPE[g] or ("@" .. path)
+      local n = NODES[g]
+      local name = raw_text(kids[1])
+      local key = owner .. "|" .. name
+      local body = body_measure(kids[2])
+      FUNCTIONS[key] = {
+        key = key, path = path, owner = owner, name = name, line = n.line, end_line = n.end_line,
+        is_wrapper = body.is_wrapper, size = body.size, doc_lines = doc_comment_lines(SOURCE_LINES[path], name, n.line),
+        takes_empty_record_alone = takes_empty_record_alone(g, name), params = lambda_params(kids[2]),
+        prod_refs = 0, value_refs = 0, expect_refs = 0, test_refs = 0, prod_callers = {},
+        prod_calls = {}, self_calls = {}, test_calls = {},
+        is_ambiguous = false, is_recursive = false, is_entry = false,
+      }
+      if sub(owner, 1, 1) ~= "@" then
+        if not has_key(MEMBER_KEYS, name) then MEMBER_KEYS[name] = {} end
+        push(MEMBER_KEYS[name], key)
       end
     end
   end
 end
 
 -- ── pass 2: the references ───────────────────────────────────────────────
--- A call is `{path, line, args, pre}`: `args` the argument nodes, `pre` an
--- arrow or method call's receiver, the hidden first argument (0 for none). A
--- reference with no call is the function passed as a value. A reference
--- inside its own body makes it a recursion.
-function note(def, ctx, call)
-  if ctx.path == def.path and ctx.line >= def.line and ctx.line <= def.last then
-    def.recursive = true
-    if call ~= nil then push(def.self_calls, call) end
+
+-- A call is `{path, line, args, receiver}`, where `args` are the argument
+-- nodes and `receiver` is an arrow or method call's receiver, which is
+-- the first argument, or 0 for none.
+
+-- The call whose head is the identifier at `g`, or nil if it heads none.
+function call_headed_by(g)
+  local apply = parent(g)
+  if apply == 0 or kind(apply) ~= "e-apply" then return nil end
+  local kids = children(apply)
+  if kids[1] ~= g then return nil end
+  local call = {path = NODE_PATH[g], line = NODES[g].line, args = drop(kids, 1), receiver = 0}
+  -- In `x->f(a)`, the apply `f(a)` is the arrow call's second child.
+  local arrow = parent(apply)
+  if arrow ~= 0 and kind(arrow) == "e-arrow-call" then
+    local arrow_kids = children(arrow)
+    if arrow_kids[2] == apply then call.receiver = arrow_kids[1] end
+  end
+  return call
+end
+
+function method_call(g)
+  local args = {}
+  local receiver = 0
+  for k in children(g) do
+    if kind(k) == "receiver" then receiver = children(k)[1] end
+    if starts_with(kind(k), "args") then args = children(k) end
+  end
+  return {path = NODE_PATH[g], line = NODES[g].line, args = args, receiver = receiver}
+end
+
+-- The key of the function that the name at `g` refers to, or "".
+function referenced_key(g, name)
+  if contains(name, ".") then
+    local parts = split(name, ".")
+    local key = parts[#parts - 1] .. "|" .. parts[#parts]
+    return has_key(FUNCTIONS, key) and key or ""
+  end
+  local path = NODE_PATH[g]
+  local owner = OWNER_TYPE[g]
+  if owner ~= "" and has_key(FUNCTIONS, owner .. "|" .. name) then return owner .. "|" .. name end
+  if has_key(FUNCTIONS, "@" .. path .. "|" .. name) then return "@" .. path .. "|" .. name end
+  local key = ""
+  for m in get(MEMBER_KEYS, name, {}) do
+    if FUNCTIONS[m].path == path then key = m end
+  end
+  return key
+end
+
+-- A reference within the function's own lines makes it recursive. Any
+-- other is from a test file, from an `expect`, or from production, and
+-- `call` is nil when the function is passed as a value.
+function record_reference(func, ref, call)
+  if ref.path == func.path and ref.line >= func.line and ref.line <= func.end_line then
+    func.is_recursive = true
+    if call ~= nil then push(func.self_calls, call) end
     return nil
   end
-  if is_test_file(ctx.path) or ctx.expect then
-    if call ~= nil then push(def.tested_calls, call) end
-  end
-  if is_test_file(ctx.path) then
-    def.tests = def.tests + 1
-  elseif ctx.expect then
-    def.expects = def.expects + 1
+  local from_test_file = is_test_file(ref.path)
+  if (from_test_file or ref.in_expect) and call ~= nil then push(func.test_calls, call) end
+  if from_test_file then
+    func.test_refs = func.test_refs + 1
+  elseif ref.in_expect then
+    func.expect_refs = func.expect_refs + 1
   else
-    def.prod = def.prod + 1
-    push(def.callers, ctx.path .. ":" .. ctx.line .. " in " .. ctx.caller)
-    if call == nil then def.values = def.values + 1 else push(def.calls, call) end
+    func.prod_refs = func.prod_refs + 1
+    push(func.prod_callers, ref.path .. ":" .. ref.line .. " in " .. ref.enclosing)
+    if call == nil then func.value_refs = func.value_refs + 1 else push(func.prod_calls, call) end
   end
   return nil
 end
 
-for g = 1, #NODE do
-  local k0 = kind(g)
-  if k0 == "e-ident" or k0 == "e-method-call" then
-    local path = PATH[g]
-    local owner = OWNER[g]
-    local ctx = {path = path, line = NODE[g].line, expect = IN_EXPECT[g], caller = CALLER[g]}
-    local call = nil
-    local target = ""
-    local method = false
-    if k0 == "e-ident" then
-      target = raw(g)
-      -- The head of an apply: its siblings are the arguments.
-      local p = parent(g)
-      if p ~= 0 and kind(p) == "e-apply" then
-        local kids = children(p)
-        if kids[1] == g then
-          call = {path = path, line = ctx.line, args = drop(kids, 1), pre = 0}
-          -- `x->f(a)`: the apply is the arrow call's second child.
-          local gp = parent(p)
-          if gp ~= 0 and kind(gp) == "e-arrow-call" then
-            local gk = children(gp)
-            if gk[2] == p then call.pre = gk[1] end
-          end
-        end
-      end
-    else
-      target = sub(get(NODE[g], "method", ""), 2)
-      method = true
-      local args = {}
-      local pre = 0
-      for k in children(g) do
-        if kind(k) == "receiver" then pre = children(k)[1] end
-        if starts_with(kind(k), "args") then args = children(k) end
-      end
-      call = {path = path, line = ctx.line, args = args, pre = pre}
-    end
-    if target ~= "" then
-      if method then
-        local ks = get(members, target, {})
-        for key in ks do
-          note(defs[key], ctx, call)
-          if #ks > 1 then defs[key].ambiguous = true end
-        end
-      elseif contains(target, ".") then
-        local parts = split(target, ".")
-        local key = parts[#parts - 1] .. "|" .. parts[#parts]
-        if has_key(defs, key) then note(defs[key], ctx, call) end
-      else
-        local key = ""
-        if owner ~= "" and has_key(defs, owner .. "|" .. target) then key = owner .. "|" .. target
-        elseif has_key(defs, "@" .. path .. "|" .. target) then key = "@" .. path .. "|" .. target
-        else
-          for m in get(members, target, {}) do
-            if defs[m].path == path then key = m end
-          end
-        end
-        if key ~= "" then note(defs[key], ctx, call) end
+function reference_at(g)
+  return {path = NODE_PATH[g], line = NODES[g].line, in_expect = IN_EXPECT[g], enclosing = ENCLOSING_DECL[g]}
+end
+
+for g = 1, #NODES do
+  local node_kind = kind(g)
+  if node_kind == "e-method-call" then
+    local name = sub(get(NODES[g], "method", ""), 2)
+    if name ~= "" then
+      local call = method_call(g)
+      local keys_of_name = get(MEMBER_KEYS, name, {})
+      for key in keys_of_name do
+        record_reference(FUNCTIONS[key], reference_at(g), call)
+        if #keys_of_name > 1 then FUNCTIONS[key].is_ambiguous = true end
       end
     end
+  elseif node_kind == "e-ident" then
+    local name = raw_text(g)
+    local key = name ~= "" and referenced_key(g, name) or ""
+    if key ~= "" then record_reference(FUNCTIONS[key], reference_at(g), call_headed_by(g)) end
   end
 end
 
--- **AN ENTRY INTO A RECURSION**: a function holding a production call of a
--- recursive one.
-local by_path = {}
-for key in keys(defs) do push_at(by_path, defs[key].path, defs[key]) end
-for key in keys(defs) do
-  local worker = defs[key]
-  if worker.recursive then
-    for c in worker.calls do
-      for d in get(by_path, c.path, {}) do
-        if c.line >= d.line and c.line <= d.last then d.entry = true end
+-- A function holding a production call of a recursive function is an
+-- entry into the recursion.
+local functions_by_path = {}
+for key in keys(FUNCTIONS) do push_at(functions_by_path, FUNCTIONS[key].path, FUNCTIONS[key]) end
+for key in keys(FUNCTIONS) do
+  local recursive = FUNCTIONS[key]
+  if recursive.is_recursive then
+    for c in recursive.prod_calls do
+      for f in get(functions_by_path, c.path, {}) do
+        if c.line >= f.line and c.line <= f.end_line then f.is_entry = true end
       end
     end
   end
@@ -546,139 +537,144 @@ end
 
 -- ── the checks ───────────────────────────────────────────────────────────
 
-function shown_name(def)
-  if sub(def.owner, 1, 1) == "@" then return def.name end
-  return def.owner .. "." .. def.name
+function display_name(func)
+  if sub(func.owner, 1, 1) == "@" then return func.name end
+  return func.owner .. "." .. func.name
 end
 
--- A call's arguments by position, `pre` first: a record argument's fields
--- as `N.field`, so `{ needle, at: 0 }` is judged field by field.
-function arg_texts(call)
+-- A call's argument texts by position ("1", "2", ...), the receiver first.
+-- A record argument gives its fields instead, as "N.field", so that
+-- `{ needle, at: 0 }` is judged field by field.
+function argument_texts(call)
   local out = {}
   local list = {}
-  if call.pre ~= 0 then push(list, call.pre) end
+  if call.receiver ~= 0 then push(list, call.receiver) end
   for a in call.args do push(list, a) end
   local n = 0
   for a in list do
     n = n + 1
     if kind(a) == "e-record" then
       for f in children(a) do
-        local fname = kind(f) == "field" and get(NODE[f], "field", "") or ""
-        if fname ~= "" then
-          local v = children(f)
-          out[n .. "." .. fname] = #v > 0 and text_of(call.path, v[1]) or fname
+        local field_name = kind(f) == "field" and get(NODES[f], "field", "") or ""
+        if field_name ~= "" then
+          local value = children(f)
+          out[n .. "." .. field_name] = #value > 0 and source_text(call.path, value[1]) or field_name
         end
       end
     else
-      out[tostring(n)] = text_of(call.path, a)
+      out[tostring(n)] = source_text(call.path, a)
     end
   end
   return out
 end
 
--- No argument's text: the marker of a slot whose calls differ.
+-- No argument's text can be this, so it marks a slot where calls differ.
 const DIFFERS = "\n differs"
 
--- **EACH SLOT'S ONE TEXT ACROSS `calls`**, by `arg_texts`'s keys: the text
--- every call gives it, or `DIFFERS`. `fixed` and `entry` both ask it.
-function same_slots(calls)
-  local seen = {}
+-- For each argument slot of `calls`, by `argument_texts`'s keys, the text
+-- every call gives it, or `DIFFERS`.
+function agreed_argument_texts(calls)
+  local agreed = {}
   local first = true
   for c in calls do
-    local a = arg_texts(c)
+    local texts = argument_texts(c)
     if first then
-      for k in keys(a) do seen[k] = a[k] end
+      for k in keys(texts) do agreed[k] = texts[k] end
       first = false
     else
-      for k in keys(seen) do
-        if seen[k] ~= DIFFERS and (not has_key(a, k) or a[k] ~= seen[k]) then seen[k] = DIFFERS end
+      for k in keys(agreed) do
+        if agreed[k] ~= DIFFERS and (not has_key(texts, k) or texts[k] ~= agreed[k]) then agreed[k] = DIFFERS end
       end
-      for k in keys(a) do
-        if not has_key(seen, k) then seen[k] = DIFFERS end
+      for k in keys(texts) do
+        if not has_key(agreed, k) then agreed[k] = DIFFERS end
       end
     end
   end
-  return seen
+  return agreed
 end
 
-for key in sort(keys(defs)) do
-  local def = defs[key]
-  local judged = not def.ambiguous and not is_test_file(def.path)
-  if judged and def.prod == 1 and def.values == 0 and def.expects == 0 and def.tests == 0 and def.doc == 0 and def.wrapper and not def.recursive and not def.entry and not is_question(def.name) then
-    say(def.path, def.line, "single", "`" .. shown_name(def) .. "` (" .. def.size .. ") has one caller in the " .. #fs .. " files read, " .. def.callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
+function concatenated(lists)
+  local out = {}
+  for l in lists do
+    for x in l do push(out, x) end
   end
-  if judged and #def.calls >= 2 and def.values == 0 then
-    -- The outside calls alone, then with its own: a slot the outside calls
-    -- agree on is `fixed` when its own calls agree too, else `entry`.
-    local outside = same_slots(def.calls)
-    local every = {}
-    for c in def.calls do push(every, c) end
-    for c in def.self_calls do push(every, c) end
-    local all = same_slots(every)
-    local own = #def.self_calls > 0 and (" and " .. #def.self_calls .. " of its own") or ""
+  return out
+end
+
+function reads_better_inline(func)
+  return func.prod_refs == 1 and func.value_refs == 0 and func.expect_refs == 0 and func.test_refs == 0 and func.doc_lines == 0 and func.is_wrapper and not func.is_recursive and not func.is_entry and not is_question_name(func.name)
+end
+
+const FILES_READ = " in the " .. #ROC_FILES .. " files read"
+
+for key in sort(keys(FUNCTIONS)) do
+  local func = FUNCTIONS[key]
+  local name = display_name(func)
+  local judged = not func.is_ambiguous and not is_test_file(func.path)
+  if judged and reads_better_inline(func) then
+    report(func.path, func.line, "single", "`" .. name .. "` (" .. func.size .. ") has one caller" .. FILES_READ .. ", " .. func.prod_callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
+  end
+  if judged and #func.prod_calls >= 2 and func.value_refs == 0 then
+    -- A slot the production calls agree on is `fixed` if the function's
+    -- own calls agree with them too, and `entry` if they vary it.
+    local outside = agreed_argument_texts(func.prod_calls)
+    local all = agreed_argument_texts(concatenated({func.prod_calls, func.self_calls}))
+    local own = #func.self_calls > 0 and (" and " .. #func.self_calls .. " of its own") or ""
     for k in sort(keys(outside)) do
       local v = outside[k]
       if v ~= DIFFERS and is_literal(v) then
-        local said = "`" .. shown_name(def) .. "`'s argument " .. k .. " is `" .. v .. "` in all " .. #def.calls .. " production calls"
+        local said = "`" .. name .. "`'s argument " .. k .. " is `" .. v .. "` in all " .. #func.prod_calls .. " production calls"
         if all[k] ~= DIFFERS then
-          if not is_library_api(def) then say(def.path, def.line, "fixed", said .. own .. " in the " .. #fs .. " files read: no parameter, or an entry function that takes only what varies") end
+          if not is_library_api(func) then report(func.path, func.line, "fixed", said .. own .. FILES_READ .. ": no parameter, or an entry function that takes only what varies") end
         else
-          say(def.path, def.line, "entry", said .. " in the " .. #fs .. " files read, and its own calls vary it: an entry function that takes only what varies and passes `" .. v .. "` itself, its one outside call")
+          report(func.path, func.line, "entry", said .. FILES_READ .. ", and its own calls vary it: an entry function that takes only what varies and passes `" .. v .. "` itself, its one outside call")
         end
       end
     end
   end
-  if def.unit and not contains(def.name, "!") and not is_test_file(def.path) then
-    say(def.path, def.line, "constant", "`" .. shown_name(def) .. "` takes `{}` alone and names no effect, so it gives the same value every call: a constant (`" .. def.name .. " = ...`), or a `!` if it has an effect")
+  if func.takes_empty_record_alone and not contains(func.name, "!") and not is_test_file(func.path) then
+    report(func.path, func.line, "constant", "`" .. name .. "` takes `{}` alone and names no effect, so it gives the same value every call: a constant (`" .. func.name .. " = ...`), or a `!` if it has an effect")
   end
-  -- Under the types: each `Bool` parameter some call passes as a literal.
-  -- A function's one parameter is the value it converts, no flag.
-  if judged and #def.params > 1 and has_key(types.real, def.path) then
-    local every = {}
-    for c in def.calls do push(every, c) end
-    for c in def.self_calls do push(every, c) end
-    for c in def.tested_calls do push(every, c) end
-    for i = 1, #def.params do
-      local q = def.params[i]
-      local ty = kind(q) == "p-ident" and roc_type_at(types, "pat", def.path, NODE[q]) or nil
+  if judged and #func.params > 1 and has_key(checker_types.real, func.path) then
+    local every = concatenated({func.prod_calls, func.self_calls, func.test_calls})
+    for i = 1, #func.params do
+      local param = func.params[i]
+      local ty = kind(param) == "p-ident" and roc_type_at(checker_types, "pat", func.path, NODES[param]) or nil
       if ty == "Bool" then
-        local lits = {}
+        local literal_calls = {}
         for c in every do
-          local v = get(arg_texts(c), tostring(i), "")
-          if has_key(BOOL_LITERALS, v) then push(lits, c.path .. ":" .. c.line .. " `" .. v .. "`") end
+          local v = get(argument_texts(c), tostring(i), "")
+          if has_key(BOOL_LITERALS, v) then push(literal_calls, c.path .. ":" .. c.line .. " `" .. v .. "`") end
         end
-        if #lits > 0 then say(def.path, def.line, "bool_param", "`" .. shown_name(def) .. "`'s parameter " .. i .. ", `" .. raw(q) .. "`, is a `Bool` (the checker's type) passed as a literal at " .. #lits .. " of its " .. #every .. " calls (" .. join(take(lits, 3), ", ") .. (#lits > 3 and ", ..." or "") .. "): a flag a caller passes is a tag, named for what it means (roc-apps docs/roc-style.md)") end
+        if #literal_calls > 0 then report(func.path, func.line, "bool_param", "`" .. name .. "`'s parameter " .. i .. ", `" .. raw_text(param) .. "`, is a `Bool` (the checker's type) passed as a literal at " .. #literal_calls .. " of its " .. #every .. " calls (" .. join(take(literal_calls, 3), ", ") .. (#literal_calls > 3 and ", ..." or "") .. "): a flag a caller passes is a tag, named for what it means (roc-apps docs/roc-style.md)") end
       end
     end
   end
 end
 
-local total = 0
-for k in keys(defs) do total = total + 1 end
 local counts = {}
-for c in CHECKS do push(counts, c .. " " .. found[c]) end
-print("boundaries (Roc): " .. #fs .. " files, " .. total .. " functions; " .. join(counts, ", "))
-fail_if_refused("boundaries", parsed.refused, types.unreached)
+for c in CHECKS do push(counts, c .. " " .. finding_counts[c]) end
+print("boundaries (Roc): " .. #ROC_FILES .. " files, " .. #keys(FUNCTIONS) .. " functions; " .. join(counts, ", "))
+fail_if_refused("boundaries", parsed.refused, checker_types.unreached)
 
--- A plant's name as the self-test's table reads it, by its own name (a
--- plant may sit in `lib/` or a package's folder); a typed plant's, a type
--- module's (`typed/BoolParam.roc`), as `bool_param.roc`.
-function plant_base(p)
-  if starts_with(p, PLANTS .. "typed/") then return roc_plant_name(basename(p)) end
+-- A plant's file name as the self-test reads it. A typed plant is a type
+-- module, so `typed/BoolParam.roc` reads as `bool_param.roc`.
+function plant_check_name(p)
+  if starts_with(p, TYPED_PLANTS) then return roc_plant_name(basename(p)) end
   return basename(p)
 end
 
-if SELF then
+if SELF_TEST then
   local wrong = {}
   for c in CHECKS do
     local planted = 0
-    for p in fs do
-      local base = plant_base(p)
-      local mine = base == c .. ".roc" or starts_with(base, c .. "_")
-      if mine then planted = planted + 1 end
-      local fired = has_key(per_file, p .. "|" .. c)
-      if mine and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. p) end
-      if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
+    for p in ROC_FILES do
+      local base = plant_check_name(p)
+      local planted_here = base == c .. ".roc" or starts_with(base, c .. "_")
+      if planted_here then planted = planted + 1 end
+      local fired_here = has_key(fired, p .. "|" .. c)
+      if planted_here and not fired_here then push(wrong, "`" .. c .. "` does not fire on its plant " .. p) end
+      if fired_here and not planted_here then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
     end
     if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
   end
