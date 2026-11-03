@@ -1,462 +1,448 @@
--- **AWKWARD NAMES IN ROC, A QUESTION EACH** (metal-vmm QUEUE 256): the
--- same five heuristics as `cookbook/zig/name_hunt.shale`, over Roc's
--- annotations (`name : Type`) and definitions (`name = ...`): the top
--- level's and a module type's members (`Html := [].{ ... }`, `X :: [].{
--- ... }`), never a local's. They are read from Roc's own parser's tree
--- (`roc_tree`, the Linux prelude's, over roc-ast at `tools:roc-ast/bin/
--- roc-ast`), so an annotation broken after its
--- colon and a `where` clause's arrows read as Roc reads them, and a file
--- that does not parse is a failure, never a pass: named, after every
--- other file is judged, and the run exits non-zero
--- (cookbook/roc/parsed.shale).
--- A finding is a question for a reader, never a verdict:
---
---   state_effect  an effect (`!`) named as a state: `held_raw!`, a past
---                 participle first, `done!`, `ready!`. A participle that
---                 starts the name of a type the effect's annotation names
---                 (`rounded_rectangle! : Frame, RoundedRectangle => {}`)
---                 modifies the thing it makes or draws, and is no state.
---   question      a function `is_*`, `has_*`, `can_*`, `should_*` that
---                 returns no `Bool`, or that has an effect and gives no
---                 `Bool` (`is_open! : Str => Str`), or a `Bool` named as a
---                 state (`marked : Str -> Bool`; a name holding `_is_` or
---                 `_has_` asks, `unsigned_is_even`). An inferred type
---                 (`is_eq : _`) is not judged, nor is a value (`has_got :
---                 List(Bool)`, a test table's column): only a function
---                 asks. An effect that gives a `Bool` (`is_playing! : Sound
---                 => Bool`) asks the host about live state, which has to
---                 be effectful. **UNDER THE TYPES** (`types=1 root=<an
---                 app>`, below) a definition's type is Roc's checker's:
---                 an unannotated `is_ready = |n| n + 1` is judged, and an
---                 annotation naming an alias of `Bool` (`Answer : Bool`)
---                 gives a `Bool`.
---   vague         a name of nothing but vague words: `handle_data`,
---                 `process!`, `do_it`
---   name_type     a `*_count` value that is no integer, a `*_path` one
---                 that is no `Str`
---   noun_effect   an effect whose first word is no verb this knows: a plain
---                 noun (`links!`, `page!`), which reads as a value, not an act.
---                 **A NAMESPACE PREFIX** (cookbook/words/namespaces.txt:
---                 `block_`, `port_`, `uefi_`, a device's or firmware's name)
---                 is no act: the word after it is judged, here and by
---                 `state_effect` (`block_read_sector!` reads; `port_status!`
---                 does not), and the namespace's own instructions listed
---                 beside it are acts (`port_out_32!`, x86's OUT). **AN
---                 EFFECT WHOSE FIRST ARGUMENT IS A SURFACE** (a `Frame` or
---                 `Canvas`, by its type's last part: `Draw.Frame`) is named
---                 for what it draws there (`circle! : Frame, Circle => {}`,
---                 read `frame.circle!(...)`, roc-ray's API), and is no noun;
---                 a shape's name on anything else (`line! : Writer, Str`)
---                 still is. An unannotated effect shows no types, and fires.
---   negative      a `no_*`/`not_*` `Bool`, an `is_not_*`
---   preposition_split  one noun given different trailing prepositions in one
---                 file (`blocks_of`, `blocks_in`, `blocks_from`): one
---                 relation should keep one preposition, or the names should
---                 say how they differ. Reported once, at the first.
---                 **A PACKAGE'S SUFFIX CONVENTION IS NO SPLIT**: a
---                 preposition on three or more stems in the files read
---                 whose annotations share one shape, the first argument's
---                 type and the result (roc-markdown's `*_onto` writers,
---                 each taking a `List(U8)` and giving it back), is one
---                 role, so `run_onto` beside `run_at` is left out before
---                 the count; the shared shape is what tells a convention
---                 from a common preposition (`_of`, `_in`) in any large
---                 package.
---                 **A FILE'S DECLARED KEYWORDS ARE NO PREPOSITIONS**: an
---                 interpreter names its statements for its language's
---                 keywords (BASIC's `do_for`, `do_on`), which the file
---                 says in a comment line, `# keywords: for, on`, read
---                 where the names are, so the exemption moves with them.
---   command_tense an effect that takes a tag union (written in place, or a
---                 type declared in any file hunted) whose tags all start
---                 with a past participle and none carries a payload (`pin! :
---                 ..., [Pinned, Unpinned]`): an instruction named like an
---                 event. A tag with a payload holds a state's data
---                 (`[Known(accounts), Unasked]`), so a union with one is a
---                 state carried along, not an order. A command is a verb
---                 (`[Pin, Unpin]`); an event is past tense where it is
---                 recorded or replayed (a plain function, a record's field),
---                 never as what an effect is told to do (roc-apps
---                 docs/roc-style.md, naming). A `List(T)` argument is
---                 judged as `T`: a plan handed in is its steps' commands.
---   mixed_tense   an effect that takes a tag union (as `command_tense`
---                 reads one, payloads and all) with a tag that starts with a
---                 verb beside one that starts with a past participle
---                 (`apply! : [Pin, Unpinned]`): an instruction list with an
---                 event in it, or an event list with an order, one of them
---                 named in the wrong mood. Only what an effect is handed
---                 is judged: a union it answers, a record's field and a
---                 pure function's argument are the domain's words for a
---                 state (an answer's `Redirect` beside `Found`, a route's
---                 `Upload` beside `Saved`), which the guide keeps.
---   container     a type's name (`Entry`, `NodeInfo`) or a record field's
---                 typed in place (`items : List(Str)`) made only of
---                 container words (cookbook/words/containers.txt) and
---                 vague.txt's: it says where a value sits, not what it
---                 holds (docs/roc-style.md: "A type is named for what it
---                 holds"; a DM's row is a `DmSummary`, not an `Entry`).
---                 **WHERE THE CONTAINER WORD IS THE DOMAIN'S** (a folder
---                 listing's entry) it stays, said so in the doc comment over
---                 its declaration, as whose: `## A folder's entry` keeps
---                 `Entry`, and `## A listing's entries` keeps a field
---                 `entries`. A type is split at its capitals, a field at
---                 its `_`s; a local's annotation is never read.
---   short_name    a top-level or module-member name of one letter (`w :
---                 F64`, `m = Tree.metrics(...)`): read far from where it is
---                 defined, a letter says nothing of what it holds, and a
---                 local of the same letter shadows it. A local's and a
---                 lambda's parameters (`|x, y|`) are never judged.
---   worker_name   a definition whose last word only says it is a helper:
---                 `_acc`, `_loop`, `_inner`, `_helper`, `_rec`
---                 (`count_acc`). A recursion's worker is named for the
---                 parameter it adds, so a call reads as a sentence:
---                 `count_from(xs, at)` a start point, `render_onto(out,
---                 node)` an output being built, `walk_with(tree, seen)`
---                 other carried state; its entry function takes the plain
---                 name, `count` (roc-apps docs/roc-style.md). `_step`,
---                 `_walk` and `_go` are words of their own (a fold's step,
---                 `List.walk`, a piece that `can_go`), so they are judged
---                 only where the definition calls itself: there they are
---                 the worker's.
---   stacked_preposition  a top-level or member name whose last two words
---                 are both prepositions (`rest_from_onto`, `x_in_at`): a
---                 worker's suffix appended to an entry whose name already
---                 ends in one. Each preposition reads once: the entry says
---                 what it gives (`rest`, `tail_after`), the worker what it
---                 adds (`rest_onto`) (roc-apps docs/roc-style.md). The
---                 prepositions are cookbook/words/prepositions.txt's, as
---                 `preposition_split`'s. A word that is no preposition
---                 must come before the two: a name made only of them
---                 (`at_of`, `via_from`) uses its first as a noun.
---   taken_word    a top-level or member name that is one taken word whole
---                 (cookbook/words/taken.txt): a function named by Roc's own
---                 word (`record`, `tag`, `union`, `alias`, `opaque`,
---                 `nominal`, `module`), which reads as Roc's and not the
---                 domain's (`Html.tag` builds an element), or a value named
---                 by a cardinal, `one` to `twelve` (`three : List(Fields)`),
---                 which says how many, not what it holds. A function that
---                 gives that very thing, its result's last part the word
---                 capitalized (`record : ApiKey.Key -> ApiKey.Record`), is
---                 honest; a function named by a number (`Time.two : I64 ->
---                 Str`), a name of more words (`tag_name`), a record's field
---                 and a local are never judged (roc-apps docs/roc-style.md,
---                 naming: "keep Roc's words for Roc").
---
--- **A NAME IS JUDGED ONCE**, from its annotation when it has one (a hosted
--- effect, `links! : Str => Str` in a platform's `Host.roc`, has nothing
--- else), else from its definition. **AN EFFECT THAT TAKES AN EFFECTFUL
--- FUNCTION** (`map2!`, `on_err!`, `catch!`: an argument's type holds a
--- `=>`, or a lambda argument is named with a `!`) has a `!` that names its
--- callback's effect, not its own act, and is judged as the same name
--- without it. **A NAME THE LANGUAGE FIXES** is never judged: the methods
--- Roc's syntax and builtins call by name (`is_eq`, `to_hash`, `subscript`,
--- `not`, `plus`, `map!`: docs/langref/static-dispatch.md's table and
--- operators.md's `subscript`) and the encoding protocol's `encode` and
--- `decode`, which a format calls by name.
---
--- The counts, then one line a finding, `path:line: <check>: <why>`, then
--- the counts again (cookbook/roc/findings.shale).
+-- This recipe looks for awkward names in every .roc file of a tree: an
+-- effect named like a state, a question that returns no `Bool`, a name made
+-- only of vague words, and the other checks below. A finding is a question
+-- for the reader, not a verdict. The recipe reads the top-level definitions
+-- and the members of module types (`Html := [].{ ... }`), never local ones,
+-- from the syntax tree of Roc's own parser (cookbook/roc/parsed.shale), so
+-- an annotation broken across lines and a `where` clause read as Roc reads
+-- them. Files that don't parse are listed after the findings, and then the
+-- run fails.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob=chat/**/*.roc
 --   shale cookbook:roc/name_hunt.shale self_test=1
 --
--- **THE WORDS** it judges by are cookbook/words/'s tables, which the Zig
--- hunt reads too: verbs.txt, participles.txt (English's irregular ones;
--- the rule takes `-ed`), ed_verbs.txt (the rule's exceptions) and
--- vague.txt; taken.txt is this hunt's alone. `words=1` gives their census instead of the findings: every
--- first word an effect judged here starts with, its count and its verdict,
--- `verb`, `participle`, `vague`, `asks` (`is_`, `has_`) or `refused` (what
--- `noun_effect` fires on), between the totals. A missing verb shows there as
--- `refused` before it is taken for a noun, and each `verb` is a word that
--- passes because verbs.txt lists it.
+-- The arguments:
+--   glob       the files to check, `**/*.roc` by default;
+--   words      with `words=1`, print the census of effects' first words
+--              (below) instead of the findings;
+--   types      with `types=1`, also ask Roc's type checker (below);
+--   root       the app the type checker starts from, or several
+--              (`root=a.roc,b.roc`);
+--   self_test  with `self_test=1`, check the plants (below).
 --
--- **THE CHECKER'S TYPES** (`types=1`, off by default; cookbook/roc/
--- types.shale) need `root=`, an app importing the files of the glob (or
--- several, `root=a.roc,b.roc`, a module two reach typed by the first), and
--- the tree's `roc-version`; a root the checker refuses and a roc-types of
--- another pin each stop the run. A file no root reaches is judged without
--- types, named after the findings (`not reached by <root>: <path>`), and
--- fails the run (cookbook/roc/parsed.shale). Off by default: roc-chat's
--- verify runs this with no root, and holds `question` at zero.
+-- An effect is a function whose name ends in `!`. The checks:
+--
+--   state_effect  An effect whose first word is a past participle
+--                 (`held_raw!`, `done!`) is named like a state; a verb would
+--                 say what it does. The participle is fine when it starts
+--                 the name of a type in the effect's annotation
+--                 (`rounded_rectangle! : Frame, RoundedRectangle => {}`),
+--                 because there it describes the thing the effect draws.
+--   question      A function named as a question (`is_*`, `has_*`, `can_*`,
+--                 `should_*`) that returns something other than a `Bool`,
+--                 or an effect so named that returns no `Bool`
+--                 (`is_open! : Str => Str`); and a function that returns a
+--                 `Bool` but is named like a state (`marked : Str -> Bool`).
+--                 A name with `_is_` or `_has_` inside (`unsigned_is_even`)
+--                 is a question too. An effect that returns a `Bool`
+--                 (`is_playing! : Sound => Bool`) is fine, because asking
+--                 the host about live state has to be an effect. Only
+--                 functions are checked: a value (`has_got : List(Bool)`)
+--                 and an inferred type (`is_eq : _`) are not. With
+--                 `types=1` a definition's type comes from the checker, so
+--                 an unannotated `is_ready = |n| n + 1` is checked, and a
+--                 result that is an alias of `Bool` (`Answer : Bool`)
+--                 counts as a `Bool`.
+--   vague         A name made only of vague words (cookbook/words/vague.txt):
+--                 `handle_data`, `process!`, `do_it`. The entry points
+--                 `handle`, `run` and `main` are fine.
+--   name_type     A value named `*_count` whose type is not an integer, or
+--                 `*_path` whose type is neither `Str` nor one naming `Path`.
+--   noun_effect   An effect whose first word is not a known verb
+--                 (cookbook/words/verbs.txt), such as a plain noun (`links!`,
+--                 `page!`), reads as a value rather than an act. When the
+--                 first word is a namespace prefix such as `block_` or
+--                 `port_` (cookbook/words/namespaces.txt), the word after it
+--                 is checked instead, here and by `state_effect`, and the
+--                 namespace's own instructions listed in that file count as
+--                 verbs (`port_out_32!`). An effect whose first argument is
+--                 a surface, a `Frame` or a `Canvas`, is named for what it
+--                 draws there (`circle! : Frame, Circle => {}`, called as
+--                 `frame.circle!(...)`), so it is not checked. An effect with
+--                 no annotation shows no surface, so it is checked.
+--   negative      A `Bool` value named `no_*` or `not_*`, or an annotated
+--                 name starting `is_not_`: its negation reads twice.
+--   preposition_split  One stem given different trailing prepositions in
+--                 one file (`blocks_of`, `blocks_in`, `blocks_from`). One
+--                 relation should keep one preposition, or the names should
+--                 say how they differ. It is reported once, at the first
+--                 name. These prepositions are left out before counting:
+--                 - one of a pair of opposites (`insert_before` beside
+--                   `insert_after`; also `from` and `to`, `with` and
+--                   `without`, `over` and `under`);
+--                 - a `_from` name that takes more arguments than its
+--                   siblings, a recursive worker resuming at an index
+--                   (`blocks_from` beside `blocks_in`);
+--                 - a package's suffix convention: a preposition on three
+--                   or more stems, in all the files read, whose annotations
+--                   share their first argument's type and their result
+--                   (roc-markdown's `*_onto` writers each take a `List(U8)`
+--                   and return it), so `run_onto` beside `run_at` is no
+--                   split;
+--                 - a word the file declares as a keyword of the language
+--                   it interprets, in a comment line such as
+--                   `# keywords: for, on` (BASIC's `do_for`, `do_on`).
+--   command_tense  An effect that takes a tag union whose tags all start
+--                 with a past participle and carry no payload
+--                 (`pin! : ..., [Pinned, Unpinned]`) names an instruction
+--                 like an event. A command is a verb (`[Pin, Unpin]`). A
+--                 union with a payload (`[Known(accounts), Unasked]`)
+--                 carries state rather than an order. The union may be
+--                 written in place or be a type declared in any file
+--                 checked, and a `List(T)` argument is checked as `T`.
+--   mixed_tense   An effect that takes a tag union (read as for
+--                 `command_tense`, payloads included) with a tag starting
+--                 with a verb beside one starting with a past participle
+--                 (`apply! : [Pin, Unpinned]`): one of them is in the wrong
+--                 mood. Only what an effect is handed is checked. A union an
+--                 effect returns, a record field and a pure function's
+--                 argument hold the domain's words for states (`Redirect`
+--                 beside `Found`).
+--   container     A type's name (`Entry`, `NodeInfo`) or a record field's
+--                 (`items : List(Str)`) made only of container words
+--                 (cookbook/words/containers.txt) and vague words. It says
+--                 where a value sits, not what it holds. When the container
+--                 word is the domain's own, the doc comment above the
+--                 declaration says whose it is: `## A folder's entry` keeps
+--                 `Entry`, and `## A listing's entries` keeps a field
+--                 `entries`. A type's words are split at its capitals, a
+--                 field's at its underscores. Fields in a local's annotation
+--                 are not read.
+--   short_name    A top-level or member name of one letter (`w : F64`). It
+--                 is read far from where it is defined, and a local of the
+--                 same letter shadows it. Locals and lambda parameters are
+--                 not checked.
+--   worker_name   A name whose last word says only that it is a helper:
+--                 `_acc`, `_loop`, `_inner`, `_helper` or `_rec`
+--                 (`count_acc`). Name a recursive worker for the parameter
+--                 it adds, so that a call reads as a sentence:
+--                 `count_from(xs, at)` for a start point,
+--                 `render_onto(out, node)` for an output being built,
+--                 `walk_with(tree, seen)` for other carried state. The entry
+--                 function takes the plain name, `count`. `_step`, `_walk`
+--                 and `_go` are ordinary words too, so they are reported
+--                 only on a definition that calls itself.
+--   stacked_preposition  A name whose last two words are both prepositions
+--                 (cookbook/words/prepositions.txt), like `rest_from_onto`:
+--                 a worker's suffix added to an entry name that already ends
+--                 in one. Let each read once: the entry says what it returns
+--                 (`tail_after`), the worker what it adds (`rest_onto`). A
+--                 name made only of prepositions (`at_of`) is not reported,
+--                 since its first word serves as a noun.
+--   taken_word    A name that is a whole word from cookbook/words/taken.txt:
+--                 a function named by one of Roc's own words (`record`,
+--                 `tag`, `alias`, `module`), which reads as Roc's rather
+--                 than the domain's, or a value named by a number from
+--                 `one` to `twelve` (`three : List(Fields)`), which says
+--                 how many rather than what it holds. A function that
+--                 returns the very thing, its result's last part being the
+--                 word capitalized (`record : ApiKey.Key -> ApiKey.Record`),
+--                 is fine.
+--
+-- Each name is judged once: from its annotation when it has one, else from
+-- its definition. An effect that takes an effectful function (`map2!`,
+-- `on_err!`: an argument's type holds a `=>`, or a lambda argument's name
+-- ends in `!`) has its `!` from that callback, so it is judged as the name
+-- without the `!`. Names the language fixes are skipped: the methods Roc
+-- calls by name (`is_eq`, `to_hash`, `plus`, `subscript`; Roc's
+-- docs/langref/static-dispatch.md and operators.md list them) and the
+-- encoders' `encode` and `decode`.
+--
+-- The output is the counts, one line per finding,
+-- `path:line: <check>: <why>`, and the counts again
+-- (cookbook/roc/findings.shale).
+--
+-- The word lists are in cookbook/words/, shared with the Zig name hunt.
+-- participles.txt lists the irregular past participles; any other word
+-- ending in `ed` counts as one unless ed_verbs.txt lists it. With `words=1`
+-- the recipe prints a census instead of the findings: each first word the
+-- effects start with, how many start with it, and its verdict: `verb`,
+-- `participle`, `vague`, `asks` (`is`, `has`) or `refused` (what
+-- `noun_effect` reports). A verb missing from verbs.txt shows up there as
+-- `refused`.
+--
+-- With `types=1` the recipe asks Roc's type checker for each definition's
+-- type (cookbook/roc/types.shale). It needs `root=` and the tree's
+-- `roc-version` file. A root the checker refuses, or a roc-types built for
+-- another Roc version, stops the run. A file that no root imports is
+-- checked without types, listed after the findings, and fails the run.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob=app/*.roc root=app/main.roc types=1
 --
--- `self_test=1` runs it over `cookbook/roc/plants/name_hunt/`, each plant
--- named for the check it holds (`question.roc`, `question_where.roc`):
--- every check must have one, fire on its own plants and on no other, a
--- `quiet_*.roc` plant (a false positive once) on none, a plant named for
--- no check is a failure, and the census
--- must give a known word of the plants each verdict but `asks`. The typed
--- plants (`typed/`, type modules named in CamelCase, `QuestionInferred`
--- read as `question_inferred`) are judged with the types, their root
--- `typed/QuietApp.roc`; the rest without. A missing roc-types fails it.
+-- `self_test=1` runs the recipe over `cookbook/roc/plants/name_hunt/`. Each
+-- plant is named for the check it holds (`question.roc`,
+-- `question_where.roc`) and must make that check report, and no other. A
+-- `quiet_*.roc` plant must make no check report. Every check needs a plant,
+-- and a plant named for no check fails the test. The census must also give
+-- the right verdict for one known word of the plants per verdict. The
+-- plants in `typed/` are checked with the types, from their app
+-- `typed/QuietApp.roc`, and their CamelCase module names read as snake case
+-- (`QuestionInferred` as `question_inferred`); the rest are checked
+-- without. The self-test fails without roc-types.
 --
--- Each file's source is read too, for the arrows roc-ast writes alike (a
--- callback's `=>`), which outgrows the default 16 MiB arena on the chat.
+-- The recipe reads each file's source as well as its tree, to tell `->`
+-- from `=>`, which the tree writes alike. On a large tree that needs more
+-- than the default arena.
 -- budget: steps=800000000 arena_bytes=3000000000 output_bytes=4000000
 
-const SELF = arg("self_test", "") == "1"
+const SELF_TEST = arg("self_test", "") == "1"
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
 const PLANTS = "cookbook:roc/plants/name_hunt/"
-const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
-const TYPES_SAID = arg("types", "0")
-if TYPES_SAID ~= "0" and TYPES_SAID ~= "1" then fail("name_hunt: types=" .. TYPES_SAID .. ": 0 (the default) or 1") end
--- A self-test judges its typed plants (`plants/name_hunt/typed/`, under
--- their app) with the types, and the rest without.
-const TYPED = SELF or TYPES_SAID == "1"
-const ROOT = SELF and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
--- The checker's types, `roc_types_hunted`'s, filled once the files are
--- known (below); empty without `types=1`.
-const TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
-const WORDS = arg("words", "") == "1"
+const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
+const TYPES_ARG = arg("types", "0")
+if TYPES_ARG ~= "0" and TYPES_ARG ~= "1" then fail("name_hunt: types=" .. TYPES_ARG .. ": 0 (the default) or 1") end
+-- The self-test checks its typed plants with the types, and the rest
+-- without.
+const USE_TYPES = SELF_TEST or TYPES_ARG == "1"
+const ROOT = SELF_TEST and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
+-- The type checker's answers, filled in once the files are known; empty
+-- unless USE_TYPES.
+const CHECKER_TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
+const CENSUS_ONLY = arg("words", "") == "1"
 const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word"}
--- The last words `worker_name` judges: only a helper's, always; a word of
--- its own, only on a definition that calls itself.
--- `loop` stays a helper's: it names a shape, never an act of the domain's,
--- where `go` is a verb (`can_go`), as `step` and `walk` are words.
-const HELPER_WORDS = {acc = true, loop = true, inner = true, helper = true, rec = true}
-const WORKER_WORDS = {step = true, walk = true, go = true}
+-- `worker_name` reports a helper suffix always, and a suffix that is also an
+-- ordinary word (a fold's `step`, `List.walk`, `can_go`) only on a
+-- definition that calls itself.
+const HELPER_SUFFIXES = {acc = true, loop = true, inner = true, helper = true, rec = true}
+const RECURSION_SUFFIXES = {step = true, walk = true, go = true}
 
--- A word table of cookbook/words/, the name hunts' one home for them: a
--- word a line, `--` starting a note. A word twice, or a line of two, is a
--- mistake in the table: it fails.
-function word_table(file)
-  local t = {}
-  for l in lines(read("cookbook:words/" .. file)) do
-    local w = trim(split(l, "--")[1])
-    if contains(w, " ") or has_key(t, w) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. w .. "` is no single new word") end
-    if w ~= "" then t[w] = true end
-  end
-  return t
+-- The lines of a list in cookbook/words/, with any note after `--` cut off.
+function word_list_lines(file)
+  local out = {}
+  for l in lines(read("cookbook:words/" .. file)) do push(out, trim(split(l, "--")[1])) end
+  return out
 end
 
-const VERBS = word_table("verbs.txt")
-const PARTICIPLES = word_table("participles.txt")
-const ED_VERBS = word_table("ed_verbs.txt")
-const VAGUE = word_table("vague.txt")
-const CONTAINERS = word_table("containers.txt")
-const PREPS = word_table("prepositions.txt")
+-- A list of one word per line, as a set. A word listed twice, or a line of
+-- two words, fails the run.
+function word_set(file)
+  local set = {}
+  for word in word_list_lines(file) do
+    if contains(word, " ") or has_key(set, word) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. word .. "` is no single new word") end
+    if word ~= "" then set[word] = true end
+  end
+  return set
+end
 
--- cookbook/words/namespaces.txt: a prefix a line, then the namespace's own
--- acts (`port in out`), by prefix: `{port = {["in"] = true, out = true}}`.
-function namespace_table(file)
-  local t = {}
-  for l in lines(read("cookbook:words/" .. file)) do
-    local ws = words(trim(split(l, "--")[1]))
+const VERBS = word_set("verbs.txt")
+const PARTICIPLES = word_set("participles.txt")
+const ED_VERBS = word_set("ed_verbs.txt")
+const VAGUE = word_set("vague.txt")
+const CONTAINERS = word_set("containers.txt")
+const PREPOSITIONS = word_set("prepositions.txt")
+
+-- cookbook/words/namespaces.txt has a prefix per line followed by the
+-- namespace's own instructions (`port in out`). The result maps each prefix
+-- to the set of its instructions: `{port = {["in"] = true, out = true}}`.
+function namespace_instructions(file)
+  local by_prefix = {}
+  for l in word_list_lines(file) do
+    local ws = words(l)
     if #ws > 0 then
-      if has_key(t, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. ws[1] .. "` twice") end
-      t[ws[1]] = set_of(drop(ws, 1))
+      if has_key(by_prefix, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. ws[1] .. "` twice") end
+      by_prefix[ws[1]] = set_of(drop(ws, 1))
     end
   end
-  return t
+  return by_prefix
 end
-const NAMESPACES = namespace_table("namespaces.txt")
+const NAMESPACES = namespace_instructions("namespaces.txt")
 
--- cookbook/words/taken.txt: a word and its kind a line, `roc` or
--- `cardinal`, by word: `{record = "roc", two = "cardinal"}`.
-function taken_table(file)
-  local t = {}
-  for l in lines(read("cookbook:words/" .. file)) do
-    local ws = words(trim(split(l, "--")[1]))
+-- cookbook/words/taken.txt has a word per line followed by its kind, `roc`
+-- or `cardinal`. The result maps each word to its kind:
+-- `{record = "roc", two = "cardinal"}`.
+function taken_word_kinds(file)
+  local kinds = {}
+  for l in word_list_lines(file) do
+    local ws = words(l)
     if #ws > 0 then
-      if #ws ~= 2 or (ws[2] ~= "roc" and ws[2] ~= "cardinal") or has_key(t, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `roc` or `cardinal`") end
-      t[ws[1]] = ws[2]
+      if #ws ~= 2 or (ws[2] ~= "roc" and ws[2] ~= "cardinal") or has_key(kinds, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `roc` or `cardinal`") end
+      kinds[ws[1]] = ws[2]
     end
   end
-  return t
+  return kinds
 end
-const TAKEN = taken_table("taken.txt")
--- The surfaces an effect draws on: one that takes one first is named for
--- what it draws (`noun_effect`).
+const TAKEN_WORDS = taken_word_kinds("taken.txt")
 const SURFACES = {Frame = true, Canvas = true}
--- Each file's names that end in a preposition, by the noun before it:
--- `path|base` -> {line, preps (a set), names}.
-const SPLITS = {}
--- Every stem each trailing preposition is put on, in all the files read,
--- by the shape its annotation gives, its first argument's type and its
--- result: `prep|first|result` -> {stem -> true}. A preposition on
--- `CONVENTION` or more stems of one shape is the package's suffix
--- convention, one role (roc-markdown's `*_onto`, a writer that takes a
--- `List(U8)` and gives it back), not one relation's word: `CONVENTIONS`
--- holds it. A bare count, or the result alone, makes a common preposition
--- a convention in any package of size (roc-chat's `name_of`, `text_of`
--- and `inviter_name_of` all give `Str`).
-const PREP_STEMS = {}
-const CONVENTION = 3
-const CONVENTIONS = {}
--- Each file's declared keywords (`# keywords: for, on`), by path.
-const KEYWORDS = {}
-const ENTRY = {handle = true, run = true, main = true}
--- The names Roc's syntax and builtins call a method by, which the author
--- does not choose (the header says where the list comes from).
-const FIXED = {to_inspect = true, is_eq = true, to_hash = true, plus = true, minus = true, times = true, div_by = true, div_trunc_by = true, rem_by = true, is_lt = true, is_lte = true, is_gt = true, is_gte = true, range_exclusive_to = true, range_inclusive_to = true, range_exclusive_from = true, range_inclusive_from = true, range_iter = true, range_len_if_known = true, negate = true, ["not"] = true, from_numeral = true, from_quote = true, from_interpolation = true, iter = true, next = true, parser_for = true, encoder_for = true, map = true, ["map!"] = true, subscript = true, encode = true, decode = true}
-const INTS = {U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true}
+-- The names in each file that end in a preposition, grouped by the stem
+-- before it. Each key is `path|stem`, each value `{path, line, stem,
+-- prepositions}`, and `prepositions` maps each preposition to the first
+-- name using it and that name's arity.
+const PREPOSITIONS_BY_STEM = {}
+-- The stems each trailing preposition is put on, across all the files read,
+-- grouped by the preposition and the shape of the annotation: its first
+-- argument's type and its result. Each key is `preposition|first|result`,
+-- each value a set of stems. A preposition reaching CONVENTION_STEMS stems
+-- of one shape goes into SUFFIX_CONVENTIONS. Counting stems by preposition
+-- alone, or by result alone, would make a common preposition (`_of`) a
+-- convention in any large package.
+const STEMS_BY_SHAPE = {}
+const CONVENTION_STEMS = 3
+const SUFFIX_CONVENTIONS = {}
+-- The keywords each file declares (`# keywords: for, on`), by path.
+const DECLARED_KEYWORDS = {}
+const ENTRY_POINT_NAMES = {handle = true, run = true, main = true}
+const LANGUAGE_FIXED_NAMES = {to_inspect = true, is_eq = true, to_hash = true, plus = true, minus = true, times = true, div_by = true, div_trunc_by = true, rem_by = true, is_lt = true, is_lte = true, is_gt = true, is_gte = true, range_exclusive_to = true, range_inclusive_to = true, range_exclusive_from = true, range_inclusive_from = true, range_iter = true, range_len_if_known = true, negate = true, ["not"] = true, from_numeral = true, from_quote = true, from_interpolation = true, iter = true, next = true, parser_for = true, encoder_for = true, map = true, ["map!"] = true, subscript = true, encode = true, decode = true}
+const INTEGER_TYPES = {U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true}
 
--- Every tag union a type declaration names, by its name (`Edit` of
--- `Edit : [Opened, Closed]`): its `union_shape`, for `command_tense` and
--- `mixed_tense`.
-const ALIASES = {}
--- The aliases of `Bool` in the files hunted, by the names the checker
--- writes them (`Answer`, `Owner.Answer`), for `question` under the types.
+-- The tag union each type declaration names, by the type's name: `Edit` of
+-- `Edit : [Opened, Closed]` maps to its `union_shape`.
+const TAG_UNION_TYPES = {}
+-- The aliases of `Bool` declared in the files read, by each name the type
+-- checker may write for them (`Answer`, `Owner.Answer`).
 const BOOL_ALIASES = {}
 
--- Every type's and record field's name `container` judges, `{path, line,
--- name, words, field, doc}`, `doc` the comment lines over its
--- declaration, lowered.
-const HOLDERS = {}
+-- Every type name and record field name that `container` checks, each
+-- `{path, line, name, words, is_field, doc}`, where `doc` is the comment
+-- lines above its declaration, lowercased.
+const TYPE_AND_FIELD_NAMES = {}
 
-const found = {}
-for c in CHECKS do found[c] = 0 end
-const per_file = {}
+const count_by_check = {}
+for c in CHECKS do count_by_check[c] = 0 end
+-- The set of `path|check` pairs where the check reported, for the self-test.
+const fired_in_file = {}
+-- Each first word an effect starts with, mapped to `{word, count, verdict}`.
+const first_word_census = {}
+const finding_lines = {}
 
--- Each first word an effect starts with, by word: `{word, count,
--- verdict}`, for the census (`words=1`).
-const census = {}
-
--- Each finding's line, printed after the counts.
-const said = {}
-
-function say(p, line, check, why)
-  if not WORDS then push(said, p .. ":" .. line .. ": " .. check .. ": " .. why) end
-  found[check] = found[check] + 1
-  per_file[p .. "|" .. check] = true
+function report(path, line, check, why)
+  if not CENSUS_ONLY then push(finding_lines, path .. ":" .. line .. ": " .. check .. ": " .. why) end
+  count_by_check[check] = count_by_check[check] + 1
+  fired_in_file[path .. "|" .. check] = true
   return nil
 end
 
-function is_participle(w)
-  if has_key(PARTICIPLES, w) then return true end
-  return #w > 3 and ends_with(w, "ed") and not has_key(ED_VERBS, w)
+function is_participle(word)
+  if has_key(PARTICIPLES, word) then return true end
+  return #word > 3 and ends_with(word, "ed") and not has_key(ED_VERBS, word)
 end
 
--- A verb that reads as a participle would make its effects states.
-for w in keys(VERBS) do
-  if is_participle(w) then fail("name_hunt: `" .. w .. "` is in cookbook/words/verbs.txt and reads as a participle") end
+for word in keys(VERBS) do
+  if is_participle(word) then fail("name_hunt: `" .. word .. "` is in cookbook/words/verbs.txt and reads as a participle, which would make its effects states") end
 end
 
--- What an effect's first word says: `participle` (a state: `state_effect`
--- fires), `verb`, `vague`, `asks` (`is`, `has`: `question` judges it), or
--- `refused`, which `noun_effect` fires on.
-function verdict(w)
-  if is_participle(w) then return "participle" end
-  if has_key(VERBS, w) then return "verb" end
-  if has_key(VAGUE, w) then return "vague" end
-  if w == "is" or w == "has" then return "asks" end
+-- What an effect's first word says: `participle`, `verb`, `vague`, `asks`
+-- (`is`, `has`) or `refused`.
+function first_word_verdict(word)
+  if is_participle(word) then return "participle" end
+  if has_key(VERBS, word) then return "verb" end
+  if has_key(VAGUE, word) then return "vague" end
+  if word == "is" or word == "has" then return "asks" end
   return "refused"
 end
 
--- ── the tree ─────────────────────────────────────────────────────────────
+-- ── the syntax tree ──────────────────────────────────────────────────────
 
--- A file's tree is `roc_tree`'s `nodes`: each `{kind, parent, kids, line,
--- col, end_line, end_col}` and its attributes (`name`, `raw`).
+-- A file's tree is the list of nodes from `roc_tree`, each `{kind, parent,
+-- kids, line, col, end_line, end_col, depth}` plus attributes such as
+-- `name` and `raw`. A node's index is its position in the list.
 
 function children(tree, at)
   return tree[at].kids
 end
 
-function attr(tree, at, name)
+function attribute(tree, at, name)
   return get(tree[at], name, "")
 end
 
 -- The type at `at`, as Roc writes it: `List(U8)`, `{ id : U8 }`, `[A, B]`,
--- `(U8 -> Bool)`. roc-ast writes `->` and `=>` alike.
-function render(tree, at)
-  local k = tree[at].kind
+-- `(U8 -> Bool)`. The tree does not say which arrow a function type has,
+-- so both come out as `->`.
+function render_type(tree, at)
+  local kind = tree[at].kind
   local kids = children(tree, at)
-  local name = attr(tree, at, "name")
-  if k == "ty-apply" then
+  local name = attribute(tree, at, "name")
+  if kind == "ty-apply" then
     local args = {}
-    for c in drop(kids, 1) do push(args, render(tree, c)) end
-    return render(tree, kids[1]) .. "(" .. join(args, ", ") .. ")"
+    for c in drop(kids, 1) do push(args, render_type(tree, c)) end
+    return render_type(tree, kids[1]) .. "(" .. join(args, ", ") .. ")"
   end
-  if k == "ty-fn" then
+  if kind == "ty-fn" then
     local args = {}
-    for c in take(kids, #kids - 1) do push(args, render(tree, c)) end
-    return "(" .. join(args, ", ") .. " -> " .. render(tree, kids[#kids]) .. ")"
+    for c in take(kids, #kids - 1) do push(args, render_type(tree, c)) end
+    return "(" .. join(args, ", ") .. " -> " .. render_type(tree, kids[#kids]) .. ")"
   end
-  if k == "ty-record" or k == "ty-tuple" or k == "tags" then
+  if kind == "ty-record" or kind == "ty-tuple" or kind == "tags" then
     local parts = {}
-    for c in kids do push(parts, render(tree, c)) end
-    if k == "ty-record" then return "{ " .. join(parts, ", ") .. " }" end
-    if k == "ty-tuple" then return "(" .. join(parts, ", ") .. ")" end
+    for c in kids do push(parts, render_type(tree, c)) end
+    if kind == "ty-record" then return "{ " .. join(parts, ", ") .. " }" end
+    if kind == "ty-tuple" then return "(" .. join(parts, ", ") .. ")" end
     return join(parts, ", ")
   end
-  if k == "ty-tag-union" then return "[" .. render(tree, kids[1]) .. "]" end
-  if k == "anno-record-field" then return name .. " : " .. render(tree, kids[1]) end
+  if kind == "ty-tag-union" then return "[" .. render_type(tree, kids[1]) .. "]" end
+  if kind == "anno-record-field" then return name .. " : " .. render_type(tree, kids[1]) end
   if name ~= "" then return name end
-  -- An inferred type, `name : _`.
-  if k == "_" then return "_" end
-  local raw = attr(tree, at, "raw")
+  -- An inferred type, as in `name : _`.
+  if kind == "_" then return "_" end
+  local raw = attribute(tree, at, "raw")
   if raw ~= "" then return raw end
-  return "(" .. k .. ")"
+  return "(" .. kind .. ")"
 end
 
--- The nodes a definition may sit in and still be a top-level or a module
--- member's: a module type (`Html := [].{ ... }`, `X :: [].{ ... }`) holds
--- its members in `associated`. Any other (a lambda's block) makes it a
--- local, which is never a finding.
-const OUTER = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
+-- The kinds of node a definition may sit in and still be top-level or a
+-- module type's member, which `associated` holds. Inside any other kind,
+-- such as a lambda's block, a definition is local.
+const OUTER_KINDS = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
 
--- The source text the node at `at` spans (the end column one past the
--- last), from the file's lines `src`.
+-- The source text of the node at `at`, from the file's lines `src`. A
+-- node's end column is one past its last character.
 function span_text(src, tree, at)
-  local n = tree[at]
-  if n.line == 0 then return "" end
-  if n.line == n.end_line then return sub(src[n.line], n.col, n.end_col - 1) end
-  local parts = {sub(src[n.line], n.col)}
-  for l = n.line + 1, n.end_line - 1 do push(parts, src[l]) end
-  push(parts, sub(src[n.end_line], 1, n.end_col - 1))
+  local node = tree[at]
+  if node.line == 0 then return "" end
+  if node.line == node.end_line then return sub(src[node.line], node.col, node.end_col - 1) end
+  local parts = {sub(src[node.line], node.col)}
+  for l = node.line + 1, node.end_line - 1 do push(parts, src[l]) end
+  push(parts, sub(src[node.end_line], 1, node.end_col - 1))
   return join(parts, "\n")
 end
 
--- The tags of the tag union at `at` (`ty-tag-union`): `{names, payload}`,
--- `names` by name (`Unpinned` of `Unpinned(Str)` too), `payload` whether
--- any tag carries one. A union with a payload (`Known(List(Account))`)
--- holds a state's data: no command for `command_tense`, though
--- `mixed_tense` reads its names.
+-- The tags of the tag union at `at`, as `{names, payload}`: `names` lists
+-- the tag names (`Unpinned` for `Unpinned(Str)` too), and `payload` says
+-- whether any tag carries one.
 function union_shape(tree, at)
-  local out = {names = {}, payload = false}
+  local shape = {names = {}, payload = false}
   for t in children(tree, at) do
     if tree[t].kind == "tags" then
-      for g in children(tree, t) do
-        local n = attr(tree, g, "name")
-        if tree[g].kind == "ty-apply" then
-          out.payload = true
-          n = attr(tree, children(tree, g)[1], "name")
+      for tag in children(tree, t) do
+        local name = attribute(tree, tag, "name")
+        if tree[tag].kind == "ty-apply" then
+          shape.payload = true
+          name = attribute(tree, children(tree, tag)[1], "name")
         end
-        if n ~= "" then push(out.names, n) end
+        if name ~= "" then push(shape.names, name) end
       end
     end
   end
-  return out
+  return shape
 end
 
--- An argument's type, as `command_tense` and `mixed_tense` need it: the
--- union written in place, or the name of a declared type (its last part:
--- `ChatState.PinEdit` is `PinEdit`); a `List(T)` as `T`, marked `list`.
-function arg_shape(tree, at)
-  local k = tree[at].kind
-  if k == "ty-tag-union" then return {union = union_shape(tree, at)} end
-  if k == "ty-apply" then
+-- An argument's type, as `command_tense` and `mixed_tense` need it:
+-- `{union}` for a tag union written in place, `{ref}` for a named type
+-- (its last part: `ChatState.PinEdit` gives `PinEdit`), or `{}`. A
+-- `List(T)` gives the shape of `T`, with `list` set.
+function argument_shape(tree, at)
+  local kind = tree[at].kind
+  if kind == "ty-tag-union" then return {union = union_shape(tree, at)} end
+  if kind == "ty-apply" then
     local kids = children(tree, at)
-    if #kids == 2 and attr(tree, kids[1], "name") == "List" then
-      local inner = arg_shape(tree, kids[2])
-      inner.list = true
-      return inner
+    if #kids == 2 and attribute(tree, kids[1], "name") == "List" then
+      local element = argument_shape(tree, kids[2])
+      element.list = true
+      return element
     end
     return {}
   end
-  local n = attr(tree, at, "name")
-  if n == "" then return {} end
-  local parts = split(n, ".")
+  local name = attribute(tree, at, "name")
+  if name == "" then return {} end
+  local parts = split(name, ".")
   return {ref = parts[#parts]}
 end
 
--- The comment lines directly over line `line` of `src`, lowered and
+-- The comment lines directly above line `line` of `src`, lowercased and
 -- joined: a declaration's doc.
-function doc_over(src, line)
+function doc_above(src, line)
   local parts = {}
   local k = line - 1
   while k >= 1 and starts_with(trim(src[k]), "#") do
@@ -466,525 +452,541 @@ function doc_over(src, line)
   return join(parts, " ")
 end
 
--- A name's words, lowered: a type's at its capitals (`NodeInfo` is
--- `node`, `info`), a field's at its `_`s.
-function words_of(name)
+-- A name's words, lowercased: a type's split at its capitals (`NodeInfo`
+-- gives `node`, `info`), a field's at its underscores.
+function name_words(name)
   local out = {}
-  local cur = ""
+  local current = ""
   for i = 1, #name do
     local c = sub(name, i, i)
     if c == "_" then
-      if cur ~= "" then push(out, lower(cur)) end
-      cur = ""
-    elseif c ~= lower(c) and cur ~= "" then
-      push(out, lower(cur))
-      cur = c
+      if current ~= "" then push(out, lower(current)) end
+      current = ""
+    elseif c ~= lower(c) and current ~= "" then
+      push(out, lower(current))
+      current = c
     else
-      cur = cur .. c
+      current = current .. c
     end
   end
-  if cur ~= "" then push(out, lower(cur)) end
+  if current ~= "" then push(out, lower(current)) end
   return out
 end
 
--- The line of the declaration a record field at `at` is part of, or ""
--- for a local's: the nearest top-level or member annotation or type above
--- it (`decl_line`), with only types between (no expression, pattern or
--- definition, which would make it a local's).
-function holder_decl(tree, decl_line, at)
+-- The line of the declaration that the record field at `at` belongs to:
+-- the nearest top-level or member annotation or type declaration above it,
+-- as `declaration_line` records it. It is "" when an expression, pattern
+-- or definition lies between them, since the field is then a local's.
+function field_declaration_line(tree, declaration_line, at)
   local k = tree[at].parent
   while k ~= 0 do
-    local kd = tree[k].kind
-    if starts_with(kd, "e-") or starts_with(kd, "p-") or kd == "s-decl" then return "" end
-    if kd == "s-type-anno" or kd == "s-type-decl" then return decl_line[k] end
+    local kind = tree[k].kind
+    if starts_with(kind, "e-") or starts_with(kind, "p-") or kind == "s-decl" then return "" end
+    if kind == "s-type-anno" or kind == "s-type-decl" then return declaration_line[k] end
     k = tree[k].parent
   end
   return ""
 end
 
--- The types the type at `at` names, into the set `into`, each by its last
--- part (`Draw.RoundedRectangle` is `RoundedRectangle`).
-function type_names(tree, at, into)
-  local n = attr(tree, at, "name")
-  if starts_with(tree[at].kind, "ty") and n ~= "" then
-    local parts = split(n, ".")
+-- The names of the types the type at `at` mentions, added to the set
+-- `into`, each by its last part (`Draw.RoundedRectangle` gives
+-- `RoundedRectangle`).
+function mentioned_type_names(tree, at, into)
+  local name = attribute(tree, at, "name")
+  if starts_with(tree[at].kind, "ty") and name ~= "" then
+    local parts = split(name, ".")
     into[parts[#parts]] = true
   end
-  for c in children(tree, at) do type_names(tree, c, into) end
+  for c in children(tree, at) do mentioned_type_names(tree, c, into) end
   return into
 end
 
--- A name's words as one type's name: `rounded_rectangle` is
+-- Words joined as one type name: `rounded`, `rectangle` gives
 -- `RoundedRectangle`.
-function camel(ws)
+function camel_case(ws)
   local out = ""
   for w in ws do out = out .. upper(sub(w, 1, 1)) .. sub(w, 2) end
   return out
 end
 
 -- The sibling just before the node at `at`, or 0.
-function before(tree, at)
-  local p = tree[at].parent
-  if p == 0 then return 0 end
-  local prev = 0
-  for k in tree[p].kids do
-    if k == at then return prev end
-    prev = k
+function previous_sibling(tree, at)
+  local parent = tree[at].parent
+  if parent == 0 then return 0 end
+  local previous = 0
+  for k in tree[parent].kids do
+    if k == at then return previous end
+    previous = k
   end
   return 0
 end
 
--- Whether the definition at `at` names `name` below it: an identifier
--- (`name`, `Tree.name`) or a method call (`x.name(...)`). The tree is in
--- order, a node's descendants just after it and deeper.
-function names_itself(tree, at, name)
+-- Whether the definition at `at` mentions `name` in its body, as an
+-- identifier (`name`, `Tree.name`) or a method call (`x.name(...)`). A
+-- node's descendants follow it in the tree, each deeper than it.
+function calls_itself(tree, at, name)
   local j = at + 1
   while j <= #tree and tree[j].depth > tree[at].depth do
-    local n = tree[j]
-    if n.kind == "e-ident" then
-      local raw = attr(tree, j, "raw")
+    local node = tree[j]
+    if node.kind == "e-ident" then
+      local raw = attribute(tree, j, "raw")
       if raw == name or ends_with(raw, "." .. name) then return true end
     end
-    if n.kind == "e-method-call" and attr(tree, j, "method") == name then return true end
+    if node.kind == "e-method-call" and attribute(tree, j, "method") == name then return true end
     j = j + 1
   end
   return false
 end
 
--- **EVERY TOP-LEVEL AND MODULE-MEMBER DEFINITION** in `paths`, by
--- `roc_tree` (Roc's own parser), each `{path, line, name, annotation, fn,
--- whole, result, callback, paired}`: an annotation's type rendered whole,
--- and when it is a function its result (a `where` clause is no part of
--- either). The tree, not the lines: an annotation broken after its colon, a
--- member indented in a module type, and a `where` clause's arrows all read
--- as Roc reads them. `callback`: it takes an effectful function, an
--- argument's type holding a `=>` (roc-ast writes `->` and `=>` alike, so the
--- source says which) or a lambda argument named with a `!`. `paired`: a
--- definition whose annotation is just above it, which judges its name.
--- `has_def`: an annotation with its definition just below it. `recurses`:
--- a `_step` or `_walk` definition that names itself in its body (`step(...)`,
--- `Tree.step(...)`, `x.step(...)`), for `worker_name`.
-function definitions(parsed_files)
-  local out = {}
-  for f in parsed_files do
-    do
-      local path = f.path
-      local tree = f.nodes
-      local src = split(read(path), "\n")
-      -- The interpreted language's keywords a file declares, `# keywords:
-      -- for, on`: words of that language, not prepositions
-      -- (`preposition_split`).
-      for l in src do
-        local kw = re_find(trim(l), "^# keywords: (.*)$")
-        if kw ~= nil then
-          for w in split(kw.groups[1], ",") do
-            if trim(w) ~= "" then push_at(KEYWORDS, path, lower(trim(w))) end
-          end
-        end
+-- The keywords a file declares in a comment line `# keywords: for, on`,
+-- added to DECLARED_KEYWORDS.
+function note_declared_keywords(path, src)
+  for l in src do
+    local found = re_find(trim(l), "^# keywords: (.*)$")
+    if found ~= nil then
+      for w in split(found.groups[1], ",") do
+        if trim(w) ~= "" then push_at(DECLARED_KEYWORDS, path, lower(trim(w))) end
       end
-      -- Each node's facts from its parent's, once (a parent comes first):
-      -- `outer` every ancestor one of OUTER; `decl_line` its line when it is
-      -- a top-level or member annotation or type, else "".
-      local outer = {}
-      local decl_line = {}
-      -- The annotation each node is, when it is one (its def), by index.
-      local anno_def = {}
-      for i = 1, #tree do
-        local n = tree[i]
-        local p = n.parent
-        push(outer, p == 0 or (outer[p] and has_key(OUTER, tree[p].kind)))
-        local line = tostring(n.line)
-        local k = n.kind
-        push(decl_line, (outer[i] and (k == "s-type-anno" or k == "s-type-decl")) and line or "")
-        if outer[i] and k == "s-type-decl" then
-          local kids = children(tree, i)
-          local decl = #kids > 0 and attr(tree, kids[1], "name") or ""
-          if #kids > 1 and decl ~= "" and tree[kids[2]].kind == "ty-tag-union" then ALIASES[decl] = union_shape(tree, kids[2]) end
-          if decl ~= "" then push(HOLDERS, {path = path, line = line, name = decl, words = words_of(decl), field = false, doc = doc_over(src, n.line)}) end
-          -- An alias of `Bool` (`Answer : Bool`), by the names the checker
-          -- writes it: bare, and as its module type's member.
-          if #kids > 1 and decl ~= "" and tree[kids[2]].kind == "ty" and attr(tree, kids[2], "name") == "Bool" then
-            BOOL_ALIASES[decl] = true
-            if p > 0 and tree[p].kind == "associated" and tree[p].parent > 0 then
-              local owner_kids = children(tree, tree[p].parent)
-              local owner = #owner_kids > 0 and attr(tree, owner_kids[1], "name") or ""
-              if owner ~= "" then BOOL_ALIASES[owner .. "." .. decl] = true end
-            end
-          end
-        end
-        if k == "anno-record-field" then
-          local at = holder_decl(tree, decl_line, i)
-          local field = attr(tree, i, "name")
-          if at ~= "" and field ~= "" then push(HOLDERS, {path = path, line = line, name = field, words = words_of(field), field = true, doc = doc_over(src, tonumber(at))}) end
-        end
-        if outer[i] and k == "s-type-anno" then
-          local def = {path = path, line = line, name = attr(tree, i, "name"), annotation = true, fn = false, callback = false, paired = false}
-          local kids = children(tree, i)
-          if #kids > 0 and tree[kids[1]].kind ~= "where" then
-            def.whole = render(tree, kids[1])
-            def.result = def.whole
-            if tree[kids[1]].kind == "ty-fn" then
-              local parts = children(tree, kids[1])
-              def.fn = true
-              def.arity = #parts - 1
-              def.result = render(tree, parts[#parts])
-              def.first = #parts > 1 and render(tree, parts[1]) or ""
-              if ends_with(def.name, "!") then def.types = type_names(tree, kids[1], {}) end
-              for a in take(parts, #parts - 1) do
-                if contains(span_text(src, tree, a), "=>") then def.callback = true end
-                -- Only an effect's arguments are judged (`command_tense`), and
-                -- what the run keeps at a `yield` is capped (1 MiB): keep none
-                -- for the rest.
-                if ends_with(def.name, "!") then
-                  if not has_key(def, "args") then def.args = {} end
-                  push(def.args, arg_shape(tree, a))
-                end
-              end
-            end
-            push(out, def)
-            anno_def[tostring(i)] = def
-          end
-        end
-        if outer[i] and k == "s-decl" then
-          local kids = children(tree, i)
-          if #kids > 0 and tree[kids[1]].kind == "p-ident" then
-            local def = {path = path, line = line, name = attr(tree, kids[1], "raw"), annotation = false, fn = false, callback = false, paired = false}
-            if #kids > 1 and tree[kids[2]].kind == "e-lambda" then
-              -- A function by its definition, for `taken_word` on a name
-              -- with no annotation.
-              def.lambda = true
-              for part in children(tree, kids[2]) do
-                if tree[part].kind == "args" then
-                  for a in children(tree, part) do
-                    if ends_with(attr(tree, a, "raw"), "!") then def.callback = true end
-                  end
-                end
-              end
-            end
-            local ws = split(ends_with(def.name, "!") and sub(def.name, 1, #def.name - 1) or def.name, "_")
-            if #ws > 1 and has_key(WORKER_WORDS, ws[#ws]) then def.recurses = names_itself(tree, i, def.name) end
-            if TYPED and has_key(TYPES.real, path) then
-              local ty = roc_type_at(TYPES, "pat", path, tree[kids[1]])
-              if ty ~= nil then def.typed = ty end
-            end
-            local above = get(anno_def, tostring(before(tree, i)))
-            if above ~= nil and above.name == def.name then
-              def.paired = true
-              above.has_def = true
-              if has_key(def, "typed") then above.typed = def.typed end
-              if def.callback then above.callback = true end
-            end
-            push(out, def)
-          end
+    end
+  end
+  return nil
+end
+
+-- Notes what the type declaration at `i` declares: its tag union in
+-- TAG_UNION_TYPES, its name in TYPE_AND_FIELD_NAMES, and in BOOL_ALIASES
+-- when it is an alias of `Bool`, under its bare name and, for a module
+-- type's member, `Owner.Name` as the checker writes it.
+function note_type_declaration(path, src, tree, i)
+  local kids = children(tree, i)
+  local declared = #kids > 0 and attribute(tree, kids[1], "name") or ""
+  if declared == "" then return nil end
+  local line = tostring(tree[i].line)
+  if #kids > 1 and tree[kids[2]].kind == "ty-tag-union" then TAG_UNION_TYPES[declared] = union_shape(tree, kids[2]) end
+  push(TYPE_AND_FIELD_NAMES, {path = path, line = line, name = declared, words = name_words(declared), is_field = false, doc = doc_above(src, tree[i].line)})
+  if #kids > 1 and tree[kids[2]].kind == "ty" and attribute(tree, kids[2], "name") == "Bool" then
+    BOOL_ALIASES[declared] = true
+    local parent = tree[i].parent
+    if parent > 0 and tree[parent].kind == "associated" and tree[parent].parent > 0 then
+      local owner_kids = children(tree, tree[parent].parent)
+      local owner = #owner_kids > 0 and attribute(tree, owner_kids[1], "name") or ""
+      if owner ~= "" then BOOL_ALIASES[owner .. "." .. declared] = true end
+    end
+  end
+  return nil
+end
+
+-- The top-level annotation at `i`, as a definition record, or nil when it
+-- is only a `where` clause. `whole` is its type rendered, and `result` the
+-- type it returns. A function's record also has `arity` and `first` (its
+-- first argument's type), and an effect's has `types`, the type names its
+-- annotation mentions, and `args`, each argument's `argument_shape`.
+-- `callback` says it takes an effectful function, an argument whose source
+-- holds `=>`.
+function annotation_definition(path, src, tree, i)
+  local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, i, "name"), annotation = true, fn = false, callback = false, paired = false}
+  local kids = children(tree, i)
+  if #kids == 0 or tree[kids[1]].kind == "where" then return nil end
+  def.whole = render_type(tree, kids[1])
+  def.result = def.whole
+  if tree[kids[1]].kind == "ty-fn" then
+    local parts = children(tree, kids[1])
+    local is_effect = ends_with(def.name, "!")
+    def.fn = true
+    def.arity = #parts - 1
+    def.result = render_type(tree, parts[#parts])
+    def.first = #parts > 1 and render_type(tree, parts[1]) or ""
+    if is_effect then
+      def.types = mentioned_type_names(tree, kids[1], {})
+      def.args = {}
+    end
+    for a in take(parts, #parts - 1) do
+      if contains(span_text(src, tree, a), "=>") then def.callback = true end
+      if is_effect then push(def.args, argument_shape(tree, a)) end
+    end
+  end
+  return def
+end
+
+-- The top-level definition `name = ...` at `i`, as a definition record, or
+-- nil when its pattern is not a plain name. `lambda` says its value is a
+-- lambda, `callback` that a lambda argument's name ends in `!`, `recurses`
+-- (for a name ending in a RECURSION_SUFFIXES word) that it calls itself,
+-- and `typed` is the checker's type when there is one.
+function value_definition(path, tree, i)
+  local kids = children(tree, i)
+  if #kids == 0 or tree[kids[1]].kind ~= "p-ident" then return nil end
+  local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, kids[1], "raw"), annotation = false, fn = false, callback = false, paired = false}
+  if #kids > 1 and tree[kids[2]].kind == "e-lambda" then
+    def.lambda = true
+    for part in children(tree, kids[2]) do
+      if tree[part].kind == "args" then
+        for a in children(tree, part) do
+          if ends_with(attribute(tree, a, "raw"), "!") then def.callback = true end
         end
       end
     end
   end
-  return out
+  local ws = split(ends_with(def.name, "!") and sub(def.name, 1, #def.name - 1) or def.name, "_")
+  if #ws > 1 and has_key(RECURSION_SUFFIXES, ws[#ws]) then def.recurses = calls_itself(tree, i, def.name) end
+  if USE_TYPES and has_key(CHECKER_TYPES.real, path) then
+    local checker_type = roc_type_at(CHECKER_TYPES, "pat", path, tree[kids[1]])
+    if checker_type ~= nil then def.typed = checker_type end
+  end
+  return def
+end
+
+-- Every top-level and module-member annotation and definition in the parsed
+-- files, as definition records `{path, line, name, annotation, fn,
+-- callback, paired, ...}`. A definition whose annotation is just above it
+-- is `paired`, and the annotation then gets `has_def`, the definition's
+-- `typed` and its `callback`. Along the way this fills DECLARED_KEYWORDS,
+-- TAG_UNION_TYPES, BOOL_ALIASES and TYPE_AND_FIELD_NAMES.
+function read_definitions(parsed_files)
+  local definitions = {}
+  for f in parsed_files do
+    local path = f.path
+    local tree = f.nodes
+    local src = split(read(path), "\n")
+    note_declared_keywords(path, src)
+    -- Each node is outer when it and every ancestor sit in OUTER_KINDS, and
+    -- its `declaration_line` is its line when it is an outer annotation or
+    -- type declaration, else "". A parent comes before its children.
+    local outer = {}
+    local declaration_line = {}
+    -- The definition record of each annotation, by the node's index.
+    local annotation_records = {}
+    for i = 1, #tree do
+      local node = tree[i]
+      local parent = node.parent
+      push(outer, parent == 0 or (outer[parent] and has_key(OUTER_KINDS, tree[parent].kind)))
+      local kind = node.kind
+      push(declaration_line, (outer[i] and (kind == "s-type-anno" or kind == "s-type-decl")) and tostring(node.line) or "")
+      if outer[i] and kind == "s-type-decl" then note_type_declaration(path, src, tree, i) end
+      if kind == "anno-record-field" then
+        local at = field_declaration_line(tree, declaration_line, i)
+        local field = attribute(tree, i, "name")
+        if at ~= "" and field ~= "" then push(TYPE_AND_FIELD_NAMES, {path = path, line = tostring(node.line), name = field, words = name_words(field), is_field = true, doc = doc_above(src, tonumber(at))}) end
+      end
+      if outer[i] and kind == "s-type-anno" then
+        local def = annotation_definition(path, src, tree, i)
+        if def ~= nil then
+          push(definitions, def)
+          annotation_records[tostring(i)] = def
+        end
+      end
+      if outer[i] and kind == "s-decl" then
+        local def = value_definition(path, tree, i)
+        if def ~= nil then
+          local above = get(annotation_records, tostring(previous_sibling(tree, i)))
+          if above ~= nil and above.name == def.name then
+            def.paired = true
+            above.has_def = true
+            if has_key(def, "typed") then above.typed = def.typed end
+            if def.callback then above.callback = true end
+          end
+          push(definitions, def)
+        end
+      end
+    end
+  end
+  return definitions
 end
 
 -- ── the checks ───────────────────────────────────────────────────────────
 
--- A tag's first word, lowered: `Unpinned` is `unpinned`, `AddedTo` is
--- `added`.
-function first_word(tag)
-  local w = lower(sub(tag, 1, 1))
+-- A tag's first word, lowercased: `Unpinned` gives `unpinned`, `AddedTo`
+-- gives `added`.
+function tag_first_word(tag)
+  local word = lower(sub(tag, 1, 1))
   local k = 2
   while k <= #tag and sub(tag, k, k) == lower(sub(tag, k, k)) do
-    w = w .. sub(tag, k, k)
+    word = word .. sub(tag, k, k)
     k = k + 1
   end
-  return w
+  return word
 end
 
--- Whether every tag starts with a past participle.
-function all_past(tags)
+function all_tags_past(tags)
   for t in tags do
-    if not is_participle(first_word(t)) then return false end
+    if not is_participle(tag_first_word(t)) then return false end
   end
   return true
 end
 
-function hunt(def)
-  local p = def.path
-  local i = def.line
-  local full = def.name
-  if has_key(FIXED, full) then return nil end
-  local bang = ends_with(full, "!")
-  local name = bang and sub(full, 1, #full - 1) or full
-  -- A `!` that names its callback's effect (`map2!`) is no act of its own.
-  local effect = bang and not def.callback
-  local ws = split(name, "_")
-  local is_annotation = def.annotation
-  -- The name's own checks, once: from its annotation, or from a definition
-  -- with none just above it.
-  local judged = not def.paired
-  -- An `_is_` or `_has_` name asks, whatever its first word:
-  -- `unsigned_is_multiple_of` is no state named `unsigned`.
-  local asks_inside = contains(name, "_is_") or contains(name, "_has_")
-  -- The word that names the act: the first, or the one after a namespace
-  -- prefix (`block_read_sector!`'s `read`; cookbook/words/namespaces.txt),
-  -- where the namespace's own acts (`port_out_32!`'s `out`) are verbs.
-  local spaced = effect and #ws > 1 and has_key(NAMESPACES, ws[1])
-  local act = spaced and ws[2] or ws[1]
-  local act_verdict = verdict(act)
-  if spaced and act_verdict == "refused" and has_key(NAMESPACES[ws[1]], act) then act_verdict = "verb" end
-  local where_said = spaced and ("the word after its namespace `" .. ws[1] .. "_`") or "its first word"
-  local state = is_participle(act) and not asks_inside
-  if effect and judged then
-    if not has_key(census, act) then census[act] = {word = act, count = 0, verdict = act_verdict} end
-    census[act].count = census[act].count + 1
-  end
-  -- An effect whose first argument is the surface it draws on (`Frame`,
-  -- `Canvas`, by the type's last part) is named for what it draws there:
-  -- `frame.circle!(...)`, the platform's API (roc-ray's Draw.roc).
-  local first_arg = (get(def, "args") or {})
-  local drawn = #first_arg > 0 and has_key(SURFACES, get(first_arg[1], "ref", ""))
-  if effect and judged and act_verdict == "refused" and not drawn then
-    if has_key(PREPS, act) then say(p, i, "noun_effect", "`" .. full .. "` has an effect but " .. where_said .. " is a preposition, `" .. act .. "`: an effect is named for its act")
-    else say(p, i, "noun_effect", "`" .. full .. "` has an effect but " .. where_said .. ", `" .. act .. "`, is no verb: it reads as a value, not an act") end
-  end
-  if judged and #ws > 1 and has_key(PREPS, ws[#ws]) then
-    local base = join(take(ws, #ws - 1), "_")
-    local key = p .. "|" .. base
-    if not has_key(SPLITS, key) then SPLITS[key] = {path = p, line = i, base = base, preps = {}, names = {}} end
-    local s = SPLITS[key]
-    if is_annotation and def.fn then
-      local rk = ws[#ws] .. "|" .. def.first .. "|" .. def.result
-      if not has_key(PREP_STEMS, rk) then PREP_STEMS[rk] = {} end
-      PREP_STEMS[rk][base] = true
-      if #keys(PREP_STEMS[rk]) >= CONVENTION then CONVENTIONS[ws[#ws]] = true end
-    end
-    if not has_key(s.preps, ws[#ws]) then
-      s.preps[ws[#ws]] = {name = full, arity = get(def, "arity", -1)}
-    end
-  end
-  -- A participle that begins the name of a type the effect takes or gives
-  -- (`rounded_rectangle! : Frame, RoundedRectangle => {}`) modifies what
-  -- it makes: no state.
-  local makes = #ws > 1 and has_key(get(def, "types") or {}, camel(ws))
-  if effect and judged and state and not makes then say(p, i, "state_effect", "`" .. full .. "` has an effect but is named as a state, `" .. act .. "`: a verb says what it does") end
-  local asks = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
-  -- An effect that asks the host about live state (`is_playing! : Sound =>
-  -- Bool`) has to be effectful: its annotation's `Bool` says it asks.
-  -- **UNDER THE TYPES** (`types=1`) a definition's type is the checker's,
-  -- so an unannotated function is judged too, and a result that names an
-  -- alias of `Bool` (`Answer : Bool`) gives a `Bool`; a definition the
-  -- checker gave no type (a hosted effect's annotation) is read as written.
-  local shape = {fn = is_annotation and def.fn, result = get(def, "result", ""), known = is_annotation, said = ""}
+-- What a definition's type says, for `question` and `taken_word`:
+-- `{is_function, result, known, source_note}`. The type is the checker's
+-- when it gave one, else the annotation's. `known` is false for a
+-- definition with no annotation and no checker's type.
+function definition_signature(def)
+  local signature = {is_function = def.annotation and def.fn, result = get(def, "result", ""), known = def.annotation, source_note = ""}
   if has_key(def, "typed") then
-    local s = roc_type_shape(def.typed)
-    shape = {fn = s.fn, result = s.result, known = true, said = " (the checker's type)"}
-    if has_key(BOOL_ALIASES, s.result) then shape.result = "Bool" end
+    local checker = roc_type_shape(def.typed)
+    signature = {is_function = checker.fn, result = checker.result, known = true, source_note = " (the checker's type)"}
+    if has_key(BOOL_ALIASES, checker.result) then signature.result = "Bool" end
   end
-  local asks_host = shape.fn and shape.result == "Bool"
-  if asks and judged and effect and not asks_host then say(p, i, "question", "`" .. full .. "` asks a question but has an effect" .. (shape.fn and (" and gives `" .. shape.result .. "`" .. shape.said) or "")) end
-  if shape.fn and shape.result == "Bool" and state and judged then say(p, i, "question", "`" .. full .. "` gives a `Bool`" .. shape.said .. " but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
-  -- An inferred type (`is_eq : _`) gives what the compiler says: no
-  -- finding.
-  -- Only a function asks: a value (`has_got : List(Bool)`, a test table's
-  -- column) is named for what it holds.
-  if asks and judged and shape.known and shape.fn and not effect and shape.result ~= "Bool" and shape.result ~= "_" then say(p, i, "question", "`" .. full .. "` asks a question but gives `" .. shape.result .. "`" .. shape.said) end
-  if judged then
+  return signature
+end
+
+-- Notes a name that ends in a preposition, for `preposition_split`, in
+-- PREPOSITIONS_BY_STEM and, when it is an annotated function, in
+-- STEMS_BY_SHAPE and SUFFIX_CONVENTIONS.
+function note_trailing_preposition(def, ws)
+  local preposition = ws[#ws]
+  local stem = join(take(ws, #ws - 1), "_")
+  local key = def.path .. "|" .. stem
+  if not has_key(PREPOSITIONS_BY_STEM, key) then PREPOSITIONS_BY_STEM[key] = {path = def.path, line = def.line, stem = stem, prepositions = {}} end
+  local group = PREPOSITIONS_BY_STEM[key]
+  if def.annotation and def.fn then
+    local shape_key = preposition .. "|" .. def.first .. "|" .. def.result
+    if not has_key(STEMS_BY_SHAPE, shape_key) then STEMS_BY_SHAPE[shape_key] = {} end
+    STEMS_BY_SHAPE[shape_key][stem] = true
+    if #keys(STEMS_BY_SHAPE[shape_key]) >= CONVENTION_STEMS then SUFFIX_CONVENTIONS[preposition] = true end
+  end
+  if not has_key(group.prepositions, preposition) then
+    group.prepositions[preposition] = {name = def.name, arity = get(def, "arity", -1)}
+  end
+  return nil
+end
+
+-- Reports what each check finds in one definition record, except
+-- `container` and `preposition_split`, which are judged over all the files
+-- afterwards.
+function judge_definition(def)
+  local path = def.path
+  local line = def.line
+  local full_name = def.name
+  if has_key(LANGUAGE_FIXED_NAMES, full_name) then return nil end
+  local has_bang = ends_with(full_name, "!")
+  local name = has_bang and sub(full_name, 1, #full_name - 1) or full_name
+  local is_effect = has_bang and not def.callback
+  local ws = split(name, "_")
+  local last_word = ws[#ws]
+  local is_annotation = def.annotation
+  -- A definition paired with an annotation was judged at the annotation.
+  local judged_here = not def.paired
+  local asks_inside = contains(name, "_is_") or contains(name, "_has_")
+  local has_namespace = is_effect and #ws > 1 and has_key(NAMESPACES, ws[1])
+  local act_word = has_namespace and ws[2] or ws[1]
+  local act_verdict = first_word_verdict(act_word)
+  if has_namespace and act_verdict == "refused" and has_key(NAMESPACES[ws[1]], act_word) then act_verdict = "verb" end
+  local act_place = has_namespace and ("the word after its namespace `" .. ws[1] .. "_`") or "its first word"
+  local named_as_state = is_participle(act_word) and not asks_inside
+  if is_effect and judged_here then
+    if not has_key(first_word_census, act_word) then first_word_census[act_word] = {word = act_word, count = 0, verdict = act_verdict} end
+    first_word_census[act_word].count = first_word_census[act_word].count + 1
+  end
+  local arguments = get(def, "args") or {}
+  local draws_on_surface = #arguments > 0 and has_key(SURFACES, get(arguments[1], "ref", ""))
+  if is_effect and judged_here and act_verdict == "refused" and not draws_on_surface then
+    if has_key(PREPOSITIONS, act_word) then report(path, line, "noun_effect", "`" .. full_name .. "` has an effect but " .. act_place .. " is a preposition, `" .. act_word .. "`: an effect is named for its act")
+    else report(path, line, "noun_effect", "`" .. full_name .. "` has an effect but " .. act_place .. ", `" .. act_word .. "`, is no verb: it reads as a value, not an act") end
+  end
+  if judged_here and #ws > 1 and has_key(PREPOSITIONS, last_word) then note_trailing_preposition(def, ws) end
+  local names_drawn_type = #ws > 1 and has_key(get(def, "types") or {}, camel_case(ws))
+  if is_effect and judged_here and named_as_state and not names_drawn_type then report(path, line, "state_effect", "`" .. full_name .. "` has an effect but is named as a state, `" .. act_word .. "`: a verb says what it does") end
+  local named_as_question = #ws > 1 and (ws[1] == "is" or ws[1] == "has" or ws[1] == "can" or ws[1] == "should")
+  local signature = definition_signature(def)
+  local returns_bool = signature.is_function and signature.result == "Bool"
+  if named_as_question and judged_here and is_effect and not returns_bool then report(path, line, "question", "`" .. full_name .. "` asks a question but has an effect" .. (signature.is_function and (" and gives `" .. signature.result .. "`" .. signature.source_note) or "")) end
+  if returns_bool and named_as_state and judged_here then report(path, line, "question", "`" .. full_name .. "` gives a `Bool`" .. signature.source_note .. " but is named as a state, `" .. ws[1] .. "`: ask it (`is_*`, `has_*`)") end
+  if named_as_question and judged_here and signature.known and signature.is_function and not is_effect and signature.result ~= "Bool" and signature.result ~= "_" then report(path, line, "question", "`" .. full_name .. "` asks a question but gives `" .. signature.result .. "`" .. signature.source_note) end
+  if judged_here then
     local all_vague = true
     for w in ws do
       if not has_key(VAGUE, w) then all_vague = false end
     end
-    if #ws == 1 and has_key(ENTRY, ws[1]) then all_vague = false end
-    if all_vague then say(p, i, "vague", "`" .. full .. "` is only vague words: what does it handle, and how?") end
-    if #name == 1 then say(p, i, "short_name", "`" .. full .. "` is one letter, read far from where it is defined: name what it holds") end
-    local named = false
+    if #ws == 1 and has_key(ENTRY_POINT_NAMES, ws[1]) then all_vague = false end
+    if all_vague then report(path, line, "vague", "`" .. full_name .. "` is only vague words: what does it handle, and how?") end
+    if #name == 1 then report(path, line, "short_name", "`" .. full_name .. "` is one letter, read far from where it is defined: name what it holds") end
+    local has_leading_noun = false
     for w in take(ws, max(#ws - 2, 0)) do
-      if not has_key(PREPS, w) then named = true end
+      if not has_key(PREPOSITIONS, w) then has_leading_noun = true end
     end
-    if named and has_key(PREPS, ws[#ws]) and has_key(PREPS, ws[#ws - 1]) then say(p, i, "stacked_preposition", "`" .. full .. "` stacks two prepositions, `_" .. ws[#ws - 1] .. "_" .. ws[#ws] .. "`: let each read once, the entry named for what it gives (`rest`, `tail_after`) and the worker for what it adds (`rest_onto`)") end
-    -- What the name is: a function by its type (written or the checker's),
-    -- else by a lambda definition; a value by a type that is none, or a
-    -- definition that is no lambda. An inferred annotation (`two : _`)
-    -- with no checker's type is neither.
-    local typed = shape.known and not (is_annotation and get(def, "whole", "") == "_" and not has_key(def, "typed"))
-    local is_fn = shape.fn or (not shape.known and get(def, "lambda", false))
-    local is_value = (typed and not shape.fn) or (not shape.known and not get(def, "lambda", false))
-    local taken = get(TAKEN, name, "")
-    if taken == "roc" and is_fn then
-      -- A function that gives the very thing it is named for is honest:
-      -- `record : ApiKey.Key -> ApiKey.Record`.
-      local parts = split(shape.result, ".")
-      if not (shape.fn and parts[#parts] == camel({name})) then say(p, i, "taken_word", "`" .. full .. "` is Roc's own word, `" .. name .. "`, for a function that gives no `" .. camel({name}) .. "`: name it for the domain's thing (`element`, `append`), and keep Roc's words for Roc") end
+    if has_leading_noun and has_key(PREPOSITIONS, last_word) and has_key(PREPOSITIONS, ws[#ws - 1]) then report(path, line, "stacked_preposition", "`" .. full_name .. "` stacks two prepositions, `_" .. ws[#ws - 1] .. "_" .. last_word .. "`: let each read once, the entry named for what it gives (`rest`, `tail_after`) and the worker for what it adds (`rest_onto`)") end
+    -- A function is known by its type, else by a lambda definition; a value
+    -- by a type that is no function, else by a definition that is no
+    -- lambda. An inferred annotation (`two : _`) with no checker's type is
+    -- neither.
+    local has_type = signature.known and not (is_annotation and get(def, "whole", "") == "_" and not has_key(def, "typed"))
+    local is_lambda = get(def, "lambda", false)
+    local is_function = signature.is_function or (not signature.known and is_lambda)
+    local is_value = (has_type and not signature.is_function) or (not signature.known and not is_lambda)
+    local taken_kind = get(TAKEN_WORDS, name, "")
+    if taken_kind == "roc" and is_function then
+      local result_parts = split(signature.result, ".")
+      local returns_the_word = signature.is_function and result_parts[#result_parts] == camel_case({name})
+      if not returns_the_word then report(path, line, "taken_word", "`" .. full_name .. "` is Roc's own word, `" .. name .. "`, for a function that gives no `" .. camel_case({name}) .. "`: name it for the domain's thing (`element`, `append`), and keep Roc's words for Roc") end
     end
-    if taken == "cardinal" and is_value then say(p, i, "taken_word", "`" .. full .. "` is a number's name for a value: it says how many, not what it holds") end
+    if taken_kind == "cardinal" and is_value then report(path, line, "taken_word", "`" .. full_name .. "` is a number's name for a value: it says how many, not what it holds") end
   end
-  -- Judged at the definition, which knows whether it calls itself; an
-  -- annotation with none below it (a hosted effect) by its name alone.
-  local lone = is_annotation and not get(def, "has_def", false)
-  local last = ws[#ws]
-  local helper = has_key(HELPER_WORDS, last) and (lone or not is_annotation)
-  local worker = has_key(WORKER_WORDS, last) and get(def, "recurses", false)
-  if #ws > 1 and (helper or worker) then say(p, i, "worker_name", "`" .. full .. "` is named only as a helper, `_" .. last .. "`: name the worker for the parameter it adds (`_from` a start point, `_onto` an output built, `_with` other carried state) and give the entry function the plain name") end
+  -- `worker_name` is judged at the definition, which knows whether it calls
+  -- itself, and at an annotation only when no definition follows it, as
+  -- with a hosted effect.
+  local annotation_alone = is_annotation and not get(def, "has_def", false)
+  local helper_suffix = has_key(HELPER_SUFFIXES, last_word) and (annotation_alone or not is_annotation)
+  local recursion_suffix = has_key(RECURSION_SUFFIXES, last_word) and get(def, "recurses", false)
+  if #ws > 1 and (helper_suffix or recursion_suffix) then report(path, line, "worker_name", "`" .. full_name .. "` is named only as a helper, `_" .. last_word .. "`: name the worker for the parameter it adds (`_from` a start point, `_onto` an output built, `_with` other carried state) and give the entry function the plain name") end
   if is_annotation and not def.fn and def.whole ~= "_" then
-    local t = def.whole
-    local last = ws[#ws]
-    if last == "count" and not has_key(INTS, t) then say(p, i, "name_type", "`" .. full .. "` is a count of type `" .. t .. "`") end
-    if last == "path" and t ~= "Str" and not contains(t, "Path") then say(p, i, "name_type", "`" .. full .. "` is a path of type `" .. t .. "`") end
-    if t == "Bool" and (ws[1] == "no" or ws[1] == "not") and #ws > 1 then say(p, i, "negative", "`" .. full .. "` is a negative flag: `" .. full .. " = Bool.false` reads twice") end
+    local annotated_type = def.whole
+    if last_word == "count" and not has_key(INTEGER_TYPES, annotated_type) then report(path, line, "name_type", "`" .. full_name .. "` is a count of type `" .. annotated_type .. "`") end
+    if last_word == "path" and annotated_type ~= "Str" and not contains(annotated_type, "Path") then report(path, line, "name_type", "`" .. full_name .. "` is a path of type `" .. annotated_type .. "`") end
+    if annotated_type == "Bool" and (ws[1] == "no" or ws[1] == "not") and #ws > 1 then report(path, line, "negative", "`" .. full_name .. "` is a negative flag: `" .. full_name .. " = Bool.false` reads twice") end
   end
-  if is_annotation and effect and def.fn then
-    for a in (get(def, "args") or {}) do
-      local u = get(a, "union")
-      local ref = get(a, "ref")
-      if u == nil and ref ~= nil then u = get(ALIASES, ref) end
-      if u ~= nil then
-        local shown = (get(a, "list") and "a list of " or "") .. "`[" .. join(u.names, ", ") .. "]`"
-        if not u.payload and #u.names >= 2 and all_past(u.names) then say(p, i, "command_tense", "`" .. full .. "` takes " .. shown .. ", an instruction named like an event: name its tags as commands (`Pinned` is `Pin`)") end
-        local verbs = {}
-        local pasts = {}
-        for t in u.names do
-          local w = first_word(t)
-          if is_participle(w) then push(pasts, t) elseif has_key(VERBS, w) then push(verbs, t) end
+  if is_annotation and is_effect and def.fn then
+    for argument in arguments do
+      local union = get(argument, "union")
+      local ref = get(argument, "ref")
+      if union == nil and ref ~= nil then union = get(TAG_UNION_TYPES, ref) end
+      if union ~= nil then
+        local shown = (get(argument, "list") and "a list of " or "") .. "`[" .. join(union.names, ", ") .. "]`"
+        if not union.payload and #union.names >= 2 and all_tags_past(union.names) then report(path, line, "command_tense", "`" .. full_name .. "` takes " .. shown .. ", an instruction named like an event: name its tags as commands (`Pinned` is `Pin`)") end
+        local command_tags = {}
+        local event_tags = {}
+        for t in union.names do
+          local w = tag_first_word(t)
+          if is_participle(w) then push(event_tags, t) elseif has_key(VERBS, w) then push(command_tags, t) end
         end
-        if #verbs > 0 and #pasts > 0 then say(p, i, "mixed_tense", "`" .. full .. "` takes " .. shown .. ": commands (" .. join(verbs, ", ") .. ") beside events (" .. join(pasts, ", ") .. "): name what it is told to do in one mood") end
+        if #command_tags > 0 and #event_tags > 0 then report(path, line, "mixed_tense", "`" .. full_name .. "` takes " .. shown .. ": commands (" .. join(command_tags, ", ") .. ") beside events (" .. join(event_tags, ", ") .. "): name what it is told to do in one mood") end
       end
     end
   end
-  if is_annotation and #ws > 2 and ws[1] == "is" and ws[2] == "not" then say(p, i, "negative", "`" .. full .. "` asks a negative: `!" .. full .. "(...)` reads twice") end
+  if is_annotation and #ws > 2 and ws[1] == "is" and ws[2] == "not" then report(path, line, "negative", "`" .. full_name .. "` asks a negative: `!" .. full_name .. "(...)` reads twice") end
   return nil
 end
 
 local paths = glob(GLOB)
-if SELF then
+if SELF_TEST then
   for q in glob(PLANTS .. "typed/*.roc") do push(paths, q) end
 end
-local files = #paths
--- The self-test's untyped plants are the root's none.
-const UNTYPED = SELF and set_of(glob(PLANTS .. "*.roc")) or {}
-if TYPED then
-  local got = roc_types_hunted("name_hunt", ROOT, roc_bin("name_hunt", SELF), paths, UNTYPED)
-  TYPES.real = got.real
-  TYPES.pats = got.pats
-  TYPES.exprs = got.exprs
-  TYPES.unreached = got.unreached
+local file_count = #paths
+-- The self-test's untyped plants are imported by no root.
+const UNTYPED_PLANTS = SELF_TEST and set_of(glob(PLANTS .. "*.roc")) or {}
+if USE_TYPES then
+  local got = roc_types_hunted("name_hunt", ROOT, roc_bin("name_hunt", SELF_TEST), paths, UNTYPED_PLANTS)
+  CHECKER_TYPES.real = got.real
+  CHECKER_TYPES.pats = got.pats
+  CHECKER_TYPES.exprs = got.exprs
+  CHECKER_TYPES.unreached = got.unreached
 end
--- A file roc-ast refuses is named, and fails the run, after the rest are
--- judged (cookbook/roc/parsed.shale).
 local parsed = parse_roc_files(paths)
--- No `yield` here: each definition's garbage is small, and what a yield
--- keeps (every definition, and the declared types' tags) passes the fixed
--- 1 MiB it allows on the chat. The arena the header sets holds it.
-for def in definitions(parsed.files) do
-  hunt(def)
+-- This loop does not `yield`, because a yield may keep only 1 MiB, and a
+-- large tree's definitions pass that. The arena in the header holds them.
+for def in read_definitions(parsed.files) do
+  judge_definition(def)
 end
 
 -- Whether a doc says whose a container word is (`a folder's entry`, `a
--- listing's entries`): the domain's word, kept.
-function owned(doc, w)
-  local forms = {w, w .. "s"}
-  if ends_with(w, "ies") then push(forms, sub(w, 1, #w - 3) .. "y") end
-  if ends_with(w, "y") then push(forms, sub(w, 1, #w - 1) .. "ies") end
-  if ends_with(w, "s") then push(forms, sub(w, 1, #w - 1)) end
-  for f in forms do
-    if contains(doc, "'s " .. f) then return true end
+-- listing's entries`), in the word's singular or plural.
+function doc_says_whose(doc, word)
+  local forms = {word, word .. "s"}
+  if ends_with(word, "ies") then push(forms, sub(word, 1, #word - 3) .. "y") end
+  if ends_with(word, "y") then push(forms, sub(word, 1, #word - 1) .. "ies") end
+  if ends_with(word, "s") then push(forms, sub(word, 1, #word - 1)) end
+  for form in forms do
+    if contains(doc, "'s " .. form) then return true end
   end
   return false
 end
 
-for h in HOLDERS do
-  local all = #h.words > 0
-  local kept = false
-  for w in h.words do
-    if not has_key(VAGUE, w) and not has_key(CONTAINERS, w) then all = false end
-    if owned(h.doc, w) then kept = true end
+for named in TYPE_AND_FIELD_NAMES do
+  local only_container_words = #named.words > 0
+  local doc_owns_it = false
+  for w in named.words do
+    if not has_key(VAGUE, w) and not has_key(CONTAINERS, w) then only_container_words = false end
+    if doc_says_whose(named.doc, w) then doc_owns_it = true end
   end
-  if all and not kept then say(h.path, h.line, "container", (h.field and "the field `" or "the type `") .. h.name .. "` is only container words: name it for what it holds, or say whose it is in its doc (`## A folder's entry`)") end
+  if only_container_words and not doc_owns_it then report(named.path, named.line, "container", (named.is_field and "the field `" or "the type `") .. named.name .. "` is only container words: name it for what it holds, or say whose it is in its doc (`## A folder's entry`)") end
 end
--- Two opposite prepositions on one noun name a matched pair on purpose
--- (`insert_before` and `insert_after`): no split.
-const OPPOSITES = {["after|before"] = true, ["from|to"] = true, ["with|without"] = true, ["over|under"] = true, ["into|onto"] = false}
 
--- **THE HOUSE'S `_from` WORKER IS NO SPLIT**: a recursion's helper that
--- resumes at an index (`has_from` beside `has_at`, `blocks_from` beside
--- `blocks_in`) takes more arguments than its siblings, and its `from` names
--- that index. It is left out before the prepositions are counted.
-for key in sort(keys(SPLITS)) do
-  local s = SPLITS[key]
-  local least = -1
-  for prep in keys(s.preps) do
-    local a = s.preps[prep].arity
-    if a >= 0 and (least < 0 or a < least) then least = a end
+const OPPOSITE_PAIRS = {["after|before"] = true, ["from|to"] = true, ["with|without"] = true, ["over|under"] = true}
+
+for key in sort(keys(PREPOSITIONS_BY_STEM)) do
+  local group = PREPOSITIONS_BY_STEM[key]
+  local fewest_arguments = -1
+  for preposition in keys(group.prepositions) do
+    local arity = group.prepositions[preposition].arity
+    if arity >= 0 and (fewest_arguments < 0 or arity < fewest_arguments) then fewest_arguments = arity end
   end
-  local kept = {}
-  local kept_preps = {}
-  for prep in sort(keys(s.preps)) do
-    local e = s.preps[prep]
-    local convention = has_key(CONVENTIONS, prep)
-    local keyword = has_item(get(KEYWORDS, s.path, {}), prep)
-    if not (prep == "from" and least >= 0 and e.arity > least) and not convention and not keyword then
-      push(kept, e.name)
-      push(kept_preps, prep)
+  local split_names = {}
+  local split_prepositions = {}
+  for preposition in sort(keys(group.prepositions)) do
+    local first_use = group.prepositions[preposition]
+    local is_from_worker = preposition == "from" and fewest_arguments >= 0 and first_use.arity > fewest_arguments
+    local is_convention = has_key(SUFFIX_CONVENTIONS, preposition)
+    local is_keyword = has_item(get(DECLARED_KEYWORDS, group.path, {}), preposition)
+    if not is_from_worker and not is_convention and not is_keyword then
+      push(split_names, first_use.name)
+      push(split_prepositions, preposition)
     end
   end
-  if #kept > 1 and not (#kept == 2 and get(OPPOSITES, join(kept_preps, "|"), false)) then say(s.path, s.line, "preposition_split", "`" .. s.base .. "` takes " .. #kept .. " prepositions here (" .. join(kept, ", ") .. "): one relation keeps one preposition, or the names say how they differ") end
+  local is_opposite_pair = #split_names == 2 and get(OPPOSITE_PAIRS, join(split_prepositions, "|"), false)
+  if #split_names > 1 and not is_opposite_pair then report(group.path, group.line, "preposition_split", "`" .. group.stem .. "` takes " .. #split_names .. " prepositions here (" .. join(split_names, ", ") .. "): one relation keeps one preposition, or the names say how they differ") end
 end
 
-local counts = {}
-for c in CHECKS do push(counts, c .. " " .. found[c]) end
-if WORDS then
+if CENSUS_ONLY then
   local rows = {}
-  local by = {}
+  local effects_by_verdict = {}
   local total = 0
-  for w in keys(census) do
-    push(rows, census[w])
-    by[census[w].verdict] = get(by, census[w].verdict, 0) + census[w].count
-    total = total + census[w].count
+  for w in keys(first_word_census) do
+    local row = first_word_census[w]
+    push(rows, row)
+    effects_by_verdict[row.verdict] = get(effects_by_verdict, row.verdict, 0) + row.count
+    total = total + row.count
   end
   sort(rows, {{key = "count", desc = true}, "word"})
   local census_lines = {}
   for r in rows do push(census_lines, pad(r.count, -4) .. " " .. pad(r.word, 12) .. " " .. r.verdict) end
-  local verdicts = {}
-  for v in {"verb", "participle", "vague", "asks", "refused"} do push(verdicts, v .. " " .. get(by, v, 0)) end
-  print_findings("name_hunt (Roc) census: " .. files .. " files; " .. total .. " effects, " .. #rows .. " first words; effects by verdict: " .. join(verdicts, ", "), census_lines)
+  local verdict_counts = {}
+  for v in {"verb", "participle", "vague", "asks", "refused"} do push(verdict_counts, v .. " " .. get(effects_by_verdict, v, 0)) end
+  print_findings("name_hunt (Roc) census: " .. file_count .. " files; " .. total .. " effects, " .. #rows .. " first words; effects by verdict: " .. join(verdict_counts, ", "), census_lines)
 else
-  print_findings("name_hunt (Roc): " .. files .. " files; " .. join(counts, ", "), said)
+  local check_counts = {}
+  for c in CHECKS do push(check_counts, c .. " " .. count_by_check[c]) end
+  print_findings("name_hunt (Roc): " .. file_count .. " files; " .. join(check_counts, ", "), finding_lines)
 end
-fail_if_refused("name_hunt", parsed.refused, TYPES.unreached)
+fail_if_refused("name_hunt", parsed.refused, CHECKER_TYPES.unreached)
 
--- A plant's name as the self-test's table reads it: a typed plant's, a
--- type module's (`typed/QuestionInferred.roc`), as `question_inferred.roc`.
-function plant_base(p)
-  local base = sub(p, #PLANTS + 1)
-  if starts_with(base, "typed/") then return roc_plant_name(sub(base, 7)) end
-  return base
+-- A plant's name relative to PLANTS. A typed plant is a CamelCase module
+-- (`typed/QuestionInferred.roc`), and its name is given in snake case
+-- (`question_inferred.roc`).
+function plant_name(path)
+  local name = sub(path, #PLANTS + 1)
+  if starts_with(name, "typed/") then return roc_plant_name(sub(name, 7)) end
+  return name
 end
 
-if SELF then
-  -- Every plant is judged before a failure stops the run, so one run shows
-  -- each plant that is wrong.
+function plant_is_for(plant, check)
+  return plant == check .. ".roc" or starts_with(plant, check .. "_")
+end
+
+if SELF_TEST then
+  -- Every plant is judged before the test fails, so one run shows each
+  -- plant that is wrong.
   local wrong = {}
   for c in CHECKS do
     local planted = 0
-    for p in paths do
-      local base = plant_base(p)
-      local mine = base == c .. ".roc" or starts_with(base, c .. "_")
-      if mine then planted = planted + 1 end
-      local fired = has_key(per_file, p .. "|" .. c)
-      if mine and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. p) end
-      if fired and not mine then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
+    for path in paths do
+      local is_its_plant = plant_is_for(plant_name(path), c)
+      if is_its_plant then planted = planted + 1 end
+      local fired = has_key(fired_in_file, path .. "|" .. c)
+      if is_its_plant and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. path) end
+      if fired and not is_its_plant then push(wrong, "`" .. c .. "` fires on " .. path .. ", another check's plant") end
     end
     if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
   end
-  -- A plant named for no check is read by none, so it could never fail.
-  for p in paths do
-    local base = plant_base(p)
-    local named = starts_with(base, "quiet_")
+  -- A plant named for no check could never fail.
+  for path in paths do
+    local plant = plant_name(path)
+    local is_named = starts_with(plant, "quiet_")
     for c in CHECKS do
-      if base == c .. ".roc" or starts_with(base, c .. "_") then named = true end
+      if plant_is_for(plant, c) then is_named = true end
     end
-    if not named then push(wrong, p .. ": a plant the table does not judge") end
+    if not is_named then push(wrong, path .. ": a plant the table does not judge") end
   end
-  -- The census: a known word of the plants in each verdict.
-  for want in {{word = "read", verdict = "verb"}, {word = "held", verdict = "participle"}, {word = "process", verdict = "vague"}, {word = "links", verdict = "refused"}} do
-    local got = get(census, want.word)
-    if got == nil then push(wrong, "the census has no `" .. want.word .. "`")
-    elseif got.verdict ~= want.verdict then push(wrong, "the census calls `" .. want.word .. "` " .. got.verdict .. ", not " .. want.verdict) end
+  for expected in {{word = "read", verdict = "verb"}, {word = "held", verdict = "participle"}, {word = "process", verdict = "vague"}, {word = "links", verdict = "refused"}} do
+    local got = get(first_word_census, expected.word)
+    if got == nil then push(wrong, "the census has no `" .. expected.word .. "`")
+    elseif got.verdict ~= expected.verdict then push(wrong, "the census calls `" .. expected.word .. "` " .. got.verdict .. ", not " .. expected.verdict) end
   end
   for w in wrong do print("FAIL " .. w) end
   if #wrong > 0 then fail("name_hunt self_test: " .. #wrong .. " plants wrong") end
