@@ -1,219 +1,212 @@
--- **A CALL NESTED THREE DEEP IS READ INSIDE OUT** (metal-vmm QUEUE 303,
--- from the Roc style review's S3): every call whose argument is a call
--- whose argument is a call, `f(g(h(x)))`, read from Roc's own parser's
--- tree (`roc_tree`, the Linux prelude's, over roc-ast at
--- `tools:roc-ast/bin/roc-ast`). roc-apps docs/roc-style.md, layout: write it left to right, a
--- method chain where the values carry methods, a pipe where the steps are
--- module functions, else a named middle step.
---
---   nested  a call `min` (3) or more deep, the outermost of each nest only:
---           `path:line:column: nested: depth N, <outer> to <deepest>: <its
---           first source line>`, the column the call's own, so two nests on
---           a line are two findings told apart, and the outermost call's
---           name and the deepest's (`List.concat to Str.to_utf8`; a method
---           by its method, `.concat`), so a nest over several lines says
---           more than its first (`List.concat(`)
---
--- **A CALL'S DEPTH** is 1 + the deepest call among its arguments. What
--- reads left to right is no level: a method's receiver (`a.f().g()`) and a
--- pipe's or an arrow call's left side (`x |> f`, `x->f()`) carry their
--- depth through. A tag or a nominal wrapper (`Ok(...)`, `ChatPath.(...)`),
--- `?` and parentheses are no call and pass their argument's depth through,
--- and so are an operator and a field's or a tuple's access: `f(g(h(x) +
--- 1))`, `f(g(h(x) ?? y))`, `f(!g(h(x)))` and `f(g(h(x).a))` are each three
--- deep, an operand or an accessed value being read inside out as an
--- argument is. A lambda argument starts again at 0: its body is read on its
--- own. A record, list or tuple argument starts again too (`f({ a: g(h(x))
--- })` names its parts), unless `loose=1`, which passes depth through them.
---
--- The count by depth first, then one line a finding, then the count again
--- (cookbook/roc/findings.shale). A file roc-ast refuses is named after
--- them, and fails the run after the rest are hunted
+-- This recipe finds calls nested three or more deep, like `f(g(h(x)))`, in
+-- every .roc file of a tree. Such a call has to be read from the inside
+-- out. The Roc style guide (roc-apps docs/roc-style.md) asks for code that
+-- reads left to right instead: a method chain, a pipe, or a named middle
+-- step. The recipe reads each file's syntax tree from Roc's own parser
 -- (cookbook/roc/parsed.shale).
 --
 --   cd <repo> && shale <shale>/cookbook/roc/nest_depth.shale glob=chat/**/*.roc min=4
 --   shale cookbook:roc/nest_depth.shale self_test=1
 --
--- `self_test=1` runs it at `min=3` over `cookbook/roc/plants/nest_depth/`:
--- a plant line ending `# depth N` must give one finding, of depth N, and
--- one ending `# depth N, M` a finding for each, left to right; no other
--- line gives any, and no two findings print the same line. A `quiet_*.roc`
--- plant holds no such mark.
+-- The arguments:
+--   glob   the files to check, `**/*.roc` by default;
+--   min    the least depth to report, 3 by default;
+--   loose  with `loose=1`, a record, list or tuple argument does not reset
+--          the depth.
+--
+-- A call's depth is one more than the deepest call among its arguments.
+-- Some things pass their parts' depth through without adding a level:
+-- whatever reads left to right (a method's receiver in `a.f().g()`, the
+-- left side of `x |> f` and `x->f()`), a tag or nominal wrapper
+-- (`Ok(...)`, `ChatPath.(...)`), `?`, parentheses, operators, and field or
+-- tuple access. So `f(g(h(x) + 1))`, `f(!g(h(x)))` and `f(g(h(x).a))` are
+-- each three deep. A lambda argument starts again at zero, since its body
+-- is read on its own, and so does a record, list or tuple argument, whose
+-- parts have names or places, unless `loose=1`.
+--
+-- Each finding is the outermost call of one nest:
+--   path:line:column: nested: depth N, <outermost> to <deepest>: <source line>
+-- The column tells apart two nests on one line. The outermost and deepest
+-- calls are named (`List.concat to Str.to_utf8`, or `.concat` for a method)
+-- so that a nest spread over several lines says more than its first line.
+-- The output is the count by depth, the findings, and the count again
+-- (cookbook/roc/findings.shale). Files that don't parse are listed after
+-- the findings, and then the run fails.
+--
+-- `self_test=1` checks the plants in `cookbook/roc/plants/nest_depth/` at
+-- `min=3`. A plant line ending `# depth N` must give one finding of depth
+-- N, and one ending `# depth N, M` a finding for each, left to right; an
+-- added `from A to B` means the finding must say `A to B`. No unmarked line
+-- may give a finding, no two findings may print the same line, and a
+-- `quiet_*.roc` plant may hold no mark.
 -- budget: steps=100000000 arena_bytes=3000000000 output_bytes=4000000
 
-const SELF = arg("self_test", "") == "1"
+const SELF_TEST = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/nest_depth/"
-const GLOB = SELF and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
+const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const LOOSE = arg("loose", "") == "1"
-const MIN = SELF and 3 or arg("min", 3)
+const MIN = SELF_TEST and 3 or arg("min", 3)
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 
--- What passes its parts' depth through unchanged: no call of its own.
--- `unary` is `!x` and `-x`; `receiver` is a field's access's value.
-const PASS = {["e-arrow-call"] = true, ["e-question-suffix"] = true, ["e-nominal-apply"] = true, mapper = true, ["e-binop"] = true, unary = true, ["e-field-access"] = true, ["e-tuple-access"] = true, receiver = true}
-const LOOSE_PASS = {["e-record"] = true, ["e-list"] = true, ["e-tuple"] = true, field = true}
+-- The node kinds that pass their parts' depth through. `unary` is `!x` or
+-- `-x`, and `receiver` holds the value whose method is called.
+const PASS_THROUGH = {["e-arrow-call"] = true, ["e-question-suffix"] = true, ["e-nominal-apply"] = true, mapper = true, ["e-binop"] = true, unary = true, ["e-field-access"] = true, ["e-tuple-access"] = true, receiver = true}
+const LOOSE_PASS_THROUGH = {["e-record"] = true, ["e-list"] = true, ["e-tuple"] = true, field = true}
 
-function passes(k, loose)
-  return has_key(PASS, k) or (loose and has_key(LOOSE_PASS, k))
+function passes_depth_through(kind, loose)
+  return has_key(PASS_THROUGH, kind) or (loose and has_key(LOOSE_PASS_THROUGH, kind))
 end
 
-function is_call(n)
-  return n.kind == "e-apply" or n.kind == "e-method-call"
+function is_call(node)
+  return node.kind == "e-apply" or node.kind == "e-method-call"
 end
 
--- The call depth at node `i` of `ns`, kept in `memo` (-1 not yet known).
-function cd(ns, memo, i, loose)
+-- Whether a call nested under a node of this kind still belongs to the
+-- same nest as the call above it.
+function continues_nest(node, loose)
+  local kind = node.kind
+  return is_call(node) or kind == "args" or kind == "receiver" or kind == "e-tuple" or passes_depth_through(kind, loose)
+end
+
+-- The call depth of node `i`, cached in `memo`, where -1 means not yet
+-- computed.
+function call_depth(nodes, memo, i, loose)
   if memo[i] >= 0 then return memo[i] end
-  local n = ns[i]
-  local k = n.kind
-  local v = 0
-  if k == "e-apply" then
-    local best = 0
-    for a in drop(n.kids, 1) do
-      local x = cd(ns, memo, a, loose)
-      if x > best then best = x end
+  local node = nodes[i]
+  local kind = node.kind
+  local depth = 0
+  if kind == "e-apply" then
+    -- The first kid is the function called, the rest its arguments.
+    local deepest_argument = 0
+    for argument in drop(node.kids, 1) do
+      deepest_argument = max(deepest_argument, call_depth(nodes, memo, argument, loose))
     end
-    -- A tag's payload (`Ok(...)`) is no call.
-    if ns[n.kids[1]].kind == "e-tag" then v = best else v = 1 + best end
-  elseif k == "e-method-call" then
-    local recv = 0
-    local best = 0
-    for c in n.kids do
-      if ns[c].kind == "receiver" then recv = cd(ns, memo, ns[c].kids[1], loose) end
-      if ns[c].kind == "args" then
-        for a in ns[c].kids do
-          local x = cd(ns, memo, a, loose)
-          if x > best then best = x end
+    -- A tag's payload, as in `Ok(...)`, is no call.
+    if nodes[node.kids[1]].kind == "e-tag" then depth = deepest_argument else depth = 1 + deepest_argument end
+  elseif kind == "e-method-call" then
+    local receiver_depth = 0
+    local deepest_argument = 0
+    for kid in node.kids do
+      if nodes[kid].kind == "receiver" then receiver_depth = call_depth(nodes, memo, nodes[kid].kids[1], loose) end
+      if nodes[kid].kind == "args" then
+        for argument in nodes[kid].kids do
+          deepest_argument = max(deepest_argument, call_depth(nodes, memo, argument, loose))
         end
       end
     end
-    v = 1 + best
-    if recv > v then v = recv end
-  elseif passes(k, loose) or (k == "e-tuple" and #n.kids == 1) then
-    -- A one-item tuple is parentheses.
-    for c in n.kids do
-      local x = cd(ns, memo, c, loose)
-      if x > v then v = x end
+    depth = max(1 + deepest_argument, receiver_depth)
+  elseif passes_depth_through(kind, loose) or (kind == "e-tuple" and #node.kids == 1) then
+    -- A one-item tuple is a pair of parentheses.
+    for kid in node.kids do
+      depth = max(depth, call_depth(nodes, memo, kid, loose))
     end
   end
-  memo[i] = v
-  return v
+  memo[i] = depth
+  return depth
 end
 
--- `i` is the outermost of its nest unless, climbing through what passes
--- depth on, the first call above it is as deep.
-function outermost(ns, memo, i, loose)
-  local p = ns[i].parent
+-- Whether the call at `i` is the outermost of its nest: the first call
+-- above it, through nodes that continue the nest, is not as deep.
+function is_outermost(nodes, memo, i, loose)
+  local p = nodes[i].parent
   while p > 0 do
-    local k = ns[p].kind
-    if is_call(ns[p]) then return cd(ns, memo, p, loose) < cd(ns, memo, i, loose) end
-    if k == "receiver" or k == "args" or passes(k, loose) or k == "e-tuple" then
-      p = ns[p].parent
-    else
-      return true
-    end
+    if is_call(nodes[p]) then return call_depth(nodes, memo, p, loose) < call_depth(nodes, memo, i, loose) end
+    if not continues_nest(nodes[p], loose) then return true end
+    p = nodes[p].parent
   end
   return true
 end
 
--- A call's name: an apply's head (`List.concat`), a method call's method
--- (`.concat`).
-function call_name(ns, i)
-  local n = ns[i]
-  if n.kind == "e-method-call" then return get(n, "method", "?") end
-  local h = ns[n.kids[1]]
-  return get(h, "raw", get(h, "name", h.kind))
+-- A call's name: an apply's function (`List.concat`), or a method call's
+-- method (`.concat`).
+function call_name(nodes, i)
+  local node = nodes[i]
+  if node.kind == "e-method-call" then return get(node, "method", "?") end
+  local head = nodes[node.kids[1]]
+  return get(head, "raw", get(head, "name", head.kind))
 end
 
 -- Whether the call at `j` is inside the nest of the call at `top`: every
--- node between them passes depth on (an argument list, a receiver, a call,
--- what `passes`, a tuple), none a lambda or (strict) a record or list.
-function in_nest(ns, top, j, loose)
-  local p = ns[j].parent
+-- node between them continues the nest.
+function is_in_nest(nodes, top, j, loose)
+  local p = nodes[j].parent
   while p > 0 and p ~= top do
-    local k = ns[p].kind
-    if not (is_call(ns[p]) or k == "args" or k == "receiver" or k == "e-tuple" or passes(k, loose)) then return false end
-    p = ns[p].parent
+    if not continues_nest(nodes[p], loose) then return false end
+    p = nodes[p].parent
   end
   return p == top
 end
 
--- The nest's deepest call: the first, in source order, of depth 1 inside
--- the nest of the call at `top`.
-function deepest_call(ns, memo, top, loose)
+-- The deepest call of the nest under the call at `top`: the first call of
+-- depth 1 inside it, in source order.
+function deepest_call(nodes, memo, top, loose)
   local j = top + 1
-  while j <= #ns and ns[j].depth > ns[top].depth do
-    if is_call(ns[j]) and cd(ns, memo, j, loose) == 1 and in_nest(ns, top, j, loose) then return j end
+  while j <= #nodes and nodes[j].depth > nodes[top].depth do
+    if is_call(nodes[j]) and call_depth(nodes, memo, j, loose) == 1 and is_in_nest(nodes, top, j, loose) then return j end
     j = j + 1
   end
   return top
 end
 
 const paths = glob(GLOB)
-local count = 0
-local by = {}
-local said = {}
--- Each line's findings for the self-test, `path:line` -> `{col, depth}`
--- in column order, and each printed line, to catch two alike.
-const at = {}
-const printed = {}
+local finding_count = 0
+local count_by_depth = {}
+local finding_lines = {}
+-- For the self-test: each line's findings, `path:line` to a list of
+-- `{col, depth, text}`, and how many times each finding line printed.
+const findings_at_line = {}
+const times_printed = {}
 local parsed = parse_roc_files(paths)
 for f in parsed.files do
-  do
-    local ns = f.nodes
-    local memo = {}
-    for n in ns do push(memo, -1) end
-    local src = {}
-    for i = 1, #ns do
-      if is_call(ns[i]) and cd(ns, memo, i, LOOSE) >= MIN and outermost(ns, memo, i, LOOSE) then
-        if #src == 0 then src = split(read(f.path), "\n") end
-        local line = ns[i].line
-        local d = cd(ns, memo, i, LOOSE)
-        -- The nest named outside in, so a finding over several lines says
-        -- more than its first (`List.concat(`).
-        local span = call_name(ns, i) .. " to " .. call_name(ns, deepest_call(ns, memo, i, LOOSE))
-        local head = f.path .. ":" .. line .. ":" .. ns[i].col .. ": nested: depth " .. d .. ", " .. span
-        local l = head .. ": " .. trim(src[line])
-        push(said, l)
-        incr(printed, l)
-        by[tostring(d)] = get(by, tostring(d), 0) + 1
-        push_at(at, f.path .. ":" .. line, {col = ns[i].col, depth = d, text = head})
-        count = count + 1
-      end
+  local nodes = f.nodes
+  local memo = {}
+  for n in nodes do push(memo, -1) end
+  local source_lines = {}
+  for i = 1, #nodes do
+    if is_call(nodes[i]) and call_depth(nodes, memo, i, LOOSE) >= MIN and is_outermost(nodes, memo, i, LOOSE) then
+      if #source_lines == 0 then source_lines = split(read(f.path), "\n") end
+      local line = nodes[i].line
+      local depth = call_depth(nodes, memo, i, LOOSE)
+      local span = call_name(nodes, i) .. " to " .. call_name(nodes, deepest_call(nodes, memo, i, LOOSE))
+      local head = f.path .. ":" .. line .. ":" .. nodes[i].col .. ": nested: depth " .. depth .. ", " .. span
+      local finding = head .. ": " .. trim(source_lines[line])
+      push(finding_lines, finding)
+      incr(times_printed, finding)
+      count_by_depth[tostring(depth)] = get(count_by_depth, tostring(depth), 0) + 1
+      push_at(findings_at_line, f.path .. ":" .. line, {col = nodes[i].col, depth = depth, text = head})
+      finding_count = finding_count + 1
     end
   end
 end
 local counts = {}
-for k in sort(keys(by)) do push(counts, "depth " .. k .. " " .. by[k]) end
-print_findings("nest_depth (Roc): " .. #paths .. " files; nested " .. count .. " (min " .. MIN .. ", " .. (LOOSE and "loose" or "strict") .. ")" .. (#counts > 0 and ("; " .. join(counts, ", ")) or ""), said)
+for depth in sort(keys(count_by_depth)) do push(counts, "depth " .. depth .. " " .. count_by_depth[depth]) end
+print_findings("nest_depth (Roc): " .. #paths .. " files; nested " .. finding_count .. " (min " .. MIN .. ", " .. (LOOSE and "loose" or "strict") .. ")" .. (#counts > 0 and ("; " .. join(counts, ", ")) or ""), finding_lines)
 fail_if_refused("nest_depth", parsed.refused)
-if SELF then
+if SELF_TEST then
   local wrong = {}
   local marks = 0
   for p in paths do
     local n = 0
     for l in lines(read(p)) do
       n = n + 1
-      local m = re_find(l, "# depth ([0-9]+(?:, [0-9]+)*)(?: from ([A-Za-z0-9_.]+) to ([A-Za-z0-9_.]+))?$")
+      local mark = re_find(l, "# depth ([0-9]+(?:, [0-9]+)*)(?: from ([A-Za-z0-9_.]+) to ([A-Za-z0-9_.]+))?$")
       local key = p .. ":" .. n
       local got = {}
       local texts = {}
-      if has_key(at, key) then
-        for g in sort(at[key], "col") do
+      if has_key(findings_at_line, key) then
+        for g in sort(findings_at_line[key], "col") do
           push(got, tostring(g.depth))
           push(texts, g.text)
         end
       end
-      if m ~= nil then
+      if mark ~= nil then
         marks = marks + 1
         if starts_with(sub(p, #PLANTS + 1), "quiet_") then push(wrong, key .. ": a quiet plant holds a `# depth` mark") end
-        local want = m.groups[1]
-        -- `from A to B`: the finding names its outermost call and its
-        -- deepest.
-        local span = get(m.groups, 2, "")
-        if span ~= nil and span ~= "" then
-          local says = span .. " to " .. m.groups[3]
+        local want = mark.groups[1]
+        local outermost_name = get(mark.groups, 2, "")
+        if outermost_name ~= nil and outermost_name ~= "" then
+          local says = outermost_name .. " to " .. mark.groups[3]
           if #texts == 0 or not contains(texts[1], says) then push(wrong, key .. ": the finding does not say `" .. says .. "`") end
         end
         if #got == 0 then push(wrong, key .. ": no finding, want depth " .. want)
@@ -223,8 +216,8 @@ if SELF then
       end
     end
   end
-  for l in keys(printed) do
-    if printed[l] > 1 then push(wrong, "two findings print the same line, " .. l) end
+  for l in keys(times_printed) do
+    if times_printed[l] > 1 then push(wrong, "two findings print the same line, " .. l) end
   end
   if marks == 0 then push(wrong, "no plant holds a `# depth` mark") end
   for w in wrong do print("FAIL " .. w) end
