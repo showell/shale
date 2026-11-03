@@ -1,212 +1,141 @@
 # The Roc cookbook
 
-Recipes for keeping a Roc tree tidy and judging a change to it, written
-in Shale over `run` (`roc`, `objdump`). Like the Zig cookbook's, they are
-recipes, not builtins: read one, copy it, change it for the job. Each is
-tested to parse (`src/shale_cookbook_test.zig`). Run one from the checkout
-it works on, `<shale>` being the shale checkout:
+These Shale scripts check and tidy a tree of Roc code. They are recipes,
+not builtins: read one, copy it, and change it for your job. Each script's
+header comment is its full documentation; this page says what each one is
+for and how to start it.
 
-    cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
+Run a recipe from the root of the repository it works on. In the lines
+below, `<repo>` is that repository and `<shale>` is the shale checkout:
 
-- [name_hunt.shale](name_hunt.shale): **awkward names, a question each**,
-  the Zig hunt's five checks over Roc's annotations and definitions, the
-  top level's and module types' members (`held_raw!` named as a state;
-  `rounded_rectangle!`, whose annotation names `RoundedRectangle`, is not).
-  It reads Roc's own parser's tree (roc-ast, `tools:roc-ast/bin/roc-ast`,
-  built by Shale's `tools/roc_ast/install.shale`), so a broken
-  annotation or a `where` clause reads as Roc reads it. A name is judged
-  once, from its annotation when it has one (a hosted effect has nothing
-  else); a `!` that names a callback's effect (`map2!`) and a name the
-  language fixes (`is_eq`, `subscript`) are not judged as the author's.
-  An effect that starts with a namespace prefix (cookbook/words/namespaces.txt,
-  `block_read_sector!`, `port_out_32!`) is judged by the word after it,
-  and one whose first argument is a surface it draws on (`Frame`,
-  `Canvas`: `circle! : Frame, Circle => {}`) is named for what it draws.
-  `question` judges functions only (a value `has_got : List(Bool)` is
-  none), and an effect that gives a `Bool` (`is_playing! : Sound => Bool`)
-  asks the host about live state. `preposition_split` leaves out a
-  package's suffix convention (a preposition on three or more stems whose
-  annotations share a first argument's type and a result, roc-markdown's
-  `*_onto` writers) and a
-  file's declared keywords (a comment line `# keywords: for, on`, for an
-  interpreter's `do_for`, `do_on`).
-  Beside the names: `command_tense` and `mixed_tense` (the tags an effect
-  is handed, a `List(T)` judged as `T`, named as events, or as commands
-  and events at once) and `container` (a type or record field named only
-  by container words, cookbook/words/containers.txt, unless its doc says
-  whose: `## A folder's entry`), and `short_name` (a top-level or
-  module-member name of one letter, `w : F64`; a local's or a lambda
-  parameter's never), and `worker_name` (a definition named only as a
-  helper, `_acc`, `_loop`, `_inner`, `_helper`, `_rec`, or a `_step`,
-  `_walk` or `_go` that calls itself: name the worker for the parameter it adds,
-  `_from`, `_onto`, `_with`, and give the entry function the plain name),
-  and `stacked_preposition` (a name whose last two words are both
-  prepositions after a word that is none, `rest_from_onto`, never
-  `at_of`, whose `at` is a noun: a worker's suffix on an entry that
-  already ends in one; the entry says what it gives, `rest`, the worker
-  what it adds, `rest_onto`), and `taken_word` (a function named only by
-  one of Roc's words, `record` or `tag`, unless it gives that very thing,
-  `record : Key -> Api.Record`; a value named only by a number, `three`;
-  the words in cookbook/words/taken.txt).
-  `self_test=1` runs its plants (`plants/name_hunt/`), and fails on a
-  plant named for no check.
-- [roc_commas.shale](roc_commas.shale): **long lines laid out by `roc fmt`.**
-  `roc fmt` never wraps a line, and it joins hand-made breaks back. A
-  trailing comma after a record's, call's or lambda's last item makes it
-  lay that group out one item a line. This puts one on each long line's
-  widest group, runs `roc fmt`, and repeats until nothing changes. It lists
-  what it can't reach: strings, long conditions, a function type's bare
-  arguments.
-- [stack.shale](stack.shale): **three or more, one a line.** Any list,
-  record, tuple, call's or lambda's arguments or tag payload of three or
-  more items on one line is a finding, each group its own, and so is a line
-  over 100 columns with none, and a function type's three or more
-  arguments, bare (`U8, U8, U8 -> U8`)
-  or in parentheses (`(U8, U8, U8 -> U8)`), which no trailing comma stacks.
-  A list or tuple of literals alone that fits the line (`[0, 0, 0]`,
-  `(0.0, 0.0, 1.5)`) is a table's row, one thing to scan, and no finding.
-  A run of flags (all `Bool`, or Bool literals) is told to be a tag, not
-  a record; a function whose annotation is a finding for its bare
-  arguments is not reported again for its lambda's on the line below.
-  `write=1` gives each a trailing comma, outermost first (never a function
-  type's arguments), and runs `roc fmt` until nothing changes; a second run
-  changes nothing. Strings and comments are never read as items, nor is a
-  record pattern's `..`; a `where` clause's items are its method
-  constraints. The Roc is the tree's own pin, `tools:roc-<pin>/roc` with
-  the pin read from the `roc-version` where the run starts; `write=1`
-  without one stops before any change. `self_test=1` runs its plants
-  (`plants/stack/`), then rewrites copies of them in `scratch:` with the
-  recipe's `SELF_TEST_PIN`: each must still parse, and a second rewrite
-  change nothing.
-- [nest_depth.shale](nest_depth.shale): **a call nested three deep**,
-  `f(g(h(x)))`, read inside out: the outermost call of each nest `min`
-  (3) or more deep, from `roc_tree` (roc-ast's tree, read in the host),
-  `path:line:column`, with the outermost call's name and the deepest's
-  (`List.concat to Str.to_utf8`), so a nest over several lines says more
-  than its first line. A method's receiver, a pipe's or
-  an arrow's left side, a tag, `?`, parentheses, an operator and a field's
-  or tuple's access are no level; a lambda,
-  record or list argument starts again (`loose=1` passes depth through the
-  last two). `self_test=1` runs its plants (`plants/nest_depth/`).
-- [boundaries.shale](boundaries.shale): **a function's boundary, from its
-  references.** `single`: a wrapper (one small expression, by its tree,
-  not its lines; a decision of two ways at most) with one production
-  caller, which no `expect`, test file (a twin, `test/`, a
-  `<Module>Spec.roc`) or `##` doc keeps, and which is neither a recursion
-  nor an entry into one (a rule of thumb, not a gate); `fixed`: a
-  parameter every production call fills with the same literal, a
-  recursion's own calls counted, never context passed down (`me`,
-  `req.me`), and never a library's API (a module type's member under
-  `lib/`, or in a module a `package` main.roc exposes); `entry`: a
-  recursion's start, the same literal at every
-  production call that its own calls vary (`at + 1`), which wants an entry
-  function that takes only what varies, not dropping (quiet once that
-  entry is its one outside call); `constant`: a function of
-  `{}` alone with no `!` in its name, which gives the same value every
-  call. A count of callers is of the files the glob reads, and a finding
-  says how many. Under the types (`types=1 root=<app>`, `types.shale`),
-  `bool_param`: a parameter whose type is `Bool` by the checker, beside
-  others, that some call passes as `Bool.True` or `Bool.False` ("a flag a
-  caller passes is a tag", roc-apps docs/roc-style.md); its home is here,
-  beside the calls `fixed` reads.
-  `self_test=1` runs its plants (`plants/boundaries/`, the typed ones
-  under `typed/`, root `QuietApp.roc`).
-- [errors.shale](errors.shale): **a failure said by its tags.**
-  `error_alias`: a function whose result's `Try` names a shared alias of
-  tags, not its tags in place (an alias in an argument, a handler's input,
-  is fine; a record or `Str` error is no alias of tags); `optional_tag`: a tag named as an optional (`None`,
-  `Some`: cookbook/words/optionals.txt); `set_fallback`: `List.set(l, i,
-  v) ?? l`, the copying shape roc-apps CLAUDE.md names first ("Six shapes
-  copy"); `placeholder`: a `??` falling back to a string literal (`??
-  "bogus"`), where the guide says to crash on the impossible. `self_test=1`
-  runs its plants (`plants/errors/`), and fails on a plant named for no
-  check.
-- [same_code.shale](same_code.shale): **the same machine code.** Two builds
-  of an archive, compared instruction by instruction with Roc's hashed
-  procedure names (`roc__p` and 32 hex digits, which move with the source's
-  layout) masked. It is the judge of a pure reformat, whose archive bytes
-  change though its code doesn't. An archive objdump can't read (wasm32) is
-  refused, never passed.
-- [tree_patch.shale](tree_patch.shale): **a tree's change as a patch.**
-  Every file under a changed copy against the original, as one unified
-  patch with `a/` and `b/` paths that `patch -p1` applies from the repo's
-  root. Dog Park's new-kind proof (`test/new_kind/sheep.patch`) is rebuilt
-  this way whenever the Roc it patches moves.
-- [methods.shale](methods.shale): **old-style calls as method calls.**
-  `Module.fn(first, rest...)` becomes `first.fn(rest...)` where that is the
-  same call (`List.map(xs, f)` is `xs.map(f)`), a chain from the inside out
-  (`List.len(List.keep_if(xs, p))` is `xs.keep_if(p).len()`). The calls are
-  roc-ast's; **the compiler is the judge**, since a tree can't say a type:
-  each file's rewrite is kept only when `roc check` on `root=` passes and
-  `roc test`'s summary is unchanged. An error on a rewritten call's line
-  leaves that call, its reason the error's title, and the file is tried
-  again; any other error puts the file back. No candidate: a call used as a
-  function value, a module's own call in its file; the right of a `|>` is
-  listed and left, and so is a call whose first argument is only number
-  literals, operators and parentheses (`U64.to_str(5)`, `U64.to_str(2 + 3)`:
-  as a receiver its type defaults, `(5).to_str()` being a `Dec`'s "5.0",
-  which checks; `5.U64` and `n + 1` turn), or a name bound to such
-  without an annotation (`n = 5`, a top-level `top = 7`; `m : U64` turns). A dry run by default (each trial put back; run it with
-  `--undo-on-stop`, so a stop mid-trial puts that back too); `apply=1`
-  keeps them. Out: the counts, a line each call left, `path:line: why`,
-  then the counts again. A run holds 64 programs: on a bigger tree it stops before a file
-  and says `go on with from=N`, the glob's file to start the next at.
-  The compiler is the tree's own pin, `tools:roc-<pin>/roc` with the pin
-  read from the `roc-version` where the run starts; a run without one
-  stops, since method lookup has changed between nightlies. **The
-  checker's types come first** (`types.shale`, below; `types=0` turns
-  them off): a candidate whose first argument is a concrete other type is
-  left untried, and the files whose calls are all of the module's own type
-  are written at once and confirmed by one `roc check` and `roc test`, a
-  file the confirm refuses going to the trial. A tree the types cannot
-  read stops the run, naming why, never a run without them: no `root=`
-  (an app importing the glob's files), a root that is no app, a roc-types
-  of another pin than `roc-version`'s. `self_test=1` runs its
-  plants (`plants/methods/`, copied to `scratch:`) with `SELF_TEST_PIN`,
-  each in a child run of its own, so each has a run's 64 programs.
-- [pinned.shale](pinned.shale): **the Roc a tree pins**, a library, not a
-  recipe: `use("cookbook:roc/pinned.shale")` gives `roc_bin(who,
-  self_test)`, the pinned `roc`'s path (`tools:roc-<pin>/roc`, the pin from
-  `roc-version` where the run starts), and `SELF_TEST_PIN`, the one Roc
-  every self-test runs. `boundaries`, `errors`, `methods`, `name_hunt`
-  and `stack` use it.
-- [findings.shale](findings.shale): **prints a summary, a list of
-  findings, and the summary again**. A library: `print_findings(summary,
-  lines)`. The first summary survives when Shale's output budget cuts a
-  long list off; the last is the line roc-chat's verify checks. Used by
-  name_hunt, errors, stack, methods, nest_depth and roc_commas, each of
-  which raises its budget to 4 MB (`output_bytes=4000000`).
-- [parsed.shale](parsed.shale): **every file that parses is judged**, a
-  library: `parse_roc_files(paths)` splits `roc_tree`'s files that parse from
-  those roc-ast refuses, and `fail_if_refused(who, refused)`, a run's last
-  word, names each refused file with its reason and exits non-zero.
-  `errors`, `boundaries`, `name_hunt` and `nest_depth` use it, so one
-  old-syntax probe in a tree never hides the other files' findings, and is
-  never passed unread. Under the types it names each file no root reached
-  too (`not reached by <root>: <path>`, `roc_types_for_files`'s), judged
-  without them, and fails the run the same way.
-- [types.shale](types.shale): **Roc's own checker's types**, a library:
-  `use("cookbook:roc/types.shale")` gives `roc_types(root, roc)`, every
-  module the app `root` reaches, by real path, each a list of its
-  expressions' and patterns' types with their regions, from roc-types
-  (`tools:roc-types/bin/roc-types`, Shale's `tools/roc_types`). A root the
-  checker refuses, a missing roc-types, an unknown header and a roc-types
-  whose pin is not the tree's Roc (`roc`, `roc_bin`'s path) each stop the
-  run. `methods.shale` uses it. For the hunts (`types=1` on `name_hunt`,
-  `errors` and `boundaries`), `roc_types_for_files` takes `root=` as one app
-  or several (`root=a.roc,b.roc`, one roc-types run each, a module two
-  reach typed by the first) and judges what they reach: a file of the glob
-  none reaches is judged without types, named, and fails the run at its
-  end (`parsed.shale`). roc-types reads only an `app [...]` header, so a
-  headerless script (`main! = ...`, roc-apps' `basic/roc/BasicRun.roc`)
-  is no root. `methods` keeps its own stop on a file the root does not
-  reach: a rewrite runs fully typed or not at all.
+    cd <repo> && shale <shale>/cookbook/roc/name_hunt.shale glob='app/**/*.roc'
 
-**Writing a recipe that edits Roc.** roc-ast's columns are bytes, and a
-span's end is exclusive. Spans overlap: `type-mod` and `s-type-decl` both
-start at the type's name. The file node starts after the leading comments,
-and a `|>` is `e-arrow-call`. When the compiler judges an edit, `roc check`
-can report two errors on one line, or report an error at the line of the
-definition around it, so match its errors to an edit by span, not by
-line alone. A recipe that compiles once per file meets the 64-program limit
-and must stop and resume, as `methods.shale`'s `from=` does.
+Most recipes take `glob=`, the files to read (`**/*.roc` by default), and
+`self_test=1`, which runs the recipe over its test files in
+`plants/<recipe>/` and fails if any gives the wrong result. Run a
+self-test from the shale checkout:
+
+    cd <shale> && shale cookbook:roc/name_hunt.shale self_test=1
+
+A recipe that runs the Roc compiler uses the version named in the
+`roc-version` file where the run starts, so start it at the repository's
+root.
+
+## Checks
+
+These recipes print findings and, except for `stack.shale`'s `write=1`,
+change no files. A finding is a question for a reader, not a verdict. Each
+finding is one line that starts `path:line:` and names its check. The
+findings are printed between two copies of a summary of counts
+(`boundaries.shale` prints its summary once, after the findings). A file
+that doesn't parse is listed at the end, and the run then fails.
+
+- [name_hunt.shale](name_hunt.shale) looks for awkward names: an effect
+  named like a state, a question that doesn't return a `Bool`, a name made
+  only of vague words, and eleven other checks. Its word lists are in
+  `cookbook/words/`. `words=1` prints a count of the first words of
+  effects instead of the findings.
+- [errors.shale](errors.shale) checks how code reports failure: a shared
+  alias of error tags where the tags belong in place, a tag named like an
+  optional (`None`), a `List.set(...) ?? l` that copies the list, and a
+  `??` that falls back to a placeholder string.
+- [boundaries.shale](boundaries.shale) asks whether each function earns
+  its boundary and each parameter is really a parameter: a small function
+  with one caller, a parameter every caller passes the same literal, a
+  function of `{}` that could be a constant, and (with `types=1`) a `Bool`
+  parameter that callers pass as a literal. Give it the whole tree, tests
+  included, because it counts callers only in the files it reads.
+- [nest_depth.shale](nest_depth.shale) finds calls nested three or more
+  deep, like `f(g(h(x)))`, which read inside out. `min=` sets the depth to
+  report.
+- [stack.shale](stack.shale) finds lines that hold three or more items
+  side by side, and lines wider than `width=` (100 by default). With
+  `write=1` it adds trailing commas and runs `roc fmt`, which lays each such
+  group out one item a line.
+
+`name_hunt`, `errors` and `boundaries` can also ask Roc's type checker
+for types: add `types=1 root=<app>`, where the app imports the files
+read. When no one app imports them all, name several apps separated by
+commas. A file that no app imports is checked without types, listed at the
+end, and fails the run.
+
+    cd <repo> && shale <shale>/cookbook/roc/errors.shale glob='app/**/*.roc' types=1 root=app/main.roc,app/Specs.roc
+
+## Rewrites and comparisons
+
+- [roc_commas.shale](roc_commas.shale) shortens lines wider than `width=`
+  in the folder `dir=` by adding a trailing comma to a group on each, so
+  that `roc fmt` lays it out one item a line. It edits the files, then
+  lists the lines it couldn't shorten.
+
+      cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
+
+- [methods.shale](methods.shale) rewrites calls like `List.map(xs, f)` as
+  method calls, `xs.map(f)`. Roc's type checker and compiler decide which
+  rewrites are safe; each call it leaves is listed with the reason. It is a
+  dry run unless given `apply=1`. Run it with `--undo-on-stop`, so a run
+  that stops in the middle puts back the file it was trying. A run starts
+  at most 64 programs, so on a large tree it stops and prints the `from=`
+  argument for the next run.
+
+      cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/methods.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
+
+- [same_code.shale](same_code.shale) compares two builds of a Roc archive
+  and says whether they hold the same machine code. Use it to confirm that
+  a change is only a reformat.
+
+      cd <repo> && shale <shale>/cookbook/roc/same_code.shale old=<a.a> new=<b.a>
+
+- [tree_patch.shale](tree_patch.shale) turns a changed copy of a folder
+  into one patch that `patch -p1` applies from the repository's root.
+
+      cd <repo> && shale <shale>/cookbook/roc/tree_patch.shale old=roc new=<copy>/roc under=roc out=<file>.patch
+
+## Libraries
+
+These files are loaded with `use("cookbook:roc/<file>.shale")` and are not
+run on their own.
+
+- [parsed.shale](parsed.shale): the recipes check every .roc file in a
+  tree, and some files may not parse. This library lets a recipe check the
+  files that do parse, print what it found, and then fail with a list of
+  the files it couldn't parse and why: `parse_roc_files(paths)` and
+  `fail_if_refused(who, refused, unreached?)`. Used by `boundaries`,
+  `errors`, `name_hunt` and `nest_depth`.
+- [findings.shale](findings.shale): `print_findings(summary, lines)` prints
+  the summary, the findings and the summary again. The first copy survives
+  when Shale's output limit cuts a long list short, and a caller that reads
+  only the last line still gets the counts. Used by `errors`, `methods`,
+  `name_hunt`, `nest_depth`, `roc_commas` and `stack`.
+- [pinned.shale](pinned.shale): `roc_bin(who, self_test)` gives the path
+  of the Roc compiler that the repository's `roc-version` file names
+  (installed at `tools:roc-<version>/roc`), and `SELF_TEST_PIN` is the
+  version every self-test uses. Used by `boundaries`, `errors`, `methods`,
+  `name_hunt`, `roc_commas` and `stack`.
+- [types.shale](types.shale): runs roc-types, Shale's tool that asks Roc's
+  type checker for the type of every expression and pattern in an app.
+  `roc_types(root, roc)` reads one app; `roc_types_for_files(who, root,
+  roc, paths, exempt)` gathers the types for a recipe's files from one or
+  more apps and lists the files none of them reaches. Used by
+  `boundaries`, `errors`, `methods` and `name_hunt`.
+
+## Tools the recipes need
+
+Run the install scripts from the shale checkout.
+
+- roc-ast, Roc's own parser, gives the recipes their syntax trees through
+  Shale's `roc_tree`. Install it with `shale tools/roc_ast/install.shale`.
+- roc-types gives the types. Install it with
+  `shale tools/roc_types/install.shale`.
+- The Roc compiler named in `roc-version`, at `tools:roc-<version>/roc`.
+
+## Writing a recipe that edits Roc
+
+roc-ast's columns count bytes, and a span's end is exclusive. Spans can
+overlap: `type-mod` and `s-type-decl` both start at the type's name. The
+file node starts after the leading comments, and a `|>` is an
+`e-arrow-call`. `roc check` can report two errors on one line, or report
+an error at the line of the definition around it, so match its errors to
+an edit by span, not by line. A Shale run starts at most 64 programs, so a
+recipe that compiles once per file must stop and resume, as
+`methods.shale`'s `from=` does.
