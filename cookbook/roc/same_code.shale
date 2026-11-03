@@ -1,63 +1,67 @@
--- **THE SAME MACHINE CODE**: two builds of a Roc archive (or any object
--- file objdump reads), compared instruction by instruction with Roc's
--- hashed procedure names masked. Roc names a procedure `roc__p` and 32 hex
--- digits that move with the source's layout, so a pure reformat (roc fmt,
--- a comment, a renamed local) changes the archive's bytes but not its code.
--- This says whether the code is the same, and where it first differs.
+-- Compare two builds of a Roc archive (or of any object file objdump can
+-- disassemble) and say whether they hold the same machine code, and if not,
+-- where they first differ. Roc names each procedure `roc__p` followed by 32
+-- hex digits that change whenever the source's layout does, so a pure
+-- reformat (roc fmt, a new comment, a renamed local) changes the archive's
+-- bytes without changing its code. This script masks those names before
+-- comparing the two disassemblies line by line.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/same_code.shale old=<a.a> new=<b.a>
 --
--- Build the old one in a worktree of the old commit. An archive objdump
--- can't disassemble (binutils' doesn't read wasm32) is refused, never
--- passed: two empty listings are not the same code.
+-- To get the old archive, build the old commit in a git worktree. The run
+-- fails on an archive objdump can't disassemble (binutils' objdump doesn't
+-- read wasm32), because two empty listings would compare as the same.
 --
 -- budget: steps=400000000 arena_bytes=2000000000
 
 const OLD = arg("old", "")
 const NEW = arg("new", "")
+const HASH_DIGITS = 32
 
--- `l` with each `roc__p<32 hex>` read as `roc__pX`.
-function masked(l)
+-- The line with each `roc__p<32 hex digits>` written as `roc__pX`.
+function with_roc_names_masked(line)
   local out = ""
   local from = 1
   while true do
-    local at = find(l, "roc__p", from)
-    if at == nil then return out .. sub(l, from) end
-    out = out .. sub(l, from, at + 5) .. "X"
-    local j = at + 6
-    while j <= #l and contains("0123456789abcdef", sub(l, j, j)) and j < at + 6 + 32 do j = j + 1 end
+    local at = find(line, "roc__p", from)
+    if at == nil then return out .. sub(line, from) end
+    out = out .. sub(line, from, at + 5) .. "X"
+    local hash_start = at + 6
+    local j = hash_start
+    while j <= #line and j < hash_start + HASH_DIGITS and contains("0123456789abcdef", sub(line, j, j)) do j = j + 1 end
     from = j
   end
 end
 
--- The archive's disassembly, the archive's own name left out (addresses
--- kept: the same code lays out the same).
-function listing(p)
-  local r = run({"objdump", "-dr", "--no-show-raw-insn", p}, {timeout_ms = 120000, whole = 64000000})
-  if r.code ~= 0 then fail("objdump " .. p .. " (code " .. r.code .. "), not judged: " .. trim(sub(r.out, 1, 200))) end
+-- The file's disassembly with Roc's names masked. The lines naming the file
+-- itself are left out, and the addresses are kept, since the same code is
+-- laid out at the same addresses.
+function disassembly(path)
+  local r = run({"objdump", "-dr", "--no-show-raw-insn", path}, {timeout_ms = 120000, whole = 64000000})
+  if r.code ~= 0 then fail("objdump failed on " .. path .. " (code " .. r.code .. "), so it can't be compared: " .. trim(sub(r.out, 1, 200))) end
   local out = {}
+  local instructions = 0
   for l in lines(r.out) do
-    if not contains(l, "file format") and not starts_with(l, "In archive") then push(out, masked(l)) end
+    if not contains(l, "file format") and not starts_with(l, "In archive") then
+      local masked = with_roc_names_masked(l)
+      push(out, masked)
+      if like(masked, "*:\t*") then instructions = instructions + 1 end
+    end
   end
-  local insns = 0
-  for l in out do
-    if like(l, "*:\t*") then insns = insns + 1 end
-  end
-  if insns == 0 then fail(p .. ": objdump read no instructions from it (wasm32? binutils can't): not judged") end
+  if instructions == 0 then fail("objdump read no instructions from " .. path .. " (wasm32? binutils can't), so it can't be compared") end
   return out
 end
 
-if OLD == "" or NEW == "" then fail("old=<archive> new=<archive>") end
-local a = listing(OLD)
-local b = listing(NEW)
-local n = min(#a, #b)
-for i = 1, n do
-  if a[i] ~= b[i] then
-    print("DIFFERENT at line " .. i .. " of " .. #a .. " and " .. #b .. ":")
-    print("  old: " .. a[i])
-    print("  new: " .. b[i])
+if OLD == "" or NEW == "" then fail("same_code needs old=<archive> new=<archive>") end
+local old_lines = disassembly(OLD)
+local new_lines = disassembly(NEW)
+for i = 1, min(#old_lines, #new_lines) do
+  if old_lines[i] ~= new_lines[i] then
+    print("DIFFERENT at line " .. i .. " of " .. #old_lines .. " and " .. #new_lines .. ":")
+    print("  old: " .. old_lines[i])
+    print("  new: " .. new_lines[i])
     fail("not the same code")
   end
 end
-if #a ~= #b then fail("DIFFERENT: " .. #a .. " lines against " .. #b) end
-print("SAME: " .. #a .. " lines of disassembly, Roc's hashed names masked")
+if #old_lines ~= #new_lines then fail("DIFFERENT: " .. #old_lines .. " lines against " .. #new_lines) end
+print("SAME: " .. #old_lines .. " lines of disassembly, Roc's hashed names masked")
