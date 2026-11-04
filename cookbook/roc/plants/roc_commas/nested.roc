@@ -1,0 +1,4 @@
+module [both]
+
+# The outer list is stacked first, then each call inside it.
+both = [f(a, b, c), g(d, e, h)]

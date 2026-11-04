@@ -9,17 +9,37 @@
 -- counts, as cookbook/roc/findings.shale describes. It runs the Roc that
 -- the repository's roc-version file names.
 --
+-- With `items=N`, every group of N or more items gets the trailing comma
+-- too, whatever its line's width, so roc-style.md's rule of stacking
+-- anything with three or more parts is `items=3`. A group and its items are
+-- read as stack.shale reads them (cookbook/roc/groups.shale), so after
+-- `items=3` stack.shale finds no group left to stack. A line's outermost
+-- group goes first, and the next pass reaches the groups inside it. A
+-- function type's arguments and a row of literals are left alone, as
+-- stack.shale leaves them.
+--
 --   cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
+--   cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc items=3
+--   shale cookbook:roc/roc_commas.shale self_test=1
+--
+-- `self_test=1` copies the plants in `cookbook/roc/plants/roc_commas/` to
+-- `scratch:roc_commas/`, rewrites them there with `items=3` and the
+-- self-test's Roc, and checks that the rewrite ends, that each plant comes
+-- out as its `.want` file, and that no line is left with a group to stack.
 --
 -- budget: steps=400000000 arena_bytes=2000000000 output_bytes=4000000
 
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/pinned.shale")
-const DIR = arg("dir", "roc")
+use("cookbook:roc/groups.shale")
+const SELF_TEST = arg("self_test", "") == "1"
+const PLANTS = "cookbook:roc/plants/roc_commas"
+const DIR = SELF_TEST and "scratch:roc_commas" or arg("dir", "roc")
 not_option("roc_commas", "dir", DIR)
 const WIDTH = arg("width", 100)
+const ITEMS = SELF_TEST and 3 or arg("items", 0)
 const MAX_PASSES = 8
-const ROC = roc_bin("roc_commas", false)
+const ROC = roc_bin("roc_commas", SELF_TEST)
 
 -- The position of the closing bracket that should get a trailing comma, or
 -- 0 if there is none. Of the groups that open and close on the line, it is
@@ -74,11 +94,6 @@ function closer_for_trailing_comma(line)
   return best
 end
 
--- The line's width in columns, counting a tab as four.
-function display_width(line)
-  return #line + 3 * (#split(line, "\t") - 1)
-end
-
 -- The line with a trailing comma added, or nil when it has no group to take
 -- one or its widest group already ends in a comma.
 function line_with_trailing_comma(line)
@@ -104,21 +119,33 @@ function roc_files()
 end
 
 function run_roc_fmt()
-  local r = run({ROC, "fmt", DIR}, {timeout_ms = 60000, tail = 20})
+  local r = run({ROC, "fmt", real(DIR)}, {timeout_ms = 60000, tail = 20})
   if r.code ~= 0 then
     print(r.out)
     fail("roc fmt failed")
   end
 end
 
--- Adds a trailing comma to each long code line of the file that can take
--- one, and returns how many lines it changed.
+-- Line `l` with a trailing comma for its outermost group of ITEMS or more
+-- items, or else, when it is wider than WIDTH, for its widest group. nil
+-- when it gets none.
+function line_with_comma(l)
+  if ITEMS > 0 then
+    local g = group_with_items(l, ITEMS, WIDTH)
+    if g ~= nil then return with_trailing_comma(l, g) end
+  end
+  if line_width(l) > WIDTH then return line_with_trailing_comma(l) end
+  return nil
+end
+
+-- Adds a trailing comma to each code line of the file that should get one,
+-- and returns how many lines it changed.
 function add_trailing_commas(path)
   local ls = split(read(path), "\n")
   local changed = 0
   for i = 1, #ls do
-    if display_width(ls[i]) > WIDTH and not is_comment(ls[i]) then
-      local with_comma = line_with_trailing_comma(ls[i])
+    if not is_comment(ls[i]) then
+      local with_comma = line_with_comma(ls[i])
       if with_comma ~= nil then
         ls[i] = with_comma
         changed = changed + 1
@@ -129,30 +156,66 @@ function add_trailing_commas(path)
   return changed
 end
 
-run_roc_fmt()
-local pass = 1
-local changed = 1
-while changed > 0 and pass <= MAX_PASSES do
-  changed = 0
-  for path in roc_files() do changed = changed + add_trailing_commas(path) end
-  print("pass " .. pass .. ": " .. changed .. " lines given a trailing comma")
+-- Adds commas and runs roc fmt until a pass changes nothing, or MAX_PASSES
+-- have run. Returns the last pass's count, 0 when the rewrite ended.
+function rewrite()
   run_roc_fmt()
-  pass = pass + 1
+  local pass = 1
+  local changed = 1
+  while changed > 0 and pass <= MAX_PASSES do
+    changed = 0
+    for path in roc_files() do changed = changed + add_trailing_commas(path) end
+    print("pass " .. pass .. ": " .. changed .. " lines given a trailing comma")
+    run_roc_fmt()
+    pass = pass + 1
+  end
+  return changed
 end
 
-local long_comments = 0
-local long_code = {}
-for path in roc_files() do
-  local ls = split(read(path), "\n")
-  for i = 1, #ls do
-    local w = display_width(ls[i])
-    if w > WIDTH then
-      if is_comment(ls[i]) then
-        long_comments = long_comments + 1
-      else
-        push(long_code, path .. ":" .. i .. " (" .. w .. "): " .. trim(sub(ls[i], 1, 140)))
+function self_test()
+  if is_dir(DIR) then remove_tree(DIR) end
+  mkdir(DIR)
+  for p in glob(PLANTS .. "/*.roc") do replace(DIR .. "/" .. basename(p), read(p)) end
+  if rewrite() > 0 then fail("roc_commas: still changing after " .. MAX_PASSES .. " passes") end
+  local bad = 0
+  for p in glob(PLANTS .. "/*.roc") do
+    local name = basename(p)
+    local want = PLANTS .. "/" .. sub(name, 1, #name - 4) .. ".want"
+    local got = read(DIR .. "/" .. name)
+    local ok = got == read(want)
+    print((ok and "ok   " or "FAIL ") .. name .. ": comes out as its .want")
+    if not ok then bad = bad + 1 end
+    local n = 0
+    for l in lines(got) do
+      n = n + 1
+      if not is_comment(l) and group_with_items(l, ITEMS, WIDTH) ~= nil then
+        print("FAIL " .. name .. ":" .. n .. ": a group left to stack: " .. trim(l))
+        bad = bad + 1
       end
     end
   end
+  if bad > 0 then fail(bad .. " checks failed") end
+  print("PASS: the rewrite ends, every plant comes out as its .want, and no group is left to stack")
 end
-print_findings("still over " .. WIDTH .. ": " .. #long_code .. " code lines, " .. long_comments .. " comment lines", long_code)
+
+if SELF_TEST then
+  self_test()
+else
+  rewrite()
+  local long_comments = 0
+  local long_code = {}
+  for path in roc_files() do
+    local ls = split(read(path), "\n")
+    for i = 1, #ls do
+      local w = line_width(ls[i])
+      if w > WIDTH then
+        if is_comment(ls[i]) then
+          long_comments = long_comments + 1
+        else
+          push(long_code, path .. ":" .. i .. " (" .. w .. "): " .. trim(sub(ls[i], 1, 140)))
+        end
+      end
+    end
+  end
+  print_findings("still over " .. WIDTH .. ": " .. #long_code .. " code lines, " .. long_comments .. " comment lines", long_code)
+end

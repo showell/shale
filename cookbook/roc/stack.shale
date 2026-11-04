@@ -69,140 +69,15 @@ const WIDTH = arg("width", 100)
 const WRITE = arg("write", "") == "1"
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/findings.shale")
+use("cookbook:roc/groups.shale")
 const MAX_PASSES = 12
-const OPENERS = {["("] = ")", ["{"] = "}", ["["] = "]"}
-const CLOSERS = {[")"] = true, ["}"] = true, ["]"] = true}
-
--- A line's width, with a tab counting four columns.
-function line_width(l)
-  return #l + 3 * (#split(l, "\t") - 1)
-end
-
--- The last character before position `i` that is not a space, or "".
-function char_before(l, i)
-  local j = i - 1
-  while j > 0 and sub(l, j, j) == " " do j = j - 1 end
-  if j == 0 then return "" end
-  return sub(l, j, j)
-end
-
--- The group whose brackets are at `open` and `close` on `l`, with its
--- items counted from the commas at its own depth. A last item that is a
--- rest pattern (`{ a, b, .. }`, `[x, .. as more]`) does not count. A
--- parenthesized group with an arrow at its own depth, like `(A, B => C)`,
--- is a function type, whose arguments can't take a trailing comma.
-function closed_group(l, open, close, commas, last_comma, depth, has_arrow)
-  local inner = trim(sub(l, open + 1, close - 1))
-  local trailing = ends_with(inner, ",")
-  local items = commas + 1
-  if trailing then items = commas end
-  if inner == "" then items = 0 end
-  local last = trim(sub(l, last_comma + 1, close - 1))
-  if not trailing and commas > 0 and (last == ".." or starts_with(last, ".. as ")) then items = items - 1 end
-  return {open = open, close = close, items = items, trailing = trailing, depth = depth, fn_type = has_arrow and sub(l, open, open) == "("}
-end
-
--- The start of a method constraint (`k.is_eq :`). In a `where` clause's
--- brackets, only a comma followed by one of these separates items.
-const CONSTRAINT = "^ *[a-z_][A-Za-z0-9_]*\\.[a-z_][A-Za-z0-9_]*!? *:"
-
--- The groups that open and close on line `l`, each
--- `{open, close, items, trailing, depth, fn_type}`. A group is a pair of
--- brackets or a lambda's `|...|`. A group that runs onto another line is
--- left out.
-function groups_on_line(l)
-  local out = {}
-  if starts_with(trim(l), "\\\\") then return out end
-  -- The groups still open, innermost last. Each holds where it opened,
-  -- the character that closes it, its commas so far and the place of the
-  -- last one, whether it is a `where` clause's brackets, and whether a
-  -- ` ->` or ` =>` appears at its own depth. An arrow call (`x->f()`) has
-  -- no space before its arrow, so it doesn't count.
-  local open_groups = {}
-  local i = 1
-  local n = #l
-  while i <= n do
-    local c = sub(l, i, i)
-    if c == "\"" or c == "'" then
-      i = i + 1
-      while i <= n and sub(l, i, i) ~= c do
-        if sub(l, i, i) == "\\" then i = i + 1 end
-        i = i + 1
-      end
-    elseif c == "#" then
-      break
-    elseif has_key(OPENERS, c) then
-      local text_before = trim(sub(l, 1, i - 1))
-      local is_where = c == "[" and (text_before == "where" or ends_with(text_before, " where"))
-      push(open_groups, {at = i, closer = OPENERS[c], commas = 0, last = i, has_arrow = false, is_where = is_where})
-    elseif (c == "-" or c == "=") and sub(l, i + 1, i + 1) == ">" and sub(l, i - 1, i - 1) == " " and #open_groups > 0 then
-      open_groups[#open_groups].has_arrow = true
-      i = i + 1
-    elseif c == "|" and sub(l, i + 1, i + 1) ~= ">" and sub(l, i + 1, i + 1) ~= "|" and sub(l, i - 1, i - 1) ~= "|" then
-      if #open_groups > 0 and open_groups[#open_groups].closer == "|" then
-        local g = open_groups[#open_groups]
-        push(out, closed_group(l, g.at, i, g.commas, g.last, #open_groups - 1, g.has_arrow))
-        open_groups = take(open_groups, #open_groups - 1)
-      else
-        -- A `|` opens a lambda only where an expression can start.
-        local b = char_before(l, i)
-        if b == "" or b == "=" or b == "(" or b == "," or b == "[" or b == "{" or b == ":" then
-          push(open_groups, {at = i, closer = "|", commas = 0, last = i, has_arrow = false, is_where = false})
-        end
-      end
-    elseif has_key(CLOSERS, c) then
-      -- Pop down to the group this character closes. A `|` that turned out
-      -- to be no lambda is dropped on the way.
-      while #open_groups > 0 and open_groups[#open_groups].closer ~= c do open_groups = take(open_groups, #open_groups - 1) end
-      if #open_groups > 0 then
-        local g = open_groups[#open_groups]
-        push(out, closed_group(l, g.at, i, g.commas, g.last, #open_groups - 1, g.has_arrow))
-        open_groups = take(open_groups, #open_groups - 1)
-      end
-    elseif c == "," and #open_groups > 0 then
-      local g = open_groups[#open_groups]
-      if not g.is_where or re_find(sub(l, i + 1), CONSTRAINT) ~= nil then
-        g.commas = g.commas + 1
-        g.last = i
-      end
-    end
-    i = i + 1
-  end
-  return out
-end
-
--- Whether group `g` on line `l` is a row of literals, read at a glance:
--- a list, or a tuple (a `(` not right after a name, `)` or `!`, so not a
--- call's arguments), whose items are all numbers, strings with nothing
--- interpolated, characters or bare tags, on a line within WIDTH. A string
--- holding a comma would be split wrongly, so it never makes a row.
-const LITERAL_ITEM = [=[^(-?[0-9][0-9A-Za-z_.]*|"[^"\\$]*"|'[^']+'|[A-Z][A-Za-z0-9]*)$]=]
-function is_literal_row(l, g)
-  if line_width(l) > WIDTH then return false end
-  local c = sub(l, g.open, g.open)
-  if c == "(" then
-    local b = char_before(l, g.open)
-    if g.open > 1 and sub(l, g.open - 1, g.open - 1) ~= " " and re_find(b, "[A-Za-z0-9_)!]") ~= nil then return false end
-  elseif c ~= "[" then
-    return false
-  end
-  for item in split(trim(sub(l, g.open + 1, g.close - 1)), ",") do
-    if trim(item) ~= "" and re_find(trim(item), LITERAL_ITEM) == nil then return false end
-  end
-  return true
-end
 
 -- The group on line `l` the rewrite gives a trailing comma: the outermost,
 -- then widest, group of three or more items that has none yet; or else, on
 -- a line wider than WIDTH, the widest group of two or more. A function
 -- type's arguments are never picked. nil when no group qualifies.
 function group_to_stack(l)
-  local best = nil
-  for g in groups_on_line(l) do
-    if g.items >= 3 and not g.trailing and not g.fn_type and not is_literal_row(l, g) then
-      if best == nil or g.depth < best.depth or (g.depth == best.depth and g.close - g.open > best.close - best.open) then best = g end
-    end
-  end
+  local best = group_with_items(l, 3, WIDTH)
   if best ~= nil or line_width(l) <= WIDTH then return best end
   for g in groups_on_line(l) do
     if g.items >= 2 and not g.trailing and not g.fn_type then
@@ -210,14 +85,6 @@ function group_to_stack(l)
     end
   end
   return best
-end
-
--- Line `l` with a comma after the last item of group `g`, before any
--- spaces that come ahead of its closing bracket.
-function with_trailing_comma(l, g)
-  local j = g.close - 1
-  while j > g.open and sub(l, j, j) == " " do j = j - 1 end
-  return sub(l, 1, j) .. "," .. sub(l, j + 1)
 end
 
 -- Text cut to 60 characters for a finding line.
@@ -289,7 +156,7 @@ function findings_in(files)
           found_on_line = found_on_line + 1
         elseif skip_lambda and sub(ls[i], g.open, g.open) == "|" then
           skip_lambda = false
-        elseif g.items >= 3 and not g.trailing and not is_literal_row(ls[i], g) then
+        elseif g.items >= 3 and not g.trailing and not is_literal_row(ls[i], g, WIDTH) then
           local advice = are_all_flags(inner) and FLAG_ADVICE or ""
           push(out, {path = p, line = i, kind = "stack", what = g.items .. " items in " .. shortened(sub(ls[i], g.open, g.close)) .. advice})
           found_on_line = found_on_line + 1
