@@ -1,0 +1,143 @@
+-- Checks that files hold no conflict markers, the last step of a merge
+-- resolved by hand or with the conflicts library:
+--
+--   shale <cookbook>/conflicts_check.shale files=a.zig,docs/b.md
+--
+-- It prints PASS, or each file's markers and FAIL. `self_test=1` tests the
+-- library on the canned conflicts below instead.
+
+use("cookbook:conflicts.shale")
+
+const DIFF3 = [=[
+top
+<<<<<<< HEAD
+ours one
+||||||| base
+base one
+=======
+theirs one
+>>>>>>> topic
+middle
+<<<<<<< HEAD
+ours two
+||||||| base
+=======
+theirs two
+theirs two, more
+>>>>>>> topic
+end
+]=]
+
+const TWO_WAY = [=[
+a
+<<<<<<< HEAD
+ours
+=======
+theirs
+>>>>>>> topic
+b
+]=]
+
+function hunks_of(text) return conflict_hunks(text, "case") end
+function keep_of(text, side) return keep_side(text, side, "case") end
+function resolve_of(text, sides) return resolve_hunks(text, sides, "case") end
+function once_of(text, old, new) return replace_once(text, old, new) end
+function resolved_of(text) return assert_resolved(text, "case") end
+function assert_file_of(path) return assert_file_resolved(path) end
+
+-- Each failing call must stop with a message holding `want`.
+function expect_stop(wrong, name, r, want)
+  if r.ok then
+    push(wrong, name .. ": did not stop")
+  elseif r.class ~= "fail" or not contains(r.error, want) then
+    push(wrong, name .. ": stopped with " .. r.class .. ": " .. r.error)
+  end
+end
+
+function expect_same(wrong, name, got, want)
+  if got ~= want then push(wrong, name .. ": got [" .. got .. "], wanted [" .. want .. "]") end
+end
+
+function self_test()
+  local wrong = {}
+
+  local h = conflict_hunks(DIFF3)
+  expect_same(wrong, "diff3 count", tostring(#h), "2")
+  expect_same(wrong, "diff3 line 1", tostring(h[1].line), "2")
+  expect_same(wrong, "diff3 line 2", tostring(h[2].line), "10")
+  expect_same(wrong, "diff3 style", h[1].style, "diff3")
+  expect_same(wrong, "diff3 ours", h[1].ours, "ours one\n")
+  expect_same(wrong, "diff3 base", h[1].base, "base one\n")
+  expect_same(wrong, "diff3 theirs", h[1].theirs, "theirs one\n")
+  expect_same(wrong, "diff3 empty base", h[2].base, "")
+  expect_same(wrong, "diff3 two lines", h[2].theirs, "theirs two\ntheirs two, more\n")
+  expect_same(wrong, "diff3 labels", h[1].ours_label .. "/" .. h[1].theirs_label, "HEAD/topic")
+
+  local t = conflict_hunks(TWO_WAY)
+  expect_same(wrong, "two-way count", tostring(#t), "1")
+  expect_same(wrong, "two-way style", t[1].style, "two-way")
+  expect_same(wrong, "two-way ours", t[1].ours, "ours\n")
+  expect_same(wrong, "two-way theirs", t[1].theirs, "theirs\n")
+  expect_same(wrong, "no conflicts", tostring(#conflict_hunks("plain\n")), "0")
+
+  expect_same(wrong, "keep ours", keep_side(DIFF3, "ours"), "top\nours one\nmiddle\nours two\nend\n")
+  expect_same(wrong, "keep theirs", keep_side(DIFF3, "theirs"), "top\ntheirs one\nmiddle\ntheirs two\ntheirs two, more\nend\n")
+  expect_same(wrong, "keep base", keep_side(DIFF3, "base"), "top\nbase one\nmiddle\nend\n")
+  expect_same(wrong, "keep two-way", keep_side(TWO_WAY, "theirs"), "a\ntheirs\nb\n")
+  expect_same(wrong, "hunk by hunk", resolve_hunks(DIFF3, {"theirs", "both"}), "top\ntheirs one\nmiddle\nours two\ntheirs two\ntheirs two, more\nend\n")
+  expect_same(wrong, "rewrite", rewrite_hunks(TWO_WAY, {"mine\n"}), "a\nmine\nb\n")
+  expect_same(wrong, "CRLF", keep_side("x\r\n<<<<<<< HEAD\r\no\r\n=======\r\nt\r\n>>>>>>> b\r\n", "theirs"), "x\r\nt\r\n")
+  expect_same(wrong, "no final newline", keep_side("<<<<<<< HEAD\no\n=======\nt\n>>>>>>> b", "ours"), "o\n")
+
+  expect_stop(wrong, "unclosed", attempt(hunks_of, "<<<<<<< HEAD\no\n=======\nt\n"), "case:1: the conflict that opens here never closes")
+  expect_stop(wrong, "close before split", attempt(hunks_of, "<<<<<<< HEAD\no\n>>>>>>> b\n"), "case:3: a `>>>>>>>` before the `=======`")
+  expect_stop(wrong, "nested open", attempt(hunks_of, "<<<<<<< HEAD\n<<<<<<< HEAD\n"), "case:2: a `<<<<<<<` inside")
+  expect_stop(wrong, "second split", attempt(hunks_of, "<<<<<<< HEAD\n=======\n=======\n>>>>>>> b\n"), "case:3: a second `=======`")
+  expect_stop(wrong, "base after split", attempt(hunks_of, "<<<<<<< HEAD\n=======\n||||||| base\n>>>>>>> b\n"), "case:3: a `|||||||` after the theirs section")
+  expect_stop(wrong, "stray close", attempt(hunks_of, "a\n>>>>>>> b\n"), "case:2: a `>>>>>>>` marker outside")
+  expect_stop(wrong, "base of two-way", attempt(keep_of, TWO_WAY, "base"), "is two-way and has no base")
+  expect_stop(wrong, "no such side", attempt(keep_of, TWO_WAY, "mine"), "no side `mine`")
+  expect_stop(wrong, "nothing to keep", attempt(keep_of, "plain\n", "ours"), "no conflict to resolve")
+  expect_stop(wrong, "too few sides", attempt(resolve_of, DIFF3, {"ours"}), "has 2 conflicts, and 1 sides")
+
+  expect_same(wrong, "replace once", replace_once("a b c", "b", "B"), "a B c")
+  expect_same(wrong, "replace at the ends", replace_once("ab", "a", "") .. replace_once("ab", "b", "c"), "bac")
+  expect_stop(wrong, "replace absent", attempt(once_of, "a b c", "d", "D"), "not found: d")
+  expect_stop(wrong, "replace twice", attempt(once_of, "a b a", "a", "A"), "found more than once: a")
+  expect_stop(wrong, "replace empty", attempt(once_of, "a", "", "A"), "the old text is empty")
+
+  expect_same(wrong, "markers in diff3", tostring(#conflict_markers(DIFF3)), "8")
+  expect_same(wrong, "markers in plain", tostring(#conflict_markers("<<<<<<<< eight\n=== \n")), "0")
+  local ok = attempt(resolved_of, keep_side(DIFF3, "ours"))
+  if not ok.ok then push(wrong, "resolved text: stopped: " .. ok.error) end
+  expect_stop(wrong, "left markers", attempt(resolved_of, TWO_WAY), "case:2: 3 conflict markers left, the first `<<<<<<< HEAD`")
+
+  local dir = fresh_dir("scratch:", "conflicts")
+  local f = path_under(dir, "f.txt")
+  create(f, DIFF3)
+  expect_stop(wrong, "file markers left", attempt(assert_file_of, f), "f.txt:2: 8 conflict markers left")
+  keep_side_file(f, "theirs")
+  expect_same(wrong, "file kept", read(f), keep_side(DIFF3, "theirs"))
+  assert_file_resolved(f)
+  remove_tree(dir)
+
+  for w in wrong do print("wrong: " .. w) end
+  if #wrong > 0 then fail("conflicts self-test: " .. #wrong .. " wrong") end
+  print("conflicts self-test: all cases right")
+end
+
+if arg("self_test", "") ~= "" then
+  self_test()
+else
+  local files = arg("files", "")
+  if files == "" then fail("conflicts_check: give files=a,b (or self_test=1)") end
+  local bad = 0
+  for p in split(files, ",") do
+    for m in conflict_markers(read(p)) do
+      print(p .. ":" .. m.line .. ": " .. m.text)
+      bad = bad + 1
+    end
+  end
+  if bad > 0 then fail("FAIL: " .. bad .. " conflict markers left") end
+  print("PASS")
+end
