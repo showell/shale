@@ -9,6 +9,8 @@
 --
 -- The arguments:
 --   glob   the files to check, `**/*.roc` by default;
+--   skip   files the glob finds to leave out, by path, comma-separated, for
+--          tables of data that read better side by side;
 --   width  the widest a line may be, 100 by default, a tab counting four;
 --   write  with `write=1`, rewrite the files (see below).
 --
@@ -73,8 +75,26 @@ const SELF_TEST = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/stack"
 const SCRATCH = "scratch:stack"
 const GLOB = SELF_TEST and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
+const SKIP = arg("skip", "")
 const WIDTH = arg("width", 100)
 const WRITE = arg("write", "") == "1"
+
+-- The files the glob finds, less the ones `skip` names. A name in `skip` that
+-- the glob doesn't find stops the run, so a renamed file can't go unchecked.
+function chosen_files()
+  local found = glob(GLOB)
+  if SKIP == "" then return found end
+  local skipped = {}
+  for name in split(SKIP, ",") do skipped[name] = false end
+  local kept = {}
+  for f in found do
+    if has_key(skipped, f) then skipped[f] = true else push(kept, f) end
+  end
+  for name in keys(skipped) do
+    if not skipped[name] then fail("stack: skip names " .. name .. ", which the glob doesn't find") end
+  end
+  return kept
+end
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/groups.shale")
@@ -287,7 +307,7 @@ function add_trailing_commas(files)
 end
 
 function self_test()
-  local files = glob(GLOB)
+  local files = chosen_files()
   local kinds_by_plant = {}
   local count_by_line = {}
   local whats_by_line = {}
@@ -361,7 +381,7 @@ if SELF_TEST then
 elseif WRITE then
   -- Stop before any change if the tree's Roc is missing.
   roc_bin("stack", SELF_TEST)
-  local files = glob(GLOB)
+  local files = chosen_files()
   add_trailing_commas(files)
   local left = {}
   local judged = findings_in(files)
@@ -369,7 +389,7 @@ elseif WRITE then
   print_findings(#left .. " left, each a line the rewrite can't reach", left)
   fail_if_refused("stack", judged.refused)
 else
-  local files = glob(GLOB)
+  local files = chosen_files()
   local all = {}
   local count_by_kind = {}
   local judged = findings_in(files)
