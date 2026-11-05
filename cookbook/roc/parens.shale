@@ -37,8 +37,9 @@
 -- `self_test=1` checks the plants in `cookbook/roc/plants/parens/`. A plant
 -- line ending `# paren_if`, `# wrapped_body` or `# else_block` must give that
 -- finding, and no unmarked line may give one. Then the test copies the plants
--- to `scratch:parens/` and rewrites them there: no finding may be left, and a
--- second rewrite must change nothing.
+-- to `scratch:parens/` and rewrites them there: every file must still parse, no
+-- finding may be left, a second rewrite must change nothing, and a plant with a
+-- `.want` file must come out as it.
 --
 -- budget: steps=900000000 arena_bytes=2000000000 output_bytes=4000000
 
@@ -171,9 +172,73 @@ function push_bracket_removal(edits, text, starts, node, keep_break)
   push(edits, {at = cut_from, cut = closing + 1 - cut_from, put = ""})
 end
 
-function push_braces_round(edits, starts, node)
-  push(edits, {at = offset_of(starts, node.line, node.col), cut = 0, put = "{ "})
-  push(edits, {at = offset_of(starts, node.end_line, node.end_col), cut = 0, put = " }"})
+-- The first index at or past `at` outside white space and comments.
+function past_comments(text, at)
+  local i = past_space(text, at)
+  while sub(text, i, i) == "#" do
+    while i <= #text and sub(text, i, i) ~= "\n" do i = i + 1 end
+    i = past_space(text, i)
+  end
+  return i
+end
+
+function fail_no_span(src, node)
+  fail("parens: " .. src.path .. ": can't find the ends of a " .. node.kind .. ", which the tree gives no span")
+end
+
+-- Roc's tree gives a `match` and a unary operator no span of their own, so an
+-- edit finds their ends from the nodes they hold. Any other kind with no span
+-- stops the run: a guess here would write braces into the wrong place.
+function start_of(src, i)
+  local node = src.nodes[i]
+  if node.line ~= 0 then return offset_of(src.starts, node.line, node.col) end
+  if node.kind ~= "unary" and node.kind ~= "e-match" then fail_no_span(src, node) end
+  local before = before_space(src.text, start_of(src, node.kids[1]))
+  if node.kind == "unary" then return before - 1 end
+  if sub(src.text, before - 5, before - 1) ~= "match" then fail_no_span(src, node) end
+  return before - 5
+end
+
+-- The index just past the node at `i`.
+function end_of(src, i)
+  local node = src.nodes[i]
+  if node.line ~= 0 then return offset_of(src.starts, node.end_line, node.end_col) end
+  if node.kind == "unary" then return end_of(src, node.kids[1]) end
+  if node.kind ~= "e-match" then fail_no_span(src, node) end
+  local branches = src.nodes[node.kids[2]].kids
+  local closing = past_comments(src.text, end_of(src, branches[#branches]))
+  if sub(src.text, closing, closing) ~= "}" then fail_no_span(src, node) end
+  return closing + 1
+end
+
+-- The opening brace of the branch at `i`, on the line of what stands before it,
+-- which ends at `after`, since `roc fmt` keeps a line break before a brace. A
+-- comment there keeps its place after the brace.
+function push_opening_brace(edits, src, i, after)
+  local from = start_of(src, i)
+  if contains(sub(src.text, after, from - 1), "#") then
+    push(edits, {at = after, cut = 0, put = " {"})
+  else
+    push(edits, {at = after, cut = from - after, put = " { "})
+  end
+end
+
+-- The index just past the `else` that follows `then_end`.
+function past_else(src, then_end)
+  local at = past_comments(src.text, then_end)
+  if sub(src.text, at, at + 3) ~= "else" then fail("parens: " .. src.path .. ": no `else` where a branch ended") end
+  return at + 4
+end
+
+-- The closing brace of a `then` branch, with `else` brought up to it.
+function push_brace_before_else(edits, src, i)
+  local to = end_of(src, i)
+  local next_word = past_space(src.text, to)
+  if sub(src.text, next_word, next_word + 3) == "else" then
+    push(edits, {at = to, cut = next_word - to, put = " } "})
+  else
+    push(edits, {at = to, cut = 0, put = " }"})
+  end
 end
 
 -- A body keeps its own line after `|x|`, `=>` or `=`, unless it is a block,
@@ -182,7 +247,10 @@ function keeps_break(nodes, node, inner)
   return nodes[node.parent].kind ~= "statements" and inner.kind ~= "e-block"
 end
 
-function push_edits(edits, text, starts, nodes, finding)
+function push_edits(edits, src, finding)
+  local nodes = src.nodes
+  local text = src.text
+  local starts = src.starts
   local node = nodes[finding.at]
   if finding.check == "wrapped_body" then
     push_bracket_removal(edits, text, starts, node, keeps_break(nodes, node, nodes[node.kids[1]]))
@@ -193,13 +261,21 @@ function push_edits(edits, text, starts, nodes, finding)
     local then_branch = nodes[node.kids[2]]
     local otherwise = nodes[node.kids[3]]
     if is_parens(condition) then push_bracket_removal(edits, text, starts, condition, false) end
-    if not has_braces(then_branch) then push_braces_round(edits, starts, then_branch) end
-    if not (has_braces(otherwise) or otherwise.kind == "e-if-then-else") then push_braces_round(edits, starts, otherwise) end
+    if not has_braces(then_branch) then
+      push_opening_brace(edits, src, node.kids[2], end_of(src, node.kids[1]))
+      push_brace_before_else(edits, src, node.kids[2])
+    end
+    if not (has_braces(otherwise) or otherwise.kind == "e-if-then-else") then
+      push_opening_brace(edits, src, node.kids[3], past_else(src, end_of(src, node.kids[2])))
+      push(edits, {at = end_of(src, node.kids[3]), cut = 0, put = " }"})
+    end
   end
 end
 
+-- At one index, an edit that only inserts goes first, so that a closing brace
+-- nested in a branch's end stands before the one that cuts the space after it.
 function with_edits(text, edits)
-  sort(edits, "at")
+  sort(edits, {"at", "cut"})
   local pieces = {}
   local from = 1
   for e in edits do
@@ -217,36 +293,46 @@ end
 function rewrite_pass(file, check)
   local edits = {}
   local text = read(file.path)
-  local starts = line_starts(text)
+  local src = {path = file.path, text = text, starts = line_starts(text), nodes = file.nodes}
   for finding in findings_in(file) do
-    if finding.check == check then push_edits(edits, text, starts, file.nodes, finding) end
+    if finding.check == check then push_edits(edits, src, finding) end
   end
   if #edits == 0 then return 0 end
   replace(file.path, with_edits(text, edits))
   return #edits
 end
 
+-- Makes one kind of edit across `paths`, and answers how many it made.
+function rewrite_check(paths, check, roc)
+  local made = 0
+  local touched = {}
+  for file in parse_roc_files(paths).files do
+    local n = rewrite_pass(file, check)
+    if n > 0 then
+      made = made + n
+      push(touched, file.path)
+    end
+  end
+  if #touched > 0 then
+    local argv = {roc, "fmt"}
+    for p in touched do push(argv, real(p)) end
+    must(run(argv, {timeout_ms = 120000, tail = 20, want = "roc-pin: the tree's own formatter"}))
+  end
+  return made
+end
+
 -- Rewrites `paths` until a pass changes nothing, and answers how many edits it
--- made.
+-- made. Each kind runs in its own call, so a tree's parse is gone by the `yield`.
 function rewrite(paths, roc)
   local made = 0
   local changed = true
   while changed do
     changed = false
     for check in CHECKS do
-      local touched = {}
-      for file in parse_roc_files(paths).files do
-        local n = rewrite_pass(file, check)
-        if n > 0 then
-          made = made + n
-          push(touched, file.path)
-          changed = true
-        end
-      end
-      if #touched > 0 then
-        local argv = {roc, "fmt"}
-        for p in touched do push(argv, real(p)) end
-        must(run(argv, {timeout_ms = 120000, tail = 20, want = "roc-pin: the tree's own formatter"}))
+      local n = rewrite_check(paths, check, roc)
+      if n > 0 then
+        made = made + n
+        changed = true
       end
       yield()
     end
@@ -307,6 +393,12 @@ function self_test(paths, found)
   rewrite(copies, roc)
   local left = report(copies)
   for l in left.lines do push(wrong, "left after the rewrite: " .. l) end
+  for r in left.refused do push(wrong, "the rewrite broke a file: " .. r) end
+  for p in paths do
+    local want = sub(p, 1, #p - 4) .. ".want"
+    local copy = SCRATCH .. "/" .. basename(p)
+    if exists(want) and read(copy) ~= read(want) then push(wrong, copy .. ": not as " .. want) end
+  end
   if rewrite(copies, roc) ~= 0 then push(wrong, "a second rewrite changed something") end
   remove_tree(SCRATCH)
   for w in wrong do print("FAIL " .. w) end

@@ -44,4 +44,15 @@ Quiet :: [].{
 				0
 			}
 		}
+
+	match_in_braces : I64, I64 -> I64
+	match_in_braces = |x, y|
+		if x > 1 {
+			match y {
+				0 => 1
+				_ => 2
+			}
+		} else {
+			3
+		}
 }

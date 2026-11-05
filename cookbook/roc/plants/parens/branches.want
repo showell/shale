@@ -1,0 +1,79 @@
+Branches :: [].{
+	else_match : I64, I64 -> I64
+	else_match = |x, y|
+		if x > 1 { # paren_if
+			2
+		} else {
+			match y {
+				0 => 3
+				_ => 4
+			}
+		}
+
+	then_match : I64, I64 -> I64
+	then_match = |x, y|
+		if x > 1 { # paren_if
+			match y {
+				0 => 3
+				_ => 4 # the last branch's comment
+			}
+		} else {
+			2
+		}
+
+	match_in_match : I64, I64 -> I64
+	match_in_match = |x, y|
+		if x > 1 { # paren_if
+			2
+		} else {
+			match x {
+				0 => 3
+				_ =>
+					match y {
+						0 => 4
+						_ => 5
+					}
+			}
+		}
+
+	not_in_branches : Bool, Bool -> Bool
+	not_in_branches = |a, b|
+		if a {
+			!b
+		} else {
+			!a
+		} # paren_if
+
+	on_many_lines : I64 -> I64
+	on_many_lines = |x|
+		if x > 1 { # paren_if
+			1
+		} else if x > 0 { # paren_if
+			2
+		} else {
+			3
+		}
+
+	then_is_an_if : Bool, Bool -> I64
+	then_is_an_if = |a, b|
+		if a { # paren_if
+			if b {
+				1
+			} else {
+				2
+			}
+		} # paren_if
+		else {
+			3
+		}
+
+	else_in_a_name : Bool -> I64
+	else_in_a_name = |a| if a {
+		1
+	} else {
+		2
+	} # paren_if
+
+	else_word : I64
+	else_word = 3
+}
