@@ -1,0 +1,324 @@
+-- This recipe finds the parentheses and braceless `if`s that a code emitter
+-- leaves in Roc, and with `write=1` rewrites them. Roc's own formatter keeps
+-- both, and adds the condition's parentheses itself to an `if` with no braces,
+-- so neither `roc check` nor `roc fmt` sees them. The recipe reads each file's
+-- syntax tree from Roc's own parser (cookbook/roc/parsed.shale).
+--
+--   cd <repo> && shale <shale>/cookbook/roc/parens.shale glob=chat/**/*.roc
+--   cd <repo> && shale <shale>/cookbook/roc/parens.shale glob=chat/**/*.roc write=1
+--   shale cookbook:roc/parens.shale self_test=1
+--
+-- The arguments:
+--   glob   the files to check, `**/*.roc` by default;
+--   write  with `write=1`, rewrite the files (see below).
+--
+-- Each finding is one line, `path:line: check: source line`:
+--   paren_if      an `if` written `if (x) a else b`, or with a condition wholly
+--                 in parentheses, or a branch with no braces;
+--   wrapped_body  parentheses around the whole of a lambda's body, a match
+--                 branch's body, a statement or a declaration's multi-line
+--                 value (`|x| (...)`, `Some => (...)`, `y = (\n...\n)`);
+--   else_block    `else { if ... }`, which is `else if ...`.
+--
+-- Parentheses around one operand or one argument are left alone: they group,
+-- and a float's order of operations can rest on them. So is a one-line
+-- declaration such as `width = (half * 2.0)`, which holds no structure to hide.
+--
+-- The output is the counts, the findings, and the counts again
+-- (cookbook/roc/findings.shale). Files that don't parse are listed after the
+-- findings, and then the run fails.
+--
+-- With `write=1`, the recipe makes each of these edits by the parser's spans,
+-- runs `roc fmt` on the files it changed, and repeats until a pass changes
+-- nothing, because taking off one pair can show the next. A comment inside a
+-- bracket stays, so it can leave a line a reader tidies. It runs the Roc the
+-- tree is built with (cookbook/roc/pinned.shale), from the repository's root.
+--
+-- `self_test=1` checks the plants in `cookbook/roc/plants/parens/`. A plant
+-- line ending `# paren_if`, `# wrapped_body` or `# else_block` must give that
+-- finding, and no unmarked line may give one. Then the test copies the plants
+-- to `scratch:parens/` and rewrites them there: no finding may be left, and a
+-- second rewrite must change nothing.
+--
+-- budget: steps=900000000 arena_bytes=2000000000 output_bytes=4000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const PLANTS = "cookbook:roc/plants/parens"
+const SCRATCH = "scratch:parens"
+const GLOB = SELF_TEST and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
+const WRITE = arg("write", "") == "1"
+const CHECKS = {"paren_if", "wrapped_body", "else_block"}
+use("cookbook:roc/findings.shale")
+use("cookbook:roc/parsed.shale")
+use("cookbook:roc/pinned.shale")
+
+-- A one-item tuple is a pair of parentheses.
+function is_parens(node)
+  return node.kind == "e-tuple" and #node.kids == 1
+end
+
+function is_last_kid(nodes, i)
+  local kids = nodes[nodes[i].parent].kids
+  return kids[#kids] == i
+end
+
+-- Whether parentheses at `i` wrap a whole body. The value of a declaration
+-- counts only over several lines; a statement counts wherever it stands, and
+-- `if`'s branches are paren_if's and the block's own.
+function wraps_body(nodes, i)
+  local node = nodes[i]
+  if not is_parens(node) or node.parent == 0 then return false end
+  local kind = nodes[node.parent].kind
+  if kind == "statements" then return true end
+  if kind == "e-lambda" or kind == "branch" then return is_last_kid(nodes, i) end
+  if kind == "s-decl" then return is_last_kid(nodes, i) and node.end_line > node.line end
+  return false
+end
+
+function has_braces(node)
+  return node.kind == "e-block"
+end
+
+function is_paren_if(nodes, i)
+  local node = nodes[i]
+  if node.kind ~= "e-if-then-else" then return false end
+  local kids = node.kids
+  local otherwise = nodes[kids[3]]
+  return is_parens(nodes[kids[1]]) or not has_braces(nodes[kids[2]])
+    or not (has_braces(otherwise) or otherwise.kind == "e-if-then-else")
+end
+
+-- The `if` that is the whole of a block, or 0: the block's one statement.
+function only_if_in(nodes, block)
+  local statements = nodes[nodes[block].kids[1]]
+  if #statements.kids ~= 1 then return 0 end
+  local only = statements.kids[1]
+  if nodes[only].kind == "e-if-then-else" then return only end
+  return 0
+end
+
+function is_else_block(nodes, i)
+  local node = nodes[i]
+  if node.kind ~= "e-if-then-else" then return false end
+  local otherwise = node.kids[3]
+  return has_braces(nodes[otherwise]) and only_if_in(nodes, otherwise) ~= 0
+end
+
+-- Each file's findings: `{check, line}`, with the node they stand on.
+function findings_in(file)
+  local found = {}
+  local i = 1
+  while i <= #file.nodes do
+    local node = file.nodes[i]
+    if wraps_body(file.nodes, i) then push(found, {check = "wrapped_body", line = node.line, at = i}) end
+    if is_paren_if(file.nodes, i) then push(found, {check = "paren_if", line = node.line, at = i}) end
+    if is_else_block(file.nodes, i) then push(found, {check = "else_block", line = node.line, at = i}) end
+    i = i + 1
+  end
+  return found
+end
+
+-- Where each line starts in `text`, as an index into it.
+function line_starts(text)
+  local starts = {1}
+  for at in find_all(text, "\n") do push(starts, at + 1) end
+  return starts
+end
+
+function offset_of(starts, line, col)
+  return starts[line] + col - 1
+end
+
+function is_space(text, at)
+  local c = sub(text, at, at)
+  return c == " " or c == "\t" or c == "\n"
+end
+
+-- The first index past `at` that isn't white space.
+function past_space(text, at)
+  local i = at
+  while is_space(text, i) do i = i + 1 end
+  return i
+end
+
+-- The last index before `at` that isn't white space, plus one.
+function before_space(text, at)
+  local i = at
+  while is_space(text, i - 1) do i = i - 1 end
+  return i
+end
+
+-- Where the line holding the index just before `at` starts.
+function last_line_start(text, at)
+  local i = at - 1
+  while i > 1 and sub(text, i - 1, i - 1) ~= "\n" do i = i - 1 end
+  return i
+end
+
+-- The edits that take off the brackets at the ends of `node`: the space inside
+-- them goes too, so nothing is left of a line that held a bracket alone. With
+-- `keep_break`, the line break after the opening bracket stays, as a body on
+-- its own line wants. A comment beside a bracket keeps its line.
+function push_bracket_removal(edits, text, starts, node, keep_break)
+  local opening = offset_of(starts, node.line, node.col)
+  local closing = offset_of(starts, node.end_line, node.end_col) - 1
+  local cut_to = past_space(text, opening + 1)
+  if keep_break or sub(text, cut_to, cut_to) == "#" then cut_to = opening + 1 end
+  push(edits, {at = opening, cut = cut_to - opening, put = ""})
+  local cut_from = before_space(text, closing)
+  local last_line_from = last_line_start(text, cut_from)
+  if contains(sub(text, last_line_from, cut_from - 1), "#") then cut_from = closing end
+  push(edits, {at = cut_from, cut = closing + 1 - cut_from, put = ""})
+end
+
+function push_braces_round(edits, starts, node)
+  push(edits, {at = offset_of(starts, node.line, node.col), cut = 0, put = "{ "})
+  push(edits, {at = offset_of(starts, node.end_line, node.end_col), cut = 0, put = " }"})
+end
+
+-- A body keeps its own line after `|x|`, `=>` or `=`, unless it is a block,
+-- whose brace sits there. A statement has nothing before it to keep.
+function keeps_break(nodes, node, inner)
+  return nodes[node.parent].kind ~= "statements" and inner.kind ~= "e-block"
+end
+
+function push_edits(edits, text, starts, nodes, finding)
+  local node = nodes[finding.at]
+  if finding.check == "wrapped_body" then
+    push_bracket_removal(edits, text, starts, node, keeps_break(nodes, node, nodes[node.kids[1]]))
+  elseif finding.check == "else_block" then
+    push_bracket_removal(edits, text, starts, nodes[node.kids[3]], false)
+  else
+    local condition = nodes[node.kids[1]]
+    local then_branch = nodes[node.kids[2]]
+    local otherwise = nodes[node.kids[3]]
+    if is_parens(condition) then push_bracket_removal(edits, text, starts, condition, false) end
+    if not has_braces(then_branch) then push_braces_round(edits, starts, then_branch) end
+    if not (has_braces(otherwise) or otherwise.kind == "e-if-then-else") then push_braces_round(edits, starts, otherwise) end
+  end
+end
+
+function with_edits(text, edits)
+  sort(edits, "at")
+  local pieces = {}
+  local from = 1
+  for e in edits do
+    if e.at < from then fail("parens: two edits overlap at index " .. e.at) end
+    if e.at > from then push(pieces, sub(text, from, e.at - 1)) end
+    push(pieces, e.put)
+    from = e.at + e.cut
+  end
+  if from <= #text then push(pieces, sub(text, from, #text)) end
+  return join(pieces, "")
+end
+
+-- One kind of edit a pass, so no two edits of a pass touch one place. A finding
+-- inside another's span of the same kind is safe: its brackets are its own.
+function rewrite_pass(file, check)
+  local edits = {}
+  local text = read(file.path)
+  local starts = line_starts(text)
+  for finding in findings_in(file) do
+    if finding.check == check then push_edits(edits, text, starts, file.nodes, finding) end
+  end
+  if #edits == 0 then return 0 end
+  replace(file.path, with_edits(text, edits))
+  return #edits
+end
+
+-- Rewrites `paths` until a pass changes nothing, and answers how many edits it
+-- made.
+function rewrite(paths, roc)
+  local made = 0
+  local changed = true
+  while changed do
+    changed = false
+    for check in CHECKS do
+      local touched = {}
+      for file in parse_roc_files(paths).files do
+        local n = rewrite_pass(file, check)
+        if n > 0 then
+          made = made + n
+          push(touched, file.path)
+          changed = true
+        end
+      end
+      if #touched > 0 then
+        local argv = {roc, "fmt"}
+        for p in touched do push(argv, real(p)) end
+        must(run(argv, {timeout_ms = 120000, tail = 20, want = "roc-pin: the tree's own formatter"}))
+      end
+      yield()
+    end
+  end
+  return made
+end
+
+-- The findings across `paths`, as lines, with the counts.
+function report(paths)
+  local parsed = parse_roc_files(paths)
+  local lines_found = {}
+  local counts = {}
+  for c in CHECKS do counts[c] = 0 end
+  local at_line = {}
+  for file in parsed.files do
+    local source = split(read(file.path), "\n")
+    for f in findings_in(file) do
+      counts[f.check] = counts[f.check] + 1
+      push(lines_found, file.path .. ":" .. f.line .. ": " .. f.check .. ": " .. trim(source[f.line]))
+      push_at(at_line, file.path .. ":" .. f.line, f.check)
+    end
+  end
+  local said = {}
+  for c in CHECKS do push(said, c .. " " .. counts[c]) end
+  return {summary = "parens (Roc): " .. #paths .. " files; " .. join(said, ", "), lines = lines_found, at_line = at_line, refused = parsed.refused, total = #lines_found}
+end
+
+function self_test(paths, found)
+  local wrong = {}
+  local marks = 0
+  for p in paths do
+    local n = 0
+    for l in lines(read(p)) do
+      n = n + 1
+      local key = p .. ":" .. n
+      local got = {}
+      if has_key(found.at_line, key) then got = found.at_line[key] end
+      local mark = re_find(l, "# (paren_if|wrapped_body|else_block)$")
+      if mark ~= nil then
+        marks = marks + 1
+        if not has_item(got, mark.group) then push(wrong, key .. ": no " .. mark.group .. " finding") end
+        if #got > 1 then push(wrong, key .. ": more than the one finding marked") end
+      elseif #got > 0 then
+        push(wrong, key .. ": a finding (" .. join(got, ", ") .. ") on a line not marked for one")
+      end
+    end
+  end
+  if marks == 0 then push(wrong, "no plant holds a mark") end
+  if exists(SCRATCH) then remove_tree(SCRATCH) end
+  mkdir(SCRATCH)
+  local copies = {}
+  for p in paths do
+    local copy = SCRATCH .. "/" .. basename(p)
+    replace(copy, read(p))
+    push(copies, copy)
+  end
+  local roc = roc_bin("parens", true)
+  rewrite(copies, roc)
+  local left = report(copies)
+  for l in left.lines do push(wrong, "left after the rewrite: " .. l) end
+  if rewrite(copies, roc) ~= 0 then push(wrong, "a second rewrite changed something") end
+  remove_tree(SCRATCH)
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail("parens self_test: " .. #wrong .. " plants wrong") end
+  print("parens (Roc) self_test: PASS (each marked line gives its finding, no other line one; the rewrite leaves none, and a second changes nothing)")
+end
+
+const paths = glob(GLOB)
+if WRITE then
+  print("parens: " .. rewrite(paths, roc_bin("parens", false)) .. " edits")
+end
+local found = report(paths)
+print_findings(found.summary, found.lines)
+fail_if_refused("parens", found.refused)
+if SELF_TEST then self_test(paths, found) end
