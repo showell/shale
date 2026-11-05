@@ -198,6 +198,7 @@ use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
+use("cookbook:roc/declared.shale")
 const PLANTS = "cookbook:roc/plants/name_hunt/"
 const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const TYPES_ARG = arg("types", "0")
@@ -217,37 +218,19 @@ const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "n
 const HELPER_SUFFIXES = {acc = true, loop = true, inner = true, helper = true, rec = true}
 const RECURSION_SUFFIXES = {step = true, walk = true, go = true}
 
--- The lines of a list in cookbook/words/, with any note after `--` cut off.
-function word_list_lines(file)
-  local out = {}
-  for l in lines(read("cookbook:words/" .. file)) do push(out, trim(split(l, "--")[1])) end
-  return out
-end
-
--- A list of one word per line, as a set. A word listed twice, or a line of
--- two words, fails the run.
-function word_set(file)
-  local set = {}
-  for word in word_list_lines(file) do
-    if contains(word, " ") or has_key(set, word) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. word .. "` is no single new word") end
-    if word ~= "" then set[word] = true end
-  end
-  return set
-end
-
-const VERBS = word_set("verbs.txt")
-const PARTICIPLES = word_set("participles.txt")
-const ED_VERBS = word_set("ed_verbs.txt")
-const VAGUE = word_set("vague.txt")
-const CONTAINERS = word_set("containers.txt")
-const PREPOSITIONS = word_set("prepositions.txt")
+const VERBS = word_set("cookbook:words/verbs.txt")
+const PARTICIPLES = word_set("cookbook:words/participles.txt")
+const ED_VERBS = word_set("cookbook:words/ed_verbs.txt")
+const VAGUE = word_set("cookbook:words/vague.txt")
+const CONTAINERS = word_set("cookbook:words/containers.txt")
+const PREPOSITIONS = word_set("cookbook:words/prepositions.txt")
 
 -- cookbook/words/namespaces.txt has a prefix per line followed by the
 -- namespace's own instructions (`port in out`). The result maps each prefix
 -- to the set of its instructions: `{port = {["in"] = true, out = true}}`.
 function namespace_instructions(file)
   local by_prefix = {}
-  for l in word_list_lines(file) do
+  for l in word_list_lines("cookbook:words/" .. file) do
     local ws = words(l)
     if #ws > 0 then
       if has_key(by_prefix, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. ws[1] .. "` twice") end
@@ -263,7 +246,7 @@ const NAMESPACES = namespace_instructions("namespaces.txt")
 -- `{record = "roc", two = "cardinal"}`.
 function taken_word_kinds(file)
   local kinds = {}
-  for l in word_list_lines(file) do
+  for l in word_list_lines("cookbook:words/" .. file) do
     local ws = words(l)
     if #ws > 0 then
       if #ws ~= 2 or (ws[2] ~= "roc" and ws[2] ~= "cardinal") or has_key(kinds, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `roc` or `cardinal`") end
@@ -343,57 +326,6 @@ end
 
 -- ── the syntax tree ──────────────────────────────────────────────────────
 
--- A file's tree is the list of nodes from `roc_tree`, each `{kind, parent,
--- kids, line, col, end_line, end_col, depth}` plus attributes such as
--- `name` and `raw`. A node's index is its position in the list.
-
-function children(tree, at)
-  return tree[at].kids
-end
-
-function attribute(tree, at, name)
-  return get(tree[at], name, "")
-end
-
--- The type at `at`, as Roc writes it: `List(U8)`, `{ id : U8 }`, `[A, B]`,
--- `(U8 -> Bool)`. The tree does not say which arrow a function type has,
--- so both come out as `->`.
-function render_type(tree, at)
-  local kind = tree[at].kind
-  local kids = children(tree, at)
-  local name = attribute(tree, at, "name")
-  if kind == "ty-apply" then
-    local args = {}
-    for c in drop(kids, 1) do push(args, render_type(tree, c)) end
-    return render_type(tree, kids[1]) .. "(" .. join(args, ", ") .. ")"
-  end
-  if kind == "ty-fn" then
-    local args = {}
-    for c in take(kids, #kids - 1) do push(args, render_type(tree, c)) end
-    return "(" .. join(args, ", ") .. " -> " .. render_type(tree, kids[#kids]) .. ")"
-  end
-  if kind == "ty-record" or kind == "ty-tuple" or kind == "tags" then
-    local parts = {}
-    for c in kids do push(parts, render_type(tree, c)) end
-    if kind == "ty-record" then return "{ " .. join(parts, ", ") .. " }" end
-    if kind == "ty-tuple" then return "(" .. join(parts, ", ") .. ")" end
-    return join(parts, ", ")
-  end
-  if kind == "ty-tag-union" then return "[" .. render_type(tree, kids[1]) .. "]" end
-  if kind == "anno-record-field" then return name .. " : " .. render_type(tree, kids[1]) end
-  if name ~= "" then return name end
-  -- An inferred type, as in `name : _`.
-  if kind == "_" then return "_" end
-  local raw = attribute(tree, at, "raw")
-  if raw ~= "" then return raw end
-  return "(" .. kind .. ")"
-end
-
--- The kinds of node a definition may sit in and still be top-level or a
--- module type's member, which `associated` holds. Inside any other kind,
--- such as a lambda's block, a definition is local.
-const OUTER_KINDS = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
-
 -- The source text of the node at `at`, from the file's lines `src`. A
 -- node's end column is one past its last character.
 function span_text(src, tree, at)
@@ -446,54 +378,6 @@ function argument_shape(tree, at)
   if name == "" then return {} end
   local parts = split(name, ".")
   return {ref = parts[#parts]}
-end
-
--- The comment lines directly above line `line` of `src`, lowercased and
--- joined: a declaration's doc.
-function doc_above(src, line)
-  local parts = {}
-  local k = line - 1
-  while k >= 1 and starts_with(trim(src[k]), "#") do
-    push(parts, lower(trim(src[k])))
-    k = k - 1
-  end
-  return join(parts, " ")
-end
-
--- A name's words, lowercased: a type's split at its capitals (`NodeInfo`
--- gives `node`, `info`), a field's at its underscores.
-function name_words(name)
-  local out = {}
-  local current = ""
-  for i = 1, #name do
-    local c = sub(name, i, i)
-    if c == "_" then
-      if current ~= "" then push(out, lower(current)) end
-      current = ""
-    elseif c ~= lower(c) and current ~= "" then
-      push(out, lower(current))
-      current = c
-    else
-      current = current .. c
-    end
-  end
-  if current ~= "" then push(out, lower(current)) end
-  return out
-end
-
--- The line of the declaration that the record field at `at` belongs to:
--- the nearest top-level or member annotation or type declaration above it,
--- as `declaration_line` records it. It is "" when an expression, pattern
--- or definition lies between them, since the field is then a local's.
-function field_declaration_line(tree, declaration_line, at)
-  local k = tree[at].parent
-  while k ~= 0 do
-    local kind = tree[k].kind
-    if starts_with(kind, "e-") or starts_with(kind, "p-") or kind == "s-decl" then return "" end
-    if kind == "s-type-anno" or kind == "s-type-decl" then return declaration_line[k] end
-    k = tree[k].parent
-  end
-  return ""
 end
 
 -- The names of the types the type at `at` mentions, added to the set

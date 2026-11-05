@@ -1,0 +1,273 @@
+-- A Roc file's parse tree (from `roc_tree`) is a list of nodes, each
+-- `{kind, parent, kids, line, col, end_line, end_col, depth}` plus attributes
+-- such as `name` and `raw`, and a node's index is its place in the list. This
+-- library reads the things the naming recipes share out of that tree: a
+-- type written as Roc writes it, a name's words, and the list of what a file
+-- declares.
+--
+--   use("cookbook:roc/declared.shale")
+--   declarations_of(file)         each type, value and record field declared
+--   render_type(tree, at)         the type at node `at`, as text
+--   name_words(name)              a name's words, lowercased
+--   comment_on_line(l)            the text of the comment on line `l`
+--   module_name(path), is_app(f)  a file's module, and whether it is an app
+--   opening_comment(src)          the comment lines that open a file
+--   word_set(path)                a word list, such as one in cookbook/words
+
+-- The kinds of node a definition may sit in and still be top-level or a
+-- module type's member, which `associated` holds. Inside any other kind,
+-- such as a lambda's block, a definition is local.
+const OUTER_KINDS = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
+
+function children(tree, at)
+  return tree[at].kids
+end
+
+function attribute(tree, at, name)
+  return get(tree[at], name, "")
+end
+
+-- The type at `at`, as Roc writes it: `List(U8)`, `{ id : U8 }`, `[A, B]`,
+-- `(U8 -> Bool)`. The tree does not say which arrow a function type has,
+-- so both come out as `->`.
+function render_type(tree, at)
+  local kind = tree[at].kind
+  local kids = children(tree, at)
+  local name = attribute(tree, at, "name")
+  if kind == "ty-apply" then
+    local args = {}
+    for c in drop(kids, 1) do push(args, render_type(tree, c)) end
+    return render_type(tree, kids[1]) .. "(" .. join(args, ", ") .. ")"
+  end
+  if kind == "ty-fn" then
+    local args = {}
+    for c in take(kids, #kids - 1) do push(args, render_type(tree, c)) end
+    return "(" .. join(args, ", ") .. " -> " .. render_type(tree, kids[#kids]) .. ")"
+  end
+  if kind == "ty-record" or kind == "ty-tuple" or kind == "tags" then
+    local parts = {}
+    for c in kids do push(parts, render_type(tree, c)) end
+    if kind == "ty-record" then return "{ " .. join(parts, ", ") .. " }" end
+    if kind == "ty-tuple" then return "(" .. join(parts, ", ") .. ")" end
+    return join(parts, ", ")
+  end
+  if kind == "ty-tag-union" then return "[" .. render_type(tree, kids[1]) .. "]" end
+  if kind == "anno-record-field" then return name .. " : " .. render_type(tree, kids[1]) end
+  if name ~= "" then return name end
+  -- An inferred type, as in `name : _`.
+  if kind == "_" then return "_" end
+  local raw = attribute(tree, at, "raw")
+  if raw ~= "" then return raw end
+  return "(" .. kind .. ")"
+end
+
+-- A name's words, lowercased: a type's split at its capitals (`NodeInfo`
+-- gives `node`, `info`), a field's at its underscores.
+function name_words(name)
+  local out = {}
+  local current = ""
+  for i = 1, #name do
+    local c = sub(name, i, i)
+    if c == "_" then
+      if current ~= "" then push(out, lower(current)) end
+      current = ""
+    elseif c ~= lower(c) and current ~= "" then
+      push(out, lower(current))
+      current = c
+    else
+      current = current .. c
+    end
+  end
+  if current ~= "" then push(out, lower(current)) end
+  return out
+end
+
+-- The comment lines directly above line `line` of `src`, lowercased and
+-- joined: a declaration's doc.
+function doc_above(src, line)
+  local parts = {}
+  local k = line - 1
+  while k >= 1 and starts_with(trim(src[k]), "#") do
+    push(parts, lower(trim(src[k])))
+    k = k - 1
+  end
+  return join(parts, " ")
+end
+
+-- The line of the declaration that the record field at `at` belongs to:
+-- the nearest top-level or member annotation or type declaration above it,
+-- as `declaration_line` records it. It is "" when an expression, pattern
+-- or definition lies between them, since the field is then a local's.
+function field_declaration_line(tree, declaration_line, at)
+  local k = tree[at].parent
+  while k ~= 0 do
+    local kind = tree[k].kind
+    if starts_with(kind, "e-") or starts_with(kind, "p-") or kind == "s-decl" then return "" end
+    if kind == "s-type-anno" or kind == "s-type-decl" then return declaration_line[k] end
+    k = tree[k].parent
+  end
+  return ""
+end
+
+-- The text after the `#` that starts line `l`'s comment, or nil when it has
+-- none. A `#` inside a string or a character is not a comment, and a line
+-- of a `\\` multiline string has no comment at all.
+function comment_on_line(l)
+  if starts_with(trim(l), "\\\\") then return nil end
+  local i = 1
+  local n = #l
+  while i <= n do
+    local c = sub(l, i, i)
+    if c == "\"" or c == "'" then
+      i = i + 1
+      while i <= n and sub(l, i, i) ~= c do
+        if sub(l, i, i) == "\\" then i = i + 1 end
+        i = i + 1
+      end
+    elseif c == "#" then
+      return sub(l, i + 1)
+    end
+    i = i + 1
+  end
+  return nil
+end
+
+-- The module a .roc file holds, by its file name.
+function module_name(path)
+  local base = basename(path)
+  return sub(base, 1, #base - 4)
+end
+
+-- Whether the parsed file `f` is an app, with an `app` header.
+function is_app(f)
+  for n in f.nodes do
+    if n.kind == "app" then return true end
+  end
+  return false
+end
+
+-- The comment lines that open a file, from its lines `src`, trimmed.
+function opening_comment(src)
+  local out = {}
+  local k = 1
+  while k <= #src and starts_with(trim(src[k]), "#") do
+    push(out, trim(src[k]))
+    k = k + 1
+  end
+  return out
+end
+
+-- The lines of a word list, with any note after `--` cut off.
+function word_list_lines(path)
+  local out = {}
+  for l in lines(read(path)) do push(out, trim(split(l, "--")[1])) end
+  return out
+end
+
+-- A list of one word per line, as a set. A word listed twice, or a line of
+-- two words, fails the run.
+function word_set(path)
+  if not exists(path) then fail("no word list " .. path) end
+  local set = {}
+  for word in word_list_lines(path) do
+    if contains(word, " ") or has_key(set, word) then fail(path .. ": `" .. word .. "` is no single new word") end
+    if word ~= "" then set[word] = true end
+  end
+  return set
+end
+
+-- The name of the type declaration around node `at`, or "" at the top level.
+function owner_of(tree, at)
+  local k = tree[at].parent
+  while k ~= 0 do
+    if tree[k].kind == "s-type-decl" then return attribute(tree, children(tree, k)[1], "name") end
+    k = tree[k].parent
+  end
+  return ""
+end
+
+-- The record for the annotation at `i`, or nil when it is only a `where`
+-- clause. `type` is its whole type. A function also has `result`, what it
+-- returns, and `first`, its first argument's type.
+function annotated_value(path, tree, i)
+  local kids = children(tree, i)
+  if #kids == 0 or tree[kids[1]].kind == "where" then return nil end
+  local record = {path = path, line = tree[i].line, kind = "value", name = attribute(tree, i, "name"), owner = owner_of(tree, i), annotated = true, fn = false, type = render_type(tree, kids[1])}
+  record.result = record.type
+  if tree[kids[1]].kind == "ty-fn" then
+    local parts = children(tree, kids[1])
+    record.fn = true
+    record.result = render_type(tree, parts[#parts])
+    record.first = #parts > 1 and render_type(tree, parts[1]) or ""
+  end
+  return record
+end
+
+-- The record for the type declared at `i`. `underlying` is the type it is
+-- built on, and `is_nominal` says it is declared with `:=` or `::`, not as
+-- an alias with `:`.
+function declared_type(path, src, tree, i)
+  local kids = children(tree, i)
+  local name = attribute(tree, kids[1], "name")
+  if name == "" then return nil end
+  local record = {path = path, line = tree[i].line, kind = "type", name = name, owner = owner_of(tree, i), underlying = "", is_nominal = false, is_tags = false}
+  if #kids > 1 and tree[kids[2]].kind ~= "associated" then
+    local between = sub(src[tree[kids[1]].end_line], tree[kids[1]].end_col, tree[kids[1]].end_col + 3)
+    record.is_nominal = contains(between, ":=") or contains(between, "::")
+    record.underlying = render_type(tree, kids[2])
+    record.is_tags = tree[kids[2]].kind == "ty-tag-union"
+  end
+  return record
+end
+
+-- Everything the parsed file `f` declares at its top level or as a module
+-- type's member, in file order. Each record is `{path, line, kind, name,
+-- owner}`, where `owner` is the type it is a member of, or "" at the top
+-- level, and `kind` is one of these:
+--   value  an annotation, or a definition with no annotation just above it
+--          (`annotated` false, and `fn` true when its value is a lambda);
+--   field  a record field in a type or an annotation, with its `type`;
+--   type   a type declaration (see `declared_type`).
+function declarations_of(f)
+  local tree = f.nodes
+  local src = split(read(f.path), "\n")
+  local out = {}
+  -- Each node is outer when it and every ancestor sit in OUTER_KINDS, and
+  -- its `declaration_line` is its line when it is an outer annotation or
+  -- type declaration, else "". A parent comes before its children.
+  local outer = {}
+  local declaration_line = {}
+  local annotated_names = {}
+  for i = 1, #tree do
+    local node = tree[i]
+    local parent = node.parent
+    push(outer, parent == 0 or (outer[parent] and has_key(OUTER_KINDS, tree[parent].kind)))
+    local kind = node.kind
+    push(declaration_line, (outer[i] and (kind == "s-type-anno" or kind == "s-type-decl")) and tostring(node.line) or "")
+    if outer[i] and kind == "s-type-decl" then
+      local record = declared_type(f.path, src, tree, i)
+      if record ~= nil then push(out, record) end
+    end
+    if kind == "anno-record-field" and field_declaration_line(tree, declaration_line, i) ~= "" then
+      push(out, {path = f.path, line = node.line, kind = "field", name = attribute(tree, i, "name"), owner = owner_of(tree, i), type = render_type(tree, children(tree, i)[1])})
+    end
+    if outer[i] and kind == "s-type-anno" then
+      local record = annotated_value(f.path, tree, i)
+      if record ~= nil then
+        push(out, record)
+        annotated_names[record.owner .. "." .. record.name] = true
+      end
+    end
+    if outer[i] and kind == "s-decl" then
+      local kids = children(tree, i)
+      if #kids > 0 and tree[kids[1]].kind == "p-ident" then
+        local name = attribute(tree, kids[1], "raw")
+        local owner = owner_of(tree, i)
+        if not has_key(annotated_names, owner .. "." .. name) then
+          push(out, {path = f.path, line = node.line, kind = "value", name = name, owner = owner, annotated = false, fn = #kids > 1 and tree[kids[2]].kind == "e-lambda", type = "", result = ""})
+        end
+      end
+    end
+  end
+  return out
+end
