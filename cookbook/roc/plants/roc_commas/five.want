@@ -1,0 +1,6 @@
+module [call, stacked]
+
+# Five tokens stay on one line, and a stacked five joins it.
+call = f(a, b, c, d, e)
+
+stacked = f(a, b, c, d, e)

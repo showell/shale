@@ -1,3 +1,3 @@
 module [xs]
 
-xs = |a, b, c| [a, b, c]
+xs = |a| [a, a, a, a, a, a]

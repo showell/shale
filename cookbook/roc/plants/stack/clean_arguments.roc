@@ -5,6 +5,4 @@ module [two, Row]
 two : U8, U8 -> U8
 two = |a, b| a + b
 
-Row : {
-	on_pick : U8, U8 -> U8,
-}
+Row : { on_pick : U8, U8 -> U8 }
