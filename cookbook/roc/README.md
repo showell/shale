@@ -23,8 +23,8 @@ root.
 
 ## Checks
 
-These recipes print findings and, except for `stack.shale`'s `write=1`,
-change no files. All but the last four below exit 0 on findings. A finding is a question for a reader, not a verdict. Each
+These recipes print findings and, except for the `write=1` of `stack.shale`
+and `parens.shale`, change no files. All but the last four below exit 0 on findings. A finding is a question for a reader, not a verdict. Each
 finding is one line that starts `path:line:` and names its check. The
 findings are printed between two copies of a summary of counts
 (`boundaries.shale` prints its summary once, after the findings). A file
@@ -52,7 +52,8 @@ that doesn't parse is listed at the end, and the run then fails.
 - [parens.shale](parens.shale) finds the parentheses and braceless `if`s a
   code emitter leaves: `if (x) a else b`, parentheses around a whole body
   (`|x| (...)`), and `else { if ... }`. Roc's formatter keeps all three. With
-  `write=1` it rewrites them and runs `roc fmt`.
+  `write=1` it rewrites them and runs `roc fmt`. In a sweep it goes before
+  `stack.shale`, because what it takes off can bring a group within a line.
 - [stack.shale](stack.shale) finds groups laid out against the stacking
   rule, both ways: a group of three or more items and six or more tokens
   that sits on one line (`stack`), and any other group that is stacked and
@@ -74,14 +75,18 @@ finding. A project's own words stay with the project and are passed in.
   types: `name_type`, from a project's `table=` of `word: Type` lines, on
   names and fields; `bare_beside_unit`, a field that is a bare number in one
   record and a unit in another; and `no_value`, a constant like `no_frames`
-  whose ordinary value is kept to mean none.
+  whose ordinary value is kept to mean none. A `word: any` line says a word
+  holds no promise, so a bare field of that name is no finding.
 - [families.shale](families.shale) finds a module spelled unlike the
   others that share its last word (`family`), and one type name declared in
-  two modules (`twin_name`).
+  two modules (`twin_name`). `roles=` names a project's file of type names
+  each module declares for itself, as `Id` in `Message.Id`.
 - [plain_names.shale](plain_names.shale) finds a pure function named like a
   mutation (`pure_mutator`), an abbreviation in a name
   (`abbreviation`, from `cookbook/words/abbreviations.txt`), and a module
-  with no doc or with history in its top comment (`module_doc`).
+  with no doc or with history in its top comment (`module_doc`). `terms=`
+  names a project's file of fixed terms that open a name and only look like a
+  verb, as `set_cookie` does.
 
 `name_hunt`, `errors` and `boundaries` can also ask Roc's type checker
 for types: add `types=1 root=<app>`, where the app imports the files
