@@ -1,3 +1,3 @@
 module [l]
 
-l = |a, b, c| a + b + c
+l = |a, b, c, d, e, f| a + b + c + d + e + f

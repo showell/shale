@@ -49,8 +49,11 @@ that doesn't parse is listed at the end, and the run then fails.
 - [nest_depth.shale](nest_depth.shale) finds calls nested three or more
   deep, like `f(g(h(x)))`, which read inside out. `min=` sets the depth to
   report.
-- [stack.shale](stack.shale) finds lines that hold three or more items
-  side by side, and lines wider than `width=` (100 by default). A wide line
+- [stack.shale](stack.shale) finds groups laid out against the stacking
+  rule, both ways: a group of three or more items and six or more tokens
+  that sits on one line (`stack`), and any other group that is stacked and
+  would fit on one line (`unstack`). It finds lines wider than `width=` (100
+  by default) too. A wide line
   is `wide string` when it would fit if the text of each string literal
   counted as empty, by Roc's parser, and `long` otherwise, so a gate can
   hold `long` at zero and leave the strings Roc can't split. With `write=1`
@@ -70,9 +73,9 @@ end, and fails the run.
 - [roc_commas.shale](roc_commas.shale) shortens lines wider than `width=`
   in the folder `dir=` by adding a trailing comma to a group on each, so
   that `roc fmt` lays it out one item a line. It edits the files, then
-  lists the lines it couldn't shorten. With `items=3` it also stacks every
-  group of three or more items, whatever its width, reading groups as
-  `stack.shale` does.
+  lists the lines it couldn't shorten. With `tokens=6` it also holds the
+  folder to the stacking rule, stacking and joining groups whatever their
+  width, reading groups as `stack.shale` does.
 
       cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
 
@@ -118,10 +121,11 @@ run on their own.
   (installed at `tools:roc-<version>/roc`), and `SELF_TEST_PIN` is the
   version every self-test uses. Used by `boundaries`, `errors`, `methods`,
   `name_hunt`, `roc_commas` and `stack`.
-- [groups.shale](groups.shale): the bracket groups on a line and their
-  items, `groups_on_line(l)`, and the group a rewrite stacks,
-  `group_with_items(l, n, width)`. Used by `roc_commas` and `stack`, so the
-  two read a group the same way.
+- [groups.shale](groups.shale): the stacking rule, the bracket groups and
+  their items and tokens, `groups_in_lines(ls)`, and what a rewrite does to
+  them, `group_to_stack(l, tokens, width)` and
+  `groups_to_unstack(ls, tokens, width)`. Used by `roc_commas` and `stack`, so
+  the two read a group the same way.
 - [types.shale](types.shale): runs roc-types, Shale's tool that asks Roc's
   type checker for the type of every expression and pattern in an app.
   `roc_types(root, roc)` reads one app; `roc_types_for_files(who, root,

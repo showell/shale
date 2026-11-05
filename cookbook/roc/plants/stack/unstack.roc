@@ -1,0 +1,85 @@
+module [
+	call,
+	record,
+	shorthand,
+	list,
+	tuple,
+	tag,
+	lambda,
+	pair,
+	nested,
+	Kinds,
+	Typed,
+]
+
+call = f(
+	a,
+	b,
+	c,
+	d,
+	e,
+)
+
+record = {
+	a: 1,
+	b: 2,
+}
+
+shorthand = {
+	a,
+	b,
+	c,
+	d,
+	e,
+}
+
+list = [
+	a,
+	b,
+	c,
+	d,
+]
+
+tuple = (
+	a,
+	b,
+	c,
+)
+
+tag = Pair(
+	a,
+	b,
+	c,
+)
+
+lambda = |
+	a,
+	b,
+	c,
+| a
+
+# A pair joins however many tokens it holds.
+pair = {
+	a: g(b, c, d),
+	e: h(i, j, k),
+}
+
+# A group inside joins with the group around it.
+nested = [
+	(
+		a,
+		b,
+	),
+	c,
+]
+
+Kinds : [
+	Red,
+	Green,
+	Blue,
+]
+
+Typed : {
+	a : Foo,
+	b : Bar,
+}

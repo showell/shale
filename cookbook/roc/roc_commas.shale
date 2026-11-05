@@ -9,23 +9,24 @@
 -- counts, as cookbook/roc/findings.shale describes. It runs the Roc that
 -- the repository's roc-version file names.
 --
--- With `items=N`, every group of N or more items gets the trailing comma
--- too, whatever its line's width, so roc-style.md's rule of stacking
--- anything with three or more parts is `items=3`. A group and its items are
--- read as stack.shale reads them (cookbook/roc/groups.shale), so after
--- `items=3` stack.shale finds no group left to stack. A line's outermost
--- group goes first, and the next pass reaches the groups inside it. A
--- function type's arguments and a row of literals are left alone, as
--- stack.shale leaves them.
+-- With `tokens=N`, the script holds the folder to roc-style.md's stacking
+-- rule, whose six tokens are `tokens=6`, whatever a line's width: a group of
+-- three or more items and N or more tokens gets the trailing comma, and a
+-- stacked group that should sit on one line loses it, which is how `roc fmt`
+-- is asked to join it. A group and its tokens are read as stack.shale reads
+-- them (cookbook/roc/groups.shale), so after `tokens=6` stack.shale finds no
+-- group left to stack or to unstack. A line's outermost group goes first, and
+-- the next pass reaches the groups inside it. A function type's arguments and
+-- a row of literals are left alone, as stack.shale leaves them.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
---   cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc items=3
+--   cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc tokens=6
 --   shale cookbook:roc/roc_commas.shale self_test=1
 --
 -- `self_test=1` copies the plants in `cookbook/roc/plants/roc_commas/` to
--- `scratch:roc_commas/`, rewrites them there with `items=3` and the
+-- `scratch:roc_commas/`, rewrites them there with `tokens=6` and the
 -- self-test's Roc, and checks that the rewrite ends, that each plant comes
--- out as its `.want` file, and that no line is left with a group to stack.
+-- out as its `.want` file, and that no group is left to stack or to unstack.
 --
 -- budget: steps=400000000 arena_bytes=2000000000 output_bytes=4000000
 
@@ -37,7 +38,7 @@ const PLANTS = "cookbook:roc/plants/roc_commas"
 const DIR = SELF_TEST and "scratch:roc_commas" or arg("dir", "roc")
 not_option("roc_commas", "dir", DIR)
 const WIDTH = arg("width", 100)
-const ITEMS = SELF_TEST and 3 or arg("items", 0)
+const TOKENS = SELF_TEST and STACK_TOKENS or arg("tokens", 0)
 const MAX_PASSES = 8
 const ROC = roc_bin("roc_commas", SELF_TEST)
 
@@ -126,23 +127,27 @@ function run_roc_fmt()
   end
 end
 
--- Line `l` with a trailing comma for its outermost group of ITEMS or more
--- items, or else, when it is wider than WIDTH, for its widest group. nil
--- when it gets none.
+-- Line `l` with a trailing comma for its outermost group that should stack,
+-- or else, when it is wider than WIDTH, for its widest group. nil when it
+-- gets none.
 function line_with_comma(l)
-  if ITEMS > 0 then
-    local g = group_with_items(l, ITEMS, WIDTH)
+  if TOKENS > 0 then
+    local g = group_to_stack(l, TOKENS, WIDTH)
     if g ~= nil then return with_trailing_comma(l, g) end
   end
   if line_width(l) > WIDTH then return line_with_trailing_comma(l) end
   return nil
 end
 
--- Adds a trailing comma to each code line of the file that should get one,
--- and returns how many lines it changed.
-function add_trailing_commas(path)
+-- Takes the trailing comma from each group of the file that should unstack,
+-- adds one to each code line that should get one, and returns how many
+-- groups and lines it changed.
+function rewrite_trailing_commas(path)
   local ls = split(read(path), "\n")
-  local changed = 0
+  local unstacked = {}
+  if TOKENS > 0 then unstacked = groups_to_unstack(ls, TOKENS, WIDTH) end
+  ls = without_trailing_commas(ls, unstacked)
+  local changed = #unstacked
   for i = 1, #ls do
     if not is_comment(ls[i]) then
       local with_comma = line_with_comma(ls[i])
@@ -156,7 +161,7 @@ function add_trailing_commas(path)
   return changed
 end
 
--- Adds commas and runs roc fmt until a pass changes nothing, or MAX_PASSES
+-- Rewrites commas and runs roc fmt until a pass changes nothing, or MAX_PASSES
 -- have run. Returns the last pass's count, 0 when the rewrite ended.
 function rewrite()
   run_roc_fmt()
@@ -164,8 +169,8 @@ function rewrite()
   local changed = 1
   while changed > 0 and pass <= MAX_PASSES do
     changed = 0
-    for path in roc_files() do changed = changed + add_trailing_commas(path) end
-    print("pass " .. pass .. ": " .. changed .. " lines given a trailing comma")
+    for path in roc_files() do changed = changed + rewrite_trailing_commas(path) end
+    print("pass " .. pass .. ": " .. changed .. " trailing commas added or taken out")
     run_roc_fmt()
     pass = pass + 1
   end
@@ -188,14 +193,18 @@ function self_test()
     local n = 0
     for l in lines(got) do
       n = n + 1
-      if not is_comment(l) and group_with_items(l, ITEMS, WIDTH) ~= nil then
+      if not is_comment(l) and group_to_stack(l, TOKENS, WIDTH) ~= nil then
         print("FAIL " .. name .. ":" .. n .. ": a group left to stack: " .. trim(l))
         bad = bad + 1
       end
     end
+    for g in groups_to_unstack(split(got, "\n"), TOKENS, WIDTH) do
+      print("FAIL " .. name .. ":" .. g.line .. ": a group left to unstack")
+      bad = bad + 1
+    end
   end
   if bad > 0 then fail(bad .. " checks failed") end
-  print("PASS: the rewrite ends, every plant comes out as its .want, and no group is left to stack")
+  print("PASS: the rewrite ends, every plant comes out as its .want, and no group is left to stack or to unstack")
 end
 
 if SELF_TEST then

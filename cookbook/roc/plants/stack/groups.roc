@@ -1,5 +1,5 @@
 module [both, one]
 
-both = [f(a, b, c), g(d, e, h)] # findings 2
+both = [f(a, b, c, d, e, h), g(i, j), k] # findings 2
 
-one = [f(a, b, c), g(d, e)] # findings 1
+one = [f(a, b, c, d, e, h), g(i, j)] # findings 1

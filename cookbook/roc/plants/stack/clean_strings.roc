@@ -1,8 +1,4 @@
-module [
-	short,
-	zzz,
-	two,
-]
+module [short, zzz, two]
 
 short = "a string" # findings 0
 zzz = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" # findings 0

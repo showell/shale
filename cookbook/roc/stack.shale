@@ -1,7 +1,9 @@
--- This recipe finds lines in .roc files that hold three or more items side
--- by side, and with `write=1` stacks them one item a line. The items are
--- those of a list, record, tuple, call's arguments, tag payload or
--- lambda's arguments.
+-- This recipe finds groups in .roc files laid out against the stacking rule,
+-- and with `write=1` lays them out by it. A group is a list, record, tuple,
+-- call's arguments, tag payload or lambda's arguments. A group of three or
+-- more items and six or more tokens stacks, one item a line. Any other group
+-- sits on one line while that line fits `width`. The rule and what counts as
+-- a token are in cookbook/roc/groups.shale.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc
 --   cd <repo> && shale <shale>/cookbook/roc/stack.shale glob=chat/**/*.roc write=1
@@ -12,11 +14,14 @@
 --   skip   files the glob finds to leave out, by path, comma-separated, for
 --          tables of data that read better side by side;
 --   width  the widest a line may be, 100 by default, a tab counting four;
+--   tokens the tokens from which a group stacks, 6 by default;
 --   write  with `write=1`, rewrite the files (see below).
 --
--- Each group of three or more items on a line is a finding,
--- `path:line: stack: ...`, left to right. A line wider than `width` with no
--- such group is a finding too, of one of two kinds. It is `wide string` when
+-- A group on one line that should stack is a finding, `path:line: stack: ...`,
+-- left to right. A stacked group that should sit on one line is a finding,
+-- `path:line: unstack: ...`, at the line it opens on. A line wider than `width`
+-- with nothing to stack by the rule is a finding too, of one of two kinds. It
+-- is `wide string` when
 -- it would fit `width` if the text of each string literal on it counted as
 -- empty, because Roc has no short way to split a string. Otherwise it is
 -- `long`. Roc's own parser says which columns are a string's text, so the
@@ -26,13 +31,18 @@
 -- (cookbook/roc/findings.shale). A file with a line wider than `width` that
 -- roc-ast refuses keeps that line as `long`, and the run fails, naming it.
 --
+-- A stacked group stays stacked, with no finding, when its joined line would
+-- be wider than `width`, or when it holds a comment, a `\\` string, a blank
+-- line, a block's statements, or a group that stays stacked.
+--
 -- Some groups are not findings, or get special advice:
 --   - A list or tuple whose items are all literals (numbers, plain strings,
 --     characters, bare tags) is a table's row, like `[0, 0, 0]` or
 --     `(0.0, 0.0, 1.5)`, and is read at a glance. It is no finding while
 --     its line fits `width`. A call's arguments are never a row.
---   - A group whose items are all `Bool`s or Bool literals is told that a
---     flag a caller passes should be a tag, as roc-style.md says.
+--   - A group of three or more `Bool`s or Bool literals is told that a flag
+--     a caller passes should be a tag, as roc-style.md says, whatever its
+--     tokens.
 --   - When a function's annotation (`name : A, B, C -> R`) is a finding for
 --     its arguments, the function's lambda arguments on the next line are
 --     not reported again.
@@ -42,12 +52,13 @@
 -- Strings, characters, `\\` multiline strings and `#` comments are skipped,
 -- so a comma or bracket inside one is no item.
 --
--- With `write=1`, the recipe gives each group of three or more a trailing
--- comma after its last item, outermost first, and runs `roc fmt` on the
--- files it changed, which lays a group with a trailing comma out one item
--- a line. On a long line with no group of three, the widest group of two
--- gets the comma, as roc_commas.shale does. This repeats until a pass
--- changes nothing, so a second run changes nothing either. The recipe then
+-- With `write=1`, the recipe gives each group that should stack a trailing
+-- comma after its last item, outermost first, takes the trailing comma from
+-- each group that should unstack, and runs `roc fmt` on the files it changed,
+-- which stacks a group with a trailing comma and joins a group without one. On
+-- a long line with no group to stack by the rule, the widest group of two or
+-- more items gets the comma, as roc_commas.shale does. This repeats until a
+-- pass changes nothing, so a second run changes nothing either. The recipe then
 -- prints the findings left, which the rewrite can't reach: long lines, and
 -- the arguments of a function type, bare (`three : U8, U8, U8 -> U8`) or in
 -- parentheses (`(U8, U8, U8 -> U8)`), because Roc refuses a trailing comma
@@ -61,13 +72,13 @@
 --
 -- `self_test=1` checks the plants in `cookbook/roc/plants/stack/`. Each
 -- plant must give a finding of the kind its name starts with (`long`,
--- `wide`, or else `stack`), a `long` plant no `wide string` and a `wide`
--- plant no `long`, and a `clean*.roc` plant none. A plant line ending
+-- `wide`, `unstack`, or else `stack`), a `long` plant no `wide string` and a
+-- `wide` plant no `long`, and a `clean*.roc` plant none. A plant line ending
 -- `# findings N` must give exactly N findings, and with `advice W` after
 -- it each of them must contain the word W. Then the test copies the plants
 -- to `scratch:stack/` and rewrites them there with the self-test's Roc:
--- the rewrite must end, a second rewrite must change nothing, and every
--- file must still parse.
+-- the rewrite must end, a second rewrite must change nothing, every file must
+-- still parse, and a plant with a `.want` file must come out as it.
 --
 -- budget: steps=900000000 arena_bytes=2000000000 output_bytes=4000000
 
@@ -99,23 +110,9 @@ use("cookbook:roc/pinned.shale")
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/groups.shale")
 use("cookbook:roc/parsed.shale")
+const TOKENS = arg("tokens", STACK_TOKENS)
 const MAX_PASSES = 12
 const STRING_TEXT = {["e-string-part"] = true, ["p-string-text"] = true}
-
--- The group on line `l` the rewrite gives a trailing comma: the outermost,
--- then widest, group of three or more items that has none yet; or else, on
--- a line wider than WIDTH, the widest group of two or more. A function
--- type's arguments are never picked. nil when no group qualifies.
-function group_to_stack(l)
-  local best = group_with_items(l, 3, WIDTH)
-  if best ~= nil or line_width(l) <= WIDTH then return best end
-  for g in groups_on_line(l) do
-    if g.items >= 2 and not g.trailing and not g.fn_type then
-      if best == nil or g.close - g.open > best.close - best.open then best = g end
-    end
-  end
-  return best
-end
 
 -- Text cut to 60 characters for a finding line.
 function shortened(s)
@@ -209,7 +206,7 @@ function wide_line_finding(p, i, l, string_columns)
   if without_strings <= WIDTH then
     return {path = p, line = i, kind = "wide string", what = width .. " columns, " .. without_strings .. " without its strings"}
   end
-  local why = starts_with(trim(l), "#") and "a comment" or (group_to_stack(l) ~= nil and "a group of two to stack" or "nothing to stack")
+  local why = starts_with(trim(l), "#") and "a comment" or (group_to_stack(l, TOKENS, WIDTH) ~= nil and "a group to stack" or "nothing to stack")
   return {path = p, line = i, kind = "long", what = width .. " columns, " .. why}
 end
 
@@ -236,10 +233,13 @@ function findings_in(files)
           found_on_line = found_on_line + 1
         elseif skip_lambda and sub(ls[i], g.open, g.open) == "|" then
           skip_lambda = false
-        elseif g.items >= 3 and not g.trailing and not is_literal_row(ls[i], g, WIDTH) then
-          local advice = are_all_flags(inner) and FLAG_ADVICE or ""
-          push(out, {path = p, line = i, kind = "stack", what = g.items .. " items in " .. shortened(sub(ls[i], g.open, g.close)) .. advice})
-          found_on_line = found_on_line + 1
+        else
+          local are_flags = g.items >= 3 and not g.trailing and are_all_flags(inner)
+          if are_flags or should_stack(ls[i], g, TOKENS, WIDTH) then
+            local advice = are_flags and FLAG_ADVICE or ""
+            push(out, {path = p, line = i, kind = "stack", what = g.tokens .. " tokens in " .. shortened(sub(ls[i], g.open, g.close)) .. advice})
+            found_on_line = found_on_line + 1
+          end
         end
       end
       local annotation = annotation_arguments(ls[i])
@@ -251,6 +251,9 @@ function findings_in(files)
       if found_on_line == 0 and line_width(ls[i]) > WIDTH then
         push(out, wide_line_finding(p, i, ls[i], string_columns))
       end
+    end
+    for g in groups_to_unstack(ls, TOKENS, WIDTH) do
+      push(out, {path = p, line = g.line, kind = "unstack", what = g.tokens .. " tokens in " .. shortened(trim(group_on_one_line(ls, g)))})
     end
   end
   return {found = out, refused = strings.refused}
@@ -265,8 +268,10 @@ function roc_fmt(files)
 end
 
 -- Rewrites `files` pass after pass until a pass changes nothing, and
--- returns how many groups the first pass gave a trailing comma.
-function add_trailing_commas(files)
+-- returns how many groups the first pass changed. A pass takes the trailing
+-- comma from each group that should unstack and gives one to each line's group
+-- that should stack, and `roc fmt` lays out the result.
+function rewrite_trailing_commas(files)
   local first_pass_count = 0
   local pass = 1
   local changed = 1
@@ -275,10 +280,12 @@ function add_trailing_commas(files)
     local touched = {}
     for p in files do
       local ls = split(read(p), "\n")
-      local n = 0
+      local unstacked = groups_to_unstack(ls, TOKENS, WIDTH)
+      ls = without_trailing_commas(ls, unstacked)
+      local n = #unstacked
       for i = 1, #ls do
         if not starts_with(trim(ls[i]), "#") then
-          local g = group_to_stack(ls[i])
+          local g = group_to_stack(ls[i], TOKENS, WIDTH)
           if g ~= nil then
             ls[i] = with_trailing_comma(ls[i], g)
             n = n + 1
@@ -291,7 +298,7 @@ function add_trailing_commas(files)
         changed = changed + n
       end
     end
-    print("pass " .. pass .. ": " .. changed .. " groups given a trailing comma, in " .. #touched .. " files")
+    print("pass " .. pass .. ": " .. changed .. " groups rewritten, in " .. #touched .. " files")
     if pass == 1 then first_pass_count = changed end
     if #touched > 0 then
       local r = roc_fmt(touched)
@@ -315,7 +322,7 @@ function self_test()
   fail_if_refused("stack", judged.refused)
   for f in judged.found do
     local name = sub(f.path, #PLANTS + 2)
-    kinds_by_plant[name] = get(kinds_by_plant, name, "") .. f.kind .. " "
+    kinds_by_plant[name] = get(kinds_by_plant, name, " ") .. f.kind .. " "
     incr(count_by_line, f.path .. ":" .. f.line)
     push_at(whats_by_line, f.path .. ":" .. f.line, f.what)
   end
@@ -343,10 +350,10 @@ function self_test()
     local name = sub(p, #PLANTS + 2)
     local is_long = starts_with(name, "long")
     local is_wide = starts_with(name, "wide")
-    local want = is_long and "long" or (is_wide and "wide string" or "stack")
+    local want = is_long and "long" or (is_wide and "wide string" or (starts_with(name, "unstack") and "unstack" or "stack"))
     local got = get(kinds_by_plant, name, "")
     local clean = starts_with(name, "clean")
-    local ok = (clean and got == "") or (not clean and contains(got, want))
+    local ok = (clean and got == "") or (not clean and contains(got, " " .. want .. " "))
     if is_long and contains(got, "wide string") then ok = false end
     if is_wide and contains(got, "long") then ok = false end
     print((ok and "ok   " or "FAIL ") .. name .. ": " .. (got == "" and "no finding" or got))
@@ -361,15 +368,22 @@ function self_test()
     replace(to, read(p))
     push(copies, to)
   end
-  add_trailing_commas(copies)
-  local again = add_trailing_commas(copies)
-  if again > 0 then fail("stack: a second rewrite gave " .. again .. " more trailing commas") end
+  rewrite_trailing_commas(copies)
+  local again = rewrite_trailing_commas(copies)
+  if again > 0 then fail("stack: a second rewrite changed " .. again .. " more groups") end
   local r = roc_fmt(copies)
   if r.code ~= 0 then
     print(r.out)
     fail("stack: a rewritten plant no longer parses")
   end
-  print("PASS: every plant gives its finding, the clean ones none; the rewrite ends, a second changes nothing, and every plant parses")
+  for want in glob(PLANTS .. "/*.want") do
+    local name = sub(basename(want), 1, #basename(want) - 5)
+    local ok = read(SCRATCH .. "/" .. name .. ".roc") == read(want)
+    print((ok and "ok   " or "FAIL ") .. name .. ".roc: comes out as its .want")
+    if not ok then bad = bad + 1 end
+  end
+  if bad > 0 then fail(bad .. " plants came out wrong") end
+  print("PASS: every plant gives its finding, the clean ones none; the rewrite ends, a second changes nothing, every plant parses and comes out as its .want")
 end
 
 function finding_line(f)
@@ -382,7 +396,7 @@ elseif WRITE then
   -- Stop before any change if the tree's Roc is missing.
   roc_bin("stack", SELF_TEST)
   local files = chosen_files()
-  add_trailing_commas(files)
+  rewrite_trailing_commas(files)
   local left = {}
   local judged = findings_in(files)
   for f in judged.found do push(left, finding_line(f)) end
@@ -397,7 +411,7 @@ else
     push(all, finding_line(f))
     incr(count_by_kind, f.kind)
   end
-  local counts = get(count_by_kind, "stack", 0) .. " to stack, " .. get(count_by_kind, "long", 0) .. " long, " .. get(count_by_kind, "wide string", 0) .. " wide string"
+  local counts = get(count_by_kind, "stack", 0) .. " to stack, " .. get(count_by_kind, "unstack", 0) .. " to unstack, " .. get(count_by_kind, "long", 0) .. " long, " .. get(count_by_kind, "wide string", 0) .. " wide string"
   print_findings(#all .. " findings in " .. #files .. " files: " .. counts, all)
   fail_if_refused("stack", judged.refused)
 end
