@@ -11,6 +11,19 @@ const ROC_TYPES_FORMAT = "1"
 
 -- A type's text with roc-types' escapes of `\`, tab, newline and carriage
 -- return undone.
+-- The checker for the compiler `roc`: the one installed for that compiler's
+-- pin, `tools:roc-types-<pin>/bin/roc-types`, as compilers sit side by side,
+-- or else the default. A checker built for another pin is refused by name
+-- when its first line is read.
+function roc_types_exe(roc)
+  local m = re_find(roc, "/roc-([^/]+)/roc$")
+  if m ~= nil then
+    local own = "tools:roc-types-" .. m.groups[1] .. "/bin/roc-types"
+    if exists(own) then return own end
+  end
+  return ROC_TYPES_EXE
+end
+
 function unescape_roc_type(s)
   local out = {}
   local i = 1
@@ -107,8 +120,9 @@ end
 -- missing, prints a format this file doesn't read, or was built for a Roc
 -- version other than `roc`'s.
 function roc_types(root, roc)
-  if not exists(ROC_TYPES_EXE) then fail("`roc_types`: no " .. ROC_TYPES_EXE .. ": Shale's `shale tools/roc_types/install.shale` installs it") end
-  return parse_roc_types_output(run({real(ROC_TYPES_EXE), real(root)}, {timeout_ms = 300000, whole = 64000000}), root, roc)
+  local exe = roc_types_exe(roc)
+  if not exists(exe) then fail("`roc_types`: no " .. exe .. ": Shale's `shale tools/roc_types/install.shale` installs it") end
+  return parse_roc_types_output(run({real(exe), real(root)}, {timeout_ms = 300000, whole = 64000000}), root, roc)
 end
 
 -- The app paths in a recipe's `root=` argument, which may list several,
