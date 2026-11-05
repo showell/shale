@@ -50,9 +50,12 @@ that doesn't parse is listed at the end, and the run then fails.
   deep, like `f(g(h(x)))`, which read inside out. `min=` sets the depth to
   report.
 - [stack.shale](stack.shale) finds lines that hold three or more items
-  side by side, and lines wider than `width=` (100 by default). With
-  `write=1` it adds trailing commas and runs `roc fmt`, which lays each such
-  group out one item a line.
+  side by side, and lines wider than `width=` (100 by default). A wide line
+  is `wide string` when it would fit if the text of each string literal
+  counted as empty, by Roc's parser, and `long` otherwise, so a gate can
+  hold `long` at zero and leave the strings Roc can't split. With `write=1`
+  it adds trailing commas and runs `roc fmt`, which lays each such group out
+  one item a line.
 
 `name_hunt`, `errors` and `boundaries` can also ask Roc's type checker
 for types: add `types=1 root=<app>`, where the app imports the files
@@ -104,7 +107,7 @@ run on their own.
   files that do parse, print what it found, and then fail with a list of
   the files it couldn't parse and why: `parse_roc_files(paths)` and
   `fail_if_refused(who, refused, unreached?)`. Used by `boundaries`,
-  `errors`, `name_hunt` and `nest_depth`.
+  `errors`, `name_hunt`, `nest_depth` and `stack`.
 - [findings.shale](findings.shale): `print_findings(summary, lines)` prints
   the summary, the findings and the summary again. The first copy survives
   when Shale's output limit cuts a long list short, and a caller that reads

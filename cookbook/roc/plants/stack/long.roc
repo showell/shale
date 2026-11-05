@@ -1,3 +1,3 @@
 module [long]
 
-long = Str.concat("a very long string that runs on and on and on, well past the hundredth column of the", "line")
+long = |xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx| |yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy| xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx + 1 # findings 1 advice stack

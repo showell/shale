@@ -14,8 +14,15 @@
 --
 -- Each group of three or more items on a line is a finding,
 -- `path:line: stack: ...`, left to right. A line wider than `width` with no
--- such group is a finding too, `path:line: long: ...`. The output is the
--- counts, the findings, and the counts again (cookbook/roc/findings.shale).
+-- such group is a finding too, of one of two kinds. It is `wide string` when
+-- it would fit `width` if the text of each string literal on it counted as
+-- empty, because Roc has no short way to split a string. Otherwise it is
+-- `long`. Roc's own parser says which columns are a string's text, so the
+-- code in an interpolation (`"${...}"`) counts, a comment counts, and so does
+-- a string in an `import` or the file's header, which has no such node. The
+-- output is the counts, the findings, and the counts again
+-- (cookbook/roc/findings.shale). A file with a line wider than `width` that
+-- roc-ast refuses keeps that line as `long`, and the run fails, naming it.
 --
 -- Some groups are not findings, or get special advice:
 --   - A list or tuple whose items are all literals (numbers, plain strings,
@@ -51,8 +58,9 @@
 -- (cookbook/roc/pinned.shale).
 --
 -- `self_test=1` checks the plants in `cookbook/roc/plants/stack/`. Each
--- plant must give a finding of the kind its name starts with (`long`, or
--- else `stack`), and a `clean*.roc` plant none. A plant line ending
+-- plant must give a finding of the kind its name starts with (`long`,
+-- `wide`, or else `stack`), a `long` plant no `wide string` and a `wide`
+-- plant no `long`, and a `clean*.roc` plant none. A plant line ending
 -- `# findings N` must give exactly N findings, and with `advice W` after
 -- it each of them must contain the word W. Then the test copies the plants
 -- to `scratch:stack/` and rewrites them there with the self-test's Roc:
@@ -70,7 +78,9 @@ const WRITE = arg("write", "") == "1"
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/groups.shale")
+use("cookbook:roc/parsed.shale")
 const MAX_PASSES = 12
+const STRING_TEXT = {["e-string-part"] = true, ["p-string-text"] = true}
 
 -- The group on line `l` the rewrite gives a trailing comma: the outermost,
 -- then widest, group of three or more items that has none yet; or else, on
@@ -136,11 +146,61 @@ function function_type_finding(path, line, items, shown, text)
   return {path = path, line = line, kind = "stack", what = items .. " bare arguments in " .. shown .. ", which no comma stacks" .. advice}
 end
 
--- Every finding in `files`, each `{path, line, kind, what}`.
+-- Whether any line of the file at `p` is wider than WIDTH.
+function has_wide_line(p)
+  for l in lines(read(p)) do
+    if line_width(l) > WIDTH then return true end
+  end
+  return false
+end
+
+-- The columns that strings' text takes up in `files`, by Roc's parser, as
+-- `{columns, refused}`. `columns[path]` maps a line's number, as text, to
+-- those columns. Only a file with a wide line is parsed, so a tree of short
+-- lines never needs roc-ast. `refused` is parse_roc_files' list.
+function string_columns_in(files)
+  local wide_files = {}
+  for p in files do
+    if has_wide_line(p) then push(wide_files, p) end
+  end
+  local columns = {}
+  if #wide_files == 0 then return {columns = columns, refused = {}} end
+  local parsed = parse_roc_files(wide_files)
+  for f in parsed.files do
+    local ls = split(read(f.path), "\n")
+    local by_line = {}
+    for n in f.nodes do
+      if has_key(STRING_TEXT, n.kind) then
+        if n.line ~= n.end_line then fail("stack: " .. f.path .. ":" .. n.line .. ": a run of string text crosses a line") end
+        incr(by_line, "" .. n.line, line_width(sub(ls[n.line], n.col, n.end_col - 1)))
+      end
+    end
+    columns[f.path] = by_line
+  end
+  return {columns = columns, refused = parsed.refused}
+end
+
+-- The finding for line `i` of `p`, wider than WIDTH with nothing else found
+-- on it. `string_columns` is the columns of strings' text on that file's
+-- lines, by line number.
+function wide_line_finding(p, i, l, string_columns)
+  local width = line_width(l)
+  local without_strings = width - get(string_columns, "" .. i, 0)
+  if without_strings <= WIDTH then
+    return {path = p, line = i, kind = "wide string", what = width .. " columns, " .. without_strings .. " without its strings"}
+  end
+  local why = starts_with(trim(l), "#") and "a comment" or (group_to_stack(l) ~= nil and "a group of two to stack" or "nothing to stack")
+  return {path = p, line = i, kind = "long", what = width .. " columns, " .. why}
+end
+
+-- Every finding in `files`, as `{found, refused}`: `found` holds each as
+-- `{path, line, kind, what}`, and `refused` the files roc-ast refused.
 function findings_in(files)
   local out = {}
+  local strings = string_columns_in(files)
   for p in files do
     local ls = split(read(p), "\n")
+    local string_columns = get(strings.columns, p, {})
     -- The function whose annotation on the line before was a finding for
     -- its arguments, or "". Its lambda's arguments are not reported again.
     local annotated_fn = ""
@@ -169,12 +229,11 @@ function findings_in(files)
         found_on_line = found_on_line + 1
       end
       if found_on_line == 0 and line_width(ls[i]) > WIDTH then
-        local why = starts_with(trim(ls[i]), "#") and "a comment" or (group_to_stack(ls[i]) ~= nil and "a group of two to stack" or "nothing to stack")
-        push(out, {path = p, line = i, kind = "long", what = line_width(ls[i]) .. " columns, " .. why})
+        push(out, wide_line_finding(p, i, ls[i], string_columns))
       end
     end
   end
-  return out
+  return {found = out, refused = strings.refused}
 end
 
 -- Runs `roc fmt` on `files`. The result's code is not 0 when a file does
@@ -232,7 +291,9 @@ function self_test()
   local kinds_by_plant = {}
   local count_by_line = {}
   local whats_by_line = {}
-  for f in findings_in(files) do
+  local judged = findings_in(files)
+  fail_if_refused("stack", judged.refused)
+  for f in judged.found do
     local name = sub(f.path, #PLANTS + 2)
     kinds_by_plant[name] = get(kinds_by_plant, name, "") .. f.kind .. " "
     incr(count_by_line, f.path .. ":" .. f.line)
@@ -260,10 +321,14 @@ function self_test()
   end
   for p in files do
     local name = sub(p, #PLANTS + 2)
-    local want = starts_with(name, "long") and "long" or "stack"
+    local is_long = starts_with(name, "long")
+    local is_wide = starts_with(name, "wide")
+    local want = is_long and "long" or (is_wide and "wide string" or "stack")
     local got = get(kinds_by_plant, name, "")
     local clean = starts_with(name, "clean")
     local ok = (clean and got == "") or (not clean and contains(got, want))
+    if is_long and contains(got, "wide string") then ok = false end
+    if is_wide and contains(got, "long") then ok = false end
     print((ok and "ok   " or "FAIL ") .. name .. ": " .. (got == "" and "no finding" or got))
     if not ok then bad = bad + 1 end
   end
@@ -299,15 +364,20 @@ elseif WRITE then
   local files = glob(GLOB)
   add_trailing_commas(files)
   local left = {}
-  for f in findings_in(files) do push(left, finding_line(f)) end
+  local judged = findings_in(files)
+  for f in judged.found do push(left, finding_line(f)) end
   print_findings(#left .. " left, each a line the rewrite can't reach", left)
+  fail_if_refused("stack", judged.refused)
 else
   local files = glob(GLOB)
   local all = {}
-  local stack_count = 0
-  for f in findings_in(files) do
+  local count_by_kind = {}
+  local judged = findings_in(files)
+  for f in judged.found do
     push(all, finding_line(f))
-    if f.kind == "stack" then stack_count = stack_count + 1 end
+    incr(count_by_kind, f.kind)
   end
-  print_findings(#all .. " findings in " .. #files .. " files: " .. stack_count .. " to stack, " .. (#all - stack_count) .. " long", all)
+  local counts = get(count_by_kind, "stack", 0) .. " to stack, " .. get(count_by_kind, "long", 0) .. " long, " .. get(count_by_kind, "wide string", 0) .. " wide string"
+  print_findings(#all .. " findings in " .. #files .. " files: " .. counts, all)
+  fail_if_refused("stack", judged.refused)
 end
