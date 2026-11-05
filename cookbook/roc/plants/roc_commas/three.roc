@@ -1,6 +1,6 @@
 module [call, point]
 
-# A call's three arguments and a record's three fields are stacked.
-call = f(a, b, c)
+# Six tokens in three or more items are stacked.
+call = f(a, b, c, d, e, g)
 
 point = { x: 1, y: 2, z: 3 }

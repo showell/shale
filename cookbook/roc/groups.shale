@@ -1,11 +1,22 @@
--- groups.shale: the bracket groups on a line of Roc and their items, as
--- stack.shale finds them and roc_commas.shale stacks them. Both use this one
--- reading, so a group one stacks is a group the other no longer reports.
+-- groups.shale: the bracket groups of Roc, their items and their tokens, as
+-- stack.shale finds them and roc_commas.shale rewrites them. Both use this one
+-- reading, so a group one rewrites is a group the other no longer reports.
+--
+-- The stacking rule's home is here: a group of three or more items and
+-- STACK_TOKENS or more tokens stacks, and any other group sits on one line
+-- while that line fits. A token is a name (a dotted path like `Angle.Bearing`
+-- is one), a number, a string or a character; punctuation and operators are
+-- none.
 --
 --   use("cookbook:roc/groups.shale")
 --   groups_on_line(l)                  each group that opens and closes on l
---   group_with_items(l, n, width)      the group a rewrite gives a comma
+--   group_to_stack(l, tokens, width)   the group a rewrite gives a comma
 --   with_trailing_comma(l, g)          l with that comma added
+--   groups_to_unstack(ls, tokens, width)  the stacked groups that shouldn't be
+--   without_trailing_commas(ls, gs)    ls with each of those commas taken out
+
+const STACK_ITEMS = 3
+const STACK_TOKENS = 6
 
 const OPENERS = {["("] = ")", ["{"] = "}", ["["] = "]"}
 const CLOSERS = {[")"] = true, ["}"] = true, ["]"] = true}
@@ -23,89 +34,145 @@ function char_before(l, i)
   return sub(l, j, j)
 end
 
--- The group whose brackets are at `open` and `close` on `l`, with its
--- items counted from the commas at its own depth. A last item that is a
--- rest pattern (`{ a, b, .. }`, `[x, .. as more]`) does not count. A
--- parenthesized group with an arrow at its own depth, like `(A, B => C)`,
--- is a function type, whose arguments can't take a trailing comma.
-function closed_group(l, open, close, commas, last_comma, depth, has_arrow)
-  local inner = trim(sub(l, open + 1, close - 1))
-  local trailing = ends_with(inner, ",")
-  local items = commas + 1
-  if trailing then items = commas end
-  if inner == "" then items = 0 end
-  local last = trim(sub(l, last_comma + 1, close - 1))
-  if not trailing and commas > 0 and (last == ".." or starts_with(last, ".. as ")) then items = items - 1 end
-  return {open = open, close = close, items = items, trailing = trailing, depth = depth, fn_type = has_arrow and sub(l, open, open) == "("}
+const NO_PARENT = {closer = "", line = 0, trailing = false}
+
+-- The innermost of `open_groups`, closed at column `close` of the line numbered
+-- `close_line`, with its items counted from the commas at its own depth. A
+-- last item that is a rest pattern (`{ a, b, .. }`, `[x, .. as more]`) does
+-- not count. A parenthesized group with an arrow at its own depth, like
+-- `(A, B => C)`, is a function type, whose arguments can't take a trailing
+-- comma. `tokens` is how many tokens lie between the brackets. `fixed` says
+-- that a comment or a `\\` string lies between them, so no rewrite can bring
+-- them onto one line. `parent` is the group around it, as the scan holds it.
+function closed_group(ls, open_groups, close_line, close, last_code, tokens, fixed)
+  local l = ls[close_line]
+  local g = open_groups[#open_groups]
+  local trailing = last_code == ","
+  g.trailing = trailing
+  local items = g.commas + 1
+  if trailing then items = g.commas end
+  if g.line == close_line then
+    if trim(sub(l, g.at + 1, close - 1)) == "" then items = 0 end
+    local last = trim(sub(l, g.last + 1, close - 1))
+    if not trailing and g.commas > 0 and (last == ".." or starts_with(last, ".. as ")) then items = items - 1 end
+  end
+  return {
+    line = g.line,
+    open = g.at,
+    close_line = close_line,
+    close = close,
+    items = items,
+    tokens = tokens - g.tokens_before,
+    fixed = fixed > g.fixed_before,
+    trailing = trailing,
+    depth = #open_groups - 1,
+    parent = #open_groups > 1 and open_groups[#open_groups - 1] or NO_PARENT,
+    fn_type = g.has_arrow and sub(ls[g.line], g.at, g.at) == "(",
+  }
 end
 
+const WORD_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+const WORD = "^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*"
+
 -- The start of a method constraint (`k.is_eq :`). In a `where` clause's
--- brackets, only a comma followed by one of these separates items.
+-- brackets, only a comma followed by one of these, or ending its line,
+-- separates items.
 const CONSTRAINT = "^ *[a-z_][A-Za-z0-9_]*\\.[a-z_][A-Za-z0-9_]*!? *:"
 
--- The groups that open and close on line `l`, each
--- `{open, close, items, trailing, depth, fn_type}`. A group is a pair of
--- brackets or a lambda's `|...|`. A group that runs onto another line is
+-- A group just opened at column `i` of the line numbered `line`.
+function opened_group(line, i, closer, is_where, tokens, fixed)
+  return {line = line, at = i, closer = closer, commas = 0, last = i, has_arrow = false, is_where = is_where, trailing = false, tokens_before = tokens, fixed_before = fixed}
+end
+
+-- The groups of the lines `ls`, each `{line, open, close_line, close, items,
+-- tokens, fixed, trailing, depth, parent, fn_type}`, by where they close. A group is a
+-- pair of brackets or a lambda's `|...|`. A group that never closes in `ls` is
 -- left out.
-function groups_on_line(l)
+function groups_in_lines(ls)
   local out = {}
-  if starts_with(trim(l), "\\\\") then return out end
   -- The groups still open, innermost last. Each holds where it opened,
   -- the character that closes it, its commas so far and the place of the
-  -- last one, whether it is a `where` clause's brackets, and whether a
-  -- ` ->` or ` =>` appears at its own depth. An arrow call (`x->f()`) has
-  -- no space before its arrow, so it doesn't count.
+  -- last one, whether it is a `where` clause's brackets, whether a
+  -- ` ->` or ` =>` appears at its own depth, and the running counts when it
+  -- opened. An arrow call (`x->f()`) has no space before its arrow, so it
+  -- doesn't count.
   local open_groups = {}
-  local i = 1
-  local n = #l
-  while i <= n do
-    local c = sub(l, i, i)
-    if c == "\"" or c == "'" then
-      i = i + 1
-      while i <= n and sub(l, i, i) ~= c do
-        if sub(l, i, i) == "\\" then i = i + 1 end
+  -- The running counts of tokens and of comments and `\\` strings, and the
+  -- last character of code seen.
+  local tokens = 0
+  local fixed = 0
+  local last_code = ""
+  for line = 1, #ls do
+    local l = ls[line]
+    local i = 1
+    local n = #l
+    if starts_with(trim(l), "\\\\") then
+      fixed = fixed + 1
+      tokens = tokens + 1
+      last_code = "\\"
+      n = 0
+    end
+    while i <= n do
+      local c = sub(l, i, i)
+      local code = c
+      if find(WORD_CHARS, c) ~= nil then
+        -- A name right after a dot continues a path, as in `f(x).name`.
+        if sub(l, i - 1, i - 1) ~= "." or sub(l, i - 2, i - 2) == "." then tokens = tokens + 1 end
+        i = i + #(re_find(sub(l, i), WORD).text) - 1
+      elseif c == "\"" or c == "'" then
+        tokens = tokens + 1
         i = i + 1
-      end
-    elseif c == "#" then
-      break
-    elseif has_key(OPENERS, c) then
-      local text_before = trim(sub(l, 1, i - 1))
-      local is_where = c == "[" and (text_before == "where" or ends_with(text_before, " where"))
-      push(open_groups, {at = i, closer = OPENERS[c], commas = 0, last = i, has_arrow = false, is_where = is_where})
-    elseif (c == "-" or c == "=") and sub(l, i + 1, i + 1) == ">" and sub(l, i - 1, i - 1) == " " and #open_groups > 0 then
-      open_groups[#open_groups].has_arrow = true
-      i = i + 1
-    elseif c == "|" and sub(l, i + 1, i + 1) ~= ">" and sub(l, i + 1, i + 1) ~= "|" and sub(l, i - 1, i - 1) ~= "|" then
-      if #open_groups > 0 and open_groups[#open_groups].closer == "|" then
+        while i <= n and sub(l, i, i) ~= c do
+          if sub(l, i, i) == "\\" then i = i + 1 end
+          i = i + 1
+        end
+      elseif c == "#" then
+        fixed = fixed + 1
+        break
+      elseif has_key(OPENERS, c) then
+        local text_before = trim(sub(l, 1, i - 1))
+        local is_where = c == "[" and (text_before == "where" or ends_with(text_before, " where"))
+        push(open_groups, opened_group(line, i, OPENERS[c], is_where, tokens, fixed))
+      elseif (c == "-" or c == "=") and sub(l, i + 1, i + 1) == ">" and sub(l, i - 1, i - 1) == " " and #open_groups > 0 then
+        open_groups[#open_groups].has_arrow = true
+        i = i + 1
+      elseif c == "|" and sub(l, i + 1, i + 1) ~= ">" and sub(l, i + 1, i + 1) ~= "|" and sub(l, i - 1, i - 1) ~= "|" then
+        if #open_groups > 0 and open_groups[#open_groups].closer == "|" then
+          push(out, closed_group(ls, open_groups, line, i, last_code, tokens, fixed))
+          open_groups = take(open_groups, #open_groups - 1)
+        else
+          -- A `|` opens a lambda only where an expression can start.
+          local b = char_before(l, i)
+          if b == "" or b == "=" or b == "(" or b == "," or b == "[" or b == "{" or b == ":" then
+            push(open_groups, opened_group(line, i, "|", false, tokens, fixed))
+          end
+        end
+      elseif has_key(CLOSERS, c) then
+        -- Pop down to the group this character closes. A `|` that turned out
+        -- to be no lambda is dropped on the way.
+        while #open_groups > 0 and open_groups[#open_groups].closer ~= c do open_groups = take(open_groups, #open_groups - 1) end
+        if #open_groups > 0 then
+          push(out, closed_group(ls, open_groups, line, i, last_code, tokens, fixed))
+          open_groups = take(open_groups, #open_groups - 1)
+        end
+      elseif c == "," and #open_groups > 0 then
         local g = open_groups[#open_groups]
-        push(out, closed_group(l, g.at, i, g.commas, g.last, #open_groups - 1, g.has_arrow))
-        open_groups = take(open_groups, #open_groups - 1)
-      else
-        -- A `|` opens a lambda only where an expression can start.
-        local b = char_before(l, i)
-        if b == "" or b == "=" or b == "(" or b == "," or b == "[" or b == "{" or b == ":" then
-          push(open_groups, {at = i, closer = "|", commas = 0, last = i, has_arrow = false, is_where = false})
+        local rest = sub(l, i + 1)
+        if not g.is_where or trim(rest) == "" or re_find(rest, CONSTRAINT) ~= nil then
+          g.commas = g.commas + 1
+          g.last = i
         end
       end
-    elseif has_key(CLOSERS, c) then
-      -- Pop down to the group this character closes. A `|` that turned out
-      -- to be no lambda is dropped on the way.
-      while #open_groups > 0 and open_groups[#open_groups].closer ~= c do open_groups = take(open_groups, #open_groups - 1) end
-      if #open_groups > 0 then
-        local g = open_groups[#open_groups]
-        push(out, closed_group(l, g.at, i, g.commas, g.last, #open_groups - 1, g.has_arrow))
-        open_groups = take(open_groups, #open_groups - 1)
-      end
-    elseif c == "," and #open_groups > 0 then
-      local g = open_groups[#open_groups]
-      if not g.is_where or re_find(sub(l, i + 1), CONSTRAINT) ~= nil then
-        g.commas = g.commas + 1
-        g.last = i
-      end
+      if code ~= " " and code ~= "\t" then last_code = code end
+      i = i + 1
     end
-    i = i + 1
   end
   return out
+end
+
+-- The groups that open and close on line `l`, as groups_in_lines gives them.
+function groups_on_line(l)
+  return groups_in_lines({l})
 end
 
 -- Whether group `g` on line `l` is a row of literals, read at a glance:
@@ -129,14 +196,33 @@ function is_literal_row(l, g, width)
   return true
 end
 
--- The outermost, then widest, group on line `l` of `min_items` or more
--- items that has no trailing comma yet, leaving out a function type's
--- arguments and a row of literals. nil when there is none.
-function group_with_items(l, min_items, width)
+-- Whether group `g` holds enough to read better stacked.
+function is_big(g, min_tokens)
+  return g.items >= STACK_ITEMS and g.tokens >= min_tokens
+end
+
+-- Whether group `g` on line `l` should stack. A function type's arguments
+-- can't take a trailing comma, and a row of literals stays side by side.
+function should_stack(l, g, min_tokens, width)
+  return is_big(g, min_tokens) and not g.trailing and not g.fn_type and not is_literal_row(l, g, width)
+end
+
+-- The group on line `l` the rewrite gives a trailing comma: the outermost,
+-- then widest, group that should stack; or else, on a line wider than
+-- `width`, the widest group of two or more items. nil when no group
+-- qualifies.
+function group_to_stack(l, min_tokens, width)
   local best = nil
-  for g in groups_on_line(l) do
-    if g.items >= min_items and not g.trailing and not g.fn_type and not is_literal_row(l, g, width) then
+  local groups = groups_on_line(l)
+  for g in groups do
+    if should_stack(l, g, min_tokens, width) then
       if best == nil or g.depth < best.depth or (g.depth == best.depth and g.close - g.open > best.close - best.open) then best = g end
+    end
+  end
+  if best ~= nil or line_width(l) <= width then return best end
+  for g in groups do
+    if g.items >= 2 and not g.trailing and not g.fn_type then
+      if best == nil or g.close - g.open > best.close - best.open then best = g end
     end
   end
   return best
@@ -148,4 +234,90 @@ function with_trailing_comma(l, g)
   local j = g.close - 1
   while j > g.open and sub(l, j, j) == " " do j = j - 1 end
   return sub(l, 1, j) .. "," .. sub(l, j + 1)
+end
+
+-- The start of a function's annotation, whose bare arguments can't stack.
+const ANNOTATION = "^[a-z_][A-Za-z0-9_]*!? : .*,$"
+
+-- The text before group `g` once it sits on one line. A stacked group among
+-- an annotation's arguments moves its line down from the annotation's, and
+-- `roc fmt` brings it back up with the group on one line.
+function text_up_to_group(ls, g)
+  local l = sub(ls[g.line], 1, g.open)
+  if g.line > 1 and re_find(trim(ls[g.line - 1]), ANNOTATION) ~= nil then
+    return ls[g.line - 1] .. " " .. trim(l)
+  end
+  return l
+end
+
+-- The line stacked group `g` of `ls` would be on one line, spaced as `roc fmt`
+-- spaces it, or nil when a line break inside it does more than separate
+-- items: a blank line, or a block's statements.
+function group_on_one_line(ls, g)
+  local joined = text_up_to_group(ls, g)
+  for i = g.line + 1, g.close_line do
+    local piece = trim(ls[i])
+    local before = sub(joined, #joined, #joined)
+    local closes = has_key(CLOSERS, sub(piece, 1, 1)) or (i == g.close_line and sub(piece, 1, 1) == "|")
+    if piece == "" then return nil end
+    if before ~= "," and not has_key(OPENERS, before) and not (before == "|" and i == g.line + 1) then return nil end
+    if closes and before == "," then joined = sub(joined, 1, #joined - 1) end
+    if before == "{" or sub(piece, 1, 1) == "}" or (before == "," and not closes) then joined = joined .. " " end
+    joined = joined .. piece
+  end
+  return joined
+end
+
+-- Whether group `g` is what keeps the parentheses around it on several lines.
+-- They would join its line, past what group_on_one_line measures.
+function holds_parentheses_open(g)
+  return g.parent.closer == ")" and g.parent.line < g.line and not g.parent.trailing
+end
+
+-- Whether stacked group `g` of `ls` should sit on one line: not big, nothing
+-- a rewrite can't join, and a joined line within `width`.
+function should_unstack(ls, g, min_tokens, width)
+  if not g.trailing or is_big(g, min_tokens) or g.fixed or holds_parentheses_open(g) then return false end
+  local joined = group_on_one_line(ls, g)
+  return joined ~= nil and line_width(joined) <= width
+end
+
+-- Whether group `inner`, which closes before `outer`, lies inside it.
+function is_inside(inner, outer)
+  return inner.line > outer.line or (inner.line == outer.line and inner.open > outer.open)
+end
+
+-- The stacked groups of `ls` that should sit on one line, by where they
+-- close, each with the column and line of its trailing comma as `comma` and
+-- `comma_line`. A group around one that stays on several lines can't be one
+-- line itself: `roc fmt` would give it its comma back.
+function groups_to_unstack(ls, min_tokens, width)
+  local out = {}
+  local last_kept = nil
+  for g in groups_in_lines(ls) do
+    if g.line ~= g.close_line then
+      local holds_kept = last_kept ~= nil and is_inside(last_kept, g)
+      if holds_kept or not should_unstack(ls, g, min_tokens, width) then
+        last_kept = g
+      else
+        local at = g.close_line
+        if trim(sub(ls[at], 1, g.close - 1)) == "" then at = at - 1 end
+        g.comma_line = at
+        g.comma = #(trim_end(ls[at]))
+        if sub(ls[at], g.comma, g.comma) ~= "," then fail("groups: line " .. at .. " does not end in its group's trailing comma") end
+        push(out, g)
+      end
+    end
+  end
+  return out
+end
+
+-- The lines `ls` with the trailing comma of each of `groups` taken out, which
+-- `roc fmt` reads as asking for one line. Each comma ends its own line.
+function without_trailing_commas(ls, groups)
+  local out = ls
+  for g in groups do
+    out[g.comma_line] = sub(out[g.comma_line], 1, g.comma - 1)
+  end
+  return out
 end
