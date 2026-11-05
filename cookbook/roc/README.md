@@ -49,6 +49,10 @@ that doesn't parse is listed at the end, and the run then fails.
 - [nest_depth.shale](nest_depth.shale) finds calls nested three or more
   deep, like `f(g(h(x)))`, which read inside out. `min=` sets the depth to
   report.
+- [parens.shale](parens.shale) finds the parentheses and braceless `if`s a
+  code emitter leaves: `if (x) a else b`, parentheses around a whole body
+  (`|x| (...)`), and `else { if ... }`. Roc's formatter keeps all three. With
+  `write=1` it rewrites them and runs `roc fmt`.
 - [stack.shale](stack.shale) finds groups laid out against the stacking
   rule, both ways: a group of three or more items and six or more tokens
   that sits on one line (`stack`), and any other group that is stacked and
@@ -129,12 +133,12 @@ run on their own.
   files that do parse, print what it found, and then fail with a list of
   the files it couldn't parse and why: `parse_roc_files(paths)` and
   `fail_if_refused(who, refused, unreached?)`. Used by `boundaries`,
-  `errors`, `name_hunt`, `nest_depth` and `stack`.
+  `errors`, `name_hunt`, `nest_depth`, `parens` and `stack`.
 - [findings.shale](findings.shale): `print_findings(summary, lines)` prints
   the summary, the findings and the summary again. The first copy survives
   when Shale's output limit cuts a long list short, and a caller that reads
   only the last line still gets the counts. Used by `errors`, `methods`,
-  `name_hunt`, `nest_depth`, `roc_commas` and `stack`.
+  `name_hunt`, `nest_depth`, `parens`, `roc_commas` and `stack`.
 - [pinned.shale](pinned.shale): `roc_bin(who, self_test)` gives the path
   of the Roc compiler that the repository's `roc-version` file names
   (installed at `tools:roc-<version>/roc`), and `SELF_TEST_PIN` is the
