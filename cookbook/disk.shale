@@ -83,7 +83,9 @@ function folders_under(mounted, prefix)
   local out = {}
   for name in ls(mounted) do
     local p = path_under(mounted, name)
-    if is_dir(p) then out[#out + 1] = {path = real(p), label = prefix .. name} end
+    -- The store refuses a symbolic link; a link is no growth spot of its own.
+    local folder = attempt(is_dir_at, p)
+    if folder.ok and folder.value then out[#out + 1] = {path = real(p), label = prefix .. name} end
   end
   return out
 end
