@@ -6,6 +6,9 @@
 --
 -- The arguments:
 --   glob       the files to check, `**/*.roc` by default;
+--   roles      a project's file of type names, one a line, that each module
+--              may declare for itself, as `Id` in `Message.Id`: read with its
+--              module it is a two-part name, so `twin_name` leaves it alone;
 --   self_test  with `self_test=1`, check the plants in
 --              `cookbook/roc/plants/families/`.
 --
@@ -32,6 +35,7 @@
 
 const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
+const ROLES_FILE = arg("roles", "")
 use("cookbook:roc/declared.shale")
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
@@ -89,7 +93,7 @@ function judge_families(modules, report)
   return nil
 end
 
-function judge_twins(declared_by_file, report)
+function judge_twins(declared_by_file, roles, report)
   local places_of = {}
   for one in declared_by_file do
     if not one.is_app then
@@ -104,7 +108,7 @@ function judge_twins(declared_by_file, report)
   end
   for name in sort(keys(places_of)) do
     local places = places_of[name]
-    if #places > 1 then
+    if #places > 1 and not has_key(roles, name) then
       local others = {}
       for p in drop(places, 1) do push(others, p.path .. ":" .. p.line) end
       push(report, {path = places[1].path, line = places[1].line, check = "twin_name", what = "`" .. name .. "` is also declared at " .. join(others, ", ")})
@@ -121,6 +125,9 @@ function self_test()
     {glob = at .. "family_small/*.roc"},
     {glob = at .. "family_half/*.roc"},
     {glob = at .. "twin_name/*.roc", counts = {twin_name = 1}, says = {"Bird.roc:4: twin_name: `Pose` is also declared at", "Cat.roc:4"}},
+    {glob = at .. "twin_name/*.roc", args = {"roles=" .. at .. "roles.txt"}},
+    {glob = at .. "twin_name/*.roc", args = {"roles=" .. at .. "other_roles.txt"}, counts = {twin_name = 1}, says = {"`Pose` is also declared at"}},
+    {glob = at .. "twin_name/*.roc", args = {"roles=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
     {glob = at .. "twin_app/*.roc"},
     {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
   })
@@ -134,7 +141,7 @@ function run_check()
   for f in parsed.files do push(declared_by_file, {path = f.path, is_app = is_app(f), declared = declarations_of(f)}) end
   local report = {}
   judge_families(modules_of(declared_by_file), report)
-  judge_twins(declared_by_file, report)
+  judge_twins(declared_by_file, ROLES_FILE == "" and {} or word_set(ROLES_FILE), report)
   local verdict = verdict_of("families", CHECKS, report, #paths)
   print_findings(verdict.summary, verdict.found)
   fail_if_refused("families", parsed.refused)
