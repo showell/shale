@@ -1,0 +1,4 @@
+# The decided words for vocabulary's plants.
+
+lean: tilt
+ride: tour, journey

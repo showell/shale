@@ -1,0 +1,151 @@
+-- This recipe checks that modules which look alike are spelled alike, and
+-- that one type name means one thing.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/families.shale
+--   shale cookbook:roc/families.shale self_test=1
+--
+-- The arguments:
+--   glob       the files to check, `**/*.roc` by default;
+--   self_test  with `self_test=1`, check the plants in
+--              `cookbook/roc/plants/families/`.
+--
+-- The checks:
+--
+--   family     Modules whose names end in the same word form a family when
+--              there are three or more (`CatSighting`, `TreeSighting`,
+--              `RailSighting`). A public name that more than half of a
+--              family's members have is the family's, and each member
+--              without it is a finding. A member that differs for a good
+--              reason says so by naming the missing name in the `##` doc
+--              above its type, or in the file's opening comment.
+--   twin_name  One public type name declared in two modules, such as
+--              `Cat.Pose` and `Geom.Pose`. It is reported once, at its first
+--              declaration, with the others listed. App files are left out,
+--              because every app declares what its platform asks for.
+--
+-- A module is a file that declares a type named for itself, and its public
+-- names are that type's members. The output is the counts, one line per
+-- finding, and the counts again (cookbook/roc/findings.shale).
+-- The run fails if there are findings, or if any file doesn't parse, and the
+-- files that do parse are judged either way.
+-- budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const GLOB = arg("glob", "**/*.roc")
+use("cookbook:roc/declared.shale")
+use("cookbook:roc/findings.shale")
+use("cookbook:roc/parsed.shale")
+use("cookbook:roc/gate_recipe.shale")
+const CHECKS = {"family", "twin_name"}
+const SMALLEST_FAMILY = 3
+const LANGUAGE_FIXED_NAMES = {is_eq = true, to_inspect = true, to_hash = true}
+
+-- The file's opening comment and the doc above line `line`, as one text.
+function module_doc_text(path, line)
+  local src = split(read(path), "\n")
+  return join(opening_comment(src), " ") .. " " .. doc_above(src, line)
+end
+
+-- Each module in the files read, as `{name, path, line, members}`, where
+-- `members` is the set of its type's member names.
+function modules_of(declared_by_file)
+  local out = {}
+  for one in declared_by_file do
+    local name = module_name(one.path)
+    local module = {name = name, path = one.path, line = 0, members = {}}
+    for d in one.declared do
+      if d.kind == "type" and d.name == name and d.owner == "" then module.line = d.line end
+      if d.kind == "value" and d.owner == name and not has_key(LANGUAGE_FIXED_NAMES, d.name) then module.members[d.name] = true end
+    end
+    if module.line ~= 0 and #keys(module.members) > 0 then push(out, module) end
+  end
+  return out
+end
+
+function judge_families(modules, report)
+  local family_of = {}
+  for m in modules do
+    local ws = name_words(m.name)
+    if #ws > 1 then push_at(family_of, ws[#ws], m) end
+  end
+  for word in sort(keys(family_of)) do
+    local members = family_of[word]
+    if #members >= SMALLEST_FAMILY then
+      local holders = {}
+      for m in members do
+        for name in keys(m.members) do incr(holders, name) end
+      end
+      for name in sort(keys(holders)) do
+        if holders[name] * 2 > #members then
+          for m in members do
+            if not has_key(m.members, name) and not contains(module_doc_text(m.path, m.line), "`" .. name .. "`") then
+              push(report, {path = m.path, line = m.line, check = "family", what = "`" .. m.name .. "` has no `" .. name .. "`, which " .. holders[name] .. " of the " .. #members .. " `*" .. word .. "` modules have: spell it alike, or name it in the module's doc to say why not"})
+            end
+          end
+        end
+      end
+    end
+  end
+  return nil
+end
+
+function judge_twins(declared_by_file, report)
+  local places_of = {}
+  for one in declared_by_file do
+    if not one.is_app then
+      local seen = {}
+      for d in one.declared do
+        if d.kind == "type" and not has_key(seen, d.name) then
+          seen[d.name] = true
+          push_at(places_of, d.name, d)
+        end
+      end
+    end
+  end
+  for name in sort(keys(places_of)) do
+    local places = places_of[name]
+    if #places > 1 then
+      local others = {}
+      for p in drop(places, 1) do push(others, p.path .. ":" .. p.line) end
+      push(report, {path = places[1].path, line = places[1].line, check = "twin_name", what = "`" .. name .. "` is also declared at " .. join(others, ", ")})
+    end
+  end
+  return nil
+end
+
+function self_test()
+  local at = "cookbook:roc/plants/families/"
+  check_plants("families", "cookbook:roc/families.shale", CHECKS, {
+    {glob = at .. "family/*.roc", counts = {family = 1}, says = {"RailSighting.roc:4: family: `RailSighting` has no `in_view`, which 3 of the 4 `*sighting` modules have"}},
+    {glob = at .. "family_answered/*.roc"},
+    {glob = at .. "family_small/*.roc"},
+    {glob = at .. "family_half/*.roc"},
+    {glob = at .. "twin_name/*.roc", counts = {twin_name = 1}, says = {"Bird.roc:4: twin_name: `Pose` is also declared at", "Cat.roc:4"}},
+    {glob = at .. "twin_app/*.roc"},
+    {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
+  })
+  return nil
+end
+
+function run_check()
+  local paths = glob(GLOB)
+  local parsed = parse_roc_files(paths)
+  local declared_by_file = {}
+  for f in parsed.files do push(declared_by_file, {path = f.path, is_app = is_app(f), declared = declarations_of(f)}) end
+  local report = {}
+  judge_families(modules_of(declared_by_file), report)
+  judge_twins(declared_by_file, report)
+  local verdict = verdict_of("families", CHECKS, report, #paths)
+  print_findings(verdict.summary, verdict.found)
+  fail_if_refused("families", parsed.refused)
+  return verdict
+end
+
+-- This `fail` stands at the top level so the summary is the last line a
+-- caller reads: a stop inside a function prints the calls after it.
+if SELF_TEST then
+  self_test()
+else
+  local verdict = run_check()
+  if #verdict.found > 0 then fail(verdict.summary) end
+end

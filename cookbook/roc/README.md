@@ -24,7 +24,7 @@ root.
 ## Checks
 
 These recipes print findings and, except for `stack.shale`'s `write=1`,
-change no files. A finding is a question for a reader, not a verdict. Each
+change no files. All but the last four below exit 0 on findings. A finding is a question for a reader, not a verdict. Each
 finding is one line that starts `path:line:` and names its check. The
 findings are printed between two copies of a summary of counts
 (`boundaries.shale` prints its summary once, after the findings). A file
@@ -56,6 +56,25 @@ that doesn't parse is listed at the end, and the run then fails.
   hold `long` at zero and leave the strings Roc can't split. With `write=1`
   it adds trailing commas and runs `roc fmt`, which lays each such group out
   one item a line.
+
+Four more checks can gate a build, because they exit nonzero on any
+finding. A project's own words stay with the project and are passed in.
+
+- [vocabulary.shale](vocabulary.shale) holds a project to its decided
+  words. `words=` names the project's file of `kept: retired, retired`
+  lines, and each identifier or comment holding a retired word is a finding.
+- [name_types.shale](name_types.shale) finds names that disagree with their
+  types: `name_type`, from a project's `table=` of `word: Type` lines, on
+  names and fields; `bare_beside_unit`, a field that is a bare number in one
+  record and a unit in another; and `no_value`, a constant like `no_frames`
+  whose ordinary value is kept to mean none.
+- [families.shale](families.shale) finds a module spelled unlike the
+  others that share its last word (`family`), and one type name declared in
+  two modules (`twin_name`).
+- [plain_names.shale](plain_names.shale) finds a pure function named like a
+  mutation (`pure_mutator`), an abbreviation in a name
+  (`abbreviation`, from `cookbook/words/abbreviations.txt`), and a module
+  with no doc or with history in its top comment (`module_doc`).
 
 `name_hunt`, `errors` and `boundaries` can also ask Roc's type checker
 for types: add `types=1 root=<app>`, where the app imports the files
@@ -128,6 +147,16 @@ run on their own.
   roc, paths, exempt)` gathers the types for a recipe's files from one or
   more apps and lists the files none of them reaches. Used by
   `boundaries`, `errors`, `methods` and `name_hunt`.
+
+- [declared.shale](declared.shale): what the naming recipes read out of a
+  parse tree: `declarations_of(file)`, each type, value and record field a
+  file declares, with `render_type`, `name_words` and `word_set`. Used by
+  `families`, `name_hunt`, `name_types`, `plain_names` and `vocabulary`.
+- [gate_recipe.shale](gate_recipe.shale): what the recipes that exit
+  nonzero on findings share: `verdict_of`, their counts and lines, and
+  `check_plants`, a self-test that runs the recipe as a child program once
+  for each row of a table, so a row judges the exit code as well as the
+  findings. Used by `families`, `name_types`, `plain_names` and `vocabulary`.
 
 ## Tools the recipes need
 

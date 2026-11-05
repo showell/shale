@@ -1,0 +1,13 @@
+-- Abbreviations a Roc name should spell out, one a line. Read by
+-- plain_names.shale, whose `abbreviation` check reports a name holding one.
+accel
+col
+dist
+frac
+grad
+iters
+pos
+poly
+pts
+sim
+vis

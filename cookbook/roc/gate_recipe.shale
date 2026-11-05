@@ -1,0 +1,102 @@
+-- This library is what the recipes that can gate a build share: a nonzero
+-- exit when there are findings, and a self-test that proves it.
+--
+--   use("cookbook:roc/gate_recipe.shale")
+--   local verdict = verdict_of("vocabulary", CHECKS, report, #paths)
+--   print_findings(verdict.summary, verdict.found)
+--   fail_if_refused("vocabulary", parsed.refused)
+--   return verdict, and `fail(verdict.summary)` at the script's top level
+--   check_plants("vocabulary", "cookbook:roc/vocabulary.shale", CHECKS, rows)
+--
+-- The self-test runs the recipe itself as a child program, once for each row
+-- of a table, so each row judges the exit code and the printed findings
+-- together. A row is `{glob, args, counts, says, stops}`. `glob` is what the
+-- recipe reads and `args` its other arguments. `counts` maps each check to
+-- the findings it must print, and a check the row leaves out must print
+-- none. `says` is a list of literals the output must hold. A row with no
+-- counts is a clean case: the recipe must exit 0 and print no finding. A row
+-- with counts must exit nonzero. `stops` marks a row that must exit nonzero
+-- without any finding, such as one with a bad data file. Every other row's
+-- last line, leaving out the `──` lines Shale adds, must be the summary,
+-- because a gate that holds counts reads them there.
+
+
+-- The summary and the finding lines of `report`, a list of `{path, line,
+-- check, what}`, sorted. The summary gives each check's count as `check N`.
+function verdict_of(who, checks, report, file_count)
+  sort(report, {"path", "line", "what"})
+  local count_by_check = {}
+  local found = {}
+  for r in report do
+    incr(count_by_check, r.check)
+    push(found, r.path .. ":" .. r.line .. ": " .. r.check .. ": " .. r.what)
+  end
+  local counts = {}
+  for c in checks do push(counts, c .. " " .. get(count_by_check, c, 0)) end
+  return {summary = who .. " (Roc): " .. file_count .. " files; " .. join(counts, ", "), found = found}
+end
+
+function findings_of(out, check)
+  local found = 0
+  for l in lines(out) do
+    if re_find(l, "^[^ ]+:[0-9]+: " .. check .. ": ") ~= nil then found = found + 1 end
+  end
+  return found
+end
+
+-- The last line of `out` that isn't one of Shale's `──` lines.
+function last_said(out)
+  local last = ""
+  for l in lines(trim(out)) do
+    if not starts_with(l, "──") and trim(l) ~= "" then last = l end
+  end
+  return last
+end
+
+-- What is wrong with one row's run, as a list of sentences.
+function row_faults(checks, row, r)
+  local faults = {}
+  local counts = get(row, "counts", {})
+  local stops = get(row, "stops", false)
+  local must_fail = stops or #keys(counts) > 0
+  if must_fail and r.code == 0 then push(faults, "it exited 0") end
+  if not must_fail and r.code ~= 0 then push(faults, "it exited " .. r.code) end
+  for check in checks do
+    local found = findings_of(r.out, check)
+    local wanted = get(counts, check, 0)
+    if found ~= wanted then push(faults, check .. " printed " .. found .. ", not " .. wanted) end
+  end
+  if not stops and not contains(last_said(r.out), " files; ") then push(faults, "its last line is no summary: " .. last_said(r.out)) end
+  for literal in get(row, "says", {}) do
+    if not contains(r.out, literal) then push(faults, "its output lacks `" .. literal .. "`") end
+  end
+  return faults
+end
+
+-- Runs every row and fails if any is wrong, or if a check has no row that
+-- makes it fire, since a check no plant fires could be blind.
+function check_plants(who, recipe, checks, rows)
+  local wrong = 0
+  local fired = {}
+  for row in rows do
+    local argv = {"shale", real(recipe), "glob=" .. row.glob}
+    for a in get(row, "args", {}) do push(argv, a) end
+    local r = run(argv, {timeout_ms = 120000, whole = 4000000})
+    local faults = row_faults(checks, row, r)
+    for check in keys(get(row, "counts", {})) do fired[check] = true end
+    print((#faults == 0 and "ok   " or "FAIL ") .. row.glob .. (#faults == 0 and "" or ": " .. join(faults, "; ")))
+    if #faults > 0 then
+      wrong = wrong + 1
+      print(r.out)
+    end
+  end
+  for check in checks do
+    if not has_key(fired, check) then
+      print("FAIL `" .. check .. "` has no plant")
+      wrong = wrong + 1
+    end
+  end
+  if wrong > 0 then fail(who .. " self_test: " .. wrong .. " wrong") end
+  print(who .. " self_test: PASS (" .. #rows .. " rows: each plant gives its findings and a nonzero exit, each clean case none and exit 0)")
+  return nil
+end

@@ -1,0 +1,132 @@
+-- This recipe finds names and top comments that say less than they should: a
+-- pure function named like a mutation, an abbreviation in a name, and a
+-- module with no doc or with history where its doc belongs.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/plain_names.shale
+--   shale cookbook:roc/plain_names.shale self_test=1
+--
+-- The arguments:
+--   glob           the files to check, `**/*.roc` by default;
+--   abbreviations  the file of abbreviations, one a line, by default
+--                  cookbook/words/abbreviations.txt, for a project with
+--                  words of its own to add;
+--   self_test      with `self_test=1`, check the plants in
+--                  `cookbook/roc/plants/plain_names/`.
+--
+-- The checks read top-level names, module members and the record fields of
+-- types and annotations, never locals:
+--
+--   pure_mutator  An annotated pure function whose first word says it changes
+--                 something (`push`, `fill`, `set`, `append`, `add`), though
+--                 its result is not its first argument's type, so nothing is
+--                 being added to. A first word `get` always counts, because
+--                 a Roc function's plain name is already what it gets.
+--   abbreviation  A name, member, field or type with a word from the
+--                 abbreviations file, since Roc's style guide prefers the
+--                 plain word. A name is reported once a file.
+--   module_doc    A module with no `##` doc at the top of its file or above
+--                 its type, or a top comment that tells history (`originally`,
+--                 `used to`, `emitted`) instead of what the module does. App
+--                 files are left out, as they have no module type.
+--
+-- The output is the counts, one line per finding, and the counts again
+-- (cookbook/roc/findings.shale). The run fails if there are findings, or if
+-- any file doesn't parse, and the files that do parse are judged either way.
+-- budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const GLOB = arg("glob", "**/*.roc")
+const ABBREVIATIONS_FILE = arg("abbreviations", "cookbook:words/abbreviations.txt")
+use("cookbook:roc/declared.shale")
+use("cookbook:roc/findings.shale")
+use("cookbook:roc/parsed.shale")
+use("cookbook:roc/gate_recipe.shale")
+const CHECKS = {"pure_mutator", "abbreviation", "module_doc"}
+const MUTATION_WORDS = {push = true, fill = true, set = true, append = true, add = true}
+const HISTORY_RE = "\\b(originally|used to|emitted)\\b"
+
+function judge_mutator(d, report)
+  if not d.fn or not d.annotated or ends_with(d.name, "!") then return nil end
+  local first_word = split(d.name, "_")[1]
+  local is_mutation = has_key(MUTATION_WORDS, first_word) and d.result ~= d.first
+  if first_word == "get" or is_mutation then
+    push(report, {path = d.path, line = d.line, check = "pure_mutator", what = "`" .. d.name .. "` is pure and gives a new `" .. d.result .. "`: name it for what it gives"})
+  end
+  return nil
+end
+
+function judge_abbreviations(declared, abbreviations, report)
+  local seen = {}
+  for d in declared do
+    if not has_key(seen, d.name) then
+      seen[d.name] = true
+      local found = {}
+      for w in name_words(d.name) do
+        if has_key(abbreviations, w) then push(found, w) end
+      end
+      if #found > 0 then push(report, {path = d.path, line = d.line, check = "abbreviation", what = "`" .. d.name .. "` abbreviates: " .. join(found, ", ")}) end
+    end
+  end
+  return nil
+end
+
+function judge_module_doc(f, declared, report)
+  if is_app(f) then return nil end
+  local name = module_name(f.path)
+  local type_line = 0
+  for d in declared do
+    if d.kind == "type" and d.name == name and d.owner == "" then type_line = d.line end
+  end
+  if type_line == 0 then return nil end
+  local src = split(read(f.path), "\n")
+  local top = opening_comment(src)
+  local has_doc = (#top > 0 and starts_with(top[1], "##")) or (type_line > 1 and starts_with(trim(src[type_line - 1]), "##"))
+  if not has_doc then push(report, {path = f.path, line = 1, check = "module_doc", what = "`" .. name .. "` has no `##` doc saying what it is for"}) end
+  local history = re_find(lower(join(top, " ")), HISTORY_RE)
+  if history ~= nil then push(report, {path = f.path, line = 1, check = "module_doc", what = "`" .. name .. "`'s top comment says `" .. history.group .. "`: say what the module does, and leave history to git"}) end
+  return nil
+end
+
+function self_test()
+  local at = "cookbook:roc/plants/plain_names/"
+  check_plants("plain_names", "cookbook:roc/plain_names.shale", CHECKS, {
+    {glob = at .. "pure_mutator.roc", counts = {pure_mutator = 4}, says = {"pure_mutator.roc:3: pure_mutator: `push_cat` is pure and gives a new `List(U64)`", "`get_speed`"}},
+    {glob = at .. "quiet_pure_mutator.roc"},
+    {glob = at .. "abbreviation.roc", counts = {abbreviation = 4}, says = {"abbreviation.roc:3: abbreviation: `max_vis_cats` abbreviates: vis", "`SunPos` abbreviates: pos", "`dist` abbreviates: dist"}},
+    {glob = at .. "quiet_abbreviation.roc"},
+    {glob = at .. "abbreviation.roc", args = {"abbreviations=" .. at .. "project_words.txt"}, counts = {abbreviation = 1}, says = {"`max_vis_cats` abbreviates: cats"}},
+    {glob = at .. "quiet_abbreviation.roc", args = {"abbreviations=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
+    {glob = at .. "module_doc/*.roc", counts = {module_doc = 3}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`"}},
+    {glob = at .. "quiet_module_doc/*.roc"},
+    {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
+  })
+  return nil
+end
+
+function run_check()
+  local abbreviations = word_set(ABBREVIATIONS_FILE)
+  local paths = glob(GLOB)
+  local parsed = parse_roc_files(paths)
+  local report = {}
+  for f in parsed.files do
+    local declared = declarations_of(f)
+    for d in declared do
+      if d.kind == "value" then judge_mutator(d, report) end
+    end
+    judge_abbreviations(declared, abbreviations, report)
+    judge_module_doc(f, declared, report)
+  end
+  local verdict = verdict_of("plain_names", CHECKS, report, #paths)
+  print_findings(verdict.summary, verdict.found)
+  fail_if_refused("plain_names", parsed.refused)
+  return verdict
+end
+
+-- This `fail` stands at the top level so the summary is the last line a
+-- caller reads: a stop inside a function prints the calls after it.
+if SELF_TEST then
+  self_test()
+else
+  local verdict = run_check()
+  if #verdict.found > 0 then fail(verdict.summary) end
+end
