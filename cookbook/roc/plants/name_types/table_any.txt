@@ -1,0 +1,4 @@
+id: any
+bull: any
+dist: any
+frames: any

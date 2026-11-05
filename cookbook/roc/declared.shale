@@ -10,6 +10,7 @@
 --   render_type(tree, at)         the type at node `at`, as text
 --   name_words(name)              a name's words, lowercased
 --   comment_on_line(l)            the text of the comment on line `l`
+--   last_part(type_name)          a dotted type's last part
 --   module_name(path), is_app(f)  a file's module, and whether it is an app
 --   opening_comment(src)          the comment lines that open a file
 --   word_set(path)                a word list, such as one in cookbook/words
@@ -132,6 +133,12 @@ function comment_on_line(l)
   return nil
 end
 
+-- A dotted type's last part.
+function last_part(type_name)
+  local parts = split(type_name, ".")
+  return parts[#parts]
+end
+
 -- The module a .roc file holds, by its file name.
 function module_name(path)
   local base = basename(path)
@@ -186,13 +193,19 @@ function owner_of(tree, at)
   return ""
 end
 
+-- Whether the node is a string with something in it: `""` spans two columns.
+function is_text(node)
+  return node.kind == "e-string" and (node.end_line > node.line or node.end_col - node.col > 2)
+end
+
 -- The record for the annotation at `i`, or nil when it is only a `where`
--- clause. `type` is its whole type. A function also has `result`, what it
--- returns, and `first`, its first argument's type.
+-- clause. `type` is its whole type. `has_text` says its definition is a string
+-- with something in it. A function also has `result`, what it returns, and
+-- `first`, its first argument's type.
 function annotated_value(path, tree, i)
   local kids = children(tree, i)
   if #kids == 0 or tree[kids[1]].kind == "where" then return nil end
-  local record = {path = path, line = tree[i].line, kind = "value", name = attribute(tree, i, "name"), owner = owner_of(tree, i), annotated = true, fn = false, type = render_type(tree, kids[1])}
+  local record = {path = path, line = tree[i].line, kind = "value", name = attribute(tree, i, "name"), owner = owner_of(tree, i), annotated = true, fn = false, has_text = false, type = render_type(tree, kids[1])}
   record.result = record.type
   if tree[kids[1]].kind == "ty-fn" then
     local parts = children(tree, kids[1])
@@ -255,7 +268,7 @@ function declarations_of(f)
       local record = annotated_value(f.path, tree, i)
       if record ~= nil then
         push(out, record)
-        annotated_names[record.owner .. "." .. record.name] = true
+        annotated_names[record.owner .. "." .. record.name] = record
       end
     end
     if outer[i] and kind == "s-decl" then
@@ -263,7 +276,9 @@ function declarations_of(f)
       if #kids > 0 and tree[kids[1]].kind == "p-ident" then
         local name = attribute(tree, kids[1], "raw")
         local owner = owner_of(tree, i)
-        if not has_key(annotated_names, owner .. "." .. name) then
+        if has_key(annotated_names, owner .. "." .. name) then
+          annotated_names[owner .. "." .. name].has_text = #kids > 1 and is_text(tree[kids[2]])
+        else
           push(out, {path = f.path, line = node.line, kind = "value", name = name, owner = owner, annotated = false, fn = #kids > 1 and tree[kids[2]].kind == "e-lambda", type = "", result = ""})
         end
       end

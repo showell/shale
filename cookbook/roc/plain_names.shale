@@ -10,6 +10,9 @@
 --   abbreviations  the file of abbreviations, one a line, by default
 --                  cookbook/words/abbreviations.txt, for a project with
 --                  words of its own to add;
+--   terms          a project's file of fixed terms that open a name and only
+--                  look like a verb, one a line, such as `set_cookie` for
+--                  HTTP's header, which `pure_mutator` leaves alone;
 --   self_test      with `self_test=1`, check the plants in
 --                  `cookbook/roc/plants/plain_names/`.
 --
@@ -18,9 +21,14 @@
 --
 --   pure_mutator  An annotated pure function whose first word says it changes
 --                 something (`push`, `fill`, `set`, `append`, `add`), though
---                 its result is not its first argument's type, so nothing is
---                 being added to. A first word `get` always counts, because
---                 a Roc function's plain name is already what it gets.
+--                 nothing is being added to. Something is when the result is
+--                 the first argument's type, on its own, as a `Try`'s value,
+--                 or as a field of a record or of an alias in the same file
+--                 (`Try({ users : Users, user : User }, [Full])`), or when the
+--                 first argument is a record with a field of the result's
+--                 type (`{ so_far : List(U8), count : U64 }`). A first word
+--                 `get` always counts, because a Roc function's plain name
+--                 is already what it gets.
 --   abbreviation  A name, member, field or type with a word from the
 --                 abbreviations file, since Roc's style guide prefers the
 --                 plain word. A name is reported once a file.
@@ -37,6 +45,7 @@
 const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
 const ABBREVIATIONS_FILE = arg("abbreviations", "cookbook:words/abbreviations.txt")
+const TERMS_FILE = arg("terms", "")
 use("cookbook:roc/declared.shale")
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
@@ -45,10 +54,45 @@ const CHECKS = {"pure_mutator", "abbreviation", "module_doc"}
 const MUTATION_WORDS = {push = true, fill = true, set = true, append = true, add = true}
 const HISTORY_RE = "\\b(originally|used to|emitted)\\b"
 
-function judge_mutator(d, report)
-  if not d.fn or not d.annotated or ends_with(d.name, "!") then return nil end
+-- The value of a `Try(value, errors)`, or `result` when it is no `Try`.
+function value_of_try(result)
+  if not starts_with(result, "Try(") then return result end
+  local depth = 0
+  for i = 5, #result do
+    local c = sub(result, i, i)
+    if c == "(" or c == "{" or c == "[" then
+      depth = depth + 1
+    elseif c == ")" or c == "}" or c == "]" then
+      depth = depth - 1
+    elseif c == "," and depth == 0 then
+      return trim(sub(result, 5, i - 1))
+    end
+  end
+  return result
+end
+
+function record_holds(record, type_name)
+  return starts_with(record, "{") and (contains(record, " : " .. type_name .. ",") or contains(record, " : " .. type_name .. " }"))
+end
+
+-- Whether a function's result is what its first argument was added to.
+function gives_first_back(d, aliases)
+  local value = value_of_try(d.result)
+  if value == d.first or record_holds(d.first, value) then return true end
+  return record_holds(get(aliases, last_part(value), value), d.first)
+end
+
+function opens_with_term(name, terms)
+  for term in keys(terms) do
+    if name == term or starts_with(name, term .. "_") then return true end
+  end
+  return false
+end
+
+function judge_mutator(d, aliases, terms, report)
+  if not d.fn or not d.annotated or ends_with(d.name, "!") or opens_with_term(d.name, terms) then return nil end
   local first_word = split(d.name, "_")[1]
-  local is_mutation = has_key(MUTATION_WORDS, first_word) and d.result ~= d.first
+  local is_mutation = has_key(MUTATION_WORDS, first_word) and not gives_first_back(d, aliases)
   if first_word == "get" or is_mutation then
     push(report, {path = d.path, line = d.line, check = "pure_mutator", what = "`" .. d.name .. "` is pure and gives a new `" .. d.result .. "`: name it for what it gives"})
   end
@@ -90,8 +134,11 @@ end
 function self_test()
   local at = "cookbook:roc/plants/plain_names/"
   check_plants("plain_names", "cookbook:roc/plain_names.shale", CHECKS, {
-    {glob = at .. "pure_mutator.roc", counts = {pure_mutator = 4}, says = {"pure_mutator.roc:3: pure_mutator: `push_cat` is pure and gives a new `List(U64)`", "`get_speed`"}},
+    {glob = at .. "pure_mutator.roc", counts = {pure_mutator = 7}, says = {"pure_mutator.roc:3: pure_mutator: `push_cat` is pure and gives a new `List(U64)`", "`get_speed`"}},
     {glob = at .. "quiet_pure_mutator.roc"},
+    {glob = at .. "terms.roc", counts = {pure_mutator = 2}, says = {"`set_cookie_header`", "`set_cookies`"}},
+    {glob = at .. "terms.roc", args = {"terms=" .. at .. "terms.txt"}, counts = {pure_mutator = 1}, says = {"`set_cookies`"}},
+    {glob = at .. "terms.roc", args = {"terms=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
     {glob = at .. "abbreviation.roc", counts = {abbreviation = 4}, says = {"abbreviation.roc:3: abbreviation: `max_vis_cats` abbreviates: vis", "`SunPos` abbreviates: pos", "`dist` abbreviates: dist"}},
     {glob = at .. "quiet_abbreviation.roc"},
     {glob = at .. "abbreviation.roc", args = {"abbreviations=" .. at .. "project_words.txt"}, counts = {abbreviation = 1}, says = {"`max_vis_cats` abbreviates: cats"}},
@@ -105,13 +152,18 @@ end
 
 function run_check()
   local abbreviations = word_set(ABBREVIATIONS_FILE)
+  local terms = TERMS_FILE == "" and {} or word_set(TERMS_FILE)
   local paths = glob(GLOB)
   local parsed = parse_roc_files(paths)
   local report = {}
   for f in parsed.files do
     local declared = declarations_of(f)
+    local aliases = {}
     for d in declared do
-      if d.kind == "value" then judge_mutator(d, report) end
+      if d.kind == "type" and not d.is_nominal then aliases[d.name] = d.underlying end
+    end
+    for d in declared do
+      if d.kind == "value" then judge_mutator(d, aliases, terms, report) end
     end
     judge_abbreviations(declared, abbreviations, report)
     judge_module_doc(f, declared, report)

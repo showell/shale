@@ -22,6 +22,12 @@ Gaze := [].{
 
 	no_guess = 3
 
+	no_match_words : Str
+	no_match_words = "The name and the password don't match."
+
+	no_channel_words : Str
+	no_channel_words = "This chat has no ${channel} channel."
+
 	know_id : U64
 	know_id = 0
 }

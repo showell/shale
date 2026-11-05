@@ -12,10 +12,10 @@
 --   self_test  with `self_test=1`, check the plants in
 --              `cookbook/roc/plants/name_types/`.
 --
--- Each line of the table is `word: Type, Type`, or `word: none`, such as
--- `dist: Distance`. A blank line or one starting with `#` is skipped, and a
--- malformed line or a word listed twice stops the run. The table belongs to
--- the project, because what `dist` must be depends on the project's types.
+-- Each line of the table is `word: Type, Type`, `word: none` or `word: any`,
+-- such as `dist: Distance`. A blank line or one starting with `#` is skipped,
+-- and a malformed line or a word listed twice stops the run. The table belongs
+-- to the project, because what `dist` must be depends on the project's types.
 --
 -- The checks read top-level names, module members and the record fields of
 -- types and annotations, never locals:
@@ -27,20 +27,25 @@
 --                     with a preposition or a question, the last word isn't
 --                     the thing named (`from_fraction`, `after_two_steps`,
 --                     `is_fraction`), so it is not judged. `none` means no
---                     name may end in the word, whatever its type or start.
+--                     name may end in the word, whatever its type or start,
+--                     and `any` means the word holds no promise at all.
 --   bare_beside_unit  A field that is a bare number in one record and a unit
 --                     in another, a unit being a nominal type built on a
 --                     number and declared in the files read. It means a
 --                     retyping stopped halfway. Each bare field is a finding.
---                     A field named by a preposition (`from`, `to`, `at`) is
---                     not judged, because that word fits any two things.
+--                     A field named by a preposition (`from`, `to`, `at`) or
+--                     by a word the table gives `any` (`id`, where a host's
+--                     number and a user's id are two things) is not judged,
+--                     because that word fits any two things.
 --   no_value          A constant whose first word is `no`, `none` or `unset`
 --                     and whose type is not a `Bool` or a tag union. An
 --                     ordinary value kept to mean "none" should be a tag.
 --                     A `List` has its own empty case, and a type's own member
 --                     of that type (`Attention.none : Attention`) is its
 --                     scale's bottom, so neither is judged, and neither is a
---                     constant with no annotation.
+--                     constant with no annotation. A string with something in
+--                     it is words about the case, not a stand-in for it
+--                     (`no_match_words`), so only `""` is judged.
 --
 -- The output is the counts, one line per finding, and the counts again
 -- (cookbook/roc/findings.shale). The run fails if there are findings, or if
@@ -61,7 +66,7 @@ const QUESTION_WORDS = {is = true, has = true, can = true, should = true}
 const PREPOSITIONS = word_set("cookbook:words/prepositions.txt")
 
 -- The table as a map from each word to the list of types allowed for it,
--- which is empty for `none`.
+-- which is empty for `none` and `{"any"}` for `any`.
 function name_type_table(path)
   local table_of_words = {}
   if path == "" then return table_of_words end
@@ -71,8 +76,8 @@ function name_type_table(path)
     number = number + 1
     local l = trim(raw)
     if l ~= "" and not starts_with(l, "#") then
-      local m = re_find(l, "^([a-z0-9]+): *(none|[A-Z][A-Za-z0-9]*(?:, *[A-Z][A-Za-z0-9]*)*)$")
-      if m == nil then fail("name_types: " .. path .. ":" .. number .. ": expected `word: Type, Type` or `word: none`") end
+      local m = re_find(l, "^([a-z0-9]+): *(none|any|[A-Z][A-Za-z0-9]*(?:, *[A-Z][A-Za-z0-9]*)*)$")
+      if m == nil then fail("name_types: " .. path .. ":" .. number .. ": expected `word: Type, Type`, `word: none` or `word: any`") end
       if has_key(table_of_words, m.groups[1]) then fail("name_types: " .. path .. ":" .. number .. ": `" .. m.groups[1] .. "` is listed twice") end
       local allowed = {}
       if m.groups[2] ~= "none" then
@@ -84,16 +89,15 @@ function name_type_table(path)
   return table_of_words
 end
 
--- A dotted type's last part.
-function last_part(type_name)
-  local parts = split(type_name, ".")
-  return parts[#parts]
+function promises_nothing(table_of_words, word)
+  return has_key(table_of_words, word) and has_item(table_of_words[word], "any")
 end
 
 function judge_name_type(d, table_of_words, report)
   local ws = name_words(sub(d.name, 1, ends_with(d.name, "!") and #d.name - 1 or #d.name))
   if #ws == 0 or not has_key(table_of_words, ws[#ws]) then return nil end
   local allowed = table_of_words[ws[#ws]]
+  if promises_nothing(table_of_words, ws[#ws]) then return nil end
   local type_name = d.kind == "field" and d.type or d.result
   if type_name == "" or type_name == "_" then return nil end
   local names_something_else = has_key(PREPOSITIONS, ws[1]) or has_key(QUESTION_WORDS, ws[1])
@@ -114,14 +118,14 @@ function unit_types(all)
   return units
 end
 
-function judge_bare_fields(all, report)
+function judge_bare_fields(all, table_of_words, report)
   local units = unit_types(all)
   local unit_of_field = {}
   for d in all do
     if d.kind == "field" and has_key(units, last_part(d.type)) then unit_of_field[d.name] = d end
   end
   for d in all do
-    if d.kind == "field" and has_key(BARE_NUMBERS, d.type) and has_key(unit_of_field, d.name) and not has_key(PREPOSITIONS, d.name) then
+    if d.kind == "field" and has_key(BARE_NUMBERS, d.type) and has_key(unit_of_field, d.name) and not has_key(PREPOSITIONS, d.name) and not promises_nothing(table_of_words, d.name) then
       local typed = unit_of_field[d.name]
       push(report, {path = d.path, line = d.line, check = "bare_beside_unit", what = "the field `" .. d.name .. "` is a bare `" .. d.type .. "` here and a `" .. typed.type .. "` at " .. typed.path .. ":" .. typed.line})
     end
@@ -138,7 +142,7 @@ function judge_no_values(all, report)
     if d.kind == "value" and d.annotated and not d.fn then
       local ws = split(d.name, "_")
       local is_none_word = has_key(NONE_WORDS, ws[1])
-      local is_plain = d.type ~= "Bool" and not starts_with(d.type, "[") and not starts_with(d.type, "List(") and d.owner ~= last_part(d.type) and not has_key(tag_types, last_part(d.type))
+      local is_plain = d.type ~= "Bool" and not d.has_text and not starts_with(d.type, "[") and not starts_with(d.type, "List(") and d.owner ~= last_part(d.type) and not has_key(tag_types, last_part(d.type))
       if is_none_word and is_plain then push(report, {path = d.path, line = d.line, check = "no_value", what = "`" .. d.name .. "` means none and is a `" .. d.type .. "`: keep the case as a tag"}) end
     end
   end
@@ -154,6 +158,9 @@ function self_test()
     {glob = at .. "quiet_name_type.roc", args = {table_arg}},
     {glob = at .. "bare_beside_unit/*.roc", counts = {bare_beside_unit = 2}, says = {"Rider.roc:4: bare_beside_unit: the field `forward` is a bare `F64` here and a `Distance` at"}},
     {glob = at .. "quiet_bare/*.roc"},
+    {glob = at .. "bare_any/*.roc", counts = {bare_beside_unit = 1}, says = {"the field `id` is a bare `U64` here"}},
+    {glob = at .. "bare_any/*.roc", args = {"table=" .. at .. "table_any.txt"}},
+    {glob = at .. "name_type.roc", args = {"table=" .. at .. "table_any.txt"}},
     {glob = at .. "no_value.roc", counts = {no_value = 3}, says = {"no_value.roc:3: no_value: `no_frames` means none and is a `Steps`"}},
     {glob = at .. "quiet_no_value.roc"},
     {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
@@ -176,7 +183,7 @@ function run_check()
   for d in all do
     if d.kind == "field" or d.kind == "value" then judge_name_type(d, table_of_words, report) end
   end
-  judge_bare_fields(all, report)
+  judge_bare_fields(all, table_of_words, report)
   judge_no_values(all, report)
   local verdict = verdict_of("name_types", CHECKS, report, #paths)
   print_findings(verdict.summary, verdict.found)
