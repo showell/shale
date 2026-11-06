@@ -58,8 +58,9 @@ const SHOW = parse_int(arg("show", "20"))
 -- sibling (each repo's gate checks its own docs, never another's).
 const ONLY = arg("only", "")
 -- A host's data, never a repo's: a path under one of these is passed by.
--- A bare data file's name (`polls.txt`) is still a finding.
-const DATA_ROOTS = {"data/", "auth/", "chat_root/", "claude-steve/"}
+-- A bare data file's name (`polls.txt`) is still a finding. `chat/channel/` is
+-- roc-chat's data disk; a repo may well have a `chat/` of its own.
+const DATA_ROOTS = {"data/", "auth/", "chat_root/", "claude-steve/", "chat/channel/"}
 
 -- Whether a tracked path is history, or a test's fixture (a doc under a
 -- `tests/` folder is data a test reads), not checked.
@@ -617,7 +618,7 @@ function self_test()
       "Whose: `src/both.zig`, on a line naming no repo.\n" ..
       "Passed by: `.zig`, `_test.zig`, `std.json`, `1/../2`, `data/`, `./auth`; built: `zig-out/bin/x.elf`; a sibling itself: `../zig-webbox`, `angry-gopher/`.\n" ..
       "```\nsrc/in_a_fence.zig\n```\n" ..
-      "A host's: `data/chat/x.md`, `claude-steve/random1.md`, `zig-metal-unikernel.conf`; but a data file alone, `random1.md`.\n" ..
+      "A host's: `data/chat/x.md`, `claude-steve/random1.md`, `chat/channel/general.channel`, `zig-metal-unikernel.conf`; but a data file alone, `random1.md`, and `chat/gone.md`, beside a data root.\n" ..
       "zig-webbox builds `probe/out.elf`.\n" ..
       "Built by whom: `probe/out.elf`.\n" ..
       "Run `./ops/check_x`, and `./ops/missing_x`.\n",
@@ -648,7 +649,7 @@ function self_test()
   local all = check_all(fix .. "/", {"metal-vmm", "zig-webbox", "angry-gopher", "roc-markdown", "roc-chat"})
   local m = all["metal-vmm"]
   local gone = join(m.gone, "\n")
-  expect(#m.gone == 5 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
+  expect(#m.gone == 6 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
   expect(not contains(gone, "answers.roc"), "a path real in an optional sibling that is here passes, by the line's naming and by `../`")
   expect(contains(gone, "docs/roc.md:2: `judge/made_up.roc`"), "a made-up path in an optional sibling that is here is gone: not written yet is a finding")
   expect(not contains(gone, "Session.roc") and not contains(gone, "Gone.roc") and get(m.skipped, "in an optional sibling not checked out here", 0) == 2, "a path in an optional sibling not checked out is passed by, never gone")
@@ -656,6 +657,7 @@ function self_test()
   expect(#absent == 1 and absent[1] == "roc-chat", "an optional sibling not checked out is named once; one that is here is not")
   expect(contains(gone, "README.md:14: `ops/missing_x`") and not contains(gone, "check_"), "a `./` path with no extension is read whole, never one character short")
   expect(contains(gone, "README.md:11: `random1.md`"), "a data file's name with no data root is a finding")
+  expect(contains(gone, "README.md:11: `chat/gone.md`"), "a path beside a data root, not under it, is a finding")
   expect(contains(gone, "README.md:13: `probe/out.elf`"), "a path a sibling ignores, on a line naming no sibling, is a finding")
   expect(not contains(gone, "w.zig"), "a sibling-named path is found there, by the line's naming and by `../`")
   expect(#m.ambiguous == 0, "a path in this repo is this repo's, though siblings have it; a name another repo answers, an optional sibling's too, is the other repo's")
@@ -670,7 +672,7 @@ function self_test()
   expect(contains(gn, "src/bad.zig does not parse as Zig"), "a file that does not parse is a finding, not a stop")
   expect(m.names == 9 and m.by_word == 2, "names by the parser; a member (`Inner.depth`) and a nested one alone by declaration or field")
   expect(m.ignored == 2, "a path the repo's .gitignore covers, or a named sibling's, is a build's, passed by")
-  expect(get(m.skipped, "an extension or a suffix", 0) == 2 and get(m.skipped, "Zig's std", 0) == 1 and get(m.skipped, "a traversal example", 0) == 1 and get(m.skipped, "a folder named alone", 0) == 2 and get(m.skipped, "a host's data", 0) == 2 and get(m.skipped, "a host's config", 0) == 1, "each rule passes its own by, and counts it")
+  expect(get(m.skipped, "an extension or a suffix", 0) == 2 and get(m.skipped, "Zig's std", 0) == 1 and get(m.skipped, "a traversal example", 0) == 1 and get(m.skipped, "a folder named alone", 0) == 2 and get(m.skipped, "a host's data", 0) == 3 and get(m.skipped, "a host's config", 0) == 1, "each rule passes its own by, and counts it")
   expect(m.lines == 2 and m.line_named == 2 and m.line_wrong == 1, "`file:N` counted, and its line checked beside a name")
   remove(fix .. "/metal-vmm/src/both.zig")
   local again = check_all(fix .. "/", {"metal-vmm", "zig-webbox", "angry-gopher"})
