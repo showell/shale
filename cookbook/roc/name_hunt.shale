@@ -328,6 +328,7 @@ function list_name_kinds(file)
   return kinds
 end
 const LIST_NAMES = list_name_kinds("list_names.txt")
+const PLAIN_ELEMENTS = set_of({"U16", "U32", "U64", "I16", "I32", "I64", "F32", "F64", "Dec", "Str", "Bool"})
 const SURFACES = {Frame = true, Canvas = true}
 -- The first words `phrase_name` lets a constructor start with. They are the
 -- ones constructors use in safari, roc-chat and roc-markdown: `Clock.at_step`,
@@ -812,15 +813,24 @@ function element_word(element)
   return #type_words > 0 and type_words[#type_words] or ""
 end
 
--- The names `singular_list` offers for `bare`, whose head word `head` is at
--- `at` in `ws`: the plural of what the list holds after the name, as in
--- `herd_cows`, or the head's own plural when the type is its own word or has
--- none; else the name with `_list`.
+-- The names `singular_list` offers for `bare`, whose head word is at `at` in
+-- `ws`: the plural of what the list holds put after the head, as in
+-- `herd_cows`, or the head's own plural when the element is that word, a
+-- number or text; else the name with `_list`.
 function honest_list_names(bare, ws, at, element)
   local held = element_word(element)
-  if held ~= "" and held ~= ws[at] and #held > 1 then return "`" .. bare .. "_" .. plural_of(held) .. "`, or `" .. bare .. "_list`" end
+  local says_what_it_holds = held ~= "" and held ~= ws[at] and re_find(element, "^[A-Z]") ~= nil and not has_key(PLAIN_ELEMENTS, element)
   local plural_words = {}
-  for k = 1, #ws do push(plural_words, k == at and plural_of(ws[at]) or ws[k]) end
+  for k = 1, #ws do
+    if k ~= at then
+      push(plural_words, ws[k])
+    elseif says_what_it_holds then
+      push(plural_words, ws[k])
+      push(plural_words, plural_of(held))
+    else
+      push(plural_words, plural_of(ws[k]))
+    end
+  end
   return "`" .. join(plural_words, "_") .. "`, or `" .. bare .. "_list`"
 end
 
