@@ -46,9 +46,9 @@
 --               and is not a literal. A library's API keeps its parameters
 --               whatever this tree's callers pass, so `fixed` skips a
 --               module type's member in a file under a `lib/` folder, or in
---               a module exposed by a `package` header in the `main.roc`
---               beside it. A file's own top-level functions there are
---               checked.
+--               a module exposed by a `package` or `platform` header in the
+--               `main.roc` beside it. A file's own top-level functions there
+--               are checked.
 --   entry       Every production call, two or more, passes the same literal
 --               for a parameter that the recursive function's own calls
 --               vary (`at: 0` outside, `at + 1` inside). The recursion
@@ -64,6 +64,24 @@
 --               constant, so a function whose annotated return type holds a
 --               type variable (`{} -> Viewer(id)`) is quiet. An unannotated
 --               function's type is unknown, so it is checked.
+--   dead        A top-level or member function that nothing reaches in the
+--               files read: no production call, no `expect`, no test file, and
+--               no reference to it as a value, a record's shorthand
+--               (`{ helper }`) included. Its calls to itself don't count. A
+--               top-level function is private to its file, even in a package,
+--               and a member of a module no package exposes has no caller to
+--               come. Left alone are the names something else calls: what an
+--               app's header provides, what a platform requires and provides,
+--               and a method Roc calls by name (`is_eq`, `to_hash`).
+--   unused_api  The same, for a member of a module its package or platform
+--               exposes, a member under a `lib/` folder, or a name a `module`
+--               header exposes. The callers of a public name are mostly
+--               outside the tree, so this is a question and not a verdict, and
+--               it has its own count. A member only an `expect` reaches is in
+--               neither.
+--   same_branches  An `if` whose two branches are the same text, braces aside
+--               (`if m.over { m } else m`). The condition decides nothing, so
+--               a rule was lost, or the `if` should go.
 --   bool_param  With `types=1` only: a parameter whose type is `Bool` is
 --               passed `Bool.True`, `Bool.False`, `True` or `False` by some
 --               call. "A flag a caller passes is a tag", named for what it
@@ -74,8 +92,8 @@
 --               a field of a record argument.
 --
 -- A reference to a function is its bare name in the file that defines it,
--- `Type.name` anywhere, or a method call `.name(...)`. The receiver of a
--- method call or of an arrow call (`x->f(a)`) is its first argument. A
+-- `Type.name` anywhere, the type read through the file's `import ... as`, or
+-- a method call `.name(...)`. The receiver of a method call or of an arrow call (`x->f(a)`) is its first argument. A
 -- method call counts for every module type with a member of that name, so
 -- a member whose name another type's member shares is ambiguous, and only
 -- `constant` checks it. A test file is a file whose name ends in
@@ -92,7 +110,8 @@
 -- `self_test=1` checks the plants in `cookbook/roc/plants/boundaries/`.
 -- Each plant is named for the check it holds (`fixed_string.roc` holds
 -- `fixed`), and each check must fire on its own plants and on no others; a
--- `quiet_*.roc` plant must give no finding. The plants under `typed/` are
+-- `quiet_*.roc` plant must give no finding. `dead` and `unused_api` are judged
+-- only under `dead/`, since nothing calls the other plants. The plants under `typed/` are
 -- type modules checked with the types under the app `QuietApp.roc`, and
 -- their names are read in snake case (`BoolParam.roc` as `bool_param`).
 -- The rest are checked without types. The self-test fails if roc-types is
@@ -105,7 +124,9 @@ const TYPED_PLANTS = PLANTS .. "typed/"
 const GLOB = SELF_TEST and (PLANTS .. "**/*.roc") or arg("glob", "**/*.roc")
 const MAX_WAYS = arg("ways", 2)
 const MAX_NODES = arg("nodes", 24)
-const CHECKS = {"single", "fixed", "entry", "constant", "bool_param"}
+const DEAD_PLANTS = PLANTS .. "dead/"
+const CHECKS = {"single", "fixed", "entry", "constant", "bool_param", "dead", "unused_api", "same_branches"}
+use("cookbook:roc/headers.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
@@ -124,6 +145,10 @@ const NODES = {}
 const NODE_PATH = {}
 const NODE_OFFSET = {}
 const SOURCE_LINES = {}
+-- Each file's `header_names`, and the module each of its import aliases
+-- stands for, by `path|alias`.
+const HEADER_NAMES = {}
+const IMPORT_ALIASES = {}
 -- The kinds of node that can hold a top-level function: a file, its
 -- statements, a module type's declaration, and the block of its members.
 const TOP_LEVEL_KINDS = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
@@ -134,6 +159,8 @@ for c in CHECKS do finding_counts[c] = 0 end
 const fired = {}
 
 function report(path, line, check, why)
+  -- The other plants exist to be read by the other checks, and nothing calls them.
+  if SELF_TEST and (check == "dead" or check == "unused_api") and not starts_with(path, DEAD_PLANTS) then return nil end
   print(path .. ":" .. line .. ": " .. check .. ": " .. why)
   finding_counts[check] = finding_counts[check] + 1
   fired[path .. "|" .. check] = true
@@ -190,38 +217,15 @@ function is_test_file(path)
   return ends_with(path, "twin.roc") or contains(path, "/twin/") or contains(path, "/test/") or starts_with(path, "test/") or starts_with(path, "twin/")
 end
 
--- The modules a folder's `main.roc` exposes when its header is `package`
--- (`package [Md, MdFence] {}`), or none for any other folder.
-const PACKAGE_MODULES_BY_DIR = {}
-function package_exposed_modules(dir)
-  if has_key(PACKAGE_MODULES_BY_DIR, dir) then return PACKAGE_MODULES_BY_DIR[dir] end
-  local main = (dir == "" or dir == ".") and "main.roc" or (dir .. "/main.roc")
-  local out = {}
-  if exists(main) then
-    local code = {}
-    for l in lines(read(main)) do
-      if not starts_with(trim(l), "#") then push(code, l) end
-    end
-    local text = join(code, "\n")
-    if starts_with(trim(text), "package") then
-      for m in split(between(text, "[", "]") or "", ",") do
-        if trim(m) ~= "" then push(out, trim(m)) end
-      end
-    end
-  end
-  PACKAGE_MODULES_BY_DIR[dir] = out
-  return out
-end
-
--- Whether a function is part of a library's API, which `fixed` skips: a
--- module type's member in a file under a `lib/` folder, or in a module its
--- package exposes.
+-- Whether a function is part of a library's API: a module type's member in a
+-- file under a `lib/` folder, or in a module its package or platform exposes,
+-- or a name its own `module` header exposes.
 function is_library_api(func)
+  if has_key(HEADER_NAMES[func.path].exposed, func.name) then return true end
   if sub(func.owner, 1, 1) == "@" then return false end
   local p = func.path
   if starts_with(p, "lib/") or contains(p, "/lib/") or contains(p, ":lib/") then return true end
-  local b = basename(p)
-  return has_item(package_exposed_modules(dirname(p)), sub(b, 1, #b - 4))
+  return is_exposed_module(p)
 end
 
 -- The name in the header of the module type declared at `g`.
@@ -244,6 +248,7 @@ local checker_types = USE_TYPES and roc_types_for_files("boundaries", ROOT, roc_
 local parsed = parse_roc_files(ROC_FILES)
 for f in parsed.files do
   SOURCE_LINES[f.path] = split(read(f.path), "\n")
+  HEADER_NAMES[f.path] = header_names(f.nodes)
   local offset = #NODES
   for n in f.nodes do
     push(NODES, n)
@@ -413,7 +418,7 @@ for g = 1, #NODES do
         is_wrapper = body.is_wrapper, size = body.size, doc_lines = doc_comment_lines(SOURCE_LINES[path], name, n.line),
         takes_empty_record_alone = takes_empty_record_alone(g, name), params = lambda_params(kids[2]),
         prod_refs = 0, value_refs = 0, expect_refs = 0, test_refs = 0, prod_callers = {},
-        prod_calls = {}, self_calls = {}, test_calls = {},
+        prod_calls = {}, self_calls = {}, test_calls = {}, mentions = 0,
         is_ambiguous = false, is_recursive = false, is_entry = false,
       }
       if sub(owner, 1, 1) ~= "@" then
@@ -458,12 +463,13 @@ end
 
 -- The key of the function that the name at `g` refers to, or "".
 function referenced_key(g, name)
+  local path = NODE_PATH[g]
   if contains(name, ".") then
     local parts = split(name, ".")
-    local key = parts[#parts - 1] .. "|" .. parts[#parts]
+    local owner = parts[#parts - 1]
+    local key = get(IMPORT_ALIASES, path .. "|" .. owner, owner) .. "|" .. parts[#parts]
     return has_key(FUNCTIONS, key) and key or ""
   end
-  local path = NODE_PATH[g]
   local owner = OWNER_TYPE[g]
   if owner ~= "" and has_key(FUNCTIONS, owner .. "|" .. name) then return owner .. "|" .. name end
   if has_key(FUNCTIONS, "@" .. path .. "|" .. name) then return "@" .. path .. "|" .. name end
@@ -501,6 +507,25 @@ function reference_at(g)
   return {path = NODE_PATH[g], line = NODES[g].line, in_expect = IN_EXPECT[g], enclosing = ENCLOSING_DECL[g]}
 end
 
+-- A name that may reach a member by a way this recipe can't follow: an alias
+-- of a type, or a name an import exposes. It keeps every member of that name
+-- out of `dead`, and counts as no call for the other checks.
+function note_mention(name)
+  for key in get(MEMBER_KEYS, name, {}) do FUNCTIONS[key].mentions = FUNCTIONS[key].mentions + 1 end
+  return nil
+end
+
+function last_dotted_part(name)
+  local parts = split(name, ".")
+  return parts[#parts]
+end
+
+for g = 1, #NODES do
+  if kind(g) == "s-import" and has_key(NODES[g], "alias") then
+    IMPORT_ALIASES[NODE_PATH[g] .. "|" .. NODES[g].alias] = last_dotted_part(raw_text(g))
+  end
+end
+
 for g = 1, #NODES do
   local node_kind = kind(g)
   if node_kind == "e-method-call" then
@@ -517,6 +542,14 @@ for g = 1, #NODES do
     local name = raw_text(g)
     local key = name ~= "" and referenced_key(g, name) or ""
     if key ~= "" then record_reference(FUNCTIONS[key], reference_at(g), call_headed_by(g)) end
+    if key == "" and contains(name, ".") then note_mention(last_dotted_part(name)) end
+  elseif node_kind == "field" and #children(g) == 0 and kind(parent(g)) == "e-record" then
+    -- `{ helper }` names `helper` with no identifier node. The field has no
+    -- span, so its record says where it is.
+    local key = referenced_key(g, get(NODES[g], "field", ""))
+    if key ~= "" then record_reference(FUNCTIONS[key], reference_at(parent(g)), nil) end
+  elseif node_kind == "text" and has_key(NODES[g], "value") and kind(parent(g)) == "exposed-lower-ident" then
+    note_mention(NODES[g].value)
   end
 end
 
@@ -607,10 +640,39 @@ end
 
 const FILES_READ = " in the " .. #ROC_FILES .. " files read"
 
+-- A function something outside the files calls: what its header dictates, or
+-- a member Roc calls by name.
+function is_called_from_outside(func)
+  if sub(func.owner, 1, 1) == "@" then return has_key(HEADER_NAMES[func.path].dictated, func.name) end
+  return has_key(LANGUAGE_FIXED_NAMES, func.name)
+end
+
+function has_no_caller(func)
+  return func.prod_refs == 0 and func.expect_refs == 0 and func.test_refs == 0 and func.mentions == 0
+end
+
+-- The text of one branch of an `if`, its braces left out when it holds one
+-- statement.
+function branch_text(path, g)
+  if kind(g) == "e-block" then
+    for k in children(g) do
+      if kind(k) == "statements" and #children(k) == 1 then return source_text(path, children(k)[1]) end
+    end
+  end
+  return source_text(path, g)
+end
+
 for key in sort(keys(FUNCTIONS)) do
   local func = FUNCTIONS[key]
   local name = display_name(func)
   local judged = not func.is_ambiguous and not is_test_file(func.path)
+  if not is_test_file(func.path) and has_no_caller(func) and not is_called_from_outside(func) then
+    if is_library_api(func) then
+      report(func.path, func.line, "unused_api", "`" .. name .. "` is exposed, and nothing" .. FILES_READ .. " calls or tests it: API with no user here, or left behind?")
+    else
+      report(func.path, func.line, "dead", "`" .. name .. "` has no caller" .. FILES_READ .. ", and no expect or test reaches it: delete it, or say who calls it")
+    end
+  end
   if judged and reads_better_inline(func) then
     report(func.path, func.line, "single", "`" .. name .. "` (" .. func.size .. ") has one caller" .. FILES_READ .. ", " .. func.prod_callers[1] .. ", and no expect, test or doc: read it inline there, or say why it stands alone")
   end
@@ -652,15 +714,26 @@ for key in sort(keys(FUNCTIONS)) do
   end
 end
 
+for g = 1, #NODES do
+  if kind(g) == "e-if-then-else" and not is_test_file(NODE_PATH[g]) then
+    local kids = children(g)
+    local shown = #kids == 3 and branch_text(NODE_PATH[g], kids[2]) or "?"
+    if shown ~= "?" and shown == branch_text(NODE_PATH[g], kids[3]) then
+      report(NODE_PATH[g], NODES[g].line, "same_branches", "both branches of this `if` are `" .. sub(shown, 1, 40) .. "`: the condition decides nothing")
+    end
+  end
+end
+
 local counts = {}
 for c in CHECKS do push(counts, c .. " " .. finding_counts[c]) end
 print("boundaries (Roc): " .. #ROC_FILES .. " files, " .. #keys(FUNCTIONS) .. " functions; " .. join(counts, ", "))
 fail_if_refused("boundaries", parsed.refused, checker_types.unreached)
 
 -- A plant's file name as the self-test reads it. A typed plant is a type
--- module, so `typed/BoolParam.roc` reads as `bool_param.roc`.
+-- module, so `typed/BoolParam.roc` reads as `bool_param.roc`, and so does a
+-- plant under `dead/`, as a package's header names its modules.
 function plant_check_name(p)
-  if starts_with(p, TYPED_PLANTS) then return snake_case_plant_name(basename(p)) end
+  if starts_with(p, TYPED_PLANTS) or starts_with(p, DEAD_PLANTS) then return snake_case_plant_name(basename(p)) end
   return basename(p)
 end
 

@@ -1,0 +1,96 @@
+-- What a Roc file's header says about who chooses its names. A name an app's
+-- platform asks for, a hook a platform hands its host, and a method Roc calls
+-- by name were all chosen somewhere else, so the recipes judge them differently
+-- from the names a program picks for itself.
+--
+--   use("cookbook:roc/headers.shale")
+--   LANGUAGE_FIXED_NAMES           the methods Roc calls by name
+--   header_names(nodes)            a parse tree's `dictated` and `exposed` names
+--   exposed_by_folder(dir)         the modules a folder's main.roc exposes
+--   is_exposed_module(path)        whether a package or platform exposes a file
+--   is_private_module(path)        whether a file is a package's own, unexposed
+--   header_word(text)              a file's first word of code
+
+-- The methods Roc calls by name, from Roc's docs/langref/static-dispatch.md and
+-- operators.md, with the encoders' `encode` and `decode`.
+const LANGUAGE_FIXED_NAMES = {to_inspect = true, is_eq = true, to_hash = true, plus = true, minus = true, times = true, div_by = true, div_trunc_by = true, rem_by = true, is_lt = true, is_lte = true, is_gt = true, is_gte = true, range_exclusive_to = true, range_inclusive_to = true, range_exclusive_from = true, range_inclusive_from = true, range_iter = true, range_len_if_known = true, negate = true, ["not"] = true, from_numeral = true, from_quote = true, from_interpolation = true, iter = true, next = true, parser_for = true, encoder_for = true, map = true, ["map!"] = true, subscript = true, encode = true, decode = true}
+
+const EXPOSED_BY_DIR = {}
+
+-- A file's text with its comment lines left out.
+function code_of(text)
+  local code = {}
+  for l in lines(text) do
+    if not starts_with(trim(l), "#") then push(code, l) end
+  end
+  return join(code, "\n")
+end
+
+-- The first word of a file's code: `app`, `package`, `platform`, `module`,
+-- `hosted`, or for a type module the type's name.
+function header_word(text)
+  local found = re_find(code_of(text), "[A-Za-z_]+")
+  return found == nil and "" or found.text
+end
+
+-- The names in the list between `[` and `]` of `text`.
+function bracketed_names(text)
+  local out = {}
+  for m in split(between(text, "[", "]") or "", ",") do
+    if trim(m) ~= "" then push(out, trim(m)) end
+  end
+  return out
+end
+
+-- What a folder's `main.roc` exposes, as `{is_package, modules}`. `is_package`
+-- says the header is `package` or `platform`, and `modules` lists what it
+-- exposes. The header is read from the file, so it counts whether or not the
+-- run's glob holds it.
+function exposed_by_folder(dir)
+  if has_key(EXPOSED_BY_DIR, dir) then return EXPOSED_BY_DIR[dir] end
+  local main = (dir == "" or dir == ".") and "main.roc" or (dir .. "/main.roc")
+  local out = {is_package = false, modules = {}}
+  if exists(main) then
+    local text = code_of(read(main))
+    local word = header_word(text)
+    if word == "package" then out = {is_package = true, modules = bracketed_names(text)} end
+    if word == "platform" then out = {is_package = true, modules = bracketed_names(between(text, "exposes", "]") .. "]")} end
+  end
+  EXPOSED_BY_DIR[dir] = out
+  return out
+end
+
+function module_of_path(path)
+  local base = basename(path)
+  return sub(base, 1, #base - 4)
+end
+
+function is_exposed_module(path)
+  return has_item(exposed_by_folder(dirname(path)).modules, module_of_path(path))
+end
+
+-- Whether a file is a module its package keeps to itself: it sits beside a
+-- package's or platform's main.roc, which doesn't expose it.
+function is_private_module(path)
+  return exposed_by_folder(dirname(path)).is_package and not is_exposed_module(path) and basename(path) ~= "main.roc"
+end
+
+-- The value names a parse tree's header speaks for, as two sets. `dictated`
+-- holds what an app provides, what a platform requires of its app and what it
+-- provides to its host. `exposed` holds what a `module` or `hosted` header
+-- exposes.
+function header_names(nodes)
+  local names = {dictated = {}, exposed = {}}
+  local i = 2
+  while i <= #nodes and nodes[i].kind ~= "statements" do
+    local n = nodes[i]
+    if n.kind == "entrypoint" then names.dictated[n.value] = true end
+    if n.kind == "symbol-map-entry" then names.dictated[n.func] = true end
+    if n.kind == "text" and has_key(n, "value") and nodes[n.parent].kind == "exposed-lower-ident" then
+      local list = nodes[nodes[n.parent].parent].kind
+      if list == "provides" then names.dictated[n.value] = true else names.exposed[n.value] = true end
+    end
+    i = i + 1
+  end
+  return names
+end
