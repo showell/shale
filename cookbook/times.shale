@@ -7,7 +7,7 @@
 --
 --   build.sh safari: 192 s, was 35 s (5.5x)
 --
--- The first word names the file, `state:times/safari.tsv`, whose lines are
+-- The first word names the file, `build:times/safari.tsv`, whose lines are
 -- `when`, `stage`, `cpu_ms` and `ms`, the last five of each stage.
 --
 -- It compares CPU time, for the reason `run`'s budget does: wall time doubles
@@ -27,7 +27,7 @@ function times_path(book)
   if book == "" or contains(book, "/") or contains(book, ":") then
     fail("times: the book is a plain name, a file's, not \"" .. book .. "\"")
   end
-  return "state:times/" .. book .. ".tsv"
+  return "build:times/" .. book .. ".tsv"
 end
 
 -- The file's rows, oldest first; none for a file not there yet. A file that
@@ -109,14 +109,14 @@ end
 
 -- `run`, its time kept under `stage` in the book's file, and the change
 -- printed. Its answer is `run`'s; `cpu_budget_ms`'s stop names the stage. The
--- file is written first, so a `state:` that cannot be written stops the run
+-- file is written first, so a `build:` that cannot be written stops the run
 -- before the program spends its time.
 function timed_run(book, stage, argv, opts)
   if stage == "" or contains(stage, "\t") or contains(stage, "\n") then
     fail("times: a stage's name is one line with no tab, not \"" .. stage .. "\"")
   end
   local path = times_path(book)
-  if not exists("state:times") then mkdir("state:times") end
+  if not exists("build:times") then mkdir("build:times") end
   local kept = TIMES_HEADER .. "\n"
   if exists(path) then kept = read(path) end
   replace(path, kept)

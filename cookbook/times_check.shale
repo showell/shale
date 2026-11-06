@@ -2,7 +2,7 @@
 --
 --   shale cookbook:times_check.shale self_test=1
 --
--- `timed_run` itself, over a real program and a real `state:` mount, is
+-- `timed_run` itself, over a real program and a real `build:` mount, is
 -- src/shale_cli_test.zig's.
 
 use("cookbook:times.shale")
@@ -86,7 +86,7 @@ replace(broken, "someone else's file\n")
 expect("a foreign file", attempt(reads_broken, broken).error, "times: " .. broken .. " does not start with its header")
 
 -- The book and the stage are names.
-expect("a plain book", times_path("safari"), "state:times/safari.tsv")
+expect("a plain book", times_path("safari"), "build:times/safari.tsv")
 expect("a book with a path", attempt(times_path, "a/b").class, "fail")
 expect("a book with a mount", attempt(times_path, "m:b").class, "fail")
 

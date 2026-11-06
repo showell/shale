@@ -272,7 +272,7 @@ test "cli: cpu_budget_ms judges CPU time: a program that burns past it stops the
     try testing.expectEqualStrings("true\ttrue\n", under.stdout);
 }
 
-test "cli: cookbook/times.shale keeps a stage's time under `state:` and prints a large change; a small one, and a stage over budget, print none; a read-only `state:` stops before the program" {
+test "cli: cookbook/times.shale keeps a stage's time under `build:` and prints a large change; a small one, and a stage over budget, print none; a read-only `build:` stops before the program" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     const io = threaded.io();
@@ -280,7 +280,7 @@ test "cli: cookbook/times.shale keeps a stage's time under `state:` and prints a
     defer tmp.cleanup();
     const a = testing.allocator;
     const fixture = @import("shale_test_options").fixture;
-    try tmp.dir.createDirPath(io, "state");
+    try tmp.dir.createDirPath(io, "build");
     try tmp.dir.createDirPath(io, "locked/times");
     const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
     defer a.free(dir);
@@ -298,7 +298,7 @@ test "cli: cookbook/times.shale keeps a stage's time under `state:` and prints a
     , .{exe_buf[0..exe_n]});
     defer a.free(source);
     try tmp.dir.writeFile(io, .{ .sub_path = "t.shale", .data = source });
-    const mounts = try std.fmt.allocPrint(a, "printf 'cookbook = %s/cookbook ro\\nstate = %s/{s}/state\\n' \"$PWD\" \"$PWD\" > '{s}/mounts' && printf 'cookbook = %s/cookbook ro\\nstate = %s/{s}/locked ro\\n' \"$PWD\" \"$PWD\" > '{s}/mounts-ro'", .{ dir, dir, dir, dir });
+    const mounts = try std.fmt.allocPrint(a, "printf 'cookbook = %s/cookbook ro\\nbuild = %s/{s}/build\\n' \"$PWD\" \"$PWD\" > '{s}/mounts' && printf 'cookbook = %s/cookbook ro\\nbuild = %s/{s}/locked ro\\n' \"$PWD\" \"$PWD\" > '{s}/mounts-ro'", .{ dir, dir, dir, dir });
     defer a.free(mounts);
     const m = try std.process.run(a, io, .{ .argv = &.{ "sh", "-c", mounts } });
     a.free(m.stdout);
@@ -329,7 +329,7 @@ test "cli: cookbook/times.shale keeps a stage's time under `state:` and prints a
     errdefer std.debug.print("{s}{s}\n", .{ slow.stdout, slow.stderr });
     try testing.expect(std.mem.startsWith(u8, slow.stdout, "the burn: 1.3 s, was 0.1 s ("));
     try testing.expect(std.mem.endsWith(u8, slow.stdout, "x)\nran\n"));
-    const kept = try tmp.dir.readFileAlloc(io, "state/times/gate.tsv", a, .limited(1 << 16));
+    const kept = try tmp.dir.readFileAlloc(io, "build/times/gate.tsv", a, .limited(1 << 16));
     defer a.free(kept);
     try testing.expect(std.mem.startsWith(u8, kept, "when\tstage\tcpu_ms\tms\n"));
     try testing.expectEqual(@as(usize, 4), std.mem.count(u8, kept, "\n"));
@@ -340,10 +340,10 @@ test "cli: cookbook/times.shale keeps a stage's time under `state:` and prints a
     errdefer std.debug.print("{s}{s}\n", .{ over.stdout, over.stderr });
     try testing.expectEqual(@as(u8, 1), over.term.exited);
     try testing.expect(std.mem.indexOf(u8, over.stderr, "stage `the burn` took ") != null);
-    const after = try tmp.dir.readFileAlloc(io, "state/times/gate.tsv", a, .limited(1 << 16));
+    const after = try tmp.dir.readFileAlloc(io, "build/times/gate.tsv", a, .limited(1 << 16));
     defer a.free(after);
     try testing.expectEqualStrings(kept, after);
-    // A `state:` that is read-only is said before the program spends its time.
+    // A `build:` that is read-only is said before the program spends its time.
     const locked = try Launch.of(io, dir, "mounts-ro", "2000", "0");
     defer a.free(locked.stdout);
     defer a.free(locked.stderr);

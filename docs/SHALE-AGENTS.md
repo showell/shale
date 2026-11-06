@@ -58,12 +58,12 @@ local r = must(timed_run("safari", "build.sh safari", {"./build.sh", "safari"},
 -- build.sh safari: 192 s, was 35 s (5.5x)
 ```
 
-The first word names a `.tsv` file under `state:times`, one a script, which
+The first word names a `.tsv` file under `build:times`, one a script, which
 holds each stage's last five runs. The line compares CPU time with the
 middle of those runs, and appears at 1.5x and a second of change, either
 way (`(5.5x faster)`). A run that did not exit 0 counts for nothing, and a
 stage over its budget stops in `run`, so neither moves the history.
-`state:` has to be writable: a read-only one stops `timed_run` before the
+`build:` has to be writable: a read-only one stops `timed_run` before the
 program starts.
 
 **On the box, a budget of steps, reads or bytes is not sacred.** A time
