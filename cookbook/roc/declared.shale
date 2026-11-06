@@ -28,6 +28,12 @@ function attribute(tree, at, name)
   return get(tree[at], name, "")
 end
 
+-- A dotted type's last part.
+function last_part(type_name)
+  local parts = split(type_name, ".")
+  return parts[#parts]
+end
+
 -- The type at `at`, as Roc writes it: `List(U8)`, `{ id : U8 }`, `[A, B]`,
 -- `(U8 -> Bool)`. The tree does not say which arrow a function type has,
 -- so both come out as `->`. With `as_shape`, each name is cut to its last part
@@ -133,12 +139,6 @@ function comment_on_line(l)
     i = i + 1
   end
   return nil
-end
-
--- A dotted type's last part.
-function last_part(type_name)
-  local parts = split(type_name, ".")
-  return parts[#parts]
 end
 
 -- The module a .roc file holds, by its file name.
