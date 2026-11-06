@@ -72,9 +72,25 @@ const coverage_files = [_][]const u8{
     "src/script/cli.zig",
 };
 
+/// A program of this repo at `mode`: the tests' and the install's differ.
+fn program(b: *std.Build, name: []const u8, path: []const u8, target: std.Build.ResolvedTarget, mode: std.builtin.Optimize, imports: []const std.Build.Module.Import) *std.Build.Step.Compile {
+    return b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
+        .root_source_file = b.path(path),
+        .target = target,
+        .optimize = mode,
+        .imports = imports,
+    }) });
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
+    // The tests' mode, and `zig build script`'s: Debug unless asked, so the
+    // test loop compiles in seconds. `installed_optimize` is the other half.
     const optimize = b.standardOptimizeOption(.{});
+    // What `zig build` installs is always ReleaseSafe, whatever the tests are
+    // built with: a Debug `shale` looks the same and costs every lint six
+    // times the CPU, and zig-webbox's `consumers` runs a plain `zig build` here.
+    const installed_optimize: std.builtin.Optimize = .safe;
 
     // A script's effects all go through webbox's `store`, and its sources
     // take their `Io` from webbox's `host_io` (zig-metal-unikernel's build
@@ -105,17 +121,13 @@ pub fn build(b: *std.Build) void {
     // The `shale` CLI (src/script_runner.zig): a script against a data
     // folder or a checkout, on Linux.
     //   SHALE_ROOT=<data> zig build script -- <file.shale>
-    const runner = b.addExecutable(.{ .name = "shale", .root_module = b.createModule(.{
-        .root_source_file = b.path("src/script_runner.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "webbox", .module = webbox },
-            .{ .name = "shale", .module = shale },
-            .{ .name = "shale_linux", .module = shale_linux },
-        },
-    }) });
-    b.installArtifact(runner);
+    const runner_imports: []const std.Build.Module.Import = &.{
+        .{ .name = "webbox", .module = webbox },
+        .{ .name = "shale", .module = shale },
+        .{ .name = "shale_linux", .module = shale_linux },
+    };
+    const runner = program(b, "shale", "src/script_runner.zig", target, optimize, runner_imports);
+    const installed_runner = program(b, "shale", "src/script_runner.zig", target, installed_optimize, runner_imports);
     const run_script = b.addRunArtifact(runner);
     run_script.addPassthruArgs();
     b.step("script", "run a Shale script: zig build script -- [--root DIR] [--verbose] [--budget NAME=N]... [<file.shale> | -e SOURCE] [name=value ...]").dependOn(&run_script.step);
@@ -199,13 +211,8 @@ pub fn build(b: *std.Build) void {
     // signed for a target.
     //   zig build shale-sign -- keygen [target] | pubkey [target] | sign <file.shale> <target> [minutes]
     //     | background <file.shale> <target> [minutes] | kill <target> [minutes]
-    const signer = b.addExecutable(.{ .name = "shale-sign", .root_module = b.createModule(.{
-        .root_source_file = b.path("src/shale_sign.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{.{ .name = "shale", .module = shale }},
-    }) });
-    b.installArtifact(signer);
+    const signer_imports: []const std.Build.Module.Import = &.{.{ .name = "shale", .module = shale }};
+    const signer = program(b, "shale-sign", "src/shale_sign.zig", target, optimize, signer_imports);
     const run_signer = b.addRunArtifact(signer);
     run_signer.addPassthruArgs();
     b.step("shale-sign", "the Shale signer: zig build shale-sign -- keygen | pubkey | sign <file.shale> <target> | background <file.shale> <target> | kill <target> (src/shale_sign.zig)").dependOn(&run_signer.step);
@@ -214,12 +221,7 @@ pub fn build(b: *std.Build) void {
     // shale-gate (tools/shale_gate.zig): the PreToolUse hook's classifier,
     // passing a `shale` launch or the escape and refusing the rest. Built
     // here; the hook is installed by hand.
-    const gate = b.addExecutable(.{ .name = "shale-gate", .root_module = b.createModule(.{
-        .root_source_file = b.path("tools/shale_gate.zig"),
-        .target = target,
-        .optimize = optimize,
-    }) });
-    b.installArtifact(gate);
+    const gate = program(b, "shale-gate", "tools/shale_gate.zig", target, optimize, &.{});
     const gate_test = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("tools/shale_gate_test.zig"),
         .target = target,
@@ -228,6 +230,17 @@ pub fn build(b: *std.Build) void {
     const gate_options = b.addOptions();
     gate_options.addOptionPath("shale_gate", gate.getEmittedBin());
     gate_test.root_module.addImport("shale_gate_options", gate_options.createModule());
+
+    // Another mode asked of the install is refused, not quietly changed. The
+    // tests take any, so this hangs on the install step alone.
+    const other_mode_asked = optimize != installed_optimize and (optimize != .debug or b.user_input_options.contains("optimize"));
+    if (other_mode_asked) {
+        b.getInstallStep().dependOn(&b.addFail("what `zig build` installs is always ReleaseSafe; -Doptimize= is for `zig build test` and `zig build script`").step);
+    } else {
+        b.installArtifact(installed_runner);
+        b.installArtifact(program(b, "shale-sign", "src/shale_sign.zig", target, installed_optimize, signer_imports));
+        b.installArtifact(program(b, "shale-gate", "tools/shale_gate.zig", target, installed_optimize, &.{}));
+    }
 
     const test_step = b.step("test", "Run unit tests");
     // **CHEAP FIRST** (metal-vmm QUEUE 252): the format, then every test
@@ -282,6 +295,9 @@ pub fn build(b: *std.Build) void {
     shale_options.addOptionPath("fixture", fixture.getEmittedBin());
     // The jobs' reaper is `shale` itself (`shale --reap`): its tests run it.
     shale_options.addOptionPath("shale", runner.getEmittedBin());
+    // The mode the install's `shale` is really configured with, so a test
+    // holds it without paying for that compile.
+    shale_options.addOption([]const u8, "installed_mode", @tagName(installed_runner.root_module.optimize.?));
     // The zig building the tests, which syntax.shale's test hands it: a
     // runner's PATH need not hold one.
     shale_options.addOption([]const u8, "zig", b.graph.zig_exe);

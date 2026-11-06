@@ -16,6 +16,17 @@
 -- held to. Only a run that exited 0 counts, since a build that stopped at its
 -- first error says nothing of its speed, and a stage over its `cpu_budget_ms`
 -- stops inside `run`, so it leaves the history as it was.
+--
+-- `cold = true` says this run compiles from nothing, as a fresh worktree's
+-- first does: it isn't held to `cpu_budget_ms` or compared, and leaves the
+-- history as it was, so a budget and "was" are judged on warm runs alone. The
+-- caller says so because the history can't: a book outlives a deleted cache,
+-- and two worktrees share one. A tier reads its own sign once, before its
+-- first stage, as stages fill the cache one by one:
+--
+--   local cold = not exists(cache .. "/green.txt")
+--
+--   build.sh safari: cold, 192 s, not judged
 
 const TIMES_KEPT = 5
 const TIMES_HEADER = "when\tstage\tcpu_ms\tms"
@@ -107,10 +118,15 @@ function times_note(path, stage, r)
   return said
 end
 
+-- The line for a cold run, which says why a budget went unheld.
+function times_cold_line(stage, r)
+  return stage .. ": cold, " .. times_seconds(r.cpu_ms) .. ", not judged"
+end
+
 -- `run`, its time kept under `stage` in the book's file, and the change
--- printed. Its answer is `run`'s; `cpu_budget_ms`'s stop names the stage. The
--- file is written first, so a `build:` that cannot be written stops the run
--- before the program spends its time.
+-- printed; a `cold` run's only said. Its answer is `run`'s; `cpu_budget_ms`'s
+-- stop names the stage. The file is written first, so a `build:` that cannot
+-- be written stops the run before the program spends its time.
 function timed_run(book, stage, argv, opts)
   if stage == "" or contains(stage, "\t") or contains(stage, "\n") then
     fail("times: a stage's name is one line with no tab, not \"" .. stage .. "\"")
@@ -120,10 +136,17 @@ function timed_run(book, stage, argv, opts)
   local kept = TIMES_HEADER .. "\n"
   if exists(path) then kept = read(path) end
   replace(path, kept)
+  local cold = get(opts, "cold", false)
   local o = {}
-  for k in keys(opts) do o[k] = opts[k] end
+  for k in keys(opts) do
+    if k ~= "cold" and not (cold and k == "cpu_budget_ms") then o[k] = opts[k] end
+  end
   if has_key(o, "cpu_budget_ms") then o.stage = stage end
   local r = run(argv, o)
+  if cold then
+    print(times_cold_line(stage, r))
+    return r
+  end
   local said = times_note(path, stage, r)
   if said ~= "" then print(said) end
   return r

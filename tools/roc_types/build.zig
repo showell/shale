@@ -24,7 +24,9 @@ pub fn build(b: *std.Build) void {
     const options = b.addOptions();
     options.addOption([]const u8, "roc_pin", pin);
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    // ReleaseSafe unless asked: every Roc recipe runs this program, and Debug
+    // takes about six times the CPU to print the same bytes.
+    const optimize = b.option(std.builtin.Optimize, "optimize", "the mode to build in (default ReleaseSafe)") orelse .safe;
     const roc = b.dependency("roc", .{ .target = target, .optimize = optimize });
     const exe = b.addExecutable(.{
         .name = "roc-types",

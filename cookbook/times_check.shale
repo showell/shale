@@ -43,6 +43,8 @@ expect("from nothing", times_change("s", 0, 2000), "s: 2.0 s, was 0.0 s")
 expect("to nothing", times_change("s", 2000, 0), "s: 0.0 s, was 2.0 s")
 expect("the seconds' edge", times_seconds(9949) .. " " .. times_seconds(9950) .. " " .. times_seconds(10000), "9.9 s 10.0 s 10 s")
 
+expect("a cold run's line", times_cold_line("s", ran(192000)), "s: cold, 192 s, not judged")
+
 -- The middle: a lone slow run is not the usual time, three in five are.
 expect("the middle of two", tostring(times_middle({35000, 192000})), "35000")
 expect("the middle of three", tostring(times_middle({192000, 35000, 40000})), "40000")

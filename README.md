@@ -40,7 +40,7 @@ it:
 
     git clone https://github.com/showell/shale
     git clone https://github.com/showell/zig-webbox
-    cd shale && zig build -Doptimize=ReleaseSafe   # zig-out/bin: shale, shale-gate, shale-sign
+    cd shale && zig build   # zig-out/bin: shale, shale-gate, shale-sign, always ReleaseSafe
 
 Put `zig-out/bin` on your PATH, or link `zig-out/bin/shale` into a folder
 that is.

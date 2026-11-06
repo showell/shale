@@ -31,8 +31,18 @@ pub const usage =
     \\  -e SOURCE         the script itself, in place of a file (neither: stdin is the script)
     \\  NAME=VALUE        a value the script reads with arg("NAME", default)
     \\  --help            this, where the docs are, and the mounts in force (alone)
+    \\  --version         the mode this `shale` was built in (alone)
     \\
 ;
+
+/// The build's mode as `-Doptimize=` spells it. `shale --version` says it,
+/// since nothing else tells a Debug `shale` from a ReleaseSafe one.
+pub const build_mode = switch (@import("builtin").mode) {
+    .debug => "Debug",
+    .safe => "ReleaseSafe",
+    .fast => "ReleaseFast",
+    .small => "ReleaseSmall",
+};
 
 /// The CLI's default budgets: output 64 KiB and call bytes 64 MiB (enough to
 /// read a program's log or a `git diff` whole); the rest are the core's.

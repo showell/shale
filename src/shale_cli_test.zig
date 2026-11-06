@@ -4,6 +4,18 @@ const std = @import("std");
 const testing = std.testing;
 const shale_exe = @import("shale_test_options").shale;
 
+test "cli: --version says the mode of this build, and the install's `shale` is ReleaseSafe whatever the tests' is" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const a = testing.allocator;
+    const r = try std.process.run(a, threaded.io(), .{ .argv = &.{ shale_exe, "--version" } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    try testing.expectEqual(@as(u8, 0), r.term.exited);
+    try testing.expectEqualStrings("shale " ++ @import("shale").script.cli.build_mode ++ "\n", r.stdout);
+    try testing.expectEqualStrings("safe", @import("shale_test_options").installed_mode);
+}
+
 test "cli: stdout and stderr into one file (`> f 2>&1`) keep both, in order" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
@@ -272,7 +284,7 @@ test "cli: cpu_budget_ms judges CPU time: a program that burns past it stops the
     try testing.expectEqualStrings("true\ttrue\n", under.stdout);
 }
 
-test "cli: cookbook/times.shale keeps a stage's time under `build:` and prints a large change; a small one, and a stage over budget, print none; a read-only `build:` stops before the program" {
+test "cli: cookbook/times.shale keeps a stage's time under `build:` and prints a large change; a small one, and a stage over budget, print none; a cold run is held to nothing and kept nowhere; a read-only `build:` stops before the program" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     const io = threaded.io();
@@ -292,6 +304,7 @@ test "cli: cookbook/times.shale keeps a stage's time under `build:` and prints a
         \\local b = arg("budget", 0)
         \\local o = {{timeout_ms = 30000, tail = 1, want = "test: the fixture"}}
         \\if b > 0 then o.cpu_budget_ms = b end
+        \\if arg("cold", "") ~= "" then o.cold = arg("cold", "") == "yes" end
         \\local r = timed_run("gate", "the burn", {{"{s}", "burn", arg("ms", "0")}}, o)
         \\print("ran")
         \\
@@ -306,7 +319,10 @@ test "cli: cookbook/times.shale keeps a stage's time under `build:` and prints a
 
     const Launch = struct {
         fn of(i: std.Io, root: []const u8, mounts_file: []const u8, ms: []const u8, budget: []const u8) !std.process.RunResult {
-            const cmd = try std.fmt.allocPrint(testing.allocator, "SHALE_MOUNTS='{s}/{s}' '{s}' --root '{s}' '{s}/t.shale' ms={s} budget={s}", .{ root, mounts_file, shale_exe, root, root, ms, budget });
+            return ofCold(i, root, mounts_file, ms, budget, "");
+        }
+        fn ofCold(i: std.Io, root: []const u8, mounts_file: []const u8, ms: []const u8, budget: []const u8, cold: []const u8) !std.process.RunResult {
+            const cmd = try std.fmt.allocPrint(testing.allocator, "SHALE_MOUNTS='{s}/{s}' '{s}' --root '{s}' '{s}/t.shale' ms={s} budget={s} cold={s}", .{ root, mounts_file, shale_exe, root, root, ms, budget, cold });
             defer testing.allocator.free(cmd);
             return std.process.run(testing.allocator, i, .{ .argv = &.{ "sh", "-c", cmd } });
         }
@@ -343,6 +359,24 @@ test "cli: cookbook/times.shale keeps a stage's time under `build:` and prints a
     const after = try tmp.dir.readFileAlloc(io, "build/times/gate.tsv", a, .limited(1 << 16));
     defer a.free(after);
     try testing.expectEqualStrings(kept, after);
+    // A cold run is said, held to no budget and kept out of the history.
+    const cold = try Launch.ofCold(io, dir, "mounts", "200", "50", "yes");
+    defer a.free(cold.stdout);
+    defer a.free(cold.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ cold.stdout, cold.stderr });
+    try testing.expectEqual(@as(u8, 0), cold.term.exited);
+    try testing.expect(std.mem.startsWith(u8, cold.stdout, "the burn: cold, "));
+    try testing.expect(std.mem.endsWith(u8, cold.stdout, " s, not judged\nran\n"));
+    const after_cold = try tmp.dir.readFileAlloc(io, "build/times/gate.tsv", a, .limited(1 << 16));
+    defer a.free(after_cold);
+    try testing.expectEqualStrings(kept, after_cold);
+    // `cold = false` is a warm run, held to the same budget.
+    const warm = try Launch.ofCold(io, dir, "mounts", "200", "50", "no");
+    defer a.free(warm.stdout);
+    defer a.free(warm.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ warm.stdout, warm.stderr });
+    try testing.expectEqual(@as(u8, 1), warm.term.exited);
+    try testing.expect(std.mem.indexOf(u8, warm.stderr, "stage `the burn` took ") != null);
     // A `build:` that is read-only is said before the program spends its time.
     const locked = try Launch.of(io, dir, "mounts-ro", "2000", "0");
     defer a.free(locked.stdout);
