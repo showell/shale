@@ -10,6 +10,7 @@
 --
 --   use("cookbook:roc/groups.shale")
 --   groups_on_line(l)                  each group that opens and closes on l
+--   without_targets_section(ls)        ls with the lines no rewrite can reach blank
 --   group_to_stack(l, tokens, width)   the group a rewrite gives a comma
 --   with_trailing_comma(l, g)          l with that comma added
 --   groups_to_unstack(ls, tokens, width)  the stacked groups that shouldn't be
@@ -175,6 +176,22 @@ function groups_on_line(l)
   return groups_in_lines({l})
 end
 
+-- The lines `ls` with a platform header's `targets:` section blanked, for
+-- reading groups. `roc fmt` lays that section out by itself and puts back or
+-- takes out any comma a rewrite changes there, so a rewrite that tried would
+-- never end. `targets` is a keyword, so nothing else can be this group.
+function without_targets_section(ls)
+  if not contains(join(ls, "\n"), "targets:") then return ls end
+  for g in groups_in_lines(ls) do
+    if re_find(sub(ls[g.line], 1, g.open - 1), "\\btargets: *$") ~= nil then
+      local out = {}
+      for i = 1, #ls do push(out, (i >= g.line and i <= g.close_line) and "" or ls[i]) end
+      return out
+    end
+  end
+  return ls
+end
+
 -- Whether group `g` on line `l` is a row of literals, read at a glance:
 -- a list, or a tuple (a `(` not right after a name, `)` or `!`, so not a
 -- call's arguments), whose items are all numbers, strings with nothing
@@ -294,7 +311,7 @@ end
 function groups_to_unstack(ls, min_tokens, width)
   local out = {}
   local last_kept = nil
-  for g in groups_in_lines(ls) do
+  for g in groups_in_lines(without_targets_section(ls)) do
     if g.line ~= g.close_line then
       local holds_kept = last_kept ~= nil and is_inside(last_kept, g)
       if holds_kept or not should_unstack(ls, g, min_tokens, width) then

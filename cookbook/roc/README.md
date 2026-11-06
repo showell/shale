@@ -195,10 +195,11 @@ run on their own.
   version every self-test uses. Used by `boundaries`, `errors`, `methods`,
   `name_hunt`, `roc_commas` and `stack`.
 - [groups.shale](groups.shale): the stacking rule, the bracket groups and
-  their items and tokens, `groups_in_lines(ls)`, and what a rewrite does to
+  their items and tokens, `groups_in_lines(ls)`, what a rewrite does to
   them, `group_to_stack(l, tokens, width)` and
-  `groups_to_unstack(ls, tokens, width)`. Used by `roc_commas` and `stack`, so
-  the two read a group the same way.
+  `groups_to_unstack(ls, tokens, width)`, and what it can't reach,
+  `without_targets_section(ls)`. Used by `roc_commas` and `stack`, so the two
+  read a group the same way.
 - [types.shale](types.shale): runs roc-types, Shale's tool that asks Roc's
   type checker for the type of every expression and pattern in an app.
   `roc_types(root, roc)` reads one app; `roc_types_for_files(who, root,

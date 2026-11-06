@@ -17,7 +17,8 @@
 -- them (cookbook/roc/groups.shale), so after `tokens=6` stack.shale finds no
 -- group left to stack or to unstack. A line's outermost group goes first, and
 -- the next pass reaches the groups inside it. A function type's arguments and
--- a row of literals are left alone, as stack.shale leaves them.
+-- a row of literals are left alone, as stack.shale leaves them, and so is a
+-- platform header's `targets:` section, which `roc fmt` lays out by itself.
 --
 --   cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
 --   cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc tokens=6
@@ -147,10 +148,11 @@ function rewrite_trailing_commas(path)
   local unstacked = {}
   if TOKENS > 0 then unstacked = groups_to_unstack(ls, TOKENS, WIDTH) end
   ls = without_trailing_commas(ls, unstacked)
+  local reachable = without_targets_section(ls)
   local changed = #unstacked
   for i = 1, #ls do
     if not is_comment(ls[i]) then
-      local with_comma = line_with_comma(ls[i])
+      local with_comma = line_with_comma(reachable[i])
       if with_comma ~= nil then
         ls[i] = with_comma
         changed = changed + 1
@@ -190,9 +192,9 @@ function self_test()
     local ok = got == read(want)
     print((ok and "ok   " or "FAIL ") .. name .. ": comes out as its .want")
     if not ok then bad = bad + 1 end
-    local n = 0
-    for l in lines(got) do
-      n = n + 1
+    local reachable = without_targets_section(split(got, "\n"))
+    for n = 1, #reachable do
+      local l = reachable[n]
       if not is_comment(l) and group_to_stack(l, TOKENS, WIDTH) ~= nil then
         print("FAIL " .. name .. ":" .. n .. ": a group left to stack: " .. trim(l))
         bad = bad + 1

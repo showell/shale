@@ -56,6 +56,9 @@
 --   - The items of a `where` clause are its method constraints, so
 --     `k.is_eq : k, k -> Bool` is one item, and a record or list pattern's
 --     rest (`..`) is no item.
+--   - The groups of a platform header's `targets:` section are no findings, and
+--     the rewrite leaves them alone, as `roc fmt` lays that section out by
+--     itself. A line there wider than `width` is still `long`.
 -- Strings, characters, `\\` multiline strings and `#` comments are skipped,
 -- so a comma or bracket inside one is no item.
 --
@@ -209,13 +212,13 @@ end
 -- The finding for line `i` of `p`, wider than WIDTH with nothing else found
 -- on it. `string_columns` is the columns of strings' text on that file's
 -- lines, by line number.
-function wide_line_finding(p, i, l, string_columns)
+function wide_line_finding(p, i, l, reachable_line, string_columns)
   local width = line_width(l)
   local without_strings = width - get(string_columns, "" .. i, 0)
   if without_strings <= WIDTH then
     return {path = p, line = i, kind = "wide string", what = width .. " columns, " .. without_strings .. " without its strings"}
   end
-  local why = starts_with(trim(l), "#") and "a comment" or (group_to_stack(l, TOKENS, WIDTH) ~= nil and "a group to stack" or "nothing to stack")
+  local why = starts_with(trim(l), "#") and "a comment" or (group_to_stack(reachable_line, TOKENS, WIDTH) ~= nil and "a group to stack" or "nothing to stack")
   return {path = p, line = i, kind = "long", what = width .. " columns, " .. why}
 end
 
@@ -250,6 +253,7 @@ function findings_in(files)
   local dictated = dictated_names_in(files)
   for p in files do
     local ls = split(read(p), "\n")
+    local reachable = without_targets_section(ls)
     local string_columns = get(strings.columns, p, {})
     local dictated_here = get(dictated.names, p, {})
     -- The function whose annotation on the line before was a finding for
@@ -259,7 +263,7 @@ function findings_in(files)
       local found_on_line = 0
       local skip_lambda = annotated_fn ~= "" and starts_with(trim(ls[i]), annotated_fn .. " = |")
       annotated_fn = ""
-      for g in sort(groups_on_line(ls[i]), "open") do
+      for g in sort(groups_on_line(reachable[i]), "open") do
         local inner = sub(ls[i], g.open + 1, g.close - 1)
         if g.items >= 3 and g.fn_type then
           local arguments = split(split(inner, "->")[1], "=>")[1]
@@ -285,7 +289,7 @@ function findings_in(files)
         end
       end
       if found_on_line == 0 and line_width(ls[i]) > WIDTH then
-        push(out, wide_line_finding(p, i, ls[i], string_columns))
+        push(out, wide_line_finding(p, i, ls[i], reachable[i], string_columns))
       end
     end
     for g in groups_to_unstack(ls, TOKENS, WIDTH) do
@@ -311,17 +315,19 @@ function rewrite_trailing_commas(files)
   local first_pass_count = 0
   local pass = 1
   local changed = 1
+  local touched = {}
   while changed > 0 and pass <= MAX_PASSES do
     changed = 0
-    local touched = {}
+    touched = {}
     for p in files do
       local ls = split(read(p), "\n")
       local unstacked = groups_to_unstack(ls, TOKENS, WIDTH)
       ls = without_trailing_commas(ls, unstacked)
+      local reachable = without_targets_section(ls)
       local n = #unstacked
       for i = 1, #ls do
         if not starts_with(trim(ls[i]), "#") then
-          local g = group_to_stack(ls[i], TOKENS, WIDTH)
+          local g = group_to_stack(reachable[i], TOKENS, WIDTH)
           if g ~= nil then
             ls[i] = with_trailing_comma(ls[i], g)
             n = n + 1
@@ -345,7 +351,7 @@ function rewrite_trailing_commas(files)
     end
     pass = pass + 1
   end
-  if changed > 0 then fail("still changing after " .. MAX_PASSES .. " passes") end
+  if changed > 0 then fail("stack: still changing after " .. MAX_PASSES .. " passes: " .. join(touched, ", ")) end
   return first_pass_count
 end
 
