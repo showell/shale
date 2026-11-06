@@ -39,7 +39,7 @@ check is house style when it says more about our habits than about their code:
 [house.shale](house.shale) lists them, and `house=0` on any one recipe leaves
 them out of that run. That is the whole of `stack` and `nest_depth`, `paren_if`
 and `lambda_if` in `parens`, `single` in `boundaries`, `bare_participle`,
-`container`, `phrase_name` and `singular_list` in `name_hunt`, and `abbreviation` in `plain_names`. Our own trees
+`container`, `phrase_name`, `singular_list` and `world_verb` in `name_hunt`, and `abbreviation` in `plain_names`. Our own trees
 keep all of them, and `write=1` refuses `house=0`.
 
 A project's guide outranks ours. Luke Boswell's roc-style.md asks for
@@ -60,7 +60,8 @@ that doesn't parse is listed at the end, and the run then fails.
   named like a state, a question that doesn't return a `Bool`, a name made
   only of vague words, a pure function named by a bare past participle
   (`added`, `named`), a function named as a bare phrase (`in_view`), a
-  list named as one thing (`triangle : List(Shape)`), and eleven other checks. Its word lists are in
+  list named as one thing (`triangle : List(Shape)`), a pure function with a
+  verb that pretends to an effect (`draw_tree`), and eleven other checks. Its word lists are in
   `cookbook/words/`. `words=1` prints a count of the first words of
   effects instead of the findings.
 - [errors.shale](errors.shale) checks how code reports failure: a shared

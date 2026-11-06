@@ -4,7 +4,7 @@
 Emphasis := [].{
 	escape_onto : List(U8), Str -> List(U8)
 
-	render_onto : List(U8), Str -> List(U8)
+	format_onto : List(U8), Str -> List(U8)
 
 	run_onto : List(U8), Str -> List(U8)
 

@@ -202,6 +202,13 @@
 --                 (`axis`). An alias of a list isn't seen, and with `types=1`
 --                 an unannotated definition or parameter is read by its
 --                 inferred type.
+--   world_verb    A pure function whose first word is a verb of
+--                 cookbook/words/world_verbs.txt, one that claims to act on
+--                 something outside (`draw`, `paint_shape`). Nothing is drawn
+--                 by a function that only makes a value, so name it for that
+--                 value (`tree_shapes`). A verb that says what happens to its
+--                 argument is fine (`plus`, `clamp`, `trim_hull`). An effect,
+--                 which does act, and a value are not reported.
 --
 -- Each name is judged once: from its annotation when it has one, else from
 -- its definition. An effect that takes an effectful function (`map2!`,
@@ -269,7 +276,7 @@ const ROOT = SELF_TEST and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
 -- unless USE_TYPES.
 const CHECKER_TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
 const CENSUS_ONLY = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle", "phrase_name", "singular_list"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle", "phrase_name", "singular_list", "world_verb"}
 -- `worker_name` reports a helper suffix always, and a suffix that is also an
 -- ordinary word (a fold's `step`, `List.walk`, `can_go`) only on a
 -- definition that calls itself.
@@ -330,6 +337,7 @@ function list_name_kinds(file)
   return kinds
 end
 const LIST_NAMES = list_name_kinds("list_names.txt")
+const WORLD_VERBS = word_set("cookbook:words/world_verbs.txt")
 const PLAIN_ELEMENTS = set_of({"U16", "U32", "U64", "I16", "I32", "I64", "F32", "F64", "Dec", "Str", "Bool"})
 const SURFACES = {Frame = true, Canvas = true}
 -- The first words `phrase_name` lets a constructor start with. They are the
@@ -959,6 +967,7 @@ function judge_definition(def)
     elseif signature.known then
       judge_list_name({path = path, line = line, name = full_name, kind = signature.is_function and "function" or "value", is_function = signature.is_function, first = signature.first, gives = signature.result})
     end
+    if not has_bang and is_function and has_key(WORLD_VERBS, ws[1]) then report(path, line, "world_verb", "`" .. full_name .. "` is pure, and `" .. ws[1] .. "` claims to act on something outside: name it for the value it gives (`tree_shapes`, not `draw_tree`)") end
     local argument_types = get(def, "argument_types", {})
     local parameters = get(def, "parameters", {})
     for k = 1, #parameters do

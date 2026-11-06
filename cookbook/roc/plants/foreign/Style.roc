@@ -32,6 +32,9 @@ Style := [].{
 
 	once = |x| x
 
+	paint : U64 -> U64
+	paint = |x| x
+
 	shout = |x| once(x) + 1
 
 	leftover = |x| x

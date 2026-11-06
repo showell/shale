@@ -1,0 +1,8 @@
+-- Verbs that claim to act on something outside: in a pure function's name they
+-- pretend to an effect. The Roc name hunt's `world_verb` reads this. Steve:
+-- "the name becomes its answer". `--` starts a note.
+draw
+fill
+paint
+plant
+render

@@ -16,7 +16,7 @@
 
 const HOUSE_CHECKS = {
   boundaries = {"single"},
-  name_hunt = {"bare_participle", "container", "phrase_name", "singular_list"},
+  name_hunt = {"bare_participle", "container", "phrase_name", "singular_list", "world_verb"},
   nest_depth = {"nested"},
   parens = {"paren_if", "lambda_if"},
   plain_names = {"abbreviation"},
