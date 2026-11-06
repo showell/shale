@@ -1,0 +1,127 @@
+-- A library for a stage's time history: `use("cookbook:times.shale")`. It
+-- keeps a script's recent times, one small file a script, and prints the
+-- change when a stage's time has moved far enough to mean something:
+--
+--   local r = timed_run("safari", "build.sh safari", {"./build.sh", "safari"},
+--     {timeout_ms = 300000, tail = 20, cpu_budget_ms = 60000})
+--
+--   build.sh safari: 192 s, was 35 s (5.5x)
+--
+-- The first word names the file, `state:times/safari.tsv`, whose lines are
+-- `when`, `stage`, `cpu_ms` and `ms`, the last five of each stage.
+--
+-- It compares CPU time, for the reason `run`'s budget does: wall time doubles
+-- on a busy box. "Was" is the middle of the stage's recent times, so one cold
+-- run neither sets off a line of its own nor becomes what the next run is
+-- held to. Only a run that exited 0 counts, since a build that stopped at its
+-- first error says nothing of its speed, and a stage over its `cpu_budget_ms`
+-- stops inside `run`, so it leaves the history as it was.
+
+const TIMES_KEPT = 5
+const TIMES_HEADER = "when\tstage\tcpu_ms\tms"
+-- Below this much CPU a change is noise, however large the ratio.
+const TIMES_LEAST_CHANGE_MS = 1000
+
+-- The file of the script named `book`.
+function times_path(book)
+  if book == "" or contains(book, "/") or contains(book, ":") then
+    fail("times: the book is a plain name, a file's, not \"" .. book .. "\"")
+  end
+  return "state:times/" .. book .. ".tsv"
+end
+
+-- The file's rows, oldest first; none for a file not there yet. A file that
+-- is not this shape stops the run rather than losing the history in it.
+function times_rows(path)
+  local rows = {}
+  if not exists(path) then return rows end
+  local all = lines(read(path))
+  if #all == 0 or all[1] ~= TIMES_HEADER then fail("times: " .. path .. " does not start with its header") end
+  for i = 2, #all do
+    local f = split(all[i], "\t")
+    if #f ~= 4 then fail("times: " .. path .. ":" .. i .. " is not four fields: " .. all[i]) end
+    push(rows, {when = f[1], stage = f[2], cpu_ms = tonumber(f[3]), ms = tonumber(f[4])})
+  end
+  return rows
+end
+
+-- The middle of a list that is not empty, the lower of the two for an even
+-- count, so a single slow run among two never counts as the usual time.
+function times_middle(list)
+  local sorted = sort(list)
+  return sorted[(#sorted + 1) // 2]
+end
+
+-- `192 s` from ten seconds up, `1.4 s` below.
+function times_seconds(ms)
+  if ms >= 10000 then return ((ms + 500) // 1000) .. " s" end
+  local tenths = (ms + 50) // 100
+  return (tenths // 10) .. "." .. (tenths % 10) .. " s"
+end
+
+-- `5.5x`, rounded; "" when the smaller time is zero, which has no ratio.
+function times_ratio(big, small)
+  if small == 0 then return "" end
+  local tenths = (big * 20 // small + 1) // 2
+  return (tenths // 10) .. "." .. (tenths % 10) .. "x"
+end
+
+-- The line for a stage's change, or "" for one too small to mean anything:
+-- less than half as much again, or less than a second.
+function times_change(stage, was_ms, now_ms)
+  local big = now_ms
+  local small = was_ms
+  if was_ms > now_ms then
+    big = was_ms
+    small = now_ms
+  end
+  if big * 2 < small * 3 or big - small < TIMES_LEAST_CHANGE_MS then return "" end
+  local ratio = times_ratio(big, small)
+  local said = stage .. ": " .. times_seconds(now_ms) .. ", was " .. times_seconds(was_ms)
+  if ratio == "" then return said end
+  if now_ms < was_ms then return said .. " (" .. ratio .. " faster)" end
+  return said .. " (" .. ratio .. ")"
+end
+
+-- Adds `run`'s result `r` to the file and gives the line for its change.
+function times_note(path, stage, r)
+  if r.ended ~= "exit" or r.code ~= 0 then return "" end
+  local rows = times_rows(path)
+  local recent = {}
+  for row in rows do
+    if row.stage == stage then push(recent, row.cpu_ms) end
+  end
+  local said = ""
+  if #recent > 0 then said = times_change(stage, times_middle(recent), r.cpu_ms) end
+  local left = #recent
+  local text = TIMES_HEADER .. "\n"
+  for row in rows do
+    local keep = true
+    if row.stage == stage then
+      keep = left < TIMES_KEPT
+      left = left - 1
+    end
+    if keep then text = text .. row.when .. "\t" .. row.stage .. "\t" .. row.cpu_ms .. "\t" .. row.ms .. "\n" end
+  end
+  replace(path, text .. date(now()) .. "\t" .. stage .. "\t" .. r.cpu_ms .. "\t" .. r.ms .. "\n")
+  return said
+end
+
+-- `run`, its time kept under `stage` in the book's file, and the change
+-- printed. Its answer is `run`'s; `cpu_budget_ms`'s stop names the stage. The
+-- folder is made first, so a `state:` that cannot be written stops the run
+-- before the program spends its time.
+function timed_run(book, stage, argv, opts)
+  if stage == "" or contains(stage, "\t") or contains(stage, "\n") then
+    fail("times: a stage's name is one line with no tab, not \"" .. stage .. "\"")
+  end
+  local path = times_path(book)
+  if not exists("state:times") then mkdir("state:times") end
+  local o = {}
+  for k in keys(opts) do o[k] = opts[k] end
+  if has_key(o, "cpu_budget_ms") then o.stage = stage end
+  local r = run(argv, o)
+  local said = times_note(path, stage, r)
+  if said ~= "" then print(said) end
+  return r
+end

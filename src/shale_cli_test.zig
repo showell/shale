@@ -272,6 +272,87 @@ test "cli: cpu_budget_ms judges CPU time: a program that burns past it stops the
     try testing.expectEqualStrings("true\ttrue\n", under.stdout);
 }
 
+test "cli: cookbook/times.shale keeps a stage's time under `state:` and prints a large change; a small one, and a stage over budget, print none; a read-only `state:` stops before the program" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    const fixture = @import("shale_test_options").fixture;
+    try tmp.dir.createDirPath(io, "state");
+    try tmp.dir.createDirPath(io, "locked");
+    const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(dir);
+    // The program starts in the root, so the fixture's path must not be relative.
+    var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_n = try std.Io.Dir.cwd().realPathFile(io, fixture, &exe_buf);
+    const source = try std.fmt.allocPrint(a,
+        \\use("cookbook:times.shale")
+        \\local b = arg("budget", 0)
+        \\local o = {{timeout_ms = 30000, tail = 1, want = "test: the fixture"}}
+        \\if b > 0 then o.cpu_budget_ms = b end
+        \\local r = timed_run("gate", "the burn", {{"{s}", "burn", arg("ms", "0")}}, o)
+        \\print("ran")
+        \\
+    , .{exe_buf[0..exe_n]});
+    defer a.free(source);
+    try tmp.dir.writeFile(io, .{ .sub_path = "t.shale", .data = source });
+    const mounts = try std.fmt.allocPrint(a, "printf 'cookbook = %s/cookbook ro\\nstate = %s/{s}/state\\n' \"$PWD\" \"$PWD\" > '{s}/mounts' && printf 'cookbook = %s/cookbook ro\\nstate = %s/{s}/locked ro\\n' \"$PWD\" \"$PWD\" > '{s}/mounts-ro'", .{ dir, dir, dir, dir });
+    defer a.free(mounts);
+    const m = try std.process.run(a, io, .{ .argv = &.{ "sh", "-c", mounts } });
+    a.free(m.stdout);
+    a.free(m.stderr);
+
+    const Launch = struct {
+        fn of(i: std.Io, root: []const u8, mounts_file: []const u8, ms: []const u8, budget: []const u8) !std.process.RunResult {
+            const cmd = try std.fmt.allocPrint(testing.allocator, "SHALE_MOUNTS='{s}/{s}' '{s}' --root '{s}' '{s}/t.shale' ms={s} budget={s}", .{ root, mounts_file, shale_exe, root, root, ms, budget });
+            defer testing.allocator.free(cmd);
+            return std.process.run(testing.allocator, i, .{ .argv = &.{ "sh", "-c", cmd } });
+        }
+    };
+    // The first run has nothing to compare with.
+    const first = try Launch.of(io, dir, "mounts", "100", "0");
+    defer a.free(first.stdout);
+    defer a.free(first.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ first.stdout, first.stderr });
+    try testing.expectEqualStrings("ran\n", first.stdout);
+    // About the same again: still nothing.
+    const same = try Launch.of(io, dir, "mounts", "100", "0");
+    defer a.free(same.stdout);
+    defer a.free(same.stderr);
+    try testing.expectEqualStrings("ran\n", same.stdout);
+    // Over a second more, and many times as much: said, before the script goes on.
+    const slow = try Launch.of(io, dir, "mounts", "1300", "0");
+    defer a.free(slow.stdout);
+    defer a.free(slow.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ slow.stdout, slow.stderr });
+    try testing.expect(std.mem.startsWith(u8, slow.stdout, "the burn: 1.3 s, was 0.1 s ("));
+    try testing.expect(std.mem.endsWith(u8, slow.stdout, "x)\nran\n"));
+    const kept = try tmp.dir.readFileAlloc(io, "state/times/gate.tsv", a, .limited(1 << 16));
+    defer a.free(kept);
+    try testing.expect(std.mem.startsWith(u8, kept, "when\tstage\tcpu_ms\tms\n"));
+    try testing.expectEqual(@as(usize, 4), std.mem.count(u8, kept, "\n"));
+    // Over its budget it stops by the stage's name, and the history is as it was.
+    const over = try Launch.of(io, dir, "mounts", "200", "50");
+    defer a.free(over.stdout);
+    defer a.free(over.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ over.stdout, over.stderr });
+    try testing.expectEqual(@as(u8, 1), over.term.exited);
+    try testing.expect(std.mem.indexOf(u8, over.stderr, "stage `the burn` took ") != null);
+    const after = try tmp.dir.readFileAlloc(io, "state/times/gate.tsv", a, .limited(1 << 16));
+    defer a.free(after);
+    try testing.expectEqualStrings(kept, after);
+    // A `state:` that is read-only is said before the program spends its time.
+    const locked = try Launch.of(io, dir, "mounts-ro", "2000", "0");
+    defer a.free(locked.stdout);
+    defer a.free(locked.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ locked.stdout, locked.stderr });
+    try testing.expectEqual(@as(u8, 1), locked.term.exited);
+    try testing.expect(std.mem.indexOf(u8, locked.stderr, "read-only") != null);
+    try testing.expect(std.mem.indexOf(u8, locked.stderr, "── time:") == null);
+}
+
 test "cli: a recipe's launch value where a program reads options is refused when it starts with `-`, not given to it as one" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
