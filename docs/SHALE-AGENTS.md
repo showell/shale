@@ -95,7 +95,7 @@ back what it changed, so no half-done edit is left (SHALE.md, "The
 runner": what it cannot put back, it says).
 
 ```sh
-zig build                      # zig-out/bin/shale: put it on PATH
+zig build -Doptimize=ReleaseSafe   # zig-out/bin/shale: put it on PATH; plain `zig build` is Debug, 6x slower
 shale count.shale dir=src
 shale rename.shale from=old to=new
 shale <<'EOF'
