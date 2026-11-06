@@ -119,7 +119,7 @@
 --                 (`count_acc`). Name a recursive worker for the parameter
 --                 it adds, so that a call reads as a sentence:
 --                 `count_from(xs, at)` for a start point,
---                 `render_onto(out, node)` for an output being built,
+--                 `html_onto(out, node)` for an output being built,
 --                 `walk_with(tree, seen)` for other carried state. The entry
 --                 function takes the plain name, `count`. `_step`, `_walk`
 --                 and `_go` are ordinary words too, so they are reported
