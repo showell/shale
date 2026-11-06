@@ -47,7 +47,7 @@
 -- finding may be left, a second rewrite must change nothing, and a plant with a
 -- `.want` file must come out as it.
 --
--- budget: steps=900000000 arena_bytes=2000000000 output_bytes=4000000
+-- budget: steps=900000000 read_bytes=1000000000 arena_bytes=2000000000 output_bytes=4000000
 
 const SELF_TEST = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/parens"
