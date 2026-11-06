@@ -24,5 +24,8 @@ triangle = make_shape
 scene : U64 -> Set(Point)
 scene = |at| make_set
 
+render_onto : List(Shape), U64 -> List(Shape)
+render_onto = |out, at| out
+
 area : List(Point), { rows : List(U64) } -> U64
 area = |l, { rows }| l.len() + rows.len()

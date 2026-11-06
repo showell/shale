@@ -192,6 +192,7 @@
 --                   (`trim_hull`);
 --                 - one letter, and a value named by a number, which are
 --                   `short_name`'s and `taken_word`'s to judge;
+--                 - an accumulator's short idiom, as a whole name (`out`);
 --                 - a name `phrase_name` reports, to be named again anyway.
 --                 The word list, a participle and a verb don't pass a word
 --                 that is the element's own (`route : List(Route)`). A word
@@ -315,13 +316,14 @@ end
 const TAKEN_WORDS = taken_word_kinds("taken.txt")
 
 -- cookbook/words/list_names.txt has a word per line followed by its kind,
--- `many`, `one` or `after`. The result maps each word to its kind.
+-- `many`, `one`, `after` or `accumulator`. The result maps each word to its
+-- kind.
 function list_name_kinds(file)
   local kinds = {}
   for l in word_list_lines("cookbook:words/" .. file) do
     local ws = words(l)
     if #ws > 0 then
-      if #ws ~= 2 or (ws[2] ~= "many" and ws[2] ~= "one" and ws[2] ~= "after") or has_key(kinds, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `many`, `one` or `after`") end
+      if #ws ~= 2 or (ws[2] ~= "many" and ws[2] ~= "one" and ws[2] ~= "after" and ws[2] ~= "accumulator") or has_key(kinds, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `many`, `one`, `after` or `accumulator`") end
       kinds[ws[1]] = ws[2]
     end
   end
@@ -841,7 +843,7 @@ function judge_list_name(subject)
   local element = list_element(subject.gives)
   if element == nil or element == "U8" then return nil end
   local bare = ends_with(subject.name, "!") and sub(subject.name, 1, #subject.name - 1) or subject.name
-  if #bare < 2 or get(TAKEN_WORDS, bare, "") == "cardinal" then return nil end
+  if #bare < 2 or get(TAKEN_WORDS, bare, "") == "cardinal" or get(LIST_NAMES, bare, "") == "accumulator" then return nil end
   local ws = split(bare, "_")
   local at = head_word_at(ws)
   local head = ws[at]
