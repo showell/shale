@@ -109,7 +109,7 @@ end
 
 -- `run`, its time kept under `stage` in the book's file, and the change
 -- printed. Its answer is `run`'s; `cpu_budget_ms`'s stop names the stage. The
--- folder is made first, so a `state:` that cannot be written stops the run
+-- file is written first, so a `state:` that cannot be written stops the run
 -- before the program spends its time.
 function timed_run(book, stage, argv, opts)
   if stage == "" or contains(stage, "\t") or contains(stage, "\n") then
@@ -117,6 +117,9 @@ function timed_run(book, stage, argv, opts)
   end
   local path = times_path(book)
   if not exists("state:times") then mkdir("state:times") end
+  local kept = TIMES_HEADER .. "\n"
+  if exists(path) then kept = read(path) end
+  replace(path, kept)
   local o = {}
   for k in keys(opts) do o[k] = opts[k] end
   if has_key(o, "cpu_budget_ms") then o.stage = stage end

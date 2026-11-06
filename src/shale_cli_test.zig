@@ -281,7 +281,7 @@ test "cli: cookbook/times.shale keeps a stage's time under `state:` and prints a
     const a = testing.allocator;
     const fixture = @import("shale_test_options").fixture;
     try tmp.dir.createDirPath(io, "state");
-    try tmp.dir.createDirPath(io, "locked");
+    try tmp.dir.createDirPath(io, "locked/times");
     const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
     defer a.free(dir);
     // The program starts in the root, so the fixture's path must not be relative.

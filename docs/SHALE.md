@@ -1213,7 +1213,8 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   On the live site's route a script has no values: `arg` gives its
   default.
 - `now()` is the wall clock **when the run started**, the same at every
-  call (`SHALE_NOW` pins it): to time a program, use `run`'s own `ms`,
+  call (`SHALE_NOW` pins it): to time a program, use `run`'s own `ms`
+  (wall time) or `cpu_ms` (CPU time),
   and to wait, the Linux prelude's `sleep(ms)`.
 - **The Linux host, its mounts and the preludes after the core's** are
   "On Linux: behind the seam", below.
@@ -1233,8 +1234,8 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   (steps, reads, read bytes, output bytes) beside each budget; and
   `── time:`, once programs, job waits and sleeps took a second or more
   (always with `--verbose`): how many programs, their wall time, the
-  slowest one's seconds and argv, the job waits and the sleeps. Both
-  stream, so `> f 2>&1` keeps them in order.
+  slowest three's seconds, shares and argvs, the job waits and the sleeps.
+  A share is of programs, job waits and sleeps together. Both stream, so `> f 2>&1` keeps them in order.
 - It exits 0 if the script finished, 1 if it stopped, 2 if the run could
   not begin: the command line, the script's file (a `name:` no mount has
   among them), stdin, the mounts, a prelude, a `-- budget:` line, or a
@@ -1261,7 +1262,20 @@ three:
   `Options.host`, and on metal it stops with class `host` ("not on this
   host"). On Linux it is `src/shale_host_linux.zig`:
   - `run`, a program under a timeout, a keep and a filter (its options
-    are `Opts` in `src/shale_host_run.zig`);
+    are `Opts` in `src/shale_host_run.zig`). Its answer gives `ms`, the wall
+    time, and `cpu_ms`, the user and system CPU time of the program and the
+    children it waited for (`wait4`'s rusage), which a busy box barely
+    moves; a child left running when the program ends is not counted. The
+    option `cpu_budget_ms = N` is a time budget: past N, and not at it,
+    the run stops with class `budget` (`budget cpu`), which `attempt` does
+    not catch, naming the stage, the budget and what it took: `` `run`:
+    stage `the build` took 192004 ms of CPU, over its `cpu_budget_ms` of
+    35000 (201330 ms of wall time)``. The option `stage = "..."` names it
+    (it needs a budget); the argv does by default. The stop takes the
+    place of `run`'s answer, so a program that also failed adds how it
+    ended and the end of what was kept of its output.
+    `cookbook/times.shale` is a stage's history over this: SHALE-AGENTS.md,
+    "A stage states what it may cost";
   - `real`, a path's OS path;
   - the jobs, `src/shale_host_jobs.zig` over `src/shale_jobs.zig`;
   - the Zig tools, `zig_rename`, `zig_decls`, `zig_move`, `zig_imports`

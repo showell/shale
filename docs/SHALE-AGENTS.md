@@ -27,15 +27,47 @@ run used of four, steps, reads, read bytes and output bytes (`── used:
 is known before a bigger run finds it;
 `--verbose` says so always, with the effects and the programs run. A run
 that spent a second or more in programs, job waits and sleeps says where,
-the slowest program named (`── time: 3 programs, 52.1 s in all; the
-slowest 51.8 s: roc build ...`): when a step is slow, that line says
-which program to look at. The
+the slowest three programs named with their shares of it (`── time: 3
+programs, 52.1 s in all; the slowest 51.8 s (99%): roc build ...; 0.2 s
+(0%): git log; 0.1 s (0%): git status`): when a step is slow, that line
+says which program to look at. The
 arena is not among the four: a stop on it (`budget arena`, 16 MiB unset)
 says nothing of what it would have needed: raise it and run again
 (`--budget arena_bytes=4000000000`), and if the script is one you keep,
 put it in its `-- budget:` line.
 
-**On the box, a budget is not sacred.** The budgets are there for Shale on
+**Slowness is a finding.** We want things to be fast 90% of the time, so
+don't tolerate slowness. A loop over about 10 seconds is a finding to
+explain by phase, never a wait, and a run over budget isn't done. Find
+which phase took the time and fix that; a budget moves only once you can
+say why the stage's real cost changed.
+
+**A stage states what it may cost**, in CPU time, because wall time doubles
+on a busy box and would make a budget flaky. `run`'s `cpu_budget_ms = N`
+stops the run when the program and the children it waited for use more
+than N ms of CPU, naming the stage (`stage = "..."`, else the argv), the
+budget and what it took, as `budget cpu`, which `attempt` cannot catch.
+At N exactly it passes. `run`'s answer has `cpu_ms` beside `ms` whether or
+not a budget is set. **`cookbook/times.shale` compares a stage with its
+recent runs**, so a slowdown shows with no budget set:
+
+```lua
+use("cookbook:times.shale")
+local r = must(timed_run("safari", "build.sh safari", {"./build.sh", "safari"},
+  {timeout_ms = 300000, tail = 20, cpu_budget_ms = 60000}))
+-- build.sh safari: 192 s, was 35 s (5.5x)
+```
+
+The first word names a `.tsv` file under `state:times`, one a script, which
+holds each stage's last five runs. The line compares CPU time with the
+middle of those runs, and appears at 1.5x and a second of change, either
+way (`(5.5x faster)`). A run that did not exit 0 counts for nothing, and a
+stage over its budget stops in `run`, so neither moves the history.
+`state:` has to be writable: a read-only one stops `timed_run` before the
+program starts.
+
+**On the box, a budget of steps, reads or bytes is not sacred.** A time
+budget is. Those are there for Shale on
 bare metal, where a runaway script takes a site's server down, and there
 they hold. A refactoring or lint tool on the box (the cookbook's recipes, a
 one-off hunt or rewrite) may raise steps, reads and read bytes as far as its
@@ -144,10 +176,10 @@ whole language is [`SHALE.md`](SHALE.md).
 **On Linux, the Linux prelude** (`src/shale_prelude_linux.shale`; metal
 has none of it):
 - **Programs:** `run(argv, opts)` runs one and gives `{argv, code, ended,
-  ms, out, ...}`. `timeout_ms` and a keep, `head` or `tail` (lines) or
-  `whole` (bytes), are required (unless `stdout_secret`); the rest are
+  ms, cpu_ms, out, ...}`. `timeout_ms` and a keep, `head` or `tail` (lines)
+  or `whole` (bytes), are required (unless `stdout_secret`); the rest are
   `cwd`, `stdin`, `env`, `secrets`, `stdout_secret`, `secret_replace`,
-  `log`, `want`, and the filters `re`, `not_re`, `nocase`,
+  `log`, `want`, `cpu_budget_ms`, `stage`, and the filters `re`, `not_re`, `nocase`,
   `before`, `after` and `width` (`Opts` in `src/shale_host_run.zig`). Its
   `cwd` is a path as every path is: under the root, or through a mount
   (`cwd = "repos:shale"` runs a sibling repo's step from another's
@@ -398,7 +430,8 @@ lines across folders, mounts or a git revision), `prose.shale` (a phrase
 in wrapped prose, found and edited) and `zig_build.shale` (a build's
 verdict without its noise) for any project; `disk.shale` (a run stopped
 under a floor of free disk, `report=1` the growth spots' sizes, each verify's
-first check); the Zig ones in
+first check); `times.shale` (a library: a stage's time against its recent
+runs); the Zig ones in
 [`cookbook/zig/`](../cookbook/zig/README.md) find a file's seams, move
 declarations along them and judge the move; `roc/` and `zig17/` are those
 work's. Copy one and change it; not everything is a builtin.
