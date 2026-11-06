@@ -158,11 +158,12 @@
 --                 The type decides what reads as a constructor or conversion,
 --                 and these pass:
 --                 - a constructor: a first word in CONSTRUCTOR_WORDS and a
---                   result, or a `Try` of one, that is its own module's type
---                   or the type it is a member of (`Clock.at_step : U32 ->
---                   Clock`, `Fraction.from_ratio`). The word matters as well
---                   as the type: `Scene.in_view : View -> Scene` gives its own
---                   type and still reads as a question;
+--                   result, or a `Try` of one, that is its own module's type,
+--                   a type declared in that module, or the type it is a
+--                   member of (`Clock.at_step : U32 -> Clock`,
+--                   `Color.from_hex_rgb : U32 -> Color.Rgb`). The word matters
+--                   as well as the type: `Scene.in_view : View -> Scene` gives
+--                   its own type and still reads as a question;
 --                 - a conversion: `to_*` and `into_*`, which name what they
 --                   give, and a `from_*` whose first argument is its own
 --                   module's type (`Along.from_start : Along -> Distance`);
@@ -670,13 +671,15 @@ function definition_signature(def)
   return signature
 end
 
--- Whether `type_text` names the module `def` is in, or the type it is a
--- member of. Type arguments don't count: `Bike.Motion(others)` is `Motion`.
+-- Whether `type_text` names the module `def` is in, a type declared in it, or
+-- the type `def` is a member of. Type arguments don't count:
+-- `Bike.Motion(others)` is `Bike.Motion`.
 function is_own_type(def, type_text)
   local head = re_find(type_text, "^[A-Za-z0-9_.]+")
   if head == nil then return false end
-  local name = last_part(head.text)
-  return name == module_name(def.path) or name == def.owner
+  local parts = split(head.text, ".")
+  local module = module_name(def.path)
+  return parts[1] == module or parts[1] == def.owner or parts[#parts] == def.owner
 end
 
 -- `Try(Fraction, [OutOfRange])` gives `Fraction`, and any other type itself.

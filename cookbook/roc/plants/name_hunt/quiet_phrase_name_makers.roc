@@ -10,6 +10,9 @@ Clock := U32.{
 	of : U32 -> Clock
 	of = |number| Clock.(number)
 
+	from_hex_rgb : U32 -> Clock.Rgb
+	from_hex_rgb = |number| { red: number }
+
 	from_start : Clock -> U32
 	from_start = |Clock.(number)| number
 

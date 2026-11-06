@@ -7,7 +7,6 @@
 -- adding prepositions to names"):
 about
 after
-along
 at
 before
 behind
