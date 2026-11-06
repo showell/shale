@@ -451,7 +451,7 @@ else
   local count_by_kind = {}
   local judged = findings_in(files)
   for f in judged.found do
-    if not is_left_out("stack", f.kind) then
+    if not house_leaves_out("stack", f.kind) then
       push(all, finding_line(f))
       incr(count_by_kind, f.kind)
     end

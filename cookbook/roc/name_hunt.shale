@@ -302,7 +302,7 @@ const first_word_census = {}
 const finding_lines = {}
 
 function report(path, line, check, why)
-  if is_left_out("name_hunt", check) then return nil end
+  if house_leaves_out("name_hunt", check) then return nil end
   if not CENSUS_ONLY then push(finding_lines, path .. ":" .. line .. ": " .. check .. ": " .. why) end
   count_by_check[check] = count_by_check[check] + 1
   fired_in_file[path .. "|" .. check] = true
