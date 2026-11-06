@@ -1,0 +1,5 @@
+Unit: its job is holding the float
+Held: the longer lines below answer for everything here
+Held.Spot: a ratio
+Held.kept: a ratio
+Held.other: a ratio
