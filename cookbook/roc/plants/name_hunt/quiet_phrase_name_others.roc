@@ -4,10 +4,10 @@ trees_in_view : U64 -> List(U64)
 trees_in_view = |view| [view]
 
 in_cart : List(U64), U64 -> Bool
-in_cart = |cart, item| cart.contains(item)
+in_cart = |cart_items, item| cart_items.contains(item)
 
-on_one_segment : { route : List(U64) }
-on_one_segment = { route: [] }
+on_one_segment : { stops : List(U64) }
+on_one_segment = { stops: [] }
 
 at_rest : U64
 at_rest = 0

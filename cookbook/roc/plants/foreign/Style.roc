@@ -1,7 +1,7 @@
 ## A plant for cookbook/roc/foreign.shale: every house check in one module, with
 ## real findings beside them.
 Style := [].{
-	Entry : { pos : U64 }
+	Entry : { pos : U64, corner : List(U64) }
 
 	chosen : List(Str) -> Str
 	chosen = |names| List.first(names) ?? crash "no names"

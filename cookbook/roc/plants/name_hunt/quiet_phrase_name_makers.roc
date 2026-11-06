@@ -26,7 +26,7 @@ Clock := U32.{
 	with_lean = |motion, lean| { ..motion, lean }
 
 	without_lean : List(U32), U32 -> List(U32)
-	without_lean = |lean, gone| lean.drop_if(|l| l == gone)
+	without_lean = |leans, gone| leans.drop_if(|l| l == gone)
 
 	Spot := U32.{
 		at_seam : U32 -> Clock.Spot

@@ -1,0 +1,21 @@
+-- Words the Roc name hunt's `singular_list` can't read from their spelling.
+-- A word per line, then its kind:
+--   many   a word that can't be counted, so it has no plural;
+--   one    a word that names one thing though it reads otherwise: an `s` that
+--          makes no plural, or a verb of verbs.txt that is a noun in a list's
+--          name;
+--   after  a word that follows the noun, so a plural before it counts
+--          (`corners_ahead`).
+-- A collective noun is no `many`: a herd holds cows, so `herd_cows`. Only a word
+-- a tree needs, or that Steve named, belongs here. `--` starts a note.
+grass many -- Steve's example of a word with no plural; no tree uses it yet
+axis one -- Steve's example
+canvas one -- Steve's example
+status one -- `status : List(Str)` (widget_kit's VcrButtons.roc)
+us one -- `toward_us` (safari's BirdStills.roc)
+route one -- verbs.txt has it for effects; a route of segments is `route_segments`
+ahead after -- `corners_ahead` (safari's Ground.roc)
+along after -- `quads_along` (safari's GuardRail.roc)
+down after -- `side_wings_down` (safari's BirdStills.roc)
+holding after -- `humans_holding` (roc-chat's GitHubSignIn.roc)
+up after -- `side_wings_up` (safari's BirdStills.roc)

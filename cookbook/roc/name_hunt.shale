@@ -171,6 +171,36 @@
 --                   first argument's type (`with_lean : Bike, Angle -> Bike`).
 --                 A definition with no annotation shows none of this, so it
 --                 is reported unless `types=1` supplies its type.
+--   singular_list  A name that holds or gives a `List(...)`, or a `Try` of
+--                 one, but reads as one thing: `triangle : List(Shape)`. The
+--                 name ends in a plural of what the list holds (`triangles`,
+--                 `herd_cows`) or is explicit (`triangle_list`). A collective
+--                 noun is no plural: `herd`, `crowd` and `route` are reported.
+--                 Read are top-level and member definitions, record fields,
+--                 and the plain parameters of a top-level or member lambda.
+--                 The word that counts is the one before a preposition or an
+--                 `after` word of cookbook/words/list_names.txt, else the
+--                 last (`trees_in_view`, `corners_ahead`). These pass:
+--                 - a `List(U8)`, whose bytes are plumbing: the name says what
+--                   they mean (`boundary`). A `List(F64)` is checked, since a
+--                   flat run of coordinates can't be told from many readings;
+--                 - a word list_names.txt calls `many`, one that can't be
+--                   counted, and a word read as a participle (`clipped`);
+--                 - a function whose whole name is a verb (`draw`), and a
+--                   changed copy: one starting with a verb, `with` or
+--                   `without` that gives its first argument's type
+--                   (`trim_hull`);
+--                 - one letter, and a value named by a number, which are
+--                   `short_name`'s and `taken_word`'s to judge;
+--                 - a name `phrase_name` reports, to be named again anyway.
+--                 The word list, a participle and a verb don't pass a word
+--                 that is the element's own (`route : List(Route)`). A word
+--                 verbs.txt holds that list_names.txt calls `one` is no verb
+--                 here (`route`). An `s` makes no plural after `s` (`class`),
+--                 after letters that are no word (`pts`), or in a `one` word
+--                 (`axis`). An alias of a list isn't seen, and with `types=1`
+--                 an unannotated definition or parameter is read by its
+--                 inferred type.
 --
 -- Each name is judged once: from its annotation when it has one, else from
 -- its definition. An effect that takes an effectful function (`map2!`,
@@ -238,7 +268,7 @@ const ROOT = SELF_TEST and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
 -- unless USE_TYPES.
 const CHECKER_TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
 const CENSUS_ONLY = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle", "phrase_name"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle", "phrase_name", "singular_list"}
 -- `worker_name` reports a helper suffix always, and a suffix that is also an
 -- ordinary word (a fold's `step`, `List.walk`, `can_go`) only on a
 -- definition that calls itself.
@@ -283,6 +313,21 @@ function taken_word_kinds(file)
   return kinds
 end
 const TAKEN_WORDS = taken_word_kinds("taken.txt")
+
+-- cookbook/words/list_names.txt has a word per line followed by its kind,
+-- `many`, `one` or `after`. The result maps each word to its kind.
+function list_name_kinds(file)
+  local kinds = {}
+  for l in word_list_lines("cookbook:words/" .. file) do
+    local ws = words(l)
+    if #ws > 0 then
+      if #ws ~= 2 or (ws[2] ~= "many" and ws[2] ~= "one" and ws[2] ~= "after") or has_key(kinds, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `many`, `one` or `after`") end
+      kinds[ws[1]] = ws[2]
+    end
+  end
+  return kinds
+end
+const LIST_NAMES = list_name_kinds("list_names.txt")
 const SURFACES = {Frame = true, Canvas = true}
 -- The first words `phrase_name` lets a constructor start with. They are the
 -- ones constructors use in safari, roc-chat and roc-markdown: `Clock.at_step`,
@@ -521,11 +566,13 @@ function annotation_definition(path, src, tree, i)
     def.arity = #parts - 1
     def.result = render_type(tree, parts[#parts])
     def.first = #parts > 1 and render_type(tree, parts[1]) or ""
+    def.argument_types = {}
     if is_effect then
       def.types = mentioned_type_names(tree, kids[1], {})
       def.args = {}
     end
     for a in take(parts, #parts - 1) do
+      push(def.argument_types, render_type(tree, a))
       if contains(span_text(src, tree, a), "=>") then def.callback = true end
       if is_effect then push(def.args, argument_shape(tree, a)) end
     end
@@ -537,17 +584,26 @@ end
 -- nil when its pattern is not a plain name. `lambda` says its value is a
 -- lambda, `callback` that a lambda argument's name ends in `!`, `recurses`
 -- (for a name ending in a RECURSION_SUFFIXES word) that it calls itself,
--- and `typed` is the checker's type when there is one.
+-- `typed` is the checker's type when there is one, and `parameters` holds
+-- `{at, name, line, typed}` for each lambda argument, `name` "" for one that
+-- is a pattern rather than a plain name.
 function value_definition(path, tree, i)
   local kids = children(tree, i)
   if #kids == 0 or tree[kids[1]].kind ~= "p-ident" then return nil end
   local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, kids[1], "raw"), owner = owner_of(tree, i), annotation = false, fn = false, callback = false, paired = false}
   if #kids > 1 and tree[kids[2]].kind == "e-lambda" then
     def.lambda = true
+    def.parameters = {}
     for part in children(tree, kids[2]) do
       if tree[part].kind == "args" then
         for a in children(tree, part) do
           if ends_with(attribute(tree, a, "raw"), "!") then def.callback = true end
+          local parameter = {name = tree[a].kind == "p-ident" and attribute(tree, a, "raw") or "", line = tostring(tree[a].line)}
+          if parameter.name ~= "" and USE_TYPES and has_key(CHECKER_TYPES.real, path) then
+            local checker_type = roc_type_at(CHECKER_TYPES, "pat", path, tree[a])
+            if checker_type ~= nil then parameter.typed = checker_type end
+          end
+          push(def.parameters, parameter)
         end
       end
     end
@@ -597,7 +653,19 @@ function read_definitions(parsed_files)
       if kind == "anno-record-field" then
         local at = field_declaration_line(tree, declaration_line, i)
         local field = attribute(tree, i, "name")
-        if at ~= "" and field ~= "" then push(TYPE_AND_FIELD_NAMES, {path = path, line = tostring(node.line), name = field, words = name_words(field), is_field = true, doc = doc_above(src, tonumber(at))}) end
+        if at ~= "" and field ~= "" then
+          local named = {path = path, line = tostring(node.line), name = field, words = name_words(field), is_field = true, doc = doc_above(src, tonumber(at))}
+          local field_type = children(tree, i)[1]
+          named.gives = render_type(tree, field_type)
+          named.is_function = tree[field_type].kind == "ty-fn"
+          named.first = ""
+          if named.is_function then
+            local parts = children(tree, field_type)
+            named.gives = render_type(tree, parts[#parts])
+            named.first = #parts > 1 and render_type(tree, parts[1]) or ""
+          end
+          push(TYPE_AND_FIELD_NAMES, named)
+        end
       end
       if outer[i] and kind == "s-type-anno" then
         local def = annotation_definition(path, src, tree, i)
@@ -615,6 +683,7 @@ function read_definitions(parsed_files)
             above.has_def = true
             if has_key(def, "typed") then above.typed = def.typed end
             if def.callback then above.callback = true end
+            above.parameters = get(def, "parameters", {})
           end
           push(definitions, def)
         end
@@ -695,6 +764,87 @@ function reads_as_maker(def, word, signature)
   if has_key(CHANGED_COPY_WORDS, word) and signature.result == signature.first then return true end
   if word == "from" and is_own_type(def, signature.first) then return true end
   return has_key(CONSTRUCTOR_WORDS, word) and is_own_type(def, success_type(signature.result))
+end
+
+-- The element type's text of a `List(...)` or a `Try` of one, else nil.
+function list_element(type_text)
+  local text = trim(type_text)
+  if starts_with(text, "Try(") and ends_with(text, ")") then text = first_argument(sub(text, 5, #text - 1)) end
+  if starts_with(text, "List(") and ends_with(text, ")") then return sub(text, 6, #text - 1) end
+  return nil
+end
+
+-- The word of a name that says what it is, by index in `ws`: the one before
+-- the first preposition or word list_names.txt calls `after`, past the name's
+-- first word (`trees_in_view` and `corners_ahead` give `trees` and `corners`),
+-- else the last. Digits alone are no word (`corner_2`).
+function head_word_at(ws)
+  for k = 2, #ws do
+    if has_key(PREPOSITIONS, ws[k]) or get(LIST_NAMES, ws[k], "") == "after" then return k - 1 end
+  end
+  local at = #ws
+  while at > 1 and re_find(ws[at], "^[0-9]+$") ~= nil do at = at - 1 end
+  return at
+end
+
+-- Whether a word reads as a plural. An `s` doesn't make one in `class`, in a
+-- word list_names.txt calls `one` (`axis`), or after letters that are no word
+-- (`pts`); after one letter it does (`xs`).
+function reads_as_plural(word)
+  if get(LIST_NAMES, word, "") == "one" then return false end
+  if not ends_with(word, "s") or ends_with(word, "ss") then return false end
+  local stem = sub(word, 1, #word - 1)
+  return #stem == 1 or re_find(stem, "[aeiouy]") ~= nil
+end
+
+function plural_of(word)
+  if ends_with(word, "y") and re_find(word, "[aeiou]y$") == nil then return sub(word, 1, #word - 1) .. "ies" end
+  if re_find(word, "(s|x|z|ch|sh)$") ~= nil then return word .. "es" end
+  return word .. "s"
+end
+
+-- The last word of `element`, a type's text, or "" for one with no name:
+-- `Shapes.RoundShape(a)` gives `shape`.
+function element_word(element)
+  local head = re_find(element, "^[A-Za-z0-9_.]+")
+  if head == nil then return "" end
+  local type_words = name_words(last_part(head.text))
+  return #type_words > 0 and type_words[#type_words] or ""
+end
+
+-- The names `singular_list` offers for `bare`, whose head word `head` is at
+-- `at` in `ws`: the plural of what the list holds after the name, as in
+-- `herd_cows`, or the head's own plural when the type is its own word or has
+-- none; else the name with `_list`.
+function honest_list_names(bare, ws, at, element)
+  local held = element_word(element)
+  if held ~= "" and held ~= ws[at] and #held > 1 then return "`" .. bare .. "_" .. plural_of(held) .. "`, or `" .. bare .. "_list`" end
+  local plural_words = {}
+  for k = 1, #ws do push(plural_words, k == at and plural_of(ws[at]) or ws[k]) end
+  return "`" .. join(plural_words, "_") .. "`, or `" .. bare .. "_list`"
+end
+
+-- Reports a name whose type says many and whose head word says one:
+-- `singular_list` in the header. `subject` is `{path, line, name, kind,
+-- is_function, first, gives}`, `kind` being what the report calls it.
+function judge_list_name(subject)
+  local element = list_element(subject.gives)
+  if element == nil or element == "U8" then return nil end
+  local bare = ends_with(subject.name, "!") and sub(subject.name, 1, #subject.name - 1) or subject.name
+  if starts_with(bare, "_") then bare = sub(bare, 2) end
+  if #bare < 2 or get(TAKEN_WORDS, bare, "") == "cardinal" then return nil end
+  local ws = split(bare, "_")
+  local at = head_word_at(ws)
+  local head = ws[at]
+  if head == "list" or reads_as_plural(head) then return nil end
+  if element_word(element) ~= head then
+    if get(LIST_NAMES, head, "") == "many" or is_participle(head) then return nil end
+    local starts_with_act = subject.is_function and has_key(VERBS, ws[1]) and get(LIST_NAMES, ws[1], "") ~= "one"
+    local is_changed_copy = subject.is_function and subject.first == subject.gives and (starts_with_act or has_key(CHANGED_COPY_WORDS, ws[1]))
+    if is_changed_copy or (starts_with_act and #ws == 1) then return nil end
+  end
+  report(subject.path, subject.line, "singular_list", "the " .. subject.kind .. " `" .. subject.name .. "` " .. (subject.is_function and "gives" or "holds") .. " `" .. subject.gives .. "` but reads as one thing, `" .. head .. "`: " .. honest_list_names(bare, ws, at, element))
+  return nil
 end
 
 -- Notes a name that ends in a preposition, for `preposition_split`, in
@@ -795,6 +945,15 @@ function judge_definition(def)
     if not has_bang and has_key(PREPOSITIONS, ws[1]) and is_function and not returns_bool and signature.result ~= "_" and not reads_as_maker(def, ws[1], signature) then
       local gives = signature.known and ("gives `" .. signature.result .. "`" .. signature.source_note) or "has no annotation to show it makes its own type"
       report(path, line, "phrase_name", "`" .. full_name .. "` starts with a preposition, `" .. ws[1] .. "`, and " .. gives .. ": bare, it reads as a yes or no and hides what it gives; name the thing (`trees_in_view`, not `in_view`)")
+    elseif signature.known then
+      judge_list_name({path = path, line = line, name = full_name, kind = signature.is_function and "function" or "value", is_function = signature.is_function, first = signature.first, gives = signature.result})
+    end
+    local argument_types = get(def, "argument_types", {})
+    local parameters = get(def, "parameters", {})
+    for k = 1, #parameters do
+      local parameter = parameters[k]
+      local parameter_type = k <= #argument_types and argument_types[k] or get(parameter, "typed", "")
+      if parameter.name ~= "" then judge_list_name({path = path, line = parameter.line, name = parameter.name, kind = "parameter", is_function = false, first = "", gives = parameter_type}) end
     end
   end
   -- `worker_name` is judged at the definition, which knows whether it calls
@@ -874,6 +1033,7 @@ for named in TYPE_AND_FIELD_NAMES do
     if doc_says_whose(named.doc, w) then doc_owns_it = true end
   end
   if only_container_words and not doc_owns_it then report(named.path, named.line, "container", (named.is_field and "the field `" or "the type `") .. named.name .. "` is only container words: name it for what it holds, or say whose it is in its doc (`## A folder's entry`)") end
+  if named.is_field then judge_list_name({path = named.path, line = named.line, name = named.name, kind = "field", is_function = named.is_function, first = named.first, gives = named.gives}) end
 end
 
 const OPPOSITE_PAIRS = {["after|before"] = true, ["from|to"] = true, ["with|without"] = true, ["over|under"] = true}
