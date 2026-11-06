@@ -21,6 +21,32 @@ A recipe that runs the Roc compiler uses the version named in the
 `roc-version` file where the run starts, so start it at the repository's
 root.
 
+## On someone else's repository
+
+One command reads another project's Roc code, from that repository's root:
+
+    cd <repo> && shale <shale>/cookbook/roc/foreign.shale
+
+[foreign.shale](foreign.shale) runs every check below once over the whole
+tree, as `families` and `boundaries` judge across folders. It only parses, so
+it runs nothing from the tree and needs no compiler at the project's pin. It
+prints each recipe's summary and then the findings to read first, and it keeps
+each recipe's whole output in `out=` (`scratch:foreign` by default). A project's
+own words go in as data: `roles=`, `terms=` and `abbreviations=`, as below.
+
+Our house style is left out, because a careful project may do the opposite. A
+check is house style when it says more about our habits than about their code:
+[house.shale](house.shale) lists them, and `house=0` on any one recipe leaves
+them out of that run. That is the whole of `stack` and `nest_depth`, `paren_if`
+and `lambda_if` in `parens`, `single` in `boundaries`, `bare_participle` and
+`container` in `name_hunt`, and `abbreviation` in `plain_names`. Our own trees
+keep all of them, and `write=1` refuses `house=0`.
+
+A project's guide outranks ours. Luke Boswell's roc-style.md asks for
+`if (x) a else b` where our braces stand, and it asks for stacking where our
+rule is only ours to hold. `foreign.shale` names any guide it sees, so read it,
+and run a left-out recipe alone when the guide asks for what it checks.
+
 ## Checks
 
 These recipes print findings and, except for the `write=1` of `stack.shale`
@@ -38,14 +64,20 @@ that doesn't parse is listed at the end, and the run then fails.
   effects instead of the findings.
 - [errors.shale](errors.shale) checks how code reports failure: a shared
   alias of error tags where the tags belong in place, a tag named like an
-  optional (`None`), a `List.set(...) ?? l` that copies the list, and a
-  `??` that falls back to a placeholder string.
+  optional (`None`) beside a tag with a payload, a `List.set(...) ?? l` that
+  copies the list, a `??` that falls back to a placeholder string, and one that
+  falls back to a number after a lookup by index (`number_fallback`).
 - [boundaries.shale](boundaries.shale) asks whether each function earns
-  its boundary and each parameter is really a parameter: a small function
-  with one caller, a parameter every caller passes the same literal, a
-  function of `{}` that could be a constant, and (with `types=1`) a `Bool`
+  its boundary and each parameter is really a parameter: a function with no
+  caller (`dead`), a small function with one, a parameter every caller passes
+  the same literal, a function of `{}` that could be a constant, an `if` whose
+  branches are the same (`same_branches`), and (with `types=1`) a `Bool`
   parameter that callers pass as a literal. Give it the whole tree, tests
-  included, because it counts callers only in the files it reads.
+  included, because it counts callers only in the files it reads. What a
+  header dictates and what Roc calls by name need no caller. A public name
+  with none has its own count, `unused_api`, as a question: its callers may
+  all be outside the tree. That is a member of a module a package or platform
+  exposes, a member under `lib/`, or a name a `module` header exposes.
 - [nest_depth.shale](nest_depth.shale) finds calls nested three or more
   deep, like `f(g(h(x)))`, which read inside out. `min=` sets the depth to
   report.
@@ -80,8 +112,10 @@ finding. A project's own words stay with the project and are passed in.
   holds no promise, so a bare field of that name is no finding.
 - [families.shale](families.shale) finds a module spelled unlike the
   others that share its last word (`family`), and one type name declared in
-  two modules (`twin_name`). `roles=` names a project's file of type names
-  each module declares for itself, as `Id` in `Message.Id`.
+  two modules with different shapes (`twin_name`), so a copy and a namespace
+  module are no finding. `roles=` names a project's file of type names each
+  module declares for itself, as `Id` in `Message.Id`. Read the whole tree, as
+  twins often sit in two folders.
 - [plain_names.shale](plain_names.shale) finds a pure function named like a
   mutation (`pure_mutator`), an abbreviation in a name
   (`abbreviation`, from `cookbook/words/abbreviations.txt`), and a module
@@ -140,6 +174,16 @@ run on their own.
   the files it couldn't parse and why: `parse_roc_files(paths)` and
   `fail_if_refused(who, refused, unreached?)`. Used by `boundaries`,
   `errors`, `name_hunt`, `nest_depth`, `parens` and `stack`.
+- [headers.shale](headers.shale): who chooses a file's names:
+  `header_names(nodes)`, what an app's or platform's header dictates and what
+  a `module` header exposes; `exposed_by_folder(dir)`, `is_exposed_module(path)`
+  and `is_private_module(path)`, what a package or platform exposes; and
+  `LANGUAGE_FIXED_NAMES`, the methods Roc calls by name. Used by `boundaries`,
+  `families`, `name_hunt`, `plain_names` and `stack`.
+- [house.shale](house.shale): `HOUSE_CHECKS`, the checks that are only our
+  house style, and `is_left_out(recipe, check)`, which `house=0` turns on. Used
+  by `boundaries`, `foreign`, `name_hunt`, `nest_depth`, `parens`,
+  `plain_names` and `stack`.
 - [findings.shale](findings.shale): `print_findings(summary, lines)` prints
   the summary, the findings and the summary again. The first copy survives
   when Shale's output limit cuts a long list short, and a caller that reads
