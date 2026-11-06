@@ -831,7 +831,6 @@ function judge_list_name(subject)
   local element = list_element(subject.gives)
   if element == nil or element == "U8" then return nil end
   local bare = ends_with(subject.name, "!") and sub(subject.name, 1, #subject.name - 1) or subject.name
-  if starts_with(bare, "_") then bare = sub(bare, 2) end
   if #bare < 2 or get(TAKEN_WORDS, bare, "") == "cardinal" then return nil end
   local ws = split(bare, "_")
   local at = head_word_at(ws)
