@@ -6,6 +6,9 @@ Style := [].{
 	chosen : List(Str) -> Str
 	chosen = |names| List.first(names) ?? crash "no names"
 
+	in_view : List(Str) -> List(Str)
+	in_view = |names| names
+
 	sign = |x| if (x > 0) 1 else 2
 
 	shape = |x| if x > 1 {

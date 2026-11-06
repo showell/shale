@@ -148,6 +148,28 @@
 --                 and a value are not reported. An effect named this way is
 --                 left to `state_effect`, and a function that gives a `Bool`
 --                 to `question`.
+--   phrase_name   A pure function, not a constant, whose first word is a
+--                 preposition (cookbook/words/prepositions.txt) and which gives
+--                 something other than a `Bool`: `in_view`, `on_next_segment`,
+--                 `over_gap`. Bare like that it reads as a yes or no and hides
+--                 what it gives, and a reader of a definition has often lost
+--                 the module's context. Name the thing (`trees_in_view`,
+--                 `rider_on_next_segment`), even if that repeats the module.
+--                 The type decides what reads as a constructor or conversion,
+--                 and these pass:
+--                 - a constructor: a first word in CONSTRUCTOR_WORDS and a
+--                   result, or a `Try` of one, that is its own module's type
+--                   or the type it is a member of (`Clock.at_step : U32 ->
+--                   Clock`, `Fraction.from_ratio`). The word matters as well
+--                   as the type: `Scene.in_view : View -> Scene` gives its own
+--                   type and still reads as a question;
+--                 - a conversion: `to_*` and `into_*`, which name what they
+--                   give, and a `from_*` whose first argument is its own
+--                   module's type (`Along.from_start : Along -> Distance`);
+--                 - a changed copy: `with_*` or `without_*` that gives its
+--                   first argument's type (`with_lean : Bike, Angle -> Bike`).
+--                 A definition with no annotation shows none of this, so it
+--                 is reported unless `types=1` supplies its type.
 --
 -- Each name is judged once: from its annotation when it has one, else from
 -- its definition. An effect that takes an effectful function (`map2!`,
@@ -215,7 +237,7 @@ const ROOT = SELF_TEST and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
 -- unless USE_TYPES.
 const CHECKER_TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
 const CENSUS_ONLY = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle", "phrase_name"}
 -- `worker_name` reports a helper suffix always, and a suffix that is also an
 -- ordinary word (a fold's `step`, `List.walk`, `can_go`) only on a
 -- definition that calls itself.
@@ -261,6 +283,13 @@ function taken_word_kinds(file)
 end
 const TAKEN_WORDS = taken_word_kinds("taken.txt")
 const SURFACES = {Frame = true, Canvas = true}
+-- The first words `phrase_name` lets a constructor start with. They are the
+-- ones constructors use in safari, roc-chat and roc-markdown: `Clock.at_step`,
+-- `Dm.between`, `SignedIn.by_session`, `MdText.for_input`,
+-- `Fraction.from_ratio`, `Name.of_strict`, `Directory.with_founder`.
+const CONSTRUCTOR_WORDS = set_of({"at", "between", "by", "for", "from", "of", "with"})
+const CONVERSION_WORDS = set_of({"into", "to"})
+const CHANGED_COPY_WORDS = set_of({"with", "without"})
 -- The names in each file that end in a preposition, grouped by the stem
 -- before it. Each key is `path|stem`, each value `{path, line, stem,
 -- prepositions}`, and `prepositions` maps each preposition to the first
@@ -479,7 +508,7 @@ end
 -- `callback` says it takes an effectful function, an argument whose source
 -- holds `=>`.
 function annotation_definition(path, src, tree, i)
-  local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, i, "name"), annotation = true, fn = false, callback = false, paired = false}
+  local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, i, "name"), owner = owner_of(tree, i), annotation = true, fn = false, callback = false, paired = false}
   local kids = children(tree, i)
   if #kids == 0 or tree[kids[1]].kind == "where" then return nil end
   def.whole = render_type(tree, kids[1])
@@ -511,7 +540,7 @@ end
 function value_definition(path, tree, i)
   local kids = children(tree, i)
   if #kids == 0 or tree[kids[1]].kind ~= "p-ident" then return nil end
-  local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, kids[1], "raw"), annotation = false, fn = false, callback = false, paired = false}
+  local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, kids[1], "raw"), owner = owner_of(tree, i), annotation = false, fn = false, callback = false, paired = false}
   if #kids > 1 and tree[kids[2]].kind == "e-lambda" then
     def.lambda = true
     for part in children(tree, kids[2]) do
@@ -615,18 +644,54 @@ function all_tags_past(tags)
   return true
 end
 
--- What a definition's type says, for `question` and `taken_word`:
--- `{is_function, result, known, source_note}`. The type is the checker's
--- when it gave one, else the annotation's. `known` is false for a
--- definition with no annotation and no checker's type.
+-- The first argument in a function type's argument text, `a, b`.
+function first_argument(args)
+  local depth = 0
+  for i = 1, #args do
+    local ch = sub(args, i, i)
+    if ch == "(" or ch == "[" or ch == "{" then depth = depth + 1 end
+    if ch == ")" or ch == "]" or ch == "}" then depth = depth - 1 end
+    if depth == 0 and ch == "," then return trim(sub(args, 1, i - 1)) end
+  end
+  return trim(args)
+end
+
+-- What a definition's type says, for `question`, `taken_word` and
+-- `phrase_name`: `{is_function, first, result, known, source_note}`. The type
+-- is the checker's when it gave one, else the annotation's. `known` is false
+-- for a definition with no annotation and no checker's type.
 function definition_signature(def)
-  local signature = {is_function = def.annotation and def.fn, result = get(def, "result", ""), known = def.annotation, source_note = ""}
+  local signature = {is_function = def.annotation and def.fn, first = get(def, "first", ""), result = get(def, "result", ""), known = def.annotation, source_note = ""}
   if has_key(def, "typed") then
     local checker = roc_type_parts(def.typed)
-    signature = {is_function = checker.fn, result = checker.result, known = true, source_note = " (the checker's type)"}
+    signature = {is_function = checker.fn, first = first_argument(checker.args), result = checker.result, known = true, source_note = " (the checker's type)"}
     if has_key(BOOL_ALIASES, checker.result) then signature.result = "Bool" end
   end
   return signature
+end
+
+-- Whether `type_text` names the module `def` is in, or the type it is a
+-- member of. Type arguments don't count: `Bike.Motion(others)` is `Motion`.
+function is_own_type(def, type_text)
+  local head = re_find(type_text, "^[A-Za-z0-9_.]+")
+  if head == nil then return false end
+  local name = last_part(head.text)
+  return name == module_name(def.path) or name == def.owner
+end
+
+-- `Try(Fraction, [OutOfRange])` gives `Fraction`, and any other type itself.
+function success_type(type_text)
+  local ok_type = re_find(type_text, "^Try\\(([A-Za-z0-9_.]+)")
+  return ok_type ~= nil and ok_type.groups[1] or type_text
+end
+
+-- Whether a function that starts with the preposition `word` reads as a
+-- constructor, a conversion or a changed copy: `phrase_name` in the header.
+function reads_as_maker(def, word, signature)
+  if has_key(CONVERSION_WORDS, word) then return true end
+  if has_key(CHANGED_COPY_WORDS, word) and signature.result == signature.first then return true end
+  if word == "from" and is_own_type(def, signature.first) then return true end
+  return has_key(CONSTRUCTOR_WORDS, word) and is_own_type(def, success_type(signature.result))
 end
 
 -- Notes a name that ends in a preposition, for `preposition_split`, in
@@ -723,6 +788,11 @@ function judge_definition(def)
     -- An effect so named is `state_effect`'s, and a function so named that
     -- gives a `Bool` is `question`'s, so this check takes the rest.
     if not has_bang and #ws == 1 and is_participle(name) and is_function and not returns_bool then report(path, line, "bare_participle", "`" .. full_name .. "` is a function named by a bare past participle, which reads as a `Bool`: name it by a noun for what it gives (`user_by_name`) or a verb for what it does (`add_user`)") end
+    -- An effect is `noun_effect`'s, and a result of `_` says nothing.
+    if not has_bang and has_key(PREPOSITIONS, ws[1]) and is_function and not returns_bool and signature.result ~= "_" and not reads_as_maker(def, ws[1], signature) then
+      local gives = signature.known and ("gives `" .. signature.result .. "`" .. signature.source_note) or "has no annotation to show it makes its own type"
+      report(path, line, "phrase_name", "`" .. full_name .. "` starts with a preposition, `" .. ws[1] .. "`, and " .. gives .. ": bare, it reads as a yes or no and hides what it gives; name the thing (`trees_in_view`, not `in_view`)")
+    end
   end
   -- `worker_name` is judged at the definition, which knows whether it calls
   -- itself, and at an annotation only when no definition follows it, as

@@ -38,8 +38,8 @@ Our house style is left out, because a careful project may do the opposite. A
 check is house style when it says more about our habits than about their code:
 [house.shale](house.shale) lists them, and `house=0` on any one recipe leaves
 them out of that run. That is the whole of `stack` and `nest_depth`, `paren_if`
-and `lambda_if` in `parens`, `single` in `boundaries`, `bare_participle` and
-`container` in `name_hunt`, and `abbreviation` in `plain_names`. Our own trees
+and `lambda_if` in `parens`, `single` in `boundaries`, `bare_participle`,
+`container` and `phrase_name` in `name_hunt`, and `abbreviation` in `plain_names`. Our own trees
 keep all of them, and `write=1` refuses `house=0`.
 
 A project's guide outranks ours. Luke Boswell's roc-style.md asks for
@@ -59,7 +59,8 @@ that doesn't parse is listed at the end, and the run then fails.
 - [name_hunt.shale](name_hunt.shale) looks for awkward names: an effect
   named like a state, a question that doesn't return a `Bool`, a name made
   only of vague words, a pure function named by a bare past participle
-  (`added`, `named`), and eleven other checks. Its word lists are in
+  (`added`, `named`), a function named as a bare phrase (`in_view`), and
+  eleven other checks. Its word lists are in
   `cookbook/words/`. `words=1` prints a count of the first words of
   effects instead of the findings.
 - [errors.shale](errors.shale) checks how code reports failure: a shared
