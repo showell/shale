@@ -3,7 +3,8 @@
 -- arguments one to a line when the last item has a trailing comma. For each
 -- code line wider than `width`, this script adds that comma to the widest
 -- group of two or more items that opens and closes on the line, runs roc
--- fmt, and repeats until no line changes. Then it lists the lines still too
+-- fmt, and repeats until no line changes; a folder still changing after 8
+-- passes stops the run, naming its files. Then it lists the lines still too
 -- wide: comment lines, and code lines with no such group (a function type's
 -- arguments, which have no brackets). The list is printed between its
 -- counts, as cookbook/roc/findings.shale describes. It runs the Roc that
@@ -28,6 +29,8 @@
 -- `scratch:roc_commas/`, rewrites them there with `tokens=6` and the
 -- self-test's Roc, and checks that the rewrite ends, that each plant comes
 -- out as its `.want` file, and that no group is left to stack or to unstack.
+-- `at_the_cap.roc` nests as deep as 8 passes reach, and `too_deep/` one group
+-- deeper, which has to stop the rewrite and name its file.
 --
 -- budget: steps=400000000 arena_bytes=2000000000 output_bytes=4000000
 
@@ -163,27 +166,41 @@ function rewrite_trailing_commas(path)
   return changed
 end
 
--- Rewrites commas and runs roc fmt until a pass changes nothing, or MAX_PASSES
--- have run. Returns the last pass's count, 0 when the rewrite ended.
+-- Rewrites commas and runs roc fmt until a pass changes nothing. Files still
+-- changing after MAX_PASSES stop the run, since the list of long lines would
+-- otherwise judge a rewrite that never finished.
 function rewrite()
   run_roc_fmt()
   local pass = 1
   local changed = 1
+  local touched = {}
   while changed > 0 and pass <= MAX_PASSES do
     changed = 0
-    for path in roc_files() do changed = changed + rewrite_trailing_commas(path) end
+    touched = {}
+    for path in roc_files() do
+      local n = rewrite_trailing_commas(path)
+      if n > 0 then
+        changed = changed + n
+        push(touched, path)
+      end
+    end
     print("pass " .. pass .. ": " .. changed .. " trailing commas added or taken out")
     run_roc_fmt()
     pass = pass + 1
   end
-  return changed
+  if changed > 0 then fail("roc_commas: still changing after " .. MAX_PASSES .. " passes: " .. join(touched, ", ")) end
+  return nil
+end
+
+function fresh_copies(plants)
+  if is_dir(DIR) then remove_tree(DIR) end
+  mkdir(DIR)
+  for p in glob(plants .. "/*.roc") do replace(DIR .. "/" .. basename(p), read(p)) end
 end
 
 function self_test()
-  if is_dir(DIR) then remove_tree(DIR) end
-  mkdir(DIR)
-  for p in glob(PLANTS .. "/*.roc") do replace(DIR .. "/" .. basename(p), read(p)) end
-  if rewrite() > 0 then fail("roc_commas: still changing after " .. MAX_PASSES .. " passes") end
+  fresh_copies(PLANTS)
+  rewrite()
   local bad = 0
   for p in glob(PLANTS .. "/*.roc") do
     local name = basename(p)
@@ -206,7 +223,11 @@ function self_test()
     end
   end
   if bad > 0 then fail(bad .. " checks failed") end
-  print("PASS: the rewrite ends, every plant comes out as its .want, and no group is left to stack or to unstack")
+  fresh_copies(PLANTS .. "/too_deep")
+  local stopped = attempt(rewrite)
+  local named = "still changing after " .. MAX_PASSES .. " passes: " .. DIR .. "/too_deep.roc"
+  if stopped.ok or not contains(stopped.error, named) then fail("roc_commas: too_deep.roc should stop with `" .. named .. "`") end
+  print("PASS: the rewrite ends, every plant comes out as its .want, no group is left to stack or to unstack, and a rewrite past its passes stops naming its file")
 end
 
 if SELF_TEST then
