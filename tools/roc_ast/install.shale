@@ -33,7 +33,9 @@ if head ~= commit then
   fail("roc-ast: " .. src .. " is at " .. head .. ", not " .. commit .. ": git -C ~/tools/roc-pr worktree add --detach " .. src .. " " .. commit)
 end
 
-local built = run({real("zig:zig"), "build", "--fork=" .. src, "--prefix", real("tools:roc-ast")}, {timeout_ms = 1800000, tail = 20, cwd = "tools/roc_ast"})
+-- ReleaseSafe, as Zig's default is Debug: every Roc recipe runs this program,
+-- and Debug takes about six times the CPU to print the same bytes.
+local built = run({real("zig:zig"), "build", "--fork=" .. src, "-Doptimize=ReleaseSafe", "--prefix", real("tools:roc-ast")}, {timeout_ms = 1800000, tail = 20, cwd = "tools/roc_ast"})
 print(built.out)
 -- Installed only when the build said so and the binary is there: a failed
 -- fetch or compile once printed this line anyway (metal-vmm QUEUE 263).
