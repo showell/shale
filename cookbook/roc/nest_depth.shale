@@ -11,6 +11,8 @@
 -- The arguments:
 --   glob   the files to check, `**/*.roc` by default;
 --   min    the least depth to report, 3 by default;
+--   house  with `house=0`, leave out what is only our house style
+--          (cookbook/roc/house.shale), for another project's code;
 --   loose  with `loose=1`, a record, list or tuple argument does not reset
 --          the depth.
 --
@@ -47,6 +49,7 @@ const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const LOOSE = arg("loose", "") == "1"
 const MIN = SELF_TEST and 3 or arg("min", 3)
 use("cookbook:roc/findings.shale")
+use("cookbook:roc/house.shale")
 use("cookbook:roc/parsed.shale")
 
 -- The node kinds that pass their parts' depth through. `unary` is `!x` or
@@ -171,17 +174,19 @@ for f in parsed.files do
       local span = call_name(nodes, i) .. " to " .. call_name(nodes, deepest_call(nodes, memo, i, LOOSE))
       local head = f.path .. ":" .. line .. ":" .. nodes[i].col .. ": nested: depth " .. depth .. ", " .. span
       local finding = head .. ": " .. trim(source_lines[line])
-      push(finding_lines, finding)
-      incr(times_printed, finding)
-      count_by_depth[tostring(depth)] = get(count_by_depth, tostring(depth), 0) + 1
-      push_at(findings_at_line, f.path .. ":" .. line, {col = nodes[i].col, depth = depth, text = head})
-      finding_count = finding_count + 1
+      if not is_left_out("nest_depth", "nested") then
+        push(finding_lines, finding)
+        incr(times_printed, finding)
+        count_by_depth[tostring(depth)] = get(count_by_depth, tostring(depth), 0) + 1
+        push_at(findings_at_line, f.path .. ":" .. line, {col = nodes[i].col, depth = depth, text = head})
+        finding_count = finding_count + 1
+      end
     end
   end
 end
 local counts = {}
 for depth in sort(keys(count_by_depth)) do push(counts, "depth " .. depth .. " " .. count_by_depth[depth]) end
-print_findings("nest_depth (Roc): " .. #paths .. " files; nested " .. finding_count .. " (min " .. MIN .. ", " .. (LOOSE and "loose" or "strict") .. ")" .. (#counts > 0 and ("; " .. join(counts, ", ")) or ""), finding_lines)
+print_findings("nest_depth (Roc): " .. #paths .. " files; nested " .. finding_count .. " (min " .. MIN .. ", " .. (LOOSE and "loose" or "strict") .. ")" .. (#counts > 0 and ("; " .. join(counts, ", ")) or "") .. house_note("nest_depth"), finding_lines)
 fail_if_refused("nest_depth", parsed.refused)
 if SELF_TEST then
   local wrong = {}

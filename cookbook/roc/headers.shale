@@ -54,7 +54,7 @@ function exposed_by_folder(dir)
     local text = code_of(read(main))
     local word = header_word(text)
     if word == "package" then out = {is_package = true, modules = bracketed_names(text)} end
-    if word == "platform" then out = {is_package = true, modules = bracketed_names(between(text, "exposes", "]") .. "]")} end
+    if word == "platform" then out = {is_package = true, modules = bracketed_names((between(text, "exposes", "]") or "") .. "]")} end
   end
   EXPOSED_BY_DIR[dir] = out
   return out

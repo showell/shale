@@ -15,6 +15,8 @@
 --   glob       the files to check, `**/*.roc` by default;
 --   words      with `words=1`, print the census of effects' first words
 --              (below) instead of the findings;
+--   house      with `house=0`, leave out what is only our house style
+--              (cookbook/roc/house.shale), for another project's code;
 --   types      with `types=1`, also ask Roc's type checker (below);
 --   root       the app the type checker starts from, or several
 --              (`root=a.roc,b.roc`);
@@ -200,6 +202,7 @@ use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
 use("cookbook:roc/declared.shale")
 use("cookbook:roc/headers.shale")
+use("cookbook:roc/house.shale")
 const PLANTS = "cookbook:roc/plants/name_hunt/"
 const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const TYPES_ARG = arg("types", "0")
@@ -299,6 +302,7 @@ const first_word_census = {}
 const finding_lines = {}
 
 function report(path, line, check, why)
+  if is_left_out("name_hunt", check) then return nil end
   if not CENSUS_ONLY then push(finding_lines, path .. ":" .. line .. ": " .. check .. ": " .. why) end
   count_by_check[check] = count_by_check[check] + 1
   fired_in_file[path .. "|" .. check] = true
@@ -843,7 +847,7 @@ if CENSUS_ONLY then
 else
   local check_counts = {}
   for c in CHECKS do push(check_counts, c .. " " .. count_by_check[c]) end
-  print_findings("name_hunt (Roc): " .. file_count .. " files; " .. join(check_counts, ", "), finding_lines)
+  print_findings("name_hunt (Roc): " .. file_count .. " files; " .. join(check_counts, ", ") .. house_note("name_hunt"), finding_lines)
 end
 fail_if_refused("name_hunt", parsed.refused, CHECKER_TYPES.unreached)
 

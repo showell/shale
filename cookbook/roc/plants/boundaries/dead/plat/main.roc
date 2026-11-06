@@ -1,5 +1,5 @@
 # Quiet for boundaries' `dead`: a platform's `provides` are its host's to call.
-# `Shown` is exposed, so a member nothing calls is `unused_api`.
+# `UnusedApi` is exposed, so a member nothing calls is `unused_api`.
 platform ""
 	requires {
 		start : U64 -> U64

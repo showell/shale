@@ -10,6 +10,9 @@
 --
 -- The arguments:
 --   glob   the files to check, `**/*.roc` by default;
+--   house  with `house=0`, leave out `paren_if` and `lambda_if`, which are
+--          only our house style (cookbook/roc/house.shale): Luke Boswell's
+--          roc-style.md asks for `if (x) a else b`;
 --   write  with `write=1`, rewrite the files (see below).
 --
 -- Each finding is one line, `path:line: check: source line`:
@@ -53,6 +56,7 @@ const GLOB = SELF_TEST and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
 const WRITE = arg("write", "") == "1"
 const CHECKS = {"paren_if", "wrapped_body", "else_block", "lambda_if"}
 use("cookbook:roc/findings.shale")
+use("cookbook:roc/house.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
 
@@ -369,14 +373,16 @@ function report(paths)
   for file in parsed.files do
     local source = split(read(file.path), "\n")
     for f in findings_in(file) do
-      counts[f.check] = counts[f.check] + 1
-      push(lines_found, file.path .. ":" .. f.line .. ": " .. f.check .. ": " .. trim(source[f.line]))
-      push_at(at_line, file.path .. ":" .. f.line, f.check)
+      if not is_left_out("parens", f.check) then
+        counts[f.check] = counts[f.check] + 1
+        push(lines_found, file.path .. ":" .. f.line .. ": " .. f.check .. ": " .. trim(source[f.line]))
+        push_at(at_line, file.path .. ":" .. f.line, f.check)
+      end
     end
   end
   local said = {}
   for c in CHECKS do push(said, c .. " " .. counts[c]) end
-  return {summary = "parens (Roc): " .. #paths .. " files; " .. join(said, ", "), lines = lines_found, at_line = at_line, refused = parsed.refused, total = #lines_found}
+  return {summary = "parens (Roc): " .. #paths .. " files; " .. join(said, ", ") .. house_note("parens"), lines = lines_found, at_line = at_line, refused = parsed.refused, total = #lines_found}
 end
 
 function self_test(paths, found)
@@ -427,6 +433,7 @@ end
 
 const paths = glob(GLOB)
 if WRITE then
+  refuse_house_rewrite("parens")
   print("parens: " .. rewrite(paths, roc_bin("parens", false)) .. " edits")
 end
 local found = report(paths)

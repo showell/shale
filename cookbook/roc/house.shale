@@ -1,0 +1,45 @@
+-- Which checks are our own house style, and not a fault in anyone else's code.
+-- Our guides hold our trees to them, and they stay on by default. Another
+-- project's guide may say otherwise: Luke Boswell's roc-style.md asks for
+-- `if (x) a else b` where ours has braces. `house=0` on a recipe leaves its
+-- house checks out, and cookbook/roc/foreign.shale runs them all that way.
+--
+--   use("cookbook:roc/house.shale")
+--   is_left_out("stack", kind)    whether `house=0` leaves this check out
+--   house_note("stack")           what the summary says when it does
+--
+-- A check belongs here when a careful project could fairly do the opposite, so
+-- a finding says more about our habits than about their code. A check that
+-- points at a fault, or at something a project's own guide would also ask,
+-- does not.
+
+const HOUSE_CHECKS = {
+  boundaries = {"single"},
+  name_hunt = {"bare_participle", "container"},
+  nest_depth = {"nested"},
+  parens = {"paren_if", "lambda_if"},
+  plain_names = {"abbreviation"},
+  stack = {"stack", "unstack", "long", "wide string"},
+}
+
+function house_is_off()
+  local house = arg("house", 1)
+  if house ~= 0 and house ~= 1 then fail("house must be 1 (the default) or 0, not " .. house) end
+  return house == 0
+end
+
+function is_left_out(recipe, check)
+  return house_is_off() and has_item(HOUSE_CHECKS[recipe], check)
+end
+
+-- The end of a summary line, saying what `house=0` left out.
+function house_note(recipe)
+  if not house_is_off() then return "" end
+  return "; left out as house style: " .. join(HOUSE_CHECKS[recipe], ", ")
+end
+
+-- Stops a rewrite under `house=0`, which would apply the rules it leaves out.
+function refuse_house_rewrite(recipe)
+  if house_is_off() then fail(recipe .. ": write=1 applies our house style, so it refuses house=0") end
+  return nil
+end
