@@ -116,6 +116,9 @@ finding. A project's own words stay with the project and are passed in.
   module are no finding. `roles=` names a project's file of type names each
   module declares for itself, as `Id` in `Message.Id`. Read the whole tree, as
   twins often sit in two folders.
+- [bare_floats.shale](bare_floats.shale) finds a bare `F64` in a signature or a
+  type alias's field, and answers each from a table of named exceptions, whose
+  unused lines fail the run.
 - [plain_names.shale](plain_names.shale) finds a pure function named like a
   mutation (`pure_mutator`), an abbreviation in a name
   (`abbreviation`, from `cookbook/words/abbreviations.txt`), and a module
