@@ -8,7 +8,7 @@ joined = |names| Str.join_with(names, ", ")
 chosen : List(Str) -> Str
 chosen = |names| List.first(names) ?? ""
 
-# A module type's member, the gopher-roc lookup the check was made for.
+# A module type's member, the roc-chat lookup the check was made for.
 Users := [].{
 	named : List(Str), Str -> Str
 	named = |names, name| List.first(names) ?? name
