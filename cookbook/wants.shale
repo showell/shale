@@ -1,20 +1,20 @@
--- **WHAT THE ESCAPES ASKED SHALE FOR**: the gate's log of every escape
--- (`state:wants.tsv`, a line each: time, session, `want` or
--- `out-of-scope`, tag, text, the command), read back: the last `rows`
--- escapes since `since`, and how many there were by kind, by tag and by
--- session. `docs/SHALE-WANTS.md` gathers them; this is the look between.
+-- This script reads back the log of escapes, the commands that went past
+-- shale-gate because Shale could not do them yet, or never will. It lists the
+-- newest escapes and counts them by kind, by tag and by session.
 --
 --   shale cookbook:wants.shale                         (today, UTC)
 --   shale cookbook:wants.shale since=2026-10-23T22:24
 --   shale cookbook:wants.shale since=2026-10-17 rows=0 top=30
 --   shale cookbook:wants.shale tag=roc-check session=ba149522
 --
--- `since` and `until` are times or their prefixes (`2026-10-23` is that
--- day's start; `until` is before); `kind`, `tag` and `session` (a prefix
--- of it) keep only those; `rows` is how many of the newest to list (0:
--- the counts alone), `top` how many tags to count. `log` is the file
--- (default `state:wants.tsv`, the `state` mount over
--- ~/.local/state/shale).
+-- `since` and `until` are times or their prefixes: `2026-10-23` is that day's
+-- start, and `until` itself is left out. `kind`, `tag` and `session` (or the
+-- start of one) keep only those escapes. `rows` is how many of the newest to
+-- list, where 0 gives the counts alone, and `top` is how many tags to count.
+--
+-- `log` is the file, by default `state:wants.tsv`, through a `state` mount over
+-- ~/.local/state/shale. Each line of it holds the time, the session, `want` or
+-- `out-of-scope`, the tag, the text and the command, separated by tabs.
 --
 -- budget: steps=200000000
 
@@ -25,53 +25,70 @@ const KIND = arg("kind", "")
 const TAG = arg("tag", "")
 const SESSION = arg("session", "")
 const ROWS = arg("rows", 40)
-const TOP = arg("top", 20)
+const TOP_TAGS = arg("top", 20)
 
-local kept = {}
-local at = 0
-while true do
-  local part = read_lines(LOG, at)
-  for l in part.lines do
-    local f = split(l, "\t")
-    if #f >= 5 and f[1] >= SINCE and (UNTIL == "" or f[1] < UNTIL)
-        and (KIND == "" or f[3] == KIND) and (TAG == "" or f[4] == TAG)
-        and (SESSION == "" or starts_with(f[2], SESSION)) then
-      push(kept, {time = f[1], session = f[2], kind = f[3], tag = f[4], text = f[5]})
+function is_wanted(fields)
+  return #fields >= 5 and fields[1] >= SINCE and (UNTIL == "" or fields[1] < UNTIL)
+    and (KIND == "" or fields[3] == KIND) and (TAG == "" or fields[4] == TAG)
+    and (SESSION == "" or starts_with(fields[2], SESSION))
+end
+
+function read_escapes()
+  local escapes = {}
+  local offset = 0
+  while true do
+    local part = read_lines(LOG, offset)
+    for line in part.lines do
+      local fields = split(line, "\t")
+      if is_wanted(fields) then
+        push(escapes, {time = fields[1], session = fields[2], kind = fields[3], tag = fields[4], text = fields[5]})
+      end
     end
+    if part.done then return escapes end
+    offset = part.next
   end
-  if part.done then break end
-  at = part.next
 end
 
--- The counts of `field` among `list`, most first.
-function counted(list, field)
-  local n = {}
-  for w in list do n[w[field]] = get(n, w[field], 0) + 1 end
-  local rows = {}
-  for k in keys(n) do push(rows, {name = k, n = n[k]}) end
-  sort(rows, "n", "desc")
-  return rows
+-- Gives each value of `field` among `escapes` with its count, most first.
+function counts_of(escapes, field)
+  local count_by_value = {}
+  for escape in escapes do incr(count_by_value, escape[field]) end
+  local counts = {}
+  for value in keys(count_by_value) do push(counts, {name = value, n = count_by_value[value]}) end
+  sort(counts, "n", "desc")
+  return counts
 end
 
-local from = #kept - ROWS + 1
-if from < 1 then from = 1 end
-for i = from, #kept do
-  local w = kept[i]
-  local mark = w.kind == "want" and "" or " (" .. w.kind .. ")"
-  print(sub(w.time, 12, 16) .. "  " .. w.tag .. mark .. ": " .. sub(w.text, 1, 160))
+function print_newest(escapes)
+  local first_listed = #escapes - ROWS + 1
+  if first_listed < 1 then first_listed = 1 end
+  for i = first_listed, #escapes do
+    local escape = escapes[i]
+    local kind_note = escape.kind == "want" and "" or " (" .. escape.kind .. ")"
+    print(sub(escape.time, 12, 16) .. "  " .. escape.tag .. kind_note .. ": " .. sub(escape.text, 1, 160))
+  end
+  if first_listed > 1 and ROWS > 0 then print("... " .. (first_listed - 1) .. " earlier (rows=" .. ROWS .. ")") end
 end
-if from > 1 and ROWS > 0 then print("... " .. (from - 1) .. " earlier (rows=" .. ROWS .. ")") end
 
-local shown = "since " .. SINCE
-if UNTIL ~= "" then shown = shown .. ", until " .. UNTIL end
-print("── " .. #kept .. " escapes " .. shown)
-local kinds = {}
-for k in counted(kept, "kind") do push(kinds, k.n .. " " .. k.name) end
-if #kinds > 0 then print("by kind: " .. join(kinds, ", ")) end
-local tags = counted(kept, "tag")
-local said = {}
-for t in take(tags, TOP) do push(said, t.n .. " " .. t.name) end
-if #said > 0 then print("by tag: " .. join(said, ", ") .. (#tags > TOP and ", ... " .. (#tags - TOP) .. " more" or "")) end
-local sessions = {}
-for s in counted(kept, "session") do push(sessions, s.n .. " " .. sub(s.name, 1, 8)) end
-if #sessions > 0 then print("by session: " .. join(sessions, ", ")) end
+function print_counts(escapes)
+  local period = "since " .. SINCE
+  if UNTIL ~= "" then period = period .. ", until " .. UNTIL end
+  print("── " .. #escapes .. " escapes " .. period)
+
+  local kinds = {}
+  for kind in counts_of(escapes, "kind") do push(kinds, kind.n .. " " .. kind.name) end
+  if #kinds > 0 then print("by kind: " .. join(kinds, ", ")) end
+
+  local tag_counts = counts_of(escapes, "tag")
+  local tags = {}
+  for tag in take(tag_counts, TOP_TAGS) do push(tags, tag.n .. " " .. tag.name) end
+  if #tags > 0 then print("by tag: " .. join(tags, ", ") .. (#tag_counts > TOP_TAGS and ", ... " .. (#tag_counts - TOP_TAGS) .. " more" or "")) end
+
+  local sessions = {}
+  for session in counts_of(escapes, "session") do push(sessions, session.n .. " " .. sub(session.name, 1, 8)) end
+  if #sessions > 0 then print("by session: " .. join(sessions, ", ")) end
+end
+
+local escapes = read_escapes()
+print_newest(escapes)
+print_counts(escapes)
