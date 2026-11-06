@@ -2,8 +2,8 @@
 ## modules.
 app [main] { pf: platform "./QuietPf.roc" }
 
-import PlaceholderIndex
-import QuietPlaceholderCount
+import NumberFallbackIndex
+import QuietNumberFallbackCount
 
 main : Str
-main = "${PlaceholderIndex.seat_count([1], 0).to_str()}${QuietPlaceholderCount.top([2]).to_str()}"
+main = "${NumberFallbackIndex.seat_count([1], 0).to_str()}${QuietNumberFallbackCount.top([2]).to_str()}"

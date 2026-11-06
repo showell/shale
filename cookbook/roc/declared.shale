@@ -30,31 +30,33 @@ end
 
 -- The type at `at`, as Roc writes it: `List(U8)`, `{ id : U8 }`, `[A, B]`,
 -- `(U8 -> Bool)`. The tree does not say which arrow a function type has,
--- so both come out as `->`.
-function render_type(tree, at)
+-- so both come out as `->`. With `as_shape`, each name is cut to its last part
+-- and fields and tags are sorted, so two copies of a type read alike.
+function render_type(tree, at, as_shape?)
   local kind = tree[at].kind
   local kids = children(tree, at)
   local name = attribute(tree, at, "name")
   if kind == "ty-apply" then
     local args = {}
-    for c in drop(kids, 1) do push(args, render_type(tree, c)) end
-    return render_type(tree, kids[1]) .. "(" .. join(args, ", ") .. ")"
+    for c in drop(kids, 1) do push(args, render_type(tree, c, as_shape)) end
+    return render_type(tree, kids[1], as_shape) .. "(" .. join(args, ", ") .. ")"
   end
   if kind == "ty-fn" then
     local args = {}
-    for c in take(kids, #kids - 1) do push(args, render_type(tree, c)) end
-    return "(" .. join(args, ", ") .. " -> " .. render_type(tree, kids[#kids]) .. ")"
+    for c in take(kids, #kids - 1) do push(args, render_type(tree, c, as_shape)) end
+    return "(" .. join(args, ", ") .. " -> " .. render_type(tree, kids[#kids], as_shape) .. ")"
   end
   if kind == "ty-record" or kind == "ty-tuple" or kind == "tags" then
     local parts = {}
-    for c in kids do push(parts, render_type(tree, c)) end
+    for c in kids do push(parts, render_type(tree, c, as_shape)) end
+    if as_shape and kind ~= "ty-tuple" then sort(parts) end
     if kind == "ty-record" then return "{ " .. join(parts, ", ") .. " }" end
     if kind == "ty-tuple" then return "(" .. join(parts, ", ") .. ")" end
     return join(parts, ", ")
   end
-  if kind == "ty-tag-union" then return "[" .. render_type(tree, kids[1]) .. "]" end
-  if kind == "anno-record-field" then return name .. " : " .. render_type(tree, kids[1]) end
-  if name ~= "" then return name end
+  if kind == "ty-tag-union" then return "[" .. render_type(tree, kids[1], as_shape) .. "]" end
+  if kind == "anno-record-field" then return name .. " : " .. render_type(tree, kids[1], as_shape) end
+  if name ~= "" then return as_shape and last_part(name) or name end
   -- An inferred type, as in `name : _`.
   if kind == "_" then return "_" end
   local raw = attribute(tree, at, "raw")
@@ -217,17 +219,18 @@ function annotated_value(path, tree, i)
 end
 
 -- The record for the type declared at `i`. `underlying` is the type it is
--- built on, and `is_nominal` says it is declared with `:=` or `::`, not as
--- an alias with `:`.
+-- built on, `shape` the same as `render_type` gives a shape, and `is_nominal`
+-- says it is declared with `:=` or `::`, not as an alias with `:`.
 function declared_type(path, src, tree, i)
   local kids = children(tree, i)
   local name = attribute(tree, kids[1], "name")
   if name == "" then return nil end
-  local record = {path = path, line = tree[i].line, kind = "type", name = name, owner = owner_of(tree, i), underlying = "", is_nominal = false, is_tags = false}
+  local record = {path = path, line = tree[i].line, kind = "type", name = name, owner = owner_of(tree, i), underlying = "", shape = "", is_nominal = false, is_tags = false}
   if #kids > 1 and tree[kids[2]].kind ~= "associated" then
     local between = sub(src[tree[kids[1]].end_line], tree[kids[1]].end_col, tree[kids[1]].end_col + 3)
     record.is_nominal = contains(between, ":=") or contains(between, "::")
     record.underlying = render_type(tree, kids[2])
+    record.shape = render_type(tree, kids[2], true)
     record.is_tags = tree[kids[2]].kind == "ty-tag-union"
   end
   return record

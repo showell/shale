@@ -46,6 +46,10 @@
 --   - When a function's annotation (`name : A, B, C -> R`) is a finding for
 --     its arguments, the function's lambda arguments on the next line are
 --     not reported again.
+--   - The annotation of a name its file's header dictates is no finding for
+--     its arguments, as the platform chose them: what an app's header
+--     provides, and what a platform's header requires and provides
+--     (cookbook/roc/headers.shale). Nor are that name's lambda arguments.
 --   - The items of a `where` clause are its method constraints, so
 --     `k.is_eq : k, k -> Bool` is one item, and a record or list pattern's
 --     rest (`..`) is no item.
@@ -110,6 +114,7 @@ use("cookbook:roc/pinned.shale")
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/groups.shale")
 use("cookbook:roc/parsed.shale")
+use("cookbook:roc/headers.shale")
 const TOKENS = arg("tokens", STACK_TOKENS)
 const MAX_PASSES = 12
 const STRING_TEXT = {["e-string-part"] = true, ["p-string-text"] = true}
@@ -153,13 +158,13 @@ function are_all_flags(text)
   return true
 end
 
-const FLAG_ADVICE = ": a flag a caller passes is a tag, not a Bool (roc-style.md)"
+const FLAG_ADVICE = ": a flag a caller passes is a tag, not a Bool (roc-apps docs/roc-style.md)"
 
 -- The finding for a function type's arguments, which can't take a
 -- trailing comma. The advice is a record for values that travel together,
 -- or a tag for a run of flags.
 function function_type_finding(path, line, items, shown, text)
-  local advice = are_all_flags(text) and FLAG_ADVICE or ": take a record (roc-style.md, Name what travels together)"
+  local advice = are_all_flags(text) and FLAG_ADVICE or ": take a record (roc-apps docs/roc-style.md, Name what travels together)"
   return {path = path, line = line, kind = "stack", what = items .. " bare arguments in " .. shown .. ", which no comma stacks" .. advice}
 end
 
@@ -210,14 +215,39 @@ function wide_line_finding(p, i, l, string_columns)
   return {path = p, line = i, kind = "long", what = width .. " columns, " .. why}
 end
 
+function concat_lists(a, b)
+  local out = {}
+  for x in a do push(out, x) end
+  for x in b do push(out, x) end
+  return out
+end
+
+-- The names the headers of `files` dictate, by path, as `{names, refused}`.
+-- Only an app's or a platform's file is parsed, so a tree of modules needs no
+-- roc-ast for this.
+function dictated_names_in(files)
+  local headed = {}
+  for p in files do
+    local word = header_word(read(p))
+    if word == "app" or word == "platform" then push(headed, p) end
+  end
+  local names = {}
+  if #headed == 0 then return {names = names, refused = {}} end
+  local parsed = parse_roc_files(headed)
+  for f in parsed.files do names[f.path] = header_names(f.nodes).dictated end
+  return {names = names, refused = parsed.refused}
+end
+
 -- Every finding in `files`, as `{found, refused}`: `found` holds each as
 -- `{path, line, kind, what}`, and `refused` the files roc-ast refused.
 function findings_in(files)
   local out = {}
   local strings = string_columns_in(files)
+  local dictated = dictated_names_in(files)
   for p in files do
     local ls = split(read(p), "\n")
     local string_columns = get(strings.columns, p, {})
+    local dictated_here = get(dictated.names, p, {})
     -- The function whose annotation on the line before was a finding for
     -- its arguments, or "". Its lambda's arguments are not reported again.
     local annotated_fn = ""
@@ -244,9 +274,11 @@ function findings_in(files)
       end
       local annotation = annotation_arguments(ls[i])
       if annotation ~= nil and annotation.items >= 3 then
-        push(out, function_type_finding(p, i, annotation.items, annotation.shown, annotation.text))
         annotated_fn = annotation.name
-        found_on_line = found_on_line + 1
+        if not has_key(dictated_here, annotation.name) then
+          push(out, function_type_finding(p, i, annotation.items, annotation.shown, annotation.text))
+          found_on_line = found_on_line + 1
+        end
       end
       if found_on_line == 0 and line_width(ls[i]) > WIDTH then
         push(out, wide_line_finding(p, i, ls[i], string_columns))
@@ -256,7 +288,7 @@ function findings_in(files)
       push(out, {path = p, line = g.line, kind = "unstack", what = g.tokens .. " tokens in " .. shortened(trim(group_on_one_line(ls, g)))})
     end
   end
-  return {found = out, refused = strings.refused}
+  return {found = out, refused = unique(concat_lists(strings.refused, dictated.refused))}
 end
 
 -- Runs `roc fmt` on `files`. The result's code is not 0 when a file does

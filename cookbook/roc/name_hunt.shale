@@ -151,10 +151,10 @@
 -- its definition. An effect that takes an effectful function (`map2!`,
 -- `on_err!`: an argument's type holds a `=>`, or a lambda argument's name
 -- ends in `!`) has its `!` from that callback, so it is judged as the name
--- without the `!`. Names the language fixes are skipped: the methods Roc
--- calls by name (`is_eq`, `to_hash`, `plus`, `subscript`; Roc's
--- docs/langref/static-dispatch.md and operators.md list them) and the
--- encoders' `encode` and `decode`.
+-- without the `!`. Names chosen elsewhere are skipped: the methods Roc calls
+-- by name (cookbook/roc/headers.shale), and the top-level names a platform
+-- dictates, which are what an app's header provides (`app [loaded, step]`)
+-- and what a platform's header requires and provides.
 --
 -- The output is the counts, one line per finding,
 -- `path:line: <check>: <why>`, and the counts again
@@ -199,6 +199,7 @@ use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
 use("cookbook:roc/types.shale")
 use("cookbook:roc/declared.shale")
+use("cookbook:roc/headers.shale")
 const PLANTS = "cookbook:roc/plants/name_hunt/"
 const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const TYPES_ARG = arg("types", "0")
@@ -275,7 +276,6 @@ const SUFFIX_CONVENTIONS = {}
 -- The keywords each file declares (`# keywords: for, on`), by path.
 const DECLARED_KEYWORDS = {}
 const ENTRY_POINT_NAMES = {handle = true, run = true, main = true}
-const LANGUAGE_FIXED_NAMES = {to_inspect = true, is_eq = true, to_hash = true, plus = true, minus = true, times = true, div_by = true, div_trunc_by = true, rem_by = true, is_lt = true, is_lte = true, is_gt = true, is_gte = true, range_exclusive_to = true, range_inclusive_to = true, range_exclusive_from = true, range_inclusive_from = true, range_iter = true, range_len_if_known = true, negate = true, ["not"] = true, from_numeral = true, from_quote = true, from_interpolation = true, iter = true, next = true, parser_for = true, encoder_for = true, map = true, ["map!"] = true, subscript = true, encode = true, decode = true}
 const INTEGER_TYPES = {U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true}
 
 -- The tag union each type declaration names, by the type's name: `Edit` of
@@ -527,6 +527,11 @@ function value_definition(path, tree, i)
   return def
 end
 
+-- Whether the definition at `i` is a top-level name its file's header dictates.
+function is_dictated(tree, i, def, dictated)
+  return has_key(dictated, def.name) and owner_of(tree, i) == ""
+end
+
 -- Every top-level and module-member annotation and definition in the parsed
 -- files, as definition records `{path, line, name, annotation, fn,
 -- callback, paired, ...}`. A definition whose annotation is just above it
@@ -540,6 +545,7 @@ function read_definitions(parsed_files)
     local tree = f.nodes
     local src = split(read(path), "\n")
     note_declared_keywords(path, src)
+    local dictated = header_names(tree).dictated
     -- Each node is outer when it and every ancestor sit in OUTER_KINDS, and
     -- its `declaration_line` is its line when it is an outer annotation or
     -- type declaration, else "". A parent comes before its children.
@@ -561,14 +567,14 @@ function read_definitions(parsed_files)
       end
       if outer[i] and kind == "s-type-anno" then
         local def = annotation_definition(path, src, tree, i)
-        if def ~= nil then
+        if def ~= nil and not is_dictated(tree, i, def, dictated) then
           push(definitions, def)
           annotation_records[tostring(i)] = def
         end
       end
       if outer[i] and kind == "s-decl" then
         local def = value_definition(path, tree, i)
-        if def ~= nil then
+        if def ~= nil and not is_dictated(tree, i, def, dictated) then
           local above = get(annotation_records, tostring(previous_sibling(tree, i)))
           if above ~= nil and above.name == def.name then
             def.paired = true

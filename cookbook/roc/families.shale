@@ -21,10 +21,19 @@
 --              without it is a finding. A member that differs for a good
 --              reason says so by naming the missing name in the `##` doc
 --              above its type, or in the file's opening comment.
---   twin_name  One public type name declared in two modules, such as
---              `Cat.Pose` and `Geom.Pose`. It is reported once, at its first
---              declaration, with the others listed. App files are left out,
---              because every app declares what its platform asks for.
+--   twin_name  One public type name declared in two modules with different
+--              shapes, such as `Cat.Pose` and `Geom.Pose`: one word, two
+--              meanings. It is reported once, at its first declaration, with
+--              the others listed. Twins of one shape are copies, as when a
+--              package can't import its platform's type, so they are no
+--              finding. A shape ignores what a name is qualified by, and the
+--              order of fields and tags. A namespace module
+--              (`Collider := [].{ ... }`) builds a type and declares none, and
+--              so does an alias of the twin (`Pose : Geom.Pose`). App files are
+--              left out, because every app declares what its platform asks for.
+--
+-- `twin_name` sees only the files read, so give it the whole tree: run by
+-- folder, it misses twins in two folders.
 --
 -- A module is a file that declares a type named for itself, and its public
 -- names are that type's members. The output is the counts, one line per
@@ -40,9 +49,9 @@ use("cookbook:roc/declared.shale")
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/gate_recipe.shale")
+use("cookbook:roc/headers.shale")
 const CHECKS = {"family", "twin_name"}
 const SMALLEST_FAMILY = 3
-const LANGUAGE_FIXED_NAMES = {is_eq = true, to_inspect = true, to_hash = true}
 
 -- The file's opening comment and the doc above line `line`, as one text.
 function module_doc_text(path, line)
@@ -93,13 +102,26 @@ function judge_families(modules, report)
   return nil
 end
 
+-- Whether the type `d` declares nothing of its own: a namespace module, or an
+-- alias of a type of its own name.
+function is_type_elsewhere(d)
+  return d.shape == "" or d.shape == "[]" or d.shape == d.name
+end
+
+function has_two_shapes(places)
+  for p in drop(places, 1) do
+    if p.shape ~= places[1].shape then return true end
+  end
+  return false
+end
+
 function judge_twins(declared_by_file, roles, report)
   local places_of = {}
   for one in declared_by_file do
     if not one.is_app then
       local seen = {}
       for d in one.declared do
-        if d.kind == "type" and not has_key(seen, d.name) then
+        if d.kind == "type" and not has_key(seen, d.name) and not is_type_elsewhere(d) then
           seen[d.name] = true
           push_at(places_of, d.name, d)
         end
@@ -108,10 +130,10 @@ function judge_twins(declared_by_file, roles, report)
   end
   for name in sort(keys(places_of)) do
     local places = places_of[name]
-    if #places > 1 and not has_key(roles, name) then
+    if #places > 1 and not has_key(roles, name) and has_two_shapes(places) then
       local others = {}
       for p in drop(places, 1) do push(others, p.path .. ":" .. p.line) end
-      push(report, {path = places[1].path, line = places[1].line, check = "twin_name", what = "`" .. name .. "` is also declared at " .. join(others, ", ")})
+      push(report, {path = places[1].path, line = places[1].line, check = "twin_name", what = "`" .. name .. "` is also declared at " .. join(others, ", ") .. ", in another shape"})
     end
   end
   return nil
@@ -129,6 +151,9 @@ function self_test()
     {glob = at .. "twin_name/*.roc", args = {"roles=" .. at .. "other_roles.txt"}, counts = {twin_name = 1}, says = {"`Pose` is also declared at"}},
     {glob = at .. "twin_name/*.roc", args = {"roles=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
     {glob = at .. "twin_app/*.roc"},
+    {glob = at .. "twin_copy/*.roc"},
+    {glob = at .. "twin_namespace/*.roc"},
+    {glob = at .. "twin_namespace_clash/*.roc", counts = {twin_name = 1}, says = {"`Lamp` is also declared at"}},
     {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
   })
   return nil

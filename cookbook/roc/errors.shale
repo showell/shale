@@ -2,7 +2,7 @@
 -- roc-apps docs/roc-style.md ("Errors and failure"). It reads each .roc
 -- file's parse tree from Roc's own parser, so text in a comment or a string
 -- never matches. A finding is a question for the reader, not a verdict.
--- There are four checks:
+-- There are five checks:
 --
 --   error_alias   A function's result is a `Try` whose error is an alias of
 --                 tags (`ReadError : [Missing, Failed]`, or a module's
@@ -17,11 +17,14 @@
 --   optional_tag  A tag named like an optional (`Some`, `None`, `Nothing`;
 --                 the full list is cookbook/words/optionals.txt). A value
 --                 that may be absent should be tagged by what it is, and its
---                 absence by why (`[Latest(Message), NoMessage]`). Every type
---                 that names such a tag is a finding at the tag's line. A tag
---                 in an expression or a pattern is a finding, once per file,
---                 only when no type in the files checked names it. A tag
---                 matches by its whole name: `NoneChosen` is not `None`.
+--                 absence by why (`[Latest(Message), NoMessage]`). A type
+--                 that names such a tag beside a tag with a payload is a
+--                 finding at the tag's line. With no payload there, the union
+--                 is a mode with two ways (`[Words, None]`), and `None` is one
+--                 of them. A tag in an expression or a pattern is a finding,
+--                 once per file, only when no type in the files checked names
+--                 it, so read the whole tree. A tag matches by its whole name:
+--                 `NoneChosen` is not `None`.
 --   set_fallback  `List.set(l, i, v) ?? l`, or `l.set(i, v) ?? l`, where the
 --                 fallback is the list being stored into. Naming `l` there
 --                 makes every store copy the list (roc-apps CLAUDE.md, "Six
@@ -30,19 +33,24 @@
 --                 interpolated (`?? "bogus"`, `?? ""`). The style guide asks
 --                 for a `crash` with a reason when the lookup can't fail, and
 --                 a tag for the case when it can.
+--   number_fallback  A `??` that falls back to a number after a lookup by
+--                 index, `List.get(l, i) ?? 0.0` or `l.get(i) ?? 0.0`. An index
+--                 past the end is a bug, not a zero. Without types `.get` is
+--                 taken for a `List`'s, so a `Dict`'s may read here; `Dict.get`
+--                 and any other lookup are left alone.
 --
--- `error_alias` reads only top-level and module-member annotations. The two
+-- `error_alias` reads only top-level and module-member annotations. The
 -- `??` checks read every expression.
 --
 -- With `types=1 root=app/main.roc` (or `root=a.roc,b.roc` for several apps)
 -- the recipe also asks Roc's type checker (cookbook/roc/types.shale). A
 -- placeholder finding then names the fallback's type and the tags the lookup
--- fails with. A number fallback is a placeholder too when the lookup fails
--- only with `[OutOfBounds]` (`List.get(counts, seat) ?? 0`), because an
--- index past the end is a bug. A lookup that can fail with `KeyNotFound` or
--- `ListWasEmpty` may fall back to a number, since zero is often the right
--- answer for a count or a total. A file that no root reaches is checked
--- without types, listed after the findings, and fails the run.
+-- fails with, and `number_fallback` goes by the lookup's type instead of its
+-- name: any lookup that fails only with `[OutOfBounds]`. A lookup that can
+-- fail with `KeyNotFound` or `ListWasEmpty` may fall back to a number, since
+-- zero is often the right answer for a count or a total. A file that no root
+-- reaches is checked without types, listed after the findings, and fails the
+-- run.
 --
 -- The recipe prints a summary line of counts, one line per finding
 -- (`path:line: check: why`), and the summary again. A file that does not
@@ -63,7 +71,7 @@
 const SELF_TEST = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/errors/"
 const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
-const CHECKS = {"error_alias", "optional_tag", "set_fallback", "placeholder"}
+const CHECKS = {"error_alias", "optional_tag", "set_fallback", "placeholder", "number_fallback"}
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
@@ -293,12 +301,18 @@ const optional_findings = {}
 for i = 1, #NODES do
   local k = kind(i)
   if k == "ty-tag-union" then
+    local has_payload = false
+    for g in union_tag_nodes(i) do
+      if kind(g) == "ty-apply" then has_payload = true end
+    end
     for g in union_tag_nodes(i) do
       local t = tag_name(g)
       if has_key(OPTIONALS, t) then
         optionals_in_types[t] = true
-        push(optional_findings, {path = NODE_PATH[i], line = node_line(g), tag = t})
-        record_finding(NODE_PATH[i], node_line(g), "optional_tag", "`" .. t .. "` names an optional: tag what the value is, and its absence by why (`[Latest(Message), NoMessage]`)")
+        if has_payload then
+          push(optional_findings, {path = NODE_PATH[i], line = node_line(g), tag = t})
+          record_finding(NODE_PATH[i], node_line(g), "optional_tag", "`" .. t .. "` names an optional: tag what the value is, and its absence by why (`[Latest(Message), NoMessage]`)")
+        end
       end
     end
   elseif k == "e-tag" or k == "p-tag" then
@@ -311,7 +325,7 @@ for key in sort(keys(first_optional_uses)) do
   local first_use = first_optional_uses[key]
   if not has_key(optionals_in_types, first_use.tag) then
     push(optional_findings, first_use)
-    record_finding(first_use.path, first_use.line, "optional_tag", "`" .. first_use.tag .. "` names an optional, and no type here says what it is: tag the value by what it is, and its absence by why")
+    record_finding(first_use.path, first_use.line, "optional_tag", "`" .. first_use.tag .. "` names an optional, and no type in the files read says what it is: tag the value by what it is, and its absence by why")
   end
 end
 
@@ -352,6 +366,17 @@ function is_literal_str(at)
   return true
 end
 
+-- Whether `at` is a lookup by index: `List.get(l, i)` or `l.get(i)`.
+function is_index_lookup(at)
+  local ks = kids(at)
+  if kind(at) == "e-apply" and kind(ks[1]) == "e-ident" then return node_raw(ks[1]) == "List.get" end
+  return kind(at) == "e-method-call" and get(NODES[at], "method", "") == ".get"
+end
+
+function is_number(at)
+  return kind(at) == "e-int" or kind(at) == "e-frac"
+end
+
 for i = 1, #NODES do
   local ks = kids(i)
   if kind(i) == "e-binop" and get(NODES[i], "op", "") == "??" and #ks == 2 then
@@ -373,11 +398,11 @@ for i = 1, #NODES do
     if is_literal_str(fallback) then
       local text = ""
       for k in kids(fallback) do text = text .. node_raw(k) end
-      record_finding(path, node_line(fallback), "placeholder", "falls back to the literal `\"" .. text .. "\"`" .. (has_types and (", a Str" .. lookup_said) or "") .. ": if the lookup can't fail, `crash` with a reason, \"never a silent `?? default`\"; if it can, keep that case as a tag (docs/roc-style.md, \"Errors and failure\")")
+      record_finding(path, node_line(fallback), "placeholder", "falls back to the literal `\"" .. text .. "\"`" .. (has_types and (", a Str" .. lookup_said) or "") .. ": if the lookup can't fail, `crash` with a reason, \"never a silent `?? default`\"; if it can, keep that case as a tag (roc-apps docs/roc-style.md, \"Errors and failure\")")
     end
-    if has_types and lookup_error == "[OutOfBounds]" and (kind(fallback) == "e-int" or kind(fallback) == "e-frac") then
-      local fallback_type = roc_type_at(TYPES, "expr", path, NODES[fallback]) or "?"
-      record_finding(path, node_line(fallback), "placeholder", "falls back to `" .. node_raw(fallback) .. "`, a " .. fallback_type .. lookup_said .. ": an index past the end is a bug, not a " .. node_raw(fallback) .. "; `crash` with a reason, or keep the case as a tag (docs/roc-style.md, \"Errors and failure\")")
+    if is_number(fallback) and (lookup_error == "[OutOfBounds]" or (not has_types and is_index_lookup(lookup))) then
+      local fallback_type = has_types and (", a " .. (roc_type_at(TYPES, "expr", path, NODES[fallback]) or "?")) or ""
+      record_finding(path, node_line(fallback), "number_fallback", "falls back to `" .. node_raw(fallback) .. "`" .. fallback_type .. lookup_said .. ": an index past the end is a bug, not a " .. node_raw(fallback) .. "; `crash` with a reason, or keep the case as a tag (roc-apps docs/roc-style.md, \"Errors and failure\")")
     end
   end
 end

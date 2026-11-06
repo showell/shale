@@ -34,8 +34,10 @@
 --                 plain word. A name is reported once a file.
 --   module_doc    A module with no `##` doc at the top of its file or above
 --                 its type, or a top comment that tells history (`originally`,
---                 `used to`, `emitted`) instead of what the module does. App
---                 files are left out, as they have no module type.
+--                 `used to`, `emitted`) instead of what the module does. A
+--                 module its package or platform keeps to itself has no public
+--                 doc to write, so any comment there will do. App files are
+--                 left out, as they have no module type.
 --
 -- The output is the counts, one line per finding, and the counts again
 -- (cookbook/roc/findings.shale). The run fails if there are findings, or if
@@ -50,6 +52,7 @@ use("cookbook:roc/declared.shale")
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/gate_recipe.shale")
+use("cookbook:roc/headers.shale")
 const CHECKS = {"pure_mutator", "abbreviation", "module_doc"}
 const MUTATION_WORDS = {push = true, fill = true, set = true, append = true, add = true}
 const HISTORY_RE = "\\b(originally|used to|emitted)\\b"
@@ -125,6 +128,7 @@ function judge_module_doc(f, declared, report)
   local src = split(read(f.path), "\n")
   local top = opening_comment(src)
   local has_doc = (#top > 0 and starts_with(top[1], "##")) or (type_line > 1 and starts_with(trim(src[type_line - 1]), "##"))
+  if is_private_module(f.path) and (#top > 0 or starts_with(trim(src[max(type_line - 1, 1)]), "#")) then has_doc = true end
   if not has_doc then push(report, {path = f.path, line = 1, check = "module_doc", what = "`" .. name .. "` has no `##` doc saying what it is for"}) end
   local history = re_find(lower(join(top, " ")), HISTORY_RE)
   if history ~= nil then push(report, {path = f.path, line = 1, check = "module_doc", what = "`" .. name .. "`'s top comment says `" .. history.group .. "`: say what the module does, and leave history to git"}) end
@@ -145,6 +149,7 @@ function self_test()
     {glob = at .. "quiet_abbreviation.roc", args = {"abbreviations=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
     {glob = at .. "module_doc/*.roc", counts = {module_doc = 3}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`"}},
     {glob = at .. "quiet_module_doc/*.roc"},
+    {glob = at .. "module_doc_private/*.roc", counts = {module_doc = 2}, says = {"`Shown` has no `##` doc", "`Silent` has no `##` doc"}},
     {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
   })
   return nil
