@@ -217,7 +217,7 @@ test "cli: cookbook/http.shale's wait says, by its own words, a wait of more fet
     try testing.expectEqualStrings("", r.stdout);
 }
 
-test "cli: a run that spent a second or more in programs, waits or sleeps says where, the slowest program named; a quick one says nothing" {
+test "cli: a run that spent a second or more in programs, waits or sleeps says where, the slowest programs named with their shares; a quick one says nothing" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     const io = threaded.io();
@@ -233,7 +233,9 @@ test "cli: a run that spent a second or more in programs, waits or sleeps says w
     const at = std.mem.indexOf(u8, r.stderr, "── time: 2 programs, 1.") orelse return error.TestUnexpectedResult;
     const line = r.stderr[at .. std.mem.indexOfScalarPos(u8, r.stderr, at, '\n') orelse r.stderr.len];
     try testing.expect(std.mem.indexOf(u8, line, " s in all; the slowest 1.") != null);
+    try testing.expect(std.mem.indexOf(u8, line, "%): ") != null);
     try testing.expect(std.mem.indexOf(u8, line, "shale-fixture sleep 1200") != null);
+    try testing.expect(std.mem.indexOf(u8, line, "shale-fixture lines 1") != null);
     try testing.expect(std.mem.indexOf(u8, line, "; slept 0.3 s") != null);
     // A quick run's report stays as it was.
     const q = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "-e", "sleep(10)" } });

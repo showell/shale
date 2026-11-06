@@ -62,27 +62,36 @@ pub const Record = struct { line: []const u8 };
 pub const Time = struct {
     runs: u32 = 0,
     run_ms: u64 = 0,
-    slowest_ms: u64 = 0,
-    /// The slowest program's argv, cut short; the host's allocator's.
-    slowest: []const u8 = "",
+    /// The slowest programs, slowest first; `top_len` of them are in use.
+    top: [top_most]Slow = undefined,
+    top_len: u8 = 0,
     waits: u32 = 0,
     wait_ms: u64 = 0,
     sleep_ms: u64 = 0,
+
+    const top_most = 3;
+
+    /// One program, its argv cut short; the host's allocator's.
+    const Slow = struct { ms: u64, argv: []const u8 };
 
     /// Said after the report when it passes a second, or always with `--verbose`.
     pub fn worthSaying(t: Time, verbose: bool) bool {
         return (verbose and (t.runs > 0 or t.waits > 0 or t.sleep_ms > 0)) or t.run_ms + t.wait_ms + t.sleep_ms >= 1000;
     }
 
-    /// `── time: 2 programs, 1.4 s in all; the slowest 1.2 s: zig build test; 1 job wait, 40.0 s; slept 0.3 s`
+    /// `── time: 2 programs, 1.4 s in all; the slowest 1.2 s (2%): zig build test; 0.2 s (0%): git log; 1 job wait, 40.0 s; slept 0.3 s`
+    ///
+    /// A share is of the whole line, waits and sleeps included: a program
+    /// that is all of the programs' time can still be little of the run's.
     pub fn print(t: Time, w: *std.Io.Writer) std.Io.Writer.Error!void {
         try w.print("── time: {d} program{s}, ", .{ t.runs, if (t.runs == 1) "" else "s" });
         try seconds(w, t.run_ms);
         try w.writeAll(" in all");
-        if (t.runs > 0) {
-            try w.writeAll("; the slowest ");
-            try seconds(w, t.slowest_ms);
-            try w.print(": {s}", .{t.slowest});
+        const whole = t.run_ms + t.wait_ms + t.sleep_ms;
+        for (t.top[0..t.top_len], 0..) |p, i| {
+            try w.writeAll(if (i == 0) "; the slowest " else "; ");
+            try seconds(w, p.ms);
+            try w.print(" ({d}%): {s}", .{ if (whole == 0) 0 else p.ms * 100 / whole, p.argv });
         }
         if (t.waits > 0) {
             try w.print("; {d} job wait{s}, ", .{ t.waits, if (t.waits == 1) "" else "s" });
@@ -99,16 +108,22 @@ pub const Time = struct {
         try w.print("{d}.{d} s", .{ ms / 1000, ms % 1000 / 100 });
     }
 
-    /// Counts one program's `ms`, keeping its argv if it is the slowest.
+    /// Counts one program's `ms`, keeping its argv if it is among the slowest.
     pub fn ran(t: *Time, alloc: std.mem.Allocator, argv: []const u8, ms: u64) void {
         t.runs += 1;
         t.run_ms += ms;
-        if (ms < t.slowest_ms and t.runs > 1) return;
-        const cut = argv[0..@min(argv.len, 80)];
-        const kept = alloc.dupe(u8, cut) catch return;
-        if (t.slowest.len > 0) alloc.free(t.slowest);
-        t.slowest = kept;
-        t.slowest_ms = ms;
+        var at: usize = 0;
+        while (at < t.top_len and t.top[at].ms >= ms) at += 1;
+        if (at == top_most) return;
+        const kept = alloc.dupe(u8, argv[0..@min(argv.len, 80)]) catch return;
+        if (t.top_len == top_most) alloc.free(t.top[top_most - 1].argv) else t.top_len += 1;
+        var i: usize = t.top_len - 1;
+        while (i > at) : (i -= 1) t.top[i] = t.top[i - 1];
+        t.top[at] = .{ .ms = ms, .argv = kept };
+    }
+
+    pub fn deinit(t: *Time, alloc: std.mem.Allocator) void {
+        for (t.top[0..t.top_len]) |p| alloc.free(p.argv);
     }
 };
 
@@ -139,7 +154,7 @@ pub const Host = struct {
     journal_bytes: usize = 0,
 
     pub fn deinit(h: *Host) void {
-        if (h.time.slowest.len > 0) h.alloc.free(h.time.slowest);
+        h.time.deinit(h.alloc);
         for (h.records.items) |r| h.alloc.free(r.line);
         h.records.deinit(h.alloc);
         for (h.journal.items) |p| {
@@ -1023,6 +1038,36 @@ test "host: the mounts file: SHALE_MOUNTS pins it; the default's absence is no m
     try testing.expectError(error.Malformed, loadMounts(a, io, file, "/h", &why));
     try testing.expect(std.mem.startsWith(u8, why, file));
     try testing.expect(std.mem.endsWith(u8, why, ": line 1: `runs`'s value `runs` is relative: an absolute path, or one from `~/`"));
+}
+
+test "time: the slowest three, in order, a fourth dropped and an earlier tie kept first; a share counts waits and sleeps; fewer than three are all said" {
+    const a = testing.allocator;
+    var t: Time = .{};
+    defer t.deinit(a);
+    t.ran(a, "two", 200);
+    t.ran(a, "one", 600);
+    t.ran(a, "tied", 200);
+    t.ran(a, "four", 100);
+    t.ran(a, "three", 300);
+    t.waits = 1;
+    t.wait_ms = 200;
+    t.sleep_ms = 400;
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try t.print(&w);
+    try testing.expectEqualStrings("── time: 5 programs, 1.4 s in all; the slowest 0.6 s (30%): one; 0.3 s (15%): three; 0.2 s (10%): two; 1 job wait, 0.2 s; slept 0.4 s\n", w.buffered());
+
+    var few: Time = .{};
+    defer few.deinit(a);
+    few.ran(a, "only", 0);
+    w = .fixed(&buf);
+    try few.print(&w);
+    try testing.expectEqualStrings("── time: 1 program, 0.0 s in all; the slowest 0.0 s (0%): only\n", w.buffered());
+
+    const none: Time = .{};
+    w = .fixed(&buf);
+    try none.print(&w);
+    try testing.expectEqualStrings("── time: 0 programs, 0.0 s in all\n", w.buffered());
 }
 
 /// A spawn that runs nothing: the bytes it is told to give, every time.
