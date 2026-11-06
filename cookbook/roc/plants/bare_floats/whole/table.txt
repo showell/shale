@@ -1,0 +1,4 @@
+Unit: its job is holding the float
+Held.Spot: a type's line covers its fields
+Held.kept: a ratio
+Held.other: a ratio

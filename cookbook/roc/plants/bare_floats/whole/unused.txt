@@ -1,0 +1,10 @@
+# A comment and a blank line are skipped.
+
+Held.Spot: a ratio
+Held.gone: nothing here has this name
+Held.Spot.gone: nor this field
+Unit: its job is holding the float
+Unit.plus: the module's line has no such member to answer for
+Held.kept: a ratio
+Held.other: a ratio
+Vanished: the file has gone
