@@ -373,7 +373,7 @@ function report(paths)
   for file in parsed.files do
     local source = split(read(file.path), "\n")
     for f in findings_in(file) do
-      if not is_left_out("parens", f.check) then
+      if not house_leaves_out("parens", f.check) then
         counts[f.check] = counts[f.check] + 1
         push(lines_found, file.path .. ":" .. f.line .. ": " .. f.check .. ": " .. trim(source[f.line]))
         push_at(at_line, file.path .. ":" .. f.line, f.check)

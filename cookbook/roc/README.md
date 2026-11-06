@@ -184,8 +184,8 @@ run on their own.
   `LANGUAGE_FIXED_NAMES`, the methods Roc calls by name. Used by `boundaries`,
   `families`, `name_hunt`, `plain_names` and `stack`.
 - [house.shale](house.shale): `HOUSE_CHECKS`, the checks that are only our
-  house style, and `is_left_out(recipe, check)`, which `house=0` turns on. Used
-  by `boundaries`, `foreign`, `name_hunt`, `nest_depth`, `parens`,
+  house style, and `house_leaves_out(recipe, check)`, which `house=0` turns on.
+  Used by `boundaries`, `foreign`, `name_hunt`, `nest_depth`, `parens`,
   `plain_names` and `stack`.
 - [findings.shale](findings.shale): `print_findings(summary, lines)` prints
   the summary, the findings and the summary again. The first copy survives

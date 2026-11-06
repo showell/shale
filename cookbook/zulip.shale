@@ -1,17 +1,18 @@
--- **A ZULIP TOPIC, READ**: the newest `num` messages (default 100) of
--- one stream's topic, oldest first, each as its sender and its markdown as
--- written. The API key stays in a secrets mount: `run`'s `secrets` gives it
--- to curl alone, which reads it from its environment (`--variable`), so no
--- script sees it and it never reaches the output.
+-- This script prints the newest messages of a Zulip topic, oldest first, each
+-- with its sender and its markdown as written.
 --
---   shale cookbook:zulip.shale site=roc.zulipchat.com email=you@example.com key=keys:roc_zulip_api_key stream=beginners topic=roc style guide
+--   shale cookbook:zulip.shale site=roc.zulipchat.com email=you@example.com key=keys:roc_zulip_api_key stream=beginners topic=style num=20
 --
--- (A value with a space works on the launch line only through
--- `--args-stdin`, one `NAME=VALUE` a line.) `site` is the realm's host,
--- `email` the account the key belongs to, `key` a secrets-mount path to a
--- file holding only the key. The body lands in a folder of this run's own
--- under `scratch:` first, removed after; a status other than 200, or a `result` other than `success`,
--- fails the launch with Zulip's own message.
+-- `site` is the Zulip server's host, `email` the account the key belongs to,
+-- and `num` how many messages to read, 100 unless given. A value with a space
+-- needs `--args-stdin`, with one `NAME=VALUE` a line.
+--
+-- `key` is a path in a secrets mount to a file holding only the API key. `run`
+-- hands the key to curl alone, which reads it from its environment
+-- (`--variable`), so no script sees it and it never reaches the output.
+--
+-- Any status other than 200, or a `result` other than `success`, fails the
+-- launch with Zulip's own message.
 --
 -- budget: steps=50000000 arena_bytes=500000000
 
@@ -26,15 +27,14 @@ if SITE == "" or EMAIL == "" or KEY == "" or STREAM == "" or TOPIC == "" then
   fail("zulip: site=, email=, key=keys:<file>, stream= and topic= are each needed")
 end
 
--- A JSON string's quotes and backslashes escaped, for the narrow.
-function quoted(s)
-  return "\"" .. substitute(substitute(s, "\\", "\\\\"), "\"", "\\\"") .. "\""
+function json_string(text)
+  return "\"" .. substitute(substitute(text, "\\", "\\\\"), "\"", "\\\"") .. "\""
 end
 
 local scratch = fresh_dir("scratch:", "zulip")
-local BODY = scratch .. "/topic.json"
-local narrow = "[{\"operator\":\"channel\",\"operand\":" .. quoted(STREAM) .. "},{\"operator\":\"topic\",\"operand\":" .. quoted(TOPIC) .. "}]"
-local r = run({"curl", "-sS", "-G", "https://" .. SITE .. "/api/v1/messages",
+local body_path = scratch .. "/topic.json"
+local narrow = "[{\"operator\":\"channel\",\"operand\":" .. json_string(STREAM) .. "},{\"operator\":\"topic\",\"operand\":" .. json_string(TOPIC) .. "}]"
+local curl = run({"curl", "-sS", "-G", "https://" .. SITE .. "/api/v1/messages",
   "--variable", "%ZULIP_KEY",
   "--expand-user", EMAIL .. ":{{ZULIP_KEY}}",
   "--data-urlencode", "narrow=" .. narrow,
@@ -42,20 +42,21 @@ local r = run({"curl", "-sS", "-G", "https://" .. SITE .. "/api/v1/messages",
   "--data-urlencode", "num_before=" .. NUM,
   "--data-urlencode", "num_after=0",
   "--data-urlencode", "apply_markdown=false",
-  "-o", real(BODY), "-w", "%{http_code}"},
+  "-o", real(body_path), "-w", "%{http_code}"},
   {timeout_ms = 60000, whole = 2000, secrets = {ZULIP_KEY = KEY}})
-if r.code ~= 0 then remove_tree(scratch) fail("zulip: curl exited " .. r.code .. ": " .. r.out) end
+if curl.code ~= 0 then remove_tree(scratch) fail("zulip: curl exited " .. curl.code .. ": " .. curl.out) end
 
-local j = json_read(read(BODY))
+local answer = json_read(read(body_path))
 remove_tree(scratch)
-if r.out ~= "200" or j.result ~= "success" then
-  fail("zulip: " .. SITE .. " answered " .. r.out .. ": " .. get(j, "msg", "(no message)"))
+local http_status = curl.out
+if http_status ~= "200" or answer.result ~= "success" then
+  fail("zulip: " .. SITE .. " answered " .. http_status .. ": " .. get(answer, "msg", "(no message)"))
 end
 
-local reach = ", the newest " .. NUM
-if j.found_oldest then reach = ", from the first" end
-print("#" .. STREAM .. " > " .. TOPIC .. ": " .. #j.messages .. " messages" .. reach)
-for m in j.messages do
-  print("---- " .. m.sender_full_name .. " (message " .. m.id .. ")")
-  print(m.content)
+local how_far_back = ", the newest " .. NUM
+if answer.found_oldest then how_far_back = ", from the first" end
+print("#" .. STREAM .. " > " .. TOPIC .. ": " .. #answer.messages .. " messages" .. how_far_back)
+for message in answer.messages do
+  print("---- " .. message.sender_full_name .. " (message " .. message.id .. ")")
+  print(message.content)
 end

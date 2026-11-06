@@ -162,7 +162,7 @@ for c in CHECKS do finding_counts[c] = 0 end
 const fired = {}
 
 function report(path, line, check, why)
-  if is_left_out("boundaries", check) then return nil end
+  if house_leaves_out("boundaries", check) then return nil end
   -- The other plants exist to be read by the other checks, and nothing calls them.
   if SELF_TEST and (check == "dead" or check == "unused_api") and not starts_with(path, DEAD_PLANTS) then return nil end
   print(path .. ":" .. line .. ": " .. check .. ": " .. why)

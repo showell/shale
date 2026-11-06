@@ -173,7 +173,7 @@ function run_check()
     for d in declared do
       if d.kind == "value" then judge_mutator(d, aliases, terms, report) end
     end
-    if not is_left_out("plain_names", "abbreviation") then judge_abbreviations(declared, abbreviations, report) end
+    if not house_leaves_out("plain_names", "abbreviation") then judge_abbreviations(declared, abbreviations, report) end
     judge_module_doc(f, declared, report)
   end
   local verdict = verdict_of("plain_names", CHECKS, report, #paths)

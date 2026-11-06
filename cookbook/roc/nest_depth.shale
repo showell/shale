@@ -174,7 +174,7 @@ for f in parsed.files do
       local span = call_name(nodes, i) .. " to " .. call_name(nodes, deepest_call(nodes, memo, i, LOOSE))
       local head = f.path .. ":" .. line .. ":" .. nodes[i].col .. ": nested: depth " .. depth .. ", " .. span
       local finding = head .. ": " .. trim(source_lines[line])
-      if not is_left_out("nest_depth", "nested") then
+      if not house_leaves_out("nest_depth", "nested") then
         push(finding_lines, finding)
         incr(times_printed, finding)
         count_by_depth[tostring(depth)] = get(count_by_depth, tostring(depth), 0) + 1
