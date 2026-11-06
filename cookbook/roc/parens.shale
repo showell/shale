@@ -18,7 +18,10 @@
 --   wrapped_body  parentheses around the whole of a lambda's body, a match
 --                 branch's body, a statement or a declaration's multi-line
 --                 value (`|x| (...)`, `Some => (...)`, `y = (\n...\n)`);
---   else_block    `else { if ... }`, which is `else if ...`.
+--   else_block    `else { if ... }`, which is `else if ...`;
+--   lambda_if     an `if` that is a lambda's whole body and hangs off its `|`
+--                 (`|x| if x > 1 {`). It starts its own line. An `if` that
+--                 paren_if also finds gets this finding once that one is fixed.
 --
 -- Parentheses around one operand or one argument are left alone: they group,
 -- and a float's order of operations can rest on them. So is a one-line
@@ -35,8 +38,8 @@
 -- tree is built with (cookbook/roc/pinned.shale), from the repository's root.
 --
 -- `self_test=1` checks the plants in `cookbook/roc/plants/parens/`. A plant
--- line ending `# paren_if`, `# wrapped_body` or `# else_block` must give that
--- finding, and no unmarked line may give one. Then the test copies the plants
+-- line ending `# paren_if`, `# wrapped_body`, `# else_block` or `# lambda_if`
+-- must give that finding, and no unmarked line may give one. Then the test copies the plants
 -- to `scratch:parens/` and rewrites them there: every file must still parse, no
 -- finding may be left, a second rewrite must change nothing, and a plant with a
 -- `.want` file must come out as it.
@@ -48,7 +51,7 @@ const PLANTS = "cookbook:roc/plants/parens"
 const SCRATCH = "scratch:parens"
 const GLOB = SELF_TEST and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
 const WRITE = arg("write", "") == "1"
-const CHECKS = {"paren_if", "wrapped_body", "else_block"}
+const CHECKS = {"paren_if", "wrapped_body", "else_block", "lambda_if"}
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/parsed.shale")
 use("cookbook:roc/pinned.shale")
@@ -105,15 +108,27 @@ function is_else_block(nodes, i)
   return has_braces(nodes[otherwise]) and only_if_in(nodes, otherwise) ~= 0
 end
 
+-- Whether the node at `i` is an `if` that is a lambda's whole body and shares
+-- its line with what comes before it, which can only be the lambda's `|`.
+function is_lambda_if(nodes, i, source)
+  local node = nodes[i]
+  if node.kind ~= "e-if-then-else" or node.parent == 0 then return false end
+  if nodes[node.parent].kind ~= "e-lambda" or not is_last_kid(nodes, i) then return false end
+  if is_paren_if(nodes, i) then return false end
+  return trim(sub(source[node.line], 1, node.col - 1)) ~= ""
+end
+
 -- Each file's findings: `{check, line}`, with the node they stand on.
 function findings_in(file)
   local found = {}
+  local source = split(read(file.path), "\n")
   local i = 1
   while i <= #file.nodes do
     local node = file.nodes[i]
     if wraps_body(file.nodes, i) then push(found, {check = "wrapped_body", line = node.line, at = i}) end
     if is_paren_if(file.nodes, i) then push(found, {check = "paren_if", line = node.line, at = i}) end
     if is_else_block(file.nodes, i) then push(found, {check = "else_block", line = node.line, at = i}) end
+    if is_lambda_if(file.nodes, i, source) then push(found, {check = "lambda_if", line = node.line, at = i}) end
     i = i + 1
   end
   return found
@@ -256,6 +271,10 @@ function push_edits(edits, src, finding)
     push_bracket_removal(edits, text, starts, node, keeps_break(nodes, node, nodes[node.kids[1]]))
   elseif finding.check == "else_block" then
     push_bracket_removal(edits, text, starts, nodes[node.kids[3]], false)
+  elseif finding.check == "lambda_if" then
+    local from = start_of(src, finding.at)
+    local after = before_space(text, from)
+    push(edits, {at = after, cut = from - after, put = "\n"})
   else
     local condition = nodes[node.kids[1]]
     local then_branch = nodes[node.kids[2]]
@@ -370,7 +389,7 @@ function self_test(paths, found)
       local key = p .. ":" .. n
       local got = {}
       if has_key(found.at_line, key) then got = found.at_line[key] end
-      local mark = re_find(l, "# (paren_if|wrapped_body|else_block)$")
+      local mark = re_find(l, "# (paren_if|wrapped_body|else_block|lambda_if)$")
       if mark ~= nil then
         marks = marks + 1
         if not has_item(got, mark.group) then push(wrong, key .. ": no " .. mark.group .. " finding") end

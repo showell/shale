@@ -55,4 +55,59 @@ Quiet :: [].{
 		} else {
 			3
 		}
+
+	if_on_its_own_line : I64 -> I64
+	if_on_its_own_line = |x|
+		if x > 1 {
+			2
+		} else {
+			3
+		}
+
+	if_after_a_comment : I64 -> I64
+	if_after_a_comment = |x| # the comment ends the lambda's line
+		if x > 1 {
+			2
+		} else {
+			3
+		}
+
+	if_on_its_own_line_inside_a_call : List(I64) -> List(I64)
+	if_on_its_own_line_inside_a_call = |numbers|
+		numbers.map(
+			|x|
+				if x > 1 {
+					2
+				} else {
+					3
+				},
+		)
+
+	if_in_a_lambdas_block : I64 -> I64
+	if_in_a_lambdas_block = |x| {
+		y = x + 1
+		if y > 1 {
+			2
+		} else {
+			3
+		}
+	}
+
+	if_as_an_argument : I64 -> I64
+	if_as_an_argument = |x| Quiet.braces(if x > 1 { 2 } else { 3 })
+
+	if_as_an_operand : I64 -> I64
+	if_as_an_operand = |x| 1 + (if x > 1 { 2 } else { 3 })
+
+	if_beside_a_declaration : I64 -> I64
+	if_beside_a_declaration = |x| {
+		y = if x > 1 { 2 } else { 3 }
+		y + 1
+	}
+
+	match_hanging_off_a_lambda : I64 -> I64
+	match_hanging_off_a_lambda = |x| match x {
+		0 => 1
+		_ => 2
+	}
 }

@@ -68,11 +68,12 @@ Branches :: [].{
 		}
 
 	else_in_a_name : Bool -> I64
-	else_in_a_name = |a| if a {
-		1
-	} else {
-		2
-	} # paren_if
+	else_in_a_name = |a|
+		if a {
+			1
+		} else {
+			2
+		} # paren_if
 
 	else_word : I64
 	else_word = 3

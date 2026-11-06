@@ -51,8 +51,9 @@ that doesn't parse is listed at the end, and the run then fails.
   report.
 - [parens.shale](parens.shale) finds the parentheses and braceless `if`s a
   code emitter leaves: `if (x) a else b`, parentheses around a whole body
-  (`|x| (...)`), and `else { if ... }`. Roc's formatter keeps all three. With
-  `write=1` it rewrites them and runs `roc fmt`. In a sweep it goes before
+  (`|x| (...)`), `else { if ... }`, and an `if` hanging off a lambda's `|`
+  (`lambda_if`), which starts its own line. Roc's formatter keeps all four.
+  With `write=1` it rewrites them and runs `roc fmt`. In a sweep it goes before
   `stack.shale`, because what it takes off can bring a group within a line.
 - [stack.shale](stack.shale) finds groups laid out against the stacking
   rule, both ways: a group of three or more items and six or more tokens
