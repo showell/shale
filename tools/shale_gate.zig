@@ -72,7 +72,7 @@ pub fn classify(cmd: []const u8) Verdict {
     while (i < n) : (i += 1) {
         const w = words[i];
         if (!plain(w)) return refuse("`{s}` is not a plain word; ", .{w});
-        if (std.mem.eql(u8, w, "--verbose") or std.mem.eql(u8, w, "--undo-on-stop") or std.mem.eql(u8, w, "--args-stdin") or std.mem.eql(u8, w, "--help")) continue;
+        if (std.mem.eql(u8, w, "--verbose") or std.mem.eql(u8, w, "--undo-on-stop") or std.mem.eql(u8, w, "--args-stdin") or std.mem.eql(u8, w, "--help") or std.mem.eql(u8, w, "--version")) continue;
         if (std.mem.eql(u8, w, "--budget")) {
             if (i + 1 >= n or std.mem.indexOfScalar(u8, words[i + 1], '=') == null or !plain(words[i + 1])) return refuse("`--budget` takes `NAME=N`; ", .{});
             i += 1;

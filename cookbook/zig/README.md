@@ -189,8 +189,8 @@ string's text). Each says its budgets in its `-- budget:` line:
   `mode=baseline` runs `zig build test` before the refactor and writes the
   names to `zig-out/refactor-baseline.txt`; `mode=check` runs it after and
   holds every test passing and the same names.
-- `const_judge.shale` (`path= name= [rev=HEAD]`): a top-level `const` as
-  `rev` had it and as the file has it now, compiled side by side in a
+- `const_judge.shale` (`path= name= [rev=HEAD]`): a top-level `const` or
+  `pub const` as `rev` had it and as the file has it now, compiled side by side in a
   throwaway test and compared by Zig, byte for byte: for a page's text
   spliced from a shared part (`a ++ shared ++ b`), which a symbol
   judge cannot see. A planted one-character change fails it.

@@ -49,6 +49,13 @@ pub fn main(init: std.process.Init) !u8 {
     if (argv.len == 2 and (std.mem.eql(u8, argv[1], "--help") or std.mem.eql(u8, argv[1], "-h"))) {
         return help(arena, io, init.environ_map.get("SHALE_MOUNTS"), init.environ_map.get("HOME") orelse "/", err);
     }
+    if (argv.len == 2 and std.mem.eql(u8, argv[1], "--version")) {
+        var out_buf: [64]u8 = undefined;
+        var ow = std.Io.File.stdout().writerStreaming(io, &out_buf);
+        try ow.interface.print("shale {s}\n", .{cli.build_mode});
+        try ow.interface.flush();
+        return 0;
+    }
     var args_buf: [64]script.Arg = undefined;
     var why_buf: [512]u8 = undefined;
     var c = switch (cli.parse(argv[1..], init.environ_map.get("SHALE_ROOT"), &args_buf, &why_buf)) {

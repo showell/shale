@@ -46,7 +46,7 @@ jobs:
         working-directory: shale/tools/roc_types
         run: |
           zig version
-          zig build --fork="$GITHUB_WORKSPACE/roc" -Dtarget=x86_64-linux-musl -Dcpu=baseline -Doptimize=ReleaseSafe --prefix "$GITHUB_WORKSPACE/out"
+          zig build --fork="$GITHUB_WORKSPACE/roc" -Dtarget=x86_64-linux-musl -Dcpu=baseline --prefix "$GITHUB_WORKSPACE/out"
           test -x "$GITHUB_WORKSPACE/out/bin/roc-types"
 
       # The plant methods.shale's self-test reads types through, by a

@@ -66,6 +66,7 @@ test "gate: what it refuses, naming both forms" {
 
 test "gate: `shale --help`, which every refusal points to, passes" {
     try passes("shale --help");
+    try passes("shale --version");
 }
 
 test "gate: a heredoc's failure modes: unquoted, a lower-case tag, no closer, a closer met twice, text after it" {

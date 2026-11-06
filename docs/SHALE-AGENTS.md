@@ -63,6 +63,11 @@ holds each stage's last five runs. The line compares CPU time with the
 middle of those runs, and appears at 1.5x and a second of change, either
 way (`(5.5x faster)`). A run that did not exit 0 counts for nothing, and a
 stage over its budget stops in `run`, so neither moves the history.
+**`cold = true`** says the run compiles from nothing, as a fresh worktree's
+first does: it isn't held to `cpu_budget_ms` or compared, and stays out of
+the history (`build.sh safari: cold, 192 s, not judged`), so a tier can keep
+a budget. The caller says so, from its own cache, read once before its first
+stage: a book outlives a deleted cache, and two worktrees share one.
 `build:` has to be writable: a read-only one stops `timed_run` before the
 program starts.
 
@@ -95,7 +100,8 @@ back what it changed, so no half-done edit is left (SHALE.md, "The
 runner": what it cannot put back, it says).
 
 ```sh
-zig build -Doptimize=ReleaseSafe   # zig-out/bin/shale: put it on PATH; plain `zig build` is Debug, 6x slower
+zig build                          # zig-out/bin/shale, always ReleaseSafe: put it on PATH
+shale --version                    # says the mode; `zig build test` stays Debug, to compile fast
 shale count.shale dir=src
 shale rename.shale from=old to=new
 shale <<'EOF'
