@@ -10,6 +10,7 @@ const Error = interp.Error;
 const std = @import("std");
 const linux = std.os.linux;
 const keep = @import("shale_keep.zig");
+const spawn = @import("shale_spawn.zig");
 const shale = @import("shale");
 const interp = script.interp;
 
@@ -60,6 +61,11 @@ const Opts = struct {
     secret_replace: bool = false,
     /// Whether the script gave `width`, which `stdout_secret` refuses.
     width_given: bool = false,
+    /// CPU time the program may take; past it the run stops. It judges CPU
+    /// time because wall time doubles on a busy box.
+    cpu_budget_ms: ?u64 = null,
+    /// What a budget's stop calls the program; its argv by default.
+    stage: ?[]const u8 = null,
 };
 
 /// With `stdout_secret`, `out` is stderr's last lines, this many.
@@ -67,6 +73,9 @@ const secret_err_tail = 20;
 
 /// The most bytes `stdout_secret` stores: what `secrets` reads of a file.
 const secret_most = 64 * 1024;
+
+/// What a failed program's output keeps in a budget's stop, from its end.
+const budget_stop_output = 2000;
 
 /// A path option (`cwd`, `log`): a string, named as `run`'s when it is not.
 fn pathOpt(run: *Run, pos: ast.Pos, k: []const u8, x: Value) Error!Value {
@@ -90,9 +99,10 @@ fn readOpts(run: *Run, pos: ast.Pos, v: Value) Error!Opts {
         } else if (std.mem.eql(u8, k, "stdout_secret")) o.stdout_secret = x else if (std.mem.eql(u8, k, "secret_replace")) o.secret_replace = switch (x) {
             .boolean => |b| b,
             else => return run.fail(pos, .type, "`run`: its `secret_replace` must be true or false, not {s}", .{x.typeName()}),
-        } else if (std.mem.eql(u8, k, "whole")) o.whole = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "log")) o.log = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "cwd")) o.cwd = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "stdin")) o.stdin = x else if (std.mem.eql(u8, k, "env")) o.env = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "secrets")) o.secrets = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "want")) o.want = try hl.strOpt(run, pos, k, x) else return run.fail(pos, .argument, "`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret and secret_replace, not `{s}`", .{k});
+        } else if (std.mem.eql(u8, k, "whole")) o.whole = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "log")) o.log = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "cwd")) o.cwd = try pathOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "stdin")) o.stdin = x else if (std.mem.eql(u8, k, "env")) o.env = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "secrets")) o.secrets = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "want")) o.want = try hl.strOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "cpu_budget_ms")) o.cpu_budget_ms = try hl.intOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "stage")) o.stage = try hl.strOpt(run, pos, k, x) else return run.fail(pos, .argument, "`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms and stage, not `{s}`", .{k});
     }
     if (o.timeout_ms == null) return run.fail(pos, .argument, "`run` needs `timeout_ms`: how long the program may take is the script's to say", .{});
+    if (o.stage != null and o.cpu_budget_ms == null) return run.fail(pos, .argument, "`run`'s `stage` names the program in a `cpu_budget_ms` stop, and needs one", .{});
     if (o.stdout_secret != null) {
         if (o.whole != null or o.re != null or o.not_re != null or o.head != null or o.tail != null or o.before > 0 or o.after > 0 or o.nocase or o.width_given or o.log != null)
             return run.fail(pos, .argument, "`run`'s `stdout_secret` sends stdout to the secret alone, so it takes no keep, filter or log (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`, `width`, `log`): its `out` is stderr's last {d} lines", .{secret_err_tail});
@@ -314,7 +324,25 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     if (run.read_bytes > run.budgets.read_bytes) return run.budgetStop(pos, .read_bytes);
     // An interrupted `shale` stops here, once the program's group is gone.
     if (outcome.ended == .interrupted) return run.fail(pos, .host, "`run`: shale was told to stop (TERM or HUP) while `{s}` ran; it was ended", .{argv[0]});
+    if (o.cpu_budget_ms) |most| if (outcome.cpu_ms > most) return overBudget(run, pos, o.stage orelse joined, most, outcome, r.map.get("out").?.string);
     return .{ .table = r };
+}
+
+/// A budget's stop takes the place of `run`'s answer, so a program that also
+/// failed says how, and how its output ended, or the failure would be lost.
+fn overBudget(run: *Run, pos: ast.Pos, stage: []const u8, most: u64, o: spawn.Outcome, out: []const u8) Error {
+    const a = run.alloc;
+    const over = std.fmt.allocPrint(a, "`run`: stage `{s}` took {d} ms of CPU, over its `cpu_budget_ms` of {d} ({d} ms of wall time)", .{ stage, o.cpu_ms, most, o.ms }) catch "`run`: a stage is over its `cpu_budget_ms`";
+    const failed = o.ended != .exit or o.code != 0;
+    const said = if (failed) std.fmt.allocPrint(a, "{s}; it also ended {s}{s}{s}, its output's end:\n{s}", .{
+        over,
+        @tagName(o.ended),
+        if (o.code != null) " " else "",
+        if (o.code) |c| std.fmt.allocPrint(a, "{d}", .{c}) catch "" else "",
+        out[out.len -| budget_stop_output..],
+    }) catch over else over;
+    run.stop = .{ .line = pos.line, .column = pos.column, .class = .budget, .budget = .cpu, .function = run.function, .trail = run.calls.items, .message = said };
+    return error.Stop;
 }
 
 /// `stdout_secret`'s file while the program runs: a temporary file beside

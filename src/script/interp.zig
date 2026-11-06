@@ -244,6 +244,7 @@ pub const Run = struct {
             .machine => std.fmt.allocPrint(self.alloc, "the machine's memory (the code, the frames, the operands) is past its budget ({d} bytes): raise it with `--budget machine_bytes=N` or the script's `-- budget: machine_bytes=N` line, up to {d}", .{ self.budgets.machine_bytes, Budgets.machine_bytes_most }) catch "the machine's memory is past its budget",
             .kept => std.fmt.allocPrint(self.alloc, "what the run keeps at a `yield` is past the kept budget ({d} bytes): raise it with `--budget kept_bytes=N` or the script's `-- budget: kept_bytes=N` line, up to {d}", .{ self.budgets.kept_bytes, Budgets.kept_bytes_most }) catch "what the run keeps at a `yield` is past the kept budget",
             .runs => "the run's programs are past their cap",
+            .cpu => "a program's CPU time is past its budget",
         } };
         return error.Stop;
     }

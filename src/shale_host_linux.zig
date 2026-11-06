@@ -1074,12 +1074,14 @@ test "time: the slowest three, in order, a fourth dropped and an earlier tie kep
 const Fake = struct {
     out: []const u8,
     cpu_ms: u64 = 1,
+    ended: spawn.Ended = .exit,
+    code: ?u8 = 0,
     calls: usize = 0,
     fn spawnFn(ctx: ?*anyopaque, _: std.mem.Allocator, _: spawn.Spec, sink: *Sink) (spawn.Error || Sink.Error)!spawn.Outcome {
         const f: *Fake = @ptrCast(@alignCast(ctx.?));
         f.calls += 1;
         try sink.write(f.out);
-        return .{ .ended = .exit, .code = 0, .ms = 1, .cpu_ms = f.cpu_ms };
+        return .{ .ended = f.ended, .code = f.code, .ms = 1, .cpu_ms = f.cpu_ms };
     }
 };
 
@@ -1098,4 +1100,45 @@ test "host: the gate's fake spawn: the same bytes into both engines, the keep an
     try t.expectOutput("for i = 1, 64 do host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}) end print(\"ok\")", "ok\n");
     fake.cpu_ms = 17;
     try t.expectOutput("print(host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}).cpu_ms)", "17\n");
+}
+
+test "host: cpu_budget_ms: under it and at it the run goes on, one past it stops, naming the stage, the budget and what it took; `attempt` cannot catch it" {
+    var t: T = undefined;
+    try t.init();
+    defer t.deinit();
+    var fake: Fake = .{ .out = "alpha\n", .cpu_ms = 100 };
+    t.host.spawn_fn = Fake.spawnFn;
+    t.host.spawn_ctx = &fake;
+    try t.expectOutput("print(host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1, cpu_budget_ms = 101}).cpu_ms)", "100\n");
+    try t.expectOutput("print(host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1, cpu_budget_ms = 100}).cpu_ms)", "100\n");
+    try t.expectStop("host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1, cpu_budget_ms = 99, stage = \"the build\"}) print(\"after\")", .atomic, .budget, "`run`: stage `the build` took 100 ms of CPU, over its `cpu_budget_ms` of 99 (1 ms of wall time)");
+    try t.expectStop("host(\"run\", {\"x\", \"y\"}, {timeout_ms = 10, tail = 1, cpu_budget_ms = 99})", .atomic, .budget, "stage `x y` took 100 ms");
+    var r = t.run("host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1, cpu_budget_ms = 99})", .atomic);
+    defer r.deinit();
+    try testing.expectEqual(script.diag.Budget.cpu, r.stop.?.budget.?);
+    try t.expectStop("function f() host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1, cpu_budget_ms = 99}) end attempt(f) print(\"caught\")", .atomic, .budget, "stage `x`");
+    // No budget, no judgment, whatever it took.
+    fake.cpu_ms = 1_000_000;
+    try t.expectOutput("print(host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}).cpu_ms)", "1000000\n");
+    try t.expectStop("host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1, stage = \"s\"})", .atomic, .argument, "needs one");
+    try t.expectStop("host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1, cpu_budget_ms = \"9\"})", .atomic, .type, "cpu_budget_ms");
+}
+
+test "host: a program over its cpu_budget_ms that also failed says how it ended and how its output ended; one that exited 0 does not" {
+    var t: T = undefined;
+    try t.init();
+    defer t.deinit();
+    var fake: Fake = .{ .out = "the test that failed\n", .cpu_ms = 100, .code = 9 };
+    t.host.spawn_fn = Fake.spawnFn;
+    t.host.spawn_ctx = &fake;
+    const over = "host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 3, cpu_budget_ms = 1})";
+    try t.expectStop(over, .atomic, .budget, "; it also ended exit 9, its output's end:\nthe test that failed\n");
+    fake.ended = .timeout;
+    fake.code = null;
+    try t.expectStop(over, .atomic, .budget, "; it also ended timeout, its output's end:\nthe test that failed\n");
+    fake.ended = .exit;
+    fake.code = 0;
+    var r = t.run(over, .atomic);
+    defer r.deinit();
+    try testing.expect(std.mem.endsWith(u8, r.stop.?.message, "(1 ms of wall time)"));
 }

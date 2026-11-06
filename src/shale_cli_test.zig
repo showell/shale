@@ -244,6 +244,34 @@ test "cli: a run that spent a second or more in programs, waits or sleeps says w
     try testing.expect(std.mem.indexOf(u8, q.stderr, "── time:") == null);
 }
 
+test "cli: cpu_budget_ms judges CPU time: a program that burns past it stops the run, exit 1, and one that only sleeps past it does not" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    const a = testing.allocator;
+    const fixture = @import("shale_test_options").fixture;
+    const burn = try std.fmt.allocPrint(a, "local r = run({{\"{s}\", \"burn\", \"300\"}}, {{timeout_ms = 30000, tail = 1, want = \"test: the fixture\", cpu_budget_ms = 100, stage = \"the burn\"}}) print(\"went on\", r.cpu_ms)", .{fixture});
+    defer a.free(burn);
+    const over = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "-e", burn } });
+    defer a.free(over.stdout);
+    defer a.free(over.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ over.stdout, over.stderr });
+    try testing.expectEqual(@as(u8, 1), over.term.exited);
+    try testing.expectEqualStrings("", over.stdout);
+    try testing.expect(std.mem.indexOf(u8, over.stderr, ": budget cpu: ") != null);
+    try testing.expect(std.mem.indexOf(u8, over.stderr, "stage `the burn` took ") != null);
+    try testing.expect(std.mem.indexOf(u8, over.stderr, "over its `cpu_budget_ms` of 100") != null);
+
+    const sleep = try std.fmt.allocPrint(a, "local r = run({{\"{s}\", \"sleep\", \"300\"}}, {{timeout_ms = 30000, tail = 1, want = \"test: the fixture\", cpu_budget_ms = 100}}) print(r.ms >= 300, r.cpu_ms < 100)", .{fixture});
+    defer a.free(sleep);
+    const under = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "-e", sleep } });
+    defer a.free(under.stdout);
+    defer a.free(under.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ under.stdout, under.stderr });
+    try testing.expectEqual(@as(u8, 0), under.term.exited);
+    try testing.expectEqualStrings("true\ttrue\n", under.stdout);
+}
+
 test "cli: a recipe's launch value where a program reads options is refused when it starts with `-`, not given to it as one" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
