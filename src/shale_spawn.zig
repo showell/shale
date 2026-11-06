@@ -62,6 +62,10 @@ pub const Outcome = struct {
     signal: ?u32 = null,
     /// Milliseconds the run took, the drain included.
     ms: u64,
+    /// Its user and system CPU time, and that of the children it waited for
+    /// (`wait4`'s rusage), in milliseconds. A busy box stretches `ms` and
+    /// barely moves this, so a budget can judge it.
+    cpu_ms: u64,
 };
 
 pub const Error = error{
@@ -85,6 +89,11 @@ fn monoMs() u64 {
     var ts: linux.timespec = undefined;
     _ = linux.clock_gettime(.MONOTONIC, &ts);
     return @as(u64, @intCast(ts.sec)) * 1000 + @as(u64, @intCast(ts.nsec)) / 1_000_000;
+}
+
+fn usageMs(u: linux.rusage) u64 {
+    const us = (u.utime.sec + u.stime.sec) * 1_000_000 + u.utime.usec + u.stime.usec;
+    return @intCast(@divTrunc(us, 1000));
 }
 
 fn zString(a: std.mem.Allocator, s: []const u8) ![*:0]const u8 {
@@ -236,6 +245,7 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
 
     var exited = false;
     var raw: i32 = 0; // wait4 fills an i32; `W` reads it as a u32
+    var usage: linux.rusage = undefined;
     // A sink failure (the keep at the host's cap) returns before the program
     // ends; without this the program would run on, then linger as a zombie.
     errdefer if (!exited) {
@@ -302,7 +312,7 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
             if (stdin_left.len == 0) closeFd(&in_pipe[1]);
         };
         if (pid_at) |i| if (fds[i].revents != 0) {
-            if (linux.wait4(pid, &raw, linux.W.NOHANG, null) == pid) {
+            if (linux.wait4(pid, &raw, linux.W.NOHANG, &usage) == pid) {
                 exited = true;
                 // All the leader wrote is in the pipe now, though this poll
                 // may have looked before it was. Read it before the drain
@@ -323,10 +333,11 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
         }
     }
     const ms = monoMs() - start;
+    const cpu_ms = usageMs(usage);
     const status: u32 = @bitCast(raw);
-    if (why_ended) |w| return .{ .ended = w, .ms = ms, .signal = if (linux.W.IFSIGNALED(status)) @backingInt(linux.W.TERMSIG(status)) else null, .code = if (linux.W.IFEXITED(status)) linux.W.EXITSTATUS(status) else null };
-    if (linux.W.IFEXITED(status)) return .{ .ended = .exit, .code = linux.W.EXITSTATUS(status), .ms = ms };
-    return .{ .ended = .signal, .signal = @backingInt(linux.W.TERMSIG(status)), .ms = ms };
+    if (why_ended) |w| return .{ .ended = w, .ms = ms, .cpu_ms = cpu_ms, .signal = if (linux.W.IFSIGNALED(status)) @backingInt(linux.W.TERMSIG(status)) else null, .code = if (linux.W.IFEXITED(status)) linux.W.EXITSTATUS(status) else null };
+    if (linux.W.IFEXITED(status)) return .{ .ended = .exit, .code = linux.W.EXITSTATUS(status), .ms = ms, .cpu_ms = cpu_ms };
+    return .{ .ended = .signal, .signal = @backingInt(linux.W.TERMSIG(status)), .ms = ms, .cpu_ms = cpu_ms };
 }
 
 /// Passes what the pipe holds to the sink until a read would block. Closes
@@ -430,6 +441,21 @@ test "spawn: a deadline ends it (TERM, then KILL for one that ignores TERM); a s
     defer testing.allocator.free(path_env[0]);
     o = try run(testing.allocator, .{ .argv = &.{ "shale-fixture", "lines", "1" }, .env = &path_env, .timeout_ms = 10_000 }, &c);
     try testing.expectEqualStrings("line 1\n", c.out.items);
+}
+
+test "spawn: `cpu_ms` counts what a program burns, a child's it waited for included, and none of what it sleeps" {
+    var c: Collect = .{};
+    defer c.out.deinit(testing.allocator);
+    const env = [_][]const u8{"PATH=/usr/bin:/bin"};
+    const burn = try spawn(&.{ "burn", "300" }, .{ .argv = &.{}, .env = &env, .timeout_ms = 30_000 }, &c);
+    try testing.expectEqual(@as(?u8, 0), burn.code);
+    try testing.expect(burn.cpu_ms >= 290);
+    const child_burn = try spawn(&.{ "burn-child", "300" }, .{ .argv = &.{}, .env = &env, .timeout_ms = 30_000 }, &c);
+    try testing.expectEqual(@as(?u8, 0), child_burn.code);
+    try testing.expect(child_burn.cpu_ms >= 290);
+    const slept = try spawn(&.{ "sleep", "300" }, .{ .argv = &.{}, .env = &env, .timeout_ms = 30_000 }, &c);
+    try testing.expect(slept.ms >= 300);
+    try testing.expect(slept.cpu_ms < 100);
 }
 
 test "spawn: much output, past the pipe's buffer, all of it read" {

@@ -291,6 +291,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
         .interrupted => "signal",
     } }) catch return run.oom(pos);
     r.map.put(a, "ms", .{ .int = @intCast(outcome.ms) }) catch return run.oom(pos);
+    r.map.put(a, "cpu_ms", .{ .int = @intCast(outcome.cpu_ms) }) catch return run.oom(pos);
     if (o.whole) |n| {
         if (out.whole_over) return run.fail(pos, .argument, "`run`: the output passed `whole = {d}` bytes ({d}): a keep, `head` and `tail`, takes any size", .{ n, out.bytes });
         const lines = countLines(whole_buf.items);

@@ -1028,12 +1028,13 @@ test "host: the mounts file: SHALE_MOUNTS pins it; the default's absence is no m
 /// A spawn that runs nothing: the bytes it is told to give, every time.
 const Fake = struct {
     out: []const u8,
+    cpu_ms: u64 = 1,
     calls: usize = 0,
     fn spawnFn(ctx: ?*anyopaque, _: std.mem.Allocator, _: spawn.Spec, sink: *Sink) (spawn.Error || Sink.Error)!spawn.Outcome {
         const f: *Fake = @ptrCast(@alignCast(ctx.?));
         f.calls += 1;
         try sink.write(f.out);
-        return .{ .ended = .exit, .code = 0, .ms = 1 };
+        return .{ .ended = .exit, .code = 0, .ms = 1, .cpu_ms = f.cpu_ms };
     }
 };
 
@@ -1050,4 +1051,6 @@ test "host: the gate's fake spawn: the same bytes into both engines, the keep an
     // 64 programs a run, the 65th a stop, counted per run (per engine).
     try t.expectStop("for i = 1, 65 do host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}) end", .atomic, .budget, "64 programs a run");
     try t.expectOutput("for i = 1, 64 do host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}) end print(\"ok\")", "ok\n");
+    fake.cpu_ms = 17;
+    try t.expectOutput("print(host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}).cpu_ms)", "17\n");
 }

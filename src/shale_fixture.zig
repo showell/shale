@@ -17,8 +17,21 @@
 //!     shale-fixture spill N          N bytes of 'x' with no newline
 //!     shale-fixture chunks N SIZE    N bytes of 100-byte lines, written
 //!                                    SIZE at a time, 1 ms apart
+//!     shale-fixture burn MS          spins until it has used MS of CPU
+//!     shale-fixture burn-child MS    a child burns MS; this waits for it
 
 const std = @import("std");
+
+/// Spins on the process's own CPU clock, so a busy box makes it take longer
+/// but never makes it burn less.
+fn burn(ms: u64) void {
+    const linux = std.os.linux;
+    var ts: linux.timespec = undefined;
+    while (true) {
+        _ = linux.clock_gettime(.PROCESS_CPUTIME_ID, &ts);
+        if (@as(u64, @intCast(ts.sec)) * 1000 + @as(u64, @intCast(ts.nsec)) / 1_000_000 >= ms) return;
+    }
+}
 
 pub fn main(init: std.process.Init) !u8 {
     const io = init.io;
@@ -86,6 +99,18 @@ pub fn main(init: std.process.Init) !u8 {
                 try io.sleep(.fromMilliseconds(1), .awake);
             }
         }
+    } else if (std.mem.eql(u8, verb, "burn")) {
+        burn(try std.fmt.parseInt(u64, arg, 10));
+    } else if (std.mem.eql(u8, verb, "burn-child")) {
+        const linux = std.os.linux;
+        const ms = try std.fmt.parseInt(u64, arg, 10);
+        const pid: linux.pid_t = @intCast(linux.fork());
+        if (pid == 0) {
+            burn(ms);
+            linux.exit_group(0);
+        }
+        var status: i32 = 0;
+        _ = linux.wait4(pid, &status, 0, null);
     } else if (std.mem.eql(u8, verb, "spill")) {
         const n = try std.fmt.parseInt(usize, arg, 10);
         for (0..n) |_| try w.writeByte('x');
