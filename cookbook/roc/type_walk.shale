@@ -60,6 +60,12 @@
 --   named_by   with `named_by=0`, leave out the "named by" section (below);
 --              with `named_by=production`, list only its untagged entries,
 --              leaving out those tagged `(test)` or `(private)`;
+--   modules    in place of `module=`, two or more sibling modules, comma
+--              separated, walked as one family with the settings above: the
+--              types two or more reach once, each member's own types and
+--              signatures with its private functions', its uses and named-by
+--              sections per member, and a table of their public names by
+--              shape (walk_family.shale says how);
 --   self_test  with `self_test=1`, check the plants in
 --              `cookbook/roc/plants/type_walk/`.
 --
@@ -140,7 +146,7 @@
 --
 -- A name that resolves to no file or no type, or a file that doesn't parse,
 -- is listed after the output, and the run then fails.
--- budget: steps=800000000 arena_bytes=2000000000 output_bytes=8000000
+-- budget: steps=2000000000 arena_bytes=2000000000 output_bytes=8000000 reads=100000
 
 const SELF_TEST = arg("self_test", "") == "1"
 
@@ -164,6 +170,7 @@ const WALK_BRIEF = {"units"}
 const WALK_NUMBERS = {"F32", "F64", "Dec", "U8", "U16", "U32", "U64", "U128", "I8", "I16", "I32", "I64", "I128"}
 use("cookbook:roc/declared.shale")
 use("cookbook:roc/walk_uses.shale")
+use("cookbook:roc/walk_family.shale")
 
 -- The type declaration's name with the names of the declarations it is
 -- nested in: `Pigs.PigInterest`.
@@ -180,36 +187,6 @@ function qualified_name(tree, at)
     k = tree[k].parent
   end
   return join(parts, ".")
-end
-
--- The source between two places, a end column being one past the last
--- character, with each line after the first losing the first line's
--- indentation.
-function source_text(src, line, col, end_line, end_col)
-  local first = src[line]
-  local indent = #first - #re_find(first, "^[ \t]*(.*)$").group
-  if line == end_line then return {sub(first, col, end_col - 1)} end
-  local out = {sub(first, col)}
-  for l = line + 1, end_line do
-    local text = l == end_line and sub(src[l], 1, end_col - 1) or src[l]
-    local k = 1
-    while k <= indent and k <= #text and (sub(text, k, k) == "\t" or sub(text, k, k) == " ") do k = k + 1 end
-    push(out, sub(text, k))
-  end
-  return out
-end
-
--- The comment lines directly above line `line`, trimmed, in order.
-function doc_lines_above(src, line)
-  local out = {}
-  local k = line - 1
-  while k >= 1 and starts_with(trim(src[k]), "#") do
-    push(out, trim(src[k]))
-    k = k - 1
-  end
-  local ordered = {}
-  for i = #out, 1, -1 do push(ordered, out[i]) end
-  return ordered
 end
 
 -- Parses the files in `paths` not read before and records what each
@@ -418,135 +395,6 @@ function visit(st, id)
     end
   end
   return nil
-end
-
-function sort_key(st, id)
-  local t = st.types[id]
-  return (has_key(st.asked, id) and "1" or "0") .. t.module .. "\t" .. t.qualified .. "\t" .. t.path
-end
-
--- Tarjan's strongly connected components over `st.deps`.
-function strong_connect(st, g, v)
-  g.index[v] = g.counter
-  g.low[v] = g.counter
-  g.counter = g.counter + 1
-  push(g.stack, v)
-  g.on[v] = true
-  for w in get(st.deps, v, {}) do
-    if not has_key(g.index, w) then
-      strong_connect(st, g, w)
-      if g.low[w] < g.low[v] then g.low[v] = g.low[w] end
-    elseif get(g.on, w, false) then
-      if g.index[w] < g.low[v] then g.low[v] = g.index[w] end
-    end
-  end
-  if g.low[v] == g.index[v] then
-    local members = {}
-    local done = false
-    while not done do
-      local w = g.stack[#g.stack]
-      g.stack = take(g.stack, #g.stack - 1)
-      g.on[w] = false
-      push(members, w)
-      done = w == v
-    end
-    push(g.components, members)
-  end
-  return nil
-end
-
--- The id with the smallest sort key among `ids` that `is_ready` allows.
-function smallest_ready(st, ids, is_ready)
-  local best = nil
-  local best_key = ""
-  for id in ids do
-    if is_ready[id] then
-      local key = sort_key(st, id)
-      if best == nil or key < best_key then
-        best = id
-        best_key = key
-      end
-    end
-  end
-  return best
-end
-
--- A cycle's members, each after the members its definition mentions where
--- that orders them, else by sort key.
-function order_in_cycle(st, members)
-  local inside = set_of(members)
-  local placed = {}
-  local out = {}
-  while #out < #members do
-    local ready = {}
-    local any = false
-    for id in members do
-      local ok = not has_key(placed, id)
-      if ok then
-        for w in get(st.def_deps, id, {}) do
-          if has_key(inside, w) and not has_key(placed, w) then ok = false end
-        end
-      end
-      ready[id] = ok
-      if ok then any = true end
-    end
-    if not any then
-      for id in members do ready[id] = not has_key(placed, id) end
-    end
-    local pick = smallest_ready(st, members, ready)
-    placed[pick] = true
-    push(out, pick)
-  end
-  return out
-end
-
--- Every type read, in printing order, as `{id, cycle}` items, where an item
--- with `cycle` set is a cycle's report line, with its members.
-function printing_order(st)
-  local ids = sort(keys(st.visited))
-  local g = {index = {}, low = {}, counter = 1, stack = {}, on = {}, components = {}}
-  for id in ids do
-    if not has_key(g.index, id) then strong_connect(st, g, id) end
-  end
-  local component_of = {}
-  local key_of = {}
-  for c = 1, #g.components do
-    local best = ""
-    for id in g.components[c] do
-      component_of[id] = c
-      local key = sort_key(st, id)
-      if best == "" or key < best then best = key end
-    end
-    key_of[c] = best
-  end
-  local printed = {}
-  for c = 1, #g.components do push(printed, false) end
-  local out = {}
-  local left = #g.components
-  while left > 0 do
-    local pick = 0
-    for c = 1, #g.components do
-      if not printed[c] and (pick == 0 or key_of[c] < key_of[pick]) then
-        local ready = true
-        for id in g.components[c] do
-          for w in get(st.deps, id, {}) do
-            if component_of[w] ~= c and not printed[component_of[w]] then ready = false end
-          end
-        end
-        if ready then pick = c end
-      end
-    end
-    printed[pick] = true
-    left = left - 1
-    local members = g.components[pick]
-    if #members == 1 then
-      push(out, {id = members[1]})
-    else
-      push(out, {cycle = members})
-      for id in order_in_cycle(st, members) do push(out, {id = id}) end
-    end
-  end
-  return out
 end
 
 -- Reads every file the files read import, and theirs, so a receiver's type
@@ -852,44 +700,154 @@ function walk(root, module, packages_arg, max_depth, settings?)
       for l in type_lines(st, item.id) do push(lines_out, l) end
     end
   end
+  local named_lines = {}
   local counts = "# " .. #keys(st.visited) .. " types, " .. st.function_count .. " functions, " .. st.constant_count .. " constants, " .. #keys(modules) .. " modules, " .. #keys(st.leaves) .. " leaves, " .. #keys(st.vars) .. " type variables, " .. #beyond .. " beyond depth " .. max_depth .. ", " .. #stopped .. " stopped"
   if st.uses then counts = counts .. ", " .. #unused .. " members with no outside use" .. precision_note(st) end
   if st.named_by then
     local section = named_by(st, root, module, start, paths, get(given, "named_by_production", false))
     for l in section.lines do push(lines_out, l) end
+    named_lines = section.lines
     counts = counts .. ", named by " .. section.annotations .. " annotations and " .. section.types .. " types: " .. section.production .. " production, " .. section.test .. " test"
   end
   push(lines_out, "")
   push(lines_out, counts)
-  return {lines = lines_out, lost = st.lost, refused = st.refused}
+  return {lines = lines_out, lost = st.lost, refused = st.refused, st = st, start = start, named_lines = named_lines}
 end
 
-function check(failures, ok, what)
-  if not ok then push(failures, what) end
-  return nil
-end
 
-function has_line(ls, line)
-  for l in ls do
-    if l == line then return true end
-  end
-  return false
-end
-
-function has_text(ls, text)
-  for l in ls do
-    if contains(l, text) then return true end
-  end
-  return false
-end
-
--- The type names of the header lines, in order.
-function headers_of(ls)
+-- The lines of the types `ids` in printing order, each printed by the walk
+-- `st_of[id]`, with `note_of[id]` (when set) after its header line.
+function family_type_lines(runs, ids, asked, st_of, note_of)
   local out = {}
-  for l in ls do
-    if starts_with(l, "#### ") then push(out, split(sub(l, 6), "   (")[1]) end
+  for item in family_order(runs, ids, asked) do
+    if has_key(item, "cycle") then
+      local names = {}
+      for id in item.cycle do push(names, display_name(st_of[id].types[id])) end
+      push(out, "")
+      push(out, "# Cycle: these types mention each other: " .. join(sort(names), ", "))
+    else
+      local ls = type_lines(st_of[item.id], item.id)
+      for i = 1, #ls do
+        push(out, ls[i])
+        if i == 2 and has_key(note_of, item.id) then push(out, note_of[item.id]) end
+      end
+    end
   end
   return out
+end
+
+-- Walks the modules `names` in the folder `root` as one family, as the
+-- header says, with `walk`'s settings, and gives `{lines, lost, refused}`.
+function family_walk(root, names, packages_arg, max_depth, settings)
+  if not has_key(settings, "trees") then settings.trees = {} end
+  local runs = {}
+  local lost = {}
+  local refused = {}
+  local said = {}
+  for m in names do
+    local r = walk(root, m, packages_arg, max_depth, settings)
+    for l in r.lost do
+      if not has_key(said, l) then push(lost, l) end
+      said[l] = true
+    end
+    for l in r.refused do
+      if not has_key(said, l) then push(refused, l) end
+      said[l] = true
+    end
+    if not has_key(r, "st") then return {lines = {}, lost = lost, refused = refused} end
+    push(runs, {module = m, r = r, st = r.st, start = r.start})
+  end
+  local own = {}
+  for run in runs do
+    for id in keys(run.st.asked) do own[id] = true end
+  end
+  local reach = {}
+  local st_of = {}
+  for run in runs do
+    for id in sort(keys(run.st.visited)) do
+      if not has_key(own, id) then
+        push_at(reach, id, run.module)
+        if not has_key(st_of, id) or run.st.depth_of[id] < st_of[id].depth_of[id] then st_of[id] = run.st end
+      end
+    end
+  end
+  local shared = {}
+  local note_of = {}
+  for id in sort(keys(reach)) do
+    if #reach[id] >= 2 then
+      push(shared, id)
+      note_of[id] = #reach[id] == #runs and "# shared by all " .. #runs or "# shared by " .. join(reach[id], ", ")
+    end
+  end
+  local leaves = {}
+  local stopped = {}
+  local beyond = {}
+  local vars = {}
+  local briefs = {}
+  for run in runs do
+    local st = run.st
+    for name in keys(st.leaves) do leaves[name] = true end
+    for id in keys(st.stopped) do stopped[display_name(st.types[id])] = true end
+    for id in keys(st.beyond) do
+      if not has_key(reach, id) and not has_key(own, id) then beyond[display_name(st.types[id])] = true end
+    end
+    for v in keys(st.vars) do
+      if not has_key(vars, v) then vars[v] = {} end
+      for t in keys(st.vars[v]) do vars[v][t] = true end
+    end
+    for id in keys(st.visited) do
+      if is_brief(st, id) and #members_of(st.files[st.types[id].path].nodes, st.types[id].at) > 0 then briefs[display_name(st.types[id])] = true end
+    end
+  end
+  local out = {"# The family " .. join(names, ", ") .. ": the types two or more members reach, once, then each member's types and signatures, then a table of their public names, to depth " .. max_depth .. ".", "# Builtin leaves, not expanded: " .. join(sort(keys(leaves)), ", ")}
+  if #keys(stopped) > 0 then push(out, "# Stopped, not expanded: " .. join(sort(keys(stopped)), "; ")) end
+  if #keys(beyond) > 0 then push(out, "# Beyond depth " .. max_depth .. ", not followed: " .. join(sort(keys(beyond)), "; ")) end
+  local var_notes = {}
+  for v in sort(keys(vars)) do push(var_notes, v .. " (" .. join(sort(keys(vars[v])), ", ") .. ")") end
+  if #var_notes > 0 then push(out, "# Type variables, not followed: " .. join(var_notes, "; ")) end
+  if #keys(briefs) > 0 then push(out, "# Brief, members by name at every depth: " .. join(sort(keys(briefs)), "; ")) end
+  push(out, "")
+  push(out, "## Shared: the " .. #shared .. " types two or more members reach, the most primitive first.")
+  for l in family_type_lines(runs, shared, {}, st_of, note_of) do push(out, l) end
+  local entries = {}
+  local unique_count = 0
+  local private_count = 0
+  for i = 1, #runs do
+    local run = runs[i]
+    local st = run.st
+    push(out, "")
+    push(out, "## " .. run.module .. "   (" .. run.start .. ")")
+    for l in run.r.lines do
+      if starts_with(l, "# Imported but") or starts_with(l, "# Public, but") or starts_with(l, "# Clients:") then push(out, l) end
+    end
+    local ids = {}
+    local mine = {}
+    for id in sort(keys(st.visited)) do
+      if has_key(st.asked, id) or (has_key(reach, id) and #reach[id] == 1) then
+        push(ids, id)
+        mine[id] = st
+        if not has_key(st.asked, id) then unique_count = unique_count + 1 end
+      end
+    end
+    for l in family_type_lines({run}, ids, st.asked, mine, {}) do push(out, l) end
+    local private = private_signatures(st, run.start)
+    private_count = private_count + private.count
+    push(out, "")
+    push(out, private.count == 0 and "# No private top-level functions in " .. run.module .. "." or "# The private top-level functions of " .. run.module .. ", in source order:")
+    for l in private.lines do push(out, l) end
+    for l in run.r.named_lines do push(out, l) end
+    push(out, "")
+    push(out, "# " .. run.module .. " alone: " .. sub(run.r.lines[#run.r.lines], 3))
+    for e in public_names(st, run.start) do
+      e.member = i
+      push(entries, e)
+    end
+  end
+  local tab = family_table(names, entries)
+  for l in tab.lines do push(out, l) end
+  push(out, "")
+  push(out, "# The family: " .. #runs .. " modules, " .. #shared .. " shared types, " .. unique_count .. " types only one member reaches, " .. #entries .. " public names in " .. tab.rows .. " table rows and " .. tab.unmatched .. " unmatched, " .. private_count .. " private functions")
+  return {lines = out, lost = lost, refused = refused}
 end
 
 function self_test()
@@ -1087,6 +1045,8 @@ function self_test()
   check(failures, has_text(lost, "`Gone`: no file " .. at .. "unresolved/Gone.roc"), "a missing module is lost")
   local moved = walk(at .. "chain/app", "Ride", "shared=" .. at .. "chain/nowhere", 3, {trees = trees}).lost
   check(failures, #moved == 2 and has_text(moved, "Leg.roc:5: `Unit.Metres`: no file " .. at .. "chain/nowhere/Unit.roc"), "packages= overrides the app's folder, got " .. join(moved, "; "))
+  local family_at = "cookbook:roc/plants/type_walk/family"
+  family_checks(failures, family_walk(family_at, parse_modules("OakSighting, PineSighting,ElmSighting"), "", 3, {trees = trees}), family_at)
   for f in failures do print("FAIL: " .. f) end
   if #failures > 0 then fail("type_walk: " .. #failures .. " self-test checks failed") end
   print("type_walk: self test passed")
@@ -1107,7 +1067,9 @@ else
   local uses_arg = arg("uses", "1")
   if uses_arg ~= "0" and uses_arg ~= "1" then fail("type_walk: uses=" .. uses_arg .. " is neither 0 nor 1") end
   local settings = {stops = parse_stops(arg("stop", join(WALK_STOP, ","))), brief = parse_brief(arg("brief", join(WALK_BRIEF, ","))), full_depth = full_depth, uses = uses_arg == "1", named_by = named_by_arg ~= "0", named_by_production = named_by_arg == "production", clients = arg("clients", "")}
-  local r = walk(arg("root", "."), arg("module", ""), arg("packages", ""), max_depth, settings)
+  local modules_arg = arg("modules", "")
+  if modules_arg ~= "" and arg("module", "") ~= "" then fail("type_walk: module= and modules= both given; name one module, or a family") end
+  local r = modules_arg == "" and walk(arg("root", "."), arg("module", ""), arg("packages", ""), max_depth, settings) or family_walk(arg("root", "."), parse_modules(modules_arg), arg("packages", ""), max_depth, settings)
   print(join(r.lines, "\n"))
   for l in r.lost do print("lost: " .. l) end
   for l in r.refused do print("refused: " .. l) end
