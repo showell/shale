@@ -21,4 +21,8 @@ Sun :: { radius : F64, warmth : F64 }.{
 	## Backdrop and Mountains both use it.
 	shared : Sun -> F64
 	shared = |Sun.({ radius, warmth: _ })| radius * 3.0
+
+	## Only Backdrop's halo uses it, which a helper draws.
+	ring_size : Sun -> F64
+	ring_size = |Sun.({ radius, warmth: _ })| radius * 4.0
 }

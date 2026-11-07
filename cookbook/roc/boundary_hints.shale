@@ -33,7 +33,8 @@
 --              method name on a receiver of no known type is left out, and
 --              counted in the summary, since its one user is not sure. When
 --              the function in N around a use builds a shape (a tag in
---              SHAPE_TAGS, or a `Shapes.` call), N draws with the member: the
+--              SHAPE_TAGS, or a `Shapes.` call) or is annotated to give one
+--              (its result names a type `Shape`), N draws with the member: the
 --              strongest form, with those functions named. When N only
 --              imports Shapes, that is said too.
 --   borrowed_noun  A member of M's types whose snake_case name starts with
@@ -78,7 +79,8 @@ function module_paths(root, globs)
 end
 
 -- The functions around the uses `sites` in the file `info` that build a
--- shape, as a list of `name: Tag, Tag`, and the shape tags found.
+-- shape, each as `name (Tag, Shapes.call, gives a Shape)` with what showed
+-- it.
 function drawing_functions(st, info, sites)
   local tree = info.nodes
   local cx = typing_context(st, info)
@@ -98,6 +100,14 @@ function drawing_functions(st, info, sites)
         end
         if n.kind == "e-ident" and starts_with(get(n, "raw", ""), "Shapes.") then built[get(n, "raw", "")] = true end
         j = j + 1
+      end
+      -- A function annotated to give a Shape draws, though a helper of its
+      -- own builds the shape.
+      local name = get(tree[tree[s].kids[1]], "raw", "")
+      for anno in get(cx.beside, tree[s].parent .. "\t" .. name, {}) do
+        local ty = tree[anno].kids[1]
+        local result = tree[ty].kind == "ty-fn" and tree[ty].kids[#tree[ty].kids] or ty
+        if has_key(mentioned_type_names(tree, result, {}), "Shape") then built["gives a Shape"] = true end
       end
       if #keys(built) > 0 then push(out, get(tree[tree[s].kids[1]], "raw", "?") .. " (" .. join(sort(keys(built)), ", ") .. ")") end
     end
@@ -232,15 +242,18 @@ function self_test()
   -- Sun.glow is called as a method on a parameter typed as a Sun, and the
   -- two drawn-with members tie on uses, so they go by name. Backdrop's
   -- sun_shapes borrows Sun's noun as sky_top_stop borrows Sky's.
+  -- Sun.ring_size's user halo builds its shape through a helper, and is
+  -- annotated to give one.
   local want = {
-    at .. "loud_pair/Sun.roc:10: fed_to_one: Sun.glow is used only by Backdrop, 1 use; Backdrop draws with it in sun_shapes (Disc)",
-    at .. "loud_pair/Sun.roc:6: fed_to_one: Sun.look is used only by Backdrop, 1 use; Backdrop draws with it in sun_shapes (Disc)",
+    at .. "loud_pair/Sun.roc:10: fed_to_one: Sun.glow is used only by Backdrop, 1 use; Backdrop draws with it in sun_shapes (Disc, gives a Shape)",
+    at .. "loud_pair/Sun.roc:6: fed_to_one: Sun.look is used only by Backdrop, 1 use; Backdrop draws with it in sun_shapes (Disc, gives a Shape)",
+    at .. "loud_pair/Sun.roc:26: fed_to_one: Sun.ring_size is used only by Backdrop, 1 use; Backdrop draws with it in halo (gives a Shape)",
     at .. "loud_pair/Sun.roc:14: fed_to_one: Sun.tint is used only by Backdrop, 1 use",
     at .. "loud_pair/Backdrop.roc:8: borrowed_noun: Backdrop.sky_top_stop names the module Sky",
     at .. "loud_pair/Backdrop.roc:16: borrowed_noun: Backdrop.sun_shapes names the module Sun",
   }
   check(failures, join(ls, "\n") == join(want, "\n"), "loud lines, got:\n" .. join(ls, "\n"))
-  check(failures, loud.summary == "boundary_hints (Roc): 4 files, 4 modules, 11 public members; fed_to_one 3 (2 drawn with), borrowed_noun 2; 0 more used by one module but maybe called by method name elsewhere, left out", "loud summary: " .. loud.summary)
+  check(failures, loud.summary == "boundary_hints (Roc): 4 files, 4 modules, 13 public members; fed_to_one 4 (3 drawn with), borrowed_noun 2; 0 more used by one module but maybe called by method name elsewhere, left out", "loud summary: " .. loud.summary)
   local quiet = hints(at .. "quiet_pair", "*.roc", "", "", trees)
   check(failures, #quiet.refused == 0 and #quiet.lost == 0, "quiet: refused or lost: " .. join(quiet.refused, "; ") .. join(quiet.lost, "; "))
   check(failures, #quiet.lines == 0, "quiet lines, got:\n" .. join(quiet.lines, "\n"))
