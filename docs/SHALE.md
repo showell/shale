@@ -1280,6 +1280,8 @@ three:
   - the jobs, `src/shale_host_jobs.zig` over `src/shale_jobs.zig`;
   - the Zig tools, `zig_rename`, `zig_decls`, `zig_move`, `zig_imports`
     and `zig_tokens` (`src/shale_host_zig.zig`);
+  - `shale_tokens`, a Shale file's tokens by the lexer in
+    `src/script/lex.zig` (`src/shale_host_tokens.zig`);
   - `may_change`, the path hook's question before a change (below).
 - **`Options.path_hook`**, called first in every store call's path. Linux's
   is the mounts: a path whose first part has a `:` is a mount's
@@ -1315,7 +1317,7 @@ three:
     `must`, `http`, `http_get`, `re_lines`, `head_lines`, `tail_lines`,
     `grep_all`, `unique`, `path_under`, `fresh_dir`, `newest`, `create`, `edits_all`, `edit_between`, `json_read`, `json_write`; the Zig tools
     `zig_rename`, `zig_renames`, `zig_decls`, `zig_move`, `zig_tokens` and
-    `zig_imports`; the jobs, `job_start`, `job_alive`, `job_stop` and
+    `zig_imports`; `shale_tokens`; the jobs, `job_start`, `job_alive`, `job_stop` and
     `job_wait`; and the processes, `procs` and `proc_stop` (`job_wait`'s helpers `curl_http`, `edit_words`, `edit_word_byte` and `edit_marker_shown`
     take their names too);
   - the git prelude (`src/shale_prelude_git.shale`): `git_status`,

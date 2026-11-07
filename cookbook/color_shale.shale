@@ -1,0 +1,351 @@
+-- budget: steps=400000000 arena_bytes=1000000000 reads=2000 changes=2000 change_bytes=64000000
+-- This colors Shale with Shale. Each file comes out as a page holding one
+-- <pre><code class="language-shale"> with spans around its comments, strings,
+-- numbers, keywords and the names `function` declares. The class names are the
+-- Roc coloring's, so the Safari book's book.css serves unchanged. Shale has no
+-- types, so `syn-type` never appears.
+--
+--   shale cookbook:color_shale.shale files=cookbook/look.shale out=colored
+--
+-- `files=` is a comma list, and `a/b.shale` comes out as `<out>/a/b.shale.html`.
+-- A page links the stylesheet `css=` names, `book.css` unless told.
+--
+-- The tokens are `shale_tokens`', the language's own lexer, comments among them.
+-- This recipe adds only the class of each. A file must also pass `shale --check`,
+-- so a file that lexes but doesn't compile gets no page either. Every byte must
+-- be in a token or be space between tokens, or the file is refused: nothing is
+-- guessed.
+--
+-- A refused file gets no page, and the run says why and fails at its end. The
+-- text of a page with its spans taken away must equal the source's escaped text
+-- byte for byte, or the run stops there. Each file costs one program, and a run
+-- holds 64, so a bigger tree goes in parts.
+--
+-- `self_test=1` proves both sides of each rule on sources written here.
+const FILES = arg("files", "")
+const OUT = arg("out", "")
+const CSS = arg("css", "book.css")
+const SHALE = arg("shale", "shale")
+
+const OPEN = "<pre><code class=\"language-shale\">"
+const CLOSE = "</code></pre>"
+const OUR_SPANS = "<span class=\"syn-[a-z]+\">|</span>"
+const CLASSES = {"syn-comment", "syn-string", "syn-number", "syn-keyword", "syn-name"}
+const CLASS_OF_TAG = {comment = "syn-comment", string = "syn-string", int = "syn-number"}
+
+function escaped(text)
+  local s = join(split(text, "&"), "&amp;")
+  s = join(split(s, "<"), "&lt;")
+  s = join(split(s, ">"), "&gt;")
+  s = join(split(s, "\""), "&quot;")
+  return join(split(s, "'"), "&#39;")
+end
+
+function refuse(text, at, why)
+  fail("line " .. #split(sub(text, 1, at), "\n") .. ": " .. why)
+end
+
+-- A name is `syn-name` right after `function`, and a comment between them
+-- doesn't end the wait for it.
+function class_of(tag, previous_tag)
+  if tag == "name" and previous_tag == "kw_function" then return "syn-name" end
+  if starts_with(tag, "kw_") then return "syn-keyword" end
+  return get(CLASS_OF_TAG, tag, "")
+end
+
+-- Sets each token's `class`, "" for a name or a symbol.
+function classify(tokens)
+  local previous_tag = ""
+  for token in tokens do
+    token.class = class_of(token.tag, previous_tag)
+    if token.tag ~= "comment" then previous_tag = token.tag end
+  end
+  return tokens
+end
+
+-- Refuses unless the tokens hold `text`: each one's bytes are where it says, in
+-- order, with only space around them.
+function check_placed(text, tokens)
+  local at = 0
+  for token in tokens do
+    if token.start < at then refuse(text, token.start + 1, "a token overlaps the one before it") end
+    if trim(sub(text, at + 1, token.start)) ~= "" then refuse(text, at + 1, "bytes no token holds") end
+    if sub(text, token.start + 1, token.stop) ~= token.text then refuse(text, token.start + 1, "a token that isn't where it says") end
+    at = token.stop
+  end
+  if trim(sub(text, at + 1, #text)) ~= "" then refuse(text, at + 1, "bytes no token holds") end
+  return nil
+end
+
+-- The classed tokens of the file at `path`, whose text is `text`.
+function placed_tokens(path, text)
+  local tokens = shale_tokens(path)
+  check_placed(text, tokens)
+  return classify(tokens)
+end
+
+function span(class, text)
+  return "<span class=\"" .. class .. "\">" .. text .. "</span>"
+end
+
+-- `text` in HTML, each classed token in a span. A span can cross lines, which a
+-- <pre> takes as it comes.
+function colored(text, tokens)
+  local pieces = {}
+  local at = 1
+  for token in tokens do
+    if token.class ~= "" then
+      push(pieces, escaped(sub(text, at, token.start)))
+      push(pieces, span(token.class, escaped(sub(text, token.start + 1, token.stop))))
+      at = token.stop + 1
+    end
+  end
+  push(pieces, escaped(sub(text, at, #text)))
+  return join(pieces, "")
+end
+
+function without_our_spans(html)
+  return re_replace(html, OUR_SPANS, "")
+end
+
+function check_text(path, text, html)
+  if without_our_spans(html) ~= escaped(text) then fail("color_shale: coloring changed the text of " .. path) end
+  return nil
+end
+
+function page(path, html)
+  return "<!doctype html>\n<meta charset=\"utf-8\">\n<title>" .. escaped(path) .. "</title>\n<link rel=\"stylesheet\" href=\"" .. escaped(CSS) .. "\">\n" .. OPEN .. html .. CLOSE .. "\n"
+end
+
+function first_line(out)
+  for l in lines(out) do
+    if trim(l) ~= "" then return trim(l) end
+  end
+  return "no output"
+end
+
+-- A mount's name makes a folder, as `cookbook:a.shale` has no place under `out`
+-- otherwise.
+function page_path(path, out)
+  return out .. "/" .. substitute(path, ":", "/") .. ".html"
+end
+
+-- Writes the file's page, or says why not in `tally.refused`.
+function color_file(path, out, tally)
+  local checked = run({SHALE, "--check", real(path)}, {timeout_ms = 60000, tail = 4})
+  if checked.code ~= 0 then
+    push(tally.refused, path .. ": " .. first_line(checked.out))
+    return nil
+  end
+  local text = read(path)
+  local got = attempt(placed_tokens, path, text)
+  if not got.ok then
+    push(tally.refused, path .. ": " .. got.error)
+    return nil
+  end
+  local html = colored(text, got.value)
+  check_text(path, text, html)
+  for token in got.value do
+    if token.class ~= "" then incr(tally.counts, token.class) end
+  end
+  local target = page_path(path, out)
+  mkdir(dirname(target))
+  replace(target, page(path, html))
+  tally.colored = tally.colored + 1
+  return nil
+end
+
+function color_files(paths, out)
+  if #paths > 64 then fail("color_shale: " .. #paths .. " files need " .. #paths .. " programs, and a run holds 64: color them in parts") end
+  local tally = {colored = 0, refused = {}, counts = {}}
+  for class in CLASSES do tally.counts[class] = 0 end
+  for path in paths do color_file(path, out, tally) end
+  return tally
+end
+
+-- `shale_tokens` reads a file, so a source goes through one in the test's folder.
+function source_tokens(checks, source)
+  local path = checks.folder .. "/source.shale"
+  replace(path, source)
+  return placed_tokens(path, source)
+end
+
+-- `expect_html` holds a source to its exact HTML, and the guard to it too.
+function expect_html(checks, what, source, want)
+  local html = colored(source, source_tokens(checks, source))
+  if html ~= want then fail("self_test: " .. what .. " gave [" .. html .. "], not [" .. want .. "]") end
+  check_text(what, source, html)
+  push(checks.passed, what)
+  return nil
+end
+
+function expect_refused(checks, source, why)
+  local got = attempt(source_tokens, checks, source)
+  if got.ok or not contains(got.error, why) then fail("self_test: [" .. source .. "] gave " .. json_write(got)) end
+  push(checks.passed, "refused: " .. source)
+  return nil
+end
+
+function expect_misplaced(checks, what, text, tokens, why)
+  local got = attempt(check_placed, text, tokens)
+  if got.ok or not contains(got.error, why) then fail("self_test: " .. what .. " gave " .. json_write(got)) end
+  push(checks.passed, what)
+  return nil
+end
+
+function c(text) return span("syn-comment", text) end
+function s(text) return span("syn-string", text) end
+function n(text) return span("syn-number", text) end
+function k(text) return span("syn-keyword", text) end
+function f(text) return span("syn-name", text) end
+
+function test_comments_and_strings(checks)
+  expect_html(checks, "a `--` in each kind of string, then a comment at the line's end",
+    "x = \"a -- b\" -- c\ny = 'd -- e'\nz = [=[f -- g]=] -- h\n",
+    "x = " .. s("&quot;a -- b&quot;") .. " " .. c("-- c") .. "\ny = " .. s("&#39;d -- e&#39;") .. "\nz = " .. s("[=[f -- g]=]") .. " " .. c("-- h") .. "\n")
+  expect_html(checks, "a comment's quote opens no string", "-- it's \"so\n1\n",
+    c("-- it&#39;s &quot;so") .. "\n" .. n("1") .. "\n")
+  expect_html(checks, "an escaped quote stays in, and an escaped backslash doesn't hide the end",
+    "\"a\\\"b\" \"c\\\\\" -- d\n", s("&quot;a\\&quot;b&quot;") .. " " .. s("&quot;c\\\\&quot;") .. " " .. c("-- d") .. "\n")
+  expect_html(checks, "the other quote inside a string", "\"it's\" 'a \"b\"'\n",
+    s("&quot;it&#39;s&quot;") .. " " .. s("&#39;a &quot;b&quot;&#39;") .. "\n")
+  expect_html(checks, "a long string over lines, holding what would start or end others",
+    "x = [=[\n-- no \"comment\n]] end\n]=] -- yes\n",
+    "x = " .. s("[=[\n-- no &quot;comment\n]] end\n]=]") .. " " .. c("-- yes") .. "\n")
+  expect_html(checks, "a higher level holds a lower closer", "[==[a ]=] b]==] 1\n", s("[==[a ]=] b]==]") .. " " .. n("1") .. "\n")
+  expect_html(checks, "a block comment over lines, with code after its closer",
+    "--[=[ it's\nend \"x ]=] y = 1\n", c("--[=[ it&#39;s\nend &quot;x ]=]") .. " y = " .. n("1") .. "\n")
+  expect_html(checks, "`--[=x` is a line comment", "--[=x\n1 --[==y ]==]\n2\n",
+    c("--[=x") .. "\n" .. n("1") .. " " .. c("--[==y ]==]") .. "\n" .. n("2") .. "\n")
+  expect_html(checks, "`--` needs no space and takes an expression with it", "a--1\nb - -1\n",
+    "a" .. c("--1") .. "\nb - -" .. n("1") .. "\n")
+  expect_html(checks, "a comment at the end of a file, with no newline", "1 -- a", n("1") .. " " .. c("-- a"))
+  expect_html(checks, "a bare `--` at the end", "--", c("--"))
+  expect_html(checks, "a CR stays in the comment it ends", "-- a\r\n1\r\n", c("-- a\r") .. "\n" .. n("1") .. "\r\n")
+  expect_html(checks, "bytes past ASCII in a comment and a string", "-- é\n\"ñ\" 'ü' [=[ö]=]\n",
+    c("-- é") .. "\n" .. s("&quot;ñ&quot;") .. " " .. s("&#39;ü&#39;") .. " " .. s("[=[ö]=]") .. "\n")
+  return nil
+end
+
+function test_words_and_numbers(checks)
+  expect_html(checks, "keywords inside names, on both sides",
+    "end_col iffy do_it _end end1 Function nil_ok format\nend if do\n",
+    "end_col iffy do_it _end end1 Function nil_ok format\n" .. k("end") .. " " .. k("if") .. " " .. k("do") .. "\n")
+  expect_html(checks, "every keyword", "and break const continue do else elseif end false for function if in local nil not or return then true while\n",
+    k("and") .. " " .. k("break") .. " " .. k("const") .. " " .. k("continue") .. " " .. k("do") .. " " .. k("else") .. " " .. k("elseif") .. " " .. k("end") .. " " .. k("false") .. " " .. k("for") .. " " .. k("function") .. " " .. k("if") .. " " .. k("in") .. " " .. k("local") .. " " .. k("nil") .. " " .. k("not") .. " " .. k("or") .. " " .. k("return") .. " " .. k("then") .. " " .. k("true") .. " " .. k("while") .. "\n")
+  expect_html(checks, "`use` and `attempt` are names, as the lexer has them", "use attempt\n", "use attempt\n")
+  expect_html(checks, "digits in a name, and a number beside a symbol", "a1 x2y 1..2 t[3]\n",
+    "a1 x2y " .. n("1") .. ".." .. n("2") .. " t[" .. n("3") .. "]\n")
+  expect_html(checks, "a function's name, and a call that is none",
+    "function iffy(x)\n  return iffy(x)\nend\n",
+    k("function") .. " " .. f("iffy") .. "(x)\n  " .. k("return") .. " iffy(x)\n" .. k("end") .. "\n")
+  expect_html(checks, "a comment between `function` and its name", "function --[=[ a ]=] b()\n",
+    k("function") .. " " .. c("--[=[ a ]=]") .. " " .. f("b") .. "()\n")
+  expect_html(checks, "a local named like the keyword declares no function", "local function_name = 1\nfunction_name2()\n",
+    k("local") .. " function_name = " .. n("1") .. "\nfunction_name2()\n")
+  expect_html(checks, "every symbol, in a row", "+ - * // % .. == ~= < <= > >= = ( ) { } [ ] , . # ? ;\n",
+    "+ - * // % .. == ~= &lt; &lt;= &gt; &gt;= = ( ) { } [ ] , . # ? ;\n")
+  expect_html(checks, "`]=` closes an index before an assignment", "t[1]=2\n", "t[" .. n("1") .. "]=" .. n("2") .. "\n")
+  expect_html(checks, "an empty file", "", "")
+  return nil
+end
+
+function test_html(checks)
+  expect_html(checks, "text that looks like our own span", "x = '<span class=\"syn-comment\">' -- </span>\n",
+    "x = " .. s("&#39;&lt;span class=&quot;syn-comment&quot;&gt;&#39;") .. " " .. c("-- &lt;/span&gt;") .. "\n")
+  expect_html(checks, "an escape already in the source", "-- &amp; &lt;\n", c("-- &amp;amp; &amp;lt;") .. "\n")
+  if not attempt(check_text, "p", "a < b", "a &lt; " .. span("syn-name", "b")).ok then fail("self_test: added spans changed the text") end
+  local changed = attempt(check_text, "p", "a b", "a " .. span("syn-name", "c"))
+  if changed.ok or changed.error ~= "color_shale: coloring changed the text of p" then fail("self_test: changed text gave " .. json_write(changed)) end
+  if attempt(check_text, "p", "<", span("syn-name", "<")).ok then fail("self_test: a lost escape passed") end
+  if attempt(check_text, "p", "ab", span("syn-name", "a") .. "bb").ok then fail("self_test: a repeated byte passed") end
+  local overlap = {{start = 0, stop = 2, class = "syn-name"}, {start = 1, stop = 2, class = "syn-name"}}
+  if attempt(check_text, "p", "ab", colored("ab", overlap)).ok then fail("self_test: overlapping tokens passed") end
+  push(checks.passed, "the text check, both sides")
+  return nil
+end
+
+-- What the lexer refuses reaches a caller as its own words, with the line.
+function test_refusals(checks)
+  expect_refused(checks, "\"abc", "no closing quote")
+  expect_refused(checks, "\"a\nb\"", "past the end of its line")
+  expect_refused(checks, "'a\"", "no closing quote")
+  expect_refused(checks, "\"a\\", "no closing quote")
+  expect_refused(checks, "\"a\\\nb\"", "an escape this language does not have")
+  expect_refused(checks, "x\ny\n[=[ a", "line 3: a long string with no `]=]`")
+  expect_refused(checks, "[==[ a ]=]", "with no `]==]`")
+  expect_refused(checks, "--[=[ a", "a long comment with no `]=]`")
+  expect_refused(checks, "[[a]]", "a long string needs a level")
+  expect_refused(checks, "--[[a]]", "a long comment needs a level")
+  expect_refused(checks, "[=a", "`[=` opens a long string")
+  expect_refused(checks, "a @ b", "no token starts with")
+  expect_refused(checks, "a / b", "use `//`")
+  expect_refused(checks, "a ~ b", "bitwise")
+  expect_refused(checks, "s:upper()", "method calls")
+  expect_refused(checks, "local é = 1", "no token starts with")
+  expect_refused(checks, "x = 1.5", "float")
+  return nil
+end
+
+-- A token list that doesn't hold its text is refused, whichever way it fails.
+function test_placing(checks)
+  local a = {text = "a", start = 0, stop = 1}
+  local b = {text = "b", start = 2, stop = 3}
+  check_placed(" a\tb\n", {{text = "a", start = 1, stop = 2}, {text = "b", start = 3, stop = 4}})
+  push(checks.passed, "tokens with only space around them")
+  expect_misplaced(checks, "a byte between tokens", "a?b", {a, b}, "line 1: bytes no token holds")
+  expect_misplaced(checks, "a byte before the first token", "\n?a", {{text = "a", start = 2, stop = 3}}, "line 2: bytes no token holds")
+  expect_misplaced(checks, "a byte after the last token", "a b", {a}, "bytes no token holds")
+  expect_misplaced(checks, "a token whose bytes are elsewhere", "a c", {a, b}, "isn't where it says")
+  expect_misplaced(checks, "a token over the one before it", "ab", {{text = "ab", start = 0, stop = 2}, {text = "b", start = 1, stop = 2}}, "overlaps")
+  return nil
+end
+
+-- A file `shale --check` refuses gets no page and fails the run's count, though
+-- `shale_tokens` would take an undeclared name, and a good file beside it still
+-- comes out.
+function test_files(checks)
+  local folder = checks.folder
+  replace(folder .. "/good.shale", "print(1) -- a\n")
+  replace(folder .. "/undeclared.shale", "print(nobody)\n")
+  replace(folder .. "/floats.shale", "print(1.5)\n")
+  local tally = color_files({folder .. "/good.shale", folder .. "/undeclared.shale", folder .. "/floats.shale"}, folder .. "/out")
+  if tally.colored ~= 1 or #tally.refused ~= 2 then fail("self_test: the file run gave " .. json_write(tally)) end
+  if not contains(tally.refused[2], "float") then fail("self_test: the refusal said " .. tally.refused[2]) end
+  if tally.counts["syn-comment"] ~= 1 or tally.counts["syn-number"] ~= 1 or tally.counts["syn-keyword"] ~= 0 then fail("self_test: the counts gave " .. json_write(tally.counts)) end
+  local good = read(page_path(folder .. "/good.shale", folder .. "/out"))
+  if not contains(good, OPEN .. "print(" .. n("1") .. ") " .. c("-- a") .. "\n" .. CLOSE) then fail("self_test: the page was [" .. good .. "]") end
+  if #glob(folder .. "/out/**/*.html") ~= 1 then fail("self_test: a refused file left a page") end
+  push(checks.passed, "a file run, with what the real lexer refuses")
+  local too_many = {}
+  for i = 1, 65 do push(too_many, "x.shale") end
+  local over = attempt(color_files, too_many, folder .. "/out")
+  if over.ok or not contains(over.error, "a run holds 64") then fail("self_test: 65 files gave " .. json_write(over)) end
+  push(checks.passed, "more files than a run's programs")
+  return nil
+end
+
+function self_test()
+  local checks = {folder = fresh_dir("scratch:", "color-shale"), passed = {}}
+  test_comments_and_strings(checks)
+  test_words_and_numbers(checks)
+  test_html(checks)
+  test_refusals(checks)
+  test_placing(checks)
+  test_files(checks)
+  remove_tree(checks.folder)
+  print("color_shale self_test: PASS, " .. #checks.passed .. " checks")
+  return nil
+end
+
+if arg("self_test", "") == "1" then
+  self_test()
+else
+  if FILES == "" or OUT == "" then fail("color_shale: files=a.shale,b.shale names the files, and out=DIR where their pages go") end
+  local tally = color_files(split(FILES, ","), OUT)
+  for why in tally.refused do print("color_shale: refused " .. why) end
+  local counts = {}
+  for class in CLASSES do push(counts, sub(class, 5, #class) .. "=" .. tally.counts[class]) end
+  print("color_shale: " .. tally.colored .. " colored, " .. #tally.refused .. " refused, " .. join(counts, " "))
+  if #tally.refused > 0 then fail("color_shale: " .. #tally.refused .. " refused") end
+end

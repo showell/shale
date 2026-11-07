@@ -9,6 +9,8 @@ pub const Tag = enum {
     name,
     int,
     string,
+    /// Only `nextOrComment` gives one: `next` passes comments by.
+    comment,
     // keywords
     kw_and,
     kw_break,
@@ -66,6 +68,10 @@ pub const Token = struct {
     text: []const u8,
     line: u32,
     column: u32,
+    /// The token in the source, `src[start..stop]`: a string's quotes or a
+    /// long string's opener and closer are in it, and its escapes as written.
+    start: usize = 0,
+    stop: usize = 0,
     /// An int's value.
     int: i64 = 0,
     /// The literal is 9223372036854775808: too big for an i64, but the
@@ -143,41 +149,79 @@ pub const Lexer = struct {
         return c;
     }
 
+    fn skipSpace(self: *Lexer) void {
+        while (self.at < self.src.len) switch (self.src[self.at]) {
+            ' ', '\t', '\r', '\n' => _ = self.bump(),
+            else => return,
+        };
+    }
+
+    fn atComment(self: *const Lexer) bool {
+        return self.peekAt(0) == '-' and self.peekAt(1) == '-';
+    }
+
+    /// Passes the comment at `at`. A line comment stops before its newline.
+    fn comment(self: *Lexer) error{Lex}!void {
+        if (self.peekAt(2) == '[' and self.peekAt(3) == '[')
+            return self.fail(self.line, self.column, true, "a long comment needs a level: `--[=[ ... ]=]` (code is full of `]]`), or start each line with `--`");
+        if (self.peekAt(2) == '[' and self.peekAt(3) == '=') {
+            // A block comment is `--` and a long string's opener;
+            // `--[=x` is a line comment.
+            var n: usize = 3;
+            while (self.peekAt(n) == '=') n += 1;
+            if (self.peekAt(n) == '[') {
+                const line = self.line;
+                const column = self.column;
+                _ = self.bump(); // -
+                _ = self.bump(); // -
+                _ = self.bump(); // [
+                _ = self.longString(line, column) catch {
+                    const level = n - 3;
+                    var closer: [64]u8 = undefined;
+                    const message = std.fmt.allocPrint(self.alloc, "a long comment with no `{s}` to close it", .{closerText(&closer, @intCast(level))}) catch "a long comment that is never closed";
+                    return self.fail(line, column, false, message);
+                };
+                return;
+            }
+        }
+        while (self.at < self.src.len and self.src[self.at] != '\n') _ = self.bump();
+    }
+
     fn skipSpaceAndComments(self: *Lexer) error{Lex}!void {
-        while (self.at < self.src.len) {
-            const c = self.src[self.at];
-            if (c == ' ' or c == '\t' or c == '\r' or c == '\n') {
-                _ = self.bump();
-            } else if (c == '-' and self.peekAt(1) == '-') {
-                if (self.peekAt(2) == '[' and self.peekAt(3) == '[')
-                    return self.fail(self.line, self.column, true, "a long comment needs a level: `--[=[ ... ]=]` (code is full of `]]`), or start each line with `--`");
-                if (self.peekAt(2) == '[' and self.peekAt(3) == '=') {
-                    // A block comment is `--` and a long string's opener;
-                    // `--[=x` is a line comment.
-                    var n: usize = 3;
-                    while (self.peekAt(n) == '=') n += 1;
-                    if (self.peekAt(n) == '[') {
-                        const line = self.line;
-                        const column = self.column;
-                        _ = self.bump(); // -
-                        _ = self.bump(); // -
-                        _ = self.bump(); // [
-                        _ = self.longString(line, column) catch {
-                            const level = n - 3;
-                            var closer: [64]u8 = undefined;
-                            const message = std.fmt.allocPrint(self.alloc, "a long comment with no `{s}` to close it", .{closerText(&closer, @intCast(level))}) catch "a long comment that is never closed";
-                            return self.fail(line, column, false, message);
-                        };
-                        continue;
-                    }
-                }
-                while (self.at < self.src.len and self.src[self.at] != '\n') _ = self.bump();
-            } else return;
+        self.skipSpace();
+        while (self.atComment()) {
+            try self.comment();
+            self.skipSpace();
         }
     }
 
     pub fn next(self: *Lexer) error{ Lex, OutOfMemory }!Token {
         try self.skipSpaceAndComments();
+        return self.placedToken();
+    }
+
+    /// `next`, but a comment comes back as a `.comment` token, its `text` its
+    /// source bytes, so that a reader of the source sees every byte but space.
+    pub fn nextOrComment(self: *Lexer) error{ Lex, OutOfMemory }!Token {
+        self.skipSpace();
+        if (!self.atComment()) return self.placedToken();
+        const start = self.at;
+        const line = self.line;
+        const column = self.column;
+        try self.comment();
+        return .{ .tag = .comment, .text = self.src[start..self.at], .line = line, .column = column, .start = start, .stop = self.at };
+    }
+
+    fn placedToken(self: *Lexer) error{ Lex, OutOfMemory }!Token {
+        const start = self.at;
+        var token = try self.scan();
+        token.start = start;
+        token.stop = self.at;
+        return token;
+    }
+
+    /// The token at `at`, with space and comments already passed.
+    fn scan(self: *Lexer) error{ Lex, OutOfMemory }!Token {
         const line = self.line;
         const column = self.column;
         if (self.at >= self.src.len) return .{ .tag = .eof, .text = "", .line = line, .column = column };
@@ -552,11 +596,98 @@ test "lex: a block comment is `--` and a long string's opener, any level: what i
     try testing.expect(std.mem.indexOf(u8, bad.err.?.message, "a long comment with no `]=]`") != null);
 }
 
+/// Reads `src` with `nextOrComment` as far as it lexes: each token's span follows
+/// the last, and only space stands between them.
+fn expectEveryByteHeld(src: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var lx = Lexer.init(arena.allocator(), src);
+    var at: usize = 0;
+    while (true) {
+        const t = lx.nextOrComment() catch |e| {
+            if (e == error.OutOfMemory) return e;
+            return;
+        };
+        try testing.expect(at <= t.start and t.start <= t.stop and t.stop <= src.len);
+        for (src[at..t.start]) |b| try testing.expect(b == ' ' or b == '\t' or b == '\r' or b == '\n');
+        at = t.stop;
+        if (t.tag == .eof) {
+            try testing.expectEqual(t.start, t.stop);
+            return;
+        }
+        try testing.expect(t.start < t.stop);
+    }
+}
+
+test "lex: every token holds its bytes, `src[start..stop]`: a name, a number, a symbol, each kind of string with its quotes, the end at the source's end" {
+    const src = "ab 12 ~= \"a\\n\" 'b' [=[\nc]=] x";
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var lx = Lexer.init(arena.allocator(), src);
+    for ([_][]const u8{ "ab", "12", "~=", "\"a\\n\"", "'b'", "[=[\nc]=]", "x" }) |want| {
+        const t = try lx.next();
+        try testing.expectEqualStrings(want, src[t.start..t.stop]);
+    }
+    const e = try lx.next();
+    try testing.expectEqual(Tag.eof, e.tag);
+    try testing.expectEqual(src.len, e.start);
+    try testing.expectEqual(src.len, e.stop);
+}
+
+test "lex: `next` passes comments by, and `nextOrComment` gives each as a token, in place, with its line and column; the other tokens are the same from both" {
+    const src = "a -- b\n--[=[ c\n d ]=] e --[=x\n  --\n--[==[ ]=] ]==]";
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var plain = Lexer.init(arena.allocator(), src);
+    for ([_]struct { Tag, []const u8 }{ .{ .name, "a" }, .{ .name, "e" }, .{ .eof, "" } }) |want| {
+        const t = try plain.next();
+        try testing.expectEqual(want[0], t.tag);
+        try testing.expectEqualStrings(want[1], t.text);
+    }
+    var keeping = Lexer.init(arena.allocator(), src);
+    for ([_]struct { Tag, []const u8, u32, u32 }{
+        .{ .name, "a", 1, 1 },
+        .{ .comment, "-- b", 1, 3 },
+        .{ .comment, "--[=[ c\n d ]=]", 2, 1 },
+        .{ .name, "e", 3, 8 },
+        .{ .comment, "--[=x", 3, 10 },
+        .{ .comment, "--", 4, 3 },
+        .{ .comment, "--[==[ ]=] ]==]", 5, 1 },
+        .{ .eof, "", 5, 16 },
+    }) |want| {
+        const t = try keeping.nextOrComment();
+        try testing.expectEqual(want[0], t.tag);
+        try testing.expectEqualStrings(want[1], t.text);
+        try testing.expectEqualStrings(want[1], src[t.start..t.stop]);
+        try testing.expectEqual(want[2], t.line);
+        try testing.expectEqual(want[3], t.column);
+    }
+}
+
+test "lex: `nextOrComment` refuses what `next` refuses: a comment with no level, one never closed, a string never closed" {
+    for ([_]struct { src: []const u8, says: []const u8 }{
+        .{ .src = "--[[ a ]]", .says = "a long comment needs a level" },
+        .{ .src = "--[=[ a", .says = "a long comment with no `]=]`" },
+        .{ .src = "\"a", .says = "no closing quote" },
+    }) |case| {
+        var arena = std.heap.ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        var lx = Lexer.init(arena.allocator(), case.src);
+        try testing.expectError(error.Lex, lx.nextOrComment());
+        try testing.expect(std.mem.indexOf(u8, lx.err.?.message, case.says) != null);
+    }
+}
+
+test "lex: only space stands between tokens, on sources that lex to the end, end in an error, or hold nothing but a comment" {
+    for ([_][]const u8{ "", " \t\r\n", "--", "a -- b\r\nc", "x = [=[ -- ]=] --[=[ ]] ]=] y", "a @ b", "--[=[ a", "\"a" }) |src| try expectEveryByteHeld(src);
+}
+
 /// One input for `std.testing.fuzz`: the lexer ends in a stream of tokens or a clean
 /// error, its lines never going back, and every error inside the source.
 fn lexOne(_: void, smith: *std.testing.Smith) anyerror!void {
     var buf: [256]u8 = undefined;
     const src = buf[0..smith.slice(&buf)];
+    try expectEveryByteHeld(src);
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var lx = Lexer.init(arena.allocator(), src);

@@ -392,6 +392,15 @@ function zig_tokens(path, opts?)
   return host("zig_tokens", path, opts)
 end
 
+-- A Shale file's tokens, from Shale's own lexer, comments among them: each
+-- `{tag, text, line, start, stop}`, with `read(path, start, stop - start)` the
+-- token and `text` its source bytes. `tag` is `name`, `int`, `string`,
+-- `comment`, a keyword's `kw_end`, or a symbol's `plus`; `opts.tag` keeps one.
+function shale_tokens(path, opts?)
+  if opts == nil then return host("shale_tokens", path) end
+  return host("shale_tokens", path, opts)
+end
+
 -- **A ZIG FILE'S `@import`s AND `@embedFile`s** (metal-vmm QUEUE 235, 3),
 -- from Zig's parser, in source order: each `{kind = "import" | "embed",
 -- target, name, line, file = "found" | "missing" | "module"}`.
