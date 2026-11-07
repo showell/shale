@@ -126,14 +126,10 @@ test "gate: the hook's input: the command of Bash and Monitor, any other tool pa
     try testing.expectEqualStrings("tail -f x", m.command.?);
     const r = gate.readHook(a.allocator(), "{\"session_id\":\"s1\",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/x\"}}").?;
     try testing.expect(r.command == null);
-    try testing.expect(!h.subagent);
     // A subagent's call carries its `agent_id` (the hooks reference,
-    // "Common input fields"): local cold agents are exempt.
+    // "Common input fields"). It reads like any other call.
     const sub = gate.readHook(a.allocator(), "{\"session_id\":\"s1\",\"agent_id\":\"a-9\",\"agent_type\":\"Explore\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}").?;
-    try testing.expect(sub.subagent);
-    // `agent_type` alone is a top-level `--agent` session: held.
-    try testing.expect(!gate.readHook(a.allocator(), "{\"agent_type\":\"x\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}").?.subagent);
-    try testing.expect(!gate.readHook(a.allocator(), "{\"agent_id\":\"\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}").?.subagent);
+    try testing.expectEqualStrings("ls", sub.command.?);
     try testing.expect(gate.readHook(a.allocator(), "not json") == null);
     try testing.expect(gate.readHook(a.allocator(), "{\"tool_name\":\"Bash\",\"tool_input\":{}}") == null);
 }
@@ -186,9 +182,15 @@ test "gate: the wrapper: a launch passes, a refusal refuses, an escape is logged
     defer testing.allocator.free(log);
     try testing.expectEqual(@as(usize, 1), std.mem.count(u8, log, "\n"));
     try testing.expect(std.mem.indexOf(u8, log, "\ts7\twant\tsed-in-place\tone edit\t# want: sed-in-place: one edit\\nsed -i s/a/b/ x\n") != null);
+    // A subagent is held to the gate like the session that started it
+    // (Steve, 2026-11-07): its plain `ls -la` is refused, and its Shale
+    // launch runs.
     const sub = try wrapped(io, home, bin, "{\"session_id\":\"s\",\"agent_id\":\"a1\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls -la\"}}");
     defer testing.allocator.free(sub.err);
-    try testing.expectEqual(@as(u8, 0), sub.code);
+    try testing.expectEqual(@as(u8, 2), sub.code);
+    const sub_launch = try wrapped(io, home, bin, "{\"session_id\":\"s\",\"agent_id\":\"a1\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"shale a.shale\"}}");
+    defer testing.allocator.free(sub_launch.err);
+    try testing.expectEqual(@as(u8, 0), sub_launch.code);
     const junk = try wrapped(io, home, bin, "not json");
     defer testing.allocator.free(junk.err);
     try testing.expectEqual(@as(u8, 2), junk.code);

@@ -110,8 +110,8 @@ EOF
 ```
 
 (`-e SOURCE` runs a script given on the command line too, but the gate
-refuses it: its quotes and `*` are not plain words. It is for a subagent,
-or a shell outside the gate.)
+refuses it: its quotes and `*` are not plain words. It is for a shell
+outside the gate.)
 
 A value given as `name=value` is the script's `arg("name", default)`; a
 default that is an integer or a boolean reads the value as one. **A value
@@ -859,9 +859,10 @@ failure, a missing binary included, into a refusal). It passes exactly:
   newlines escaped. An escape that cannot be logged (no `HOME`, a write
   that fails) is refused, not run. `shale cookbook:wants.shale` reads it
   back (today's, or `since=`, with counts by kind, tag and session),
-  through a mount over that folder (`state = ~/.local/state/shale ro`);
-- **a subagent's call:** its hook input carries an `agent_id` (the
-  top-level session's carries none), so subagents are not gated.
+  through a mount over that folder (`state = ~/.local/state/shale ro`).
+
+A subagent is gated like the session that started it: its hook input
+carries an `agent_id`, and the gate reads it like any other call.
 
 Anything else is refused, with one line naming both forms. Put `shale` on
 `PATH` as a link to `zig-out/bin/shale`, so a rebuild is what every launch
