@@ -3,12 +3,16 @@
 -- types. Resolving reads only files the walk has read already (`st.files`).
 --
 --   use("cookbook:roc/walk_uses.shale")
+--   package_folders(root, given, trees), own_packages(st, tree, path)
+--                             where a file's `import pkg.Module` reads from
+--   client_files(text, skip), then clients_line(st, paths, start)
+--                             the files `clients=` names, and their apps
 --   resolve(st, info, name)   what a type name written in a file refers to
 --   members_of(tree, at)      the annotations in a type's block
 --   test_context(info)     where each node sits, and the values only expects use
 --   in_tests(fc, c)        whether a node there is in tests
 --   asked_members(st, start), then count_uses(st, info, start) for each other
---   file, then uses_note(rec), unused_members(st) and precision_note(st)
+--   file, then uses_note(rec, app_of), unused_members(st) and precision_note(st)
 --
 -- A use is in tests when it sits in an `expect`, in a top-level value that
 -- only expects use (directly or through other such values), or anywhere in a
@@ -39,6 +43,171 @@ function is_outer(tree, at)
     k = tree[k].parent
   end
   return true
+end
+
+function path_join(dir, name)
+  if dir == "" or dir == "." then return name end
+  return dir .. "/" .. name
+end
+
+-- Roc's trees of the files `paths`, in order, as `roc_tree` gives them,
+-- parsing only those not already in `trees` and keeping them there, so walks
+-- that share `trees` parse a file once.
+function parsed_files(trees, paths)
+  local fresh = {}
+  for p in paths do
+    if not has_key(trees, p) then push(fresh, p) end
+  end
+  if #fresh > 0 then
+    for f in roc_tree(fresh) do trees[f.path] = f end
+  end
+  local out = {}
+  for p in paths do push(out, trees[p]) end
+  return out
+end
+
+-- The packages an app's or a package's header names, from its tree, as
+-- `{name, raw}`, `raw` being the path written for its main file.
+function header_packages(tree)
+  local out = {}
+  for i = 1, #tree do
+    local n = tree[i]
+    if n.kind == "record-field" and n.parent ~= 0 and tree[n.parent].kind == "packages" then
+      local raw = ""
+      for j = i + 1, #tree do
+        if tree[j].kind == "e-string-part" and tree[tree[j].parent].parent == i then raw = tree[j].raw end
+      end
+      push(out, {name = n.name, raw = raw})
+    end
+  end
+  return out
+end
+
+-- Whether the line `l` opens an app's or a package's header.
+function is_header_line(l)
+  return starts_with(l, "app [") or starts_with(l, "app[") or l == "package" or starts_with(l, "package [") or starts_with(l, "package[")
+end
+
+-- Each package's folder, from the `packages=` argument `given` and the
+-- headers of the apps and packages directly in the folder `root`, as `{dir}`
+-- or `{err}`, a given one with `given` set.
+function package_folders(root, given, trees)
+  local out = {}
+  local apps = {}
+  for p in glob(path_join(root, "*.roc")) do
+    local header = false
+    for l in lines(read(p)) do
+      if is_header_line(l) then header = true end
+    end
+    if header then push(apps, p) end
+  end
+  if #apps > 0 then
+    for f in parsed_files(trees, apps) do
+      if f.err == "" then
+        for pkg in header_packages(f.nodes) do
+          local dir = path_normal(path_join(root, dirname(pkg.raw)))
+          local found = dir == nil and {err = "`" .. pkg.name .. "` is at `" .. dirname(pkg.raw) .. "` from the root, outside it: pass packages=" .. pkg.name .. "=<folder>, such as a repos: path"} or {dir = dir}
+          if has_key(out, pkg.name) and get(out[pkg.name], "dir", "") ~= get(found, "dir", "") then
+            found = {err = "the apps in the root give `" .. pkg.name .. "` two folders: pass packages=" .. pkg.name .. "=<folder>"}
+          end
+          out[pkg.name] = found
+        end
+      end
+    end
+  end
+  if given ~= "" then
+    for pair in split(given, ",") do
+      local at = find(pair, "=")
+      if at == nil then fail("type_walk: packages=: `" .. pair .. "` is no name=folder") end
+      out[trim(sub(pair, 1, at - 1))] = {dir = trim(sub(pair, at + 1)), given = true}
+    end
+  end
+  return out
+end
+
+-- The folder of each package the file at `path` reads, unless `packages=`
+-- names that package: from its own header, a gates app's
+-- `game: "../game.roc"`, else from the headers of the apps and packages in
+-- its folder, as a client app's module reads `import lib.Brush` through its
+-- folder's `main.roc`. A folder outside the root and its mounts is left out.
+function own_packages(st, tree, path)
+  local dir = dirname(path)
+  if not has_key(st.dir_packages, dir) then st.dir_packages[dir] = package_folders(dir, "", st.trees) end
+  local found = st.dir_packages[dir]
+  local own = {}
+  for name in keys(found) do
+    if has_key(found[name], "dir") then own[name] = found[name] end
+  end
+  for pkg in header_packages(tree) do
+    local at = path_normal(path_join(dir, dirname(pkg.raw)))
+    if at ~= nil then own[pkg.name] = {dir = at} end
+  end
+  local out = {}
+  for name in keys(own) do
+    if not get(get(st.packages, name, {}), "given", false) then out[name] = own[name] end
+  end
+  return out
+end
+
+-- Stops a walk whose `root=`, `module=` or `clients=` climbs with `..`,
+-- which no path may, naming the forms that reach a package from outside it.
+function refuse_climbing(root, module, clients)
+  for pair in {{"root", root}, {"module", module}, {"clients", clients}} do
+    if contains(pair[2], "..") then fail("type_walk: " .. pair[1] .. "=" .. pair[2] .. " climbs with `..`, which no path may. Walk a package from outside it with root= as a mount path, root=repos:roc-apps/canvas_apps/lib module=Brush, or from its parent folder, root=lib, and name the apps that use it with clients=, such as clients=repos:roc-apps/canvas_apps/*") end
+  end
+  return nil
+end
+
+-- The client files `clients=`'s text names, comma separated, as `{paths,
+-- app_of}`: an entry ending in `.roc` is a glob of files, and any other is a
+-- folder or a glob of folders, `repos:roc-apps/canvas_apps/*`, whose `.roc`
+-- files at any depth are read. A file's app is the folder its entry names,
+-- or for a `.roc` glob the file's own folder. The files in the set `skip`,
+-- the root's, are left out. An entry that names no file stops the walk.
+function client_files(text, skip)
+  local paths = {}
+  local app_of = {}
+  for part in split(text, ",") do
+    local entry = trim(part)
+    while ends_with(entry, "/") do entry = sub(entry, 1, #entry - 1) end
+    if entry ~= "" then
+      local is_file = ends_with(entry, ".roc")
+      local found = glob(is_file and entry or entry .. "/**/*.roc")
+      if #found == 0 then fail("type_walk: clients=: `" .. entry .. "` names no .roc file") end
+      local depth = #split(entry, "/")
+      for p in found do
+        local q = path_normal(p)
+        if not has_key(skip, q) and not has_key(app_of, q) then
+          push(paths, q)
+          app_of[q] = is_file and dirname(q) or join(take(split(q, "/"), depth), "/")
+        end
+      end
+    end
+  end
+  return {paths = sort(paths), app_of = app_of}
+end
+
+function plural(n, word)
+  return n .. " " .. word .. (n == 1 and "" or "s")
+end
+
+-- The clients' header line, after their files are read: how many files in
+-- how many apps. When none imports the asked file `start`, a lost entry says
+-- so, since then the root and the clients are named by paths of two kinds.
+function clients_line(st, paths, start)
+  local apps = {}
+  local importing = 0
+  for p in paths do
+    apps[st.app_of[p]] = true
+    local imports = get(st.files[p], "imports", {})
+    local hit = false
+    for name in keys(imports) do
+      if get(imports[name], "path", "") == start then hit = true end
+    end
+    if hit then importing = importing + 1 end
+  end
+  if importing == 0 then push(st.lost, "clients=: none of the " .. #paths .. " client files imports " .. start .. "; name root= and clients= alike, both as mount paths or both from one folder") end
+  return "# Clients: " .. plural(#paths, "file") .. " in " .. plural(#keys(apps), "app") .. ", " .. importing .. " importing " .. start
 end
 
 -- The type in `info` whose name is `q` exactly, else nil.
@@ -495,10 +664,6 @@ function count_uses(st, info, start)
   return nil
 end
 
-function plural(n, word)
-  return n .. " " .. word .. (n == 1 and "" or "s")
-end
-
 -- How many files of `set`, a set of paths, are not in `seen`, and how many of
 -- those are not in `prod` either, so only tests use the member there; each
 -- is then added to `seen`.
@@ -544,10 +709,27 @@ function is_unused(rec)
   return u.named.files == 0 and u.method.files == 0 and u.op.files == 0
 end
 
+-- How many client apps, by `app_of`, hold a file that names the member of
+-- the record `rec` or calls it on a receiver of its type.
+function apps_using(rec, app_of)
+  local apps = {}
+  for p in keys(rec.prod) do
+    if has_key(app_of, p) then apps[app_of[p]] = true end
+  end
+  for p in keys(rec.test) do
+    if has_key(app_of, p) then apps[app_of[p]] = true end
+  end
+  return #keys(apps)
+end
+
 -- The note after a member's annotation: `used by 3 files, 1 in tests only;
--- by method name in 2 more; by operator, untyped, in 1 more`.
-function uses_note(rec)
+-- by method name in 2 more; by operator, untyped, in 1 more`. When the files
+-- that name it or call it typed lie in several client apps, by `app_of`, the
+-- first part says how many: `used by 9 files in 5 apps`.
+function uses_note(rec, app_of)
   local u = uses_of(rec)
+  local apps = apps_using(rec, app_of)
+  if apps > 1 then u.named.apps = apps end
   local parts = {}
   local kinds = {{u.named, "used by ", ""}, {u.method, "by method name in ", "used by method name only, in "}, {u.op, "by operator, untyped, in ", "used by operator only, untyped, in "}}
   for k in kinds do
@@ -555,6 +737,7 @@ function uses_note(rec)
     if c.files > 0 then
       local text = k[2] .. plural(c.files, "file")
       if #parts > 0 then text = k[2] .. c.files .. " more" elseif k[3] ~= "" then text = k[3] .. plural(c.files, "file") end
+      if has_key(c, "apps") then text = text .. " in " .. c.apps .. " apps" end
       if c.in_tests > 0 then text = text .. ", " .. c.in_tests .. " in tests only" end
       push(parts, text)
     end
