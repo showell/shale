@@ -311,6 +311,14 @@ has none of it):
   (std.zig.Token.Tag's names), by the tokenizer the other three read with:
   a plain comment is no token, a string one. `{tag = "identifier"}` keeps
   the names alone.
+  `shale_tokens(p, {tag}?)` lists a Shale file's tokens, comments among them,
+  by the lexer that runs the language: `{tag, text, line, start, stop}`.
+  `tag` is `name`, `int`, `string`, `comment`, a keyword's `kw_end` or a
+  symbol's `plus` (`lex.Tag`'s names); `text` is the source's bytes, a string's
+  quotes and escapes as written; `read(p, start, stop - start)` is the token,
+  as in `zig_decls`, and only space stands between tokens.
+  `{tag = "comment"}` keeps the comments alone. A file that doesn't lex stops
+  the run with the lexer's line and message.
   `zig_imports(p)` lists a Zig file's `@import`s and `@embedFile`s, from
   Zig's parser (a split call is one, a comment's or a string's none):
   `{kind, target, name, line, file}`, `file` being `"found"` or

@@ -10,13 +10,11 @@
 -- `files=` is a comma list, and `a/b.shale` comes out as `<out>/a/b.shale.html`.
 -- A page links the stylesheet `css=` names, `book.css` unless told.
 --
--- Shale gives a script no tokens of its own, so this reads them itself. That is
--- a small job, because the language's lexing depends on no context: a keyword
--- is a keyword everywhere (`m.end` and `{end = 1}` are refused), and a `--`
--- outside a string always starts a comment, even in `x--1`. The real lexer
--- still has the first word: a file that `shale --check` refuses is refused here
--- too, so `shale_tokens` only places what that lexer accepted. It stops on what
--- it can't place, and never guesses.
+-- The tokens are `shale_tokens`', the language's own lexer, comments among them.
+-- This recipe adds only the class of each. A file must also pass `shale --check`,
+-- so a file that lexes but doesn't compile gets no page either. Every byte must
+-- be in a token or be space between tokens, or the file is refused: nothing is
+-- guessed.
 --
 -- A refused file gets no page, and the run says why and fails at its end. The
 -- text of a page with its spans taken away must equal the source's escaped text
@@ -33,12 +31,7 @@ const OPEN = "<pre><code class=\"language-shale\">"
 const CLOSE = "</code></pre>"
 const OUR_SPANS = "<span class=\"syn-[a-z]+\">|</span>"
 const CLASSES = {"syn-comment", "syn-string", "syn-number", "syn-keyword", "syn-name"}
-const SPACE = "space"
-
-const KEYWORD = set_of({"and", "break", "const", "continue", "do", "else", "elseif", "end", "false", "for", "function", "if", "in", "local", "nil", "not", "or", "return", "then", "true", "while"})
-const QUOTED = "\"(?:[^\"\\\\\n]|\\\\[^\n])*\"|'(?:[^'\\\\\n]|\\\\[^\n])*'"
-const LONG_OPENER = "\\[=+\\["
-const PLAIN = "[ \t\r\n]+|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|//|\\.\\.|==|~=|<=|>=|[-+*%#?(){}\\[\\],;.=<>]"
+const CLASS_OF_TAG = {comment = "syn-comment", string = "syn-string", int = "syn-number"}
 
 function escaped(text)
   local s = join(split(text, "&"), "&amp;")
@@ -52,79 +45,43 @@ function refuse(text, at, why)
   fail("line " .. #split(sub(text, 1, at), "\n") .. ": " .. why)
 end
 
--- Where the long string opened at `at` ends: the byte after its closer. A
--- closer's first occurrence is the one the lexer stops at, since a run of `=`
--- of any other length never holds it.
-function long_end(text, at)
-  local opener = re_find(text, LONG_OPENER, {from = at})
-  if opener == nil or opener.at ~= at then refuse(text, at, "`[=` opens no long string") end
-  local closer = "]" .. rep("=", #opener.text - 2) .. "]"
-  local close = find(text, closer, at + #opener.text)
-  if close == nil then refuse(text, at, "no `" .. closer .. "` closes this") end
-  return close + #closer
+-- A name is `syn-name` right after `function`, and a comment between them
+-- doesn't end the wait for it.
+function class_of(tag, previous_tag)
+  if tag == "name" and previous_tag == "kw_function" then return "syn-name" end
+  if starts_with(tag, "kw_") then return "syn-keyword" end
+  return get(CLASS_OF_TAG, tag, "")
 end
 
--- Where the comment at `at` ends. `--[=x` is a line comment, so only a whole
--- opener makes a block.
-function comment_end(text, at)
-  local after = sub(text, at + 2, at + 3)
-  if after == "[[" then refuse(text, at, "a long comment needs a level") end
-  if after == "[=" then
-    local opener = re_find(text, LONG_OPENER, {from = at + 2})
-    if opener ~= nil and opener.at == at + 2 then return long_end(text, at + 2) end
-  end
-  local newline = find(text, "\n", at)
-  if newline == nil then return #text + 1 end
-  return newline
-end
-
-function quoted_end(text, at)
-  local m = re_find(text, QUOTED, {from = at})
-  if m == nil or m.at ~= at then refuse(text, at, "a string that doesn't close on its line") end
-  return at + #m.text
-end
-
-function plain_token(text, at)
-  local m = re_find(text, PLAIN, {from = at})
-  if m == nil or m.at ~= at then refuse(text, at, "a byte no token starts with, `" .. sub(text, at, at) .. "`") end
-  local class = ""
-  if trim(m.text) == "" then
-    class = SPACE
-  elseif has_key(KEYWORD, m.text) then
-    class = "syn-keyword"
-  elseif re_match(m.text, "^[0-9]") then
-    class = "syn-number"
-  end
-  return {from = at, to = at + #m.text, class = class}
-end
-
-function token_at(text, at)
-  local first = sub(text, at, at)
-  local two = sub(text, at, at + 1)
-  if two == "--" then return {from = at, to = comment_end(text, at), class = "syn-comment"} end
-  if first == "\"" or first == "'" then return {from = at, to = quoted_end(text, at), class = "syn-string"} end
-  if two == "[[" then refuse(text, at, "a long string needs a level") end
-  if two == "[=" then return {from = at, to = long_end(text, at), class = "syn-string"} end
-  return plain_token(text, at)
-end
-
--- Every token of `text` in order, each `{from, to, class}`, with `to` the byte
--- after it. A name or a symbol has the class "". A comment can stand between
--- `function` and its name, and doesn't end the wait for it.
-function shale_tokens(text)
-  local tokens = {}
-  local at = 1
-  local previous = ""
-  while at <= #text do
-    local token = token_at(text, at)
-    at = token.to
-    if token.class ~= SPACE then
-      if previous == "function" and token.class == "" then token.class = "syn-name" end
-      if token.class ~= "syn-comment" then previous = sub(text, token.from, token.to - 1) end
-      push(tokens, token)
-    end
+-- Sets each token's `class`, "" for a name or a symbol.
+function classify(tokens)
+  local previous_tag = ""
+  for token in tokens do
+    token.class = class_of(token.tag, previous_tag)
+    if token.tag ~= "comment" then previous_tag = token.tag end
   end
   return tokens
+end
+
+-- Refuses unless the tokens hold `text`: each one's bytes are where it says, in
+-- order, with only space around them.
+function check_placed(text, tokens)
+  local at = 0
+  for token in tokens do
+    if token.start < at then refuse(text, token.start + 1, "a token overlaps the one before it") end
+    if trim(sub(text, at + 1, token.start)) ~= "" then refuse(text, at + 1, "bytes no token holds") end
+    if sub(text, token.start + 1, token.stop) ~= token.text then refuse(text, token.start + 1, "a token that isn't where it says") end
+    at = token.stop
+  end
+  if trim(sub(text, at + 1, #text)) ~= "" then refuse(text, at + 1, "bytes no token holds") end
+  return nil
+end
+
+-- The classed tokens of the file at `path`, whose text is `text`.
+function placed_tokens(path, text)
+  local tokens = shale_tokens(path)
+  check_placed(text, tokens)
+  return classify(tokens)
 end
 
 function span(class, text)
@@ -138,9 +95,9 @@ function colored(text, tokens)
   local at = 1
   for token in tokens do
     if token.class ~= "" then
-      push(pieces, escaped(sub(text, at, token.from - 1)))
-      push(pieces, span(token.class, escaped(sub(text, token.from, token.to - 1))))
-      at = token.to
+      push(pieces, escaped(sub(text, at, token.start)))
+      push(pieces, span(token.class, escaped(sub(text, token.start + 1, token.stop))))
+      at = token.stop + 1
     end
   end
   push(pieces, escaped(sub(text, at, #text)))
@@ -181,7 +138,7 @@ function color_file(path, out, tally)
     return nil
   end
   local text = read(path)
-  local got = attempt(shale_tokens, text)
+  local got = attempt(placed_tokens, path, text)
   if not got.ok then
     push(tally.refused, path .. ": " .. got.error)
     return nil
@@ -206,19 +163,33 @@ function color_files(paths, out)
   return tally
 end
 
+-- `shale_tokens` reads a file, so a source goes through one in the test's folder.
+function source_tokens(checks, source)
+  local path = checks.folder .. "/source.shale"
+  replace(path, source)
+  return placed_tokens(path, source)
+end
+
 -- `expect_html` holds a source to its exact HTML, and the guard to it too.
 function expect_html(checks, what, source, want)
-  local html = colored(source, shale_tokens(source))
+  local html = colored(source, source_tokens(checks, source))
   if html ~= want then fail("self_test: " .. what .. " gave [" .. html .. "], not [" .. want .. "]") end
   check_text(what, source, html)
-  push(checks, what)
+  push(checks.passed, what)
   return nil
 end
 
 function expect_refused(checks, source, why)
-  local got = attempt(shale_tokens, source)
+  local got = attempt(source_tokens, checks, source)
   if got.ok or not contains(got.error, why) then fail("self_test: [" .. source .. "] gave " .. json_write(got)) end
-  push(checks, "refused: " .. source)
+  push(checks.passed, "refused: " .. source)
+  return nil
+end
+
+function expect_misplaced(checks, what, text, tokens, why)
+  local got = attempt(check_placed, text, tokens)
+  if got.ok or not contains(got.error, why) then fail("self_test: " .. what .. " gave " .. json_write(got)) end
+  push(checks.passed, what)
   return nil
 end
 
@@ -288,36 +259,53 @@ function test_html(checks)
   if changed.ok or changed.error ~= "color_shale: coloring changed the text of p" then fail("self_test: changed text gave " .. json_write(changed)) end
   if attempt(check_text, "p", "<", span("syn-name", "<")).ok then fail("self_test: a lost escape passed") end
   if attempt(check_text, "p", "ab", span("syn-name", "a") .. "bb").ok then fail("self_test: a repeated byte passed") end
-  local overlap = {{from = 1, to = 3, class = "syn-name"}, {from = 2, to = 3, class = "syn-name"}}
+  local overlap = {{start = 0, stop = 2, class = "syn-name"}, {start = 1, stop = 2, class = "syn-name"}}
   if attempt(check_text, "p", "ab", colored("ab", overlap)).ok then fail("self_test: overlapping tokens passed") end
-  push(checks, "the text check, both sides")
+  push(checks.passed, "the text check, both sides")
   return nil
 end
 
+-- What the lexer refuses reaches a caller as its own words, with the line.
 function test_refusals(checks)
-  expect_refused(checks, "\"abc", "doesn't close")
-  expect_refused(checks, "\"a\nb\"", "doesn't close")
-  expect_refused(checks, "'a\"", "doesn't close")
-  expect_refused(checks, "\"a\\", "doesn't close")
-  expect_refused(checks, "\"a\\\nb\"", "doesn't close")
-  expect_refused(checks, "x\ny\n[=[ a", "line 3: no `]=]`")
-  expect_refused(checks, "[==[ a ]=]", "no `]==]`")
-  expect_refused(checks, "--[=[ a", "no `]=]`")
-  expect_refused(checks, "[[a]]", "needs a level")
-  expect_refused(checks, "--[[a]]", "needs a level")
-  expect_refused(checks, "[=a", "opens no long string")
+  expect_refused(checks, "\"abc", "no closing quote")
+  expect_refused(checks, "\"a\nb\"", "past the end of its line")
+  expect_refused(checks, "'a\"", "no closing quote")
+  expect_refused(checks, "\"a\\", "no closing quote")
+  expect_refused(checks, "\"a\\\nb\"", "an escape this language does not have")
+  expect_refused(checks, "x\ny\n[=[ a", "line 3: a long string with no `]=]`")
+  expect_refused(checks, "[==[ a ]=]", "with no `]==]`")
+  expect_refused(checks, "--[=[ a", "a long comment with no `]=]`")
+  expect_refused(checks, "[[a]]", "a long string needs a level")
+  expect_refused(checks, "--[[a]]", "a long comment needs a level")
+  expect_refused(checks, "[=a", "`[=` opens a long string")
   expect_refused(checks, "a @ b", "no token starts with")
-  expect_refused(checks, "a / b", "no token starts with")
-  expect_refused(checks, "a ~ b", "no token starts with")
-  expect_refused(checks, "s:upper()", "no token starts with")
+  expect_refused(checks, "a / b", "use `//`")
+  expect_refused(checks, "a ~ b", "bitwise")
+  expect_refused(checks, "s:upper()", "method calls")
   expect_refused(checks, "local é = 1", "no token starts with")
+  expect_refused(checks, "x = 1.5", "float")
   return nil
 end
 
--- A file the real lexer refuses gets no page and fails the run's count, though
--- `shale_tokens` would take it, and a good file beside it still comes out.
+-- A token list that doesn't hold its text is refused, whichever way it fails.
+function test_placing(checks)
+  local a = {text = "a", start = 0, stop = 1}
+  local b = {text = "b", start = 2, stop = 3}
+  check_placed(" a\tb\n", {{text = "a", start = 1, stop = 2}, {text = "b", start = 3, stop = 4}})
+  push(checks.passed, "tokens with only space around them")
+  expect_misplaced(checks, "a byte between tokens", "a?b", {a, b}, "line 1: bytes no token holds")
+  expect_misplaced(checks, "a byte before the first token", "\n?a", {{text = "a", start = 2, stop = 3}}, "line 2: bytes no token holds")
+  expect_misplaced(checks, "a byte after the last token", "a b", {a}, "bytes no token holds")
+  expect_misplaced(checks, "a token whose bytes are elsewhere", "a c", {a, b}, "isn't where it says")
+  expect_misplaced(checks, "a token over the one before it", "ab", {{text = "ab", start = 0, stop = 2}, {text = "b", start = 1, stop = 2}}, "overlaps")
+  return nil
+end
+
+-- A file `shale --check` refuses gets no page and fails the run's count, though
+-- `shale_tokens` would take an undeclared name, and a good file beside it still
+-- comes out.
 function test_files(checks)
-  local folder = fresh_dir("scratch:", "color-shale")
+  local folder = checks.folder
   replace(folder .. "/good.shale", "print(1) -- a\n")
   replace(folder .. "/undeclared.shale", "print(nobody)\n")
   replace(folder .. "/floats.shale", "print(1.5)\n")
@@ -328,24 +316,25 @@ function test_files(checks)
   local good = read(page_path(folder .. "/good.shale", folder .. "/out"))
   if not contains(good, OPEN .. "print(" .. n("1") .. ") " .. c("-- a") .. "\n" .. CLOSE) then fail("self_test: the page was [" .. good .. "]") end
   if #glob(folder .. "/out/**/*.html") ~= 1 then fail("self_test: a refused file left a page") end
-  push(checks, "a file run, with what the real lexer refuses")
+  push(checks.passed, "a file run, with what the real lexer refuses")
   local too_many = {}
   for i = 1, 65 do push(too_many, "x.shale") end
   local over = attempt(color_files, too_many, folder .. "/out")
   if over.ok or not contains(over.error, "a run holds 64") then fail("self_test: 65 files gave " .. json_write(over)) end
-  push(checks, "more files than a run's programs")
-  remove_tree(folder)
+  push(checks.passed, "more files than a run's programs")
   return nil
 end
 
 function self_test()
-  local checks = {}
+  local checks = {folder = fresh_dir("scratch:", "color-shale"), passed = {}}
   test_comments_and_strings(checks)
   test_words_and_numbers(checks)
   test_html(checks)
   test_refusals(checks)
+  test_placing(checks)
   test_files(checks)
-  print("color_shale self_test: PASS, " .. #checks .. " checks")
+  remove_tree(checks.folder)
+  print("color_shale self_test: PASS, " .. #checks.passed .. " checks")
   return nil
 end
 

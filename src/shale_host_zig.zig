@@ -42,23 +42,23 @@ const hl = @import("shale_host_linux.zig");
 /// script calling `zig_decls` over a hundred files holds every parse at once.
 /// Only what the script is given, and what a change hands core, goes in the
 /// run's arena.
-const Scratch = struct {
+pub const Scratch = struct {
     capped: hl.Capped,
     arena: std.heap.ArenaAllocator,
 
-    fn init(s: *Scratch, backing: std.mem.Allocator, run: *Run) std.mem.Allocator {
+    pub fn init(s: *Scratch, backing: std.mem.Allocator, run: *Run) std.mem.Allocator {
         s.capped = .{ .backing = backing, .most = run.budgets.arena_bytes -| run.budgeted.held };
         s.arena = std.heap.ArenaAllocator.init(s.capped.allocator());
         return s.arena.allocator();
     }
 
-    fn deinit(s: *Scratch) void {
+    pub fn deinit(s: *Scratch) void {
         s.arena.deinit();
     }
 };
 
 /// Copies `x` into the run's arena, so it outlives the scratch.
-fn keep(run: *Run, pos: ast.Pos, x: []const u8) Error![]const u8 {
+pub fn keep(run: *Run, pos: ast.Pos, x: []const u8) Error![]const u8 {
     return run.alloc.dupe(u8, x) catch run.oom(pos);
 }
 
@@ -585,26 +585,34 @@ pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const 
     return .{ .table = list };
 }
 
+/// The tag a token builtin's options keep, `{tag = name}`, a name in `Tag`, or
+/// null for every tag. `call` names the builtin in a refusal, and `tags` says
+/// what a tag's name looks like.
+pub fn tagOption(comptime Tag: type, run: *Run, pos: ast.Pos, comptime call: []const u8, comptime tags: []const u8, opts: Value) Error!?Tag {
+    var only: ?Tag = null;
+    switch (opts) {
+        .table => |t| if (t.kind == .map) {
+            for (t.map.keys(), t.map.values()) |k, x| {
+                if (!std.mem.eql(u8, k, "tag")) return run.fail(pos, .argument, "`" ++ call ++ "` takes `tag`, not `{s}`", .{k});
+                const s = switch (x) {
+                    .string => |v| v,
+                    else => return run.fail(pos, .type, "`" ++ call ++ "`' `tag` is a tag's name, not {s}", .{x.typeName()}),
+                };
+                only = std.meta.stringToEnum(Tag, s) orelse return run.fail(pos, .argument, "`" ++ call ++ "`: no token tag `{s}` (" ++ tags ++ ")", .{s});
+            }
+        } else return run.fail(pos, .type, "`" ++ call ++ "`' options are a map, not a list", .{}),
+        else => |v| return run.fail(pos, .type, "`" ++ call ++ "`' options are a map, not {s}", .{v.typeName()}),
+    }
+    return only;
+}
+
 /// `host("zig_tokens", path[, {tag}])`: the file's tokens from `za.tokens`, as
 /// `{tag, text, line}`, where `tag` is a std.zig.Token.Tag name. A plain comment
 /// is not a token; a doc comment is. `{tag = "identifier"}` keeps one kind, so
 /// the script does not hold every token. Charges a step per token.
 pub fn tokens(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (args.len < 1 or args.len > 2) return run.fail(pos, .argument, "`zig_tokens` takes a path and options, given {d} arguments", .{args.len});
-    var only: ?za.Tag = null;
-    if (args.len == 2) switch (args[1]) {
-        .table => |t| if (t.kind == .map) {
-            for (t.map.keys(), t.map.values()) |k, x| {
-                if (!std.mem.eql(u8, k, "tag")) return run.fail(pos, .argument, "`zig_tokens` takes `tag`, not `{s}`", .{k});
-                const s = switch (x) {
-                    .string => |v| v,
-                    else => return run.fail(pos, .type, "`zig_tokens`' `tag` is a tag's name, not {s}", .{x.typeName()}),
-                };
-                only = std.meta.stringToEnum(za.Tag, s) orelse return run.fail(pos, .argument, "`zig_tokens`: no token tag `{s}` (std.zig.Token.Tag: `identifier`, `keyword_fn`, `string_literal`, ...)", .{s});
-            }
-        } else return run.fail(pos, .type, "`zig_tokens`' options are a map, not a list", .{}),
-        else => |v| return run.fail(pos, .type, "`zig_tokens`' options are a map, not {s}", .{v.typeName()}),
-    };
+    const only: ?za.Tag = if (args.len == 2) try tagOption(za.Tag, run, pos, "zig_tokens", "std.zig.Token.Tag: `identifier`, `keyword_fn`, `string_literal`, ...", args[1]) else null;
     const hub = script.builtins_store;
     const rd = script.builtins_read;
     const p = try hub.pathArg(run, pos, .host, args[0], false);
@@ -746,7 +754,7 @@ fn readZig(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, p: script.builtins_st
     return .{ .was = was, .src = src };
 }
 
-fn put(run: *Run, pos: ast.Pos, t: *script.value.Table, k: []const u8, v: Value) Error!void {
+pub fn put(run: *Run, pos: ast.Pos, t: *script.value.Table, k: []const u8, v: Value) Error!void {
     t.map.put(run.alloc, k, v) catch return run.oom(pos);
 }
 
