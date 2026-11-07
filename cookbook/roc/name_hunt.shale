@@ -209,6 +209,11 @@
 --                 value (`tree_shapes`). A verb that says what happens to its
 --                 argument is fine (`plus`, `clamp`, `trim_hull`). An effect,
 --                 which does act, and a value are not reported.
+--   where_name    A method in a `where` clause named by one word
+--                 (`[a.height : a -> U64]`). A clause matches by name alone,
+--                 so the name is the whole contract: two words say what it is
+--                 for (`scenery_height`). The methods Roc calls by name
+--                 (`is_eq`, `plus`, `map`) are fine. A local's clause is read.
 --
 -- Each name is judged once: from its annotation when it has one, else from
 -- its definition. An effect that takes an effectful function (`map2!`,
@@ -276,7 +281,7 @@ const ROOT = SELF_TEST and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
 -- unless USE_TYPES.
 const CHECKER_TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
 const CENSUS_ONLY = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle", "phrase_name", "singular_list", "world_verb"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle", "phrase_name", "singular_list", "world_verb", "where_name"}
 -- `worker_name` reports a helper suffix always, and a suffix that is also an
 -- ordinary word (a fold's `step`, `List.walk`, `can_go`) only on a
 -- definition that calls itself.
@@ -1030,6 +1035,21 @@ local parsed = parse_roc_files(paths)
 -- large tree's definitions pass that. The arena in the header holds them.
 for def in read_definitions(parsed.files) do
   judge_definition(def)
+end
+
+-- `where_name` in the header.
+function judge_where_names(file)
+  for n in file.nodes do
+    if n.kind == "method" and file.nodes[n.parent].kind == "where" then
+      local bare = ends_with(n.name, "!") and sub(n.name, 1, #n.name - 1) or n.name
+      if #split(bare, "_") < 2 and not has_key(LANGUAGE_FIXED_NAMES, n.name) then report(file.path, n.line, "where_name", "the `where` method `" .. n.name .. "` is one word, and a `where` clause matches by name alone: say what it is for (`scenery_height`, not `height`)") end
+    end
+  end
+  return nil
+end
+
+for file in parsed.files do
+  judge_where_names(file)
 end
 
 -- Whether a doc says whose a container word is (`a folder's entry`, `a

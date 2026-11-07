@@ -39,7 +39,7 @@ check is house style when it says more about our habits than about their code:
 [house.shale](house.shale) lists them, and `house=0` on any one recipe leaves
 them out of that run. That is the whole of `stack` and `nest_depth`, `paren_if`
 and `lambda_if` in `parens`, `single` in `boundaries`, `bare_participle`,
-`container`, `phrase_name`, `singular_list` and `world_verb` in `name_hunt`, and `abbreviation` in `plain_names`. Our own trees
+`container`, `phrase_name`, `singular_list`, `where_name` and `world_verb` in `name_hunt`, and `abbreviation` in `plain_names`. Our own trees
 keep all of them, and `write=1` refuses `house=0`.
 
 A project's guide outranks ours. Luke Boswell's roc-style.md asks for
