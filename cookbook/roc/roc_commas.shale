@@ -4,11 +4,14 @@
 -- code line wider than `width`, this script adds that comma to the widest
 -- group of two or more items that opens and closes on the line, runs roc
 -- fmt, and repeats until no line changes; a folder still changing after 8
--- passes stops the run, naming its files. Then it lists the lines still too
--- wide: comment lines, and code lines with no such group (a function type's
--- arguments, which have no brackets). The list is printed between its
--- counts, as cookbook/roc/findings.shale describes. It runs the Roc that
--- the repository's roc-version file names.
+-- passes stops the run, naming its files. The passes work on a copy of the
+-- folder's .roc files under `scratch:roc_commas_work/`, and the changed
+-- files are written back only once the rewrite has finished, so a run that
+-- stops, on a pass too many or on a budget, leaves the folder as it was.
+-- Then it lists the lines still too wide: comment lines, and code lines with
+-- no such group (a function type's arguments, which have no brackets). The
+-- list is printed between its counts, as cookbook/roc/findings.shale
+-- describes. It runs the Roc that the repository's roc-version file names.
 --
 -- With `tokens=N`, the script holds the folder to roc-style.md's stacking
 -- rule, whose six tokens are `tokens=6`, whatever a line's width: a group of
@@ -30,9 +33,17 @@
 -- self-test's Roc, and checks that the rewrite ends, that each plant comes
 -- out as its `.want` file, and that no group is left to stack or to unstack.
 -- `at_the_cap.roc` nests as deep as 8 passes reach, and `too_deep/` one group
--- deeper, which has to stop the rewrite and name its file.
+-- deeper, which has to stop the rewrite, name its file and leave it as it was.
 --
--- budget: steps=400000000 arena_bytes=2000000000 output_bytes=4000000
+-- Numeric data stays packed, as groups.shale's is_data_line and
+-- is_number_data say: a number list never stacks, and nothing on a line wider
+-- than `width` that holds one does. `numbers.roc` in the plants checks both
+-- and that a list of names beside them still stacks.
+--
+-- roc-apps' canvas_apps/safari, with its 70,000-byte lines of polygon data,
+-- takes about 160,000,000 steps with `tokens=6`.
+--
+-- budget: steps=1000000000 arena_bytes=2000000000 output_bytes=4000000 changes=5000
 
 use("cookbook:roc/findings.shale")
 use("cookbook:roc/pinned.shale")
@@ -123,31 +134,83 @@ function roc_files()
   return out
 end
 
+-- The .roc files of DIR, each as its path inside DIR.
+function roc_paths_in_dir()
+  local out = {}
+  for path in roc_files() do push(out, sub(path, #DIR + 2)) end
+  return out
+end
+
+-- The rewrite works on a copy of the folder's .roc files, so a run that
+-- stops, on a budget or a pass too many, leaves the folder as it was.
+const WORK = SELF_TEST and "scratch:roc_commas_work/self_test" or "scratch:roc_commas_work/" .. re_replace(real(DIR), "[^A-Za-z0-9]", "_")
+
+function fresh_work_copy(paths)
+  if is_dir(WORK) then remove_tree(WORK) end
+  mkdir(WORK)
+  for p in paths do replace(WORK .. "/" .. p, read(DIR .. "/" .. p)) end
+end
+
+-- Writes each file the rewrite changed back to the folder. It reads them all
+-- first and checks that what is left of the budgets covers every write, so
+-- the folder gets all of the rewrite or none of it.
+function write_back(paths)
+  local changed = {}
+  local bytes = 0
+  for p in paths do
+    local text = read(WORK .. "/" .. p)
+    if text ~= read(DIR .. "/" .. p) then
+      push(changed, {path = DIR .. "/" .. p, text = text})
+      bytes = bytes + #text
+    end
+  end
+  local left = budget()
+  if left.changes < #changed + 1 or left.change_bytes < bytes or left.steps < 2 * bytes + 1000 * #changed + 100000 then
+    fail("roc_commas: too little budget left to write the " .. #changed .. " changed files, so none was written")
+  end
+  for c in changed do replace(c.path, c.text) end
+  print(#changed .. " files rewritten")
+end
+
 function run_roc_fmt()
-  local r = run({ROC, "fmt", real(DIR)}, {timeout_ms = 60000, tail = 20})
+  local r = run({ROC, "fmt", real(WORK)}, {timeout_ms = 60000, tail = 20})
   if r.code ~= 0 then
     print(r.out)
     fail("roc fmt failed")
   end
 end
 
+-- How many commas line `l` holds, not counting one that ends it. A group of
+-- STACK_ITEMS items that opens and closes on the line holds STACK_ITEMS - 1 of
+-- them at least, and a comma that ends the line is inside no such group, so a
+-- line that fits with fewer has no group to stack. Counting is far cheaper
+-- than reading the line's groups, and most of a data file's lines are like
+-- `{ x: 0.5, y: 0.25 },`.
+function commas_before_the_last(l)
+  local commas = #split(l, ",") - 1
+  if ends_with(trim_end(l), ",") then commas = commas - 1 end
+  return commas
+end
+
 -- Line `l` with a trailing comma for its outermost group that should stack,
 -- or else, when it is wider than WIDTH, for its widest group. nil when it
--- gets none.
+-- gets none. A line of data, by groups.shale's is_data_line, gets none.
 function line_with_comma(l)
+  local fits = line_width(l) <= WIDTH
+  if fits and (TOKENS == 0 or commas_before_the_last(l) < STACK_ITEMS - 1) then return nil end
   if TOKENS > 0 then
     local g = group_to_stack(l, TOKENS, WIDTH)
     if g ~= nil then return with_trailing_comma(l, g) end
   end
-  if line_width(l) > WIDTH then return line_with_trailing_comma(l) end
+  if not fits and not is_data_line(l, WIDTH) then return line_with_trailing_comma(l) end
   return nil
 end
 
--- Takes the trailing comma from each group of the file that should unstack,
--- adds one to each code line that should get one, and returns how many
--- groups and lines it changed.
-function rewrite_trailing_commas(path)
-  local ls = split(read(path), "\n")
+-- Takes the trailing comma from each group of the file at `path`, whose text
+-- is `text`, that should unstack, adds one to each code line that should get
+-- one, and returns how many groups and lines it changed.
+function rewrite_trailing_commas(path, text)
+  local ls = split(text, "\n")
   local unstacked = {}
   if TOKENS > 0 then unstacked = groups_to_unstack(ls, TOKENS, WIDTH) end
   ls = without_trailing_commas(ls, unstacked)
@@ -166,29 +229,42 @@ function rewrite_trailing_commas(path)
   return changed
 end
 
--- Rewrites commas and runs roc fmt until a pass changes nothing. Files still
--- changing after MAX_PASSES stop the run, since the list of long lines would
--- otherwise judge a rewrite that never finished.
+-- Rewrites commas and runs roc fmt, in the work copy, until a pass changes
+-- nothing, and then writes the changed files back. Files still changing after
+-- MAX_PASSES stop the run, since the list of long lines would otherwise judge
+-- a rewrite that never finished.
 function rewrite()
+  local paths = roc_paths_in_dir()
+  fresh_work_copy(paths)
   run_roc_fmt()
   local pass = 1
   local changed = 1
   local touched = {}
+  -- A file's text when a pass last left it alone. A later pass would leave
+  -- the same text alone again, so it is not read for groups a second time.
+  local settled = {}
   while changed > 0 and pass <= MAX_PASSES do
     changed = 0
     touched = {}
-    for path in roc_files() do
-      local n = rewrite_trailing_commas(path)
-      if n > 0 then
-        changed = changed + n
-        push(touched, path)
+    for p in paths do
+      local text = read(WORK .. "/" .. p)
+      if not has_key(settled, p) or settled[p] ~= text then
+        local n = rewrite_trailing_commas(WORK .. "/" .. p, text)
+        if n > 0 then
+          changed = changed + n
+          push(touched, DIR .. "/" .. p)
+        else
+          settled[p] = text
+        end
       end
     end
     print("pass " .. pass .. ": " .. changed .. " trailing commas added or taken out")
     run_roc_fmt()
     pass = pass + 1
   end
-  if changed > 0 then fail("roc_commas: still changing after " .. MAX_PASSES .. " passes: " .. join(touched, ", ")) end
+  if changed > 0 then fail("roc_commas: still changing after " .. MAX_PASSES .. " passes, so no file was written: " .. join(touched, ", ")) end
+  write_back(paths)
+  remove_tree(WORK)
   return nil
 end
 
@@ -223,11 +299,15 @@ function self_test()
     end
   end
   if bad > 0 then fail(bad .. " checks failed") end
+  if is_dir(WORK) then fail("roc_commas: a finished rewrite should remove its work copy, " .. WORK) end
   fresh_copies(PLANTS .. "/too_deep")
   local stopped = attempt(rewrite)
-  local named = "still changing after " .. MAX_PASSES .. " passes: " .. DIR .. "/too_deep.roc"
+  local named = "still changing after " .. MAX_PASSES .. " passes, so no file was written: " .. DIR .. "/too_deep.roc"
   if stopped.ok or not contains(stopped.error, named) then fail("roc_commas: too_deep.roc should stop with `" .. named .. "`") end
-  print("PASS: the rewrite ends, every plant comes out as its .want, no group is left to stack or to unstack, and a rewrite past its passes stops naming its file")
+  if read(DIR .. "/too_deep.roc") ~= read(PLANTS .. "/too_deep/too_deep.roc") then fail("roc_commas: a rewrite that stops should leave too_deep.roc as it was") end
+  print("ok   too_deep.roc: stops naming its file, and is left as it was")
+  remove_tree(WORK)
+  print("PASS: the rewrite ends, every plant comes out as its .want, no group is left to stack or to unstack, and a rewrite past its passes stops naming its file and changes none")
 end
 
 if SELF_TEST then

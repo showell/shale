@@ -143,7 +143,11 @@ end, and fails the run.
   that `roc fmt` lays it out one item a line. It edits the files, then
   lists the lines it couldn't shorten. With `tokens=6` it also holds the
   folder to the stacking rule, stacking and joining groups whatever their
-  width, reading groups as `stack.shale` does.
+  width, reading groups as `stack.shale` does. Numeric data, such as a
+  list of polygon points, stays packed, as both recipes leave it (`groups.shale`'s
+  `is_data_line` and `is_number_data`). It rewrites a copy under
+  `scratch:` and writes the folder only once the rewrite has finished, so a
+  run that stops leaves the folder as it was.
 
       cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
 

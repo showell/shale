@@ -11,6 +11,7 @@
 --   use("cookbook:roc/groups.shale")
 --   groups_on_line(l)                  each group that opens and closes on l
 --   without_targets_section(ls)        ls with the lines no rewrite can reach blank
+--   is_data_line(l, width)             a wide line of numeric data, left packed
 --   group_to_stack(l, tokens, width)   the group a rewrite gives a comma
 --   with_trailing_comma(l, g)          l with that comma added
 --   groups_to_unstack(ls, tokens, width)  the stacked groups that shouldn't be
@@ -73,7 +74,22 @@ function closed_group(ls, open_groups, close_line, close, last_code, tokens, fix
 end
 
 const WORD_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
-const WORD = "^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*"
+-- Searched for with `from` at a word character, so it matches there. A data
+-- line can run to 80,000 bytes, and copying the rest of the line at each word
+-- would cost the square of that.
+const WORD = "[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*"
+
+-- Whether the code before column `i` of `l` ends in the keyword `where`, so
+-- that a `[` there opens a `where` clause. It looks back from `i` only, for
+-- the same reason.
+function follows_where(l, i)
+  local j = i - 1
+  while j > 0 and (sub(l, j, j) == " " or sub(l, j, j) == "\t") do j = j - 1 end
+  if j < 5 or sub(l, j - 4, j) ~= "where" then return false end
+  if j == 5 then return true end
+  local b = sub(l, j - 5, j - 5)
+  return b == " " or (b == "\t" and trim(sub(l, 1, j - 5)) == "")
+end
 
 -- The start of a method constraint (`k.is_eq :`). In a `where` clause's
 -- brackets, only a comma followed by one of these, or ending its line,
@@ -116,10 +132,12 @@ function groups_in_lines(ls)
     while i <= n do
       local c = sub(l, i, i)
       local code = c
-      if find(WORD_CHARS, c) ~= nil then
+      if c == " " then
+        -- A space only separates, and spaces are the most common character.
+      elseif find(WORD_CHARS, c) ~= nil then
         -- A name right after a dot continues a path, as in `f(x).name`.
         if sub(l, i - 1, i - 1) ~= "." or sub(l, i - 2, i - 2) == "." then tokens = tokens + 1 end
-        i = i + #(re_find(sub(l, i), WORD).text) - 1
+        i = i + #(re_find(l, WORD, {from = i}).text) - 1
       elseif c == "\"" or c == "'" then
         tokens = tokens + 1
         i = i + 1
@@ -131,8 +149,7 @@ function groups_in_lines(ls)
         fixed = fixed + 1
         break
       elseif has_key(OPENERS, c) then
-        local text_before = trim(sub(l, 1, i - 1))
-        local is_where = c == "[" and (text_before == "where" or ends_with(text_before, " where"))
+        local is_where = c == "[" and follows_where(l, i)
         push(open_groups, opened_group(line, i, OPENERS[c], is_where, tokens, fixed))
       elseif (c == "-" or c == "=") and sub(l, i + 1, i + 1) == ">" and sub(l, i - 1, i - 1) == " " and #open_groups > 0 then
         open_groups[#open_groups].has_arrow = true
@@ -158,8 +175,7 @@ function groups_in_lines(ls)
         end
       elseif c == "," and #open_groups > 0 then
         local g = open_groups[#open_groups]
-        local rest = sub(l, i + 1)
-        if not g.is_where or trim(rest) == "" or re_find(rest, CONSTRAINT) ~= nil then
+        if not g.is_where or trim(sub(l, i + 1)) == "" or re_find(sub(l, i + 1), CONSTRAINT) ~= nil then
           g.commas = g.commas + 1
           g.last = i
         end
@@ -199,7 +215,8 @@ end
 -- holding a comma would be split wrongly, so it never makes a row.
 const LITERAL_ITEM = [=[^(-?[0-9][0-9A-Za-z_.]*|"[^"\\$]*"|'[^']+'|[A-Z][A-Za-z0-9]*)$]=]
 function is_literal_row(l, g, width)
-  if line_width(l) > width then return false end
+  -- A line's width is at least its length, which costs nothing to read.
+  if #l > width or line_width(l) > width then return false end
   local c = sub(l, g.open, g.open)
   if c == "(" then
     local b = char_before(l, g.open)
@@ -213,22 +230,62 @@ function is_literal_row(l, g, width)
   return true
 end
 
+-- Numeric data, such as a polygon's points, stays packed at any width. A
+-- number is a literal or a negative written `(0.0 - 0.5)`; a flat number
+-- record is a record of numbers, `{ x: 0.5, y: (0.0 - 0.25) }`; and a number
+-- list is a list of two or more numbers or flat number records.
+const NEGATIVE_NUMBER = "\\(-?[0-9][0-9A-Za-z_.]* - [0-9][0-9A-Za-z_.]*\\)"
+const NUMBER_RECORD = "\\{ *[a-z_][A-Za-z0-9_]*: *-?[0-9][0-9A-Za-z_.]*(?: *, *[a-z_][A-Za-z0-9_]*: *-?[0-9][0-9A-Za-z_.]*)* *,? *\\}"
+const NUMBER_LIST = "\\[ *-?[0-9][0-9A-Za-z_.]*(?: *, *-?[0-9][0-9A-Za-z_.]*)+ *,? *\\]"
+
+-- `text` with each negative number and each flat number record read as the
+-- number 0, so that a list of them reads as a list of numbers.
+function numbers_as_zero(text)
+  return re_replace(re_replace(text, NEGATIVE_NUMBER, "0"), NUMBER_RECORD, "0")
+end
+
+-- Whether text holds a number list.
+function holds_number_list(text)
+  return re_find(numbers_as_zero(text), NUMBER_LIST) ~= nil
+end
+
+-- Whether group `g` on line `l` is numeric data: a number list, or a flat
+-- number record on a line that holds a number list, as a point among a
+-- polygon's points is. A flat number record on a line of its own is an
+-- ordinary record.
+function is_number_data(l, g)
+  local text = numbers_as_zero(sub(l, g.open, g.close))
+  if re_find(text, "^" .. NUMBER_LIST .. "$") ~= nil then return true end
+  return text == "0" and holds_number_list(l)
+end
+
+-- Whether line `l` is a line of data: wider than `width`, with a number list
+-- on it. No group on it stacks, since stacking any group around the data, or
+-- beside it, makes `roc fmt` open every group around that one, and the data
+-- spreads one item a line in later passes. A line that fits stacks as any
+-- other, but its number lists stay packed.
+function is_data_line(l, width)
+  return line_width(l) > width and holds_number_list(l)
+end
+
 -- Whether group `g` holds enough to read better stacked.
 function is_big(g, min_tokens)
   return g.items >= STACK_ITEMS and g.tokens >= min_tokens
 end
 
 -- Whether group `g` on line `l` should stack. A function type's arguments
--- can't take a trailing comma, and a row of literals stays side by side.
+-- can't take a trailing comma, a row of literals stays side by side, and so
+-- does numeric data. The caller asks is_data_line first, once a line.
 function should_stack(l, g, min_tokens, width)
-  return is_big(g, min_tokens) and not g.trailing and not g.fn_type and not is_literal_row(l, g, width)
+  return is_big(g, min_tokens) and not g.trailing and not g.fn_type and not is_literal_row(l, g, width) and not is_number_data(l, g)
 end
 
 -- The group on line `l` the rewrite gives a trailing comma: the outermost,
 -- then widest, group that should stack; or else, on a line wider than
 -- `width`, the widest group of two or more items. nil when no group
--- qualifies.
+-- qualifies or the line is a line of data.
 function group_to_stack(l, min_tokens, width)
+  if is_data_line(l, width) then return nil end
   local best = nil
   local groups = groups_on_line(l)
   for g in groups do
