@@ -1,0 +1,16 @@
+module [names, near, polygon, samples, shape]
+
+# A list of numbers stays packed, however many items it has.
+near = [(0.0 - 0.5), 1.25, (0.0 - 2.0), 3.75]
+
+samples = [0.5, 1.25, (0.0 - 2.0), 3.75, 4.0, 5.5, 6.25, 7.0, 8.5, 9.75, 10.0, 11.5, 12.25, 13.0, 14.5, 15.75]
+
+# A wide line holding a list of flat number records is data: nothing on it is
+# stacked.
+polygon = { color: 7, gradients: [], points: [{ x: 0.1, y: 0.2 }, { x: (0.0 - 0.3), y: 0.4 }, { x: 0.5, y: 0.6 }] }
+
+# A record that fits is stacked, but the number list inside stays packed.
+shape = { name: tri, size: 3, points: [(0.0 - 1.0), (0.0 - 2.0), 3.0, 4.0] }
+
+# A list of names is not data, so it is stacked.
+names = [alpha, beta, gamma, delta, epsilon, zeta]

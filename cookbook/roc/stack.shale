@@ -263,6 +263,7 @@ function findings_in(files)
       local found_on_line = 0
       local skip_lambda = annotated_fn ~= "" and starts_with(trim(ls[i]), annotated_fn .. " = |")
       annotated_fn = ""
+      local data_line = is_data_line(reachable[i], WIDTH)
       for g in sort(groups_on_line(reachable[i]), "open") do
         local inner = sub(ls[i], g.open + 1, g.close - 1)
         if g.items >= 3 and g.fn_type then
@@ -271,7 +272,7 @@ function findings_in(files)
           found_on_line = found_on_line + 1
         elseif skip_lambda and sub(ls[i], g.open, g.open) == "|" then
           skip_lambda = false
-        else
+        elseif not data_line then
           local are_flags = g.items >= 3 and not g.trailing and are_all_flags(inner)
           if are_flags or should_stack(ls[i], g, TOKENS, WIDTH) then
             local advice = are_flags and FLAG_ADVICE or ""

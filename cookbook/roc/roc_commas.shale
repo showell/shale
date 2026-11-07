@@ -35,8 +35,13 @@
 -- `at_the_cap.roc` nests as deep as 8 passes reach, and `too_deep/` one group
 -- deeper, which has to stop the rewrite, name its file and leave it as it was.
 --
+-- Numeric data stays packed, as groups.shale's is_data_line and
+-- is_number_data say: a number list never stacks, and nothing on a line wider
+-- than `width` that holds one does. `numbers.roc` in the plants checks both
+-- and that a list of names beside them still stacks.
+--
 -- roc-apps' canvas_apps/safari, with its 70,000-byte lines of polygon data,
--- takes about 390,000,000 steps and 1.2 GB of arena.
+-- takes about 160,000,000 steps with `tokens=6`.
 --
 -- budget: steps=1000000000 arena_bytes=2000000000 output_bytes=4000000 changes=5000
 
@@ -189,7 +194,7 @@ end
 
 -- Line `l` with a trailing comma for its outermost group that should stack,
 -- or else, when it is wider than WIDTH, for its widest group. nil when it
--- gets none.
+-- gets none. A line of data, by groups.shale's is_data_line, gets none.
 function line_with_comma(l)
   local fits = line_width(l) <= WIDTH
   if fits and (TOKENS == 0 or commas_before_the_last(l) < STACK_ITEMS - 1) then return nil end
@@ -197,7 +202,7 @@ function line_with_comma(l)
     local g = group_to_stack(l, TOKENS, WIDTH)
     if g ~= nil then return with_trailing_comma(l, g) end
   end
-  if not fits then return line_with_trailing_comma(l) end
+  if not fits and not is_data_line(l, WIDTH) then return line_with_trailing_comma(l) end
   return nil
 end
 

@@ -11,6 +11,7 @@
 --   use("cookbook:roc/groups.shale")
 --   groups_on_line(l)                  each group that opens and closes on l
 --   without_targets_section(ls)        ls with the lines no rewrite can reach blank
+--   is_data_line(l, width)             a wide line of numeric data, left packed
 --   group_to_stack(l, tokens, width)   the group a rewrite gives a comma
 --   with_trailing_comma(l, g)          l with that comma added
 --   groups_to_unstack(ls, tokens, width)  the stacked groups that shouldn't be
@@ -229,22 +230,62 @@ function is_literal_row(l, g, width)
   return true
 end
 
+-- Numeric data, such as a polygon's points, stays packed at any width. A
+-- number is a literal or a negative written `(0.0 - 0.5)`; a flat number
+-- record is a record of numbers, `{ x: 0.5, y: (0.0 - 0.25) }`; and a number
+-- list is a list of two or more numbers or flat number records.
+const NEGATIVE_NUMBER = "\\(-?[0-9][0-9A-Za-z_.]* - [0-9][0-9A-Za-z_.]*\\)"
+const NUMBER_RECORD = "\\{ *[a-z_][A-Za-z0-9_]*: *-?[0-9][0-9A-Za-z_.]*(?: *, *[a-z_][A-Za-z0-9_]*: *-?[0-9][0-9A-Za-z_.]*)* *,? *\\}"
+const NUMBER_LIST = "\\[ *-?[0-9][0-9A-Za-z_.]*(?: *, *-?[0-9][0-9A-Za-z_.]*)+ *,? *\\]"
+
+-- `text` with each negative number and each flat number record read as the
+-- number 0, so that a list of them reads as a list of numbers.
+function numbers_as_zero(text)
+  return re_replace(re_replace(text, NEGATIVE_NUMBER, "0"), NUMBER_RECORD, "0")
+end
+
+-- Whether text holds a number list.
+function holds_number_list(text)
+  return re_find(numbers_as_zero(text), NUMBER_LIST) ~= nil
+end
+
+-- Whether group `g` on line `l` is numeric data: a number list, or a flat
+-- number record on a line that holds a number list, as a point among a
+-- polygon's points is. A flat number record on a line of its own is an
+-- ordinary record.
+function is_number_data(l, g)
+  local text = numbers_as_zero(sub(l, g.open, g.close))
+  if re_find(text, "^" .. NUMBER_LIST .. "$") ~= nil then return true end
+  return text == "0" and holds_number_list(l)
+end
+
+-- Whether line `l` is a line of data: wider than `width`, with a number list
+-- on it. No group on it stacks, since stacking any group around the data, or
+-- beside it, makes `roc fmt` open every group around that one, and the data
+-- spreads one item a line in later passes. A line that fits stacks as any
+-- other, but its number lists stay packed.
+function is_data_line(l, width)
+  return line_width(l) > width and holds_number_list(l)
+end
+
 -- Whether group `g` holds enough to read better stacked.
 function is_big(g, min_tokens)
   return g.items >= STACK_ITEMS and g.tokens >= min_tokens
 end
 
 -- Whether group `g` on line `l` should stack. A function type's arguments
--- can't take a trailing comma, and a row of literals stays side by side.
+-- can't take a trailing comma, a row of literals stays side by side, and so
+-- does numeric data. The caller asks is_data_line first, once a line.
 function should_stack(l, g, min_tokens, width)
-  return is_big(g, min_tokens) and not g.trailing and not g.fn_type and not is_literal_row(l, g, width)
+  return is_big(g, min_tokens) and not g.trailing and not g.fn_type and not is_literal_row(l, g, width) and not is_number_data(l, g)
 end
 
 -- The group on line `l` the rewrite gives a trailing comma: the outermost,
 -- then widest, group that should stack; or else, on a line wider than
 -- `width`, the widest group of two or more items. nil when no group
--- qualifies.
+-- qualifies or the line is a line of data.
 function group_to_stack(l, min_tokens, width)
+  if is_data_line(l, width) then return nil end
   local best = nil
   local groups = groups_on_line(l)
   for g in groups do
