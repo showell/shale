@@ -476,14 +476,14 @@ end
 
 -- `Try(Fraction, [OutOfRange])` gives `Fraction`, and any other type itself.
 function success_type(type_text)
-  local ok_type = re_find(type_text, "^Try\\(([A-Za-z0-9_.]+)")
-  return ok_type ~= nil and ok_type.groups[1] or type_text
+  local text = trim(type_text)
+  if starts_with(text, "Try(") and ends_with(text, ")") then return first_argument(sub(text, 5, #text - 1)) end
+  return text
 end
 
 -- The element type's text of a `List(...)` or a `Try` of one, else nil.
 function list_element(type_text)
-  local text = trim(type_text)
-  if starts_with(text, "Try(") and ends_with(text, ")") then text = first_argument(sub(text, 5, #text - 1)) end
+  local text = success_type(type_text)
   if starts_with(text, "List(") and ends_with(text, ")") then return sub(text, 6, #text - 1) end
   return nil
 end

@@ -161,12 +161,26 @@
 --                   result, or a `Try` of one, that is its own module's type,
 --                   a type declared in that module, or the type it is a
 --                   member of (`Clock.at_step : U32 -> Clock`,
---                   `Color.from_hex_rgb : U32 -> Color.Rgb`). The word matters
---                   as well as the type: `Scene.in_view : View -> Scene` gives
+--                   `Color.of_hex : U32 -> Color.Rgb`). The word matters as
+--                   well as the type: `Scene.in_view : View -> Scene` gives
 --                   its own type and still reads as a question;
 --                 - a conversion: `to_*` and `into_*`, which name what they
---                   give, and a `from_*` whose first argument is its own
---                   module's type (`Along.from_start : Along -> Distance`);
+--                   give;
+--                 - a `from_*` that takes or gives its own module's type, as
+--                   above, even inside a record, a union or a list
+--                   (`Along.from_start : Along -> Distance`,
+--                   `Key.from_path : Str -> Try({ key : Key }, [NoKey])`). A
+--                   `Try` gives its success only: an error that carries the
+--                   type is no conversion to it;
+--                 - a `from_<noun>` in a module that has no type of its own,
+--                   one whose file declares only `Hex :: [].{ ... }`
+--                   (`Hex.from_hex : Str -> Try(List(U8), [NotHex])`). Such a
+--                   module has no type to take or give. A module with a type
+--                   is held to the rule above, so
+--                   `DateTime.from_clock : I64 -> Try(Str, [OutOfRange])`,
+--                   which neither takes nor gives a `DateTime`, is reported.
+--                   The next word has to be no preposition, so `from_behind`
+--                   stays a phrase, and the type has to be known;
 --                 - a changed copy: `with_*` or `without_*` that gives its
 --                   first argument's type (`with_lean : Bike, Angle -> Bike`).
 --                 A definition with no annotation shows none of this, so it
@@ -305,9 +319,10 @@ const PLAIN_ELEMENTS = set_of({"U16", "U32", "U64", "I16", "I32", "I64", "F32", 
 const SURFACES = {Frame = true, Canvas = true}
 -- The first words `phrase_name` lets a constructor start with. They are the
 -- ones constructors use in safari, roc-chat and roc-markdown: `Clock.at_step`,
--- `Dm.between`, `SignedIn.by_session`, `MdText.for_input`,
--- `Fraction.from_ratio`, `Name.of_strict`, `Directory.with_founder`.
-const CONSTRUCTOR_WORDS = set_of({"at", "between", "by", "for", "from", "of", "with"})
+-- `Dm.between`, `SignedIn.by_session`, `MdText.for_input`, `Name.of_strict`,
+-- `Directory.with_founder`. `from` has a wider rule of its own,
+-- `is_from_conversion`.
+const CONSTRUCTOR_WORDS = set_of({"at", "between", "by", "for", "of", "with"})
 const CONVERSION_WORDS = set_of({"into", "to"})
 const CHANGED_COPY_WORDS = set_of({"with", "without"})
 -- The names in each file that end in a preposition, grouped by the stem
@@ -336,6 +351,9 @@ const TAG_UNION_TYPES = {}
 -- The aliases of `Bool` declared in the files read, by each name the type
 -- checker may write for them (`Answer`, `Owner.Answer`).
 const BOOL_ALIASES = {}
+-- Each type a file declares, by path, as whether it is `[].{ ... }`: an empty
+-- union with members.
+const TYPES_DECLARED_IN_FILE = {}
 
 -- Every type name and record field name that `container` checks, each
 -- `{path, line, name, words, is_field, doc}`, where `doc` is the comment
@@ -394,7 +412,8 @@ function note_declared_keywords(path, src)
 end
 
 -- Notes what the type declaration at `i` declares: its tag union in
--- TAG_UNION_TYPES, its name in TYPE_AND_FIELD_NAMES, and in BOOL_ALIASES
+-- TAG_UNION_TYPES, its kind in TYPES_DECLARED_IN_FILE, its name in
+-- TYPE_AND_FIELD_NAMES, and in BOOL_ALIASES
 -- when it is an alias of `Bool`, under its bare name and, for a module
 -- type's member, `Owner.Name` as the checker writes it.
 function note_type_declaration(path, src, tree, i)
@@ -402,7 +421,9 @@ function note_type_declaration(path, src, tree, i)
   local declared = #kids > 0 and attribute(tree, kids[1], "name") or ""
   if declared == "" then return nil end
   local line = tostring(tree[i].line)
-  if #kids > 1 and tree[kids[2]].kind == "ty-tag-union" then TAG_UNION_TYPES[declared] = union_shape(tree, kids[2]) end
+  local is_union = #kids > 1 and tree[kids[2]].kind == "ty-tag-union"
+  if is_union then TAG_UNION_TYPES[declared] = union_shape(tree, kids[2]) end
+  push_at(TYPES_DECLARED_IN_FILE, path, is_union and #TAG_UNION_TYPES[declared].names == 0 and tree[kids[#kids]].kind == "associated")
   push(TYPE_AND_FIELD_NAMES, {path = path, line = line, name = declared, words = name_words(declared), is_field = false, doc = doc_above(src, tree[i].line)})
   if #kids > 1 and tree[kids[2]].kind == "ty" and attribute(tree, kids[2], "name") == "Bool" then
     BOOL_ALIASES[declared] = true
@@ -597,12 +618,36 @@ function is_own_type(def, type_text)
   return parts[1] == module or parts[1] == def.owner or parts[#parts] == def.owner
 end
 
--- Whether a function that starts with the preposition `word` reads as a
+-- Whether `type_text` names its module's own type anywhere in it. Only a
+-- capital starts a type, so a field that shares a file's name is no mention.
+function mentions_own_type(def, type_text)
+  for found in re_find_all(type_text, "\\b[A-Z][A-Za-z0-9_.]*") do
+    if is_own_type(def, found.text) then return true end
+  end
+  return false
+end
+
+-- Whether the file at `path` declares one type, `[].{ ... }`, which holds the
+-- module's functions and has no values of its own.
+function has_no_type_of_its_own(path)
+  local declared = get(TYPES_DECLARED_IN_FILE, path, {})
+  return #declared == 1 and declared[1]
+end
+
+-- Whether a function named `ws`, whose first word is `from`, reads as a
+-- conversion: `phrase_name` in the header.
+function is_from_conversion(def, ws, signature)
+  if mentions_own_type(def, signature.first) or mentions_own_type(def, success_type(signature.result)) then return true end
+  return signature.known and has_no_type_of_its_own(def.path) and #ws > 1 and not has_key(PREPOSITIONS, ws[2])
+end
+
+-- Whether a function named `ws`, whose first word is a preposition, reads as a
 -- constructor, a conversion or a changed copy: `phrase_name` in the header.
-function reads_as_maker(def, word, signature)
+function reads_as_maker(def, ws, signature)
+  local word = ws[1]
   if has_key(CONVERSION_WORDS, word) then return true end
   if has_key(CHANGED_COPY_WORDS, word) and signature.result == signature.first then return true end
-  if word == "from" and is_own_type(def, signature.first) then return true end
+  if word == "from" then return is_from_conversion(def, ws, signature) end
   return has_key(CONSTRUCTOR_WORDS, word) and is_own_type(def, success_type(signature.result))
 end
 
@@ -773,7 +818,7 @@ function judge_definition(def)
     -- gives a `Bool` is `question`'s, so this check takes the rest.
     if not has_bang and #ws == 1 and is_participle(name) and is_function and not returns_bool then report(path, line, "bare_participle", "`" .. full_name .. "` is a function named by a bare past participle, which reads as a `Bool`: name it by a noun for what it gives (`user_by_name`) or a verb for what it does (`add_user`)") end
     -- An effect is `noun_effect`'s, and a result of `_` says nothing.
-    if not has_bang and has_key(PREPOSITIONS, ws[1]) and is_function and not returns_bool and signature.result ~= "_" and not reads_as_maker(def, ws[1], signature) then
+    if not has_bang and has_key(PREPOSITIONS, ws[1]) and is_function and not returns_bool and signature.result ~= "_" and not reads_as_maker(def, ws, signature) then
       local gives = signature.known and ("gives `" .. signature.result .. "`" .. signature.source_note) or "has no annotation to show it makes its own type"
       report(path, line, "phrase_name", "`" .. full_name .. "` starts with a preposition, `" .. ws[1] .. "`, and " .. gives .. ": bare, it reads as a yes or no and hides what it gives; name the thing (`trees_in_view`, not `in_view`)")
     elseif signature.known then
