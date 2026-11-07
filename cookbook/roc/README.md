@@ -186,6 +186,9 @@ end, and fails the run.
   name, or by a method call or operator on a receiver the file plainly types
   as its type. A call on a receiver it can't type is counted apart, by name,
   and the counts line says how many calls were typed and how many pooled.
+  A file roc-ast refuses has no uses the walk can read, so it is named on
+  the second line and in the counts line, a member with none says `no
+  outside use, as far as the parsed files show`, and the run fails.
   A package that apps use is walked from outside it, with `clients=` naming
   the apps, so their uses and signatures count too, and a member used across
   several apps says how many (`used by 9 files in 5 apps`). `modules=A,B,C`

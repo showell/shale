@@ -18,6 +18,8 @@
 --   in_tests(fc, c)        whether a node there is in tests
 --   asked_members(st, start), then count_uses(st, info, start) for each other
 --   file, then uses_note(rec, app_of), unused_members(st) and precision_note(st)
+--   refused_line(st), with_refused_line(lines, line)
+--                             the files roc-ast refused, named before the counts
 --
 -- A use is in tests when it sits in an `expect`, in a top-level value that
 -- only expects use (directly or through other such values), or anywhere in a
@@ -762,11 +764,17 @@ function apps_using(rec, app_of)
   return #keys(apps)
 end
 
+-- What a claim of no use adds when a file was refused, whose uses the walk
+-- can't see.
+const AS_FAR_AS_PARSED = "as far as the parsed files show"
+
 -- The note after a member's annotation: `used by 3 files, 1 in tests only;
 -- by method name in 2 more; by operator, untyped, in 1 more`. When the files
 -- that name it or call it typed lie in several client apps, by `app_of`, the
--- first part says how many: `used by 9 files in 5 apps`.
-function uses_note(rec, app_of)
+-- first part says how many: `used by 9 files in 5 apps`. With `partial`,
+-- some file was refused and its uses are unknown, so a member with none says
+-- `no outside use, as far as the parsed files show`.
+function uses_note(rec, app_of, partial?)
   local u = uses_of(rec)
   local apps = apps_using(rec, app_of)
   if apps > 1 then u.named.apps = apps end
@@ -782,7 +790,7 @@ function uses_note(rec, app_of)
       push(parts, text)
     end
   end
-  if #parts == 0 then return "no outside use" end
+  if #parts == 0 then return partial == true and "no outside use, " .. AS_FAR_AS_PARSED or "no outside use" end
   return join(parts, "; ")
 end
 
@@ -793,6 +801,29 @@ function unused_members(st)
   for rec in st.member_list do
     if is_unused(rec) then push(out, rec.label) end
   end
+  return out
+end
+
+-- The walk's second line when roc-ast refused files, each named with its
+-- reason's first clause, `# Refused by roc-ast, so their uses and mentions
+-- are not counted: Scene.roc (52 parse problem(s))`. A refused file's uses
+-- are unread, so the counts line ends by naming it too, and a member with
+-- none says `no outside use, as far as the parsed files show`, as does the
+-- line of members used only in this file.
+function refused_line(st)
+  local named = {}
+  for r in st.refusals do
+    local cut = find(r.why, ": ")
+    push(named, r.path .. " (" .. (cut == nil and r.why or sub(r.why, 1, cut - 1)) .. ")")
+  end
+  return "# Refused by roc-ast, so their uses and mentions are not counted: " .. join(sort(named), "; ")
+end
+
+-- The walk's lines `lines` with `line` second, under the title, where a
+-- reader meets it before any count it qualifies.
+function with_refused_line(lines, line)
+  local out = {lines[1], line}
+  for l in drop(lines, 1) do push(out, l) end
   return out
 end
 

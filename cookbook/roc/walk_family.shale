@@ -10,6 +10,9 @@
 --   check, has_line, has_text, headers_of, and family_checks(failures, r, at)
 --                             the self-test's, the last on the plant family
 --                             `cookbook/roc/plants/type_walk/family/`
+--   refused_checks(failures, rf, clean, at)
+--                             the self-test's on the plant
+--                             `cookbook/roc/plants/type_walk/refused/`
 --
 -- Each member is walked as `module=` walks it, with the same settings, and the
 -- output is pooled:
@@ -366,5 +369,22 @@ function family_checks(failures, r, at)
   check(failures, not has_text(ls, "segment_pines ! [Behind, TooSmall]   <-"), "family: an error set marked that matches")
   check(failures, has_line(ls, "### unmatched: names of a shape no sibling has") and has_line(ls, "  ElmSighting   visible_elms"), "family: the name that breaks the pattern, unmatched")
   check(failures, ls[#ls] == "# The family: 3 modules, 2 shared types, 1 types only one member reaches, 6 public names in 2 table rows and 1 unmatched, 3 private functions", "family: counts line: " .. ls[#ls])
+  return nil
+end
+
+-- The self-test's checks of a walk `rf` of the plant
+-- `cookbook/roc/plants/type_walk/refused/`, whose
+-- Broken.roc holds `spin`'s only outside use but which roc-ast refuses,
+-- and of `clean`, a walk with no file refused.
+function refused_checks(failures, rf, clean, at)
+  local ls = rf.lines
+  local broken = at .. "refused/Broken.roc"
+  check(failures, #rf.refused == 1 and rf.refused[1] == broken .. ": 4 parse problem(s): a file that does not parse has no tree to hunt", "refused: got " .. join(rf.refused, "; "))
+  check(failures, ls[2] == "# Refused by roc-ast, so their uses and mentions are not counted: " .. broken .. " (4 parse problem(s))", "the refused line: got " .. ls[2])
+  check(failures, has_line(ls, "\tspin : Coin -> Coin   # no outside use, as far as the parsed files show"), "a member with no outside use, beside a refused file")
+  check(failures, has_line(ls, "\tflip : Coin -> Coin   # used by 1 file"), "a member used by a file read, beside a refused file")
+  check(failures, has_line(ls, "# Public, but used only in this file, as far as the parsed files show: spin"), "the unused-members line, beside a refused file")
+  check(failures, ends_with(ls[#ls], ", 1 files refused and not counted: " .. broken), "counts line with a refused file: " .. ls[#ls])
+  check(failures, not has_text(clean, "as far as") and not has_text(clean, "# Refused"), "a refused note with no file refused")
   return nil
 end
