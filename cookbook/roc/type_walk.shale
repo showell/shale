@@ -100,6 +100,13 @@
 -- stopped or beyond-depth type, `# Imported but not in any printed type:
 -- Camera, Screen`: modules its functions use only in their bodies (or in
 -- annotations outside its types' blocks), which a reviewer should read too.
+-- The imports only its tests use are left out of it and named on their own,
+-- `# Imported for tests only: Polygon`: every use of the import sits in an
+-- `expect`, or in a top-level value (its annotation included) that only
+-- expects use, directly or through other such values. A member of a type's
+-- block is production, as other files may call it. No import may be a
+-- test's alone: its test moves to a CrossModuleExpects file. In a family,
+-- each member's block has its own line.
 --
 -- The other files are the root folder's other `.roc` files, those under its
 -- `gates/` folder, and the clients'. A file's `import game.Geom` reads the
@@ -580,8 +587,13 @@ function walk(root, module, packages_arg, max_depth, settings?)
   local var_notes = {}
   for v in sort(keys(st.vars)) do push(var_notes, v .. " (" .. join(sort(keys(st.vars[v])), ", ") .. ")") end
   if #var_notes > 0 then push(lines_out, "# Type variables, not followed: " .. join(var_notes, "; ")) end
-  local unprinted = imports_not_printed(st, start)
+  local tests_only = test_only_imports(st, st.files[start])
+  local unprinted = {}
+  for name in imports_not_printed(st, start) do
+    if not has_item(tests_only, name) then push(unprinted, name) end
+  end
   if #unprinted > 0 then push(lines_out, "# Imported but not in any printed type: " .. join(unprinted, ", ")) end
+  if #tests_only > 0 then push(lines_out, "# Imported for tests only: " .. join(tests_only, ", ")) end
   local briefs = {}
   for id in keys(st.visited) do
     if is_brief(st, id) and #members_of(st.files[st.types[id].path].nodes, st.types[id].at) > 0 then push(briefs, display_name(st.types[id])) end
@@ -748,7 +760,7 @@ function family_walk(root, names, packages_arg, max_depth, settings)
     push(out, "")
     push(out, "## " .. run.module .. "   (" .. run.start .. ")")
     for l in run.r.lines do
-      if starts_with(l, "# Refused by") or starts_with(l, "# Imported but") or starts_with(l, "# Public, but") or starts_with(l, "# Clients:") then push(out, l) end
+      if starts_with(l, "# Refused by") or starts_with(l, "# Imported") or starts_with(l, "# Public, but") or starts_with(l, "# Clients:") then push(out, l) end
     end
     local ids = {}
     local mine = {}
@@ -861,6 +873,10 @@ function self_test()
   -- Tally is imported for a body alone, and Hidden for a helper outside the
   -- block; Leg, Note and Speed hold printed types.
   check(failures, has_line(ls, "# Imported but not in any printed type: Hidden, Tally"), "the imports in no printed type")
+  -- Sample is used only by an expect and a value only it reads, annotation
+  -- and body; Tally by an expect and by `legs_of`; Hidden by a helper nothing
+  -- reads, which is no test's.
+  check(failures, has_line(ls, "# Imported for tests only: Sample"), "the imports only tests use")
 
   -- Trip names Ride in its definition, in a member's annotation and in a
   -- top-level helper's; its own `own_plan` mentions Trip's `Plan`, not Ride's.
@@ -890,6 +906,7 @@ function self_test()
   local alone = walk(at .. "unresolved", "Lost", "", 3, {trees = trees}).lines
   check(failures, has_line(alone, "# Named by: no annotation or type in the other modules of " .. at .. "unresolved mentions Lost's types."), "the named-by line with none")
   check(failures, not has_text(alone, "Public, but"), "the unused-members line with no members")
+  check(failures, not has_text(alone, "# Imported for tests only"), "a tests-only line with no import only tests use")
 
   -- Note stopped: named once, not printed, and Note.Mark, reached only
   -- through it, never read. Ride's own Ride.Plan is never stopped.

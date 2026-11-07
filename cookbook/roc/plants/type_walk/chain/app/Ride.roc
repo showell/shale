@@ -4,6 +4,7 @@ import Note
 import Hidden
 import Speed
 import Tally
+import Sample
 
 Ride :: { legs : List(Leg), name : Str }.{
 
@@ -35,3 +36,13 @@ Ride :: { legs : List(Leg), name : Str }.{
 ## A helper outside the module's block, so not part of the type.
 helper : Ride -> Hidden
 helper = |_ride| Hidden.none
+
+## A value only the expect below reads, so its annotation's and its body's
+## uses of Sample are tests'.
+sample_one : Sample
+sample_one = Sample.one
+
+expect sample_one == Sample.one
+
+## Tally is also used in production, in `legs_of`, so it is no test's alone.
+expect Tally.mark("x") == "x"

@@ -24,7 +24,7 @@
 --      `# shared by` line. A member's own types are never shared; they print
 --      in its block.
 --   3. Each member's block, in the order `modules=` gives: its walk's
---      imports-not-printed, unused-members and clients lines, the types only
+--      import lines, unused-members and clients lines, the types only
 --      its closure reaches, its own types with their public members'
 --      signatures and outside uses, then its private top-level functions'
 --      signatures in source order, each marked `# private` (`# private;

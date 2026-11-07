@@ -18,6 +18,8 @@
 --                             public names with the error tags each answers
 --   test_context(info)     where each node sits, and the values only expects use
 --   in_tests(fc, c)        whether a node there is in tests
+--   test_only_imports(st, info)
+--                          a file's imports that only its tests use
 --   asked_members(st, start), then count_uses(st, info, start) for each other
 --   file, then uses_note(rec, app_of), unused_members(st) and precision_note(st).
 --   Several modules may be asked at once: asked_members for each, their files
@@ -496,6 +498,63 @@ end
 function file_context(st, info)
   if not has_key(st.contexts, info.path) then st.contexts[info.path] = test_context(info) end
   return st.contexts[info.path]
+end
+
+-- The imports of the file `info` that only its tests use, sorted, by the name
+-- the file uses each by (its alias, else its last part). A use is a name,
+-- tag or type whose first part is that name or one the import exposes; it is
+-- a test's by `in_tests`, or inside the annotation of a top-level value only
+-- expects use. A type's block is production, as other files may call its
+-- members. A gates app's are all tests, so it has none.
+function test_only_imports(st, info)
+  local tree = info.nodes
+  local fc = file_context(st, info)
+  if fc.gates then return {} end
+  local owner = {}
+  for i = 1, #tree do
+    local n = tree[i]
+    if n.kind == "s-import" and is_outer(tree, i) then
+      local parts = split(get(n, "raw", ""), ".")
+      local name = get(n, "alias", parts[#parts])
+      owner[name] = name
+      for k in n.kids do
+        if tree[k].kind == "exposing" then
+          for e in tree[k].kids do
+            if tree[e].kind == "exposed-upper-ident" then owner[get(tree[e], "text", "")] = name end
+            if tree[e].kind == "exposed-lower-ident" then
+              for t in tree[e].kids do owner[get(tree[t], "value", "")] = name end
+            end
+          end
+        end
+      end
+    end
+  end
+  local test_anno = {}
+  local used = {}
+  for i = 1, #tree do
+    local n = tree[i]
+    local c = fc.ctx[i]
+    if (n.parent ~= 0 and has_key(test_anno, tostring(n.parent))) or (n.kind == "s-type-anno" and c == "none" and has_key(fc.test_values, get(n, "name", ""))) then test_anno[tostring(i)] = true end
+    local name = ""
+    if n.kind == "e-ident" or n.kind == "e-tag" then name = get(n, "raw", "") end
+    if n.kind == "ty" then name = get(n, "name", "") end
+    -- roc-ast keeps only `.Red` of a pattern's `Color.Red`, so the source says.
+    if n.kind == "p-tag" then
+      name = get(n, "raw", "")
+      local m = starts_with(name, ".") and re_find(sub(info.src[n.line], n.col), "^([A-Za-z_][A-Za-z0-9_.]*)") or nil
+      if m ~= nil then name = m.group end
+    end
+    local head = split(name, ".")[1]
+    if name ~= "" and has_key(owner, head) then
+      local side = (has_key(test_anno, tostring(i)) or in_tests(fc, c)) and "test" or "production"
+      if get(used, owner[head], "") ~= "production" then used[owner[head]] = side end
+    end
+  end
+  local out = {}
+  for name in sort(keys(used)) do
+    if used[name] == "test" then push(out, name) end
+  end
+  return out
 end
 
 -- What the file `info` binds where, worked out once a walk, for `expr_type`:
