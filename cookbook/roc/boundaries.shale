@@ -24,15 +24,17 @@
 --          apps separated by commas (`root=a.roc,b.roc`);
 --   clients  globs separated by commas, of files read only for the calls
 --          they make into the files checked, as apps that import a game.
---          Their own functions and `if`s are not checked;
+--          Their own functions and `if`s are not checked, even where `glob`
+--          matches them too;
 --   tests  globs separated by commas, of checked files that are tests of
 --          the rest, as a tree's gate apps. A reference from one of them to
 --          a function outside them counts as a test's;
 --   test_reach  `keeps` by default, so an `expect` or a test that reaches a
 --          function keeps it out of `dead` and `unused_api`. With
 --          `test_reach=dead`, only a production call or reference keeps a
---          module type's member out. A file's own top-level function is
---          private to it, so its tests may still be all that reach it.
+--          module type's member out of `dead`. A file's own top-level
+--          function is private to it, so its tests may still be all that
+--          reach it, and a test of a library's API is a user of it.
 --
 -- The checks, most from the Roc style guide (roc-apps docs/roc-style.md):
 --
@@ -127,8 +129,10 @@
 -- only under `dead/`, since nothing calls the other plants. The plants under
 -- `typed/` are type modules checked with the types under the app `QuietApp.roc`, and
 -- their names are read in snake case (`BoolParam.roc` as `bool_param`).
--- The rest are checked without types. The self-test fails if roc-types is
--- not installed.
+-- The rest are checked without types. The self-test runs with
+-- `test_reach=dead`, the plants under `dead/clients/` as `clients`, and those
+-- under `dead/gates/` as `tests`. The self-test fails if roc-types is not
+-- installed.
 -- budget: steps=800000000 arena_bytes=3000000000
 
 const SELF_TEST = arg("self_test", "") == "1"
@@ -148,7 +152,11 @@ const TYPES_ARG = arg("types", "0")
 if TYPES_ARG ~= "0" and TYPES_ARG ~= "1" then fail("boundaries: types must be 0 (the default) or 1, not " .. TYPES_ARG) end
 const USE_TYPES = SELF_TEST or TYPES_ARG == "1"
 const ROOT = SELF_TEST and (TYPED_PLANTS .. "QuietApp.roc") or arg("root", "")
-const TEST_REACH = arg("test_reach", "keeps")
+-- The self-test reads the plants under `dead/clients/` as clients, and those
+-- under `dead/gates/` as tests.
+const CLIENTS_ARG = SELF_TEST and (DEAD_PLANTS .. "clients/*.roc") or arg("clients", "")
+const TESTS_ARG = SELF_TEST and (DEAD_PLANTS .. "gates/*.roc") or arg("tests", "")
+const TEST_REACH = SELF_TEST and "dead" or arg("test_reach", "keeps")
 if TEST_REACH ~= "keeps" and TEST_REACH ~= "dead" then fail("boundaries: test_reach must be keeps (the default) or dead, not " .. TEST_REACH) end
 -- The pinned Roc defines `Bool := [False, True]`.
 const BOOL_LITERALS = {["Bool.True"] = true, ["Bool.False"] = true, True = true, False = true}
@@ -270,14 +278,20 @@ function globbed(globs, as_set)
   return as_set and set or paths
 end
 
-const ROC_FILES = globbed(GLOB, false)
-const CHECKED = globbed(GLOB, true)
-const TEST_PATHS = globbed(arg("tests", ""), true)
-local client_files = {}
-for p in globbed(arg("clients", ""), false) do
-  if not has_key(CHECKED, p) then push(client_files, p) end
+-- A file that `clients` and `glob` both match is a client, and not checked.
+const CLIENT_FILES = globbed(CLIENTS_ARG, false)
+const CLIENT_SET = globbed(CLIENTS_ARG, true)
+local checked_files = {}
+local checked_set = {}
+for p in globbed(GLOB, false) do
+  if not has_key(CLIENT_SET, p) then
+    push(checked_files, p)
+    checked_set[p] = true
+  end
 end
-const CLIENT_FILES = client_files
+const ROC_FILES = checked_files
+const CHECKED = checked_set
+const TEST_PATHS = globbed(TESTS_ARG, true)
 local untyped_plants = {}
 if SELF_TEST then
   for p in ROC_FILES do
@@ -691,9 +705,10 @@ function is_called_from_outside(func)
   return has_key(LANGUAGE_FIXED_NAMES, func.name)
 end
 
+-- A test of a library's API is a user of it, so `unused_api` keeps it.
 function has_no_caller(func)
   local is_member = sub(func.owner, 1, 1) ~= "@"
-  if TEST_REACH == "dead" and is_member then return func.prod_refs == 0 and func.mentions == 0 end
+  if TEST_REACH == "dead" and is_member and not is_library_api(func) then return func.prod_refs == 0 and func.mentions == 0 end
   return func.prod_refs == 0 and func.expect_refs == 0 and func.test_refs == 0 and func.mentions == 0
 end
 
@@ -802,7 +817,11 @@ if SELF_TEST then
       if fired_here and not planted_here then push(wrong, "`" .. c .. "` fires on " .. p .. ", another check's plant") end
     end
     if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
+    for p in CLIENT_FILES do
+      if has_key(fired, p .. "|" .. c) then push(wrong, "`" .. c .. "` fires on the client " .. p .. ", which is read only for its calls") end
+    end
   end
+  if #CLIENT_FILES == 0 or #keys(TEST_PATHS) == 0 then push(wrong, "no client or no gate plant read") end
   for w in wrong do print("FAIL " .. w) end
   if #wrong > 0 then fail("boundaries self_test: " .. #wrong .. " plants wrong") end
   print("boundaries (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none)")
