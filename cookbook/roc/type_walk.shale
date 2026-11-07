@@ -1,0 +1,641 @@
+-- This recipe prints a Roc module's types and every type they depend on,
+-- the most primitive first, with no function bodies, so the types can be
+-- reviewed on their own.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/type_walk.shale module=Pigs
+--   shale cookbook:roc/type_walk.shale self_test=1
+--
+-- The arguments:
+--   module     the module to start from, read from `<root>/<module>.roc`;
+--   root       the folder that holds it, `.` by default;
+--   packages   where a package's modules are, as `lib=repos:roc-apps/lib`,
+--              several separated by commas. Without it a package's folder is
+--              read from the headers of the apps in the root folder, which
+--              works only when that folder is under the root, so a package at
+--              `../lib` needs this argument;
+--   self_test  with `self_test=1`, check the plants in
+--              `cookbook/roc/plants/type_walk/`.
+--
+-- The types read are the type declarations at a file's top level and those
+-- nested in a type's `.{ ... }` block. A type's functions are the annotations
+-- in its own block whose type is a function: each is printed as its doc and
+-- its annotation, with its body left out, not written as `...`. Constants in
+-- a block, and functions outside any block (a module's private helpers), are
+-- left out, and so are the types only they mention.
+--
+-- Every type name in a printed definition or annotation is followed: a bare
+-- name declared in the same file, a bare name that is an imported module's own
+-- type (`Distance` after `import Distance`), and `Module.Type`. A tag's name is
+-- not a type, but its payload is. Builtins (`Str`, `List`, `U32` and the rest)
+-- are leaves, named in one line and not expanded. Type variables are not
+-- followed; each is named with the types it appears in.
+--
+-- The types come out in topological order: a type before every type that
+-- mentions it, its definition or its functions. Ties go by module, then by
+-- name, and the asked-for module's types come last. Types that mention each
+-- other form a cycle, which is reported in one line before its members; the
+-- members then follow, by their definitions where those order them, else by
+-- name. Each type has a header line with its name, file and line, then its
+-- doc comment and its definition as written, and then its functions inside a
+-- `.{ ... }`. The source's text is kept, re-indented. The last line counts the
+-- types, functions, modules and leaves.
+--
+-- A name that resolves to no file or no type, or a file that doesn't parse,
+-- is listed after the output, and the run then fails.
+-- budget: steps=800000000 arena_bytes=2000000000 output_bytes=8000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+use("cookbook:roc/declared.shale")
+
+const WALK_BUILTINS = set_of({"Str", "List", "Bool", "Try", "Box", "Dict", "Set", "Iter", "Num", "Int", "Frac", "Dec", "F32", "F64", "U8", "U16", "U32", "U64", "U128", "I8", "I16", "I32", "I64", "I128", "Utf8Problem"})
+
+-- The kinds of node a type declaration may sit in and still be one this
+-- recipe reads: the top level, or a type's block.
+const WALK_OUTER_KINDS = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
+
+function path_join(dir, name)
+  if dir == "" or dir == "." then return name end
+  return dir .. "/" .. name
+end
+
+-- Whether every ancestor of node `at` is a kind in WALK_OUTER_KINDS.
+function is_outer(tree, at)
+  local k = tree[at].parent
+  while k ~= 0 do
+    if not has_key(WALK_OUTER_KINDS, tree[k].kind) then return false end
+    k = tree[k].parent
+  end
+  return true
+end
+
+-- The type declaration's name with the names of the declarations it is
+-- nested in: `Pigs.PigInterest`.
+function qualified_name(tree, at)
+  local parts = {get(tree[tree[at].kids[1]], "name", "")}
+  local k = tree[at].parent
+  while k ~= 0 do
+    if tree[k].kind == "s-type-decl" then
+      local name = get(tree[tree[k].kids[1]], "name", "")
+      local grown = {name}
+      for p in parts do push(grown, p) end
+      parts = grown
+    end
+    k = tree[k].parent
+  end
+  return join(parts, ".")
+end
+
+-- The source between two places, a end column being one past the last
+-- character, with each line after the first losing the first line's
+-- indentation.
+function source_text(src, line, col, end_line, end_col)
+  local first = src[line]
+  local indent = #first - #re_find(first, "^[ \t]*(.*)$").group
+  if line == end_line then return {sub(first, col, end_col - 1)} end
+  local out = {sub(first, col)}
+  for l = line + 1, end_line do
+    local text = l == end_line and sub(src[l], 1, end_col - 1) or src[l]
+    local k = 1
+    while k <= indent and k <= #text and (sub(text, k, k) == "\t" or sub(text, k, k) == " ") do k = k + 1 end
+    push(out, sub(text, k))
+  end
+  return out
+end
+
+-- The comment lines directly above line `line`, trimmed, in order.
+function doc_lines_above(src, line)
+  local out = {}
+  local k = line - 1
+  while k >= 1 and starts_with(trim(src[k]), "#") do
+    push(out, trim(src[k]))
+    k = k - 1
+  end
+  local ordered = {}
+  for i = #out, 1, -1 do push(ordered, out[i]) end
+  return ordered
+end
+
+-- Each package's folder, from the `packages=` argument and the headers of
+-- the apps directly in the root folder, as `{dir}` or `{err}`.
+function package_folders(root, given)
+  local out = {}
+  local apps = {}
+  for p in glob(path_join(root, "*.roc")) do
+    for l in lines(read(p)) do
+      if starts_with(l, "app [") or starts_with(l, "app[") then push(apps, p) end
+    end
+  end
+  if #apps > 0 then
+    for f in roc_tree(apps) do
+      if f.err == "" then
+        for i = 1, #f.nodes do
+          local n = f.nodes[i]
+          if n.kind == "record-field" and n.parent ~= 0 and f.nodes[n.parent].kind == "packages" then
+            local raw = ""
+            for j = i + 1, #f.nodes do
+              if f.nodes[j].kind == "e-string-part" and f.nodes[f.nodes[j].parent].parent == i then raw = f.nodes[j].raw end
+            end
+            local dir = path_normal(path_join(root, dirname(raw)))
+            local found = dir == nil and {err = "`" .. n.name .. "` is at `" .. dirname(raw) .. "` from the root, outside it: pass packages=" .. n.name .. "=<folder>, such as a repos: path"} or {dir = dir}
+            if has_key(out, n.name) and get(out[n.name], "dir", "") ~= get(found, "dir", "") then
+              found = {err = "the apps in the root give `" .. n.name .. "` two folders: pass packages=" .. n.name .. "=<folder>"}
+            end
+            out[n.name] = found
+          end
+        end
+      end
+    end
+  end
+  if given ~= "" then
+    for pair in split(given, ",") do
+      local at = find(pair, "=")
+      if at == nil then fail("type_walk: packages=: `" .. pair .. "` is no name=folder") end
+      out[trim(sub(pair, 1, at - 1))] = {dir = trim(sub(pair, at + 1))}
+    end
+  end
+  return out
+end
+
+-- Parses the files in `paths` not read before and records what each
+-- declares and imports.
+function load_files(st, paths)
+  local fresh = {}
+  for p in paths do
+    if not has_key(st.files, p) then push(fresh, p) end
+  end
+  if #fresh == 0 then return nil end
+  for f in roc_tree(fresh) do
+    if f.err ~= "" then
+      st.files[f.path] = {path = f.path, err = f.err}
+      if f.err ~= "no such file" then push(st.refused, f.path .. ": " .. f.err) end
+    else
+      local info = {path = f.path, err = "", module = module_name(f.path), nodes = f.nodes, src = split(read(f.path), "\n"), types = {}, imports = {}}
+      local tree = f.nodes
+      for i = 1, #tree do
+        local n = tree[i]
+        if n.kind == "s-type-decl" and is_outer(tree, i) and get(tree[n.kids[1]], "name", "") ~= "" then
+          local q = qualified_name(tree, i)
+          local t = {id = f.path .. "#" .. q, path = f.path, module = info.module, qualified = q, name = last_part(q), at = i, line = n.line}
+          push(info.types, t)
+          st.types[t.id] = t
+        end
+        if n.kind == "s-import" and is_outer(tree, i) then
+          local raw = get(n, "raw", "")
+          local parts = split(raw, ".")
+          local target = {}
+          if #parts == 1 then
+            target = {path = path_normal(path_join(dirname(f.path), raw .. ".roc"))}
+          else
+            local pkg = get(st.packages, parts[1], {err = "no app in the root names the package `" .. parts[1] .. "`: pass packages=" .. parts[1] .. "=<folder>"})
+            if has_key(pkg, "err") then target = {err = pkg.err} else target = {path = path_join(pkg.dir, join(drop(parts, 1), "/") .. ".roc")} end
+          end
+          info.imports[parts[#parts]] = target
+        end
+      end
+      st.files[f.path] = info
+    end
+  end
+  return nil
+end
+
+-- The type in `info` whose name is `q` exactly, else nil.
+function type_named(info, q)
+  for t in info.types do
+    if t.qualified == q then return t end
+  end
+  return nil
+end
+
+-- What `name` is in the imported module `target`, whose own type `rest` may
+-- be when `name` is qualified by the module's name.
+function resolve_in_module(st, target, name, rest)
+  if has_key(target, "err") then return {kind = "lost", why = target.err} end
+  if not has_key(st.files, target.path) then return {kind = "need", path = target.path} end
+  local file = st.files[target.path]
+  if file.err == "no such file" then return {kind = "lost", why = "no file " .. target.path} end
+  if file.err ~= "" then return {kind = "lost", why = target.path .. " doesn't parse"} end
+  local t = type_named(file, name) or type_named(file, rest)
+  if t ~= nil then return {kind = "type", id = t.id} end
+  return {kind = "lost", why = "no type `" .. name .. "` in " .. target.path}
+end
+
+-- What the type name `name`, written in the file `info`, refers to:
+-- `{kind = "type", id}`, `{kind = "leaf"}`, `{kind = "need", path}` when the
+-- file that says is not read yet, or `{kind = "lost", why}`.
+function resolve(st, info, name)
+  local parts = split(name, ".")
+  if #parts == 1 then
+    local here = {}
+    for t in info.types do
+      if t.name == name then push(here, t) end
+    end
+    if #here == 1 then return {kind = "type", id = here[1].id} end
+    if #here > 1 then
+      local top = type_named(info, name) or type_named(info, info.module .. "." .. name)
+      if top ~= nil then return {kind = "type", id = top.id} end
+      return {kind = "lost", why = #here .. " types of this name in the file"}
+    end
+    if has_key(info.imports, name) then return resolve_in_module(st, info.imports[name], name, name) end
+    if has_key(WALK_BUILTINS, name) then return {kind = "leaf"} end
+    return {kind = "lost", why = "no type of this name in the file, no import of it, and no builtin"}
+  end
+  local head = parts[1]
+  local rest = join(drop(parts, 1), ".")
+  if head == info.module then
+    local t = type_named(info, name) or type_named(info, rest)
+    if t ~= nil then return {kind = "type", id = t.id} end
+    return {kind = "lost", why = "no type `" .. name .. "` in its own module"}
+  end
+  if has_key(info.imports, head) then return resolve_in_module(st, info.imports[head], name, rest) end
+  if has_key(WALK_BUILTINS, head) then return {kind = "leaf"} end
+  return {kind = "lost", why = "`" .. head .. "` is no imported module"}
+end
+
+-- The type names and type variables the type at node `at` mentions, pushed
+-- onto `into` as `{name, line}` and `{var, line}`. A tag's name is skipped and
+-- its payload read.
+function mentions_in(tree, at, into)
+  local n = tree[at]
+  local parent_kind = n.parent ~= 0 and tree[n.parent].kind or ""
+  if n.kind == "ty-var" then
+    push(into, {var = get(n, "raw", ""), line = n.line})
+    return into
+  end
+  if n.kind == "ty" then
+    if parent_kind ~= "tags" and get(n, "name", "") ~= "" then push(into, {name = n.name, line = n.line}) end
+    return into
+  end
+  local kids = n.kids
+  local from = 1
+  if n.kind == "ty-apply" and parent_kind == "tags" then from = 2 end
+  for k = from, #kids do mentions_in(tree, kids[k], into) end
+  return into
+end
+
+-- The function annotations in the type's own block, as node indices.
+function functions_of(tree, at)
+  local out = {}
+  for k in tree[at].kids do
+    if tree[k].kind == "associated" then
+      for m in tree[k].kids do
+        if tree[m].kind == "s-type-anno" and #tree[m].kids > 0 and tree[tree[m].kids[1]].kind == "ty-fn" then push(out, m) end
+      end
+    end
+  end
+  return out
+end
+
+-- A type's name as printed: qualified by its module, or with the module
+-- named after it when the type sits outside the module's own type.
+function display_name(t)
+  if t.qualified == t.module or starts_with(t.qualified, t.module .. ".") then return t.qualified end
+  return t.qualified .. ", in module " .. t.module
+end
+
+function add_edge(st, from, to, in_definition)
+  if from == to then return nil end
+  local seen = st.dep_seen
+  if not has_key(seen, from .. ">" .. to) then
+    seen[from .. ">" .. to] = true
+    push_at(st.deps, from, to)
+  end
+  if in_definition and not has_key(seen, from .. "=" .. to) then
+    seen[from .. "=" .. to] = true
+    push_at(st.def_deps, from, to)
+  end
+  return nil
+end
+
+function enqueue(st, id)
+  if has_key(st.visited, id) then return nil end
+  st.visited[id] = true
+  push(st.queue, id)
+  return nil
+end
+
+-- Settles one mention of the type `m.from`: an edge, a leaf, a lost name, or
+-- a wait for its file.
+function settle(st, m)
+  local info = st.files[st.types[m.from].path]
+  local r = resolve(st, info, m.name)
+  if r.kind == "need" then
+    push(st.deferred, m)
+    st.wanted[r.path] = true
+  elseif r.kind == "type" then
+    add_edge(st, m.from, r.id, m.in_definition)
+    enqueue(st, r.id)
+  elseif r.kind == "leaf" then
+    st.leaves[m.name] = true
+  else
+    push(st.lost, info.path .. ":" .. m.line .. ": `" .. m.name .. "`: " .. r.why)
+  end
+  return nil
+end
+
+function visit(st, id)
+  local t = st.types[id]
+  local info = st.files[t.path]
+  local tree = info.nodes
+  local kids = tree[t.at].kids
+  local found = {}
+  if #kids > 1 and tree[kids[2]].kind ~= "associated" then mentions_in(tree, kids[2], found) end
+  local in_definition = #found
+  for f in functions_of(tree, t.at) do
+    for k in tree[f].kids do mentions_in(tree, k, found) end
+  end
+  for i = 1, #found do
+    local m = found[i]
+    if has_key(m, "var") then
+      if not has_key(st.vars, m.var) then st.vars[m.var] = {} end
+      st.vars[m.var][display_name(t)] = true
+    else
+      settle(st, {from = id, name = m.name, line = m.line, in_definition = i <= in_definition})
+    end
+  end
+  return nil
+end
+
+function sort_key(st, id)
+  local t = st.types[id]
+  return (has_key(st.asked, id) and "1" or "0") .. t.module .. "\t" .. t.qualified .. "\t" .. t.path
+end
+
+-- Tarjan's strongly connected components over `st.deps`.
+function strong_connect(st, g, v)
+  g.index[v] = g.counter
+  g.low[v] = g.counter
+  g.counter = g.counter + 1
+  push(g.stack, v)
+  g.on[v] = true
+  for w in get(st.deps, v, {}) do
+    if not has_key(g.index, w) then
+      strong_connect(st, g, w)
+      if g.low[w] < g.low[v] then g.low[v] = g.low[w] end
+    elseif get(g.on, w, false) then
+      if g.index[w] < g.low[v] then g.low[v] = g.index[w] end
+    end
+  end
+  if g.low[v] == g.index[v] then
+    local members = {}
+    local done = false
+    while not done do
+      local w = g.stack[#g.stack]
+      g.stack = take(g.stack, #g.stack - 1)
+      g.on[w] = false
+      push(members, w)
+      done = w == v
+    end
+    push(g.components, members)
+  end
+  return nil
+end
+
+-- The id with the smallest sort key among `ids` that `is_ready` allows.
+function smallest_ready(st, ids, is_ready)
+  local best = nil
+  local best_key = ""
+  for id in ids do
+    if is_ready[id] then
+      local key = sort_key(st, id)
+      if best == nil or key < best_key then
+        best = id
+        best_key = key
+      end
+    end
+  end
+  return best
+end
+
+-- A cycle's members, each after the members its definition mentions where
+-- that orders them, else by sort key.
+function order_in_cycle(st, members)
+  local inside = set_of(members)
+  local placed = {}
+  local out = {}
+  while #out < #members do
+    local ready = {}
+    local any = false
+    for id in members do
+      local ok = not has_key(placed, id)
+      if ok then
+        for w in get(st.def_deps, id, {}) do
+          if has_key(inside, w) and not has_key(placed, w) then ok = false end
+        end
+      end
+      ready[id] = ok
+      if ok then any = true end
+    end
+    if not any then
+      for id in members do ready[id] = not has_key(placed, id) end
+    end
+    local pick = smallest_ready(st, members, ready)
+    placed[pick] = true
+    push(out, pick)
+  end
+  return out
+end
+
+-- Every type read, in printing order, as `{id, cycle}` items, where an item
+-- with `cycle` set is a cycle's report line, with its members.
+function printing_order(st)
+  local ids = sort(keys(st.visited))
+  local g = {index = {}, low = {}, counter = 1, stack = {}, on = {}, components = {}}
+  for id in ids do
+    if not has_key(g.index, id) then strong_connect(st, g, id) end
+  end
+  local component_of = {}
+  local key_of = {}
+  for c = 1, #g.components do
+    local best = ""
+    for id in g.components[c] do
+      component_of[id] = c
+      local key = sort_key(st, id)
+      if best == "" or key < best then best = key end
+    end
+    key_of[c] = best
+  end
+  local printed = {}
+  for c = 1, #g.components do push(printed, false) end
+  local out = {}
+  local left = #g.components
+  while left > 0 do
+    local pick = 0
+    for c = 1, #g.components do
+      if not printed[c] and (pick == 0 or key_of[c] < key_of[pick]) then
+        local ready = true
+        for id in g.components[c] do
+          for w in get(st.deps, id, {}) do
+            if component_of[w] ~= c and not printed[component_of[w]] then ready = false end
+          end
+        end
+        if ready then pick = c end
+      end
+    end
+    printed[pick] = true
+    left = left - 1
+    local members = g.components[pick]
+    if #members == 1 then
+      push(out, {id = members[1]})
+    else
+      push(out, {cycle = members})
+      for id in order_in_cycle(st, members) do push(out, {id = id}) end
+    end
+  end
+  return out
+end
+
+-- The lines printed for one type.
+function type_lines(st, id)
+  local t = st.types[id]
+  local info = st.files[t.path]
+  local tree = info.nodes
+  local src = info.src
+  local decl = tree[t.at]
+  local out = {"", "#### " .. display_name(t) .. "   (" .. t.path .. ":" .. t.line .. ")"}
+  local doc = doc_lines_above(src, decl.line)
+  if #doc == 0 and t.qualified == t.module and tree[decl.parent].kind ~= "associated" then doc = opening_comment(src) end
+  for l in doc do push(out, l) end
+  local kids = decl.kids
+  local last = (#kids > 1 and tree[kids[2]].kind ~= "associated") and tree[kids[2]] or tree[kids[1]]
+  local definition = source_text(src, decl.line, decl.col, last.end_line, last.end_col)
+  local fns = functions_of(tree, t.at)
+  if #fns == 0 then
+    for l in definition do push(out, l) end
+    return out
+  end
+  definition[#definition] = definition[#definition] .. ".{"
+  for l in definition do push(out, l) end
+  for i = 1, #fns do
+    local f = tree[fns[i]]
+    if i > 1 then push(out, "") end
+    for l in doc_lines_above(src, f.line) do push(out, "\t" .. l) end
+    for l in source_text(src, f.line, f.col, f.end_line, f.end_col) do push(out, "\t" .. l) end
+    st.function_count = st.function_count + 1
+  end
+  push(out, "}")
+  return out
+end
+
+-- Walks the module `module` in the folder `root` and gives `{lines, lost,
+-- refused}`: the lines to print, the names that resolve to nothing, and the
+-- files that don't parse.
+function walk(root, module, packages_arg)
+  local st = {files = {}, types = {}, packages = package_folders(root, packages_arg), refused = {}, lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, asked = {}, queue = {}, deferred = {}, wanted = {}, function_count = 0}
+  if module == "" then fail("type_walk: name the module to start from, as module=Pigs") end
+  local start = path_normal(path_join(root, module .. ".roc"))
+  if start == nil or not exists(start) then fail("type_walk: no file " .. path_join(root, module .. ".roc") .. " for module=" .. module) end
+  load_files(st, {start})
+  if st.files[start].err ~= "" then return {lines = {}, lost = {}, refused = st.refused} end
+  for t in st.files[start].types do
+    st.asked[t.id] = true
+    enqueue(st, t.id)
+  end
+  local at = 1
+  local more = true
+  while more do
+    while at <= #st.queue do
+      visit(st, st.queue[at])
+      at = at + 1
+    end
+    more = #st.deferred > 0
+    if more then
+      load_files(st, sort(keys(st.wanted)))
+      st.wanted = {}
+      local again = st.deferred
+      st.deferred = {}
+      for m in again do settle(st, m) end
+    end
+  end
+  local lines_out = {"# The types of " .. module .. " and every type they depend on, the most primitive first.", "# Builtin leaves, not expanded: " .. join(sort(keys(st.leaves)), ", ")}
+  local var_notes = {}
+  for v in sort(keys(st.vars)) do push(var_notes, v .. " (" .. join(sort(keys(st.vars[v])), ", ") .. ")") end
+  if #var_notes > 0 then push(lines_out, "# Type variables, not followed: " .. join(var_notes, "; ")) end
+  local modules = {}
+  for item in printing_order(st) do
+    if has_key(item, "cycle") then
+      local names = {}
+      for id in item.cycle do push(names, display_name(st.types[id])) end
+      push(lines_out, "")
+      push(lines_out, "# Cycle: these types mention each other: " .. join(sort(names), ", "))
+    else
+      modules[st.types[item.id].path] = true
+      for l in type_lines(st, item.id) do push(lines_out, l) end
+    end
+  end
+  push(lines_out, "")
+  push(lines_out, "# " .. #keys(st.visited) .. " types, " .. st.function_count .. " functions, " .. #keys(modules) .. " modules, " .. #keys(st.leaves) .. " leaves, " .. #keys(st.vars) .. " type variables")
+  return {lines = lines_out, lost = st.lost, refused = st.refused}
+end
+
+function check(failures, ok, what)
+  if not ok then push(failures, what) end
+  return nil
+end
+
+function has_line(ls, line)
+  for l in ls do
+    if l == line then return true end
+  end
+  return false
+end
+
+function has_text(ls, text)
+  for l in ls do
+    if contains(l, text) then return true end
+  end
+  return false
+end
+
+function self_test()
+  local at = "cookbook:roc/plants/type_walk/"
+  local failures = {}
+  local r = walk(at .. "chain/app", "Ride", "")
+  local ls = r.lines
+  local headers = {}
+  for l in ls do
+    if starts_with(l, "#### ") then push(headers, split(sub(l, 6), "   (")[1]) end
+  end
+  local want = {"Tagged, in module Leg", "Note", "Note.Mark", "Unit.Metres", "Leg", "Leg.Stretch", "Ride", "Ride.Plan"}
+  check(failures, join(headers, " | ") == join(want, " | "), "order: got " .. join(headers, " | "))
+  check(failures, #r.lost == 0, "lost names: " .. join(r.lost, "; "))
+  check(failures, #r.refused == 0, "refused: " .. join(r.refused, "; "))
+  check(failures, has_line(ls, "# Builtin leaves, not expanded: F64, List, Str"), "leaves line")
+  check(failures, has_line(ls, "# Type variables, not followed: a (Tagged, in module Leg)"), "type variable line")
+  check(failures, has_line(ls, "# Cycle: these types mention each other: Note, Note.Mark"), "cycle line")
+  check(failures, has_line(ls, "# 8 types, 3 functions, 4 modules, 3 leaves, 1 type variables"), "counts line: " .. ls[#ls])
+  check(failures, has_line(ls, "Ride :: { legs : List(Leg), name : Str }.{"), "a module type's definition opens its block")
+  check(failures, has_line(ls, "\tlegs_of : Ride -> List(Leg)"), "a function's annotation")
+  check(failures, has_line(ls, "\t## The legs of a ride, in order."), "a function's doc")
+  check(failures, has_line(ls, "\tnoted : Ride, Note -> Str"), "a type only an annotation mentions")
+  check(failures, has_line(ls, "Plan : [Short, Long(Leg.Stretch)]"), "a nested type, re-indented")
+  check(failures, has_line(ls, "## How long a ride's plan is."), "a nested type's doc")
+  check(failures, has_line(ls, "## A ride is a list of legs, with a name."), "a module type's doc from the file's opening comment")
+  check(failures, has_line(ls, "\tlabel : Tagged(Str),"), "a multiline definition, re-indented")
+  check(failures, has_line(ls, "Metres :: F64"), "a type from a package")
+  check(failures, not has_text(ls, "BODY_MARKER") and not has_text(ls, "ride.legs") and not has_text(ls, "|ride|"), "a body is printed")
+  check(failures, not has_text(ls, "count"), "a constant is printed")
+  check(failures, not has_text(ls, "helper") and not has_text(ls, "Hidden"), "a helper outside the block, or its type, is printed")
+  check(failures, not has_text(ls, "#### Unit "), "a module type nobody mentions is printed")
+  check(failures, not has_line(ls, "#### Short") and not has_text(ls, "Long,"), "a tag is read as a type")
+
+  local lost = walk(at .. "unresolved", "Lost", "").lost
+  check(failures, #lost == 2, "two lost names, got " .. #lost .. ": " .. join(lost, "; "))
+  check(failures, has_text(lost, "`Nowhere.Thing`: `Nowhere` is no imported module"), "a name of no import is lost")
+  check(failures, has_text(lost, "`Gone`: no file " .. at .. "unresolved/Gone.roc"), "a missing module is lost")
+  local moved = walk(at .. "chain/app", "Ride", "shared=" .. at .. "chain/nowhere").lost
+  check(failures, #moved == 2 and has_text(moved, "Leg.roc:5: `Unit.Metres`: no file " .. at .. "chain/nowhere/Unit.roc"), "packages= overrides the app's folder, got " .. join(moved, "; "))
+  for f in failures do print("FAIL: " .. f) end
+  if #failures > 0 then fail("type_walk: " .. #failures .. " self-test checks failed") end
+  print("type_walk: self test passed")
+  return nil
+end
+
+if SELF_TEST then
+  self_test()
+else
+  local r = walk(arg("root", "."), arg("module", ""), arg("packages", ""))
+  print(join(r.lines, "\n"))
+  for l in r.lost do print("lost: " .. l) end
+  for l in r.refused do print("refused: " .. l) end
+  if #r.lost > 0 or #r.refused > 0 then fail("type_walk: " .. #r.lost .. " names resolve to no type and " .. #r.refused .. " files don't parse (named above); every other type is printed") end
+end

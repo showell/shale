@@ -168,6 +168,16 @@ end, and fails the run.
 
       cd <repo> && shale <shale>/cookbook/roc/tree_patch.shale old=roc new=<copy>/roc under=roc out=<file>.patch
 
+## Reading types
+
+- [type_walk.shale](type_walk.shale) prints a module's types and every type
+  they depend on, the most primitive first and the module's own last, each
+  with its doc, its definition as written and its functions' annotations,
+  with no bodies. It is for reviewing the types alone. A package outside the
+  root needs `packages=`, as below; a name it can't resolve fails the run.
+
+      cd <repo> && shale <shale>/cookbook/roc/type_walk.shale module=Pigs packages=lib=repos:roc-apps/canvas_apps/lib
+
 ## Libraries
 
 These files are loaded with `use("cookbook:roc/<file>.shale")` and are not
