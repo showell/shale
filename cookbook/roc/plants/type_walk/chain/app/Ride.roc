@@ -3,6 +3,7 @@ import Leg
 import Note
 import Hidden
 import Speed
+import Tally
 
 Ride :: { legs : List(Leg), name : Str }.{
 
@@ -22,7 +23,7 @@ Ride :: { legs : List(Leg), name : Str }.{
 	## The legs of a ride, in order.
 	legs_of : Ride -> List(Leg)
 	legs_of = |ride| {
-		marker = "BODY_MARKER"
+		marker = Tally.mark("BODY_MARKER")
 		ride.legs
 	}
 
