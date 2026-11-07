@@ -182,15 +182,20 @@ end, and fails the run.
   name, or by a method call or operator on a receiver the file plainly types
   as its type. A call on a receiver it can't type is counted apart, by name,
   and the counts line says how many calls were typed and how many pooled.
+  A package that apps use is walked from outside it, with `clients=` naming
+  the apps, so their uses and signatures count too, and a member used across
+  several apps says how many (`used by 9 files in 5 apps`).
 
       cd <repo> && shale <shale>/cookbook/roc/type_walk.shale module=Pigs packages=lib=repos:roc-apps/canvas_apps/lib
+      shale cookbook:roc/type_walk.shale root=repos:roc-apps/canvas_apps/lib module=Brush clients=repos:roc-apps/canvas_apps/*
 
 ## Libraries
 
 These files are loaded with `use("cookbook:roc/<file>.shale")` and are not
 run on their own.
 
-- [walk_uses.shale](walk_uses.shale): `type_walk`'s name resolution and its
+- [walk_uses.shale](walk_uses.shale): `type_walk`'s package folders and
+  client files, its name resolution and its
   counts of each member's outside uses, with the rules for typing a method
   call's receiver and the operators Roc sends to members (`<` to `is_lt`).
 - [parsed.shale](parsed.shale): the recipes check every .roc file in a

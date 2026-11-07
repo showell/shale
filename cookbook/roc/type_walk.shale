@@ -5,9 +5,26 @@
 --   cd <repo> && shale <shale>/cookbook/roc/type_walk.shale module=Pigs
 --   shale cookbook:roc/type_walk.shale self_test=1
 --
+-- A package that apps use is walked from outside it, its folder named as a
+-- mount path and its apps as clients, since no path may climb with `..`:
+--
+--   shale cookbook:roc/type_walk.shale root=repos:roc-apps/canvas_apps/lib \
+--     module=Brush clients=repos:roc-apps/canvas_apps/*
+--
+-- (or from canvas_apps, `root=lib clients=*`). Run from inside the package,
+-- the walk sees only the package's own files.
+--
 -- The arguments:
 --   module     the module to start from, read from `<root>/<module>.roc`;
 --   root       the folder that holds it, `.` by default;
+--   clients    the code that uses the package, comma separated: a folder or
+--              a glob of folders, each an app whose `.roc` files at any depth
+--              are read, or a glob ending in `.roc`, whose files' folders are
+--              the apps. Named as the root is, both mount paths or both from
+--              one folder, as the walk compares paths as written. Their files
+--              join the other files below, each reading its imports from its
+--              own app header or its folder's (`import lib.Brush`, or
+--              `import game.Geom` in a gates app);
 --   packages   where a package's modules are, as `lib=repos:roc-apps/lib`,
 --              several separated by commas. Without it a package's folder is
 --              read from the headers of the apps in the root folder, which
@@ -78,9 +95,12 @@
 -- Camera, Screen`: modules its functions use only in their bodies (or in
 -- annotations outside its types' blocks), which a reviewer should read too.
 --
--- The other files are the root folder's other `.roc` files and those under
--- its `gates/` folder. A gates app's `import game.Geom` reads the package's
--- folder from that app's own header, unless `packages=` names it.
+-- The other files are the root folder's other `.roc` files, those under its
+-- `gates/` folder, and the clients'. A file's `import game.Geom` reads the
+-- package's folder from its own header, else from the headers of the apps and
+-- packages in its folder, unless `packages=` names it. A header line counts
+-- the clients' files and apps, and a member used by files in several client
+-- apps says how many, `# used by 9 files in 5 apps`.
 --
 -- Each member of the asked module's types ends with its outside uses, `#
 -- used by 3 files, 1 in tests only`, or `# no outside use` (after `#
@@ -142,11 +162,6 @@ const WALK_NUMBERS = {"F32", "F64", "Dec", "U8", "U16", "U32", "U64", "U128", "I
 use("cookbook:roc/declared.shale")
 use("cookbook:roc/walk_uses.shale")
 
-function path_join(dir, name)
-  if dir == "" or dir == "." then return name end
-  return dir .. "/" .. name
-end
-
 -- The type declaration's name with the names of the declarations it is
 -- nested in: `Pigs.PigInterest`.
 function qualified_name(tree, at)
@@ -192,86 +207,6 @@ function doc_lines_above(src, line)
   local ordered = {}
   for i = #out, 1, -1 do push(ordered, out[i]) end
   return ordered
-end
-
--- Each package's folder, from the `packages=` argument and the headers of
--- the apps directly in the root folder, as `{dir}` or `{err}`.
--- Roc's trees of the files `paths`, in order, as `roc_tree` gives them,
--- parsing only those not already in `trees` and keeping them there, so walks
--- that share `trees` parse a file once.
-function parsed_files(trees, paths)
-  local fresh = {}
-  for p in paths do
-    if not has_key(trees, p) then push(fresh, p) end
-  end
-  if #fresh > 0 then
-    for f in roc_tree(fresh) do trees[f.path] = f end
-  end
-  local out = {}
-  for p in paths do push(out, trees[p]) end
-  return out
-end
-
--- The packages an app's header names, from its tree, as `{name, raw}`, `raw`
--- being the path written for its main file.
-function header_packages(tree)
-  local out = {}
-  for i = 1, #tree do
-    local n = tree[i]
-    if n.kind == "record-field" and n.parent ~= 0 and tree[n.parent].kind == "packages" then
-      local raw = ""
-      for j = i + 1, #tree do
-        if tree[j].kind == "e-string-part" and tree[tree[j].parent].parent == i then raw = tree[j].raw end
-      end
-      push(out, {name = n.name, raw = raw})
-    end
-  end
-  return out
-end
-
-function package_folders(root, given, trees)
-  local out = {}
-  local apps = {}
-  for p in glob(path_join(root, "*.roc")) do
-    for l in lines(read(p)) do
-      if starts_with(l, "app [") or starts_with(l, "app[") then push(apps, p) end
-    end
-  end
-  if #apps > 0 then
-    for f in parsed_files(trees, apps) do
-      if f.err == "" then
-        for pkg in header_packages(f.nodes) do
-          local dir = path_normal(path_join(root, dirname(pkg.raw)))
-          local found = dir == nil and {err = "`" .. pkg.name .. "` is at `" .. dirname(pkg.raw) .. "` from the root, outside it: pass packages=" .. pkg.name .. "=<folder>, such as a repos: path"} or {dir = dir}
-          if has_key(out, pkg.name) and get(out[pkg.name], "dir", "") ~= get(found, "dir", "") then
-            found = {err = "the apps in the root give `" .. pkg.name .. "` two folders: pass packages=" .. pkg.name .. "=<folder>"}
-          end
-          out[pkg.name] = found
-        end
-      end
-    end
-  end
-  if given ~= "" then
-    for pair in split(given, ",") do
-      local at = find(pair, "=")
-      if at == nil then fail("type_walk: packages=: `" .. pair .. "` is no name=folder") end
-      out[trim(sub(pair, 1, at - 1))] = {dir = trim(sub(pair, at + 1)), given = true}
-    end
-  end
-  return out
-end
-
--- The folder of each package the file's own app header names, where it lies
--- inside the root, unless `packages=` names that package: a gates app's
--- `game: "../game.roc"`.
-function own_packages(st, tree, path)
-  local out = {}
-  for pkg in header_packages(tree) do
-    local dir = path_normal(path_join(dirname(path), dirname(pkg.raw)))
-    local given = get(get(st.packages, pkg.name, {}), "given", false)
-    if dir ~= nil and not given then out[pkg.name] = {dir = dir} end
-  end
-  return out
 end
 
 -- Parses the files in `paths` not read before and records what each
@@ -688,7 +623,7 @@ function type_lines(st, id)
       st.function_count = st.function_count + 1
     end
     local key = id .. "\t" .. get(f, "name", "")
-    if st.uses and has_key(st.member_rec, key) then push(notes, uses_note(st.member_rec[key])) end
+    if st.uses and has_key(st.member_rec, key) then push(notes, uses_note(st.member_rec[key], st.app_of)) end
     if #notes > 0 then anno[#anno] = anno[#anno] .. "   # " .. join(notes, "; ") end
     for l in anno do push(out, "\t" .. l) end
   end
@@ -801,6 +736,7 @@ function named_by(st, root, module, start, paths, production_only)
     end
   end
   local where = (root == "" or root == ".") and "the root folder" or root
+  if #keys(st.app_of) > 0 then where = where .. " and the clients" end
   local head = not any and "# Named by: no annotation or type in the other modules of " .. where .. " mentions " .. module .. "'s types." or "# Named by: the annotations and types in the other modules of " .. where .. " that mention " .. module .. "'s types."
   if any and production_only then head = head .. " Production only: " .. counts.test .. " test and " .. counts.private .. " private entries left out." end
   local section = {"", head}
@@ -836,7 +772,9 @@ end
 function walk(root, module, packages_arg, max_depth, settings?)
   local given = settings == nil and {} or settings
   local trees = get(given, "trees", {})
-  local st = {files = {}, types = {}, trees = trees, packages = package_folders(root, packages_arg, trees), refused = {},lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, depth_of = {}, asked = {}, next = {}, beyond = {}, stopped = {}, stops = get(given, "stops", WALK_STOP), brief = get(given, "brief", WALK_BRIEF), full_depth = get(given, "full_depth", WALK_FULL_DEPTH), uses = get(given, "uses", true), named_by = get(given, "named_by", true), depth = 0, max_depth = max_depth, deferred = {}, wanted = {}, function_count = 0, constant_count = 0, contexts = {}, typing = {}, resolved = {}, precision = {}, member_rec = {}, member_list = {}, members_by_name = {}}
+  local clients = get(given, "clients", "")
+  refuse_climbing(root, module, clients)
+  local st = {files = {}, types = {}, trees = trees, packages = package_folders(root, packages_arg, trees), dir_packages = {}, app_of = {}, refused = {}, lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, depth_of = {}, asked = {}, next = {}, beyond = {}, stopped = {}, stops = get(given, "stops", WALK_STOP), brief = get(given, "brief", WALK_BRIEF), full_depth = get(given, "full_depth", WALK_FULL_DEPTH), uses = get(given, "uses", true), named_by = get(given, "named_by", true), depth = 0, max_depth = max_depth, deferred = {}, wanted = {}, function_count = 0, constant_count = 0, contexts = {}, typing = {}, resolved = {}, precision = {}, member_rec = {}, member_list = {}, members_by_name = {}}
   if module == "" then fail("type_walk: name the module to start from, as module=Pigs") end
   local start = path_normal(path_join(root, module .. ".roc"))
   if start == nil or not exists(start) then fail("type_walk: no file " .. path_join(root, module .. ".roc") .. " for module=" .. module) end
@@ -877,7 +815,18 @@ function walk(root, module, packages_arg, max_depth, settings?)
   end
   if #briefs > 0 then push(lines_out, "# Brief, members by name at every depth: " .. join(sort(briefs), "; ")) end
   local paths = {}
-  if st.uses or st.named_by then paths = other_files(st, root, start) end
+  if st.uses or st.named_by then
+    paths = other_files(st, root, start)
+    if clients ~= "" then
+      local skip = set_of(paths)
+      skip[start] = true
+      local cl = client_files(clients, skip)
+      load_files(st, cl.paths)
+      st.app_of = cl.app_of
+      push(lines_out, clients_line(st, cl.paths, start))
+      for p in cl.paths do push(paths, p) end
+    end
+  end
   local unused = {}
   if st.uses then
     load_imports(st)
@@ -1102,6 +1051,28 @@ function self_test()
   check(failures, has_line(m, "# Public, but used only in this file: minus, is_gt"), "the members used only here, beside calls typed elsewhere and untyped operators")
   check(failures, m[#m] == "# 1 types, 11 functions, 1 constants, 1 modules, 2 leaves, 0 type variables, 0 beyond depth 3, 0 stopped, 2 members with no outside use, method calls 9 typed and 1 pooled, operators 6 typed and 1 pooled", "methods counts line: " .. m[#m])
 
+  -- The package pkg's Dot: app one names it `kit` and uses shift and scale;
+  -- app two names it `geo`, and its Helper, with no header, uses scale
+  -- through the folder's app; pkg's own Grid uses origin.
+  local cl_at = at .. "clients/"
+  local c = walk(cl_at .. "pkg", "Dot", "", WALK_MAX_DEPTH, {trees = trees, clients = cl_at .. "apps/*"})
+  local cls = c.lines
+  check(failures, #c.lost == 0 and #c.refused == 0, "clients: lost or refused: " .. join(c.lost, "; ") .. join(c.refused, "; "))
+  check(failures, has_line(cls, "# Clients: 3 files in 2 apps, 2 importing " .. cl_at .. "pkg/Dot.roc"), "the clients line")
+  check(failures, has_line(cls, "\tshift : Dot -> Dot   # used by 1 file"), "a member only one client app uses, through its alias")
+  check(failures, has_line(cls, "\tscale : Dot -> Dot   # used by 2 files in 2 apps"), "a member two client apps use, one through its folder's header, with its apps")
+  check(failures, has_line(cls, "\torigin : Dot   # constant; used by 1 file"), "a member the package's own file uses, with clients")
+  check(failures, has_line(cls, "# Public, but used only in this file: hidden"), "the members used only here, with clients")
+  check(failures, has_line(cls, cl_at .. "apps/one/main.roc:7: (private) moved : Dot -> Dot") and has_line(cls, cl_at .. "apps/two/Helper.roc:8: Helper.far : Dot -> Dot"), "named by the clients' signatures")
+  check(failures, has_line(cls, "# Named by: the annotations and types in the other modules of " .. cl_at .. "pkg and the clients that mention Dot's types."), "the named-by heading with clients")
+  local alone_pkg = walk(cl_at .. "pkg", "Dot", "", WALK_MAX_DEPTH, {trees = trees}).lines
+  check(failures, has_line(alone_pkg, "# Public, but used only in this file: shift, scale, hidden"), "without clients, the members only clients use")
+  check(failures, has_line(alone_pkg, "\tscale : Dot -> Dot   # no outside use") and not has_text(alone_pkg, "apps/") and not has_text(alone_pkg, "# Clients"), "without clients, a client counted")
+  -- A root written from the data root, beside clients through a mount, gives
+  -- the asked file two names, and no client imports the one the walk has.
+  local unlike = walk("cookbook/roc/plants/type_walk/clients/pkg", "Dot", "", WALK_MAX_DEPTH, {trees = trees, clients = cl_at .. "apps/*"}).lost
+  check(failures, #unlike == 1 and has_text(unlike, "clients=: none of the 3 client files imports cookbook/roc/plants/type_walk/clients/pkg/Dot.roc"), "clients named unlike the root, got " .. join(unlike, "; "))
+
   local lost = walk(at .. "unresolved", "Lost", "", WALK_MAX_DEPTH, {trees = trees}).lost
   check(failures, #lost == 2, "two lost names, got " .. #lost .. ": " .. join(lost, "; "))
   check(failures, has_text(lost, "`Nowhere.Thing`: `Nowhere` is no imported module"), "a name of no import is lost")
@@ -1127,7 +1098,7 @@ else
   if named_by_arg ~= "0" and named_by_arg ~= "1" and named_by_arg ~= "production" then fail("type_walk: named_by=" .. named_by_arg .. " is none of 0, 1 and production") end
   local uses_arg = arg("uses", "1")
   if uses_arg ~= "0" and uses_arg ~= "1" then fail("type_walk: uses=" .. uses_arg .. " is neither 0 nor 1") end
-  local settings = {stops = parse_stops(arg("stop", join(WALK_STOP, ","))), brief = parse_brief(arg("brief", join(WALK_BRIEF, ","))), full_depth = full_depth, uses = uses_arg == "1", named_by = named_by_arg ~= "0", named_by_production = named_by_arg == "production"}
+  local settings = {stops = parse_stops(arg("stop", join(WALK_STOP, ","))), brief = parse_brief(arg("brief", join(WALK_BRIEF, ","))), full_depth = full_depth, uses = uses_arg == "1", named_by = named_by_arg ~= "0", named_by_production = named_by_arg == "production", clients = arg("clients", "")}
   local r = walk(arg("root", "."), arg("module", ""), arg("packages", ""), max_depth, settings)
   print(join(r.lines, "\n"))
   for l in r.lost do print("lost: " .. l) end
