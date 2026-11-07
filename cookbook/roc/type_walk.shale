@@ -13,6 +13,12 @@
 --              read from the headers of the apps in the root folder, which
 --              works only when that folder is under the root, so a package at
 --              `../lib` needs this argument;
+--   max_depth  how many steps from the module's own types to follow, 3 by
+--              default (WALK_MAX_DEPTH). The module's types are at depth 0 and
+--              the types they mention at depth 1. A type at the last depth is
+--              printed, and the types it mentions that aren't printed anyway
+--              are named in one line, not followed. A clear type reads from
+--              its immediate children alone, which is depth 1;
 --   self_test  with `self_test=1`, check the plants in
 --              `cookbook/roc/plants/type_walk/`.
 --
@@ -49,6 +55,10 @@
 -- budget: steps=800000000 arena_bytes=2000000000 output_bytes=8000000
 
 const SELF_TEST = arg("self_test", "") == "1"
+
+-- How many steps from the module's own types the walk follows when
+-- `max_depth=` doesn't say.
+const WALK_MAX_DEPTH = 3
 use("cookbook:roc/declared.shale")
 
 const WALK_BUILTINS = set_of({"Str", "List", "Bool", "Try", "Box", "Dict", "Set", "Iter", "Num", "Int", "Frac", "Dec", "F32", "F64", "U8", "U16", "U32", "U64", "U128", "I8", "I16", "I32", "I64", "I128", "Utf8Problem"})
@@ -316,15 +326,17 @@ function add_edge(st, from, to, in_definition)
   return nil
 end
 
+-- Adds the type `id` to the next depth's types, unless it is already read.
 function enqueue(st, id)
   if has_key(st.visited, id) then return nil end
   st.visited[id] = true
-  push(st.queue, id)
+  push(st.next, id)
   return nil
 end
 
 -- Settles one mention of the type `m.from`: an edge, a leaf, a lost name, or
--- a wait for its file.
+-- a wait for its file. At the last depth a type not read already is named as
+-- beyond it, and gets no edge, so it is not printed.
 function settle(st, m)
   local info = st.files[st.types[m.from].path]
   local r = resolve(st, info, m.name)
@@ -332,8 +344,12 @@ function settle(st, m)
     push(st.deferred, m)
     st.wanted[r.path] = true
   elseif r.kind == "type" then
-    add_edge(st, m.from, r.id, m.in_definition)
-    enqueue(st, r.id)
+    if st.depth < st.max_depth or has_key(st.visited, r.id) then
+      add_edge(st, m.from, r.id, m.in_definition)
+      enqueue(st, r.id)
+    else
+      st.beyond[r.id] = true
+    end
   elseif r.kind == "leaf" then
     st.leaves[m.name] = true
   else
@@ -532,11 +548,13 @@ function type_lines(st, id)
   return out
 end
 
--- Walks the module `module` in the folder `root` and gives `{lines, lost,
--- refused}`: the lines to print, the names that resolve to nothing, and the
--- files that don't parse.
-function walk(root, module, packages_arg)
-  local st = {files = {}, types = {}, packages = package_folders(root, packages_arg), refused = {}, lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, asked = {}, queue = {}, deferred = {}, wanted = {}, function_count = 0, constant_count = 0}
+-- Walks the module `module` in the folder `root`, `max_depth` steps from its
+-- own types, and gives `{lines, lost, refused}`: the lines to print, the names
+-- that resolve to nothing, and the files that don't parse. Each depth is
+-- settled, files and all, before the next starts, so a type is read at the
+-- fewest steps it is from the module.
+function walk(root, module, packages_arg, max_depth)
+  local st = {files = {}, types = {}, packages = package_folders(root, packages_arg), refused = {}, lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, asked = {}, next = {}, beyond = {}, depth = 0, max_depth = max_depth, deferred = {}, wanted = {}, function_count = 0, constant_count = 0}
   if module == "" then fail("type_walk: name the module to start from, as module=Pigs") end
   local start = path_normal(path_join(root, module .. ".roc"))
   if start == nil or not exists(start) then fail("type_walk: no file " .. path_join(root, module .. ".roc") .. " for module=" .. module) end
@@ -546,23 +564,23 @@ function walk(root, module, packages_arg)
     st.asked[t.id] = true
     enqueue(st, t.id)
   end
-  local at = 1
-  local more = true
-  while more do
-    while at <= #st.queue do
-      visit(st, st.queue[at])
-      at = at + 1
-    end
-    more = #st.deferred > 0
-    if more then
+  while #st.next > 0 do
+    local these = st.next
+    st.next = {}
+    for id in these do visit(st, id) end
+    while #st.deferred > 0 do
       load_files(st, sort(keys(st.wanted)))
       st.wanted = {}
       local again = st.deferred
       st.deferred = {}
       for m in again do settle(st, m) end
     end
+    st.depth = st.depth + 1
   end
-  local lines_out = {"# The types of " .. module .. " and every type they depend on, the most primitive first.", "# Builtin leaves, not expanded: " .. join(sort(keys(st.leaves)), ", ")}
+  local lines_out = {"# The types of " .. module .. " and every type they depend on, to depth " .. max_depth .. ", the most primitive first.", "# Builtin leaves, not expanded: " .. join(sort(keys(st.leaves)), ", ")}
+  local beyond = {}
+  for id in keys(st.beyond) do push(beyond, display_name(st.types[id])) end
+  if #beyond > 0 then push(lines_out, "# Beyond depth " .. max_depth .. ", not followed: " .. join(sort(beyond), "; ")) end
   local var_notes = {}
   for v in sort(keys(st.vars)) do push(var_notes, v .. " (" .. join(sort(keys(st.vars[v])), ", ") .. ")") end
   if #var_notes > 0 then push(lines_out, "# Type variables, not followed: " .. join(var_notes, "; ")) end
@@ -579,7 +597,7 @@ function walk(root, module, packages_arg)
     end
   end
   push(lines_out, "")
-  push(lines_out, "# " .. #keys(st.visited) .. " types, " .. st.function_count .. " functions, " .. st.constant_count .. " constants, " .. #keys(modules) .. " modules, " .. #keys(st.leaves) .. " leaves, " .. #keys(st.vars) .. " type variables")
+  push(lines_out, "# " .. #keys(st.visited) .. " types, " .. st.function_count .. " functions, " .. st.constant_count .. " constants, " .. #keys(modules) .. " modules, " .. #keys(st.leaves) .. " leaves, " .. #keys(st.vars) .. " type variables, " .. #beyond .. " beyond depth " .. max_depth)
   return {lines = lines_out, lost = st.lost, refused = st.refused}
 end
 
@@ -602,15 +620,21 @@ function has_text(ls, text)
   return false
 end
 
+-- The type names of the header lines, in order.
+function headers_of(ls)
+  local out = {}
+  for l in ls do
+    if starts_with(l, "#### ") then push(out, split(sub(l, 6), "   (")[1]) end
+  end
+  return out
+end
+
 function self_test()
   local at = "cookbook:roc/plants/type_walk/"
   local failures = {}
-  local r = walk(at .. "chain/app", "Ride", "")
+  local r = walk(at .. "chain/app", "Ride", "", WALK_MAX_DEPTH)
   local ls = r.lines
-  local headers = {}
-  for l in ls do
-    if starts_with(l, "#### ") then push(headers, split(sub(l, 6), "   (")[1]) end
-  end
+  local headers = headers_of(ls)
   -- Speed is mentioned only by the constant `cruising`, so it joining the
   -- order shows a constant's annotation is followed.
   local want = {"Tagged, in module Leg", "Note", "Note.Mark", "Speed", "Unit.Metres", "Leg", "Leg.Stretch", "Ride", "Ride.Plan"}
@@ -622,7 +646,8 @@ function self_test()
   check(failures, has_line(ls, "# Builtin leaves, not expanded: F64, List, Str, U32"), "leaves line")
   check(failures, has_line(ls, "# Type variables, not followed: a (Tagged, in module Leg)"), "type variable line")
   check(failures, has_line(ls, "# Cycle: these types mention each other: Note, Note.Mark"), "cycle line")
-  check(failures, has_line(ls, "# 9 types, 3 functions, 2 constants, 5 modules, 4 leaves, 1 type variables"), "counts line: " .. ls[#ls])
+  check(failures, has_line(ls, "# 9 types, 3 functions, 2 constants, 5 modules, 4 leaves, 1 type variables, 0 beyond depth 3"), "counts line: " .. ls[#ls])
+  check(failures, not has_text(ls, "# Beyond depth"), "a beyond line when the walk reached every type")
   check(failures, has_line(ls, "\t## How many rides a day allows."), "a constant's doc")
   check(failures, has_line(ls, "\tcount : U32   # constant"), "a constant's annotation, marked")
   check(failures, has_line(ls, "\tcruising : Speed   # constant"), "a constant of a type from another module")
@@ -645,11 +670,26 @@ function self_test()
   check(failures, not has_text(ls, "#### Unit "), "a module type nobody mentions is printed")
   check(failures, not has_line(ls, "#### Short") and not has_text(ls, "Long,"), "a tag is read as a type")
 
-  local lost = walk(at .. "unresolved", "Lost", "").lost
+  -- Ride's deepest types, Note.Mark, Tagged and Unit.Metres, are two steps
+  -- from it, so depth 1 names them and prints the rest, and Note's cycle
+  -- through Note.Mark is gone with it.
+  local one = walk(at .. "chain/app", "Ride", "", 1).lines
+  check(failures, join(headers_of(one), " | ") == "Leg | Leg.Stretch | Note | Speed | Ride | Ride.Plan", "depth 1 order: got " .. join(headers_of(one), " | "))
+  check(failures, has_line(one, "# Beyond depth 1, not followed: Note.Mark; Tagged, in module Leg; Unit.Metres"), "depth 1 beyond line")
+  check(failures, has_line(one, "# 6 types, 3 functions, 2 constants, 4 modules, 4 leaves, 0 type variables, 3 beyond depth 1"), "depth 1 counts line: " .. one[#one])
+  check(failures, not has_text(one, "# Cycle"), "a cycle through a type beyond the depth")
+  check(failures, has_line(one, "\tlabel : Tagged(Str),"), "a type at the last depth printed whole")
+  -- Depth 0 is the module's own types, and Speed's F64 is no longer read.
+  local zero = walk(at .. "chain/app", "Ride", "", 0).lines
+  check(failures, join(headers_of(zero), " | ") == "Ride | Ride.Plan", "depth 0 order: got " .. join(headers_of(zero), " | "))
+  check(failures, has_line(zero, "# Beyond depth 0, not followed: Leg; Leg.Stretch; Note; Speed"), "depth 0 beyond line")
+  check(failures, has_line(zero, "# Builtin leaves, not expanded: List, Str, U32"), "depth 0 leaves line")
+
+  local lost = walk(at .. "unresolved", "Lost", "", WALK_MAX_DEPTH).lost
   check(failures, #lost == 2, "two lost names, got " .. #lost .. ": " .. join(lost, "; "))
   check(failures, has_text(lost, "`Nowhere.Thing`: `Nowhere` is no imported module"), "a name of no import is lost")
   check(failures, has_text(lost, "`Gone`: no file " .. at .. "unresolved/Gone.roc"), "a missing module is lost")
-  local moved = walk(at .. "chain/app", "Ride", "shared=" .. at .. "chain/nowhere").lost
+  local moved = walk(at .. "chain/app", "Ride", "shared=" .. at .. "chain/nowhere", WALK_MAX_DEPTH).lost
   check(failures, #moved == 2 and has_text(moved, "Leg.roc:5: `Unit.Metres`: no file " .. at .. "chain/nowhere/Unit.roc"), "packages= overrides the app's folder, got " .. join(moved, "; "))
   for f in failures do print("FAIL: " .. f) end
   if #failures > 0 then fail("type_walk: " .. #failures .. " self-test checks failed") end
@@ -660,7 +700,10 @@ end
 if SELF_TEST then
   self_test()
 else
-  local r = walk(arg("root", "."), arg("module", ""), arg("packages", ""))
+  local depth_arg = arg("max_depth", tostring(WALK_MAX_DEPTH))
+  local max_depth = parse_int(depth_arg)
+  if max_depth == nil or max_depth < 0 then fail("type_walk: max_depth=" .. depth_arg .. " is no count of steps, such as 3") end
+  local r = walk(arg("root", "."), arg("module", ""), arg("packages", ""), max_depth)
   print(join(r.lines, "\n"))
   for l in r.lost do print("lost: " .. l) end
   for l in r.refused do print("refused: " .. l) end
