@@ -11,8 +11,6 @@
 //!   - the escape: a first line `# want: <tag>: <text>` or
 //!     `# out-of-scope: <tag>: <text>` (tag `[a-z0-9-]+`), run and logged
 //!     to `~/.local/state/shale/wants.tsv` with one append;
-//!   - a subagent's call (its input carries an `agent_id`): local cold
-//!     agents are exempt;
 //!   - any tool but Bash and Monitor (the hook's matcher names those two).
 //!
 //! Anything else is refused (exit 2), with one line naming both forms.
@@ -154,8 +152,6 @@ pub const Hook = struct {
     session: []const u8,
     /// Bash's or Monitor's command; null for any other tool.
     command: ?[]const u8,
-    /// A subagent's call: its input has a non-empty `agent_id`.
-    subagent: bool = false,
 };
 
 /// The hook's input, or null for input the gate cannot read (refused).
@@ -166,9 +162,6 @@ pub fn readHook(a: std.mem.Allocator, json: []const u8) ?Hook {
     var h: Hook = .{ .session = "", .command = null };
     if (o.get("session_id")) |s| if (s == .string) {
         h.session = s.string;
-    };
-    if (o.get("agent_id")) |s| if (s == .string and s.string.len > 0) {
-        h.subagent = true;
     };
     const tool = o.get("tool_name") orelse return null;
     if (tool != .string) return null;
@@ -227,7 +220,6 @@ pub fn main(init: std.process.Init) u8 {
         return 2;
     };
     const cmd = h.command orelse return 0;
-    if (h.subagent) return 0;
     switch (classify(cmd)) {
         .launch => return 0,
         .escape => |e| {
