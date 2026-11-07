@@ -206,13 +206,24 @@ end, and fails the run.
       shale cookbook:roc/type_walk.shale root=repos:roc-apps/canvas_apps/lib module=Brush clients=repos:roc-apps/canvas_apps/*
       cd canvas_apps && shale <shale>/cookbook/roc/type_walk.shale root=safari modules=TreeSighting,RailSighting,TowerSighting packages=lib=repos:roc-apps/canvas_apps/lib
 
+- [boundary_hints.shale](boundary_hints.shale) ranks cheap hints that one
+  module does another's work, for a short review rather than an audit: a
+  public member whose production uses outside its module all sit in one
+  other module (`fed_to_one`, strongest when that module builds shapes in
+  the function that uses it), and a public name that starts with another
+  module's name and an underscore (`borrowed_noun`, `sky_top_stop` in
+  Backdrop). Uses are counted as type_walk counts them; tests are no user.
+  Hints don't gate: the run fails only on a file that doesn't parse.
+
+      cd canvas_apps && shale <shale>/cookbook/roc/boundary_hints.shale root=safari clients=*_widget,widget_kit
+
 ## Libraries
 
 These files are loaded with `use("cookbook:roc/<file>.shale")` and are not
 run on their own.
 
-- [walk_uses.shale](walk_uses.shale): `type_walk`'s package folders and
-  client files, its name resolution and its
+- [walk_uses.shale](walk_uses.shale): `type_walk`'s file loading, package
+  folders and client files, its name resolution and its
   counts of each member's outside uses, with the rules for typing a method
   call's receiver and the operators Roc sends to members (`<` to `is_lt`),
   and a family member's private functions and public names.
