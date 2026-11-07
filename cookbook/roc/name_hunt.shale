@@ -75,12 +75,14 @@
 --                 - a `_from` name that takes more arguments than its
 --                   siblings, a recursive worker resuming at an index
 --                   (`blocks_from` beside `blocks_in`);
---                 - a package's suffix convention: a preposition on three
---                   or more stems, in all the files read, whose annotations
+--                 - a module's suffix convention: a preposition on three
+--                   or more stems in the same file, whose annotations
 --                   share their first argument's type and their result
 --                   (roc-markdown's `*_onto` writers each take a `List(U8)`
 --                   and return it), so `run_onto` beside `run_at` is no
---                   split;
+--                   split. Only the pair's own file counts, so a pair's
+--                   verdict never moves when another file gains or loses
+--                   a name;
 --                 - a word the file declares as a keyword of the language
 --                   it interprets, in a comment line such as
 --                   `# keywords: for, on` (BASIC's `do_for`, `do_on`).
@@ -330,13 +332,14 @@ const CHANGED_COPY_WORDS = set_of({"with", "without"})
 -- prepositions}`, and `prepositions` maps each preposition to the first
 -- name using it and that name's arity.
 const PREPOSITIONS_BY_STEM = {}
--- The stems each trailing preposition is put on, across all the files read,
--- grouped by the preposition and the shape of the annotation: its first
--- argument's type and its result. Each key is `preposition|first|result`,
--- each value a set of stems. A preposition reaching CONVENTION_STEMS stems
--- of one shape goes into SUFFIX_CONVENTIONS. Counting stems by preposition
--- alone, or by result alone, would make a common preposition (`_of`) a
--- convention in any large package.
+-- The stems each trailing preposition is put on in each file, grouped by the
+-- preposition and the shape of the annotation: its first argument's type and
+-- its result. Each key is `path|preposition|first|result`, each value a set
+-- of stems. A preposition reaching CONVENTION_STEMS stems of one shape in a
+-- file goes into SUFFIX_CONVENTIONS as `path|preposition`. Counting stems by
+-- preposition alone, or by result alone, would make a common preposition
+-- (`_of`) a convention in any large module. Counting them across files made
+-- a pair's verdict move when an unrelated file lost a name.
 const STEMS_BY_SHAPE = {}
 const CONVENTION_STEMS = 3
 const SUFFIX_CONVENTIONS = {}
@@ -733,10 +736,10 @@ function note_trailing_preposition(def, ws)
   if not has_key(PREPOSITIONS_BY_STEM, key) then PREPOSITIONS_BY_STEM[key] = {path = def.path, line = def.line, stem = stem, prepositions = {}} end
   local group = PREPOSITIONS_BY_STEM[key]
   if def.annotation and def.fn then
-    local shape_key = preposition .. "|" .. def.first .. "|" .. def.result
+    local shape_key = def.path .. "|" .. preposition .. "|" .. def.first .. "|" .. def.result
     if not has_key(STEMS_BY_SHAPE, shape_key) then STEMS_BY_SHAPE[shape_key] = {} end
     STEMS_BY_SHAPE[shape_key][stem] = true
-    if #keys(STEMS_BY_SHAPE[shape_key]) >= CONVENTION_STEMS then SUFFIX_CONVENTIONS[preposition] = true end
+    if #keys(STEMS_BY_SHAPE[shape_key]) >= CONVENTION_STEMS then SUFFIX_CONVENTIONS[def.path .. "|" .. preposition] = true end
   end
   if not has_key(group.prepositions, preposition) then
     group.prepositions[preposition] = {name = def.name, arity = get(def, "arity", -1)}
@@ -942,7 +945,7 @@ for key in sort(keys(PREPOSITIONS_BY_STEM)) do
   for preposition in sort(keys(group.prepositions)) do
     local first_use = group.prepositions[preposition]
     local is_from_worker = preposition == "from" and fewest_arguments >= 0 and first_use.arity > fewest_arguments
-    local is_convention = has_key(SUFFIX_CONVENTIONS, preposition)
+    local is_convention = has_key(SUFFIX_CONVENTIONS, group.path .. "|" .. preposition)
     local is_keyword = has_item(get(DECLARED_KEYWORDS, group.path, {}), preposition)
     if not is_from_worker and not is_convention and not is_keyword then
       push(split_names, first_use.name)
