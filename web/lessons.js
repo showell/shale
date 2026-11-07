@@ -151,11 +151,12 @@ Hello, world / Tide pools / A walk in the fog / Field notes on crows
       {
         say: [
           "A function is declared with `function` and called after it. This one turns a title into a file name: lower case, with dashes for spaces.",
+          "`substitute` stops the script when what it replaces is not there, so a script never carries on thinking it changed text it didn't. A title may have no comma, or no space, so these calls say `{missing_ok = true}`.",
         ],
         code: R`function slug(title)
   local s = lower(title)
-  s = substitute(s, ",", "")
-  s = substitute(s, " ", "-")
+  s = substitute(s, ",", "", {missing_ok = true})
+  s = substitute(s, " ", "-", {missing_ok = true})
   return s
 end
 
@@ -171,7 +172,7 @@ hello-world
           "A function sees its own parameters and the constants above it, never the script's other locals.",
         ],
         code: R`function slug(title)
-  return substitute(substitute(lower(title), ",", ""), " ", "-")
+  return substitute(substitute(lower(title), ",", "", {missing_ok = true}), " ", "-", {missing_ok = true})
 end
 
 function post(title, date, tags, body)
