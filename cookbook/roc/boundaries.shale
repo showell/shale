@@ -21,7 +21,18 @@
 --          (cookbook/roc/types.shale), which `bool_param` needs. It is off
 --          by default, and needs the tree's `roc-version` file;
 --   root   with `types=1`, the app that imports the files read, or several
---          apps separated by commas (`root=a.roc,b.roc`).
+--          apps separated by commas (`root=a.roc,b.roc`);
+--   clients  globs separated by commas, of files read only for the calls
+--          they make into the files checked, as apps that import a game.
+--          Their own functions and `if`s are not checked;
+--   tests  globs separated by commas, of checked files that are tests of
+--          the rest, as a tree's gate apps. A reference from one of them to
+--          a function outside them counts as a test's;
+--   test_reach  `keeps` by default, so an `expect` or a test that reaches a
+--          function keeps it out of `dead` and `unused_api`. With
+--          `test_reach=dead`, only a production call or reference keeps a
+--          module type's member out. A file's own top-level function is
+--          private to it, so its tests may still be all that reach it.
 --
 -- The checks, most from the Roc style guide (roc-apps docs/roc-style.md):
 --
@@ -80,7 +91,7 @@
 --               header exposes. The callers of a public name are mostly
 --               outside the tree, so this is a question and not a verdict, and
 --               it has its own count. A member only an `expect` reaches is in
---               neither.
+--               neither, unless `test_reach=dead`.
 --   same_branches  An `if` whose two branches are the same text, braces aside
 --               (`if m.over { m } else m`). The condition decides nothing, so
 --               a rule was lost, or the `if` should go.
@@ -137,6 +148,8 @@ const TYPES_ARG = arg("types", "0")
 if TYPES_ARG ~= "0" and TYPES_ARG ~= "1" then fail("boundaries: types must be 0 (the default) or 1, not " .. TYPES_ARG) end
 const USE_TYPES = SELF_TEST or TYPES_ARG == "1"
 const ROOT = SELF_TEST and (TYPED_PLANTS .. "QuietApp.roc") or arg("root", "")
+const TEST_REACH = arg("test_reach", "keeps")
+if TEST_REACH ~= "keeps" and TEST_REACH ~= "dead" then fail("boundaries: test_reach must be keeps (the default) or dead, not " .. TEST_REACH) end
 -- The pinned Roc defines `Bool := [False, True]`.
 const BOOL_LITERALS = {["Bool.True"] = true, ["Bool.False"] = true, True = true, False = true}
 
@@ -241,7 +254,30 @@ end
 
 -- ── the syntax trees ─────────────────────────────────────────────────────
 
-const ROC_FILES = glob(GLOB)
+-- The files matched by `globs`, a list separated by commas, as a set when
+-- `as_set`.
+function globbed(globs, as_set)
+  local paths = {}
+  local set = {}
+  for g in split(globs, ",") do
+    if trim(g) ~= "" then
+      for p in glob(trim(g)) do
+        push(paths, p)
+        set[p] = true
+      end
+    end
+  end
+  return as_set and set or paths
+end
+
+const ROC_FILES = globbed(GLOB, false)
+const CHECKED = globbed(GLOB, true)
+const TEST_PATHS = globbed(arg("tests", ""), true)
+local client_files = {}
+for p in globbed(arg("clients", ""), false) do
+  if not has_key(CHECKED, p) then push(client_files, p) end
+end
+const CLIENT_FILES = client_files
 local untyped_plants = {}
 if SELF_TEST then
   for p in ROC_FILES do
@@ -249,7 +285,10 @@ if SELF_TEST then
   end
 end
 local checker_types = USE_TYPES and roc_types_for_files("boundaries", ROOT, roc_bin("boundaries", SELF_TEST), ROC_FILES, untyped_plants) or {real = {}, pats = {}, exprs = {}, unreached = {}}
-local parsed = parse_roc_files(ROC_FILES)
+local files_parsed = {}
+for p in ROC_FILES do push(files_parsed, p) end
+for p in CLIENT_FILES do push(files_parsed, p) end
+local parsed = parse_roc_files(files_parsed)
 for f in parsed.files do
   SOURCE_LINES[f.path] = split(read(f.path), "\n")
   HEADER_NAMES[f.path] = header_names(f.nodes)
@@ -410,7 +449,7 @@ const MEMBER_KEYS = {}
 for g = 1, #NODES do
   if kind(g) == "s-decl" then
     local kids = children(g)
-    if #kids > 1 and kind(kids[1]) == "p-ident" and kind(kids[2]) == "e-lambda" and AT_TOP_LEVEL[g] then
+    if #kids > 1 and kind(kids[1]) == "p-ident" and kind(kids[2]) == "e-lambda" and AT_TOP_LEVEL[g] and has_key(CHECKED, NODE_PATH[g]) then
       local path = NODE_PATH[g]
       local owner = OWNER_TYPE[g] ~= "" and OWNER_TYPE[g] or ("@" .. path)
       local n = NODES[g]
@@ -493,7 +532,7 @@ function record_reference(func, ref, call)
     if call ~= nil then push(func.self_calls, call) end
     return nil
   end
-  local from_test_file = is_test_file(ref.path)
+  local from_test_file = is_test_file(ref.path) or (has_key(TEST_PATHS, ref.path) and not has_key(TEST_PATHS, func.path))
   if (from_test_file or ref.in_expect) and call ~= nil then push(func.test_calls, call) end
   if from_test_file then
     func.test_refs = func.test_refs + 1
@@ -642,7 +681,8 @@ function reads_better_inline(func)
   return func.prod_refs == 1 and func.value_refs == 0 and func.expect_refs == 0 and func.test_refs == 0 and func.doc_lines == 0 and func.is_wrapper and not func.is_recursive and not func.is_entry and not is_question_name(func.name)
 end
 
-const FILES_READ = " in the " .. #ROC_FILES .. " files read"
+const CLIENTS_READ = #CLIENT_FILES > 0 and (" and " .. #CLIENT_FILES .. " clients") or ""
+const FILES_READ = " in the " .. #ROC_FILES .. " files read" .. CLIENTS_READ
 
 -- A function something outside the files calls: what its header dictates, or
 -- a member Roc calls by name.
@@ -652,7 +692,13 @@ function is_called_from_outside(func)
 end
 
 function has_no_caller(func)
+  local is_member = sub(func.owner, 1, 1) ~= "@"
+  if TEST_REACH == "dead" and is_member then return func.prod_refs == 0 and func.mentions == 0 end
   return func.prod_refs == 0 and func.expect_refs == 0 and func.test_refs == 0 and func.mentions == 0
+end
+
+function is_test_only(func)
+  return func.expect_refs + func.test_refs > 0
 end
 
 -- The text of one branch of an `if`, its braces left out when it holds one
@@ -673,6 +719,8 @@ for key in sort(keys(FUNCTIONS)) do
   if not is_test_file(func.path) and has_no_caller(func) and not is_called_from_outside(func) then
     if is_library_api(func) then
       report(func.path, func.line, "unused_api", "`" .. name .. "` is exposed, and nothing" .. FILES_READ .. " calls or tests it: API with no user here, or left behind?")
+    elseif is_test_only(func) then
+      report(func.path, func.line, "dead", "`" .. name .. "` has no production caller" .. FILES_READ .. ", only an expect or a test: delete it with its tests, or say who calls it")
     else
       report(func.path, func.line, "dead", "`" .. name .. "` has no caller" .. FILES_READ .. ", and no expect or test reaches it: delete it, or say who calls it")
     end
@@ -719,7 +767,7 @@ for key in sort(keys(FUNCTIONS)) do
 end
 
 for g = 1, #NODES do
-  if kind(g) == "e-if-then-else" and not is_test_file(NODE_PATH[g]) then
+  if kind(g) == "e-if-then-else" and not is_test_file(NODE_PATH[g]) and has_key(CHECKED, NODE_PATH[g]) then
     local kids = children(g)
     local shown = #kids == 3 and branch_text(NODE_PATH[g], kids[2]) or "?"
     if shown ~= "?" and shown == branch_text(NODE_PATH[g], kids[3]) then
@@ -730,7 +778,7 @@ end
 
 local counts = {}
 for c in CHECKS do push(counts, c .. " " .. finding_counts[c]) end
-print("boundaries (Roc): " .. #ROC_FILES .. " files, " .. #keys(FUNCTIONS) .. " functions; " .. join(counts, ", ") .. house_note("boundaries"))
+print("boundaries (Roc): " .. #ROC_FILES .. " files" .. CLIENTS_READ .. ", " .. #keys(FUNCTIONS) .. " functions; " .. join(counts, ", ") .. house_note("boundaries"))
 fail_if_refused("boundaries", parsed.refused, checker_types.unreached)
 
 -- A plant's file name as the self-test reads it. A typed plant is a type
