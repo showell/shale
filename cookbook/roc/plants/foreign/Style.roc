@@ -40,6 +40,9 @@ Style := [].{
 	leftover = |x| x
 
 	delay_of = |delays, slot| List.get(delays, slot) ?? 0.0
+
+	tallest_of : a, a -> U64 where [a.height : a -> U64]
+	tallest_of = |first, second| first.height().max(second.height())
 }
 
 expect Style.sign(1) + Style.shape(1) + Style.depth(1) + Style.shout(1) == 1
