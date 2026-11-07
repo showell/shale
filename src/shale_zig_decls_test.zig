@@ -37,7 +37,7 @@ test "zig_decls: the linux_host split's file: a pub fn with its doc, a struct li
             \\-- so its four uses become what cookbook/zig17/array_mult.shale writes, each
             \\-- on its own line (line numbers kept).
             \\function to17(src)
-            \\  for p in {{"\"x\" ** 100", "&@as([100]u8, @splat('x'))"}, {"\"x\" ** 40", "&@as([40]u8, @splat('x'))"}, {"\"u\" ** 2000000", "&@as([2000000]u8, @splat('u'))"}, {"&([_]u8{'x'} ** n)", "&(@as([n]u8, @splat('x')))"}} do src = substitute(src, p[1], p[2]) end
+            \\  for p in {{"\"x\" ** 100", "&@as([100]u8, @splat('x'))"}, {"\"x\" ** 40", "&@as([40]u8, @splat('x'))"}, {"\"u\" ** 2000000", "&@as([2000000]u8, @splat('u'))"}, {"&([_]u8{'x'} ** n)", "&(@as([n]u8, @splat('x')))"}} do src = substitute(src, p[1], p[2], {missing_ok = true}) end
             \\  return src
             \\end
             \\create("lh.zig", to17(r.out))

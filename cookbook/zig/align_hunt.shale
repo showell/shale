@@ -170,7 +170,7 @@ end
 -- `target_word_size`). Parameters read `name:type`.
 function takes_target(f)
   for q in f.params do
-    local named = substitute(q, "comptime ", "")
+    local named = substitute(q, "comptime ", "", {missing_ok = true})
     if re_match(q, ":[\\w.*]*\\b(std\\.Target|RocTarget|Target|TargetUsize)$") or starts_with(named, "target_usize") or starts_with(named, "target_word") then return true end
   end
   return false

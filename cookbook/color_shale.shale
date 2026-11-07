@@ -127,7 +127,7 @@ end
 -- A mount's name makes a folder, as `cookbook:a.shale` has no place under `out`
 -- otherwise.
 function page_path(path, out)
-  return out .. "/" .. substitute(path, ":", "/") .. ".html"
+  return out .. "/" .. substitute(path, ":", "/", {missing_ok = true}) .. ".html"
 end
 
 -- Writes the file's page, or says why not in `tally.refused`.

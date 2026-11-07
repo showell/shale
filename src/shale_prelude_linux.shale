@@ -513,7 +513,7 @@ end
 -- **INTERNAL to `edit_between`**: a marker as its failure shows it, its
 -- first 40 bytes on one line.
 function edit_marker_shown(s)
-  local one = substitute(s, "\n", "\\n")
+  local one = substitute(s, "\n", "\\n", {missing_ok = true})
   if #one > 40 then return sub(one, 1, 40) .. "..." end
   return one
 end

@@ -38,7 +38,7 @@ pub const specs = [_]bi.Spec{
     spec(.tonumber, 1, 1, tonumber),
     spec(.parse_int, 1, 1, parseInt),
     spec(.rep, 2, 2, rep),
-    spec(.substitute, 3, 3, substitute),
+    spec(.substitute, 3, 4, substitute),
     spec(.path, 1, bi.most_args, path),
     spec(.basename, 1, 1, basename),
     spec(.strip_suffix, 2, 2, stripSuffix),
@@ -104,19 +104,37 @@ fn rep(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     return .{ .string = out };
 }
 
-/// `substitute(s, old, new)` replaces every non-overlapping `old` in `s`, left
-/// to right, with `new`; plain text. A step per byte of `s` and of the result.
+/// `substitute(s, old, new[, {missing_ok}])` replaces every non-overlapping
+/// `old` in `s`, left to right, with `new`; plain text. An `old` that is not
+/// in `s` stops the run, because a script that meant to change text and
+/// changed none would otherwise carry on as if it had; `{missing_ok = true}`
+/// says a miss is expected and gives `s` unchanged. A step per byte of `s`
+/// and of the result.
 fn substitute(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const str = try bi.stringArg(run, pos, .substitute, args[0], "its first argument");
     const old = try bi.stringArg(run, pos, .substitute, args[1], "what it replaces");
     const new = try bi.stringArg(run, pos, .substitute, args[2], "what it puts instead");
+    var missing_ok = false;
+    if (args.len > 3) {
+        const m = try bi.mapArg(run, pos, .substitute, args[3]);
+        for (m.map.keys(), m.map.values()) |k, x| {
+            if (!std.mem.eql(u8, k, "missing_ok")) return run.fail(pos, .argument, "`substitute` takes `missing_ok`, not `{s}`", .{k});
+            missing_ok = switch (x) {
+                .boolean => |v| v,
+                else => return run.fail(pos, .type, "`substitute`: its `missing_ok` must be true or false, not {s}", .{x.typeName()}),
+            };
+        }
+    }
     if (old.len == 0) return run.fail(pos, .argument, "`substitute` of \"\" is an error: there is nothing to replace", .{});
     try bi.chargeBytes(run, pos, str.len);
     const finder = try Finder.init(run, pos, old);
     var n: usize = 0;
     var at: usize = 0;
     while (try finder.find(str, at)) |i| : (at = i + old.len) n += 1;
-    if (n == 0) return .{ .string = str };
+    if (n == 0) {
+        if (missing_ok) return .{ .string = str };
+        return run.fail(pos, .argument, "`substitute`: \"{s}\" is not in the text, so nothing was replaced; `{{missing_ok = true}}` if a miss is expected", .{old[0..@min(old.len, 40)]});
+    }
     const added = std.math.mul(usize, n, new.len) catch return run.budgetStop(pos, .arena);
     const total = str.len - n * old.len + added;
     try run.charge(pos, total);

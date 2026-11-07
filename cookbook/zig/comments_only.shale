@@ -66,7 +66,7 @@ else
       failed = failed + 1
       print(f .. ": not comment-only: the file is new or gone since " .. REV)
     else
-      local old_path = ".zig-cache/comments_only/" .. substitute(f, "/", "__")
+      local old_path = ".zig-cache/comments_only/" .. substitute(f, "/", "__", {missing_ok = true})
       replace(old_path, at_rev[f])
       local was = code_tokens(old_path)
       local now = code_tokens(f)

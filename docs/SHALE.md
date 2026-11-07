@@ -596,7 +596,7 @@ change_bytes` past those budgets.
 | `re_match(s, pattern[, {nocase}])` | a boolean: whether `s` holds a match | as `re_find` |
 | `re_replace(s, pattern, replacement[, {nocase}])` | `s` with every match replaced | as `re_find`; `argument` for a `\N` in the replacement past the pattern's groups |
 | `rep(s, n)` | `s`, `n` times | `argument` for `n` < 0 |
-| `substitute(s, old, new)` | `s` with each `old` replaced | `argument` for `old` = "" |
+| `substitute(s, old, new[, {missing_ok}])` | `s` with each `old` replaced | `argument` for `old` = "", and for an `old` not in `s` unless `missing_ok` |
 | `path(a, b, ...)` | the parts joined with `/` | |
 | `basename(p)`, `strip_suffix(s, t)` | strings | |
 | `tostring(v)` | a scalar's text | `type` for a list or map |
@@ -696,7 +696,7 @@ costs").
 | `between(s, a, b)` | the text after the first `a` in `s` and before the first `b` after it, or nil when either is not there; `a` of "" is the start, `b` of "" the end: `between(line, "DEPARTS (", ")")`. A field between two literals; `re_find` where a field has a shape |
 | `match_path(path, pattern)` | whether a path matches a glob, part by part on `/`: `**` is any number of parts, none included; in any other part `*` and `?` are `like`'s, never across a `/`. `src/**/*.zig` is every `.zig` under `src`, `src/tcp*.zig` only those in it. The prelude's `glob` uses it |
 | `rep(s, n)` | `s`, `n` times over; charged before it is made |
-| `substitute(s, old, new)` | every `old` replaced by `new`, left to right, none overlapping; `old` = "" is an error |
+| `substitute(s, old, new[, {missing_ok}])` | every `old` replaced by `new`, left to right, none overlapping; `old` = "" is an error. **An `old` not in `s` stops the run**, naming it, so text meant for `replace(p, ...)` is never written back quietly unchanged; `{missing_ok = true}` says a miss is expected (escaping, a table of renames over many files) and gives `s` as it was. To change a file, `edit` is the tool: it holds `old` to being there once |
 | `tostring(v)` | a scalar's text, as `print` writes it |
 | `tonumber(s)` | an optional `-` and decimal digits; anything else is an `argument` error |
 | `parse_int(s)` | the integer `s` says, the blanks around it let be (spaces, tabs, `\r`, `\n`), or nil for anything else: a word, a torn line, a number past 64 bits. nil gives nil and an integer itself, so a field that is missing (`get`) reads as no number. For data the script did not write |

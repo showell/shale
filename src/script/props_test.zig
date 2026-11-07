@@ -156,7 +156,7 @@ test "expensive fuzz: props: split then join round-trips any string and separato
             \\local pieces = split(s, sep)
             \\if join(pieces, sep) ~= s then print("join", s, sep) end
             \\for p in pieces do if contains(p, sep) then print("a piece holds the separator") end end
-            \\if #pieces - 1 ~= #substitute(s, sep, sep .. "x") - #s then print("one piece more than separators") end
+            \\if #pieces - 1 ~= #substitute(s, sep, sep .. "x", {missing_ok = true}) - #s then print("one piece more than separators") end
             \\print("ok")
         );
         try f.expectOk(src.items, "split and join");

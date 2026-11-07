@@ -28,7 +28,7 @@ if SITE == "" or EMAIL == "" or KEY == "" or STREAM == "" or TOPIC == "" then
 end
 
 function json_string(text)
-  return "\"" .. substitute(substitute(text, "\\", "\\\\"), "\"", "\\\"") .. "\""
+  return "\"" .. substitute(substitute(text, "\\", "\\\\", {missing_ok = true}), "\"", "\\\"", {missing_ok = true}) .. "\""
 end
 
 local scratch = fresh_dir("scratch:", "zulip")

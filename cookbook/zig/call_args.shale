@@ -92,7 +92,7 @@ function filled(args)
   -- The highest first, so `$1` never eats the start of `$11`.
   local k = #args
   while k >= 1 do
-    out = substitute(out, "$" .. k, args[k])
+    out = substitute(out, "$" .. k, args[k], {missing_ok = true})
     k = k - 1
   end
   return out

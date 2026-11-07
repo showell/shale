@@ -535,9 +535,18 @@ test "builtins: min, max and abs; rep and substitute, plain text, charged before
     try f.expectStop("print(abs(-9223372036854775807 - 1))", .arithmetic);
     try f.expectStop("print(min(1, \"2\"))", .type);
     try f.expectStop("print(max(1))", .argument);
-    try f.expectOutput("print(rep(\"ab\", 3), #rep(\"x\", 0), substitute(\"a.b.c\", \".\", \"::\"), substitute(\"aaa\", \"aa\", \"b\"), substitute(\"abc\", \"z\", \"y\"))", "ababab\t0\ta::b::c\tba\tabc\n");
+    try f.expectOutput("print(rep(\"ab\", 3), #rep(\"x\", 0), substitute(\"a.b.c\", \".\", \"::\"), substitute(\"aaa\", \"aa\", \"b\"), substitute(\"abc\", \"z\", \"y\", {missing_ok = true}))", "ababab\t0\ta::b::c\tba\tabc\n");
     try f.expectStop("print(rep(\"x\", -1))", .argument);
     try f.expectStop("print(substitute(\"abc\", \"\", \"y\"))", .argument);
+    try f.expectStop("print(substitute(\"abc\", \"\", \"y\", {missing_ok = true}))", .argument);
+    // A miss stops unless the call says one is expected; `missing_ok`
+    // changes nothing about a hit.
+    try f.expectStop("print(substitute(\"abc\", \"z\", \"y\"))", .argument);
+    try f.expectStop("print(substitute(\"abc\", \"z\", \"y\", {missing_ok = false}))", .argument);
+    try f.expectOutput("print(substitute(\"abc\", \"b\", \"y\", {missing_ok = true}), substitute(\"abc\", \"b\", \"y\", {missing_ok = false}))", "ayc\tayc\n");
+    try f.expectStop("print(substitute(\"abc\", \"z\", \"y\", {missing_ok = 1}))", .type);
+    try f.expectStop("print(substitute(\"abc\", \"b\", \"y\", {missing = true}))", .argument);
+    try f.expectStop("print(substitute(\"abc\", \"b\", \"y\", 1))", .type);
     // A hundred million bytes requested: the steps run out before the
     // arena is asked.
     var r = f.run("local s = rep(\"0123456789\", 10000000)", .{});

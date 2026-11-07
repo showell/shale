@@ -126,6 +126,8 @@ const cases = [_]Case{
     .{ .src = "local x = table({{a = 1}}, {\"b\"})", .line = 1, .column = 11, .class = .index, .message = "`table`: row 1 has no \"b\"" },
     .{ .src = "local x = rep(\"a\", -1)", .line = 1, .column = 11, .class = .argument, .message = "`rep`: -1 times" },
     .{ .src = "local x = substitute(\"a\", \"\", \"b\")", .line = 1, .column = 11, .class = .argument, .message = "`substitute` of \"\" is an error: there is nothing to replace" },
+    .{ .src = "local x = substitute(\"abc\", \"zz\", \"b\")", .line = 1, .column = 11, .class = .argument, .message = "`substitute`: \"zz\" is not in the text, so nothing was replaced; `{missing_ok = true}` if a miss is expected" },
+    .{ .src = "local x = substitute(\"abc\", \"b\", \"c\", {nocase = true})", .line = 1, .column = 11, .class = .argument, .message = "`substitute` takes `missing_ok`, not `nocase`" },
     .{ .src = "local x = abs(-9223372036854775808)", .line = 1, .column = 11, .class = .arithmetic, .message = "abs(-9223372036854775808) overflows 64 bits" },
     .{ .src = "local x = min(1)", .line = 1, .column = 11, .class = .argument, .message = "`min` takes 2 to 4 arguments, given 1" },
     .{ .src = "function f(a, b?) end f()", .line = 1, .column = 23, .class = .argument, .message = "`f` takes 1 to 2 arguments, given 0" },

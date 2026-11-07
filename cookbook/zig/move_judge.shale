@@ -95,7 +95,7 @@ function same_as(l)
   if not starts_with(l, "sym ") then return l end
   local out = l
   if SAME[1] ~= "" then
-    for m in SAME do out = substitute(out, m .. ".", SAME[1] .. ".") end
+    for m in SAME do out = substitute(out, m .. ".", SAME[1] .. ".", {missing_ok = true}) end
   end
   local f = re_find(out, "\\.S\\.file_ [0-9]+$")
   if f ~= nil then out = sub(out, 1, f.at - 1) .. ".S.file_ (a file's name)" end
