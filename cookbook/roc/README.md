@@ -172,8 +172,11 @@ end, and fails the run.
 
 - [type_walk.shale](type_walk.shale) prints a module's types and every type
   they depend on, the most primitive first and the module's own last, each
-  with its doc, its definition as written and its functions' annotations,
-  with no bodies. It is for reviewing the types alone. A package outside the
+  with its doc, its definition as written and the annotations of its
+  functions and constants, with no bodies or values. A constant's annotation
+  ends in `# constant`, and the types it mentions are followed like a
+  function's. An annotation of type `_` and the helpers outside any type's
+  block are left out. It is for reviewing the types alone. A package outside the
   root needs `packages=`, as below; a name it can't resolve fails the run.
 
       cd <repo> && shale <shale>/cookbook/roc/type_walk.shale module=Pigs packages=lib=repos:roc-apps/canvas_apps/lib

@@ -17,11 +17,15 @@
 --              `cookbook/roc/plants/type_walk/`.
 --
 -- The types read are the type declarations at a file's top level and those
--- nested in a type's `.{ ... }` block. A type's functions are the annotations
--- in its own block whose type is a function: each is printed as its doc and
--- its annotation, with its body left out, not written as `...`. Constants in
--- a block, and functions outside any block (a module's private helpers), are
--- left out, and so are the types only they mention.
+-- nested in a type's `.{ ... }` block. A type's members are the annotations
+-- in its own block, in source order: its functions, whose type is written as
+-- a function, and its constants, whose type is not, such as `count : I64`.
+-- Each is printed as its doc and its annotation, with its body or value left
+-- out, not written as `...`, and a constant's annotation ends in
+-- `# constant`, so it reads as one even when its type is an alias. An
+-- annotation whose whole type is `_` is left out, since it says nothing of
+-- the type's surface. Values outside any block (a module's private helpers)
+-- are left out, and so are the types only they mention.
 --
 -- Every type name in a printed definition or annotation is followed: a bare
 -- name declared in the same file, a bare name that is an imported module's own
@@ -38,7 +42,7 @@
 -- name. Each type has a header line with its name, file and line, then its
 -- doc comment and its definition as written, and then its functions inside a
 -- `.{ ... }`. The source's text is kept, re-indented. The last line counts the
--- types, functions, modules and leaves.
+-- types, functions, constants, modules and leaves.
 --
 -- A name that resolves to no file or no type, or a file that doesn't parse,
 -- is listed after the output, and the run then fails.
@@ -272,13 +276,19 @@ function mentions_in(tree, at, into)
   return into
 end
 
--- The function annotations in the type's own block, as node indices.
-function functions_of(tree, at)
+-- The annotations in the type's own block, in source order, as `{at,
+-- constant}`: `at` is the annotation's node, and `constant` is true when its
+-- type is not written as a function. An annotation whose whole type is `_`
+-- says nothing about the type's surface, so it is left out.
+function members_of(tree, at)
   local out = {}
   for k in tree[at].kids do
     if tree[k].kind == "associated" then
       for m in tree[k].kids do
-        if tree[m].kind == "s-type-anno" and #tree[m].kids > 0 and tree[tree[m].kids[1]].kind == "ty-fn" then push(out, m) end
+        if tree[m].kind == "s-type-anno" and #tree[m].kids > 0 then
+          local kind = tree[tree[m].kids[1]].kind
+          if kind ~= "_" then push(out, {at = m, constant = kind ~= "ty-fn"}) end
+        end
       end
     end
   end
@@ -340,8 +350,8 @@ function visit(st, id)
   local found = {}
   if #kids > 1 and tree[kids[2]].kind ~= "associated" then mentions_in(tree, kids[2], found) end
   local in_definition = #found
-  for f in functions_of(tree, t.at) do
-    for k in tree[f].kids do mentions_in(tree, k, found) end
+  for member in members_of(tree, t.at) do
+    for k in tree[member.at].kids do mentions_in(tree, k, found) end
   end
   for i = 1, #found do
     local m = found[i]
@@ -498,19 +508,25 @@ function type_lines(st, id)
   local kids = decl.kids
   local last = (#kids > 1 and tree[kids[2]].kind ~= "associated") and tree[kids[2]] or tree[kids[1]]
   local definition = source_text(src, decl.line, decl.col, last.end_line, last.end_col)
-  local fns = functions_of(tree, t.at)
-  if #fns == 0 then
+  local members = members_of(tree, t.at)
+  if #members == 0 then
     for l in definition do push(out, l) end
     return out
   end
   definition[#definition] = definition[#definition] .. ".{"
   for l in definition do push(out, l) end
-  for i = 1, #fns do
-    local f = tree[fns[i]]
+  for i = 1, #members do
+    local f = tree[members[i].at]
     if i > 1 then push(out, "") end
     for l in doc_lines_above(src, f.line) do push(out, "\t" .. l) end
-    for l in source_text(src, f.line, f.col, f.end_line, f.end_col) do push(out, "\t" .. l) end
-    st.function_count = st.function_count + 1
+    local anno = source_text(src, f.line, f.col, f.end_line, f.end_col)
+    if members[i].constant then
+      anno[#anno] = anno[#anno] .. "   # constant"
+      st.constant_count = st.constant_count + 1
+    else
+      st.function_count = st.function_count + 1
+    end
+    for l in anno do push(out, "\t" .. l) end
   end
   push(out, "}")
   return out
@@ -520,7 +536,7 @@ end
 -- refused}`: the lines to print, the names that resolve to nothing, and the
 -- files that don't parse.
 function walk(root, module, packages_arg)
-  local st = {files = {}, types = {}, packages = package_folders(root, packages_arg), refused = {}, lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, asked = {}, queue = {}, deferred = {}, wanted = {}, function_count = 0}
+  local st = {files = {}, types = {}, packages = package_folders(root, packages_arg), refused = {}, lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, asked = {}, queue = {}, deferred = {}, wanted = {}, function_count = 0, constant_count = 0}
   if module == "" then fail("type_walk: name the module to start from, as module=Pigs") end
   local start = path_normal(path_join(root, module .. ".roc"))
   if start == nil or not exists(start) then fail("type_walk: no file " .. path_join(root, module .. ".roc") .. " for module=" .. module) end
@@ -563,7 +579,7 @@ function walk(root, module, packages_arg)
     end
   end
   push(lines_out, "")
-  push(lines_out, "# " .. #keys(st.visited) .. " types, " .. st.function_count .. " functions, " .. #keys(modules) .. " modules, " .. #keys(st.leaves) .. " leaves, " .. #keys(st.vars) .. " type variables")
+  push(lines_out, "# " .. #keys(st.visited) .. " types, " .. st.function_count .. " functions, " .. st.constant_count .. " constants, " .. #keys(modules) .. " modules, " .. #keys(st.leaves) .. " leaves, " .. #keys(st.vars) .. " type variables")
   return {lines = lines_out, lost = st.lost, refused = st.refused}
 end
 
@@ -595,14 +611,26 @@ function self_test()
   for l in ls do
     if starts_with(l, "#### ") then push(headers, split(sub(l, 6), "   (")[1]) end
   end
-  local want = {"Tagged, in module Leg", "Note", "Note.Mark", "Unit.Metres", "Leg", "Leg.Stretch", "Ride", "Ride.Plan"}
+  -- Speed is mentioned only by the constant `cruising`, so it joining the
+  -- order shows a constant's annotation is followed.
+  local want = {"Tagged, in module Leg", "Note", "Note.Mark", "Speed", "Unit.Metres", "Leg", "Leg.Stretch", "Ride", "Ride.Plan"}
   check(failures, join(headers, " | ") == join(want, " | "), "order: got " .. join(headers, " | "))
   check(failures, #r.lost == 0, "lost names: " .. join(r.lost, "; "))
   check(failures, #r.refused == 0, "refused: " .. join(r.refused, "; "))
-  check(failures, has_line(ls, "# Builtin leaves, not expanded: F64, List, Str"), "leaves line")
+  -- U32 appears only in the constant `count : U32`, so it is a leaf because
+  -- constants are printed and followed.
+  check(failures, has_line(ls, "# Builtin leaves, not expanded: F64, List, Str, U32"), "leaves line")
   check(failures, has_line(ls, "# Type variables, not followed: a (Tagged, in module Leg)"), "type variable line")
   check(failures, has_line(ls, "# Cycle: these types mention each other: Note, Note.Mark"), "cycle line")
-  check(failures, has_line(ls, "# 8 types, 3 functions, 4 modules, 3 leaves, 1 type variables"), "counts line: " .. ls[#ls])
+  check(failures, has_line(ls, "# 9 types, 3 functions, 2 constants, 5 modules, 4 leaves, 1 type variables"), "counts line: " .. ls[#ls])
+  check(failures, has_line(ls, "\t## How many rides a day allows."), "a constant's doc")
+  check(failures, has_line(ls, "\tcount : U32   # constant"), "a constant's annotation, marked")
+  check(failures, has_line(ls, "\tcruising : Speed   # constant"), "a constant of a type from another module")
+  check(failures, not has_text(ls, "CONSTANT_MARKER") and not has_text(ls, "= 3"), "a constant's value is printed")
+  check(failures, not has_text(ls, "legs_of : Ride -> List(Leg)   # constant"), "a function is marked as a constant")
+  -- `is_eq : _` leaves its whole type to inference, so its annotation says
+  -- nothing of Ride's surface and is left out.
+  check(failures, not has_text(ls, "is_eq"), "an annotation of type `_` is printed")
   check(failures, has_line(ls, "Ride :: { legs : List(Leg), name : Str }.{"), "a module type's definition opens its block")
   check(failures, has_line(ls, "\tlegs_of : Ride -> List(Leg)"), "a function's annotation")
   check(failures, has_line(ls, "\t## The legs of a ride, in order."), "a function's doc")
@@ -613,7 +641,6 @@ function self_test()
   check(failures, has_line(ls, "\tlabel : Tagged(Str),"), "a multiline definition, re-indented")
   check(failures, has_line(ls, "Metres :: F64"), "a type from a package")
   check(failures, not has_text(ls, "BODY_MARKER") and not has_text(ls, "ride.legs") and not has_text(ls, "|ride|"), "a body is printed")
-  check(failures, not has_text(ls, "count"), "a constant is printed")
   check(failures, not has_text(ls, "helper") and not has_text(ls, "Hidden"), "a helper outside the block, or its type, is printed")
   check(failures, not has_text(ls, "#### Unit "), "a module type nobody mentions is printed")
   check(failures, not has_line(ls, "#### Short") and not has_text(ls, "Long,"), "a tag is read as a type")

@@ -2,14 +2,22 @@
 import Leg
 import Note
 import Hidden
+import Speed
 
 Ride :: { legs : List(Leg), name : Str }.{
 
 	## How long a ride's plan is.
 	Plan : [Short, Long(Leg.Stretch)]
 
+	## How many rides a day allows.
 	count : U32
 	count = 3
+
+	cruising : Speed
+	cruising = CONSTANT_MARKER
+
+	is_eq : _
+	is_eq = |a, b| a == b
 
 	## The legs of a ride, in order.
 	legs_of : Ride -> List(Leg)
