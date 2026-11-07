@@ -1,0 +1,131 @@
+-- Which code in a parsed Roc file (from `roc_tree`) is a test's, and a note
+-- of how many files use a member, for `cookbook/roc/type_walk.shale`.
+--
+--   use("cookbook:roc/walk_uses.shale")
+--   test_context(info)     where each node sits, and the values only expects use
+--   in_tests(fc, c)        whether a node there is in tests
+--   uses_note(rec)         `used by 3 files, 1 in tests only`
+--
+-- A use is in tests when it sits in an `expect`, in a top-level value that
+-- only expects use (directly or through other such values), or anywhere in a
+-- file under a `gates/` folder, a gates-only app.
+
+-- Whether the file at `path` is a gates-only app, under a `gates/` folder.
+function is_gates(path)
+  return contains("/" .. path, "/gates/")
+end
+
+-- Where each node of the file `info` (`{path, nodes}`) sits, as `{ctx,
+-- test_values, gates}`: `ctx[i]` is `expect` inside an `expect`,
+-- `value:<name>` inside the definition of a top-level value, `block` inside a
+-- type's block, and `none` elsewhere. `test_values` is the set of top-level
+-- values that only expects use, directly or through other such values; a
+-- value nothing uses is not one. A parent comes before its children in the
+-- tree.
+function test_context(info)
+  local tree = info.nodes
+  local ctx = {}
+  local tops = {}
+  for i = 1, #tree do
+    local n = tree[i]
+    local up = n.parent == 0 and "none" or ctx[n.parent]
+    local c = up
+    if n.kind == "s-expect" then
+      c = "expect"
+    elseif n.kind == "associated" then
+      c = "block"
+    elseif n.kind == "s-decl" and up == "none" and #n.kids > 0 and tree[n.kids[1]].kind == "p-ident" then
+      local name = get(tree[n.kids[1]], "raw", "")
+      c = "value:" .. name
+      tops[name] = true
+    end
+    push(ctx, c)
+  end
+  local refs = {}
+  for i = 1, #tree do
+    local n = tree[i]
+    if n.kind == "e-ident" then
+      local raw = get(n, "raw", "")
+      if has_key(tops, raw) and ctx[i] ~= "value:" .. raw then push_at(refs, raw, ctx[i]) end
+    end
+  end
+  local test_values = {}
+  local changed = true
+  while changed do
+    changed = false
+    for name in sort(keys(refs)) do
+      if not has_key(test_values, name) then
+        local all = true
+        for c in refs[name] do
+          if not (c == "expect" or (starts_with(c, "value:") and has_key(test_values, sub(c, 7)))) then all = false end
+        end
+        if all then
+          test_values[name] = true
+          changed = true
+        end
+      end
+    end
+  end
+  return {ctx = ctx, test_values = test_values, gates = is_gates(info.path)}
+end
+
+-- Whether a node whose context is `c`, in a file whose `test_context` is
+-- `fc`, is in tests: in a gates app, an `expect`, or a value only expects
+-- use.
+function in_tests(fc, c)
+  return fc.gates or c == "expect" or (starts_with(c, "value:") and has_key(fc.test_values, sub(c, 7)))
+end
+
+function plural(n, word)
+  return n .. " " .. word .. (n == 1 and "" or "s")
+end
+
+-- A member's outside uses as `{files, in_tests, method_files,
+-- method_in_tests}`, from its record's sets of files, `prod`, `test`,
+-- `method_prod` and `method_test`: the files that name it, those whose every
+-- use is in tests, and the same for the files that only call a method of its
+-- name.
+function uses_of(rec)
+  local out = {files = 0, in_tests = 0, method_files = 0, method_in_tests = 0}
+  local named = {}
+  for p in keys(rec.prod) do named[p] = true end
+  for p in keys(rec.test) do named[p] = true end
+  for p in keys(named) do
+    out.files = out.files + 1
+    if not has_key(rec.prod, p) then out.in_tests = out.in_tests + 1 end
+  end
+  local called = {}
+  for p in keys(rec.method_prod) do called[p] = true end
+  for p in keys(rec.method_test) do called[p] = true end
+  for p in keys(called) do
+    if not has_key(named, p) then
+      out.method_files = out.method_files + 1
+      if not has_key(rec.method_prod, p) then out.method_in_tests = out.method_in_tests + 1 end
+    end
+  end
+  return out
+end
+
+-- Whether no other file uses the member, by name or by a method's name.
+function is_unused(rec)
+  local u = uses_of(rec)
+  return u.files == 0 and u.method_files == 0
+end
+
+-- The note after a member's annotation: `used by 3 files, 1 in tests only`.
+function uses_note(rec)
+  local u = uses_of(rec)
+  if u.files == 0 and u.method_files == 0 then return "no outside use" end
+  local parts = {}
+  if u.files > 0 then
+    local named = "used by " .. plural(u.files, "file")
+    if u.in_tests > 0 then named = named .. ", " .. u.in_tests .. " in tests only" end
+    push(parts, named)
+  end
+  if u.method_files > 0 then
+    local called = u.files > 0 and "by method name in " .. u.method_files .. " more" or "used by method name only, in " .. plural(u.method_files, "file")
+    if u.method_in_tests > 0 then called = called .. ", " .. u.method_in_tests .. " in tests only" end
+    push(parts, called)
+  end
+  return join(parts, "; ")
+end
