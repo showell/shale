@@ -126,78 +126,6 @@ function qualified_name(tree, at)
   return join(parts, ".")
 end
 
--- Parses the files in `paths` not read before and records what each
--- declares and imports, in `st.files` and `st.types`; a file roc-ast refuses
--- goes in `st.refused` and `st.refusals`.
-function load_files(st, paths)
-  local fresh = {}
-  for p in paths do
-    if not has_key(st.files, p) then push(fresh, p) end
-  end
-  if #fresh == 0 then return nil end
-  for f in parsed_files(st.trees, fresh) do
-    if f.err ~= "" then
-      st.files[f.path] = {path = f.path, err = f.err}
-      if f.err ~= "no such file" then
-        -- roc_tree's `err` names the file first when roc-ast did.
-        local why = starts_with(f.err, f.path .. ": ") and sub(f.err, #f.path + 3) or f.err
-        push(st.refused, f.path .. ": " .. why)
-        push(st.refusals, {path = f.path, why = why})
-      end
-    else
-      -- A library uses no other, so this is declared.shale's module_name,
-      -- the file's name less `.roc`.
-      local base = basename(f.path)
-      local info = {path = f.path, err = "", module = sub(base, 1, #base - 4), nodes = f.nodes, src = split(read(f.path), "\n"), types = {}, imports = {}}
-      local tree = f.nodes
-      local own = own_packages(st, tree, f.path)
-      for i = 1, #tree do
-        local n = tree[i]
-        if n.kind == "s-type-decl" and is_outer(tree, i) and get(tree[n.kids[1]], "name", "") ~= "" then
-          local q = qualified_name(tree, i)
-          local q_parts = split(q, ".")
-          local t = {id = f.path .. "#" .. q, path = f.path, module = info.module, qualified = q, name = q_parts[#q_parts], at = i, line = n.line}
-          push(info.types, t)
-          st.types[t.id] = t
-        end
-        if n.kind == "s-import" and is_outer(tree, i) then
-          local raw = get(n, "raw", "")
-          local parts = split(raw, ".")
-          local target = {}
-          if #parts == 1 then
-            target = {path = path_normal(path_join(dirname(f.path), raw .. ".roc"))}
-          else
-            local pkg = has_key(own, parts[1]) and own[parts[1]] or get(st.packages, parts[1], {err = "no app in the root names the package `" .. parts[1] .. "`: pass packages=" .. parts[1] .. "=<folder>"})
-            if has_key(pkg, "err") then target = {err = pkg.err} else target = {path = path_join(pkg.dir, join(drop(parts, 1), "/") .. ".roc")} end
-          end
-          info.imports[parts[#parts]] = target
-        end
-      end
-      st.files[f.path] = info
-    end
-  end
-  return nil
-end
-
--- Reads every file the files read import, and theirs, so a receiver's type
--- resolves when the uses are counted.
-function load_imports(st)
-  local more = true
-  while more do
-    local found = {}
-    for p in keys(st.files) do
-      local imports = get(st.files[p], "imports", {})
-      for name in keys(imports) do
-        local q = get(imports[name], "path", "")
-        if q ~= "" and not has_key(st.files, q) then found[q] = true end
-      end
-    end
-    load_files(st, sort(keys(found)))
-    more = #keys(found) > 0
-  end
-  return nil
-end
-
 -- The packages an app's or a package's header names, from its tree, as
 -- `{name, raw}`, `raw` being the path written for its main file.
 function header_packages(tree)
@@ -279,6 +207,78 @@ function own_packages(st, tree, path)
     if not get(get(st.packages, name, {}), "given", false) then out[name] = own[name] end
   end
   return out
+end
+
+-- Parses the files in `paths` not read before and records what each
+-- declares and imports, in `st.files` and `st.types`; a file roc-ast refuses
+-- goes in `st.refused` and `st.refusals`.
+function load_files(st, paths)
+  local fresh = {}
+  for p in paths do
+    if not has_key(st.files, p) then push(fresh, p) end
+  end
+  if #fresh == 0 then return nil end
+  for f in parsed_files(st.trees, fresh) do
+    if f.err ~= "" then
+      st.files[f.path] = {path = f.path, err = f.err}
+      if f.err ~= "no such file" then
+        -- roc_tree's `err` names the file first when roc-ast did.
+        local why = starts_with(f.err, f.path .. ": ") and sub(f.err, #f.path + 3) or f.err
+        push(st.refused, f.path .. ": " .. why)
+        push(st.refusals, {path = f.path, why = why})
+      end
+    else
+      -- A library uses no other, so this is declared.shale's module_name,
+      -- the file's name less `.roc`.
+      local base = basename(f.path)
+      local info = {path = f.path, err = "", module = sub(base, 1, #base - 4), nodes = f.nodes, src = split(read(f.path), "\n"), types = {}, imports = {}}
+      local tree = f.nodes
+      local own = own_packages(st, tree, f.path)
+      for i = 1, #tree do
+        local n = tree[i]
+        if n.kind == "s-type-decl" and is_outer(tree, i) and get(tree[n.kids[1]], "name", "") ~= "" then
+          local q = qualified_name(tree, i)
+          local q_parts = split(q, ".")
+          local t = {id = f.path .. "#" .. q, path = f.path, module = info.module, qualified = q, name = q_parts[#q_parts], at = i, line = n.line}
+          push(info.types, t)
+          st.types[t.id] = t
+        end
+        if n.kind == "s-import" and is_outer(tree, i) then
+          local raw = get(n, "raw", "")
+          local parts = split(raw, ".")
+          local target = {}
+          if #parts == 1 then
+            target = {path = path_normal(path_join(dirname(f.path), raw .. ".roc"))}
+          else
+            local pkg = has_key(own, parts[1]) and own[parts[1]] or get(st.packages, parts[1], {err = "no app in the root names the package `" .. parts[1] .. "`: pass packages=" .. parts[1] .. "=<folder>"})
+            if has_key(pkg, "err") then target = {err = pkg.err} else target = {path = path_join(pkg.dir, join(drop(parts, 1), "/") .. ".roc")} end
+          end
+          info.imports[parts[#parts]] = target
+        end
+      end
+      st.files[f.path] = info
+    end
+  end
+  return nil
+end
+
+-- Reads every file the files read import, and theirs, so a receiver's type
+-- resolves when the uses are counted.
+function load_imports(st)
+  local more = true
+  while more do
+    local found = {}
+    for p in keys(st.files) do
+      local imports = get(st.files[p], "imports", {})
+      for name in keys(imports) do
+        local q = get(imports[name], "path", "")
+        if q ~= "" and not has_key(st.files, q) then found[q] = true end
+      end
+    end
+    load_files(st, sort(keys(found)))
+    more = #keys(found) > 0
+  end
+  return nil
 end
 
 -- Stops a walk whose `root=`, `module=` or `clients=` climbs with `..`,
