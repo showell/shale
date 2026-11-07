@@ -199,7 +199,7 @@ pub fn main(init: std.process.Init) !u8 {
 }
 
 /// `shale --help`: the usage, where the docs are, and the mounts in force, on
-/// stdout. The docs are named in this binary's checkout when it runs from one
+/// stdout, each with its folder but a `secrets` mount's. The docs are named in this binary's checkout when it runs from one
 /// (`<checkout>/zig-out/bin/shale`), else by the repository's URL.
 fn help(arena: std.mem.Allocator, io: std.Io, pinned: ?[]const u8, home: []const u8, err: *std.Io.Writer) !u8 {
     var out_buf: [4096]u8 = undefined;
@@ -231,10 +231,16 @@ fn help(arena: std.mem.Allocator, io: std.Io, pinned: ?[]const u8, home: []const
     try w.print("\nThe mounts, `name:path` in a script ({s}):\n", .{mounts.from});
     if (mounts.mounts.len == 0) try w.writeAll("  none\n");
     for (mounts.mounts) |m| {
+        // A secrets mount's folder is never printed: agents run `--help` to
+        // learn the language, and its output lands in their transcripts.
+        // Scripts name a secret as `name:FILE`, so the folder is no help.
+        if (m.secrets) {
+            try w.print("  {s}:  secrets, for `run`'s `secrets` only (its folder is not shown)\n", .{m.name});
+            continue;
+        }
         try w.print("  {s}:  {s}", .{ m.name, m.dir });
         if (m.access == .read_only) try w.writeAll("  ro");
         if (m.tools) try w.writeAll("  tools");
-        if (m.secrets) try w.writeAll("  secrets");
         try w.writeAll("\n");
     }
     return 0;

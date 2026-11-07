@@ -157,6 +157,31 @@ test "cli: `shale --help` prints the usage, where the docs are, and each mount i
     try testing.expect(std.mem.endsWith(u8, r.stdout[at..end], "/libdir  ro"));
 }
 
+test "cli: `shale --help` names a secrets mount and what it is for, never its folder" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = testing.allocator;
+    try tmp.dir.createDirPath(io, "libdir");
+    try tmp.dir.createDirPath(io, "fake-keys-7q2x");
+    const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer a.free(dir);
+    const cmd = try std.fmt.allocPrint(a, "printf 'lib = %s/{s}/libdir\\nkeys = %s/{s}/fake-keys-7q2x secrets\\n' \"$PWD\" \"$PWD\" > '{s}/mounts' && SHALE_MOUNTS='{s}/mounts' '{s}' --help", .{ dir, dir, dir, dir, shale_exe });
+    defer a.free(cmd);
+    const r = try std.process.run(a, io, .{ .argv = &.{ "sh", "-c", cmd } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}\n{s}\n", .{ r.stdout, r.stderr });
+    try testing.expectEqual(std.process.Child.Term{ .exited = 0 }, r.term);
+    try testing.expect(std.mem.indexOf(u8, r.stdout, "fake-keys-7q2x") == null);
+    try testing.expect(std.mem.indexOf(u8, r.stderr, "fake-keys-7q2x") == null);
+    try testing.expect(std.mem.indexOf(u8, r.stdout, "  keys:  secrets, for `run`'s `secrets` only (its folder is not shown)\n") != null);
+    // The other mounts still show their folders.
+    try testing.expect(std.mem.indexOf(u8, r.stdout, "/libdir\n") != null);
+}
+
 test "cli: a root spelled with `.`, `..` or a link is the folder itself: a read-only or secrets mount inside it holds, and real(\".\") is the folder" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
