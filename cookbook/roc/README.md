@@ -100,7 +100,7 @@ that doesn't parse is listed at the end, and the run then fails.
   it adds trailing commas and runs `roc fmt`, which lays each such group out
   one item a line.
 
-Four more checks can gate a build, because they exit nonzero on any
+Five more checks can gate a build, because they exit nonzero on any
 finding. A project's own words stay with the project and are passed in.
 
 - [vocabulary.shale](vocabulary.shale) holds a project to its decided
@@ -127,6 +127,12 @@ finding. A project's own words stay with the project and are passed in.
   with no doc or with history in its top comment (`module_doc`). `terms=`
   names a project's file of fixed terms that open a name and only look like a
   verb, as `set_cookie` does.
+- [unused_imports.shale](unused_imports.shale) finds an import line whose
+  name the file never uses (`unused_import`), since Roc doesn't warn of one:
+  no value, tag or type starts with the module's name or alias, and no name
+  the line exposes is used. A use in an annotation, a pattern or an expect
+  counts; one in a comment or a string doesn't. Its `glob=` takes several
+  globs separated by commas.
 
 `name_hunt`, `errors` and `boundaries` can also ask Roc's type checker
 for types: add `types=1 root=<app>`, where the app imports the files
@@ -263,7 +269,8 @@ run on their own.
   nonzero on findings share: `verdict_of`, their counts and lines, and
   `check_plants`, a self-test that runs the recipe as a child program once
   for each row of a table, so a row judges the exit code as well as the
-  findings. Used by `families`, `name_types`, `plain_names` and `vocabulary`.
+  findings. Used by `families`, `name_types`, `plain_names`,
+  `unused_imports` and `vocabulary`.
 
 ## Tools the recipes need
 

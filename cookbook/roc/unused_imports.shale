@@ -1,0 +1,162 @@
+-- This recipe finds import lines that the file never uses, since Roc doesn't
+-- warn of one.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/unused_imports.shale
+--   shale cookbook:roc/unused_imports.shale self_test=1
+--
+-- The arguments:
+--   glob       the files to check, `**/*.roc` by default; several globs may
+--              be given, separated by commas;
+--   self_test  with `self_test=1`, check the plants in
+--              `cookbook/roc/plants/unused_imports/`.
+--
+-- The check:
+--
+--   unused_import  An `import` line whose name the file never refers to. The
+--              name is the alias of `import pkg.Mod as M`, else the last part
+--              of the module's path: `Mod` of `import pkg.Mod` and of
+--              `import Mod`. A use is a value, tag or type whose first part
+--              is that name: `Mod.name`, `Mod.Type`, `Mod.Tag(x)`, the
+--              module's own type `Mod`, in an annotation, a pattern, an
+--              expect or an interpolation alike. A name the line exposes
+--              (`exposing [line!]`) and the file uses is a use of the line.
+--              A file import, `import "page.html" as page : Str`, is used
+--              when the file refers to `page`. A name in a comment or a
+--              string is no use.
+--
+-- A method call never names its module, so a module whose only use is a
+-- method on a value of its type is unused here, and Roc agrees: the method
+-- resolves through the value's type without the import. A tag in a tag union
+-- type that shares a module's name reads as a use of the module.
+--
+-- roc-ast drops the qualifier of a tag in a pattern (`Color.Red =>` comes as
+-- `.Red`), so that name is read from the source at the pattern's column.
+--
+-- The output is the counts, one line per finding, and the counts again
+-- (cookbook/roc/findings.shale). The run fails if there are findings, or if
+-- any file doesn't parse, and the files that do parse are judged either way.
+-- budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const GLOB = arg("glob", "**/*.roc")
+use("cookbook:roc/findings.shale")
+use("cookbook:roc/parsed.shale")
+use("cookbook:roc/gate_recipe.shale")
+const CHECKS = {"unused_import"}
+
+-- The first part of a dotted name: `Mod` of `Mod.Type.name`.
+function head_of(name)
+  return split(name, ".")[1]
+end
+
+-- The name a pattern's tag is written with, read from the source line `text`
+-- at byte `col`, since the tree keeps only `.Red` of `Color.Red`.
+function written_tag(text, col)
+  local m = re_find(sub(text, col), "^([A-Za-z_][A-Za-z0-9_.]*)")
+  if m == nil then return "" end
+  return m.group
+end
+
+-- Each import of the file, as `{line, label, names}`: `names` are the names a
+-- use of the line may start with.
+function imports_of(tree)
+  local out = {}
+  for i = 1, #tree do
+    local node = tree[i]
+    if node.kind == "s-import" then
+      local parts = split(node.raw, ".")
+      local name = get(node, "alias", "")
+      if name == "" then name = parts[#parts] end
+      local names = {name}
+      for k in node.kids do
+        if tree[k].kind == "exposing" then
+          for e in tree[k].kids do
+            if tree[e].kind == "exposed-upper-ident" then push(names, tree[e].text) end
+            if tree[e].kind == "exposed-lower-ident" then
+              for t in tree[e].kids do push(names, tree[t].value) end
+            end
+          end
+        end
+      end
+      push(out, {line = node.line, label = "`" .. node.raw .. "`" .. (get(node, "alias", "") == "" and "" or " as `" .. node.alias .. "`"), names = names})
+    elseif node.kind == "s-file-import" then
+      for k in node.kids do
+        if tree[k].kind == "name" then push(out, {line = node.line, label = "the file import `" .. tree[k].value .. "`", names = {tree[k].value}}) end
+      end
+    end
+  end
+  return out
+end
+
+-- The set of first parts of every value, tag and type name the file uses.
+function heads_used(tree, src)
+  local used = {}
+  for node in tree do
+    local name = ""
+    if node.kind == "e-ident" or node.kind == "e-tag" then name = node.raw end
+    if node.kind == "ty" then name = node.name end
+    if node.kind == "p-tag" then name = starts_with(node.raw, ".") and written_tag(src[node.line], node.col) or node.raw end
+    if name ~= "" then used[head_of(name)] = true end
+  end
+  return used
+end
+
+function judge_file(f, report)
+  local tree = f.nodes
+  local used = heads_used(tree, split(read(f.path), "\n"))
+  for imp in imports_of(tree) do
+    local is_used = false
+    for name in imp.names do
+      if has_key(used, name) then is_used = true end
+    end
+    if not is_used then push(report, {path = f.path, line = imp.line, check = "unused_import", what = imp.label .. " is imported and never used: delete the line"}) end
+  end
+  return nil
+end
+
+function self_test()
+  local at = "cookbook:roc/plants/unused_imports/"
+  check_plants("unused_imports", "cookbook:roc/unused_imports.shale", CHECKS, {
+    {glob = at .. "unused.roc", counts = {unused_import = 1}, says = {"unused.roc:3: unused_import: `game.Polygon` is imported and never used"}},
+    {glob = at .. "unused_alias.roc", counts = {unused_import = 1}, says = {"`game.Distance` as `D` is imported and never used"}},
+    {glob = at .. "unused_exposing.roc", counts = {unused_import = 1}, says = {"`pf.Stdout` is imported"}},
+    {glob = at .. "unused_file_import.roc", counts = {unused_import = 1}, says = {"the file import `page` is imported"}},
+    {glob = at .. "unused_in_prose.roc", counts = {unused_import = 1}, says = {"`game.Polygon` is imported"}},
+    {glob = at .. "unused_method_only.roc", counts = {unused_import = 1}, says = {"`game.Distance` is imported"}},
+    {glob = at .. "unused.roc," .. at .. "unused_alias.roc", counts = {unused_import = 2}},
+    {glob = at .. "quiet_qualified.roc"},
+    {glob = at .. "quiet_annotation.roc"},
+    {glob = at .. "quiet_expect.roc"},
+    {glob = at .. "quiet_pattern_tag.roc"},
+    {glob = at .. "quiet_tag.roc"},
+    {glob = at .. "quiet_exposing.roc"},
+    {glob = at .. "quiet_alias.roc"},
+    {glob = at .. "quiet_interpolation.roc"},
+    {glob = at .. "quiet_file_import.roc"},
+    {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
+  })
+  return nil
+end
+
+function run_check()
+  local paths = {}
+  for g in split(GLOB, ",") do
+    for p in glob(trim(g)) do push(paths, p) end
+  end
+  local parsed = parse_roc_files(paths)
+  local report = {}
+  for f in parsed.files do judge_file(f, report) end
+  local verdict = verdict_of("unused_imports", CHECKS, report, #paths)
+  print_findings(verdict.summary, verdict.found)
+  fail_if_refused("unused_imports", parsed.refused)
+  return verdict
+end
+
+-- This `fail` stands at the top level so the summary is the last line a
+-- caller reads: a stop inside a function prints the calls after it.
+if SELF_TEST then
+  self_test()
+else
+  local verdict = run_check()
+  if #verdict.found > 0 then fail(verdict.summary) end
+end
