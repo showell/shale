@@ -1150,9 +1150,9 @@ function self_test()
 
   -- Speed and Unit.Metres are nominal types over F64 with no nested type, so
   -- units: brief at every depth, Speed at depth 1 among them.
-  check(failures, has_line(ls, "Speed :: F64.{ still }"), "a unit at depth 1 printed brief")
+  check(failures, has_line(ls, "Speed :: F64.{ still }"), "a unit at depth 1 printed whole")
   check(failures, has_line(ls, "# Brief, members by name at every depth: Speed; Unit.Metres"), "the brief line")
-  check(failures, has_line(full, "Speed :: F64.{") and has_line(full, "\tstill : Speed   # constant") and not has_text(full, "# Brief"), "brief= empty prints a unit whole")
+  check(failures, has_line(full, "Speed :: F64.{") and has_line(full, "\tstill : Speed   # constant") and not has_text(full, "# Brief"), "brief= empty prints a unit brief")
   local deep = walk(at .. "chain/app", "Ride", "", WALK_MAX_DEPTH, {trees = trees, full_depth = 3}).lines
   check(failures, has_line(deep, "Metres :: F64.{ zero, plus }"), "a unit within the full depth printed whole")
   local named_brief = walk(at .. "chain/app", "Ride", "", WALK_MAX_DEPTH, {trees = trees, brief = parse_brief("Leg")}).lines
@@ -1178,7 +1178,7 @@ function self_test()
   local production = walk(at .. "chain/app", "Ride", "", WALK_MAX_DEPTH, {trees = trees, named_by_production = true}).lines
   check(failures, has_line(production, "# Named by: the annotations and types in the other modules of " .. at .. "chain/app that mention Ride's types. Production only: 2 test and 1 private entries left out."), "the production-only heading")
   check(failures, has_line(production, at .. "chain/app/Trip.roc:6: Trip :: { ride : Ride, legs : List(Leg) }") and has_line(production, at .. "chain/app/Trip.roc:9: Trip.plan_of : Trip -> Ride.Plan"), "named_by=production leaves out an untagged entry")
-  check(failures, not has_text(production, "(test)") and not has_text(production, "(private)") and not has_text(production, "### Check"), "named_by=production lists a tagged entry")
+  check(failures, not has_text(production, "start : Ride") and not has_text(production, "sample_plan") and not has_text(production, "### Check"), "named_by=production lists a tagged entry")
   check(failures, production[#production] == ls[#ls], "named_by=production changes the counts: " .. production[#production])
   -- Ride's own `helper : Ride -> Hidden` would be listed were Ride read.
   local own = false
