@@ -214,8 +214,12 @@ run on their own.
 
 - [declared.shale](declared.shale): what the naming recipes read out of a
   parse tree: `declarations_of(file)`, each type, value and record field a
-  file declares, with `render_type`, `name_words` and `word_set`. Used by
-  `families`, `name_hunt`, `name_types`, `plain_names` and `vocabulary`.
+  file declares, with `render_type`, `name_words` and `word_set`, and what
+  `name_hunt` reads of a type in the tree or written as text, such as
+  `union_shape` and `first_argument`. These sit here, not in a library of
+  their own, because a library's functions can't call another library's and
+  they need this one's. Used by `families`, `name_hunt`, `name_types`,
+  `plain_names` and `vocabulary`.
 - [gate_recipe.shale](gate_recipe.shale): what the recipes that exit
   nonzero on findings share: `verdict_of`, their counts and lines, and
   `check_plants`, a self-test that runs the recipe as a child program once

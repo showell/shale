@@ -14,6 +14,17 @@
 --   module_name(path), is_app(f)  a file's module, and whether it is an app
 --   opening_comment(src)          the comment lines that open a file
 --   word_set(path)                a word list, such as one in cookbook/words
+--   namespace_instructions(file), taken_word_kinds(file), list_name_kinds(file)
+--                                 the word lists that hold more than words
+--   span_text(src, tree, at)      a node's source text
+--   union_shape, argument_shape, mentioned_type_names
+--                                 what a type in the tree holds
+--   previous_sibling, calls_itself
+--                                 where a node sits, and what a definition calls
+--   camel_case(ws), tag_first_word(tag)
+--                                 words into a type's name, and a tag's first word
+--   first_argument, success_type, list_element, element_word
+--                                 the parts of a type written as text
 
 -- The kinds of node a definition may sit in and still be top-level or a
 -- module type's member, which `associated` holds. Inside any other kind,
@@ -185,6 +196,51 @@ function word_set(path)
   return set
 end
 
+-- cookbook/words/namespaces.txt has a prefix per line followed by the
+-- namespace's own instructions (`port in out`). The result maps each prefix
+-- to the set of its instructions: `{port = {["in"] = true, out = true}}`.
+function namespace_instructions(file)
+  local by_prefix = {}
+  for l in word_list_lines("cookbook:words/" .. file) do
+    local ws = words(l)
+    if #ws > 0 then
+      if has_key(by_prefix, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. ws[1] .. "` twice") end
+      by_prefix[ws[1]] = set_of(drop(ws, 1))
+    end
+  end
+  return by_prefix
+end
+
+-- cookbook/words/taken.txt has a word per line followed by its kind, `roc`
+-- or `cardinal`. The result maps each word to its kind:
+-- `{record = "roc", two = "cardinal"}`.
+function taken_word_kinds(file)
+  local kinds = {}
+  for l in word_list_lines("cookbook:words/" .. file) do
+    local ws = words(l)
+    if #ws > 0 then
+      if #ws ~= 2 or (ws[2] ~= "roc" and ws[2] ~= "cardinal") or has_key(kinds, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `roc` or `cardinal`") end
+      kinds[ws[1]] = ws[2]
+    end
+  end
+  return kinds
+end
+
+-- cookbook/words/list_names.txt has a word per line followed by its kind,
+-- `many`, `one`, `after` or `accumulator`. The result maps each word to its
+-- kind.
+function list_name_kinds(file)
+  local kinds = {}
+  for l in word_list_lines("cookbook:words/" .. file) do
+    local ws = words(l)
+    if #ws > 0 then
+      if #ws ~= 2 or (ws[2] ~= "many" and ws[2] ~= "one" and ws[2] ~= "after" and ws[2] ~= "accumulator") or has_key(kinds, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `many`, `one`, `after` or `accumulator`") end
+      kinds[ws[1]] = ws[2]
+    end
+  end
+  return kinds
+end
+
 -- The name of the type declaration around node `at`, or "" at the top level.
 function owner_of(tree, at)
   local k = tree[at].parent
@@ -288,4 +344,155 @@ function declarations_of(f)
     end
   end
   return out
+end
+
+-- The source text of the node at `at`, from the file's lines `src`. A
+-- node's end column is one past its last character.
+function span_text(src, tree, at)
+  local node = tree[at]
+  if node.line == 0 then return "" end
+  if node.line == node.end_line then return sub(src[node.line], node.col, node.end_col - 1) end
+  local parts = {sub(src[node.line], node.col)}
+  for l = node.line + 1, node.end_line - 1 do push(parts, src[l]) end
+  push(parts, sub(src[node.end_line], 1, node.end_col - 1))
+  return join(parts, "\n")
+end
+
+-- The tags of the tag union at `at`, as `{names, payload}`: `names` lists
+-- the tag names (`Unpinned` for `Unpinned(Str)` too), and `payload` says
+-- whether any tag carries one.
+function union_shape(tree, at)
+  local shape = {names = {}, payload = false}
+  for t in children(tree, at) do
+    if tree[t].kind == "tags" then
+      for tag in children(tree, t) do
+        local name = attribute(tree, tag, "name")
+        if tree[tag].kind == "ty-apply" then
+          shape.payload = true
+          name = attribute(tree, children(tree, tag)[1], "name")
+        end
+        if name ~= "" then push(shape.names, name) end
+      end
+    end
+  end
+  return shape
+end
+
+-- An argument's type, as `command_tense` and `mixed_tense` need it:
+-- `{union}` for a tag union written in place, `{ref}` for a named type
+-- (its last part: `ChatState.PinEdit` gives `PinEdit`), or `{}`. A
+-- `List(T)` gives the shape of `T`, with `list` set.
+function argument_shape(tree, at)
+  local kind = tree[at].kind
+  if kind == "ty-tag-union" then return {union = union_shape(tree, at)} end
+  if kind == "ty-apply" then
+    local kids = children(tree, at)
+    if #kids == 2 and attribute(tree, kids[1], "name") == "List" then
+      local element = argument_shape(tree, kids[2])
+      element.list = true
+      return element
+    end
+    return {}
+  end
+  local name = attribute(tree, at, "name")
+  if name == "" then return {} end
+  local parts = split(name, ".")
+  return {ref = parts[#parts]}
+end
+
+-- The names of the types the type at `at` mentions, added to the set
+-- `into`, each by its last part (`Draw.RoundedRectangle` gives
+-- `RoundedRectangle`).
+function mentioned_type_names(tree, at, into)
+  local name = attribute(tree, at, "name")
+  if starts_with(tree[at].kind, "ty") and name ~= "" then
+    local parts = split(name, ".")
+    into[parts[#parts]] = true
+  end
+  for c in children(tree, at) do mentioned_type_names(tree, c, into) end
+  return into
+end
+
+-- Whether the definition at `at` mentions `name` in its body, as an
+-- identifier (`name`, `Tree.name`) or a method call (`x.name(...)`). A
+-- node's descendants follow it in the tree, each deeper than it.
+function calls_itself(tree, at, name)
+  local j = at + 1
+  while j <= #tree and tree[j].depth > tree[at].depth do
+    local node = tree[j]
+    if node.kind == "e-ident" then
+      local raw = attribute(tree, j, "raw")
+      if raw == name or ends_with(raw, "." .. name) then return true end
+    end
+    if node.kind == "e-method-call" and attribute(tree, j, "method") == name then return true end
+    j = j + 1
+  end
+  return false
+end
+
+-- The sibling just before the node at `at`, or 0.
+function previous_sibling(tree, at)
+  local parent = tree[at].parent
+  if parent == 0 then return 0 end
+  local previous = 0
+  for k in tree[parent].kids do
+    if k == at then return previous end
+    previous = k
+  end
+  return 0
+end
+
+-- Words joined as one type name: `rounded`, `rectangle` gives
+-- `RoundedRectangle`.
+function camel_case(ws)
+  local out = ""
+  for w in ws do out = out .. upper(sub(w, 1, 1)) .. sub(w, 2) end
+  return out
+end
+
+-- A tag's first word, lowercased: `Unpinned` gives `unpinned`, `AddedTo`
+-- gives `added`.
+function tag_first_word(tag)
+  local word = lower(sub(tag, 1, 1))
+  local k = 2
+  while k <= #tag and sub(tag, k, k) == lower(sub(tag, k, k)) do
+    word = word .. sub(tag, k, k)
+    k = k + 1
+  end
+  return word
+end
+
+-- The first argument in a function type's argument text, `a, b`.
+function first_argument(args)
+  local depth = 0
+  for i = 1, #args do
+    local ch = sub(args, i, i)
+    if ch == "(" or ch == "[" or ch == "{" then depth = depth + 1 end
+    if ch == ")" or ch == "]" or ch == "}" then depth = depth - 1 end
+    if depth == 0 and ch == "," then return trim(sub(args, 1, i - 1)) end
+  end
+  return trim(args)
+end
+
+-- `Try(Fraction, [OutOfRange])` gives `Fraction`, and any other type itself.
+function success_type(type_text)
+  local ok_type = re_find(type_text, "^Try\\(([A-Za-z0-9_.]+)")
+  return ok_type ~= nil and ok_type.groups[1] or type_text
+end
+
+-- The element type's text of a `List(...)` or a `Try` of one, else nil.
+function list_element(type_text)
+  local text = trim(type_text)
+  if starts_with(text, "Try(") and ends_with(text, ")") then text = first_argument(sub(text, 5, #text - 1)) end
+  if starts_with(text, "List(") and ends_with(text, ")") then return sub(text, 6, #text - 1) end
+  return nil
+end
+
+-- The last word of `element`, a type's text, or "" for one with no name:
+-- `Shapes.RoundShape(a)` gives `shape`.
+function element_word(element)
+  local head = re_find(element, "^[A-Za-z0-9_.]+")
+  if head == nil then return "" end
+  local type_words = name_words(last_part(head.text))
+  return #type_words > 0 and type_words[#type_words] or ""
 end
