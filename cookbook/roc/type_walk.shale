@@ -145,7 +145,8 @@
 -- (untagged or private) and test.
 --
 -- A name that resolves to no file or no type, or a file that doesn't parse,
--- is listed after the output, and the run then fails.
+-- is listed after the output, and the run then fails. A refused file's uses
+-- are unread, so walk_uses.shale's refused_line says how it is named.
 -- budget: steps=2000000000 arena_bytes=2000000000 output_bytes=8000000 reads=100000
 
 const SELF_TEST = arg("self_test", "") == "1"
@@ -200,7 +201,12 @@ function load_files(st, paths)
   for f in parsed_files(st.trees, fresh) do
     if f.err ~= "" then
       st.files[f.path] = {path = f.path, err = f.err}
-      if f.err ~= "no such file" then push(st.refused, f.path .. ": " .. f.err) end
+      if f.err ~= "no such file" then
+        -- roc_tree's `err` names the file first when roc-ast did.
+        local why = starts_with(f.err, f.path .. ": ") and sub(f.err, #f.path + 3) or f.err
+        push(st.refused, f.path .. ": " .. why)
+        push(st.refusals, {path = f.path, why = why})
+      end
     else
       local info = {path = f.path, err = "", module = module_name(f.path), nodes = f.nodes, src = split(read(f.path), "\n"), types = {}, imports = {}}
       local tree = f.nodes
@@ -474,7 +480,7 @@ function type_lines(st, id)
       st.function_count = st.function_count + 1
     end
     local key = id .. "\t" .. get(f, "name", "")
-    if st.uses and has_key(st.member_rec, key) then push(notes, uses_note(st.member_rec[key], st.app_of)) end
+    if st.uses and has_key(st.member_rec, key) then push(notes, uses_note(st.member_rec[key], st.app_of, #st.refused > 0)) end
     if #notes > 0 then anno[#anno] = anno[#anno] .. "   # " .. join(notes, "; ") end
     for l in anno do push(out, "\t" .. l) end
   end
@@ -625,7 +631,7 @@ function walk(root, module, packages_arg, max_depth, settings?)
   local trees = get(given, "trees", {})
   local clients = get(given, "clients", "")
   refuse_climbing(root, module, clients)
-  local st = {files = {}, types = {}, trees = trees, packages = package_folders(root, packages_arg, trees), dir_packages = {}, app_of = {}, refused = {}, lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, depth_of = {}, asked = {}, next = {}, beyond = {}, stopped = {}, stops = get(given, "stops", WALK_STOP), brief = get(given, "brief", WALK_BRIEF), full_depth = get(given, "full_depth", WALK_FULL_DEPTH), uses = get(given, "uses", true), named_by = get(given, "named_by", true), depth = 0, max_depth = max_depth, deferred = {}, wanted = {}, function_count = 0, constant_count = 0, contexts = {}, typing = {}, resolved = {}, precision = {}, member_rec = {}, member_list = {}, members_by_name = {}}
+  local st = {files = {}, types = {}, trees = trees, packages = package_folders(root, packages_arg, trees), dir_packages = {}, app_of = {}, refused = {}, refusals = {}, lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, depth_of = {}, asked = {}, next = {}, beyond = {}, stopped = {}, stops = get(given, "stops", WALK_STOP), brief = get(given, "brief", WALK_BRIEF), full_depth = get(given, "full_depth", WALK_FULL_DEPTH), uses = get(given, "uses", true), named_by = get(given, "named_by", true), depth = 0, max_depth = max_depth, deferred = {}, wanted = {}, function_count = 0, constant_count = 0, contexts = {}, typing = {}, resolved = {}, precision = {}, member_rec = {}, member_list = {}, members_by_name = {}}
   if module == "" then fail("type_walk: name the module to start from, as module=Pigs") end
   local start = path_normal(path_join(root, module .. ".roc"))
   if start == nil or not exists(start) then fail("type_walk: no file " .. path_join(root, module .. ".roc") .. " for module=" .. module) end
@@ -686,7 +692,8 @@ function walk(root, module, packages_arg, max_depth, settings?)
       if st.files[p].err == "" then count_uses(st, st.files[p], start) end
     end
     unused = unused_members(st)
-    if #unused > 0 then push(lines_out, "# Public, but used only in this file: " .. join(unused, ", ")) end
+    local partial = #st.refused > 0 and ", " .. AS_FAR_AS_PARSED or ""
+    if #unused > 0 then push(lines_out, "# Public, but used only in this file" .. partial .. ": " .. join(unused, ", ")) end
   end
   local modules = {}
   for item in printing_order(st) do
@@ -708,6 +715,13 @@ function walk(root, module, packages_arg, max_depth, settings?)
     for l in section.lines do push(lines_out, l) end
     named_lines = section.lines
     counts = counts .. ", named by " .. section.annotations .. " annotations and " .. section.types .. " types: " .. section.production .. " production, " .. section.test .. " test"
+  end
+  local refused = {}
+  for r in st.refusals do push(refused, r.path) end
+  refused = sort(refused)
+  if #refused > 0 then
+    counts = counts .. ", " .. #refused .. " files refused and not counted: " .. join(refused, ", ")
+    lines_out = with_refused_line(lines_out, refused_line(st))
   end
   push(lines_out, "")
   push(lines_out, counts)
@@ -818,7 +832,7 @@ function family_walk(root, names, packages_arg, max_depth, settings)
     push(out, "")
     push(out, "## " .. run.module .. "   (" .. run.start .. ")")
     for l in run.r.lines do
-      if starts_with(l, "# Imported but") or starts_with(l, "# Public, but") or starts_with(l, "# Clients:") then push(out, l) end
+      if starts_with(l, "# Refused by") or starts_with(l, "# Imported but") or starts_with(l, "# Public, but") or starts_with(l, "# Clients:") then push(out, l) end
     end
     local ids = {}
     local mine = {}
@@ -1039,6 +1053,7 @@ function self_test()
   check(failures, #others.lost == 0 and #others.refused == 0, "a client importing other root modules: lost or refused: " .. join(others.lost, "; ") .. join(others.refused, "; "))
   check(failures, has_line(others.lines, "# Clients: 1 file in 1 app, 0 importing " .. cl_at .. "pkg/Dot.roc"), "the clients line with none importing the asked module")
 
+  refused_checks(failures, walk(at .. "refused", "Coin", "", 3, {trees = trees}), ls, at)
   local lost = walk(at .. "unresolved", "Lost", "", 3, {trees = trees}).lost
   check(failures, #lost == 2, "two lost names, got " .. #lost .. ": " .. join(lost, "; "))
   check(failures, has_text(lost, "`Nowhere.Thing`: `Nowhere` is no imported module"), "a name of no import is lost")
