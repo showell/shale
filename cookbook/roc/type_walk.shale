@@ -99,8 +99,11 @@
 -- `gates/` folder, and the clients'. A file's `import game.Geom` reads the
 -- package's folder from its own header, else from the headers of the apps and
 -- packages in its folder, unless `packages=` names it. A header line counts
--- the clients' files and apps, and a member used by files in several client
--- apps says how many, `# used by 9 files in 5 apps`.
+-- the clients' files and apps and those importing the asked module, which
+-- may be none, and a member used by files in several client apps says how
+-- many, `# used by 9 files in 5 apps`. When no client imports any of the
+-- root's files, the root and the clients are taken to be named unlike, and
+-- the walk fails.
 --
 -- Each member of the asked module's types ends with its outside uses, `#
 -- used by 3 files, 1 in tests only`, or `# no outside use` (after `#
@@ -823,7 +826,7 @@ function walk(root, module, packages_arg, max_depth, settings?)
       local cl = client_files(clients, skip)
       load_files(st, cl.paths)
       st.app_of = cl.app_of
-      push(lines_out, clients_line(st, cl.paths, start))
+      push(lines_out, clients_line(st, cl.paths, start, skip))
       for p in cl.paths do push(paths, p) end
     end
   end
@@ -1071,7 +1074,12 @@ function self_test()
   -- A root written from the data root, beside clients through a mount, gives
   -- the asked file two names, and no client imports the one the walk has.
   local unlike = walk("cookbook/roc/plants/type_walk/clients/pkg", "Dot", "", 3, {trees = trees, clients = cl_at .. "apps/*"}).lost
-  check(failures, #unlike == 1 and has_text(unlike, "clients=: none of the 3 client files imports cookbook/roc/plants/type_walk/clients/pkg/Dot.roc"), "clients named unlike the root, got " .. join(unlike, "; "))
+  check(failures, #unlike == 1 and has_text(unlike, "clients=: none of the 3 client files imports any of the root's files, such as cookbook/roc/plants/type_walk/clients/pkg/Dot.roc"), "clients named unlike the root, got " .. join(unlike, "; "))
+  -- The app grid_only imports the package's Grid and not Dot, which is no
+  -- mismatch: it walks cleanly, with no client importing Dot.
+  local others = walk(cl_at .. "pkg", "Dot", "", 3, {trees = trees, clients = cl_at .. "others/*"})
+  check(failures, #others.lost == 0 and #others.refused == 0, "a client importing other root modules: lost or refused: " .. join(others.lost, "; ") .. join(others.refused, "; "))
+  check(failures, has_line(others.lines, "# Clients: 1 file in 1 app, 0 importing " .. cl_at .. "pkg/Dot.roc"), "the clients line with none importing the asked module")
 
   local lost = walk(at .. "unresolved", "Lost", "", 3, {trees = trees}).lost
   check(failures, #lost == 2, "two lost names, got " .. #lost .. ": " .. join(lost, "; "))

@@ -5,7 +5,7 @@
 --   use("cookbook:roc/walk_uses.shale")
 --   package_folders(root, given, trees), own_packages(st, tree, path)
 --                             where a file's `import pkg.Module` reads from
---   client_files(text, skip), then clients_line(st, paths, start)
+--   client_files(text, skip), then clients_line(st, paths, start, root_files)
 --                             the files `clients=` names, and their apps
 --   resolve(st, info, name)   what a type name written in a file refers to
 --   members_of(tree, at)      the annotations in a type's block
@@ -192,21 +192,26 @@ function plural(n, word)
 end
 
 -- The clients' header line, after their files are read: how many files in
--- how many apps. When none imports the asked file `start`, a lost entry says
--- so, since then the root and the clients are named by paths of two kinds.
-function clients_line(st, paths, start)
+-- how many apps, and how many of them import the asked file `start`, which
+-- may be none. When no client imports any of the root's files, the set
+-- `root_files`, a lost entry says so, since paths are compared as written and
+-- then the root and the clients are named by paths of two kinds.
+function clients_line(st, paths, start, root_files)
   local apps = {}
   local importing = 0
+  local into_root = false
   for p in paths do
     apps[st.app_of[p]] = true
     local imports = get(st.files[p], "imports", {})
     local hit = false
     for name in keys(imports) do
-      if get(imports[name], "path", "") == start then hit = true end
+      local q = get(imports[name], "path", "")
+      if q == start then hit = true end
+      if has_key(root_files, q) then into_root = true end
     end
     if hit then importing = importing + 1 end
   end
-  if importing == 0 then push(st.lost, "clients=: none of the " .. #paths .. " client files imports " .. start .. "; name root= and clients= alike, both as mount paths or both from one folder") end
+  if not into_root then push(st.lost, "clients=: none of the " .. #paths .. " client files imports any of the root's files, such as " .. start .. "; name root= and clients= alike, both as mount paths or both from one folder") end
   return "# Clients: " .. plural(#paths, "file") .. " in " .. plural(#keys(apps), "app") .. ", " .. importing .. " importing " .. start
 end
 
