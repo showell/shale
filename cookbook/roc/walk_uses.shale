@@ -433,6 +433,17 @@ function is_gates(path)
   return contains("/" .. path, "/gates/")
 end
 
+-- The value the node `i` names: an identifier's name, or a punned record
+-- field's, as `still_shapes` in `{ still_shapes }`, which roc-ast keeps as a
+-- `field` with no identifier under it (boundaries.shale reads it so too).
+-- Any other node names none, "".
+function value_named(tree, i)
+  local n = tree[i]
+  if n.kind == "e-ident" then return get(n, "raw", "") end
+  if n.kind == "field" and #n.kids == 0 and n.parent ~= 0 and tree[n.parent].kind == "e-record" then return get(n, "field", "") end
+  return ""
+end
+
 -- Where each node of the file `info` (`{path, nodes}`) sits, as `{ctx,
 -- test_values, gates}`: `ctx[i]` is `expect` inside an `expect`,
 -- `value:<name>` inside the definition of a top-level value, `block` inside a
@@ -461,11 +472,8 @@ function test_context(info)
   end
   local refs = {}
   for i = 1, #tree do
-    local n = tree[i]
-    if n.kind == "e-ident" then
-      local raw = get(n, "raw", "")
-      if has_key(tops, raw) and ctx[i] ~= "value:" .. raw then push_at(refs, raw, ctx[i]) end
-    end
+    local raw = value_named(tree, i)
+    if has_key(tops, raw) and ctx[i] ~= "value:" .. raw then push_at(refs, raw, ctx[i]) end
   end
   local test_values = {}
   local changed = true
@@ -501,8 +509,9 @@ function file_context(st, info)
 end
 
 -- The imports of the file `info` that only its tests use, sorted, by the name
--- the file uses each by (its alias, else its last part). A use is a name,
--- tag or type whose first part is that name or one the import exposes; it is
+-- the file uses each by (its alias, else its last part). A use is a name
+-- (a punned field's among them), tag or type whose first part is that name
+-- or one the import exposes; it is
 -- a test's by `in_tests`, or inside the annotation of a top-level value only
 -- expects use. A type's block is production, as other files may call its
 -- members. A gates app's are all tests, so it has none.
@@ -535,8 +544,8 @@ function test_only_imports(st, info)
     local n = tree[i]
     local c = fc.ctx[i]
     if (n.parent ~= 0 and has_key(test_anno, tostring(n.parent))) or (n.kind == "s-type-anno" and c == "none" and has_key(fc.test_values, get(n, "name", ""))) then test_anno[tostring(i)] = true end
-    local name = ""
-    if n.kind == "e-ident" or n.kind == "e-tag" then name = get(n, "raw", "") end
+    local name = value_named(tree, i)
+    if n.kind == "e-tag" then name = get(n, "raw", "") end
     if n.kind == "ty" then name = get(n, "name", "") end
     -- roc-ast keeps only `.Red` of a pattern's `Color.Red`, so the source says.
     if n.kind == "p-tag" then

@@ -877,6 +877,11 @@ function self_test()
   -- and body; Tally by an expect and by `legs_of`; Hidden by a helper nothing
   -- reads, which is no test's.
   check(failures, has_line(ls, "# Imported for tests only: Sample"), "the imports only tests use")
+  -- A punned field, `{ shades }`, names a top-level value: `shades` reaches
+  -- production that way, so Shade is no test's, and `probed` reaches only an
+  -- expect that way, so Probe is.
+  local punned = walk(at .. "punned", "Pun", "", 3, {trees = trees}).lines
+  check(failures, has_line(punned, "# Imported for tests only: Probe"), "a punned field's uses: Shade's production value counted a test's, or Probe's test value production's")
 
   -- Trip names Ride in its definition, in a member's annotation and in a
   -- top-level helper's; its own `own_plan` mentions Trip's `Plan`, not Ride's.
