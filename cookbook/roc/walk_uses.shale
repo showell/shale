@@ -1,14 +1,124 @@
--- Which code in a parsed Roc file (from `roc_tree`) is a test's, and a note
--- of how many files use a member, for `cookbook/roc/type_walk.shale`.
+-- How `cookbook/roc/type_walk.shale` resolves a type's name and finds a
+-- type's members, and how many files use each member of the asked module's
+-- types. Resolving reads only files the walk has read already (`st.files`).
 --
 --   use("cookbook:roc/walk_uses.shale")
+--   resolve(st, info, name)   what a type name written in a file refers to
+--   members_of(tree, at)      the annotations in a type's block
 --   test_context(info)     where each node sits, and the values only expects use
 --   in_tests(fc, c)        whether a node there is in tests
---   uses_note(rec)         `used by 3 files, 1 in tests only`
+--   asked_members(st, start), then count_uses(st, info, start) for each other
+--   file, then uses_note(rec), unused_members(st) and precision_note(st)
 --
 -- A use is in tests when it sits in an `expect`, in a top-level value that
 -- only expects use (directly or through other such values), or anywhere in a
 -- file under a `gates/` folder, a gates-only app.
+--
+-- A file uses a member by naming it through its import of the asked module,
+-- or by calling it as a method or through an operator. Roc's checker sends
+-- `a + b` to `a.plus(b)`, and so on for the operators in
+-- WALK_OPERATOR_METHODS, and a unary `-` to `negate` (src/check/Check.zig);
+-- `!` is always Bool's `not`. A call counts for a member of the receiver's
+-- type when the file makes that type plain (`expr_type`), and for no member
+-- of another type of the same name. A receiver it can't type counts for
+-- every member of the method's name, pooled, and keeps that member off the
+-- list of those used only in their own file.
+
+-- The builtin types, leaves of the walk.
+const WALK_BUILTINS = {Str = true, List = true, Bool = true, Try = true, Box = true, Dict = true, Set = true, Iter = true, Num = true, Int = true, Frac = true, Dec = true, F32 = true, F64 = true, U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true, Utf8Problem = true}
+
+-- The kinds of node a type declaration may sit in and still be one this
+-- recipe reads: the top level, or a type's block.
+const WALK_OUTER_KINDS = {file = true, statements = true, ["s-type-decl"] = true, associated = true}
+
+-- Whether every ancestor of node `at` is a kind in WALK_OUTER_KINDS.
+function is_outer(tree, at)
+  local k = tree[at].parent
+  while k ~= 0 do
+    if not has_key(WALK_OUTER_KINDS, tree[k].kind) then return false end
+    k = tree[k].parent
+  end
+  return true
+end
+
+-- The type in `info` whose name is `q` exactly, else nil.
+function type_named(info, q)
+  for t in info.types do
+    if t.qualified == q then return t end
+  end
+  return nil
+end
+
+-- What `name` is in the imported module `target`, whose own type `rest` may
+-- be when `name` is qualified by the module's name.
+function resolve_in_module(st, target, name, rest)
+  if has_key(target, "err") then return {kind = "lost", why = target.err} end
+  if not has_key(st.files, target.path) then return {kind = "need", path = target.path} end
+  local file = st.files[target.path]
+  if file.err == "no such file" then return {kind = "lost", why = "no file " .. target.path} end
+  if file.err ~= "" then return {kind = "lost", why = target.path .. " doesn't parse"} end
+  local t = type_named(file, name) or type_named(file, rest)
+  if t ~= nil then return {kind = "type", id = t.id} end
+  return {kind = "lost", why = "no type `" .. name .. "` in " .. target.path}
+end
+
+-- What the type name `name`, written in the file `info`, refers to:
+-- `{kind = "type", id}`, `{kind = "leaf"}`, `{kind = "need", path}` when the
+-- file that says is not read yet, or `{kind = "lost", why}`.
+function resolve(st, info, name)
+  local parts = split(name, ".")
+  if #parts == 1 then
+    local here = {}
+    for t in info.types do
+      if t.name == name then push(here, t) end
+    end
+    if #here == 1 then return {kind = "type", id = here[1].id} end
+    if #here > 1 then
+      local top = type_named(info, name) or type_named(info, info.module .. "." .. name)
+      if top ~= nil then return {kind = "type", id = top.id} end
+      return {kind = "lost", why = #here .. " types of this name in the file"}
+    end
+    if has_key(info.imports, name) then return resolve_in_module(st, info.imports[name], name, name) end
+    if has_key(WALK_BUILTINS, name) then return {kind = "leaf"} end
+    return {kind = "lost", why = "no type of this name in the file, no import of it, and no builtin"}
+  end
+  local head = parts[1]
+  local rest = join(drop(parts, 1), ".")
+  if head == info.module then
+    local t = type_named(info, name) or type_named(info, rest)
+    if t ~= nil then return {kind = "type", id = t.id} end
+    return {kind = "lost", why = "no type `" .. name .. "` in its own module"}
+  end
+  if has_key(info.imports, head) then return resolve_in_module(st, info.imports[head], name, rest) end
+  if has_key(WALK_BUILTINS, head) then return {kind = "leaf"} end
+  return {kind = "lost", why = "`" .. head .. "` is no imported module"}
+end
+
+-- The annotations in the type's own block, in source order, as `{at,
+-- constant}`: `at` is the annotation's node, and `constant` is true when its
+-- type is not written as a function. An annotation whose whole type is `_`
+-- says nothing about the type's surface, so it is left out.
+function members_of(tree, at)
+  local out = {}
+  for k in tree[at].kids do
+    if tree[k].kind == "associated" then
+      for m in tree[k].kids do
+        if tree[m].kind == "s-type-anno" and #tree[m].kids > 0 then
+          local kind = tree[tree[m].kids[1]].kind
+          if kind ~= "_" then push(out, {at = m, constant = kind ~= "ty-fn"}) end
+        end
+      end
+    end
+  end
+  return out
+end
+
+-- The member each binary operator calls on its left operand.
+const WALK_OPERATOR_METHODS = {["+"] = "plus", ["-"] = "minus", ["*"] = "times", ["/"] = "div_by", ["//"] = "div_trunc_by", ["%"] = "rem_by", ["<"] = "is_lt", ["<="] = "is_lte", [">"] = "is_gt", [">="] = "is_gte", ["=="] = "is_eq", ["!="] = "is_eq"}
+
+-- The operators' members whose two operands have one type, so the right
+-- operand's type is the left's.
+const WALK_SAME_SIDES = {is_lt = true, is_lte = true, is_gt = true, is_gte = true, is_eq = true}
 
 -- Whether the file at `path` is a gates-only app, under a `gates/` folder.
 function is_gates(path)
@@ -76,56 +186,397 @@ function in_tests(fc, c)
   return fc.gates or c == "expect" or (starts_with(c, "value:") and has_key(fc.test_values, sub(c, 7)))
 end
 
+-- The file `info`'s `test_context`, worked out once a walk.
+function file_context(st, info)
+  if not has_key(st.contexts, info.path) then st.contexts[info.path] = test_context(info) end
+  return st.contexts[info.path]
+end
+
+-- What the file `info` binds where, worked out once a walk, for `expr_type`:
+-- `scope[i]`, the top-level definition or `expect` node `i` sits in (0
+-- outside any); `binds`, the names each of those binds, by `<scope>\t<name>`,
+-- not counting the definition's own name; `annos`, the annotations at the top
+-- level or in a type's block by name, and `beside` the same by the node they
+-- sit in and name, `<parent>\t<name>`; and `decls`, how many definitions
+-- there bind each name.
+function typing_context(st, info)
+  if has_key(st.typing, info.path) then return st.typing[info.path] end
+  local tree = info.nodes
+  local scope = {}
+  local cx = {scope = scope, binds = {}, annos = {}, beside = {}, decls = {}}
+  for i = 1, #tree do
+    local n = tree[i]
+    local p = n.parent
+    local s = p == 0 and 0 or scope[p]
+    local k = n.kind
+    if s == 0 and (k == "s-decl" or k == "s-expect") and is_outer(tree, i) then s = i end
+    push(scope, s)
+    if k == "p-ident" and s ~= 0 then
+      if p == s and tree[s].kids[1] == i then
+        if tree[s].kind == "s-decl" then incr(cx.decls, get(n, "raw", "")) end
+      else
+        push_at(cx.binds, s .. "\t" .. get(n, "raw", ""), i)
+      end
+    end
+    if k == "s-type-anno" and s == 0 and is_outer(tree, i) then
+      push_at(cx.annos, get(n, "name", ""), i)
+      push_at(cx.beside, p .. "\t" .. get(n, "name", ""), i)
+    end
+  end
+  st.typing[info.path] = cx
+  return cx
+end
+
+-- `resolve_type`'s work, which that function keeps by file and name.
+function resolve_alias(st, info, name)
+  local here = info
+  local want = name
+  for step = 1, 8 do
+    local r = resolve(st, here, want)
+    if r.kind == "leaf" then return "leaf" end
+    if r.kind ~= "type" then return nil end
+    local t = st.types[r.id]
+    local file = st.files[t.path]
+    local kids = file.nodes[t.at].kids
+    if #kids < 2 or file.nodes[kids[2]].kind ~= "ty" then return r.id end
+    local head = file.nodes[kids[1]]
+    if contains(sub(file.src[head.end_line], head.end_col, head.end_col + 3), "::") then return r.id end
+    here = file
+    want = get(file.nodes[kids[2]], "name", "")
+  end
+  return nil
+end
+
+-- What the type name `name`, written in the file `info`, is, an alias
+-- (`Across : Width`) followed to the type it names: a type's id, `leaf` for a
+-- builtin, or nil when it can't be told, as when its file isn't read.
+function resolve_type(st, info, name)
+  local key = info.path .. "\t" .. name
+  if not has_key(st.resolved, key) then st.resolved[key] = resolve_alias(st, info, name) or false end
+  return st.resolved[key] or nil
+end
+
+-- The type a type annotation's node `at` in the file `info` names, as
+-- `resolve_type` gives it: a name, or an applied name by its head. Any other
+-- form (a record, a function, a type variable) is nil.
+function anno_type(st, info, at)
+  local n = info.nodes[at]
+  local name = ""
+  if n.kind == "ty" then name = get(n, "name", "") end
+  if n.kind == "ty-apply" then name = get(info.nodes[n.kids[1]], "name", "") end
+  if name == "" then return nil end
+  return resolve_type(st, info, name)
+end
+
+-- The type of a value the annotation `anno` in the file `info` declares: what
+-- a call of it gives when `applied`, else the constant's own type.
+function anno_value_type(st, info, anno, applied)
+  local at = info.nodes[anno].kids[1]
+  local ty = info.nodes[at]
+  if applied then
+    if ty.kind ~= "ty-fn" then return nil end
+    return anno_type(st, info, ty.kids[#ty.kids])
+  end
+  if ty.kind == "ty-fn" then return nil end
+  return anno_type(st, info, at)
+end
+
+-- The member `name` of the type `id`, as `{info, at}`, its file and its
+-- annotation, else nil.
+function member_anno(st, id, name)
+  local t = st.types[id]
+  local info = st.files[t.path]
+  for member in members_of(info.nodes, t.at) do
+    if get(info.nodes[member.at], "name", "") == name then return {info = info, at = member.at} end
+  end
+  return nil
+end
+
+-- The type of the qualified value `raw`, `Pixels.zero` or `Distance.metres`
+-- when `applied`, written in the file `info`: from its member's annotation.
+function qualified_type(st, info, raw, applied)
+  local parts = split(raw, ".")
+  local id = resolve_type(st, info, join(take(parts, #parts - 1), "."))
+  if id == nil or id == "leaf" then return nil end
+  local m = member_anno(st, id, parts[#parts])
+  if m == nil then return nil end
+  return anno_value_type(st, m.info, m.at, applied)
+end
+
+-- The type of the bare value `raw` that no definition binds locally, from
+-- the file's one annotation and definition of that name, else nil.
+function top_value_type(st, info, cx, raw, applied)
+  local annos = get(cx.annos, raw, {})
+  if #annos ~= 1 or get(cx.decls, raw, 0) > 1 then return nil end
+  return anno_value_type(st, info, annos[1], applied)
+end
+
+-- The type of the field `field` of the record type `id`, else nil.
+function field_type(st, id, field)
+  local t = st.types[id]
+  local info = st.files[t.path]
+  local kids = info.nodes[t.at].kids
+  if #kids < 2 or info.nodes[kids[2]].kind ~= "ty-record" then return nil end
+  for k in info.nodes[kids[2]].kids do
+    if get(info.nodes[k], "name", "") == field then return anno_type(st, info, info.nodes[k].kids[1]) end
+  end
+  return nil
+end
+
+-- The type the nominal pattern `Pixels.(p)`, its node `at`, gives `p`: the
+-- type the nominal type is over, else nil. A tag's pattern, `Ok(p)`, is nil.
+function backing_type(st, info, at)
+  local n = info.nodes[at]
+  local raw = get(n, "raw", "")
+  if #n.kids ~= 1 or sub(info.src[n.line], n.col + #raw, n.col + #raw + 1) ~= ".(" then return nil end
+  local id = resolve_type(st, info, raw)
+  if id == nil or id == "leaf" then return nil end
+  local t = st.types[id]
+  local file = st.files[t.path]
+  local kids = file.nodes[t.at].kids
+  local head = file.nodes[kids[1]]
+  if #kids < 2 or not contains(sub(file.src[head.end_line], head.end_col, head.end_col + 3), "::") then return nil end
+  return anno_type(st, file, kids[2])
+end
+
+-- The type of the parameter `p`, in the lambda's `args` node `args`, of the
+-- definition `s`, from the definition's annotation beside it, else nil.
+function param_type(st, info, cx, s, args, p)
+  local tree = info.nodes
+  local found = get(cx.beside, tree[s].parent .. "\t" .. get(tree[tree[s].kids[1]], "raw", ""), {})
+  if #found ~= 1 then return nil end
+  local ty = tree[tree[found[1]].kids[1]]
+  local params = tree[args].kids
+  if ty.kind ~= "ty-fn" or #ty.kids - 1 ~= #params then return nil end
+  for k = 1, #params do
+    if params[k] == p then return anno_type(st, info, ty.kids[k]) end
+  end
+  return nil
+end
+
+-- The type of the expression at node `at` in the file `info` (whose
+-- `typing_context` is `cx`), where the file makes it plain, as a type's id,
+-- `leaf` for a builtin, or nil. It is plain for a parameter of a definition
+-- whose annotation gives its type, a local or top-level value bound once in
+-- reach, a qualified constant or call (`Pixels.zero`, `Distance.metres(2)`),
+-- a call of a top-level annotated function, a field of a value of a record
+-- type, a method call on a value of a known type, by the method's
+-- annotation, and the value a nominal pattern `Pixels.(p)` unwraps. A name
+-- bound twice in a definition, or a `$` variable, is nil.
+function expr_type(st, info, cx, at, depth)
+  if depth > 12 then return nil end
+  local tree = info.nodes
+  local n = tree[at]
+  if n.kind == "e-tuple" and #n.kids == 1 then return expr_type(st, info, cx, n.kids[1], depth + 1) end
+  if n.kind == "e-apply" or n.kind == "e-ident" then
+    local applied = n.kind == "e-apply"
+    local f = applied and tree[n.kids[1]] or n
+    if f.kind ~= "e-ident" then return nil end
+    local raw = get(f, "raw", "")
+    if contains(raw, ".") then return qualified_type(st, info, raw, applied) end
+    if starts_with(raw, "$") then return nil end
+    local binds = get(cx.binds, cx.scope[at] .. "\t" .. raw, {})
+    if #binds == 0 then return top_value_type(st, info, cx, raw, applied) end
+    if #binds > 1 or applied then return nil end
+    local p = binds[1]
+    local up = tree[tree[p].parent]
+    if up.kind == "s-decl" and up.kids[1] == p then return expr_type(st, info, cx, up.kids[2], depth + 1) end
+    if up.kind == "p-tag" then return backing_type(st, info, tree[p].parent) end
+    local s = cx.scope[at]
+    if up.kind == "args" and tree[s].kind == "s-decl" and tree[s].kids[2] == up.parent then return param_type(st, info, cx, s, tree[p].parent, p) end
+    return nil
+  end
+  if n.kind == "e-method-call" then
+    local recv = expr_type(st, info, cx, tree[n.kids[1]].kids[1], depth + 1)
+    if recv == nil or recv == "leaf" then return nil end
+    local name = get(n, "method", "")
+    if starts_with(name, ".") then name = sub(name, 2) end
+    local m = member_anno(st, recv, name)
+    if m == nil then return nil end
+    return anno_value_type(st, m.info, m.at, true)
+  end
+  if n.kind == "e-field-access" then
+    local ty = expr_type(st, info, cx, tree[n.kids[1]].kids[1], depth + 1)
+    for k in drop(n.kids, 1) do
+      if ty == nil or ty == "leaf" then return nil end
+      ty = field_type(st, ty, get(tree[k], "field", ""))
+    end
+    return ty
+  end
+  return nil
+end
+
+-- Records each member of the asked module's types, to count its outside
+-- uses: `st.member_rec` by type id and name, and `st.members_by_name`.
+function asked_members(st, start)
+  local info = st.files[start]
+  for t in info.types do
+    for member in members_of(info.nodes, t.at) do
+      local name = get(info.nodes[member.at], "name", "")
+      local label = name
+      if starts_with(t.qualified, t.module .. ".") then label = sub(t.qualified, #t.module + 2) .. "." .. name end
+      if t.qualified ~= t.module and not starts_with(t.qualified, t.module .. ".") then label = t.qualified .. "." .. name end
+      local rec = {label = label, line = info.nodes[member.at].line, prod = {}, test = {}, method_prod = {}, method_test = {}, op_prod = {}, op_test = {}}
+      st.member_rec[t.id .. "\t" .. name] = rec
+      push(st.member_list, rec)
+      push_at(st.members_by_name, name, rec)
+    end
+  end
+  return nil
+end
+
+-- The member a dotted name such as `Geom.AheadPoint.at_height`, split into
+-- `parts`, names in the asked file `start`, or nil: the type is the parts
+-- before the last, with the module's name or without it.
+function member_named(st, start, parts)
+  local n = #parts
+  if n < 2 then return nil end
+  local type_parts = take(parts, n - 1)
+  local candidates = {join(type_parts, ".")}
+  if n > 2 then push(candidates, join(drop(type_parts, 1), ".")) end
+  for q in candidates do
+    local t = type_named(st.files[start], q)
+    if t ~= nil and has_key(st.member_rec, t.id .. "\t" .. parts[n]) then return st.member_rec[t.id .. "\t" .. parts[n]] end
+  end
+  return nil
+end
+
+-- Counts one call of the member `name`, by a method or (`kind` `op`) an
+-- operator, in the file `path`, on a receiver of the type `ty`: for that
+-- type's member when it is one of the asked module's, for every member of
+-- the name, pooled, when `ty` is nil, and for none otherwise.
+function count_call(st, path, test, name, ty, kind)
+  if ty == nil then
+
+    incr(st.precision, kind .. "_pooled")
+    for rec in st.members_by_name[name] do
+      local into = test and rec[kind .. "_test"] or rec[kind .. "_prod"]
+      into[path] = true
+    end
+    return nil
+  end
+  incr(st.precision, kind .. "_typed")
+  local key = ty .. "\t" .. name
+  if has_key(st.asked, ty) and has_key(st.member_rec, key) then
+    if test then st.member_rec[key].test[path] = true else st.member_rec[key].prod[path] = true end
+
+  end
+  return nil
+end
+
+-- Counts the file `info`'s uses of the asked module's members: names through
+-- its import of the asked file `start`, method calls, and operators.
+function count_uses(st, info, start)
+  local fc = file_context(st, info)
+  local cx = typing_context(st, info)
+  local tree = info.nodes
+  for i = 1, #tree do
+    local n = tree[i]
+    if n.kind == "e-ident" then
+      local parts = split(get(n, "raw", ""), ".")
+      if #parts > 1 and get(get(info.imports, parts[1], {}), "path", "") == start then
+        local rec = member_named(st, start, parts)
+        if rec ~= nil then
+          if in_tests(fc, fc.ctx[i]) then rec.test[info.path] = true else rec.prod[info.path] = true end
+        end
+      end
+    elseif n.kind == "e-method-call" then
+      local name = get(n, "method", "")
+      if starts_with(name, ".") then name = sub(name, 2) end
+      if has_key(st.members_by_name, name) then count_call(st, info.path, in_tests(fc, fc.ctx[i]), name, expr_type(st, info, cx, tree[n.kids[1]].kids[1], 0), "method") end
+    elseif n.kind == "e-binop" or (n.kind == "unary" and get(n, "value", "") == "-") then
+      local name = n.kind == "unary" and "negate" or get(WALK_OPERATOR_METHODS, get(n, "op", ""), "")
+      if has_key(st.members_by_name, name) then
+        local ty = expr_type(st, info, cx, n.kids[1], 0)
+        if ty == nil and has_key(WALK_SAME_SIDES, name) then ty = expr_type(st, info, cx, n.kids[2], 0) end
+        count_call(st, info.path, in_tests(fc, fc.ctx[i]), name, ty, "op")
+      end
+    end
+  end
+  return nil
+end
+
 function plural(n, word)
   return n .. " " .. word .. (n == 1 and "" or "s")
 end
 
--- A member's outside uses as `{files, in_tests, method_files,
--- method_in_tests}`, from its record's sets of files, `prod`, `test`,
--- `method_prod` and `method_test`: the files that name it, those whose every
--- use is in tests, and the same for the files that only call a method of its
--- name.
+-- How many files of `set`, a set of paths, are not in `seen`, and how many of
+-- those are not in `prod` either, so only tests use the member there; each
+-- is then added to `seen`.
+function fresh_files(seen, set, prod)
+  local files = 0
+  local in_tests = 0
+  for p in sort(keys(set)) do
+    if not has_key(seen, p) then
+      files = files + 1
+      if not has_key(prod, p) then in_tests = in_tests + 1 end
+    end
+  end
+  for p in keys(set) do seen[p] = true end
+  return {files = files, in_tests = in_tests}
+end
+
+-- A member's outside uses as `{named, method, op}`, each `{files,
+-- in_tests}`, from its record's sets of files: those that name it or call it
+-- on a receiver of its type, then those of the rest that call a method of
+-- its name on a receiver of no known type, then those of the rest that apply
+-- its operator so.
 function uses_of(rec)
-  local out = {files = 0, in_tests = 0, method_files = 0, method_in_tests = 0}
+  local seen = {}
   local named = {}
   for p in keys(rec.prod) do named[p] = true end
   for p in keys(rec.test) do named[p] = true end
-  for p in keys(named) do
-    out.files = out.files + 1
-    if not has_key(rec.prod, p) then out.in_tests = out.in_tests + 1 end
-  end
+  local out = {named = fresh_files(seen, named, rec.prod)}
   local called = {}
   for p in keys(rec.method_prod) do called[p] = true end
   for p in keys(rec.method_test) do called[p] = true end
-  for p in keys(called) do
-    if not has_key(named, p) then
-      out.method_files = out.method_files + 1
-      if not has_key(rec.method_prod, p) then out.method_in_tests = out.method_in_tests + 1 end
+  out.method = fresh_files(seen, called, rec.method_prod)
+  local applied = {}
+  for p in keys(rec.op_prod) do applied[p] = true end
+  for p in keys(rec.op_test) do applied[p] = true end
+  out.op = fresh_files(seen, applied, rec.op_prod)
+  return out
+end
+
+-- Whether no other file uses the member, by name, by a typed call, or by a
+-- call its name or operator might be.
+function is_unused(rec)
+  local u = uses_of(rec)
+  return u.named.files == 0 and u.method.files == 0 and u.op.files == 0
+end
+
+-- The note after a member's annotation: `used by 3 files, 1 in tests only;
+-- by method name in 2 more; by operator, untyped, in 1 more`.
+function uses_note(rec)
+  local u = uses_of(rec)
+  local parts = {}
+  local kinds = {{u.named, "used by ", ""}, {u.method, "by method name in ", "used by method name only, in "}, {u.op, "by operator, untyped, in ", "used by operator only, untyped, in "}}
+  for k in kinds do
+    local c = k[1]
+    if c.files > 0 then
+      local text = k[2] .. plural(c.files, "file")
+      if #parts > 0 then text = k[2] .. c.files .. " more" elseif k[3] ~= "" then text = k[3] .. plural(c.files, "file") end
+      if c.in_tests > 0 then text = text .. ", " .. c.in_tests .. " in tests only" end
+      push(parts, text)
     end
+  end
+  if #parts == 0 then return "no outside use" end
+  return join(parts, "; ")
+end
+
+-- The labels of the asked module's members no other file uses, in file
+-- order.
+function unused_members(st)
+  local out = {}
+  for rec in st.member_list do
+    if is_unused(rec) then push(out, rec.label) end
   end
   return out
 end
 
--- Whether no other file uses the member, by name or by a method's name.
-function is_unused(rec)
-  local u = uses_of(rec)
-  return u.files == 0 and u.method_files == 0
-end
-
--- The note after a member's annotation: `used by 3 files, 1 in tests only`.
-function uses_note(rec)
-  local u = uses_of(rec)
-  if u.files == 0 and u.method_files == 0 then return "no outside use" end
-  local parts = {}
-  if u.files > 0 then
-    local named = "used by " .. plural(u.files, "file")
-    if u.in_tests > 0 then named = named .. ", " .. u.in_tests .. " in tests only" end
-    push(parts, named)
-  end
-  if u.method_files > 0 then
-    local called = u.files > 0 and "by method name in " .. u.method_files .. " more" or "used by method name only, in " .. plural(u.method_files, "file")
-    if u.method_in_tests > 0 then called = called .. ", " .. u.method_in_tests .. " in tests only" end
-    push(parts, called)
-  end
-  return join(parts, "; ")
+-- The counts line's note of how many method calls and operators of the
+-- asked members' names had a receiver typed, and how many were pooled.
+function precision_note(st)
+  local p = st.precision
+  return ", method calls " .. get(p, "method_typed", 0) .. " typed and " .. get(p, "method_pooled", 0) .. " pooled, operators " .. get(p, "op_typed", 0) .. " typed and " .. get(p, "op_pooled", 0) .. " pooled"
 end

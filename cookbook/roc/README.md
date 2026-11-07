@@ -178,6 +178,10 @@ end, and fails the run.
   function's. An annotation of type `_` and the helpers outside any type's
   block are left out. It is for reviewing the types alone. A package outside the
   root needs `packages=`, as below; a name it can't resolve fails the run.
+  Each of the module's members ends with how many other files use it: by
+  name, or by a method call or operator on a receiver the file plainly types
+  as its type. A call on a receiver it can't type is counted apart, by name,
+  and the counts line says how many calls were typed and how many pooled.
 
       cd <repo> && shale <shale>/cookbook/roc/type_walk.shale module=Pigs packages=lib=repos:roc-apps/canvas_apps/lib
 
@@ -186,6 +190,9 @@ end, and fails the run.
 These files are loaded with `use("cookbook:roc/<file>.shale")` and are not
 run on their own.
 
+- [walk_uses.shale](walk_uses.shale): `type_walk`'s name resolution and its
+  counts of each member's outside uses, with the rules for typing a method
+  call's receiver and the operators Roc sends to members (`<` to `is_lt`).
 - [parsed.shale](parsed.shale): the recipes check every .roc file in a
   tree, and some files may not parse. This library lets a recipe check the
   files that do parse, print what it found, and then fail with a list of
