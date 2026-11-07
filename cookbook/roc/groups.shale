@@ -73,7 +73,22 @@ function closed_group(ls, open_groups, close_line, close, last_code, tokens, fix
 end
 
 const WORD_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
-const WORD = "^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*"
+-- Searched for with `from` at a word character, so it matches there. A data
+-- line can run to 80,000 bytes, and copying the rest of the line at each word
+-- would cost the square of that.
+const WORD = "[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*"
+
+-- Whether the code before column `i` of `l` ends in the keyword `where`, so
+-- that a `[` there opens a `where` clause. It looks back from `i` only, for
+-- the same reason.
+function follows_where(l, i)
+  local j = i - 1
+  while j > 0 and (sub(l, j, j) == " " or sub(l, j, j) == "\t") do j = j - 1 end
+  if j < 5 or sub(l, j - 4, j) ~= "where" then return false end
+  if j == 5 then return true end
+  local b = sub(l, j - 5, j - 5)
+  return b == " " or (b == "\t" and trim(sub(l, 1, j - 5)) == "")
+end
 
 -- The start of a method constraint (`k.is_eq :`). In a `where` clause's
 -- brackets, only a comma followed by one of these, or ending its line,
@@ -116,10 +131,12 @@ function groups_in_lines(ls)
     while i <= n do
       local c = sub(l, i, i)
       local code = c
-      if find(WORD_CHARS, c) ~= nil then
+      if c == " " then
+        -- A space only separates, and spaces are the most common character.
+      elseif find(WORD_CHARS, c) ~= nil then
         -- A name right after a dot continues a path, as in `f(x).name`.
         if sub(l, i - 1, i - 1) ~= "." or sub(l, i - 2, i - 2) == "." then tokens = tokens + 1 end
-        i = i + #(re_find(sub(l, i), WORD).text) - 1
+        i = i + #(re_find(l, WORD, {from = i}).text) - 1
       elseif c == "\"" or c == "'" then
         tokens = tokens + 1
         i = i + 1
@@ -131,8 +148,7 @@ function groups_in_lines(ls)
         fixed = fixed + 1
         break
       elseif has_key(OPENERS, c) then
-        local text_before = trim(sub(l, 1, i - 1))
-        local is_where = c == "[" and (text_before == "where" or ends_with(text_before, " where"))
+        local is_where = c == "[" and follows_where(l, i)
         push(open_groups, opened_group(line, i, OPENERS[c], is_where, tokens, fixed))
       elseif (c == "-" or c == "=") and sub(l, i + 1, i + 1) == ">" and sub(l, i - 1, i - 1) == " " and #open_groups > 0 then
         open_groups[#open_groups].has_arrow = true
@@ -158,8 +174,7 @@ function groups_in_lines(ls)
         end
       elseif c == "," and #open_groups > 0 then
         local g = open_groups[#open_groups]
-        local rest = sub(l, i + 1)
-        if not g.is_where or trim(rest) == "" or re_find(rest, CONSTRAINT) ~= nil then
+        if not g.is_where or trim(sub(l, i + 1)) == "" or re_find(sub(l, i + 1), CONSTRAINT) ~= nil then
           g.commas = g.commas + 1
           g.last = i
         end
@@ -199,7 +214,8 @@ end
 -- holding a comma would be split wrongly, so it never makes a row.
 const LITERAL_ITEM = [=[^(-?[0-9][0-9A-Za-z_.]*|"[^"\\$]*"|'[^']+'|[A-Z][A-Za-z0-9]*)$]=]
 function is_literal_row(l, g, width)
-  if line_width(l) > width then return false end
+  -- A line's width is at least its length, which costs nothing to read.
+  if #l > width or line_width(l) > width then return false end
   local c = sub(l, g.open, g.open)
   if c == "(" then
     local b = char_before(l, g.open)
