@@ -188,10 +188,14 @@ end, and fails the run.
   and the counts line says how many calls were typed and how many pooled.
   A package that apps use is walked from outside it, with `clients=` naming
   the apps, so their uses and signatures count too, and a member used across
-  several apps says how many (`used by 9 files in 5 apps`).
+  several apps says how many (`used by 9 files in 5 apps`). `modules=A,B,C`
+  walks sibling modules as one family: the types two or more reach once,
+  each member's types and signatures with its private functions', and a
+  table of their public names by shape, with the error tags each answers.
 
       cd <repo> && shale <shale>/cookbook/roc/type_walk.shale module=Pigs packages=lib=repos:roc-apps/canvas_apps/lib
       shale cookbook:roc/type_walk.shale root=repos:roc-apps/canvas_apps/lib module=Brush clients=repos:roc-apps/canvas_apps/*
+      cd canvas_apps && shale <shale>/cookbook/roc/type_walk.shale root=safari modules=TreeSighting,RailSighting,TowerSighting packages=lib=repos:roc-apps/canvas_apps/lib
 
 ## Libraries
 
@@ -201,7 +205,10 @@ run on their own.
 - [walk_uses.shale](walk_uses.shale): `type_walk`'s package folders and
   client files, its name resolution and its
   counts of each member's outside uses, with the rules for typing a method
-  call's receiver and the operators Roc sends to members (`<` to `is_lt`).
+  call's receiver and the operators Roc sends to members (`<` to `is_lt`),
+  and a family member's private functions and public names.
+- [walk_family.shale](walk_family.shale): `type_walk`'s printing order, the
+  family table and its shape rule, and the self-test's checks.
 - [parsed.shale](parsed.shale): the recipes check every .roc file in a
   tree, and some files may not parse. This library lets a recipe check the
   files that do parse, print what it found, and then fail with a list of
