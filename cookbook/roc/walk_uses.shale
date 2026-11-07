@@ -3,6 +3,8 @@
 -- types. Resolving reads only files the walk has read already (`st.files`).
 --
 --   use("cookbook:roc/walk_uses.shale")
+--   load_files(st, paths), load_imports(st)
+--                             parse files into `st.files` and `st.types`
 --   package_folders(root, given, trees), own_packages(st, tree, path)
 --                             where a file's `import pkg.Module` reads from
 --   client_files(text, skip), then clients_line(st, paths, start, root_files)
@@ -17,7 +19,11 @@
 --   test_context(info)     where each node sits, and the values only expects use
 --   in_tests(fc, c)        whether a node there is in tests
 --   asked_members(st, start), then count_uses(st, info, start) for each other
---   file, then uses_note(rec, app_of), unused_members(st) and precision_note(st)
+--   file, then uses_note(rec, app_of), unused_members(st) and precision_note(st).
+--   Several modules may be asked at once: asked_members for each, their files
+--   in the set `st.asked_files`, and count_uses once a file. Each member's
+--   record keeps `sites`, `{path, at}` for each node that names it or calls
+--   it on a receiver of its type, in production or tests.
 --   refused_line(st), with_refused_line(lines, line)
 --                             the files roc-ast refused, named before the counts
 --
@@ -101,6 +107,95 @@ function parsed_files(trees, paths)
   local out = {}
   for p in paths do push(out, trees[p]) end
   return out
+end
+
+-- The type declaration's name with the names of the declarations it is
+-- nested in: `Pigs.PigInterest`.
+function qualified_name(tree, at)
+  local parts = {get(tree[tree[at].kids[1]], "name", "")}
+  local k = tree[at].parent
+  while k ~= 0 do
+    if tree[k].kind == "s-type-decl" then
+      local name = get(tree[tree[k].kids[1]], "name", "")
+      local grown = {name}
+      for p in parts do push(grown, p) end
+      parts = grown
+    end
+    k = tree[k].parent
+  end
+  return join(parts, ".")
+end
+
+-- Parses the files in `paths` not read before and records what each
+-- declares and imports, in `st.files` and `st.types`; a file roc-ast refuses
+-- goes in `st.refused` and `st.refusals`.
+function load_files(st, paths)
+  local fresh = {}
+  for p in paths do
+    if not has_key(st.files, p) then push(fresh, p) end
+  end
+  if #fresh == 0 then return nil end
+  for f in parsed_files(st.trees, fresh) do
+    if f.err ~= "" then
+      st.files[f.path] = {path = f.path, err = f.err}
+      if f.err ~= "no such file" then
+        -- roc_tree's `err` names the file first when roc-ast did.
+        local why = starts_with(f.err, f.path .. ": ") and sub(f.err, #f.path + 3) or f.err
+        push(st.refused, f.path .. ": " .. why)
+        push(st.refusals, {path = f.path, why = why})
+      end
+    else
+      -- A library uses no other, so this is declared.shale's module_name,
+      -- the file's name less `.roc`.
+      local base = basename(f.path)
+      local info = {path = f.path, err = "", module = sub(base, 1, #base - 4), nodes = f.nodes, src = split(read(f.path), "\n"), types = {}, imports = {}}
+      local tree = f.nodes
+      local own = own_packages(st, tree, f.path)
+      for i = 1, #tree do
+        local n = tree[i]
+        if n.kind == "s-type-decl" and is_outer(tree, i) and get(tree[n.kids[1]], "name", "") ~= "" then
+          local q = qualified_name(tree, i)
+          local q_parts = split(q, ".")
+          local t = {id = f.path .. "#" .. q, path = f.path, module = info.module, qualified = q, name = q_parts[#q_parts], at = i, line = n.line}
+          push(info.types, t)
+          st.types[t.id] = t
+        end
+        if n.kind == "s-import" and is_outer(tree, i) then
+          local raw = get(n, "raw", "")
+          local parts = split(raw, ".")
+          local target = {}
+          if #parts == 1 then
+            target = {path = path_normal(path_join(dirname(f.path), raw .. ".roc"))}
+          else
+            local pkg = has_key(own, parts[1]) and own[parts[1]] or get(st.packages, parts[1], {err = "no app in the root names the package `" .. parts[1] .. "`: pass packages=" .. parts[1] .. "=<folder>"})
+            if has_key(pkg, "err") then target = {err = pkg.err} else target = {path = path_join(pkg.dir, join(drop(parts, 1), "/") .. ".roc")} end
+          end
+          info.imports[parts[#parts]] = target
+        end
+      end
+      st.files[f.path] = info
+    end
+  end
+  return nil
+end
+
+-- Reads every file the files read import, and theirs, so a receiver's type
+-- resolves when the uses are counted.
+function load_imports(st)
+  local more = true
+  while more do
+    local found = {}
+    for p in keys(st.files) do
+      local imports = get(st.files[p], "imports", {})
+      for name in keys(imports) do
+        local q = get(imports[name], "path", "")
+        if q ~= "" and not has_key(st.files, q) then found[q] = true end
+      end
+    end
+    load_files(st, sort(keys(found)))
+    more = #keys(found) > 0
+  end
+  return nil
 end
 
 -- The packages an app's or a package's header names, from its tree, as
@@ -627,7 +722,7 @@ function asked_members(st, start)
       local label = name
       if starts_with(t.qualified, t.module .. ".") then label = sub(t.qualified, #t.module + 2) .. "." .. name end
       if t.qualified ~= t.module and not starts_with(t.qualified, t.module .. ".") then label = t.qualified .. "." .. name end
-      local rec = {label = label, line = info.nodes[member.at].line, prod = {}, test = {}, method_prod = {}, method_test = {}, op_prod = {}, op_test = {}}
+      local rec = {label = label, line = info.nodes[member.at].line, prod = {}, test = {}, method_prod = {}, method_test = {}, op_prod = {}, op_test = {}, sites = {}}
       st.member_rec[t.id .. "\t" .. name] = rec
       push(st.member_list, rec)
       push_at(st.members_by_name, name, rec)
@@ -656,9 +751,8 @@ end
 -- operator, in the file `path`, on a receiver of the type `ty`: for that
 -- type's member when it is one of the asked module's, for every member of
 -- the name, pooled, when `ty` is nil, and for none otherwise.
-function count_call(st, path, test, name, ty, kind)
+function count_call(st, path, test, name, ty, kind, at)
   if ty == nil then
-
     incr(st.precision, kind .. "_pooled")
     for rec in st.members_by_name[name] do
       local into = test and rec[kind .. "_test"] or rec[kind .. "_prod"]
@@ -669,37 +763,43 @@ function count_call(st, path, test, name, ty, kind)
   incr(st.precision, kind .. "_typed")
   local key = ty .. "\t" .. name
   if has_key(st.asked, ty) and has_key(st.member_rec, key) then
-    if test then st.member_rec[key].test[path] = true else st.member_rec[key].prod[path] = true end
+    local rec = st.member_rec[key]
+    if test then rec.test[path] = true else rec.prod[path] = true end
+    push(rec.sites, {path = path, at = at})
   end
   return nil
 end
 
--- Counts the file `info`'s uses of the asked module's members: names through
--- its import of the asked file `start`, method calls, and operators.
+-- Counts the file `info`'s uses of the asked modules' members: names through
+-- its import of the asked file `start` or of a file in `st.asked_files`,
+-- method calls, and operators.
 function count_uses(st, info, start)
   local fc = file_context(st, info)
   local cx = typing_context(st, info)
   local tree = info.nodes
+  local asked_files = get(st, "asked_files", {})
   for i = 1, #tree do
     local n = tree[i]
     if n.kind == "e-ident" then
       local parts = split(get(n, "raw", ""), ".")
-      if #parts > 1 and get(get(info.imports, parts[1], {}), "path", "") == start then
-        local rec = member_named(st, start, parts)
+      local target = #parts > 1 and get(get(info.imports, parts[1], {}), "path", "") or ""
+      if target ~= "" and (target == start or has_key(asked_files, target)) then
+        local rec = member_named(st, target, parts)
         if rec ~= nil then
           if in_tests(fc, fc.ctx[i]) then rec.test[info.path] = true else rec.prod[info.path] = true end
+          push(rec.sites, {path = info.path, at = i})
         end
       end
     elseif n.kind == "e-method-call" then
       local name = get(n, "method", "")
       if starts_with(name, ".") then name = sub(name, 2) end
-      if has_key(st.members_by_name, name) then count_call(st, info.path, in_tests(fc, fc.ctx[i]), name, expr_type(st, info, cx, tree[n.kids[1]].kids[1], 0), "method") end
+      if has_key(st.members_by_name, name) then count_call(st, info.path, in_tests(fc, fc.ctx[i]), name, expr_type(st, info, cx, tree[n.kids[1]].kids[1], 0), "method", i) end
     elseif n.kind == "e-binop" or (n.kind == "unary" and get(n, "value", "") == "-") then
       local name = n.kind == "unary" and "negate" or get(WALK_OPERATOR_METHODS, get(n, "op", ""), "")
       if has_key(st.members_by_name, name) then
         local ty = expr_type(st, info, cx, n.kids[1], 0)
         if ty == nil and has_key(WALK_SAME_SIDES, name) then ty = expr_type(st, info, cx, n.kids[2], 0) end
-        count_call(st, info.path, in_tests(fc, fc.ctx[i]), name, ty, "op")
+        count_call(st, info.path, in_tests(fc, fc.ctx[i]), name, ty, "op", i)
       end
     end
   end
