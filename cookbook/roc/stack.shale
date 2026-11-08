@@ -46,10 +46,17 @@
 --   - A group of three or more `Bool`s or Bool literals is told that a flag
 --     a caller passes should be a tag, as roc-style.md says, whatever its
 --     tokens.
---   - A function's annotation (`name : A, B, C -> R`) is read to its first
---     arrow, over the lines `roc fmt` wraps it onto. When it is a finding for
---     its arguments, at its first line, the function's lambda arguments on
---     the line after it are not reported again.
+--   - A function's annotation (`name : A, B, C -> R`), or a type alias of a
+--     function (`Pick(a) : a, a, a -> a`), is read to its first arrow, over
+--     the lines `roc fmt` wraps it onto, from a type that starts on the line
+--     after the colon, past a comment on a line of its own, to a blank line.
+--     When it is a finding for its arguments, at its first line, the
+--     function's lambda arguments on the line after it are not reported
+--     again.
+--   - A field of a record type on one line whose type is a function
+--     (`{ on_pick : U8, U8, U8 -> U8 }`) is read the same way, its arguments
+--     counted up to its arrow, unless its file's header dictates it (a
+--     platform's `requires { step : U8, U8, U8 -> U8 }`).
 --   - The annotation of a name its file's header dictates is no finding for
 --     its arguments, as the platform chose them: what an app's header
 --     provides, and what a platform's header requires and provides
@@ -133,7 +140,26 @@ function shortened(s)
   return s
 end
 
-const ANNOTATION_START ="^[a-z_][A-Za-z0-9_]*!? : (.*)$"
+-- The start of a function's annotation (`name :`) or of a type alias
+-- (`Handler :`, `Pick(a) :`), the type's text after it, which may be empty
+-- when the type starts on the next line.
+const ANNOTATION_START = "^[a-z_][A-Za-z0-9_]*!? :(?: (.*))?$"
+const ALIAS_START = "^[A-Z][A-Za-z0-9_]*(?:\\([^()]*\\))? :(?: (.*))?$"
+
+-- The start of an annotation or alias on the line `l`, read with type_line,
+-- or nil.
+function annotation_start(l)
+  local m = re_find(l, ANNOTATION_START)
+  if m ~= nil then return m end
+  return re_find(l, ALIAS_START)
+end
+
+-- The type text an annotation's start gives on its own line.
+function start_text(m)
+  local text = get(m.groups, 1, "")
+  if text == nil then return "" end
+  return text
+end
 
 -- Line `l` without a `#` comment, trimmed. A type has no string, so the
 -- first `#` starts the comment.
@@ -146,23 +172,26 @@ end
 -- If line `i` of `ls` starts a function's annotation (`name : A, B, C -> R`),
 -- its arguments before the first arrow, counted by the commas outside any
 -- brackets: `{items, shown, text, name, last}`, where `shown` is `text`
--- shortened and `last` the annotation's last line read. `roc fmt` wraps a
--- long signature, so the annotation goes on to the next line while a bracket
--- is open or its text so far ends in a comma outside any bracket, until the
--- first arrow outside any bracket; a next line that starts another
--- annotation or field ends it. nil when line `i` annotates no function.
+-- shortened and `last` the annotation's last line read. A type alias of a
+-- function (`Handler : U8, U8, U8 -> U8`) counts the same way. `roc fmt` wraps
+-- a long signature, so the annotation goes on to the next line while its text
+-- so far is empty (the type starts after the colon's line), a bracket is open
+-- or its text ends in a comma outside any bracket, until the first arrow
+-- outside any bracket. A comment on a line of its own is passed over; a blank
+-- line, or a next line that starts another annotation or field, ends it. nil
+-- when line `i` annotates no function.
 function annotation_arguments(ls, i)
-  local m = re_find(type_line(ls[i]), ANNOTATION_START)
+  local m = annotation_start(type_line(ls[i]))
   if m == nil then return nil end
-  local name = split(trim(ls[i]), " :")[1]
+  local name = trim(split(trim(ls[i]), " :")[1])
   local type_text = ""
   local depth = 0
   local commas = 0
   local n = i
-  local piece = m.groups[1]
+  local piece = start_text(m)
   while true do
     local start = #type_text
-    type_text = type_text .. (start == 0 and "" or " ") .. piece
+    type_text = type_text .. ((start == 0 or piece == "") and "" or " ") .. piece
     for at = start + 1, #type_text do
       local c = sub(type_text, at, at)
       if has_key(OPENERS, c) then depth = depth + 1 end
@@ -174,12 +203,14 @@ function annotation_arguments(ls, i)
         return {items = commas + 1, shown = shortened(text), text = text, name = name, last = n}
       end
     end
-    local goes_on = depth > 0 or ends_with(type_text, ",")
-    if not goes_on or n >= #ls then return nil end
-    local next_line = type_line(ls[n + 1])
-    if next_line == "" then return nil end
-    if depth == 0 and re_find(next_line, ANNOTATION_START) ~= nil then return nil end
+    local goes_on = type_text == "" or depth > 0 or ends_with(type_text, ",")
+    if not goes_on then return nil end
+    -- The next line of code, past any comment on a line of its own.
     n = n + 1
+    while n <= #ls and trim(ls[n]) ~= "" and type_line(ls[n]) == "" do n = n + 1 end
+    if n > #ls or trim(ls[n]) == "" then return nil end
+    local next_line = type_line(ls[n])
+    if depth == 0 and annotation_start(next_line) ~= nil then return nil end
     piece = next_line
   end
 end
@@ -202,6 +233,50 @@ const FLAG_ADVICE = ": a flag a caller passes is a tag, not a Bool (roc-apps doc
 function function_type_finding(path, line, items, shown, text)
   local advice = are_all_flags(text) and FLAG_ADVICE or ": take a record (roc-apps docs/roc-style.md, Name what travels together)"
   return {path = path, line = line, kind = "stack", what = items .. " bare arguments in " .. shown .. ", which no comma stacks" .. advice}
+end
+
+-- The start of a record type's field, `name : `.
+const FIELD_START = "^ *[a-z_][A-Za-z0-9_]* : "
+
+-- The function types among the fields of a record type whose inside, between
+-- its braces, is `inner`, each `{name, items, text}`: a field whose type has an
+-- arrow outside any bracket, its arguments counted by the commas before it. A
+-- comma starts the next field only when `name : ` follows it, so the commas
+-- of a field's function type stay its own.
+function record_field_functions(inner)
+  local out = {}
+  if re_find(inner, FIELD_START) == nil then return out end
+  local depth = 0
+  local commas = 0
+  local type_start = 0
+  local field_start = 1
+  local name = ""
+  local done = false
+  local at = 1
+  while at <= #inner do
+    local c = sub(inner, at, at)
+    if has_key(OPENERS, c) then depth = depth + 1 end
+    if has_key(CLOSERS, c) then depth = depth - 1 end
+    if depth == 0 then
+      if type_start == 0 and sub(inner, at, at + 2) == " : " then
+        type_start = at + 3
+        name = trim(sub(inner, field_start, at - 1))
+        at = at + 2
+      elseif c == "," and re_find(sub(inner, at + 1), FIELD_START) ~= nil then
+        commas = 0
+        type_start = 0
+        field_start = at + 1
+        done = false
+      elseif c == "," then
+        commas = commas + 1
+      elseif not done and type_start > 0 and sub(inner, at - 1, at - 1) == " " and (sub(inner, at, at + 1) == "->" or sub(inner, at, at + 1) == "=>") then
+        push(out, {name = name, items = commas + 1, text = trim(sub(inner, type_start, at - 1))})
+        done = true
+      end
+    end
+    at = at + 1
+  end
+  return out
 end
 
 -- Whether any line of the file at `p` is wider than WIDTH.
@@ -297,6 +372,14 @@ function findings_in(files)
       local data_line = is_data_line(reachable[i], WIDTH)
       for g in sort(groups_on_line(reachable[i]), "open") do
         local inner = sub(ls[i], g.open + 1, g.close - 1)
+        if sub(ls[i], g.open, g.open) == "{" then
+          for field in record_field_functions(inner) do
+            if field.items >= 3 and not has_key(dictated_here, field.name) then
+              push(out, function_type_finding(p, i, field.items, shortened(field.text), field.text))
+              found_on_line = found_on_line + 1
+            end
+          end
+        end
         if g.items >= 3 and g.fn_type then
           local arguments = split(split(inner, "->")[1], "=>")[1]
           push(out, function_type_finding(p, i, g.items, shortened(sub(ls[i], g.open, g.close)), arguments))
