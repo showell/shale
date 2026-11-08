@@ -1,0 +1,9 @@
+module [RiderPoint, RaisedPoint, raise]
+
+
+RiderPoint : { x : F32, y : F32 }
+
+RaisedPoint : { ground : RiderPoint, height : F32 }
+
+raise : RaisedPoint -> F32
+raise = |p| p.height

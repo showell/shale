@@ -27,6 +27,16 @@
 --              renamed too, `Mod` held to `module=` when it is given. Any
 --              other mention of `from` in the book (prose, an include's
 --              `from "..."` text) is left and counted as in a string;
+--   to_module  with `to_module=RiderView` (and `module=Geom`), Geom's `from`
+--              moves to RiderView: each `Geom.from` becomes `RiderView.to`
+--              (`to` is `from` unless given), or bare `to` inside
+--              `RiderView.roc`. A file that changed gains `import RiderView`
+--              beside its `import Geom` (`import game.Geom` gives
+--              `import game.RiderView`) unless it imports RiderView already,
+--              and loses `import Geom` when no `Geom.` is left in its code.
+--              A changed file whose `import Geom` exposes or aliases, or
+--              which has none, is refused, and a refusal writes no file.
+--              Bare uses are left: the declarations move by hand;
 --   dry        with `dry=1`, the counts are reported and nothing is written;
 --   self_test  with `self_test=1`, run the plants in
 --              `cookbook/roc/plants/rename/` on copies under `scratch:`.
@@ -47,14 +57,19 @@
 --
 -- The output is one line per file that changed or holds a left mention, then
 -- the total. The run fails when nothing was renamed: a rename that renames
--- nothing is a mistake.
+-- nothing is a mistake. No file is written until every file has been read,
+-- so a refusal leaves the tree as it was.
+--
+--   shale cookbook:roc/rename.shale from=RiderPoint module=Geom to_module=RiderView
 -- budget: steps=400000000 reads=100000 arena_bytes=2000000000 output_bytes=2000000
 
 const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
 const FROM = arg("from", "")
-const TO = arg("to", "")
+const TO = arg("to", FROM)
 const MODULE = arg("module", "")
+const TO_MODULE = arg("to_module", "")
+const MOVE = TO_MODULE ~= ""
 const SKIP = arg("skip", "")
 const FIELDS = arg("fields", "") == "1"
 const BOOK = arg("book", "")
@@ -136,6 +151,7 @@ function is_wanted(line, at, stop, in_module)
     if q ~= "" and contains(UPPER, sub(q, 1, 1)) then return MODULE == "" or q == MODULE end
     return FIELDS
   end
+  if MOVE then return false end
   if MODULE ~= "" and not in_module then return false end
   if is_field_def(line, at, stop) then return FIELDS end
   return true
@@ -158,6 +174,16 @@ function rename_line(line, in_module, counts)
         counts.comments = counts.comments + 1
       elseif where == "string" then
         counts.strings = counts.strings + 1
+      elseif MOVE and is_wanted(line, at, stop, in_module) then
+        -- A move rewrites the qualifier too; `in_module` is whether this
+        -- is the new module's own file, where the name stands bare.
+        local start = at - 1 - #qualifier_of(line, at - 1)
+        local name = TO_MODULE .. "." .. TO
+        if in_module then name = TO end
+        out = out .. sub(line, copied, start - 1) .. name
+        copied = stop
+        pos = stop
+        counts.renamed = counts.renamed + 1
       elseif is_wanted(line, at, stop, in_module) then
         out = out .. sub(line, copied, at - 1) .. TO
         copied = stop
@@ -169,8 +195,18 @@ function rename_line(line, in_module, counts)
   return out .. sub(line, copied)
 end
 
+-- Every whole-word `from` the line held but its renamed includes is left.
+-- They are counted first, since a move can keep the name.
 function rename_book_line(line, counts)
   local pos = 1
+  while true do
+    local at = find(line, FROM, pos)
+    if at == nil then break end
+    local stop = at + #FROM
+    if (at == 1 or not is_ident(sub(line, at - 1, at - 1))) and not is_ident(sub(line, stop, stop)) then counts.strings = counts.strings + 1 end
+    pos = at + 1
+  end
+  pos = 1
   while true do
     local at = find(line, "{{code ", pos)
     if at == nil then break end
@@ -179,31 +215,92 @@ function rename_book_line(line, counts)
     while e <= #line and (is_ident(sub(line, e, e)) or sub(line, e, e) == ".") do e = e + 1 end
     local parts = split(sub(line, s, e - 1), ".")
     if #parts == 2 and parts[2] == FROM and (MODULE == "" or parts[1] == MODULE) then
-      line = sub(line, 1, s - 1) .. parts[1] .. "." .. TO .. sub(line, e)
+      local qualifier = parts[1]
+      if MOVE then qualifier = TO_MODULE end
+      line = sub(line, 1, s - 1) .. qualifier .. "." .. TO .. sub(line, e)
       counts.renamed = counts.renamed + 1
+      counts.strings = counts.strings - 1
     end
     pos = s
-  end
-  pos = 1
-  while true do
-    local at = find(line, FROM, pos)
-    if at == nil then break end
-    local stop = at + #FROM
-    if (at == 1 or not is_ident(sub(line, at - 1, at - 1))) and not is_ident(sub(line, stop, stop)) then counts.strings = counts.strings + 1 end
-    pos = at + 1
   end
   return line
 end
 
--- Renames in one file, writing it unless `dry`, and gives its counts.
+-- The module an `import` line names: `import game.Geom` gives name `Geom`,
+-- prefix `game.`, and `tail`, what follows (an `exposing [...]` or `as G`).
+function import_of(line)
+  local t = trim(line)
+  if not starts_with(t, "import ") then return nil end
+  local rest = trim(sub(t, 8))
+  local e = 1
+  while e <= #rest and (is_ident(sub(rest, e, e)) or sub(rest, e, e) == ".") do e = e + 1 end
+  local token = sub(rest, 1, e - 1)
+  local parts = split(token, ".")
+  local name = parts[#parts]
+  return {name = name, prefix = sub(token, 1, #token - #name), tail = trim(sub(rest, e)), indent = sub(line, 1, find(line, "import") - 1)}
+end
+
+-- Whether a line other than an import still says `MODULE.name` in code.
+function uses_module(lines)
+  local q = MODULE .. "."
+  for line in lines do
+    if import_of(line) == nil then
+      local pos = 1
+      while true do
+        local at = find(line, q, pos)
+        if at == nil then break end
+        pos = at + 1
+        local before = ""
+        if at > 1 then before = sub(line, at - 1, at - 1) end
+        if not is_ident(before) and before ~= "." and is_ident(sub(line, at + #q, at + #q)) and context_at(line, at) == "code" then return true end
+      end
+    end
+  end
+  return false
+end
+
+-- A moved file's import block: `import TO_MODULE` added beside the old
+-- import unless present (or this is TO_MODULE's own file), and the old one
+-- dropped when no `MODULE.` is left. Gives the lines, or a refusal.
+function move_imports(lines, own_file, counts)
+  local old_at = 0
+  local has_new = false
+  for i = 1, #lines do
+    local imp = import_of(lines[i])
+    if imp ~= nil and imp.name == MODULE and old_at == 0 then old_at = i end
+    if imp ~= nil and imp.name == TO_MODULE then has_new = true end
+  end
+  if old_at == 0 then return {refusal = "it says `" .. MODULE .. "." .. FROM .. "` but has no `import " .. MODULE .. "` line"} end
+  local old = import_of(lines[old_at])
+  if old.tail ~= "" and not starts_with(old.tail, "#") then return {refusal = "its `import " .. MODULE .. "` has `" .. old.tail .. "`, which a move doesn't follow: edit that import by hand first"} end
+  local keep_old = uses_module(lines)
+  local out = {}
+  for i = 1, #lines do
+    if i ~= old_at then
+      push(out, lines[i])
+    else
+      if keep_old then push(out, lines[i]) else counts.dropped = true end
+      if not has_new and not own_file then
+        push(out, old.indent .. "import " .. old.prefix .. TO_MODULE)
+        counts.added = true
+      end
+    end
+  end
+  return {lines = out, refusal = ""}
+end
+
+-- Renames in one file and gives its counts, its new text, and a refusal
+-- (`""` when there is none). Nothing is written here.
 function rename_file(p, is_book)
-  local counts = {renamed = 0, comments = 0, strings = 0}
+  local counts = {renamed = 0, comments = 0, strings = 0, added = false, dropped = false}
+  local result = {counts = counts, text = "", refusal = ""}
   local was = read(p)
   local needle = FROM
   if is_book then needle = "{{code " end
-  if not contains(was, FROM) or not contains(was, needle) then return counts end
+  if not contains(was, FROM) or not contains(was, needle) then return result end
   local in_module = MODULE ~= "" and basename(p) == MODULE .. ".roc"
-  if MODULE ~= "" and not in_module and not is_book and not contains(was, MODULE .. "." .. FROM) then return counts end
+  if MOVE then in_module = basename(p) == TO_MODULE .. ".roc" end
+  if MODULE ~= "" and (MOVE or not in_module) and not is_book and not contains(was, MODULE .. "." .. FROM) then return result end
   local out = {}
   for line in split(was, "\n") do
     if not contains(line, FROM) then
@@ -214,8 +311,16 @@ function rename_file(p, is_book)
       push(out, rename_line(line, in_module, counts))
     end
   end
-  if counts.renamed > 0 and not DRY then replace(p, join(out, "\n")) end
-  return counts
+  if MOVE and not is_book and counts.renamed > 0 then
+    local m = move_imports(out, in_module, counts)
+    if m.refusal ~= "" then
+      result.refusal = m.refusal
+      return result
+    end
+    out = m.lines
+  end
+  result.text = join(out, "\n")
+  return result
 end
 
 function report_line(p, c)
@@ -223,6 +328,8 @@ function report_line(p, c)
   if c.renamed > 0 then push(parts, c.renamed .. " renamed") end
   if c.comments > 0 then push(parts, c.comments .. " left in comments") end
   if c.strings > 0 then push(parts, c.strings .. " left in strings") end
+  if c.added then push(parts, "import " .. TO_MODULE .. " added") end
+  if c.dropped then push(parts, "import " .. MODULE .. " dropped") end
   return p .. ": " .. join(parts, ", ")
 end
 
@@ -253,6 +360,13 @@ end
 function expect_same(what, got, want, wrong)
   if read(got) ~= read(want) then push(wrong, what .. ": " .. got .. " is not as " .. want .. ":\n" .. read(got)) end
   return nil
+end
+
+-- A move of `Geom.RiderPoint` to RiderView, with `more` arguments.
+function move_args(more)
+  local a = {"from=RiderPoint", "module=Geom", "to_module=RiderView"}
+  for x in more do push(a, x) end
+  return a
 end
 
 function self_test()
@@ -289,17 +403,47 @@ function self_test()
   r = child({"glob=" .. d .. "/*.roc", "from=portion", "to=share", "module=Ride"})
   if r.code == 0 or not contains(r.out, "nothing matched") then push(wrong, "a rename of `Ride.portion`, which no file has, should fail: exited " .. r.code .. ": " .. r.out) end
 
+  d = copy_plants("move", scratch)
+  r = child(move_args({"glob=" .. d .. "/*.roc", "skip=" .. d .. "/Exposes.roc", "book=" .. d .. "/book.md"}))
+  expect_ok("move", r, {"Drops.roc: 1 renamed, 1 left in comments, 1 left in strings, import RiderView added, import Geom dropped", "Keeps.roc: 2 renamed, import RiderView added", "Already.roc: 1 renamed, import Geom dropped", "RiderView.roc: 1 renamed, import Geom dropped", "book.md: 1 renamed", "move `Geom.RiderPoint` to `RiderView.RiderPoint`: 6 renamed in 5 files of 6"}, wrong)
+  if contains(r.out, "Keeps.roc: 2 renamed, import RiderView added, import Geom dropped") then push(wrong, "move: Keeps.roc still says `Geom.near` and must keep its import: " .. r.out) end
+  if contains(r.out, "Geom.roc:") then push(wrong, "move: Geom.roc has no `Geom.RiderPoint` and should be left: " .. r.out) end
+  for name in {"Drops", "Keeps", "Already", "RiderView"} do
+    expect_same("move", d .. "/" .. name .. ".roc", plants .. "move/" .. name .. ".want", wrong)
+  end
+  expect_same("move", d .. "/book.md", plants .. "move/book.want", wrong)
+  expect_same("move", d .. "/Geom.roc", plants .. "move/Geom.roc", wrong)
+
+  d = copy_plants("move", scratch .. "/move_dry")
+  r = child(move_args({"glob=" .. d .. "/*.roc", "skip=" .. d .. "/Exposes.roc", "dry=1"}))
+  expect_ok("move dry=1", r, {"Drops.roc: 1 renamed", "import Geom dropped", "5 renamed in 4 files of 5 (dry run, nothing written)"}, wrong)
+  expect_same("move dry=1", d .. "/Drops.roc", plants .. "move/Drops.roc", wrong)
+
+  r = child(move_args({"glob=" .. d .. "/*.roc"}))
+  if r.code == 0 or not contains(r.out, "Exposes.roc: its `import Geom` has `exposing [near]`") then push(wrong, "a move into a file whose `import Geom` exposes should be refused: exited " .. r.code .. ": " .. r.out) end
+  expect_same("a refused move", d .. "/Drops.roc", plants .. "move/Drops.roc", wrong)
+  expect_same("a refused move", d .. "/Exposes.roc", plants .. "move/Exposes.roc", wrong)
+
+  r = child({"glob=" .. d .. "/*.roc", "from=RiderPont", "module=Geom", "to_module=RiderView"})
+  if r.code == 0 or not contains(r.out, "nothing matched") then push(wrong, "a move of nothing (`RiderPont`) should fail saying so: exited " .. r.code .. ": " .. r.out) end
+
   remove_tree(scratch)
   for w in wrong do print("FAIL " .. w) end
   if #wrong > 0 then fail("rename self_test: " .. #wrong .. " wrong") end
-  print("rename (Roc) self_test: PASS (portion, fields=1, module=Ride with a book, skip=, dry=1, and two renames of nothing that fail)")
+  print("rename (Roc) self_test: PASS (portion, fields=1, module=Ride with a book, skip=, dry=1, two renames of nothing that fail, and to_module= moves: imports added, kept, dropped, already there, refused, dry, and of nothing)")
   return nil
 end
 
 function rename_tree()
   if not is_name(FROM) or not is_name(TO) then fail("rename: from= and to= must each be an identifier, e.g. from=portion to=share") end
-  if FROM == TO then fail("rename: from= and to= are the same") end
+  if not MOVE and arg("to", "") == "" then fail("rename: to= is missing, e.g. from=portion to=share") end
+  if FROM == TO and not MOVE then fail("rename: from= and to= are the same") end
   if MODULE ~= "" and not is_name(MODULE) then fail("rename: module= must be a module's name, e.g. module=Ride") end
+  if MOVE then
+    if MODULE == "" or not is_name(TO_MODULE) then fail("rename: to_module= moves a name from module= to another module, e.g. module=Geom to_module=RiderView") end
+    if MODULE == TO_MODULE then fail("rename: module= and to_module= are the same") end
+    if FIELDS then fail("rename: fields=1 and to_module= don't go together: a move takes `Mod.name` alone") end
+  end
   local skipped = {}
   if SKIP ~= "" then
     for g in split(SKIP, ",") do
@@ -315,22 +459,41 @@ function rename_tree()
   if BOOK ~= "" then push(paths, BOOK) end
   local total = 0
   local files = 0
+  local changed = {}
+  local refusals = {}
   for p in paths do
-    local c = rename_file(p, p == BOOK)
-    if c.renamed + c.comments + c.strings > 0 then print(report_line(p, c)) end
-    if c.renamed > 0 then
-      total = total + c.renamed
-      files = files + 1
+    local f = rename_file(p, p == BOOK)
+    local c = f.counts
+    if f.refusal ~= "" then
+      push(refusals, p .. ": " .. f.refusal)
+    else
+      if c.renamed + c.comments + c.strings > 0 then print(report_line(p, c)) end
+      if c.renamed > 0 then
+        total = total + c.renamed
+        files = files + 1
+        push(changed, {path = p, text = f.text})
+      end
     end
     yield()
   end
+  -- Every file is written only once all of them have been read, so a
+  -- refusal anywhere writes none.
+  if #refusals == 0 and not DRY then
+    for f in changed do replace(f.path, f.text) end
+  end
+  local verb = "rename "
   local scope = "`" .. FROM .. "`"
   if MODULE ~= "" then scope = "`" .. MODULE .. "." .. FROM .. "`" end
+  local target = "`" .. TO .. "`"
+  if MOVE then
+    verb = "move "
+    target = "`" .. TO_MODULE .. "." .. TO .. "`"
+  end
   local plural = "s"
   if files == 1 then plural = "" end
   local dry = ""
   if DRY then dry = " (dry run, nothing written)" end
-  return {total = total, line = "rename " .. scope .. " to `" .. TO .. "`: " .. total .. " renamed in " .. files .. " file" .. plural .. " of " .. #paths .. dry}
+  return {total = total, refusals = refusals, line = verb .. scope .. " to " .. target .. ": " .. total .. " renamed in " .. files .. " file" .. plural .. " of " .. #paths .. dry}
 end
 
 -- This `fail` stands at the top level so the summary is the last line a
@@ -339,6 +502,8 @@ if SELF_TEST then
   self_test()
 else
   local r = rename_tree()
+  for w in r.refusals do print("refused " .. w) end
   print(r.line)
+  if #r.refusals > 0 then fail("rename: " .. #r.refusals .. " file(s) refused, nothing written") end
   if r.total == 0 then fail("rename: nothing matched " .. r.line) end
 end

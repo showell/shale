@@ -1,0 +1,6 @@
+module [start]
+
+import RiderView
+
+start : RiderView.RaisedPoint -> RiderView.RiderPoint
+start = |p| p.ground
