@@ -179,7 +179,7 @@ pub fn main(init: std.process.Init) !void {
     // reader must still see whose format follows.
     try out.flush();
 
-    var builtin_modules = try eval.BuiltinModules.init(gpa);
+    var builtin_modules = try eval.BuiltinModules.init(gpa, io);
     defer builtin_modules.deinit();
     var coord = try Coordinator.init(
         gpa,
