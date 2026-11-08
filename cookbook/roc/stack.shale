@@ -46,9 +46,10 @@
 --   - A group of three or more `Bool`s or Bool literals is told that a flag
 --     a caller passes should be a tag, as roc-style.md says, whatever its
 --     tokens.
---   - When a function's annotation (`name : A, B, C -> R`) is a finding for
---     its arguments, the function's lambda arguments on the next line are
---     not reported again.
+--   - A function's annotation (`name : A, B, C -> R`) is read to its first
+--     arrow, over the lines `roc fmt` wraps it onto. When it is a finding for
+--     its arguments, at its first line, the function's lambda arguments on
+--     the line after it are not reported again.
 --   - The annotation of a name its file's header dictates is no finding for
 --     its arguments, as the platform chose them: what an app's header
 --     provides, and what a platform's header requires and provides
@@ -132,27 +133,55 @@ function shortened(s)
   return s
 end
 
--- If line `l` is a function's annotation (`name : A, B, C -> R`), its
--- arguments before the first arrow, counted by the commas outside any
--- brackets: `{items, shown, text, name}`, where `shown` is `text`
--- shortened. nil when `l` annotates no function.
-function annotation_arguments(l)
-  local m = re_find(trim(l), "^[a-z_][A-Za-z0-9_]*!? : (.*)$")
+const ANNOTATION_START ="^[a-z_][A-Za-z0-9_]*!? : (.*)$"
+
+-- Line `l` without a `#` comment, trimmed. A type has no string, so the
+-- first `#` starts the comment.
+function type_line(l)
+  local at = find(l, "#")
+  if at == nil then return trim(l) end
+  return trim(sub(l, 1, at - 1))
+end
+
+-- If line `i` of `ls` starts a function's annotation (`name : A, B, C -> R`),
+-- its arguments before the first arrow, counted by the commas outside any
+-- brackets: `{items, shown, text, name, last}`, where `shown` is `text`
+-- shortened and `last` the annotation's last line read. `roc fmt` wraps a
+-- long signature, so the annotation goes on to the next line while a bracket
+-- is open or its text so far ends in a comma outside any bracket, until the
+-- first arrow outside any bracket; a next line that starts another
+-- annotation or field ends it. nil when line `i` annotates no function.
+function annotation_arguments(ls, i)
+  local m = re_find(type_line(ls[i]), ANNOTATION_START)
   if m == nil then return nil end
-  local type_text = m.groups[1]
+  local name = split(trim(ls[i]), " :")[1]
+  local type_text = ""
   local depth = 0
   local commas = 0
-  for i = 1, #type_text do
-    local c = sub(type_text, i, i)
-    if has_key(OPENERS, c) then depth = depth + 1 end
-    if has_key(CLOSERS, c) then depth = depth - 1 end
-    if depth == 0 and c == "," then commas = commas + 1 end
-    if depth == 0 and (sub(type_text, i, i + 1) == "->" or sub(type_text, i, i + 1) == "=>") then
-      local text = trim(sub(type_text, 1, i - 1))
-      return {items = commas + 1, shown = shortened(text), text = text, name = split(trim(l), " :")[1]}
+  local n = i
+  local piece = m.groups[1]
+  while true do
+    local start = #type_text
+    type_text = type_text .. (start == 0 and "" or " ") .. piece
+    for at = start + 1, #type_text do
+      local c = sub(type_text, at, at)
+      if has_key(OPENERS, c) then depth = depth + 1 end
+      if has_key(CLOSERS, c) then depth = depth - 1 end
+      if depth < 0 then return nil end
+      if depth == 0 and c == "," then commas = commas + 1 end
+      if depth == 0 and (sub(type_text, at, at + 1) == "->" or sub(type_text, at, at + 1) == "=>") then
+        local text = trim(sub(type_text, 1, at - 1))
+        return {items = commas + 1, shown = shortened(text), text = text, name = name, last = n}
+      end
     end
+    local goes_on = depth > 0 or ends_with(type_text, ",")
+    if not goes_on or n >= #ls then return nil end
+    local next_line = type_line(ls[n + 1])
+    if next_line == "" then return nil end
+    if depth == 0 and re_find(next_line, ANNOTATION_START) ~= nil then return nil end
+    n = n + 1
+    piece = next_line
   end
-  return nil
 end
 
 -- Whether every comma-separated item of `text` is `Bool` or a Bool
@@ -256,13 +285,15 @@ function findings_in(files)
     local reachable = without_targets_section(ls)
     local string_columns = get(strings.columns, p, {})
     local dictated_here = get(dictated.names, p, {})
-    -- The function whose annotation on the line before was a finding for
-    -- its arguments, or "". Its lambda's arguments are not reported again.
+    -- The function whose annotation ended on the line before and was a
+    -- finding for its arguments, or "". Its lambda's arguments are not
+    -- reported again.
     local annotated_fn = ""
+    local annotation_end = 0
     for i = 1, #ls do
       local found_on_line = 0
-      local skip_lambda = annotated_fn ~= "" and starts_with(trim(ls[i]), annotated_fn .. " = |")
-      annotated_fn = ""
+      local skip_lambda = annotated_fn ~= "" and i == annotation_end + 1 and starts_with(trim(ls[i]), annotated_fn .. " = |")
+      if i > annotation_end then annotated_fn = "" end
       local data_line = is_data_line(reachable[i], WIDTH)
       for g in sort(groups_on_line(reachable[i]), "open") do
         local inner = sub(ls[i], g.open + 1, g.close - 1)
@@ -281,7 +312,9 @@ function findings_in(files)
           end
         end
       end
-      local annotation = annotation_arguments(ls[i])
+      -- A line inside a wrapped annotation starts none.
+      local annotation = i > annotation_end and annotation_arguments(ls, i) or nil
+      if annotation ~= nil then annotation_end = annotation.last end
       if annotation ~= nil and annotation.items >= 3 then
         annotated_fn = annotation.name
         if not has_key(dictated_here, annotation.name) then
