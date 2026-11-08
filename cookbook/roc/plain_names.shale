@@ -35,8 +35,10 @@
 --                 abbreviations file, since Roc's style guide prefers the
 --                 plain word. A name is reported once a file.
 --   module_doc    A module with no `##` doc at the top of its file or above
---                 its type, or a top comment that tells history (`originally`,
---                 `used to`, `emitted`) instead of what the module does. A
+--                 its type, or a top comment or a doc above its type that
+--                 tells history (`originally`, `used to`, `emitted`,
+--                 `ported`, even wrapped across two lines) instead of what
+--                 the module does. A
 --                 module its package or platform keeps to itself has no public
 --                 doc to write, so any comment there will do. App files are
 --                 left out, as they have no module type.
@@ -58,7 +60,7 @@ use("cookbook:roc/headers.shale")
 use("cookbook:roc/house.shale")
 const CHECKS = {"pure_mutator", "abbreviation", "module_doc"}
 const MUTATION_WORDS = {push = true, fill = true, set = true, append = true, add = true}
-const HISTORY_RE = "\\b(originally|used to|emitted)\\b"
+const HISTORY_RE = "\\b(originally|used to|emitted|ported)\\b"
 
 -- The value of a `Try(value, errors)`, or `result` when it is no `Try`.
 function value_of_try(result)
@@ -120,6 +122,28 @@ function judge_abbreviations(declared, abbreviations, report)
   return nil
 end
 
+-- The history word in the comment lines `comment`, or nil. Each line's
+-- leading `#`s go before the lines are joined, so a phrase wrapped across
+-- two lines reads as one.
+function history_word(comment)
+  local words = {}
+  for l in comment do push(words, trim(re_replace(l, "^#+", ""))) end
+  local found = re_find(lower(join(words, " ")), HISTORY_RE)
+  if found == nil then return nil end
+  return found.group
+end
+
+-- The comment lines just above line `at` of `src`, trimmed, as `{lines,
+-- first}`, where `first` is the line the comment starts on, or `at` when
+-- there is none.
+function comment_above(src, at)
+  local first = at
+  while first > 1 and starts_with(trim(src[first - 1]), "#") do first = first - 1 end
+  local out = {}
+  for k = first, at - 1 do push(out, trim(src[k])) end
+  return {lines = out, first = first}
+end
+
 function judge_module_doc(f, declared, report)
   if is_app(f) then return nil end
   local name = module_name(f.path)
@@ -133,8 +157,13 @@ function judge_module_doc(f, declared, report)
   local has_doc = (#top > 0 and starts_with(top[1], "##")) or (type_line > 1 and starts_with(trim(src[type_line - 1]), "##"))
   if is_private_module(f.path) and (#top > 0 or starts_with(trim(src[max(type_line - 1, 1)]), "#")) then has_doc = true end
   if not has_doc then push(report, {path = f.path, line = 1, check = "module_doc", what = "`" .. name .. "` has no `##` doc saying what it is for"}) end
-  local history = re_find(lower(join(top, " ")), HISTORY_RE)
-  if history ~= nil then push(report, {path = f.path, line = 1, check = "module_doc", what = "`" .. name .. "`'s top comment says `" .. history.group .. "`: say what the module does, and leave history to git"}) end
+  local history = history_word(top)
+  if history ~= nil then push(report, {path = f.path, line = 1, check = "module_doc", what = "`" .. name .. "`'s top comment says `" .. history .. "`: say what the module does, and leave history to git"}) end
+  local doc = comment_above(src, type_line)
+  local doc_history = history_word(doc.lines)
+  if doc.first > 1 and doc_history ~= nil then
+    push(report, {path = f.path, line = doc.first, check = "module_doc", what = "`" .. name .. "`'s doc says `" .. doc_history .. "`: say what the module does, and leave history to git"})
+  end
   return nil
 end
 
@@ -150,7 +179,7 @@ function self_test()
     {glob = at .. "quiet_abbreviation.roc"},
     {glob = at .. "abbreviation.roc", args = {"abbreviations=" .. at .. "project_words.txt"}, counts = {abbreviation = 1}, says = {"`max_vis_cats` abbreviates: cats"}},
     {glob = at .. "quiet_abbreviation.roc", args = {"abbreviations=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
-    {glob = at .. "module_doc/*.roc", counts = {module_doc = 3}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`"}},
+    {glob = at .. "module_doc/*.roc", counts = {module_doc = 5}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`", "`Sky`'s top comment says `used to`", "Sun.roc:3: module_doc: `Sun`'s doc says `originally`"}},
     {glob = at .. "quiet_module_doc/*.roc"},
     {glob = at .. "module_doc_private/*.roc", counts = {module_doc = 2}, says = {"`Shown` has no `##` doc", "`Silent` has no `##` doc"}},
     {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
