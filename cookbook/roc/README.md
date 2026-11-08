@@ -214,7 +214,11 @@ end, and fails the run.
   outside use, as far as the parsed files show`, and the run fails.
   A package that apps use is walked from outside it, with `clients=` naming
   the apps, so their uses and signatures count too, and a member used across
-  several apps says how many (`used by 9 files in 5 apps`). `modules=A,B,C`
+  several apps says how many (`used by 9 files in 5 apps`). An app beside
+  the package that uses it but holds no client file fails the walk, naming
+  it, since a member only it uses would read as unused: `clients=*_widget`
+  leaves out Safari and the other apps, and `clients=*` names them all.
+  `modules=A,B,C`
   walks sibling modules as one family: the types two or more reach once,
   each member's types and signatures with its private functions', and a
   table of their public names by shape, with the error tags each answers.

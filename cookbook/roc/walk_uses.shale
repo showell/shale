@@ -9,6 +9,8 @@
 --                             where a file's `import pkg.Module` reads from
 --   client_files(text, skip), then clients_line(st, paths, start, root_files)
 --                             the files `clients=` names, and their apps
+--   clients_missing_apps(st, root, client_paths)
+--                             the apps beside a package that `clients=` leaves out
 --   resolve(st, info, name)   what a type name written in a file refers to
 --   members_of(tree, at)      the annotations in a type's block
 --   source_text(src, ...), doc_lines_above(src, line)
@@ -319,6 +321,54 @@ function client_files(text, skip)
     end
   end
   return {paths = sort(paths), app_of = app_of}
+end
+
+-- The app folders beside the folder `root` that name it as a package in a
+-- header directly in them, sorted: `safari` beside `lib`, whose `main.roc`
+-- says `lib: "../lib/main.roc"`. None when `root` is `.`, whose parent no
+-- path may reach.
+function apps_beside(root, trees)
+  local here = path_normal(root)
+  if here == nil or here == "." or here == "" then return {} end
+  local headers = {}
+  for p in glob(path_join(dirname(here), "*/*.roc")) do
+    local q = path_normal(p)
+    if dirname(q) ~= here then
+      local header = false
+      for l in lines(read(q)) do
+        if is_header_line(l) then header = true end
+      end
+      if header then push(headers, q) end
+    end
+  end
+  local apps = {}
+  if #headers > 0 then
+    for f in parsed_files(trees, headers) do
+      if f.err == "" then
+        for pkg in header_packages(f.nodes) do
+          if path_normal(path_join(dirname(f.path), dirname(pkg.raw))) == here then apps[dirname(f.path)] = true end
+        end
+      end
+    end
+  end
+  return sort(keys(apps))
+end
+
+-- The lost entry when an app beside the package folder `root` that uses it
+-- holds none of the client files `client_paths`, else nil. Its uses would go
+-- uncounted, and a member only it uses would read as unused, as when
+-- `clients=*_widget` leaves out every app that is no widget.
+function clients_missing_apps(st, root, client_paths)
+  local missed = {}
+  for app in apps_beside(root, st.trees) do
+    local covered = false
+    for p in client_paths do
+      if starts_with(p, app .. "/") then covered = true end
+    end
+    if not covered then push(missed, app) end
+  end
+  if #missed == 0 then return nil end
+  return "clients=: the apps beside " .. path_normal(root) .. " that use it as a package and hold no client file, whose uses are not counted: " .. join(missed, ", ") .. "; name every app that uses it, as clients=" .. path_join(dirname(path_normal(root)), "*")
 end
 
 function plural(n, word)

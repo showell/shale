@@ -116,7 +116,11 @@
 -- may be none, and a member used by files in several client apps says how
 -- many, `# used by 9 files in 5 apps`. When no client imports any of the
 -- root's files, the root and the clients are taken to be named unlike, and
--- the walk fails.
+-- the walk fails. It fails too when an app beside the root, one whose header
+-- directly in its folder names the root as a package (`safari/main.roc`'s
+-- `lib: "../lib/main.roc"`), holds no client file, with or without
+-- `clients=`: a member only that app uses would read as unused. From the
+-- root's parent folder, `clients=*` names them all.
 --
 -- Each member of the asked module's types ends with its outside uses, `#
 -- used by 3 files, 1 in tests only`, or `# no outside use` (after `#
@@ -602,6 +606,7 @@ function walk(root, module, packages_arg, max_depth, settings?)
   local paths = {}
   if st.uses or st.named_by then
     paths = other_files(st, root, start)
+    local client_paths = {}
     if clients ~= "" then
       local skip = set_of(paths)
       skip[start] = true
@@ -609,8 +614,11 @@ function walk(root, module, packages_arg, max_depth, settings?)
       load_files(st, cl.paths)
       st.app_of = cl.app_of
       push(lines_out, clients_line(st, cl.paths, start, skip))
+      client_paths = cl.paths
       for p in cl.paths do push(paths, p) end
     end
+    local missing = clients_missing_apps(st, root, client_paths)
+    if missing ~= nil then push(st.lost, missing) end
   end
   local unused = {}
   if st.uses then
@@ -990,6 +998,20 @@ function self_test()
   local others = walk(cl_at .. "pkg", "Dot", "", 3, {trees = trees, clients = cl_at .. "others/*"})
   check(failures, #others.lost == 0 and #others.refused == 0, "a client importing other root modules: lost or refused: " .. join(others.lost, "; ") .. join(others.refused, "; "))
   check(failures, has_line(others.lines, "# Clients: 1 file in 1 app, 0 importing " .. cl_at .. "pkg/Dot.roc"), "the clients line with none importing the asked module")
+  -- Beside the package beside/lib are two apps that use it, walker and
+  -- dot_widget. Clients that leave walker out, or no clients, would read
+  -- `step`, which only walker uses, as unused, so the walk fails naming the
+  -- apps left out; with both, each member is used once.
+  local bs = at .. "beside/"
+  local widgets_only = walk(bs .. "lib", "Spot", "", 3, {trees = trees, clients = bs .. "*_widget"}).lost
+  check(failures, #widgets_only == 1 and has_text(widgets_only, "clients=: the apps beside " .. bs .. "lib that use it as a package and hold no client file, whose uses are not counted: " .. bs .. "walker; name every app that uses it, as clients=" .. bs .. "*"), "an app beside the package left out of the clients, got " .. join(widgets_only, "; "))
+  local no_clients = walk(bs .. "lib", "Spot", "", 3, {trees = trees}).lost
+  check(failures, #no_clients == 1 and has_text(no_clients, "not counted: " .. bs .. "dot_widget, " .. bs .. "walker;"), "the apps beside the package with no clients, got " .. join(no_clients, "; "))
+  local every = walk(bs .. "lib", "Spot", "", 3, {trees = trees, clients = bs .. "*"})
+  check(failures, #every.lost == 0 and #every.refused == 0, "every app beside the package a client: lost or refused: " .. join(every.lost, "; ") .. join(every.refused, "; "))
+  check(failures, has_line(every.lines, "\tstep : Spot -> Spot   # used by 1 file") and has_line(every.lines, "\thome : Spot   # constant; used by 1 file"), "every app beside the package a client, a member each app alone uses")
+  local unread = walk(bs .. "lib", "Spot", "", 3, {trees = trees, uses = false, named_by = false}).lost
+  check(failures, #unread == 0, "uses=0 named_by=0 with apps beside the package, which reads no other file, got " .. join(unread, "; "))
 
   refused_checks(failures, walk(at .. "refused", "Coin", "", 3, {trees = trees}), ls, at)
   local lost = walk(at .. "unresolved", "Lost", "", 3, {trees = trees}).lost
