@@ -20,9 +20,9 @@
 -- Some things pass their parts' depth through without adding a level:
 -- whatever reads left to right (a method's receiver in `a.f().g()`, the
 -- left side of `x |> f` and `x->f()`), a tag or nominal wrapper
--- (`Ok(...)`, `ChatPath.(...)`), `?`, parentheses, operators, and field or
--- tuple access. So `f(g(h(x) + 1))`, `f(!g(h(x)))` and `f(g(h(x).a))` are
--- each three deep. A lambda argument starts again at zero, since its body
+-- (`Ok(...)`, `ChatPath.(...)`), `?`, parentheses, operators, field or
+-- tuple access, and a string's interpolation. So `f(g(h(x) + 1))`,
+-- `f(!g(h(x)))`, `f(g(h(x).a))` and `f("${g(h(x))}")` are each three deep. A lambda argument starts again at zero, since its body
 -- is read on its own, and so does a record, list or tuple argument, whose
 -- parts have names or places, unless `loose=1`.
 --
@@ -53,8 +53,9 @@ use("cookbook:roc/house.shale")
 use("cookbook:roc/parsed.shale")
 
 -- The node kinds that pass their parts' depth through. `unary` is `!x` or
--- `-x`, and `receiver` holds the value whose method is called.
-const PASS_THROUGH = {["e-arrow-call"] = true, ["e-question-suffix"] = true, ["e-nominal-apply"] = true, mapper = true, ["e-binop"] = true, unary = true, ["e-field-access"] = true, ["e-tuple-access"] = true, receiver = true}
+-- `-x`, `receiver` holds the value whose method is called, and an `e-string`
+-- holds its interpolations' code.
+const PASS_THROUGH = {["e-arrow-call"] = true, ["e-question-suffix"] = true, ["e-nominal-apply"] = true, mapper = true, ["e-binop"] = true, unary = true, ["e-field-access"] = true, ["e-tuple-access"] = true, receiver = true, ["e-string"] = true}
 const LOOSE_PASS_THROUGH = {["e-record"] = true, ["e-list"] = true, ["e-tuple"] = true, field = true}
 
 function passes_depth_through(kind, loose)
