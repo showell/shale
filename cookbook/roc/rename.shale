@@ -1,0 +1,344 @@
+-- This recipe renames one identifier across a tree of Roc code, by whole
+-- words, so renaming `portion` leaves `proportion` and `portion_size` alone,
+-- and `Rider` leaves `RiderState`.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/rename.shale --args-stdin <<'ARGS'
+--   glob=app/**/*.roc
+--   from=portion
+--   to=share
+--   ARGS
+--   shale cookbook:roc/rename.shale self_test=1
+--
+-- The arguments:
+--   glob       the files to rename in, `**/*.roc` by default; several globs
+--              may be given, separated by commas;
+--   from, to   the name and its new name, each a whole identifier;
+--   module     with `module=Ride`, only Ride's own `from` is renamed: the
+--              qualified form `Ride.from` in every file, and `from` bare
+--              inside `Ride.roc`, its declaration among them. Without it,
+--              every bare `from` and every `Mod.from` is renamed, whatever
+--              `Mod` is;
+--   skip       globs to leave out, separated by commas (a huge data file);
+--   fields     with `fields=1`, a record field named `from` is renamed too:
+--              `.from` after a value (`slice.from`, which is also how a
+--              method call reads), and `from:` in a record or a record type.
+--              Without it they are left;
+--   book       a markdown file whose `{{code Mod.from ...}}` includes are
+--              renamed too, `Mod` held to `module=` when it is given. Any
+--              other mention of `from` in the book (prose, an include's
+--              `from "..."` text) is left and counted as in a string;
+--   dry        with `dry=1`, the counts are reported and nothing is written;
+--   self_test  with `self_test=1`, run the plants in
+--              `cookbook/roc/plants/rename/` on copies under `scratch:`.
+--
+-- What counts as a use: `from` with no letter, digit, `_` or `$` either
+-- side, in code. A `from` in a comment or inside a string is left and
+-- counted (`left in comments`, `left in strings`), since those are often
+-- prose; a `${...}` interpolation is code. A `from` followed by `:` is a
+-- record field when it comes after `{` or `,`, or its line ends in `,`;
+-- otherwise it is a declaration.
+--
+-- What it can't see: the text is read line by line, not parsed, so a
+-- multi-line string's lines read as code. A record field written as a pun
+-- (`{ from }`, `{ from, other }`) is renamed with the variable, which changes
+-- the field's name. An import's alias (`import pkg.Ride as R`) and a name
+-- an import exposes (`exposing [from]`) are not followed under `module=`.
+-- `roc check` judges the result.
+--
+-- The output is one line per file that changed or holds a left mention, then
+-- the total. The run fails when nothing was renamed: a rename that renames
+-- nothing is a mistake.
+-- budget: steps=400000000 reads=100000 arena_bytes=2000000000 output_bytes=2000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const GLOB = arg("glob", "**/*.roc")
+const FROM = arg("from", "")
+const TO = arg("to", "")
+const MODULE = arg("module", "")
+const SKIP = arg("skip", "")
+const FIELDS = arg("fields", "") == "1"
+const BOOK = arg("book", "")
+const DRY = arg("dry", "") == "1"
+const IDENT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$"
+const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+function is_ident(c)
+  return c ~= "" and contains(IDENT, c)
+end
+
+function is_name(s)
+  if s == "" then return false end
+  for i = 1, #s do
+    if not is_ident(sub(s, i, i)) then return false end
+  end
+  return true
+end
+
+-- Whether byte `at` of `line` is in code, a string or a comment.
+function context_at(line, at)
+  local state = "code"
+  local interp = false
+  local depth = 0
+  local i = 1
+  while i < at do
+    local c = sub(line, i, i)
+    if state == "code" then
+      if c == "#" then return "comment" end
+      if c == "\"" then
+        state = "string"
+      elseif interp and c == "{" then
+        depth = depth + 1
+      elseif interp and c == "}" then
+        if depth == 0 then
+          state = "string"
+          interp = false
+        else
+          depth = depth - 1
+        end
+      end
+    else
+      if c == "\\" then
+        i = i + 1
+      elseif c == "\"" then
+        state = "code"
+      elseif c == "$" and sub(line, i + 1, i + 1) == "{" then
+        state = "code"
+        interp = true
+        depth = 0
+        i = i + 1
+      end
+    end
+    i = i + 1
+  end
+  return state
+end
+
+-- The identifier that ends just before the `.` at byte `dot`.
+function qualifier_of(line, dot)
+  local s = dot
+  while s > 1 and is_ident(sub(line, s - 1, s - 1)) do s = s - 1 end
+  return sub(line, s, dot - 1)
+end
+
+-- Whether the name at `at`, ending before `stop`, is a record field's
+-- declaration: `name:` after `{` or `,`, or on a line that ends in `,`.
+function is_field_def(line, at, stop)
+  local rest = trim(sub(line, stop))
+  if not starts_with(rest, ":") or starts_with(rest, ":=") or starts_with(rest, "::") then return false end
+  local before = trim(sub(line, 1, at - 1))
+  if ends_with(before, "{") or ends_with(before, ",") then return true end
+  return ends_with(trim(line), ",")
+end
+
+function is_wanted(line, at, stop, in_module)
+  if at > 1 and sub(line, at - 1, at - 1) == "." then
+    local q = qualifier_of(line, at - 1)
+    if q ~= "" and contains(UPPER, sub(q, 1, 1)) then return MODULE == "" or q == MODULE end
+    return FIELDS
+  end
+  if MODULE ~= "" and not in_module then return false end
+  if is_field_def(line, at, stop) then return FIELDS end
+  return true
+end
+
+function rename_line(line, in_module, counts)
+  local out = ""
+  local copied = 1
+  local pos = 1
+  while true do
+    local at = find(line, FROM, pos)
+    if at == nil then break end
+    local stop = at + #FROM
+    pos = at + 1
+    local before = ""
+    if at > 1 then before = sub(line, at - 1, at - 1) end
+    if not is_ident(before) and not is_ident(sub(line, stop, stop)) then
+      local where = context_at(line, at)
+      if where == "comment" then
+        counts.comments = counts.comments + 1
+      elseif where == "string" then
+        counts.strings = counts.strings + 1
+      elseif is_wanted(line, at, stop, in_module) then
+        out = out .. sub(line, copied, at - 1) .. TO
+        copied = stop
+        pos = stop
+        counts.renamed = counts.renamed + 1
+      end
+    end
+  end
+  return out .. sub(line, copied)
+end
+
+function rename_book_line(line, counts)
+  local pos = 1
+  while true do
+    local at = find(line, "{{code ", pos)
+    if at == nil then break end
+    local s = at + 7
+    local e = s
+    while e <= #line and (is_ident(sub(line, e, e)) or sub(line, e, e) == ".") do e = e + 1 end
+    local parts = split(sub(line, s, e - 1), ".")
+    if #parts == 2 and parts[2] == FROM and (MODULE == "" or parts[1] == MODULE) then
+      line = sub(line, 1, s - 1) .. parts[1] .. "." .. TO .. sub(line, e)
+      counts.renamed = counts.renamed + 1
+    end
+    pos = s
+  end
+  pos = 1
+  while true do
+    local at = find(line, FROM, pos)
+    if at == nil then break end
+    local stop = at + #FROM
+    if (at == 1 or not is_ident(sub(line, at - 1, at - 1))) and not is_ident(sub(line, stop, stop)) then counts.strings = counts.strings + 1 end
+    pos = at + 1
+  end
+  return line
+end
+
+-- Renames in one file, writing it unless `dry`, and gives its counts.
+function rename_file(p, is_book)
+  local counts = {renamed = 0, comments = 0, strings = 0}
+  local was = read(p)
+  local needle = FROM
+  if is_book then needle = "{{code " end
+  if not contains(was, FROM) or not contains(was, needle) then return counts end
+  local in_module = MODULE ~= "" and basename(p) == MODULE .. ".roc"
+  if MODULE ~= "" and not in_module and not is_book and not contains(was, MODULE .. "." .. FROM) then return counts end
+  local out = {}
+  for line in split(was, "\n") do
+    if not contains(line, FROM) then
+      push(out, line)
+    elseif is_book then
+      push(out, rename_book_line(line, counts))
+    else
+      push(out, rename_line(line, in_module, counts))
+    end
+  end
+  if counts.renamed > 0 and not DRY then replace(p, join(out, "\n")) end
+  return counts
+end
+
+function report_line(p, c)
+  local parts = {}
+  if c.renamed > 0 then push(parts, c.renamed .. " renamed") end
+  if c.comments > 0 then push(parts, c.comments .. " left in comments") end
+  if c.strings > 0 then push(parts, c.strings .. " left in strings") end
+  return p .. ": " .. join(parts, ", ")
+end
+
+-- A copy of the plant folder `name` under `scratch`, its .roc and .md files.
+function copy_plants(name, scratch)
+  local dir = scratch .. "/" .. name
+  mkdir(dir)
+  for p in glob("cookbook:roc/plants/rename/" .. name .. "/*") do
+    if ends_with(p, ".roc") or ends_with(p, ".md") then replace(dir .. "/" .. basename(p), read(p)) end
+  end
+  return dir
+end
+
+function child(args)
+  local argv = {"shale", real("cookbook:roc/rename.shale")}
+  for a in args do push(argv, a) end
+  return run(argv, {timeout_ms = 60000, tail = 40})
+end
+
+function expect_ok(what, r, says, wrong)
+  if r.code ~= 0 then push(wrong, what .. ": exited " .. r.code .. ": " .. r.out) end
+  for s in says do
+    if not contains(r.out, s) then push(wrong, what .. ": the output doesn't say `" .. s .. "`: " .. r.out) end
+  end
+  return nil
+end
+
+function expect_same(what, got, want, wrong)
+  if read(got) ~= read(want) then push(wrong, what .. ": " .. got .. " is not as " .. want .. ":\n" .. read(got)) end
+  return nil
+end
+
+function self_test()
+  local plants = "cookbook:roc/plants/rename/"
+  local scratch = fresh_dir("scratch:", "rename")
+  local wrong = {}
+
+  local d = copy_plants("portion", scratch)
+  local r = child({"glob=" .. d .. "/*.roc", "from=portion", "to=share", "skip=" .. d .. "/data.roc"})
+  expect_ok("portion", r, {"shapes.roc: 8 renamed, 2 left in comments, 2 left in strings", "8 renamed in 1 file of 1"}, wrong)
+  expect_same("portion", d .. "/shapes.roc", plants .. "portion/shapes.want", wrong)
+  expect_same("portion's skip", d .. "/data.roc", plants .. "portion/data.roc", wrong)
+
+  d = copy_plants("portion", scratch .. "/fields")
+  r = child({"glob=" .. d .. "/shapes.roc", "from=portion", "to=share", "fields=1"})
+  expect_ok("portion fields=1", r, {"shapes.roc: 11 renamed, 2 left in comments, 2 left in strings"}, wrong)
+  expect_same("portion fields=1", d .. "/shapes.roc", plants .. "portion/shapes.fields.want", wrong)
+
+  d = copy_plants("rider", scratch)
+  r = child({"glob=" .. d .. "/*.roc", "from=Rider", "to=Cyclist", "module=Ride", "book=" .. d .. "/book.md"})
+  expect_ok("Rider module=Ride", r, {"Ride.roc: 5 renamed", "Uses.roc: 1 renamed", "book.md: 2 renamed, 2 left in strings", "8 renamed in 3 files of 3"}, wrong)
+  expect_same("Rider module=Ride", d .. "/Ride.roc", plants .. "rider/Ride.want", wrong)
+  expect_same("Rider module=Ride", d .. "/Uses.roc", plants .. "rider/Uses.want", wrong)
+  expect_same("Rider module=Ride", d .. "/book.md", plants .. "rider/book.want", wrong)
+
+  d = copy_plants("portion", scratch .. "/dry")
+  r = child({"glob=" .. d .. "/*.roc", "from=portion", "to=share", "dry=1"})
+  expect_ok("dry=1", r, {"shapes.roc: 8 renamed", "data.roc: 2 renamed", "dry run, nothing written"}, wrong)
+  expect_same("dry=1", d .. "/shapes.roc", plants .. "portion/shapes.roc", wrong)
+  expect_same("dry=1", d .. "/data.roc", plants .. "portion/data.roc", wrong)
+
+  r = child({"glob=" .. d .. "/*.roc", "from=portio", "to=share"})
+  if r.code == 0 or not contains(r.out, "nothing matched") then push(wrong, "a rename of nothing (`portio`) should fail saying so: exited " .. r.code .. ": " .. r.out) end
+  r = child({"glob=" .. d .. "/*.roc", "from=portion", "to=share", "module=Ride"})
+  if r.code == 0 or not contains(r.out, "nothing matched") then push(wrong, "a rename of `Ride.portion`, which no file has, should fail: exited " .. r.code .. ": " .. r.out) end
+
+  remove_tree(scratch)
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail("rename self_test: " .. #wrong .. " wrong") end
+  print("rename (Roc) self_test: PASS (portion, fields=1, module=Ride with a book, skip=, dry=1, and two renames of nothing that fail)")
+  return nil
+end
+
+function rename_tree()
+  if not is_name(FROM) or not is_name(TO) then fail("rename: from= and to= must each be an identifier, e.g. from=portion to=share") end
+  if FROM == TO then fail("rename: from= and to= are the same") end
+  if MODULE ~= "" and not is_name(MODULE) then fail("rename: module= must be a module's name, e.g. module=Ride") end
+  local skipped = {}
+  if SKIP ~= "" then
+    for g in split(SKIP, ",") do
+      for p in glob(trim(g)) do skipped[p] = true end
+    end
+  end
+  local paths = {}
+  for g in split(GLOB, ",") do
+    for p in glob(trim(g)) do
+      if not has_key(skipped, p) then push(paths, p) end
+    end
+  end
+  if BOOK ~= "" then push(paths, BOOK) end
+  local total = 0
+  local files = 0
+  for p in paths do
+    local c = rename_file(p, p == BOOK)
+    if c.renamed + c.comments + c.strings > 0 then print(report_line(p, c)) end
+    if c.renamed > 0 then
+      total = total + c.renamed
+      files = files + 1
+    end
+    yield()
+  end
+  local scope = "`" .. FROM .. "`"
+  if MODULE ~= "" then scope = "`" .. MODULE .. "." .. FROM .. "`" end
+  local plural = "s"
+  if files == 1 then plural = "" end
+  local dry = ""
+  if DRY then dry = " (dry run, nothing written)" end
+  return {total = total, line = "rename " .. scope .. " to `" .. TO .. "`: " .. total .. " renamed in " .. files .. " file" .. plural .. " of " .. #paths .. dry}
+end
+
+-- This `fail` stands at the top level so the summary is the last line a
+-- caller reads: a stop inside a function prints the calls after it.
+if SELF_TEST then
+  self_test()
+else
+  local r = rename_tree()
+  print(r.line)
+  if r.total == 0 then fail("rename: nothing matched " .. r.line) end
+end

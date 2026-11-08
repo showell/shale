@@ -1,0 +1,10 @@
+module [Cyclist, RiderState, RiderCamera, start]
+
+Cyclist : { speed : U64 }
+
+RiderState : [Riding(Cyclist), Resting]
+
+RiderCamera : { follow : Cyclist }
+
+start : U64 -> Cyclist
+start = |speed| { speed }

@@ -157,6 +157,16 @@ end, and fails the run.
 
       cd <repo> && shale <shale>/cookbook/roc/roc_commas.shale dir=roc width=100
 
+- [rename.shale](rename.shale) renames one identifier across a tree by
+  whole words, so `portion` leaves `proportion` and `portion_size` alone.
+  `module=` holds it to one module's name (qualified everywhere, bare
+  inside the module's own file), `fields=1` takes record fields too, `book=` a
+  markdown file's `{{code Mod.from}}` includes, `skip=` globs to leave out
+  and `dry=1` only counts. Mentions in comments and strings are left and
+  counted, and a run that renames nothing fails.
+
+      cd <repo> && shale <shale>/cookbook/roc/rename.shale from=portion to=share module=Pie
+
 - [methods.shale](methods.shale) rewrites calls like `List.map(xs, f)` as
   method calls, `xs.map(f)`. Roc's type checker and compiler decide which
   rewrites are safe; each call it leaves is listed with the reason. It is a

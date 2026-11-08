@@ -1,0 +1,23 @@
+module [share, proportion, portion_size, Slice]
+
+## How much of the whole a slice takes: its portion of the pie.
+Slice : { portion : U64, label : Str }
+
+share : U64 -> U64
+share = |whole| whole // 4
+
+proportion : U64 -> U64
+proportion = |whole| share(whole) * 2
+
+portion_size = 3
+
+describe : Slice -> Str
+describe = |slice| "a portion of ${Num.to_str(share(slice.portion))}" # portion here is prose
+
+make : U64 -> Slice
+make = |n| {
+    portion: share(n),
+    label: "portion",
+}
+
+total = Shapes.share(8) + Other.share(2) + portion_size
