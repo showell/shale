@@ -1,0 +1,8 @@
+module [ahead]
+
+import Distance
+import RiderView
+
+## The point ahead, as Geom.RiderPoint says.
+ahead : Distance -> RiderView.RiderPoint
+ahead = |d| { x: d, label: "Geom.RiderPoint" }
