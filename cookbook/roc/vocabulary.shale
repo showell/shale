@@ -21,7 +21,8 @@
 --
 -- Identifiers are read from the tree of Roc's own parser and split into words
 -- at underscores and capitals, so `TiltStep` and `tilt_step` both hold
--- `tilt`. Comments are read as words too, and the text of a string doesn't
+-- `tilt`. They include the names a header or an import exposes, a `where`
+-- clause's methods and an `as` pattern's name. Comments are read as words too, and the text of a string doesn't
 -- count. There are two checks, one for each place a word can be:
 --
 --   retired_name     an identifier that holds a retired word;
@@ -44,7 +45,8 @@ use("cookbook:roc/gate_recipe.shale")
 const CHECKS = {"retired_name", "retired_comment"}
 
 -- Which attribute holds the identifier in each kind of node that has one. A
--- `field` node may hold a field's name under either attribute.
+-- `field` node may hold a field's name under either attribute. A `method` is a
+-- `where` clause's constraint, and a `p-as` the name an `as` pattern gives.
 const IDENTIFIER_ATTRIBUTES = {
   ty = {"name"},
   ["ty-var"] = {"raw"},
@@ -62,8 +64,30 @@ const IDENTIFIER_ATTRIBUTES = {
   segment = {"field"},
   ["e-method-call"] = {"method"},
   ["p-list-rest"] = {"name"},
+  method = {"name"},
+  ["p-as"] = {"name"},
   ["exposed-upper-ident"] = {"text"},
 }
+
+-- The kinds of node whose identifier is the `value` of a `text` node among its
+-- kids: a lower-case name a header or an import exposes.
+const TEXT_KID_IDENTIFIERS = {["exposed-lower-ident"] = true}
+
+-- The identifiers node `i` of `tree` holds.
+function identifiers_at(tree, i)
+  local out = {}
+  local node = tree[i]
+  for name_attribute in get(IDENTIFIER_ATTRIBUTES, node.kind, {}) do
+    local name = attribute(tree, i, name_attribute)
+    if name ~= "" then push(out, name) end
+  end
+  if has_key(TEXT_KID_IDENTIFIERS, node.kind) then
+    for k in node.kids do
+      if tree[k].kind == "text" and get(tree[k], "value", "") ~= "" then push(out, tree[k].value) end
+    end
+  end
+  return out
+end
 
 -- The words file as a map from each retired word to the word kept for it.
 function retired_words(path)
@@ -113,16 +137,13 @@ function judge_names(f, kept_by_retired, report)
   local tree = f.nodes
   local seen = {}
   for i = 1, #tree do
-    for name_attribute in get(IDENTIFIER_ATTRIBUTES, tree[i].kind, {}) do
-      local name = attribute(tree, i, name_attribute)
-      if name ~= "" then
-        for w in retired_in(name, kept_by_retired) do
-          local line = node_line(tree, i)
-          local key = line .. "|" .. name .. "|" .. w
-          if not has_key(seen, key) then
-            seen[key] = true
-            push(report, {path = f.path, line = line, check = "retired_name", what = name .. ": " .. w .. " is " .. kept_by_retired[w] .. " here"})
-          end
+    for name in identifiers_at(tree, i) do
+      for w in retired_in(name, kept_by_retired) do
+        local line = node_line(tree, i)
+        local key = line .. "|" .. name .. "|" .. w
+        if not has_key(seen, key) then
+          seen[key] = true
+          push(report, {path = f.path, line = line, check = "retired_name", what = name .. ": " .. w .. " is " .. kept_by_retired[w] .. " here"})
         end
       end
     end
@@ -149,6 +170,7 @@ function self_test()
   local words = "words=" .. at .. "words.txt"
   check_plants("vocabulary", "cookbook:roc/vocabulary.shale", CHECKS, {
     {glob = at .. "names.roc", args = {words}, counts = {retired_name = 9}, says = {"names.roc:6: retired_name: tilt_step: tilt is lean here", "RideTour: tour is ride here", "names.roc:12: retired_name: tour_stops", "names.roc:16: retired_name: .tilt"}},
+    {glob = at .. "names_unseen.roc", args = {words}, counts = {retired_name = 3}, says = {"names_unseen.roc:3: retired_name: tilt_now", "names_unseen.roc:7: retired_name: tilt_of", "names_unseen.roc:12: retired_name: tilt_pair"}},
     {glob = at .. "comments.roc", args = {words}, counts = {retired_comment = 3}, says = {"comments.roc:2: retired_comment: tilt is lean here"}},
     {glob = at .. "clean.roc", args = {words}},
     {glob = at .. "broken/*.roc", args = {words}, stops = true, counts = {retired_name = 1}, says = {"refused: "}},
