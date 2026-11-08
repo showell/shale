@@ -1,5 +1,7 @@
 -- **ROC-TYPES, DOWNLOADED AND INSTALLED** where Shale may run it
--- (~/tools/roc-types/bin/roc-types, under the `tools` mount). The checker is
+-- (~/tools/roc-types-<roc-version>/bin/roc-types, under the `tools` mount,
+-- beside the checkers of other pins, as cookbook/roc/types.shale looks for
+-- a tree's own; the unpinned ~/tools/roc-types is left alone). The checker is
 -- roc-lang/roc's at the commit roc-version names, linked whole: building it
 -- takes more than the box holds beside its other work, so it is built on
 -- GitHub and installed from its published asset, never built here. The
@@ -35,8 +37,9 @@ if find(url, "-" .. short .. "-") == nil then
   fail("roc-types: roc-version pins Roc " .. short .. ", and " .. RELEASE .. "'s asset is not that pin's (" .. url .. "): publish the pin's asset")
 end
 
-if not exists("tools:roc-types") then mkdir("tools:roc-types") end
-local dir = fresh_dir("tools:roc-types", "download")
+local home = "tools:roc-types-" .. version
+if not exists(home) then mkdir(home) end
+local dir = fresh_dir(home, "download")
 local tarball = real(dir) .. "/roc-types.tar.gz"
 must(run({"curl", "-fsSL", "-o", tarball, url}, {timeout_ms = 600000, tail = 20}))
 local summed = must(run({"sha256sum", tarball}, {timeout_ms = 60000, tail = 2}))
@@ -45,7 +48,14 @@ if got ~= sha then
   remove_tree(dir)
   fail("roc-types: the download's sha256 is " .. got .. ", not " .. RELEASE .. "'s " .. sha .. "; nothing installed")
 end
-must(run({"tar", "-xzf", tarball, "-C", real("tools:roc-types")}, {timeout_ms = 60000, tail = 20}))
+must(run({"tar", "-xzf", tarball, "-C", real(home)}, {timeout_ms = 60000, tail = 20}))
 remove_tree(dir)
-if not exists("tools:roc-types/bin/roc-types") then fail("roc-types: the asset held no bin/roc-types; nothing installed at ~/tools/roc-types/bin/roc-types") end
-print("roc-types: Roc " .. short .. "'s checker, installed at ~/tools/roc-types/bin/roc-types")
+local exe = home .. "/bin/roc-types"
+if not exists(exe) then fail("roc-types: the asset held no bin/roc-types; nothing installed at " .. real(home) .. "/bin/roc-types") end
+-- The checker has no --version: its first line on the workflow's smoke
+-- plant is its header, `roc-types <N> <roc-version>`.
+local said = must(run({real(exe), "cookbook/roc/plants/methods/TypedApp.roc"}, {timeout_ms = 60000, head = 1}))
+local head = trim(split(said.out, "\n")[1])
+local head_words = words(head)
+if #head_words ~= 3 or head_words[1] ~= "roc-types" or head_words[3] ~= version then fail("roc-types: installed at " .. real(exe) .. ", and its header on TypedApp.roc is `" .. head .. "`, not Roc " .. version .. "'s") end
+print("roc-types: Roc " .. short .. "'s checker, installed at " .. real(exe) .. " (" .. head .. ")")

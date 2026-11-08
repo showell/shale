@@ -349,8 +349,9 @@ has none of it):
   given an app, it writes every expression's and pattern's type, by
   region, for every module the app reaches, and fails on any error. It
   links most of the compiler, so it is built on GitHub and installed by
-  `shale tools/roc_types/install.shale` as `roc-types/bin/roc-types` under
-  the `tools` mount. Its format's home is `tools/roc_types/main.zig`'s
+  `shale tools/roc_types/install.shale` as
+  `roc-types-<roc-version>/bin/roc-types` under the `tools` mount, beside
+  the other pins' (CI unpacks it as the unpinned `roc-types/bin/roc-types`). Its format's home is `tools/roc_types/main.zig`'s
   header; the library `cookbook:roc/types.shale` reads it,
   `roc_types(root, roc)`, `roc` the tree's Roc, whose pin roc-types' must
   be.
