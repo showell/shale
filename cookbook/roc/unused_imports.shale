@@ -26,8 +26,10 @@
 --
 -- A method call never names its module, so a module whose only use is a
 -- method on a value of its type is unused here, and Roc agrees: the method
--- resolves through the value's type without the import. A tag in a tag union
--- type that shares a module's name reads as a use of the module.
+-- resolves through the value's type without the import. A bare tag that
+-- shares a module's name (`Other`, in an expression, a pattern or a tag union
+-- type) is no use of the module, but a nominal type's name before its record
+-- (`Point.{ x: 0 }`) is.
 --
 -- roc-ast drops the qualifier of a tag in a pattern (`Color.Red =>` comes as
 -- `.Red`), so that name is read from the source at the pattern's column.
@@ -88,14 +90,36 @@ function imports_of(tree)
   return out
 end
 
--- The set of first parts of every value, tag and type name the file uses.
+-- The indexes, as text, of the nodes of `tree` that are kids of a node of
+-- kind `kind`.
+function kids_of_kind(tree, kind)
+  local out = {}
+  for node in tree do
+    if node.kind == kind then
+      for k in node.kids do out["" .. k] = true end
+    end
+  end
+  return out
+end
+
+-- The set of first parts of every value, tag and type name the file uses. A
+-- bare tag (`Other`, in an expression, a pattern or a tag union type) names
+-- no module, so only a qualified one counts, or one that is a nominal type's
+-- name (`Point.{ x: 0 }`).
 function heads_used(tree, src)
   local used = {}
-  for node in tree do
+  local union_tags = kids_of_kind(tree, "tags")
+  local nominal_names = kids_of_kind(tree, "mapper")
+  for i = 1, #tree do
+    local node = tree[i]
     local name = ""
-    if node.kind == "e-ident" or node.kind == "e-tag" then name = node.raw end
-    if node.kind == "ty" then name = node.name end
-    if node.kind == "p-tag" then name = starts_with(node.raw, ".") and written_tag(src[node.line], node.col) or node.raw end
+    if node.kind == "e-ident" then name = node.raw end
+    if node.kind == "e-tag" and (contains(node.raw, ".") or has_key(nominal_names, "" .. i)) then name = node.raw end
+    if node.kind == "ty" and not has_key(union_tags, "" .. i) then name = node.name end
+    if node.kind == "p-tag" then
+      local written = starts_with(node.raw, ".") and written_tag(src[node.line], node.col) or node.raw
+      if contains(written, ".") then name = written end
+    end
     if name ~= "" then used[head_of(name)] = true end
   end
   return used
@@ -123,6 +147,7 @@ function self_test()
     {glob = at .. "unused_file_import.roc", counts = {unused_import = 1}, says = {"the file import `page` is imported"}},
     {glob = at .. "unused_in_prose.roc", counts = {unused_import = 1}, says = {"`game.Polygon` is imported"}},
     {glob = at .. "unused_method_only.roc", counts = {unused_import = 1}, says = {"`game.Distance` is imported"}},
+    {glob = at .. "unused_tag_namesake.roc", counts = {unused_import = 1}, says = {"`game.Other` is imported"}},
     {glob = at .. "unused.roc," .. at .. "unused_alias.roc", counts = {unused_import = 2}},
     {glob = at .. "quiet_qualified.roc"},
     {glob = at .. "quiet_annotation.roc"},
