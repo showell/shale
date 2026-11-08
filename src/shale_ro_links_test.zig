@@ -170,9 +170,9 @@ test "secrets mounts: run's stdout_secret stores stdout in one, 0600, never seen
     t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/keys secrets\np = {s}/plain\n", .{ t.root, t.root }), "/home/x", &why);
 
     // Stored: exactly the bytes printed, mode 0600, and the token in neither
-    // the result, the output nor the run's records (`ms` set aside: its
-    // digits would make the gate's engines differ in work).
-    try t.expectOutput("local r = run({\"shale-fixture\", \"cat\"}, {timeout_ms = 10000, stdin = \"tok-7f3a9c\\n\", stdout_secret = \"k:new\"}) r.ms = 0 print(r.code, r.secret_written, r.secret_bytes, r.out, contains(json_write(r), \"7f3a9c\"))", "0\ttrue\t11\t\tfalse\n");
+    // the result, the output nor the run's records (`ms` and `cpu_ms` set
+    // aside: their digits would make the gate's engines differ in work).
+    try t.expectOutput("local r = run({\"shale-fixture\", \"cat\"}, {timeout_ms = 10000, stdin = \"tok-7f3a9c\\n\", stdout_secret = \"k:new\"}) r.ms = 0 r.cpu_ms = 0 print(r.code, r.secret_written, r.secret_bytes, r.out, contains(json_write(r), \"7f3a9c\"))", "0\ttrue\t11\t\tfalse\n");
     try testing.expectEqualStrings("tok-7f3a9c\n", try t.file("keys/new"));
     const st = try t.tmp.dir.statFile(io, "keys/new", .{});
     try testing.expectEqual(@as(u32, 0o600), @as(u32, @intCast(st.permissions.toMode() & 0o777)));
