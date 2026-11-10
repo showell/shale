@@ -15,6 +15,9 @@
 --          tables of data that read better side by side;
 --   width  the widest a line may be, 100 by default, a tab counting four;
 --   tokens the tokens from which a group stacks, 6 by default;
+--   dictated a table of functions whose arguments something outside the file
+--          dictates, one `path name -- reason` a line, judged as a header's
+--          names are (below);
 --   house  with `house=0`, leave out every finding here, as the stacking rule
 --          is our house style (cookbook/roc/house.shale);
 --   write  with `write=1`, rewrite the files (see below).
@@ -105,6 +108,7 @@ const PLANTS = "cookbook:roc/plants/stack"
 const SCRATCH = "scratch:stack"
 const GLOB = SELF_TEST and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
 const SKIP = arg("skip", "")
+const DICTATED = SELF_TEST and (PLANTS .. "/dictated.txt") or arg("dictated", "")
 const WIDTH = arg("width", 100)
 const WRITE = arg("write", "") == "1"
 
@@ -349,12 +353,48 @@ function dictated_names_in(files)
   return {names = names, refused = parsed.refused}
 end
 
+-- The names the `dictated` table adds to `names`, the result of
+-- dictated_names_in. Each line of the table is a file's path, a function's
+-- name, and after ` -- ` who dictates its arguments, such as an API the file
+-- copies or an edge with no records. The path names the file the glob finds
+-- with that path or ending `/` and that path, so the self-test's copies in
+-- scratch are found too. A line whose file the glob doesn't find, whose
+-- function has no annotation there, or that gives no reason stops the run, so
+-- the table can't go stale.
+function with_dictated_table(names, files)
+  if DICTATED == "" then return names end
+  for l in lines(read(DICTATED)) do
+    if trim(l) ~= "" and not starts_with(trim(l), "#") then
+      local m = re_find(l, "^(\\S+) ([a-z_][A-Za-z0-9_]*!?) -- \\S")
+      if m == nil then fail("stack: " .. DICTATED .. " has a line that is not `path name -- reason`: " .. l) end
+      local name = m.groups[2]
+      local path = nil
+      for p in files do
+        if p == m.groups[1] or ends_with(p, "/" .. m.groups[1]) then path = p end
+      end
+      if path == nil then fail("stack: " .. DICTATED .. " names " .. m.groups[1] .. ", which the glob doesn't find") end
+      local annotated = false
+      for line in lines(read(path)) do
+        if starts_with(trim(line), name .. " :") then annotated = true end
+      end
+      if not annotated then
+        fail("stack: " .. DICTATED .. " names " .. name .. ", which has no annotation in " .. path)
+      end
+      local here = get(names, path, {})
+      here[name] = true
+      names[path] = here
+    end
+  end
+  return names
+end
+
 -- Every finding in `files`, as `{found, refused}`: `found` holds each as
 -- `{path, line, kind, what}`, and `refused` the files roc-ast refused.
 function findings_in(files)
   local out = {}
   local strings = string_columns_in(files)
   local dictated = dictated_names_in(files)
+  dictated.names = with_dictated_table(dictated.names, files)
   for p in files do
     local ls = split(read(p), "\n")
     local reachable = without_targets_section(ls)

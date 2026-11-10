@@ -1,0 +1,2 @@
+# The self-test's table for `dictated=`: arguments_dictated.roc.
+arguments_dictated.roc rect -- a plant copying another library's API
