@@ -313,6 +313,9 @@ end
 -- The start of a function's annotation, whose bare arguments can't stack.
 const ANNOTATION = "^[a-z_][A-Za-z0-9_]*!? : .*,$"
 
+-- The start of a function's annotation, on the line a group opens on.
+const ANNOTATION_OPENS = "^[a-z_][A-Za-z0-9_]*!? : "
+
 -- The text before group `g` once it sits on one line. A stacked group among
 -- an annotation's arguments moves its line down from the annotation's, and
 -- `roc fmt` brings it back up with the group on one line.
@@ -338,6 +341,28 @@ function group_on_one_line(ls, g)
     if closes and before == "," then joined = sub(joined, 1, #joined - 1) end
     if before == "{" or sub(piece, 1, 1) == "}" or (before == "," and not closes) then joined = joined .. " " end
     joined = joined .. piece
+  end
+  return with_annotation_rest(ls, g, joined)
+end
+
+-- `joined`, the line group `g` would be on, with the rest of its annotation
+-- when `g` is among an annotation's arguments. Stacking such a group puts the
+-- arguments after it on lines of their own, and `roc fmt` brings them back up
+-- with it, so they are on the line `roc fmt` would make. The rest runs to the
+-- line with the annotation's arrow. Without an arrow, as in a record type's
+-- fields, `joined` is the whole line.
+function with_annotation_rest(ls, g, joined)
+  local opens = re_find(trim(ls[g.line]), ANNOTATION_OPENS) ~= nil
+  local follows = g.line > 1 and re_find(trim(ls[g.line - 1]), ANNOTATION) ~= nil
+  if not opens and not follows then return joined end
+  local rest = joined
+  local i = g.close_line + 1
+  while sub(rest, #rest, #rest) == "," and i <= #ls do
+    local piece = trim(ls[i])
+    if piece == "" then return joined end
+    rest = rest .. " " .. piece
+    if re_find(piece, "->|=>") ~= nil then return rest end
+    i = i + 1
   end
   return joined
 end
