@@ -169,12 +169,46 @@ function plain(s)
   return re_replace(re_replace(re_replace(re_replace(s, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"), "`", "")
 end
 
-function page(book_title, title, body, pager)
+-- A page: the contents page is `front`, and a chapter is `chapter`, with the
+-- chapter list beside it, `nav`.
+function page(kind, book_title, title, body, pager, nav)
   return "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
     .. "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-    .. "<title>" .. plain(title) .. "</title>\n<link rel=\"stylesheet\" href=\"book.css\">\n</head>\n<body>\n"
+    .. "<title>" .. plain(title) .. "</title>\n<link rel=\"stylesheet\" href=\"book.css\">\n</head>\n<body class=\"" .. kind .. "\">\n"
     .. "<header class=\"top-bar\"><a href=\"index.html\">" .. plain(book_title) .. "</a><span>a rough draft</span></header>\n"
-    .. "<main>\n" .. body .. "\n</main>\n" .. pager .. "\n</body>\n</html>\n"
+    .. nav .. "<main>\n" .. body .. "\n" .. pager .. "\n</main>\n</body>\n</html>\n"
+end
+
+-- A rendered page's sections, `{id, title}`, from its `<h2>` lines.
+function sections_of(html)
+  local found = {}
+  for l in lines(html) do
+    local m = re_find(l, "^<h2 id=\"([^\"]+)\">(.*)</h2>$")
+    if m ~= nil then push(found, {id = m.groups[1], title = re_replace(m.groups[2], "<[^>]*>", "")}) end
+  end
+  return found
+end
+
+-- The chapter list beside a chapter: every chapter by number, and the
+-- sections of chapter `n`, the one being read.
+function sidebar(book_title, chapters, n, sections)
+  local ls = {"<nav class=\"book-nav\" aria-label=\"Chapters\">", "<a class=\"book-name\" href=\"index.html\">" .. plain(book_title) .. "</a>", "<ol>"}
+  local i = 0
+  for c in chapters do
+    i = i + 1
+    local file = "chapter-" .. i .. ".html"
+    local link = "<a href=\"" .. file .. "\"><span class=\"number\">" .. i .. "</span>" .. plain(c.title) .. "</a>"
+    if i == n then
+      push(ls, "<li class=\"here\">" .. link .. "<ol class=\"sections\">")
+      for s in sections do push(ls, "<li><a href=\"" .. file .. "#" .. s.id .. "\">" .. s.title .. "</a></li>") end
+      push(ls, "</ol></li>")
+    else
+      push(ls, "<li>" .. link .. "</li>")
+    end
+  end
+  push(ls, "</ol>")
+  push(ls, "</nav>")
+  return join(ls, "\n") .. "\n"
 end
 
 function pager(n, chapters)
@@ -204,14 +238,16 @@ mkdir(DEST)
 replace(DEST .. "/book.css", read(CSS))
 -- The book with every include filled in, for a reader who wants it in one file.
 replace(DEST .. "/book.md", join(whole, "\n") .. "\n")
-replace(DEST .. "/index.html", page(book.title, book.title, contents(book), "<nav class=\"pager\"><span></span><a href=\"chapter-1.html\">Start reading →</a></nav>"))
+replace(DEST .. "/index.html", page("front", book.title, book.title, contents(book), "<nav class=\"pager\"><span></span><a href=\"chapter-1.html\">Start reading →</a></nav>", ""))
 local rows = {}
 local over = {}
 local n = 0
 for c in book.chapters do
   n = n + 1
   local p = chapter_page(c)
-  replace(DEST .. "/chapter-" .. n .. ".html", page(book.title, c.title, rendered(p.markdown), pager(n, book.chapters)))
+  local html = rendered(p.markdown)
+  local nav = sidebar(book.title, book.chapters, n, sections_of(html))
+  replace(DEST .. "/chapter-" .. n .. ".html", page("chapter", book.title, c.title, html, pager(n, book.chapters), nav))
   push(rows, {chapter = n, prose = p.prose, code = p.code, title = plain(c.title)})
   if p.prose > MAX_PROSE_WORDS then push(over, n .. " (" .. p.prose .. " words)") end
 end
