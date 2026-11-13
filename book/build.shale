@@ -8,7 +8,10 @@
 -- exactly `{{file PATH}}` or `{{file PATH:FIRST-LAST}}` becomes that file, or
 -- those lines of it, as a code block, so every script the book quotes is the
 -- script as it stands. `{{function PATH NAME}}` is one top-level function,
--- with the comment right above it. A path through a mount
+-- with the comment right above it. `{{lines PATH from "TEXT" to "TEXT"}}` is
+-- the lines from the one holding the first text through the one holding the
+-- second; each text must occur in the file exactly once, so the quote can't
+-- drift the way a line range can. A path through a mount
 -- (`repos:roc-apps/...`) reaches another checkout. Each block gets a caption
 -- naming where it comes from.
 --
@@ -89,13 +92,44 @@ function function_of(path, name)
   return "*" .. shown_path(path) .. ", the function " .. name .. "*\n\n" .. fenced(path, slice(ls, first, last))
 end
 
+-- The number of the one line of `ls` that holds `anchor`, which must occur
+-- exactly once, so an edit that removes or repeats it stops the build.
+function anchored_line(ls, anchor, path)
+  local at = 0
+  local seen = 0
+  local i = 0
+  for l in ls do
+    i = i + 1
+    if contains(l, anchor) then
+      seen = seen + 1
+      at = i
+    end
+  end
+  if seen ~= 1 then fail("book: `" .. anchor .. "` is in " .. path .. " " .. seen .. " times, and an anchor must be there once") end
+  return at
+end
+
+-- The lines from the one holding the first anchor through the one holding
+-- the second.
+function between_anchors(path, from, to)
+  if not exists(path) then fail("book: {{lines " .. path .. " ...}} names no file") end
+  local ls = text_lines(read(path))
+  local first = anchored_line(ls, from, path)
+  local last = anchored_line(ls, to, path)
+  if last < first then fail("book: in " .. path .. ", `" .. to .. "` comes before `" .. from .. "`") end
+  return "*" .. shown_path(path) .. "*\n\n" .. fenced(path, slice(ls, first, last))
+end
+
 function expanded(text)
   local out = {}
   for l in text_lines(text) do
     local m = re_find(l, "^\\{\\{file (\\S+)\\}\\}$")
     local f = re_find(l, "^\\{\\{function (\\S+) (\\w+)\\}\\}$")
+    local a = re_find(l, "^\\{\\{lines (\\S+) from \"([^\"]+)\" to \"([^\"]+)\"\\}\\}$")
     if m ~= nil then
       for q in lines(quoted(m.group)) do push(out, q) end
+    elseif a ~= nil then
+      for q in lines(between_anchors(a.groups[1], a.groups[2], a.groups[3])) do push(out, q) end
     elseif f ~= nil then
       for q in lines(function_of(f.groups[1], f.groups[2])) do push(out, q) end
     else

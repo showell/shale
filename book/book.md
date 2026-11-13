@@ -279,7 +279,7 @@ Look at `unused_exception`. A kept sentence that the prose no longer holds is a 
 
 Here is the verdict, the last lines of the script:
 
-{{file repos:roc-apps/canvas_apps/safari/gates/book_negatives.shale:204-216}}
+{{lines repos:roc-apps/canvas_apps/safari/gates/book_negatives.shale from "-- This `fail` stands at the top level" to "if #all > 0 then fail(VERDICT.summary) end"}}
 
 `held` is the number the merge gate expects. With `held=0`, the run passes only when the count is exactly zero. Held at three, it would pass at exactly three: four fails, and so does two, until someone lowers the number. So the held number changes only on purpose, in a commit someone reads. The comment above `VERDICT` explains a small craft detail: the `fail` stands at the top level, so the summary is the last line a caller sees.
 
