@@ -218,7 +218,7 @@ has none of it):
   `parent` (`mktemp -d`, `<prefix>.XXXXXX`), so two runs at once never
   share a scratch folder; the caller removes it.
 - **Jobs**, programs that outlive the call:
-  - `job_start(argv, {log, cwd, env, want})` starts one under a detached
+  - `job_start(argv, {log, cwd, env, want, keep_on_stop})` starts one under a detached
     reaper (`want` as `run`'s, for a program `run` would refuse).
     `log` is required, and there are no `secrets`. A log whose job still
     runs, or whose reaper has yet to write its end, is refused: stop or
@@ -236,6 +236,22 @@ has none of it):
     look, so a long wait on a large log costs the log once, and a later
     call reads it from the start. A file that cannot be read stops the
     run, named.
+  - **A run that stops ends the jobs it started.** A `fail`, an error or
+    a budget, anything but the script's own end, stops each job this run
+    started that still runs, as `job_stop` does, and the report says so in
+    one line naming each: `` ── stopped with the run, 1 job it started:
+    `zig build serve` (log runs:serve.log) ``. A run that ends leaves its
+    jobs running, so a server started on purpose stays up; so does a
+    failure `attempt` catches, since the run goes on (a job started inside
+    it ends with a later stop, as any other of the run's). `keep_on_stop =
+    true` keeps a job whatever happens, and a stop names it apart, `──
+    left running (keep_on_stop): ...`. A job the run already stopped or
+    waited to its end is left alone, and a job another run started is
+    never touched, even one this run looked at with `job_alive` or
+    `job_wait`. The jobs end before
+    `--undo-on-stop` puts files back, so none writes past the undo. What
+    kills `shale` itself (a signal, the Bash call's timeout) never reaches
+    the stop, and its jobs run on.
   - **Keep `timeout_ms` under the Bash call's own timeout** (120 s unless
     raised), because Shale cannot see it.
 - **Processes that are not your jobs:** `procs()` lists each as `{pid,

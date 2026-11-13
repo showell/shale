@@ -68,11 +68,15 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     var cwd_v: ?Value = null;
     var env_t: ?*script.value.Table = null;
     var want: ?[]const u8 = null;
+    var keep_on_stop = false;
     for (m.map.keys(), m.map.values()) |k, x| {
-        if (std.mem.eql(u8, k, "log")) log = x else if (std.mem.eql(u8, k, "cwd")) cwd_v = x else if (std.mem.eql(u8, k, "env")) env_t = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "want")) want = try hl.strOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "secrets"))
+        if (std.mem.eql(u8, k, "log")) log = x else if (std.mem.eql(u8, k, "cwd")) cwd_v = x else if (std.mem.eql(u8, k, "env")) env_t = try hl.mapOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "want")) want = try hl.strOpt(run, pos, k, x) else if (std.mem.eql(u8, k, "keep_on_stop")) keep_on_stop = switch (x) {
+            .boolean => |b| b,
+            else => return run.fail(pos, .type, "`job_start`'s `keep_on_stop` is a boolean, not {s}", .{x.typeName()}),
+        } else if (std.mem.eql(u8, k, "secrets"))
             return run.fail(pos, .argument, "`job_start`: no `secrets` on a job: a detached job's log has nobody to scrub it", .{})
         else
-            return run.fail(pos, .argument, "`job_start` takes log, cwd, env and want, not `{s}`", .{k});
+            return run.fail(pos, .argument, "`job_start` takes log, cwd, env, want and keep_on_stop, not `{s}`", .{k});
     }
     const log_v = log orelse return run.fail(pos, .argument, "`job_start` needs a `log`: a job's output goes there, and its record beside it", .{});
     const log_shown = try hl.strOpt(run, pos, "log", log_v);
@@ -134,7 +138,19 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         error.NoRecord => return run.fail(pos, .host, "`job_start`: the reaper ended without writing a record at {s}.job", .{log_shown}),
     };
     const joined = std.mem.join(a, " ", argv) catch return run.oom(pos);
-    h.record("job {s}{s}{s} started (pid {d}), log {s}", .{ joined, if (want != null) " (want: " else "", if (want) |w| std.fmt.allocPrint(a, "{s})", .{w}) catch w else "", r.pid, log_shown });
+    h.record("job {s}{s}{s} started (pid {d}), log {s}{s}", .{ joined, if (want != null) " (want: " else "", if (want) |w| std.fmt.allocPrint(a, "{s})", .{w}) catch w else "", r.pid, log_shown, if (keep_on_stop) ", kept on a stop" else "" });
+    // Kept by the host, past the run's arena, for `stopWithRun`. A job the
+    // host cannot keep would be one a stop leaves running unsaid, so it is
+    // a stop now, the job ended first.
+    h.jobs_started.ensureUnusedCapacity(h.alloc, 1) catch {
+        _ = jobs.stop(r, 2000);
+        return run.oom(pos);
+    };
+    const kept = Started.make(h.alloc, record_os, log_shown, joined, r, keep_on_stop) catch {
+        _ = jobs.stop(r, 2000);
+        return run.oom(pos);
+    };
+    h.jobs_started.appendAssumeCapacity(kept);
 
     const t = try run.newTable(pos);
     t.kind = .map;
@@ -143,6 +159,83 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     t.map.put(a, "pid", .{ .int = r.pid }) catch return run.oom(pos);
     t.map.put(a, "pgid", .{ .int = r.pgid }) catch return run.oom(pos);
     return .{ .table = t };
+}
+
+/// A job this run started, as the host keeps it past the run: which job it
+/// is (its leader's pid and start time, so a later job on the same log is
+/// another), where its record is, and how a stop names it.
+pub const Started = struct {
+    record_os: []const u8,
+    log: []const u8,
+    argv: []const u8,
+    pid: i32,
+    pgid: i32,
+    start: []const u8,
+    keep: bool,
+
+    /// The most bytes of a job's argv the stop's line shows.
+    const argv_shown_most = 80;
+
+    fn make(alloc: std.mem.Allocator, record_os: []const u8, log: []const u8, argv: []const u8, r: jobs.Record, keep: bool) error{OutOfMemory}!Started {
+        const record_copy = try alloc.dupe(u8, record_os);
+        errdefer alloc.free(record_copy);
+        const log_copy = try alloc.dupe(u8, log);
+        errdefer alloc.free(log_copy);
+        const argv_copy = if (argv.len > argv_shown_most) try std.fmt.allocPrint(alloc, "{s}...", .{argv[0..argv_shown_most]}) else try alloc.dupe(u8, argv);
+        errdefer alloc.free(argv_copy);
+        const start_copy = try alloc.dupe(u8, r.start);
+        return .{ .record_os = record_copy, .log = log_copy, .argv = argv_copy, .pid = r.pid, .pgid = r.pgid, .start = start_copy, .keep = keep };
+    }
+
+    pub fn free(s: Started, alloc: std.mem.Allocator) void {
+        alloc.free(s.record_os);
+        alloc.free(s.log);
+        alloc.free(s.argv);
+        alloc.free(s.start);
+    }
+
+    /// Whether the job still runs and has not ended by the run's own hand:
+    /// its record, while it is this job's, says whether it was waited to its
+    /// end; the leader's start time says whether a pid is still it.
+    fn running(s: Started, io: std.Io, alloc: std.mem.Allocator) bool {
+        const ident: jobs.Record = .{ .pid = s.pid, .pgid = s.pgid, .start = s.start };
+        if (std.Io.Dir.cwd().readFileAlloc(io, s.record_os, alloc, .limited(64 * 1024))) |text| {
+            defer alloc.free(text);
+            if (jobs.parseRecord(text)) |r| if (r.pid == s.pid and std.mem.eql(u8, r.start, s.start) and r.done()) return false;
+        } else |_| {}
+        return jobs.alive(ident);
+    }
+};
+
+/// A run that stopped (a `fail`, an error, a budget: anything but its end)
+/// ends the jobs it started, each as `job_stop` does (TERM, 2 seconds, KILL),
+/// but for those started with `keep_on_stop`, and says so in a line naming
+/// each. A job already stopped or waited to its end is passed by, and only a
+/// job this run started is ever signalled. Returns how many it stopped.
+pub fn stopWithRun(h: *Host, io: std.Io, w: *std.Io.Writer) !usize {
+    var stopped: std.ArrayList(u8) = .empty;
+    defer stopped.deinit(h.alloc);
+    var kept: std.ArrayList(u8) = .empty;
+    defer kept.deinit(h.alloc);
+    var n_stopped: usize = 0;
+    var n_kept: usize = 0;
+    for (h.jobs_started.items) |j| {
+        if (!j.running(io, h.alloc)) continue;
+        const into = if (j.keep) &kept else &stopped;
+        if (into.items.len > 0) try into.appendSlice(h.alloc, ", ");
+        try into.print(h.alloc, "`{s}` (log {s})", .{ j.argv, j.log });
+        if (j.keep) {
+            n_kept += 1;
+            continue;
+        }
+        const ident: jobs.Record = .{ .pid = j.pid, .pgid = j.pgid, .start = j.start };
+        _ = jobs.stop(ident, 2000);
+        if (jobs.alive(ident)) try into.appendSlice(h.alloc, " still alive after KILL");
+        n_stopped += 1;
+    }
+    if (n_stopped > 0) try w.print("── stopped with the run, {d} job{s} it started: {s}\n", .{ n_stopped, if (n_stopped == 1) "" else "s", stopped.items });
+    if (n_kept > 0) try w.print("── left running (keep_on_stop): {s}\n", .{kept.items});
+    return n_stopped;
 }
 
 /// A job found again: its record as read now, its record's Shale path, and

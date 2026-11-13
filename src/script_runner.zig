@@ -192,6 +192,9 @@ pub fn main(init: std.process.Init) !u8 {
     for (host.records.items, records) |r, *line| line.* = r.line;
     try cli.printReport(&result, cli.scriptName(c), preludes, .{ .verbose = c.verbose, .records = records, .budgets = c.budgets }, err);
     if (host.time.worthSaying(c.verbose)) try host.time.print(err);
+    // A stopped run ends the jobs it started (but `keep_on_stop`'s), before
+    // any undo, so no job of its writes past the files put back.
+    if (!result.finished()) _ = try linux.shale_host_jobs.stopWithRun(&host, io, err);
     // `--undo-on-stop`: a stopped run puts back what it changed. Exit 1
     // either way: the run stopped, and what could not be put back is said.
     if (c.undo_on_stop and !result.finished()) _ = try shale_host.undoChanges(&host, io, err);

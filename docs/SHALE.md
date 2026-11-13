@@ -1187,6 +1187,14 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   back` (`, but not all` when a folder was among them). A run that finishes
   keeps every change and exits 0; a run that stops exits 1, whether or not
   everything was put back.
+- **A run that stops ends the jobs it started** (`job_start`), each as
+  `job_stop` does, before any `--undo-on-stop`, and says which in one
+  line, `` ── stopped with the run, 2 jobs it started: `...` (log ...),
+  ... ``. A run that finishes leaves them running, and a failure `attempt`
+  catches is no stop. A job started with `keep_on_stop = true` runs on
+  whatever happens (`── left running (keep_on_stop): ...`); one the run
+  already stopped or waited to its end, and one another run started, are
+  left alone. SHALE-AGENTS.md's Jobs have the rest.
 - **`--args-stdin`**: the FILE's `NAME=VALUE`s are stdin's lines, after the
   command line's, each value raw to its line's end (quotes, spaces, `|`,
   `$` and backslashes as they are: no shell sees them), blank lines passed
@@ -1277,7 +1285,9 @@ three:
     `cookbook/times.shale` is a stage's history over this: SHALE-AGENTS.md,
     "A stage states what it may cost";
   - `real`, a path's OS path;
-  - the jobs, `src/shale_host_jobs.zig` over `src/shale_jobs.zig`;
+  - the jobs, `src/shale_host_jobs.zig` over `src/shale_jobs.zig`; the
+    host keeps the jobs a run started, so a stopped run ends them
+    (`stopWithRun`, called by the runner as `--undo-on-stop`'s undo is);
   - the Zig tools, `zig_rename`, `zig_decls`, `zig_move`, `zig_imports`
     and `zig_tokens` (`src/shale_host_zig.zig`);
   - `shale_tokens`, a Shale file's tokens by the lexer in

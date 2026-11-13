@@ -213,7 +213,7 @@ test "jobs: the mistakes a job's call can make, each named" {
     defer t.deinit();
     try t.expectStop("job_start({\"shale-fixture\", \"lines\", \"1\"}, {})", .atomic, .argument, "`job_start` needs a `log`");
     try t.expectStop("job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"x.log\", secrets = {K = \"k\"}})", .atomic, .argument, "no `secrets` on a job");
-    try t.expectStop("job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"x.log\", tail = 3})", .atomic, .argument, "`job_start` takes log, cwd, env and want, not `tail`");
+    try t.expectStop("job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"x.log\", tail = 3})", .atomic, .argument, "`job_start` takes log, cwd, env, want and keep_on_stop, not `tail`");
     try t.expectStop("job_start({\"bash\", \"-c\", \"x\"}, {log = \"x.log\"})", .atomic, .refused, "`job_start` of `bash`");
     try t.expectStop("job_start({\"no-such-program-anywhere\"}, {log = \"x.log\"})", .atomic, .host, "`job_start`: `no-such-program-anywhere` is not found along PATH");
     try t.expectStop("job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"no-such-dir/x.log\"})", .atomic, .store, "`job_start`: no-such-dir/x.log's directory is not there");
@@ -253,4 +253,143 @@ test "jobs: a job whose argument holds a newline is found again by its record; a
     var r = t.runOnce("job_start({\"shale-fixture\", \"lines\", \"1\", rep(\"x\", 8000)}, {log = \"long.log\"})", .atomic);
     defer r.deinit();
     try testing.expect(std.mem.indexOf(u8, r.stop.?.message, "a record holds 7168") != null);
+}
+
+/// What a `shale` run of `src` (written to `name` in the root) did, as a
+/// shell sees it: the binary the tests build, the fixture on its PATH.
+const Launched = struct { code: u8, stderr: []const u8 };
+
+fn launch(t: *T, name: []const u8, src: []const u8) !Launched {
+    const a = t.arena.allocator();
+    try t.put(name, src);
+    const cmd = try std.fmt.allocPrint(a, "{s} '{s}' --root '{s}' '{s}/{s}'", .{ t.path_env, t.host.reaper.?, t.root, t.root, name });
+    const r = try std.process.run(a, t.threaded.io(), .{ .argv = &.{ "sh", "-c", cmd } });
+    return .{ .code = switch (r.term) {
+        .exited => |c| c,
+        else => 255,
+    }, .stderr = r.stderr };
+}
+
+/// The `── stopped with the run` line of a run's report, or "" when it has none.
+fn stopLine(stderr: []const u8) []const u8 {
+    const at = std.mem.indexOf(u8, stderr, "── stopped with the run") orelse return "";
+    return stderr[at .. std.mem.indexOfScalarPos(u8, stderr, at, '\n') orelse stderr.len];
+}
+
+test "jobs: a run that stops ends the jobs it started, in one line naming each; a run that ends keeps them; another run's job is never touched" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    // A run that ends: its job runs on, and nothing is said.
+    const ended = try launch(&t, "ends.shale", "job_start({\"shale-fixture\", \"sleep\", \"30000\"}, {log = \"kept.log\"}) print(\"started\")\n");
+    errdefer std.debug.print("{s}\n", .{ended.stderr});
+    try testing.expectEqual(@as(u8, 0), ended.code);
+    try testing.expectEqualStrings("", stopLine(ended.stderr));
+    try testing.expectEqualStrings("true\n", try once(&t, "print(job_alive(\"kept.log.job\"))"));
+    // A run that fails: its two jobs end, named; the first run's job, which
+    // this one asks about, runs on.
+    const failed = try launch(&t, "fails.shale",
+        \\job_start({"shale-fixture", "sleep", "30000"}, {log = "one.log"})
+        \\job_start({"shale-fixture", "sleep", "30000", "two"}, {log = "two.log"})
+        \\print(job_alive("kept.log.job"))
+        \\fail("on purpose")
+        \\
+    );
+    errdefer std.debug.print("{s}\n", .{failed.stderr});
+    try testing.expectEqual(@as(u8, 1), failed.code);
+    try testing.expectEqualStrings("── stopped with the run, 2 jobs it started: `shale-fixture sleep 30000` (log one.log), `shale-fixture sleep 30000 two` (log two.log)", stopLine(failed.stderr));
+    try testing.expectEqualStrings("false\tfalse\ttrue\n", try once(&t, "print(job_alive(\"one.log.job\"), job_alive(\"two.log.job\"), job_alive(\"kept.log.job\"))"));
+    // A budget's stop is a stop too.
+    const budget = try launch(&t, "budget.shale",
+        \\-- budget: steps=100000
+        \\job_start({"shale-fixture", "sleep", "30000"}, {log = "spent.log"})
+        \\local i = 0
+        \\while true do i = i + 1 end
+        \\
+    );
+    errdefer std.debug.print("{s}\n", .{budget.stderr});
+    try testing.expectEqual(@as(u8, 1), budget.code);
+    try testing.expect(std.mem.indexOf(u8, budget.stderr, "budget steps") != null);
+    try testing.expectEqualStrings("── stopped with the run, 1 job it started: `shale-fixture sleep 30000` (log spent.log)", stopLine(budget.stderr));
+    try testing.expectEqualStrings("false\ttrue\ttrue\n", try once(&t, "print(job_alive(\"spent.log.job\"), job_alive(\"kept.log.job\"), job_stop(\"kept.log.job\"))"));
+}
+
+test "jobs: keep_on_stop keeps its job through the run's stop, said apart; a keep_on_stop that is no boolean is refused" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const r = try launch(&t, "keep.shale",
+        \\job_start({"shale-fixture", "sleep", "30000"}, {log = "server.log", keep_on_stop = true})
+        \\job_start({"shale-fixture", "sleep", "30000"}, {log = "helper.log", keep_on_stop = false})
+        \\fail("on purpose")
+        \\
+    );
+    errdefer std.debug.print("{s}\n", .{r.stderr});
+    try testing.expectEqual(@as(u8, 1), r.code);
+    try testing.expectEqualStrings("── stopped with the run, 1 job it started: `shale-fixture sleep 30000` (log helper.log)", stopLine(r.stderr));
+    try testing.expect(std.mem.indexOf(u8, r.stderr, "── left running (keep_on_stop): `shale-fixture sleep 30000` (log server.log)\n") != null);
+    try testing.expectEqualStrings("true\tfalse\ttrue\n", try once(&t, "print(job_alive(\"server.log.job\"), job_alive(\"helper.log.job\"), job_stop(\"server.log.job\"))"));
+    try t.expectStop("job_start({\"shale-fixture\", \"exit\", \"0\"}, {log = \"x.log\", keep_on_stop = \"yes\"})", .atomic, .type, "`keep_on_stop` is a boolean, not a string");
+}
+
+test "jobs: a failure attempt catches is no stop, so its jobs run on; a later stop ends them, one started inside the attempt too" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const caught = try launch(&t, "caught.shale",
+        \\function f()
+        \\  job_start({"shale-fixture", "sleep", "30000"}, {log = "inside.log"})
+        \\  fail("caught")
+        \\end
+        \\print(attempt(f).ok)
+        \\job_start({"shale-fixture", "sleep", "30000"}, {log = "after.log"})
+        \\
+    );
+    errdefer std.debug.print("{s}\n", .{caught.stderr});
+    try testing.expectEqual(@as(u8, 0), caught.code);
+    try testing.expectEqualStrings("", stopLine(caught.stderr));
+    try testing.expectEqualStrings("true\ttrue\ttrue\ttrue\n", try once(&t, "print(job_alive(\"inside.log.job\"), job_alive(\"after.log.job\"), job_stop(\"inside.log.job\"), job_stop(\"after.log.job\"))"));
+    const later = try launch(&t, "later.shale",
+        \\function f()
+        \\  job_start({"shale-fixture", "sleep", "30000"}, {log = "inside2.log"})
+        \\  fail("caught")
+        \\end
+        \\attempt(f)
+        \\fail("the run stops now")
+        \\
+    );
+    errdefer std.debug.print("{s}\n", .{later.stderr});
+    try testing.expectEqual(@as(u8, 1), later.code);
+    try testing.expectEqualStrings("── stopped with the run, 1 job it started: `shale-fixture sleep 30000` (log inside2.log)", stopLine(later.stderr));
+    try testing.expectEqualStrings("false\n", try once(&t, "print(job_alive(\"inside2.log.job\"))"));
+}
+
+test "jobs: a job the run already stopped or waited to its end makes no second stop; a log taken again names only its new job, once" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const none = try launch(&t, "none.shale",
+        \\local s = job_start({"shale-fixture", "sleep", "30000"}, {log = "stopped.log"})
+        \\job_stop(s)
+        \\local w = job_start({"shale-fixture", "exit", "0"}, {log = "waited.log"})
+        \\job_wait(w, {timeout_ms = 10000})
+        \\fail("on purpose")
+        \\
+    );
+    errdefer std.debug.print("{s}\n", .{none.stderr});
+    try testing.expectEqual(@as(u8, 1), none.code);
+    try testing.expectEqualStrings("", stopLine(none.stderr));
+    // The log a waited job ended on, taken by a job that still runs: that
+    // one job is stopped, named once.
+    const again = try launch(&t, "again.shale",
+        \\local w = job_start({"shale-fixture", "exit", "0"}, {log = "reused.log"})
+        \\job_wait(w, {timeout_ms = 10000})
+        \\job_start({"shale-fixture", "sleep", "30000"}, {log = "reused.log"})
+        \\fail("on purpose")
+        \\
+    );
+    errdefer std.debug.print("{s}\n", .{again.stderr});
+    try testing.expectEqual(@as(u8, 1), again.code);
+    try testing.expectEqualStrings("── stopped with the run, 1 job it started: `shale-fixture sleep 30000` (log reused.log)", stopLine(again.stderr));
+    try testing.expectEqualStrings("false\n", try once(&t, "print(job_alive(\"reused.log.job\"))"));
 }
