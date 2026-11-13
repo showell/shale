@@ -1,4 +1,4 @@
-# Reading Shale
+# Automating agentic development with Shale
 
 Shale is a programming language written by agents, for agents. This book is for the humans beside them: people curious about programming languages and open to letting an agent do real work. You will read a lot of Shale and write very little. Here we learn to read it at the speed it scrolls by, to judge the recipes an agent keeps, and to trust the gates that hold a codebase, or a book, to its standards.
 
