@@ -1,0 +1,220 @@
+-- budget: steps=60000000 output_bytes=100000
+-- This builds the Shale book into the dev channel, one page a chapter.
+--
+--   cd <shale checkout> && shale book/build.shale
+--
+-- book.md is the whole book. Its `#` line is the title, the text under it is
+-- the contents page's, and each `##` heading starts a chapter. A line that is
+-- exactly `{{file PATH}}` or `{{file PATH:FIRST-LAST}}` becomes that file, or
+-- those lines of it, as a code block, so every script the book quotes is the
+-- script as it stands. `{{function PATH NAME}}` is one top-level function,
+-- with the comment right above it. A path through a mount
+-- (`repos:roc-apps/...`) reaches another checkout. Each block gets a caption
+-- naming where it comes from.
+--
+-- The build is also the book's first gate. It stops on an include that names
+-- no file or runs past its end, on any `{{` left over, and on a chapter over
+-- MAX_PROSE_WORDS words of prose. The essay surface's roc-markdown renderer
+-- draws each page.
+const SOURCE = "book/book.md"
+const CSS = "book/book.css"
+const DEST = "build:roc-apps/next/shale-book"
+const URL = "http://143.244.172.148:9210/shale-book/"
+const RENDER = "repos:essay-repl-server/bin/render_note"
+const RENDER_WANT = "renderer: the essay surface's roc-markdown renderer draws the book's pages"
+const MAX_PROSE_WORDS = 900
+const FENCE = "```"
+
+-- The lines of a text, without the empty one after its last newline.
+function text_lines(text)
+  local ls = lines(text)
+  if #ls > 0 and ls[#ls] == "" then return take(ls, #ls - 1) end
+  return ls
+end
+
+-- A path as the reader sees it, without the mount that reaches it.
+function shown_path(path)
+  if starts_with(path, "repos:") then return sub(path, 7) end
+  return path
+end
+
+function fenced(path, ls)
+  local tag = "shale"
+  if ends_with(path, ".roc") then tag = "roc" end
+  return FENCE .. tag .. "\n" .. join(ls, "\n") .. "\n" .. FENCE
+end
+
+-- One include, as the code block that takes its place.
+function quoted(spec)
+  local path = spec
+  local first = 0
+  local last = 0
+  local m = re_find(spec, "^(.*):(\\d+)-(\\d+)$")
+  if m ~= nil then
+    path = m.groups[1]
+    first = parse_int(m.groups[2])
+    last = parse_int(m.groups[3])
+  end
+  if not exists(path) then fail("book: {{file " .. spec .. "}} names no file") end
+  local ls = text_lines(read(path))
+  if first == 0 then
+    first = 1
+    last = #ls
+  end
+  if first < 1 or first > last or last > #ls then
+    fail("book: {{file " .. spec .. "}} runs past the file's " .. #ls .. " lines")
+  end
+  local where = shown_path(path) .. ", lines " .. first .. " to " .. last
+  if first == 1 and last == #ls then where = shown_path(path) .. ", the whole file" end
+  return "*" .. where .. "*\n\n" .. fenced(path, slice(ls, first, last))
+end
+
+-- One top-level function, with the comment lines right above it, through the
+-- first `end` at the start of a line.
+function function_of(path, name)
+  if not exists(path) then fail("book: {{function " .. path .. " " .. name .. "}} names no file") end
+  local ls = text_lines(read(path))
+  local start = 0
+  local i = 0
+  for l in ls do
+    i = i + 1
+    if start == 0 and starts_with(l, "function " .. name .. "(") then start = i end
+  end
+  if start == 0 then fail("book: " .. path .. " has no top-level function " .. name) end
+  local first = start
+  while first > 1 and starts_with(ls[first - 1], "--") do first = first - 1 end
+  local last = start
+  while last <= #ls and ls[last] ~= "end" do last = last + 1 end
+  if last > #ls then fail("book: " .. name .. " in " .. path .. " has no `end` at the start of a line") end
+  return "*" .. shown_path(path) .. ", the function " .. name .. "*\n\n" .. fenced(path, slice(ls, first, last))
+end
+
+function expanded(text)
+  local out = {}
+  for l in text_lines(text) do
+    local m = re_find(l, "^\\{\\{file (\\S+)\\}\\}$")
+    local f = re_find(l, "^\\{\\{function (\\S+) (\\w+)\\}\\}$")
+    if m ~= nil then
+      for q in lines(quoted(m.group)) do push(out, q) end
+    elseif f ~= nil then
+      for q in lines(function_of(f.groups[1], f.groups[2])) do push(out, q) end
+    else
+      if contains(re_replace(l, "`[^`]*`", ""), "{{") then fail("book: a `{{` the build doesn't know: " .. l) end
+      push(out, l)
+    end
+  end
+  return out
+end
+
+-- The book's parts: its title, the contents page's text, and each chapter as
+-- {title, lines}.
+function parts_of(ls)
+  local title = ""
+  local front = {}
+  local chapters = {}
+  local current = nil
+  local in_code = false
+  for l in ls do
+    if starts_with(l, FENCE) then in_code = not in_code end
+    if in_code or starts_with(l, FENCE) then
+      if current == nil then push(front, l) else push(current.lines, l) end
+    elseif title == "" and starts_with(l, "# ") then
+      title = sub(l, 3)
+    elseif starts_with(l, "## ") then
+      current = {title = sub(l, 4), lines = {}}
+      push(chapters, current)
+    elseif current == nil then
+      push(front, l)
+    else
+      push(current.lines, l)
+    end
+  end
+  if title == "" then fail("book: book.md has no `#` title") end
+  return {title = title, front = front, chapters = chapters}
+end
+
+-- A chapter's markdown, its `###` sections made `##`, and its counts.
+function chapter_page(chapter)
+  local out = {"# " .. chapter.title, ""}
+  local in_code = false
+  local prose = 0
+  local code = 0
+  for l in chapter.lines do
+    if starts_with(l, FENCE) then
+      in_code = not in_code
+      push(out, l)
+    elseif in_code then
+      code = code + 1
+      push(out, l)
+    elseif starts_with(l, "### ") then
+      push(out, "## " .. sub(l, 5))
+    else
+      prose = prose + #words(l)
+      push(out, l)
+    end
+  end
+  return {markdown = join(out, "\n"), prose = prose, code = code}
+end
+
+function rendered(markdown)
+  local r = run({real(RENDER), markdown}, {timeout_ms = 30000, whole = 4000000, want = RENDER_WANT})
+  if r.ended ~= "exit" or r.code ~= 0 then
+    print(trim(r.out))
+    fail("book: the renderer failed")
+  end
+  return r.out
+end
+
+function plain(s)
+  return re_replace(re_replace(re_replace(re_replace(s, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"), "`", "")
+end
+
+function page(book_title, title, body, pager)
+  return "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+    .. "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+    .. "<title>" .. plain(title) .. "</title>\n<link rel=\"stylesheet\" href=\"book.css\">\n</head>\n<body>\n"
+    .. "<header class=\"top-bar\"><a href=\"index.html\">" .. plain(book_title) .. "</a><span>a rough draft</span></header>\n"
+    .. "<main>\n" .. body .. "\n</main>\n" .. pager .. "\n</body>\n</html>\n"
+end
+
+function pager(n, chapters)
+  local before = "<span></span>"
+  local after = "<span></span>"
+  if n > 1 then before = "<a href=\"chapter-" .. (n - 1) .. ".html\">← " .. plain(chapters[n - 1].title) .. "</a>" end
+  if n < #chapters then after = "<a href=\"chapter-" .. (n + 1) .. ".html\">" .. plain(chapters[n + 1].title) .. " →</a>" end
+  return "<nav class=\"pager\">" .. before .. "<a href=\"index.html\">Contents</a>" .. after .. "</nav>"
+end
+
+function contents(book)
+  local ls = {"<h1>" .. plain(book.title) .. "</h1>", rendered(join(book.front, "\n")), "<ol class=\"contents\">"}
+  local n = 0
+  for c in book.chapters do
+    n = n + 1
+    push(ls, "<li><a href=\"chapter-" .. n .. ".html\">" .. plain(c.title) .. "</a></li>")
+  end
+  push(ls, "</ol>")
+  return join(ls, "\n")
+end
+
+local whole = expanded(read(SOURCE))
+local book = parts_of(whole)
+if #book.chapters == 0 then fail("book: book.md has no `##` chapters") end
+if exists(DEST) then remove_tree(DEST) end
+mkdir(DEST)
+replace(DEST .. "/book.css", read(CSS))
+-- The book with every include filled in, for a reader who wants it in one file.
+replace(DEST .. "/book.md", join(whole, "\n") .. "\n")
+replace(DEST .. "/index.html", page(book.title, book.title, contents(book), "<nav class=\"pager\"><span></span><a href=\"chapter-1.html\">Start reading →</a></nav>"))
+local rows = {}
+local over = {}
+local n = 0
+for c in book.chapters do
+  n = n + 1
+  local p = chapter_page(c)
+  replace(DEST .. "/chapter-" .. n .. ".html", page(book.title, c.title, rendered(p.markdown), pager(n, book.chapters)))
+  push(rows, {chapter = n, prose = p.prose, code = p.code, title = plain(c.title)})
+  if p.prose > MAX_PROSE_WORDS then push(over, n .. " (" .. p.prose .. " words)") end
+end
+print(table(rows, {"chapter", "prose", "code", "title"}))
+if #over > 0 then fail("book: over " .. MAX_PROSE_WORDS .. " words of prose: " .. join(over, ", ")) end
+print("book: " .. #book.chapters .. " chapters at " .. URL)
