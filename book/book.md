@@ -2,7 +2,7 @@
 
 Shale is a programming language written by agents, for agents. This book is for the humans beside them: people curious about programming languages and open to letting an agent do real work. You will read a lot of Shale and write very little. Here we learn to read it at the speed it scrolls by, to judge the recipes an agent keeps, and to trust the gates that hold a codebase, or a book, to its standards.
 
-Every script quoted here is pulled from its file when the book is built, so each one is the script as it stands today. This draft is rough: eight chapters, prose and code, with pictures still to come.
+Every script quoted from a file is pulled from it when the book is built, so each one is the script as it stands today. The short examples typed into the text are unchecked so far. This draft is rough: eight chapters, prose and code, with pictures still to come.
 
 ## A book published by a script
 
@@ -12,15 +12,15 @@ That human is you, and this book is about reading. The premise is unusual: you w
 
 ### This morning's deploy
 
-The best way to meet Shale is to watch it do something real. This morning a 39-chapter book about the Roc language went to staging, and one Shale script carried it there. Here is the part of it that matters:
+The best way to meet Shale is to watch it do something real. This morning a 39-chapter book about the Roc language went to staging. Before it could, one Shale script had to say it was ready. Here is the part of that script that matters:
 
 {{file repos:roc-apps/canvas_apps/safari/gates/publish.shale:13-39}}
 
-If you know Lua, or Python, or JavaScript, most of this reads itself. `const` names a value. `function` starts a function, and `end` closes it. `..` joins strings. `~=` means "not equal". `run` starts a program, and two of its options appear on every call in this book: `timeout_ms`, how long the program may take, and `tail`, how much of its output comes back.
+If you know Lua, or Python, or JavaScript, most of this reads itself. `const` names a value. `function` starts a function, and `end` closes it. `..` joins strings. `~=` means "not equal". `run` starts a program, and two kinds of option appear on every call: `timeout_ms`, how long the program may take, and a keep, how much of its output comes back (`tail` for the last lines, `whole` for all of it up to a size).
 
 `main` runs three stages. The first is the merge gate, from cold caches. The second is `check.shale`, which runs the compiler over 59 apps. The third builds the book and checks every link in it. After each stage, `report_stage` prints what the stage said, and how long it took. Then it asks one question: did the stage end well? If the stage failed, `fail` stops the whole run.
 
-This morning, every stage passed. The merge gate took 120 seconds, the compiler check 28, and the book 148, including a browser that followed 2,214 links. The last line printed was the verdict:
+This morning, every stage passed. The merge gate took 120 seconds, the compiler check 28, and the book 148, including a browser that checked 2,214 links. The last line printed was the verdict:
 
 ```text
 safari publish: every stage passed; site/publish.sh takes each page from the dev channel
@@ -41,15 +41,15 @@ Gates don't appear from nowhere. On this machine they grow, one rung at a time:
 3. **A recipe with plants.** The recipe starts making judgments, and each judgment gets proof: small files that must trip it, and small files that must stay quiet.
 4. **A gate.** The judgment becomes a count, held on every commit.
 
-The book climbs that ladder in order. Each rung asks something different of you as a reader. A heredoc goes by at scroll speed, and you want to know what it touched. A recipe asks for review: is it worth keeping? A gate asks for trust, and you give it only once you've seen what the gate holds and what proves it's watching.
+The book climbs that ladder in order, with one detour in chapter 4 to the recipes that change code. The last two chapters put the gates to work, on a book and on a day. Each rung asks something different of you as a reader. A heredoc goes by at scroll speed, and you want to know what it touched. A recipe asks for review: is it worth keeping? A gate asks for trust, and you give it only once you've seen what the gate holds and what proves it's watching.
 
 ### Who wrote this language
 
-Agents wrote Shale: the interpreter, the libraries and most of the recipes. A human set the taste and said no, often. Both of those show in the code. It is plain, it explains itself in comments, and it stops loudly when something is wrong. We'll see why each of those matters to a reader in the next chapter, which starts where an agent's work does: a heredoc scrolling by.
+Agents wrote Shale: the interpreter, the libraries and most of the recipes. A human set the taste and said no, often. Both of those show in the code. It is plain, it explains itself in comments, and it stops loudly when something is wrong. Each of those matters to a reader, as we'll see. The next chapter starts where an agent's work does: a heredoc scrolling by.
 
 ## Reading a heredoc as it scrolls by
 
-On this machine, a hook stands between an agent and the shell. Every command the agent sends goes to the hook first, and the hook lets exactly one form through: a Shale launch. So what scrolls by in an agent's session looks like this:
+On this machine, a hook stands between an agent and the shell. Every command the agent sends goes to the hook first, and the hook lets one form through: a Shale launch, plus a logged escape we'll meet in the next chapter. So what scrolls by in an agent's session looks like this:
 
 ```shale
 cd ~/showell_repos/shale && shale <<'EOF'
@@ -70,8 +70,8 @@ The first line says where the script runs, and the lines between `<<'EOF'` and `
 
 A script going by gets a few seconds of your attention. Spend them on three questions:
 
-- **What does it read?** Here: the Zig files under `src`, and nothing else. A Shale script reads only under the folder it runs in, and the named folders called mounts.
-- **What does it run?** Here: no programs at all. Every program a script runs goes through `run`, so a program is easy to spot.
+- **What does it read?** Here: the Zig files under `src`, and nothing else. A Shale script reads only under the folder it runs in, and its mounts. A mount is a folder elsewhere with a short name: `cookbook:look.shale` is `look.shale` in the cookbook's folder, and `build:`, `scratch:` and `repos:` name the build, scratch and repositories folders.
+- **What does it run?** Here: no programs at all. Every program a script runs goes through `run`, `job_start` for one that outlives the script, or a prelude call like `git_commit`, so a program is easy to spot.
 - **How did it end?** Shale prints a footer when a run stops, and the footer says where and why.
 
 Here is a program being run, as you'll see it many times a day:
@@ -99,7 +99,7 @@ Shale borrows Lua's look so that an agent's habits, and yours, carry over. The d
 
 - **A function is declared above where it's called,** at the top level, and closures are out. You read a script top to bottom, once.
 - **A missing key stops the run.** In Lua it's a quiet `nil` that surfaces three steps later.
-- **Patterns are regular expressions,** the ones you already know, in place of Lua's own.
+- **Patterns are regular expressions,** a subset of the ones you know that always runs in linear time, in place of Lua's own patterns.
 - **Integers only.** No floats, so no rounding to wonder about.
 - **One loop name per `for`.** You saw that stop above.
 
@@ -122,7 +122,7 @@ for k in keys(by) do print(k, by[k]) end
 grep -h 'DEPARTS (' src/tcp*.zig | sed -E 's/.*DEPARTS \(([a-z]+)\).*/\1/' | sort | uniq -c
 ```
 
-The shell wins on length. Shale wins on reading: each step has a name you can point at, and it says how it ended. The real difference shows up later, when a one-liner like this comes back for the third time.
+The shell wins on length, and for a question asked once, that's a fine answer. The Shale version names each step and says how it ended, which starts to matter when a script like this comes back. That's the next chapter.
 
 ### The smallest gate
 
@@ -132,7 +132,7 @@ The shell wins on length. Shale wins on reading: each step has a name you can po
 
 Most heredocs are asked once and forgotten. Some come back. When an agent writes the same ten lines for the third time, those lines earn a file, a name and arguments. That file is a **recipe**.
 
-Recipes start in the repository that uses them, in its own scripts folder. A recipe moves to the shared cookbook once it has proven itself and a second repository wants it. Today the cookbook holds about 80 recipes, and about 130 Shale scripts are spread across the repositories on this machine.
+Recipes start in the repository that uses them, in its own scripts folder. A recipe moves to the shared cookbook once it has proven itself and a second repository wants it. Today the cookbook holds about 60 recipes, with the libraries they share, and about 75 more Shale scripts live in the other repositories on this machine.
 
 ### A whole recipe
 
@@ -154,7 +154,7 @@ A recipe asks more of you than a heredoc. The agent proposes to keep it, so you'
 
 ### Where recipes come from
 
-The hook leaves one way past it: a command whose first line is `# want: tag: why`. The command runs, and a line goes into a log of wants, which say "Shale should do this". A second recipe reads that log back:
+The hook leaves one way past it: a command whose first line is `# want: tag: why`, meaning Shale should do this, or `# out-of-scope: tag: why`, meaning it never will. The command runs, and a line goes into a log. A recipe reads that log back:
 
 {{file cookbook/wants.shale:1-19}}
 
@@ -183,16 +183,17 @@ for p in glob("src/**/*.zig") do
     local r = zig_rename(p, "pastDeadline", "deadlinePassed")
     n = n + r.renamed
     if r.left_in_comments > 0 then print(p .. ": " .. r.left_in_comments .. " left in comments") end
+    if #grep(p, "timeouts.pastDeadline") > 0 then edit(p, "timeouts.pastDeadline", "timeouts.deadlinePassed", {all = true}) end
   end
 end
 print(n .. " renamed")
 ```
 
-It renames identifier tokens and nothing else. A string, a test's name or another struct's field stays as it was. Mentions in comments are counted and left for a human to decide. Roc gets the same treatment from its own parser: `roc_tree` hands a recipe the parse tree of each file, and the Roc hunts in the cookbook read names, imports and nesting from it.
+It renames identifier tokens and nothing else. A use after a `.`, like `timeouts.pastDeadline`, gets its own `edit`, and the build judges whatever is left. A string, a test's name or another struct's field stays as it was. Mentions in comments are counted and left for a human to decide. Roc gets the same treatment from its own parser: `roc_tree` hands a recipe the parse tree of each file, and the Roc hunts in the cookbook read names, imports and nesting from it.
 
 ### Edits that pin their text down
 
-The everyday change is `edit(path, old, new)`. It replaces a literal, prints a one-line summary of the diff, and fails when `old` isn't there. Its list form takes several edits to one file. Each `old` must occur exactly once, in the file as the edit before left it. The file gets one write, or none if any edit fails. A half-applied refactor is never left behind.
+The everyday change is `edit(path, old, new)`. It replaces a literal, prints a one-line summary of the diff, and fails unless `old` is there exactly once, or `{all = true}` asks for every one. Its list form takes several edits to one file. Each `old` must occur exactly once, in the file as the edit before left it. The file gets one write, or none if any edit fails. A half-applied refactor is never left behind.
 
 ### Merges, with a library
 
@@ -200,7 +201,7 @@ Merge conflicts are where agents used to write their most fragile code: hand-rol
 
 {{function cookbook/conflicts.shale conflict_marker_kind}}
 
-It reads one line and names the marker it is, CRLF files included. The rest of the library builds on it: hunks, sides, a resolution in a few lines. `git_merge` in the git prelude does its part too. On a conflict it aborts the merge and stops, naming the files, so a checkout is never left half merged.
+It reads one line and names the marker it is, CRLF files included. The library's other functions build on this one. `git_merge` in the git prelude does its part too. On a conflict it aborts the merge and stops, naming the files, so a checkout is never left half merged.
 
 ### The build judges the move
 
@@ -240,7 +241,7 @@ A row with `counts` must print exactly those findings and exit nonzero. A row wi
 
 ### The function that checks the plants
 
-The self-test's machinery is shared by every judging recipe:
+The Roc judges share their self-test machinery in one library:
 
 {{function cookbook/roc/gate_recipe.shale check_plants}}
 
@@ -268,7 +269,7 @@ A sentence that holds one of these words, as a whole word, is a negative. Inline
 
 ### The exceptions table
 
-Some negatives belong in the book. "Roc forbids import cycles, so no path of arrows loops back" states a rule the compiler enforces, and the "no" is the point. So the lint reads a table of kept sentences, each with its kind. The header defines the table's rules:
+Some negatives could belong in the book. A sentence like "Roc forbids import cycles, so no path of arrows loops back" states a rule the compiler enforces, and the "no" is the point. So the lint reads a table of kept sentences, each with its kind. Today the table keeps none. Its `fix` kinds name the negatives that must be rewritten, so a sentence of that kind can't be parked in the table. The header defines the table's rules:
 
 {{file repos:roc-apps/canvas_apps/safari/gates/book_negatives.shale:33-48}}
 
@@ -280,7 +281,7 @@ Here is the verdict, the last lines of the script:
 
 {{file repos:roc-apps/canvas_apps/safari/gates/book_negatives.shale:204-216}}
 
-`held` is the number the merge gate expects. With `held=0`, the run passes only when the count is exactly zero. A count of one fails, and so would a count that dropped below the held number, if it were ever held above zero. Either way the gate's number changes only on purpose, in a commit someone reads. The comment above `VERDICT` explains a small craft detail: the `fail` stands at the top level, so the summary is the last line a caller sees.
+`held` is the number the merge gate expects. With `held=0`, the run passes only when the count is exactly zero. Held at three, it would pass at exactly three: four fails, and so does two, until someone lowers the number. So the held number changes only on purpose, in a commit someone reads. The comment above `VERDICT` explains a small craft detail: the `fail` stands at the top level, so the summary is the last line a caller sees.
 
 This morning it printed:
 
@@ -288,7 +289,7 @@ This morning it printed:
 book_negatives: negative 0, unused_exception 0, 0 negative sentences of 2015 read above `Appendix: the patterns`, 0 kept in the table, as held
 ```
 
-Over two thousand sentences, read on every merge, in about a fifth of a second.
+Over two thousand sentences, read on every merge, in a fraction of a second.
 
 ### A rule in a day
 
@@ -300,7 +301,7 @@ The rule went from a sentence in a conversation to a failing build the same day.
 
 ### Reading a gate at trust speed
 
-When you meet a gate, ask three things. What does it hold? Here, a count of zero. How is the count kept honest? Here, by the exceptions table, checked from both sides. What proves the gate is watching? For a recipe in the cookbook, its plants. For a book's lint, the book itself: every sentence ever fixed was a finding first.
+When you meet a gate, ask three things. What does it hold? Here, a count of zero. How is the count kept honest? Here, by the exceptions table, checked from both sides. What proves the gate is watching? For a recipe in the cookbook, its plants. The book's lints have no plants yet. Today the only evidence is that every sentence ever fixed was a finding first, and by chapter 5's standard that's weak. Plants for the book's lints are on the list.
 
 The negatives were about voice. The next chapter's gates are about truth.
 
@@ -322,7 +323,7 @@ The book you're reading is built the same way, more simply. Its source quotes fi
 
 {{function book/build.shale function_of}}
 
-It finds the function, walks up over the comment above it, and down to the first `end` at the start of a line. A function that's gone stops the build. So every block of code in this book is the code as it stood the day the book was built.
+It finds the function, walks up over the comment above it, and down to the first `end` at the start of a line. A function that's gone stops the build. So every quoted function in this book is the code as it stood the day the book was built. Line ranges are weaker: the build checks only that the lines exist, so an edit above them quietly shifts the quote. Roc's book anchors its excerpts on text, and this book should too.
 
 ### Names in sentences
 
@@ -334,7 +335,7 @@ It reads every backticked name in the prose, looks for it in the code, and holds
 
 ### A book that reports on itself
 
-Other scripts read the book for its shape. `book_stats.shale` counts each chapter's prose, code, diagrams and pictures. `book_index.shale` builds the index from a list of terms, and flags a term used in a chapter before the chapter that teaches it. Neither one writes a sentence. They hold up a mirror, and the author decides what to fix.
+Other scripts read the book for its shape. `book_stats.shale` counts each chapter's prose, code, diagrams and pictures. `book_index.shale` builds the index from a list of terms, and flags a term that may be used before the chapter that teaches it. Neither one writes a sentence. They hold up a mirror, and the author decides what to fix.
 
 ### What this adds up to
 
@@ -350,7 +351,7 @@ Gates cost time, and a gate that's too slow stops getting run. So the gates on t
 
 {{file repos:roc-apps/canvas_apps/safari/gates/fast.shale:1-13}}
 
-About ten seconds: the compiler's check, the formatter, the main tests, and the lints on just the changed files.
+About ten seconds: the compiler's check, the formatter, the main tests, the lints on the changed files, and one frame held to its hash.
 
 **The merge gate runs before each push.** It runs everything, and reports every failure:
 
