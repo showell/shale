@@ -29,3 +29,9 @@ The Session 1 rewrite (MISSION AN) no longer sets these up, and Session 2's draf
 - `essay_start` and `essay_stop`, since Session 1's audit used `job_start` and `job_stop` directly;
 - the run record's fields (`code`, `out`, `ms`), which Meet Shale covers only loosely.
 Session 1 now names `bench.shale`, and states that the audit stops the server before it judges anything, which Session 2's `attempt` passage builds on. Rewrite Session 2 from its sources (MISSION AL), and decide where in the ladder each of these is first taught.
+
+## Later: themes and transparency, not yet actionable (Steve, 2026-11-14)
+
+- **How the book was really built.** The first half of the book was almost truly a one-shot. When we come back to the repo, be slightly more transparent about how the book was actually built.
+- **Maintaining Shale is cheap for Steve, and a positive story.** When an agent finds a problem in Shale and fixes it (Session 1's `lines`, the regex built-ins), that shows how little Steve has to do to maintain the language. Skipping such a story early isn't portraying something hard as easy: "It was easy for Steve. I would argue that it wasn't even hard for the agent."
+- **A theme for the book to cover eventually:** "Agents are really good at fixing compilers for the same reason they are good at writing compilers!" A ready example: Steve asked for color syntax for Shale in one shot, and the agent built it, on Shale's own lexer, nearly at once. "It was right in your wheelhouse. It looks great!"
