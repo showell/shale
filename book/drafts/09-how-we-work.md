@@ -7,7 +7,7 @@ Seven sessions leave habits behind, and they're the real subject of the book.
 ### Three ways to read
 
 Read Shale at three speeds:
-- **At scroll speed,** a script going by, with One loop's three questions. A Shale script names every program it runs, and its stop is one line, so a few seconds is enough.
+- **At scroll speed,** a script going by, with Session 1's three questions. A Shale script names every program it runs, and its stop is one line, so a few seconds is enough.
 - **At review speed,** a script the agent wants to keep: is it worth having again? Read its code, not its opening comment. Check its arguments, the way it fails, and its last line, which is its claim about what it did.
 - **At trust speed,** a gate: what does it hold, how does its count stay honest, and what proves it's watching? A gate you've never seen fail is a gate you haven't tested.
 

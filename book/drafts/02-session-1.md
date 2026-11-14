@@ -20,7 +20,7 @@ The agent saved the three checks as `scripts/check.shale`, and it runs that scri
 
 {{show repos:essay-surface d793c5a:scripts/check.shale from "local fmt" to "test.ms"}}
 
-Read it with One loop's three questions. What does it read? Only its programs' output. What does it run? Those three programs, one after another, to check that every file is formatted, vet is clean, and every test passes. How does it end? With a verdict for each, or a stop.
+Read any script that goes by with three questions. What does it read? Only its programs' output. What does it run? Those three programs, one after another, to check that every file is formatted, vet is clean, and every test passes. How does it end? With a verdict for each, or a stop.
 
 The gate's first real run listed two files that needed formatting:
 
