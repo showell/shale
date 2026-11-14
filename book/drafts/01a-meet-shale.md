@@ -28,7 +28,7 @@ It printed `vet: clean, 386 ms`.
 ### What Shale adds
 
 A few features are Shale's own:
-- **Every run has budgets:** steps, reads, bytes read and printed, memory, and the programs it starts. A runaway script stops and says which budget it hit.
+- **Every run has budgets:** steps, reads, bytes, memory and programs started. A runaway script stops, naming the budget it hit.
 - **A script works inside its own folder** and the folders it mounts. A mount is a named folder beyond its own, written `name:path`, so you can see everything a script can reach.
 - **A risky program runs when the script gives its reason.** A shell, an interpreter, a text tool or a program git doesn't track needs one, and Shale logs it.
 - **A prelude does the daily work.** The prelude is Shale's built-in library: git, jobs, HTTP, JSON, and refactors that read code the way its compiler does. A job is a program that outlives the call that started it, such as a server.
@@ -39,7 +39,7 @@ Shale builds programs by orchestrating other tools. In a Go project, the agent u
 
 ### Who reads the output
 
-Shale's output is written for the agent. A run that stops ends on one `── stopped at` line, naming where and why, and a `── used:` line for its budgets. The agent reads them and tells Steve what he needs, and Steve almost never reads them raw. Agents translate output well, so Shale leaves that to them. This book shows a raw stop line with its meaning beside it.
+Shale's output is written for the agent. A run that stops ends on one `── stopped at` line, naming where and why, and a `── used:` line for its budgets. The agent reads them and tells Steve what he needs. Agents translate output well, so Shale leaves that to them. This book shows a raw stop line with its meaning beside it.
 
 ### The cookbook
 
@@ -49,7 +49,7 @@ A script lives in a project's `scripts/` folder instead, and encodes that projec
 
 ### How an agent learns Shale
 
-There's no magic here. Steve's setup tells each agent to read Shale's README, which points it to an agent guide. The agent reads an example program for context, and scans the cookbook when a task needs a recipe. In one test, a fresh agent told only that its shell work is Shale read both guides, listed the cookbook and passed its project's commit check in about 40 seconds.
+Agents are linguists. Learning a language from its docs is what they do best, even a language newer than their training: Steve has watched lesser models than today's give themselves crash courses in recent Roc and Zig. Steve's setup points each agent to Shale's README, which points it to an agent guide. In one test, a fresh agent told only that its shell work is Shale read both, listed the cookbook, and passed its project's commit check, all in about 40 seconds.
 
 ### A language that changes
 
