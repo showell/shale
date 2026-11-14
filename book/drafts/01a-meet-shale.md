@@ -31,6 +31,10 @@ Shale is meant to have dialects. A dialect costs a team of humans a great deal, 
 
 The same goes for recipes, scripts saved to a file because their question came back. Shale has a cookbook of them, and your agent builds its own library on top of it, or instead of it.
 
+### What it costs
+
+Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its recipes. What it buys is the rest of this chapter: scripts a person can read at scroll speed, inside budgets and folders you can see.
+
 ### Four words for what's next
 
 Four words come up from the first session on. `run` needs a timeout and a keep. A keep is how much of a program's output `run` holds on to. `whole` and `tail` are the two keeps:

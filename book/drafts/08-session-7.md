@@ -1,6 +1,6 @@
 # Draft
 
-## Session 7: links, the boring way
+## Session 7: links, the expedient way
 
 Session 7 asks for the first feature to come out of daily use:
 
