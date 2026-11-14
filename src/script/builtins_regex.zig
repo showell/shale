@@ -139,6 +139,7 @@ pub fn matchValue(run: *Run, pos: ast.Pos, c: *const regex.Cached, s: []const u8
     const n = c.program.groups;
     if (n > 0) {
         const gs = try run.newTable(pos);
+        gs.kind = .list;
         for (f.groups[0..n]) |g| gs.list.append(a, .{ .string = if (g) |x| s[x[0]..x[1]] else "" }) catch return run.oom(pos);
         m.map.put(a, "groups", .{ .table = gs }) catch return run.oom(pos);
         m.map.put(a, "group", gs.list.items[0]) catch return run.oom(pos);

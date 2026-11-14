@@ -715,6 +715,26 @@ test "linux prelude: json_read gives Shale's values, and json_write gives them b
     );
 }
 
+test "linux prelude: a match's groups are a list, which json_write writes whole, from re_find and re_find_all alike" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.expectOutput(
+        \\local m = re_find("200 x", "^([0-9]+) (.*)$")
+        \\print(#m.groups, m.groups[1], m.groups[2], json_write(m.groups))
+        \\print(json_write(m))
+        \\print(json_write(re_find("ac", "(a)(b)?(c)").groups))
+        \\print(json_write(re_find_all("x=1, yy=22", "(\\w+)=(\\d+)")))
+        \\print(json_write(re_find("abc", "b")))
+    ,
+        "2\t200\tx\t[\"200\",\"x\"]\n" ++
+            "{\"at\":1,\"text\":\"200 x\",\"groups\":[\"200\",\"x\"],\"group\":\"200\"}\n" ++
+            "[\"a\",\"\",\"c\"]\n" ++
+            "[{\"at\":1,\"text\":\"x=1\",\"groups\":[\"x\",\"1\"],\"group\":\"x\"},{\"at\":6,\"text\":\"yy=22\",\"groups\":[\"yy\",\"22\"],\"group\":\"yy\"}]\n" ++
+            "{\"at\":2,\"text\":\"b\"}\n",
+    );
+}
+
 test "linux prelude: json_read refuses a malformed text by what is wrong and where, and its budgets" {
     var t: T = undefined;
     try init(&t);
