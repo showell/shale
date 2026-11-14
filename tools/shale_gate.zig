@@ -24,7 +24,7 @@ pub const Escape = struct { kind: []const u8, tag: []const u8, text: []const u8 
 pub const Verdict = union(enum) { launch, escape: Escape, refused: []const u8 };
 
 /// The two forms, as every refusal names them.
-pub const forms = "a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs and this box's mounts: `shale --help`)";
+pub const forms = "a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)";
 
 var why_buf: [1024]u8 = undefined;
 
