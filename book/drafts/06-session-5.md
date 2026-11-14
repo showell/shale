@@ -4,7 +4,7 @@
 
 {{quote repos:essay-surface/journal/prompts/friday.md}}
 
-A cold agent built the release script and proved it on the dev port in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
+A cold agent built the release script and proved it on a dev port, away from the live server, in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
 
 By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A chore done by hand is done a little differently each time. A release done by a script is the same every time, and that sameness is what we mean by boring.
 
@@ -30,7 +30,7 @@ The first surprise came before the script ran at all. The trial put an "old" ser
 
 {{fence repos:essay-surface/journal/friday.md "the page: 404" from "── stopped at" to "bind: address"}}
 
-The smoke's server logged "listening", then failed to bind, and the smoke went on to ask the trial server for its test page. Every script waited for "listening", and the server said it before the port was its own. This time the check failed; against a different server, it could have passed. Two fixes followed: `server.go` now binds first and says "listening" after, and the checks moved to port 9310, named once in the prelude.
+The smoke's server logged "listening", then failed to bind, and the smoke went on to ask the trial server for its test page. Every script waited for "listening", and the server said it before the port was its own. This time the check failed; against a different server, it could have passed. Two fixes followed: `server.go` now binds first and says "listening" after, and the checks moved to port 9310, named once in the project's own prelude, the file of helpers its scripts share.
 
 ### The trap, sprung
 

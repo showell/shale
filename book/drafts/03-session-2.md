@@ -6,7 +6,7 @@ The second prompt asks for the feature the surface exists for:
 
 {{quote repos:essay-surface/journal/prompts/tuesday.md}}
 
-A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after it finished, with the eye test at the end of this session, and the orchestrator made that fix.
+A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after it finished, when he looked at the result in his browser at the end of this session, and the orchestrator made that fix.
 
 As in the first prompt, the "I" who reads the comments is really the agent: it writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
 
@@ -77,7 +77,7 @@ Green again ✅
 
 ### Every check passed
 
-The report's last item was an eye test the agent couldn't run, since the box has no browser. Steve opened a note in his, and found no way to reply. The buttons sat at opacity 0 and appeared only on hover. His words: "Hover is an anti-feature."
+The report's last item was an eye test, a look at a page in a browser, that the agent couldn't run, since its machine has no browser. Steve opened a note in his own, and found no way to reply. The buttons sat at opacity 0 and appeared only on hover. His words: "Hover is an anti-feature."
 
 The fix set the buttons at opacity 0.6. Their first label was "note", which already meant the essays, so a second commit made it "reply". Steve has written his real replies on the new surface ever since. In Session 4, hidden reply buttons become a check that runs without a browser.
 

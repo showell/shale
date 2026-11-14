@@ -20,9 +20,9 @@ You won't find skills files here, the instruction files some setups use to teach
 
 ### The project
 
-The book follows one side project from start to finish. We build a new essay surface: a small web app where an agent's notes, written in markdown, become pages, and Steve reads them in a browser and replies to any paragraph. (The first prompt says "where I write notes". In practice the agent writes them, and Steve reads and replies.) A Go server sits behind a plain-JavaScript front end. Steve soon used it to reply to the drafts of this book.
+The book follows one side project. We build a new essay surface: a small web app where an agent's notes, written in markdown, become pages, and Steve, who runs this project, reads them in a browser and replies to any paragraph. (The first prompt says "where I write notes". In practice the agent writes them, and Steve reads and replies.) A Go server sits behind a plain-JavaScript front end. Steve soon used it to reply to the drafts of this book.
 
-We tell it in sessions, a chapter each. A session is one stretch of work that starts with one prompt. The sessions aren't days: the real build took an afternoon of agent time, and the feature in Session 7 came the next morning. The agent's journals kept the names they were first given, so the captions under Session 1's quotes say `monday.md`. An essay surface isn't an agent harness, though the two have something in common. In both, a human reads what was written, replies, and steers.
+We tell it in sessions, a chapter each. A session is one stretch of work that starts with one prompt. The sessions aren't days: the real build took an afternoon of agent time, and the feature in Session 7 came the next morning. Each session's agent kept a journal under the name first given it, so the captions under Session 1's quotes say `monday.md`. An essay surface isn't an agent harness, the program an agent runs inside, but in both a human reads what was written, replies, and steers.
 
 ### We, and the prompts
 
@@ -47,8 +47,8 @@ Nobody planned the gates up front. They arrived when the work asked for them, fr
 
 ### A language that changes
 
-Shale is meant to have dialects. A dialect costs a team of humans a great deal, since everyone must learn it, and an agent very little, since it reads the whole script and its dialect's docs. So keep the dialect that works for your agent, and build your own library on the cookbook or instead of it.
+Shale is meant to have dialects. A dialect costs a team of humans a great deal, since everyone must learn it, and an agent very little, since it reads the whole script and its dialect's docs. So keep the dialect that works for your agent, and build your own library on Shale's cookbook of scripts or instead of it.
 
 In Session 6, after a nuisance came up three times, the language changed to fix it. For now, a reader who wants that freedom forks their own copy of Shale.
 
-First, one turn of the loop, start to finish. Then Session 1, with an empty repository and a prompt.
+First, one turn of the loop. Then Session 1, with an empty repository and a prompt.

@@ -6,7 +6,7 @@ Our first session starts with an empty repository and this prompt:
 
 {{quote repos:essay-surface/journal/prompts/monday.md}}
 
-The orchestrator, the Claude session Steve talks to, wrote this prompt from his plan and handed it to a cold agent with a short brief. The agent worked for about twelve minutes, and Steve didn't step in.
+The orchestrator, the Claude session Steve talks to, wrote this prompt from a plan Steve gave it and handed it to a cold agent with a short brief. The agent worked for about twelve minutes, and Steve didn't step in.
 
 The prompt has the roles turned around: in practice the agent writes the notes, and Steve replies to them. "Five hundred notes" says where to work. Steve has about that many on the old surface, so the agent works against those.
 

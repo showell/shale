@@ -33,7 +33,7 @@ At the end of Session 3, the agent's report listed a few calls Steve might want 
 {"name":"Steve","text":"add a defensive check","quote":"**The comments folder's parent must exist** when the server starts."}
 ```
 
-That's the whole of the steering: four words, attached to the paragraph they answer. The orchestrator passed it on to the next session's agent in a short message.
+That's the whole of the steering: four words, attached to the paragraph they answer. The agent Steve talks to, the orchestrator, passed it on to the next session's agent in a short message.
 
 ### The change
 

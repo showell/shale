@@ -32,9 +32,9 @@ You won't find skills files here, the instruction files some setups use to teach
 
 ### The project
 
-The book follows one side project from start to finish. We build a new essay surface: a small web app where an agent's notes, written in markdown, become pages, and Steve reads them in a browser and replies to any paragraph. (The first prompt says "where I write notes". In practice the agent writes them, and Steve reads and replies.) A Go server sits behind a plain-JavaScript front end. Steve soon used it to reply to the drafts of this book.
+The book follows one side project. We build a new essay surface: a small web app where an agent's notes, written in markdown, become pages, and Steve, who runs this project, reads them in a browser and replies to any paragraph. (The first prompt says "where I write notes". In practice the agent writes them, and Steve reads and replies.) A Go server sits behind a plain-JavaScript front end. Steve soon used it to reply to the drafts of this book.
 
-We tell it in sessions, a chapter each. A session is one stretch of work that starts with one prompt. The sessions aren't days: the real build took an afternoon of agent time, and the feature in Session 7 came the next morning. The agent's journals kept the names they were first given, so the captions under Session 1's quotes say `monday.md`. An essay surface isn't an agent harness, though the two have something in common. In both, a human reads what was written, replies, and steers.
+We tell it in sessions, a chapter each. A session is one stretch of work that starts with one prompt. The sessions aren't days: the real build took an afternoon of agent time, and the feature in Session 7 came the next morning. Each session's agent kept a journal under the name first given it, so the captions under Session 1's quotes say `monday.md`. An essay surface isn't an agent harness, the program an agent runs inside, but in both a human reads what was written, replies, and steers.
 
 ### We, and the prompts
 
@@ -59,11 +59,11 @@ Nobody planned the gates up front. They arrived when the work asked for them, fr
 
 ### A language that changes
 
-Shale is meant to have dialects. A dialect costs a team of humans a great deal, since everyone must learn it, and an agent very little, since it reads the whole script and its dialect's docs. So keep the dialect that works for your agent, and build your own library on the cookbook or instead of it.
+Shale is meant to have dialects. A dialect costs a team of humans a great deal, since everyone must learn it, and an agent very little, since it reads the whole script and its dialect's docs. So keep the dialect that works for your agent, and build your own library on Shale's cookbook of scripts or instead of it.
 
 In Session 6, after a nuisance came up three times, the language changed to fix it. For now, a reader who wants that freedom forks their own copy of Shale.
 
-First, one turn of the loop, start to finish. Then Session 1, with an empty repository and a prompt.
+First, one turn of the loop. Then Session 1, with an empty repository and a prompt.
 
 ## One loop
 
@@ -98,7 +98,7 @@ At the end of Session 3, the agent's report listed a few calls Steve might want 
 {"name":"Steve","text":"add a defensive check","quote":"**The comments folder's parent must exist** when the server starts."}
 ```
 
-That's the whole of the steering: four words, attached to the paragraph they answer. The orchestrator passed it on to the next session's agent in a short message.
+That's the whole of the steering: four words, attached to the paragraph they answer. The agent Steve talks to, the orchestrator, passed it on to the next session's agent in a short message.
 
 ### The change
 
@@ -150,7 +150,7 @@ Our first session starts with an empty repository and this prompt:
 
 {{quote repos:essay-surface/journal/prompts/monday.md}}
 
-The orchestrator, the Claude session Steve talks to, wrote this prompt from his plan and handed it to a cold agent with a short brief. The agent worked for about twelve minutes, and Steve didn't step in.
+The orchestrator, the Claude session Steve talks to, wrote this prompt from a plan Steve gave it and handed it to a cold agent with a short brief. The agent worked for about twelve minutes, and Steve didn't step in.
 
 The prompt has the roles turned around: in practice the agent writes the notes, and Steve replies to them. "Five hundred notes" says where to work. Steve has about that many on the old surface, so the agent works against those.
 
@@ -226,7 +226,7 @@ The second prompt asks for the feature the surface exists for:
 
 {{quote repos:essay-surface/journal/prompts/tuesday.md}}
 
-A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after it finished, with the eye test at the end of this session, and the orchestrator made that fix.
+A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after it finished, when he looked at the result in his browser at the end of this session, and the orchestrator made that fix.
 
 As in the first prompt, the "I" who reads the comments is really the agent: it writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
 
@@ -297,7 +297,7 @@ Green again ✅
 
 ### Every check passed
 
-The report's last item was an eye test the agent couldn't run, since the box has no browser. Steve opened a note in his, and found no way to reply. The buttons sat at opacity 0 and appeared only on hover. His words: "Hover is an anti-feature."
+The report's last item was an eye test, a look at a page in a browser, that the agent couldn't run, since its machine has no browser. Steve opened a note in his own, and found no way to reply. The buttons sat at opacity 0 and appeared only on hover. His words: "Hover is an anti-feature."
 
 The fix set the buttons at opacity 0.6. Their first label was "note", which already meant the essays, so a second commit made it "reply". Steve has written his real replies on the new surface ever since. In Session 4, hidden reply buttons become a check that runs without a browser.
 
@@ -333,7 +333,7 @@ Each stage goes through one function, whose stop names the stage and its failed 
 
 {{function repos:essay-surface/scripts/fast.shale stage}}
 
-A run that spends more CPU than its `cpu_budget_ms` stops, naming the stage. The budgets are CPU time, never wall time: wall time on this two-CPU box doubles when something else is building, and the CPU a program spends barely moves. So a busy box can't turn the verdict red, and a stage gone slow can. A real run takes 2.4 s:
+A run that spends more CPU than its `cpu_budget_ms` stops, naming the stage. The budgets are CPU time, never wall time: wall time on this two-CPU machine doubles when something else is building, and the CPU a program spends barely moves. So a busy machine can't turn the verdict red, and a stage gone slow can. A real run takes 2.4 s:
 
 {{fence repos:essay-surface/journal/wednesday.md "5 programs, 2.4 s in all"}}
 
@@ -472,7 +472,7 @@ Every stage of `full.shale` has been seen red once, and its kept fixtures run on
 
 {{quote repos:essay-surface/journal/prompts/friday.md}}
 
-A cold agent built the release script and proved it on the dev port in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
+A cold agent built the release script and proved it on a dev port, away from the live server, in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
 
 By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A chore done by hand is done a little differently each time. A release done by a script is the same every time, and that sameness is what we mean by boring.
 
@@ -498,7 +498,7 @@ The first surprise came before the script ran at all. The trial put an "old" ser
 
 {{fence repos:essay-surface/journal/friday.md "the page: 404" from "── stopped at" to "bind: address"}}
 
-The smoke's server logged "listening", then failed to bind, and the smoke went on to ask the trial server for its test page. Every script waited for "listening", and the server said it before the port was its own. This time the check failed; against a different server, it could have passed. Two fixes followed: `server.go` now binds first and says "listening" after, and the checks moved to port 9310, named once in the prelude.
+The smoke's server logged "listening", then failed to bind, and the smoke went on to ask the trial server for its test page. Every script waited for "listening", and the server said it before the port was its own. This time the check failed; against a different server, it could have passed. Two fixes followed: `server.go` now binds first and says "listening" after, and the checks moved to port 9310, named once in the project's own prelude, the file of helpers its scripts share.
 
 ### The trap, sprung
 
@@ -657,7 +657,7 @@ The after pages came from the same audit. The comparison took two stops. The fir
 
 {{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
 
-That's the lesson of Session 1 again. `re_find_all` is written in Shale, in the prelude, so every character it reads costs a step, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. Session 6 showed what a nuisance that keeps coming back asks for, and this one makes the case for moving Shale's regex helpers into its host, where a match would cost a step like any builtin.
+That's the lesson of Session 1 again. `re_find_all` is written in Shale, in the prelude, so every character it reads costs a step, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. Session 6 showed what a nuisance that keeps coming back asks for, and this one makes the case for moving Shale's regex helpers into the interpreter that runs it, where a match would cost a step like any builtin.
 
 The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
 
