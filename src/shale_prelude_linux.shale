@@ -810,3 +810,89 @@ function edits_all(list)
   for w in writes do host("may_change", w[1]) end
   return host("edits_write", writes)
 end
+
+-- A line of a program's output as `report_run` prints it: its first 240
+-- bytes, and a cut one says so and how much is left (the log has it whole).
+function report_run_line(l)
+  if #l <= 240 then return l end
+  return sub(l, 1, 240) .. " … (" .. (#l - 240) .. " more bytes)"
+end
+
+-- How `report_run` names where the whole output went.
+function report_run_kept(path)
+  if path == "" then return "the whole output not kept (no .zig-cache here: `log=PATH` keeps it)" end
+  return "the whole output in " .. path
+end
+
+-- **A PROGRAM AND ITS VERDICT** (2026-11-14: 228 of a session's heredocs
+-- launched `cookbook:run.shale` as a child run for this): runs `argv` as
+-- `run` does and prints what it said that matters: each line holding one of
+-- `grep`'s literals (at most `most`, 60), its last `tail` lines (10; at
+-- least 30 for a failure), and `── exit N in T: <command>`. The whole
+-- output goes to `log`, by default `.zig-cache/run.log` under `cwd` where
+-- that folder is already (a Zig checkout, which ignores it), and else
+-- nowhere; `append_log = true` adds to it, after an `== <command>` line. A
+-- failure (an exit not 0, a timeout, a signal) prints where the output went
+-- and stops the run, naming the command, unless `keep_going = true`. The
+-- answer is `run`'s, with `ok` and `log` beside. `opts` takes `cwd`,
+-- `timeout_ms` (10 minutes), `want`, `shown` (how the command is named;
+-- its words), `grep` (a list), `tail`, `most`, `log`, `append_log` and
+-- `keep_going`. A program named through a mount (`zig:zig`) runs by its
+-- OS path.
+function report_run(argv, opts?)
+  if opts == nil then opts = {} end
+  if #argv == 0 then fail("`report_run`: an empty command") end
+  local cwd = get(opts, "cwd", ".")
+  local shown = get(opts, "shown", join(argv, " "))
+  local tail_n = get(opts, "tail", 10)
+  local most = get(opts, "most", 60)
+  local wanted = get(opts, "grep", {})
+  local log_path = get(opts, "log", "auto")
+  if log_path == "auto" then
+    log_path = ""
+    if is_dir(path_under(cwd, ".zig-cache")) then log_path = path_under(cwd, ".zig-cache/run.log") end
+  end
+  local program = {}
+  for w in argv do push(program, w) end
+  if contains(program[1], ":") then program[1] = real(program[1]) end
+  local run_opts = {cwd = cwd, timeout_ms = get(opts, "timeout_ms", 600000), whole = 16777216}
+  if has_key(opts, "want") then run_opts.want = opts.want end
+  local r = run(program, run_opts)
+  if log_path ~= "" then
+    local text = "== " .. shown .. "\n" .. r.out
+    if get(opts, "append_log", false) and exists(log_path) then append(log_path, text) else replace(log_path, text) end
+  end
+  -- A run ended by its time or a signal has no exit code: say how it ended.
+  local how = ""
+  if has_key(r, "code") then how = "exit " .. r.code else how = "ended: " .. tostring(r.ended) .. " (no exit code)" end
+  local failed = not has_key(r, "code") or r.code ~= 0
+  local out_lines = lines(r.out)
+  local held = 0
+  for l in out_lines do
+    for w in wanted do
+      if contains(l, w) then
+        held = held + 1
+        if held <= most then print("grep: " .. report_run_line(l)) end
+        break
+      end
+    end
+  end
+  if held > most then print("grep: ... " .. (held - most) .. " more (most=" .. most .. ")") end
+  if #wanted > 0 and held == 0 then print("grep: no line holds " .. join(wanted, ",")) end
+  -- A failure's own words are usually near its end: at least 30 of them.
+  local n = tail_n
+  if failed and n < 30 then n = 30 end
+  local from = #out_lines - n + 1
+  if from < 1 then from = 1 end
+  for i = from, #out_lines do print("   " .. report_run_line(out_lines[i])) end
+  local took = r.ms .. " ms"
+  if r.ms >= 1000 then took = (r.ms // 1000) .. "." .. (r.ms % 1000 // 100) .. " s" end
+  print("── " .. how .. " in " .. took .. ": " .. shown)
+  r.ok = not failed
+  r.log = log_path
+  if failed and not get(opts, "keep_going", false) then
+    print(report_run_kept(log_path))
+    fail("run: `" .. shown .. "` " .. how)
+  end
+  return r
+end

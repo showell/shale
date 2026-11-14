@@ -339,6 +339,48 @@ test "linux prelude: grep_all numbers the lines holding a literal across a file'
     try t.expectStop("grep_all(\"big.txt\", \"\")", .atomic, .fail, "`grep_all` of \"\"");
 }
 
+fn expectHas(output: []const u8, part: []const u8) !void {
+    if (std.mem.indexOf(u8, output, part) == null) {
+        std.debug.print("want {s}\n  in {s}\n", .{ part, output });
+        return error.TestUnexpectedResult;
+    }
+}
+
+test "linux prelude: report_run prints a program's verdict, keeps its output, and stops on a failure unless told to go on" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    // Once each, not through the gate: the verdict's time differs between
+    // engines.
+    var ok = t.runOnce("local r = report_run({\"shale-fixture\", \"lines\", \"4\"}, {tail = 2, grep = {\"line 2\"}, log = \"r.log\"}) print(r.ok, r.code, r.log)", .atomic);
+    defer ok.deinit();
+    try testing.expect(ok.stop == null);
+    try expectHas(ok.output, "grep: line 2\n   line 3\n   line 4\n── exit 0 in ");
+    try expectHas(ok.output, " ms: shale-fixture lines 4\ntrue\t0\tr.log\n");
+    try testing.expectEqualStrings("== shale-fixture lines 4\nline 1\nline 2\nline 3\nline 4\n", try t.file("r.log"));
+    // A second command adds to the log; a grep that finds nothing says so.
+    var more = t.runOnce("report_run({\"shale-fixture\", \"lines\", \"1\"}, {shown = \"one line\", grep = {\"zz\"}, log = \"r.log\", append_log = true})", .atomic);
+    defer more.deinit();
+    try expectHas(more.output, "grep: no line holds zz\n   line 1\n── exit 0 in ");
+    try testing.expectEqualStrings("== shale-fixture lines 4\nline 1\nline 2\nline 3\nline 4\n== one line\nline 1\n", try t.file("r.log"));
+    // A failure with keep_going is an answer; without it, a stop naming the
+    // command, after where the output went (here, with no .zig-cache, nowhere).
+    var going = t.runOnce("local r = report_run({\"shale-fixture\", \"exit\", \"3\"}, {keep_going = true}) print(r.ok, r.code, r.log == \"\")", .atomic);
+    defer going.deinit();
+    try testing.expect(going.stop == null);
+    try expectHas(going.output, "── exit 3 in ");
+    try expectHas(going.output, "false\t3\ttrue\n");
+    var failed = t.runOnce("report_run({\"shale-fixture\", \"exit\", \"3\"})", .atomic);
+    defer failed.deinit();
+    try testing.expect(failed.stop != null);
+    try testing.expectEqual(.fail, failed.stop.?.class);
+    try expectHas(failed.stop.?.message, "run: `shale-fixture exit 3` exit 3");
+    try expectHas(failed.output, "the whole output not kept (no .zig-cache here: `log=PATH` keeps it)\n");
+    var empty = t.runOnce("report_run({})", .atomic);
+    defer empty.deinit();
+    try expectHas(empty.stop.?.message, "`report_run`: an empty command");
+}
+
 test "linux prelude: grep_tree searches a tree, says what it passed by, and takes a pattern, either case, extensions, context and a cap" {
     var t: T = undefined;
     try init(&t);

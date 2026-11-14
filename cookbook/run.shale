@@ -6,7 +6,9 @@
 -- that folder is already (a Zig checkout, which ignores it); elsewhere (an
 -- essay repo, a memory folder) nothing is written, and the last line says
 -- so. It is `run` from a launch line, for `roc check`, a `zig build` with a
--- log and a timing, a bench binary, `gh run` or `node`.
+-- log and a timing, a bench binary, `gh run` or `node`. Inside a heredoc,
+-- call the prelude's `report_run(argv, opts)`, which this recipe is a
+-- launch line for: the same verdict, with no child run.
 --
 --   cd <repo> && shale cookbook:run.shale --args-stdin <<'ARGS'
 --   cmd=roc check roc/Game.roc && roc test roc/Game.roc && roc fmt --check roc/
@@ -36,71 +38,24 @@ const WANT = arg("want", "")
 
 if trim(CMD) == "" then fail("run: say `cmd=`, the command line (with spaces: on stdin, `--args-stdin`)") end
 
--- nil: the whole output is not kept.
-local log_path = nil
-if LOG ~= "" then
-  log_path = path_under(DIR, LOG)
-elseif is_dir(path_under(DIR, ".zig-cache")) then
-  log_path = path_under(DIR, ".zig-cache/run.log")
-end
--- How the run's last line names where the output went.
-function kept_in(path)
-  if path == nil then return "the whole output not kept (no .zig-cache here: `log=PATH` keeps it)" end
-  return "the whole output in " .. path
-end
+-- Where the whole output goes, `report_run`'s rule: `log=`, else
+-- .zig-cache/run.log where that folder is, else nowhere ("").
+local log_path = "auto"
+if LOG ~= "" then log_path = path_under(DIR, LOG) end
 local wanted = {}
 for w in split(GREP, ",") do if w ~= "" then push(wanted, w) end end
 
--- A line as printed: its first 240 bytes, and a cut one says so and how
--- much is left (the log has it whole).
-function shown_line(l)
-  if #l <= 240 then return l end
-  return sub(l, 1, 240) .. " … (" .. (#l - 240) .. " more bytes)"
-end
-
-local log = ""
+-- Each command in order through the prelude's `report_run`, which prints
+-- its verdict and stops the launch on the first that fails.
+local k = 0
+local r = nil
 for part in split(CMD, "&&") do
+  k = k + 1
   local argv = {}
   for w in words(part) do push(argv, w) end
   if #argv == 0 then fail("run: an empty command in `" .. CMD .. "`") end
-  if contains(argv[1], ":") then argv[1] = real(argv[1]) end
-  local shown = trim(part)
-  local opts = {cwd = DIR, timeout_ms = MINUTES * 60000, whole = 16777216}
+  local opts = {cwd = DIR, timeout_ms = MINUTES * 60000, shown = trim(part), grep = wanted, tail = TAIL, most = MOST, log = log_path, append_log = k > 1}
   if WANT ~= "" then opts.want = WANT end
-  local r = run(argv, opts)
-  log = log .. "== " .. shown .. "\n" .. r.out
-  if log_path ~= nil then replace(log_path, log) end
-  -- A run ended by its time or a signal has no exit code: say how it ended.
-  local how = ""
-  if has_key(r, "code") then how = "exit " .. r.code else how = "ended: " .. tostring(r.ended) .. " (no exit code)" end
-  local failed = not has_key(r, "code") or r.code ~= 0
-  local lines_of = lines(r.out)
-
-  local held = 0
-  for l in lines_of do
-    for w in wanted do
-      if contains(l, w) then
-        held = held + 1
-        if held <= MOST then print("grep: " .. shown_line(l)) end
-        break
-      end
-    end
-  end
-  if held > MOST then print("grep: ... " .. (held - MOST) .. " more (most=" .. MOST .. ")") end
-  if #wanted > 0 and held == 0 then print("grep: no line holds " .. GREP) end
-
-  -- A failure's own words are usually near its end: at least 30 of them.
-  local n = TAIL
-  if failed and n < 30 then n = 30 end
-  local from = #lines_of - n + 1
-  if from < 1 then from = 1 end
-  for i = from, #lines_of do print("   " .. shown_line(lines_of[i])) end
-  local took = r.ms .. " ms"
-  if r.ms >= 1000 then took = (r.ms // 1000) .. "." .. (r.ms % 1000 // 100) .. " s" end
-  print("── " .. how .. " in " .. took .. ": " .. shown)
-  if failed then
-    print(kept_in(log_path))
-    fail("run: `" .. shown .. "` " .. how)
-  end
+  r = report_run(argv, opts)
 end
-print(kept_in(log_path))
+print(report_run_kept(r.log))
