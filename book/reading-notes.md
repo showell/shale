@@ -35,3 +35,10 @@ Session 1 now names `bench.shale`, and states that the audit stops the server be
 - **How the book was really built.** The first half of the book was almost truly a one-shot. When we get back to rewriting the introduction (still frozen), clarify that framing, and be slightly more transparent about how the book was actually built.
 - **Maintaining Shale is cheap for Steve, and a positive story.** When an agent finds a problem in Shale and fixes it (Session 1's `lines`, the regex built-ins), that shows how little Steve has to do to maintain the language. Skipping such a story early isn't portraying something hard as easy: "It was easy for Steve. I would argue that it wasn't even hard for the agent."
 - **A theme for the book to cover eventually:** "Agents are really good at fixing compilers for the same reason they are good at writing compilers!" A ready example: Steve asked for color syntax for Shale in one shot, and the agent built it, on Shale's own lexer, nearly at once. "It was right in your wheelhouse. It looks great!"
+
+## Steve's answers (the question series, 2026-11-14)
+
+- **Heredocs:** as a reader, he wouldn't have known what a heredoc is before agents. Gloss it once, early.
+- **The orchestrator in Session 1:** keep it. The reader should know from the start who wrote the prompt.
+- **Why only `go vet` uses `must`:** noise. Say what the script checks, not how each check is coded.
+- **Go code in the book:** a little, a short excerpt now and then, so the reader sees what's being checked.
