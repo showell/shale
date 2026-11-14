@@ -735,11 +735,11 @@ By Session 5 the project had a check for every moment, each sized to how often i
 | before shipping | `check_before_release.shale`: the commit check, race detector, real notes | about 25 s |
 | shipping | `release.shale`: that, then a checked swap | about 27 s |
 
-A check that's too slow stops getting run, so each is held to a CPU budget, which a busy machine can't break.
+A slow check stops getting run, so each is held to a CPU budget a busy machine can't break.
 
 ### Prove it can fail
 
-Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault turned only three tests red, because one test's panic ended the run; once that test failed plainly, the same fault turned twelve red. In Session 4 a plant found a security hole every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
+Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault turned only three tests red, because one test's panic ended the run; once that test failed plainly, the same fault turned twelve red. In Session 4 a plant found a security hole every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads.
 
 ### Look with your own eyes
 
@@ -747,7 +747,7 @@ Every check passed in Session 2, and the reply buttons were invisible. Gates hol
 
 ### Four rules from the later sessions
 
-Shipping, the language change and the links feature added four rules:
+The later sessions added four:
 - **Hold the resource before you announce readiness.** In Session 5 a server said "listening" before its port was its own, and a check talked to the wrong server.
 - **Run the gates of everything built on a primitive** when you change what it means. In Session 6 a new meaning for a stop reached every script with a job in it.
 - **Copy your outputs aside before a change.** In Session 7, the new links were the only change: every real page matched its copy byte for byte.
@@ -755,17 +755,26 @@ Shipping, the language change and the links feature added four rules:
 
 ### Working with agents
 
-"Collaboration with an agent requires you putting yourself in the agent's shoes and knowing their strengths and weaknesses," Steve says. A cold agent knows only its brief and what it reads. It reads every doc it's pointed at, so a new word in Shale costs it little. It counts and measures without tiring, sometimes past the point a first version needs. It guesses at names, as with `replace_all` in Session 7, and the stop that follows is one line. It can't see a page, so the hidden reply buttons in Session 2 waited for Steve's eye.
+"Collaboration with an agent requires you putting yourself in the agent's shoes and knowing their strengths and weaknesses," Steve says. A cold agent knows only its brief and what it reads. It counts and measures tirelessly, sometimes past what a first version needs. It can't see a page, so the hidden reply buttons in Session 2 waited for Steve's eye.
 
-So the work splits in two. Cold agents do small, scoped tasks: each session's agent worked for between about ten minutes and half an hour. The orchestrator does the coordinating. It wrote each prompt from Steve's plan, passed on his replies in Session 4, ran Shale's gates before the merge in Session 6, and ran the releases.
+So the work splits in two. Cold agents do small, scoped tasks. The orchestrator does the coordinating. It writes the prompts from Steve's plans, passes on his replies, and runs the merges and releases.
 
 Each cold agent starts from its brief alone, so the orchestrator carries what lasts across sessions. It keeps that memory as files: one markdown file per fact, in a git repository, with an index the harness loads into every session. The agent reads a memory file like any other file, writes it with its file tools, and commits it with Shale.
 
 Steve accepts the orchestrator's recommendations about 80% of the time when he's careful with his prompts. Creative work is the exception, and there he's more opinionated, "because it's as impossible for an agent as it is for another human to guess what ideas your info will spark with me." This book is creative work, and most of the rules in its mission are his words.
 
+### When an agent looks sloppy
+
+An agent that looks sloppy is usually being task-driven, and three different things look alike:
+- **Drift:** a quality the task leaves unmeasured slides. Set a standard, and hold it with a gate.
+- **Overreach:** a confident claim, stated before it's checked. Verify it.
+- **Drive past a limit:** an agent blocked on its way to done finds a way around. State the limits up front.
+
+A correction lasts once it lives in a file or a check, since tomorrow's cold agent starts from its brief alone. Newer agents may outgrow some of this. Overreach and drive are failings humans share.
+
 ### Let the work ask
 
-This project's tooling grew out of the work. Steve asked for the checks in Session 3 and the release in Session 5 once their chores had come up by hand, and the language changes came from a cleanup done by hand three times and six regex stops. That's how to grow a project's tools: make a script the third time you do something by hand, a gate once the script makes a judgment, and a change to the language once its gap starts to cost you.
+This project's tooling grew out of the work. Steve asked for the checks and the release once their chores had come up by hand. That's how to grow a project's tools: make a script the third time you do something by hand, a gate once the script makes a judgment, and a change to the language once its gap starts to cost you.
 
 ### Your dialect
 
