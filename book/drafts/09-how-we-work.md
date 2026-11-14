@@ -43,9 +43,9 @@ The later sessions added four:
 
 "Collaboration with an agent requires you putting yourself in the agent's shoes and knowing their strengths and weaknesses," Steve says. A cold agent knows only its brief and what it reads. It counts and measures tirelessly, sometimes past what a first version needs. It can't see a page, so the hidden reply buttons in Session 2 waited for Steve's eye.
 
-So the work splits in two. Cold agents do small, scoped tasks. The orchestrator does the coordinating. It writes the prompts from Steve's plans, passes on his replies, and runs the merges and releases.
+An advanced technique, separate from Shale, gets more done at once: split the work. Cold agents, each starting with only its brief, do small, scoped tasks, and an orchestrator coordinates them. It writes the prompts, passes on replies, and runs the merges and releases.
 
-Each cold agent starts from its brief alone, so the orchestrator carries what lasts across sessions. It keeps that memory as files: one markdown file per fact, in a git repository, with an index the harness loads into every session. The agent reads a memory file like any other file, writes it with its file tools, and commits it with Shale.
+The orchestrator carries what lasts across sessions. It keeps that memory as files: one markdown file per fact, in a git repository, with an index the harness loads into every session. The agent reads a memory file like any other file, writes it with its file tools, and commits it with Shale.
 
 Steve accepts the orchestrator's recommendations about 80% of the time when he's careful with his prompts. Creative work is the exception, and there he's more opinionated, "because it's as impossible for an agent as it is for another human to guess what ideas your info will spark with me." This book is creative work, and most of the rules in its mission are his words.
 

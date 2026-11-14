@@ -115,54 +115,45 @@ That's enough Shale to start. Next, one turn of the loop, from a report to a cha
 
 ## One loop
 
-Before the sessions, here's one complete turn of the loop they run once the essay surface can take replies, taken from the middle of Session 4. From Steve's reply to the commit took under five minutes, and it took Steve four words.
+Before the sessions, here's the loop every piece of work in this book runs: Steve asks the agent for something, the agent builds it and reports, Steve replies on a line of the report, and the agent fixes what he pointed at. Here is one real turn, from Session 3 into Session 4.
 
 ```dot
-digraph turn {
-  rankdir=TB;
+digraph loop {
+  rankdir=LR;
   node [shape=box, style="rounded", fontname="Helvetica", margin="0.2,0.1"];
   edge [fontname="Helvetica"];
-  agent3 [label="The Session 3 agent"];
-  orchestrator [label="The orchestrator"];
-  note [label="The note"];
   steve [label="Steve"];
-  agent4 [label="The Session 4 agent"];
-  code [label="The code"];
-  agent3 -> orchestrator [label="1. reports to"];
-  orchestrator -> note [label="2. writes"];
-  steve -> note [label="3. replies on a line of"];
-  orchestrator -> agent4 [label="4. passes the reply to"];
-  agent4 -> code [label="5. changes and proves"];
+  agent [label="The agent"];
+  steve -> agent [label="1. asks"];
+  agent -> steve [label="2. builds, and reports to"];
+  steve -> agent [label="3. replies on a line to"];
+  agent -> steve [label="4. fixes, proves, and reports to"];
 }
 ```
 
-*One turn of the loop, from Session 4. Read each arrow as a sentence, in order: the Session 3 agent reports to the orchestrator.*
+*One turn of the loop. Read each arrow as a sentence, in order: Steve asks the agent.*
 
-### The Session 3 agent reports to the orchestrator
+### Steve asks the agent
 
-The Session 3 agent ended its session with a report: what it built, and the decisions it made on its own, for Steve to confirm or change.
+In Session 3, Steve asked for a faster index and for a way to run the project's checks at the right moment, "so nobody has to remember the list."
 
-### The orchestrator writes a note
+### The agent builds, and reports to Steve
 
-The orchestrator, the agent that coordinates the others, turned that report into a note on the essay surface, where Steve reads. One line of it said: "**The comments folder's parent must exist** when the server starts."
+The agent built both, and ended with a report on the essay surface: what it built, and a list of calls it had made on its own, for Steve to confirm or change. One of them read: "**The comments folder's parent must exist** when the server starts."
 
-### Steve replies on a line of the note
+### Steve replies on a line to the agent
 
 Steve replied on that line, in four words: "add a defensive check".
 
-Reply where the context is. The line carries the context, so four words make a complete instruction. In a chat window, you'd have to quote the line first.
+Reply where the context is. The line carries the context, so four words make a complete instruction: stop at start, with one clear message naming the path, and leave the folder unmade. In a chat window, you'd have to quote the line first.
 
-### The orchestrator passes the reply to the Session 4 agent
-
-By then the Session 4 agent was at work. The orchestrator passed it the reply, with its line, and spelled out what the four words meant: stop at start, with one clear message naming the path, and leave the folder unmade. That's the orchestrator's part in the loop. It holds the context on both sides, so Steve's reply can stay short.
-
-### The Session 4 agent changes and proves the code
+### The agent fixes, proves, and reports to Steve
 
 The agent added the check in Go, where the server starts:
 
 {{lines repos:essay-surface/store.go from "// The parent is checked, never made" to "is not a folder; make it"}}
 
-Its comment says why: a mistyped `-comments` path would grow a folder of comments where nobody looks. The agent wrote a test for three cases: a missing parent, a parent that's a file, and a parent that exists. Then it seeded a fault, once: it took its own check out, watched the test fail, and put the check back. Then the check before every commit passed.
+Its comment says why: a mistyped `-comments` path would grow a folder of comments where nobody looks. The agent wrote a test for three cases: a missing parent, a parent that's a file, and a parent that exists. Then it seeded a fault, once: it took its own check out, watched the test fail, and put the check back. Then the check before every commit passed, and the next report told Steve it was done.
 
 Judge a change by its proof: a test that says what the code must do, a fault seeded once to show the test can fail, and a gate that's green.
 
@@ -174,7 +165,7 @@ Session 1 starts with a new repository that holds only a README, and this prompt
 
 {{quote repos:essay-surface/journal/prompts/session-1.md}}
 
-The orchestrator wrote this prompt from Steve's plan and handed it to a cold agent, a new agent that starts with only its prompt and none of our conversation. Steve didn't step in.
+Steve gave the agent this prompt, and the agent worked until it had a report for him.
 
 The agent wrote the server first. It's a Go program, about 250 lines, using only Go's standard library: it reads the notes folder, turns each markdown file into an HTML page, and serves them, with an index. The markdown renderer is Go too, about a thousand lines, and the agent wrote it from scratch. Then it copied in a dozen of Steve's notes as samples and wrote the renderer's tests.
 
@@ -748,9 +739,9 @@ The later sessions added four:
 
 "Collaboration with an agent requires you putting yourself in the agent's shoes and knowing their strengths and weaknesses," Steve says. A cold agent knows only its brief and what it reads. It counts and measures tirelessly, sometimes past what a first version needs. It can't see a page, so the hidden reply buttons in Session 2 waited for Steve's eye.
 
-So the work splits in two. Cold agents do small, scoped tasks. The orchestrator does the coordinating. It writes the prompts from Steve's plans, passes on his replies, and runs the merges and releases.
+An advanced technique, separate from Shale, gets more done at once: split the work. Cold agents, each starting with only its brief, do small, scoped tasks, and an orchestrator coordinates them. It writes the prompts, passes on replies, and runs the merges and releases.
 
-Each cold agent starts from its brief alone, so the orchestrator carries what lasts across sessions. It keeps that memory as files: one markdown file per fact, in a git repository, with an index the harness loads into every session. The agent reads a memory file like any other file, writes it with its file tools, and commits it with Shale.
+The orchestrator carries what lasts across sessions. It keeps that memory as files: one markdown file per fact, in a git repository, with an index the harness loads into every session. The agent reads a memory file like any other file, writes it with its file tools, and commits it with Shale.
 
 Steve accepts the orchestrator's recommendations about 80% of the time when he's careful with his prompts. Creative work is the exception, and there he's more opinionated, "because it's as impossible for an agent as it is for another human to guess what ideas your info will spark with me." This book is creative work, and most of the rules in its mission are his words.
 

@@ -76,7 +76,7 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **AB. Put yourself in the agent's shoes.** "Collaboration with an agent requires you putting yourself in the agent's shoes and knowing their strengths and weaknesses" (Steve, 2026-11-14).
 
-**AC. The orchestrator is Steve's proxy.** Claude often acts as Steve's proxy in the orchestrator role. Cold agents do small tasks, and the orchestrator is largely responsible for coordination (Steve, 2026-11-14).
+**AC. The orchestrator is Steve's proxy.** Claude often acts as Steve's proxy in the orchestrator role. Cold agents do small tasks, and the orchestrator is largely responsible for coordination (Steve, 2026-11-14). (Placement: AU puts this late, as an advanced technique.)
 
 **AD. About 80%, and the creative exception.** Steve accepts the agent's recommendations about 80% of the time when he's being careful with his prompts. In creative work he's more opinionated, "because it's as impossible for an agent as it is for another human to guess what ideas your info will spark with me" (Steve, 2026-11-14).
 
@@ -111,6 +111,8 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 **AS. A diagram illustrates its chapter (Steve, 2026-11-14).** A diagram shows what the chapter tells, and never lies or sets a structure the text can't commit to. A general picture, such as the loop every session runs, waits until a real account motivates it; until then, draw the particular case the chapter walks.
 
 **AT. A chapter's story fits in a small diagram (Steve, 2026-11-14).** A few boxes, each arrow a sentence, and the headings are those sentences in order. When the diagram gets busy, cut the chapter, not the font. A diagram that tells the story well may in turn shape the prose and its headings; it still never claims what the text can't commit to (AS).
+
+**AU. The primary workflow first; orchestration is advanced (Steve, 2026-11-14).** The workflow the reader needs, and the one Steve uses most, is simple: Steve asks Claude to build something, Claude builds it and reports on the essay surface, Steve replies on a line, and Claude fixes it. Cold agents and an orchestrator that keeps them busy are an advanced technique of work optimization, completely orthogonal to Shale. The book was built that way, but that's an implementation detail: tell the work as "the agent" doing it, and teach orchestration late, as an advanced technique, if at all. This corrects an overcorrection. The Roc book had no narrative of how Steve built things; this book swung to excruciating detail about one very specific workflow. Every diagram and chapter serves what the reader needs to learn about Shale.
 
 ## 6. Part Two
 

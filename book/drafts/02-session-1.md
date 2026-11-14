@@ -6,7 +6,7 @@ Session 1 starts with a new repository that holds only a README, and this prompt
 
 {{quote repos:essay-surface/journal/prompts/session-1.md}}
 
-The orchestrator wrote this prompt from Steve's plan and handed it to a cold agent, a new agent that starts with only its prompt and none of our conversation. Steve didn't step in.
+Steve gave the agent this prompt, and the agent worked until it had a report for him.
 
 The agent wrote the server first. It's a Go program, about 250 lines, using only Go's standard library: it reads the notes folder, turns each markdown file into an HTML page, and serves them, with an index. The markdown renderer is Go too, about a thousand lines, and the agent wrote it from scratch. Then it copied in a dozen of Steve's notes as samples and wrote the renderer's tests.
 
