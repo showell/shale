@@ -644,8 +644,35 @@ function lint_findings(ls)
   return found
 end
 
+-- MISSION O: the cookbook's negatives lint over book.md's own prose, its
+-- includes unexpanded, so a quoted prompt or script never counts. Each
+-- negative sentence is rewritten or kept in NEGATIVES_TABLE, and the count of
+-- the rest is held at NEGATIVES_HELD, so it can only go down: a rewrite that
+-- removes one fails the build until the number here moves down with it. The
+-- recipe is named in the worktree that holds it until it reaches the
+-- cookbook's checkout.
+const NEGATIVES = "cookbook:prose/negatives.shale"
+const NEGATIVES_BOOK = "book/book.md"
+const NEGATIVES_TABLE = "book/negatives.txt"
+const NEGATIVES_HELD = 119
+
+function negatives_findings()
+  local r = run({"shale", real(NEGATIVES), "manuscript=" .. NEGATIVES_BOOK, "table=" .. NEGATIVES_TABLE, "held=" .. NEGATIVES_HELD}, {timeout_ms = 60000, tail = 40})
+  local summary = ""
+  for l in lines(r.out) do
+    if starts_with(l, "negatives: negative ") then summary = l end
+  end
+  if r.ended == "exit" and get(r, "code", -1) == 0 then
+    print(summary)
+    return {}
+  end
+  print(trim(r.out))
+  return {"the negatives count moved off NEGATIVES_HELD, " .. NEGATIVES_HELD .. " (above): a new negative is rewritten or kept in " .. NEGATIVES_TABLE .. ", and a rewrite that removed one lowers NEGATIVES_HELD to the new count"}
+end
+
 local whole = expanded(read(SOURCE))
 local lint = lint_findings(whole)
+for f in negatives_findings() do push(lint, f) end
 local book = parts_of(whole)
 if #book.chapters == 0 then fail("book: book.md has no `##` chapters") end
 if exists(DEST) then remove_tree(DEST) end

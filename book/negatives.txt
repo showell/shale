@@ -1,0 +1,23 @@
+# The negative sentences the book's prose keeps. The rule is MISSION O: say
+# what happens, and keep a negative only where the "no" is the point.
+# build.shale runs the cookbook's prose/negatives.shale over book.md, which
+# finds every sentence holding a negative word. Each one is rewritten, or
+# listed here with its kind. The build holds the unlisted count at `held`, so
+# it can only go down as chapters are rewritten.
+#
+# The kinds. A `fix` kind is rewritten: cut the sentence or the clause first,
+# if the paragraph stands without it, and only then say what happens. A `keep`
+# kind may be listed below, and still has to earn its place.
+#
+# fix extraneous: the paragraph says it already, or needs none of it.
+# fix contrast: says what a thing is by what it isn't, "X, not Y".
+# fix hidden-positive: a negation that hides a positive fact: "the gate never lets it through" for "the gate stops it".
+# fix presumed-worry: answers a doubt the reader never raised.
+# fix hedge: softens or apologizes for a claim.
+# fix double-negative: two negatives where one positive does.
+# keep guarantee: the "no" is the guarantee itself, such as a budget or a confinement: "A script reads no path outside its root."
+# keep caution: warns of a real trap: "Never run `zig build` in the checkout the hook runs."
+# keep quoted: Steve's words, or a prompt's, quoted as he said them.
+#
+# Each line below is `kind: the sentence`, the sentence exactly as the lint
+# prints it, and its kind is a `keep` kind. None is listed yet.
