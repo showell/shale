@@ -74,6 +74,7 @@ const cases = [_]Case{
     .{ .b = .match_path, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = match_path(s, \"*b\")" },
     .{ .b = .between, .grows = .scales, .per = script.builtins.bytes_per_step, .setup = "local s = rep(\"a\", N) .. \"(x)\"", .call = "local x = between(s, \"(\", \")\")" },
     .{ .b = .basename, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = basename(s)" },
+    .{ .b = .is_name, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = is_name(s)" },
     .{ .b = .strip_suffix, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = strip_suffix(s, s)" },
     .{ .b = .upper, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = upper(s)" },
     .{ .b = .lower, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = lower(s)" },

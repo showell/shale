@@ -293,6 +293,129 @@ function grep_all(p, lit)
   end
 end
 
+-- One file's hits for `grep_tree`, each `{line, text}`: `grep` for a
+-- literal (`grep_all` past 1 MiB, the smallest call-bytes cap), and for a
+-- pattern or either case the file a part at a time (`read_lines`' own
+-- part), its lines numbered across the parts.
+function grep_tree_file(p, size, needle, regex, nocase)
+  if not regex and not nocase then
+    if size > 1048576 then return grep_all(p, needle) end
+    return grep(p, needle)
+  end
+  local lowered = lower(needle)
+  local got = {}
+  local base = 0
+  local at = 0
+  while true do
+    local r = read_lines(p, at)
+    if regex then
+      for m in re_lines(join(r.lines, "\n"), needle, {nocase = nocase}) do push(got, {line = base + m.line, text = m.text}) end
+    else
+      local n = base
+      for l in r.lines do
+        n = n + 1
+        if contains(lower(l), lowered) then push(got, {line = n, text = l}) end
+      end
+    end
+    base = base + #r.lines
+    if r.done then return got end
+    at = r.next
+  end
+end
+
+-- Why `grep_tree` passes a walked entry by, or "" to search it, or nil when
+-- it isn't a file of the search at all (a folder, a build's own output, an
+-- extension not asked for). `rest` is its path below the place searched.
+function grep_tree_skip(e, rest, exts)
+  if e.kind == "directory" then return nil end
+  local named = true
+  for part in split(rest, "/") do
+    if part == "zig-out" or part == "zig-pkg" or part == "node_modules" then return nil end
+    if not is_name(part) then named = false end
+  end
+  if #exts > 0 then
+    local wanted = false
+    for x in exts do
+      if ends_with(e.path, "." .. x) then wanted = true end
+    end
+    if not wanted then return nil end
+  end
+  if e.kind ~= "file" then return "a symbolic link, never followed" end
+  if not named then return "a name the store can't hold" end
+  if e.size > 0 and contains(read(e.path, 0, 4096), "\0") then return "binary" end
+  return ""
+end
+
+-- **A SEARCH OVER A TREE** (2026-11-14: a quarter of a session's heredocs
+-- ran `grep -rn` through `run`): the lines holding `needle` in the files
+-- under `place` (a folder, `.` the root, a mount's path, or one file), in
+-- path order. A folder named with a leading `.` is not entered, and nothing
+-- under a build's own folders (`zig-out`, `zig-pkg`, `node_modules`) is
+-- searched. A symbolic link is never followed, and a binary file (a zero
+-- byte in its first 4 KiB) and a file the store can't name (`is_name`) are
+-- passed by, each in `passed`, so nothing is left out quietly. `opts`:
+-- `regex = true`, `needle` a pattern (`re_lines`'s) and not a literal;
+-- `nocase = true`, either case; `ext = {"zig", "md"}`, only files ending in
+-- one of these; `context = N`, each hit with `before` and `after`, the N
+-- lines on each side; `most = N`, at most N hits (10,000), `cut` saying the
+-- search stopped there. The answer is `{hits, files, passed, cut}`: each
+-- hit `{path, line, text}`, the number of files searched, and each file
+-- passed by `{path, why}`.
+function grep_tree(place, needle, opts?)
+  if needle == "" then fail("`grep_tree` of \"\": every line holds it") end
+  if opts == nil then opts = {} end
+  local regex = get(opts, "regex", false)
+  local nocase = get(opts, "nocase", false)
+  local exts = get(opts, "ext", {})
+  local context = get(opts, "context", 0)
+  local most = get(opts, "most", 10000)
+  local answer = {hits = {}, files = 0, passed = {}, cut = false}
+  local entries = {}
+  local prefix = place .. "/"
+  if ends_with(place, ":") then prefix = place end
+  if place == "." or place == "" then prefix = "" end
+  if prefix ~= "" and not is_dir(place) then
+    entries = {{path = place, kind = "file", size = stat(place).size}}
+    prefix = ""
+  else
+    entries = walk_all(place, {skip = ".*"})
+  end
+  for e in entries do
+    if answer.cut then break end
+    local rest = e.path
+    if prefix ~= "" and starts_with(e.path, prefix) then rest = sub(e.path, #prefix + 1) end
+    if prefix == "" and e.path == place then rest = basename(place) end
+    local why = grep_tree_skip(e, rest, exts)
+    if why ~= nil and why ~= "" then push(answer.passed, {path = e.path, why = why}) end
+    if why == "" then
+      answer.files = answer.files + 1
+      local found = grep_tree_file(e.path, e.size, needle, regex, nocase)
+      local all = {}
+      if context > 0 and #found > 0 then all = lines(read(e.path)) end
+      for m in found do
+        if #answer.hits >= most then
+          answer.cut = true
+          break
+        end
+        local hit = {path = e.path, line = m.line, text = m.text}
+        if context > 0 then
+          local before = {}
+          local after = {}
+          for i = m.line - context, m.line - 1 do
+            if i >= 1 then push(before, {line = i, text = all[i]}) end
+          end
+          for i = m.line + 1, m.line + context do
+            if i <= #all then push(after, {line = i, text = all[i]}) end
+          end
+          hit = {path = e.path, line = m.line, text = m.text, before = before, after = after}
+        end
+        push(answer.hits, hit)
+      end
+    end
+  end
+  return answer
+end
+
 -- **A NAME BELOW A FOLDER**, spelled as every call takes it: in the root
 -- (`""`, `"."`) the name, in a mount's folder (`m:`, `m:.`) `m:name`,
 -- else `dir/name`.

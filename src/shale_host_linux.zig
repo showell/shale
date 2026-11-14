@@ -547,17 +547,27 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
 /// (`bash5.2` is `bash`, `perl5` is `perl`).
 const refused = [_]struct { []const []const u8, []const u8 }{
     .{ &.{ "bash", "sh", "dash", "zsh", "busybox", "python", "python3", "perl", "node" }, "a shell or an interpreter: Shale is the script" },
-    .{ &.{ "head", "tail", "grep", "sed", "awk", "gawk", "cut", "sort", "uniq", "wc", "cat", "tr" }, "a text tool: Shale's builtins and run's own filter and keep do this" },
+    .{ &.{ "head", "tail", "grep", "awk", "gawk", "cut", "sort", "uniq", "wc", "cat", "tr" }, "a text tool: Shale's builtins and run's own filter and keep do this" },
     .{ &.{ "env", "xargs", "timeout", "nice", "nohup", "setsid", "stdbuf", "time" }, "a wrapper that runs another program: run that program, with run's own options" },
 };
 
-/// Refuses, unless given a `want`, a program in `refused` and a program by path
-/// that git does not track, unless it is under a `tools` mount. Used by `run`
-/// and `job_start`.
+/// Programs `run` refuses even with a `want` (Steve, 2026-11-14): a session's
+/// 293 calls of `sed` each had a Shale form at least as good, which the refusal
+/// names. `edit` stops the run when its text isn't there, where `sed -i` changes
+/// nothing and says nothing.
+const never = [_]struct { []const []const u8, []const u8 }{
+    .{ &.{ "sed", "gsed" }, "`edit(p, old, new)` changes a file and stops the run when `old` isn't there; `re_replace(s, pattern, new)` then `replace(p, s)` for a pattern; `lines(read(p))`, or `shale cookbook:look.shale at=f:N-M`, for a file's lines" },
+};
+
+/// Refuses a program in `never`, whatever the `want`; then, unless given a
+/// `want`, a program in `refused` and a program by path that git does not
+/// track, unless it is under a `tools` mount. Used by `run` and `job_start`.
 pub fn refuse(h: *Host, run: *Run, pos: ast.Pos, who: []const u8, argv0: []const u8, cwd: []const u8, want: ?[]const u8) Error!void {
-    if (want != null) return;
     const base = baseName(argv0);
     const bare = std.mem.trimEnd(u8, base, "0123456789");
+    for (never) |group| for (group[0]) |n| if (std.mem.eql(u8, n, base) or (bare.len > 0 and std.mem.eql(u8, n, bare)))
+        return run.fail(pos, .refused, "`{s}` of `{s}`, even with a want: {s}", .{ who, base, group[1] });
+    if (want != null) return;
     for (refused) |group| for (group[0]) |n| if (std.mem.eql(u8, n, base) or (bare.len > 0 and std.mem.eql(u8, n, bare)))
         return run.fail(pos, .refused, "`{s}` of `{s}`: {s}; {{want = \"tag: why\"}} to run it anyway", .{ who, base, group[1] });
     if (std.mem.indexOfScalar(u8, argv0, '/') != null and !underToolsMount(h, argv0) and !try tracked(h, run, pos, argv0, cwd))
@@ -845,9 +855,16 @@ test "host: what run refuses without a want, by name and by an untracked path; a
     var t: T = undefined;
     try t.init();
     defer t.deinit();
-    for ([_][]const u8{ "bash", "/usr/bin/python3.12", "grep", "xargs", "sed", "bash5.2", "perl5", "/usr/bin/python3" }) |name| {
+    for ([_][]const u8{ "bash", "/usr/bin/python3.12", "grep", "xargs", "bash5.2", "perl5", "/usr/bin/python3" }) |name| {
         var src: [256]u8 = undefined;
         try t.expectStop(try std.fmt.bufPrint(&src, "host(\"run\", {{\"{s}\", \"x\"}}, {{timeout_ms = 1000, tail = 1}})", .{name}), .atomic, .refused, "want =");
+    }
+    // `sed` is refused with a want too, by any path or version, and the
+    // refusal names `edit`.
+    for ([_][]const u8{ "sed", "/usr/bin/sed", "gsed", "sed4" }) |name| {
+        var src: [256]u8 = undefined;
+        try t.expectStop(try std.fmt.bufPrint(&src, "host(\"run\", {{\"{s}\", \"-n\", \"1p\"}}, {{timeout_ms = 1000, tail = 1}})", .{name}), .atomic, .refused, "even with a want: `edit(p, old, new)`");
+        try t.expectStop(try std.fmt.bufPrint(&src, "host(\"run\", {{\"{s}\", \"-n\", \"1p\"}}, {{timeout_ms = 1000, tail = 1, want = \"test: a sed\"}})", .{name}), .atomic, .refused, "even with a want");
     }
     // A program by path that git does not track: the fixture, by its path.
     var buf: [std.fs.max_path_bytes + 128]u8 = undefined;

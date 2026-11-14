@@ -52,6 +52,7 @@ pub const Builtin = enum {
     path,
     match_path,
     basename,
+    is_name,
     strip_suffix,
     between,
     // regular expressions

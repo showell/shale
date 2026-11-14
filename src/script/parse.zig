@@ -93,6 +93,10 @@ pub const Parser = struct {
     frame: Frame = .{},
     /// Whether the frame is the script's own (top level) or a function's.
     in_function: bool = false,
+    /// The script's own frame while one of the script's functions is parsed,
+    /// so a stop can tell a script `local` the function can't see from a name
+    /// that is nowhere, and name the fix.
+    script_frame: ?*const Frame = null,
     functions: std.ArrayList(ast.Function) = .empty,
     /// The script's own functions, by name.
     function_names: std.StringHashMapUnmanaged(u32) = .empty,
@@ -263,8 +267,38 @@ pub const Parser = struct {
 
     fn unknownName(self: *Parser, name: []const u8, pos: ast.Pos) Error {
         if (lua_names.get(name)) |why| return self.failAt(pos, .refused, why);
+        // A script `local` the function can't see: the stop names the fix,
+        // `const` for a value set once, a parameter for one that changes.
+        if (self.in_function and self.in_prelude == null) if (self.script_frame) |f| if (frameHas(f, name)) {
+            if (assignedAgain(self.alloc, self.lexer.src, name))
+                return self.failf(pos, .name, "`{s}` is a script `local` that is assigned again, and a function sees only its own parameters and locals: pass `{s}` in as a parameter", .{ name, name });
+            return self.failf(pos, .name, "`{s}` is a script `local` set once, and a function sees only its own parameters and locals and the `const`s above it: declare it `const {s} = ...` where it is set", .{ name, name });
+        };
         if (self.in_function) return self.failf(pos, .name, "no local `{s}` here: a function sees only its own parameters and locals, and the script's `const`s declared above it (Shale's builtins and preludes: `shale --help`)", .{name});
         return self.failf(pos, .name, "no local `{s}`: declare it with `local {s} = ...` (there are no globals; Shale's builtins and preludes: `shale --help`)", .{ name, name });
+    }
+
+    fn frameHas(f: *const Frame, name: []const u8) bool {
+        for (f.locals.items) |l| if (std.mem.eql(u8, l.name, name)) return true;
+        return false;
+    }
+
+    /// Whether the script assigns `name` anywhere but its `local`'s own
+    /// line: `name = ...`, not `local name = ...` or `x.name = ...`. A
+    /// function's own local of that name counts too, so the answer leans to
+    /// "assigned again", whose fix (a parameter) is right either way. A
+    /// source that doesn't lex counts as assigned again, for the same reason.
+    fn assignedAgain(alloc: std.mem.Allocator, src: []const u8, name: []const u8) bool {
+        var lx = lex.Lexer.init(alloc, src);
+        var before: Tag = .eof;
+        var current = lx.next() catch return true;
+        while (current.tag != .eof) {
+            const after = lx.next() catch return true;
+            if (current.tag == .name and std.mem.eql(u8, current.text, name) and after.tag == .assign and before != .kw_local and before != .dot) return true;
+            before = current.tag;
+            current = after;
+        }
+        return false;
     }
 
     fn blockEnds(tag: Tag) bool {
@@ -510,12 +544,17 @@ pub const Parser = struct {
 
         const saved = self.frame;
         const saved_in_function = self.in_function;
+        const saved_script_frame = self.script_frame;
+        // A prelude's function, loaded at its first call, may be parsed in
+        // the middle of the script's: only the script's own top level counts.
+        if (!saved_in_function and self.in_prelude == null) self.script_frame = &saved;
         self.frame = .{};
         self.in_function = true;
         defer {
             self.frame.locals.deinit(self.scratch);
             self.frame = saved;
             self.in_function = saved_in_function;
+            self.script_frame = saved_script_frame;
         }
         _ = try self.expect(.lparen, "`(` after the function's name");
         self.frame.depth = 1;

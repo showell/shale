@@ -132,6 +132,14 @@ const cases = [_]Case{
     .{ .src = "local x = min(1)", .line = 1, .column = 11, .class = .argument, .message = "`min` takes 2 to 4 arguments, given 1" },
     .{ .src = "function f(a, b?) end f()", .line = 1, .column = 23, .class = .argument, .message = "`f` takes 1 to 2 arguments, given 0" },
     .{ .src = "function f(a, b?) end f(1, 2, 3)", .line = 1, .column = 23, .class = .argument, .message = "`f` takes 1 to 2 arguments, given 3" },
+    // A function reaching for a script `local`: the stop names the fix, `const`
+    // for one set once (a key added to a map is not an assignment), a
+    // parameter for one assigned again (inside the function or anywhere
+    // else), and the plain stop for a name that is nowhere.
+    .{ .src = "local today = 5\nlocal m = {}\nm.today = 1\nfunction f() return today end\nprint(f())", .line = 4, .column = 21, .class = .name, .message = "`today` is a script `local` set once, and a function sees only its own parameters and locals and the `const`s above it: declare it `const today = ...` where it is set" },
+    .{ .src = "local t = \"a\"\nfunction f() t = t .. \"b\" end\nf()", .line = 2, .column = 14, .class = .name, .message = "`t` is a script `local` that is assigned again, and a function sees only its own parameters and locals: pass `t` in as a parameter" },
+    .{ .src = "local n = 1\nfunction f() return n end\nn = 2\nprint(f())", .line = 2, .column = 21, .class = .name, .message = "`n` is a script `local` that is assigned again, and a function sees only its own parameters and locals: pass `n` in as a parameter" },
+    .{ .src = "function f() return nowhere end\nf()", .line = 1, .column = 21, .class = .name, .message = "no local `nowhere` here: a function sees only its own parameters and locals, and the script's `const`s declared above it (Shale's builtins and preludes: `shale --help`)" },
     .{ .src = "function f(a?, b) end", .line = 1, .column = 16, .class = .syntax, .message = "`b` is required after an optional parameter: the optional ones (`a?`) come last" },
     .{ .src = "local x = 1 ? 2", .line = 1, .column = 13, .class = .syntax, .message = "expected a value, found `?`, which marks an optional parameter (`function f(a, b?)`) and nothing else" },
     .{ .src = "local x = trim(\"a\", \"b\")", .line = 1, .column = 11, .class = .argument, .message = "`trim` takes 1 argument, given 2" },

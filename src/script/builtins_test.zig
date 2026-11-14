@@ -80,6 +80,16 @@ test "builtins: the store's reads: ls sorted, stat, exists, is_dir, read" {
     try f.expectOutput("print(read(\"chat/a.md\") .. \" \" .. read(\"chat/b.md\"))", "hello world!\n");
 }
 
+test "builtin: is_name says which names the store holds, by its own rule" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("print(is_name(\"a.md\"), is_name(\"x-y_z 2.zig\"), is_name(rep(\"a\", 96)))", "true\ttrue\ttrue\n");
+    try f.expectOutput("print(is_name(rep(\"a\", 97)), is_name(\"\"), is_name(\".\"), is_name(\"..\"), is_name(\"a/b\"), is_name(\"a:b\"), is_name(\"a.\"), is_name(\"a \"), is_name(\"caf\xc3\xa9\"))", "false\tfalse\tfalse\tfalse\tfalse\tfalse\tfalse\tfalse\tfalse\n");
+    // A name it refuses is one `read` refuses too: the rule has one home.
+    try f.expectStop("local x = read(rep(\"a\", 97))", .argument);
+}
+
 test "builtins: the store's changes, each in the effects log with its outcome, and a stopped run keeps what it did" {
     var f: Fixture = undefined;
     try f.init();

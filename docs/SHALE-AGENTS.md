@@ -130,8 +130,8 @@ Each has a Shale form, most of them one launch:
 | `sed -n 40,80p f; sed -n 5,9p g` | `shale cookbook:look.shale at=f:40-80,g:5-9` |
 | `pkill -f pat`, `ps aux \| grep pat \| xargs kill` | `for p in procs() do if find(p.args, "pat") ~= nil then proc_stop(p) end end`: never this run or its shell |
 | `grep -rn 'text' src build.zig` | `shale cookbook:look.shale find=text in=src,build.zig ext=zig` (a value with `(`, `*` or a space: `--args-stdin`) |
-| `run({"grep", "-rn", ...})` inside a heredoc | `for p in glob("src/**/*.zig") do for h in grep(p, "text") do print(p .. ":" .. h.line .. ": " .. h.text) end end`: `grep` is one file and a literal; `re_lines(read(p), pattern)` a regex; `grep_all(p, "text")` one file past the call-bytes cap, a part at a time; `#grep(p, "text")` a count |
-| `run({"sed", "-i", ...})` inside a heredoc | `edit(p, old, new)`: a literal, stopping the run when `old` isn't there, so no edit misses quietly; `re_replace(s, pattern, new)` then `replace(p, s)` for a regex |
+| `run({"grep", "-rn", ...})` inside a heredoc | `for h in grep_tree("src", "text", {ext = {"zig"}}).hits do print(h.path .. ":" .. h.line .. ": " .. h.text) end` (`regex = true`, `nocase = true`, `context = 2` for `-A2 -B2`); one file: `grep(p, "text")`, `re_lines(read(p), pattern)`, `grep_all(p, "text")` past the call-bytes cap, `#grep(p, "text")` a count |
+| `run({"sed", "-i", ...})` inside a heredoc, refused even with a want | `edit(p, old, new)`: a literal, stopping the run when `old` isn't there, so no edit misses quietly; `re_replace(s, pattern, new)` then `replace(p, s)` for a regex |
 | `grep -rn 'a phrase' docs` over prose, which misses one a line break splits | `shale cookbook:find_phrase.shale find="a phrase" in=docs` (phrase on stdin with `--args-stdin`): each paragraph, list item, quote and comment block read whole (never a code fence), so a break, an indent or a run of spaces inside the phrase is one space; a hit says `path:line` where it starts, `(N lines)` when it crosses breaks, `(markup inside)` when only `*` or a backtick splits it; `new=` shows the edit and `write=1` makes it, rewrapping only the lines the edit moves |
 | grep in Zig's std, a sibling repo | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:dog-park/src` |
 | `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:run_zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
@@ -215,7 +215,13 @@ has none of it):
   each line's search, so a pattern over megabytes of notes fits the
   default budget when it begins with a byte that is rare in them. `head_lines(p, n)` and `tail_lines(p, n)` take a
   file of any size and give nil for a missing one. `grep_all(p, lit)` is
-  `grep` for a file of any size. `unique(list)` gives each item once. `newest(dir, n)`
+  `grep` for a file of any size. `grep_tree(place, needle, opts?)` is
+  `grep -rn`: `{hits, files, passed, cut}`, each hit `{path, line, text}`,
+  with `regex`, `nocase`, `ext = {"zig"}`, `context = N` (each hit's
+  `before` and `after`) and `most`; a link, a binary file and a name the
+  store can't hold (`is_name`) are in `passed`, never left out quietly.
+  Each file it reads stays in the run's arena, so a tree of more than a
+  few megabytes wants `--budget arena_bytes=N`. `unique(list)` gives each item once. `newest(dir, n)`
   gives the names that changed last (the root as `""` or `"."`).
   `path_under(dir, name)` spells a name below a folder as every call takes
   it: `name` in the root, `m:name` in a mount's folder, else `dir/name`.

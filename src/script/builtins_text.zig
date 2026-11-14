@@ -9,6 +9,8 @@ const interp = @import("interp.zig");
 const value = @import("value.zig");
 const bi = @import("builtins.zig");
 
+const store = @import("webbox").store;
+
 const Run = interp.Run;
 const Value = value.Value;
 const Error = interp.Error;
@@ -41,8 +43,20 @@ pub const specs = [_]bi.Spec{
     spec(.substitute, 3, 4, substitute),
     spec(.path, 1, bi.most_args, path),
     spec(.basename, 1, 1, basename),
+    spec(.is_name, 1, 1, isName),
     spec(.strip_suffix, 2, 2, stripSuffix),
 };
+
+/// `is_name(s)`: whether the store holds `s` as one part of a path, by the
+/// store's own rule (webbox's `store.fatName`, the bare-metal host's FAT): so a
+/// walk over a tree it didn't make passes by a file it couldn't read, rather
+/// than stopping on it. A step a byte.
+fn isName(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+    const s = try bi.stringArg(run, pos, .is_name, args[0], "its name");
+    try run.charge(pos, s.len);
+    run.tally(s.len);
+    return .{ .boolean = store.fatName(s) };
+}
 
 /// `path(a, b, ...)` joins the parts with `/`, leaving out each "", so ""
 /// denotes the root and needs no special case. A step per byte produced.

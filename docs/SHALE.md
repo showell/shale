@@ -599,6 +599,7 @@ change_bytes` past those budgets.
 | `substitute(s, old, new[, {missing_ok}])` | `s` with each `old` replaced | `argument` for `old` = "", and for an `old` not in `s` unless `missing_ok` |
 | `path(a, b, ...)` | the parts joined with `/` | |
 | `basename(p)`, `strip_suffix(s, t)` | strings | |
+| `is_name(s)` | a boolean | |
 | `tostring(v)` | a scalar's text | `type` for a list or map |
 | `tonumber(s)` | an integer | `argument` for anything but digits |
 | `parse_int(s)` | an integer, or nil | none: anything but an integer is nil |
@@ -702,6 +703,7 @@ costs").
 | `parse_int(s)` | the integer `s` says, the blanks around it let be (spaces, tabs, `\r`, `\n`), or nil for anything else: a word, a torn line, a number past 64 bits. nil gives nil and an integer itself, so a field that is missing (`get`) reads as no number. For data the script did not write |
 | `path(a, b, ...)` | the parts (one to four) joined with `/`, each "" left out, so "" is the root: `path("", "<name>.txt")` is `<name>.txt` |
 | `basename(p)` | what follows the last `/`, or all of `p` |
+| `is_name(s)` | whether the store holds `s` as one part of a path, by its own rule (1 to 96 bytes of printable ASCII, none of `"*/:<>?\|`, not `.` or `..`, not ending in `.` or a space): a walk over a tree the store didn't make passes by a file it couldn't read |
 | `strip_suffix(s, t)` | `s` without `t` at its end, or `s` as it is |
 
 
@@ -1330,7 +1332,7 @@ three:
 - **`Options.preludes`**, the preludes after the core's, in order:
   - the Linux prelude (`src/shale_prelude_linux.shale`): `run`, `real`, `sleep`, `not_option`,
     `must`, `http`, `http_get`, `re_lines`, `head_lines`, `tail_lines`,
-    `grep_all`, `unique`, `path_under`, `fresh_dir`, `newest`, `create`, `edits_all`, `edit_between`, `json_read`, `json_write`; the Zig tools
+    `grep_all`, `grep_tree`, `unique`, `path_under`, `fresh_dir`, `newest`, `create`, `edits_all`, `edit_between`, `json_read`, `json_write`; the Zig tools
     `zig_rename`, `zig_renames`, `zig_decls`, `zig_move`, `zig_tokens` and
     `zig_imports`; `shale_tokens`; the jobs, `job_start`, `job_alive`, `job_stop` and
     `job_wait`; and the processes, `procs` and `proc_stop` (`job_wait`'s helpers `curl_http`, `edit_words`, `edit_word_byte` and `edit_marker_shown`

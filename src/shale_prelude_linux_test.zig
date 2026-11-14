@@ -339,6 +339,41 @@ test "linux prelude: grep_all numbers the lines holding a literal across a file'
     try t.expectStop("grep_all(\"big.txt\", \"\")", .atomic, .fail, "`grep_all` of \"\"");
 }
 
+test "linux prelude: grep_tree searches a tree, says what it passed by, and takes a pattern, either case, extensions, context and a cap" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    for ([_][]const u8{ "src/sub", "src/zig-out", "src/.hidden" }) |dir| try t.tmp.dir.createDirPath(t.threaded.io(), dir);
+    try t.put("src/a.zig", "fn one() {}\nconst HIT = 1;\nfn two() {}\n");
+    try t.put("src/b.md", "a hit here\nnone\n");
+    try t.put("src/sub/c.zig", "x\ny HIT\nz\n");
+    try t.put("src/zig-out/d.zig", "HIT in a build's output\n");
+    try t.put("src/.hidden/e.zig", "HIT in a hidden folder\n");
+    try t.put("src/bin.dat", "HIT\x00\x01\x02");
+    const long = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt";
+    try t.put("src/" ++ long, "HIT in a name too long for the store\n");
+    try t.tmp.dir.symLink(t.threaded.io(), "a.zig", "src/link.zig", .{});
+    // A literal: the hits in path order, the files searched, and each one
+    // passed by with why; the build's output and the hidden folder are not
+    // the search's at all.
+    try t.expectOutput(
+        \\local r = grep_tree("src", "HIT")
+        \\for h in r.hits do print(h.path .. ":" .. h.line .. ": " .. h.text) end
+        \\print(r.files, r.cut)
+        \\for p in r.passed do print(p.path, p.why) end
+    ,
+        "src/a.zig:2: const HIT = 1;\nsrc/sub/c.zig:2: y HIT\n3\tfalse\n" ++
+            "src/" ++ long ++ "\ta name the store can't hold\nsrc/bin.dat\tbinary\nsrc/link.zig\ta symbolic link, never followed\n",
+    );
+    // Either case, in the extensions asked for; a pattern.
+    try t.expectOutput("local r = grep_tree(\"src\", \"hit\", {nocase = true, ext = {\"md\"}}) print(r.files, r.hits[1].path, r.hits[1].line, r.hits[1].text)", "1\tsrc/b.md\t1\ta hit here\n");
+    try t.expectOutput("local r = grep_tree(\"src\", \"^fn (one|two)\", {regex = true, ext = {\"zig\"}}) for h in r.hits do print(h.path, h.line) end", "src/a.zig\t1\nsrc/a.zig\t3\n");
+    // One file, with a line on each side; a cap that cuts the search says so.
+    try t.expectOutput("local h = grep_tree(\"src/sub/c.zig\", \"HIT\", {context = 1}).hits[1] print(h.before[1].line, h.before[1].text, h.line, h.after[1].line, h.after[1].text)", "1\tx\t2\t3\tz\n");
+    try t.expectOutput("local r = grep_tree(\"src\", \"fn\", {most = 1}) print(#r.hits, r.cut)", "1\ttrue\n");
+    try t.expectStop("grep_tree(\"src\", \"\")", .atomic, .fail, "`grep_tree` of \"\"");
+}
+
 fn touch(t: *T, name: []const u8, seconds: i64) !void {
     const path = try std.fmt.allocPrintSentinel(t.arena.allocator(), "{s}/{s}", .{ t.root, name }, 0);
     const ts: [2]std.os.linux.timespec = .{ .{ .sec = seconds, .nsec = 0 }, .{ .sec = seconds, .nsec = 0 } };
