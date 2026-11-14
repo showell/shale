@@ -152,9 +152,13 @@ pub const Host = struct {
     undo: bool = false,
     journal: std.ArrayList(Prior) = .empty,
     journal_bytes: usize = 0,
+    /// The jobs this run started, for a stop to end (`shale_host_jobs.stopWithRun`).
+    jobs_started: std.ArrayList(@import("shale_host_jobs.zig").Started) = .empty,
 
     pub fn deinit(h: *Host) void {
         h.time.deinit(h.alloc);
+        for (h.jobs_started.items) |j| j.free(h.alloc);
+        h.jobs_started.deinit(h.alloc);
         for (h.records.items) |r| h.alloc.free(r.line);
         h.records.deinit(h.alloc);
         for (h.journal.items) |p| {

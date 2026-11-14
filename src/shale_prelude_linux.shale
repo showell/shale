@@ -41,7 +41,9 @@ end
 
 -- **A LONG JOB** (`job_start`): a program that outlives this run, its
 -- output in `opts.log` and its record in `<log>.job`, under a detached
--- reaper. A later run finds it by that record's path.
+-- reaper. A later run finds it by that record's path. A run that stops
+-- (a failure, a budget) ends the jobs it started, but those with
+-- `keep_on_stop = true` (`shale_host_jobs.zig`'s `stopWithRun`).
 function job_start(argv, opts)
   return host("job_start", argv, opts)
 end
