@@ -159,17 +159,21 @@ Session 1 starts with a new repository that holds only a README, and this prompt
 
 {{quote repos:essay-surface/journal/prompts/session-1.md}}
 
-The orchestrator wrote this prompt from a plan Steve gave it and handed it to a cold agent, and Steve didn't step in. "Even with five hundred notes" is a speed target, and it's also a real count: the old surface, the Python server Steve used before this one, holds 502 notes. The agent copied a dozen of them in as samples, and measured and audited against all of them.
+The orchestrator wrote this prompt from Steve's plan and handed it to a cold agent, and Steve didn't step in.
 
-The agent wrote the server and its markdown renderer in Go, with no dependencies. The prompt also says to commit as you go, so the agent commits on its own, with nobody watching, and each commit needs a bar to clear.
+The agent wrote the server first. It's a Go program, about 250 lines, using only Go's standard library: it reads the notes folder, turns each markdown file into an HTML page, and serves them, with an index. The markdown renderer is Go too, about a thousand lines, and the agent wrote it from scratch. Then it copied in a dozen of Steve's notes as samples and wrote the renderer's tests.
 
 ### A gate before a commit
 
-Before its first commit, the agent saved `scripts/check.shale`, and it runs that script before every commit:
+The prompt says "commit as you go", so the agent commits on its own. The prompt never asks for checks before a commit. The agent added them anyway, because checking code before you commit it is standard practice in Go, and an agent brings a language's standard practices with it, the way an experienced hire would.
+
+Go ships the tools for those checks, and the agent used two of them besides the tests. `gofmt` is Go's official formatter: Go has one accepted layout for code, and `gofmt -l` lists every file that doesn't match it. `go vet` is Go's built-in checker for code that compiles but is probably wrong, such as a `Printf` whose arguments don't match its format string. `go test` runs the tests.
+
+The agent saved the three checks as `scripts/check.shale`, and it runs that script before every commit:
 
 {{show repos:essay-surface d793c5a:scripts/check.shale from "local fmt" to "test.ms"}}
 
-Read it with One loop's three questions. What does it read? Nothing: it only runs programs. What does it run? Three of them: `gofmt -l`, which lists any file that isn't formatted, `go vet`, which looks for suspicious code, and `go test`. How does it end? With a verdict for each, or a stop. Only `go vet` goes through `must`. `gofmt -l` exits 0 even when it lists files, so the script checks its output instead, with `~=` (not equal). A failed `go test` prints what it said before `fail` stops the script. `.ms` is how long a run took.
+Read it with One loop's three questions. What does it read? Nothing: it only runs programs. What does it run? Those three programs, one after another. How does it end? With a verdict for each, or a stop. Only `go vet` goes through `must`. `gofmt -l` exits 0 even when it lists files, so the script checks its output instead, with `~=` (not equal). A failed `go test` prints what it said before `fail` stops the script. `.ms` is how long a run took.
 
 The gate's first real run listed two files that needed formatting:
 
@@ -215,7 +219,7 @@ The first full run flagged 37 pages. Most of them came from two real bugs: title
 
 Each fix got a test, the table one copied from the note that found it. After the fixes, two pages were flagged, and both were faithful output: CommonMark renders their sources the same way.
 
-Run your code over real data before you trust your own tests. Your tests hold only the cases you thought of, and five hundred real notes hold many you didn't. When real data finds a bug, copy the real case into a test. The agent's own hindsight goes one step further. Asked what it would do differently tomorrow, it said it would write the audit before the renderer's tests.
+Run your code over real data before you trust your own tests. Your tests hold only the cases you thought of, and Steve's real notes hold many you didn't. When real data finds a bug, copy the real case into a test. The agent's own hindsight goes one step further. Asked what it would do differently tomorrow, it said it would write the audit before the renderer's tests.
 
 ### The gates now
 

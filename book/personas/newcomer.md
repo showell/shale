@@ -9,3 +9,5 @@ Read as that developer, chapter by chapter, and stop wherever you would stop. Fo
 - **Bored:** where your attention dropped, and why.
 
 Quote the passage, name the chapter, and suggest a fix in a sentence. Under 600 words, most important first. Edit nothing.
+
+The newcomer knows nothing of Steve's setup (his old surface, his note count, his agents' habits), and has read Go but not used its tools: about Steve's own 1,000 lines before agents (MISSION AO). Flag any step the agent took on its own initiative that the chapter doesn't motivate, and any Go tool or idiom used without a gloss.
