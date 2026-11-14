@@ -32,7 +32,7 @@ You won't find skills files here, the instruction files some setups use to teach
 
 The book follows one side project. We build a new essay surface: a small web app where an agent's notes, written in markdown, become pages, and Steve, who runs this project, reads them in a browser and replies to any paragraph. A Go server sits behind a plain-JavaScript front end. Steve soon used it to reply to the drafts of this book. The first two prompts have the roles turned around: they say "I write notes" and "I read those comments". In practice the agent writes the notes, Steve replies, and the agent reads his replies to steer its next draft.
 
-We tell it in sessions, a chapter each. A session is one stretch of work that starts with one prompt. The sessions aren't days: the real build took an afternoon of agent time, and the merge in Session 6 and the feature in Session 7 came the next morning. Each session's agent kept a journal under the name first given it, so the captions under Session 1's quotes say `monday.md`. An essay surface isn't an agent harness, the program an agent runs inside, but in both a human reads what was written, replies, and steers.
+We tell it in sessions, a chapter each. A session is one stretch of work that starts with one prompt. The sessions aren't days: the real build took an afternoon of agent time, and the merge in Session 6 and the feature in Session 7 came the next morning. An essay surface isn't an agent harness, the program an agent runs inside, but in both a human reads what was written, replies, and steers.
 
 ### We, and the prompts
 
@@ -138,9 +138,9 @@ Its comment says why: a mistyped folder name would otherwise grow a folder of co
 
 Last, the agent ran the real server once with a folder that doesn't exist, to see the message where a person would meet it. This is what scrolled by:
 
-{{fence repos:essay-surface/journal/thursday.md "what the real server says when the comments folder"}}
+{{fence repos:essay-surface/journal/session-4.md "what the real server says when the comments folder"}}
 
-{{fence repos:essay-surface/journal/thursday.md "made: false"}}
+{{fence repos:essay-surface/journal/session-4.md "made: false"}}
 
 Read every script that goes by at scroll speed, with three questions. A few seconds a script is what lets you judge an agent's work as fast as it runs:
 - **What does it read?** One folder of notes, and whether `.run/no-such-folder` exists afterwards.
@@ -157,7 +157,7 @@ The same check in bash is one line: run the server, echo `$?`, list the folder. 
 
 Session 1 starts with an empty repository and this prompt:
 
-{{quote repos:essay-surface/journal/prompts/monday.md}}
+{{quote repos:essay-surface/journal/prompts/session-1.md}}
 
 The orchestrator wrote this prompt from a plan Steve gave it and handed it to a cold agent with a short brief. The agent worked for about twelve minutes, and Steve didn't step in.
 
@@ -167,9 +167,9 @@ The orchestrator wrote this prompt from a plan Steve gave it and handed it to a 
 
 The agent began by reading Shale's own docs, and its first script stopped:
 
-{{fence repos:essay-surface/journal/monday.md "Before you reach"}}
+{{fence repos:essay-surface/journal/session-1.md "Before you reach"}}
 
-{{fence repos:essay-surface/journal/monday.md "index 0 is outside the list"}}
+{{fence repos:essay-surface/journal/session-1.md "index 0 is outside the list"}}
 
 A stop is one line: the place (line 7, column 28), a class (`index`), and the reason. Ask One loop's three questions: this script reads a doc, runs no programs, and ended at a stop. The cause is on its first line. `lines` splits a string, not a file, so `ls` held one line: the path itself. The agent read the doc with its file reader instead.
 
@@ -177,11 +177,11 @@ A stop is one line: the place (line 7, column 28), a class (`index`), and the re
 
 To pick a dozen varied samples, the agent surveyed every real note in the old surface's folder: its size, and how many fences, tables and list items it holds. The first try stopped on a budget:
 
-{{fence repos:essay-surface/journal/monday.md "the step budget (5000000 steps) ran out"}}
+{{fence repos:essay-surface/journal/session-1.md "the step budget (5000000 steps) ran out"}}
 
 Steps are the first budget on Meet Shale's list. A regex search costs steps for its whole pattern at every byte it examines, so a few patterns over five hundred notes spent the step budget, and the budget stopped the run before it ran on. The agent switched to `grep`, a builtin, and hit the memory budget next. The docs give the fix: do each file's work in a function, and call `yield()` after each file, so the run holds one file at a time.
 
-{{fence repos:essay-surface/journal/monday.md "wt = wt + 1" from "function measure(p)" to "print(#all"}}
+{{fence repos:essay-surface/journal/session-1.md "wt = wt + 1" from "function measure(p)" to "print(#all"}}
 
 `{path = ..., bytes = ...}` is a map, and `#` is a length. `glob` lists files, and `stat` gives a file's size. The script reads the notes, runs no programs, and ended well. Smaller stops came throughout: a guessed field name, a guessed builtin. Each was named in one line and fixed in the next call.
 
@@ -189,11 +189,11 @@ Steps are the first budget on Meet Shale's list. A regex search costs steps for 
 
 The agent wrote the server and its renderer in Go. Then it saved its first recipe, `scripts/check.shale`: gofmt must list nothing, vet must be quiet, and every test must pass. Its first run stopped, which is its job:
 
-{{fence repos:essay-surface/journal/monday.md "fail: gofmt (131 steps)"}}
+{{fence repos:essay-surface/journal/session-1.md "fail: gofmt (131 steps)"}}
 
 Once the gate passed, the agent counted what ran. A green is a claim: a passing gate says the tests ran, and only a count shows that they did.
 
-{{fence repos:essay-surface/journal/monday.md "how many tests and subtests actually ran?"}}
+{{fence repos:essay-surface/journal/session-1.md "how many tests and subtests actually ran?"}}
 
 Every program goes through `run` or a call like it, so programs are easy to spot at scroll speed. Sixty-nine test cases ran, and none failed. Green ✅
 
@@ -201,7 +201,7 @@ Every program goes through `run` or a call like it, so programs are easy to spot
 
 To time a note, the agent started the server on the sample notes and sent it requests. `job_start` runs the server as a job, and `job_wait` watches its log for a line. Git doesn't track a server just built, so the call gives a `want`:
 
-{{fence repos:essay-surface/journal/monday.md "start the server on the sample notes" from "job_start(" to "idx.ms"}}
+{{fence repos:essay-surface/journal/session-1.md "start the server on the sample notes" from "job_start(" to "idx.ms"}}
 
 The first number it printed was wrong. `http_get` starts a curl process per call, so it timed curl starting up. The agent saved `scripts/bench.shale`, which reads curl's own clock over one kept-alive connection: a note takes about a tenth of a millisecond. The index took longer, mostly in a `stat` of every note on every request, and a later session took that on.
 
@@ -209,11 +209,11 @@ The first number it printed was wrong. `http_get` starts a curl process per call
 
 The tests checked the cases the agent thought of. To find the rest, it rendered every real note through the server and counted markdown left over outside code. The first try stopped:
 
-{{fence repos:essay-surface/journal/monday.md "budget runs: 64 programs a run"}}
+{{fence repos:essay-surface/journal/session-1.md "budget runs: 64 programs a run"}}
 
 Each `http_get` is a program, and a run gets 64. Worse, the stop came after `job_start`, so the server stayed up. Shale keeps a record of each job, a file named for its log plus `.job`, and the agent stopped the server by it:
 
-{{fence repos:essay-surface/journal/monday.md "the job's record is <log>.job"}}
+{{fence repos:essay-surface/journal/session-1.md "the job's record is <log>.job"}}
 
 So the saved `scripts/audit.shale` fetches every page with one curl, stops the server, and only then lets `must` judge the fetch. A first cut with `re_replace`, another regex, ran out of 80 million steps on 7 MB of pages, so the script cuts code out with `split` and `find`, builtins that ran in under a second:
 
@@ -221,7 +221,7 @@ So the saved `scripts/audit.shale` fetches every page with one curl, stops the s
 
 It found two real bugs that every hand-written test had missed:
 
-{{fence repos:essay-surface/journal/monday.md "<title>Review: gopher-roc"}}
+{{fence repos:essay-surface/journal/session-1.md "<title>Review: gopher-roc"}}
 
 Titles kept their markdown, and a lone triple backtick in a table cell swallowed the rest of its row. Each fix got a test, the table one copied from the note that found it. Run your code over real data before you trust your own tests: your tests hold only the cases you thought of, and five hundred real notes hold the rest.
 
@@ -233,7 +233,7 @@ Titles kept their markdown, and a lone triple backtick in a table cell swallowed
 
 Session 2 asks for the feature the surface exists for:
 
-{{quote repos:essay-surface/journal/prompts/tuesday.md}}
+{{quote repos:essay-surface/journal/prompts/session-2.md}}
 
 A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after looking at the result in his browser, and the orchestrator made that fix.
 
@@ -270,7 +270,7 @@ digraph anchor {
 
 The first simulation of the real resolver panicked, on a block the agent's own test code removed twice. The second ran past its timeout and was killed. A killed program has no exit code, only an `ended` that says why, so the script stopped on the line that read `code`:
 
-{{fence repos:essay-surface/journal/tuesday.md "110.0 s in all"}}
+{{fence repos:essay-surface/journal/session-2.md "110.0 s in all"}}
 
 The agent kept the timeout and found the waste: every simulated case recomputed the whole note. Its first cache went onto each case's copy of the note and was thrown away with it, so the third run timed out too. With each block's features cached once per note, the simulation ran over all of Steve's paragraphs. It deletes each real paragraph in turn, and 345 of those 22,928 deletions lent their comments to a look-alike; every edit in place kept its comments. The agent compared two measures of similarity and chose the one that misplaced fewer. When a guess can be wrong, prefer an honest failure to a confident wrong answer: an orphan at the foot of the page tells Steve to look, and a reply on the wrong paragraph misleads him.
 
@@ -278,11 +278,11 @@ The agent kept the timeout and found the waste: every simulated case recomputed 
 
 Sixteen hand-written anchoring tests passed on their first run. To see whether they could fail, the agent broke the code twice, on purpose, and put it back each time. That's fault seeding, also called mutation testing, and we call each seeded fault a plant:
 
-{{fence repos:essay-surface/journal/tuesday.md "plant 1: no in-place rule"}}
+{{fence repos:essay-surface/journal/session-2.md "plant 1: no in-place rule"}}
 
 `edit(path, old, new)` replaces text that must occur exactly once, so each break and each repair lands exactly where it says. Each `run` goes without `must`, since a red is the point. Each fault turned several tests red:
 
-{{fence repos:essay-surface/journal/tuesday.md "--- FAIL: TestAnchorTypoFixed"}}
+{{fence repos:essay-surface/journal/session-2.md "--- FAIL: TestAnchorTypoFixed"}}
 
 This script is for one use: a fault left in place would prove nothing more. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
 
@@ -298,13 +298,13 @@ The end of the script shows how it holds a server:
 
 `attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. Its run on all the real notes stopped on its budget for what a run keeps at each `yield`:
 
-{{fence repos:essay-surface/journal/tuesday.md "bench.shale:140:5"}}
+{{fence repos:essay-surface/journal/session-2.md "bench.shale:140:5"}}
 
 A budget stop is the one stop `attempt` can't catch, so the server stayed up until the agent stopped it by its job record. The bench's budget line now leaves room.
 
 A run of the smoke test prints each check it passed, from the first post to the orphan:
 
-{{fence repos:essay-surface/journal/tuesday.md "ok: and the file still has it"}}
+{{fence repos:essay-surface/journal/session-2.md "ok: and the file still has it"}}
 
 Green again ✅
 
@@ -322,7 +322,7 @@ The fix set the buttons at opacity 0.6. Their first label was "note", which alre
 
 Session 3 turns a list of scripts into checks:
 
-{{quote repos:essay-surface/journal/prompts/wednesday.md}}
+{{quote repos:essay-surface/journal/prompts/session-3.md}}
 
 A cold agent worked for about half an hour on this one, and Steve didn't step in.
 
@@ -338,7 +338,7 @@ The new server hears changes from the kernel, through Linux's inotify, instead o
 
 What's new here is the budgets. A stage whose run spends more CPU than its `cpu_budget_ms` stops, naming the stage. The budgets are CPU time, never wall time: on this two-CPU machine, wall times ran 1.7 times as long at a load of 2 from other work, and the CPU a program spends moves much less. So a busy machine can't turn the verdict red, and a stage gone slow can. A real run takes 2.4 s:
 
-{{fence repos:essay-surface/journal/wednesday.md "5 programs, 2.4 s in all"}}
+{{fence repos:essay-surface/journal/session-3.md "5 programs, 2.4 s in all"}}
 
 ### A check before shipping
 
@@ -358,13 +358,13 @@ Slowness is a finding too. The anchoring simulation took 13 s, so the agent prof
 
 The store's new tests all passed on their first run. So the agent seeded a fault, a deaf watch: one line that made the server read nothing from the kernel's queue. Three tests went red, but every test that edits a note should have. The agent ran it again with the panic lines shown:
 
-{{fence repos:essay-surface/journal/wednesday.md "slice bounds out of range [:-1] [recovered, repanicked]" from "slice bounds" to "0.042s"}}
+{{fence repos:essay-surface/journal/session-3.md "slice bounds out of range [:-1] [recovered, repanicked]" from "slice bounds" to "0.042s"}}
 
 `TestCommentsFollowEdits`, written in Session 2, sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Its runs in Session 2 gave no sign, because nothing failed then. With the panic made a plain failure, the same deaf watch turned twelve tests red. After seeding a fault, count how many tests went red against how many should have, because a test that panics hides every test after it. The next session makes that trick a habit.
 
 Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`, which looks the same on the page. The verdict was right, `NOT SAFE: fast, race failed`, but the red first stage, then named `fast`, showed the last lines of `go test -v`, and those were passes. Now fast keeps only the failed tests and their lines, and its stop names them:
 
-{{fence repos:essay-surface/journal/wednesday.md "1 failed: TestRender (86718 steps)" from "markdown_test.go:100" to "stopped at"}}
+{{fence repos:essay-surface/journal/session-3.md "1 failed: TestRender (86718 steps)" from "markdown_test.go:100" to "stopped at"}}
 
 The audit, which reads every rendered note for markdown left over, passed that fault, since it never checks which tags appear; the renderer's tests caught it. Each check has its own job.
 
@@ -376,7 +376,7 @@ The audit, which reads every rendered note for markdown left over, passed that f
 
 Session 4 asks whether those checks can fail:
 
-{{quote repos:essay-surface/journal/prompts/thursday.md}}
+{{quote repos:essay-surface/journal/prompts/session-4.md}}
 
 A cold agent worked for about seventeen minutes. Steve stepped in once, with two replies that the orchestrator passed on mid-run.
 
@@ -388,7 +388,7 @@ This session seeded one fault in each stage, ran the stage, and took the fault o
 
 `check_before_release.shale` has six stages, and its first, `commit`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `check_before_release.shale` runs it, the fault out, then proof that the tree is back and `check_before_commit.shale` passes:
 
-{{fence repos:essay-surface/journal/thursday.md "plant 1, fast's gofmt stage" from "OLD, NEW)" to "after: exit"}}
+{{fence repos:essay-surface/journal/session-4.md "plant 1, fast's gofmt stage" from "OLD, NEW)" to "after: exit"}}
 
 Each plant costs a rebuild and one run of its stage, from a few seconds to twenty, once. None was committed.
 
@@ -398,21 +398,21 @@ Every stage went red for its fault, and the faults that got past every other sta
 
 Plant 6's first launch named a stage with no CPU budget, and Shale stops on that. It stopped the script between the fault going in and coming out, leaving the fault in `store.go`. The agent removed it first:
 
-{{fence repos:essay-surface/journal/thursday.md "the last launch stopped after planting"}}
+{{fence repos:essay-surface/journal/session-4.md "the last launch stopped after planting"}}
 
 Plants 1 to 5 had been lucky: a stop in any of them would have left its fault behind too. A script that edits files to test something must put them back on any stop, or one stop leaves a bug in the tree. After that, every plant ran under `shale --undo-on-stop`, which puts back every file a stopped run changed. The next try stopped on a mistake in the agent's own `print`, and Shale's last line shows the undo:
 
-{{fence repos:essay-surface/journal/thursday.md "undone: 1 path(s) the run changed put back"}}
+{{fence repos:essay-surface/journal/session-4.md "undone: 1 path(s) the run changed put back"}}
 
 ### Green with the fault in
 
 The fourth plant wrote a commenter's name to the page without escaping it. The tests checked the comment's text, and nothing checked the name, so `fast` passed:
 
-{{fence repos:essay-surface/journal/thursday.md "ok  test, 2474 ms" from "ok  test" to "fast: PASS"}}
+{{fence repos:essay-surface/journal/session-4.md "ok  test, 2474 ms" from "ok  test" to "fast: PASS"}}
 
 That is a real security hole: a commenter named `<script>...` would run code on every reader's page, and every stage of the full check passed with it. Test every field that reaches the page, not just the one you thought about, since the field you skipped is the hole. The agent wrote the missing test, which puts markup in every field:
 
-{{fence repos:essay-surface/journal/thursday.md "func TestEveryCommentFieldEscaped"}}
+{{fence repos:essay-surface/journal/session-4.md "func TestEveryCommentFieldEscaped"}}
 
 It passed before the plant, failed with it, and passed after: green again ✅.
 
@@ -432,11 +432,11 @@ In Session 2 every check passed, and Steve opened a page with no visible way to 
 
 Its fixtures are seven small sheets, five known-bad and two known-good, at 0.02 s inside `go test`. One is the real sheet from Session 2, taken from git:
 
-{{fence repos:essay-surface/journal/thursday.md "the known-bad and known-good sheets for the reply-button check" from "testdata/buttons/tuesday.css" to "faint-article.css"}}
+{{fence repos:essay-surface/journal/session-4.md "the known-bad and known-good sheets for the reply-button check" from "testdata/buttons/hidden-at-rest.css" to "faint-article.css"}}
 
 Putting its `opacity:0` back turned the test red at widths of 51 and 80rem. The checker got a plant of its own, opacities no longer multiplied, and `faint-article.css` caught it:
 
-{{fence repos:essay-surface/journal/thursday.md "faint-article.css: want" from "--- FAIL" to "faint-article.css: want"}}
+{{fence repos:essay-surface/journal/session-4.md "faint-article.css: want" from "--- FAIL" to "faint-article.css: want"}}
 
 ### Steve's two replies
 
@@ -450,7 +450,7 @@ Every stage of `check_before_release.shale` has been seen red once, and its kept
 
 Session 5 turns a chore into a script:
 
-{{quote repos:essay-surface/journal/prompts/friday.md}}
+{{quote repos:essay-surface/journal/prompts/session-5.md}}
 
 A cold agent built the release script and proved it on a dev port, away from the live server, in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
 
@@ -472,7 +472,7 @@ A failed release puts the old binary back, checks it the same way, and says so o
 
 The first surprise came before the release script was written. The agent set up a trial with an "old" server on the dev port, 9300, and the checks' own servers listened there too. Run beside it, as a trial release would run it, the smoke check failed, and its log shows why:
 
-{{fence repos:essay-surface/journal/friday.md "the page: 404" from "── stopped at" to "bind: address"}}
+{{fence repos:essay-surface/journal/session-5.md "the page: 404" from "── stopped at" to "bind: address"}}
 
 The smoke's server logged "listening", then failed to bind, and the smoke went on to ask the trial server for its test page. Every script waited for "listening", and the server said it before the port was its own. Announce readiness only after you hold the resource, because whatever waits on the announcement acts on it at once. This time the check failed; against a different server, it could have passed. Two fixes followed: `server.go` now binds first and says "listening" after, and the checks moved to port 9310. That port is named once, in the project's own prelude: a project can add a prelude beside Shale's, a file of helpers its scripts share.
 
@@ -480,7 +480,7 @@ The smoke's server logged "listening", then failed to bind, and the smoke went o
 
 In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. It sprang again in this session's first trial, which ran out of its step budget just after the swap:
 
-{{fence repos:essay-surface/journal/friday.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
+{{fence repos:essay-surface/journal/session-5.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
 
 `attempt` catches a failure, and a budget stop is past its reach. The run stopped after the old server was down and the new one was up, so the rollback never ran. The trial was left serving a build nobody had checked. On the live server, that would have been an unchecked release with no way back but by hand, which is how the agent put the trial back.
 
@@ -490,11 +490,11 @@ The cause was a regex search over a 67 KB page, which pays for its whole pattern
 
 The prompt asked for a release that fails. A fault the full check catches never reaches the swap, so it proves nothing about the rollback. The agent needed a fault no check covers, and found one in the server's defaults. Every check passes `-comments` explicitly. The live server passes none. So the agent seeded one fault, on a throwaway branch in its own git worktree, that moves the default comments folder inside the notes folder:
 
-{{fence repos:essay-surface/journal/friday.md "*comments = filepath.Join(filepath.Clean(*dir)"}}
+{{fence repos:essay-surface/journal/session-5.md "*comments = filepath.Join(filepath.Clean(*dir)"}}
 
 The full check said SAFE TO SHIP. The release caught it on the first comment and put the old server back, checked the same way:
 
-{{fence repos:essay-surface/journal/friday.md "FAILED: comment f31eaaa22556" from "started abacae9" to "ROLLED BACK"}}
+{{fence repos:essay-surface/journal/session-5.md "FAILED: comment f31eaaa22556" from "started abacae9" to "ROLLED BACK"}}
 
 Afterward every comments file matched byte for byte, and the bad binary was kept with its log. That's the case for a release check: the full check tests the server the way the tests start it, and the release check tests it the way it really runs, with its real flags and data.
 
@@ -504,7 +504,7 @@ Another trial seeded a formatting fault, and the full check stopped it: `nothing
 
 When it worked on dev, the orchestrator ran it on the live server. The agent's report kept its last lines:
 
-{{fence repos:essay-repl-server/notes/essay-surface-friday.md "RELEASED: running 92fb48b" from "full check: SAFE TO SHIP" to "RELEASED: running"}}
+{{fence repos:essay-surface/journal/session-5.md "RELEASED: running 92fb48b" from "full check: SAFE TO SHIP" to "RELEASED: running"}}
 
 Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back. Green again ✅
 
@@ -555,7 +555,7 @@ Some jobs must outlive even a stop, so `job_start` gained one option, `keep_on_s
 
 When a run stops, its report says what happened to each job it started, in one line apiece: stopped with the run, or left running. These two lines end a release that failed on purpose in this session's trials, after it had put the old server back with `keep_on_stop`:
 
-{{fence repos:essay-surface/journal/saturday.md "plant: a budget stop in the child's checks" from "── stopped at" to "── left running"}}
+{{fence repos:essay-surface/journal/session-6.md "plant: a budget stop in the child's checks" from "── stopped at" to "── left running"}}
 
 ### How it arrived
 
@@ -610,7 +610,7 @@ Shale's own tests hold the rule on every side, and the consumers gate holds ever
 
 Session 7 asks for the first feature to come out of daily use:
 
-{{quote repos:essay-surface/journal/prompts/links.md}}
+{{quote repos:essay-surface/journal/prompts/session-7.md}}
 
 Steve asked for this in conversation, and the orchestrator wrote the prompt from his words. A cold agent worked for about eleven minutes, Steve didn't step in, and the orchestrator ran the release.
 
@@ -620,11 +620,11 @@ Steve wanted to click the URLs in his notes, a small request that can still be h
 
 Before designing anything, the agent counted: 514 real notes held 125 `http://` or `https://` URLs. It printed each one with its context. Most were markdown links already, and the bare ones ended in every way the prompt names:
 
-{{fence repos:essay-surface/journal/links.md "metal-lynrummy-com.md:5" from "day-wrap-2026-11-12.md:7" to "roc-web-umbrella.md:44"}}
+{{fence repos:essay-surface/journal/session-7.md "metal-lynrummy-com.md:5" from "day-wrap-2026-11-12.md:7" to "roc-web-umbrella.md:44"}}
 
 A parenthesis then a period, bold, a table cell, a placeholder host: each became a test case. Then, before any edit, the agent kept a "before". Copy your outputs aside before any change, so you can compare the after byte for byte, and every difference is one you can see. The audit from Session 1 already fetches every real note's page, so it ran once on the unchanged server, and its pages were copied aside:
 
-{{fence repos:essay-surface/journal/links.md "before any change: every real note"}}
+{{fence repos:essay-surface/journal/session-7.md "before any change: every real note"}}
 
 ### The cases, as fixtures
 
@@ -642,11 +642,11 @@ The new tests passed on their first run, so the agent counted the cases the test
 
 The hostile notes need a test that doesn't depend on exact HTML: only the renderer's own tags, every `&` an entity, and each link's href and text the same URL, escaped once. To prove that test watches, the agent took out the href's escaping, once, under `--undo-on-stop`:
 
-{{fence repos:essay-surface/journal/links.md "seed once: a bare URL's href"}}
+{{fence repos:essay-surface/journal/session-7.md "seed once: a bare URL's href"}}
 
 `git_diff` shows the tree came back as it was. The escaping test went red by three of its rules:
 
-{{fence repos:essay-surface/journal/links.md "planted: exit 1" from "--- FAIL: TestBareURLsEscaped" to "markdown_test.go:259"}}
+{{fence repos:essay-surface/journal/session-7.md "planted: exit 1" from "--- FAIL: TestBareURLsEscaped" to "markdown_test.go:259"}}
 
 The last line is the one that matters. A note that writes `&quot;` in a URL sends it to the href raw, and a browser reads it as a quote mark, which ends the attribute. `&quot;` is a valid entity, so the `&` rule passes it, and only the rule that href and text are one URL catches it. Then `check_before_commit.shale` passed with 50 tests, up from 48, so both new ones ran.
 
@@ -654,21 +654,21 @@ The last line is the one that matters. A note that writes `&quot;` in a URL send
 
 The after pages came from the same audit. The comparison took two stops. The first called `replace_all`, a builtin Shale doesn't have, and stopped before a line ran. The second ran out of steps:
 
-{{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
+{{fence repos:essay-surface/journal/session-7.md "the step budget (200000000 steps) ran out"}}
 
 A regex search pays for its whole pattern at every byte it examines, and the comparison searched 7 MB of pages twice. That's the fourth regex stop this book has shown, and the journals hold six. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back.
 
 The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
 
-{{fence repos:essay-surface/journal/links.md "by split and find (builtins)" from "function bare(page)" to "return {n = n, plain"}}
+{{fence repos:essay-surface/journal/session-7.md "by split and find (builtins)" from "function bare(page)" to "return {n = n, plain"}}
 
 With those links taken back to text, every after page must equal its before page, byte for byte. Every one did, so the only change on 514 pages was the new links:
 
-{{fence repos:essay-surface/journal/links.md "26 bare URLs linked on 24 pages" from "linked  note" to "26 bare URLs linked"}}
+{{fence repos:essay-surface/journal/session-7.md "26 bare URLs linked on 24 pages" from "linked  note" to "26 bare URLs linked"}}
 
 No URL was left as text outside code. A finder that reports nothing proves little until it has found something, so the agent ran the same finder on the before pages:
 
-{{fence repos:essay-surface/journal/links.md "before pages: 26 http" from "before pages" to "before pages"}}
+{{fence repos:essay-surface/journal/session-7.md "before pages: 26 http" from "before pages" to "before pages"}}
 
 It found exactly the 26, so its zero is a real zero. The report also named 15 URLs written as code, left alone as the prompt said, a few of which Steve may want to click. That call is his.
 
@@ -676,7 +676,7 @@ It found exactly the 26, so its zero is a real zero. The report also named 15 UR
 
 The full check said `SAFE TO SHIP`. Then the orchestrator ran the release script from Session 5 on Steve's own server, unchanged, and its last lines read like the last release's:
 
-{{fence repos:essay-surface/journal/links.md "comments kept: 4 files, 11 comments"}}
+{{fence repos:essay-surface/journal/session-7.md "comments kept: 4 files, 11 comments"}}
 
 All eleven comments were kept and back on their pages, and the rollback now names a real commit, `8218ffc`, where Session 5's said `unknown`, since the server it replaced came from an earlier release. Green again ✅
 
@@ -799,7 +799,7 @@ That's enough Roc to start. Next, a session that writes types before any code.
 
 Part Two's sessions open with types. The prompt gives the mission, and the agent's first report is a set of Roc types for Steve to reply to, before any code. That's new for us, because Steve's earlier Roc projects were mostly ports, where the old program is the spec. Here there's no old program:
 
-{{quote repos:essay-surface/journal/prompts/format-types.md}}
+{{quote repos:essay-surface/journal/prompts/session-8.md}}
 
 The orchestrator drafted this prompt from Steve's plan. A cold agent worked for about fifteen minutes, from the prompt's commit at 13:40 to the types' at 13:55. Steve stepped in once, with his reply to the report.
 
@@ -811,7 +811,7 @@ The repository's `notes/` holds 12 notes, a sample copied from the old surface, 
 
 It wrote `scripts/features.shale`, which walks each note line by line, tracks code fences as the Go renderer does, and counts, for each feature, the notes that use it, how often it appears, and where it first appears:
 
-{{fence repos:essay-surface/journal/format-types.md "paragraph                     522"}}
+{{fence repos:essay-surface/journal/session-8.md "paragraph                     522"}}
 
 The counts took several passes. Images first counted as links, which the agent fixed before reading the numbers. A first scan found 126 headings with a style in them, and every one was a Roc doc comment inside a code fence of one note; a rerun that skipped fences found 7 notes. Then the examples corrected two readings. The five "links inside italics" were all subtitles, the italic line under a note's title, so the subtitle gets a type of its own. And the lists nested two deep also matched diff lines, so their count is a ceiling. A hand count found the subtitle in 296 notes.
 
@@ -833,7 +833,7 @@ A style holds a `Phrase`, words and code with no style of its own, so bold insid
 
 Every compile check said `No errors found` in a few milliseconds, which is fast enough to doubt. So the agent planted two faults under `--undo-on-stop`, each put back before the next:
 
-{{fence repos:essay-surface/journal/format-types.md "plant 1, Tabel in Block"}}
+{{fence repos:essay-surface/journal/session-8.md "plant 1, Tabel in Block"}}
 
 Both went red, so the check from `Note.roc` reads the types of every module it imports. Then the hunts, Shale scripts that read Roc's parse tree for weak names and layouts, found five things on their first pass: three names (two `container` hits, on a list's `items` and `Item`, and a `singular_list` hit, on a table's `header`) and two layout hits (`unstack`, on `Table` and `Widget`). A list's `Item` became a `Point`, a table's `header` became `column_headings`, and the two short records went onto one line each. A numbered list's `first` became `first_number` too, since `first` read as its first point. One edit stopped on a doc line quoted wrong, and nothing in that file was written.
 
@@ -855,7 +855,7 @@ Next, a demo puts these types to work and finds where Roc runs.
 
 The orchestrator drafted this prompt from Steve's plan, and it opens with his answers from the last session:
 
-{{quote repos:essay-surface/journal/prompts/demo.md}}
+{{quote repos:essay-surface/journal/prompts/session-9.md}}
 
 A cold agent took it at about 14:01 and finished in about twenty minutes. Steve didn't step in. The orchestrator ran the release about forty minutes later.
 
@@ -863,7 +863,7 @@ A cold agent took it at about 14:01 and finished in about twenty minutes. Steve 
 
 The prompt leaves where Roc runs to the demo. First, the agent looked for Roc already in use, and for Graphviz and node:
 
-{{fence repos:essay-surface/journal/demo.md "def render_with_roc"}}
+{{fence repos:essay-surface/journal/session-9.md "def render_with_roc"}}
 
 The old surface already runs Roc in production: a plain app on the platform Roc ships with, which gives it arguments and stdout, so each note's text arrives as arguments. A probe at the pinned compiler showed that `Json.to_str` is a builtin, so Roc can answer in JSON without an escaper.
 
@@ -901,7 +901,7 @@ None of the ten types changed shape. The demo pushed back once, on a link to ano
 
 `scripts/note_check.shale` checks the Roc and runs its tests, builds `render-note`, renders every `.note`, draws each diagram with the page's own viz.js, and posts replies to a real server. Its first run stopped at its first stage, the format check, because the agent had added tests after last running `roc fmt`. Then each plant went red:
 
-{{fence repos:essay-surface/journal/demo.md "plant 1, each end one byte short"}}
+{{fence repos:essay-surface/journal/session-9.md "plant 1, each end one byte short"}}
 
 Plant 3 is a stray module that nothing imports, with one `expect`. `roc test` said all 60 passed, which is true. So the check holds the runner to the number of `expect` lines in the files:
 
@@ -911,7 +911,7 @@ Never take a test runner's count as the total. Count the tests in the files and 
 
 The journal's commit check, `fast`, is now `check_before_commit.shale`:
 
-{{fence repos:essay-surface/journal/demo.md "fast: PASS"}}
+{{fence repos:essay-surface/journal/session-9.md "fast: PASS"}}
 
 Green again ✅
 

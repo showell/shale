@@ -4,7 +4,7 @@
 
 Session 5 turns a chore into a script:
 
-{{quote repos:essay-surface/journal/prompts/friday.md}}
+{{quote repos:essay-surface/journal/prompts/session-5.md}}
 
 A cold agent built the release script and proved it on a dev port, away from the live server, in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
 
@@ -26,7 +26,7 @@ A failed release puts the old binary back, checks it the same way, and says so o
 
 The first surprise came before the release script was written. The agent set up a trial with an "old" server on the dev port, 9300, and the checks' own servers listened there too. Run beside it, as a trial release would run it, the smoke check failed, and its log shows why:
 
-{{fence repos:essay-surface/journal/friday.md "the page: 404" from "── stopped at" to "bind: address"}}
+{{fence repos:essay-surface/journal/session-5.md "the page: 404" from "── stopped at" to "bind: address"}}
 
 The smoke's server logged "listening", then failed to bind, and the smoke went on to ask the trial server for its test page. Every script waited for "listening", and the server said it before the port was its own. Announce readiness only after you hold the resource, because whatever waits on the announcement acts on it at once. This time the check failed; against a different server, it could have passed. Two fixes followed: `server.go` now binds first and says "listening" after, and the checks moved to port 9310. That port is named once, in the project's own prelude: a project can add a prelude beside Shale's, a file of helpers its scripts share.
 
@@ -34,7 +34,7 @@ The smoke's server logged "listening", then failed to bind, and the smoke went o
 
 In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. It sprang again in this session's first trial, which ran out of its step budget just after the swap:
 
-{{fence repos:essay-surface/journal/friday.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
+{{fence repos:essay-surface/journal/session-5.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
 
 `attempt` catches a failure, and a budget stop is past its reach. The run stopped after the old server was down and the new one was up, so the rollback never ran. The trial was left serving a build nobody had checked. On the live server, that would have been an unchecked release with no way back but by hand, which is how the agent put the trial back.
 
@@ -44,11 +44,11 @@ The cause was a regex search over a 67 KB page, which pays for its whole pattern
 
 The prompt asked for a release that fails. A fault the full check catches never reaches the swap, so it proves nothing about the rollback. The agent needed a fault no check covers, and found one in the server's defaults. Every check passes `-comments` explicitly. The live server passes none. So the agent seeded one fault, on a throwaway branch in its own git worktree, that moves the default comments folder inside the notes folder:
 
-{{fence repos:essay-surface/journal/friday.md "*comments = filepath.Join(filepath.Clean(*dir)"}}
+{{fence repos:essay-surface/journal/session-5.md "*comments = filepath.Join(filepath.Clean(*dir)"}}
 
 The full check said SAFE TO SHIP. The release caught it on the first comment and put the old server back, checked the same way:
 
-{{fence repos:essay-surface/journal/friday.md "FAILED: comment f31eaaa22556" from "started abacae9" to "ROLLED BACK"}}
+{{fence repos:essay-surface/journal/session-5.md "FAILED: comment f31eaaa22556" from "started abacae9" to "ROLLED BACK"}}
 
 Afterward every comments file matched byte for byte, and the bad binary was kept with its log. That's the case for a release check: the full check tests the server the way the tests start it, and the release check tests it the way it really runs, with its real flags and data.
 
@@ -58,7 +58,7 @@ Another trial seeded a formatting fault, and the full check stopped it: `nothing
 
 When it worked on dev, the orchestrator ran it on the live server. The agent's report kept its last lines:
 
-{{fence repos:essay-repl-server/notes/essay-surface-friday.md "RELEASED: running 92fb48b" from "full check: SAFE TO SHIP" to "RELEASED: running"}}
+{{fence repos:essay-surface/journal/session-5.md "RELEASED: running 92fb48b" from "full check: SAFE TO SHIP" to "RELEASED: running"}}
 
 Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back. Green again ✅
 

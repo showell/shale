@@ -14,10 +14,9 @@
 1	where a person would meet it
 1	found where they were
 1	the mainstream you know
-# The chapters are sessions, not weekdays (MISSION Y). Only the introduction's
-# sentence on the journals' file names may say monday; a caption naming a
-# journal is a path, not prose, and isn't counted.
-1	monday
+# The chapters are sessions, not weekdays (MISSION Y), so no weekday is
+# allowed; a caption naming a source file is a path, not prose, and isn't counted.
+0	monday
 0	tuesday
 0	wednesday
 0	thursday

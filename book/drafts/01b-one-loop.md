@@ -45,9 +45,9 @@ Its comment says why: a mistyped folder name would otherwise grow a folder of co
 
 Last, the agent ran the real server once with a folder that doesn't exist, to see the message where a person would meet it. This is what scrolled by:
 
-{{fence repos:essay-surface/journal/thursday.md "what the real server says when the comments folder"}}
+{{fence repos:essay-surface/journal/session-4.md "what the real server says when the comments folder"}}
 
-{{fence repos:essay-surface/journal/thursday.md "made: false"}}
+{{fence repos:essay-surface/journal/session-4.md "made: false"}}
 
 Read every script that goes by at scroll speed, with three questions. A few seconds a script is what lets you judge an agent's work as fast as it runs:
 - **What does it read?** One folder of notes, and whether `.run/no-such-folder` exists afterwards.

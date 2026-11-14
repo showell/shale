@@ -4,7 +4,7 @@
 
 Session 3 turns a list of scripts into checks:
 
-{{quote repos:essay-surface/journal/prompts/wednesday.md}}
+{{quote repos:essay-surface/journal/prompts/session-3.md}}
 
 A cold agent worked for about half an hour on this one, and Steve didn't step in.
 
@@ -20,7 +20,7 @@ The new server hears changes from the kernel, through Linux's inotify, instead o
 
 What's new here is the budgets. A stage whose run spends more CPU than its `cpu_budget_ms` stops, naming the stage. The budgets are CPU time, never wall time: on this two-CPU machine, wall times ran 1.7 times as long at a load of 2 from other work, and the CPU a program spends moves much less. So a busy machine can't turn the verdict red, and a stage gone slow can. A real run takes 2.4 s:
 
-{{fence repos:essay-surface/journal/wednesday.md "5 programs, 2.4 s in all"}}
+{{fence repos:essay-surface/journal/session-3.md "5 programs, 2.4 s in all"}}
 
 ### A check before shipping
 
@@ -40,13 +40,13 @@ Slowness is a finding too. The anchoring simulation took 13 s, so the agent prof
 
 The store's new tests all passed on their first run. So the agent seeded a fault, a deaf watch: one line that made the server read nothing from the kernel's queue. Three tests went red, but every test that edits a note should have. The agent ran it again with the panic lines shown:
 
-{{fence repos:essay-surface/journal/wednesday.md "slice bounds out of range [:-1] [recovered, repanicked]" from "slice bounds" to "0.042s"}}
+{{fence repos:essay-surface/journal/session-3.md "slice bounds out of range [:-1] [recovered, repanicked]" from "slice bounds" to "0.042s"}}
 
 `TestCommentsFollowEdits`, written in Session 2, sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Its runs in Session 2 gave no sign, because nothing failed then. With the panic made a plain failure, the same deaf watch turned twelve tests red. After seeding a fault, count how many tests went red against how many should have, because a test that panics hides every test after it. The next session makes that trick a habit.
 
 Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`, which looks the same on the page. The verdict was right, `NOT SAFE: fast, race failed`, but the red first stage, then named `fast`, showed the last lines of `go test -v`, and those were passes. Now fast keeps only the failed tests and their lines, and its stop names them:
 
-{{fence repos:essay-surface/journal/wednesday.md "1 failed: TestRender (86718 steps)" from "markdown_test.go:100" to "stopped at"}}
+{{fence repos:essay-surface/journal/session-3.md "1 failed: TestRender (86718 steps)" from "markdown_test.go:100" to "stopped at"}}
 
 The audit, which reads every rendered note for markdown left over, passed that fault, since it never checks which tags appear; the renderer's tests caught it. Each check has its own job.
 

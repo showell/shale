@@ -20,7 +20,7 @@ Some jobs must outlive even a stop, so `job_start` gained one option, `keep_on_s
 
 When a run stops, its report says what happened to each job it started, in one line apiece: stopped with the run, or left running. These two lines end a release that failed on purpose in this session's trials, after it had put the old server back with `keep_on_stop`:
 
-{{fence repos:essay-surface/journal/saturday.md "plant: a budget stop in the child's checks" from "── stopped at" to "── left running"}}
+{{fence repos:essay-surface/journal/session-6.md "plant: a budget stop in the child's checks" from "── stopped at" to "── left running"}}
 
 ### How it arrived
 

@@ -4,7 +4,7 @@
 
 Session 2 asks for the feature the surface exists for:
 
-{{quote repos:essay-surface/journal/prompts/tuesday.md}}
+{{quote repos:essay-surface/journal/prompts/session-2.md}}
 
 A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after looking at the result in his browser, and the orchestrator made that fix.
 
@@ -41,7 +41,7 @@ digraph anchor {
 
 The first simulation of the real resolver panicked, on a block the agent's own test code removed twice. The second ran past its timeout and was killed. A killed program has no exit code, only an `ended` that says why, so the script stopped on the line that read `code`:
 
-{{fence repos:essay-surface/journal/tuesday.md "110.0 s in all"}}
+{{fence repos:essay-surface/journal/session-2.md "110.0 s in all"}}
 
 The agent kept the timeout and found the waste: every simulated case recomputed the whole note. Its first cache went onto each case's copy of the note and was thrown away with it, so the third run timed out too. With each block's features cached once per note, the simulation ran over all of Steve's paragraphs. It deletes each real paragraph in turn, and 345 of those 22,928 deletions lent their comments to a look-alike; every edit in place kept its comments. The agent compared two measures of similarity and chose the one that misplaced fewer. When a guess can be wrong, prefer an honest failure to a confident wrong answer: an orphan at the foot of the page tells Steve to look, and a reply on the wrong paragraph misleads him.
 
@@ -49,11 +49,11 @@ The agent kept the timeout and found the waste: every simulated case recomputed 
 
 Sixteen hand-written anchoring tests passed on their first run. To see whether they could fail, the agent broke the code twice, on purpose, and put it back each time. That's fault seeding, also called mutation testing, and we call each seeded fault a plant:
 
-{{fence repos:essay-surface/journal/tuesday.md "plant 1: no in-place rule"}}
+{{fence repos:essay-surface/journal/session-2.md "plant 1: no in-place rule"}}
 
 `edit(path, old, new)` replaces text that must occur exactly once, so each break and each repair lands exactly where it says. Each `run` goes without `must`, since a red is the point. Each fault turned several tests red:
 
-{{fence repos:essay-surface/journal/tuesday.md "--- FAIL: TestAnchorTypoFixed"}}
+{{fence repos:essay-surface/journal/session-2.md "--- FAIL: TestAnchorTypoFixed"}}
 
 This script is for one use: a fault left in place would prove nothing more. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
 
@@ -69,13 +69,13 @@ The end of the script shows how it holds a server:
 
 `attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. Its run on all the real notes stopped on its budget for what a run keeps at each `yield`:
 
-{{fence repos:essay-surface/journal/tuesday.md "bench.shale:140:5"}}
+{{fence repos:essay-surface/journal/session-2.md "bench.shale:140:5"}}
 
 A budget stop is the one stop `attempt` can't catch, so the server stayed up until the agent stopped it by its job record. The bench's budget line now leaves room.
 
 A run of the smoke test prints each check it passed, from the first post to the orphan:
 
-{{fence repos:essay-surface/journal/tuesday.md "ok: and the file still has it"}}
+{{fence repos:essay-surface/journal/session-2.md "ok: and the file still has it"}}
 
 Green again ✅
 

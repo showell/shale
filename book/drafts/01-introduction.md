@@ -20,7 +20,7 @@ You won't find skills files here, the instruction files some setups use to teach
 
 The book follows one side project. We build a new essay surface: a small web app where an agent's notes, written in markdown, become pages, and Steve, who runs this project, reads them in a browser and replies to any paragraph. A Go server sits behind a plain-JavaScript front end. Steve soon used it to reply to the drafts of this book. The first two prompts have the roles turned around: they say "I write notes" and "I read those comments". In practice the agent writes the notes, Steve replies, and the agent reads his replies to steer its next draft.
 
-We tell it in sessions, a chapter each. A session is one stretch of work that starts with one prompt. The sessions aren't days: the real build took an afternoon of agent time, and the merge in Session 6 and the feature in Session 7 came the next morning. Each session's agent kept a journal under the name first given it, so the captions under Session 1's quotes say `monday.md`. An essay surface isn't an agent harness, the program an agent runs inside, but in both a human reads what was written, replies, and steers.
+We tell it in sessions, a chapter each. A session is one stretch of work that starts with one prompt. The sessions aren't days: the real build took an afternoon of agent time, and the merge in Session 6 and the feature in Session 7 came the next morning. An essay surface isn't an agent harness, the program an agent runs inside, but in both a human reads what was written, replies, and steers.
 
 ### We, and the prompts
 

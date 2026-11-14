@@ -4,7 +4,7 @@
 
 Part Two's sessions open with types. The prompt gives the mission, and the agent's first report is a set of Roc types for Steve to reply to, before any code. That's new for us, because Steve's earlier Roc projects were mostly ports, where the old program is the spec. Here there's no old program:
 
-{{quote repos:essay-surface/journal/prompts/format-types.md}}
+{{quote repos:essay-surface/journal/prompts/session-8.md}}
 
 The orchestrator drafted this prompt from Steve's plan. A cold agent worked for about fifteen minutes, from the prompt's commit at 13:40 to the types' at 13:55. Steve stepped in once, with his reply to the report.
 
@@ -16,7 +16,7 @@ The repository's `notes/` holds 12 notes, a sample copied from the old surface, 
 
 It wrote `scripts/features.shale`, which walks each note line by line, tracks code fences as the Go renderer does, and counts, for each feature, the notes that use it, how often it appears, and where it first appears:
 
-{{fence repos:essay-surface/journal/format-types.md "paragraph                     522"}}
+{{fence repos:essay-surface/journal/session-8.md "paragraph                     522"}}
 
 The counts took several passes. Images first counted as links, which the agent fixed before reading the numbers. A first scan found 126 headings with a style in them, and every one was a Roc doc comment inside a code fence of one note; a rerun that skipped fences found 7 notes. Then the examples corrected two readings. The five "links inside italics" were all subtitles, the italic line under a note's title, so the subtitle gets a type of its own. And the lists nested two deep also matched diff lines, so their count is a ceiling. A hand count found the subtitle in 296 notes.
 
@@ -38,7 +38,7 @@ A style holds a `Phrase`, words and code with no style of its own, so bold insid
 
 Every compile check said `No errors found` in a few milliseconds, which is fast enough to doubt. So the agent planted two faults under `--undo-on-stop`, each put back before the next:
 
-{{fence repos:essay-surface/journal/format-types.md "plant 1, Tabel in Block"}}
+{{fence repos:essay-surface/journal/session-8.md "plant 1, Tabel in Block"}}
 
 Both went red, so the check from `Note.roc` reads the types of every module it imports. Then the hunts, Shale scripts that read Roc's parse tree for weak names and layouts, found five things on their first pass: three names (two `container` hits, on a list's `items` and `Item`, and a `singular_list` hit, on a table's `header`) and two layout hits (`unstack`, on `Table` and `Widget`). A list's `Item` became a `Point`, a table's `header` became `column_headings`, and the two short records went onto one line each. A numbered list's `first` became `first_number` too, since `first` read as its first point. One edit stopped on a doc line quoted wrong, and nothing in that file was written.
 

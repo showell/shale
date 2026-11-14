@@ -4,7 +4,7 @@
 
 The orchestrator drafted this prompt from Steve's plan, and it opens with his answers from the last session:
 
-{{quote repos:essay-surface/journal/prompts/demo.md}}
+{{quote repos:essay-surface/journal/prompts/session-9.md}}
 
 A cold agent took it at about 14:01 and finished in about twenty minutes. Steve didn't step in. The orchestrator ran the release about forty minutes later.
 
@@ -12,7 +12,7 @@ A cold agent took it at about 14:01 and finished in about twenty minutes. Steve 
 
 The prompt leaves where Roc runs to the demo. First, the agent looked for Roc already in use, and for Graphviz and node:
 
-{{fence repos:essay-surface/journal/demo.md "def render_with_roc"}}
+{{fence repos:essay-surface/journal/session-9.md "def render_with_roc"}}
 
 The old surface already runs Roc in production: a plain app on the platform Roc ships with, which gives it arguments and stdout, so each note's text arrives as arguments. A probe at the pinned compiler showed that `Json.to_str` is a builtin, so Roc can answer in JSON without an escaper.
 
@@ -50,7 +50,7 @@ None of the ten types changed shape. The demo pushed back once, on a link to ano
 
 `scripts/note_check.shale` checks the Roc and runs its tests, builds `render-note`, renders every `.note`, draws each diagram with the page's own viz.js, and posts replies to a real server. Its first run stopped at its first stage, the format check, because the agent had added tests after last running `roc fmt`. Then each plant went red:
 
-{{fence repos:essay-surface/journal/demo.md "plant 1, each end one byte short"}}
+{{fence repos:essay-surface/journal/session-9.md "plant 1, each end one byte short"}}
 
 Plant 3 is a stray module that nothing imports, with one `expect`. `roc test` said all 60 passed, which is true. So the check holds the runner to the number of `expect` lines in the files:
 
@@ -60,7 +60,7 @@ Never take a test runner's count as the total. Count the tests in the files and 
 
 The journal's commit check, `fast`, is now `check_before_commit.shale`:
 
-{{fence repos:essay-surface/journal/demo.md "fast: PASS"}}
+{{fence repos:essay-surface/journal/session-9.md "fast: PASS"}}
 
 Green again ✅
 

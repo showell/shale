@@ -4,7 +4,7 @@
 
 Session 4 asks whether those checks can fail:
 
-{{quote repos:essay-surface/journal/prompts/thursday.md}}
+{{quote repos:essay-surface/journal/prompts/session-4.md}}
 
 A cold agent worked for about seventeen minutes. Steve stepped in once, with two replies that the orchestrator passed on mid-run.
 
@@ -16,7 +16,7 @@ This session seeded one fault in each stage, ran the stage, and took the fault o
 
 `check_before_release.shale` has six stages, and its first, `commit`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `check_before_release.shale` runs it, the fault out, then proof that the tree is back and `check_before_commit.shale` passes:
 
-{{fence repos:essay-surface/journal/thursday.md "plant 1, fast's gofmt stage" from "OLD, NEW)" to "after: exit"}}
+{{fence repos:essay-surface/journal/session-4.md "plant 1, fast's gofmt stage" from "OLD, NEW)" to "after: exit"}}
 
 Each plant costs a rebuild and one run of its stage, from a few seconds to twenty, once. None was committed.
 
@@ -26,21 +26,21 @@ Every stage went red for its fault, and the faults that got past every other sta
 
 Plant 6's first launch named a stage with no CPU budget, and Shale stops on that. It stopped the script between the fault going in and coming out, leaving the fault in `store.go`. The agent removed it first:
 
-{{fence repos:essay-surface/journal/thursday.md "the last launch stopped after planting"}}
+{{fence repos:essay-surface/journal/session-4.md "the last launch stopped after planting"}}
 
 Plants 1 to 5 had been lucky: a stop in any of them would have left its fault behind too. A script that edits files to test something must put them back on any stop, or one stop leaves a bug in the tree. After that, every plant ran under `shale --undo-on-stop`, which puts back every file a stopped run changed. The next try stopped on a mistake in the agent's own `print`, and Shale's last line shows the undo:
 
-{{fence repos:essay-surface/journal/thursday.md "undone: 1 path(s) the run changed put back"}}
+{{fence repos:essay-surface/journal/session-4.md "undone: 1 path(s) the run changed put back"}}
 
 ### Green with the fault in
 
 The fourth plant wrote a commenter's name to the page without escaping it. The tests checked the comment's text, and nothing checked the name, so `fast` passed:
 
-{{fence repos:essay-surface/journal/thursday.md "ok  test, 2474 ms" from "ok  test" to "fast: PASS"}}
+{{fence repos:essay-surface/journal/session-4.md "ok  test, 2474 ms" from "ok  test" to "fast: PASS"}}
 
 That is a real security hole: a commenter named `<script>...` would run code on every reader's page, and every stage of the full check passed with it. Test every field that reaches the page, not just the one you thought about, since the field you skipped is the hole. The agent wrote the missing test, which puts markup in every field:
 
-{{fence repos:essay-surface/journal/thursday.md "func TestEveryCommentFieldEscaped"}}
+{{fence repos:essay-surface/journal/session-4.md "func TestEveryCommentFieldEscaped"}}
 
 It passed before the plant, failed with it, and passed after: green again ✅.
 
@@ -60,11 +60,11 @@ In Session 2 every check passed, and Steve opened a page with no visible way to 
 
 Its fixtures are seven small sheets, five known-bad and two known-good, at 0.02 s inside `go test`. One is the real sheet from Session 2, taken from git:
 
-{{fence repos:essay-surface/journal/thursday.md "the known-bad and known-good sheets for the reply-button check" from "testdata/buttons/tuesday.css" to "faint-article.css"}}
+{{fence repos:essay-surface/journal/session-4.md "the known-bad and known-good sheets for the reply-button check" from "testdata/buttons/hidden-at-rest.css" to "faint-article.css"}}
 
 Putting its `opacity:0` back turned the test red at widths of 51 and 80rem. The checker got a plant of its own, opacities no longer multiplied, and `faint-article.css` caught it:
 
-{{fence repos:essay-surface/journal/thursday.md "faint-article.css: want" from "--- FAIL" to "faint-article.css: want"}}
+{{fence repos:essay-surface/journal/session-4.md "faint-article.css: want" from "--- FAIL" to "faint-article.css: want"}}
 
 ### Steve's two replies
 

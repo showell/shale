@@ -12,7 +12,7 @@ This is the one home for the book's rules. Every writer and reader of the book, 
 
 **D. The narrative is honest.** Tell an abridged story of what actually happened. Mistakes happen, and the book says so, each in an instructive context: what caught it, and what habit it taught. Abridge, but never invent, and never tidy a mistake away (Steve, 2026-11-13). The journals in the essay-surface repo are the record.
 
-**E. We, and the prompts.** The book is narrated as "we": Steve and his agent. Each session opens with the prompt we gave the agent, quoted whole from `journal/prompts/`. The journals keep the weekday file names they were written under (`journal/monday.md`), since they're the record and the includes name them. Agents really did the work: "this isn't remotely dishonest" (Steve).
+**E. We, and the prompts.** The book is narrated as "we": Steve and his agent. Each session opens with the prompt we gave the agent, quoted whole from `journal/prompts/`. The journals are named by session (`journal/session-1.md`), and they're the record the includes name. They began under weekday names, and were renamed at Steve's direction (2026-11-14). Agents really did the work: "this isn't remotely dishonest" (Steve).
 
 **F. Real work, how you should work.** The book walks the reader through real work, and its theme is "this is how you should work" (Steve). Programmers want to write apps, not books, so building a book is at most an aside.
 
@@ -62,7 +62,7 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **X. Diagrams are drawn from source.** A ```dot fence in a chapter is drawn by Graphviz at build time, so a diagram changes with the words around it. The first is the loop, in "One loop". The story comes first: Shale's architecture (its interpreter, written in Zig, the host, the preludes) and most of its technical detail wait for after the sessions' narrative (Steve, 2026-11-14).
 
-**Y. Sessions, not days (Steve, 2026-11-14).** The story's chapters are numbered sessions, not weekdays. That's more honest, and it doesn't cap the story at a week. A weekday in prose is a leftover of the old framing: `book/refrains.txt` holds each weekday to zero uses, and `monday` to the one sentence that explains the journals' names. Captions that name a journal file aren't prose, so they don't count.
+**Y. Sessions, not days (Steve, 2026-11-14).** The story's chapters are numbered sessions, not weekdays. That's more honest, and it doesn't cap the story at a week. A weekday in prose is a leftover of the old framing: `book/refrains.txt` holds each weekday to zero uses, with no exception (Steve, 2026-11-14: "fully eradicate" them). Captions that name a journal file aren't prose, so they don't count.
 
 **W. Chapters are named, never numbered,** in prose. A session has a number, so "Session 4" and "in session 4" are fine, and "chapter 4" is not. The build stops on "chapter 4".
 
