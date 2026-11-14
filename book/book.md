@@ -165,11 +165,15 @@ The agent's journal records 52 blocks of scripts and output. This chapter shows 
 
 ### Seven stops in twelve minutes
 
-The agent's first script stopped:
+Before writing any code, the agent read Shale's own docs. It wanted one table from them, the one that says which builtin to use in place of each shell habit, so its first script looked for the line where that table starts:
+
+{{fence repos:essay-surface/journal/session-1.md "Before you reach"}}
+
+It stopped:
 
 {{fence repos:essay-surface/journal/session-1.md "index 0 is outside the list"}}
 
-You don't need to read a line like that, because the agent does. It names the place and the reason, and the agent turned it into a fix in its next call. The session had seven stops, and this is the whole record of them:
+You don't need to read a line like that, because the agent does. It names the place and the reason. Here `lines` had split the path's text, not the file, so nothing matched, and the agent read the doc with its file reader in its next call. The session had seven stops, and this is the whole record of them:
 
 | The stop | What the agent did next |
 |---|---|

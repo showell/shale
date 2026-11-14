@@ -96,6 +96,8 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **AL. Pivots rewrite; each iteration keeps lessons, not legacy (Steve, 2026-11-14).** A book makes steady progress and then hits a major pivot, more than once, that calls for rewriting the whole book, or a chapter from scratch, rather than editing it. At this stage a big-picture observation, such as Steve's that Session 1 drowns in detail, can be that kind of pivot. When one comes, start the chapter over from its sources and this document, and carry forward what the last draft taught: its rules, its lessons, its findings. Don't carry its sentences, structure or quotes just because they exist. An old draft is a record in git, not a base to patch.
 
+**AM. Purpose before output (Steve, 2026-11-14).** Never show a stop or any output before the reader knows what the script was for. "You said the 'agent's first script stopped' without telling me anything about the script. I'm immediately lost." Say what the agent was trying to do, in a sentence, and show the script when it's short. Then show what it said.
+
 ## 6. Part Two
 
 **PA. Part Two: four languages, one workflow.** Part Two makes the essay surface richer, with dot diagrams and small widgets in a note. Shale is the glue the agent builds, checks, refactors and ships with. Go does the plumbing, Roc expresses the features, and JavaScript does what JavaScript always does. Its premise is that true multi-lingual development is far more feasible with agents, for the same reason dialects are cheap for them. The book's central theme still holds: building your own workflow, now in app territory (Steve, 2026-11-14).
