@@ -4,6 +4,8 @@
 
 {{quote repos:essay-surface/journal/prompts/thursday.md}}
 
+A cold agent worked for about seventeen minutes. Steve stepped in once, with two replies that the orchestrator passed on mid-run.
+
 Session 3 ended on `SAFE TO SHIP`. Could that line ever say anything else?
 
 ### One fault per stage
@@ -16,7 +18,7 @@ This session seeded one fault in each stage, a plant in our word, ran the stage,
 
 Each plant costs a rebuild and one run of its stage, from a few seconds to twenty, once. None was committed.
 
-Every stage went red for its fault. The race detector caught a map read without its lock. The audit named the four real notes that a fault in aligned tables broke. The dates stage named one real note that a plausible "show the latest edit" change re-dated. The bench caught a cache kept but unused, at 1,776 µs of CPU a request against a budget of 400.
+Every stage went red for its fault. The race detector caught a map read without its lock. The audit named the four real notes that a fault in aligned tables broke. The dates stage named one real note that a plausible "show the latest edit" change re-dated. The bench caught a cache kept but unused.
 
 Three of those faults got past everything else. `fast` passed with the race in, and with the unused cache. Only the smoke test runs the real server binary, so its fault was invisible to the Go tests. The anchoring, audit and dates faults also tripped `fast`'s unit tests; those three stages earn their place on Steve's real notes.
 
@@ -66,13 +68,11 @@ Putting its `opacity:0` back turned the test red at widths of 51 and 80rem. The 
 
 ### Steve's two replies
 
-Two replies to the report from Session 3 arrived mid-run. The first asked for a defensive check that the comments folder's parent exists. The server already failed there, but by accident. Now it checks first, names the path, and makes nothing:
+The two replies answered the report from Session 3. The first asked for a defensive check that the comments folder's parent exists. The server already failed there, but by accident. Now it checks first, names the path, and makes nothing:
 
 {{fence repos:essay-surface/journal/thursday.md "made: false"}}
 
 The second put phones out of scope. The README says so in one sentence, and the by-hand list keeps only the desktop browser. The narrow-window CSS stays: out of scope means unchecked, not removed.
-
-`full.shale` went from 30.9 s to 23.3 s, mostly from a quieter box; this session's additions cost tens of milliseconds.
 
 ### Now a gate
 

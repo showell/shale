@@ -33,7 +33,7 @@ At the end of Session 3, the agent's report listed a few calls Steve might want 
 {"name":"Steve","text":"add a defensive check","quote":"**The comments folder's parent must exist** when the server starts."}
 ```
 
-That's the whole of the steering: four words, attached to the paragraph they answer. We passed it on to the next session's agent in a short message.
+That's the whole of the steering: four words, attached to the paragraph they answer. The orchestrator passed it on to the next session's agent in a short message.
 
 ### The change
 
@@ -66,6 +66,7 @@ The same check in bash is one line: run the server, echo `$?`, list the folder. 
 
 - **Agent:** an AI model working in a terminal on our behalf. It reads, runs programs and writes code.
 - **Cold agent:** a fresh agent with no memory of our conversation, given one task and a written brief.
+- **Orchestrator:** the agent Steve talks to, acting as his proxy. It writes the prompts, briefs the cold agents and checks their work.
 - **Prompt:** what we ask an agent to do, in plain words. Each session opens with one.
 - **Heredoc:** a Shale script written inline in a shell command, `shale <<'EOF' … EOF`, run once.
 - **Recipe:** a script saved to a file because its question came back.

@@ -4,23 +4,17 @@
 
 {{quote repos:essay-surface/journal/prompts/wednesday.md}}
 
+A cold agent worked for about half an hour on this one, and Steve didn't step in.
+
 By now the essay surface had four scripts, and the last session's report listed what to run and when. A list is something to remember. This session made it two commands.
 
-### Measure, then listen
+### An index that listens
 
-The first session's numbers had already named the cost: the index checked every note's file on every request. Before touching it, the agent measured the parts of its plan. One survey counted where the 505 real notes keep their dates: nearly always on line 3, in the paragraph after the title. Another timed `git log` on the notes at 0.8 s, slowed by 3,961 unpacked objects. That repository is Steve's, so the agent left it alone, and the server pays the cost once, at start-up.
+The first session's bench had named the cost: the index checked every note's file on every request. The new server hears changes from the kernel, through Linux's inotify, and reads the kernel's queue of events at the start of each request. The kernel queues an event before the write returns, so the next request always sees it. The index page is kept until a note changes, and the agent measured it at about the cost of a note.
 
-The new server hears changes from the kernel, through Linux's inotify, and reads the kernel's queue of events at the start of each request. The kernel queues an event before the write returns, so the next request always sees it. The index page is kept until a note changes. Before, the index took fifteen times as long as a note:
+A note's date now comes from its first lines, or else its last commit. A fresh clone, which resets every file's time, gives the same index, and that comparison became a stage of the full check.
 
-{{fence repos:essay-surface/journal/wednesday.md "median 2.276 ms" from "index:" to "notes, no comments"}}
-
-After, it took 0.1 ms, as fast as a note:
-
-{{fence repos:essay-surface/journal/wednesday.md "median 0.105 ms, p90 0.143 ms" from "index:" to "notes, no comments"}}
-
-A note's date now comes from its first lines, or else its last commit. A fresh clone, which resets every file's time, gives the same index, all 506 notes in place. That comparison became a stage of the full check.
-
-The mistakes on the way stopped loudly. The prelude's `edit_between`, which replaces the text between two anchors, moved the store out of `server.go` and reported `-175 +3 lines`. That count showed it had cut the imports too, before anyone looked. A builtin the agent guessed at, `take_last`, stopped its script before a line ran.
+The mistakes on the way stopped loudly. The prelude's `edit_between`, which replaces the text between two anchors, moved the store out of `server.go` and reported `-175 +3 lines`. That count showed it had cut the imports too, before anyone looked.
 
 ### A check for each edit
 
@@ -44,13 +38,11 @@ A run that spends more CPU than its `cpu_budget_ms` stops, naming the stage. The
 
 {{lines repos:essay-surface/scripts/full.shale from "local failed = {}" to "SAFE TO SHIP"}}
 
-The bench needed more care, since its job is time. The server now logs, as it stops, how many requests it served and the CPU they took, so the bench holds each request's CPU to a budget:
+The bench needed more care, since its job is time. The server now logs, as it stops, the CPU its requests took, so the bench holds each kind of request to a CPU budget, about twice what real notes took:
 
 {{lines repos:essay-surface/scripts/bench.shale from "const CPU_BUDGET_US" to "const CPU_BUDGET_US"}}
 
-Each is about twice what real notes took, in microseconds.
-
-The first version held one budget for the whole mix of requests, and the bench's 1,615 comment posts outweighed the rest: a return to the old scan would have added only about 125 µs to the average. So each phase got a server of its own. To prove the index budget, the agent put the old scan back once, and it measured 2,170 µs a request against the budget of 400. Wall-clock medians are still reported, and judged only when the box is quiet.
+One budget for the whole mix hid a slow index under the many comment posts, so each kind got a server of its own. The old scan, put back once, broke the index's budget more than five times over.
 
 Slowness is a finding too. The anchoring simulation took 13 s, so the agent profiled it: the time was the work itself, 187,000 simulated edits, and it stays.
 

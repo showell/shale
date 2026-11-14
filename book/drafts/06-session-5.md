@@ -4,6 +4,8 @@
 
 {{quote repos:essay-surface/journal/prompts/friday.md}}
 
+A cold agent built the release script and proved it on the dev port in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
+
 By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A chore done by hand is done a little differently each time. A release done by a script is the same every time, and that sameness is what we mean by boring.
 
 ### A release, in order
@@ -12,7 +14,7 @@ The agent's `release.shale` follows the prompt, in order. It stops before it tou
 
 {{lines repos:essay-surface/scripts/release.shale from "-- 2: the full check." to "full check: SAFE TO SHIP"}}
 
-Next, `go build` makes the new binary beside the old one, and the script writes down the commit it came from and how long the build took.
+Next, `go build` makes the new binary beside the old one, and the script writes down the commit it came from.
 
 Before it stops anything, the script copies the comments into a dated folder and compares the copy file by file. It also saves the old server's index and its commented pages, as a record of where each comment sat. Then it stops the old server, keeps its binary as `.prev`, starts the new one, and checks it. The comment check is strict: each comment must follow the same block of the note as before, and still be in its file.
 
@@ -50,16 +52,16 @@ The full check said SAFE TO SHIP. The release caught it on the first comment and
 
 {{fence repos:essay-surface/journal/friday.md "FAILED: comment f31eaaa22556" from "started abacae9" to "ROLLED BACK"}}
 
-Afterward every comments file matched the data byte for byte, and the bad binary was kept as `.failed`, with its log. That's the case for a release check: the full check tests the server the way the tests start it, and the release check tests it the way it really runs, with its real flags and data.
+Afterward every comments file matched byte for byte, and the bad binary was kept with its log. That's the case for a release check: the full check tests the server the way the tests start it, and the release check tests it the way it really runs, with its real flags and data.
 
 A fourth trial seeded a formatting fault, and the full check stopped it: `nothing touched`, the same server pids before and after. Then the agent removed the seeded fault's branch and worktree, since a seeded fault proves a check once.
 
 ### The real release
 
-When it worked on dev, we ran it ourselves on the live server. It shipped, with every comment where it was. The agent's report kept its last lines:
+When it worked on dev, the orchestrator ran it on the live server. It shipped, with every comment where it was. The agent's report kept its last lines:
 
 {{fence repos:essay-repl-server/notes/essay-surface-friday.md "RELEASED: running 92fb48b" from "full check: SAFE TO SHIP" to "RELEASED: running"}}
 
-Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back (shortened in the report). The old version reads `unknown` because it was built by hand. The full check is nearly all of the 27 seconds; the swap and its checks fit inside one. Green again ✅
+Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back. Green again ✅
 
 The release was the most boring thing in the project, and it took the most care to make it so. Boring is what a release looks like when every surprise was found on the dev port first.

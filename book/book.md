@@ -92,7 +92,7 @@ At the end of Session 3, the agent's report listed a few calls Steve might want 
 {"name":"Steve","text":"add a defensive check","quote":"**The comments folder's parent must exist** when the server starts."}
 ```
 
-That's the whole of the steering: four words, attached to the paragraph they answer. We passed it on to the next session's agent in a short message.
+That's the whole of the steering: four words, attached to the paragraph they answer. The orchestrator passed it on to the next session's agent in a short message.
 
 ### The change
 
@@ -125,6 +125,7 @@ The same check in bash is one line: run the server, echo `$?`, list the folder. 
 
 - **Agent:** an AI model working in a terminal on our behalf. It reads, runs programs and writes code.
 - **Cold agent:** a fresh agent with no memory of our conversation, given one task and a written brief.
+- **Orchestrator:** the agent Steve talks to, acting as his proxy. It writes the prompts, briefs the cold agents and checks their work.
 - **Prompt:** what we ask an agent to do, in plain words. Each session opens with one.
 - **Heredoc:** a Shale script written inline in a shell command, `shale <<'EOF' … EOF`, run once.
 - **Recipe:** a script saved to a file because its question came back.
@@ -143,7 +144,9 @@ Our first session starts with an empty repository and this prompt:
 
 {{quote repos:essay-surface/journal/prompts/monday.md}}
 
-The prompt has the roles turned around: in practice the agent writes the notes, and Steve replies to them. Two phrases shape the session. "Speed matters to me" asks for a number, and "five hundred notes" says where to measure it. Steve has about that many on the old surface, so the agent works against those.
+The orchestrator, the Claude session Steve talks to, wrote this prompt from his plan and handed it to a cold agent with a short brief. The agent worked for about twelve minutes, and Steve didn't step in.
+
+The prompt has the roles turned around: in practice the agent writes the notes, and Steve replies to them. "Five hundred notes" says where to work. Steve has about that many on the old surface, so the agent works against those.
 
 ### The first stop
 
@@ -153,27 +156,23 @@ The agent began by reading Shale's own docs, and its first script stopped:
 
 {{fence repos:essay-surface/journal/monday.md "index 0 is outside the list"}}
 
-A stop is one line: the place (line 7, column 28), a class (`index`), and the reason. At scroll speed, ask three questions of any script. What does it read? What does it run? How did it end? This one reads a doc, runs no programs, and ended at a stop. The cause is on its first line. `lines` splits a string, not a file, so `ls` held one line: the path itself. A file's lines are `read_lines`. The agent read the doc with its file reader instead, the right tool for prose.
+A stop is one line: the place (line 7, column 28), a class (`index`), and the reason. At scroll speed, ask three questions of any script. What does it read? What does it run? How did it end? This one reads a doc, runs no programs, and ended at a stop. The cause is on its first line. `lines` splits a string, not a file, so `ls` held one line: the path itself. The agent read the doc with its file reader instead, the right tool for prose.
 
 ### Budgets
 
-To pick a dozen varied samples, the agent surveyed every real note, in the old surface's folder `essay-repl-server/notes`: its size, and how many fences, tables and list items it holds. The first try stopped on a budget:
+To pick a dozen varied samples, the agent surveyed every real note in the old surface's folder: its size, and how many fences, tables and list items it holds. The first try stopped on a budget:
 
 {{fence repos:essay-surface/journal/monday.md "the step budget (5000000 steps) ran out"}}
 
-Every Shale run has budgets for steps, reads, bytes and memory. `re_lines` is written in Shale itself, so it spends a step a character, and over 4.7 MB of notes the budget stopped the run long before it could run away. The agent switched to `grep`, a builtin, and hit the memory budget next. The docs give the fix: do each file's work in a function, and call `yield()` after each file, so the run holds one file at a time.
+Every Shale run has budgets for steps, reads, bytes and memory. `re_lines` is written in Shale itself, so it spends a step a character, and the budget stopped the run long before it could run away. The agent switched to `grep`, a builtin, and hit the memory budget next. The docs give the fix: do each file's work in a function, and call `yield()` after each file, so the run holds one file at a time.
 
 {{fence repos:essay-surface/journal/monday.md "wt = wt + 1" from "function measure(p)" to "print(#all"}}
 
-This reads like Lua, on purpose. `function` declares a function, and `end` closes it. `{path = ..., bytes = ...}` is a map, `#` is a length, and `..` joins strings. `glob` lists files, and `stat` gives a file's size. The script reads the notes, runs no programs, and ended well:
-
-{{fence repos:essay-surface/journal/monday.md "total bytes 4747688" from "502 notes" to "167408"}}
-
-Five hundred was the real count, with a long tail: the biggest note is 167 KB. Smaller stops came throughout, a guessed field name or builtin, each named in one line and fixed in the next call.
+This reads like Lua, on purpose. `function` declares a function, and `end` closes it. `{path = ..., bytes = ...}` is a map, `#` is a length, and `..` joins strings. `glob` lists files, and `stat` gives a file's size. The script reads the notes, runs no programs, and ended well. Smaller stops came throughout, a guessed field name or builtin, each named in one line and fixed in the next call.
 
 ### A gate before a commit
 
-The agent wrote the server and its renderer in Go. The first test run had one red, a table rule the agent chose to keep and wrote down as a test of its own. Then it saved its first recipe, `scripts/check.shale`: gofmt must list nothing, vet must be quiet, and every test must pass. Its first run stopped, which is its job:
+The agent wrote the server and its renderer in Go. Then it saved its first recipe, `scripts/check.shale`: gofmt must list nothing, vet must be quiet, and every test must pass. Its first run stopped, which is its job:
 
 {{fence repos:essay-surface/journal/monday.md "fail: gofmt (131 steps)"}}
 
@@ -181,27 +180,15 @@ Once the gate passed, the agent counted what ran, since a green is a claim:
 
 {{fence repos:essay-surface/journal/monday.md "how many tests and subtests actually ran?"}}
 
-`run` takes a program as a list of words, with a timeout and how much output to keep: here three minutes, and up to 200 KB. `must` turns a failed program into a failed script. Every program goes through `run` or a call like it, so programs are easy to spot at scroll speed. Seven top-level tests ran 69 cases, and none failed:
-
-{{fence repos:essay-surface/journal/monday.md "PASS lines: 69"}}
-
-Green again ✅
+`run` takes a program as a list of words, with a timeout and how much output to keep. `must` turns a failed program into a failed script. Every program goes through `run` or a call like it, so programs are easy to spot at scroll speed. Sixty-nine test cases ran, and none failed. Green again ✅
 
 ### The number
 
-`job_start` runs a program that outlives one call, and `job_wait` watches its log for a line. The agent started the server and fetched the index. Its `want` gives the reason Shale asks for before running a program git doesn't track, like a server just built:
+`job_start` runs a program that outlives one call, such as a server, and `job_wait` watches its log for a line. Its `want` gives the reason Shale asks for before running a program git doesn't track, like a server just built:
 
 {{fence repos:essay-surface/journal/monday.md "start the server on the sample notes" from "job_start(" to "idx.ms"}}
 
-The index came back in nine milliseconds:
-
-{{fence repos:essay-surface/journal/monday.md "index 200, 3742 bytes, 9 ms" from "index 200" to "note 200"}}
-
-That was the wrong number. `http_get` starts a curl process per call, so it timed curl starting up. The agent saved `scripts/bench.shale`, which runs one curl over many URLs on a kept-alive connection and reads curl's own clock. On all 503 real notes, a note takes about a tenth of a millisecond, and the index twenty times that:
-
-{{fence repos:essay-surface/journal/monday.md "in 178ms" from "index: 200 requests" to "notes: 503 requests"}}
-
-The agent split the index's 2 ms by phase with two Go benchmarks, and found 1.1 ms of it was a `stat` of every note on every request. It went first on the next session's list.
+The first number it printed was wrong. `http_get` starts a curl process per call, so it timed curl starting up. The agent saved `scripts/bench.shale`, which reads curl's own clock over one kept-alive connection: a note takes about a tenth of a millisecond. The index took longer, mostly in a `stat` of every note on every request, and a later session took that on.
 
 ### The audit
 
@@ -217,11 +204,11 @@ So the saved `scripts/audit.shale` fetches every page with one curl, stops the s
 
 {{function repos:essay-surface/scripts/audit.shale cut}}
 
-It ran in under a second and found two real bugs:
+It found two real bugs that every hand-written test had missed:
 
 {{fence repos:essay-surface/journal/monday.md "<title>Review: gopher-roc"}}
 
-Titles kept their markdown in 35 notes, and a lone triple backtick in a table cell swallowed the rest of its row. Each fix got a test, the table one copied from the note that found it. The audit of 503 real notes found two bugs that 62 hand-written renderer tests missed. The agent's verdict: write the audit before the tests next time.
+Titles kept their markdown, and a lone triple backtick in a table cell swallowed the rest of its row. Each fix got a test, the table one copied from the note that found it. The agent's verdict: write the audit before the tests next time.
 
 ### What's a check now
 
@@ -233,33 +220,15 @@ The second prompt asks for the feature the surface exists for:
 
 {{quote repos:essay-surface/journal/prompts/tuesday.md}}
 
+A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after it finished, with the eye test at the end of this session, and the orchestrator made that fix.
+
 As in the first prompt, the "I" who reads the comments is really the agent: it writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
 
-### Arguing from real paragraphs
+### A reply finds its paragraph
 
-The obvious design: a comment remembers its paragraph's text, and on each render it goes to the most similar block above some threshold. The agent measured that before building it. A Go test scored every block of every real note against its nearest other block, and against itself after a typo, a changed word or a split. Scores are in thousandths, and p1 is the score the lowest 1% fall under:
-
-{{fence repos:essay-surface/journal/tuesday.md "words: nearest other block" from "words: nearest other block" to "words: one typo"}}
-
-One typo in a short block drops it to 250, while 1% of blocks have a look-alike in the same note at 714 or more. The two ranges overlap. A simulation of the decision itself showed the cost: with a second measure, trigrams, at a threshold of 300, low enough to keep edited short blocks, most deleted blocks hand their comments to a look-alike.
-
-{{fence repos:essay-surface/journal/tuesday.md "trigrams deleted  T=300" from "trigrams deleted  T=300" to "trigrams deleted  T=300"}}
+A reply belongs to a paragraph, and it has to find that paragraph again after the note changes. The obvious design remembers the paragraph's text and, on each render, picks the most similar block. The agent tried that idea on Steve's real notes before building it, and it failed: a short block with one typo can look less like itself than another block looks like its neighbor, so a deleted paragraph would hand its replies to a look-alike.
 
 So the design added structure. A comment also remembers the fingerprints of the blocks before and after it. On each render it goes, in order, to the block with the same text, the block still between the same two neighbors, the most similar block, or the orphans at the foot of the page. A deleted block leaves its neighbors touching, so the second rule tells a deletion from an edit.
-
-The first simulation of the real resolver ran past its 110-second timeout and was killed. A killed program has no exit code, only an `ended` that says why, so the script stopped on the line that read `code`:
-
-{{fence repos:essay-surface/journal/tuesday.md "110.0 s in all"}}
-
-The agent kept the timeout and found the waste: every simulated case recomputed the whole note. It cached each block's features once per note, then ran `go test` again with `env` pointing it at the real notes:
-
-{{fence repos:essay-surface/journal/tuesday.md "precompute features once per note" from "local real = run(" to "real notes, ended"}}
-
-With the word measure at a threshold of 600, every edit in place kept its comments, and 345 of 22,928 deleted paragraphs lent theirs to a look-alike:
-
-{{fence repos:essay-surface/journal/tuesday.md "real notes, ended exit, 49158 ms" from "words    T=600 typo" to "words    T=600 deleted"}}
-
-The trigram measure misplaced 635. The agent chose words because a wrong placement misleads, and an orphan is honest. The design was argued from Steve's own 22,900 paragraphs, and the comparison is committed as it ran, so anyone can run it again.
 
 ```dot
 digraph anchor {
@@ -283,6 +252,12 @@ digraph anchor {
 ```
 
 *How a reply finds its paragraph. Each rule is tried in turn, and a comment is never lost.*
+
+The first simulation of the real resolver ran past its timeout and was killed. A killed program has no exit code, only an `ended` that says why, so the script stopped on the line that read `code`:
+
+{{fence repos:essay-surface/journal/tuesday.md "110.0 s in all"}}
+
+The agent kept the timeout and found the waste: every simulated case recomputed the whole note. With each block's features cached once per note, the simulation ran over all of Steve's paragraphs. Every edit in place kept its comments, and 345 of 22,928 deleted paragraphs lent theirs to a look-alike. The agent compared two measures of similarity and chose the one that misplaced fewer, because a wrong placement misleads, and an orphan is honest. The comparison is committed as it ran, so anyone can run it again.
 
 ### Seeding faults
 
@@ -316,35 +291,29 @@ Green again ✅
 
 ### Every check passed
 
-The report's last item to check from now on was an eye test the agent couldn't run, since the box has no browser. Steve opened a note in his, and found no way to reply. The buttons sat at opacity 0 and appeared only on hover. On the old surface, reply buttons follow only prose paragraphs, so a button that appears on hover had him hunting for buttons that might not exist. His words: "Hover is an anti-feature."
+The report's last item was an eye test the agent couldn't run, since the box has no browser. Steve opened a note in his, and found no way to reply. The buttons sat at opacity 0 and appeared only on hover. His words: "Hover is an anti-feature."
 
-The fix set the buttons at opacity 0.6. Their first label was "note", which already meant the essays, so a second commit made it "reply". Steve has written his real replies on the new surface ever since. The first landed on a bullet about "a rename pass", and it read back correctly from the comments file. In Session 4, hidden reply buttons become a check that runs without a browser.
+The fix set the buttons at opacity 0.6. Their first label was "note", which already meant the essays, so a second commit made it "reply". Steve has written his real replies on the new surface ever since. In Session 4, hidden reply buttons become a check that runs without a browser.
 
 ### What's a check now
 
-`check.shale` parses the front end and runs the anchoring simulation on the sample notes, its numbers held at what was measured, so any change to the anchoring shows its new numbers. The browser caught what every check missed, and that miss is the next check.
+`check.shale` parses the front end and runs the anchoring simulation on the sample notes, its numbers held at what was measured. The browser caught what every check missed, and that miss is the next check.
 
 ## Session 3: a check for each moment
 
 {{quote repos:essay-surface/journal/prompts/wednesday.md}}
 
+A cold agent worked for about half an hour on this one, and Steve didn't step in.
+
 By now the essay surface had four scripts, and the last session's report listed what to run and when. A list is something to remember. This session made it two commands.
 
-### Measure, then listen
+### An index that listens
 
-The first session's numbers had already named the cost: the index checked every note's file on every request. Before touching it, the agent measured the parts of its plan. One survey counted where the 505 real notes keep their dates: nearly always on line 3, in the paragraph after the title. Another timed `git log` on the notes at 0.8 s, slowed by 3,961 unpacked objects. That repository is Steve's, so the agent left it alone, and the server pays the cost once, at start-up.
+The first session's bench had named the cost: the index checked every note's file on every request. The new server hears changes from the kernel, through Linux's inotify, and reads the kernel's queue of events at the start of each request. The kernel queues an event before the write returns, so the next request always sees it. The index page is kept until a note changes, and the agent measured it at about the cost of a note.
 
-The new server hears changes from the kernel, through Linux's inotify, and reads the kernel's queue of events at the start of each request. The kernel queues an event before the write returns, so the next request always sees it. The index page is kept until a note changes. Before, the index took fifteen times as long as a note:
+A note's date now comes from its first lines, or else its last commit. A fresh clone, which resets every file's time, gives the same index, and that comparison became a stage of the full check.
 
-{{fence repos:essay-surface/journal/wednesday.md "median 2.276 ms" from "index:" to "notes, no comments"}}
-
-After, it took 0.1 ms, as fast as a note:
-
-{{fence repos:essay-surface/journal/wednesday.md "median 0.105 ms, p90 0.143 ms" from "index:" to "notes, no comments"}}
-
-A note's date now comes from its first lines, or else its last commit. A fresh clone, which resets every file's time, gives the same index, all 506 notes in place. That comparison became a stage of the full check.
-
-The mistakes on the way stopped loudly. The prelude's `edit_between`, which replaces the text between two anchors, moved the store out of `server.go` and reported `-175 +3 lines`. That count showed it had cut the imports too, before anyone looked. A builtin the agent guessed at, `take_last`, stopped its script before a line ran.
+The mistakes on the way stopped loudly. The prelude's `edit_between`, which replaces the text between two anchors, moved the store out of `server.go` and reported `-175 +3 lines`. That count showed it had cut the imports too, before anyone looked.
 
 ### A check for each edit
 
@@ -368,13 +337,11 @@ A run that spends more CPU than its `cpu_budget_ms` stops, naming the stage. The
 
 {{lines repos:essay-surface/scripts/full.shale from "local failed = {}" to "SAFE TO SHIP"}}
 
-The bench needed more care, since its job is time. The server now logs, as it stops, how many requests it served and the CPU they took, so the bench holds each request's CPU to a budget:
+The bench needed more care, since its job is time. The server now logs, as it stops, the CPU its requests took, so the bench holds each kind of request to a CPU budget, about twice what real notes took:
 
 {{lines repos:essay-surface/scripts/bench.shale from "const CPU_BUDGET_US" to "const CPU_BUDGET_US"}}
 
-Each is about twice what real notes took, in microseconds.
-
-The first version held one budget for the whole mix of requests, and the bench's 1,615 comment posts outweighed the rest: a return to the old scan would have added only about 125 µs to the average. So each phase got a server of its own. To prove the index budget, the agent put the old scan back once, and it measured 2,170 µs a request against the budget of 400. Wall-clock medians are still reported, and judged only when the box is quiet.
+One budget for the whole mix hid a slow index under the many comment posts, so each kind got a server of its own. The old scan, put back once, broke the index's budget more than five times over.
 
 Slowness is a finding too. The anchoring simulation took 13 s, so the agent profiled it: the time was the work itself, 187,000 simulated edits, and it stays.
 
@@ -421,6 +388,8 @@ digraph checks {
 
 {{quote repos:essay-surface/journal/prompts/thursday.md}}
 
+A cold agent worked for about seventeen minutes. Steve stepped in once, with two replies that the orchestrator passed on mid-run.
+
 Session 3 ended on `SAFE TO SHIP`. Could that line ever say anything else?
 
 ### One fault per stage
@@ -433,7 +402,7 @@ This session seeded one fault in each stage, a plant in our word, ran the stage,
 
 Each plant costs a rebuild and one run of its stage, from a few seconds to twenty, once. None was committed.
 
-Every stage went red for its fault. The race detector caught a map read without its lock. The audit named the four real notes that a fault in aligned tables broke. The dates stage named one real note that a plausible "show the latest edit" change re-dated. The bench caught a cache kept but unused, at 1,776 µs of CPU a request against a budget of 400.
+Every stage went red for its fault. The race detector caught a map read without its lock. The audit named the four real notes that a fault in aligned tables broke. The dates stage named one real note that a plausible "show the latest edit" change re-dated. The bench caught a cache kept but unused.
 
 Three of those faults got past everything else. `fast` passed with the race in, and with the unused cache. Only the smoke test runs the real server binary, so its fault was invisible to the Go tests. The anchoring, audit and dates faults also tripped `fast`'s unit tests; those three stages earn their place on Steve's real notes.
 
@@ -483,13 +452,11 @@ Putting its `opacity:0` back turned the test red at widths of 51 and 80rem. The 
 
 ### Steve's two replies
 
-Two replies to the report from Session 3 arrived mid-run. The first asked for a defensive check that the comments folder's parent exists. The server already failed there, but by accident. Now it checks first, names the path, and makes nothing:
+The two replies answered the report from Session 3. The first asked for a defensive check that the comments folder's parent exists. The server already failed there, but by accident. Now it checks first, names the path, and makes nothing:
 
 {{fence repos:essay-surface/journal/thursday.md "made: false"}}
 
 The second put phones out of scope. The README says so in one sentence, and the by-hand list keeps only the desktop browser. The narrow-window CSS stays: out of scope means unchecked, not removed.
-
-`full.shale` went from 30.9 s to 23.3 s, mostly from a quieter box; this session's additions cost tens of milliseconds.
 
 ### Now a gate
 
@@ -499,6 +466,8 @@ Every stage of `full.shale` has been seen red once, and its kept fixtures run on
 
 {{quote repos:essay-surface/journal/prompts/friday.md}}
 
+A cold agent built the release script and proved it on the dev port in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
+
 By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A chore done by hand is done a little differently each time. A release done by a script is the same every time, and that sameness is what we mean by boring.
 
 ### A release, in order
@@ -507,7 +476,7 @@ The agent's `release.shale` follows the prompt, in order. It stops before it tou
 
 {{lines repos:essay-surface/scripts/release.shale from "-- 2: the full check." to "full check: SAFE TO SHIP"}}
 
-Next, `go build` makes the new binary beside the old one, and the script writes down the commit it came from and how long the build took.
+Next, `go build` makes the new binary beside the old one, and the script writes down the commit it came from.
 
 Before it stops anything, the script copies the comments into a dated folder and compares the copy file by file. It also saves the old server's index and its commented pages, as a record of where each comment sat. Then it stops the old server, keeps its binary as `.prev`, starts the new one, and checks it. The comment check is strict: each comment must follow the same block of the note as before, and still be in its file.
 
@@ -545,21 +514,27 @@ The full check said SAFE TO SHIP. The release caught it on the first comment and
 
 {{fence repos:essay-surface/journal/friday.md "FAILED: comment f31eaaa22556" from "started abacae9" to "ROLLED BACK"}}
 
-Afterward every comments file matched the data byte for byte, and the bad binary was kept as `.failed`, with its log. That's the case for a release check: the full check tests the server the way the tests start it, and the release check tests it the way it really runs, with its real flags and data.
+Afterward every comments file matched byte for byte, and the bad binary was kept with its log. That's the case for a release check: the full check tests the server the way the tests start it, and the release check tests it the way it really runs, with its real flags and data.
 
 A fourth trial seeded a formatting fault, and the full check stopped it: `nothing touched`, the same server pids before and after. Then the agent removed the seeded fault's branch and worktree, since a seeded fault proves a check once.
 
 ### The real release
 
-When it worked on dev, we ran it ourselves on the live server. It shipped, with every comment where it was. The agent's report kept its last lines:
+When it worked on dev, the orchestrator ran it on the live server. It shipped, with every comment where it was. The agent's report kept its last lines:
 
 {{fence repos:essay-repl-server/notes/essay-surface-friday.md "RELEASED: running 92fb48b" from "full check: SAFE TO SHIP" to "RELEASED: running"}}
 
-Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back (shortened in the report). The old version reads `unknown` because it was built by hand. The full check is nearly all of the 27 seconds; the swap and its checks fit inside one. Green again ✅
+Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back. Green again ✅
 
 The release was the most boring thing in the project, and it took the most care to make it so. Boring is what a release looks like when every surprise was found on the dev port first.
 
 ## Session 6: the language gets better
+
+*Steve's reply, in conversation*
+
+> go ahead with the jobs feature
+
+This session began from a reply in conversation, not from a written prompt. At the end of the first afternoon, Steve had asked the orchestrator to watch for a nuisance Shale could fix. It spotted one, and a cold agent built the fix in about sixteen minutes. The reply, the next morning, started the merge. Steve stepped in once more, to choose the child run below from three options, and a cold agent already polishing the scripts took it on.
 
 Three times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, and in the first release trial, on a budget stop. Each time, someone noticed and stopped it by hand. Session 4 had a cousin of the trap: a stop between a fault going in and coming out left the fault in the tree, and `--undo-on-stop` already covered files.
 
@@ -579,9 +554,9 @@ That's the same shape as every stop in this book: one line, what happened, and w
 
 ### How it arrived
 
-A cold agent built it: each run keeps a list of the jobs it starts, and a stop ends the ones still running. The tests cover every side of the rule. A run that ends keeps its job. A failed run ends both of its jobs and names them. A budget stop ends its job. A caught failure ends nothing. A `keep_on_stop` job survives the stop and is named apart. A job the run already stopped or waited for gets no second stop. A job another run started is never touched. Two faults seeded into the feature turned those tests red, so the tests are watching.
+The design is small: each run keeps a list of the jobs it starts, and a stop ends the ones still running. The tests cover every side of the rule: a run that ends, a failed run, a budget stop, a caught failure, a `keep_on_stop` job, a job already stopped, and a job another run started. Two faults seeded into the feature turned those tests red, so the tests are watching.
 
-Then the feature passed Shale's own tests and the consumers gate, Shale's gate that runs the checks of every repository built on it. A change to what a stop means touches every script with a job in it, so that gate is the one that matters. It passed, and we merged it.
+After Steve's reply, the orchestrator ran Shale's own tests and the consumers gate, Shale's gate that runs the checks of every repository built on it. A change to what a stop means touches every script with a job in it, so that gate is the one that matters. It passed, and the orchestrator merged it.
 
 ### The code says what it keeps
 
@@ -589,7 +564,7 @@ The feature changed what a stop does, and one script had to say something new. A
 
 {{lines repos:essay-surface/scripts/release.shale from "function rel_start(t, keep)" to "local job = job_start(rel_argv(t)"}}
 
-The new server starts with `keep` false, and the old one put back by a failed release starts with it true. Before this session, the script's defense against the trap was a large step budget and a comment explaining it. Now the code says which server stays, and the language does the rest.
+The new server starts with `keep` false, and the old one put back by a failed release starts with it true. Before, a large step budget and a comment were its only defense. Now the code says which server stays, and the language does the rest.
 
 The feature also exposed a gap in the release script itself. A budget stop after the swap would now end the new server with the run, and the run could never put the old one back. A script can't catch its own stop, so the release runs the swap and its checks as a child run, a second Shale process it can watch:
 
@@ -620,7 +595,7 @@ digraph release {
 
 This is what we mean by a language that agents make better. The feature came from the project's own work. The work needed it three times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.
 
-`keep_on_stop` went into Shale's main line, since every project with a server wants it. In your own fork, a word like it is where your dialect begins. A dialect costs a human a great deal: new words to learn, old habits that no longer fit. It costs an agent very little, since the agent reads the docs every session. So Shale is meant to have dialects. Each reader keeps the one that works for their agent, and builds their own scripts on top of it.
+`keep_on_stop` went into Shale's main line, since every project with a server wants it. In your own fork, a word like it is where your dialect begins. That's why Shale is meant to have dialects: a new word costs an agent little, since it reads the docs every session.
 
 For now, that means forking your own copy of Shale and letting your agent change it. The habit matters more than the mechanism. When a cleanup happens by hand a third time, ask your agent what word the language is missing. Then read the tests on both sides, see the seeded faults turn them red, and run the gates of everything that depends on it.
 
@@ -629,6 +604,8 @@ The best feature so far came from the most annoying chore. Your agent's nuisance
 ## Session 7: a feature arrives
 
 {{quote repos:essay-surface/journal/prompts/links.md}}
+
+Steve asked for this in conversation, and the orchestrator wrote the prompt from his words. A cold agent worked for about eleven minutes, Steve didn't step in, and the orchestrator ran the release.
 
 After six sessions the surface was in daily use, and the first request to come out of that use was small: Steve wanted to click the URLs in his notes. Small isn't the same as easy. A renderer that links URLs can get them subtly wrong in a dozen ways: a sentence's period pulled into the link, a parenthesis that belongs to the prose, a URL inside code, a URL that carries markup into the page. Steve called it a can of worms. This session shows what the earlier habits buy when a request like that arrives.
 
@@ -692,7 +669,7 @@ It found exactly the 26, so its zero is a real zero. The report also named what 
 
 ### A boring release
 
-The full check said `SAFE TO SHIP` in 25.7 s. Then we ran the release script from Session 5 on Steve's own server, unchanged. It took 26.3 s, and its last lines read like the last release's:
+The full check said `SAFE TO SHIP`. Then the orchestrator ran the release script from Session 5 on Steve's own server, unchanged, and its last lines read like the last release's:
 
 ```text
 full check: SAFE TO SHIP, 24566 ms
@@ -740,6 +717,14 @@ Between Sessions 6 and 7, apart from any prompt, Shale's cookbook gained three G
 ### Look with your own eyes
 
 Every check passed in Session 2, and the reply buttons were invisible. Gates hold what you already know to check. A human's first look finds what you didn't know yet, and then the agent can often turn it into a gate.
+
+### Working with agents
+
+"Collaboration with an agent requires you putting yourself in the agent's shoes and knowing their strengths and weaknesses," Steve says. A cold agent knows only its brief and what it reads. It reads every doc it's pointed at, so a new word in Shale costs it little. It counts and measures tirelessly, sometimes past the point a first version needs. It guesses at names, as with `replace_all` in Session 7, and the stop that follows is one line. It can't see a page, so the hidden reply buttons in Session 2 waited for Steve's eye.
+
+So the work splits in two. Cold agents do small, scoped tasks: each session's agent worked for between about ten minutes and half an hour. The orchestrator, Claude acting as Steve's proxy, does the coordinating. It wrote each prompt from his plan, passed on his replies in Session 4, ran Shale's gates before the merge in Session 6, and ran the releases.
+
+Steve accepts the orchestrator's recommendations about 80% of the time when he's careful with his prompts. Creative work is the exception, and there he's more opinionated, "because it's as impossible for an agent as it is for another human to guess what ideas your info will spark with me." This book is creative work, and most of the rules in its mission are his words.
 
 ### Let the work ask
 

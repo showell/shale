@@ -67,3 +67,15 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 **W. Chapters are named, never numbered,** in prose. A session has a number, so "Session 4" and "in session 4" are fine, and "chapter 4" is not. The build stops on "chapter 4".
 
 **T. The essay surface is where we talk.** Decisions go in an essay, and Steve replies on the new surface itself.
+
+**Z. A first version isn't about speed.** "For the first versions of an essay server, I would never be quite so obsessed with speed" (Steve, 2026-11-14). The early sessions keep only the numbers that carry a point. Speed becomes the subject only where the work truly calls for it, as when the checks for each moment get slow. Where the agent did measure something, the book can say so in a clause.
+
+## 5. Working with agents
+
+**AA. Show the agent side.** The reader is new to agents, so each session says who did the work: a cold agent with a small task, or the orchestrator. It also says roughly how long the work ran and how often we stepped in. Session 6 opens with the reply that started it, "go ahead with the jobs feature", and says plainly that the session began from a reply in conversation, not from a written prompt. Facts come from the journals and the session records, or they're left out.
+
+**AB. Put yourself in the agent's shoes.** "Collaboration with an agent requires you putting yourself in the agent's shoes and knowing their strengths and weaknesses" (Steve, 2026-11-14).
+
+**AC. The orchestrator is Steve's proxy.** Claude often acts as Steve's proxy in the orchestrator role. Cold agents do small tasks, and the orchestrator is largely responsible for coordination (Steve, 2026-11-14).
+
+**AD. About 80%, and the creative exception.** Steve accepts the agent's recommendations about 80% of the time when he's being careful with his prompts. In creative work he's more opinionated, "because it's as impossible for an agent as it is for another human to guess what ideas your info will spark with me" (Steve, 2026-11-14).

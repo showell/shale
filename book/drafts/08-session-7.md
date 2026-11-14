@@ -4,6 +4,8 @@
 
 {{quote repos:essay-surface/journal/prompts/links.md}}
 
+Steve asked for this in conversation, and the orchestrator wrote the prompt from his words. A cold agent worked for about eleven minutes, Steve didn't step in, and the orchestrator ran the release.
+
 After six sessions the surface was in daily use, and the first request to come out of that use was small: Steve wanted to click the URLs in his notes. Small isn't the same as easy. A renderer that links URLs can get them subtly wrong in a dozen ways: a sentence's period pulled into the link, a parenthesis that belongs to the prose, a URL inside code, a URL that carries markup into the page. Steve called it a can of worms. This session shows what the earlier habits buy when a request like that arrives.
 
 ### The real URLs first
@@ -66,7 +68,7 @@ It found exactly the 26, so its zero is a real zero. The report also named what 
 
 ### A boring release
 
-The full check said `SAFE TO SHIP` in 25.7 s. Then we ran the release script from Session 5 on Steve's own server, unchanged. It took 26.3 s, and its last lines read like the last release's:
+The full check said `SAFE TO SHIP`. Then the orchestrator ran the release script from Session 5 on Steve's own server, unchanged, and its last lines read like the last release's:
 
 ```text
 full check: SAFE TO SHIP, 24566 ms
