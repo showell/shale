@@ -32,7 +32,7 @@ Each stage goes through one function:
 
 {{function repos:essay-surface/scripts/fast.shale stage}}
 
-`opts.stage` names the stage, and each call passes a `cpu_budget_ms`. A run that spends more CPU than its budget stops, naming the stage. The budgets are CPU time, never wall time, because wall time on this two-CPU box doubles when something else is building, and the CPU a program spends barely moves. So a busy box can't turn the verdict red, and a stage gone slow can. A real run:
+Each stage runs under its own name, and each call passes a `cpu_budget_ms`. A run that spends more CPU than its budget stops, naming the stage. The budgets are CPU time, never wall time, because wall time on this two-CPU box doubles when something else is building, and the CPU a program spends barely moves. So a busy box can't turn the verdict red, and a stage gone slow can. A real run:
 
 {{fence repos:essay-surface/journal/wednesday.md "5 programs, 2.4 s in all"}}
 

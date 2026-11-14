@@ -21,7 +21,7 @@ When a run stops, its report says what happened to each job, in one line apiece.
 ── left running (keep_on_stop): `sleep 30` (log scratch:keep-test.7WQsc0/kept.log)
 ```
 
-That's the same shape as every stop in this book: one line, what happened, and where to look. A reader scanning a stopped run sees at once which servers are gone and which are still serving.
+That's the same shape as every stop in this book: one line, what happened, and where to look.
 
 ### How it arrived
 
@@ -37,7 +37,11 @@ The feature changed what a stop does, and one script had to say something new. A
 
 The new server starts with `keep` false, and the old one put back by a failed release starts with it true. Before Saturday, the script's defense against the trap was a large step budget and a comment explaining it. Now the code says which server stays, and the language does the rest.
 
-It also changes Friday's trap. If a budget stop comes after the swap, the unchecked new server now ends with the run, and the stop line names it. The run still has no way to put the old server back, so nothing serves until someone runs the rollback. That's a loud failure in place of a quiet one: an unchecked server stays up only while its checks run.
+The feature also exposed a gap in Friday's script. A budget stop after the swap would now end the new server with the run, and the run could never put the old one back. A script can't catch its own stop, so the release hands the risky part to a child it can watch:
+
+{{function repos:essay-surface/scripts/release.shale rel_install_child}}
+
+The swap and its checks run as a separate Shale process. A child that stops just exits nonzero, its new server ends with it, and the parent, still running, puts the old server back. We proved it with a runaway loop planted in the child's checks: the budget stopped the child, the old server came back, and both test comments were on its page.
 
 One limit remains. A `shale` killed from outside, by Ctrl-C or by a timeout around it, never reaches its own stop, so its jobs run on. That's why the release's header asks for a long timeout on the call that runs it.
 
@@ -45,7 +49,7 @@ One limit remains. A `shale` killed from outside, by Ctrl-C or by a timeout arou
 
 This is what we mean by a language that agents make better. The feature came from the week's own work. The work needed it four times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.
 
-`keep_on_stop` is the first word of this project's dialect of Shale. A dialect costs a human a great deal: new words to learn, old habits that no longer fit. It costs an agent very little, since the agent reads the docs every session. So Shale is meant to have dialects. Each reader keeps the one that works for their agent, and builds their own scripts on top of it.
+`keep_on_stop` went into Shale's main line, since every project with a server wants it. In your own fork, a word like it is where your dialect begins. A dialect costs a human a great deal: new words to learn, old habits that no longer fit. It costs an agent very little, since the agent reads the docs every session. So Shale is meant to have dialects. Each reader keeps the one that works for their agent, and builds their own scripts on top of it.
 
 For now, that means forking your own copy of Shale and letting your agent change it. The habit matters more than the mechanism. When a cleanup happens by hand a second time, ask your agent what word the language is missing. Then read the tests on both sides, see the seeded faults turn them red, and run the gates of everything that depends on it.
 

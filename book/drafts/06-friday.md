@@ -18,7 +18,7 @@ Before it stops anything, the script copies the comments into a dated folder and
 
 The swap and the checks run under `attempt`, which catches a failure and hands it back as a value:
 
-{{lines repos:essay-surface/scripts/release.shale from "local done = attempt(rel_install_and_check, t, before)" to "ROLLED BACK: running"}}
+{{show repos:essay-surface 92fb48b:scripts/release.shale from "local done = attempt(rel_install_and_check, t, before)" to "ROLLED BACK: running"}}
 
 On a failure, the old binary goes back, starts, and gets the same checks the new one failed. A failed release ends where it started, and says so on its last line.
 
@@ -38,7 +38,7 @@ Monday's journal warned that a run that stops after `job_start` leaves its serve
 
 `attempt` catches a failure, and a budget stop is past its reach. The run stopped after the old server was down and the new one was up, so the rollback never ran. The trial was left serving a build nobody had checked. On the live server, that would have been a release with no check and no way back but by hand, which is how the agent put the trial back.
 
-The cause was a regex over a 67 KB page, at a step a character; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses, with the reason written above it. The trap itself stayed in the language until Saturday.
+The cause was a regex over a 67 KB page, at a step a character; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses. The trap itself stayed in the language until Saturday.
 
 ### A release that fails on purpose
 
