@@ -67,3 +67,16 @@ Session 1 now names `bench.shale`, and states that the audit stops the server be
 - **Which project does the book follow?** Unsettled. The book should follow a project's growth, but every project with enough cruft predates Shale. angry-gopher is finished, not growing. Steve: "we could talk about projects without focusing on a specific project." Its October reshaping was partly artificial, fixing things that weren't broken, and low-risk sweeps were safe precisely because the gates had earned that confidence.
 - **The thesis as it stands:** agents build fast with or without Shale, and easily scale to projects like a chat server with decent quality. Shale is for reshaping, gating and coordinating repos. "Still not entirely satisfying."
 - The essays behind this, on the dogfood surface (`~/essay-dogfood/notes/`): part-one-framing.note, shale-book-artifacts.md, shale-cookbook-catalog.md, death-of-refactoring.note, a-language-in-a-week.note, shales-sweet-spot.note, angry-gopher-history.note, one-loop-diagrams.note.
+
+### Steve on the ten theses (2026-11-14 night)
+
+- **No. 1, "agents build; Shale reshapes":** the most direct; it raises how to show it in a linear book.
+- **No. 2, legacy cleanup:** the big counter is that agents let us replace legacy apps from first principles; that's why two first drafts were thrown out. "We don't want to put lipstick on the pig."
+- **No. 3, strictness:** a fundamental philosophy for any book, maybe too small to be central. "The machine is still a harsh mistress at times," but rules can outlive their usefulness.
+- **No. 4, the transcript as design document:** not really a curveball. Recursive improvement: things compound; the danger is polishing tools and forgetting to build the house. Agents are central to a book about "a language for agents written by agents".
+- **No. 5, refactoring:** the refactoring tools serve new apps as well as legacy ones; the day's timing lost that thread. "Linter" was never said: Shale is a really good linter.
+- **No. 6, a language that grows:** Shale can grow in a way Python can't any more; what it loses in breadth it gains in flexibility and speed. None of the old languages are optimized for the work Steve does today, which is also why Roc.
+- **No. 7, decommissioning:** too dreary for a book; you just do it, with Shale.
+- **No. 8, the human decides:** too simple. The agent should decide a LOT; Shale isn't about micro-managing agents or guarding the home directory.
+- **No. 9, BusyBox:** refer to it; it shares a minimalist ethos. Shale is a small language in a small niche.
+- **No. 10, the box as a codebase:** everything is kinda fractal.
