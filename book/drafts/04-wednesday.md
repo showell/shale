@@ -66,6 +66,27 @@ Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`
 
 Monday's audit, which reads every rendered note for markdown left over, passed that fault, since it never checks which tags appear; the renderer's tests caught it. Each check has its own job.
 
+```dot
+digraph checks {
+  rankdir=LR;
+  node [shape=box, style="rounded", fontname="Helvetica", margin="0.15,0.08"];
+  edge [fontname="Helvetica"];
+  edit [label="each edit", shape=plaintext];
+  ship [label="before shipping", shape=plaintext];
+  shipping [label="shipping", shape=plaintext];
+  fast [label="fast.shale\nformat, vet, tests, smoke\nabout 3 s of CPU"];
+  full [label="full.shale\nfast, race, the real notes\nabout 25 s"];
+  rel [label="release.shale\nfull, then a checked swap\nabout 27 s"];
+  edit -> fast;
+  ship -> full;
+  shipping -> rel;
+  fast -> full [label="runs inside", style=dashed];
+  full -> rel [label="runs inside", style=dashed];
+}
+```
+
+*A check for each moment. Each runs the one before it, so a release has passed them all.*
+
 ### Now a gate
 
 `fast.shale` runs on every edit, in about three seconds, and stops at the first failing stage, naming the failed tests. `full.shale` runs before anything ships, holds every stage to a CPU budget, and ends on one line: `SAFE TO SHIP`, or `NOT SAFE` and the stages that failed.

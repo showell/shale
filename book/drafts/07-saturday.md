@@ -45,6 +45,23 @@ A child that stops just exits nonzero, its new server ends with it, and the pare
 
 One limit remains. A `shale` killed from outside, by Ctrl-C or by a timeout around it, never reaches its own stop, so its jobs run on. That's why the release script's opening comment asks for a long timeout on the call that runs it.
 
+```dot
+digraph release {
+  rankdir=LR;
+  node [shape=box, style="rounded", fontname="Helvetica", margin="0.15,0.08"];
+  edge [fontname="Helvetica"];
+  parent [label="the release (parent)\nfull check, build,\nkeep the comments"];
+  child [label="the install (child)\nswap the servers,\ncheck every comment"];
+  done [label="RELEASED\nthe new server stays up"];
+  back [label="ROLLED BACK\nthe old server, checked"];
+  parent -> child [label="runs"];
+  child -> done [label="exits 0"];
+  child -> back [label="stops: the parent\nputs the old one back", style=dashed];
+}
+```
+
+*The release as a parent and a child. Whatever stops the child, the parent is still running to put the old server back.*
+
 ### Dialects
 
 This is what we mean by a language that agents make better. The feature came from the week's own work. The work needed it four times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.

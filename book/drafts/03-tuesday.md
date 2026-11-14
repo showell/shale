@@ -34,6 +34,29 @@ With the word measure at a threshold of 600, every edit in place kept its commen
 
 The trigram measure misplaced 635. The agent chose words because a wrong placement misleads, and an orphan is honest. The design was argued from Steve's own 22,900 paragraphs, and the comparison is committed as it ran, so anyone can run it again.
 
+```dot
+digraph anchor {
+  rankdir=TB;
+  node [shape=box, style="rounded", fontname="Helvetica", margin="0.15,0.08"];
+  edge [fontname="Helvetica"];
+  start [label="a comment, and its note as it is now"];
+  same [label="a block with the same text?", shape=diamond];
+  between [label="a block still between\nthe same two neighbors?", shape=diamond];
+  similar [label="a block similar enough?", shape=diamond];
+  attach [label="attach it there"];
+  orphan [label="show it at the foot,\norphaned"];
+  start -> same;
+  same -> attach [label="yes"];
+  same -> between [label="no"];
+  between -> attach [label="yes"];
+  between -> similar [label="no"];
+  similar -> attach [label="yes"];
+  similar -> orphan [label="no"];
+}
+```
+
+*How a reply finds its paragraph. Each rule is tried in turn, and a comment is never lost.*
+
 ### Seeding faults
 
 Sixteen hand-written anchoring tests passed on their first run. To see whether they could fail, the agent broke the code twice, on purpose, and put it back each time:

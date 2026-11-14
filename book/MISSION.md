@@ -61,6 +61,8 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **X. Diagrams are drawn from source.** A ```dot fence in a chapter is drawn by Graphviz at build time, so a diagram changes with the words around it. The first is the loop, in "One loop". The story comes first: Shale's architecture (its interpreter, written in Zig, the host, the preludes) and most of its technical detail wait for after the Monday-to-Saturday narrative (Steve, 2026-11-14).
 
+**Y. Sessions, not days (direction, Steve, 2026-11-14).** The Monday-to-Saturday framing may give way to numbered sessions. That's more honest, and it doesn't cap the story at a week. Planned: when the links feature lands as its own chapter, rename the days to sessions in one pass. Until then, chapters stay named by day.
+
 **W. Chapters are named, never numbered,** in prose. The week's chapters are days. The build stops on "chapter 4".
 
 **T. The essay surface is where we talk.** Decisions go in an essay, and Steve replies on the new surface itself.

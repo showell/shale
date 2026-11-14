@@ -11,6 +11,7 @@ This is draft 2, rough in places: prose and code, with pictures still to come.
 
 
 
+
 ## Introduction
 
 Shale is a programming language written by agents, for agents. It looks like Lua on purpose, and it mostly works like any mainstream language: variables, functions, loops, lists and maps, strings and files. Its unique features are built for its niche, which is scripts an agent writes and a human reads.
@@ -259,6 +260,29 @@ With the word measure at a threshold of 600, every edit in place kept its commen
 
 The trigram measure misplaced 635. The agent chose words because a wrong placement misleads, and an orphan is honest. The design was argued from Steve's own 22,900 paragraphs, and the comparison is committed as it ran, so anyone can run it again.
 
+```dot
+digraph anchor {
+  rankdir=TB;
+  node [shape=box, style="rounded", fontname="Helvetica", margin="0.15,0.08"];
+  edge [fontname="Helvetica"];
+  start [label="a comment, and its note as it is now"];
+  same [label="a block with the same text?", shape=diamond];
+  between [label="a block still between\nthe same two neighbors?", shape=diamond];
+  similar [label="a block similar enough?", shape=diamond];
+  attach [label="attach it there"];
+  orphan [label="show it at the foot,\norphaned"];
+  start -> same;
+  same -> attach [label="yes"];
+  same -> between [label="no"];
+  between -> attach [label="yes"];
+  between -> similar [label="no"];
+  similar -> attach [label="yes"];
+  similar -> orphan [label="no"];
+}
+```
+
+*How a reply finds its paragraph. Each rule is tried in turn, and a comment is never lost.*
+
 ### Seeding faults
 
 Sixteen hand-written anchoring tests passed on their first run. To see whether they could fail, the agent broke the code twice, on purpose, and put it back each time:
@@ -364,6 +388,27 @@ Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`
 {{fence repos:essay-surface/journal/wednesday.md "1 failed: TestRender (86718 steps)" from "markdown_test.go:100" to "stopped at"}}
 
 Monday's audit, which reads every rendered note for markdown left over, passed that fault, since it never checks which tags appear; the renderer's tests caught it. Each check has its own job.
+
+```dot
+digraph checks {
+  rankdir=LR;
+  node [shape=box, style="rounded", fontname="Helvetica", margin="0.15,0.08"];
+  edge [fontname="Helvetica"];
+  edit [label="each edit", shape=plaintext];
+  ship [label="before shipping", shape=plaintext];
+  shipping [label="shipping", shape=plaintext];
+  fast [label="fast.shale\nformat, vet, tests, smoke\nabout 3 s of CPU"];
+  full [label="full.shale\nfast, race, the real notes\nabout 25 s"];
+  rel [label="release.shale\nfull, then a checked swap\nabout 27 s"];
+  edit -> fast;
+  ship -> full;
+  shipping -> rel;
+  fast -> full [label="runs inside", style=dashed];
+  full -> rel [label="runs inside", style=dashed];
+}
+```
+
+*A check for each moment. Each runs the one before it, so a release has passed them all.*
 
 ### Now a gate
 
@@ -568,6 +613,23 @@ The feature also exposed a gap in Friday's script. A budget stop after the swap 
 A child that stops just exits nonzero, its new server ends with it, and the parent, still running, puts the old server back. We proved it with a runaway loop planted in the child's checks: the budget stopped the child, the old server came back, and both test comments were on its page.
 
 One limit remains. A `shale` killed from outside, by Ctrl-C or by a timeout around it, never reaches its own stop, so its jobs run on. That's why the release script's opening comment asks for a long timeout on the call that runs it.
+
+```dot
+digraph release {
+  rankdir=LR;
+  node [shape=box, style="rounded", fontname="Helvetica", margin="0.15,0.08"];
+  edge [fontname="Helvetica"];
+  parent [label="the release (parent)\nfull check, build,\nkeep the comments"];
+  child [label="the install (child)\nswap the servers,\ncheck every comment"];
+  done [label="RELEASED\nthe new server stays up"];
+  back [label="ROLLED BACK\nthe old server, checked"];
+  parent -> child [label="runs"];
+  child -> done [label="exits 0"];
+  child -> back [label="stops: the parent\nputs the old one back", style=dashed];
+}
+```
+
+*The release as a parent and a child. Whatever stops the child, the parent is still running to put the old server back.*
 
 ### Dialects
 
