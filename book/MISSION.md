@@ -117,3 +117,7 @@ These are observations, not a script. The answers come from the sessions. Sessio
 **PH. Types can also be extracted.** Roc scripts already exist that extract the types from a working program (`roc-types`). That's retroactive, the reverse of types-first, and worth noting once Part Two is deeper in (Steve, 2026-11-14).
 
 **PI. Prompt fidelity.** Part Two's prompts are drafted by the orchestrator close to how Steve prompts, and Steve doesn't need to approve each one. Perfect fidelity isn't the goal, since the reader's prompts won't match Steve's either (Steve, 2026-11-14). `book/personas/steve.md` is a neutral description of how he really prompts, drawn from his messages. Drafted prompts may be longer and more self-contained than his, for the book's clarity and pace (Steve agrees, 2026-11-14), but a session is a loop of short follow-ups, not one complete prompt, so Part Two shows a few of the real follow-ups too.
+
+## Holds
+
+**The introduction is frozen** (Steve, 2026-11-14). As the book's scope grows, the introduction is gathering inaccuracies. It's structurally fine, and reworking it now would only churn, so no edit touches it, including review rounds' fixes, until Steve lifts the hold. Findings about it go to `book/reading-notes.md` under the introduction, to fix in one pass later.
