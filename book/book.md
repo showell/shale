@@ -122,17 +122,25 @@ digraph turn {
   rankdir=TB;
   node [shape=box, style="rounded", fontname="Helvetica", margin="0.15,0.08"];
   edge [fontname="Helvetica"];
-  report [label="The agent's report\n\"The comments folder's parent\nmust exist when the server starts.\""];
-  reply [label="Steve's reply, on that line\n\"add a defensive check\""];
-  handoff [label="The orchestrator passes it\nto the agent at work on Session 4"];
-  change [label="The change\nstore.go, a test, one planted fault"];
-  real [label="One real run of the server,\nin Shale"];
-  gate [label="check_before_commit\ngreen"];
-  report -> reply -> handoff -> change -> real -> gate;
+  agent3 [label="The Session 3 agent"];
+  report [label="Its report\n\"The comments folder's parent\nmust exist when the server starts.\""];
+  steve [label="Steve"];
+  orchestrator [label="The orchestrator"];
+  agent4 [label="The Session 4 agent"];
+  code [label="store.go and its test"];
+  server [label="The real server"];
+  gate [label="check_before_commit"];
+  agent3 -> report [label="writes"];
+  steve -> report [label="replies on a line:\n\"add a defensive check\""];
+  orchestrator -> report [label="picks up the reply"];
+  orchestrator -> agent4 [label="passes it to"];
+  agent4 -> code [label="adds the check,\na test, one planted fault"];
+  agent4 -> server [label="runs once, in Shale"];
+  agent4 -> gate [label="runs: green"];
 }
 ```
 
-*One turn of the loop, from Session 4.*
+*One turn of the loop, from Session 4. Each arrow reads as a sentence: the Session 3 agent writes its report.*
 
 ### The report and the reply
 
