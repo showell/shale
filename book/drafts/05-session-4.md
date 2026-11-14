@@ -2,11 +2,13 @@
 
 ## Session 4: making the checks fail
 
+Session 4 asks whether those checks can fail:
+
 {{quote repos:essay-surface/journal/prompts/thursday.md}}
 
 A cold agent worked for about seventeen minutes. Steve stepped in once, with two replies that the orchestrator passed on mid-run.
 
-Session 3 ended on `SAFE TO SHIP`. Could that line ever say anything else?
+Session 3 ended on `SAFE TO SHIP`. Could that line ever say anything else? This is reading a gate at trust speed, a third speed after scroll and review: what proves the gate is watching?
 
 ### One fault per stage
 
@@ -18,13 +20,11 @@ This session seeded one fault in each stage, a plant in our word, ran the stage,
 
 Each plant costs a rebuild and one run of its stage, from a few seconds to twenty, once. None was committed.
 
-Every stage went red for its fault. The race detector caught a map read without its lock. The audit named the four real notes that a fault in aligned tables broke. The dates stage named one real note that a plausible "show the latest edit" change re-dated. The bench caught a cache kept but unused.
-
-Three of those faults got past everything else. `fast` passed with the race in, and with the unused cache. Only the smoke test runs the real server binary, so its fault was invisible to the Go tests. The anchoring, audit and dates faults also tripped `fast`'s unit tests; those three stages earn their place on Steve's real notes.
+Every stage went red for its fault, and the faults that got past every other stage show why each stage exists. `fast` passed with a map read without its lock, which only the race detector caught. Only the smoke test runs the real server binary, so its fault was invisible to the Go tests.
 
 ### A stop with the fault still in
 
-Plant 6's first launch gave `run` a CPU budget but no stage name for its stop to report. Shale stopped the script between the fault going in and coming out, leaving it in `store.go`. The agent removed it first:
+Plant 6's first launch gave `run` a stage name but no CPU budget for it to name, and Shale stops on that. It stopped the script between the fault going in and coming out, leaving the fault in `store.go`. The agent removed it first:
 
 {{fence repos:essay-surface/journal/thursday.md "the last launch stopped after planting"}}
 
@@ -56,7 +56,7 @@ The rest of the plants proved their stages once and left. A known-bad Go file wo
 
 ### Reply buttons, without a browser
 
-In Session 2 every check passed, and Steve opened a page with no visible way to reply: the buttons sat at `opacity:0` until hovered. `buttons_test.go` works out the CSS cascade itself, on the stylesheet the page is served with. It judges each place `comments.js` puts a button, at every width a media query names, light and dark. A button counts as hidden under `display:none`, `visibility:hidden`, or opacities that multiply out to under 0.5. It never runs the script, and it misses clipping and contrast.
+In Session 2 every check passed, and Steve opened a page with no visible way to reply: the buttons sat at `opacity:0` until hovered. `buttons_test.go` works out the CSS cascade itself, on the stylesheet the page is served with. It checks each place `comments.js` puts a button, at every width a media query names, light and dark. A button counts as hidden under `display:none`, `visibility:hidden`, or opacities that multiply out to under 0.5. It never runs the script, and it misses clipping and contrast.
 
 Its fixtures are seven small sheets, five known-bad and two known-good, at 0.02 s inside `go test`. One is the real sheet from Session 2, taken from git:
 
@@ -68,12 +68,8 @@ Putting its `opacity:0` back turned the test red at widths of 51 and 80rem. The 
 
 ### Steve's two replies
 
-The two replies answered the report from Session 3. The first asked for a defensive check that the comments folder's parent exists. The server already failed there, but by accident. Now it checks first, names the path, and makes nothing:
+The two replies answered the report from Session 3. The first was the defensive check from One loop. The server already failed when the comments folder's parent was missing, but by accident; now it checks first, names the path, and makes nothing. The second put phones out of scope. The README says so, and the narrow-window CSS stays: out of scope means unchecked, not removed.
 
-{{fence repos:essay-surface/journal/thursday.md "made: false"}}
-
-The second put phones out of scope. The README says so, and the narrow-window CSS stays: out of scope means unchecked, not removed.
-
-### Now a gate
+### The gates now
 
 Every stage of `full.shale` has been seen red once, and its kept fixtures run on every check in milliseconds. A page that hides its reply buttons fails `fast.shale` now, and so does a commenter's name that reaches the page unescaped.

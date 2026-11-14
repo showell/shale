@@ -2,6 +2,8 @@
 
 ## Session 3: a check for each moment
 
+Session 3 turns a list of scripts into checks:
+
 {{quote repos:essay-surface/journal/prompts/wednesday.md}}
 
 A cold agent worked for about half an hour on this one, and Steve didn't step in.
@@ -10,31 +12,23 @@ By now the essay surface had four scripts, and the last session's report listed 
 
 ### An index that listens
 
-The first session's bench had named the cost: the index checked every note's file on every request. The new server hears changes from the kernel, through Linux's inotify, and reads the kernel's queue of events at the start of each request. The kernel queues an event before the write returns, so the next request always sees it. The index page is kept until a note changes, and the agent measured it at about the cost of a note.
+The new server hears changes from the kernel, through Linux's inotify, instead of checking every note's file on every request, so the index now costs about as much as a note.
 
 A note's date now comes from its first lines, or else its last commit. A fresh clone, which resets every file's time, gives the same index, and that comparison became a stage of the full check.
 
-The mistakes on the way stopped loudly. The prelude's `edit_between`, which replaces the text between two anchors, moved the store out of `server.go` and reported `-175 +3 lines`. That count showed it had cut the imports too, before anyone looked.
+The mistakes on the way stopped loudly: when the prelude's `edit_between` moved the store out of `server.go`, its report of `-175 +3 lines` showed it had cut the imports too.
 
 ### A check for each edit
 
-`fast.shale` is the check Steve runs without thinking. Its body is five stages: the formatter, `go vet`, the front end's syntax, every Go test, and a smoke test through the real server:
+`fast.shale` is the check the agent runs on every edit, the one from Meet Shale: five stages, each a line that calls the `stage` helper. Its last two stages count what ran: "44 tests passed, 63 subtests" can be checked, and "ok" can't.
 
-{{lines repos:essay-surface/scripts/fast.shale from "local fmt = stage" to "checks through the real server"}}
-
-The last two stages count what ran: "44 tests passed, 63 subtests" can be checked, and "ok" can't.
-
-Each stage goes through one function, whose stop names the stage and its failed tests:
-
-{{function repos:essay-surface/scripts/fast.shale stage}}
-
-A run that spends more CPU than its `cpu_budget_ms` stops, naming the stage. The budgets are CPU time, never wall time: wall time on this two-CPU machine doubles when something else is building, and the CPU a program spends barely moves. So a busy machine can't turn the verdict red, and a stage gone slow can. A real run takes 2.4 s:
+What's new here is the budgets. A stage whose run spends more CPU than its `cpu_budget_ms` stops, naming the stage. The budgets are CPU time, never wall time: on this two-CPU machine, wall times ran 1.7 times as long at a load of 2 from other work, and the CPU a program spends moves much less. So a busy machine can't turn the verdict red, and a stage gone slow can. A real run takes 2.4 s:
 
 {{fence repos:essay-surface/journal/wednesday.md "5 programs, 2.4 s in all"}}
 
 ### A check before shipping
 
-`full.shale` runs `fast.shale` first, then five stages on all of Steve's real notes: the Go tests under the race detector, the anchoring simulation from Session 2 (which replays edits to see where comments land), the audit of every rendered note from Session 1, the dates comparison, and the bench. Every stage runs, even after one fails, so the last line names every stage that failed:
+`full.shale` runs `fast.shale` first, then five stages on all of Steve's real notes: the Go tests under the race detector, the anchoring simulation from Session 2 (which replays edits to see where comments land), the audit of every rendered note from Session 1, the dates comparison, and the bench. Every stage runs, even after one fails, unless a stage breaks its CPU budget, so the last line names every stage that failed:
 
 {{lines repos:essay-surface/scripts/full.shale from "local failed = {}" to "SAFE TO SHIP"}}
 
@@ -81,6 +75,8 @@ digraph checks {
 
 *A check for each moment. Each runs the one before it, so a release has passed them all.*
 
-### Now a gate
+### The gates now
 
 `fast.shale` runs on every edit, in about three seconds, and stops at the first failing stage, naming the failed tests. `full.shale` runs before anything ships, holds every stage to a CPU budget, and ends on one line: `SAFE TO SHIP`, or `NOT SAFE` and the stages that failed.
+
+The session's report closed with the decisions Steve might reverse, among them the comments folder's parent from One loop.

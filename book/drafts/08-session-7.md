@@ -1,12 +1,14 @@
 # Draft
 
-## Session 7: a feature arrives
+## Session 7: links, the boring way
+
+Session 7 asks for the first feature to come out of daily use:
 
 {{quote repos:essay-surface/journal/prompts/links.md}}
 
 Steve asked for this in conversation, and the orchestrator wrote the prompt from his words. A cold agent worked for about eleven minutes, Steve didn't step in, and the orchestrator ran the release.
 
-After six sessions the surface was in daily use, and the first request to come out of that use was small: Steve wanted to click the URLs in his notes. Small isn't the same as easy. A renderer that links URLs can get them subtly wrong in a dozen ways: a sentence's period pulled into the link, a parenthesis that belongs to the prose, a URL inside code, a URL that carries markup into the page. Steve called it a can of worms. This session shows what the earlier habits buy when a request like that arrives.
+The request was small: Steve wanted to click the URLs in his notes. Small can still be hard. A renderer that links URLs can get them subtly wrong in a dozen ways: a sentence's period pulled into the link, a parenthesis that belongs to the prose, a URL inside code, a URL that carries markup into the page. Steve called it a can of worms.
 
 ### The real URLs first
 
@@ -17,8 +19,6 @@ Before designing anything, the agent counted: 514 real notes held 125 `http://` 
 A parenthesis then a period, bold, a table cell, a placeholder host: each became a test case. Then, before any edit, the agent kept a "before". Copy your outputs aside before any change, so you can compare the after byte for byte, and every difference is one you can see. The audit from Session 1 already fetches every real note's page, so it ran once on the unchanged server, and its pages were copied aside:
 
 {{fence repos:essay-surface/journal/links.md "before any change: every real note"}}
-
-`yield()` lets the run hold one page at a time, as in Session 1.
 
 ### The cases, as fixtures
 
@@ -38,7 +38,7 @@ The hostile notes need a test that doesn't depend on exact HTML: only the render
 
 {{fence repos:essay-surface/journal/links.md "seed once: a bare URL's href"}}
 
-`git_diff` before and after shows the tree came back as it was. The escaping test went red by three of its rules:
+`git_diff` shows the tree came back as it was. The escaping test went red by three of its rules:
 
 {{fence repos:essay-surface/journal/links.md "planted: exit 1" from "--- FAIL: TestBareURLsEscaped" to "markdown_test.go:259"}}
 
@@ -50,7 +50,7 @@ The after pages came from the same audit. The comparison took two stops. The fir
 
 {{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
 
-`re_find_all` is written in Shale, in the prelude, so every character it reads costs a step, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back, and it makes the case for moving Shale's regex helpers into the interpreter, where a match would cost a step like any builtin.
+A regex search pays for its whole pattern at every byte it examines, and the comparison searched 7 MB of pages twice. That made six regex stops in four sessions: two in Session 1, two in Session 3's work on dates, one in Session 5 and this one. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back.
 
 The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
 
@@ -64,20 +64,20 @@ No URL was left as text outside code. A finder that reports nothing proves littl
 
 {{fence repos:essay-surface/journal/links.md "before pages: 26 http" from "before pages" to "before pages"}}
 
-It found exactly the 26, so its zero is a real zero. The report also named what the prompt left alone: 15 URLs written as code, a few of which Steve may want to click. That's his call, and it's on the page for him to make.
+It found exactly the 26, so its zero is a real zero. The report also named 15 URLs written as code, left alone as the prompt said, a few of which Steve may want to click. That call is his.
 
 ### A boring release
 
 The full check said `SAFE TO SHIP`. Then the orchestrator ran the release script from Session 5 on Steve's own server, unchanged, and its last lines read like the last release's:
 
-```text
-full check: SAFE TO SHIP, 24566 ms
-comments kept: 4 files, 11 comments, in essay-dogfood/releases/2026-11-14T110736Z/comments, each compared
-ok: the index, 514 notes, the same as before
-ok: all 11 comments from before on their pages and in their files
-RELEASED: running bbd9eae on 127.0.0.1:9301; to roll back to 8218ffc: cd /home/steve && shale repos:essay-surface/scripts/release.shale data=essay-dogfood port=9301 rollback=1
-```
+{{fence repos:essay-surface/journal/links.md "comments kept: 4 files, 11 comments"}}
 
-Eleven comments kept and found where they were, and a rollback that now names a real commit, since the server it replaced came from an earlier release. Green again ✅
+All eleven comments were kept and back on their pages, and the rollback now names a real commit, since the server it replaced came from an earlier release. Green again ✅
 
-This session's new pieces were the cases, the URL finder and the comparison. The habits behind them, fixtures, a seeded fault, the audit of real notes and the release, were each built for an earlier problem, and the audit and the release took this feature unchanged. That's what the habits are for: when a request arrives, most of the work is the feature itself.
+### A second change to the language
+
+The same day, after this session, the regex nuisance became Shale's second language change. `re_find_all` became a builtin, `re_lines` moved into the host, and a search now passes over the bytes no match can begin with. Over 5.3 MB of markdown, a search for links fell from 80 million steps to 3.9 million, and tests hold both to the results of the Shale they replaced. The work had asked for it six times.
+
+### The gates now
+
+The 62 cases run on every edit, inside `fast.shale`, and the escaping test has been seen red once. The rest, the audit of real notes and the release, took this feature unchanged. That's what the habits are for: when a request arrives, most of the work is the feature itself.

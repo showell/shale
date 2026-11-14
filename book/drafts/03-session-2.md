@@ -2,13 +2,13 @@
 
 ## Session 2: replies that stay put
 
-The second prompt asks for the feature the surface exists for:
+Session 2 asks for the feature the surface exists for:
 
 {{quote repos:essay-surface/journal/prompts/tuesday.md}}
 
-A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after it finished, when he looked at the result in his browser at the end of this session, and the orchestrator made that fix.
+A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after looking at the result in his browser, and the orchestrator made that fix.
 
-As in the first prompt, the "I" who reads the comments is really the agent: it writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
+The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
 
 ### A reply finds its paragraph
 
@@ -39,11 +39,11 @@ digraph anchor {
 
 *How a reply finds its paragraph. Each rule is tried in turn, and a comment is never lost.*
 
-The first simulation of the real resolver ran past its timeout and was killed. A killed program has no exit code, only an `ended` that says why, so the script stopped on the line that read `code`:
+The first simulation of the real resolver panicked, on a block the agent's own test code removed twice. The second ran past its timeout and was killed. A killed program has no exit code, only an `ended` that says why, so the script stopped on the line that read `code`:
 
 {{fence repos:essay-surface/journal/tuesday.md "110.0 s in all"}}
 
-The agent kept the timeout and found the waste: every simulated case recomputed the whole note. With each block's features cached once per note, the simulation ran over all of Steve's paragraphs. Every edit in place kept its comments, and 345 of 22,928 deleted paragraphs lent theirs to a look-alike. The agent compared two measures of similarity and chose the one that misplaced fewer. When a guess can be wrong, prefer an honest failure to a confident wrong answer: an orphan at the foot of the page tells Steve to look, and a reply on the wrong paragraph misleads him. The comparison is committed as it ran, so anyone can run it again.
+The agent kept the timeout and found the waste: every simulated case recomputed the whole note. Its first cache went onto each case's copy of the note and was thrown away with it, so the third run timed out too. With each block's features cached once per note, the simulation ran over all of Steve's paragraphs. It deletes each real paragraph in turn, and 345 of those 22,928 deletions lent their comments to a look-alike; every edit in place kept its comments. The agent compared two measures of similarity and chose the one that misplaced fewer. When a guess can be wrong, prefer an honest failure to a confident wrong answer: an orphan at the foot of the page tells Steve to look, and a reply on the wrong paragraph misleads him.
 
 ### Seeding faults
 
@@ -81,6 +81,6 @@ The report's last item was an eye test, a look at a page in a browser, that the 
 
 The fix set the buttons at opacity 0.6. Their first label was "note", which already meant the essays, so a second commit made it "reply". Steve has written his real replies on the new surface ever since. In Session 4, hidden reply buttons become a check that runs without a browser.
 
-### What's a check now
+### The gates now
 
 `check.shale` parses the front end and runs the anchoring simulation on the sample notes, its numbers held at what was measured. The browser caught what every check missed. Turn each miss into a check, so the same miss can't get past you twice.

@@ -2,11 +2,13 @@
 
 ## Session 6: the language gets better
 
+Session 6 opens with a reply:
+
 *Steve's reply, in conversation*
 
 > go ahead with the jobs feature
 
-This session began from a reply in conversation, not from a written prompt. At the end of the first afternoon, Steve had asked the orchestrator to watch for a nuisance Shale could fix. It spotted one, and a cold agent built the fix in about sixteen minutes. The reply, the next morning, started the merge. Steve stepped in once more, to choose the child run below from three options, and a cold agent already polishing the scripts took it on.
+This session began from a reply in conversation, not from a written prompt. The orchestrator, asked to watch for a nuisance, had spotted one, and right after Session 5 a cold agent built the fix into Shale in about sixteen minutes. The reply, the next morning, started the merge. Steve stepped in once more, to choose the child run below from three options. The orchestrator handed that to a cold agent that was already making the project's scripts read better before the book quoted them.
 
 Three times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, and in the first release trial, on a budget stop. Each time, someone noticed and stopped it by hand. Session 4 had a cousin of the trap: a stop between a fault going in and coming out left the fault in the tree, and `--undo-on-stop` already covered files.
 
@@ -22,11 +24,9 @@ When a run stops, its report says what happened to each job it started, in one l
 
 {{fence repos:essay-surface/journal/saturday.md "plant: a budget stop in the child's checks" from "── stopped at" to "── left running"}}
 
-That's the same shape as every stop in this book: one line, what happened, and where to look.
-
 ### How it arrived
 
-The design is small: each run keeps a list of the jobs it starts, and a stop ends the ones still running. The tests cover every side of the rule: a run that ends, a failed run, a budget stop, a caught failure, a `keep_on_stop` job, a job already stopped, and a job another run started. Two faults seeded into the feature turned those tests red, so the tests are watching.
+The design is small: each run keeps a list of the jobs it starts, and a stop ends the ones still running. The tests cover every side of the rule: a run that ends, a failed run, a budget stop, a caught failure, a `keep_on_stop` job, a job already stopped, and a job another run started.
 
 After Steve's reply, the orchestrator ran Shale's own tests and the consumers gate, Shale's gate that runs the checks of every repository built on it. When you change what a primitive means, run the gates of everything built on it: a new meaning for a stop reaches every script with a job in it. It passed, and the orchestrator merged it.
 
@@ -65,10 +65,10 @@ digraph release {
 
 ### Dialects
 
-This is what we mean by a language that agents make better. The feature came from the project's own work. The work needed it three times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.
+This is a dialect arriving. The work needed the rule three times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report. A new word like `keep_on_stop` costs an agent little, since it reads the docs every session, while every human on a team would have to learn it. That difference is why Shale is meant to have dialects.
 
-`keep_on_stop` went into Shale's main line, since every project with a server wants it. In your own fork, a word like it is where your dialect begins. That's why Shale is meant to have dialects: a new word costs an agent little, since it reads the docs every session.
+`keep_on_stop` went into Shale's main line, since every project with a server needs it. A word only your project needs belongs in your own fork, and that's where your dialect begins. For now, that means forking your own copy of Shale and letting your agent change it. When a cleanup happens by hand a third time, ask your agent what word the language is missing. Your agent's nuisances are your language's roadmap.
 
-For now, that means forking your own copy of Shale and letting your agent change it. The habit matters more than the mechanism. When a cleanup happens by hand a third time, ask your agent what word the language is missing. Then read its tests on both sides, and see seeded faults turn them red.
+### The gates now
 
-This feature came from a chore done by hand three times. Your agent's nuisances are your language's roadmap.
+Shale's own tests hold the rule on every side, and the consumers gate holds every project built on Shale to it. `release.shale` runs its swap as a child, so even a budget stop mid-check ends with the old server back.

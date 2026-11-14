@@ -27,13 +27,11 @@ digraph loop {
 
 ### The report
 
-At the end of Session 3, the agent's report listed a few calls Steve might want to unmake. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The reply landed in a file, one JSON line per reply, shown here trimmed to its main fields:
+Jump ahead to the end of Session 3. The agent's report there listed a few decisions Steve might reverse. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The server appended his reply to the note's comments file, one JSON line per reply:
 
-```text
-{"name":"Steve","text":"add a defensive check","quote":"**The comments folder's parent must exist** when the server starts."}
-```
+{{fence repos:essay-surface/journal/reply.md "add a defensive check"}}
 
-That's the whole of the steering. Attach each reply to the paragraph it answers: the paragraph carries the context, so four words are a complete instruction. The agent Steve talks to, the orchestrator, passed it on to the next session's agent in a short message.
+That's the whole of the steering. Attach each reply to the paragraph it answers: the paragraph carries the context, so four words are a complete instruction. The `quote` is that paragraph, and `prev` and `next` fingerprint its neighbors, as Session 2 explains. The orchestrator passed this reply and one more to the agent already at work on Session 4, mid-run.
 
 ### The change
 
@@ -53,10 +51,10 @@ Last, the agent ran the real server once with a folder that doesn't exist, to se
 
 Read every script that goes by at scroll speed, with three questions. A few seconds a script is what lets you judge an agent's work as fast as it runs:
 - **What does it read?** One folder of notes, and whether `.run/no-such-folder` exists afterwards.
-- **What does it run?** `./essay-surface`, the server it just built. Because that binary isn't tracked by git, `run` asks for a reason, and the script gives one: `want = "build: the server we just built"`.
+- **What does it run?** `./essay-surface`, the server it just built. Because that binary isn't tracked by git, `run` requires a reason, and the script gives one: `want = "build: the server we just built"`.
 - **How did it end?** Exit 1, with the message, and `made: false`: the server stopped and created nothing.
 
-That took a few seconds. It shows the check working where a person would meet it, and the test and the planted fault cover the rest.
+That run shows the check working for real, and the test and the planted fault cover the rest.
 
 ### Why Shale, and not bash
 
