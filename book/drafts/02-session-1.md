@@ -24,7 +24,7 @@ When it passed, it said so in three lines:
 
 ### A green is a claim
 
-A passing gate says the tests ran. It doesn't say how many did, and a test file that compiled to nothing would pass just as quietly. So the agent counted:
+A passing gate says the tests ran. It doesn't say how many did, or whether the ones you meant to add were among them. So the agent counted:
 
 {{fence repos:essay-surface/journal/session-1.md "how many tests and subtests actually ran?"}}
 
