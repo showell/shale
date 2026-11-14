@@ -42,3 +42,4 @@ Session 1 now names `bench.shale`, and states that the audit stops the server be
 - **The orchestrator in Session 1:** keep it. The reader should know from the start who wrote the prompt.
 - **Why only `go vet` uses `must`:** noise. Say what the script checks, not how each check is coded.
 - **Go code in the book:** a little, a short excerpt now and then, so the reader sees what's being checked.
+- **"Cold agent":** define it once, briefly, where it first appears. "The concept is easy, the term is ours, though, not universally known."
