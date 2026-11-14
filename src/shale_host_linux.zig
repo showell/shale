@@ -547,16 +547,18 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
 /// (`bash5.2` is `bash`, `perl5` is `perl`).
 const refused = [_]struct { []const []const u8, []const u8 }{
     .{ &.{ "bash", "sh", "dash", "zsh", "busybox", "python", "python3", "perl", "node" }, "a shell or an interpreter: Shale is the script" },
-    .{ &.{ "head", "tail", "grep", "awk", "gawk", "cut", "sort", "uniq", "wc", "cat", "tr" }, "a text tool: Shale's builtins and run's own filter and keep do this" },
+    .{ &.{ "head", "tail", "awk", "gawk", "cut", "sort", "uniq", "wc", "cat", "tr" }, "a text tool: Shale's builtins and run's own filter and keep do this" },
     .{ &.{ "env", "xargs", "timeout", "nice", "nohup", "setsid", "stdbuf", "time" }, "a wrapper that runs another program: run that program, with run's own options" },
 };
 
 /// Programs `run` refuses even with a `want` (Steve, 2026-11-14): a session's
-/// 293 calls of `sed` each had a Shale form at least as good, which the refusal
-/// names. `edit` stops the run when its text isn't there, where `sed -i` changes
-/// nothing and says nothing.
+/// 293 calls of `sed` and 399 heredocs running `grep` each had a Shale form at
+/// least as good, which the refusal names. `edit` stops the run when its text
+/// isn't there, where `sed -i` changes nothing and says nothing; `grep_tree`
+/// says what it passed by, where `grep -r` skips it quietly.
 const never = [_]struct { []const []const u8, []const u8 }{
     .{ &.{ "sed", "gsed" }, "`edit(p, old, new)` changes a file and stops the run when `old` isn't there; `re_replace(s, pattern, new)` then `replace(p, s)` for a pattern; `lines(read(p))`, or `shale cookbook:look.shale at=f:N-M`, for a file's lines" },
+    .{ &.{ "grep", "egrep", "fgrep" }, "`grep_tree(place, needle, {regex, nocase, ext, like, context})` searches a tree; `grep(p, lit)`, `re_lines(read(p), pattern)` or `grep_all(p, lit)` one file; `report_run(argv, {grep = {...}})` or `run`'s `re` a program's output" },
 };
 
 /// Refuses a program in `never`, whatever the `want`; then, unless given a
@@ -855,7 +857,7 @@ test "host: what run refuses without a want, by name and by an untracked path; a
     var t: T = undefined;
     try t.init();
     defer t.deinit();
-    for ([_][]const u8{ "bash", "/usr/bin/python3.12", "grep", "xargs", "bash5.2", "perl5", "/usr/bin/python3" }) |name| {
+    for ([_][]const u8{ "bash", "/usr/bin/python3.12", "cat", "xargs", "bash5.2", "perl5", "/usr/bin/python3" }) |name| {
         var src: [256]u8 = undefined;
         try t.expectStop(try std.fmt.bufPrint(&src, "host(\"run\", {{\"{s}\", \"x\"}}, {{timeout_ms = 1000, tail = 1}})", .{name}), .atomic, .refused, "want =");
     }
@@ -865,6 +867,11 @@ test "host: what run refuses without a want, by name and by an untracked path; a
         var src: [256]u8 = undefined;
         try t.expectStop(try std.fmt.bufPrint(&src, "host(\"run\", {{\"{s}\", \"-n\", \"1p\"}}, {{timeout_ms = 1000, tail = 1}})", .{name}), .atomic, .refused, "even with a want: `edit(p, old, new)`");
         try t.expectStop(try std.fmt.bufPrint(&src, "host(\"run\", {{\"{s}\", \"-n\", \"1p\"}}, {{timeout_ms = 1000, tail = 1, want = \"test: a sed\"}})", .{name}), .atomic, .refused, "even with a want");
+    }
+    // And `grep`, naming `grep_tree`.
+    for ([_][]const u8{ "grep", "/bin/grep", "egrep", "fgrep" }) |name| {
+        var src: [256]u8 = undefined;
+        try t.expectStop(try std.fmt.bufPrint(&src, "host(\"run\", {{\"{s}\", \"-rn\", \"x\", \".\"}}, {{timeout_ms = 1000, tail = 1, want = \"test: a grep\"}})", .{name}), .atomic, .refused, "even with a want: `grep_tree(place, needle");
     }
     // A program by path that git does not track: the fixture, by its path.
     var buf: [std.fs.max_path_bytes + 128]u8 = undefined;
