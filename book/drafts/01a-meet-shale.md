@@ -33,7 +33,7 @@ The same goes for recipes, scripts saved to a file because their question came b
 
 ### What it costs
 
-Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its recipes. What it buys is the rest of this chapter: scripts a person can read at scroll speed, inside budgets and folders you can see.
+Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its recipes. What it buys, above all, is a higher-level language than bash, one where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, functions take and return lists and maps, and a helper like fast.shale's `stage` becomes a word the next script uses. Each primitive your agent builds makes the next script shorter and easier to read, and the budgets and folders keep every one of them inside lines you can see.
 
 ### Four words for what's next
 
