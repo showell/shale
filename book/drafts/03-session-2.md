@@ -43,7 +43,7 @@ The first simulation of the real resolver ran past its timeout and was killed. A
 
 {{fence repos:essay-surface/journal/tuesday.md "110.0 s in all"}}
 
-The agent kept the timeout and found the waste: every simulated case recomputed the whole note. With each block's features cached once per note, the simulation ran over all of Steve's paragraphs. Every edit in place kept its comments, and 345 of 22,928 deleted paragraphs lent theirs to a look-alike. The agent compared two measures of similarity and chose the one that misplaced fewer, because a wrong placement misleads, and an orphan is honest. The comparison is committed as it ran, so anyone can run it again.
+The agent kept the timeout and found the waste: every simulated case recomputed the whole note. With each block's features cached once per note, the simulation ran over all of Steve's paragraphs. Every edit in place kept its comments, and 345 of 22,928 deleted paragraphs lent theirs to a look-alike. The agent compared two measures of similarity and chose the one that misplaced fewer. When a guess can be wrong, prefer an honest failure to a confident wrong answer: an orphan at the foot of the page tells Steve to look, and a reply on the wrong paragraph misleads him. The comparison is committed as it ran, so anyone can run it again.
 
 ### Seeding faults
 
@@ -83,4 +83,4 @@ The fix set the buttons at opacity 0.6. Their first label was "note", which alre
 
 ### What's a check now
 
-`check.shale` parses the front end and runs the anchoring simulation on the sample notes, its numbers held at what was measured. The browser caught what every check missed, and that miss is the next check.
+`check.shale` parses the front end and runs the anchoring simulation on the sample notes, its numbers held at what was measured. The browser caught what every check missed. Turn each miss into a check, so the same miss can't get past you twice.

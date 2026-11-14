@@ -70,7 +70,7 @@ It found two real bugs that every hand-written test had missed:
 
 {{fence repos:essay-surface/journal/monday.md "<title>Review: gopher-roc"}}
 
-Titles kept their markdown, and a lone triple backtick in a table cell swallowed the rest of its row. Each fix got a test, the table one copied from the note that found it. The agent's verdict: write the audit before the tests next time.
+Titles kept their markdown, and a lone triple backtick in a table cell swallowed the rest of its row. Each fix got a test, the table one copied from the note that found it. Run your code over real data before you trust your own tests: your tests hold only the cases you thought of, and five hundred real notes hold the rest.
 
 ### What's a check now
 

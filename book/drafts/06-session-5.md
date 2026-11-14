@@ -6,7 +6,7 @@
 
 A cold agent built the release script and proved it on a dev port, away from the live server, in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
 
-By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A chore done by hand is done a little differently each time. A release done by a script is the same every time, and that sameness is what we mean by boring.
+By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A script runs the same steps in the same order each time, and that sameness is what we mean by boring.
 
 ### A release, in order
 
@@ -30,7 +30,7 @@ The first surprise came before the script ran at all. The trial put an "old" ser
 
 {{fence repos:essay-surface/journal/friday.md "the page: 404" from "── stopped at" to "bind: address"}}
 
-The smoke's server logged "listening", then failed to bind, and the smoke went on to ask the trial server for its test page. Every script waited for "listening", and the server said it before the port was its own. This time the check failed; against a different server, it could have passed. Two fixes followed: `server.go` now binds first and says "listening" after, and the checks moved to port 9310, named once in the project's own prelude, the file of helpers its scripts share.
+The smoke's server logged "listening", then failed to bind, and the smoke went on to ask the trial server for its test page. Every script waited for "listening", and the server said it before the port was its own. Announce readiness only after you hold the resource, because whatever waits on the announcement acts on it at once. This time the check failed; against a different server, it could have passed. Two fixes followed: `server.go` now binds first and says "listening" after, and the checks moved to port 9310, named once in the project's own prelude, the file of helpers its scripts share.
 
 ### The trap, sprung
 
@@ -64,4 +64,4 @@ When it worked on dev, the orchestrator ran it on the live server. It shipped, w
 
 Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back. Green again ✅
 
-The release was the most boring thing in the project, and it took the most care to make it so. Boring is what a release looks like when every surprise was found on the dev port first.
+The real release was boring because this session's surprises, the wrong server and the budget stop, were found on the dev port first.

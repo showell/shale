@@ -14,11 +14,11 @@ Before designing anything, the agent counted: 514 real notes held 125 `http://` 
 
 {{fence repos:essay-surface/journal/links.md "metal-lynrummy-com.md:5" from "day-wrap-2026-11-12.md:7" to "roc-web-umbrella.md:44"}}
 
-A parenthesis then a period, bold, a table cell, a placeholder host: each became a test case. Then, before any edit, the agent kept a "before". The audit from Session 1 already fetches every real note's page, so it ran once on the unchanged server, and its pages were copied aside:
+A parenthesis then a period, bold, a table cell, a placeholder host: each became a test case. Then, before any edit, the agent kept a "before". Copy your outputs aside before any change, so you can compare the after byte for byte, and every difference is one you can see. The audit from Session 1 already fetches every real note's page, so it ran once on the unchanged server, and its pages were copied aside:
 
 {{fence repos:essay-surface/journal/links.md "before any change: every real note"}}
 
-`yield()` lets the run hold one page at a time, as Session 1 taught. Every page of the change can now be compared with the page as it was.
+`yield()` lets the run hold one page at a time, as in Session 1.
 
 ### The cases, as fixtures
 
@@ -50,7 +50,7 @@ The after pages came from the same audit. The comparison took two stops. The fir
 
 {{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
 
-That's the lesson of Session 1 again. `re_find_all` is written in Shale, in the prelude, so every character it reads costs a step, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. Session 6 showed what a nuisance that keeps coming back asks for, and this one makes the case for moving Shale's regex helpers into the interpreter that runs it, where a match would cost a step like any builtin.
+`re_find_all` is written in Shale, in the prelude, so every character it reads costs a step, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back, and it makes the case for moving Shale's regex helpers into the interpreter, where a match would cost a step like any builtin.
 
 The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
 
@@ -80,4 +80,4 @@ RELEASED: running bbd9eae on 127.0.0.1:9301; to roll back to 8218ffc: cd /home/s
 
 Eleven comments kept and found where they were, and a rollback that now names a real commit, since the server it replaced came from an earlier release. Green again ✅
 
-Nothing in this session was new. The fixtures, the seeded fault, the audit of real notes and the release were each built for an earlier problem, and each took this feature without a change. That's what the habits are for: when a request arrives, the work is the feature itself.
+This session's new pieces were the cases, the URL finder and the comparison. The habits behind them, fixtures, a seeded fault, the audit of real notes and the release, were each built for an earlier problem, and the audit and the release took this feature unchanged. That's what the habits are for: when a request arrives, most of the work is the feature itself.

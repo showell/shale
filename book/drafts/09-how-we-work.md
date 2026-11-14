@@ -27,10 +27,6 @@ A check that's too slow stops getting run, so each one is held to a budget, and 
 
 Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault turned only three tests red, because one test's panic ended the run; once that test failed plainly, the same fault turned twelve red. In Session 4 one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
 
-### Measure a baseline
-
-Between Sessions 6 and 7, apart from any prompt, Shale's cookbook gained three Go hunts. They read code through Go's own parser and flag what a reader may want to look at twice: vague names, calls nested deep, and smells such as long functions. Each is proved by plants of its own. Run over essay-surface, they found little. There were no vague function names and nothing nested four calls deep. Two long functions in the markdown renderer, `inline` and `link`, are the next refactor if one is wanted. A hunt that finds little in good code is still worth running: it sets the baseline, and the next change gets held to it.
-
 ### Look with your own eyes
 
 Every check passed in Session 2, and the reply buttons were invisible. Gates hold what you already know to check. A human's first look finds what you didn't know yet, and then the agent can often turn it into a gate.
@@ -47,7 +43,7 @@ The orchestrator also keeps its own memory: one markdown file per fact, in a git
 
 ### Let the work ask
 
-Nothing in this project was planned in advance. The checks, the release script and the language change all arrived because a chore came up more than once. That's how to grow a project's tools: make a script the third time you do something by hand, a gate once the script makes a judgment, and a change to the language once its gap starts to cost you.
+Little of this project's tooling was planned up front. Steve's prompts asked for the checks in Session 3 and the release in Session 5, each once its chore had come up by hand, and the language change came from a cleanup done three times. That's how to grow a project's tools: make a script the third time you do something by hand, a gate once the script makes a judgment, and a change to the language once its gap starts to cost you.
 
 ### Your dialect
 

@@ -33,7 +33,7 @@ At the end of Session 3, the agent's report listed a few calls Steve might want 
 {"name":"Steve","text":"add a defensive check","quote":"**The comments folder's parent must exist** when the server starts."}
 ```
 
-That's the whole of the steering: four words, attached to the paragraph they answer. The agent Steve talks to, the orchestrator, passed it on to the next session's agent in a short message.
+That's the whole of the steering. Attach each reply to the paragraph it answers: the paragraph carries the context, so four words are a complete instruction. The agent Steve talks to, the orchestrator, passed it on to the next session's agent in a short message.
 
 ### The change
 
@@ -51,16 +51,16 @@ Last, the agent ran the real server once with a folder that doesn't exist, to se
 
 {{fence repos:essay-surface/journal/thursday.md "made: false"}}
 
-Read it at scroll speed, with three questions:
+Read every script that goes by at scroll speed, with three questions. A few seconds a script is what lets you judge an agent's work as fast as it runs:
 - **What does it read?** One folder of notes, and whether `.run/no-such-folder` exists afterwards.
 - **What does it run?** `./essay-surface`, the server it just built. Because that binary isn't tracked by git, `run` asks for a reason, and the script gives one: `want = "build: the server we just built"`.
 - **How did it end?** Exit 1, with the message, and `made: false`: the server stopped and created nothing.
 
-That took a few seconds, and it's enough to trust the change.
+That took a few seconds. It shows the check working where a person would meet it, and the test and the planted fault cover the rest.
 
 ### Why Shale, and not bash
 
-The same check in bash is one line: run the server, echo `$?`, list the folder. It works on a good day. On a bad day, when the check is missing, the server starts listening and never exits, and the agent's shell hangs on it. The Shale version can't hang. `run` requires a timeout, here 10 seconds, and a keep, here the last 5 lines. A program the repository doesn't track runs only with a reason, and the reason is logged. Every line of the script says what it touches, so the reader can judge it at a glance. That's the bargain the whole book rests on: slightly longer scripts that a human can read in seconds.
+The same check in bash is one line: run the server, echo `$?`, list the folder. It works on a good day. On a bad day, when the check is missing, the server starts listening and never exits, and the agent's shell hangs on it. The Shale version stops waiting: `run` requires a timeout, here 10 seconds, and a keep, here the last 5 lines. A program the repository doesn't track runs only with a reason, and the reason is logged. Every line of the script says what it touches, so the reader can judge it at a glance. That's the bargain the whole book rests on: slightly longer scripts that a human can read in seconds.
 
 ### The words we'll use
 
