@@ -14,7 +14,7 @@ The repository's `notes/` holds 12 notes, a sample copied from the old surface, 
 
 ### Counting before designing
 
-It wrote `scripts/features.shale`, which walks each note line by line, tracks code fences as the Go renderer does, and counts, for each feature, the notes that use it, how often it appears, and where it first appears:
+It wrote `scripts/count_markdown_features.shale`, which walks each note line by line, tracks code fences as the Go renderer does, and counts, for each feature, the notes that use it, how often it appears, and where it first appears:
 
 {{fence repos:essay-surface/journal/session-8.md "paragraph                     522"}}
 
@@ -22,7 +22,7 @@ The counts took several passes. Images first counted as links, which the agent f
 
 Nesting checks pushed the survey over its step budget, and a cheap `find` of each pattern's literal before its regex brought it back under, at 19.5 seconds a run. Then, to see examples of six features, the agent launched it six times, 117 seconds in all, where one run that printed all six would have taken 20.
 
-Count your real data before you design a format for it, and keep the counter. The agent kept features.shale because the counts are the argument: a reply that questions one is answered by running it again.
+Count your real data before you design a format for it, and keep the counter. The agent kept count_markdown_features.shale because the counts are the argument: a reply that questions one is answered by running it again.
 
 ### Types that compile
 

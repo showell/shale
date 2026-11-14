@@ -59,15 +59,15 @@ This script is for one use: a fault proves its point in a single run. The agent 
 
 ### A script worth keeping
 
-Some of the agent's scripts get a read at review speed, the slower read a script gets when the agent proposes to keep it: does it earn its place? `scripts/comments_smoke.shale` runs the whole comment flow through the real server. It posts a comment, fixes a typo and adds a paragraph above it on disk while the server runs, then deletes the paragraph. Its checks go through one small function:
+Some of the agent's scripts get a read at review speed, the slower read a script gets when the agent proposes to keep it: does it earn its place? `scripts/check_comment_flow.shale` runs the whole comment flow through the real server. It posts a comment, fixes a typo and adds a paragraph above it on disk while the server runs, then deletes the paragraph. Its checks go through one small function:
 
-{{function repos:essay-surface/scripts/comments_smoke.shale want}}
+{{function repos:essay-surface/scripts/check_comment_flow.shale want}}
 
 The end of the script shows how it holds a server:
 
-{{lines repos:essay-surface/scripts/comments_smoke.shale from "local job = essay_start(" to "for l in result.value do print(l) end"}}
+{{lines repos:essay-surface/scripts/check_comment_flow.shale from "local job = essay_start(" to "for l in result.value do print(l) end"}}
 
-`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. Its run on all the real notes stopped on its budget for what a run keeps at each `yield`:
+`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `measure_server.shale` failed it once in this session. Its run on all the real notes stopped on its budget for what a run keeps at each `yield`:
 
 {{fence repos:essay-surface/journal/session-2.md "bench.shale:140:5"}}
 

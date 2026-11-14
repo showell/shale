@@ -48,13 +48,13 @@ Then the agent counted what ran. A one-off script reruns the tests with `-v` and
 
 ### The easy part
 
-Next the agent saved `scripts/bench.shale`, which times the server through one curl. A note took about 0.13 ms and the index about 2 ms, inside the prompt's few milliseconds. Speed was the easy part. Correctness wasn't.
+Next the agent saved `scripts/measure_server.shale`, which times the server through one curl. A note took about 0.13 ms and the index about 2 ms, inside the prompt's few milliseconds. Speed was the easy part. Correctness wasn't.
 
 ### The audit
 
 The renderer's tests are examples the agent chose, and the notes weren't written to fit them. Steve's agents write them, as essays he replies to, with whatever markdown comes to hand. A survey of the dozen samples alone found raw HTML, fences of four tildes, and lists nested six spaces deep. The notes themselves are the only full list of what they hold, so the agent checked every one.
 
-Then it saved `scripts/audit.shale`, which starts the server on all the real notes, fetches every page, and counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Outside code, each is usually a construct the renderer missed.
+Then it saved `scripts/check_rendered_notes.shale`, which starts the server on all the real notes, fetches every page, and counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Outside code, each is usually a construct the renderer missed.
 
 The audit stops the server before it judges anything, so a failure afterward finds the server already stopped. It fetches, stops, and only then checks the fetch:
 

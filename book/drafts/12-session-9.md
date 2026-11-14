@@ -48,13 +48,13 @@ None of the ten types changed shape. The demo pushed back once, on a link to ano
 
 ### A check for the new path
 
-`scripts/note_check.shale` checks the Roc and runs its tests, builds `render-note`, renders every `.note`, draws each diagram with the page's own viz.js, and posts replies to a real server. Its first run stopped at its first stage, the format check, because the agent had added tests after last running `roc fmt`. Then each plant went red:
+`scripts/check_note_format.shale` checks the Roc and runs its tests, builds `render-note`, renders every `.note`, draws each diagram with the page's own viz.js, and posts replies to a real server. Its first run stopped at its first stage, the format check, because the agent had added tests after last running `roc fmt`. Then each plant went red:
 
 {{fence repos:essay-surface/journal/session-9.md "plant 1, each end one byte short"}}
 
 Plant 3 is a stray module outside the import graph, with one `expect`. `roc test` said all 60 passed, which is true. So the check holds the runner to the number of `expect` lines in the files:
 
-{{lines repos:essay-surface/scripts/note_check.shale from "local expects = 0" to "want all"}}
+{{lines repos:essay-surface/scripts/check_note_format.shale from "local expects = 0" to "want all"}}
 
 Never take a test runner's count as the total. Count the tests in the files and hold the runner to it, or a test the runner misses stays green forever.
 
@@ -88,4 +88,4 @@ That evening, after a day on the new surface in place of the old one:
 
 ### The gates now
 
-`note_check.shale` is now a stage of the commit check, and every release builds `render-note` and renders the demo note with it before touching anything.
+`check_note_format.shale` is now a stage of the commit check, and every release builds `render-note` and renders the demo note with it before touching anything.

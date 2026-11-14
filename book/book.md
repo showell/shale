@@ -225,13 +225,13 @@ Then the agent counted what ran. A one-off script reruns the tests with `-v` and
 
 ### The easy part
 
-Next the agent saved `scripts/bench.shale`, which times the server through one curl. A note took about 0.13 ms and the index about 2 ms, inside the prompt's few milliseconds. Speed was the easy part. Correctness wasn't.
+Next the agent saved `scripts/measure_server.shale`, which times the server through one curl. A note took about 0.13 ms and the index about 2 ms, inside the prompt's few milliseconds. Speed was the easy part. Correctness wasn't.
 
 ### The audit
 
 The renderer's tests are examples the agent chose, and the notes weren't written to fit them. Steve's agents write them, as essays he replies to, with whatever markdown comes to hand. A survey of the dozen samples alone found raw HTML, fences of four tildes, and lists nested six spaces deep. The notes themselves are the only full list of what they hold, so the agent checked every one.
 
-Then it saved `scripts/audit.shale`, which starts the server on all the real notes, fetches every page, and counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Outside code, each is usually a construct the renderer missed.
+Then it saved `scripts/check_rendered_notes.shale`, which starts the server on all the real notes, fetches every page, and counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Outside code, each is usually a construct the renderer missed.
 
 The audit stops the server before it judges anything, so a failure afterward finds the server already stopped. It fetches, stops, and only then checks the fetch:
 
@@ -314,15 +314,15 @@ This script is for one use: a fault proves its point in a single run. The agent 
 
 ### A script worth keeping
 
-Some of the agent's scripts get a read at review speed, the slower read a script gets when the agent proposes to keep it: does it earn its place? `scripts/comments_smoke.shale` runs the whole comment flow through the real server. It posts a comment, fixes a typo and adds a paragraph above it on disk while the server runs, then deletes the paragraph. Its checks go through one small function:
+Some of the agent's scripts get a read at review speed, the slower read a script gets when the agent proposes to keep it: does it earn its place? `scripts/check_comment_flow.shale` runs the whole comment flow through the real server. It posts a comment, fixes a typo and adds a paragraph above it on disk while the server runs, then deletes the paragraph. Its checks go through one small function:
 
-{{function repos:essay-surface/scripts/comments_smoke.shale want}}
+{{function repos:essay-surface/scripts/check_comment_flow.shale want}}
 
 The end of the script shows how it holds a server:
 
-{{lines repos:essay-surface/scripts/comments_smoke.shale from "local job = essay_start(" to "for l in result.value do print(l) end"}}
+{{lines repos:essay-surface/scripts/check_comment_flow.shale from "local job = essay_start(" to "for l in result.value do print(l) end"}}
 
-`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. Its run on all the real notes stopped on its budget for what a run keeps at each `yield`:
+`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `measure_server.shale` failed it once in this session. Its run on all the real notes stopped on its budget for what a run keeps at each `yield`:
 
 {{fence repos:essay-surface/journal/session-2.md "bench.shale:140:5"}}
 
@@ -374,7 +374,7 @@ What's new here is the budgets. A stage whose run spends more CPU than its `cpu_
 
 The bench needed more care, since its job is time. The server now logs, as it stops, the CPU its requests took, so the bench holds each kind of request to a CPU budget, about twice what real notes took:
 
-{{lines repos:essay-surface/scripts/bench.shale from "const CPU_BUDGET_US" to "const CPU_BUDGET_US"}}
+{{lines repos:essay-surface/scripts/measure_server.shale from "const CPU_BUDGET_US" to "const CPU_BUDGET_US"}}
 
 One budget for the whole mix hid a slow index under the many comment posts, so each kind got a server of its own. The old scan, put back once, broke the index's budget more than five times over.
 
@@ -844,7 +844,7 @@ The repository's `notes/` holds 12 notes, a sample copied from the old surface, 
 
 ### Counting before designing
 
-It wrote `scripts/features.shale`, which walks each note line by line, tracks code fences as the Go renderer does, and counts, for each feature, the notes that use it, how often it appears, and where it first appears:
+It wrote `scripts/count_markdown_features.shale`, which walks each note line by line, tracks code fences as the Go renderer does, and counts, for each feature, the notes that use it, how often it appears, and where it first appears:
 
 {{fence repos:essay-surface/journal/session-8.md "paragraph                     522"}}
 
@@ -852,7 +852,7 @@ The counts took several passes. Images first counted as links, which the agent f
 
 Nesting checks pushed the survey over its step budget, and a cheap `find` of each pattern's literal before its regex brought it back under, at 19.5 seconds a run. Then, to see examples of six features, the agent launched it six times, 117 seconds in all, where one run that printed all six would have taken 20.
 
-Count your real data before you design a format for it, and keep the counter. The agent kept features.shale because the counts are the argument: a reply that questions one is answered by running it again.
+Count your real data before you design a format for it, and keep the counter. The agent kept count_markdown_features.shale because the counts are the argument: a reply that questions one is answered by running it again.
 
 ### Types that compile
 
@@ -934,13 +934,13 @@ None of the ten types changed shape. The demo pushed back once, on a link to ano
 
 ### A check for the new path
 
-`scripts/note_check.shale` checks the Roc and runs its tests, builds `render-note`, renders every `.note`, draws each diagram with the page's own viz.js, and posts replies to a real server. Its first run stopped at its first stage, the format check, because the agent had added tests after last running `roc fmt`. Then each plant went red:
+`scripts/check_note_format.shale` checks the Roc and runs its tests, builds `render-note`, renders every `.note`, draws each diagram with the page's own viz.js, and posts replies to a real server. Its first run stopped at its first stage, the format check, because the agent had added tests after last running `roc fmt`. Then each plant went red:
 
 {{fence repos:essay-surface/journal/session-9.md "plant 1, each end one byte short"}}
 
 Plant 3 is a stray module outside the import graph, with one `expect`. `roc test` said all 60 passed, which is true. So the check holds the runner to the number of `expect` lines in the files:
 
-{{lines repos:essay-surface/scripts/note_check.shale from "local expects = 0" to "want all"}}
+{{lines repos:essay-surface/scripts/check_note_format.shale from "local expects = 0" to "want all"}}
 
 Never take a test runner's count as the total. Count the tests in the files and hold the runner to it, or a test the runner misses stays green forever.
 
@@ -974,4 +974,4 @@ That evening, after a day on the new surface in place of the old one:
 
 ### The gates now
 
-`note_check.shale` is now a stage of the commit check, and every release builds `render-note` and renders the demo note with it before touching anything.
+`check_note_format.shale` is now a stage of the commit check, and every release builds `render-note` and renders the demo note with it before touching anything.

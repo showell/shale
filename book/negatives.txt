@@ -1,6 +1,6 @@
 # The negative sentences the book's prose keeps. The rule is MISSION O: say
 # what happens, and keep a negative only where the "no" is the point.
-# build.shale runs the cookbook's prose/negatives.shale over book.md, which
+# build.shale runs the cookbook's prose/find_negatives.shale over book.md, which
 # finds every sentence holding a negative word. Each one is rewritten, or
 # listed here with its kind. The build holds the unlisted count at `held`, so
 # it can only go down as chapters are rewritten.

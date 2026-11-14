@@ -651,7 +651,7 @@ end
 -- removes one fails the build until the number here moves down with it. The
 -- recipe is named in the worktree that holds it until it reaches the
 -- cookbook's checkout.
-const NEGATIVES = "cookbook:prose/negatives.shale"
+const NEGATIVES = "cookbook:prose/find_negatives.shale"
 const NEGATIVES_BOOK = "book/book.md"
 const NEGATIVES_TABLE = "book/negatives.txt"
 const NEGATIVES_HELD = 115

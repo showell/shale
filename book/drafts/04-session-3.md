@@ -30,7 +30,7 @@ What's new here is the budgets. A stage whose run spends more CPU than its `cpu_
 
 The bench needed more care, since its job is time. The server now logs, as it stops, the CPU its requests took, so the bench holds each kind of request to a CPU budget, about twice what real notes took:
 
-{{lines repos:essay-surface/scripts/bench.shale from "const CPU_BUDGET_US" to "const CPU_BUDGET_US"}}
+{{lines repos:essay-surface/scripts/measure_server.shale from "const CPU_BUDGET_US" to "const CPU_BUDGET_US"}}
 
 One budget for the whole mix hid a slow index under the many comment posts, so each kind got a server of its own. The old scan, put back once, broke the index's budget more than five times over.
 
