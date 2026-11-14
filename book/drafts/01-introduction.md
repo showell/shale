@@ -10,11 +10,9 @@ That niche is the premise of this book. You will read a lot of Shale and write v
 
 This book is for experienced developers: people who have written plenty of code, but not much of it with an agent. You know a build from a test and a test from a gate. You may have tried an agent on a small task and wondered what it would take to trust one with a real project. You're curious about programming languages, and open to letting an agent do real work.
 
-Every script in the book really ran, and the book shows what it printed.
-
 ### Agents in late 2026
 
-This book was written with late-2026 agents, and agents change fast. That cuts two ways. If your picture of agents is a year old, they're already better than you think. And some of the workflow here may be obsolete by 2027. So the book leans on principles that should last. The first is that an agent can't read your mind, so getting your requirements across is always part of the bottleneck. That's why this book's project is an essay surface, where you reply to the exact paragraph you mean.
+This book was written with late-2026 agents, and agents change fast. If your picture of agents is a year old, they're already better than you think. And some of the workflow here may be obsolete by 2027. So the book leans on principles that should last. The first is that an agent can't read your mind, so getting your requirements across is always part of the bottleneck. That's why this book's project is an essay surface, where you reply to the exact paragraph you mean.
 
 You won't find skills files here, the instruction files some setups use to teach an agent a task. A modern agent learned how to do things in training. What it needs from you is a mission and a standard, so this project has mission documents, style guides and Shale gates instead.
 
@@ -26,7 +24,7 @@ We tell it in sessions, a chapter each. A session is one stretch of work that st
 
 ### We, and the prompts
 
-The book says "we" for Steve and his agent. Each session opens with the prompt we gave the agent, quoted whole. Then it follows the agent's own Shale, quoted from the journal it kept. The agents were real, the prompts were real, and so were the mistakes. When something went wrong, the book says so, along with what caught it and what habit it taught.
+The book says "we" for Steve and his agent. Each session opens with the prompt we gave the agent, quoted whole, which sets the session's mission. Later prompts mostly enforce standards, and a few improve the workflow itself. Then it follows the agent's own Shale, quoted from the journal it kept. The agents were real, the prompts were real, and so were the mistakes. When something went wrong, the book says so, along with what caught it and what habit it taught.
 
 ### What Shale adds
 
