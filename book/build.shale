@@ -120,21 +120,67 @@ function between_anchors(path, from, to)
   return "*" .. shown_path(path) .. "*\n\n" .. fenced(path, slice(ls, first, last))
 end
 
+-- A file of prose, a prompt, as a block quote under its caption.
+function quote_of(path)
+  if not exists(path) then fail("book: {{quote " .. path .. "}} names no file") end
+  local out = {"*" .. shown_path(path) .. "*", ""}
+  for l in text_lines(read(path)) do
+    if trim(l) == "" then push(out, ">") else push(out, "> " .. l) end
+  end
+  return join(out, "\n")
+end
+
+-- The one fenced block of a file that holds `text`, fences and all, as the
+-- file has it. A journal's scripts are quoted this way.
+function fence_of(path, text)
+  if not exists(path) then fail("book: {{fence " .. path .. " ...}} names no file") end
+  local blocks = {}
+  local now = nil
+  for l in text_lines(read(path)) do
+    if now == nil and starts_with(l, FENCE) then
+      now = {l}
+    elseif now ~= nil then
+      push(now, l)
+      if trim(l) == FENCE then
+        push(blocks, now)
+        now = nil
+      end
+    end
+  end
+  local found = {}
+  for b in blocks do
+    if contains(join(b, "\n"), text) then push(found, b) end
+  end
+  if #found ~= 1 then fail("book: `" .. text .. "` is in " .. #found .. " fenced blocks of " .. path .. ", and a fence's anchor must be in one") end
+  return "*" .. shown_path(path) .. "*\n\n" .. join(found[1], "\n")
+end
+
 function expanded(text)
   local out = {}
   for l in text_lines(text) do
-    local m = re_find(l, "^\\{\\{file (\\S+)\\}\\}$")
-    local f = re_find(l, "^\\{\\{function (\\S+) (\\w+)\\}\\}$")
-    local a = re_find(l, "^\\{\\{lines (\\S+) from \"([^\"]+)\" to \"([^\"]+)\"\\}\\}$")
-    if m ~= nil then
-      for q in lines(quoted(m.group)) do push(out, q) end
-    elseif a ~= nil then
-      for q in lines(between_anchors(a.groups[1], a.groups[2], a.groups[3])) do push(out, q) end
-    elseif f ~= nil then
-      for q in lines(function_of(f.groups[1], f.groups[2])) do push(out, q) end
-    else
-      if contains(re_replace(l, "`[^`]*`", ""), "{{") then fail("book: a `{{` the build doesn't know: " .. l) end
+    local file = re_find(l, "^\\{\\{file (\\S+)\\}\\}$")
+    local func = re_find(l, "^\\{\\{function (\\S+) (\\w+)\\}\\}$")
+    local span = re_find(l, "^\\{\\{lines (\\S+) from \"([^\"]+)\" to \"([^\"]+)\"\\}\\}$")
+    local prompt = re_find(l, "^\\{\\{quote (\\S+)\\}\\}$")
+    local fence = re_find(l, "^\\{\\{fence (\\S+) \"([^\"]+)\"\\}\\}$")
+    local block = nil
+    if file ~= nil then
+      block = quoted(file.group)
+    elseif func ~= nil then
+      block = function_of(func.groups[1], func.groups[2])
+    elseif span ~= nil then
+      block = between_anchors(span.groups[1], span.groups[2], span.groups[3])
+    elseif prompt ~= nil then
+      block = quote_of(prompt.group)
+    elseif fence ~= nil then
+      block = fence_of(fence.groups[1], fence.groups[2])
+    elseif contains(re_replace(l, "`[^`]*`", ""), "{{") then
+      fail("book: a `{{` the build doesn't know: " .. l)
+    end
+    if block == nil then
       push(out, l)
+    else
+      for q in lines(block) do push(out, q) end
     end
   end
   return out
@@ -183,7 +229,8 @@ function chapter_page(chapter)
     elseif starts_with(l, "### ") then
       push(out, "## " .. sub(l, 5))
     else
-      prose = prose + #words(l)
+      -- A quoted prompt is the prompt's words, not the chapter's.
+      if not starts_with(l, ">") then prose = prose + #words(l) end
       push(out, l)
     end
   end
