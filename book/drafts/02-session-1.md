@@ -34,7 +34,7 @@ Sixty-nine passed, seven of them top-level tests, and none failed. That's a numb
 
 ### The audit
 
-The tests checked the cases the agent thought of. To find the rest, it saved a second recipe, `scripts/audit.shale`. It starts the server on all of Steve's real notes, fetches every page, stops the server, and then counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Any of those in a rendered page is a construct the renderer missed.
+The renderer's tests are examples the agent chose. Steve's notes weren't written to fit them: five hundred notes, by Steve and by his agents, with whatever markdown came to hand. Among them the agent's first survey found raw HTML blocks, fences of four tildes, and lists nested six spaces deep. The server has to show every one of those notes correctly, and nobody has a list of what they hold. A test suite can't cover what nobody listed, but the notes themselves can be checked. So the agent saved a second recipe, `scripts/audit.shale`. It starts the server on all of Steve's real notes, fetches every page, stops the server, and then counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Any of those in a rendered page is a construct the renderer missed.
 
 It found two real bugs that the 62 hand-written test cases had missed:
 
