@@ -12,7 +12,8 @@
 -- the lines from the one holding the first text through the one holding the
 -- second; each text must occur in the file exactly once, so the quote can't
 -- drift the way a line range can. A path through a mount
--- (`repos:roc-apps/...`) reaches another checkout. Each block gets a caption
+-- (`repos:roc-apps/...`) reaches another checkout. `{{show REPO REV:PATH}}`
+-- is a whole file as commit REV had it, for a script since changed or gone. Each block gets a caption
 -- naming where it comes from.
 --
 -- The build is also the book's first gate. It stops on an include that names
@@ -44,10 +45,23 @@ function shown_path(path)
   return path
 end
 
+-- A fence's language, from the file's extension; Shale's unless named here.
+const FENCE_TAGS = {roc = "roc", go = "go", zig = "zig", js = "javascript", css = "css", md = "markdown", json = "json", txt = "text", jsonl = "json"}
+
 function fenced(path, ls)
   local tag = "shale"
-  if ends_with(path, ".roc") then tag = "roc" end
+  local m = re_find(path, "\\.(\\w+)$")
+  if m ~= nil and has_key(FENCE_TAGS, m.group) then tag = FENCE_TAGS[m.group] end
   return FENCE .. tag .. "\n" .. join(ls, "\n") .. "\n" .. FENCE
+end
+
+-- A file as a commit had it, for a script the project has since changed or
+-- removed: `{{show REPO REV:PATH}}`, the repo a Shale path.
+function shown_at(repo, spec)
+  local at = find(spec, ":")
+  if at == nil then fail("book: {{show " .. repo .. " " .. spec .. "}} needs REV:PATH") end
+  local text = git_show(repo, spec)
+  return "*" .. shown_path(repo) .. "/" .. sub(spec, at + 1) .. ", as of " .. sub(spec, 1, at - 1) .. "*\n\n" .. fenced(spec, text_lines(text))
 end
 
 -- One include, as the code block that takes its place.
@@ -166,6 +180,7 @@ function expanded(text)
     local span = re_find(l, "^\\{\\{lines (\\S+) from \"([^\"]+)\" to \"([^\"]+)\"\\}\\}$")
     local prompt = re_find(l, "^\\{\\{quote (\\S+)\\}\\}$")
     local fence = re_find(l, "^\\{\\{fence (\\S+) \"([^\"]+)\"\\}\\}$")
+    local show = re_find(l, "^\\{\\{show (\\S+) (\\S+)\\}\\}$")
     local block = nil
     if file ~= nil then
       block = quoted(file.group)
@@ -177,6 +192,8 @@ function expanded(text)
       block = quote_of(prompt.group)
     elseif fence ~= nil then
       block = fence_of(fence.groups[1], fence.groups[2])
+    elseif show ~= nil then
+      block = shown_at(show.groups[1], show.groups[2])
     elseif contains(re_replace(l, "`[^`]*`", ""), "{{") then
       fail("book: a `{{` the build doesn't know: " .. l)
     end
