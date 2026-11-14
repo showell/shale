@@ -18,3 +18,14 @@ Steve is reading the whole book cover to cover (from 2026-11-14) and sends bits 
 ## Part Two (Meet Roc, Sessions 8 and 9)
 
 - (Steve, 2026-11-14) Part Two must acknowledge that a perfectly good markdown renderer already exists, and that building a new format is an intentional decision: "It's totally defensible, to be clear, but we need to state why clearly." The facts: markdown notes keep rendering through `markdown.go` unchanged, and `.note` is a second format beside it (MISSION PB). The reasons to state: markdown holds diagrams and widgets badly; a format designed from what Steve actually writes is small (Session 8's counts); and porting takes the fun out (Steve). FOR THE EDITOR'S PASS NOW, not later: Part Two is in review.
+
+## Session 2 (for its rewrite)
+
+The Session 1 rewrite (MISSION AN) no longer sets these up, and Session 2's draft leans on them, from the flow reviewer, 2026-11-14:
+- reading a stop line, including a killed run's stop, which has no `code`, only `ended`;
+- budgets as stops: "stopped on its budget", and a budget stop as the one stop `attempt` can't catch;
+- `yield`, and a script's `-- budget:` header line;
+- job records ("stopped it by its job record"), which first came up when Session 1's audit left a server running;
+- `essay_start` and `essay_stop`, since Session 1's audit used `job_start` and `job_stop` directly;
+- the run record's fields (`code`, `out`, `ms`), which Meet Shale covers only loosely.
+Session 1 now names `bench.shale`, and states that the audit stops the server before it judges anything, which Session 2's `attempt` passage builds on. Rewrite Session 2 from its sources (MISSION AL), and decide where in the ladder each of these is first taught.
