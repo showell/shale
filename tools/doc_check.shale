@@ -37,17 +37,29 @@
 
 -- The essays (`notes/*.md`, history, so its own are passed by) are
 -- essay-repl-server's: listed so the others' citations of them resolve.
-const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "dog-park", "observatory", "zig-coverage-sdk", "essay-repl-server", "cobble-webbox", "roc-webbox", "roc-chat", "roc-markdown", "chat-client"}
+const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "dog-park", "observatory", "zig-coverage-sdk", "essay-repl-server", "cobble-webbox", "roc-webbox", "roc-chat", "roc-markdown", "chat-client", "roc-apps"}
 -- **THE OPTIONAL SIBLINGS** (metal-vmm QUEUE 313): the Roc chat's repos,
 -- which many machines have not checked out. One that is not here is said
 -- once (`not_checked_out`), and a path cited as its own (`../roc-chat/x`,
 -- `roc-chat/x`, or on a line naming it) is passed by, never `gone`: that
 -- machine cannot tell. Where it is here, its paths are checked like any
 -- sibling's, and one not written yet is a finding.
-const OPTIONAL = {"roc-chat", "roc-markdown", "chat-client"}
+const OPTIONAL = {"roc-chat", "roc-markdown", "chat-client", "roc-apps"}
 
 function optional(repo)
   for r in OPTIONAL do
+    if r == repo then return true end
+  end
+  return false
+end
+
+-- A repo listed only so that the others' citations of it resolve. Its own
+-- docs are not checked here: roc-apps' cite the Roc compiler's tree and
+-- paths inside each app, which this check cannot tell from a gone file.
+const CITED_ONLY = {"roc-apps"}
+
+function cited_only(repo)
+  for r in CITED_ONLY do
     if r == repo then return true end
   end
   return false
@@ -294,6 +306,13 @@ function resolve(at, repo, docdir, c, kind, text, bases, ignores)
   for r in named(text) do
     if r ~= repo then of[r] = {p} end
   end
+  -- A path that starts with a repo beside these but missing from REPOS
+  -- says so: else the file is there and the finding reads as a lie.
+  local listed = false
+  for r in REPOS do
+    if r == first then listed = true end
+  end
+  if not listed and repo_here(at .. first) and exists(at .. first .. "/.git") and exists(at .. p) then return {gone = true, asks = of, unlisted = first} end
   return {gone = true, asks = of}
 end
 
@@ -414,7 +433,9 @@ function check_doc(at, repo, doc, r)
             elseif has_key(got, "skip") then
               r.skipped[got.skip] = get(r.skipped, got.skip, 0) + 1
             elseif has_key(got, "gone") then
-              push(r.pending, {said = where .. ": `" .. c.path .. "`", asks = got.asks})
+              local said = where .. ": `" .. c.path .. "`"
+              if has_key(got, "unlisted") then said = said .. " is in `" .. got.unlisted .. "`, a repo beside these that is not one of REPOS" end
+              push(r.pending, {said = said, asks = got.asks})
             elseif has_key(got, "ambiguous") then
               push(r.ambiguous, where .. ": `" .. c.path .. "` is in " .. got.ambiguous .. ": say which")
             else
@@ -489,7 +510,7 @@ function check_all(at, repos)
     local r = fresh()
     r.bases = bases
     r.ignores = ignores
-    if repo_here(at .. repo) and (ONLY == "" or repo == ONLY) then
+    if repo_here(at .. repo) and not cited_only(repo) and (ONLY == "" or repo == ONLY) then
       for p in tracked[repo] do
         if ends_with(p, ".md") and not history(p) then
           r.docs = r.docs + 1
@@ -627,6 +648,8 @@ function self_test()
       "Not written yet in roc-markdown: `judge/made_up.roc`.\n" ..
       "Not checked out here: roc-chat's `app/Session.roc`, and `../roc-chat/app/Gone.roc`.\n" ..
       "Bare, one regular repo's alone but for an optional sibling: `server.zig`.\n",
+    ["docs/cross.md"] = "The general rules are in `roc-apps/CLAUDE.md` and `roc-apps/docs/roc-style.md`.\n" ..
+      "Not a listed repo: `side-repo/notes.md`.\n",
     ["FEEDBACK.md"] = "`src/history_only.zig` is gone and that is fine.\n",
     ["notes/essay.md"] = "`src/essay_only.zig` too.\n",
     ["docs/reviews/old.md"] = "`src/review_only.zig`, reviewed once.\n",
@@ -646,10 +669,17 @@ function self_test()
   fixture_repo(fix, "angry-gopher", {["src/both.zig"] = "", ["src/server.zig"] = ""})
   -- An optional sibling that is here (QUEUE 313); roc-chat is not.
   fixture_repo(fix, "roc-markdown", {["judge/answers.roc"] = "", ["host/server.zig"] = ""})
-  local all = check_all(fix .. "/", {"metal-vmm", "zig-webbox", "angry-gopher", "roc-markdown", "roc-chat"})
+  -- A repo cited by others whose own docs are not checked, and a repo
+  -- beside the others that is not one of REPOS.
+  fixture_repo(fix, "roc-apps", {["CLAUDE.md"] = "Our `src/not_here.roc`.\n", ["docs/roc-style.md"] = ""})
+  fixture_repo(fix, "side-repo", {["notes.md"] = ""})
+  local all = check_all(fix .. "/", {"metal-vmm", "zig-webbox", "angry-gopher", "roc-markdown", "roc-chat", "roc-apps"})
   local m = all["metal-vmm"]
   local gone = join(m.gone, "\n")
-  expect(#m.gone == 6 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
+  expect(#m.gone == 7 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
+  expect(not contains(gone, "roc-apps/"), "a path cited as `roc-apps/x` is found in roc-apps")
+  expect(not has_key(all, "roc-apps"), "a repo listed only to be cited has its own docs passed by")
+  expect(contains(gone, "docs/cross.md:2: `side-repo/notes.md` is in `side-repo`, a repo beside these that is not one of REPOS"), "a path in a repo missing from REPOS is gone, and says which repo to list")
   expect(not contains(gone, "answers.roc"), "a path real in an optional sibling that is here passes, by the line's naming and by `../`")
   expect(contains(gone, "docs/roc.md:2: `judge/made_up.roc`"), "a made-up path in an optional sibling that is here is gone: not written yet is a finding")
   expect(not contains(gone, "Session.roc") and not contains(gone, "Gone.roc") and get(m.skipped, "in an optional sibling not checked out here", 0) == 2, "a path in an optional sibling not checked out is passed by, never gone")
@@ -705,6 +735,7 @@ if arg("self_test", "") == "1" then
   self_test()
 else
   local checked = check_all(arg("at", ""), REPOS)
+  if ONLY ~= "" and cited_only(ONLY) then fail("doc check: `only=" .. ONLY .. "`: its docs are not checked here, only cited (CITED_ONLY)") end
   if ONLY ~= "" and not has_key(checked, ONLY) then fail("doc check: `only=" .. ONLY .. "` is not one of the repos beside it") end
   local total = report(checked, REPOS)
   for r in not_checked_out(arg("at", ""), REPOS) do
