@@ -20,7 +20,7 @@ The agent saved the three checks as `scripts/check.shale`, and it runs that scri
 
 {{show repos:essay-surface d793c5a:scripts/check.shale from "local fmt" to "test.ms"}}
 
-Read it with One loop's three questions. What does it read? Nothing: it only runs programs. What does it run? Those three programs, one after another, to check that every file is formatted, vet finds nothing, and every test passes. How does it end? With a verdict for each, or a stop.
+Read it with One loop's three questions. What does it read? Only its programs' output. What does it run? Those three programs, one after another, to check that every file is formatted, vet is clean, and every test passes. How does it end? With a verdict for each, or a stop.
 
 The gate's first real run listed two files that needed formatting:
 
@@ -56,7 +56,7 @@ The renderer's tests are examples the agent chose, and the notes weren't written
 
 Then it saved `scripts/audit.shale`, which starts the server on all the real notes, fetches every page, and counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Outside code, each is usually a construct the renderer missed.
 
-The audit stops the server before it judges anything, so nothing that fails afterward can leave a server running. It fetches, stops, and only then checks the fetch:
+The audit stops the server before it judges anything, so a failure afterward finds the server already stopped. It fetches, stops, and only then checks the fetch:
 
 {{show repos:essay-surface d793c5a:scripts/audit.shale from "local fetched = run(argv" to "must(fetched)"}}
 

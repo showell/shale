@@ -6,7 +6,6 @@
 1	a step a character
 1	turned around
 1	is a gap in the language
-1	shale builds nothing itself
 1	slowness is a finding
 99	green again
 # Sessions 1 to 7, and Session 9, close under this heading, on purpose.
@@ -23,3 +22,6 @@
 0	friday
 0	saturday
 0	sunday
+# MISSION O, say what happens: "nothing" is a negative, so the prose
+# says what did happen instead (Steve, 2026-11-14).
+0	nothing

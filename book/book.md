@@ -62,7 +62,16 @@ If you've read Lua, this looks familiar, and that's on purpose. `local` declares
 
 Agents write Shale tersely, so you'll meet names like `ls` for a list of lines. Steve scans for the calls, such as `lines`, and skips the variables: "The honest truth is that I skim shale scripts really fast, because I have seen a lot of it." If you can't skim it that fast yet, ask your agent to write more verbosely. It will: terseness is just a habit agents fall into when nobody objects.
 
-An agent usually hands a one-off script to `shale` in a heredoc, bash's way of passing a block of text to a program as its input, between `<<'EOF'` and a closing `EOF`. A block captioned "Shale, launched from bash" ran that way.
+An agent usually hands a script to `shale` from bash, as a heredoc: everything between `<<'EOF'` and the closing `EOF` goes to `shale` as its input. Here's a real one:
+
+```bash Shale, launched from bash
+cd ~/showell_repos/essay-surface && shale <<'EOF'
+local r = must(run({"go", "vet", "."}, {timeout_ms = 60000, tail = 20}))
+print("vet: clean, " .. r.ms .. " ms")
+EOF
+```
+
+It printed `vet: clean, 386 ms`.
 
 ### What Shale adds
 
@@ -74,7 +83,7 @@ A few features are Shale's own:
 
 ### Who builds what
 
-Shale builds nothing itself. `go build` makes the server, and `go test` compiles the tests. Shale runs those programs, keeps what they said, and checks what came out: check_before_commit.shale reads go test's output and counts the tests that passed.
+Shale builds programs by orchestrating other tools. In a Go project, the agent uses Shale to run Go's own tools, `gofmt`, `go vet`, `go build` and `go test`, and to check what each one said: check_before_commit.shale reads go test's output and counts the tests that passed.
 
 ### Who reads the output
 
@@ -96,7 +105,7 @@ Shale is meant to have dialects. A dialect costs a team of humans a great deal a
 
 ### What it costs
 
-Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its scripts. What it buys, above all, is a higher-level language than bash, where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive makes the next script shorter and easier to read.
+Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its scripts. What it buys is a higher-level language than bash, where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive makes the next script shorter and easier to read.
 
 ### Four words for what's next
 
@@ -160,7 +169,7 @@ Last, the agent ran the real server once with a folder that doesn't exist, to se
 Read every script that goes by at scroll speed, with three questions. A few seconds a script is what lets you judge an agent's work as fast as it runs:
 - **What does it read?** One folder of notes, and whether `.run/no-such-folder` exists afterwards.
 - **What does it run?** `./essay-surface`, the server it just built. Because that binary isn't tracked by git, `run` requires a reason, and the script gives one: `want = "build: the server we just built"`.
-- **How did it end?** Exit 1, with the message, and `made: false`: the server stopped and created nothing.
+- **How did it end?** Exit 1, with the message, and `made: false`: the server stopped before creating the folder.
 
 That run shows the check working for real, and the test and the planted fault cover the rest.
 
@@ -188,7 +197,7 @@ The agent saved the three checks as `scripts/check.shale`, and it runs that scri
 
 {{show repos:essay-surface d793c5a:scripts/check.shale from "local fmt" to "test.ms"}}
 
-Read it with One loop's three questions. What does it read? Nothing: it only runs programs. What does it run? Those three programs, one after another, to check that every file is formatted, vet finds nothing, and every test passes. How does it end? With a verdict for each, or a stop.
+Read it with One loop's three questions. What does it read? Only its programs' output. What does it run? Those three programs, one after another, to check that every file is formatted, vet is clean, and every test passes. How does it end? With a verdict for each, or a stop.
 
 The gate's first real run listed two files that needed formatting:
 
@@ -224,7 +233,7 @@ The renderer's tests are examples the agent chose, and the notes weren't written
 
 Then it saved `scripts/audit.shale`, which starts the server on all the real notes, fetches every page, and counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Outside code, each is usually a construct the renderer missed.
 
-The audit stops the server before it judges anything, so nothing that fails afterward can leave a server running. It fetches, stops, and only then checks the fetch:
+The audit stops the server before it judges anything, so a failure afterward finds the server already stopped. It fetches, stops, and only then checks the fetch:
 
 {{show repos:essay-surface d793c5a:scripts/audit.shale from "local fetched = run(argv" to "must(fetched)"}}
 
@@ -301,7 +310,7 @@ Sixteen hand-written anchoring tests passed on their first run. To see whether t
 
 {{fence repos:essay-surface/journal/session-2.md "--- FAIL: TestAnchorTypoFixed"}}
 
-This script is for one use: a fault left in place would prove nothing more. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
+This script is for one use: a fault proves its point in a single run. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
 
 ### A script worth keeping
 
@@ -373,11 +382,11 @@ Slowness is a finding too. The anchoring simulation took 13 s, so the agent prof
 
 ### The test that hid others
 
-The store's new tests all passed on their first run. So the agent seeded a fault, a deaf watch: one line that made the server read nothing from the kernel's queue. Three tests went red, but every test that edits a note should have. The agent ran it again with the panic lines shown:
+The store's new tests all passed on their first run. So the agent seeded a fault, a deaf watch: one line that made the server skip every read from the kernel's queue. Three tests went red, but every test that edits a note should have. The agent ran it again with the panic lines shown:
 
 {{fence repos:essay-surface/journal/session-3.md "slice bounds out of range [:-1] [recovered, repanicked]" from "slice bounds" to "0.042s"}}
 
-`TestCommentsFollowEdits`, written in Session 2, sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Its runs in Session 2 gave no sign, because nothing failed then. With the panic made a plain failure, the same deaf watch turned twelve tests red. After seeding a fault, count how many tests went red against how many should have, because a test that panics hides every test after it. The next session makes that trick a habit.
+`TestCommentsFollowEdits`, written in Session 2, sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Its runs in Session 2 gave no sign, because every test passed then. With the panic made a plain failure, the same deaf watch turned twelve tests red. After seeding a fault, count how many tests went red against how many should have, because a test that panics hides every test after it. The next session makes that trick a habit.
 
 Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`, which looks the same on the page. The verdict was right, `NOT SAFE: fast, race failed`, but the red first stage, then named `fast`, showed the last lines of `go test -v`, and those were passes. Now fast keeps only the failed tests and their lines, and its stop names them:
 
@@ -401,7 +410,7 @@ Can every stage really go red? Session 3 saw `NOT SAFE` once, for one fault. Ask
 
 ### One fault per stage
 
-This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that test nothing, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Steve is wary of fixtures, because they can slow gates, often through needless rebuilds.
+This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that pass whatever the code does, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Steve is wary of fixtures, because they can slow gates, often through needless rebuilds.
 
 `check_before_release.shale` has six stages, and its first, `commit`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `check_before_release.shale` runs it, the fault out, then proof that the tree is back and `check_before_commit.shale` passes:
 
@@ -423,7 +432,7 @@ Plants 1 to 5 had been lucky: a stop in any of them would have left its fault be
 
 ### Green with the fault in
 
-The fourth plant wrote a commenter's name to the page without escaping it. The tests checked the comment's text, and nothing checked the name, so `fast` passed:
+The fourth plant wrote a commenter's name to the page without escaping it. The tests checked the comment's text and skipped the name, so `fast` passed:
 
 {{fence repos:essay-surface/journal/session-4.md "ok  test, 2474 ms" from "ok  test" to "fast: PASS"}}
 
@@ -457,7 +466,7 @@ Putting its `opacity:0` back turned the test red at widths of 51 and 80rem. The 
 
 ### Steve's two replies
 
-The two replies answered the report from Session 3. The first was the defensive check from One loop. The server already failed when the comments folder's parent was missing, but by accident; now it checks first, names the path, and makes nothing. The second put phones out of scope. The README says so, and the narrow-window CSS stays: out of scope means unchecked, not removed.
+The two replies answered the report from Session 3. The first was the defensive check from One loop. The server already failed when the comments folder's parent was missing, but by accident; now it checks first, names the path, and stops before making a folder. The second put phones out of scope. The README says so, and the narrow-window CSS stays: out of scope means unchecked, not removed.
 
 ### The gates now
 
@@ -505,7 +514,7 @@ The cause was a regex search over a 67 KB page, which pays for its whole pattern
 
 ### A release that fails on purpose
 
-The prompt asked for a release that fails. A fault the full check catches never reaches the swap, so it proves nothing about the rollback. The agent needed a fault no check covers, and found one in the server's defaults. Every check passes `-comments` explicitly. The live server passes none. So the agent seeded one fault, on a throwaway branch in its own git worktree, that moves the default comments folder inside the notes folder:
+The prompt asked for a release that fails. A fault the full check catches never reaches the swap, so the rollback goes untested. The agent needed a fault no check covers, and found one in the server's defaults. Every check passes `-comments` explicitly. The live server passes none. So the agent seeded one fault, on a throwaway branch in its own git worktree, that moves the default comments folder inside the notes folder:
 
 {{fence repos:essay-surface/journal/session-5.md "*comments = filepath.Join(filepath.Clean(*dir)"}}
 
@@ -515,7 +524,7 @@ The full check said SAFE TO SHIP. The release caught it on the first comment and
 
 Afterward every comments file matched byte for byte, and the bad binary was kept with its log. That's the case for a release check: the full check tests the server the way the tests start it, and the release check tests it the way it really runs, with its real flags and data.
 
-Another trial seeded a formatting fault, and the full check stopped it: `nothing touched`, the same server pids before and after. Then the agent removed the seeded fault's branch and worktree, since a seeded fault proves a check once.
+Another trial seeded a formatting fault, and the full check stopped it with the live server untouched: the same server pids before and after. Then the agent removed the seeded fault's branch and worktree, since a seeded fault proves a check once.
 
 ### The real release
 
@@ -683,7 +692,7 @@ With those links taken back to text, every after page must equal its before page
 
 {{fence repos:essay-surface/journal/session-7.md "26 bare URLs linked on 24 pages" from "linked  note" to "26 bare URLs linked"}}
 
-No URL was left as text outside code. A finder that reports nothing proves little until it has found something, so the agent ran the same finder on the before pages:
+No URL was left as text outside code. A clean report counts only from a finder that has found something, so the agent ran the same finder on the before pages:
 
 {{fence repos:essay-surface/journal/session-7.md "before pages: 26 http" from "before pages" to "before pages"}}
 
@@ -741,7 +750,7 @@ Every check passed in Session 2, and the reply buttons were invisible. Gates hol
 Shipping, the language change and the links feature added four rules:
 - **Hold the resource before you announce readiness.** In Session 5 a server said "listening" before its port was its own, and a check talked to the wrong server.
 - **Run the gates of everything built on a primitive** when you change what it means. In Session 6 a new meaning for a stop reached every script with a job in it.
-- **Copy your outputs aside before a change.** In Session 7, every real page but its new links matched its copy byte for byte, so nothing else had moved.
+- **Copy your outputs aside before a change.** In Session 7, the new links were the only change: every real page matched its copy byte for byte.
 - **A finder proves little until it has found something.** In Session 7 a finder found no bare URL left on the after pages. Run on the before pages, the same finder found all 26.
 
 ### Working with agents
@@ -789,7 +798,7 @@ A type made with `:=` is nominal: it has a name of its own, and any code can bui
 
 {{lines repos:essay-surface/format/Note.roc from "Note := {" to "Subtitle : [NoSubtitle, Subtitle(Text)]"}}
 
-A note built from valid parts is a valid note, so there's nothing for a constructor to check. The rules live in its parts: `Phrase` and `Text` are opaque, like `Diagram`. Where another language would make the subtitle a nullable field, this type names both cases as tags, and code that reads a subtitle must handle both.
+A note built from valid parts is a valid note, so its parts' constructors do all the checking: `Phrase` and `Text` are opaque, like `Diagram`. Where another language would make the subtitle a nullable field, this type names both cases as tags, and code that reads a subtitle must handle both.
 
 ### Pure, with a few marks
 
@@ -852,7 +861,7 @@ Every compile check said `No errors found` in a few milliseconds, which is fast 
 
 {{fence repos:essay-surface/journal/session-8.md "plant 1, Tabel in Block"}}
 
-Both went red, so the check from `Note.roc` reads the types of every module it imports. Then the hunts, Shale scripts that read Roc's parse tree for weak names and layouts, found five things on their first pass: three names (two `container` hits, on a list's `items` and `Item`, and a `singular_list` hit, on a table's `header`) and two layout hits (`unstack`, on `Table` and `Widget`). A list's `Item` became a `Point`, a table's `header` became `column_headings`, and the two short records went onto one line each. A numbered list's `first` became `first_number` too, since `first` read as its first point. One edit stopped on a doc line quoted wrong, and nothing in that file was written.
+Both went red, so the check from `Note.roc` reads the types of every module it imports. Then the hunts, Shale scripts that read Roc's parse tree for weak names and layouts, found five things on their first pass: three names (two `container` hits, on a list's `items` and `Item`, and a `singular_list` hit, on a table's `header`) and two layout hits (`unstack`, on `Table` and `Widget`). A list's `Item` became a `Point`, a table's `header` became `column_headings`, and the two short records went onto one line each. A numbered list's `first` became `first_number` too, since `first` read as its first point. One edit stopped on a doc line quoted wrong, and left that file as it was.
 
 Did compiling matter? It was cheap: about two minutes went to writing and checking the types, and about twelve to reading and counting. And it bought a lot. The plants and the hunts ran on real code, not on a sketch someone would translate later. When you ask for a design, ask for it in a form a tool can check, so the first review is the compiler's.
 
@@ -888,7 +897,7 @@ The old surface already runs Roc in production: a plain app on the platform Roc 
 
 The agent chose the arrangement that already runs on Steve's server. `format/render_note.roc` is built into a program, `render-note`, beside the server. The Go store runs it each time a `.note` changes, with the text as arguments in parts of at most 32,000 bytes, and keeps the page it prints. A request never runs Roc.
 
-The reasons are requirements, not taste. A platform of our own would mean writing its host program in Zig, built against the same compiler version, and the copy of the compiler's source on Steve's server was at another version. The seam is one JSON value. And a process per render costs a reader nothing; the demo renders in about 2 ms.
+The reasons are requirements, not taste. A platform of our own would mean writing its host program in Zig, built against the same compiler version, and the copy of the compiler's source on Steve's server was at another version. The seam is one JSON value. And a process per render is cheap for a reader: the demo renders in about 2 ms.
 
 The agent named four costs, as the prompt asked:
 - **Arguments are the only way in.** The platform gives no stdin and no file reads. Linux's argument space here is 4,194,304 bytes, about twenty-five times the largest real note, but it's a ceiling.
@@ -920,11 +929,11 @@ None of the ten types changed shape. The demo pushed back once, on a link to ano
 
 {{fence repos:essay-surface/journal/session-9.md "plant 1, each end one byte short"}}
 
-Plant 3 is a stray module that nothing imports, with one `expect`. `roc test` said all 60 passed, which is true. So the check holds the runner to the number of `expect` lines in the files:
+Plant 3 is a stray module outside the import graph, with one `expect`. `roc test` said all 60 passed, which is true. So the check holds the runner to the number of `expect` lines in the files:
 
 {{lines repos:essay-surface/scripts/note_check.shale from "local expects = 0" to "want all"}}
 
-Never take a test runner's count as the total. Count the tests in the files and hold the runner to it, or a test that nothing runs passes forever.
+Never take a test runner's count as the total. Count the tests in the files and hold the runner to it, or a test the runner misses stays green forever.
 
 The journal's commit check, `fast`, is now `check_before_commit.shale`:
 

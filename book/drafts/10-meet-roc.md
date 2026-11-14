@@ -27,7 +27,7 @@ A type made with `:=` is nominal: it has a name of its own, and any code can bui
 
 {{lines repos:essay-surface/format/Note.roc from "Note := {" to "Subtitle : [NoSubtitle, Subtitle(Text)]"}}
 
-A note built from valid parts is a valid note, so there's nothing for a constructor to check. The rules live in its parts: `Phrase` and `Text` are opaque, like `Diagram`. Where another language would make the subtitle a nullable field, this type names both cases as tags, and code that reads a subtitle must handle both.
+A note built from valid parts is a valid note, so its parts' constructors do all the checking: `Phrase` and `Text` are opaque, like `Diagram`. Where another language would make the subtitle a nullable field, this type names both cases as tags, and code that reads a subtitle must handle both.
 
 ### Pure, with a few marks
 

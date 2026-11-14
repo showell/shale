@@ -60,7 +60,7 @@ With those links taken back to text, every after page must equal its before page
 
 {{fence repos:essay-surface/journal/session-7.md "26 bare URLs linked on 24 pages" from "linked  note" to "26 bare URLs linked"}}
 
-No URL was left as text outside code. A finder that reports nothing proves little until it has found something, so the agent ran the same finder on the before pages:
+No URL was left as text outside code. A clean report counts only from a finder that has found something, so the agent ran the same finder on the before pages:
 
 {{fence repos:essay-surface/journal/session-7.md "before pages: 26 http" from "before pages" to "before pages"}}
 

@@ -36,7 +36,7 @@ Every check passed in Session 2, and the reply buttons were invisible. Gates hol
 Shipping, the language change and the links feature added four rules:
 - **Hold the resource before you announce readiness.** In Session 5 a server said "listening" before its port was its own, and a check talked to the wrong server.
 - **Run the gates of everything built on a primitive** when you change what it means. In Session 6 a new meaning for a stop reached every script with a job in it.
-- **Copy your outputs aside before a change.** In Session 7, every real page but its new links matched its copy byte for byte, so nothing else had moved.
+- **Copy your outputs aside before a change.** In Session 7, the new links were the only change: every real page matched its copy byte for byte.
 - **A finder proves little until it has found something.** In Session 7 a finder found no bare URL left on the after pages. Run on the before pages, the same finder found all 26.
 
 ### Working with agents

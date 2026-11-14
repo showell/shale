@@ -42,7 +42,7 @@ The cause was a regex search over a 67 KB page, which pays for its whole pattern
 
 ### A release that fails on purpose
 
-The prompt asked for a release that fails. A fault the full check catches never reaches the swap, so it proves nothing about the rollback. The agent needed a fault no check covers, and found one in the server's defaults. Every check passes `-comments` explicitly. The live server passes none. So the agent seeded one fault, on a throwaway branch in its own git worktree, that moves the default comments folder inside the notes folder:
+The prompt asked for a release that fails. A fault the full check catches never reaches the swap, so the rollback goes untested. The agent needed a fault no check covers, and found one in the server's defaults. Every check passes `-comments` explicitly. The live server passes none. So the agent seeded one fault, on a throwaway branch in its own git worktree, that moves the default comments folder inside the notes folder:
 
 {{fence repos:essay-surface/journal/session-5.md "*comments = filepath.Join(filepath.Clean(*dir)"}}
 
@@ -52,7 +52,7 @@ The full check said SAFE TO SHIP. The release caught it on the first comment and
 
 Afterward every comments file matched byte for byte, and the bad binary was kept with its log. That's the case for a release check: the full check tests the server the way the tests start it, and the release check tests it the way it really runs, with its real flags and data.
 
-Another trial seeded a formatting fault, and the full check stopped it: `nothing touched`, the same server pids before and after. Then the agent removed the seeded fault's branch and worktree, since a seeded fault proves a check once.
+Another trial seeded a formatting fault, and the full check stopped it with the live server untouched: the same server pids before and after. Then the agent removed the seeded fault's branch and worktree, since a seeded fault proves a check once.
 
 ### The real release
 

@@ -55,7 +55,7 @@ Sixteen hand-written anchoring tests passed on their first run. To see whether t
 
 {{fence repos:essay-surface/journal/session-2.md "--- FAIL: TestAnchorTypoFixed"}}
 
-This script is for one use: a fault left in place would prove nothing more. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
+This script is for one use: a fault proves its point in a single run. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
 
 ### A script worth keeping
 

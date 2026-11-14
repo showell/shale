@@ -20,7 +20,7 @@ The old surface already runs Roc in production: a plain app on the platform Roc 
 
 The agent chose the arrangement that already runs on Steve's server. `format/render_note.roc` is built into a program, `render-note`, beside the server. The Go store runs it each time a `.note` changes, with the text as arguments in parts of at most 32,000 bytes, and keeps the page it prints. A request never runs Roc.
 
-The reasons are requirements, not taste. A platform of our own would mean writing its host program in Zig, built against the same compiler version, and the copy of the compiler's source on Steve's server was at another version. The seam is one JSON value. And a process per render costs a reader nothing; the demo renders in about 2 ms.
+The reasons are requirements, not taste. A platform of our own would mean writing its host program in Zig, built against the same compiler version, and the copy of the compiler's source on Steve's server was at another version. The seam is one JSON value. And a process per render is cheap for a reader: the demo renders in about 2 ms.
 
 The agent named four costs, as the prompt asked:
 - **Arguments are the only way in.** The platform gives no stdin and no file reads. Linux's argument space here is 4,194,304 bytes, about twenty-five times the largest real note, but it's a ceiling.
@@ -52,11 +52,11 @@ None of the ten types changed shape. The demo pushed back once, on a link to ano
 
 {{fence repos:essay-surface/journal/session-9.md "plant 1, each end one byte short"}}
 
-Plant 3 is a stray module that nothing imports, with one `expect`. `roc test` said all 60 passed, which is true. So the check holds the runner to the number of `expect` lines in the files:
+Plant 3 is a stray module outside the import graph, with one `expect`. `roc test` said all 60 passed, which is true. So the check holds the runner to the number of `expect` lines in the files:
 
 {{lines repos:essay-surface/scripts/note_check.shale from "local expects = 0" to "want all"}}
 
-Never take a test runner's count as the total. Count the tests in the files and hold the runner to it, or a test that nothing runs passes forever.
+Never take a test runner's count as the total. Count the tests in the files and hold the runner to it, or a test the runner misses stays green forever.
 
 The journal's commit check, `fast`, is now `check_before_commit.shale`:
 

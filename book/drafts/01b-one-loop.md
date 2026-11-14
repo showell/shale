@@ -52,7 +52,7 @@ Last, the agent ran the real server once with a folder that doesn't exist, to se
 Read every script that goes by at scroll speed, with three questions. A few seconds a script is what lets you judge an agent's work as fast as it runs:
 - **What does it read?** One folder of notes, and whether `.run/no-such-folder` exists afterwards.
 - **What does it run?** `./essay-surface`, the server it just built. Because that binary isn't tracked by git, `run` requires a reason, and the script gives one: `want = "build: the server we just built"`.
-- **How did it end?** Exit 1, with the message, and `made: false`: the server stopped and created nothing.
+- **How did it end?** Exit 1, with the message, and `made: false`: the server stopped before creating the folder.
 
 That run shows the check working for real, and the test and the planted fault cover the rest.
 

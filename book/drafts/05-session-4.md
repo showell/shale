@@ -12,7 +12,7 @@ Can every stage really go red? Session 3 saw `NOT SAFE` once, for one fault. Ask
 
 ### One fault per stage
 
-This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that test nothing, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Steve is wary of fixtures, because they can slow gates, often through needless rebuilds.
+This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that pass whatever the code does, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Steve is wary of fixtures, because they can slow gates, often through needless rebuilds.
 
 `check_before_release.shale` has six stages, and its first, `commit`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `check_before_release.shale` runs it, the fault out, then proof that the tree is back and `check_before_commit.shale` passes:
 
@@ -34,7 +34,7 @@ Plants 1 to 5 had been lucky: a stop in any of them would have left its fault be
 
 ### Green with the fault in
 
-The fourth plant wrote a commenter's name to the page without escaping it. The tests checked the comment's text, and nothing checked the name, so `fast` passed:
+The fourth plant wrote a commenter's name to the page without escaping it. The tests checked the comment's text and skipped the name, so `fast` passed:
 
 {{fence repos:essay-surface/journal/session-4.md "ok  test, 2474 ms" from "ok  test" to "fast: PASS"}}
 
@@ -68,7 +68,7 @@ Putting its `opacity:0` back turned the test red at widths of 51 and 80rem. The 
 
 ### Steve's two replies
 
-The two replies answered the report from Session 3. The first was the defensive check from One loop. The server already failed when the comments folder's parent was missing, but by accident; now it checks first, names the path, and makes nothing. The second put phones out of scope. The README says so, and the narrow-window CSS stays: out of scope means unchecked, not removed.
+The two replies answered the report from Session 3. The first was the defensive check from One loop. The server already failed when the comments folder's parent was missing, but by accident; now it checks first, names the path, and stops before making a folder. The second put phones out of scope. The README says so, and the narrow-window CSS stays: out of scope means unchecked, not removed.
 
 ### The gates now
 

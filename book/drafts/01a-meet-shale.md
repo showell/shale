@@ -14,7 +14,16 @@ If you've read Lua, this looks familiar, and that's on purpose. `local` declares
 
 Agents write Shale tersely, so you'll meet names like `ls` for a list of lines. Steve scans for the calls, such as `lines`, and skips the variables: "The honest truth is that I skim shale scripts really fast, because I have seen a lot of it." If you can't skim it that fast yet, ask your agent to write more verbosely. It will: terseness is just a habit agents fall into when nobody objects.
 
-An agent usually hands a one-off script to `shale` in a heredoc, bash's way of passing a block of text to a program as its input, between `<<'EOF'` and a closing `EOF`. A block captioned "Shale, launched from bash" ran that way.
+An agent usually hands a script to `shale` from bash, as a heredoc: everything between `<<'EOF'` and the closing `EOF` goes to `shale` as its input. Here's a real one:
+
+```bash Shale, launched from bash
+cd ~/showell_repos/essay-surface && shale <<'EOF'
+local r = must(run({"go", "vet", "."}, {timeout_ms = 60000, tail = 20}))
+print("vet: clean, " .. r.ms .. " ms")
+EOF
+```
+
+It printed `vet: clean, 386 ms`.
 
 ### What Shale adds
 
@@ -26,7 +35,7 @@ A few features are Shale's own:
 
 ### Who builds what
 
-Shale builds nothing itself. `go build` makes the server, and `go test` compiles the tests. Shale runs those programs, keeps what they said, and checks what came out: check_before_commit.shale reads go test's output and counts the tests that passed.
+Shale builds programs by orchestrating other tools. In a Go project, the agent uses Shale to run Go's own tools, `gofmt`, `go vet`, `go build` and `go test`, and to check what each one said: check_before_commit.shale reads go test's output and counts the tests that passed.
 
 ### Who reads the output
 
@@ -48,7 +57,7 @@ Shale is meant to have dialects. A dialect costs a team of humans a great deal a
 
 ### What it costs
 
-Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its scripts. What it buys, above all, is a higher-level language than bash, where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive makes the next script shorter and easier to read.
+Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its scripts. What it buys is a higher-level language than bash, where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive makes the next script shorter and easier to read.
 
 ### Four words for what's next
 

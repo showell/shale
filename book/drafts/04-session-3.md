@@ -38,11 +38,11 @@ Slowness is a finding too. The anchoring simulation took 13 s, so the agent prof
 
 ### The test that hid others
 
-The store's new tests all passed on their first run. So the agent seeded a fault, a deaf watch: one line that made the server read nothing from the kernel's queue. Three tests went red, but every test that edits a note should have. The agent ran it again with the panic lines shown:
+The store's new tests all passed on their first run. So the agent seeded a fault, a deaf watch: one line that made the server skip every read from the kernel's queue. Three tests went red, but every test that edits a note should have. The agent ran it again with the panic lines shown:
 
 {{fence repos:essay-surface/journal/session-3.md "slice bounds out of range [:-1] [recovered, repanicked]" from "slice bounds" to "0.042s"}}
 
-`TestCommentsFollowEdits`, written in Session 2, sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Its runs in Session 2 gave no sign, because nothing failed then. With the panic made a plain failure, the same deaf watch turned twelve tests red. After seeding a fault, count how many tests went red against how many should have, because a test that panics hides every test after it. The next session makes that trick a habit.
+`TestCommentsFollowEdits`, written in Session 2, sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Its runs in Session 2 gave no sign, because every test passed then. With the panic made a plain failure, the same deaf watch turned twelve tests red. After seeding a fault, count how many tests went red against how many should have, because a test that panics hides every test after it. The next session makes that trick a habit.
 
 Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`, which looks the same on the page. The verdict was right, `NOT SAFE: fast, race failed`, but the red first stage, then named `fast`, showed the last lines of `go test -v`, and those were passes. Now fast keeps only the failed tests and their lines, and its stop names them:
 
