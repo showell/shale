@@ -6,7 +6,7 @@ Tuesday's prompt asks for the feature the surface exists for:
 
 {{quote repos:essay-surface/journal/prompts/tuesday.md}}
 
-The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. Today we read the agent's scripts at review speed, too. It proposes to keep some of them, and the question for each is whether it earns its place.
+The prompt has the roles turned around, as Monday's did. In practice the agent writes the notes, and Steve is the one who replies, so the agent reads his replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. Today we read the agent's scripts at review speed, too. It proposes to keep some of them, and the question for each is whether it earns its place.
 
 ### Arguing from real paragraphs
 
