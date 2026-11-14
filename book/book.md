@@ -83,21 +83,21 @@ A few features are Shale's own:
 
 ### Who builds what
 
-Shale builds programs by orchestrating other tools. In a Go project, the agent uses Shale to run Go's own tools, `gofmt`, `go vet`, `go build` and `go test`, and to check what each one said: check_before_commit.shale reads go test's output and counts the tests that passed.
+Shale builds programs by orchestrating other tools. In a Go project, the agent uses Shale to run Go's own tools, `gofmt`, `go vet`, `go build` and `go test`, and to check what each one said.
 
 ### Who reads the output
 
-Shale's output is written for the agent. A run that stops ends on one `── stopped at` line, naming where and why, and a `── used:` line for its budgets. The agent reads them and tells Steve what he needs, and Steve almost never reads them raw. Agents translate output well, so Shale leaves that to them. When this book shows a raw stop line, it says what the line means beside it.
+Shale's output is written for the agent. A run that stops ends on one `── stopped at` line, naming where and why, and a `── used:` line for its budgets. The agent reads them and tells Steve what he needs, and Steve almost never reads them raw. Agents translate output well, so Shale leaves that to them. This book shows a raw stop line with its meaning beside it.
 
 ### The cookbook
 
-Shale ships with a cookbook: a folder of ready-made scripts, `cookbook/` in the Shale repository, that agents wrote. Each script in it is a recipe, general enough to work in any project. `disk.shale` stops a run when the disk runs low, `http.shale` fetches a page and prints the lines that matter, and `conflicts.shale` parses git's merge-conflict markers. Recipes get you running.
+Shale ships with a cookbook: a folder of ready-made scripts, `cookbook/` in the Shale repository, that agents wrote. Each script in it is a recipe, general enough for any project, and a recipe comes in two kinds. Most you run directly, with their arguments on the launch line: `shale cookbook:disk.shale floor=60` stops when the disk has under 60 GB free. A few are libraries: a script loads one with `use("cookbook:conflicts.shale")`, then calls its functions, which parse git's merge-conflict markers. Recipes get you running.
 
 A script lives in a project's `scripts/` folder instead, and encodes that project's standards, such as what every commit must pass. Your scripts are the value you add to your own ecosystem. When a second project needs one, it becomes a recipe in your own cookbook, beside Shale's or in place of it.
 
 ### How an agent learns Shale
 
-There's no magic here. Steve's setup tells each agent to read Shale's README, which points it to an agent guide. The agent reads an example program for context, and scans the cookbook when a task needs a recipe. In one test, a fresh agent told only that its shell work is Shale read both guides, ran a working first script, listed the cookbook, and passed its project's commit check, in about 40 seconds.
+There's no magic here. Steve's setup tells each agent to read Shale's README, which points it to an agent guide. The agent reads an example program for context, and scans the cookbook when a task needs a recipe. In one test, a fresh agent told only that its shell work is Shale read both guides, listed the cookbook and passed its project's commit check in about 40 seconds.
 
 ### A language that changes
 
@@ -105,7 +105,7 @@ Shale is meant to have dialects. A dialect costs a team of humans a great deal a
 
 ### What it costs
 
-Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its scripts. What it buys is a higher-level language than bash, where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive makes the next script shorter and easier to read.
+Shale doesn't save tokens, and it may add to them. It also slows you at first, while your agent builds its scripts. What it buys is a higher-level language than bash, where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive makes the next script shorter and easier to read.
 
 ### Four words for what's next
 
