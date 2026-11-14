@@ -19,10 +19,13 @@
 -- no file or runs past its end, on any `{{` left over, and on a chapter over
 -- MAX_PROSE_WORDS words of prose. The essay surface's roc-markdown renderer
 -- draws each page.
-const SOURCE = "book/book.md"
+-- `source=` builds another file, such as one chapter's draft, and `stage=`
+-- puts it in its own folder of the channel, so a draft never replaces the book.
+const SOURCE = arg("source", "book/book.md")
+const STAGE = arg("stage", "shale-book")
 const CSS = "book/book.css"
-const DEST = "build:roc-apps/next/shale-book"
-const URL = "http://143.244.172.148:9210/shale-book/"
+const DEST = "build:roc-apps/next/" .. STAGE
+const URL = "http://143.244.172.148:9210/" .. STAGE .. "/"
 const RENDER = "repos:essay-repl-server/bin/render_note"
 const RENDER_WANT = "renderer: the essay surface's roc-markdown renderer draws the book's pages"
 const MAX_PROSE_WORDS = 900
