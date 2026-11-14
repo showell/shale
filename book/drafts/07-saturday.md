@@ -2,7 +2,7 @@
 
 ## Saturday: the language gets better
 
-Four times this week, an agent's run stopped after `job_start` and left a server running: on Monday, on Tuesday, on Thursday during a planted fault, and in Friday's first trial, on a budget stop. Each time, someone noticed and cleaned up by hand.
+Four times this week, an agent's run stopped after `job_start` and left a server running: on Monday, on Tuesday, on Thursday while seeding a fault, and in Friday's first trial, on a budget stop. Each time, someone noticed and cleaned up by hand.
 
 Four times is a pattern, and a pattern of hand cleanup is a gap in the language. So on Saturday we closed it, in Shale itself.
 
@@ -25,9 +25,9 @@ That's the same shape as every stop in this book: one line, what happened, and w
 
 ### How it arrived
 
-A cold agent built it. Shale's interpreter is Zig, so the feature is Zig too: the host keeps each job a run starts, and the runner ends the running ones when the run stops. The tests cover every side of the rule. A run that ends keeps its job. A failed run ends both of its jobs and names them. A budget stop ends its job. A caught failure ends nothing. A `keep_on_stop` job survives the stop and is named apart. A job the run already stopped or waited for gets no second stop. A job another run started is never touched. Two faults seeded into the feature turned those tests red, so the tests are watching.
+A cold agent built it. Shale's interpreter is written in Zig, so the feature is Zig too: the interpreter keeps a list of the jobs a run starts, and ends the ones still running when the run stops. The tests cover every side of the rule. A run that ends keeps its job. A failed run ends both of its jobs and names them. A budget stop ends its job. A caught failure ends nothing. A `keep_on_stop` job survives the stop and is named apart. A job the run already stopped or waited for gets no second stop. A job another run started is never touched. Two faults seeded into the feature turned those tests red, so the tests are watching.
 
-Then the feature passed Shale's own tests and the consumers gate, which runs the gates of every repository that uses Shale. A change to what a stop means touches every script with a job in it, so that gate is the one that matters. It passed, and we merged it.
+Then the feature passed Shale's own tests and the consumers gate, Shale's gate that runs the checks of every repository built on it. A change to what a stop means touches every script with a job in it, so that gate is the one that matters. It passed, and we merged it.
 
 ### The code says what it keeps
 
@@ -37,13 +37,13 @@ The feature changed what a stop does, and one script had to say something new. A
 
 The new server starts with `keep` false, and the old one put back by a failed release starts with it true. Before Saturday, the script's defense against the trap was a large step budget and a comment explaining it. Now the code says which server stays, and the language does the rest.
 
-The feature also exposed a gap in Friday's script. A budget stop after the swap would now end the new server with the run, and the run could never put the old one back. A script can't catch its own stop, so the release hands the risky part to a child it can watch:
+The feature also exposed a gap in Friday's script. A budget stop after the swap would now end the new server with the run, and the run could never put the old one back. A script can't catch its own stop, so the release runs the swap and its checks as a child run, a second Shale process it can watch:
 
 {{function repos:essay-surface/scripts/release.shale rel_install_child}}
 
-The swap and its checks run as a separate Shale process. A child that stops just exits nonzero, its new server ends with it, and the parent, still running, puts the old server back. We proved it with a runaway loop planted in the child's checks: the budget stopped the child, the old server came back, and both test comments were on its page.
+A child that stops just exits nonzero, its new server ends with it, and the parent, still running, puts the old server back. We proved it with a runaway loop planted in the child's checks: the budget stopped the child, the old server came back, and both test comments were on its page.
 
-One limit remains. A `shale` killed from outside, by Ctrl-C or by a timeout around it, never reaches its own stop, so its jobs run on. That's why the release's header asks for a long timeout on the call that runs it.
+One limit remains. A `shale` killed from outside, by Ctrl-C or by a timeout around it, never reaches its own stop, so its jobs run on. That's why the release script's opening comment asks for a long timeout on the call that runs it.
 
 ### Dialects
 

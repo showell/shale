@@ -260,14 +260,51 @@ function parts_of(ls)
   return {title = title, front = front, chapters = chapters}
 end
 
--- A chapter's markdown, its `###` sections made `##`, and its counts.
+const DOT_WANT = "graphviz: the book's diagrams, drawn at build time"
+
+-- A ```dot fence's source drawn as SVG by Graphviz, ready to sit in a page,
+-- its comments and titles dropped (a title shows as a tooltip on hover).
+function drawn(source)
+  local dir = fresh_dir("scratch:", "book-dot")
+  replace(dir .. "/d.dot", source)
+  local r = run({"dot", "-Tsvg", "-Gfontsize=12", "-Nfontsize=12", "-Efontsize=11", real(dir .. "/d.dot")}, {timeout_ms = 30000, whole = 2000000, want = DOT_WANT})
+  remove_tree(dir)
+  if r.code ~= 0 then
+    print(trim(r.out))
+    fail("book: dot could not draw a diagram")
+  end
+  local at = find(r.out, "<svg ")
+  if at == nil then fail("book: dot drew no <svg>") end
+  local kept = {}
+  for l in lines(sub(r.out, at)) do
+    if not starts_with(l, "<!--") and not starts_with(l, "<title>") then push(kept, l) end
+  end
+  return join(kept, "\n")
+end
+
+-- A chapter's markdown, its `###` sections made `##`, and its counts. A
+-- ```dot fence becomes its drawing, as raw HTML.
 function chapter_page(chapter)
   local out = {"# " .. chapter.title, ""}
   local in_code = false
+  local in_dot = false
+  local dot = {}
   local prose = 0
   local code = 0
   for l in chapter.lines do
-    if starts_with(l, FENCE) then
+    if in_dot then
+      if trim(l) == FENCE then
+        push(out, FENCE .. "raw")
+        push(out, "<figure class=\"diagram\">" .. drawn(join(dot, "\n")) .. "</figure>")
+        push(out, FENCE)
+        in_dot = false
+      else
+        push(dot, l)
+      end
+    elseif not in_code and trim(l) == FENCE .. "dot" then
+      in_dot = true
+      dot = {}
+    elseif starts_with(l, FENCE) then
       in_code = not in_code
       push(out, l)
     elseif in_code then
@@ -276,8 +313,10 @@ function chapter_page(chapter)
     elseif starts_with(l, "### ") then
       push(out, "## " .. sub(l, 5))
     else
-      -- A quoted prompt is the prompt's words, not the chapter's.
-      if not starts_with(l, ">") then prose = prose + #words(l) end
+      -- A quoted prompt is the prompt's words, not the chapter's, and a
+      -- quote's caption names its file.
+      local caption = re_find(l, "^\\*[^*]+\\*$") ~= nil
+      if not starts_with(l, ">") and not caption then prose = prose + #words(l) end
       push(out, l)
     end
   end

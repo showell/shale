@@ -59,6 +59,8 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **V. One point per output block.** A quoted output block shows the lines that carry its point, and the sentence before it says the point. The build stops on an output block over 12 lines unless `book/long_blocks.txt` names it with a reason.
 
+**X. Diagrams are drawn from source.** A ```dot fence in a chapter is drawn by Graphviz at build time, so a diagram changes with the words around it. The first is the loop, in "One loop". The story comes first: Shale's architecture (its interpreter, written in Zig, the host, the preludes) and most of its technical detail wait for after the Monday-to-Saturday narrative (Steve, 2026-11-14).
+
 **W. Chapters are named, never numbered,** in prose. The week's chapters are days. The build stops on "chapter 4".
 
 **T. The essay surface is where we talk.** Decisions go in an essay, and Steve replies on the new surface itself.

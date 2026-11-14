@@ -45,4 +45,4 @@ Shale is meant to have dialects. A dialect costs a team of humans a great deal, 
 
 The week shows this happening. A nuisance came up four times, so on Saturday the language changed to fix it. For now, a reader who wants that freedom forks their own copy of Shale.
 
-Monday starts with an empty repository and a prompt.
+First, one turn of the loop, start to finish. Then Monday, with an empty repository and a prompt.
