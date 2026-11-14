@@ -1,6 +1,6 @@
--- **AWKWARD NAMES, A QUESTION EACH** (metal-vmm QUEUE 256): heuristic
--- hunts over Zig's tokens for names that say something other than what
--- the code does. A finding is a question for a reader, never a verdict:
+-- This recipe hunts a Zig tree for awkward names: names that say something
+-- other than what the code does, read from Zig's tokens by heuristics. A
+-- finding is a question for a reader, never a verdict:
 --
 --   state_effect  a function with effects (it takes `io`, an `Io` or a
 --                 store) named as a state, not a verb: `held*`, a past
@@ -21,7 +21,7 @@
 --   cd <repo> && shale <shale>/cookbook/zig/hunt_names.shale glob=src/**/*.zig
 --   shale cookbook:zig/hunt_names.shale self_test=1
 --
--- **THE WORDS** it judges by are cookbook/words/'s tables, the Roc hunt's
+-- The words it judges by are cookbook/words/'s tables, the Roc hunt's
 -- too: participles.txt (English's irregular ones; the rule takes `-ed`),
 -- ed_verbs.txt (the rule's exceptions), vague.txt and verbs.txt. `words=1`
 -- gives the census instead of the findings: every first word a function

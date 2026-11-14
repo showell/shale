@@ -1,11 +1,13 @@
--- **DECLARATIONS NOTHING USES**: Zig never says so, as its analysis is
--- lazy, so a function nobody calls sits in its file. By Zig's tokenizer:
+-- This recipe finds Zig declarations nothing uses. Zig never reports them,
+-- because its analysis is lazy, so a function nobody calls sits in its file.
+-- It reads Zig's tokens and reports two kinds:
 --
---   - **dead**: a top-level declaration that is not `pub` and whose name no
+--   - dead: a top-level declaration that is not `pub` and whose name no
 --     other identifier in its file is (not after a `.` either: a private
---     name is only reached bare). Certain: nothing outside can see it.
---   - **unreached, pub**: a `pub` one no identifier in the tree names, bare
---     or after a `.`. A question, not a verdict: another repo, a build
+--     name is only reached bare). This is certain, as nothing outside can
+--     see it.
+--   - unreached, pub: a `pub` one no identifier in the tree names, bare or
+--     after a `.`. This is a question, not a verdict: another repo, a build
 --     script, or `@field(x, "name")` may reach it.
 --
 -- Tests, `comptime` blocks, `export`ed and `extern` declarations, and

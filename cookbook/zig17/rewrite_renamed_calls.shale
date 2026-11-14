@@ -1,6 +1,6 @@
--- **THE ZIG 0.17 UPGRADE: CALLS RENAMED OR RESHAPED** (written for the
--- 0.16 -> 0.17 upgrade, 2026-10-20), each one 0.17 removed (not merely
--- deprecated), rewritten in place:
+-- This recipe rewrites the calls Zig 0.17 renamed or reshaped, for the 0.16
+-- to 0.17 upgrade: each one 0.17 removed (not merely deprecated), rewritten
+-- in place:
 --   - `x.dupeZ(T, s)`: `x.dupeSentinel(T, s, 0)` (the call's closing
 --     parenthesis found by depth, so nested arguments are safe)
 --   - type info reshaped: a pointer's `.pointer.is_const` (and

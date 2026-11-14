@@ -1,10 +1,11 @@
 -- budget: steps=900000000 arena_bytes=4000000000
--- **A DECLARATION RENAMED WITH ITS CALLERS ACROSS A TREE** (metal-vmm QUEUE
--- 261): `from` in `file` (a top-level declaration, or with `container=` a
+-- This recipe renames a Zig declaration with its callers across a tree. It
+-- renames `from` in `file` (a top-level declaration, or with `container=` a
 -- container's member), and in every other file of the tree that imports
 -- `file`, each `alias.from` (or `alias.Container.from`) through the name it
 -- imports it by. What a file reaches some other way (a value of the type,
--- `@import("root")`) is never guessed at: its lines are said, for a reader.
+-- `@import("root")`) is never guessed at: its lines are printed, for a
+-- reader.
 --
 --   cd <repo> && shale <shale>/cookbook/zig/rename_member.shale file=src/search_index.zig from=ready to=indexOrBuild
 --   shale <shale>/cookbook/zig/rename_member.shale file=src/router_harness.zig container=UidSite from=marked to=isSigned glob=src/**/*.zig

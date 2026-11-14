@@ -1,9 +1,9 @@
--- **A CHANGE THAT TOUCHES COMMENTS ONLY**: each Zig file, as it is and as
--- `rev` holds it, by Zig's tokenizer (`zig_tokens`), its doc-comment tokens
--- dropped (a plain `//` comment is no token): the two lists of tags and
--- texts must be the same. Says "comment-only" for each file that holds,
--- and for one that does not, the first token that differs, with its line
--- on each side (QUEUE 242's judge: a commit that fails it is split).
+-- This recipe checks that a change touches comments only. It reads each Zig
+-- file as it is and as `rev` holds it, by Zig's tokenizer (`zig_tokens`),
+-- drops the doc-comment tokens (a plain `//` comment is no token), and holds
+-- the two lists of tags and texts to be the same. It says "comment-only" for
+-- each file that passes, and for one that does not, the first token that
+-- differs, with its line on each side. A commit that fails it is split.
 --
 --   cd <repo> && shale <shale>/cookbook/zig/check_comments_only.shale
 --   cd <repo> && shale <shale>/cookbook/zig/check_comments_only.shale rev=origin/master

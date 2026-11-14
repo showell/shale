@@ -1,18 +1,18 @@
--- **THE DISK'S FREE SPACE, A RUN STOPPED BEFORE IT FILLS**: `df` on the
--- filesystem holding the working directory.
+-- This recipe checks the free space on the filesystem that holds the working
+-- directory, by `df`, and stops a run before the disk fills.
 --
 --   shale cookbook:check_disk_space.shale                 disk: 52 GB free
 --   shale cookbook:check_disk_space.shale floor=60        stops: disk: 52 GB free, under the floor of 60 GB; the biggest: ...
 --   shale cookbook:check_disk_space.shale report=1        the growth spots' sizes, biggest first
 --   shale cookbook:check_disk_space.shale self_test=1
 --
--- **GUARD, THE DEFAULT**: under `floor=` GB free (20) it stops, exit
+-- By default it guards: under `floor=` GB free (20) it stops, exit
 -- nonzero, with one line naming the three biggest growth spots; otherwise
 -- it prints `disk: N GB free`. A verify runs it as its first check, so a
 -- full disk fails at the start and never mid-run. Fail, never warn: there
 -- is no warning band.
 --
--- **REPORT** (`report=1`): the sizes of the spots that grow, each by
+-- With `report=1` it prints the sizes of the spots that grow, each by
 -- `du -sk`, biggest first, those under 0.1 GB counted on one line; sizes
 -- only, never a file's name or contents below a spot:
 --   - each folder of `build:lanes/` (a lane's Roc and Zig caches);

@@ -1,11 +1,11 @@
--- **WHERE CODE COPIES ALIGNMENT ARITHMETIC INSTEAD OF ASKING**: a hunt
--- for one shape in a Zig compiler. The alignment is known in one place (a
--- layout store, `@alignOf(T)`, a string blob's `strings.alignment(id)`),
--- and code that copies the arithmetic uses a stand-in or forgets to ask.
--- The archetype is roc-lang/roc#12641: `addAllocation(.u8, len,
--- self.word_size, ...)` where the blob needed `@max(word,
--- strings.alignment(id))`. Written for the Roc compiler; each check is a
--- few lines, to copy and change for another tree.
+-- This recipe hunts a Zig compiler for code that copies alignment arithmetic
+-- instead of asking for it. The alignment is known in one place (a layout
+-- store, `@alignOf(T)`, a string blob's `strings.alignment(id)`), and code
+-- that copies the arithmetic uses a stand-in or forgets to ask. The
+-- archetype is roc-lang/roc#12641: `addAllocation(.u8, len, self.word_size,
+-- ...)` where the blob needed `@max(word, strings.alignment(id))`. It is
+-- written for the Roc compiler; each check is a few lines, to copy and
+-- change for another tree.
 --
 --   cd <roc> && shale <shale>/cookbook/zig/hunt_alignment_math.shale
 --   cd <shale> && shale cookbook/zig/hunt_alignment_math.shale self_test=1

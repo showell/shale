@@ -1,7 +1,7 @@
--- **THE ZIG 0.17 UPGRADE: ARRAY MULTIPLICATION BECOMES @splat** (written for
--- the 0.16 -> 0.17 upgrade, 2026-10-20). 0.17 removed `a ** n` for arrays;
--- a repeated one-element array, `[_]T{v} ** N`, is `@splat(v)` with the
--- array's type known. Each one, by where it stands:
+-- This recipe rewrites array multiplication as `@splat`, for the Zig 0.16 to
+-- 0.17 upgrade. 0.17 removed `a ** n` for arrays; a repeated one-element
+-- array, `[_]T{v} ** N`, is `@splat(v)` with the array's type known. Each
+-- one is rewritten by where it stands:
 --   - an untyped declaration, `var x = [_]T{v} ** N;` (and `const`, `pub`,
 --     `export`, with `align(...)` or `linksection(...)` kept after the
 --     type): `var x: [N]T = @splat(v);`

@@ -1,7 +1,7 @@
--- **ONE SYNTAX CHECK A FILE, BY KIND** (metal-vmm QUEUE 249): after an edit,
--- did each file's syntax survive? One line a file, `ok` or its first error,
--- then PASS or a FAIL that stops the run. No habit reaches for each
--- language's own command.
+-- This recipe checks that each file's syntax survived an edit, with the
+-- check that fits the file's kind. It prints one line a file, `ok` or the
+-- first error, then PASS, or a FAIL that stops the run, so no one has to
+-- remember each language's own command.
 --
 --   shale cookbook:check_syntax.shale files=src/a.zig,roc/Walk.roc,tools/x.mjs
 --   shale cookbook:check_syntax.shale rev=HEAD~1..HEAD repo=repos:dog-park
@@ -23,8 +23,8 @@
 -- `zig fmt` for every Zig file; more is refused before the first.
 --
 -- The tools are values (`zig=`, `roc=`, `node=`, each its name on PATH by
--- default, or a path): a machine's PATH is not the build's. **A TOOL THE
--- MACHINE LACKS IS SAID**, never a quiet pass nor a quiet fail: its files
+-- default, or a path): a machine's PATH is not the build's. When the
+-- machine lacks a tool, the recipe says so instead of passing or failing: its files
 -- are `skip`, a line says `no <tool>: .<kind> files not checked`, and the
 -- PASS counts them apart.
 

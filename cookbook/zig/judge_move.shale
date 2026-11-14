@@ -1,7 +1,7 @@
--- **A PURE MOVE CHANGED NOTHING**: the judge of a refactor that only moves
--- declarations between files, in a Zig repo with `zig build` and `zig
--- build test`. Three things, taken before (`mode=baseline`) and held equal
--- after (`mode=check`):
+-- This recipe judges a refactor that only moves declarations between files,
+-- in a Zig repo with `zig build` and `zig build test`: such a move should
+-- change nothing. It takes three things before the move (`mode=baseline`)
+-- and holds them equal after (`mode=check`):
 --
 --   - the tests, by name, read from the source with zig_decls (a moved
 --     test keeps its name; its file is left out), and the runner's count;

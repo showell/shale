@@ -1,14 +1,14 @@
--- **A PHRASE IN WRAPPED PROSE, WHEREVER A LINE BREAK SPLITS IT** (metal-vmm
--- QUEUE 298): a line-by-line search never sees `*(not yet` at the end of
--- one line and `settled)*` at the start of the next. This reads prose the
--- way a reader does, a paragraph at a time, and finds the phrase in it:
+-- This recipe finds a phrase in wrapped prose, even where a line break splits
+-- it. A line-by-line search never sees `*(not yet` at the end of one line and
+-- `settled)*` at the start of the next. This reads prose the way a reader
+-- does, a paragraph at a time, and finds the phrase in it:
 --
 --   shale <cookbook>/find_phrase.shale find="(not yet settled)" in=docs
 --   shale <cookbook>/find_phrase.shale find="*(not yet settled)*" new="" in=docs/roc-style.md
 --   shale <cookbook>/find_phrase.shale find="*(not yet settled)*" new="" in=docs write=1
 --   shale <cookbook>/find_phrase.shale self_test=1
 --
--- **WHAT IS PROSE:** in a Markdown file (`.md`), its paragraphs, list items
+-- Prose, in a Markdown file (`.md`), is its paragraphs, list items
 -- (a continuation line belongs to its item), block quotes and headings,
 -- each its own; a blank line ends one, and a fenced code block (``` or
 -- ~~~), a table row (`|`) and an HTML line (`<`) are never prose. In a
@@ -16,23 +16,23 @@
 -- marker (`//`, `///`, `//!` in Zig; `##`, `#` in Roc; `--` in Shale; `#`
 -- in a shell script), an empty comment line ending one.
 --
--- **HOW IT MATCHES:** each paragraph's words joined by one space, the
+-- To match, it joins each paragraph's words with one space, and the
 -- phrase's too, so a line break, indentation or a run of spaces inside the
 -- phrase is one space. A hit is said as `path:line`, the line it starts on,
--- with `(N lines)` when it crosses breaks. **MARKUP INSIDE IT**: a phrase
+-- with `(N lines)` when it crosses breaks. A phrase
 -- that matches only with `*` and a backtick taken out of both (`**a
 -- phrase\nsplit**`) is said as a hit `(markup inside)`, and never edited:
 -- which `*` goes with the edit is the reader's call (find it again with the
 -- markup in the phrase, `*(not yet settled)*`, and that hit is plain).
 --
--- **AN EDIT** (`new=`, shown, written with `write=1`) replaces each plain
--- hit and rewraps its paragraph **from the hit's line only until the line
--- breaks fall back into step**: lines before it are kept, and once a line
+-- An edit (`new=`, shown, written with `write=1`) replaces each plain
+-- hit and rewraps its paragraph from the hit's line only until the line
+-- breaks fall back into step: lines before it are kept, and once a line
 -- would start at a word that started a line before, the rest are kept as
 -- they were, so the diff is the lines the edit moved. The width is the
 -- paragraph's widest line; a continuation line takes the paragraph's
 -- second line's prefix (a list item's hanging indent, a comment's marker).
--- **THE TRADE-OFFS:** a rewrap moves words, so a paragraph whose breaks
+-- A rewrap moves words, so a paragraph whose breaks
 -- mean something (a poem, a hand-aligned table in prose) is the reader's to
 -- edit by hand; a phrase inside an inline code span is prose here.
 --
@@ -343,8 +343,8 @@ function relaid(prefixes, contents, a, upto, width, cont, out)
 end
 
 -- Block `b`'s lines (its words `w`) with raw[at..stop] replaced by `new`,
--- the block's new lines, whole, prefixes and all. **ONLY THE LINES THE
--- EDIT MOVES**: a replacement of as many words as the hit takes their
+-- the block's new lines, whole, prefixes and all. Only the lines the edit
+-- moves change: a replacement of as many words as the hit takes their
 -- places, line by line; any other is the hit's line's text, the hit's
 -- later lines folded into it. Either way a line too wide gives its last
 -- words to the next, and the first line that fits past the edit ends it.

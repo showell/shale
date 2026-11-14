@@ -1,22 +1,22 @@
--- **A PAGE FETCHED, AND WHAT IT SAID THAT MATTERS**: `http_get` (the
--- Linux prelude's, by `curl`) from a launch line: the status, how long it
+-- This recipe fetches a page from a launch line, by the Linux prelude's
+-- `http_get` (which runs `curl`), and prints the status, how long the fetch
 -- took, and the body's first `head` lines, or its lines holding `grep`'s
--- literals. A status other than `status` (default 200) fails the launch.
--- The escape behind a release's checks (2026-10-23: `/version`, a page's
--- `Begin Game`, a wait for a new commit to serve).
+-- literals. A status other than `status` (default 200) fails the launch. It
+-- suits a release's checks: a `/version`, a page's text, a wait for a new
+-- commit to serve.
 --
 --   shale cookbook:fetch_page.shale url=https://dogpark.lynrummy.com/version
 --   shale cookbook:fetch_page.shale url=https://dogpark.lynrummy.com/ grep=Begin,Game
 --   shale cookbook:fetch_page.shale url=https://dogpark.lynrummy.com/version wait=5419352 minutes=10
 --   shale cookbook:fetch_page.shale url=https://chat.example/api/v1/messages json=messages.1.id
 --
--- **`json`** reads the body as JSON (`json_read`) and prints the value at a
+-- `json` reads the body as JSON (`json_read`) and prints the value at a
 -- dotted path, a list's items by number from 1 (`messages.1.id`); `json=.`
 -- is the whole body, compact. A path that is not there fails, naming the
 -- part that was not.
 --
 -- `bearer` is a Shale path (through a mount) whose file holds a token,
--- sent as `Authorization: Bearer` and never shown. **`wait`**: fetch every
+-- sent as `Authorization: Bearer` and never shown. `wait` fetches every
 -- `every` seconds (default 10) until the body holds that literal, for at
 -- most `minutes` (default 10); a failed fetch meanwhile (the server
 -- restarting) is said and tried again. Each try is one program (the

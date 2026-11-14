@@ -1,11 +1,11 @@
--- **WHERE A ZIG FILE DIVIDES**: its top-level declarations as a graph
--- (zig_decls' `uses`), the hubs set aside (what much of the file uses, and
--- what uses much of it), and what is left. It prints a count line
--- (declarations, production and tests, the edges left), the largest
--- declarations (150 lines or more), the hubs with their edges in and out,
--- the cut profile in file order (the gaps the fewest edges cross, each with
--- the edges that cross it), and each declaration grouped by the hubs that
--- reach it: the structure by caller.
+-- This recipe finds where a Zig file divides. It reads the file's top-level
+-- declarations as a graph (zig_decls' `uses`), sets the hubs aside (what much
+-- of the file uses, and what uses much of it), and looks at what is left. It
+-- prints a count line (declarations, production and tests, the edges left),
+-- the largest declarations (150 lines or more), the hubs with their edges in
+-- and out, the cut profile in file order (the gaps the fewest edges cross,
+-- each with the edges that cross it), and each declaration grouped by the
+-- hubs that reach it: the structure by caller.
 --
 --   cd <repo> && shale <shale>/cookbook/zig/find_seams.shale path=src/x.zig [container=Name] [hub=N] [out=N] [min=N] [show=N] [names=N]
 --
@@ -100,7 +100,7 @@ for d in prod do
   end
   uses_n[d.name] = n
 end
--- **TWO KINDS OF HUB**: what much of the file uses (a shared type or
+-- A hub is one of two kinds: what much of the file uses (a shared type or
 -- helper), and what uses much of the file (an orchestrator: `main`,
 -- `serve`). Either glues everything to everything; set aside, what is left
 -- shows its parts.
@@ -146,7 +146,7 @@ end
 if #big > 0 then print("largest (150+ lines; a seam inside one is below the top level): " .. join(big, ", ")) end
 print("hubs: " .. join(hub_names, ", "))
 
--- **THE CUT PROFILE**: for each gap after the i-th, the edges that cross
+-- The cut profile: for each gap after the i-th, the edges that cross
 -- it; a gap few cross, with code on both sides, is a seam in the file's
 -- own order.
 local min_lines = parse_int(arg("min", "120"))
@@ -192,7 +192,7 @@ while shown < SHOW and count(taken) < #gaps do
   end
 end
 
--- **WHO REACHES IT**: each declaration that is not a hub, grouped by the
+-- Each declaration that is not a hub, grouped by the
 -- hubs whose uses reach it (through other declarations, not through
 -- hubs). A helper only `serve` reaches goes with `serve`; one `main` and
 -- `serve` both reach is shared; one no hub reaches is the tests' or dead.

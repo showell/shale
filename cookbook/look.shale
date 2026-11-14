@@ -1,7 +1,7 @@
--- **LOOK: LINES BY NUMBER, AND A LITERAL'S LINES ACROSS FOLDERS**, the
--- two reads behind most `# want:` escapes (2026-10-19 and 20: 120 escapes
--- for `sed -n a,bp`, 195 for `grep -n`, most of them several files or
--- repos at once). One launch, no script to write:
+-- This recipe shows lines of files by number, and finds a literal's lines
+-- across files, folders, mounts or a git revision. These are the two reads
+-- most shell escapes were for (`sed -n a,bp` and `grep -n`, often over
+-- several files or repos at once), in one launch with no script to write:
 --
 --   shale <cookbook>/look.shale at=src/io.zig:690-730,build.zig:16-29
 --   shale <cookbook>/look.shale find=pathFromRoot( in=src,build.zig ext=zig
@@ -23,9 +23,8 @@
 -- run that finds more says so: never a silent cut. A found line longer than
 -- `wide` characters is cut there, ending ` ...`.
 --
--- **AT A REVISION** (`rev=`, 2026-10-20, from CC's escapes: `git show
--- origin/master:QUEUE.md | awk` to read one item): every path of `at` and
--- `in` is read as `rev` holds it, in the git checkout `repo` (default the
+-- With `rev=`, the files are read at a git revision, in place of `git show
+-- origin/master:QUEUE.md | awk`: every path of `at` and `in` is read as `rev` holds it, in the git checkout `repo` (default the
 -- root), through the git prelude; a folder of `in` is the files `git
 -- ls-tree` lists under it there, `like` as before. Its own argument, not a
 -- `rev:path`, because a path's colon is already a mount's.

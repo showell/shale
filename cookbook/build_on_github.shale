@@ -1,9 +1,10 @@
--- **A BUILD ON GITHUB, NOT ON THE BOX**: a `workflow_dispatch` workflow
--- (shale's .github/workflows/test.yml: `zig build test`) dispatched for
--- `ref` and its run's URL and id said at once, then checked by that id:
--- its status, or when it is done PASS or FAIL with its wall time, and a
--- failure's last 40 log lines (`gh run view --log-failed`), failing the
--- launch. The workflow runs on no push and no PR: only when this asks.
+-- This recipe runs a build on GitHub instead of on the box. It dispatches a
+-- `workflow_dispatch` workflow (shale's .github/workflows/test.yml, which runs
+-- `zig build test`) for `ref`, and says the run's URL and id at once. Given
+-- that id, it checks the run: its status, or once the run is done, PASS or
+-- FAIL with its wall time, and for a failure the last 40 log lines (`gh run
+-- view --log-failed`), failing the launch. The workflow never runs on a push
+-- or a PR, only when this recipe asks.
 --
 --   cd <repo> && shale cookbook:build_on_github.shale ref=my-branch
 --   shale cookbook:build_on_github.shale run=40518919602
@@ -12,7 +13,7 @@
 -- `repo` is showell/<repo> (default shale), `ref` the branch, tag or
 -- commit the workflow checks out (default the branch checked out here),
 -- `workflow` its file (default test.yml). A dispatch is 3 or 4 programs
--- and a few seconds; `run=<id>` is one look, no waiting. **`wait=yes`**
+-- and a few seconds; `run=<id>` is one look, no waiting. `wait=yes`
 -- dispatches and polls every `every` seconds (default 15) until the run
 -- is done: it is for a background task, whose exit says the verdict. Each
 -- look is one program and a run holds 64 (`runs_most`), so a wait is at
@@ -44,8 +45,8 @@ function gh(argv)
   return trim(r.out)
 end
 
--- **GITHUB'S REST API, NEVER ITS GRAPHQL**: `gh workflow run` and `gh run
--- list` ask GraphQL, which a Claude Code session is refused; `gh api` on
+-- These calls use GitHub's REST API. `gh workflow run` and `gh run list`
+-- ask GraphQL, which a Claude Code session is refused; `gh api` on
 -- the REST paths works wherever `gh` does.
 
 -- The newest dispatched run's id, or "" when there is none.

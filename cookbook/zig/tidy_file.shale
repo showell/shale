@@ -1,7 +1,7 @@
--- **A ZIG FILE TIDIED AFTER A MOVE**: its first block of top-level `const`
--- lines ordered, `@import`s first (each in the order it had), then the
--- aliases; and a section banner (`// ──`) with nothing under it, only blank
--- lines before the next banner or the end, removed.
+-- This recipe tidies a Zig file after a move. It orders the first block of
+-- top-level `const` lines, `@import`s first (each in the order it had), then
+-- the aliases, and it removes a section banner (`// ──`) with nothing under
+-- it, only blank lines before the next banner or the end.
 --
 --   cd <repo> && shale <shale>/cookbook/zig/tidy_file.shale path=src/x.zig
 

@@ -1,11 +1,10 @@
--- **A ZIG BUILD, AND WHAT IT SAID THAT MATTERS**: the verdict of `zig build
--- STEP` without its noise, the escape behind most `zig build ... | grep
--- error | sort | uniq -c` (2026-10-20: about 70 of them). It prints the
--- Build Summary, each distinct error line with how often it came (a
--- failing step's error repeats once per binary), the failed tests' names
--- and their first lines, a failed run's last lines, and the exit code. Every line of the output is
--- kept in `log` (default .zig-cache/run_zig_build.log under `dir`) for the
--- rest.
+-- This recipe runs `zig build STEP` and prints its verdict without the
+-- noise, in place of `zig build ... | grep error | sort | uniq -c`. It prints
+-- the Build Summary, each distinct error line with how often it came (a
+-- failing step's error repeats once per binary), the failed tests' names and
+-- their first lines, a failed run's last lines, and the exit code. Every line
+-- of the output is kept in `log` (default .zig-cache/run_zig_build.log under
+-- `dir`) for the rest.
 --
 --   cd <repo> && shale cookbook:run_zig_build.shale step=test
 --   cd <repo> && shale cookbook:run_zig_build.shale step=metal zig=zig016:zig
@@ -17,9 +16,8 @@
 -- ` tools` mount, such as `zig016:zig`), `step` a step's name, `args` more words after
 -- it (split on spaces), `dir` where to run, `minutes` the time it gets.
 --
--- **THE LINES A VERDICT HANGS ON** (`grep=`, 2026-10-20, from CC's escapes:
--- `zig build fuzz 2>&1 | grep FAIL` to show a plant's verdict): every line
--- of the output holding one of `grep`'s literals (comma-separated), in
+-- With `grep=`, in place of `zig build fuzz 2>&1 | grep FAIL`, it also
+-- prints every line of the output holding one of `grep`'s literals (comma-separated), in
 -- order, after the summary, at most `most` of them (said when more):
 --
 --   shale cookbook:run_zig_build.shale step=fuzz --args-stdin <<'ARGS'

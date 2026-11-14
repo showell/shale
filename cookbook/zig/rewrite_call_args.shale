@@ -1,14 +1,14 @@
--- **EVERY CALL OF A FUNCTION, ITS ARGUMENTS REGROUPED**: the call sites'
--- half of changing a signature, as when seven strings in a row become two
--- structs and two strings. Each call `name(a1, a2, ...)` (bare, or after a
--- `.`, so `store.name(` too) is rewritten by `template`, where `$N` is the
+-- This recipe regroups the arguments of every call of a function: the call
+-- sites' half of changing a signature, as when seven strings in a row become
+-- two structs and two strings. Each call `name(a1, a2, ...)` (bare, or after
+-- a `.`, so `store.name(` too) is rewritten by `template`, where `$N` is the
 -- Nth argument's text as written:
 --
 --   template=$1, $2, $3, $4, .{ .dir = $5, .key = $6, .sid = $7 }, .{ .name = $8, .id = $9 }, $10, $11
 --
 -- The arguments are split at the commas of the call's own depth, past
 -- brackets of every kind, `"..."` strings with their escapes and `'x'`
--- characters. **A CALL IT CANNOT TAKE WHOLE IS REFUSED, NAMED**, before
+-- characters. A call it cannot take whole is refused by name, before
 -- anything is written: one that runs past its line (`\\` strings, an
 -- argument list wrapped), or one whose arguments number other than the
 -- template's highest `$N` (`count=` says how many every call must have).
@@ -21,8 +21,7 @@
 --   template=...
 --   ARGS
 --
--- Every file is read and every line scanned: angry-gopher's 95 files
--- took 3 million steps of the default 5.
+-- Every file is read and every line scanned.
 --
 -- budget: steps=100000000
 

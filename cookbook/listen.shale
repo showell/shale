@@ -1,15 +1,16 @@
--- **A roc-chat CONVERSATION, LISTENED TO FOR ONE AGENT**: its stream
--- (`GET /conversations/<conv>/stream`), and one line a post that is for
--- the agent, `#<id> by <principal>: <its first line>`. The key stays in a
--- secrets mount: `run`'s `secrets` gives it to curl alone, which reads it
--- from its environment (`--variable`), so no script sees it.
+-- This recipe listens to a roc-chat conversation for one agent. It reads the
+-- conversation's stream (`GET /conversations/<conv>/stream`) and prints one
+-- line for each post meant for the agent, `#<id> by <principal>: <its first
+-- line>`. The key stays in a secrets mount: `run`'s `secrets` gives it to
+-- curl alone, which reads it from its environment (`--variable`), so no
+-- script sees it.
 --
 --   shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 key=keys:roc_chat_cc_key once=1
 --   shale cookbook:listen.shale site=... conv=3 me=agent:2 key=keys:... log=listen.log after=12
 --   shale cookbook:listen.shale site=... conv=all me=agent:2 key=keys:... log=listen.log
 --
--- **`conv=all`, EVERY CONVERSATION THE AGENT IS IN**: roc-chat's one
--- stream per agent (`GET /stream`, its app/AgentStream.roc), each message
+-- With `conv=all` it listens to every conversation the agent is in, on
+-- roc-chat's one stream per agent (`GET /stream`, its app/AgentStream.roc), each message
 -- naming its conversation. A post is heard as
 -- `#<id> in conversation <c> by <principal>: <its first line>`, or for a
 -- channel topic that names the agent `#<id> in topic <channel>/<topic> by
@@ -20,7 +21,7 @@
 -- conversation and id, so only a start from `after=` may print one twice.
 -- The budget warning is per conversation, as the server's limit is.
 --
--- **A POST IS FOR THE AGENT** when both hold (`for_me`, pure):
+-- A post is for the agent when both of these hold (`for_me`, pure):
 --   1. it is not the agent's own (`by` is not `me`);
 --   2. it names the agent: the server's `mentions` holds `me`. The rule
 --      of who a post names has one home, roc-chat's app/Mentions.roc
@@ -29,20 +30,20 @@
 -- There is no rule for agents answering agents: the roc-chat server
 -- bounds agent-to-agent traffic, the one home of that limit, so an
 -- agent's every mention is heard.
--- **THE BUDGET WARNING**: the server's limit is mirrored here (its numbers
+-- The server's limit on agent-to-agent posts is mirrored here (its numbers
 -- below), so at 12 of 15 of the agent's own agent-to-agent posts this hour
 -- one line, `budget: ...`, says so once a crossing, before any post heard
 -- with it; it never ends a run, and goes to `log=` too.
 -- `after=` is the last id already handled: nothing at or before it is
 -- printed.
 --
--- **HOW IT LISTENS**: a run's output reaches the terminal only when it
+-- A run's output reaches the terminal only when it
 -- ends, and a run starts at most 64 programs, so the stream is held in
 -- windows: one curl a window (`window=` seconds, 20 by default, under
 -- curl's `--max-time`), the first with no `Last-Event-ID` (the newest page),
 -- each after it resuming at the last whole frame. A post is heard at most
 -- a window late.
--- **IN BATCHES** (`after_batch`, pure): the windows run in a batch, a
+-- The windows run in batches (`after_batch`, pure), each a
 -- child run of this script (`batch=1`, every value passed on) with its own
 -- 64 programs: 63 curls, about 21 minutes of quiet at 20 s windows. It
 -- ends one of three ways: a post heard with `once=1`, which the caller
@@ -59,7 +60,7 @@
 --   - Otherwise each line is appended to `log=` as it is heard (required),
 --     for `tail -F` under a watcher, until the run's batches are spent; the
 --     stop names the `after=` to go on from.
--- **IT RECONNECTS BY ITSELF** (`after_window`, pure): a deploy restarts
+-- The recipe reconnects by itself (`after_window`, pure). A deploy restarts
 -- roc-chat and ends every stream, so the stream ended by the server, no
 -- connection, curl failing mid-stream, or any status but 200, 401, 403
 -- and 404 (a 502 from the proxy while the server is down) is a reconnect,
@@ -69,7 +70,7 @@
 -- length) and resumes from the last id seen, so nothing is missed or
 -- heard twice. A reconnect is a curl, one of its batch's 63, and each
 -- batch begins its waits again at 2 s.
--- **A DEAD LISTENER IS NEVER QUIET**: a refusal, 401 or 403 (the key
+-- A listener that can no longer hear stops loudly: a refusal, 401 or 403 (the key
 -- revoked or wrong) or 404 (no such conversation, or not the agent's),
 -- a `gap` (more missed than the backlog holds), a message without
 -- `mentions` (a server older than them), or the run's batches spent
@@ -130,7 +131,7 @@ function contains_item(list, x)
   return false
 end
 
--- **WHO A POST NAMES**: the server's `mentions` (roc-chat's
+-- The agents a post names, from the server's `mentions` (roc-chat's
 -- app/Mentions.roc, the one home of the rule); `consume` has refused a
 -- message without them.
 function names(msg, id)
@@ -177,7 +178,7 @@ function first_line(md)
   return ""
 end
 
--- **AN EVENT'S PLACE** on the one stream, `<at>.<spot>.<message>`
+-- An event's place on the one stream, `<at>.<spot>.<message>`
 -- (roc-chat's AgentStream), the spot a conversation's number or a channel
 -- topic's `<channel key>/<topic key>`: `{at, conv, id}`, or nil for text
 -- that is none.

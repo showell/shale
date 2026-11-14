@@ -1,18 +1,17 @@
--- **MERGED WORK BRANCHES, FOUND AND (WHEN ASKED) DELETED**: in each repo,
--- every branch on `origin` whose name starts with one of `prefixes`
--- (`claude/` and `box/`: CC's and the box's), judged against `origin`'s
--- default branch, one line each:
+-- This recipe finds the work branches that are merged, and deletes them when
+-- asked. In each repo it judges every branch on `origin` whose name starts
+-- with one of `prefixes` (`claude/` and `box/`: CC's and the box's) against
+-- `origin`'s default branch, one line each:
 --
 --   delete  roc-chat claude/roc-chat   merged into main
 --   keep    shale    claude/x          3 commits not in master
 --   keep    roc-chat box/auth          origin's default branch
 --
--- **MERGED IS ANCESTRY, NEVER A NAME**: a branch is merged only when its
--- tip is an ancestor of the default branch's (`git merge-base
--- --is-ancestor`), so a branch with even one commit the default lacks is
--- kept, with the count. **The default branch is never deleted**, whatever
--- its name. **Nothing is deleted without `delete=1`**: the plain run is a
--- report, and with `delete=1` each `delete` line is a `git push origin
+-- A branch counts as merged only when its tip is an ancestor of the default
+-- branch's (`git merge-base --is-ancestor`), never by its name, so a branch
+-- with even one commit the default lacks is kept, with the count. The
+-- default branch is always kept. Only `delete=1` deletes: the plain run is
+-- a report, and with `delete=1` each `delete` line is a `git push origin
 -- --delete`, said as it is done. Run it yourself (Steve), or let an agent
 -- run the report and hand you the `delete=1` line.
 --

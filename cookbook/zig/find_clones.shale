@@ -1,15 +1,14 @@
--- **THE SAME CODE IN TWO PLACES**: runs of `window=` (6) or more lines,
--- alike once each is trimmed, found in two places, in one file or two:
+-- This recipe finds the same code in two places: runs of `window=` (6) or
+-- more lines, alike once each is trimmed, in one file or two. Such a run is
 -- what a shared function, a table or a loop would say once. Blank lines,
--- comments and a line of only brackets (`}`, `};`, `) {`) are passed by,
--- so a run is of lines that do something; so are imports and one-name
--- aliases. Exact, line by line: a copy with its names changed is not found.
+-- comments and a line of only brackets (`}`, `};`, `) {`) are passed by, so a
+-- run is of lines that do something; so are imports and one-name aliases. It
+-- matches exactly, line by line, so a copy with its names changed is not
+-- found.
 --
--- **A FIND IS A QUESTION, NOT A FIX.** The kernel's three stores' vtable
--- casts were one generic waiting (store.Store.of, 2026-10-18); its two TCP
--- simulators' networks are alike on purpose, two models kept apart to judge
--- each other; and two algorithms' shared setup, an `errdefer` among it,
--- stays each function's own.
+-- A find is a question, not a fix. Code may be alike on purpose: two
+-- simulators kept apart to judge each other, or two algorithms whose shared
+-- setup, an `errdefer` among it, stays each function's own.
 --
 --   cd <repo> && shale <shale>/cookbook/zig/find_clones.shale [tests=yes] [window=6] [top=20]
 --   (`glob=`, default src/**/*.zig, holds a `*`: on stdin, `--args-stdin`;

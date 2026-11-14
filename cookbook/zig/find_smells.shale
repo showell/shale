@@ -1,5 +1,6 @@
--- **WHERE A ZIG TREE MAY WANT A SECOND LOOK**: each smell a list, read
--- from Zig's tokenizer (so never a comment's or a string's), not a verdict:
+-- This recipe lists the places in a Zig tree that may want a second look,
+-- each smell a list, read from Zig's tokens (so never a comment's or a
+-- string's). A list is a question, not a verdict:
 --
 --   - a long function (`long=` lines, 80), a struct's members and nested
 --     functions included;

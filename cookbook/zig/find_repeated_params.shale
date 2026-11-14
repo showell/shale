@@ -1,15 +1,15 @@
--- **THE SAME PARAMETERS IN A ROW, IN FUNCTION AFTER FUNCTION**: a run of
--- parameter names (`conv_dir, conv_key, sid`) that several functions
--- declare, in that order. A long list is a question; a run that recurs is
--- a struct with more than one user already, which is when one earns its
--- keep. Read from Zig's tokenizer: each `fn`'s names before a `:` at its
--- parentheses' own depth.
+-- This recipe finds the same parameters in a row in function after function:
+-- a run of parameter names (`conv_dir, conv_key, sid`) that several
+-- functions declare, in that order. A long list is a question; a run that
+-- recurs is a struct with more than one user already, which is when one
+-- earns its keep. It reads Zig's tokens: each `fn`'s names before a `:` at
+-- its parentheses' own depth.
 --
 -- The plumbing every handler takes (`skip=`, by default io, alloc, a,
 -- req, bus, self, gpa, arena, and a comparator's `_`) is passed by, so runs are of the parameters
 -- that say what a function is about. A run is reported once, at its
 -- longest: a shorter run inside it, in no more functions, is left out.
--- **Functions are counted by name**: an interface's implementations (a
+-- Functions are counted by name: an interface's implementations (a
 -- writer's `drain` in five files, a vtable's `read`) declare one shape
 -- because they must, so a run needs `min` distinct names.
 --
@@ -20,10 +20,6 @@
 -- Each file's tokens are held for the run, so a real tree needs room:
 --
 -- budget: steps=900000000 arena_bytes=4000000000
---
--- On 2026-10-18 it found
--- angry-gopher's (conv_dir, sid) in 21 functions and (user_id,
--- session_id) in 14.
 
 const GLOB = arg("glob", "src/**/*.zig")
 const MIN = parse_int(arg("min", "3"))

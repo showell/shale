@@ -1,13 +1,13 @@
--- **EACH BARE `true` OR `false` A CALL PASSES, FLIPPED, AND THE TESTS RUN**:
--- a flip the tests let through is a decision nothing checks. Mutation
--- testing kept to the one mutation that names a choice at a call: a bool
--- argument (`f(x, true)`), outside tests, comments and strings' lines.
--- Each flip is planted alone, the build's tests run, and the file put back
+-- This recipe flips each bare `true` or `false` a call passes and runs the
+-- tests. A flip the tests let through is a decision nothing checks. It is
+-- mutation testing kept to the one mutation that names a choice at a call: a
+-- bool argument (`f(x, true)`), outside tests, comments and strings' lines.
+-- Each flip is planted alone, the build's tests run, and the file is put back
 -- before the next; under `--undo-on-stop` a stop puts it back too.
 --
--- **A HUNT, NEVER A GATE**: each flip is a whole test run (half a minute
--- in angry-gopher), so it runs alone, detached, and what survives becomes
--- a test, or an enum and a test.
+-- It is a hunt, never a gate: each flip is a whole test run (half a minute in
+-- angry-gopher), so it runs alone, detached, and what survives becomes a
+-- test, or an enum and a test.
 --
 --   cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/flip_bools.shale [build=test] [most=40] [timeout_ms=600000]
 --   (`glob=`, default src/**/*.zig, holds a `*`: on stdin, `--args-stdin`;
@@ -15,13 +15,10 @@
 --
 -- `most` caps the flips a run plants; the rest are listed, not run.
 --
--- **READ EACH SURVIVOR BEFORE BELIEVING IT**: one in code the build step
--- never runs (a bench's own binary) survives for that alone, and one a
--- separate step judges (angry-gopher's `markdown-regression`) wants
--- `build=` that step. On 2026-10-18, angry-gopher's 24 flips left 17
--- standing: 8 were real gaps (4 tests now hold them), 4 were judged by
--- markdown-regression, 2 sat in the stress binary, and 3 change nothing
--- that matters.
+-- Read each survivor before believing it. One in code the build step never
+-- runs (a bench's own binary) survives for that alone, and one a separate
+-- step judges (angry-gopher's `markdown-regression`) wants `build=` that
+-- step. Some survivors change nothing that matters.
 
 const GLOB = arg("glob", "src/**/*.zig")
 const BUILD = arg("build", "test")

@@ -1,6 +1,7 @@
--- groups.shale: the bracket groups of Roc, their items and their tokens, as
--- check_stacking.shale finds them and wrap_long_lines.shale rewrites them. Both use this one
--- reading, so a group one rewrites is a group the other no longer reports.
+-- This library reads the bracket groups of Roc, their items and their
+-- tokens, as check_stacking.shale finds them and wrap_long_lines.shale
+-- rewrites them. Both use this one reading, so a group one rewrites is a
+-- group the other no longer reports.
 --
 -- The stacking rule's home is here: a group of three or more items and
 -- STACK_TOKENS or more tokens stacks, and any other group sits on one line

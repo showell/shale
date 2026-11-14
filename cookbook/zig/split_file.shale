@@ -1,5 +1,5 @@
--- **DECLARATIONS MOVED TO A NEW FILE, AND THE OLD ONE MADE TO USE THEM**:
--- zig_move and what a split needs around it, as one script.
+-- This recipe moves Zig declarations to a new file and makes the old file
+-- use them: zig_move and what a split needs around it, as one script.
 --
 --   cd <repo> && shale --undo-on-stop <shale>/cookbook/zig/split_file.shale --args-stdin <<'ARGS'
 --   from=src/main.zig
@@ -57,7 +57,7 @@ if USES ~= "qualify" and USES ~= "alias" then fail("split_file: uses=qualify or 
 if FROM == "" or TO == "" or AS == "" or #NAMES == 0 or (DOC == "" and not INTO) then fail("split_file: from, to, as, names and doc (or into=yes)") end
 if INTO and not exists(TO) then fail("split_file: into=yes, and " .. TO .. " is not there") end
 if not INTO and exists(TO) then fail("split_file: " .. TO .. " is there already: this makes a new file (into=yes joins one)") end
--- **THE IMPORT'S NAME MUST BE FREE**: Zig lets nothing shadow a top-level
+-- The import's name must be free, because Zig lets nothing shadow a top-level
 -- name, so a parameter or a local already called `as` would stop the
 -- build in every function that has one. Exact, by Zig's tokenizer: an
 -- identifier `as` not right after a `.` (`x.as` is a field, not a name).

@@ -1,10 +1,10 @@
--- **THE ZIG 0.17 UPGRADE: WHAT EACH REPO USES THAT CHANGED** (written for
--- the 0.16 -> 0.17 upgrade, 2026-10-20). For each repo, each change the
--- 0.17 release notes list, counted by a literal text pattern in its .zig
--- files (.zig-cache, zig-out and zig-pkg skipped): a census to choose the
--- scripted fixes by, and to show a repo done (every count 0, or every
--- remaining hit one the compiler accepts). Text, not tokens: a comment
--- counts too, so a count is an upper bound.
+-- This recipe counts what each repo uses that Zig 0.17 changed, for the
+-- 0.16 to 0.17 upgrade. For each repo it counts each change the 0.17 release
+-- notes list, by a literal text pattern in its .zig files (.zig-cache,
+-- zig-out and zig-pkg skipped): a census to choose the scripted fixes by,
+-- and to show a repo done (every count 0, or every remaining hit one the
+-- compiler accepts). It counts text, not tokens: a comment counts too, so a
+-- count is an upper bound.
 --
 --   cd ~/showell_repos && shale shale/cookbook/zig17/count_upgrade_changes.shale
 --   cd ~/showell_repos && shale shale/cookbook/zig17/count_upgrade_changes.shale only=zig-webbox

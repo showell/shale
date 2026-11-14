@@ -1,8 +1,8 @@
--- **HOW MUCH THE COMMENTS SAY, AND HOW LOUDLY**: per Zig file, its code
--- lines, its doc lines (`///`, `//!`), its plain `//` lines, comment lines
--- per 100 lines of code, words a comment line, and the loud and dated ones
--- (QUEUE 242: Shale's comments in the Zig compiler authors' voice; this is
--- the before and after of every commit).
+-- This recipe counts how much a Zig tree's comments say, and how loudly. For
+-- each file it gives its code lines, its doc lines (`///`, `//!`), its plain
+-- `//` lines, comment lines per 100 lines of code, words a comment line, and
+-- the loud and dated comment lines. Run before and after a commit that
+-- rewrites comments, it shows what the commit changed.
 --
 --   cd <repo> && shale <shale>/cookbook/zig/count_comments.shale
 --   shale <shale>/cookbook/zig/count_comments.shale dir=zig:lib/std/zig files=AstGen.zig,Parse.zig,Zir.zig
@@ -13,9 +13,9 @@
 -- `*` on the command line is the shell's unless quoted.
 --
 -- A line is code when it holds anything but a comment, a comment line
--- when it is only one (a comment after code counts as code). **Loud**: a
--- comment line with `**`, a heading of two upper-case words or more
--- (`THE HUNT`), or a `──` banner. **Dated**: one naming a QUEUE or
+-- when it is only one (a comment after code counts as code). A loud line
+-- holds `**`, a heading of two upper-case words or more (`THE HUNT`), or a
+-- `──` banner. A dated line names a QUEUE or
 -- FEEDBACK item, a date (`2026-10-20`), or a person (`Steve`, `the box`,
 -- `CC`). The table is the loudest first, `top` rows of it (default all),
 -- then the whole's totals.

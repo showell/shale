@@ -1,10 +1,11 @@
--- **WHERE A `bool` PARAMETER IS A FLAG**: each function with one, and the
--- calls that pass it a bare `true` or `false`, which says nothing at the
--- call (`begin(c, n, true, false)`), where a named enum says what it means
--- (`.chunked`, `.upload`). A computed condition (`settle(n == want)`)
--- reads; a literal does not. By Zig's tokenizer, across the tree: a call
--- is the name, `(`, its arguments split at the commas of its own depth.
--- A method's call (`x.name(`) counts its receiver as the first argument.
+-- This recipe finds `bool` parameters used as flags. It lists each function
+-- with one, and the calls that pass it a bare `true` or `false`, which says
+-- nothing at the call (`begin(c, n, true, false)`), where a named enum would
+-- say what it means (`.chunked`, `.upload`). A computed condition
+-- (`settle(n == want)`) reads; a literal does not. It reads Zig's tokens
+-- across the tree: a call is the name, `(`, and its arguments split at the
+-- commas of its own depth. A method's call (`x.name(`) counts its receiver as
+-- the first argument.
 --
 --   cd <repo> && shale <shale>/cookbook/zig/find_bool_flags.shale
 --

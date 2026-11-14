@@ -1,9 +1,9 @@
 -- budget: steps=500000000
--- **A SEALED VALUE IS MADE BY ITS CHECK ALONE** (metal-vmm QUEUE 250): a
--- value checked once and passed on as a type only its check can make, so a
--- caller that skips the check does not compile. Zig has no private fields,
--- so such a type carries a seal, a field of size zero that only its own
--- file sets:
+-- This recipe checks that a sealed value is made by its check alone. A sealed
+-- value is checked once and passed on as a type only its check can make, so a
+-- caller that skips the check does not compile. Zig has no private fields, so
+-- such a type carries a seal, a field of size zero that only its own file
+-- sets:
 --
 --     pub const Id = struct { text: []const u8, id_seal: Seal = undefined };
 --
@@ -18,8 +18,8 @@
 --
 -- A literal without the seal does not compile; this refuses one that sets
 -- it, `.id_seal =` read from Zig's tokens (a string or a comment is never
--- code), anywhere but the seal's own file, its tests too. **A PAYLOAD IS
--- SEALED THE SAME WAY** (the box's review): name it as only its file does
+-- code), anywhere but the seal's own file, its tests too. A payload is
+-- sealed the same way: name it as only its file does
 -- (`player_id`, not `text`), read it by a method, and list it as a seal,
 -- so a change to a value already made (`id.player_id = raw`) is refused too.
 --
@@ -27,8 +27,8 @@
 --   shale cookbook:check_seals.shale dir=zig-webbox/src,dog-park/src seals=target_path:zig-webbox/src/http.zig headers=location:zig-webbox/src/http.zig
 --
 -- `dir` is one tree or several (a consumer's beside its library's), and a
--- seal's file is named from the root. **`headers=name:file`**: a header of
--- that name is set (`.name = "location"`, any case) in that file only, so a
+-- seal's file is named from the root. With `headers=name:file`, a header of
+-- that name may be set (`.name = "location"`, any case) in that file only, so a
 -- response cannot carry one its checked helper did not make.
 --
 -- One line a finding, then PASS or a FAIL that stops the run. What it cannot

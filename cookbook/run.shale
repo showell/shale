@@ -1,13 +1,12 @@
--- **A PROGRAM RUN, AND WHAT IT SAID THAT MATTERS**: one command line, or
--- several joined by `&&` and run in order until one fails, each with how
--- it ended, how long it took, the lines holding `grep`'s literals and its
--- last lines; the whole output kept in `log`. **The default log is
--- .zig-cache/run.log under `dir` only where that folder is already** (a
--- Zig checkout, which ignores it); elsewhere (an essay repo, a memory
--- folder) nothing is written, and the last line says so. The escape behind most of 2026-10-23's
--- wants (about 130 of 210: `roc check`, `zig build` with a log and a
--- timing, a bench binary, `gh run`, `node`), which `run` already did
--- but only from a script.
+-- This recipe runs a program and prints what it said that matters. It takes
+-- one command line, or several joined by `&&` and run in order until one
+-- fails, and prints for each how it ended, how long it took, the lines
+-- holding `grep`'s literals and its last lines. The whole output is kept in
+-- `log`. The default log is .zig-cache/run.log under `dir`, and only where
+-- that folder is already (a Zig checkout, which ignores it); elsewhere (an
+-- essay repo, a memory folder) nothing is written, and the last line says
+-- so. It is `run` from a launch line, for `roc check`, a `zig build` with a
+-- log and a timing, a bench binary, `gh run` or `node`.
 --
 --   cd <repo> && shale cookbook:run.shale --args-stdin <<'ARGS'
 --   cmd=roc check roc/Game.roc && roc test roc/Game.roc && roc fmt --check roc/
