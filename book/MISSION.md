@@ -103,3 +103,17 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 **PD. Types as the prompt.** Each Part Two session opens with types: the prompt gives the mission, and the agent's first report is a proposed set of Roc types for Steve to reply to, before any code. This paradigm is new for us, precisely because our past work was so driven by porting. The book is honest about where we get the types wrong (Steve, 2026-11-14).
 
 **PE. Read Roc, rarely write it.** Part Two mirrors Part One's premise: the reader reads Roc and judges it, and the agent writes it. A "Meet Roc" interlude opens Part Two, like Meet Shale, with one real function from the project. Roc's unusual features arrive only when a session needs them (Steve, 2026-11-14).
+
+**PF. Watch the types-first session honestly (Steve, 2026-11-14).** The book records what really happens, including:
+- whether the cold agent replies with Roc that compiles, or with a sketch of the types;
+- whether it matters that the types compile right away;
+- what happens if the agent gets bogged down in types before a minimum viable product, and whether that matters when we already know Roc can do the job;
+- how the human is engaged for judgment and clarification without being bogged down in details.
+
+These are observations, not a script. The answers come from the sessions.
+
+**PG. The reader reads mainstream languages.** The reader knows how to read mainstream programming languages well enough to grok Roc. Frame Roc for that reader: show it, and explain only what a mainstream reader wouldn't guess (Steve, 2026-11-14).
+
+**PH. Types can also be extracted.** Roc scripts already exist that extract the types from a working program (`roc-types`). That's retroactive, the reverse of types-first, and worth noting once Part Two is deeper in (Steve, 2026-11-14).
+
+**PI. Prompt fidelity.** Part Two's prompts are drafted by the orchestrator close to how Steve prompts, and Steve doesn't need to approve each one. Perfect fidelity isn't the goal, since the reader's prompts won't match Steve's either (Steve, 2026-11-14).
