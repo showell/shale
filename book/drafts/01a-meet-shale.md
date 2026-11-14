@@ -12,7 +12,7 @@ Then the stages, in order: the formatter, `go vet`, a syntax check of the front 
 
 If you've read Lua, this looks familiar, and that's on purpose. `local` declares a variable, `function` and `end` frame a function, braces build a list or a map, and `..` joins strings. The rest is the mainstream you know.
 
-Agents write Shale tersely, so you'll meet names like `ls` for a list of lines. Steve scans for the calls, such as `lines`, and skips the variables: "The honest truth is that I skim shale scripts really fast, because I have seen a lot of it." If you can't skim it that fast yet, ask your agent to write more verbosely. It will. Steve doesn't need it.
+Agents write Shale tersely, so you'll meet names like `ls` for a list of lines. Steve scans for the calls, such as `lines`, and skips the variables: "The honest truth is that I skim shale scripts really fast, because I have seen a lot of it." If you can't skim it that fast yet, ask your agent to write more verbosely. It will: terseness is just a habit agents fall into when nobody objects.
 
 An agent usually hands a one-off script to `shale` in a heredoc, bash's way of passing a block of text to a program as its input, between `<<'EOF'` and a closing `EOF`. A block captioned "Shale, launched from bash" ran that way.
 
@@ -30,7 +30,7 @@ Shale builds nothing itself. `go build` makes the server, and `go test` compiles
 
 ### Who reads the output
 
-Shale's output is written for the agent. A run that stops ends on one `── stopped at` line, naming where and why, and a `── used:` line for its budgets. The agent reads them and tells Steve what he needs, and Steve almost never reads them raw. Translating output for a person is what agents already do well, so Shale leaves it to them. When this book shows a raw stop line, it says what the line means beside it.
+Shale's output is written for the agent. A run that stops ends on one `── stopped at` line, naming where and why, and a `── used:` line for its budgets. The agent reads them and tells Steve what he needs, and Steve almost never reads them raw. Agents translate output well, so Shale leaves that to them. When this book shows a raw stop line, it says what the line means beside it.
 
 ### The cookbook
 
