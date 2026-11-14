@@ -43,6 +43,8 @@ So the work splits in two. Cold agents do small, scoped tasks: each session's ag
 
 Steve accepts the orchestrator's recommendations about 80% of the time when he's careful with his prompts. Creative work is the exception, and there he's more opinionated, "because it's as impossible for an agent as it is for another human to guess what ideas your info will spark with me." This book is creative work, and most of the rules in its mission are his words.
 
+The orchestrator also keeps its own memory: one markdown file per fact, in a git repository, with an index the harness loads at the start of every session. Nothing else about a memory file is special. The agent reads it like any other file, and commits it with Shale like any other change.
+
 ### Let the work ask
 
 Nothing in this project was planned in advance. The checks, the release script and the language change all arrived because a chore came up more than once. That's how to grow a project's tools: make a script the third time you do something by hand, a gate once the script makes a judgment, and a change to the language once its gap starts to cost you.
