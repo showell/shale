@@ -1,0 +1,2 @@
+# Output blocks the book quotes whole, over 12 lines, each with its reason
+# (MISSION V): the block's first line, a tab, then why it stays long.

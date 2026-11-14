@@ -21,7 +21,7 @@ By Friday the project had a check for every moment, each sized to how often it r
 | before shipping | `full.shale`: fast, the race detector, the real notes | about 25 s |
 | shipping | `release.shale`: full, then a checked swap with a rollback | about 27 s |
 
-A check that's too slow stops getting run, so each one is held to a budget, and the budget is CPU time, which a busy machine can't break. Slowness is a finding.
+A check that's too slow stops getting run, so each one is held to a budget, and the budget is CPU time, which a busy machine can't break.
 
 ### Prove it can fail
 

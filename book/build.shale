@@ -164,7 +164,21 @@ function fence_of(path, text)
     if contains(join(b, "\n"), text) then push(found, b) end
   end
   if #found ~= 1 then fail("book: `" .. text .. "` is in " .. #found .. " fenced blocks of " .. path .. ", and a fence's anchor must be in one") end
-  return "*" .. shown_path(path) .. "*\n\n" .. join(found[1], "\n")
+  return found[1]
+end
+
+-- `{{fence PATH "TEXT"}}`, or with `from "A" to "B"` only the block's lines
+-- between those anchors, its fences kept.
+function fence_quote(path, text, from, to)
+  local b = fence_of(path, text)
+  if from ~= nil then
+    local inside = slice(b, 2, #b - 1)
+    local kept = anchored_span(inside, from, to, path .. " (the fence holding `" .. text .. "`)")
+    b = {b[1]}
+    for l in kept do push(b, l) end
+    push(b, FENCE)
+  end
+  return "*" .. shown_path(path) .. "*\n\n" .. join(b, "\n")
 end
 
 -- A file as a commit had it, for a script the project has since changed or
@@ -187,6 +201,7 @@ function expanded(text)
     local span = re_find(l, "^\\{\\{lines (\\S+) from \"([^\"]+)\" to \"([^\"]+)\"\\}\\}$")
     local prompt = re_find(l, "^\\{\\{quote (\\S+)\\}\\}$")
     local fence = re_find(l, "^\\{\\{fence (\\S+) \"([^\"]+)\"\\}\\}$")
+    local fence_span = re_find(l, "^\\{\\{fence (\\S+) \"([^\"]+)\" from \"([^\"]+)\" to \"([^\"]+)\"\\}\\}$")
     local show = re_find(l, "^\\{\\{show (\\S+) (\\S+)\\}\\}$")
     local show_span = re_find(l, "^\\{\\{show (\\S+) (\\S+) from \"([^\"]+)\" to \"([^\"]+)\"\\}\\}$")
     local block = nil
@@ -199,7 +214,9 @@ function expanded(text)
     elseif prompt ~= nil then
       block = quote_of(prompt.group)
     elseif fence ~= nil then
-      block = fence_of(fence.groups[1], fence.groups[2])
+      block = fence_quote(fence.groups[1], fence.groups[2], nil, nil)
+    elseif fence_span ~= nil then
+      block = fence_quote(fence_span.groups[1], fence_span.groups[2], fence_span.groups[3], fence_span.groups[4])
     elseif show ~= nil then
       block = shown_at(show.groups[1], show.groups[2], nil, nil)
     elseif show_span ~= nil then
@@ -341,7 +358,62 @@ function contents(book)
   return join(ls, "\n")
 end
 
+-- The book's prose lints, over the whole expanded book, as `path-free`
+-- findings: an output block over MAX_OUTPUT_LINES that long_blocks.txt
+-- doesn't name, a phrase of refrains.txt used more than its allowance, and a
+-- chapter named by number. Each table line is `key<TAB>value`: a block's
+-- first line and the reason it's long; a phrase's allowance and the phrase.
+const MAX_OUTPUT_LINES = 12
+const LONG_BLOCKS = "book/long_blocks.txt"
+const REFRAINS = "book/refrains.txt"
+
+function table_lines(path)
+  local rows = {}
+  if not exists(path) then return rows end
+  for l in text_lines(read(path)) do
+    if trim(l) ~= "" and not starts_with(l, "#") then
+      local tab = find(l, "\t")
+      if tab == nil then fail("book: " .. path .. " has a line with no tab: " .. l) end
+      push(rows, {key = sub(l, 1, tab - 1), value = sub(l, tab + 1)})
+    end
+  end
+  return rows
+end
+
+function lint_findings(ls)
+  local found = {}
+  local long_ok = {}
+  for row in table_lines(LONG_BLOCKS) do long_ok[row.key] = true end
+  local prose = {}
+  local in_code = false
+  local tag = ""
+  local block = {}
+  for l in ls do
+    if starts_with(l, FENCE) then
+      if not in_code then
+        tag = trim(sub(l, 4))
+        block = {}
+      elseif tag == "text" and #block > MAX_OUTPUT_LINES and not has_key(long_ok, get(block, 1, "")) then
+        push(found, "an output block of " .. #block .. " lines, over " .. MAX_OUTPUT_LINES .. ", starting `" .. sub(get(block, 1, ""), 1, 80) .. "`: trim it, or name it in " .. LONG_BLOCKS)
+      end
+      in_code = not in_code
+    elseif in_code then
+      push(block, l)
+    elseif not starts_with(l, ">") then
+      push(prose, lower(l))
+    end
+  end
+  local text = join(prose, "\n")
+  for row in table_lines(REFRAINS) do
+    local uses = #find_all(text, lower(row.value))
+    if uses > parse_int(row.key) then push(found, "`" .. row.value .. "` is used " .. uses .. " times, and " .. REFRAINS .. " allows " .. row.key) end
+  end
+  for m in re_find_all(text, "\\bchapters? [0-9]+") do push(found, "a chapter named by number: `" .. m.text .. "`") end
+  return found
+end
+
 local whole = expanded(read(SOURCE))
+local lint = lint_findings(whole)
 local book = parts_of(whole)
 if #book.chapters == 0 then fail("book: book.md has no `##` chapters") end
 if exists(DEST) then remove_tree(DEST) end
@@ -363,5 +435,7 @@ for c in book.chapters do
   if p.prose > MAX_PROSE_WORDS then push(over, n .. " (" .. p.prose .. " words)") end
 end
 print(table(rows, {"chapter", "prose", "code", "title"}))
+for f in lint do print("lint: " .. f) end
 if #over > 0 then fail("book: over " .. MAX_PROSE_WORDS .. " words of prose: " .. join(over, ", ")) end
+if #lint > 0 then fail("book: " .. #lint .. " lint findings, above") end
 print("book: " .. #book.chapters .. " chapters at " .. URL)

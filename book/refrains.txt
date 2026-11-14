@@ -1,0 +1,7 @@
+# Each phrase, with how many times the book may use it (MISSION U).
+# A mantra, repeated on purpose, gets a large allowance; an accidental
+# refrain gets one. Matched in prose, any case, outside fences and quotes.
+1	a green is a claim
+1	shale builds nothing itself
+1	slowness is a finding
+99	green again

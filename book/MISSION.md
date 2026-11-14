@@ -55,4 +55,10 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **S. American English, and plain words.**
 
+**U. Mantras, not refrains.** A phrase repeated on purpose can be a mantra, and that's good: "green again ✅" may close a check that passes, as often as it's earned (Steve, 2026-11-14). A good mantra is short, because short is what makes it catchy: a few words, never a sentence. A phrase repeated by accident is a refrain, and it reads as padding. `book/refrains.txt` names each phrase with how many times the book may use it, and the build holds it there.
+
+**V. One point per output block.** A quoted output block shows the lines that carry its point, and the sentence before it says the point. The build stops on an output block over 12 lines unless `book/long_blocks.txt` names it with a reason.
+
+**W. Chapters are named, never numbered,** in prose. The week's chapters are days. The build stops on "chapter 4".
+
 **T. The essay surface is where we talk.** Decisions go in an essay, and Steve replies on the new surface itself.
