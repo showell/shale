@@ -14,7 +14,7 @@ Can every stage really go red? Session 3 saw `NOT SAFE` once, for one fault. Ask
 
 This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that test nothing, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Steve is wary of fixtures, because they can slow gates, often through needless rebuilds.
 
-`full.shale` has six stages, and its first, `fast`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `full.shale` runs it, the fault out, then proof that the tree is back and `fast.shale` passes:
+`check_before_release.shale` has six stages, and its first, `commit`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `check_before_release.shale` runs it, the fault out, then proof that the tree is back and `check_before_commit.shale` passes:
 
 {{fence repos:essay-surface/journal/thursday.md "plant 1, fast's gofmt stage" from "OLD, NEW)" to "after: exit"}}
 
@@ -46,9 +46,9 @@ It passed before the plant, failed with it, and passed after: green again ✅.
 
 ### Fixtures, and what they cost
 
-Three kinds of fixture stayed, each one data the check reads. The audit reads a known-bad page and a known-good one before any real note, in under 5 ms, and a plant that blinded the audit stopped it there, before any server started. The hidden panic from Session 3 became data for the part of `fast.shale` that reads `go test` output:
+Three kinds of fixture stayed, each one data the check reads. The audit reads a known-bad page and a known-good one before any real note, in under 5 ms, and a plant that blinded the audit stopped it there, before any server started. The hidden panic from Session 3 became data for the part of `check_before_commit.shale` that reads `go test` output:
 
-{{lines repos:essay-surface/scripts/fast.shale from "A known-bad go test -v output" to "misreads testdata"}}
+{{lines repos:essay-surface/scripts/check_before_commit.shale from "A known-bad go test -v output" to "misreads testdata"}}
 
 It costs 3 ms, and a plant that stopped the reader from recognizing a panic tripped it at once. The third kind is the reply-button sheets, below.
 
@@ -72,4 +72,4 @@ The two replies answered the report from Session 3. The first was the defensive 
 
 ### The gates now
 
-Every stage of `full.shale` has been seen red once, and its kept fixtures run on every check in milliseconds. A page that hides its reply buttons fails `fast.shale` now, and so does a commenter's name that reaches the page unescaped.
+Every stage of `check_before_release.shale` has been seen red once, and its kept fixtures run on every check in milliseconds. A page that hides its reply buttons fails `check_before_commit.shale` now, and so does a commenter's name that reaches the page unescaped.

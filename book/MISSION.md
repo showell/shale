@@ -92,6 +92,8 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **AJ. Shale isn't a token saver.** Never portray Shale as something that saves tokens: it may add to token costs. It also slows you down at first, while you build up recipes. The book's other points matter far more (Steve, 2026-11-14). Meet Shale says this once, plainly, and then gives the main advantage over bash: Shale is a higher-level language, one in which you build up real primitives (Steve, 2026-11-14). There's no "trying this yourself" section with costs, since the book has no record of them.
 
+**AK. Say what the reader is actually doing.** "Jump ahead" means the book really moves on to later material. A glimpse of later work, before returning, is a preview: "Here we preview..." (Steve, 2026-11-14). The same goes for any signpost: it names the move the text makes.
+
 ## 6. Part Two
 
 **PA. Part Two: four languages, one workflow.** Part Two makes the essay surface richer, with dot diagrams and small widgets in a note. Shale is the glue the agent builds, checks, refactors and ships with. Go does the plumbing, Roc expresses the features, and JavaScript does what JavaScript always does. Its premise is that true multi-lingual development is far more feasible with agents, for the same reason dialects are cheap for them. The book's central theme still holds: building your own workflow, now in app territory (Steve, 2026-11-14).

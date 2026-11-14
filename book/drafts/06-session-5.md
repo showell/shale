@@ -74,8 +74,8 @@ digraph checks {
   edit [label="each edit", shape=plaintext];
   ship [label="before shipping", shape=plaintext];
   shipping [label="shipping", shape=plaintext];
-  fast [label="fast.shale\nformat, vet, tests, smoke\nabout 3 s of CPU"];
-  full [label="full.shale\nfast, race, the real notes\nabout 25 s"];
+  fast [label="check_before_commit.shale\nformat, vet, tests, smoke\nabout 3 s of CPU"];
+  full [label="check_before_release.shale\nthe commit check, race,\nthe real notes\nabout 25 s"];
   rel [label="release.shale\nfull, then a checked swap\nabout 27 s"];
   edit -> fast;
   ship -> full;

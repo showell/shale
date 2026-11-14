@@ -50,28 +50,28 @@ Gates need a language to write them in. Next, a short tour of Shale.
 
 ## Meet Shale
 
-The quickest way to meet a language is to read some, so here's a real gate: `scripts/fast.shale`. It comes from later in the project, where it's the check the agent runs on every edit, in a few seconds. First, the helper that runs each stage:
+The quickest way to meet a language is to read some, so here's a real gate: `scripts/check_before_commit.shale`. It comes from later in the project, where it's the check the agent runs on every edit, in a few seconds. First, the helper that runs each stage:
 
-{{function repos:essay-surface/scripts/fast.shale stage}}
+{{function repos:essay-surface/scripts/check_before_commit.shale stage}}
 
 Then the stages, in order: the formatter, `go vet`, a syntax check of the front end, the Go tests, and a smoke test through the real server. One more line after them prints the verdict, `fast: PASS`.
 
-{{lines repos:essay-surface/scripts/fast.shale from "local fmt = stage(" to "checks through the real server"}}
+{{lines repos:essay-surface/scripts/check_before_commit.shale from "local fmt = stage(" to "checks through the real server"}}
 
 If you've read Lua, this looks familiar, and that's on purpose. `local` declares a variable, `function` and `end` frame a function, braces build a list or a map, and `..` joins strings. The rest is the mainstream you know.
 
 ### What Shale adds
 
-A few features are Shale's own, and most of them show up in fast.shale:
-- **Every run has budgets:** steps, reads, bytes read and printed, memory, and the programs it starts. A runaway script stops and says which budget it hit. A program can get a CPU budget too, and fast.shale gives each stage one, `cpu_budget_ms`, so a stage that turns slow fails.
-- **A script works inside its own folder** and the folders it mounts. A mount is a named folder beyond its own, written `name:path`, so you can see everything a script can reach. Every path in fast.shale, such as `.` or `comments.js`, is inside its repository.
+A few features are Shale's own, and most of them show up in check_before_commit.shale:
+- **Every run has budgets:** steps, reads, bytes read and printed, memory, and the programs it starts. A runaway script stops and says which budget it hit. A program can get a CPU budget too, and check_before_commit.shale gives each stage one, `cpu_budget_ms`, so a stage that turns slow fails.
+- **A script works inside its own folder** and the folders it mounts. A mount is a named folder beyond its own, written `name:path`, so you can see everything a script can reach. Every path in check_before_commit.shale, such as `.` or `comments.js`, is inside its repository.
 - **A risky program runs when the script gives its reason.** A shell, an interpreter, a text tool or a program git doesn't track requires a reason, and the reason is logged. `node` is an interpreter, so the js stage says why it runs.
-- **A stop is one line** that says where and why. When a stage fails, fast.shale ends on one line that names it, such as `vet: go exited 1`.
+- **A stop is one line** that says where and why. When a stage fails, check_before_commit.shale ends on one line that names it, such as `vet: go exited 1`.
 - **A prelude does the daily work.** The prelude is Shale's built-in library: git, jobs, HTTP, JSON, and refactors that read code the way its compiler does. A job is a program that outlives the call that started it, such as a server. `run` comes from the prelude too.
 
 ### Who builds what
 
-Shale builds nothing itself. `go build` makes the server, and `go test` compiles the tests. Shale runs those programs, keeps what they said, and checks what came out: fast.shale reads go test's output and counts the tests that passed.
+Shale builds nothing itself. `go build` makes the server, and `go test` compiles the tests. Shale runs those programs, keeps what they said, and checks what came out: check_before_commit.shale reads go test's output and counts the tests that passed.
 
 ### A language that changes
 
@@ -81,15 +81,15 @@ The same goes for recipes, scripts saved to a file because their question came b
 
 ### What it costs
 
-Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its recipes. What it buys, above all, is a higher-level language than bash, one where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, functions take and return lists and maps, and a helper like fast.shale's `stage` becomes a word the next script uses. Each primitive your agent builds makes the next script shorter and easier to read, and the budgets and folders keep every one of them inside lines you can see.
+Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its recipes. What it buys, above all, is a higher-level language than bash, one where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, functions take and return lists and maps, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive your agent builds makes the next script shorter and easier to read, and the budgets and folders keep every one of them inside lines you can see.
 
 ### Four words for what's next
 
 Four words come up from the first session on. `run` needs a timeout and a keep. A keep is how much of a program's output `run` holds on to. `whole` and `tail` are the two keeps:
 - **`want`:** the reason a script gives for running a risky program, written `want = "tag: why"`. Shale logs it.
-- **`whole`:** a keep in bytes. `run` holds all of the output up to that size, and each stage in fast.shale holds up to 400,000 bytes.
+- **`whole`:** a keep in bytes. `run` holds all of the output up to that size, and each stage in check_before_commit.shale holds up to 400,000 bytes.
 - **`tail`:** a keep in lines. `run` holds the program's last lines, where its verdict usually sits.
-- **`must`:** `must(r)` returns a run that exited 0, and fails the script on any other, printing the output and naming the program. fast.shale's `stage` does the same job, with more to say when a test fails.
+- **`must`:** `must(r)` returns a run that exited 0, and fails the script on any other, printing the output and naming the program. check_before_commit.shale's `stage` does the same job, with more to say when a test fails.
 
 That's enough Shale to start. Next, one turn of the loop, from a reply to a change.
 
@@ -120,7 +120,7 @@ digraph loop {
 
 ### The report
 
-Jump ahead to the end of Session 3. The agent's report there listed a few decisions Steve might reverse. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The server appended his reply to the note's comments file, one JSON line per reply:
+Here we preview the end of Session 3. The agent's report there listed a few decisions Steve might reverse. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The server appended his reply to the note's comments file, one JSON line per reply:
 
 {{fence repos:essay-surface/journal/reply.md "add a defensive check"}}
 
@@ -334,7 +334,7 @@ The new server hears changes from the kernel, through Linux's inotify, instead o
 
 ### A check for each edit
 
-`fast.shale` is the check the agent runs on every edit, the one from Meet Shale: five stages, each a line that calls the `stage` helper. Its last two stages count what ran: "44 tests passed, 63 subtests" can be checked, and "ok" can't.
+`check_before_commit.shale` is the check the agent runs on every edit, the one from Meet Shale: five stages, each a line that calls the `stage` helper. Its last two stages count what ran: "44 tests passed, 63 subtests" can be checked, and "ok" can't.
 
 What's new here is the budgets. A stage whose run spends more CPU than its `cpu_budget_ms` stops, naming the stage. The budgets are CPU time, never wall time: on this two-CPU machine, wall times ran 1.7 times as long at a load of 2 from other work, and the CPU a program spends moves much less. So a busy machine can't turn the verdict red, and a stage gone slow can. A real run takes 2.4 s:
 
@@ -342,9 +342,9 @@ What's new here is the budgets. A stage whose run spends more CPU than its `cpu_
 
 ### A check before shipping
 
-`full.shale` runs `fast.shale` first, then five stages on all of Steve's real notes: the Go tests under the race detector, the anchoring simulation from Session 2 (which replays edits to see where comments land), the audit of every rendered note from Session 1, the dates comparison, and the bench. Every stage runs, even after one fails, unless a stage breaks its CPU budget, so the last line names every stage that failed:
+`check_before_release.shale` runs `check_before_commit.shale` first, then five stages on all of Steve's real notes: the Go tests under the race detector, the anchoring simulation from Session 2 (which replays edits to see where comments land), the audit of every rendered note from Session 1, the dates comparison, and the bench. Every stage runs, even after one fails, unless a stage breaks its CPU budget, so the last line names every stage that failed:
 
-{{lines repos:essay-surface/scripts/full.shale from "local failed = {}" to "SAFE TO SHIP"}}
+{{lines repos:essay-surface/scripts/check_before_release.shale from "local failed = {}" to "SAFE TO SHIP"}}
 
 The bench needed more care, since its job is time. The server now logs, as it stops, the CPU its requests took, so the bench holds each kind of request to a CPU budget, about twice what real notes took:
 
@@ -362,7 +362,7 @@ The store's new tests all passed on their first run. So the agent seeded a fault
 
 `TestCommentsFollowEdits`, written in Session 2, sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Its runs in Session 2 gave no sign, because nothing failed then. With the panic made a plain failure, the same deaf watch turned twelve tests red. After seeding a fault, count how many tests went red against how many should have, because a test that panics hides every test after it. The next session makes that trick a habit.
 
-Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`, which looks the same on the page. The verdict was right, `NOT SAFE: fast, race failed`, but the red fast stage showed the last lines of `go test -v`, and those were passes. Now fast keeps only the failed tests and their lines, and its stop names them:
+Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`, which looks the same on the page. The verdict was right, `NOT SAFE: fast, race failed`, but the red first stage, then named `fast`, showed the last lines of `go test -v`, and those were passes. Now fast keeps only the failed tests and their lines, and its stop names them:
 
 {{fence repos:essay-surface/journal/wednesday.md "1 failed: TestRender (86718 steps)" from "markdown_test.go:100" to "stopped at"}}
 
@@ -370,7 +370,7 @@ The audit, which reads every rendered note for markdown left over, passed that f
 
 ### The gates now
 
-`fast.shale` runs on every edit, in about three seconds, and stops at the first failing stage, naming the failed tests. `full.shale` runs before anything ships, holds every stage to a CPU budget, and ends on one line: `SAFE TO SHIP`, or `NOT SAFE` and the stages that failed.
+`check_before_commit.shale` runs on every edit, in about three seconds, and stops at the first failing stage, naming the failed tests. `check_before_release.shale` runs before anything ships, holds every stage to a CPU budget, and ends on one line: `SAFE TO SHIP`, or `NOT SAFE` and the stages that failed.
 
 ## Session 4: making the checks fail
 
@@ -386,7 +386,7 @@ Can every stage really go red? Session 3 saw `NOT SAFE` once, for one fault. Ask
 
 This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that test nothing, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Steve is wary of fixtures, because they can slow gates, often through needless rebuilds.
 
-`full.shale` has six stages, and its first, `fast`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `full.shale` runs it, the fault out, then proof that the tree is back and `fast.shale` passes:
+`check_before_release.shale` has six stages, and its first, `commit`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `check_before_release.shale` runs it, the fault out, then proof that the tree is back and `check_before_commit.shale` passes:
 
 {{fence repos:essay-surface/journal/thursday.md "plant 1, fast's gofmt stage" from "OLD, NEW)" to "after: exit"}}
 
@@ -418,9 +418,9 @@ It passed before the plant, failed with it, and passed after: green again ✅.
 
 ### Fixtures, and what they cost
 
-Three kinds of fixture stayed, each one data the check reads. The audit reads a known-bad page and a known-good one before any real note, in under 5 ms, and a plant that blinded the audit stopped it there, before any server started. The hidden panic from Session 3 became data for the part of `fast.shale` that reads `go test` output:
+Three kinds of fixture stayed, each one data the check reads. The audit reads a known-bad page and a known-good one before any real note, in under 5 ms, and a plant that blinded the audit stopped it there, before any server started. The hidden panic from Session 3 became data for the part of `check_before_commit.shale` that reads `go test` output:
 
-{{lines repos:essay-surface/scripts/fast.shale from "A known-bad go test -v output" to "misreads testdata"}}
+{{lines repos:essay-surface/scripts/check_before_commit.shale from "A known-bad go test -v output" to "misreads testdata"}}
 
 It costs 3 ms, and a plant that stopped the reader from recognizing a panic tripped it at once. The third kind is the reply-button sheets, below.
 
@@ -444,7 +444,7 @@ The two replies answered the report from Session 3. The first was the defensive 
 
 ### The gates now
 
-Every stage of `full.shale` has been seen red once, and its kept fixtures run on every check in milliseconds. A page that hides its reply buttons fails `fast.shale` now, and so does a commenter's name that reaches the page unescaped.
+Every stage of `check_before_release.shale` has been seen red once, and its kept fixtures run on every check in milliseconds. A page that hides its reply buttons fails `check_before_commit.shale` now, and so does a commenter's name that reaches the page unescaped.
 
 ## Session 5: shipping should be boring
 
@@ -520,8 +520,8 @@ digraph checks {
   edit [label="each edit", shape=plaintext];
   ship [label="before shipping", shape=plaintext];
   shipping [label="shipping", shape=plaintext];
-  fast [label="fast.shale\nformat, vet, tests, smoke\nabout 3 s of CPU"];
-  full [label="full.shale\nfast, race, the real notes\nabout 25 s"];
+  fast [label="check_before_commit.shale\nformat, vet, tests, smoke\nabout 3 s of CPU"];
+  full [label="check_before_release.shale\nthe commit check, race,\nthe real notes\nabout 25 s"];
   rel [label="release.shale\nfull, then a checked swap\nabout 27 s"];
   edit -> fast;
   ship -> full;
@@ -648,7 +648,7 @@ The hostile notes need a test that doesn't depend on exact HTML: only the render
 
 {{fence repos:essay-surface/journal/links.md "planted: exit 1" from "--- FAIL: TestBareURLsEscaped" to "markdown_test.go:259"}}
 
-The last line is the one that matters. A note that writes `&quot;` in a URL sends it to the href raw, and a browser reads it as a quote mark, which ends the attribute. `&quot;` is a valid entity, so the `&` rule passes it, and only the rule that href and text are one URL catches it. Then `fast.shale` passed with 50 tests, up from 48, so both new ones ran.
+The last line is the one that matters. A note that writes `&quot;` in a URL sends it to the href raw, and a browser reads it as a quote mark, which ends the attribute. `&quot;` is a valid entity, so the `&` rule passes it, and only the rule that href and text are one URL catches it. Then `check_before_commit.shale` passed with 50 tests, up from 48, so both new ones ran.
 
 ### Every real page, before and after
 
@@ -686,7 +686,7 @@ The same day, after this session, the regex nuisance became Shale's second langu
 
 ### The gates now
 
-The 62 cases run on every edit, inside `fast.shale`, and the escaping test has been seen red once. The rest, the audit of real notes and the release, took this feature unchanged. That's what the habits are for: when a request arrives, most of the work is the feature itself.
+The 62 cases run on every edit, inside `check_before_commit.shale`, and the escaping test has been seen red once. The rest, the audit of real notes and the release, took this feature unchanged. That's what the habits are for: when a request arrives, most of the work is the feature itself.
 
 ## How we work
 
@@ -705,9 +705,9 @@ By Session 5 the project had a check for every moment, each sized to how often i
 
 | When | The check | Its time |
 |---|---|---|
-| each edit | `fast.shale`: format, vet, the tests, a smoke test | about 3 s of CPU |
-| before shipping | `full.shale`: fast, the race detector, the real notes | about 25 s |
-| shipping | `release.shale`: full, then a checked swap | about 27 s |
+| each edit | `check_before_commit.shale`: format, vet, the tests, a smoke test | about 3 s of CPU |
+| before shipping | `check_before_release.shale`: the commit check, race detector, real notes | about 25 s |
+| shipping | `release.shale`: that, then a checked swap | about 27 s |
 
 A check that's too slow stops getting run, so each is held to a CPU budget, which a busy machine can't break.
 

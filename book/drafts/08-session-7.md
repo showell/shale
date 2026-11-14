@@ -42,7 +42,7 @@ The hostile notes need a test that doesn't depend on exact HTML: only the render
 
 {{fence repos:essay-surface/journal/links.md "planted: exit 1" from "--- FAIL: TestBareURLsEscaped" to "markdown_test.go:259"}}
 
-The last line is the one that matters. A note that writes `&quot;` in a URL sends it to the href raw, and a browser reads it as a quote mark, which ends the attribute. `&quot;` is a valid entity, so the `&` rule passes it, and only the rule that href and text are one URL catches it. Then `fast.shale` passed with 50 tests, up from 48, so both new ones ran.
+The last line is the one that matters. A note that writes `&quot;` in a URL sends it to the href raw, and a browser reads it as a quote mark, which ends the attribute. `&quot;` is a valid entity, so the `&` rule passes it, and only the rule that href and text are one URL catches it. Then `check_before_commit.shale` passed with 50 tests, up from 48, so both new ones ran.
 
 ### Every real page, before and after
 
@@ -80,4 +80,4 @@ The same day, after this session, the regex nuisance became Shale's second langu
 
 ### The gates now
 
-The 62 cases run on every edit, inside `fast.shale`, and the escaping test has been seen red once. The rest, the audit of real notes and the release, took this feature unchanged. That's what the habits are for: when a request arrives, most of the work is the feature itself.
+The 62 cases run on every edit, inside `check_before_commit.shale`, and the escaping test has been seen red once. The rest, the audit of real notes and the release, took this feature unchanged. That's what the habits are for: when a request arrives, most of the work is the feature itself.

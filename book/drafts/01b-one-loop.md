@@ -27,7 +27,7 @@ digraph loop {
 
 ### The report
 
-Jump ahead to the end of Session 3. The agent's report there listed a few decisions Steve might reverse. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The server appended his reply to the note's comments file, one JSON line per reply:
+Here we preview the end of Session 3. The agent's report there listed a few decisions Steve might reverse. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The server appended his reply to the note's comments file, one JSON line per reply:
 
 {{fence repos:essay-surface/journal/reply.md "add a defensive check"}}
 

@@ -17,9 +17,9 @@ By Session 5 the project had a check for every moment, each sized to how often i
 
 | When | The check | Its time |
 |---|---|---|
-| each edit | `fast.shale`: format, vet, the tests, a smoke test | about 3 s of CPU |
-| before shipping | `full.shale`: fast, the race detector, the real notes | about 25 s |
-| shipping | `release.shale`: full, then a checked swap | about 27 s |
+| each edit | `check_before_commit.shale`: format, vet, the tests, a smoke test | about 3 s of CPU |
+| before shipping | `check_before_release.shale`: the commit check, race detector, real notes | about 25 s |
+| shipping | `release.shale`: that, then a checked swap | about 27 s |
 
 A check that's too slow stops getting run, so each is held to a CPU budget, which a busy machine can't break.
 
