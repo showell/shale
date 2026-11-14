@@ -1,0 +1,2 @@
+-- Finds the disk's space, named in neither case nor with a verb.
+if true then print(1) end

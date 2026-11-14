@@ -1,0 +1,2 @@
+-- The totals of a log, with no verb in its name or its header.
+print(1)

@@ -1,0 +1,2 @@
+-- Finds the negative sentences, under a name find_negatives.shale already has.
+print(1)

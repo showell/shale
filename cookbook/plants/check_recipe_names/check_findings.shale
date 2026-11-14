@@ -1,0 +1,5 @@
+-- The findings' printer: a library named like a command.
+function print_all(lines)
+  for l in lines do print(l) end
+  return nil
+end

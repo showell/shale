@@ -1,0 +1,58 @@
+# The verbs a runnable cookbook recipe's name may start with, one a line, in
+# their plain form (`find`, never `finds`). check_recipe_names.shale reads it;
+# a verb is added here, in the same change as the recipe that needs it.
+#
+# `merge` is left out on purpose: `merge_conflicts.shale` is the standard's own
+# example of a library's name, and a library named with a verb first breaks it.
+add
+align
+build
+check
+clean
+collect
+color
+compare
+count
+cut
+delete
+diff
+edit
+extract
+fetch
+find
+fix
+flip
+format
+hunt
+judge
+lint
+list
+listen
+look
+map
+measure
+move
+parse
+patch
+post
+print
+prune
+read
+rename
+replace
+report
+rewrite
+run
+scan
+send
+show
+sort
+split
+strip
+tidy
+trace
+verify
+wait
+walk
+watch
+write

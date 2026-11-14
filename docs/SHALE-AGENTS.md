@@ -483,6 +483,13 @@ terms used before the chapter that teaches them); the Zig ones in
 declarations along them and judge the move; `roc/` and `zig17/` are those
 work's. Copy one and change it; not everything is a builtin.
 
+**A recipe's name says what it does.** One that runs starts with a verb
+(`find_negatives.shale`), one of `cookbook/recipe_verbs.txt`; a library,
+which `use` loads, is named for what it holds (`merge_conflicts.shale`).
+`cookbook/check_recipe_names.shale` holds the cookbook to it, telling a
+library by its code (a top level of `const` and `function` alone);
+`report=1` lists each break with a suggested name.
+
 **Where a script lives:** a script starts in the repository that uses it,
 in that repo's own scripts folder. It moves to the cookbook lazily, once it
 has proven itself and a second repository wants it; reuse is never forced,

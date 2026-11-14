@@ -1,0 +1,2 @@
+-- Checks the disk, named in camelCase.
+print(1)

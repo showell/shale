@@ -1,0 +1,13 @@
+-- The conflict markers: a good library name, its const a map over lines.
+const MARKERS = {
+  open = "<<<<<<<",
+  close = ">>>>>>>",
+}
+
+function is_marker(l)
+  if starts_with(l, "<<<<<<<") then return true end
+  for m in {"=======", ">>>>>>>"} do
+    if starts_with(l, m) then return true end
+  end
+  return false
+end

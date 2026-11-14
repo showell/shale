@@ -1,0 +1,277 @@
+-- budget: steps=50000000 reads=20000 read_bytes=50000000 output_bytes=1000000
+-- Checks that every cookbook recipe is named for what it does, in the words a
+-- newcomer expects. From Shale's root:
+--
+--   shale cookbook/check_recipe_names.shale             the gate: fails on any break
+--   shale cookbook/check_recipe_names.shale report=1    the same list, passing
+--   shale cookbook/check_recipe_names.shale self_test=1 its plants, then the cookbook
+--
+-- `dir=` names another tree of recipes (`cookbook` by default) and `verbs=`
+-- another verb table (`cookbook/recipe_verbs.txt`). A `plants` folder is
+-- skipped: its files are a self-test's, named to break the rules.
+--
+-- A recipe is one of two kinds, told from its code. A library is a file whose
+-- top level holds only `const` and `function` declarations, the language's
+-- own rule for what `use` loads (SHALE.md, "Libraries: `use`"); every other
+-- file runs. The rules:
+--
+--   not_snake_case              the name is lower-case words joined by `_`;
+--   runnable_without_verb       a recipe that runs starts with a verb of the table;
+--   library_named_like_command  a library starts with no verb of the table.
+--
+-- Each break is printed as `path  kind  rules  suggested`, then the counts.
+-- A suggestion is a start for the rename, never a verdict: a verb later in the
+-- name moves to the front (`name_hunt` to `hunt_name`), else the first verb of
+-- the header's opening sentence goes in front (`Finds ...` gives `find_`),
+-- else it says `<verb>_`. A library's leading verb moves to the end.
+--
+-- `self_test=1` judges the plants, then the cookbook itself. While
+-- COOKBOOK_ENFORCED is false the cookbook's breaks are only counted, on the
+-- last line; set it true once the rename sweep has made the cookbook pass, and
+-- `zig build test` (its `cookbook-test`) fails on any break from then on.
+
+use("cookbook:roc/findings.shale")
+
+const COOKBOOK_ENFORCED = false
+
+const PLANTS = "cookbook/plants/check_recipe_names"
+
+-- Each plant's name, its kind, the rules it breaks and the name suggested.
+const PLANT_VERDICTS = {
+  {"find_negatives.shale", "runnable", "", ""},
+  {"merge_conflicts.shale", "library", "", ""},
+  {"report_rows.shale", "runnable", "", ""},
+  {"check_findings.shale", "library", "library_named_like_command", "findings_check.shale"},
+  {"disk_space.shale", "runnable", "runnable_without_verb", "find_disk_space.shale"},
+  {"name_hunt.shale", "runnable", "runnable_without_verb", "hunt_name.shale"},
+  {"totals.shale", "runnable", "runnable_without_verb", "<verb>_totals.shale"},
+  {"checkDisk.shale", "runnable", "not_snake_case", "check_disk.shale"},
+  {"Disk-Space.shale", "runnable", "not_snake_case,runnable_without_verb", "find_disk_space.shale"},
+  {"negatives.shale", "runnable", "runnable_without_verb", "find_negatives.shale (taken)"},
+}
+
+-- The verbs of the table at `path`, as a set: one a line, `#` lines and blank
+-- ones skipped.
+function verb_table(path)
+  if not exists(path) then fail("check_recipe_names: no verb table " .. path) end
+  local verbs = {}
+  for raw in lines(read(path)) do
+    local l = trim(raw)
+    if l ~= "" and not starts_with(l, "#") then
+      if re_find(l, "^[a-z]+$") == nil then fail("check_recipe_names: " .. path .. ": `" .. l .. "` is no plain lower-case verb") end
+      if has_key(verbs, l) then fail("check_recipe_names: " .. path .. ": `" .. l .. "` is listed twice") end
+      verbs[l] = true
+    end
+  end
+  if #keys(verbs) == 0 then fail("check_recipe_names: " .. path .. " lists no verbs") end
+  return verbs
+end
+
+-- `library` when every line that starts a statement at the top level starts
+-- with `const` or `function`, else `runnable`. A token opens a level when it
+-- is `function`, `if` or `do` (closed by `end`) or a bracket.
+function recipe_kind(path)
+  local opens = set_of({"kw_function", "kw_if", "kw_do", "lbrace", "lparen", "lbracket"})
+  local closes = set_of({"kw_end", "rbrace", "rparen", "rbracket"})
+  local depth = 0
+  local last_line = 0
+  local starts = 0
+  local declarations = 0
+  for t in shale_tokens(path) do
+    if t.tag ~= "comment" then
+      if depth == 0 and t.line ~= last_line then
+        starts = starts + 1
+        if t.tag == "kw_const" or t.tag == "kw_function" then declarations = declarations + 1 end
+      end
+      last_line = t.line
+      if has_key(opens, t.tag) then depth = depth + 1 end
+      if has_key(closes, t.tag) then depth = depth - 1 end
+    end
+  end
+  if depth ~= 0 then fail("check_recipe_names: " .. path .. ": its blocks don't balance (" .. depth .. " left open)") end
+  if starts > 0 and starts == declarations then return "library" end
+  return "runnable"
+end
+
+-- `name` in snake_case: a capital starts a word, and `-` and spaces are `_`.
+function snake(name)
+  local s = re_replace(name, "([a-z0-9])([A-Z])", "\\1_\\2")
+  s = lower(re_replace(s, "[- ]+", "_"))
+  return re_replace(s, "_+", "_")
+end
+
+-- The verb of the table that `word` is a form of (`finds`, `fetches`,
+-- `tidies`), or "".
+function verb_form(verbs, word)
+  local w = lower(word)
+  local stems = {w}
+  if ends_with(w, "ies") then push(stems, sub(w, 1, #w - 3) .. "y") end
+  if ends_with(w, "es") then push(stems, sub(w, 1, #w - 2)) end
+  if ends_with(w, "s") then push(stems, sub(w, 1, #w - 1)) end
+  for s in stems do
+    if s ~= "" and has_key(verbs, s) then return s end
+  end
+  return ""
+end
+
+-- The first sentence of the comment that opens the file at `path`, a
+-- `-- budget:` line skipped.
+function header_sentence(path)
+  local text = ""
+  for l in lines(read(path)) do
+    if not starts_with(l, "--") then break end
+    if not starts_with(l, "-- budget:") then
+      local body = trim(sub(l, 3))
+      if body == "" and text ~= "" then break end
+      text = text .. " " .. body
+    end
+  end
+  local m = re_find(text, "^([^.]*)")
+  if m == nil then return "" end
+  return m.group
+end
+
+-- The first verb of the table in `path`'s opening sentence, or "". A word
+-- right after a determiner is a noun (`This lint finds`, `A run stopped`).
+function header_verb(verbs, path)
+  local determiners = set_of({"a", "an", "the", "this", "that", "each", "every", "its", "one"})
+  local after_determiner = false
+  for w in words(header_sentence(path)) do
+    local plain = re_replace(w, "[^A-Za-z]", "")
+    if not after_determiner then
+      local v = verb_form(verbs, plain)
+      if v ~= "" then return v end
+    end
+    after_determiner = has_key(determiners, lower(plain))
+  end
+  return ""
+end
+
+-- The numbers from `first` to `last`, a list (none when `last` < `first`).
+function range_list(first, last)
+  local l = {}
+  local i = first
+  while i <= last do
+    push(l, i)
+    i = i + 1
+  end
+  return l
+end
+
+-- The name suggested for a recipe of `kind` whose snake_case stem is `stem`.
+function suggested_stem(verbs, kind, stem, path)
+  local parts = split(stem, "_")
+  if kind == "library" then
+    if has_key(verbs, parts[1]) and #parts > 1 then return join(drop(parts, 1), "_") .. "_" .. parts[1] end
+    return stem
+  end
+  if has_key(verbs, parts[1]) then return stem end
+  for i in range_list(2, #parts) do
+    if has_key(verbs, parts[i]) then
+      local rest = {}
+      for j in range_list(1, #parts) do
+        if j ~= i then push(rest, parts[j]) end
+      end
+      return parts[i] .. "_" .. join(rest, "_")
+    end
+  end
+  local v = header_verb(verbs, path)
+  if v == "" then v = "<verb>" end
+  return v .. "_" .. stem
+end
+
+-- The verdict on one recipe: `{path, kind, rules, suggested}`, `rules` the
+-- names of the rules it breaks joined by `,` ("" when it passes).
+function judged_recipe(verbs, path)
+  local kind = recipe_kind(path)
+  local name = basename(path)
+  if not ends_with(name, ".shale") then fail("check_recipe_names: " .. path .. " is no .shale file") end
+  local stem = sub(name, 1, #name - 6)
+  local broken = {}
+  if re_find(stem, "^[a-z][a-z0-9]*(_[a-z0-9]+)*$") == nil then push(broken, "not_snake_case") end
+  local fixed = snake(stem)
+  local first = split(fixed, "_")[1]
+  if kind == "runnable" and not has_key(verbs, first) then push(broken, "runnable_without_verb") end
+  if kind == "library" and has_key(verbs, first) then push(broken, "library_named_like_command") end
+  local suggested = ""
+  if #broken > 0 then
+    suggested = suggested_stem(verbs, kind, fixed, path) .. ".shale"
+    if not starts_with(suggested, "<verb>") and exists(path_under(dirname(path), suggested)) then suggested = suggested .. " (taken)" end
+  end
+  return {path = path, kind = kind, rules = join(broken, ","), suggested = suggested}
+end
+
+-- The recipes under `dir`, every `.shale` file outside a `plants` folder.
+function recipes_in(dir)
+  local found = {}
+  for p in glob(dir .. "/**/*.shale") do
+    local rel = sub(p, #dir + 2)
+    if not starts_with(rel, "plants/") and find(rel, "/plants/") == nil then push(found, p) end
+  end
+  return found
+end
+
+-- The verdict on the tree at `dir`: `{rows, breaks, summary}`, `rows` every
+-- recipe's verdict and `breaks` those that break a rule.
+function judged_tree(verbs, dir)
+  local rows = {}
+  local breaks = {}
+  local by_kind = {}
+  local by_rule = {}
+  local paths = recipes_in(dir)
+  if #paths == 0 then fail("check_recipe_names: no recipes under " .. dir) end
+  for p in paths do
+    local v = judged_recipe(verbs, p)
+    push(rows, v)
+    incr(by_kind, v.kind)
+    if v.rules ~= "" then
+      push(breaks, v)
+      for r in split(v.rules, ",") do incr(by_rule, r) end
+    end
+    yield()
+  end
+  local rule_counts = {}
+  for r in {"not_snake_case", "runnable_without_verb", "library_named_like_command"} do push(rule_counts, r .. " " .. get(by_rule, r, 0)) end
+  local summary = "check_recipe_names: " .. dir .. ": " .. #breaks .. " of " .. #rows .. " recipes break the naming standard (" .. get(by_kind, "runnable", 0) .. " runnable, " .. get(by_kind, "library", 0) .. " libraries); " .. join(rule_counts, ", ")
+  return {rows = rows, breaks = breaks, summary = summary}
+end
+
+-- The breaks as a table's lines, for print_findings.
+function break_lines(breaks)
+  if #breaks == 0 then return {} end
+  return split(table(breaks, {"path", "kind", "rules", "suggested"}), "\n")
+end
+
+if arg("self_test", "") ~= "" then
+  local verbs = verb_table(arg("verbs", "cookbook/recipe_verbs.txt"))
+  local wrong = {}
+  for c in PLANT_VERDICTS do
+    local path = PLANTS .. "/" .. c[1]
+    if not exists(path) then
+      push(wrong, c[1] .. ": no such plant")
+    else
+      local v = judged_recipe(verbs, path)
+      local got = v.kind .. " [" .. v.rules .. "] " .. v.suggested
+      local want = c[2] .. " [" .. c[3] .. "] " .. c[4]
+      if got ~= want then push(wrong, c[1] .. ": want " .. want .. ", got " .. got) end
+    end
+  end
+  -- Every plant is in the table above, so a new one can't pass unjudged.
+  local tree = judged_tree(verbs, PLANTS)
+  if #tree.rows ~= #PLANT_VERDICTS then push(wrong, PLANTS .. " holds " .. #tree.rows .. " plants, the table " .. #PLANT_VERDICTS) end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail(tostring(#wrong) .. " check_recipe_names plants wrong") end
+  local cookbook = judged_tree(verbs, "cookbook")
+  if COOKBOOK_ENFORCED and #cookbook.breaks > 0 then
+    print_findings(cookbook.summary, break_lines(cookbook.breaks))
+    fail(cookbook.summary)
+  end
+  local mode = "enforced"
+  if not COOKBOOK_ENFORCED then mode = "report mode, COOKBOOK_ENFORCED false" end
+  print("check_recipe_names: " .. #PLANT_VERDICTS .. " plants as they say; the cookbook: " .. #cookbook.breaks .. " of " .. #cookbook.rows .. " recipes break the standard (" .. mode .. ")")
+else
+  local verbs = verb_table(arg("verbs", "cookbook/recipe_verbs.txt"))
+  local tree = judged_tree(verbs, arg("dir", "cookbook"))
+  print_findings(tree.summary, break_lines(tree.breaks))
+  if #tree.breaks > 0 and arg("report", "") == "" then fail(tree.summary) end
+end
