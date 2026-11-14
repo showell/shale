@@ -50,7 +50,7 @@ Gates need a language to write them in. Next, a short tour of Shale.
 
 ## Meet Shale
 
-The quickest way to meet a language is to read some, so here's a real gate: `scripts/check_before_commit.shale`. It comes from later in the project, where the agent runs it on every edit. First, the helper that runs each stage:
+The quickest way to meet a language is to read some, so here's a real gate: `scripts/check_before_commit.shale`. It's from later in the project: the agent runs it on every edit. First, the helper that runs each stage:
 
 {{function repos:essay-surface/scripts/check_before_commit.shale stage}}
 
@@ -60,16 +60,16 @@ Then the stages, in order: the formatter, `go vet`, a syntax check of the front 
 
 If you've read Lua, this looks familiar, and that's on purpose. `local` declares a variable, `function` and `end` frame a function, braces build a list or a map, and `..` joins strings. The rest is the mainstream you know.
 
-Agents write Shale tersely, so you'll meet names like `ls` for a list of lines. Steve scans for the calls, such as `lines`, and skips the variables: "The honest truth is that I skim shale scripts really fast, because I have seen a lot of it."
+Agents write Shale tersely, so you'll meet names like `ls` for a list of lines. Steve scans for the calls, such as `lines`, and skips the variables: "The honest truth is that I skim shale scripts really fast, because I have seen a lot of it." If you can't skim it that fast yet, ask your agent to write more verbosely. It will. Steve doesn't need it.
 
 An agent usually hands a one-off script to `shale` in a heredoc, bash's way of passing a block of text to a program as its input, between `<<'EOF'` and a closing `EOF`. A block captioned "Shale, launched from bash" ran that way.
 
 ### What Shale adds
 
-A few features are Shale's own, and most show up in check_before_commit.shale:
+A few features are Shale's own:
 - **Every run has budgets:** steps, reads, bytes read and printed, memory, and the programs it starts. A runaway script stops and says which budget it hit.
 - **A script works inside its own folder** and the folders it mounts. A mount is a named folder beyond its own, written `name:path`, so you can see everything a script can reach.
-- **A risky program runs when the script gives its reason.** A shell, an interpreter, a text tool or a program git doesn't track needs one, and Shale logs it. The js stage says why it runs `node`.
+- **A risky program runs when the script gives its reason.** A shell, an interpreter, a text tool or a program git doesn't track needs one, and Shale logs it.
 - **A prelude does the daily work.** The prelude is Shale's built-in library: git, jobs, HTTP, JSON, and refactors that read code the way its compiler does. A job is a program that outlives the call that started it, such as a server.
 
 ### Who builds what
@@ -96,7 +96,7 @@ Shale is meant to have dialects. A dialect costs a team of humans a great deal a
 
 ### What it costs
 
-Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its scripts. What it buys, above all, is a higher-level language than bash, one where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive makes the next script shorter and easier to read.
+Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its scripts. What it buys, above all, is a higher-level language than bash, where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive makes the next script shorter and easier to read.
 
 ### Four words for what's next
 
