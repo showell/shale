@@ -230,25 +230,6 @@ function find_all(s, t)
   return got
 end
 
--- Every match of `pattern` in `s`, left to right and not overlapping, each
--- as `re_find` gives it (`{at, text[, groups, group]}`); none is `{}`. Each
--- search sees the whole of `s` (`re_find`'s `from`), so `^` and `\b` mean
--- its real edges; after an empty match the next search starts a byte on.
--- `opts` takes `nocase`.
-function re_find_all(s, pattern, opts?)
-  opts_only(opts, {"nocase"}, "re_find_all")
-  local o = {from = 1}
-  if opts ~= nil and has_key(opts, "nocase") then o.nocase = opts.nocase end
-  local got = {}
-  while o.from <= #s + 1 do
-    local m = re_find(s, pattern, o)
-    if m == nil then break end
-    push(got, m)
-    o.from = m.at + max(1, #m.text)
-  end
-  return got
-end
-
 -- What precedes `p`'s last `/`: its folder, "" (the root) when it has
 -- none. `basename`'s other half.
 function dirname(p)

@@ -20,7 +20,7 @@ pub const Pattern = struct {
 
     fn matches(p: Pattern, line: []const u8, work: *u64) bool {
         const r = regex.search(p.program, p.scratch, line, std.math.maxInt(u64));
-        work.* += r.positions * p.program.insts.len;
+        work.* += r.positions * p.program.insts.len + (std.math.divCeil(u64, r.skipped, 16) catch unreachable);
         return r.found != null;
     }
 };

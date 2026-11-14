@@ -84,8 +84,9 @@ const cases = [_]Case{
     .{ .b = .words, .grows = .scales, .setup = "local s = rep(\"a \", N)", .call = "local x = words(s)" },
     .{ .b = .like, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = like(s, \"*b\")" },
     .{ .b = .re_find, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = re_find(s, \"a*b\")" },
-    .{ .b = .re_match, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = re_match(s, \"b\")" },
+    .{ .b = .re_match, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = re_match(s, \"a*b\")" },
     .{ .b = .re_replace, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = re_replace(s, \"a\", \"bc\")" },
+    .{ .b = .re_find_all, .grows = .scales, .setup = "local s = rep(\"a\", N)", .call = "local x = re_find_all(s, \"a\")" },
     .{ .b = .rep, .grows = .scales, .call = "local x = rep(\"ab\", N)" },
     .{ .b = .substitute, .grows = .scales, .per = script.builtins.bytes_per_step, .setup = "local s = rep(\"a\", N)", .call = "local x = substitute(s, \"a\", \"b\")" },
     // numbers
@@ -277,6 +278,9 @@ const hard_cases = [_]struct { name: []const u8, store: Setup = .none, setup: []
     .{ .name = "re_find, a loop of a loop that never matches", .setup = "local s = rep(\"a\", N)", .call = "local x = re_find(s, \"(a*)*b\")" },
     .{ .name = "re_find, many ways at every byte", .setup = "local s = rep(\"a\", N)", .call = "local x = re_find(s, \"a?a?a?a?a*a*a*$\")" },
     .{ .name = "re_find, alternatives that meet at every byte", .setup = "local s = rep(\"a\", N)", .call = "local x = re_find(s, \"(a|aa|a?)*b\", {nocase = true})" },
+    .{ .name = "re_find, every byte skipped", .setup = "local s = rep(\"a\", N)", .call = "local x = re_find(s, \"b\")" },
+    .{ .name = "re_find_all, an empty match at every byte", .setup = "local s = rep(\"a\", N)", .call = "local x = re_find_all(s, \"b*\")" },
+    .{ .name = "re_find_all, a near miss at every other byte", .setup = "local s = rep(\"ab\", N)", .call = "local x = re_find_all(s, \"ab*c\")" },
     .{ .name = "re_replace, an empty match at every byte", .setup = "local s = rep(\"a\", N)", .call = "local x = re_replace(s, \"(b*)\", \"<\\\\1>\")" },
     .{ .name = "sort, strings sharing a prefix", .setup = "local l = {} for i = 1, N do push(l, rep(\"x\", 20) .. (N - i)) end", .call = "sort(l)" },
 };

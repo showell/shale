@@ -1053,6 +1053,100 @@ test "builtins: re_find's from starts the search there, 1 to #s + 1, and the sea
     try f.expectStop("print(re_match(\"abc\", \"a\", {from = 1}))", .argument);
 }
 
+test "builtins: re_find_all gives every match as re_find does, not overlapping, edges the whole string's, empty matches a byte apart" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.expectOutput("for m in re_find_all(\"x=1, yy=22\", \"(\\\\w+)=(\\\\d+)\") do print(m.at, m.text, m.group, m.groups[2]) end", "1\tx=1\tx\t1\n6\tyy=22\tyy\t22\n");
+    // No match; empty matches, as re_replace takes them; a group-less match has no `group`.
+    try f.expectOutput("print(#re_find_all(\"abc\", \"z\"), #re_find_all(\"ab\", \"\"), #re_find_all(\"\", \"x*\"), has_key(re_find_all(\"a\", \"a\")[1], \"group\"))", "0\t3\t1\tfalse\n");
+    // `^` and `\b` see the whole string, never the part after a match.
+    try f.expectOutput("print(#re_find_all(\"aaa\", \"^a\"), #re_find_all(\"ab ab xab\", \"\\\\bab\"), #re_find_all(\"Ab ab\", \"ab\", {nocase = true}))", "1\t2\t2\n");
+    // A group the match did not pass through is "", and `group` is the first.
+    try f.expectOutput("for m in re_find_all(\"ac abc\", \"(a)(b)?(c)\") do print(m.at, m.text, m.group, \"[\" .. join(m.groups, \"|\") .. \"]\") end", "1\tac\ta\t[a||c]\n4\tabc\ta\t[a|b|c]\n");
+    // A match far from the last, past bytes no match begins with.
+    try f.expectOutput("local m = re_find_all(rep(\"-\", 5000) .. \"[x](y)\" .. rep(\"-\", 5000), \"\\\\[([^\\\\]]*)\\\\]\\\\(([^)]*)\\\\)\") print(#m, m[1].at, m[1].groups[2])", "1\t5001\ty\n");
+    // None is `{}`, as the prelude's was: still free to be a map.
+    try f.expectOutput("local m = re_find_all(\"abc\", \"z\") m.k = 1 print(m.k)", "1\n");
+    // Its options and refusals: `from` is `re_find`'s alone.
+    var from = f.run("print(re_find_all(\"a\", \"a\", {from = 2}))", .{});
+    defer from.deinit();
+    try testing.expectEqual(script.diag.Class.fail, from.stop.?.class);
+    try testing.expectEqualStrings("`re_find_all` takes `nocase`, not `from`", from.stop.?.message);
+    try f.expectStop("print(re_find_all(\"a\", \"a\", {nocase = 1}))", .type);
+    try f.expectStop("print(re_find_all(1, \"a\"))", .type);
+    var refused = f.run("print(re_find_all(\"a\", \"a{2}\"))", .{});
+    defer refused.deinit();
+    try testing.expectEqual(script.diag.Class.argument, refused.stop.?.class);
+    try testing.expect(std.mem.startsWith(u8, refused.stop.?.message, "`re_find_all`'s pattern, at its byte 2: `{n,m}`"));
+}
+
+test "builtins: re_find_all finds what the prelude's re_find_all, a loop of re_find, found: on a varied corpus, every pattern, with and without nocase" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    var r = f.run(old_re_find_all_judge, .{ .steps = 2_000_000_000 });
+    defer r.deinit();
+    if (r.stop) |s| std.debug.print("stopped {d}:{d}: {s}\n", .{ s.line, s.column, s.message });
+    try testing.expectEqualStrings("same 207 of 207, matches 57527\n", r.output);
+}
+
+/// The prelude's `re_find_all` as it was before the builtin, and a judge
+/// comparing the two, each pattern three ways, on corpora of three seeds.
+const old_re_find_all_judge = @import("regex_judge.zig").corpus ++
+    \\function old_re_find_all(s, pattern, opts?)
+    \\  opts_only(opts, {"nocase"}, "re_find_all")
+    \\  local o = {from = 1}
+    \\  if opts ~= nil and has_key(opts, "nocase") then o.nocase = opts.nocase end
+    \\  local got = {}
+    \\  while o.from <= #s + 1 do
+    \\    local m = re_find(s, pattern, o)
+    \\    if m == nil then break end
+    \\    push(got, m)
+    \\    o.from = m.at + max(1, #m.text)
+    \\  end
+    \\  return got
+    \\end
+    \\function shown(ms)
+    \\  local out = {}
+    \\  for m in ms do
+    \\    local g = "-"
+    \\    if has_key(m, "groups") then g = join(m.groups, ",") .. "/" .. m.group end
+    \\    push(out, m.at .. "|" .. m.text .. "|" .. g)
+    \\  end
+    \\  return join(out, "\n")
+    \\end
+    \\-- The matches, or -1 where the two differ.
+    \\function judged(s, p, k)
+    \\  local ms = {}
+    \\  local want = ""
+    \\  if k == "none" then
+    \\    ms = re_find_all(s, p)
+    \\    want = shown(old_re_find_all(s, p))
+    \\  else
+    \\    ms = re_find_all(s, p, {nocase = k == "true"})
+    \\    want = shown(old_re_find_all(s, p, {nocase = k == "true"}))
+    \\  end
+    \\  if shown(ms) ~= want then return -1 end
+    \\  return #ms
+    \\end
+    \\local same = 0
+    \\local all = 0
+    \\local matches = 0
+    \\for seed in {1, 42, 2026} do
+    \\  for p in lines(regex_patterns) do
+    \\    for k in {"none", "false", "true"} do
+    \\      local n = judged(corpus(500, seed), p, k)
+    \\      all = all + 1
+    \\      if n >= 0 then same = same + 1 matches = matches + n else print("differs: /" .. p .. "/, nocase " .. k .. ", seed " .. seed) end
+    \\      yield()
+    \\    end
+    \\  end
+    \\end
+    \\print("same " .. same .. " of " .. all .. ", matches " .. matches)
+    \\
+;
+
 test "builtins: patterns whose programs do not fit the machine's memory stop on that budget, at the call" {
     var f: Fixture = undefined;
     try f.init();

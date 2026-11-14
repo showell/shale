@@ -29,6 +29,7 @@ const sources = .{
     .{ "process.zig", @embedFile("process.zig") },
     .{ "cli.zig", @embedFile("cli.zig") },
     .{ "regex.zig", @embedFile("regex.zig") },
+    .{ "regex_judge.zig", @embedFile("regex_judge.zig") },
     .{ "hunt.zig", @embedFile("hunt.zig") },
     .{ "gen.zig", @embedFile("gen.zig") },
 };

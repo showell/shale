@@ -160,9 +160,11 @@ was missing in the escape's text: that is how the next want is found.
 **What it has for code:** `glob(pattern)` (`**` any folders, `*` and `?`
 within one; hidden names like `.git` and `.zig-cache` left out, unless `{hidden = true}`),
 `grep(p, s)` (the lines holding a literal, numbered), `read_lines` and
-`count_lines` for a file of any size, `re_find(s, pattern)` and
-`re_match` (regular expressions, a linear-time subset: `|`, `\b`, up to
-nine capture groups and `(?:...)`, `{nocase = true}`), `between(s, a, b)` (the text after one string and before the
+`count_lines` for a file of any size, `re_find(s, pattern)`, `re_match`
+and `re_find_all(s, pattern)` (regular expressions, a linear-time subset:
+`|`, `\b`, up to nine capture groups and `(?:...)`, `{nocase = true}`;
+`re_find_all` gives each match as `re_find` does, and `re_find`'s own
+`{from = n}` starts a search there), `between(s, a, b)` (the text after one string and before the
 next), `edit(p, old, new[, {all, word}])` (a literal replaced, its diff
 printed) and `edit(p, {{old = ..., new = ...}, ...})` (several in sequence,
 one diff, one write, none made if any fails), long strings (`[=[ ... ]=]`,
@@ -171,8 +173,7 @@ language's own `split`, `words`, `contains`, `sort`, `table` and maps. The
 prelude adds the small helpers scripts kept writing out: `slice(l, from,
 to)`, `push_at(m, k, v)` (a map of lists), `incr(m, k[, n])`,
 `set_of(list)` and `has_item(list, x)`, `find_all(s, t)`,
-`re_find_all(s, pattern)` (each match as `re_find` gives it; `re_find`'s
-own `{from = n}` starts a search there), `dirname(p)`, `path_normal(p)`
+`dirname(p)`, `path_normal(p)`
 (`a/./b/../c` is `a/c`) and `opts_only(opts, {"a", "b"}, who)` (a stop on
 any other key). **Already there, and still rewritten:** `drop(l, n)`,
 `basename(p)`, `find(s, t[, from])`, `fresh_dir(parent, prefix)`, and
@@ -208,7 +209,9 @@ has none of it):
   column; `depth` (64) and `size` (the call-bytes cap) bound it.
   `json_write(v)` is compact JSON, an empty table `[]`.
 - **Text:** `re_lines(s, pattern, opts?)` gives `{line, text}`, with
-  `invert` and `nocase`. `head_lines(p, n)` and `tail_lines(p, n)` take a
+  `invert` and `nocase`. The host searches the lines, a step a line and
+  each line's search, so a pattern over megabytes of notes fits the
+  default budget when it begins with a byte that is rare in them. `head_lines(p, n)` and `tail_lines(p, n)` take a
   file of any size and give nil for a missing one. `grep_all(p, lit)` is
   `grep` for a file of any size. `unique(list)` gives each item once. `newest(dir, n)`
   gives the names that changed last (the root as `""` or `"."`).
@@ -902,7 +905,7 @@ what the gate refuses with what to do instead.
 - **Regular expressions are a subset**: up to nine capture groups (and
   `(?:...)`), no `{n,m}`, no lookaround, no backreferences (each refused by
   name). In return no pattern makes a search slower than linear, and its
-  cost is known before it runs, and the match is the one a backtracker
+  cost is bounded before it runs, and the match is the one a backtracker
   would find, loops whose turn can take nothing among them.
 - **A file is read whole by `grep` and `edit`**, at most the call-bytes cap
   (64 MiB under `shale`, `--budget call_bytes=N`; 1 MiB on a site): a

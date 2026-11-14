@@ -58,6 +58,7 @@ pub const Builtin = enum {
     re_find,
     re_match,
     re_replace,
+    re_find_all,
     // numbers
     min,
     max,

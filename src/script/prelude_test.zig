@@ -251,18 +251,6 @@ test "prelude: find_all gives every start of t in s, overlapping ones too; no ma
     try expectFail(&f, "print(find_all(\"abc\", \"\"))", "`find_all`: an empty string");
 }
 
-test "prelude: re_find_all gives every match as re_find does, not overlapping, edges the whole string's, empty matches a byte apart" {
-    var f: Fixture = undefined;
-    try f.init();
-    defer f.deinit();
-    try f.expectOutput("for m in re_find_all(\"x=1, yy=22\", \"(\\\\w+)=(\\\\d+)\") do print(m.at, m.text, m.group, m.groups[2]) end", "1\tx=1\tx\t1\n6\tyy=22\tyy\t22\n");
-    // No match; empty matches, as re_replace takes them; a group-less match has no `group`.
-    try f.expectOutput("print(#re_find_all(\"abc\", \"z\"), #re_find_all(\"ab\", \"\"), #re_find_all(\"\", \"x*\"), has_key(re_find_all(\"a\", \"a\")[1], \"group\"))", "0\t3\t1\tfalse\n");
-    // `^` and `\b` see the whole string, never the part after a match.
-    try f.expectOutput("print(#re_find_all(\"aaa\", \"^a\"), #re_find_all(\"ab ab xab\", \"\\\\bab\"), #re_find_all(\"Ab ab\", \"ab\", {nocase = true}))", "1\t2\t2\n");
-    try expectFail(&f, "print(re_find_all(\"a\", \"a\", {from = 2}))", "`re_find_all` takes `nocase`, not `from`");
-}
-
 test "prelude: dirname gives what precedes the last /, \"\" for a name at the root" {
     var f: Fixture = undefined;
     try f.init();
@@ -334,7 +322,6 @@ test "prelude: every prelude function is reached when a script calls it, one scr
         .{ "set_of", "print(count(set_of({\"a\"})))" },
         .{ "has_item", "print(has_item({1}, 1))" },
         .{ "find_all", "print(#find_all(\"aa\", \"a\"))" },
-        .{ "re_find_all", "print(#re_find_all(\"aa\", \"a\"))" },
         .{ "dirname", "print(dirname(\"a/b\"))" },
         .{ "path_normal", "print(path_normal(\"a/../b\"))" },
     };

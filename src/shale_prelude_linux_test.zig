@@ -184,6 +184,119 @@ test "linux prelude: re_lines, its lines numbered, inverted or folded if asked" 
     try t.expectOutput("local got = re_lines(\"a1\\nb\\nA2\\n\", \"a[0-9]\", {nocase = true}) " ++ show, "1\ta1\n3\tA2\n");
     try t.expectOutput("local got = re_lines(\"a1\\nb\\nA2\\n\", \"a[0-9]\", {invert = true}) " ++ show, "2\tb\n3\tA2\n");
     try t.expectStop("re_lines(\"a\", \"a\", {inverse = true})", .atomic, .fail, "`re_lines` takes `invert` and `nocase`, not `inverse`");
+    // Each line alone: `^`, `$` and `\b` see its edges; a group is no part
+    // of what it gives; a last line without its newline counts, a `\r` is
+    // the line's.
+    try t.expectOutput("local got = re_lines(\"ab\\nb a\\r\\n\\nb\", \"^b|a$\") " ++ show, "2\tb a\r\n4\tb\n");
+    try t.expectOutput("local got = re_lines(\"cat\\nconcat\\n\", \"\\\\bcat\") " ++ show, "1\tcat\n");
+    try t.expectOutput("local got = re_lines(\"k=v\\nx\", \"(\\\\w)=(\\\\w)\") " ++ show ++ " print(has_key(got[1], \"group\"))", "1\tk=v\nfalse\n");
+    // An empty line matches what can match nothing; inverted, both kept.
+    try t.expectOutput("local got = re_lines(\"a\\n\\nb\", \"^$\") " ++ show, "2\t\n");
+    try t.expectOutput("local got = re_lines(\"a\\nb\", \"z\", {invert = true, nocase = true}) " ++ show, "1\ta\n2\tb\n");
+    // None, and nothing to search, is `{}`, as the prelude's was.
+    try t.expectOutput("local got = re_lines(\"a\\nb\", \"z\") got.k = 1 print(#re_lines(\"\", \"a\"), got.k)", "0\t1\n");
+    // A match far into a long line, past the bytes no match begins with.
+    try t.expectOutput("local got = re_lines(\"x\\n\" .. rep(\"-\", 9000) .. \"[a](b)\\ny\", \"\\\\[a\\\\]\") print(#got, got[1].line, #got[1].text)", "1\t2\t9006\n");
+    try t.expectStop("re_lines(\"a\", \"a\", {invert = 1})", .atomic, .type, "`re_lines`: its `invert` must be true or false, not an integer");
+    try t.expectStop("re_lines(\"a\", \"a\", {nocase = \"yes\"})", .atomic, .type, "`re_lines`: its `nocase` must be true or false");
+    try t.expectStop("re_lines(\"a\", \"a\", {invert = 1, from = 2})", .atomic, .fail, "`re_lines` takes `invert` and `nocase`, not `from`");
+    try t.expectStop("re_lines(\"a\", \"a(?=b)\")", .atomic, .argument, "`re_lines`'s pattern, at its byte 2: `(?` is not in this subset");
+    try t.expectStop("re_lines(3, \"a\")", .atomic, .type, "`re_lines`: its first argument must be a string, not an integer");
+}
+
+test "linux prelude: re_lines finds what the prelude's re_lines, a loop of re_find over `lines`, found: on a varied corpus, every pattern, plain, folded and inverted" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    t.budgets.steps = 2_000_000_000;
+    try t.expectOutput(@import("shale").script.regex_judge.corpus ++
+        \\function old_re_lines(s, pattern, opts?)
+        \\  local o = {}
+        \\  local invert = false
+        \\  if opts ~= nil then
+        \\    for k in keys(opts) do
+        \\      if k == "nocase" then
+        \\        o.nocase = opts.nocase
+        \\      elseif k == "invert" then
+        \\        invert = opts.invert
+        \\      else
+        \\        fail("`re_lines` takes `invert` and `nocase`, not `" .. k .. "`")
+        \\      end
+        \\    end
+        \\  end
+        \\  local got = {}
+        \\  local n = 0
+        \\  for text in lines(s) do
+        \\    n = n + 1
+        \\    if (re_find(text, pattern, o) ~= nil) ~= invert then push(got, {line = n, text = text}) end
+        \\  end
+        \\  return got
+        \\end
+        \\function shown(ms)
+        \\  local out = {}
+        \\  for m in ms do push(out, m.line .. "|" .. m.text) end
+        \\  return join(out, "\n")
+        \\end
+        \\-- The lines kept, or -1 where the two differ.
+        \\function judged(s, p, k)
+        \\  local o = {}
+        \\  if k == "nocase" then o = {nocase = true} elseif k == "invert" then o = {invert = true} elseif k == "both" then o = {invert = true, nocase = true} end
+        \\  local ms = re_lines(s, p, o)
+        \\  if k == "none" then ms = re_lines(s, p) end
+        \\  if shown(ms) ~= shown(old_re_lines(s, p, o)) then return -1 end
+        \\  return #ms
+        \\end
+        \\local same = 0
+        \\local all = 0
+        \\local kept = 0
+        \\for seed in {1, 42, 2026} do
+        \\  for p in lines(regex_patterns) do
+        \\    for k in {"none", "nocase", "invert", "both"} do
+        \\      local n = judged(corpus(500, seed), p, k)
+        \\      all = all + 1
+        \\      if n >= 0 then same = same + 1 kept = kept + n else print("differs: /" .. p .. "/, " .. k .. ", seed " .. seed) end
+        \\      yield()
+        \\    end
+        \\  end
+        \\end
+        \\print("same " .. same .. " of " .. all .. ", lines kept " .. kept)
+        \\
+    , "same 276 of 276, lines kept 7314\n");
+}
+
+test "linux prelude: re_lines is charged in proportion to its text: a step a line and its searches, its bytes as a scan" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    t.budgets.steps = 500_000_000;
+    // The text's own steps taken off: `rep` charges a step a byte.
+    const Case = struct { setup: []const u8, call: []const u8, at_least: u64 };
+    for ([_]Case{
+        // A line a byte, each searched: at least a step a line.
+        .{ .setup = "local s = rep(\"a\\n\", N)", .call = " local x = re_lines(s, \"b\")", .at_least = 1 },
+        // One long line no match begins in: its bytes a scan's.
+        .{ .setup = "local s = rep(\"a\", N)", .call = " local x = re_lines(s, \"b\")", .at_least = 0 },
+        // One long line whose every byte may begin a match: each examined.
+        .{ .setup = "local s = rep(\"a\", N)", .call = " local x = re_lines(s, \"a*b\")", .at_least = 5 },
+    }) |c| {
+        var steps: [2]u64 = undefined;
+        for ([_]u64{ 4000, 16000 }, &steps) |n, *got| {
+            var num: [16]u8 = undefined;
+            const setup = try std.mem.replaceOwned(u8, testing.allocator, c.setup, "N", try std.fmt.bufPrint(&num, "{d}", .{n}));
+            defer testing.allocator.free(setup);
+            const src = try std.mem.concat(testing.allocator, u8, &.{ setup, c.call });
+            defer testing.allocator.free(src);
+            var r = t.runOnce(src, .atomic);
+            defer r.deinit();
+            var r0 = t.runOnce(setup, .atomic);
+            defer r0.deinit();
+            try testing.expect(r.stop == null and r0.stop == null);
+            got.* = r.steps - r0.steps;
+        }
+        errdefer std.debug.print("{s}: {d} steps at 4000, {d} at 16000\n", .{ c.call, steps[0], steps[1] });
+        // 12000 more, so at least that many more steps a unit, or 1 for each 16 bytes.
+        try testing.expect(steps[1] >= steps[0] + 12000 * c.at_least + @as(u64, if (c.at_least == 0) 12000 / 16 else 0));
+    }
 }
 
 test "linux prelude: head_lines and tail_lines, of any size; a missing file is nil" {

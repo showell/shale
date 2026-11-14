@@ -88,3 +88,90 @@ fn sweep(pattern: []const u8, resizes: usize) !void {
     // five arrays and the pattern's copy.
     try testing.expect(i >= 8);
 }
+
+/// The match of `p` in `s` from `from`, through `sc`: start, end and groups,
+/// and what the search skipped.
+fn searched(p: *const regex.Program, sc: *regex.Scratch, s: []const u8, from: usize) regex.Searched {
+    const r = regex.searchFrom(p, sc, s, from, std.math.maxInt(u64));
+    std.debug.assert(r.finished);
+    return r;
+}
+
+test "regex: a search that skips the bytes no match can begin with finds what one examining every position finds, groups and all, from every start" {
+    const patterns = [_][]const u8{
+        "a",      "ab|cd",         "\\[([^\\]]*)\\]\\(([^)]*)\\)", "`([^`\n]+)`", "\\bstep(s)?\\b",
+        "x+y",    "(a)(b)?(c)",    "[0-9]+",                       "\\Bb",        "(?:ab)+c",
+        "a$",     "\\bcat\\b|dog", "(x|y)z*",                      ".b",          "[^a]c",
+        "(a*)*b", "\\n",           "(a|ab)(c|bcd)",                "\\$x",        "b\\b",
+    };
+    const strings = [_][]const u8{
+        "",                                "a",                    "xyz",
+        "see [the docs](a.md) and [x](y)", "`code` and `more` ``", "Steps: one step, two steps; misstep",
+        "aab abc cd ab",                   "xxxy xy y x",          "123 abc 45",
+        "abb bab b",                       "ababab ababc abc",     "a cat, a dog, concat",
+        "a\nb\na",                         "[unclosed (paren",     "abcbcd abcd",
+        "$x $$x x",                        "ab.b cb\nb",           "aaaaaaaaab aaa",
+    };
+    var skipped_somewhere = false;
+    for (patterns) |pattern| for ([_]bool{ false, true }) |nocase| {
+        var refused: regex.Refusal = undefined;
+        var p = try regex.compile(testing.allocator, pattern, .{ .nocase = nocase }, &refused);
+        defer p.deinit(testing.allocator);
+        // The same program, with nothing to skip by.
+        var every = p;
+        every.first = null;
+        var sc = try regex.Scratch.init(testing.allocator, &p);
+        defer sc.deinit(testing.allocator);
+        for (strings) |s| for (0..s.len + 1) |from| {
+            const got = searched(&p, &sc, s, from);
+            const want = searched(&every, &sc, s, from);
+            errdefer std.debug.print("/{s}/{s} on \"{f}\" from {d}\n", .{ pattern, if (nocase) "i" else "", std.zig.fmtString(s), from });
+            try testing.expectEqual(want.skipped, 0);
+            try testing.expectEqual(want.found == null, got.found == null);
+            if (got.found) |g| {
+                const w = want.found.?;
+                try testing.expectEqual(w.start, g.start);
+                try testing.expectEqual(w.end, g.end);
+                for (w.groups, g.groups) |wg, gg| try testing.expectEqual(wg, gg);
+            }
+            // A skipped byte is a position not examined.
+            try testing.expect(got.positions + got.skipped <= want.positions + 1);
+            if (got.skipped > 0) skipped_somewhere = true;
+        };
+    };
+    try testing.expect(skipped_somewhere);
+}
+
+test "regex: a pattern that can match nothing, or begin with any byte, skips nothing; one that cannot names the bytes it can begin with" {
+    for ([_][]const u8{ "", "a*", "^", "$", "\\b", "(a|)", "x?", "(a*)*", "a|b*", "[\\s\\S]" }) |pattern| {
+        var refused: regex.Refusal = undefined;
+        var p = try regex.compile(testing.allocator, pattern, .{}, &refused);
+        defer p.deinit(testing.allocator);
+        errdefer std.debug.print("/{s}/\n", .{pattern});
+        try testing.expect(p.first == null);
+    }
+    for ([_]struct { []const u8, []const u8, bool }{
+        .{ "ab|cd", "ac", false },     .{ "\\bstep", "s", false }, .{ "step", "sS", true },
+        .{ "(?:x|y)+z", "xy", false }, .{ "a?b", "ab", false },    .{ "[0-2]x", "012", false },
+    }) |c| {
+        var refused: regex.Refusal = undefined;
+        var p = try regex.compile(testing.allocator, c[0], .{ .nocase = c[2] }, &refused);
+        defer p.deinit(testing.allocator);
+        errdefer std.debug.print("/{s}/\n", .{c[0]});
+        try testing.expectEqual(c[1].len, p.first.?.count());
+        for (c[1]) |b| try testing.expect(p.first.?.isSet(b));
+    }
+}
+
+test "regex: a search stops unfinished past the bytes it may skip, as past the positions it may examine" {
+    var refused: regex.Refusal = undefined;
+    var p = try regex.compile(testing.allocator, "z", .{}, &refused);
+    defer p.deinit(testing.allocator);
+    var sc = try regex.Scratch.init(testing.allocator, &p);
+    defer sc.deinit(testing.allocator);
+    const s = "aaaaaaaaaaz";
+    const short = regex.searchWithin(&p, &sc, s, 0, .{ .positions = 100, .skipped = 9 });
+    try testing.expect(!short.finished and short.found == null and short.skipped == 10);
+    const enough = regex.searchWithin(&p, &sc, s, 0, .{ .positions = 100, .skipped = 10 });
+    try testing.expect(enough.finished and enough.found.?.start == 10 and enough.positions == 2);
+}

@@ -1,8 +1,11 @@
-//! The regular-expression builtins, `re_find`, `re_match` and `re_replace`, over regex.zig's
-//! linear-time subset. A pattern is compiled once per run (cached in the
-//! machine's memory) at a step per byte; a search is charged a step per byte
-//! of the string, plus one for its end, times the pattern's instructions, so a
-//! budget bounds a search whatever the pattern.
+//! The regular-expression builtins, `re_find`, `re_match`, `re_replace` and
+//! `re_find_all`, over regex.zig's linear-time subset, and the searching the
+//! Linux host's `re_lines` shares. A pattern is compiled once per run (cached
+//! in the machine's memory) at a step per byte; a search is charged a step per
+//! position it examines, plus one for its end, times the pattern's
+//! instructions, and the bytes it skips (where no match can begin) as a scan,
+//! a step for each `bytes_per_step`, so a budget bounds a search whatever the
+//! pattern.
 
 const std = @import("std");
 const ast = @import("ast.zig");
@@ -21,13 +24,14 @@ pub const specs = [_]bi.Spec{
     spec(.re_find, 2, 3, reFind),
     spec(.re_match, 2, 3, reMatch),
     spec(.re_replace, 3, 4, reReplace),
+    spec(.re_find_all, 2, 3, reFindAll),
 };
 
 /// Returns the pattern's compiled program from the run's cache, compiling and
-/// caching it if absent.
-fn program(run: *Run, pos: ast.Pos, b: B, pattern: []const u8, options: regex.Options) Error!*regex.Cached {
+/// caching it if absent. `who` names the call in a refusal.
+pub fn program(run: *Run, pos: ast.Pos, who: []const u8, pattern: []const u8, options: regex.Options) Error!*regex.Cached {
     if (run.patterns.get(pattern, options)) |got| return got;
-    if (pattern.len > regex.pattern_most) return run.fail(pos, .argument, "`{s}`'s pattern is {d} bytes, and one may be at most {d}", .{ @tagName(b), pattern.len, regex.pattern_most });
+    if (pattern.len > regex.pattern_most) return run.fail(pos, .argument, "`{s}`'s pattern is {d} bytes, and one may be at most {d}", .{ who, pattern.len, regex.pattern_most });
     // A step per byte to compile, and a step per byte more to fold case.
     const cost = pattern.len + 1 + if (options.nocase) pattern.len else 0;
     try run.charge(pos, cost);
@@ -35,7 +39,7 @@ fn program(run: *Run, pos: ast.Pos, b: B, pattern: []const u8, options: regex.Op
     var refused: regex.Refusal = undefined;
     return run.patterns.put(run.machine_heap, pattern, options, &refused) catch |e| switch (e) {
         error.OutOfMemory => run.machineOom(pos),
-        error.Refused => run.fail(pos, .argument, "`{s}`'s pattern, at its byte {d}: {s}", .{ @tagName(b), refused.at + 1, refused.message }),
+        error.Refused => run.fail(pos, .argument, "`{s}`'s pattern, at its byte {d}: {s}", .{ who, refused.at + 1, refused.message }),
     };
 }
 
@@ -50,13 +54,22 @@ fn optionsArg(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!regex.Op
     const m = try bi.mapArg(run, pos, b, args[at]);
     for (m.map.keys(), m.map.values()) |k, x| {
         if (b == .re_find and std.mem.eql(u8, k, "from")) continue;
-        if (!std.mem.eql(u8, k, "nocase")) return run.fail(pos, .argument, "`{s}` takes `{s}`, not `{s}`", .{ @tagName(b), if (b == .re_find) "nocase` or `from" else "nocase", k });
-        o.nocase = switch (x) {
-            .boolean => |v| v,
-            else => return run.fail(pos, .type, "`{s}`: its `nocase` must be true or false, not {s}", .{ @tagName(b), x.typeName() }),
-        };
+        if (!std.mem.eql(u8, k, "nocase")) {
+            // `re_find_all` was the prelude's, whose `opts_only` said it so.
+            if (b == .re_find_all) return run.fail(pos, .fail, "`re_find_all` takes `nocase`, not `{s}`", .{k});
+            return run.fail(pos, .argument, "`{s}` takes `{s}`, not `{s}`", .{ @tagName(b), if (b == .re_find) "nocase` or `from" else "nocase", k });
+        }
+        o.nocase = try flagOption(run, pos, @tagName(b), "nocase", x);
     }
     return o;
+}
+
+/// An option that is true or false; `who` and `name` say whose and which.
+pub fn flagOption(run: *Run, pos: ast.Pos, who: []const u8, name: []const u8, x: Value) Error!bool {
+    return switch (x) {
+        .boolean => |v| v,
+        else => run.fail(pos, .type, "`{s}`: its `{s}` must be true or false, not {s}", .{ who, name, x.typeName() }),
+    };
 }
 
 /// `re_find`'s `from` (1-based, 1 to `#s + 1`, as `find`'s): the byte its
@@ -77,32 +90,47 @@ fn fromArg(run: *Run, pos: ast.Pos, args: []const Value, len: usize) Error!usize
 /// Runs the search, charged as it goes: when the steps left would not cover
 /// all of it, it stops where they run out.
 fn searched(run: *Run, pos: ast.Pos, b: B, s: []const u8, pattern: []const u8, args: []const Value) Error!struct { ?regex.Found, *regex.Cached } {
-    const c = try program(run, pos, b, pattern, try optionsArg(run, pos, b, args));
-    return .{ try searchedFrom(run, pos, c, s, 0), c };
+    const c = try program(run, pos, @tagName(b), pattern, try optionsArg(run, pos, b, args));
+    var each: Searches = .{};
+    const found = try each.from(run, pos, c, s, 0);
+    try each.done(run, pos);
+    return .{ found, c };
 }
 
-/// One search of `s` from byte `from`, charged as `searched` charges.
-fn searchedFrom(run: *Run, pos: ast.Pos, c: *regex.Cached, s: []const u8, from: usize) Error!?regex.Found {
-    const per: u64 = c.program.states;
-    const most = (run.budgets.steps -| run.steps) / per + 1;
-    const r = regex.searchFrom(&c.program, &c.scratch, s, from, most);
-    run.tally(r.work);
-    try run.charge(pos, r.positions * per);
-    std.debug.assert(r.finished);
-    return r.found;
-}
+/// The searches of one call, charged as they go: each position examined at
+/// the program's instructions, and the bytes skipped a step for each
+/// `bytes_per_step` across all of them, so many short searches (a line each)
+/// pay for their skipped bytes as one scan. `done` charges the part of 16
+/// left over. When the steps left would not cover a search, it stops where
+/// they run out.
+pub const Searches = struct {
+    skipped: u64 = 0,
+    /// The steps charged so far for `skipped`.
+    paid: u64 = 0,
 
-/// `re_find(s, pattern[, {nocase, from}])` returns the leftmost match of
-/// `pattern` in `s` at or after `from`, the one a backtracking matcher would find first, as `{at, text}` with
-/// `at` 1-based, or nil. When the pattern has capture groups, also `groups`,
-/// each one's text in order of its `(` ("" where the match did not pass
-/// through it), and `group`, the first's: a one-group pattern reads as it did.
-fn reFind(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
-    const s = try bi.stringArg(run, pos, .re_find, args[0], "its first argument");
-    const pattern = try bi.stringArg(run, pos, .re_find, args[1], "its pattern");
-    const from = try fromArg(run, pos, args, s.len);
-    const c = try program(run, pos, .re_find, pattern, try optionsArg(run, pos, .re_find, args));
-    const f = try searchedFrom(run, pos, c, s, from) orelse return .nil;
+    pub fn from(each: *Searches, run: *Run, pos: ast.Pos, c: *regex.Cached, s: []const u8, at: usize) Error!?regex.Found {
+        const per: u64 = c.program.states;
+        const left = run.budgets.steps -| run.steps;
+        // Past either count the charge is more than is left, so a search
+        // stopped short always stops the run.
+        const r = regex.searchWithin(&c.program, &c.scratch, s, at, .{ .positions = left / per + 1, .skipped = (left +| 2) *| bi.bytes_per_step });
+        run.tally(r.work + r.skipped);
+        each.skipped += r.skipped;
+        const owed = each.skipped / bi.bytes_per_step - each.paid;
+        each.paid += owed;
+        try run.charge(pos, r.positions * per + owed);
+        std.debug.assert(r.finished);
+        return r.found;
+    }
+
+    pub fn done(each: *Searches, run: *Run, pos: ast.Pos) Error!void {
+        if (each.skipped % bi.bytes_per_step != 0) try run.charge(pos, 1);
+    }
+};
+
+/// A match as `re_find` gives it: `{at, text[, groups, group]}`, its text
+/// and groups slices of `s`.
+pub fn matchValue(run: *Run, pos: ast.Pos, c: *const regex.Cached, s: []const u8, f: regex.Found) Error!Value {
     const a = run.alloc;
     const m = try run.newTable(pos);
     m.kind = .map;
@@ -116,6 +144,47 @@ fn reFind(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         m.map.put(a, "group", gs.list.items[0]) catch return run.oom(pos);
     }
     return .{ .table = m };
+}
+
+/// `re_find(s, pattern[, {nocase, from}])` returns the leftmost match of
+/// `pattern` in `s` at or after `from`, the one a backtracking matcher would find first, as `{at, text}` with
+/// `at` 1-based, or nil. When the pattern has capture groups, also `groups`,
+/// each one's text in order of its `(` ("" where the match did not pass
+/// through it), and `group`, the first's: a one-group pattern reads as it did.
+fn reFind(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+    const s = try bi.stringArg(run, pos, .re_find, args[0], "its first argument");
+    const pattern = try bi.stringArg(run, pos, .re_find, args[1], "its pattern");
+    const from = try fromArg(run, pos, args, s.len);
+    const c = try program(run, pos, "re_find", pattern, try optionsArg(run, pos, .re_find, args));
+    var each: Searches = .{};
+    const found = try each.from(run, pos, c, s, from);
+    try each.done(run, pos);
+    return matchValue(run, pos, c, s, found orelse return .nil);
+}
+
+/// `re_find_all(s, pattern[, {nocase}])` returns every match of `pattern` in
+/// `s`, left to right and not overlapping, each as `re_find` gives it; none is
+/// `{}`. Each search sees the whole of `s`, so `^` and `\b` mean its real
+/// edges; after an empty match the next search starts a byte on. A step is
+/// charged for each match made, beside the searches'.
+fn reFindAll(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+    const s = try bi.stringArg(run, pos, .re_find_all, args[0], "its first argument");
+    const pattern = try bi.stringArg(run, pos, .re_find_all, args[1], "its pattern");
+    const options = try optionsArg(run, pos, .re_find_all, args);
+    const c = try program(run, pos, "re_find_all", pattern, options);
+    // A list once it holds a match, `{}` as the prelude's was while it holds none.
+    const out = try run.newTable(pos);
+    var each: Searches = .{};
+    var at: usize = 0;
+    while (at <= s.len) {
+        const f = try each.from(run, pos, c, s, at) orelse break;
+        try run.charge(pos, 1);
+        out.kind = .list;
+        out.list.append(run.alloc, try matchValue(run, pos, c, s, f)) catch return run.oom(pos);
+        at = f.start + @max(1, f.end - f.start);
+    }
+    try each.done(run, pos);
+    return .{ .table = out };
 }
 
 /// `re_match(s, pattern[, {nocase}])` returns whether `s` contains a match of
@@ -139,7 +208,7 @@ fn reReplace(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const s = try bi.stringArg(run, pos, .re_replace, args[0], "its first argument");
     const pattern = try bi.stringArg(run, pos, .re_replace, args[1], "its pattern");
     const with = try bi.stringArg(run, pos, .re_replace, args[2], "its replacement");
-    const c = try program(run, pos, .re_replace, pattern, try optionsArg(run, pos, .re_replace, args));
+    const c = try program(run, pos, "re_replace", pattern, try optionsArg(run, pos, .re_replace, args));
     const groups = c.program.groups;
     // How often each group is named, and the bytes the names take.
     var uses: [regex.groups_most]usize = @splat(0);
@@ -161,8 +230,9 @@ fn reReplace(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const a = run.alloc;
     var at: usize = 0;
     var replaced = false;
+    var each: Searches = .{};
     while (at <= s.len) {
-        const f = try searchedFrom(run, pos, c, s, at) orelse break;
+        const f = try each.from(run, pos, c, s, at) orelse break;
         replaced = true;
         // A step a byte this match adds, charged before it is written.
         var grown: usize = 0;
@@ -189,6 +259,7 @@ fn reReplace(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
             at = f.end + 1;
         }
     }
+    try each.done(run, pos);
     if (!replaced) return .{ .string = s };
     if (at < s.len) {
         try run.charge(pos, s.len - at);

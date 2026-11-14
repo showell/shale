@@ -70,7 +70,8 @@ pub const Program = struct {
     sets: []Set,
     /// How many capture groups the pattern has.
     groups: u8,
-    /// Whether the pattern begins with `^`, so it can only match at the start.
+    /// Whether each of the pattern's alternatives begins with `^`, so it can
+    /// only match at the start.
     anchored: bool,
     /// Each instruction's loops whose turn can take nothing, the ones its
     /// thread's bits are told apart by.
@@ -81,6 +82,10 @@ pub const Program = struct {
     /// The states a position can hold: the instructions, each times two to
     /// the loops around it whose turn can take nothing.
     states: u32,
+    /// The bytes a match can begin with, when every match takes at least one
+    /// and some byte cannot begin one; else null. While no thread is alive, a
+    /// search skips the bytes outside it, where a start could only die.
+    first: ?Set,
 
     pub fn deinit(p: *Program, alloc: std.mem.Allocator) void {
         alloc.free(p.insts);
@@ -543,15 +548,83 @@ pub fn compile(alloc: std.mem.Allocator, pattern: []const u8, options: Options, 
         b.* = states;
         states += @as(u32, 1) << @intCast(en.n);
     }
+    const first = try firstBytes(alloc, insts, r.sets.items);
     return .{
+        .first = first,
         .encl = encl,
         .base = base,
         .states = states,
         .insts = insts,
         .sets = try r.sets.toOwnedSlice(alloc),
         .groups = r.groups,
-        .anchored = top.len == 1 and top[0].len > 0 and top[0][0].kind == .start,
+        .anchored = anchoredAll(top),
     };
+}
+
+/// Whether every alternative begins with `^`.
+fn anchoredAll(top: Alt) bool {
+    for (top) |seq| if (seq.len == 0 or seq[0].kind != .start) return false;
+    return true;
+}
+
+/// The bytes a match can begin with: every consuming instruction reachable
+/// from the start without taking a byte, each place (`^`, `$`, `\b`) and each
+/// loop's bit taken as passable, so the set holds at least every byte a match
+/// can begin with. Null when `match` is reachable that way (a match can take
+/// nothing) or when every byte is in it (nothing to skip).
+fn firstBytes(alloc: std.mem.Allocator, insts: []const Inst, sets: []const Set) error{OutOfMemory}!?Set {
+    const seen = try alloc.alloc(bool, insts.len);
+    defer alloc.free(seen);
+    @memset(seen, false);
+    const stack = try alloc.alloc(u16, 2 * insts.len + 1);
+    defer alloc.free(stack);
+    var top: usize = 1;
+    stack[0] = 0;
+    var got = Set.empty;
+    while (top > 0) {
+        top -= 1;
+        const pc = stack[top];
+        if (seen[pc]) continue;
+        seen[pc] = true;
+        const i = insts[pc];
+        switch (i.op) {
+            .byte => got.set(i.c),
+            .any => {
+                got.setRangeValue(.{ .start = 0, .end = 256 }, true);
+                got.unset('\n');
+            },
+            .set => got.setUnion(sets[i.x]),
+            .match => return null,
+            .jmp => {
+                stack[top] = i.x;
+                top += 1;
+            },
+            .split => {
+                stack[top] = i.x;
+                stack[top + 1] = i.y;
+                top += 2;
+            },
+            .first => {
+                stack[top] = pc + 1;
+                stack[top + 1] = i.y;
+                top += 2;
+            },
+            .save, .start, .end, .boundary, .turn, .again => {
+                stack[top] = pc + 1;
+                top += 1;
+            },
+        }
+    }
+    if (got.count() == 256) return null;
+    return got;
+}
+
+/// The first byte at or after `from` that a match can begin with, or null.
+fn nextFirst(first: *const Set, s: []const u8, from: usize) ?usize {
+    if (first.count() == 1) return std.mem.indexOfScalarPos(u8, s, from, @intCast(first.findFirstSet().?));
+    var i = from;
+    while (i < s.len) : (i += 1) if (first.isSet(s[i])) return i;
+    return null;
 }
 
 /// A new thread's captures, its match begun at `pos`.
@@ -654,8 +727,11 @@ pub const Found = struct {
 pub const Searched = struct {
     found: ?Found,
     /// Positions examined, from 0 to the string's length. A search costs
-    /// this times the program's instructions.
+    /// this times the program's instructions, and its skipped bytes as a scan.
     positions: u64,
+    /// Bytes passed over while no thread was alive, none able to begin a
+    /// match (`Program.first`): looked at once each, never examined.
+    skipped: u64 = 0,
     /// Instructions followed; tests assert it stays at most twice the
     /// program's instructions per position.
     work: u64,
@@ -728,6 +804,15 @@ pub fn search(p: *const Program, sc: *Scratch, s: []const u8, positions_most: u6
 /// `search` starting at byte `from` of `s`: the leftmost match that starts
 /// there or later, with `^`, `$` and `\b` still seeing the whole of `s`.
 pub fn searchFrom(p: *const Program, sc: *Scratch, s: []const u8, from: usize, positions_most: u64) Searched {
+    return searchWithin(p, sc, s, from, .{ .positions = positions_most });
+}
+
+/// How far a search may go before it stops unfinished: positions examined,
+/// and bytes skipped.
+pub const Most = struct { positions: u64, skipped: u64 = std.math.maxInt(u64) };
+
+/// `searchFrom`, stopped unfinished past either of `most`'s counts.
+pub fn searchWithin(p: *const Program, sc: *Scratch, s: []const u8, from: usize, most: Most) Searched {
     std.debug.assert(from <= s.len);
     var clist = &sc.a;
     var nlist = &sc.b;
@@ -735,10 +820,21 @@ pub fn searchFrom(p: *const Program, sc: *Scratch, s: []const u8, from: usize, p
     var matched: ?Caps = null;
     var match_end: usize = 0;
     var positions: u64 = 0;
+    var skipped: u64 = 0;
     var work: u64 = 0;
     var pos: usize = from;
+    const skips = !p.anchored and p.first != null;
     while (true) : (pos += 1) {
-        if (positions == positions_most) return .{ .found = null, .positions = positions, .work = work, .finished = false };
+        // No thread alive and none matched: a start can live only at a byte
+        // that can begin a match, and none takes nothing, so the bytes before
+        // the next such one are passed over, and with none left, so is the rest.
+        if (skips and matched == null and clist.len == 0) {
+            const next = nextFirst(&p.first.?, s, pos);
+            skipped += (next orelse s.len) - pos;
+            if (skipped > most.skipped) return .{ .found = null, .positions = positions, .skipped = skipped, .work = work, .finished = false };
+            pos = next orelse return .{ .found = null, .positions = positions, .skipped = skipped, .work = work, .finished = true };
+        }
+        if (positions == most.positions) return .{ .found = null, .positions = positions, .skipped = skipped, .work = work, .finished = false };
         positions += 1;
         // A new start at each position, least preferred, until a match.
         if (matched == null and (!p.anchored or pos == 0))
@@ -769,10 +865,11 @@ pub fn searchFrom(p: *const Program, sc: *Scratch, s: []const u8, from: usize, p
         if (pos == s.len) break;
         if (clist.len == 0 and (matched != null or p.anchored)) break;
     }
-    const caps = matched orelse return .{ .found = null, .positions = positions, .work = work, .finished = true };
+    const caps = matched orelse return .{ .found = null, .positions = positions, .skipped = skipped, .work = work, .finished = true };
     return .{
         .found = .{ .start = caps[0], .end = match_end, .groups = groupsOf(caps) },
         .positions = positions,
+        .skipped = skipped,
         .work = work,
         .finished = true,
     };

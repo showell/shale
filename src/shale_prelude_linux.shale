@@ -205,28 +205,11 @@ end
 
 -- The lines of `s` a regular expression matches (`{invert = true}`: the
 -- others; `{nocase = true}`: either case), each `{line, text}`, numbered
--- from 1.
+-- from 1. The host searches them (`src/shale_host_regex.zig`), at what the
+-- searches cost and a step a line.
 function re_lines(s, pattern, opts?)
-  local o = {}
-  local invert = false
-  if opts ~= nil then
-    for k in keys(opts) do
-      if k == "nocase" then
-        o.nocase = opts.nocase
-      elseif k == "invert" then
-        invert = opts.invert
-      else
-        fail("`re_lines` takes `invert` and `nocase`, not `" .. k .. "`")
-      end
-    end
-  end
-  local got = {}
-  local n = 0
-  for text in lines(s) do
-    n = n + 1
-    if (re_find(text, pattern, o) ~= nil) ~= invert then push(got, {line = n, text = text}) end
-  end
-  return got
+  if opts == nil then return host("re_lines", s, pattern) end
+  return host("re_lines", s, pattern, opts)
 end
 
 -- The first `n` lines of a file, read a part at a time; nil when there is

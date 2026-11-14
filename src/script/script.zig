@@ -17,6 +17,9 @@ pub const builtins_text = @import("builtins_text.zig");
 pub const builtins_store = @import("builtins_store.zig");
 pub const builtins_walk = @import("builtins_walk.zig");
 pub const builtins_read = @import("builtins_read.zig");
+pub const builtins_regex = @import("builtins_regex.zig");
+/// The regex judges' corpus, for the Linux host's tests too.
+pub const regex_judge = if (@import("builtin").is_test) @import("regex_judge.zig") else struct {};
 pub const builtins_change = @import("builtins_change.zig");
 pub const compile = @import("compile.zig");
 pub const vm = @import("vm.zig");
