@@ -14,7 +14,7 @@ Every script in the book really ran, and the book shows what it printed.
 
 ### Agents in late 2026
 
-This book was written with late-2026 agents, and agents change fast. That cuts two ways. If your picture of agents is a year old, they're already better than you think. And some of the workflow here may be obsolete by 2027. So the book leans on the principles that should last. The first is that an agent can't read your mind, so getting your requirements across is always part of the bottleneck. That's why we built an essay surface, where Steve replies to the exact paragraph he means.
+This book was written with late-2026 agents, and agents change fast. That cuts two ways. If your picture of agents is a year old, they're already better than you think. And some of the workflow here may be obsolete by 2027. So the book leans on principles that should last. The first is that an agent can't read your mind, so getting your requirements across is always part of the bottleneck. That's why this book's project is an essay surface, where you reply to the exact paragraph you mean.
 
 You won't find skills files here, the instruction files some setups use to teach an agent a task. A modern agent learned how to do things in training. What it needs from you is a mission and a standard, so this project has mission documents, style guides and Shale gates instead.
 
