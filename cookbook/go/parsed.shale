@@ -1,0 +1,134 @@
+-- What the Go recipes share: the files' trees from go_tree (go-ast, Go's
+-- own go/parser), the files it refused, a few ways to read a node, a Go
+-- name's words, and the self-test that holds a recipe to its plants'
+-- `// want:` marks.
+--
+--   use("cookbook:go/parsed.shale")
+--   local parsed = parse_go_files(paths)     {files, refused}
+--   ...the recipe's findings...
+--   fail_if_go_refused("name_hunt", parsed.refused)
+--   check_want_marks("name_hunt", paths, found_at, CHECKS)
+--
+-- A node is go_tree's: `{kind, depth, parent, kids, line, col, end_line,
+-- end_col}`, `role` (the parent's field that holds it, `Fun`, `Args`,
+-- `Body`) and its scalars (`name`, `value`, `op`, `tok`).
+
+-- The files that parse, and a `path: reason` line for each that doesn't.
+function parse_go_files(paths)
+  local files = {}
+  local refused = {}
+  for f in go_tree(paths) do
+    if f.err == "" then
+      push(files, f)
+    elseif starts_with(f.err, f.path) then
+      push(refused, f.err)
+    else
+      push(refused, f.path .. ": " .. f.err)
+    end
+  end
+  return {files = files, refused = refused}
+end
+
+-- After the findings: the files go-ast refused, then a failure.
+function fail_if_go_refused(who, refused)
+  if #refused == 0 then return nil end
+  for r in refused do print("refused: " .. r) end
+  fail(who .. ": go-ast refused " .. #refused .. " files (named above), which have no tree to judge; every other file was judged")
+end
+
+-- The paths a glob names, less the `_test.go` files when `tests` is false.
+function go_paths(pattern, tests)
+  local kept = {}
+  for p in glob(pattern) do
+    if tests or not ends_with(p, "_test.go") then push(kept, p) end
+  end
+  return kept
+end
+
+-- The kids of node `i` that its field `role` holds, in order.
+function kids_in(nodes, i, role)
+  local got = {}
+  for k in nodes[i].kids do
+    if get(nodes[k], "role", "") == role then push(got, k) end
+  end
+  return got
+end
+
+-- The one kid of node `i` in field `role`, or 0 when it has none.
+function kid_in(nodes, i, role)
+  for k in nodes[i].kids do
+    if get(nodes[k], "role", "") == role then return k end
+  end
+  return 0
+end
+
+-- A node's source text when it sits on one line, else its first line's
+-- part and `...`.
+function source_of(source_lines, n)
+  if n.line == 0 then return "" end
+  local l = source_lines[n.line]
+  if n.end_line == n.line then return sub(l, n.col, n.end_col - 1) end
+  return sub(l, n.col, #l) .. "..."
+end
+
+-- A Go name's words, lower case: `serveHTTP` is {serve, http},
+-- `parseURLPath` {parse, url, path}, `no_cache` {no, cache}.
+function go_words(name)
+  local s = re_replace(name, "([a-z0-9])([A-Z])", "\\1_\\2")
+  s = re_replace(s, "([A-Z])([A-Z][a-z])", "\\1_\\2")
+  local got = {}
+  for w in split(lower(s), "_") do
+    if w ~= "" then push(got, w) end
+  end
+  return got
+end
+
+-- A word table of cookbook/words/: a word a line, `--` starting a note.
+function go_word_table(file)
+  local t = {}
+  for l in lines(read("cookbook:words/" .. file)) do
+    local w = trim(split(l, "--")[1])
+    if w ~= "" then t[w] = true end
+  end
+  return t
+end
+
+-- The self-test. A plant line ending `// want: a, b` must give exactly
+-- those findings, as `found_at` (`path:line` to a list of tags) holds
+-- them, in any order; an unmarked line none; a `quiet_*.go` plant no mark;
+-- and each of `checks` must fire on some plant, since a check no plant
+-- fires could be blind. A tag is a check's name, or what the recipe says
+-- its finding is (`nested 3`).
+function check_want_marks(who, paths, found_at, checks)
+  local wrong = {}
+  local fired = {}
+  local marks = 0
+  for p in paths do
+    local n = 0
+    for l in lines(read(p)) do
+      n = n + 1
+      local key = p .. ":" .. n
+      local got = sort(get(found_at, key, {}))
+      for g in got do fired[split(g, " ")[1]] = true end
+      local mark = re_find(l, "// want: ([^/]+)$")
+      if mark ~= nil then
+        marks = marks + 1
+        if starts_with(basename(p), "quiet_") then push(wrong, key .. ": a quiet plant holds a `// want:` mark") end
+        local want = {}
+        for w in split(mark.group, ",") do push(want, trim(w)) end
+        sort(want)
+        if join(got, ", ") ~= join(want, ", ") then push(wrong, key .. ": found [" .. join(got, ", ") .. "], want [" .. join(want, ", ") .. "]") end
+      elseif #got > 0 then
+        push(wrong, key .. ": found [" .. join(got, ", ") .. "] on a line not marked for it")
+      end
+    end
+  end
+  if marks == 0 then push(wrong, "no plant holds a `// want:` mark") end
+  for c in checks do
+    if not has_key(fired, c) then push(wrong, "`" .. c .. "` fires on no plant") end
+  end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail(who .. " self_test: " .. #wrong .. " wrong") end
+  print(who .. " (Go) self_test: PASS (" .. #paths .. " plants, " .. marks .. " marked lines: each gives exactly its marks, no other line a finding, every check fires)")
+  return nil
+end

@@ -1,0 +1,162 @@
+-- Calls nested three or more deep, like `f(g(h(x)))`, in a Go tree, read
+-- from Go's own parser (go_tree, cookbook/go/parsed.shale). Such a call is
+-- read from the inside out; a named middle step reads left to right. The
+-- Roc recipe's rule (cookbook/roc/nest_depth.shale), in Go's terms.
+--
+--   cd <repo> && shale <shale>/cookbook/go/nest_depth.shale min=4
+--   shale cookbook:go/nest_depth.shale self_test=1
+--
+-- The arguments: `glob=` the files (`**/*.go`), `tests=0` to leave out the
+-- `_test.go` files, `min=` the least depth to report (3), and `loose=1`,
+-- under which a composite literal argument (`T{...}`, `[]T{...}`) does not
+-- start the count again.
+--
+-- A call's depth is one more than the deepest call among its arguments.
+-- What reads left to right passes its parts' depth through without adding
+-- a level: a method's receiver (`a.f().g()`), a selector, an index or a
+-- slice, `*`, `&` and the other operators, parentheses, and a type
+-- assertion. A conversion to a type the syntax shows (`string(b)`,
+-- `[]byte(s)`, `(*T)(p)`) is no level either; one to a named type
+-- (`Note(x)`) looks like any call, since the tree has no types. A function
+-- literal starts again at zero, since its body is read on its own, and so
+-- does a composite literal, whose parts have names or places, unless
+-- `loose=1`. So `f(g(h(x) + 1))`, `f(*g(h(x)))` and `f(g(h(x).a))` are
+-- each three deep.
+--
+-- Each finding is the outermost call of one nest:
+--   path:line:col: nested: depth N, <outermost> to <deepest>: <source line>
+-- between two copies of the counts; the run exits 0 on findings and fails
+-- on a file go-ast refuses. `self_test=1` reads
+-- `cookbook/go/plants/nest_depth/` at min 3, each line ending `// want:
+-- nested N, ...` giving exactly those nests.
+-- budget: steps=200000000 arena_bytes=2000000000 output_bytes=4000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const PLANTS = "cookbook:go/plants/nest_depth/"
+const GLOB = SELF_TEST and (PLANTS .. "*.go") or arg("glob", "**/*.go")
+const TESTS = arg("tests", 1) == 1
+const LOOSE = arg("loose", "") == "1"
+const MIN = SELF_TEST and 3 or arg("min", 3)
+use("cookbook:go/parsed.shale")
+use("cookbook:roc/findings.shale")
+
+const PASS_THROUGH = {SelectorExpr = true, IndexExpr = true, IndexListExpr = true, SliceExpr = true, StarExpr = true, UnaryExpr = true, BinaryExpr = true, ParenExpr = true, TypeAssertExpr = true}
+const LOOSE_PASS_THROUGH = {CompositeLit = true, KeyValueExpr = true}
+const TYPE_NAMES = {string = true, bool = true, byte = true, rune = true, int = true, int8 = true, int16 = true, int32 = true, int64 = true, uint = true, uint8 = true, uint16 = true, uint32 = true, uint64 = true, uintptr = true, float32 = true, float64 = true, complex64 = true, complex128 = true, any = true, error = true}
+const TYPE_KINDS = {ArrayType = true, MapType = true, ChanType = true, FuncType = true, InterfaceType = true, StructType = true}
+
+function passes_depth_through(kind, loose)
+  return has_key(PASS_THROUGH, kind) or (loose and has_key(LOOSE_PASS_THROUGH, kind))
+end
+
+-- Whether the call at `i` converts to a type the syntax shows.
+function is_conversion(nodes, i)
+  local fun = nodes[kid_in(nodes, i, "Fun")]
+  if fun.kind == "Ident" then return has_key(TYPE_NAMES, fun.name) end
+  if has_key(TYPE_KINDS, fun.kind) then return true end
+  if fun.kind == "ParenExpr" then
+    local inner = nodes[fun.kids[1]]
+    return inner.kind == "StarExpr" or has_key(TYPE_KINDS, inner.kind)
+  end
+  return false
+end
+
+function is_call(nodes, i)
+  return nodes[i].kind == "CallExpr" and not is_conversion(nodes, i)
+end
+
+-- The call depth of node `i`, cached in `memo`, -1 not yet known.
+function call_depth(nodes, memo, i, loose)
+  if memo[i] >= 0 then return memo[i] end
+  local node = nodes[i]
+  local depth = 0
+  if node.kind == "CallExpr" then
+    local deepest_argument = 0
+    for a in kids_in(nodes, i, "Args") do deepest_argument = max(deepest_argument, call_depth(nodes, memo, a, loose)) end
+    -- The function called passes its receiver's depth through.
+    local fun_depth = call_depth(nodes, memo, kid_in(nodes, i, "Fun"), loose)
+    if is_conversion(nodes, i) then depth = deepest_argument else depth = max(1 + deepest_argument, fun_depth) end
+  elseif passes_depth_through(node.kind, loose) then
+    for k in node.kids do depth = max(depth, call_depth(nodes, memo, k, loose)) end
+  end
+  memo[i] = depth
+  return depth
+end
+
+function continues_nest(nodes, i, loose)
+  return nodes[i].kind == "CallExpr" or passes_depth_through(nodes[i].kind, loose)
+end
+
+-- Whether the call at `i` is its nest's outermost: the first call above it,
+-- through nodes that continue the nest, is not as deep.
+function is_outermost(nodes, memo, i, loose)
+  local p = nodes[i].parent
+  while p > 0 do
+    if is_call(nodes, p) then return call_depth(nodes, memo, p, loose) < call_depth(nodes, memo, i, loose) end
+    if not continues_nest(nodes, p, loose) then return true end
+    p = nodes[p].parent
+  end
+  return true
+end
+
+-- A call's name: `f`, `strings.Trim`, or `.Trim` for a method on a value
+-- the syntax does not name.
+function call_name(nodes, i)
+  local fun_at = kid_in(nodes, i, "Fun")
+  local fun = nodes[fun_at]
+  if fun.kind == "Ident" then return fun.name end
+  if fun.kind == "SelectorExpr" then
+    local x = nodes[kid_in(nodes, fun_at, "X")]
+    local sel = nodes[kid_in(nodes, fun_at, "Sel")].name
+    if x.kind == "Ident" then return x.name .. "." .. sel end
+    return "." .. sel
+  end
+  return fun.kind
+end
+
+function is_in_nest(nodes, top, j, loose)
+  local p = nodes[j].parent
+  while p > 0 and p ~= top do
+    if not continues_nest(nodes, p, loose) then return false end
+    p = nodes[p].parent
+  end
+  return p == top
+end
+
+-- The nest's deepest call: the first call of depth 1 inside it.
+function deepest_call(nodes, memo, top, loose)
+  local j = top + 1
+  while j <= #nodes and nodes[j].depth > nodes[top].depth do
+    if is_call(nodes, j) and call_depth(nodes, memo, j, loose) == 1 and is_in_nest(nodes, top, j, loose) then return j end
+    j = j + 1
+  end
+  return top
+end
+
+const paths = go_paths(GLOB, TESTS)
+local parsed = parse_go_files(paths)
+local finding_lines = {}
+local count_by_depth = {}
+const found_at = {}
+for f in parsed.files do
+  local nodes = f.nodes
+  local memo = {}
+  for n in nodes do push(memo, -1) end
+  local source_lines = {}
+  for i = 1, #nodes do
+    if is_call(nodes, i) and call_depth(nodes, memo, i, LOOSE) >= MIN and is_outermost(nodes, memo, i, LOOSE) then
+      if #source_lines == 0 then source_lines = split(read(f.path), "\n") end
+      local line = nodes[i].line
+      local depth = call_depth(nodes, memo, i, LOOSE)
+      local span = call_name(nodes, i) .. " to " .. call_name(nodes, deepest_call(nodes, memo, i, LOOSE))
+      push(finding_lines, f.path .. ":" .. line .. ":" .. nodes[i].col .. ": nested: depth " .. depth .. ", " .. span .. ": " .. trim(source_lines[line]))
+      incr(count_by_depth, tostring(depth))
+      push_at(found_at, f.path .. ":" .. line, "nested " .. depth)
+    end
+  end
+end
+local counts = {}
+for depth in sort(keys(count_by_depth)) do push(counts, "depth " .. depth .. " " .. count_by_depth[depth]) end
+print_findings("nest_depth (Go): " .. #paths .. " files; nested " .. #finding_lines .. " (min " .. MIN .. ", " .. (LOOSE and "loose" or "strict") .. ")" .. (#counts > 0 and ("; " .. join(counts, ", ")) or ""), finding_lines)
+fail_if_go_refused("nest_depth", parsed.refused)
+if SELF_TEST then check_want_marks("nest_depth", paths, found_at, {"nested"}) end

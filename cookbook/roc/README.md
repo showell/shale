@@ -270,7 +270,8 @@ run on their own.
   the summary, the findings and the summary again. The first copy survives
   when Shale's output limit cuts a long list short, and a caller that reads
   only the last line still gets the counts. Used by `errors`, `methods`,
-  `name_hunt`, `nest_depth`, `parens`, `roc_commas` and `stack`.
+  `name_hunt`, `nest_depth`, `parens`, `roc_commas` and `stack`, and by
+  the Go recipes ([cookbook/go/](../go/README.md)).
 - [pinned.shale](pinned.shale): `roc_bin(who, self_test)` gives the path
   of the Roc compiler that the repository's `roc-version` file names
   (installed at `tools:roc-<version>/roc`), and `SELF_TEST_PIN` is the
