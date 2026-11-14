@@ -654,7 +654,7 @@ end
 const NEGATIVES = "cookbook:prose/find_negatives.shale"
 const NEGATIVES_BOOK = "book/book.md"
 const NEGATIVES_TABLE = "book/negatives.txt"
-const NEGATIVES_HELD = 108
+const NEGATIVES_HELD = 107
 
 function negatives_findings()
   local r = run({"shale", real(NEGATIVES), "manuscript=" .. NEGATIVES_BOOK, "table=" .. NEGATIVES_TABLE, "held=" .. NEGATIVES_HELD}, {timeout_ms = 60000, tail = 40})

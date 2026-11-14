@@ -111,55 +111,62 @@ Four words come up from the first session on. `run` needs a timeout and a keep, 
 - **`tail`:** a keep in lines: the program's last lines, where its verdict usually sits.
 - **`must`:** `must(r)` returns a run that exited 0, and fails the script on any other, printing the output and naming the program.
 
-That's enough Shale to start. Next, one turn of the loop, from a reply to a change.
+That's enough Shale to start. Next, one turn of the loop, from a report to a change.
 
 ## One loop
 
-Before the sessions, here's one complete turn of the loop this book is made of, from the middle of Session 4. It took the agent a few minutes, and it took Steve four words.
+Before the sessions, here's one complete turn of the loop they run once the essay surface can take replies, taken from the middle of Session 4. From Steve's reply to the commit took under five minutes, and it took Steve four words.
 
 ```dot
 digraph turn {
-  rankdir=LR;
+  rankdir=TB;
   node [shape=box, style="rounded", fontname="Helvetica", margin="0.2,0.1"];
   edge [fontname="Helvetica"];
-  agent [label="The agent"];
-  report [label="Its report"];
+  agent3 [label="The Session 3 agent"];
+  orchestrator [label="The orchestrator"];
+  note [label="The note"];
   steve [label="Steve"];
+  agent4 [label="The Session 4 agent"];
   code [label="The code"];
-  agent -> report [label="1. writes"];
-  steve -> report [label="2. replies on a line of"];
-  report -> agent [label="3. carries the reply back to"];
-  agent -> code [label="4. changes and proves"];
+  agent3 -> orchestrator [label="1. reports to"];
+  orchestrator -> note [label="2. writes"];
+  steve -> note [label="3. replies on a line of"];
+  orchestrator -> agent4 [label="4. passes the reply to"];
+  agent4 -> code [label="5. changes and proves"];
 }
 ```
 
-*One turn of the loop, from Session 4. Each arrow reads as a sentence, in order: the agent writes its report.*
+*One turn of the loop, from Session 4. Read each arrow as a sentence, in order: the Session 3 agent reports to the orchestrator.*
 
-### The agent writes its report
+### The Session 3 agent reports to the orchestrator
 
-The agent ended Session 3 with a report on the essay surface. One line in it named a decision Steve might want to reverse: "**The comments folder's parent must exist** when the server starts."
+The Session 3 agent ended its session with a report: what it built, and the decisions it made on its own, for Steve to confirm or change.
 
-### Steve replies on a line
+### The orchestrator writes a note
 
-Steve replied to that line, in four words: "add a defensive check".
+The orchestrator, the agent that coordinates the others, turned that report into a note on the essay surface, where Steve reads. One line of it said: "**The comments folder's parent must exist** when the server starts."
 
-Reply where the context is. The line carries everything the agent needs to know about what you mean, so four words are a complete instruction. A reply in a chat window would have to restate it.
+### Steve replies on a line of the note
 
-### The reply goes back to the agent
+Steve replied on that line, in four words: "add a defensive check".
 
-The orchestrator, the agent that coordinates the others, passed the reply to the agent already at work on Session 4.
+Reply where the context is. The line carries the context, so four words make a complete instruction. In a chat window, you'd have to quote the line first.
 
-### The agent changes and proves the code
+### The orchestrator passes the reply to the Session 4 agent
+
+By then the Session 4 agent was at work. The orchestrator passed it the reply, with its line, and spelled out what the four words meant: stop at start, with one clear message naming the path, and leave the folder unmade. That's the orchestrator's part in the loop. It holds the context on both sides, so Steve's reply can stay short.
+
+### The Session 4 agent changes and proves the code
 
 The agent added the check in Go, where the server starts:
 
 {{lines repos:essay-surface/store.go from "// The parent is checked, never made" to "is not a folder; make it"}}
 
-Its comment says why: a mistyped folder name would grow a folder of comments where nobody looks. The agent wrote a test for three cases, a missing parent, a parent that's a file, and one that's there. Then it planted a fault once: it took its own check out, watched the test go red, and put the check back. The commit check passed.
+Its comment says why: a mistyped `-comments` path would grow a folder of comments where nobody looks. The agent wrote a test for three cases: a missing parent, a parent that's a file, and a parent that exists. Then it seeded a fault, once: it took its own check out, watched the test fail, and put the check back. Then the check before every commit passed.
 
-You know the change is right without reading the Go. The test says what the code must do, the planted fault proves the test can fail, and the gate says everything else still holds.
+Judge a change by its proof: a test that says what the code must do, a fault seeded once to show the test can fail, and a gate that's green.
 
-That's the loop the rest of the book runs, session after session: steer by replying where the context is, and let the agent prove what it changed.
+Once the surface can take replies, every session runs this loop. It begins, in Session 1, with a new repository.
 
 ## Session 1: the bugs the tests missed
 

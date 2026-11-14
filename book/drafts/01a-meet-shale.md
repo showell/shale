@@ -63,4 +63,4 @@ Four words come up from the first session on. `run` needs a timeout and a keep, 
 - **`tail`:** a keep in lines: the program's last lines, where its verdict usually sits.
 - **`must`:** `must(r)` returns a run that exited 0, and fails the script on any other, printing the output and naming the program.
 
-That's enough Shale to start. Next, one turn of the loop, from a reply to a change.
+That's enough Shale to start. Next, one turn of the loop, from a report to a change.
