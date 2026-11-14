@@ -161,55 +161,45 @@ Session 1 starts with an empty repository and this prompt:
 
 The orchestrator wrote this prompt from a plan Steve gave it and handed it to a cold agent. The agent worked for about twelve minutes, and Steve didn't step in. "Five hundred notes" says where to work: Steve has about that many on the old surface, the Python server he used before this one, and the agent works against the real ones.
 
-The agent's journal records 52 blocks of scripts and output. This chapter shows five, each as it ran.
+The agent wrote the server and its markdown renderer in Go, with no dependencies, and a dozen real notes to serve as samples. What this chapter follows is how it checked that work, because that's where Shale comes in.
 
-### Seven stops in twelve minutes
+### A gate before a commit
 
-Before writing any code, the agent read Shale's own docs. It wanted one table from them, the one that says which builtin to use in place of each shell habit, so its first script looked for the line where that table starts:
+Before its first commit, the agent saved a recipe, `scripts/check.shale`. Every commit after it passes through this script, so it's the first one worth reading closely. Here it is as Session 1 left it:
 
-{{fence repos:essay-surface/journal/session-1.md "Before you reach"}}
+{{show repos:essay-surface d793c5a:scripts/check.shale}}
 
-It stopped:
+Read it the way you'd read any short script. Three programs run, one after another: `gofmt -l` lists any file that isn't formatted, `go vet` looks for suspicious code, and `go test` runs the tests. Each `run` starts a program and keeps what it said. `must` fails the script unless the program exited 0, and `fail` stops it with a reason. So the script either prints three verdicts or stops on the first one that's wrong.
 
-{{fence repos:essay-surface/journal/session-1.md "index 0 is outside the list"}}
+When it passed, it said so in three lines:
 
-You don't need to read a line like that, because the agent does. It names the place and the reason. Here `lines` had split the path's text, not the file, so nothing matched, and the agent read the doc with its file reader in its next call. The session had seven stops, and this is the whole record of them:
+{{fence repos:essay-surface/journal/session-1.md "vet: clean, 454 ms"}}
 
-| The stop | What the agent did next |
-|---|---|
-| index 0 is outside the list | `lines` splits a string, not a file, so it read the file instead |
-| the step budget ran out | a regex in a loop over 500 notes; it switched to `grep`, a builtin |
-| the arena budget ran out | the loop held every note's work at once; now it holds one at a time |
-| no key "mtime" in the map | a guessed field name; the real one is `modified` |
-| fail: gofmt | its own new gate, doing its job |
-| no function `first` | a guessed builtin |
-| 64 programs a run | one request per note; the audit below tells this one |
+### A green is a claim
 
-That's what an agent's first session with a language looks like, and it's cheap. Each stop is one line, and none cost more than the next call. An agent guesses (a field name, a builtin), and the stops correct its guesses before they can do anything.
-
-### A green, counted
-
-The agent wrote the server and its markdown renderer in Go, with no dependencies. Then it saved its first recipe, `scripts/check.shale`: gofmt must list nothing, vet must be quiet, and every test must pass. Once the gate passed, the agent counted what ran:
+A passing gate says the tests ran. It doesn't say how many did, and a test file that compiled to nothing would pass just as quietly. So the agent counted:
 
 {{fence repos:essay-surface/journal/session-1.md "how many tests and subtests actually ran?"}}
 
-Sixty-nine passed, and none failed. A green is a claim: a passing gate says the tests ran, and only a count shows that they did. Green ✅
+{{fence repos:essay-surface/journal/session-1.md "PASS lines: 69"}}
 
-The agent saved a benchmark too. A note takes about a tenth of a millisecond to serve, which is all a first version needs to know.
+Sixty-nine passed, seven of them top-level tests, and none failed. That's a number you can check against the test file, which "ok" never is. Count what ran, every time a gate turns green for the first time. Green ✅
 
 ### The audit
 
-The tests checked the cases the agent thought of. To find the rest, it rendered every real note through the server and counted markdown left over outside code. The first try fetched each page as a program of its own, and stopped:
+The tests checked the cases the agent thought of. To find the rest, it saved a second recipe, `scripts/audit.shale`. It starts the server on all of Steve's real notes, fetches every page, stops the server, and then counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Any of those in a rendered page is a construct the renderer missed.
 
-{{fence repos:essay-surface/journal/session-1.md "budget runs: 64 programs a run"}}
-
-This is the one stop with stakes. It came after the server had started, so it left a server running. The agent found the server by the record Shale keeps of each job, and stopped it. Then it built the lesson into the saved script, `scripts/audit.shale`: one curl fetches every page, the server stops, and only then is anything judged. A script that starts a server must stop it before anything can stop the script.
-
-The audit found two real bugs that the 62 hand-written test cases had missed:
+It found two real bugs that the 62 hand-written test cases had missed:
 
 {{fence repos:essay-surface/journal/session-1.md "<title>Review: gopher-roc"}}
 
-Titles kept their markdown, and a lone triple backtick in a table cell swallowed the rest of its row. Each fix got a test, the table one copied from the note that found it. Run your code over real data before you trust your own tests: your tests hold only the cases you thought of, and five hundred real notes hold the rest.
+Titles kept their markdown, and a lone triple backtick in a table cell swallowed the rest of its row. Each fix got a test, the table one copied from the note that found it.
+
+Run your code over real data before you trust your own tests. Your tests hold only the cases you thought of, and five hundred real notes hold the rest. The audit cost one script and under a second of running, and it found what the tests couldn't.
+
+Not every script ran the first time. The agent hit a few stops along the way, each one line, and fixed each in its next call. Reading a stop is a craft of its own, and it can wait until you know what a run that works looks like.
+
+The agent also saved a benchmark. A note takes about a tenth of a millisecond to serve, which is all a first version needs to know.
 
 ### The gates now
 
