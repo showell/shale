@@ -1,0 +1,300 @@
+-- This recipe finds every bare `F64` in a project's declarations, for a project
+-- that keeps its floats inside unit types. What must stay a float is named in
+-- the project's table, with a reason.
+--
+--   cd <repo> && shale cookbook:roc/find_bare_floats.shale table=bare_floats.txt
+--   shale cookbook:roc/find_bare_floats.shale self_test=1
+--
+-- The arguments:
+--   glob       the files to check, `**/*.roc` by default;
+--   table      the project's exceptions, without which every `F64` is a finding;
+--   self_test  with `self_test=1`, check the plants in
+--              `cookbook/roc/plants/find_bare_floats/`.
+--
+-- Each line of the table is `Name: reason`. A name is a module, or what is in
+-- it: `Pixels`, `Scene.fade`, `Animation.Spot.lift`. A type's own module isn't
+-- repeated, so `to_metres` in `Distance.roc` is `Distance.to_metres`, whether
+-- or not it is a member of the type `Distance`. A record field's name follows
+-- what declares it. A line covers its name and whatever is inside it, and only
+-- the longest line that fits a finding answers for it. A blank line or one
+-- starting with `#` is skipped, and a line with no reason or a name listed
+-- twice stops the run.
+--
+-- The checks:
+--
+--   bare_float        An `F64` in a top-level or member annotation or in a type
+--                     declaration, however deep in the type: a field, a list's
+--                     element, a tag's payload. Each `F64` is a finding, so a
+--                     signature with two gives two. A local's annotation is the
+--                     body's business and isn't judged. A constant with no
+--                     annotation has no signature, so it can't be judged.
+--   unused_exception  A line of the table that no finding needs, or that names
+--                     a module no file below the table's folder holds. A line
+--                     for a module the run didn't read isn't judged, so a run
+--                     over part of a tree still fails only for what it read.
+--
+-- A helper only tests use is test code and isn't judged, and a line tells it
+-- so at the top of the output. It is a definition at the top level of a type
+-- module, outside the type's block, which the compiler lets no other module
+-- reach, so a file's own text shows everything that uses it. Every use must be
+-- in an `expect` or in another such helper, and there must be one. The file has
+-- to be a type module for this: an app's or a `module [...]` file's top-level
+-- names can be reached from outside, so its helpers are always judged. A local
+-- that shares a helper's name counts as a use, which can only report more.
+--
+-- The output is the counts, one line per finding, and the counts again
+-- (cookbook/findings.shale). The run fails if there are findings, or if
+-- any file doesn't parse, and the files that do parse are judged either way.
+-- budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const GLOB = arg("glob", "**/*.roc")
+const TABLE_FILE = arg("table", "")
+use("cookbook:roc/declared.shale")
+use("cookbook:findings.shale")
+use("cookbook:roc/parsed.shale")
+use("cookbook:roc/gate_recipe.shale")
+const CHECKS = {"bare_float", "unused_exception"}
+
+-- The table as `{lines, by_name, used}`: its lines in order, each `{name,
+-- module, line}`, the same by name, and an empty set `judge_float` fills.
+function exception_table(path)
+  local lines_of_table = {}
+  local by_name = {}
+  if path == "" then return {lines = lines_of_table, by_name = by_name, used = {}} end
+  if not exists(path) then fail("find_bare_floats: no table " .. path) end
+  local number = 0
+  for raw in lines(read(path)) do
+    number = number + 1
+    local l = trim(raw)
+    if l ~= "" and not starts_with(l, "#") then
+      local m = re_find(l, "^([A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*!?)*): +[^ ]")
+      if m == nil then fail("find_bare_floats: " .. path .. ":" .. number .. ": expected `Name: reason`") end
+      if has_key(by_name, m.group) then fail("find_bare_floats: " .. path .. ":" .. number .. ": `" .. m.group .. "` is listed twice") end
+      local entry = {name = m.group, module = split(m.group, ".")[1], line = number}
+      push(lines_of_table, entry)
+      by_name[m.group] = entry
+    end
+  end
+  return {lines = lines_of_table, by_name = by_name, used = {}}
+end
+
+-- The longest name of the table that covers `key`, or nil.
+function exception_for(exceptions, key)
+  local parts = split(key, ".")
+  local n = #parts
+  while n >= 1 do
+    local name = join(take(parts, n), ".")
+    if has_key(exceptions.by_name, name) then return name end
+    n = n - 1
+  end
+  return nil
+end
+
+function is_type_module(tree)
+  for at in children(tree, 1) do
+    if tree[at].kind == "type-mod" then return true end
+  end
+  return false
+end
+
+-- Where the `F64` at `at` is declared, or nil when it belongs to a local. `key`
+-- is its dotted name, `declaration` the annotation or type declaration holding
+-- it, `name` that declaration's own name, and `in_type` whether a type's block
+-- holds it.
+function declaration_of(tree, at, module)
+  local names = {}
+  local declaration = 0
+  local in_type = false
+  local k = tree[at].parent
+  while k ~= 0 do
+    local kind = tree[k].kind
+    if starts_with(kind, "e-") or starts_with(kind, "p-") or kind == "s-decl" then return nil end
+    if kind == "anno-record-field" or kind == "s-type-anno" then push(names, attribute(tree, k, "name")) end
+    if kind == "s-type-decl" then
+      local type_name = attribute(tree, children(tree, k)[1], "name")
+      if type_name ~= module then push(names, type_name) end
+      in_type = true
+    end
+    if (kind == "s-type-anno" or kind == "s-type-decl") and declaration == 0 then declaration = k end
+    k = tree[k].parent
+  end
+  local parts = {module}
+  local i = #names
+  while i >= 1 do
+    push(parts, names[i])
+    i = i - 1
+  end
+  return {key = join(parts, "."), declaration = declaration, in_type = in_type, name = attribute(tree, declaration, "name")}
+end
+
+-- The node's type as text, for a finding: what a reader will find at the line.
+function declared_type_text(tree, at)
+  local kids = children(tree, at)
+  if tree[at].kind == "s-type-anno" then return render_type(tree, kids[1]) end
+  return render_type(tree, kids[2])
+end
+
+-- The name a node uses, or "": an identifier, or a field in a record's short
+-- form, `{ a, b }`, which uses `a` and `b`.
+function name_used(tree, at)
+  local node = tree[at]
+  if node.kind == "e-ident" then return node.raw end
+  if node.kind == "field" and #node.kids == 0 then return get(node, "field", "") end
+  return ""
+end
+
+-- The definitions at the top level of the file, outside any type's block, as a
+-- map from each name to its `s-decl`.
+function top_level_definitions(tree)
+  local found = {}
+  for at in children(tree, 1) do
+    if tree[at].kind == "statements" then
+      for s in children(tree, at) do
+        if tree[s].kind == "s-decl" then
+          local kids = children(tree, s)
+          if #kids > 0 and tree[kids[1]].kind == "p-ident" then found[attribute(tree, kids[1], "raw")] = s end
+        end
+      end
+    end
+  end
+  return found
+end
+
+-- The helpers only tests use, by the rule the header gives: a map from each
+-- top-level definition to whether it is one.
+-- Each node's `place` is the helper it sits in, `expect` in a test, and "" for
+-- anything else. A parent comes before its children, so one pass fills it.
+function test_only_helpers(tree)
+  local helpers = {}
+  if not is_type_module(tree) then return helpers end
+  local definitions = top_level_definitions(tree)
+  local definition_at = {}
+  for name in keys(definitions) do definition_at[tostring(definitions[name])] = name end
+  local place = {}
+  local places_of = {}
+  for name in keys(definitions) do places_of[name] = {} end
+  for i = 1, #tree do
+    local node = tree[i]
+    local here = node.parent == 0 and "" or place[node.parent]
+    if node.kind == "s-expect" then here = "expect" end
+    if here == "" and has_key(definition_at, tostring(i)) then here = definition_at[tostring(i)] end
+    push(place, here)
+    local used = name_used(tree, i)
+    if used ~= "" and has_key(places_of, used) and here ~= used then places_of[used][here] = true end
+  end
+  for name in keys(definitions) do
+    helpers[name] = #keys(places_of[name]) > 0
+  end
+  -- A helper falls when anything outside tests uses it, which can bring down
+  -- the helpers only it used.
+  local changed = true
+  while changed do
+    changed = false
+    for name in keys(helpers) do
+      for used_at in keys(places_of[name]) do
+        if helpers[name] and used_at ~= "expect" and not get(helpers, used_at, false) then
+          helpers[name] = false
+          changed = true
+        end
+      end
+    end
+  end
+  return helpers
+end
+
+-- Judges the one `F64` at `at`, and gives 1 when a test's helper holds it.
+function judge_float(f, at, module, helpers, exceptions, report)
+  local tree = f.nodes
+  local where = declaration_of(tree, at, module)
+  if where == nil then return 0 end
+  if not where.in_type and get(helpers, where.name, false) then return 1 end
+  local covered_by = exception_for(exceptions, where.key)
+  if covered_by ~= nil then
+    exceptions.used[covered_by] = true
+    return 0
+  end
+  push(report, {path = f.path, line = tree[at].line, check = "bare_float", what = "`" .. where.key .. "` has a bare `F64`: " .. declared_type_text(tree, where.declaration)})
+  return 0
+end
+
+-- Judges one file, and gives how many of its floats belong to tests' helpers.
+function judge_file(f, exceptions, report)
+  local tree = f.nodes
+  local module = module_name(f.path)
+  local helpers = test_only_helpers(tree)
+  local in_helpers = 0
+  for i = 1, #tree do
+    if tree[i].kind == "ty" and last_part(attribute(tree, i, "name")) == "F64" then
+      in_helpers = in_helpers + judge_float(f, i, module, helpers, exceptions, report)
+    end
+  end
+  return in_helpers
+end
+
+function judge_exceptions(exceptions, read_modules, report)
+  if #exceptions.lines == 0 then return nil end
+  local known = {}
+  for p in glob(path_under(dirname(TABLE_FILE), "**/*.roc")) do known[module_name(p)] = true end
+  for e in exceptions.lines do
+    if not has_key(known, e.module) then
+      push(report, {path = TABLE_FILE, line = e.line, check = "unused_exception", what = "`" .. e.name .. "` names a module no file here holds"})
+    elseif has_key(read_modules, e.module) and not has_key(exceptions.used, e.name) then
+      push(report, {path = TABLE_FILE, line = e.line, check = "unused_exception", what = "`" .. e.name .. "` excuses nothing: no finding needs it"})
+    end
+  end
+  return nil
+end
+
+function self_test()
+  local at = "cookbook:roc/plants/find_bare_floats/"
+  local recipe = "cookbook:roc/find_bare_floats.shale"
+  local table_arg = "table=" .. at .. "whole/table.txt"
+  check_plants("find_bare_floats", recipe, CHECKS, {
+    {glob = at .. "Signatures.roc", counts = {bare_float = 12}, says = {"Signatures.roc:5: bare_float: `Signatures.Reading` has a bare `F64`: F64", "`Signatures.scaled` has a bare `F64`: (Reading, F64 -> Reading)", "`Signatures.Trip.length` has a bare `F64`: { length : F64, name : Str }", "`Signatures.pair` has a bare `F64`: (F64, F64)"}},
+    {glob = at .. "Quiet.roc"},
+    {glob = at .. "Helpers.roc", counts = {bare_float = 7}, says = {"`Helpers.used_by_a_member` has", "`Helpers.used_by_a_definition` has", "`Helpers.reached_from_production` has", "`Helpers.in_a_short_record` has", "`Helpers.used_by_nothing` has", "`Helpers.only_itself` has", "`Helpers.member_tests_use` has"}},
+    {glob = at .. "QuietHelpers.roc", says = {"3 bare `F64`s are in helpers only tests use"}},
+    {glob = at .. "helpers_app.roc", counts = {bare_float = 1}, says = {"`helpers_app.only_tests` has"}},
+    {glob = at .. "whole/*.roc", counts = {bare_float = 7}},
+    {glob = at .. "whole/*.roc", args = {table_arg}},
+    {glob = at .. "whole/*.roc", args = {"table=" .. at .. "whole/narrow.txt"}, counts = {bare_float = 2}, says = {"`Held.Spot.left_out` has a bare", "`Held.other` has a bare"}},
+    {glob = at .. "whole/*.roc", args = {"table=" .. at .. "whole/shadowed.txt"}, counts = {unused_exception = 1}, says = {"`Held` excuses nothing"}},
+    {glob = at .. "whole/*.roc", args = {"table=" .. at .. "whole/unused.txt"}, counts = {unused_exception = 4}, says = {"unused.txt:4: unused_exception: `Held.gone` excuses nothing", "`Unit.plus` excuses nothing", "`Held.Spot.gone` excuses nothing", "`Vanished` names a module no file here holds"}},
+    {glob = at .. "whole/Held.roc", args = {table_arg}},
+    {glob = at .. "whole/Unit.roc", args = {"table=" .. at .. "whole/unused.txt"}, counts = {unused_exception = 2}, says = {"`Unit.plus` excuses nothing", "`Vanished` names a module"}},
+    {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
+    {glob = at .. "Quiet.roc", args = {"table=" .. at .. "no_such.txt"}, stops = true, says = {"no table"}},
+    {glob = at .. "Quiet.roc", args = {"table=" .. at .. "table_no_reason.txt"}, stops = true, says = {"table_no_reason.txt:2: expected"}},
+    {glob = at .. "Quiet.roc", args = {"table=" .. at .. "table_twice.txt"}, stops = true, says = {"`Quiet.name` is listed twice"}},
+  })
+  return nil
+end
+
+function run_check()
+  local exceptions = exception_table(TABLE_FILE)
+  local paths = glob(GLOB)
+  local parsed = parse_roc_files(paths)
+  local report = {}
+  local read_modules = {}
+  local in_helpers = 0
+  for f in parsed.files do
+    read_modules[module_name(f.path)] = true
+    in_helpers = in_helpers + judge_file(f, exceptions, report)
+  end
+  judge_exceptions(exceptions, read_modules, report)
+  if in_helpers > 0 then print(in_helpers .. " bare `F64`s are in helpers only tests use, and aren't judged") end
+  local verdict = verdict_of("find_bare_floats", CHECKS, report, #paths)
+  print_findings(verdict.summary, verdict.found)
+  fail_if_refused("find_bare_floats", parsed.refused)
+  return verdict
+end
+
+-- This `fail` stands at the top level so the summary is the last line a
+-- caller reads: a stop inside a function prints the calls after it.
+if SELF_TEST then
+  self_test()
+else
+  local verdict = run_check()
+  if #verdict.found > 0 then fail(verdict.summary) end
+end

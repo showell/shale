@@ -1,0 +1,5 @@
+# The words and types for check_name_types' plants.
+
+dist: Distance
+steps: Steps
+frames: none

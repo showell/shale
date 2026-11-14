@@ -298,7 +298,7 @@ pub fn build(b: *std.Build) void {
     // The mode the install's `shale` is really configured with, so a test
     // holds it without paying for that compile.
     shale_options.addOption([]const u8, "installed_mode", @tagName(installed_runner.root_module.optimize.?));
-    // The zig building the tests, which syntax.shale's test hands it: a
+    // The zig building the tests, which check_syntax.shale's test hands it: a
     // runner's PATH need not hold one.
     shale_options.addOption([]const u8, "zig", b.graph.zig_exe);
     shale_options.addOption([]const []const u8, "hunt_files", &hunt_files);
@@ -435,8 +435,8 @@ pub fn build(b: *std.Build) void {
     // go-ast live: the Roc name hunt, the method rewrite and the Go hunts fail
     // without them, saying how to install them; CI installs them there. `scratch`, a
     // fresh folder deleted after, is where a self-test plants what it writes
-    // (branch_prune's repos). This `shale` is first on PATH, so a self-test
-    // that judges each plant in a child run (methods') runs this tree's
+    // (prune_merged_branches's repos). This `shale` is first on PATH, so a self-test
+    // that judges each plant in a child run (rewrite_method_calls') runs this tree's
     // too. After `quick`.
     {
         const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt(

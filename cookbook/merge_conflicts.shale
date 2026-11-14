@@ -1,0 +1,192 @@
+-- A library for resolving git merge conflicts: it parses the markers git
+-- leaves in a file, so a resolution is a few lines saying which side each
+-- hunk keeps. `use("cookbook:merge_conflicts.shale")`; check_conflict_markers.shale tests it.
+--
+-- It reads git's default markers, seven characters wide, in both styles:
+-- diff3 (`<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`) and the two-way one
+-- with no base section. A marker out of order, or a hunk never closed,
+-- stops the run, naming its line.
+
+-- The kind of marker a line is: "open", "base", "split", "close", or "" for
+-- none. A CR before the newline is ignored, so CRLF files read the same.
+function conflict_marker_kind(line)
+  local l = line
+  if ends_with(l, "\r") then l = sub(l, 1, #l - 1) end
+  if l == "=======" then return "split" end
+  local heads = {{"<<<<<<<", "open"}, {"|||||||", "base"}, {">>>>>>>", "close"}}
+  for h in heads do
+    if starts_with(l, h[1]) and (#l == 7 or sub(l, 8, 8) == " ") then return h[2] end
+  end
+  return ""
+end
+
+-- The text after a marker, which git fills with the side's name.
+function conflict_marker_label(line)
+  return trim(sub(line, 8))
+end
+
+-- The text cut into segments, in order: `{kind = "text", text}` for what is
+-- outside every hunk, and `{kind = "hunk", ...}` as conflict_hunks gives one.
+-- Each segment's text keeps its newlines, so joining them gives the text back.
+function conflict_segments(text, where?)
+  local at = "conflicts"
+  if where ~= nil then at = where end
+  local pieces = split(text, "\n")
+  local segments = {}
+  local plain = {}
+  local hunk = nil
+  local part = ""
+  local i = 0
+  for piece in pieces do
+    i = i + 1
+    local whole = piece
+    if i < #pieces then whole = piece .. "\n" end
+    local kind = conflict_marker_kind(piece)
+    if hunk == nil then
+      if kind == "open" then
+        if #plain > 0 then push(segments, {kind = "text", text = join(plain, "")}) end
+        plain = {}
+        hunk = {kind = "hunk", line = i, style = "two-way", ours_label = conflict_marker_label(piece), theirs_label = "", ours = {}, base = {}, theirs = {}}
+        part = "ours"
+      elseif kind == "base" or kind == "close" then
+        fail(at .. ":" .. i .. ": a `" .. sub(piece, 1, 7) .. "` marker outside any conflict")
+      else
+        push(plain, whole)
+      end
+    elseif kind == "open" then
+      fail(at .. ":" .. i .. ": a `<<<<<<<` inside the conflict that opens at line " .. hunk.line)
+    elseif kind == "base" then
+      if part ~= "ours" then fail(at .. ":" .. i .. ": a `|||||||` after the " .. part .. " section of the conflict at line " .. hunk.line) end
+      hunk.style = "diff3"
+      part = "base"
+    elseif kind == "split" then
+      if part == "theirs" then fail(at .. ":" .. i .. ": a second `=======` in the conflict at line " .. hunk.line) end
+      part = "theirs"
+    elseif kind == "close" then
+      if part ~= "theirs" then fail(at .. ":" .. i .. ": a `>>>>>>>` before the `=======` of the conflict at line " .. hunk.line) end
+      hunk.theirs_label = conflict_marker_label(piece)
+      hunk.ours = join(hunk.ours, "")
+      hunk.base = join(hunk.base, "")
+      hunk.theirs = join(hunk.theirs, "")
+      push(segments, hunk)
+      hunk = nil
+    else
+      push(hunk[part], whole)
+    end
+  end
+  if hunk ~= nil then fail(at .. ":" .. hunk.line .. ": the conflict that opens here never closes with `>>>>>>>`") end
+  if #plain > 0 then push(segments, {kind = "text", text = join(plain, "")}) end
+  return segments
+end
+
+-- Each hunk in the text, in order: `{line, style, ours, base, theirs,
+-- ours_label, theirs_label}`. `line` is its `<<<<<<<` line's number, `style`
+-- is "diff3" or "two-way", and a two-way hunk's `base` is "". Each side's
+-- text is its lines whole, newlines and all.
+function conflict_hunks(text, where?)
+  local hunks = {}
+  for s in conflict_segments(text, where) do
+    if s.kind == "hunk" then push(hunks, s) end
+  end
+  return hunks
+end
+
+-- The text with its hunks replaced, in order, by the strings in `texts`,
+-- one a hunk. A count that differs from the hunks' stops the run.
+function rewrite_hunks(text, texts, where?)
+  local out = {}
+  local n = 0
+  local segments = conflict_segments(text, where)
+  for s in segments do
+    if s.kind == "hunk" then n = n + 1 end
+  end
+  if n ~= #texts then fail("rewrite_hunks: the text has " .. n .. " conflicts, and " .. #texts .. " texts were given") end
+  local k = 0
+  for s in segments do
+    if s.kind == "text" then
+      push(out, s.text)
+    else
+      k = k + 1
+      push(out, texts[k])
+    end
+  end
+  return join(out, "")
+end
+
+-- One hunk's text for a side: "ours", "theirs", "base", or "both" (ours,
+-- then theirs). A two-way hunk has no base to keep, which stops the run.
+function hunk_side_text(h, side)
+  if side == "ours" then return h.ours end
+  if side == "theirs" then return h.theirs end
+  if side == "both" then return h.ours .. h.theirs end
+  if side == "base" then
+    if h.style ~= "diff3" then fail("conflicts: the conflict at line " .. h.line .. " is two-way and has no base") end
+    return h.base
+  end
+  fail("conflicts: no side `" .. side .. "`: ours, theirs, base or both")
+end
+
+-- The text with each hunk resolved to the side `sides` names for it, one a
+-- hunk, in order: `resolve_hunks(t, {"ours", "theirs"})`.
+function resolve_hunks(text, sides, where?)
+  local hunks = conflict_hunks(text, where)
+  if #hunks ~= #sides then fail("resolve_hunks: the text has " .. #hunks .. " conflicts, and " .. #sides .. " sides were given") end
+  local texts = {}
+  local k = 0
+  for h in hunks do
+    k = k + 1
+    push(texts, hunk_side_text(h, sides[k]))
+  end
+  return rewrite_hunks(text, texts, where)
+end
+
+-- The text with every hunk resolved to one side. A text with no conflict
+-- stops the run, since resolving it is surely a mistake.
+function keep_side(text, side, where?)
+  local hunks = conflict_hunks(text, where)
+  if #hunks == 0 then fail("keep_side: no conflict to resolve") end
+  local sides = {}
+  for h in hunks do push(sides, side) end
+  return resolve_hunks(text, sides, where)
+end
+
+-- The text with `old`, which must be there exactly once, replaced by `new`.
+-- Absent or found twice, it stops the run rather than change nothing.
+function replace_once(text, old, new)
+  if old == "" then fail("replace_once: the old text is empty") end
+  local at = find(text, old)
+  if at == nil then fail("replace_once: not found: " .. old) end
+  if find(text, old, at + 1) ~= nil then fail("replace_once: found more than once: " .. old) end
+  return sub(text, 1, at - 1) .. new .. sub(text, at + #old)
+end
+
+-- Every marker line left in the text, `{line, text}`. A lone `=======` is
+-- counted though it can be a Markdown heading's underline.
+function conflict_markers(text)
+  local found = {}
+  local i = 0
+  for l in lines(text) do
+    i = i + 1
+    if conflict_marker_kind(l) ~= "" then push(found, {line = i, text = l}) end
+  end
+  return found
+end
+
+-- Stops the run if any marker is left in the text, naming the first.
+-- `where` names the text in the message, a path for a file.
+function assert_resolved(text, where)
+  local found = conflict_markers(text)
+  if #found > 0 then fail(where .. ":" .. found[1].line .. ": " .. #found .. " conflict markers left, the first `" .. found[1].text .. "`") end
+end
+
+-- Stops the run if any marker is left in the file.
+function assert_file_resolved(path)
+  assert_resolved(read(path), path)
+end
+
+-- A file's every hunk resolved to one side, written back, then checked.
+function keep_side_file(path, side)
+  local text = keep_side(read(path), side, path)
+  assert_resolved(text, path)
+  replace(path, text)
+end

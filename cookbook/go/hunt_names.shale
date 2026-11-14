@@ -1,0 +1,228 @@
+-- Awkward names in a Go tree, a question each, read from Go's own parser
+-- (go_tree, cookbook/go/parsed.shale). The Zig and Roc name hunts' checks
+-- that translate to Go, judged by the same word tables in cookbook/words/:
+--
+--   vague        a name of nothing but vague words (`data`, `handleData`,
+--                `processStuff`, `info`): a function, a method, a type, a
+--                var or const, a `:=` or a range variable, a parameter or
+--                a struct field. A lone `handle` or `run` function is an
+--                entry point's convention and passes.
+--   question     a function named `is*`, `has*`, `can*` or `should*` that
+--                gives no bool, or one that gives a bool named as a state
+--                (`loaded() bool`): ask it, `isLoaded`.
+--   negative     a bool parameter, field or var named `no*` or `not*`, or
+--                a function `isNot*`: `noCache = false` reads twice.
+--   name_type    a parameter or field named `*Count` that is no integer,
+--                or `*Path` that is no string or path type.
+--   phrase_name  a function whose first word is a preposition and which
+--                gives no bool (`inView`, `byName`, `forUser`): bare, it
+--                hides what it gives. Name the thing (`treesInView`). A
+--                conversion (`to*`, `into*`) passes, and so does a
+--                constructor: `at`, `between`, `by`, `for`, `from`, `of` or
+--                `with` first, giving a type its own folder declares.
+--
+-- Go's compiler and gofmt already settle unused names and layout, so
+-- nothing here repeats them. One line a finding, `path:line: <check>:
+-- <why>`, between two copies of the counts; the run exits 0 on findings,
+-- which are for a reader, and fails on a file go-ast refuses.
+--
+--   cd <repo> && shale <shale>/cookbook/go/hunt_names.shale
+--   cd <repo> && shale <shale>/cookbook/go/hunt_names.shale tests=0
+--   shale cookbook:go/hunt_names.shale self_test=1
+--
+-- `glob=` names the files (`**/*.go`; one with `*` goes on stdin with
+-- `--args-stdin`), and `tests=0` leaves out the `_test.go` files.
+-- `self_test=1` reads `cookbook/go/plants/hunt_names/`, each line ending
+-- `// want: <check>, ...` giving exactly those findings (parsed.shale's
+-- `check_want_marks`).
+-- budget: steps=200000000 arena_bytes=2000000000 output_bytes=4000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const PLANTS = "cookbook:go/plants/hunt_names/"
+const GLOB = SELF_TEST and (PLANTS .. "*.go") or arg("glob", "**/*.go")
+const TESTS = arg("tests", 1) == 1
+const CHECKS = {"vague", "question", "negative", "name_type", "phrase_name"}
+use("cookbook:go/parsed.shale")
+use("cookbook:findings.shale")
+
+const VAGUE = go_word_table("vague.txt")
+const PARTICIPLES = go_word_table("participles.txt")
+const ED_VERBS = go_word_table("ed_verbs.txt")
+const PREPOSITIONS = go_word_table("prepositions.txt")
+const ENTRY = {handle = true, run = true}
+const ASKING = {is = true, has = true, can = true, should = true}
+const CONVERSION_WORDS = {to = true, into = true}
+const CONSTRUCTOR_WORDS = {at = true, between = true, by = true, ["for"] = true, from = true, of = true, with = true}
+
+function is_participle(w)
+  if has_key(PARTICIPLES, w) then return true end
+  return #w > 3 and ends_with(w, "ed") and not has_key(ED_VERBS, w)
+end
+
+function is_int_type(t)
+  return re_match(t, "^u?int(8|16|32|64)?$") or t == "uintptr"
+end
+
+function is_all_vague(ws)
+  if #ws == 0 then return false end
+  for w in ws do
+    if not has_key(VAGUE, w) then return false end
+  end
+  return true
+end
+
+-- A type's last name, `*store.Note` as `Note`, `[]Note` as `Note`.
+function type_base(t)
+  local m = re_find(t, "([A-Za-z0-9_]+)$")
+  if m == nil then return "" end
+  return m.group
+end
+
+-- The types each folder declares, `dir|Name`, so a constructor's result
+-- can be its own package's.
+function folder_types(files)
+  local got = {}
+  for f in files do
+    local nodes = f.nodes
+    for i = 1, #nodes do
+      if nodes[i].kind == "TypeSpec" then
+        local name = kid_in(nodes, i, "Name")
+        if name > 0 then got[dirname(f.path) .. "|" .. nodes[name].name] = true end
+      end
+    end
+  end
+  return got
+end
+
+-- The type text of each value a field list gives, one a name (`a, b int`
+-- is two ints).
+function field_types(nodes, source_lines, list)
+  local got = {}
+  if list == 0 then return got end
+  for field in kids_in(nodes, list, "List") do
+    local t = source_of(source_lines, nodes[kid_in(nodes, field, "Type")])
+    local names = kids_in(nodes, field, "Names")
+    if #names == 0 then push(got, t) end
+    for k in names do push(got, t) end
+  end
+  return got
+end
+
+function say(report, path, line, check, what)
+  push(report, {path = path, line = line, check = check, what = what})
+  return nil
+end
+
+function function_names(f, nodes, source_lines, types, report)
+  for i = 1, #nodes do
+    if nodes[i].kind == "FuncDecl" then
+      local name = nodes[kid_in(nodes, i, "Name")].name
+      local line = nodes[i].line
+      local ftype = kid_in(nodes, i, "Type")
+      local results = field_types(nodes, source_lines, kid_in(nodes, ftype, "Results"))
+      local gives_bool = #results == 1 and results[1] == "bool"
+      local ws = go_words(name)
+      local first = ws[1]
+      if is_all_vague(ws) and not (#ws == 1 and has_key(ENTRY, first)) then
+        say(report, f.path, line, "vague", "`" .. name .. "` is only vague words: what does it handle, and how?")
+      end
+      if #ws > 1 and has_key(ASKING, first) and not has_item(results, "bool") then
+        local gives = #results == 0 and "nothing" or ("`" .. join(results, ", ") .. "`")
+        say(report, f.path, line, "question", "`" .. name .. "` asks a question but gives " .. gives)
+      end
+      if gives_bool and is_participle(first) then
+        say(report, f.path, line, "question", "`" .. name .. "` gives a bool but is named as a state, `" .. first .. "`: ask it (`is" .. upper(sub(first, 1, 1)) .. sub(first, 2) .. "`)")
+      end
+      if #ws > 2 and first == "is" and ws[2] == "not" then
+        say(report, f.path, line, "negative", "`" .. name .. "` asks a negative: `!" .. name .. "()` reads twice")
+      end
+      if has_key(PREPOSITIONS, first) and not gives_bool and not has_key(CONVERSION_WORDS, first) then
+        local own = #results > 0 and has_key(types, dirname(f.path) .. "|" .. type_base(results[1]))
+        if not (has_key(CONSTRUCTOR_WORDS, first) and own) then
+          say(report, f.path, line, "phrase_name", "`" .. name .. "` starts with a preposition, `" .. first .. "`, and gives " .. (#results == 0 and "nothing" or ("`" .. join(results, ", ") .. "`")) .. ": bare, it hides what it gives; name the thing (`treesInView`, not `inView`)")
+        end
+      end
+    end
+  end
+  return nil
+end
+
+-- Whether field `i` is a parameter or a struct's field, as `name_type` and
+-- `negative` judge them; a result's name is neither.
+function is_param_or_member(nodes, i)
+  local list = nodes[i].parent
+  local role = get(nodes[list], "role", "")
+  return role == "Params" or role == "Fields"
+end
+
+function value_names(f, nodes, source_lines, report)
+  for i = 1, #nodes do
+    local n = nodes[i]
+    local named = {}
+    local type_text = ""
+    if n.kind == "Field" and is_param_or_member(nodes, i) then
+      named = kids_in(nodes, i, "Names")
+      type_text = source_of(source_lines, nodes[kid_in(nodes, i, "Type")])
+    elseif n.kind == "ValueSpec" then
+      named = kids_in(nodes, i, "Names")
+      local t = kid_in(nodes, i, "Type")
+      if t > 0 then type_text = source_of(source_lines, nodes[t]) end
+    elseif n.kind == "TypeSpec" then
+      named = kids_in(nodes, i, "Name")
+    elseif n.kind == "AssignStmt" and get(n, "tok", "") == ":=" then
+      named = kids_in(nodes, i, "Lhs")
+    elseif n.kind == "RangeStmt" and get(n, "tok", "") == ":=" then
+      named = kids_in(nodes, i, "Key")
+      for k in kids_in(nodes, i, "Value") do push(named, k) end
+    end
+    for k in named do
+      local id = nodes[k]
+      if id.kind == "Ident" and id.name ~= "_" then
+        local ws = go_words(id.name)
+        if is_all_vague(ws) then say(report, f.path, id.line, "vague", "`" .. id.name .. "` is only vague words: what does it hold?") end
+        if n.kind == "Field" or n.kind == "ValueSpec" then
+          if type_text == "bool" and #ws > 1 and (ws[1] == "no" or ws[1] == "not") then
+            say(report, f.path, id.line, "negative", "`" .. id.name .. "` is a negative flag: `" .. id.name .. " = false` reads twice")
+          end
+        end
+        if n.kind == "Field" and type_text ~= "" then
+          local last = ws[#ws]
+          if last == "count" and not is_int_type(type_text) then say(report, f.path, id.line, "name_type", "`" .. id.name .. "` is a count of type `" .. type_text .. "`") end
+          if last == "path" and type_text ~= "string" and not contains(type_text, "Path") and not contains(type_text, "path") then say(report, f.path, id.line, "name_type", "`" .. id.name .. "` is a path of type `" .. type_text .. "`") end
+        end
+      end
+    end
+  end
+  return nil
+end
+
+-- The findings for one file, each `{path, line, check, what}`.
+function hunt(f, types, report)
+  local nodes = f.nodes
+  local source_lines = split(read(f.path), "\n")
+  function_names(f, nodes, source_lines, types, report)
+  value_names(f, nodes, source_lines, report)
+  return nil
+end
+
+const paths = go_paths(GLOB, TESTS)
+local parsed = parse_go_files(paths)
+local types = folder_types(parsed.files)
+local report = {}
+for f in parsed.files do
+  hunt(f, types, report)
+end
+sort(report, {"path", "line", "check", "what"})
+local count_by_check = {}
+local finding_lines = {}
+const found_at = {}
+for r in report do
+  incr(count_by_check, r.check)
+  push(finding_lines, r.path .. ":" .. r.line .. ": " .. r.check .. ": " .. r.what)
+  push_at(found_at, r.path .. ":" .. r.line, r.check)
+end
+local counts = {}
+for c in CHECKS do push(counts, c .. " " .. get(count_by_check, c, 0)) end
+print_findings("hunt_names (Go): " .. #paths .. " files; " .. join(counts, ", "), finding_lines)
+fail_if_go_refused("hunt_names", parsed.refused)
+if SELF_TEST then check_want_marks("hunt_names", paths, found_at, CHECKS) end

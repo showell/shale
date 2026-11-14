@@ -1,0 +1,222 @@
+-- This recipe finds names and top comments that say less than they should: a
+-- pure function named like a mutation, an abbreviation in a name, and a
+-- module with no doc or with history where its doc belongs.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/find_unclear_names.shale
+--   shale cookbook:roc/find_unclear_names.shale self_test=1
+--
+-- The arguments:
+--   glob           the files to check, `**/*.roc` by default;
+--   abbreviations  the file of abbreviations, one a line, by default
+--                  cookbook/words/abbreviations.txt, for a project with
+--                  words of its own to add;
+--   terms          a project's file of fixed terms that open a name and only
+--                  look like a verb, one a line, such as `set_cookie` for
+--                  HTTP's header, which `pure_mutator` leaves alone;
+--   house          with `house=0`, leave out what is only our house style
+--                  (cookbook/roc/house.shale), for another project's code;
+--   self_test      with `self_test=1`, check the plants in
+--                  `cookbook/roc/plants/find_unclear_names/`.
+--
+-- The checks read top-level names, module members and the record fields of
+-- types and annotations, never locals:
+--
+--   pure_mutator  An annotated pure function whose first word says it changes
+--                 something (`push`, `fill`, `set`, `append`, `add`), though
+--                 nothing is being added to. Something is when the result is
+--                 the first argument's type, on its own, as a `Try`'s value,
+--                 or as a field of a record or of an alias in the same file
+--                 (`Try({ users : Users, user : User }, [Full])`), or when the
+--                 first argument is a record with a field of the result's
+--                 type (`{ so_far : List(U8), count : U64 }`). A first word
+--                 `get` always counts, because a Roc function's plain name
+--                 is already what it gets.
+--   abbreviation  A name, member, field or type with a word from the
+--                 abbreviations file, since Roc's style guide prefers the
+--                 plain word. A name is reported once a file.
+--   module_doc    A module with no `##` doc at the top of its file or above
+--                 its type, or a top comment or a doc above its type that
+--                 tells history (`originally`, `used to`, `emitted`,
+--                 `ported`, even wrapped across two lines) instead of what
+--                 the module does. A
+--                 module its package or platform keeps to itself has no public
+--                 doc to write, so any comment there will do. App files are
+--                 left out, as they have no module type.
+--
+-- The output is the counts, one line per finding, and the counts again
+-- (cookbook/findings.shale). The run fails if there are findings, or if
+-- any file doesn't parse, and the files that do parse are judged either way.
+-- budget: steps=800000000 arena_bytes=2000000000 output_bytes=4000000
+
+const SELF_TEST = arg("self_test", "") == "1"
+const GLOB = arg("glob", "**/*.roc")
+const ABBREVIATIONS_FILE = arg("abbreviations", "cookbook:words/abbreviations.txt")
+const TERMS_FILE = arg("terms", "")
+use("cookbook:roc/declared.shale")
+use("cookbook:findings.shale")
+use("cookbook:roc/parsed.shale")
+use("cookbook:roc/gate_recipe.shale")
+use("cookbook:roc/headers.shale")
+use("cookbook:roc/house.shale")
+const CHECKS = {"pure_mutator", "abbreviation", "module_doc"}
+const MUTATION_WORDS = {push = true, fill = true, set = true, append = true, add = true}
+const HISTORY_RE = "\\b(originally|used to|emitted|ported)\\b"
+
+-- The value of a `Try(value, errors)`, or `result` when it is no `Try`.
+function value_of_try(result)
+  if not starts_with(result, "Try(") then return result end
+  local depth = 0
+  for i = 5, #result do
+    local c = sub(result, i, i)
+    if c == "(" or c == "{" or c == "[" then
+      depth = depth + 1
+    elseif c == ")" or c == "}" or c == "]" then
+      depth = depth - 1
+    elseif c == "," and depth == 0 then
+      return trim(sub(result, 5, i - 1))
+    end
+  end
+  return result
+end
+
+function record_holds(record, type_name)
+  return starts_with(record, "{") and (contains(record, " : " .. type_name .. ",") or contains(record, " : " .. type_name .. " }"))
+end
+
+-- Whether a function's result is what its first argument was added to.
+function gives_first_back(d, aliases)
+  local value = value_of_try(d.result)
+  if value == d.first or record_holds(d.first, value) then return true end
+  return record_holds(get(aliases, last_part(value), value), d.first)
+end
+
+function opens_with_term(name, terms)
+  for term in keys(terms) do
+    if name == term or starts_with(name, term .. "_") then return true end
+  end
+  return false
+end
+
+function judge_mutator(d, aliases, terms, report)
+  if not d.fn or not d.annotated or ends_with(d.name, "!") or opens_with_term(d.name, terms) then return nil end
+  local first_word = split(d.name, "_")[1]
+  local is_mutation = has_key(MUTATION_WORDS, first_word) and not gives_first_back(d, aliases)
+  if first_word == "get" or is_mutation then
+    push(report, {path = d.path, line = d.line, check = "pure_mutator", what = "`" .. d.name .. "` is pure and gives a new `" .. d.result .. "`: name it for what it gives"})
+  end
+  return nil
+end
+
+function judge_abbreviations(declared, abbreviations, report)
+  local seen = {}
+  for d in declared do
+    if not has_key(seen, d.name) then
+      seen[d.name] = true
+      local found = {}
+      for w in name_words(d.name) do
+        if has_key(abbreviations, w) then push(found, w) end
+      end
+      if #found > 0 then push(report, {path = d.path, line = d.line, check = "abbreviation", what = "`" .. d.name .. "` abbreviates: " .. join(found, ", ")}) end
+    end
+  end
+  return nil
+end
+
+-- The history word in the comment lines `comment`, or nil. Each line's
+-- leading `#`s go before the lines are joined, so a phrase wrapped across
+-- two lines reads as one.
+function history_word(comment)
+  local words = {}
+  for l in comment do push(words, trim(re_replace(l, "^#+", ""))) end
+  local found = re_find(lower(join(words, " ")), HISTORY_RE)
+  if found == nil then return nil end
+  return found.group
+end
+
+-- The comment lines just above line `at` of `src`, trimmed, as `{lines,
+-- first}`, where `first` is the line the comment starts on, or `at` when
+-- there is none.
+function comment_above(src, at)
+  local first = at
+  while first > 1 and starts_with(trim(src[first - 1]), "#") do first = first - 1 end
+  local out = {}
+  for k = first, at - 1 do push(out, trim(src[k])) end
+  return {lines = out, first = first}
+end
+
+function judge_module_doc(f, declared, report)
+  if is_app(f) then return nil end
+  local name = module_name(f.path)
+  local type_line = 0
+  for d in declared do
+    if d.kind == "type" and d.name == name and d.owner == "" then type_line = d.line end
+  end
+  if type_line == 0 then return nil end
+  local src = split(read(f.path), "\n")
+  local top = opening_comment(src)
+  local has_doc = (#top > 0 and starts_with(top[1], "##")) or (type_line > 1 and starts_with(trim(src[type_line - 1]), "##"))
+  if is_private_module(f.path) and (#top > 0 or starts_with(trim(src[max(type_line - 1, 1)]), "#")) then has_doc = true end
+  if not has_doc then push(report, {path = f.path, line = 1, check = "module_doc", what = "`" .. name .. "` has no `##` doc saying what it is for"}) end
+  local history = history_word(top)
+  if history ~= nil then push(report, {path = f.path, line = 1, check = "module_doc", what = "`" .. name .. "`'s top comment says `" .. history .. "`: say what the module does, and leave history to git"}) end
+  local doc = comment_above(src, type_line)
+  local doc_history = history_word(doc.lines)
+  if doc.first > 1 and doc_history ~= nil then
+    push(report, {path = f.path, line = doc.first, check = "module_doc", what = "`" .. name .. "`'s doc says `" .. doc_history .. "`: say what the module does, and leave history to git"})
+  end
+  return nil
+end
+
+function self_test()
+  local at = "cookbook:roc/plants/find_unclear_names/"
+  check_plants("find_unclear_names", "cookbook:roc/find_unclear_names.shale", CHECKS, {
+    {glob = at .. "pure_mutator.roc", counts = {pure_mutator = 7}, says = {"pure_mutator.roc:3: pure_mutator: `push_cat` is pure and gives a new `List(U64)`", "`get_speed`"}},
+    {glob = at .. "quiet_pure_mutator.roc"},
+    {glob = at .. "terms.roc", counts = {pure_mutator = 2}, says = {"`set_cookie_header`", "`set_cookies`"}},
+    {glob = at .. "terms.roc", args = {"terms=" .. at .. "terms.txt"}, counts = {pure_mutator = 1}, says = {"`set_cookies`"}},
+    {glob = at .. "terms.roc", args = {"terms=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
+    {glob = at .. "abbreviation.roc", counts = {abbreviation = 4}, says = {"abbreviation.roc:3: abbreviation: `max_vis_cats` abbreviates: vis", "`SunPos` abbreviates: pos", "`dist` abbreviates: dist"}},
+    {glob = at .. "quiet_abbreviation.roc"},
+    {glob = at .. "abbreviation.roc", args = {"abbreviations=" .. at .. "project_words.txt"}, counts = {abbreviation = 1}, says = {"`max_vis_cats` abbreviates: cats"}},
+    {glob = at .. "quiet_abbreviation.roc", args = {"abbreviations=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
+    {glob = at .. "module_doc/*.roc", counts = {module_doc = 5}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`", "`Sky`'s top comment says `used to`", "Sun.roc:3: module_doc: `Sun`'s doc says `originally`"}},
+    {glob = at .. "quiet_module_doc/*.roc"},
+    {glob = at .. "module_doc_private/*.roc", counts = {module_doc = 2}, says = {"`Shown` has no `##` doc", "`Silent` has no `##` doc"}},
+    {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
+  })
+  return nil
+end
+
+function run_check()
+  local abbreviations = word_set(ABBREVIATIONS_FILE)
+  local terms = TERMS_FILE == "" and {} or word_set(TERMS_FILE)
+  local paths = glob(GLOB)
+  local parsed = parse_roc_files(paths)
+  local report = {}
+  for f in parsed.files do
+    local declared = declarations_of(f)
+    local aliases = {}
+    for d in declared do
+      if d.kind == "type" and not d.is_nominal then aliases[d.name] = d.underlying end
+    end
+    for d in declared do
+      if d.kind == "value" then judge_mutator(d, aliases, terms, report) end
+    end
+    if not house_leaves_out("find_unclear_names", "abbreviation") then judge_abbreviations(declared, abbreviations, report) end
+    judge_module_doc(f, declared, report)
+  end
+  local verdict = verdict_of("find_unclear_names", CHECKS, report, #paths)
+  verdict.summary = verdict.summary .. house_note("find_unclear_names")
+  print_findings(verdict.summary, verdict.found)
+  fail_if_refused("find_unclear_names", parsed.refused)
+  return verdict
+end
+
+-- This `fail` stands at the top level so the summary is the last line a
+-- caller reads: a stop inside a function prints the calls after it.
+if SELF_TEST then
+  self_test()
+else
+  local verdict = run_check()
+  if #verdict.found > 0 then fail(verdict.summary) end
+end

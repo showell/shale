@@ -1,5 +1,0 @@
-# The words and types for name_types' plants.
-
-dist: Distance
-steps: Steps
-frames: none

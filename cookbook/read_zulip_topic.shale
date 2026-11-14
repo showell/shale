@@ -1,0 +1,62 @@
+-- This script prints the newest messages of a Zulip topic, oldest first, each
+-- with its sender and its markdown as written.
+--
+--   shale cookbook:read_zulip_topic.shale site=roc.zulipchat.com email=you@example.com key=keys:roc_zulip_api_key stream=beginners topic=style num=20
+--
+-- `site` is the Zulip server's host, `email` the account the key belongs to,
+-- and `num` how many messages to read, 100 unless given. A value with a space
+-- needs `--args-stdin`, with one `NAME=VALUE` a line.
+--
+-- `key` is a path in a secrets mount to a file holding only the API key. `run`
+-- hands the key to curl alone, which reads it from its environment
+-- (`--variable`), so no script sees it and it never reaches the output.
+--
+-- Any status other than 200, or a `result` other than `success`, fails the
+-- launch with Zulip's own message.
+--
+-- budget: steps=50000000 arena_bytes=500000000
+
+const SITE = arg("site", "")
+const EMAIL = arg("email", "")
+const KEY = arg("key", "")
+const STREAM = arg("stream", "")
+const TOPIC = arg("topic", "")
+const NUM = arg("num", 100)
+
+if SITE == "" or EMAIL == "" or KEY == "" or STREAM == "" or TOPIC == "" then
+  fail("zulip: site=, email=, key=keys:<file>, stream= and topic= are each needed")
+end
+
+function json_string(text)
+  return "\"" .. substitute(substitute(text, "\\", "\\\\", {missing_ok = true}), "\"", "\\\"", {missing_ok = true}) .. "\""
+end
+
+local scratch = fresh_dir("scratch:", "zulip")
+local body_path = scratch .. "/topic.json"
+local narrow = "[{\"operator\":\"channel\",\"operand\":" .. json_string(STREAM) .. "},{\"operator\":\"topic\",\"operand\":" .. json_string(TOPIC) .. "}]"
+local curl = run({"curl", "-sS", "-G", "https://" .. SITE .. "/api/v1/messages",
+  "--variable", "%ZULIP_KEY",
+  "--expand-user", EMAIL .. ":{{ZULIP_KEY}}",
+  "--data-urlencode", "narrow=" .. narrow,
+  "--data-urlencode", "anchor=newest",
+  "--data-urlencode", "num_before=" .. NUM,
+  "--data-urlencode", "num_after=0",
+  "--data-urlencode", "apply_markdown=false",
+  "-o", real(body_path), "-w", "%{http_code}"},
+  {timeout_ms = 60000, whole = 2000, secrets = {ZULIP_KEY = KEY}})
+if curl.code ~= 0 then remove_tree(scratch) fail("zulip: curl exited " .. curl.code .. ": " .. curl.out) end
+
+local answer = json_read(read(body_path))
+remove_tree(scratch)
+local http_status = curl.out
+if http_status ~= "200" or answer.result ~= "success" then
+  fail("zulip: " .. SITE .. " answered " .. http_status .. ": " .. get(answer, "msg", "(no message)"))
+end
+
+local how_far_back = ", the newest " .. NUM
+if answer.found_oldest then how_far_back = ", from the first" end
+print("#" .. STREAM .. " > " .. TOPIC .. ": " .. #answer.messages .. " messages" .. how_far_back)
+for message in answer.messages do
+  print("---- " .. message.sender_full_name .. " (message " .. message.id .. ")")
+  print(message.content)
+end

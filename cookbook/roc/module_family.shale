@@ -1,0 +1,390 @@
+-- How `cookbook/roc/print_module_types.shale` walks several sibling modules as one
+-- family, `modules=TreeSighting,RailSighting,...`, for a review that reads
+-- them together.
+--
+--   use("cookbook:roc/module_family.shale")
+--   parse_modules(text)       the family's modules from `modules=`
+--   printing_order(st)        a walk's types, the most primitive first
+--   family_order(runs, ids, asked), family_table(names, entries)
+--                             the pieces of print_module_types.shale's `family_walk`
+--   check, has_line, has_text, headers_of, and family_checks(failures, r, at)
+--                             the self-test's, the last on the plant family
+--                             `cookbook/roc/plants/print_module_types/family/`
+--   refused_checks(failures, rf, clean, at)
+--                             the self-test's on the plant
+--                             `cookbook/roc/plants/print_module_types/refused/`
+--
+-- Each member is walked as `module=` walks it, with the same settings, and the
+-- output is pooled:
+--
+--   1. One header: the builtin leaves, stopped, beyond-depth and brief types
+--      and type variables of every member's walk together.
+--   2. The shared types: those two or more members' closures reach, at the
+--      usual depth rules, printed once, the most primitive first, each with a
+--      `# shared by` line. A member's own types are never shared; they print
+--      in its block.
+--   3. Each member's block, in the order `modules=` gives: its walk's
+--      import lines, unused-members and clients lines, the types only
+--      its closure reaches, its own types with their public members'
+--      signatures and outside uses, then its private top-level functions'
+--      signatures in source order, each marked `# private` (`# private;
+--      tests only` for one only expects use), then its "named by" section,
+--      and its walk's counts line. The uses and named-by sections are per
+--      member: they are about one module's surface, and pooled they would
+--      repeat an annotation that names two siblings.
+--   4. The family table: the members' public names grouped by shape, a row
+--      per shape and a line per member in each row, `-` where a member has no
+--      name of that shape, and after each name the error tags its `Try`
+--      result answers, sorted. A name whose error set differs from the row's
+--      most common one is marked `<- errors differ`.
+--
+-- The shape rule: a name's words are split at `_`. Its suffix shape is the
+-- name with its first word, the noun, made `*` (`trees_in_view` is
+-- `*_in_view`), and its prefix shape is the first word and `*`
+-- (`segment_sightings` is `segment_*`); a one-word name is its own shape. A
+-- suffix shape that names of two or more members have is a row; then a
+-- prefix shape, among the names left; the names left after both are listed
+-- per member as unmatched.
+
+-- A walk's type `id`'s key for ordering: the asked module's types last,
+-- then by module, name and path.
+function sort_key(st, id)
+  local t = st.types[id]
+  return (has_key(st.asked, id) and "1" or "0") .. t.module .. "\t" .. t.qualified .. "\t" .. t.path
+end
+
+-- Tarjan's strongly connected components over `st.deps`.
+function strong_connect(st, g, v)
+  g.index[v] = g.counter
+  g.low[v] = g.counter
+  g.counter = g.counter + 1
+  push(g.stack, v)
+  g.on[v] = true
+  for w in get(st.deps, v, {}) do
+    if not has_key(g.index, w) then
+      strong_connect(st, g, w)
+      if g.low[w] < g.low[v] then g.low[v] = g.low[w] end
+    elseif get(g.on, w, false) then
+      if g.index[w] < g.low[v] then g.low[v] = g.index[w] end
+    end
+  end
+  if g.low[v] == g.index[v] then
+    local members = {}
+    local done = false
+    while not done do
+      local w = g.stack[#g.stack]
+      g.stack = take(g.stack, #g.stack - 1)
+      g.on[w] = false
+      push(members, w)
+      done = w == v
+    end
+    push(g.components, members)
+  end
+  return nil
+end
+
+-- The id with the smallest sort key among `ids` that `is_ready` allows.
+function smallest_ready(st, ids, is_ready)
+  local best = nil
+  local best_key = ""
+  for id in ids do
+    if is_ready[id] then
+      local key = sort_key(st, id)
+      if best == nil or key < best_key then
+        best = id
+        best_key = key
+      end
+    end
+  end
+  return best
+end
+
+-- A cycle's members, each after the members its definition mentions where
+-- that orders them, else by sort key.
+function order_in_cycle(st, members)
+  local inside = set_of(members)
+  local placed = {}
+  local out = {}
+  while #out < #members do
+    local ready = {}
+    local any = false
+    for id in members do
+      local ok = not has_key(placed, id)
+      if ok then
+        for w in get(st.def_deps, id, {}) do
+          if has_key(inside, w) and not has_key(placed, w) then ok = false end
+        end
+      end
+      ready[id] = ok
+      if ok then any = true end
+    end
+    if not any then
+      for id in members do ready[id] = not has_key(placed, id) end
+    end
+    local pick = smallest_ready(st, members, ready)
+    placed[pick] = true
+    push(out, pick)
+  end
+  return out
+end
+
+-- Every type read, in printing order, as `{id, cycle}` items, where an item
+-- with `cycle` set is a cycle's report line, with its members.
+function printing_order(st)
+  local ids = sort(keys(st.visited))
+  local g = {index = {}, low = {}, counter = 1, stack = {}, on = {}, components = {}}
+  for id in ids do
+    if not has_key(g.index, id) then strong_connect(st, g, id) end
+  end
+  local component_of = {}
+  local key_of = {}
+  for c = 1, #g.components do
+    local best = ""
+    for id in g.components[c] do
+      component_of[id] = c
+      local key = sort_key(st, id)
+      if best == "" or key < best then best = key end
+    end
+    key_of[c] = best
+  end
+  local printed = {}
+  for c = 1, #g.components do push(printed, false) end
+  local out = {}
+  local left = #g.components
+  while left > 0 do
+    local pick = 0
+    for c = 1, #g.components do
+      if not printed[c] and (pick == 0 or key_of[c] < key_of[pick]) then
+        local ready = true
+        for id in g.components[c] do
+          for w in get(st.deps, id, {}) do
+            if component_of[w] ~= c and not printed[component_of[w]] then ready = false end
+          end
+        end
+        if ready then pick = c end
+      end
+    end
+    printed[pick] = true
+    left = left - 1
+    local members = g.components[pick]
+    if #members == 1 then
+      push(out, {id = members[1]})
+    else
+      push(out, {cycle = members})
+      for id in order_in_cycle(st, members) do push(out, {id = id}) end
+    end
+  end
+  return out
+end
+
+function check(failures, ok, what)
+  if not ok then push(failures, what) end
+  return nil
+end
+
+function has_line(ls, line)
+  for l in ls do
+    if l == line then return true end
+  end
+  return false
+end
+
+function has_text(ls, text)
+  for l in ls do
+    if contains(l, text) then return true end
+  end
+  return false
+end
+
+-- The type names of the header lines, in order.
+function headers_of(ls)
+  local out = {}
+  for l in ls do
+    if starts_with(l, "#### ") then push(out, split(sub(l, 6), "   (")[1]) end
+  end
+  return out
+end
+
+-- The family's modules from `modules=`'s comma-separated text: two or more,
+-- each once.
+function parse_modules(text)
+  local out = {}
+  for part in split(text, ",") do
+    local s = trim(part)
+    if s ~= "" then
+      if has_item(out, s) then fail("print_module_types: modules=: `" .. s .. "` is named twice") end
+      push(out, s)
+    end
+  end
+  if #out < 2 then fail("print_module_types: modules=" .. text .. " names " .. #out .. " module; a family is two or more, as modules=TreeSighting,RailSighting") end
+  return out
+end
+
+-- The ids in `ids`, ordered as `printing_order` orders a walk's types, with
+-- the edges of every member's walk among them. `asked` marks the types that
+-- sort last.
+function family_order(runs, ids, asked)
+  local inside = set_of(ids)
+  local ps = {types = {}, deps = {}, def_deps = {}, visited = inside, asked = asked}
+  local seen = {}
+  for run in runs do
+    local st = run.st
+    for id in ids do
+      if has_key(st.types, id) then ps.types[id] = st.types[id] end
+      for pair in {{st.deps, ps.deps, ">"}, {st.def_deps, ps.def_deps, "="}} do
+        for w in get(pair[1], id, {}) do
+          if has_key(inside, w) and not has_key(seen, id .. pair[3] .. w) then
+            seen[id .. pair[3] .. w] = true
+            push_at(pair[2], id, w)
+          end
+        end
+      end
+    end
+  end
+  return printing_order(ps)
+end
+
+-- The name's shape in the pass `pass`, `suffix` or `prefix`, by the rule in
+-- the header.
+function name_shape(name, pass)
+  local words = split(name, "_")
+  if #words == 1 then return name end
+  if pass == "suffix" then return "*_" .. join(drop(words, 1), "_") end
+  return words[1] .. "_*"
+end
+
+function padded(text, width)
+  local out = text
+  while #out < width do out = out .. " " end
+  return out
+end
+
+-- The family table's lines and counts, from `entries`, each `{member, name,
+-- label, errors}`, `member` an index into `names`.
+function family_table(names, entries)
+  local width = 0
+  for m in names do
+    if #m + 2 > width then width = #m + 2 end
+  end
+  local assigned = {}
+  local rows = {}
+  for pass in {"suffix", "prefix"} do
+    local members_by_shape = {}
+    local order = {}
+    for i = 1, #entries do
+      if not has_key(assigned, "" .. i) then
+        local shape = name_shape(entries[i].name, pass)
+        if not has_key(members_by_shape, shape) then
+          members_by_shape[shape] = {}
+          push(order, shape)
+        end
+        members_by_shape[shape]["" .. entries[i].member] = true
+      end
+    end
+    for shape in order do
+      if #keys(members_by_shape[shape]) >= 2 then
+        local row = {shape = shape, entries = {}}
+        for i = 1, #entries do
+          if not has_key(assigned, "" .. i) and name_shape(entries[i].name, pass) == shape then
+            assigned["" .. i] = true
+            push(row.entries, entries[i])
+          end
+        end
+        push(rows, row)
+      end
+    end
+  end
+  local out = {"", "## The family table: the public names by shape (module_family.shale's rule), and the error tags each answers."}
+  for row in rows do
+    local count = {}
+    for e in row.entries do incr(count, e.errors) end
+    local most = ""
+    local best = 0
+    for e in row.entries do
+      if count[e.errors] > best then
+        best = count[e.errors]
+        most = e.errors
+      end
+    end
+    local present = {}
+    for e in row.entries do present["" .. e.member] = true end
+    push(out, "")
+    push(out, "### " .. row.shape .. "   (" .. #keys(present) .. " of " .. #names .. ")")
+    for m = 1, #names do
+      local shown = {}
+      local differs = false
+      for e in row.entries do
+        if e.member == m then
+          push(shown, e.errors == "" and e.label or e.label .. " ! " .. e.errors)
+          if #keys(count) > 1 and e.errors ~= most then differs = true end
+        end
+      end
+      local text = #shown == 0 and "-" or join(shown, ", ")
+      push(out, padded("  " .. names[m], width + 2) .. text .. (differs and "   <- errors differ" or ""))
+    end
+  end
+  local unmatched = 0
+  local left = {}
+  for i = 1, #entries do
+    if not has_key(assigned, "" .. i) then
+      unmatched = unmatched + 1
+      push_at(left, "" .. entries[i].member, entries[i].errors == "" and entries[i].label or entries[i].label .. " ! " .. entries[i].errors)
+    end
+  end
+  if unmatched > 0 then
+    push(out, "")
+    push(out, "### unmatched: names of a shape no sibling has")
+    for m = 1, #names do
+      if has_key(left, "" .. m) then push(out, padded("  " .. names[m], width + 2) .. join(left["" .. m], ", ")) end
+    end
+  end
+  return {lines = out, rows = #rows, unmatched = unmatched}
+end
+
+-- How many lines of `ls` are `line`.
+function count_line(ls, line)
+  local n = 0
+  for l in ls do
+    if l == line then n = n + 1 end
+  end
+  return n
+end
+
+-- The family plant: Spot and View are reached by all three siblings, Bark by
+-- OakSighting alone; ElmSighting names its list `visible_elms`, not
+-- `elms_in_view`, and its segment's sighting answers fewer errors.
+-- `r` is `family_walk`'s result for the plant family at `at`.
+function family_checks(failures, r, at)
+  local ls = r.lines
+  check(failures, #r.lost == 0 and #r.refused == 0, "family: lost or refused: " .. join(r.lost, "; ") .. join(r.refused, "; "))
+  check(failures, count_line(ls, "#### Spot   (" .. at .. "/Spot.roc:3)") == 1 and count_line(ls, "#### View   (" .. at .. "/View.roc:2)") == 1, "family: a shared type printed other than once")
+  check(failures, has_line(ls, "## Shared: the 2 types two or more members reach, the most primitive first.") and has_line(ls, "# shared by all 3"), "family: the shared heading and note")
+  check(failures, join(headers_of(ls), " | ") == "Spot | View | Bark | OakSighting | PineSighting | ElmSighting", "family: order: got " .. join(headers_of(ls), " | "))
+  check(failures, has_line(ls, "oak_at : View -> Spot   # private") and has_line(ls, "## An oak at the view's middle."), "family: a private signature, marked, with its doc")
+  check(failures, has_line(ls, "view_of : F64 -> View   # private; tests only"), "family: a private function only expects use")
+  check(failures, not has_text(ls, "sample : View") and not has_text(ls, "{ x: view.width"), "family: a private constant or a body printed")
+  check(failures, has_line(ls, "# No private top-level functions in ElmSighting."), "family: a member with no private functions")
+  check(failures, has_line(ls, "### *_in_view   (2 of 3)") and has_line(ls, "  ElmSighting   -"), "family: the table's row missing a member")
+  check(failures, has_line(ls, "  OakSighting   segment_oaks ! [Behind, TooSmall]") and has_line(ls, "  ElmSighting   segment_elms ! [Behind]   <- errors differ"), "family: the error sets, sorted, and the one that differs")
+  check(failures, not has_text(ls, "segment_pines ! [Behind, TooSmall]   <-"), "family: an error set marked that matches")
+  check(failures, has_line(ls, "### unmatched: names of a shape no sibling has") and has_line(ls, "  ElmSighting   visible_elms"), "family: the name that breaks the pattern, unmatched")
+  check(failures, ls[#ls] == "# The family: 3 modules, 2 shared types, 1 types only one member reaches, 6 public names in 2 table rows and 1 unmatched, 3 private functions", "family: counts line: " .. ls[#ls])
+  return nil
+end
+
+-- The self-test's checks of a walk `rf` of the plant
+-- `cookbook/roc/plants/print_module_types/refused/`, whose
+-- Broken.roc holds `spin`'s only outside use but which roc-ast refuses,
+-- and of `clean`, a walk with no file refused.
+function refused_checks(failures, rf, clean, at)
+  local ls = rf.lines
+  local broken = at .. "refused/Broken.roc"
+  check(failures, #rf.refused == 1 and rf.refused[1] == broken .. ": 4 parse problem(s): a file that does not parse has no tree to hunt", "refused: got " .. join(rf.refused, "; "))
+  check(failures, ls[2] == "# Refused by roc-ast, so their uses and mentions are not counted: " .. broken .. " (4 parse problem(s))", "the refused line: got " .. ls[2])
+  check(failures, has_line(ls, "\tspin : Coin -> Coin   # no outside use, as far as the parsed files show"), "a member with no outside use, beside a refused file")
+  check(failures, has_line(ls, "\tflip : Coin -> Coin   # used by 1 file"), "a member used by a file read, beside a refused file")
+  check(failures, has_line(ls, "# Public, but used only in this file, as far as the parsed files show: spin"), "the unused-members line, beside a refused file")
+  check(failures, ends_with(ls[#ls], ", 1 files refused and not counted: " .. broken), "counts line with a refused file: " .. ls[#ls])
+  check(failures, not has_text(clean, "as far as") and not has_text(clean, "# Refused"), "a refused note with no file refused")
+  return nil
+end

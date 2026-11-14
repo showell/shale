@@ -6,8 +6,8 @@
 --   use("cookbook:go/parsed.shale")
 --   local parsed = parse_go_files(paths)     {files, refused}
 --   ...the recipe's findings...
---   fail_if_go_refused("name_hunt", parsed.refused)
---   check_want_marks("name_hunt", paths, found_at, CHECKS)
+--   fail_if_go_refused("hunt_names", parsed.refused)
+--   check_want_marks("hunt_names", paths, found_at, CHECKS)
 --
 -- A node is go_tree's: `{kind, depth, parent, kids, line, col, end_line,
 -- end_col}`, `role` (the parent's field that holds it, `Fun`, `Args`,

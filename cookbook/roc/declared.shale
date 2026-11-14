@@ -204,7 +204,7 @@ function namespace_instructions(file)
   for l in word_list_lines("cookbook:words/" .. file) do
     local ws = words(l)
     if #ws > 0 then
-      if has_key(by_prefix, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. ws[1] .. "` twice") end
+      if has_key(by_prefix, ws[1]) then fail("hunt_names: cookbook/words/" .. file .. ": `" .. ws[1] .. "` twice") end
       by_prefix[ws[1]] = set_of(drop(ws, 1))
     end
   end
@@ -219,7 +219,7 @@ function taken_word_kinds(file)
   for l in word_list_lines("cookbook:words/" .. file) do
     local ws = words(l)
     if #ws > 0 then
-      if #ws ~= 2 or (ws[2] ~= "roc" and ws[2] ~= "cardinal") or has_key(kinds, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `roc` or `cardinal`") end
+      if #ws ~= 2 or (ws[2] ~= "roc" and ws[2] ~= "cardinal") or has_key(kinds, ws[1]) then fail("hunt_names: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `roc` or `cardinal`") end
       kinds[ws[1]] = ws[2]
     end
   end
@@ -234,7 +234,7 @@ function list_name_kinds(file)
   for l in word_list_lines("cookbook:words/" .. file) do
     local ws = words(l)
     if #ws > 0 then
-      if #ws ~= 2 or (ws[2] ~= "many" and ws[2] ~= "one" and ws[2] ~= "after" and ws[2] ~= "accumulator") or has_key(kinds, ws[1]) then fail("name_hunt: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `many`, `one`, `after` or `accumulator`") end
+      if #ws ~= 2 or (ws[2] ~= "many" and ws[2] ~= "one" and ws[2] ~= "after" and ws[2] ~= "accumulator") or has_key(kinds, ws[1]) then fail("hunt_names: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `many`, `one`, `after` or `accumulator`") end
       kinds[ws[1]] = ws[2]
     end
   end

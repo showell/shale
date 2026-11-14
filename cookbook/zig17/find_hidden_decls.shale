@@ -1,0 +1,71 @@
+-- This script finds declarations that Zig 0.17's `@hasDecl` no longer sees.
+-- Under 0.16 `@hasDecl(T, "name")` also found a declaration that was not `pub`,
+-- in the same file at least; under 0.17 it finds only a `pub` one. Where the
+-- check is optional (a site's `between`, `family` or `uploader`, a host's
+-- feature flag), a declaration without `pub` turns its feature off with no
+-- compile error, and at most a test notices.
+--
+-- The script prints every declaration of a checked name that is not `pub` in a
+-- repo's .zig files, and `fix=yes` makes each one `pub`. The checked names are
+-- those our repos ask `@hasDecl` about by a literal; `names=a,b` gives others.
+--
+--   cd <repo> && shale <shale>/cookbook/zig17/find_hidden_decls.shale dir=.
+--   cd <repo> && shale <shale>/cookbook/zig17/find_hidden_decls.shale dir=. fix=yes
+--
+-- budget: steps=900000000 reads=100000 arena_bytes=4000000000
+
+const DIR = arg("dir", ".")
+const FIX = arg("fix", "no") == "yes"
+const CHECKED_NAMES = split(arg("names", "between,family,uploader,shale_change_check,shale_preludes,shale_diff_summary,coverage_checks,burst,name"), ",")
+
+-- Gives the checked name a line declares without `pub`, or nil. A `fn` counts
+-- at any depth, since a function always belongs to a container. A `const` or
+-- `var` counts only at the top level: indented, it may be a function's local,
+-- where `pub` would not compile.
+function checked_name_lacking_pub(line)
+  local code = trim(line)
+  if starts_with(code, "pub ") or starts_with(code, "//") then return nil end
+  local keywords = {"fn "}
+  if #code == #line then keywords = {"fn ", "const ", "var "} end
+  for keyword in keywords do
+    if starts_with(code, keyword) then
+      local rest = sub(code, #keyword + 1)
+      for name in CHECKED_NAMES do
+        if starts_with(rest, name .. "(") or starts_with(rest, name .. " ") or starts_with(rest, name .. ":") then return name end
+      end
+    end
+  end
+  return nil
+end
+
+function with_pub(line)
+  local code = trim(line)
+  return sub(line, 1, #line - #code) .. "pub " .. code
+end
+
+-- Prints the file's findings, rewrites it under `fix=yes`, and gives their count.
+function check_file(path)
+  local found = 0
+  local fixed_lines = {}
+  local number = 0
+  for line in lines(read(path)) do
+    number = number + 1
+    if checked_name_lacking_pub(line) == nil then
+      push(fixed_lines, line)
+    else
+      found = found + 1
+      print(path .. ":" .. number .. ": " .. trim(line))
+      push(fixed_lines, with_pub(line))
+    end
+  end
+  if FIX and found > 0 then replace(path, join(fixed_lines, "\n") .. "\n") end
+  return found
+end
+
+local found = 0
+for entry in walk_all(DIR, {kind = "file", like = "*.zig"}) do
+  if not contains(entry.path, ".zig-cache") and not contains(entry.path, "zig-out") then
+    found = found + check_file(entry.path)
+  end
+end
+print("declarations of a checked name, not pub: " .. found .. (FIX and " (made pub)" or " (fix=yes makes them pub)"))

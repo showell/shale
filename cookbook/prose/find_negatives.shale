@@ -1,0 +1,291 @@
+-- budget: steps=200000000 reads=100 read_bytes=10000000 output_bytes=1000000
+-- This lint finds the negative sentences in a book's prose. A book whose rule
+-- is "say what happens, not what something isn't" rewrites each negative, or
+-- keeps it and lists it in a table with its kind.
+--
+--   cd <a book's checkout> && shale <cookbook>/prose/find_negatives.shale manuscript=book/book.md table=book/negatives.txt
+--   shale <cookbook>/prose/find_negatives.shale self_test=1
+--
+-- The arguments:
+--   manuscript  the markdown document;
+--   table       the sentences the book keeps (the format is below);
+--   stop_at     the heading, after `## `, of the first chapter it doesn't
+--               read; the whole manuscript when it's not given. A book being
+--               rewritten a chapter at a time moves it down as it goes;
+--   words       `negatives` by default, or `voice` for the disguised
+--               negatives and the verbs that give code a will;
+--   held        how many unlisted negative sentences to expect, so a book
+--               with many today can hold the count and bring it down.
+--
+-- The prose is every line above `stop_at` outside a ``` fence, except a line
+-- that starts `{{`, a book's include. Inline code, between backticks, is taken
+-- out before the words are read, so `doesn't` in a quoted name is never a hit,
+-- and so is a link to a chapter, `{{chapter Title}}`. A table row's cells are
+-- read one by one. A sentence ends at `.`, `!` or `?` followed by a space or
+-- the line's end, so `4.5` and `Distance.metres` stay in one. A curly
+-- apostrophe reads as a straight one.
+--
+-- A negative is a sentence holding one of the words, matched as a whole word
+-- with any case. A sentence counts once, however many it holds.
+--
+-- The table opens with the kinds, each a line `# keep name: what it is` or
+-- `# fix name: what it is`. Every other line that isn't blank or a `#` comment
+-- is `kind: the sentence`, the sentence exactly as this prints it, and its kind
+-- must be a `keep` kind. A sentence listed twice, a kind the table doesn't
+-- define, a `fix` kind on a sentence, or a table with no kinds stops the run.
+--
+-- The checks:
+--
+--   negative          A negative sentence the table doesn't list.
+--   unused_exception  A line of the table whose sentence the prose doesn't
+--                     hold, or holds with no negative in it.
+--
+-- The output is the counts, one line per finding, and the counts again
+-- (cookbook/findings.shale). The run fails if there is a finding. Given
+-- `held`, it passes with that many negatives, printing only the counts, and
+-- fails with any other number, more or fewer, or with an unused exception.
+-- The summary starts with the word set's name, `negatives:` or `voice:`.
+
+use("cookbook:findings.shale")
+
+-- The plain negatives, and their near friends: `unless`, `rather than`,
+-- `lacks`, `hardly` and `barely` each say a thing by what it isn't, too.
+const NEGATIVE_WORDS = {
+  "not", "no", "none", "nothing", "nobody", "nowhere", "never", "neither", "nor", "without",
+  "isn't", "aren't", "wasn't", "weren't", "don't", "doesn't", "didn't", "can't", "cannot", "won't",
+  "wouldn't", "shouldn't", "couldn't", "hasn't", "haven't", "hadn't", "mustn't", "needn't", "ain't",
+  "unless", "rather than", "lacks", "lack", "hardly", "barely",
+}
+
+-- Negatives in disguise, and verbs that give code a will. Only the
+-- third-person forms are listed, so "you know" is never a hit.
+const VOICE_WORDS = {
+  "refuses", "refused", "leaves out", "left out", "stays out", "stay out", "spares", "skips",
+  "omits", "free of", "knows", "decides", "wants", "trusts", "remembers", "forgets", "insists",
+}
+
+const WORD_SETS = {negatives = NEGATIVE_WORDS, voice = VOICE_WORDS}
+
+-- A sentence: code spans whole, and a `.`, `!` or `?` that a space doesn't
+-- follow inside it.
+const SENTENCE = "((?:`[^`]*`|[^`.!?]|[.!?][^ .!?`])+[.!?]*)"
+
+-- The pattern that finds the words of `word_set`, one of WORD_SETS' names.
+function word_pattern(word_set)
+  if not has_key(WORD_SETS, word_set) then fail("negatives: words= is negatives or voice, not `" .. word_set .. "`") end
+  return "\\b(" .. join(WORD_SETS[word_set], "|") .. ")\\b"
+end
+
+-- The texts of one line of prose: a table row's cells, or the line itself.
+function line_texts(l)
+  if not starts_with(trim(l), "|") then return {l} end
+  local cells = {}
+  for c in split(l, "|") do
+    if trim(c) ~= "" and re_find(c, "^ *:?-+:? *$") == nil then push(cells, c) end
+  end
+  return cells
+end
+
+-- The words of `pattern` in `sentence`, its code taken out, in the order they
+-- come.
+function words_in(sentence, pattern)
+  local no_code = re_replace(substitute(sentence, "’", "'", {missing_ok = true}), "`[^`]*`", " ")
+  local plain = lower(re_replace(no_code, "\\{\\{chapter [^}]*\\}\\}", " "))
+  local found = {}
+  for m in re_find_all(plain, pattern) do push(found, m.group) end
+  return found
+end
+
+-- Every sentence of `text` above the chapter `stop_at` ("" for none) that
+-- holds a word of `pattern`, as `{line, chapter, words, sentence}`, and how
+-- many sentences were read. `where` names the manuscript in a stop.
+function prose_hits(text, pattern, stop_at, where)
+  local found = {}
+  local read_count = 0
+  local is_fenced = false
+  local chapter = "(before the first chapter)"
+  local number = 0
+  local is_stopped = false
+  for l in split(text, "\n") do
+    number = number + 1
+    if not is_stopped then
+      if starts_with(l, "```") then
+        is_fenced = not is_fenced
+      elseif not is_fenced and not starts_with(l, "{{") then
+        if starts_with(l, "## ") then
+          chapter = trim(sub(l, 4))
+          if stop_at ~= "" and chapter == stop_at then is_stopped = true end
+        end
+        if not is_stopped then
+          for t in line_texts(l) do
+            for m in re_find_all(t, SENTENCE) do
+              local sentence = trim(m.group)
+              if sentence ~= "" then
+                read_count = read_count + 1
+                local words = words_in(sentence, pattern)
+                if #words > 0 then push(found, {line = number, chapter = chapter, words = join(unique(words), ","), sentence = sentence}) end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  if stop_at ~= "" and not is_stopped then fail("negatives: no heading `## " .. stop_at .. "` in " .. where) end
+  return {found = found, read_count = read_count}
+end
+
+-- The table at `path` as `{kinds, rows, by_sentence}`: `kinds` from each
+-- kind's name to `keep` or `fix`, and each row `{kind, sentence, line}`.
+function exception_table(path)
+  if not exists(path) then fail("negatives: no table " .. path) end
+  local kinds = {}
+  local rows = {}
+  local by_sentence = {}
+  local number = 0
+  for raw in lines(read(path)) do
+    number = number + 1
+    local l = trim(raw)
+    local at = "negatives: " .. path .. ":" .. number .. ": "
+    local kind = re_find(l, "^# (keep|fix) ([a-z-]+): +[^ ]")
+    if kind ~= nil then
+      if has_key(kinds, kind.groups[2]) then fail(at .. "the kind `" .. kind.groups[2] .. "` is defined twice") end
+      kinds[kind.groups[2]] = kind.groups[1]
+    elseif l ~= "" and not starts_with(l, "#") then
+      local m = re_find(l, "^([a-z-]+): +([^ ].*)$")
+      if m == nil then fail(at .. "expected `kind: the sentence`") end
+      local name = m.groups[1]
+      local sentence = m.groups[2]
+      if not has_key(kinds, name) then fail(at .. "`" .. name .. "` is no kind the table defines") end
+      if kinds[name] ~= "keep" then fail(at .. "`" .. name .. "` is a kind to fix, not to keep") end
+      if has_key(by_sentence, sentence) then fail(at .. "the sentence is listed twice") end
+      push(rows, {kind = name, sentence = sentence, line = number})
+      by_sentence[sentence] = true
+    end
+  end
+  if #keys(kinds) == 0 then fail("negatives: " .. path .. " defines no kinds") end
+  return {kinds = kinds, rows = rows, by_sentence = by_sentence}
+end
+
+-- The verdict on the manuscript at `manuscript` against the table at `table_path`,
+-- as `{negatives, unused, summary}`: `negatives` the hits the table doesn't
+-- keep, `{line, chapter, words, sentence}`, and `unused` the finding lines of
+-- the table's unused rows.
+function judged(manuscript, table_path, word_set, stop_at)
+  local pattern = word_pattern(word_set)
+  local exceptions = exception_table(table_path)
+  local prose = prose_hits(read(manuscript), pattern, stop_at, manuscript)
+  if prose.read_count == 0 then fail("negatives: no prose in " .. manuscript) end
+  local negatives = {}
+  local kept = {}
+  for f in prose.found do
+    if has_key(exceptions.by_sentence, f.sentence) then kept[f.sentence] = true else push(negatives, f) end
+  end
+  local unused = {}
+  for row in exceptions.rows do
+    if not has_key(kept, row.sentence) then
+      push(unused, table_path .. ":" .. row.line .. ": unused_exception: no negative sentence of the prose is `" .. row.sentence .. "`")
+    end
+  end
+  local read_where = ""
+  if stop_at ~= "" then read_where = " above `" .. stop_at .. "`" end
+  local summary = word_set .. ": negative " .. #negatives .. ", unused_exception " .. #unused .. ", " .. #prose.found .. " negative sentences of " .. prose.read_count .. " read" .. read_where .. ", " .. #exceptions.rows .. " kept in the table"
+  return {negatives = negatives, unused = unused, summary = summary}
+end
+
+function finding_line(manuscript, f)
+  return manuscript .. ":" .. f.line .. ": negative [" .. f.chapter .. "] " .. f.words .. ": " .. f.sentence
+end
+
+-- Whether the verdict passes: no finding, or with `held` given (not ""),
+-- exactly that many negatives and no unused exception.
+function is_passing(verdict, held)
+  if #verdict.unused > 0 then return false end
+  if held == "" then return #verdict.negatives == 0 end
+  return #verdict.negatives == tonumber(held)
+end
+
+-- The plants' findings as `line words` each, joined by `; `.
+function compact(verdict)
+  local got = {}
+  for f in verdict.negatives do push(got, f.line .. " " .. f.words) end
+  return join(got, "; ")
+end
+
+-- A stop's message, or "" when `attempt` gave a value.
+function stop_message(r)
+  if r.ok then return "" end
+  return r.error
+end
+
+if arg("self_test", "") ~= "" then
+  local P = "cookbook/prose/plants/find_negatives/"
+  local BOOK = P .. "book.md"
+  local wrong = {}
+  local cases = {
+    {"negatives", "", "table.txt", "3 isn't; 7 doesn't,never; 8 nothing; 11 doesn't; 15 not; 23 nothing", 1},
+    {"negatives", "Second", "table.txt", "3 isn't; 7 doesn't,never; 8 nothing; 11 doesn't; 15 not", 1},
+    {"voice", "", "voice.txt", "9 refuses,knows", 0},
+  }
+  for c in cases do
+    local v = judged(BOOK, P .. c[3], c[1], c[2])
+    if compact(v) ~= c[4] or #v.unused ~= c[5] then
+      push(wrong, c[1] .. " stop_at=`" .. c[2] .. "`: want [" .. c[4] .. "] and " .. c[5] .. " unused, got [" .. compact(v) .. "] and " .. #v.unused .. " unused")
+    end
+  end
+  -- The sentences whole: a `4.5` and a table cell, as a finding prints them.
+  local v = judged(BOOK, P .. "table.txt", "negatives", "")
+  local want_lines = {
+    BOOK .. ":8: negative [First] nothing: The value 4.5 stays in one sentence with nothing in it.",
+    BOOK .. ":15: negative [First] not: not a sentence",
+  }
+  for w in want_lines do
+    local seen = false
+    for f in v.negatives do
+      if finding_line(BOOK, f) == w then seen = true end
+    end
+    if not seen then push(wrong, "no finding `" .. w .. "`") end
+  end
+  if #v.unused ~= 1 or not contains(v.unused[1], "table.txt:5: unused_exception") then push(wrong, "the unused row: got [" .. join(v.unused, "; ") .. "]") end
+  -- `held` passes at the count alone, and an unused row fails it.
+  local voice = judged(BOOK, P .. "voice.txt", "voice", "")
+  local holds = {{voice, "1", true}, {voice, "0", false}, {voice, "2", false}, {voice, "", false}, {v, "6", false}}
+  for h in holds do
+    if is_passing(h[1], h[2]) ~= h[3] then push(wrong, "held=`" .. h[2] .. "` with " .. #h[1].negatives .. " negatives: want " .. tostring(h[3])) end
+  end
+  -- The stops, each with the words its message holds.
+  local stops = {
+    {"negatives", "Missing", "table.txt", "no heading `## Missing`"},
+    {"loud", "", "table.txt", "words= is negatives or voice"},
+    {"negatives", "", "twice.txt", "listed twice"},
+    {"negatives", "", "undefined.txt", "is no kind the table defines"},
+    {"negatives", "", "fix.txt", "a kind to fix, not to keep"},
+    {"negatives", "", "nokinds.txt", "defines no kinds"},
+    {"negatives", "", "gone.txt", "no table"},
+  }
+  for s in stops do
+    local why = stop_message(attempt(judged, BOOK, P .. s[3], s[1], s[2]))
+    if not contains(why, s[4]) then push(wrong, s[3] .. " words=" .. s[1] .. " stop_at=`" .. s[2] .. "`: want a stop holding `" .. s[4] .. "`, got `" .. why .. "`") end
+  end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail(tostring(#wrong) .. " negatives plants wrong") end
+  print("negatives: " .. #cases .. " readings, " .. #holds .. " holds and " .. #stops .. " stops as their plants say")
+else
+  local manuscript = arg("manuscript", "")
+  local table_path = arg("table", "")
+  if manuscript == "" or table_path == "" then fail("negatives: manuscript= and table= name the document and its table (see the header)") end
+  local held = arg("held", "")
+  local verdict = judged(manuscript, table_path, arg("words", "negatives"), arg("stop_at", ""))
+  if held ~= "" and is_passing(verdict, held) then
+    print(verdict.summary .. ", as held")
+  else
+    local all = {}
+    for f in verdict.negatives do push(all, finding_line(manuscript, f)) end
+    for l in verdict.unused do push(all, l) end
+    print_findings(verdict.summary, all)
+    -- A stop inside a function prints the calls after it, so these stand at
+    -- the top level, and the summary is the last line a caller reads.
+    if held ~= "" then fail("negatives: held at negative " .. held .. " and unused_exception 0") end
+    if #all > 0 then fail(verdict.summary) end
+  end
+end

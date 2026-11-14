@@ -41,7 +41,7 @@ pub const specs = [_]bi.Spec{
 ///
 /// **SEALED** (metal-vmm QUEUE 250): only `pathArg` makes one, so a call that
 /// takes a `Path` took a checked one. A literal without `path_seal` does not
-/// compile, and cookbook/sealed.shale refuses one that sets it, or changes
+/// compile, and cookbook/check_seals.shale refuses one that sets it, or changes
 /// `path_full` or `path_rel` of one made, outside this file. `full()` and
 /// `rel()` read them.
 pub const Path = struct {

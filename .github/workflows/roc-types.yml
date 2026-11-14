@@ -49,7 +49,7 @@ jobs:
           zig build --fork="$GITHUB_WORKSPACE/roc" -Dtarget=x86_64-linux-musl -Dcpu=baseline --prefix "$GITHUB_WORKSPACE/out"
           test -x "$GITHUB_WORKSPACE/out/bin/roc-types"
 
-      # The plant methods.shale's self-test reads types through, by a
+      # The plant rewrite_method_calls.shale's self-test reads types through, by a
       # relative path: the header is the format's and the pin's, and the
       # imported type module has its types.
       - name: Smoke
@@ -57,9 +57,9 @@ jobs:
         run: |
           format=$(sed -n 's/^const format = \([0-9]*\);$/\1/p' tools/roc_types/main.zig)
           version=$(tr -d '[:space:]' < tools/roc_types/roc-version)
-          "$GITHUB_WORKSPACE/out/bin/roc-types" cookbook/roc/plants/methods/TypedApp.roc > /tmp/types.out
+          "$GITHUB_WORKSPACE/out/bin/roc-types" cookbook/roc/plants/rewrite_method_calls/TypedApp.roc > /tmp/types.out
           test "$(head -n 1 /tmp/types.out)" = "roc-types $format $version"
-          grep -q '^== /.*/cookbook/roc/plants/methods/Typed.roc$' /tmp/types.out
+          grep -q '^== /.*/cookbook/roc/plants/rewrite_method_calls/Typed.roc$' /tmp/types.out
           grep -cP '^t\t' /tmp/types.out
 
       - name: Tarball

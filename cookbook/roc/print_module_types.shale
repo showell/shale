@@ -1,0 +1,1052 @@
+-- This recipe prints a Roc module's types and every type they depend on,
+-- the most primitive first, with no function bodies, so the types can be
+-- reviewed on their own.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/print_module_types.shale module=Pigs
+--   shale cookbook:roc/print_module_types.shale self_test=1
+--
+-- A package that apps use is walked from outside it, its folder named as a
+-- mount path and its apps as clients, since no path may climb with `..`:
+--
+--   shale cookbook:roc/print_module_types.shale root=repos:roc-apps/canvas_apps/lib \
+--     module=Brush clients=repos:roc-apps/canvas_apps/*
+--
+-- (or from canvas_apps, `root=lib clients=*`). Run from inside the package,
+-- the walk sees only the package's own files.
+--
+-- The arguments:
+--   module     the module to start from, read from `<root>/<module>.roc`;
+--   root       the folder that holds it, `.` by default;
+--   clients    the code that uses the package, comma separated: a folder or
+--              a glob of folders, each an app whose `.roc` files at any depth
+--              are read, or a glob ending in `.roc`, whose files' folders are
+--              the apps. Named as the root is, both mount paths or both from
+--              one folder, as the walk compares paths as written. Their files
+--              join the other files below, each reading its imports from its
+--              own app header or its folder's (`import lib.Brush`, or
+--              `import game.Geom` in a gates app);
+--   packages   where a package's modules are, as `lib=repos:roc-apps/lib`,
+--              several separated by commas. Without it a package's folder is
+--              read from the headers of the apps in the root folder, which
+--              works only when that folder is under the root, so a package at
+--              `../lib` needs this argument;
+--   max_depth  how many steps from the module's own types to follow, 2 by
+--              default (WALK_MAX_DEPTH). The module's types are at depth 0 and
+--              the types they mention at depth 1. A type at the last depth is
+--              printed, and the types it mentions that aren't printed anyway
+--              are named in one line, not followed. A clear type reads from
+--              its immediate children alone, which is depth 1;
+--   full_depth the deepest depth printed in full, 1 by default
+--              (WALK_FULL_DEPTH). A deeper type prints its header, doc and
+--              definition, and its block's members as one line of names,
+--              `.{ metres, to_metres, zero }`. It still counts and is followed
+--              as before; only its printing is shorter;
+--   stop       the hub types that are named but never expanded, comma
+--              separated, WALK_STOP by default; `stop=` empty stops none. An
+--              entry is a type's printed name, `Shapes.Shape`, or a module's
+--              name and `.*`, `Brush.*`, for every type of that module. A
+--              stopped type is named once, in the `# Stopped` line, is not
+--              printed, and nothing it mentions is followed through it. The
+--              asked module's own types are never stopped;
+--   brief      the types printed by name and members alone at every depth,
+--              even depth 1, comma separated, WALK_BRIEF by default; `brief=`
+--              empty makes none brief. An entry is a type's printed name or
+--              `Module.*`, as for `stop`, or `units`: every nominal type over
+--              one builtin number with no type nested in its block, such as
+--              `Distance :: F64.{ ... }` or `Steps :: U32.{ ... }`, found from
+--              its declaration. The asked module's own types are never brief;
+--   uses       with `uses=0`, leave out the outside uses of the asked module's
+--              members (below);
+--   named_by   with `named_by=0`, leave out the "named by" section (below);
+--              with `named_by=production`, list only its untagged entries,
+--              leaving out those tagged `(test)` or `(private)`;
+--   modules    in place of `module=`, two or more sibling modules, comma
+--              separated, walked as one family with the settings above: the
+--              types two or more reach once, each member's own types and
+--              signatures with its private functions', its uses and named-by
+--              sections per member, and a table of their public names by
+--              shape (module_family.shale says how);
+--   self_test  with `self_test=1`, check the plants in
+--              `cookbook/roc/plants/print_module_types/`.
+--
+-- The types read are the type declarations at a file's top level and those
+-- nested in a type's `.{ ... }` block. A type's members are the annotations
+-- in its own block, in source order: its functions, whose type is written as
+-- a function, and its constants, whose type is not, such as `count : I64`.
+-- Each is printed as its doc and its annotation, with its body or value left
+-- out, not written as `...`, and a constant's annotation ends in
+-- `# constant`, so it reads as one even when its type is an alias. An
+-- annotation whose whole type is `_` is left out, since it says nothing of
+-- the type's surface. Values outside any block (a module's private helpers)
+-- are left out, and so are the types only they mention.
+--
+-- Every type name in a printed definition or annotation is followed: a bare
+-- name declared in the same file, a bare name that is an imported module's own
+-- type (`Distance` after `import Distance`), and `Module.Type`. A tag's name is
+-- not a type, but its payload is. Builtins (`Str`, `List`, `U32` and the rest)
+-- are leaves, named in one line and not expanded. Type variables are not
+-- followed; each is named with the types it appears in.
+--
+-- The types come out in topological order: a type before every type that
+-- mentions it, its definition or its functions. Ties go by module, then by
+-- name, and the asked-for module's types come last. Types that mention each
+-- other form a cycle, which is reported in one line before its members; the
+-- members then follow, by their definitions where those order them, else by
+-- name. Each type has a header line with its name, file and line, then its
+-- doc comment and its definition as written, and then its functions inside a
+-- `.{ ... }`. The source's text is kept, re-indented.
+--
+-- A header line names the asked module's imports that hold no printed,
+-- stopped or beyond-depth type, `# Imported but not in any printed type:
+-- Camera, Screen`: modules its functions use only in their bodies (or in
+-- annotations outside its types' blocks), which a reviewer should read too.
+-- The imports only its tests use are left out of it and named on their own,
+-- `# Imported for tests only: Polygon`: every use of the import sits in an
+-- `expect`, or in a top-level value (its annotation included) that only
+-- expects use, directly or through other such values. A member of a type's
+-- block is production, as other files may call it. No import may be a
+-- test's alone: its test moves to a CrossModuleExpects file. In a family,
+-- each member's block has its own line.
+--
+-- The other files are the root folder's other `.roc` files, those under its
+-- `gates/` folder, and the clients'. A file's `import game.Geom` reads the
+-- package's folder from its own header, else from the headers of the apps and
+-- packages in its folder, unless `packages=` names it. A header line counts
+-- the clients' files and apps and those importing the asked module, which
+-- may be none, and a member used by files in several client apps says how
+-- many, `# used by 9 files in 5 apps`. When no client imports any of the
+-- root's files, the root and the clients are taken to be named unlike, and
+-- the walk fails. It fails too when an app beside the root, one whose header
+-- directly in its folder names the root as a package (`safari/main.roc`'s
+-- `lib: "../lib/main.roc"`), holds no client file, with or without
+-- `clients=`: a member only that app uses would read as unused. From the
+-- root's parent folder, `clients=*` names them all.
+--
+-- Each member of the asked module's types ends with its outside uses, `#
+-- used by 3 files, 1 in tests only`, or `# no outside use` (after `#
+-- constant;` on a constant). A file uses a member by naming it through its
+-- import of the asked module, `Geom.ahead_point` or
+-- `Geom.AheadPoint.at_height`, or by calling it, `point.at_height(h)`, or
+-- through its operator, `a < b` for `is_lt`, on a receiver the file plainly
+-- types as its type (member_uses.shale says when). A call on a receiver of no
+-- known type counts for every member of its name, and only in a file with no
+-- use above: `; by method name in 2 more`, `; by operator, untyped, in 1
+-- more`. A use is in tests when it sits in an `expect`, in a top-level value
+-- that only expects use (directly or through other such values), or anywhere
+-- in a file under a `gates/` folder; a file is "in tests only" when all its
+-- uses of the member are. A header line lists the members no other file uses
+-- or may use, `# Public, but used only in this file: near_plane_crossing,
+-- AheadPoint.at_right`, a nested type's members named with their type.
+--
+-- After the types, the "named by" section lists every annotation, a
+-- function's or a constant's, in a type's block or at the top level, and
+-- every type definition, in the other files that mentions one of the asked
+-- module's types, grouped by module, each as `file:line: ` and its text, a
+-- member or nested type qualified by the type it sits in. An entry in tests,
+-- by the rule above, is tagged `(test)` after its place, and a top-level
+-- annotation that is not is tagged `(private)`, being a helper outside any
+-- block. A mention counts when it resolves to the asked module's type as the
+-- walk resolves names, through the file's import of the asked module,
+-- qualified or bare, so another type of the same bare name does not. The last
+-- line counts the types, functions, constants, modules, leaves, type
+-- variables, types beyond the depth, stopped types, the members with no
+-- outside use, the method calls and operators of their names typed and
+-- pooled, and the annotations and types the "named by" section found,
+-- all of them whatever `named_by=production` lists, split into production
+-- (untagged or private) and test.
+--
+-- A name that resolves to no file or no type, or a file that doesn't parse,
+-- is listed after the output, and the run then fails. A refused file's uses
+-- are unread, so member_uses.shale's refused_line says how it is named.
+-- budget: steps=2000000000 arena_bytes=2000000000 output_bytes=8000000 reads=100000
+
+const SELF_TEST = arg("self_test", "") == "1"
+
+-- How many steps from the module's own types the walk follows when
+-- `max_depth=` doesn't say.
+const WALK_MAX_DEPTH = 2
+
+-- The deepest depth printed in full when `full_depth=` doesn't say.
+const WALK_FULL_DEPTH = 1
+
+-- The hub types named but never expanded when `stop=` doesn't say: types so
+-- widely used that following them buries the module's own story.
+const WALK_STOP = {"Shapes.Shape", "Brush.*", "World.Segment"}
+
+-- The types printed by name and members alone at every depth when `brief=`
+-- doesn't say: the plain unit wrappers, whose members are arithmetic a
+-- reviewer reads past.
+const WALK_BRIEF = {"units"}
+
+-- The builtin numbers a unit wrapper may be a nominal type over.
+const WALK_NUMBERS = {"F32", "F64", "Dec", "U8", "U16", "U32", "U64", "U128", "I8", "I16", "I32", "I64", "I128"}
+use("cookbook:roc/declared.shale")
+use("cookbook:roc/member_uses.shale")
+use("cookbook:roc/module_family.shale")
+
+-- The type names and type variables the type at node `at` mentions, pushed
+-- onto `into` as `{name, line}` and `{var, line}`. A tag's name is skipped and
+-- its payload read.
+function mentions_in(tree, at, into)
+  local n = tree[at]
+  local parent_kind = n.parent ~= 0 and tree[n.parent].kind or ""
+  if n.kind == "ty-var" then
+    push(into, {var = get(n, "raw", ""), line = n.line})
+    return into
+  end
+  if n.kind == "ty" then
+    if parent_kind ~= "tags" and get(n, "name", "") ~= "" then push(into, {name = n.name, line = n.line}) end
+    return into
+  end
+  local kids = n.kids
+  local from = 1
+  if n.kind == "ty-apply" and parent_kind == "tags" then from = 2 end
+  for k = from, #kids do mentions_in(tree, kids[k], into) end
+  return into
+end
+
+-- A type's name as printed: qualified by its module, or with the module
+-- named after it when the type sits outside the module's own type.
+function display_name(t)
+  if t.qualified == t.module or starts_with(t.qualified, t.module .. ".") then return t.qualified end
+  return t.qualified .. ", in module " .. t.module
+end
+
+function add_edge(st, from, to, in_definition)
+  if from == to then return nil end
+  local seen = st.dep_seen
+  if not has_key(seen, from .. ">" .. to) then
+    seen[from .. ">" .. to] = true
+    push_at(st.deps, from, to)
+  end
+  if in_definition and not has_key(seen, from .. "=" .. to) then
+    seen[from .. "=" .. to] = true
+    push_at(st.def_deps, from, to)
+  end
+  return nil
+end
+
+-- Adds the type `id`, at `depth` steps from the module, to the next depth's
+-- types, unless it is already read.
+function enqueue(st, id, depth)
+  if has_key(st.visited, id) then return nil end
+  st.visited[id] = true
+  st.depth_of[id] = depth
+  push(st.next, id)
+  return nil
+end
+
+-- Whether the list of type names `names` (a stop list or a brief list) holds
+-- the type `t`: its printed name, or its module's name and `.*`.
+function listed(names, t)
+  local name = display_name(t)
+  for s in names do
+    if s == name or s == t.module .. ".*" then return true end
+  end
+  return false
+end
+
+-- A list of type names from `who=`'s comma-separated text: none for "".
+function parse_type_list(text, who)
+  local out = {}
+  for part in split(text, ",") do
+    local s = trim(part)
+    if s ~= "" then
+      if contains(s, "*") and not (ends_with(s, ".*") and #s > 2 and not contains(sub(s, 1, #s - 1), "*")) then fail("print_module_types: " .. who .. "=: `" .. s .. "` is no type's name and no `Module.*`") end
+      push(out, s)
+    end
+  end
+  return out
+end
+
+-- The stop list from `stop=`'s text.
+function parse_stops(text)
+  return parse_type_list(text, "stop")
+end
+
+-- The brief list from `brief=`'s text, which may also hold `units`.
+function parse_brief(text)
+  return parse_type_list(text, "brief")
+end
+
+-- Whether the type `t` is a unit wrapper: a nominal type (`::`) over one
+-- builtin number, with no type declared in its block.
+function is_unit(st, t)
+  local info = st.files[t.path]
+  local tree = info.nodes
+  local kids = tree[t.at].kids
+  if #kids < 2 or tree[kids[2]].kind ~= "ty" or not has_item(WALK_NUMBERS, get(tree[kids[2]], "name", "")) then return false end
+  local name_node = tree[kids[1]]
+  local between = sub(info.src[name_node.end_line], name_node.end_col, name_node.end_col + 3)
+  if not contains(between, "::") then return false end
+  for k in kids do
+    if tree[k].kind == "associated" then
+      for m in tree[k].kids do
+        if tree[m].kind == "s-type-decl" then return false end
+      end
+    end
+  end
+  return true
+end
+
+-- Whether the type `id` prints by name and members alone at every depth: it
+-- is on the brief list, or a unit wrapper while the list holds `units`. The
+-- asked module's own types never are.
+function is_brief(st, id)
+  if has_key(st.asked, id) then return false end
+  local t = st.types[id]
+  if listed(st.brief, t) then return true end
+  return has_item(st.brief, "units") and is_unit(st, t)
+end
+
+-- Settles one mention of the type `m.from`: an edge, a leaf, a lost name, or
+-- a wait for its file. A stopped type is named as stopped and gets no edge.
+-- At the last depth a type not read already is named as beyond it, and gets
+-- no edge, so it is not printed.
+function settle(st, m)
+  local info = st.files[st.types[m.from].path]
+  local r = resolve(st, info, m.name)
+  if r.kind == "need" then
+    push(st.deferred, m)
+    st.wanted[r.path] = true
+  elseif r.kind == "type" then
+    if not has_key(st.asked, r.id) and listed(st.stops, st.types[r.id]) then
+      st.stopped[r.id] = true
+    elseif st.depth < st.max_depth or has_key(st.visited, r.id) then
+      add_edge(st, m.from, r.id, m.in_definition)
+      enqueue(st, r.id, st.depth + 1)
+    else
+      st.beyond[r.id] = true
+    end
+  elseif r.kind == "leaf" then
+    st.leaves[m.name] = true
+  else
+    push(st.lost, info.path .. ":" .. m.line .. ": `" .. m.name .. "`: " .. r.why)
+  end
+  return nil
+end
+
+function visit(st, id)
+  local t = st.types[id]
+  local info = st.files[t.path]
+  local tree = info.nodes
+  local kids = tree[t.at].kids
+  local found = {}
+  if #kids > 1 and tree[kids[2]].kind ~= "associated" then mentions_in(tree, kids[2], found) end
+  local in_definition = #found
+  for member in members_of(tree, t.at) do
+    for k in tree[member.at].kids do mentions_in(tree, k, found) end
+  end
+  for i = 1, #found do
+    local m = found[i]
+    if has_key(m, "var") then
+      if not has_key(st.vars, m.var) then st.vars[m.var] = {} end
+      st.vars[m.var][display_name(t)] = true
+    else
+      settle(st, {from = id, name = m.name, line = m.line, in_definition = i <= in_definition})
+    end
+  end
+  return nil
+end
+
+-- The root folder's other `.roc` files and those under its `gates/` folder,
+-- read, with the asked file `start` left out.
+function other_files(st, root, start)
+  local paths = {}
+  local found = {}
+  for p in glob(path_join(root, "*.roc")) do push(found, p) end
+  for p in glob(path_join(root, "gates/**/*.roc")) do push(found, p) end
+  for p in sort(found) do
+    if path_normal(p) ~= start then push(paths, path_normal(p)) end
+  end
+  load_files(st, paths)
+  return paths
+end
+
+-- The lines printed for one type.
+function type_lines(st, id)
+  local t = st.types[id]
+  local info = st.files[t.path]
+  local tree = info.nodes
+  local src = info.src
+  local decl = tree[t.at]
+  local out = {"", "#### " .. display_name(t) .. "   (" .. t.path .. ":" .. t.line .. ")"}
+  local doc = doc_lines_above(src, decl.line)
+  if #doc == 0 and t.qualified == t.module and tree[decl.parent].kind ~= "associated" then doc = opening_comment(src) end
+  for l in doc do push(out, l) end
+  local kids = decl.kids
+  local last = (#kids > 1 and tree[kids[2]].kind ~= "associated") and tree[kids[2]] or tree[kids[1]]
+  local definition = source_text(src, decl.line, decl.col, last.end_line, last.end_col)
+  local members = members_of(tree, t.at)
+  if #members == 0 then
+    for l in definition do push(out, l) end
+    return out
+  end
+  if st.depth_of[id] > st.full_depth or is_brief(st, id) then
+    local names = {}
+    for member in members do
+      push(names, get(tree[member.at], "name", ""))
+      if member.constant then st.constant_count = st.constant_count + 1 else st.function_count = st.function_count + 1 end
+    end
+    definition[#definition] = definition[#definition] .. ".{ " .. join(names, ", ") .. " }"
+    for l in definition do push(out, l) end
+    return out
+  end
+  definition[#definition] = definition[#definition] .. ".{"
+  for l in definition do push(out, l) end
+  for i = 1, #members do
+    local f = tree[members[i].at]
+    if i > 1 then push(out, "") end
+    for l in doc_lines_above(src, f.line) do push(out, "\t" .. l) end
+    local anno = source_text(src, f.line, f.col, f.end_line, f.end_col)
+    local notes = {}
+    if members[i].constant then
+      push(notes, "constant")
+      st.constant_count = st.constant_count + 1
+    else
+      st.function_count = st.function_count + 1
+    end
+    local key = id .. "\t" .. get(f, "name", "")
+    if st.uses and has_key(st.member_rec, key) then push(notes, uses_note(st.member_rec[key], st.app_of, #st.refused > 0)) end
+    if #notes > 0 then anno[#anno] = anno[#anno] .. "   # " .. join(notes, "; ") end
+    for l in anno do push(out, "\t" .. l) end
+  end
+  push(out, "}")
+  return out
+end
+
+-- Whether a mention in `found`, from the file `info`, resolves to one of the
+-- asked module's types. Only a name through the file's import of the asked
+-- file `start` can, and it is then resolved as the walk resolves it, so a
+-- bare name the file declares itself is its own. A name the import holds no
+-- type of is lost.
+function names_asked(st, info, found, start)
+  local hit = false
+  for m in found do
+    if has_key(m, "name") then
+      local parts = split(m.name, ".")
+      local target = get(info.imports, parts[1], {})
+      if get(target, "path", "") == start then
+        local r = resolve(st, info, m.name)
+        if r.kind == "type" and has_key(st.asked, r.id) then hit = true end
+        if r.kind == "lost" then push(st.lost, info.path .. ":" .. m.line .. ": `" .. m.name .. "`: " .. r.why) end
+      end
+    end
+  end
+  return hit
+end
+
+-- The qualified name of the type declaration around node `at`, with a `.`
+-- after it, or "" at the top level.
+function owner_prefix(tree, at)
+  local k = tree[at].parent
+  while k ~= 0 do
+    if tree[k].kind == "s-type-decl" then return qualified_name(tree, k) .. "." end
+    k = tree[k].parent
+  end
+  return ""
+end
+
+-- The "named by" items of the file `info`, in line order, as `{lines,
+-- is_type, tag}`: each type definition and annotation that mentions one of
+-- the asked module's types. `tag` is `test` for one in tests (a gates app's,
+-- or a top-level value's that only expects use), `private` for any other
+-- top-level annotation, and "" otherwise.
+function named_by_items(st, info, start)
+  local out = {}
+  local tree = info.nodes
+  local fc = file_context(st, info)
+  for i = 1, #tree do
+    local n = tree[i]
+    if is_outer(tree, i) then
+      if n.kind == "s-type-decl" and #n.kids > 1 and tree[n.kids[2]].kind ~= "associated" then
+        local name = get(tree[n.kids[1]], "name", "")
+        if name ~= "" and names_asked(st, info, mentions_in(tree, n.kids[2], {}), start) then
+          local last = tree[n.kids[2]]
+          local text = source_text(info.src, n.line, n.col, last.end_line, last.end_col)
+          text[1] = qualified_name(tree, i) .. sub(text[1], #name + 1)
+          push(out, {lines = text, line = n.line, is_type = true, tag = fc.gates and "test" or ""})
+        end
+      end
+      if n.kind == "s-type-anno" and #n.kids > 0 then
+        local found = {}
+        for k in n.kids do mentions_in(tree, k, found) end
+        if names_asked(st, info, found, start) then
+          local text = source_text(info.src, n.line, n.col, n.end_line, n.end_col)
+          local owner = owner_prefix(tree, i)
+          text[1] = owner .. text[1]
+          local tag = ""
+          if fc.gates or (owner == "" and has_key(fc.test_values, get(n, "name", ""))) then
+            tag = "test"
+          elseif owner == "" then
+            tag = "private"
+          end
+          push(out, {lines = text, line = n.line, is_type = false, tag = tag})
+        end
+      end
+    end
+  end
+  return out
+end
+
+-- The "named by" section for the asked module's file `start`, from the
+-- other files `paths`, as `{lines, annotations, types, production, test}`.
+-- With `production_only`, the entries tagged `test` or `private` are counted
+-- but not listed.
+function named_by(st, root, module, start, paths, production_only)
+  local lines_out = {}
+  local counts = {annotations = 0, types = 0, production = 0, test = 0, private = 0}
+  local any = false
+  for p in paths do
+    local info = st.files[p]
+    if info.err == "" then
+      local shown = {}
+      for item in named_by_items(st, info, start) do
+        any = true
+        if item.is_type then counts.types = counts.types + 1 else counts.annotations = counts.annotations + 1 end
+        if item.tag == "test" then counts.test = counts.test + 1 else counts.production = counts.production + 1 end
+        if item.tag == "private" then counts.private = counts.private + 1 end
+        if not production_only or item.tag == "" then push(shown, item) end
+      end
+      if #shown > 0 then
+        push(lines_out, "")
+        push(lines_out, "### " .. info.module)
+        for item in shown do
+          local tag = item.tag == "" and "" or "(" .. item.tag .. ") "
+          push(lines_out, info.path .. ":" .. item.line .. ": " .. tag .. item.lines[1])
+          for l in drop(item.lines, 1) do push(lines_out, l) end
+        end
+      end
+    end
+  end
+  local where = (root == "" or root == ".") and "the root folder" or root
+  if #keys(st.app_of) > 0 then where = where .. " and the clients" end
+  local head = not any and "# Named by: no annotation or type in the other modules of " .. where .. " mentions " .. module .. "'s types." or "# Named by: the annotations and types in the other modules of " .. where .. " that mention " .. module .. "'s types."
+  if any and production_only then head = head .. " Production only: " .. counts.test .. " test and " .. counts.private .. " private entries left out." end
+  local section = {"", head}
+  for l in lines_out do push(section, l) end
+  counts.lines = section
+  return counts
+end
+
+-- The asked module's imports, by name, that hold no type the walk printed,
+-- stopped or named beyond its depth.
+function imports_not_printed(st, start)
+  local seen = {}
+  for id in keys(st.visited) do seen[st.types[id].path] = true end
+  for id in keys(st.stopped) do seen[st.types[id].path] = true end
+  for id in keys(st.beyond) do seen[st.types[id].path] = true end
+  local out = {}
+  local imports = st.files[start].imports
+  for name in sort(keys(imports)) do
+    if not has_key(seen, get(imports[name], "path", "")) then push(out, name) end
+  end
+  return out
+end
+
+-- Walks the module `module` in the folder `root`, `max_depth` steps from its
+-- own types, and gives `{lines, lost, refused}`: the lines to print, the names
+-- that resolve to nothing, and the files that don't parse. Each depth is
+-- settled, files and all, before the next starts, so a type is read at the
+-- fewest steps it is from the module. `settings` may hold `stops` (a list,
+-- WALK_STOP unless given), `brief` (a list, WALK_BRIEF), `full_depth`
+-- (WALK_FULL_DEPTH), `uses` (true), `named_by` (true) and
+-- `named_by_production` (false), and `trees`, a map of parsed files that
+-- walks may share (the self-test's do, to parse each plant once).
+function walk(root, module, packages_arg, max_depth, settings?)
+  local given = settings == nil and {} or settings
+  local trees = get(given, "trees", {})
+  local clients = get(given, "clients", "")
+  refuse_climbing(root, module, clients)
+  local st = {files = {}, types = {}, trees = trees, packages = package_folders(root, packages_arg, trees), dir_packages = {}, app_of = {}, refused = {}, refusals = {}, lost = {}, leaves = {}, vars = {}, deps = {}, def_deps = {}, dep_seen = {}, visited = {}, depth_of = {}, asked = {}, next = {}, beyond = {}, stopped = {}, stops = get(given, "stops", WALK_STOP), brief = get(given, "brief", WALK_BRIEF), full_depth = get(given, "full_depth", WALK_FULL_DEPTH), uses = get(given, "uses", true), named_by = get(given, "named_by", true), depth = 0, max_depth = max_depth, deferred = {}, wanted = {}, function_count = 0, constant_count = 0, contexts = {}, typing = {}, resolved = {}, precision = {}, member_rec = {}, member_list = {}, members_by_name = {}}
+  if module == "" then fail("print_module_types: name the module to start from, as module=Pigs") end
+  local start = path_normal(path_join(root, module .. ".roc"))
+  if start == nil or not exists(start) then fail("print_module_types: no file " .. path_join(root, module .. ".roc") .. " for module=" .. module) end
+  load_files(st, {start})
+  if st.files[start].err ~= "" then return {lines = {}, lost = {}, refused = st.refused} end
+  for t in st.files[start].types do
+    st.asked[t.id] = true
+    enqueue(st, t.id, 0)
+  end
+  while #st.next > 0 do
+    local these = st.next
+    st.next = {}
+    for id in these do visit(st, id) end
+    while #st.deferred > 0 do
+      load_files(st, sort(keys(st.wanted)))
+      st.wanted = {}
+      local again = st.deferred
+      st.deferred = {}
+      for m in again do settle(st, m) end
+    end
+    st.depth = st.depth + 1
+  end
+  local lines_out = {"# The types of " .. module .. " and every type they depend on, to depth " .. max_depth .. ", the most primitive first.", "# Builtin leaves, not expanded: " .. join(sort(keys(st.leaves)), ", ")}
+  local stopped = {}
+  for id in keys(st.stopped) do push(stopped, display_name(st.types[id])) end
+  if #stopped > 0 then push(lines_out, "# Stopped, not expanded: " .. join(sort(stopped), "; ")) end
+  local beyond = {}
+  for id in keys(st.beyond) do push(beyond, display_name(st.types[id])) end
+  if #beyond > 0 then push(lines_out, "# Beyond depth " .. max_depth .. ", not followed: " .. join(sort(beyond), "; ")) end
+  local var_notes = {}
+  for v in sort(keys(st.vars)) do push(var_notes, v .. " (" .. join(sort(keys(st.vars[v])), ", ") .. ")") end
+  if #var_notes > 0 then push(lines_out, "# Type variables, not followed: " .. join(var_notes, "; ")) end
+  local tests_only = test_only_imports(st, st.files[start])
+  local unprinted = {}
+  for name in imports_not_printed(st, start) do
+    if not has_item(tests_only, name) then push(unprinted, name) end
+  end
+  if #unprinted > 0 then push(lines_out, "# Imported but not in any printed type: " .. join(unprinted, ", ")) end
+  if #tests_only > 0 then push(lines_out, "# Imported for tests only: " .. join(tests_only, ", ")) end
+  local briefs = {}
+  for id in keys(st.visited) do
+    if is_brief(st, id) and #members_of(st.files[st.types[id].path].nodes, st.types[id].at) > 0 then push(briefs, display_name(st.types[id])) end
+  end
+  if #briefs > 0 then push(lines_out, "# Brief, members by name at every depth: " .. join(sort(briefs), "; ")) end
+  local paths = {}
+  if st.uses or st.named_by then
+    paths = other_files(st, root, start)
+    local client_paths = {}
+    if clients ~= "" then
+      local skip = set_of(paths)
+      skip[start] = true
+      local cl = client_files(clients, skip)
+      load_files(st, cl.paths)
+      st.app_of = cl.app_of
+      push(lines_out, clients_line(st, cl.paths, start, skip))
+      client_paths = cl.paths
+      for p in cl.paths do push(paths, p) end
+    end
+    local missing = clients_missing_apps(st, root, client_paths)
+    if missing ~= nil then push(st.lost, missing) end
+  end
+  local unused = {}
+  if st.uses then
+    load_imports(st)
+    asked_members(st, start)
+    for p in paths do
+      if st.files[p].err == "" then count_uses(st, st.files[p], start) end
+    end
+    unused = unused_members(st)
+    local partial = #st.refused > 0 and ", " .. AS_FAR_AS_PARSED or ""
+    if #unused > 0 then push(lines_out, "# Public, but used only in this file" .. partial .. ": " .. join(unused, ", ")) end
+  end
+  local modules = {}
+  for item in printing_order(st) do
+    if has_key(item, "cycle") then
+      local names = {}
+      for id in item.cycle do push(names, display_name(st.types[id])) end
+      push(lines_out, "")
+      push(lines_out, "# Cycle: these types mention each other: " .. join(sort(names), ", "))
+    else
+      modules[st.types[item.id].path] = true
+      for l in type_lines(st, item.id) do push(lines_out, l) end
+    end
+  end
+  local named_lines = {}
+  local counts = "# " .. #keys(st.visited) .. " types, " .. st.function_count .. " functions, " .. st.constant_count .. " constants, " .. #keys(modules) .. " modules, " .. #keys(st.leaves) .. " leaves, " .. #keys(st.vars) .. " type variables, " .. #beyond .. " beyond depth " .. max_depth .. ", " .. #stopped .. " stopped"
+  if st.uses then counts = counts .. ", " .. #unused .. " members with no outside use" .. precision_note(st) end
+  if st.named_by then
+    local section = named_by(st, root, module, start, paths, get(given, "named_by_production", false))
+    for l in section.lines do push(lines_out, l) end
+    named_lines = section.lines
+    counts = counts .. ", named by " .. section.annotations .. " annotations and " .. section.types .. " types: " .. section.production .. " production, " .. section.test .. " test"
+  end
+  local refused = {}
+  for r in st.refusals do push(refused, r.path) end
+  refused = sort(refused)
+  if #refused > 0 then
+    counts = counts .. ", " .. #refused .. " files refused and not counted: " .. join(refused, ", ")
+    lines_out = with_refused_line(lines_out, refused_line(st))
+  end
+  push(lines_out, "")
+  push(lines_out, counts)
+  return {lines = lines_out, lost = st.lost, refused = st.refused, st = st, start = start, named_lines = named_lines}
+end
+
+
+-- The lines of the types `ids` in printing order, each printed by the walk
+-- `st_of[id]`, with `note_of[id]` (when set) after its header line.
+function family_type_lines(runs, ids, asked, st_of, note_of)
+  local out = {}
+  for item in family_order(runs, ids, asked) do
+    if has_key(item, "cycle") then
+      local names = {}
+      for id in item.cycle do push(names, display_name(st_of[id].types[id])) end
+      push(out, "")
+      push(out, "# Cycle: these types mention each other: " .. join(sort(names), ", "))
+    else
+      local ls = type_lines(st_of[item.id], item.id)
+      for i = 1, #ls do
+        push(out, ls[i])
+        if i == 2 and has_key(note_of, item.id) then push(out, note_of[item.id]) end
+      end
+    end
+  end
+  return out
+end
+
+-- Walks the modules `names` in the folder `root` as one family, as the
+-- header says, with `walk`'s settings, and gives `{lines, lost, refused}`.
+function family_walk(root, names, packages_arg, max_depth, settings)
+  if not has_key(settings, "trees") then settings.trees = {} end
+  local runs = {}
+  local lost = {}
+  local refused = {}
+  local said = {}
+  for m in names do
+    local r = walk(root, m, packages_arg, max_depth, settings)
+    for l in r.lost do
+      if not has_key(said, l) then push(lost, l) end
+      said[l] = true
+    end
+    for l in r.refused do
+      if not has_key(said, l) then push(refused, l) end
+      said[l] = true
+    end
+    if not has_key(r, "st") then return {lines = {}, lost = lost, refused = refused} end
+    push(runs, {module = m, r = r, st = r.st, start = r.start})
+  end
+  local own = {}
+  for run in runs do
+    for id in keys(run.st.asked) do own[id] = true end
+  end
+  local reach = {}
+  local st_of = {}
+  for run in runs do
+    for id in sort(keys(run.st.visited)) do
+      if not has_key(own, id) then
+        push_at(reach, id, run.module)
+        if not has_key(st_of, id) or run.st.depth_of[id] < st_of[id].depth_of[id] then st_of[id] = run.st end
+      end
+    end
+  end
+  local shared = {}
+  local note_of = {}
+  for id in sort(keys(reach)) do
+    if #reach[id] >= 2 then
+      push(shared, id)
+      note_of[id] = #reach[id] == #runs and "# shared by all " .. #runs or "# shared by " .. join(reach[id], ", ")
+    end
+  end
+  local leaves = {}
+  local stopped = {}
+  local beyond = {}
+  local vars = {}
+  local briefs = {}
+  for run in runs do
+    local st = run.st
+    for name in keys(st.leaves) do leaves[name] = true end
+    for id in keys(st.stopped) do stopped[display_name(st.types[id])] = true end
+    for id in keys(st.beyond) do
+      if not has_key(reach, id) and not has_key(own, id) then beyond[display_name(st.types[id])] = true end
+    end
+    for v in keys(st.vars) do
+      if not has_key(vars, v) then vars[v] = {} end
+      for t in keys(st.vars[v]) do vars[v][t] = true end
+    end
+    for id in keys(st.visited) do
+      if is_brief(st, id) and #members_of(st.files[st.types[id].path].nodes, st.types[id].at) > 0 then briefs[display_name(st.types[id])] = true end
+    end
+  end
+  local out = {"# The family " .. join(names, ", ") .. ": the types two or more members reach, once, then each member's types and signatures, then a table of their public names, to depth " .. max_depth .. ".", "# Builtin leaves, not expanded: " .. join(sort(keys(leaves)), ", ")}
+  if #keys(stopped) > 0 then push(out, "# Stopped, not expanded: " .. join(sort(keys(stopped)), "; ")) end
+  if #keys(beyond) > 0 then push(out, "# Beyond depth " .. max_depth .. ", not followed: " .. join(sort(keys(beyond)), "; ")) end
+  local var_notes = {}
+  for v in sort(keys(vars)) do push(var_notes, v .. " (" .. join(sort(keys(vars[v])), ", ") .. ")") end
+  if #var_notes > 0 then push(out, "# Type variables, not followed: " .. join(var_notes, "; ")) end
+  if #keys(briefs) > 0 then push(out, "# Brief, members by name at every depth: " .. join(sort(keys(briefs)), "; ")) end
+  push(out, "")
+  push(out, "## Shared: the " .. #shared .. " types two or more members reach, the most primitive first.")
+  for l in family_type_lines(runs, shared, {}, st_of, note_of) do push(out, l) end
+  local entries = {}
+  local unique_count = 0
+  local private_count = 0
+  for i = 1, #runs do
+    local run = runs[i]
+    local st = run.st
+    push(out, "")
+    push(out, "## " .. run.module .. "   (" .. run.start .. ")")
+    for l in run.r.lines do
+      if starts_with(l, "# Refused by") or starts_with(l, "# Imported") or starts_with(l, "# Public, but") or starts_with(l, "# Clients:") then push(out, l) end
+    end
+    local ids = {}
+    local mine = {}
+    for id in sort(keys(st.visited)) do
+      if has_key(st.asked, id) or (has_key(reach, id) and #reach[id] == 1) then
+        push(ids, id)
+        mine[id] = st
+        if not has_key(st.asked, id) then unique_count = unique_count + 1 end
+      end
+    end
+    for l in family_type_lines({run}, ids, st.asked, mine, {}) do push(out, l) end
+    local private = private_signatures(st, run.start)
+    private_count = private_count + private.count
+    push(out, "")
+    push(out, private.count == 0 and "# No private top-level functions in " .. run.module .. "." or "# The private top-level functions of " .. run.module .. ", in source order:")
+    for l in private.lines do push(out, l) end
+    for l in run.r.named_lines do push(out, l) end
+    push(out, "")
+    push(out, "# " .. run.module .. " alone: " .. sub(run.r.lines[#run.r.lines], 3))
+    for e in public_names(st, run.start) do
+      e.member = i
+      push(entries, e)
+    end
+  end
+  local tab = family_table(names, entries)
+  for l in tab.lines do push(out, l) end
+  push(out, "")
+  push(out, "# The family: " .. #runs .. " modules, " .. #shared .. " shared types, " .. unique_count .. " types only one member reaches, " .. #entries .. " public names in " .. tab.rows .. " table rows and " .. tab.unmatched .. " unmatched, " .. private_count .. " private functions")
+  return {lines = out, lost = lost, refused = refused}
+end
+
+function self_test()
+  local at = "cookbook:roc/plants/print_module_types/"
+  local failures = {}
+  -- Every walk shares one map of parsed files, since a run may start only 64
+  -- programs.
+  local trees = {}
+  local r = walk(at .. "chain/app", "Ride", "", 3, {trees = trees})
+  local ls = r.lines
+  local headers = headers_of(ls)
+  -- Speed is mentioned only by the constant `cruising`, so it joining the
+  -- order shows a constant's annotation is followed.
+  local want = {"Tagged, in module Leg", "Note", "Note.Mark", "Speed", "Unit.Metres", "Leg", "Leg.Stretch", "Ride", "Ride.Plan"}
+  check(failures, join(headers, " | ") == join(want, " | "), "order: got " .. join(headers, " | "))
+  check(failures, #r.lost == 0, "lost names: " .. join(r.lost, "; "))
+  check(failures, #r.refused == 0, "refused: " .. join(r.refused, "; "))
+  -- U32 appears only in the constant `count : U32`, so it is a leaf because
+  -- constants are printed and followed.
+  check(failures, has_line(ls, "# Builtin leaves, not expanded: F64, List, Str, U32"), "leaves line")
+  check(failures, has_line(ls, "# Type variables, not followed: a (Tagged, in module Leg)"), "type variable line")
+  check(failures, has_line(ls, "# Cycle: these types mention each other: Note, Note.Mark"), "cycle line")
+  check(failures, has_line(ls, "# 9 types, 4 functions, 4 constants, 5 modules, 4 leaves, 1 type variables, 0 beyond depth 3, 0 stopped, 1 members with no outside use, method calls 0 typed and 1 pooled, operators 0 typed and 0 pooled, named by 4 annotations and 1 types: 3 production, 2 test"), "counts line: " .. ls[#ls])
+  check(failures, not has_text(ls, "# Beyond depth"), "a beyond line when the walk reached every type")
+  check(failures, has_line(ls, "\t## How many rides a day allows."), "a constant's doc")
+  -- main.roc reads `Ride.count` in production, and Trip.roc in a value that
+  -- only another value reads, which only an expect reads.
+  check(failures, has_line(ls, "\tcount : U32   # constant; used by 2 files, 1 in tests only"), "a constant's annotation, marked, used in production and in a test-only value")
+  check(failures, has_line(ls, "\tcruising : Speed   # constant; no outside use"), "a constant of a type from another module, which nothing outside uses")
+  check(failures, not has_text(ls, "CONSTANT_MARKER") and not has_text(ls, "= 3"), "a constant's value is printed")
+  check(failures, not has_text(ls, "legs_of : Ride -> List(Leg)   # constant"), "a function is marked as a constant")
+  -- `is_eq : _` leaves its whole type to inference, so its annotation says
+  -- nothing of Ride's surface and is left out.
+  check(failures, not has_text(ls, "is_eq"), "an annotation of type `_` is printed")
+  check(failures, has_line(ls, "Ride :: { legs : List(Leg), name : Str }.{"), "a module type's definition opens its block")
+  -- Only gates/Check.roc, through its own header's `game` package, uses
+  -- `legs_of`.
+  check(failures, has_line(ls, "\tlegs_of : Ride -> List(Leg)   # used by 1 file, 1 in tests only"), "a function's annotation, used by a gates app alone")
+  check(failures, has_line(ls, "\t## The legs of a ride, in order."), "a function's doc")
+  -- Trip.roc names `noted` in an expect, and Log.roc calls `.noted()` on a
+  -- value of no known type.
+  check(failures, has_line(ls, "\tnoted : Ride, Note -> Str   # used by 1 file, 1 in tests only; by method name in 1 more"), "a type only an annotation mentions, its member used in an expect and by method name")
+  check(failures, has_line(ls, "# Public, but used only in this file: cruising"), "the members no other file uses")
+  local unused = walk(at .. "chain/app", "Ride", "", 3, {trees = trees, uses = false}).lines
+  check(failures, has_line(unused, "\tcount : U32   # constant") and has_line(unused, "\tlegs_of : Ride -> List(Leg)"), "uses=0 keeps the uses")
+  check(failures, not has_text(unused, "Public, but") and not has_text(unused, "outside use") and not has_text(unused, "used by"), "uses=0 keeps the summary")
+  check(failures, unused[#unused] == "# 9 types, 4 functions, 4 constants, 5 modules, 4 leaves, 1 type variables, 0 beyond depth 3, 0 stopped, named by 4 annotations and 1 types: 3 production, 2 test", "uses=0 counts line: " .. unused[#unused])
+  check(failures, has_line(ls, "Plan : [Short, Long(Leg.Stretch)]"), "a nested type, re-indented")
+  check(failures, has_line(ls, "## How long a ride's plan is."), "a nested type's doc")
+  check(failures, has_line(ls, "## A ride is a list of legs, with a name."), "a module type's doc from the file's opening comment")
+  check(failures, has_line(ls, "\tlabel : Tagged(Str),"), "a multiline definition, re-indented")
+  check(failures, has_line(ls, "#### Unit.Metres   (" .. at .. "chain/shared/Unit.roc:6)"), "a type from a package")
+  check(failures, not has_text(ls, "BODY_MARKER") and not has_text(ls, "ride.legs") and not has_text(ls, "|ride|"), "a body is printed")
+  check(failures, not has_text(ls, "helper") and not has_text(ls, "#### Hidden"), "a helper outside the block, or its type, is printed")
+
+  -- Unit.Metres is two steps from Ride, past the default full depth of 1, so
+  -- its members are one line of names; Leg, one step away, is whole.
+  check(failures, has_line(ls, "Metres :: F64.{ zero, plus }"), "a type past the full depth, its members by name")
+  check(failures, not has_text(ls, "plus : Metres, Metres -> Metres"), "a type past the full depth printed whole")
+  check(failures, has_line(ls, "\tlength_of : Leg -> Unit.Metres"), "a type at the full depth printed whole")
+  -- Metres is a unit, brief by default, so this full depth is shown with no
+  -- brief types.
+  local full = walk(at .. "chain/app", "Ride", "", 3, {trees = trees, full_depth = 3, brief = {}}).lines
+  check(failures, has_line(full, "Metres :: F64.{") and has_line(full, "\tplus : Metres, Metres -> Metres") and has_line(full, "\tzero : Metres   # constant"), "full_depth=3 prints a depth-2 type whole")
+  check(failures, not has_text(full, "Metres :: F64.{ zero"), "full_depth=3 still names a depth-2 type's members")
+  check(failures, full[#full] == ls[#ls], "the full depth changes the counts: " .. full[#full])
+
+  -- Speed and Unit.Metres are nominal types over F64 with no nested type, so
+  -- units: brief at every depth, Speed at depth 1 among them.
+  check(failures, has_line(ls, "Speed :: F64.{ still }"), "a unit at depth 1 printed whole")
+  check(failures, has_line(ls, "# Brief, members by name at every depth: Speed; Unit.Metres"), "the brief line")
+  check(failures, has_line(full, "Speed :: F64.{") and has_line(full, "\tstill : Speed   # constant") and not has_text(full, "# Brief"), "brief= empty prints a unit brief")
+  local deep = walk(at .. "chain/app", "Ride", "", 3, {trees = trees, full_depth = 3}).lines
+  check(failures, has_line(deep, "Metres :: F64.{ zero, plus }"), "a unit within the full depth printed whole")
+  local named_brief = walk(at .. "chain/app", "Ride", "", 3, {trees = trees, brief = parse_brief("Leg")}).lines
+  check(failures, has_line(named_brief, "}.{ length_of }") and has_line(named_brief, "# Brief, members by name at every depth: Leg"), "a type on the brief list by name printed whole")
+  check(failures, has_line(named_brief, "Speed :: F64.{") and has_line(named_brief, "\tstill : Speed   # constant"), "a unit printed brief without `units` on the list")
+  local asked_unit = walk(at .. "chain/app", "Speed", "", 3, {trees = trees}).lines
+  check(failures, has_line(asked_unit, "Speed :: F64.{") and not has_text(asked_unit, "# Brief"), "the asked module's unit printed brief")
+
+  -- Tally is imported for a body alone, and Hidden for a helper outside the
+  -- block; Leg, Note and Speed hold printed types.
+  check(failures, has_line(ls, "# Imported but not in any printed type: Hidden, Tally"), "the imports in no printed type")
+  -- Sample is used only by an expect and a value only it reads, annotation
+  -- and body; Tally by an expect and by `legs_of`; Hidden by a helper nothing
+  -- reads, which is no test's.
+  check(failures, has_line(ls, "# Imported for tests only: Sample"), "the imports only tests use")
+  -- A punned field, `{ shades }`, names a top-level value: `shades` reaches
+  -- production that way, so Shade is no test's, and `probed` reaches only an
+  -- expect that way, so Probe is.
+  local punned = walk(at .. "punned", "Pun", "", 3, {trees = trees}).lines
+  check(failures, has_line(punned, "# Imported for tests only: Probe"), "a punned field's uses: Shade's production value counted a test's, or Probe's test value production's")
+
+  -- Trip names Ride in its definition, in a member's annotation and in a
+  -- top-level helper's; its own `own_plan` mentions Trip's `Plan`, not Ride's.
+  check(failures, has_line(ls, "# Named by: the annotations and types in the other modules of " .. at .. "chain/app that mention Ride's types."), "the named-by heading")
+  check(failures, has_line(ls, "### Trip"), "the named-by module")
+  check(failures, has_line(ls, at .. "chain/app/Trip.roc:6: Trip :: { ride : Ride, legs : List(Leg) }"), "named by a type's definition")
+  check(failures, has_line(ls, at .. "chain/app/Trip.roc:9: Trip.plan_of : Trip -> Ride.Plan"), "named by a member's annotation")
+  check(failures, has_line(ls, at .. "chain/app/Trip.roc:20: (private) start : Ride -> Trip"), "named by a top-level helper, tagged private")
+  check(failures, has_line(ls, at .. "chain/app/Trip.roc:32: (test) sample_plan : Ride.Plan"), "named by a value only an expect reads, tagged test")
+  check(failures, has_line(ls, at .. "chain/app/gates/Check.roc:10: (test) check : Ride -> U64"), "named by a gates app, tagged test")
+  check(failures, not has_text(ls, "own_plan"), "named by another type of the same bare name")
+  local production = walk(at .. "chain/app", "Ride", "", 3, {trees = trees, named_by_production = true}).lines
+  check(failures, has_line(production, "# Named by: the annotations and types in the other modules of " .. at .. "chain/app that mention Ride's types. Production only: 2 test and 1 private entries left out."), "the production-only heading")
+  check(failures, has_line(production, at .. "chain/app/Trip.roc:6: Trip :: { ride : Ride, legs : List(Leg) }") and has_line(production, at .. "chain/app/Trip.roc:9: Trip.plan_of : Trip -> Ride.Plan"), "named_by=production leaves out an untagged entry")
+  check(failures, not has_text(production, "start : Ride") and not has_text(production, "sample_plan") and not has_text(production, "### Check"), "named_by=production lists a tagged entry")
+  check(failures, production[#production] == ls[#ls], "named_by=production changes the counts: " .. production[#production])
+  -- Ride's own `helper : Ride -> Hidden` would be listed were Ride read.
+  local own = false
+  for l in ls do
+    if starts_with(l, at .. "chain/app/Ride.roc:") then own = true end
+  end
+  check(failures, not own, "named by the asked module itself")
+  local unnamed = walk(at .. "chain/app", "Ride", "", 3, {trees = trees, named_by = false}).lines
+  check(failures, not has_text(unnamed, "Named by") and not has_text(unnamed, "Trip.roc"), "named_by=0 keeps the section")
+  check(failures, unnamed[#unnamed] == "# 9 types, 4 functions, 4 constants, 5 modules, 4 leaves, 1 type variables, 0 beyond depth 3, 0 stopped, 1 members with no outside use, method calls 0 typed and 1 pooled, operators 0 typed and 0 pooled", "named_by=0 counts line: " .. unnamed[#unnamed])
+  -- Lost names a module no other file names, and its type has no members.
+  local alone = walk(at .. "unresolved", "Lost", "", 3, {trees = trees}).lines
+  check(failures, has_line(alone, "# Named by: no annotation or type in the other modules of " .. at .. "unresolved mentions Lost's types."), "the named-by line with none")
+  check(failures, not has_text(alone, "Public, but"), "the unused-members line with no members")
+  check(failures, not has_text(alone, "# Imported for tests only"), "a tests-only line with no import only tests use")
+
+  -- Note stopped: named once, not printed, and Note.Mark, reached only
+  -- through it, never read. Ride's own Ride.Plan is never stopped.
+  local stopped = walk(at .. "chain/app", "Ride", "", 3, {trees = trees, stops = {"Note", "Ride.Plan"}}).lines
+  check(failures, has_line(stopped, "# Stopped, not expanded: Note"), "the stopped line")
+  check(failures, not has_text(stopped, "#### Note") and not has_text(stopped, "Mark"), "a stopped type expanded")
+  check(failures, has_text(stopped, "#### Ride.Plan"), "an asked type stopped")
+  check(failures, has_line(stopped, "# Imported but not in any printed type: Hidden, Tally"), "a stopped import named as unprinted")
+  check(failures, stopped[#stopped] == "# 7 types, 4 functions, 4 constants, 4 modules, 4 leaves, 1 type variables, 0 beyond depth 3, 1 stopped, 1 members with no outside use, method calls 0 typed and 1 pooled, operators 0 typed and 0 pooled, named by 4 annotations and 1 types: 3 production, 2 test", "stopped counts line: " .. stopped[#stopped])
+  local by_module = walk(at .. "chain/app", "Ride", "", 3, {trees = trees, stops = parse_stops(" Leg.* , ")}).lines
+  check(failures, has_line(by_module, "# Stopped, not expanded: Leg; Leg.Stretch"), "a module's types stopped by `.*`: got " .. join(headers_of(by_module), " | "))
+  check(failures, not has_text(by_module, "Unit.Metres") and not has_text(by_module, "Tagged"), "a type followed through a stopped one")
+  check(failures, not has_text(ls, "# Stopped"), "a stopped line with nothing stopped")
+  check(failures, #parse_stops("") == 0, "stop= empty stops something")
+  local unstopped = walk(at .. "chain/app", "Ride", "", 3, {trees = trees, stops = parse_stops("")}).lines
+  check(failures, has_text(unstopped, "#### Note   (") and not has_text(unstopped, "# Stopped"), "with no stops, Note is expanded")
+  check(failures, not has_text(ls, "#### Unit "), "a module type nobody mentions is printed")
+  check(failures, not has_line(ls, "#### Short") and not has_text(ls, "Long,"), "a tag is read as a type")
+
+  -- Ride's deepest types, Note.Mark, Tagged and Unit.Metres, are two steps
+  -- from it, so depth 1 names them and prints the rest, and Note's cycle
+  -- through Note.Mark is gone with it.
+  local one = walk(at .. "chain/app", "Ride", "", 1, {trees = trees}).lines
+  check(failures, join(headers_of(one), " | ") == "Leg | Leg.Stretch | Note | Speed | Ride | Ride.Plan", "depth 1 order: got " .. join(headers_of(one), " | "))
+  check(failures, has_line(one, "# Beyond depth 1, not followed: Note.Mark; Tagged, in module Leg; Unit.Metres"), "depth 1 beyond line")
+  check(failures, has_line(one, "# 6 types, 3 functions, 3 constants, 4 modules, 4 leaves, 0 type variables, 3 beyond depth 1, 0 stopped, 1 members with no outside use, method calls 0 typed and 1 pooled, operators 0 typed and 0 pooled, named by 4 annotations and 1 types: 3 production, 2 test"),"depth 1 counts line: " .. one[#one])
+  check(failures, not has_text(one, "# Cycle"), "a cycle through a type beyond the depth")
+  check(failures, has_line(one, "\tlabel : Tagged(Str),"), "a type at the last depth printed whole")
+  -- Depth 0 is the module's own types, and Speed's F64 is no longer read.
+  local zero = walk(at .. "chain/app", "Ride", "", 0, {trees = trees}).lines
+  check(failures, join(headers_of(zero), " | ") == "Ride | Ride.Plan", "depth 0 order: got " .. join(headers_of(zero), " | "))
+  check(failures, has_line(zero, "# Beyond depth 0, not followed: Leg; Leg.Stretch; Note; Speed"), "depth 0 beyond line")
+  check(failures, has_line(zero, "# Builtin leaves, not expanded: List, Str, U32"), "depth 0 leaves line")
+
+  -- Width has members named as Span's. Typed.roc calls each Span member
+  -- below on a Span through one typing rule; OtherType.roc calls `plus`,
+  -- `minus` and `>` on Widths alone, and Width.roc's own `+`, `-` and `>`
+  -- are on the F64s its patterns unwrap; Pooled.roc calls `plus` and applies
+  -- `<=` on values of no known type.
+  local m = walk(at .. "methods", "Span", "", 3, {trees = trees, named_by = false}).lines
+  check(failures, has_line(m, "\tplus : Span, Span -> Span   # used by 1 file; by method name in 1 more"), "a field's receiver typed, and an untyped one pooled")
+  check(failures, has_line(m, "\tscaled : Span, F64 -> Span   # used by 1 file"), "a local from a qualified call typed")
+  check(failures, has_line(m, "\thalved : Span -> Span   # used by 1 file"), "a qualified constant typed")
+  check(failures, has_line(m, "\tdoubled : Span -> Span   # used by 1 file"), "a method's result typed")
+  check(failures, has_line(m, "\tflipped : Span -> Span   # used by 1 file"), "a constant of the file typed")
+  check(failures, has_line(m, "\tminus : Span, Span -> Span   # no outside use") and has_line(m, "\tis_gt : Span, Span -> Bool   # no outside use"), "a call on another type counted, through a parameter, an alias, a field, an operator or a nominal pattern")
+  check(failures, has_line(m, "\tis_lt : Span, Span -> Bool   # used by 1 file"), "an operator on an alias of the type")
+  check(failures, has_line(m, "\tis_gte : Span, Span -> Bool   # used by 1 file"), "a comparison typed by its right side")
+  check(failures, has_line(m, "\tis_lte : Span, Span -> Bool   # used by operator only, untyped, in 1 file"), "an untyped operator pooled")
+  check(failures, has_line(m, "# Public, but used only in this file: minus, is_gt"), "the members used only here, beside calls typed elsewhere and untyped operators")
+  check(failures, m[#m] == "# 1 types, 11 functions, 1 constants, 1 modules, 2 leaves, 0 type variables, 0 beyond depth 3, 0 stopped, 2 members with no outside use, method calls 9 typed and 1 pooled, operators 6 typed and 1 pooled", "methods counts line: " .. m[#m])
+
+  -- The package pkg's Dot: app one names it `kit` and uses shift and scale;
+  -- app two names it `geo`, and its Helper, with no header, uses scale
+  -- through the folder's app; pkg's own Grid uses origin.
+  local cl_at = at .. "clients/"
+  local c = walk(cl_at .. "pkg", "Dot", "", 3, {trees = trees, clients = cl_at .. "apps/*"})
+  local cls = c.lines
+  check(failures, #c.lost == 0 and #c.refused == 0, "clients: lost or refused: " .. join(c.lost, "; ") .. join(c.refused, "; "))
+  check(failures, has_line(cls, "# Clients: 3 files in 2 apps, 2 importing " .. cl_at .. "pkg/Dot.roc"), "the clients line")
+  check(failures, has_line(cls, "\tshift : Dot -> Dot   # used by 1 file"), "a member only one client app uses, through its alias")
+  check(failures, has_line(cls, "\tscale : Dot -> Dot   # used by 2 files in 2 apps"), "a member two client apps use, one through its folder's header, with its apps")
+  check(failures, has_line(cls, "\torigin : Dot   # constant; used by 1 file"), "a member the package's own file uses, with clients")
+  check(failures, has_line(cls, "# Public, but used only in this file: hidden"), "the members used only here, with clients")
+  check(failures, has_line(cls, cl_at .. "apps/one/main.roc:7: (private) moved : Dot -> Dot") and has_line(cls, cl_at .. "apps/two/Helper.roc:8: Helper.far : Dot -> Dot"), "named by the clients' signatures")
+  check(failures, has_line(cls, "# Named by: the annotations and types in the other modules of " .. cl_at .. "pkg and the clients that mention Dot's types."), "the named-by heading with clients")
+  local alone_pkg = walk(cl_at .. "pkg", "Dot", "", 3, {trees = trees}).lines
+  check(failures, has_line(alone_pkg, "# Public, but used only in this file: shift, scale, hidden"), "without clients, the members only clients use")
+  check(failures, has_line(alone_pkg, "\tscale : Dot -> Dot   # no outside use") and not has_text(alone_pkg, "apps/") and not has_text(alone_pkg, "# Clients"), "without clients, a client counted")
+  -- A root written from the data root, beside clients through a mount, gives
+  -- the asked file two names, and no client imports the one the walk has.
+  local unlike = walk("cookbook/roc/plants/print_module_types/clients/pkg", "Dot", "", 3, {trees = trees, clients = cl_at .. "apps/*"}).lost
+  check(failures, #unlike == 1 and has_text(unlike, "clients=: none of the 3 client files imports any of the root's files, such as cookbook/roc/plants/print_module_types/clients/pkg/Dot.roc"), "clients named unlike the root, got " .. join(unlike, "; "))
+  -- The app grid_only imports the package's Grid and not Dot, which is no
+  -- mismatch: it walks cleanly, with no client importing Dot.
+  local others = walk(cl_at .. "pkg", "Dot", "", 3, {trees = trees, clients = cl_at .. "others/*"})
+  check(failures, #others.lost == 0 and #others.refused == 0, "a client importing other root modules: lost or refused: " .. join(others.lost, "; ") .. join(others.refused, "; "))
+  check(failures, has_line(others.lines, "# Clients: 1 file in 1 app, 0 importing " .. cl_at .. "pkg/Dot.roc"), "the clients line with none importing the asked module")
+  -- Beside the package beside/lib are two apps that use it, walker and
+  -- dot_widget. Clients that leave walker out, or no clients, would read
+  -- `step`, which only walker uses, as unused, so the walk fails naming the
+  -- apps left out; with both, each member is used once.
+  local bs = at .. "beside/"
+  local widgets_only = walk(bs .. "lib", "Spot", "", 3, {trees = trees, clients = bs .. "*_widget"}).lost
+  check(failures, #widgets_only == 1 and has_text(widgets_only, "clients=: the apps beside " .. bs .. "lib that use it as a package and hold no client file, whose uses are not counted: " .. bs .. "walker; name every app that uses it, as clients=" .. bs .. "*"), "an app beside the package left out of the clients, got " .. join(widgets_only, "; "))
+  local no_clients = walk(bs .. "lib", "Spot", "", 3, {trees = trees}).lost
+  check(failures, #no_clients == 1 and has_text(no_clients, "not counted: " .. bs .. "dot_widget, " .. bs .. "walker;"), "the apps beside the package with no clients, got " .. join(no_clients, "; "))
+  local every = walk(bs .. "lib", "Spot", "", 3, {trees = trees, clients = bs .. "*"})
+  check(failures, #every.lost == 0 and #every.refused == 0, "every app beside the package a client: lost or refused: " .. join(every.lost, "; ") .. join(every.refused, "; "))
+  check(failures, has_line(every.lines, "\tstep : Spot -> Spot   # used by 1 file") and has_line(every.lines, "\thome : Spot   # constant; used by 1 file"), "every app beside the package a client, a member each app alone uses")
+  local unread = walk(bs .. "lib", "Spot", "", 3, {trees = trees, uses = false, named_by = false}).lost
+  check(failures, #unread == 0, "uses=0 named_by=0 with apps beside the package, which reads no other file, got " .. join(unread, "; "))
+
+  refused_checks(failures, walk(at .. "refused", "Coin", "", 3, {trees = trees}), ls, at)
+  local lost = walk(at .. "unresolved", "Lost", "", 3, {trees = trees}).lost
+  check(failures, #lost == 2, "two lost names, got " .. #lost .. ": " .. join(lost, "; "))
+  check(failures, has_text(lost, "`Nowhere.Thing`: `Nowhere` is no imported module"), "a name of no import is lost")
+  check(failures, has_text(lost, "`Gone`: no file " .. at .. "unresolved/Gone.roc"), "a missing module is lost")
+  local moved = walk(at .. "chain/app", "Ride", "shared=" .. at .. "chain/nowhere", 3, {trees = trees}).lost
+  check(failures, #moved == 2 and has_text(moved, "Leg.roc:5: `Unit.Metres`: no file " .. at .. "chain/nowhere/Unit.roc"), "packages= overrides the app's folder, got " .. join(moved, "; "))
+  local family_at = "cookbook:roc/plants/print_module_types/family"
+  family_checks(failures, family_walk(family_at, parse_modules("OakSighting, PineSighting,ElmSighting"), "", 3, {trees = trees}), family_at)
+  for f in failures do print("FAIL: " .. f) end
+  if #failures > 0 then fail("print_module_types: " .. #failures .. " self-test checks failed") end
+  print("print_module_types: self test passed")
+  return nil
+end
+
+if SELF_TEST then
+  self_test()
+else
+  local depth_arg = arg("max_depth", tostring(WALK_MAX_DEPTH))
+  local max_depth = parse_int(depth_arg)
+  if max_depth == nil or max_depth < 0 then fail("print_module_types: max_depth=" .. depth_arg .. " is no count of steps, such as 3") end
+  local full_arg = arg("full_depth", tostring(WALK_FULL_DEPTH))
+  local full_depth = parse_int(full_arg)
+  if full_depth == nil or full_depth < 0 then fail("print_module_types: full_depth=" .. full_arg .. " is no count of steps, such as 1") end
+  local named_by_arg = arg("named_by", "1")
+  if named_by_arg ~= "0" and named_by_arg ~= "1" and named_by_arg ~= "production" then fail("print_module_types: named_by=" .. named_by_arg .. " is none of 0, 1 and production") end
+  local uses_arg = arg("uses", "1")
+  if uses_arg ~= "0" and uses_arg ~= "1" then fail("print_module_types: uses=" .. uses_arg .. " is neither 0 nor 1") end
+  local settings = {stops = parse_stops(arg("stop", join(WALK_STOP, ","))), brief = parse_brief(arg("brief", join(WALK_BRIEF, ","))), full_depth = full_depth, uses = uses_arg == "1", named_by = named_by_arg ~= "0", named_by_production = named_by_arg == "production", clients = arg("clients", "")}
+  local modules_arg = arg("modules", "")
+  if modules_arg ~= "" and arg("module", "") ~= "" then fail("print_module_types: module= and modules= both given; name one module, or a family") end
+  local r = modules_arg == "" and walk(arg("root", "."), arg("module", ""), arg("packages", ""), max_depth, settings) or family_walk(arg("root", "."), parse_modules(modules_arg), arg("packages", ""), max_depth, settings)
+  print(join(r.lines, "\n"))
+  for l in r.lost do print("lost: " .. l) end
+  for l in r.refused do print("refused: " .. l) end
+  if #r.lost > 0 or #r.refused > 0 then fail("print_module_types: " .. #r.lost .. " names resolve to no type and " .. #r.refused .. " files don't parse (named above); every other type is printed") end
+end

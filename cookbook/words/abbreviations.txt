@@ -1,5 +1,5 @@
 -- Abbreviations a Roc name should spell out, one a line. Read by
--- plain_names.shale, whose `abbreviation` check reports a name holding one.
+-- find_unclear_names.shale, whose `abbreviation` check reports a name holding one.
 accel
 col
 dist

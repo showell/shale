@@ -1,6 +1,6 @@
 -- Vague words: a name of nothing but these says nothing of what it does
 -- (`handle_data`, `process!`, `doIt`). The name hunts' `vague` check, in
--- cookbook/roc/name_hunt.shale and cookbook/zig/name_hunt.shale; a lone
+-- cookbook/roc/hunt_names.shale and cookbook/zig/hunt_names.shale; a lone
 -- entry point (each hunt's ENTRY: `handle`, `run`) is exempt there.
 -- One word a line; `--` starts a note.
 handle

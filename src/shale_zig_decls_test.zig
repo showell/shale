@@ -34,7 +34,7 @@ test "zig_decls: the linux_host split's file: a pub fn with its doc, a struct li
         "const W = \"" ++ webbox_root ++ "\"\n" ++
             \\local r = must(run({"git", "-C", W, "show", "589837e^:src/linux_host.zig"}, {timeout_ms = 30000, whole = 1048576}))
             \\-- The history is 0.16 source; Zig 0.17 removed `**` on arrays and strings,
-            \\-- so its four uses become what cookbook/zig17/array_mult.shale writes, each
+            \\-- so its four uses become what cookbook/zig17/rewrite_array_mult.shale writes, each
             \\-- on its own line (line numbers kept).
             \\function to17(src)
             \\  for p in {{"\"x\" ** 100", "&@as([100]u8, @splat('x'))"}, {"\"x\" ** 40", "&@as([40]u8, @splat('x'))"}, {"\"u\" ** 2000000", "&@as([2000000]u8, @splat('u'))"}, {"&([_]u8{'x'} ** n)", "&(@as([n]u8, @splat('x')))"}} do src = substitute(src, p[1], p[2], {missing_ok = true}) end

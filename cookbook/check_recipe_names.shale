@@ -30,7 +30,7 @@
 -- last line; set it true once the rename sweep has made the cookbook pass, and
 -- `zig build test` (its `cookbook-test`) fails on any break from then on.
 
-use("cookbook:roc/findings.shale")
+use("cookbook:findings.shale")
 
 const COOKBOOK_ENFORCED = false
 
@@ -43,11 +43,11 @@ const PLANT_VERDICTS = {
   {"report_rows.shale", "runnable", "", ""},
   {"check_findings.shale", "library", "library_named_like_command", "findings_check.shale"},
   {"disk_space.shale", "runnable", "runnable_without_verb", "find_disk_space.shale"},
-  {"name_hunt.shale", "runnable", "runnable_without_verb", "hunt_name.shale"},
+  {"hunt_names.shale", "runnable", "runnable_without_verb", "hunt_name.shale"},
   {"totals.shale", "runnable", "runnable_without_verb", "<verb>_totals.shale"},
   {"checkDisk.shale", "runnable", "not_snake_case", "check_disk.shale"},
   {"Disk-Space.shale", "runnable", "not_snake_case,runnable_without_verb", "find_disk_space.shale"},
-  {"negatives.shale", "runnable", "runnable_without_verb", "find_negatives.shale (taken)"},
+  {"find_negatives.shale", "runnable", "runnable_without_verb", "find_negatives.shale (taken)"},
 }
 
 -- The verbs of the table at `path`, as a set: one a line, `#` lines and blank

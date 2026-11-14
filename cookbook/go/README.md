@@ -16,8 +16,8 @@ files (`**/*.go` by default; a glob with `*` in it goes on stdin with
 `--args-stdin`), `tests=0` leaves out the `_test.go` files, and
 `self_test=1`, from the shale checkout, runs the recipe over its plants:
 
-    cd <repo> && shale <shale>/cookbook/go/name_hunt.shale tests=0
-    cd <shale> && shale cookbook:go/name_hunt.shale self_test=1
+    cd <repo> && shale <shale>/cookbook/go/hunt_names.shale tests=0
+    cd <shale> && shale cookbook:go/hunt_names.shale self_test=1
 
 Each finding is one line that starts `path:line:` and names its check,
 between two copies of a summary of counts. A finding is a question for a
@@ -28,7 +28,7 @@ repeats them.
 
 ## Checks
 
-- [name_hunt.shale](name_hunt.shale) looks for awkward names, by the word
+- [hunt_names.shale](hunt_names.shale) looks for awkward names, by the word
   tables the Zig and Roc name hunts read (`cookbook/words/`): a name of
   nothing but vague words (`vague`: `data`, `handleData`, `info`), a
   question that gives no bool or a bool named as a state (`question`), a
@@ -36,12 +36,12 @@ repeats them.
   wrong type (`name_type`), and a function that starts with a preposition
   and hides what it gives (`phrase_name`: `inView`, where `treesInView`
   names the thing).
-- [nest_depth.shale](nest_depth.shale) finds calls nested three or more
+- [find_deep_calls.shale](find_deep_calls.shale) finds calls nested three or more
   deep, like `f(g(h(x)))`, which read inside out. A method chain, an
   operator, a selector and a conversion the syntax shows (`string(b)`) add
   no level; a function literal and a composite literal start again. `min=`
   sets the depth to report.
-- [smells.shale](smells.shale) finds long functions (`long_func`, `long=`
+- [find_smells.shale](find_smells.shale) finds long functions (`long_func`, `long=`
   80 lines), statements nested `deep=` 4 blocks deep (`deep_block`; an
   `else if` is no level), functions of `params=` 6 parameters or more
   (`many_params`) and `bool` parameters (`bool_param`).
@@ -68,8 +68,8 @@ plant fires could be blind. `zig build cookbook-test` runs them all.
   kids by their `role`; `source_of(lines, node)`, a node's text;
   `go_words(name)`, a Go name's words (`parseURLPath` is `parse`, `url`,
   `path`); `go_word_table(file)`; and `check_want_marks`, the self-test.
-- The recipes print with [roc/findings.shale](../roc/findings.shale)'s
-  `print_findings`, which is no Roc's own.
+- The recipes print with [findings.shale](../findings.shale)'s
+  `print_findings`, which the whole cookbook shares.
 
 ## Why `go_tree` is a builtin
 

@@ -9,20 +9,20 @@ every repo, kept as the shape of the next upgrade. Each is tested to parse
 On a branch, with the new compiler beside the old:
 
 1. **Count** what the repo uses that 0.17 changed:
-   `shale <shale>/cookbook/zig17/census.shale only=<repo>` (from the folder
+   `shale <shale>/cookbook/zig17/count_upgrade_changes.shale only=<repo>` (from the folder
    that holds the repos). The counts are text, so an upper bound: many of
    0.17's renames keep the old name as a deprecated alias.
 2. **Run the scripted fixes**, then `zig fmt` over the `.zig` files only
    (`zig fmt .` formats `.zon` too, and can change a generated file's hash
    under a golden test):
-   - [array_mult.shale](array_mult.shale): `[_]T{v} ** N` becomes `@splat(v)`,
+   - [rewrite_array_mult.shale](rewrite_array_mult.shale): `[_]T{v} ** N` becomes `@splat(v)`,
      and a repeated one-character string `"x" ** N` becomes
      `&@as([N]u8, @splat('x'))` (0.17 removed both). What it can't type is
      listed.
-   - [renames.shale](renames.shale): what 0.17 removed or reshaped, each a
+   - [rewrite_renamed_calls.shale](rewrite_renamed_calls.shale): what 0.17 removed or reshaped, each a
      sure rewrite (calls, the optimize tags, `b.args`, `pathFromRoot` and
      `build_root`, bitsets' `initEmpty`/`initFull`, type info's fields).
-   - [has_decl.shale](has_decl.shale) (`fix=yes`): every declaration of a
+   - [find_hidden_decls.shale](find_hidden_decls.shale) (`fix=yes`): every declaration of a
      name some `@hasDecl` asks about, made `pub` (0.17's `@hasDecl` sees
      only `pub`; an optional check then turns its feature off silently).
      Its names are plain words, so a builtin or local of the same name is

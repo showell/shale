@@ -1,4 +1,4 @@
--- The Roc recipes (name_hunt, nest_depth and the rest) check every .roc
+-- The Roc recipes (hunt_names, find_deep_calls and the rest) check every .roc
 -- file in a tree, and some files may not parse. This library lets a recipe
 -- check the files that do parse, print what it found, and then fail with a
 -- list of the files it couldn't parse and why.

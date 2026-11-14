@@ -136,9 +136,9 @@ expressions, not Lua's `%d`), are in
   Linux prelude (`run`, jobs, git, http) and the traps.
 - **[cookbook/](cookbook)**, recipes to run or copy: `look.shale` (find,
   or show line ranges), `run.shale` (a program's verdict and tail),
-  `zig_build.shale`, `rename_words.shale`, `syntax.shale`, `http.shale`.
+  `run_zig_build.shale`, `rename_words.shale`, `check_syntax.shale`, `fetch_page.shale`.
   Hunts over a Zig tree are in [cookbook/zig/](cookbook/zig/README.md)
-  (`seams`, `smells`, `dead`, `clones`, ...), Roc's in
+  (`find_seams`, `find_smells`, `find_dead_code`, `find_clones`, ...), Roc's in
   [cookbook/roc/](cookbook/roc/README.md), and Go's in
   [cookbook/go/](cookbook/go/README.md).
 - **[The tutorial](https://lynrummy.com/shale/tutorial.html)**: fifteen
@@ -231,7 +231,7 @@ last lines and fails when they fail.
 
 Every gate escape (`# want:`) lands in `~/.local/state/shale/wants.tsv`: the
 list of what Shale should learn next
-([docs/SHALE-WANTS.md](docs/SHALE-WANTS.md) is ours). `cookbook/wants.shale`
+([docs/SHALE-WANTS.md](docs/SHALE-WANTS.md) is ours). `cookbook/read_wants.shale`
 reads it back, given a `state = ~/.local/state/shale ro` mount.
 
 ### Recipes for any project

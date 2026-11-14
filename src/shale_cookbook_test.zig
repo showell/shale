@@ -162,7 +162,7 @@ test "preludes: each one compiled whole, its lines with code written for tools/c
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = ".zig-cache/coverage/prelude_code.txt", .data = out.items });
 }
 
-test "cookbook: syntax.shale gives each file one verdict by its kind, a good file ok and a broken one its first error, then PASS or FAIL" {
+test "cookbook: check_syntax.shale gives each file one verdict by its kind, a good file ok and a broken one its first error, then PASS or FAIL" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     const io = threaded.io();
@@ -210,7 +210,7 @@ test "cookbook: syntax.shale gives each file one verdict by its kind, a good fil
     // The zig that builds this test, never the one on PATH.
     const zig_arg = try std.fmt.allocPrint(a, "zig={s}", .{@import("shale_test_options").zig});
     defer a.free(zig_arg);
-    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/syntax.shale", files_arg, shale_arg, zig_arg } });
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/check_syntax.shale", files_arg, shale_arg, zig_arg } });
     defer a.free(r.stdout);
     defer a.free(r.stderr);
     errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
@@ -233,7 +233,7 @@ test "cookbook: syntax.shale gives each file one verdict by its kind, a good fil
     try testing.expect(std.mem.indexOf(u8, r.stderr, "syntax: FAIL") != null);
 }
 
-test "cookbook: sealed.shale passes this tree's seals, and a plant that sets one outside its file fails by its line" {
+test "cookbook: check_seals.shale passes this tree's seals, and a plant that sets one outside its file fails by its line" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     const io = threaded.io();
@@ -241,7 +241,7 @@ test "cookbook: sealed.shale passes this tree's seals, and a plant that sets one
     const shale_exe = @import("shale_test_options").shale;
     // This tree: a script's `Path` is made by `pathArg` alone (metal-vmm QUEUE 250).
     {
-        const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "cookbook/sealed.shale", "dir=src", "seals=path_seal:src/script/builtins_store.zig,path_full:src/script/builtins_store.zig,path_rel:src/script/builtins_store.zig" } });
+        const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "cookbook/check_seals.shale", "dir=src", "seals=path_seal:src/script/builtins_store.zig,path_full:src/script/builtins_store.zig,path_rel:src/script/builtins_store.zig" } });
         defer a.free(r.stdout);
         defer a.free(r.stderr);
         errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
@@ -261,7 +261,7 @@ test "cookbook: sealed.shale passes this tree's seals, and a plant that sets one
     try tmp.dir.writeFile(io, .{ .sub_path = "http.zig", .data = "const h = .{ .name = \"location\", .value = \"/\" };\n" });
     const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
     defer a.free(root);
-    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/sealed.shale", "dir=.", "seals=id_seal:id.zig,text:id.zig", "headers=location:http.zig" } });
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/check_seals.shale", "dir=.", "seals=id_seal:id.zig,text:id.zig", "headers=location:http.zig" } });
     defer a.free(r.stdout);
     defer a.free(r.stderr);
     errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });

@@ -1,4 +1,4 @@
-# `zig build test`, on demand only: dispatched by cookbook/gh_build.shale
+# `zig build test`, on demand only: dispatched by cookbook/build_on_github.shale
 # (or `gh workflow run test.yml -f ref=<ref>`), never on a push or a PR.
 name: test
 
@@ -100,7 +100,7 @@ jobs:
           CGO_ENABLED=0 go build -trimpath -o ~/tools/go-ast/bin/go-ast .
           test -x ~/tools/go-ast/bin/go-ast
 
-      # methods.shale's typed plant reads Roc's checker's types from
+      # rewrite_method_calls.shale's typed plant reads Roc's checker's types from
       # ~/tools/roc-types/bin/roc-types: the asset built by roc-types.yml from
       # Shale's tools/roc_types, its URL and sha256 read from
       # tools/roc_types/release (install.shale's too), the checksum checked.
@@ -118,8 +118,8 @@ jobs:
           tar -xzf /tmp/roc-types.tar.gz -C ~/tools/roc-types
           test -x ~/tools/roc-types/bin/roc-types
 
-      # The Roc rewrites' self-tests (cookbook/roc/methods.shale and
-      # stack.shale) are judged by the compiler itself, the same release's
+      # The Roc rewrites' self-tests (cookbook/roc/rewrite_method_calls.shale and
+      # check_stacking.shale) are judged by the compiler itself, the same release's
       # (70 MB), tools:roc-nightly-2026-10-30-0602c5f/roc (each recipe's
       # SELF_TEST_PIN).
       - name: Install Roc

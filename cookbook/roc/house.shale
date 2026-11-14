@@ -2,12 +2,12 @@
 -- a fault in anyone else's code. Our guides hold our trees to them, and they
 -- stay on by default. Another project's guide may say otherwise: Luke Boswell's
 -- roc-style.md asks for `if (x) a else b` where ours has braces. `house=0` on a
--- recipe leaves its house checks out, and cookbook/roc/foreign.shale runs every
+-- recipe leaves its house checks out, and cookbook/roc/check_foreign_code.shale runs every
 -- recipe that way.
 --
 --   use("cookbook:roc/house.shale")
---   house_leaves_out("stack", kind)    whether `house=0` leaves this check out
---   house_note("stack")                what the summary says when it does
+--   house_leaves_out("check_stacking", kind)    whether `house=0` leaves this check out
+--   house_note("check_stacking")                what the summary says when it does
 --
 -- A check belongs here when a careful project could fairly do the opposite, so
 -- a finding says more about our habits than about their code. A check that
@@ -15,12 +15,12 @@
 -- does not.
 
 const HOUSE_CHECKS = {
-  boundaries = {"single"},
-  name_hunt = {"bare_participle", "container", "phrase_name", "singular_list", "where_name", "world_verb"},
-  nest_depth = {"nested"},
-  parens = {"paren_if", "lambda_if"},
-  plain_names = {"abbreviation"},
-  stack = {"stack", "unstack", "long", "wide string"},
+  check_boundaries = {"single"},
+  hunt_names = {"bare_participle", "container", "phrase_name", "singular_list", "where_name", "world_verb"},
+  find_deep_calls = {"nested"},
+  find_extra_parens = {"paren_if", "lambda_if"},
+  find_unclear_names = {"abbreviation"},
+  check_stacking = {"stack", "unstack", "long", "wide string"},
 }
 
 function house_is_off()

@@ -2,11 +2,11 @@
 -- exit when there are findings, and a self-test that proves it.
 --
 --   use("cookbook:roc/gate_recipe.shale")
---   local verdict = verdict_of("vocabulary", CHECKS, report, #paths)
+--   local verdict = verdict_of("check_vocabulary", CHECKS, report, #paths)
 --   print_findings(verdict.summary, verdict.found)
---   fail_if_refused("vocabulary", parsed.refused)
+--   fail_if_refused("check_vocabulary", parsed.refused)
 --   return verdict, and `fail(verdict.summary)` at the script's top level
---   check_plants("vocabulary", "cookbook:roc/vocabulary.shale", CHECKS, rows)
+--   check_plants("check_vocabulary", "cookbook:roc/check_vocabulary.shale", CHECKS, rows)
 --
 -- The self-test runs the recipe itself as a child program, once for each row
 -- of a table, so each row judges the exit code and the printed findings

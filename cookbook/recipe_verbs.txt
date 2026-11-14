@@ -34,9 +34,11 @@ measure
 move
 parse
 patch
+plan
 post
 print
 prune
+rank
 read
 rename
 replace
@@ -49,10 +51,12 @@ show
 sort
 split
 strip
+test
 tidy
 trace
 verify
 wait
 walk
 watch
+wrap
 write

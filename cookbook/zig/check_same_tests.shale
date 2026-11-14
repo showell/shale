@@ -1,0 +1,72 @@
+-- This script checks that a refactor kept a checkout's test suite: every test
+-- passes, and the same tests run, whichever file holds them. It compares test
+-- names against a saved baseline, leaving out the module part of each name
+-- (before ".test."), since a moved test's module changes.
+--
+-- Run it from the checkout whose suite it is (zig-webbox's or shale's), once
+-- before the refactor and once after:
+--   shale <shale>/cookbook/zig/check_same_tests.shale mode=baseline
+--   shale <shale>/cookbook/zig/check_same_tests.shale mode=check
+-- The baseline holds one test's full name a line.
+
+const MODE = arg("mode", "")
+const BASELINE = "zig-out/refactor-baseline.txt"
+
+function without_module(test_name)
+  local match = re_find(test_name, "\\.test\\.(.*)$")
+  if match == nil then return test_name end
+  return match.group
+end
+
+function test_names_in(build_output)
+  local names = {}
+  for line in lines(build_output) do
+    local timing = re_find(line, "^ *[0-9]+\\.[0-9]+ s  (.*)$")
+    if timing ~= nil and re_find(timing.group, "^total, ") == nil then push(names, timing.group) end
+  end
+  sort(names)
+  return names
+end
+
+function save_baseline(names)
+  replace(BASELINE, join(names, "\n") .. "\n")
+  print("same tests: baseline of " .. #names .. " tests in " .. BASELINE)
+end
+
+function check_against_baseline(names)
+  local current = {}
+  for name in names do push(current, without_module(name)) end
+  local expected = {}
+  for name in lines(read(BASELINE)) do if name ~= "" then push(expected, without_module(name)) end end
+  sort(expected)
+
+  -- A test name can occur more than once, so each one is counted.
+  local unmatched = {}
+  for name in current do incr(unmatched, name) end
+  local missing = 0
+  for name in expected do
+    if get(unmatched, name, 0) == 0 then
+      print("missing: " .. name)
+      missing = missing + 1
+    else
+      unmatched[name] = unmatched[name] - 1
+    end
+  end
+  local added = 0
+  for name in keys(unmatched) do
+    if unmatched[name] > 0 then
+      print("new: " .. name)
+      added = added + unmatched[name]
+    end
+  end
+  if missing > 0 or added > 0 then fail(missing .. " missing, " .. added .. " new, of " .. #expected) end
+  print("same tests: " .. #current .. " of " .. #expected .. ", all passing")
+end
+
+if MODE ~= "baseline" and MODE ~= "check" then fail("check_same_tests: give mode=baseline (before the refactor) or mode=check (after)") end
+local build = run({"zig", "build", "test", "-Dtest-timing"}, {timeout_ms = 110000, whole = 4000000})
+if build.code ~= 0 then
+  for line in last(lines(build.out), 40) do print(line) end
+  fail("zig build test exited " .. build.code)
+end
+if MODE == "baseline" then save_baseline(test_names_in(build.out)) else check_against_baseline(test_names_in(build.out)) end

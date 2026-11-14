@@ -1,0 +1,20 @@
+-- This script lists the .zig files over a thousand lines in the repos we work
+-- in, longest first. `over=N` sets another limit. Run it from the folder that
+-- holds the repos:
+--   cd ~/showell_repos && shale <shale>/cookbook/zig/list_long_files.shale [over=N]
+
+const OVER = arg("over", 1000)
+
+local repos = {"zig-metal-unikernel", "zig-webbox", "shale", "metal-vmm", "dog-park", "observatory", "angry-gopher", "zig-coverage-sdk"}
+local long_files = {}
+local file_count = 0
+for repo in repos do
+  for path in glob(repo .. "/**/*.zig") do
+    file_count = file_count + 1
+    local line_count = count_lines(path)
+    if line_count > OVER then push(long_files, {lines = line_count, path = path}) end
+  end
+end
+sort(long_files, "lines", "desc")
+print(table(long_files, {"lines", "path"}))
+print(#long_files .. " of " .. file_count .. " .zig files are over " .. OVER .. " lines")

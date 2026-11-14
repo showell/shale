@@ -1,0 +1,73 @@
+-- This script finishes a move of Zig declarations by adding the `pub`s that
+-- only the compiler can name. `zig_move` reports what a move broke, but it
+-- cannot see a method called through a value (`machine.step()`). The script
+-- builds, and for each "is not marked 'pub'" error it puts `pub` on the line
+-- the error's "declared here" note points at. It builds again until the build
+-- passes, or until only errors of another kind are left, which it prints.
+--
+--   cd <repo> && shale <shale>/cookbook/zig/add_missing_pubs.shale [build=<step>]
+
+const MAX_ROUNDS = 20
+const MAX_ERRORS_SHOWN = 20
+const DECLARED_HERE = "([A-Za-z0-9_/]+\\.zig:[0-9]+):[0-9]+: note: declared here"
+
+-- Gives the file and line of the first "declared here" note at or after
+-- `start`, or nil when there is none.
+function declaration_site(output, start)
+  local i = start
+  while i <= #output and not contains(output[i], "declared here") do i = i + 1 end
+  if i > #output then return nil end
+  local note = re_find(output[i], DECLARED_HERE)
+  if note == nil then return nil end
+  local parts = split(note.group, ":")
+  return {path = parts[1], line = parse_int(parts[2])}
+end
+
+-- Gives whether the line needed `pub`.
+function make_pub(site)
+  local line = lines(read(site.path))[site.line]
+  local indent = re_find(line, "^( *)").group
+  local declaration = sub(line, #indent + 1)
+  if starts_with(declaration, "pub ") then return false end
+  edit(site.path, line .. "\n", indent .. "pub " .. declaration .. "\n")
+  return true
+end
+
+-- Acts on one failed build's output, and gives how many lines it made `pub`
+-- and the errors that are not about `pub`.
+function fix_reported_declarations(output)
+  local made_pub = 0
+  local other_errors = {}
+  for i = 1, #output do
+    if contains(output[i], "is not marked 'pub'") then
+      local site = declaration_site(output, i + 1)
+      if site ~= nil and make_pub(site) then made_pub = made_pub + 1 end
+    elseif contains(output[i], "error:") then
+      push(other_errors, output[i])
+    end
+  end
+  return {made_pub = made_pub, other_errors = other_errors}
+end
+
+local build = {"zig", "build"}
+if arg("build", "") ~= "" then push(build, arg("build", "")) end
+
+local made_pub = 0
+local round = 0
+local built = false
+while round < MAX_ROUNDS and not built do
+  round = round + 1
+  local result = run(build, {timeout_ms = 400000, whole = 2000000})
+  if result.code == 0 then
+    print("builds after " .. round .. " rounds, " .. made_pub .. " made pub")
+    built = true
+  else
+    local fixes = fix_reported_declarations(lines(result.out))
+    made_pub = made_pub + fixes.made_pub
+    if fixes.made_pub == 0 then
+      for error_line in take(fixes.other_errors, MAX_ERRORS_SHOWN) do print(error_line) end
+      fail("add_missing_pubs: round " .. round .. ": no pub to make, and it does not build")
+    end
+  end
+end
+if not built then fail("add_missing_pubs: still not building after " .. round .. " rounds") end

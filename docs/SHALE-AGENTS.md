@@ -130,16 +130,16 @@ Each has a Shale form, most of them one launch:
 | `sed -n 40,80p f; sed -n 5,9p g` | `shale cookbook:look.shale at=f:40-80,g:5-9` |
 | `pkill -f pat`, `ps aux \| grep pat \| xargs kill` | `for p in procs() do if find(p.args, "pat") ~= nil then proc_stop(p) end end`: never this run or its shell |
 | `grep -rn 'text' src build.zig` | `shale cookbook:look.shale find=text in=src,build.zig ext=zig` (a value with `(`, `*` or a space: `--args-stdin`) |
-| `grep -rn 'a phrase' docs` over prose, which misses one a line break splits | `shale cookbook:prose.shale find="a phrase" in=docs` (phrase on stdin with `--args-stdin`): each paragraph, list item, quote and comment block read whole (never a code fence), so a break, an indent or a run of spaces inside the phrase is one space; a hit says `path:line` where it starts, `(N lines)` when it crosses breaks, `(markup inside)` when only `*` or a backtick splits it; `new=` shows the edit and `write=1` makes it, rewrapping only the lines the edit moves |
+| `grep -rn 'a phrase' docs` over prose, which misses one a line break splits | `shale cookbook:find_phrase.shale find="a phrase" in=docs` (phrase on stdin with `--args-stdin`): each paragraph, list item, quote and comment block read whole (never a code fence), so a break, an indent or a run of spaces inside the phrase is one space; a hit says `path:line` where it starts, `(N lines)` when it crosses breaks, `(markup inside)` when only `*` or a backtick splits it; `new=` shows the edit and `write=1` makes it, rewrapping only the lines the edit moves |
 | grep in Zig's std, a sibling repo | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:dog-park/src` |
-| `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
+| `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:run_zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
 | `zig build fuzz 2>&1 \| grep FAIL` | the same with `grep=FAIL,hunts ran` (a value with a space: on stdin, `--args-stdin`): every output line holding one of the literals, after the summary |
 | `roc check f && roc test f 2>&1 \| tail`, any other program and its verdict | `shale cookbook:run.shale` with `cmd=roc check f && roc test f` on stdin (`--args-stdin`): each command in order until one fails, how it ended and its time, its last lines (`tail=`), lines holding `grep=` literals, the whole output in .zig-cache/run.log where that folder is (else `log=PATH`, or not kept, said); `want=tag: why` for a program `run` refuses (`node`, `sh`) |
-| `python3 -m py_compile f`, `node --check f`, `zig ast-check f`, `bash -n f`: did an edit's syntax survive? | `shale cookbook:syntax.shale files=f,g` (or `rev=HEAD~1..HEAD`): one verdict a file by its kind (`.zig`, `.zon`, `.roc`, `.js`, `.mjs`, `.shale`, `.py`, `.sh`), then PASS or FAIL |
-| `grep -rn ".field =" src`: does anything but its own file make a sealed value (a checked id, a path)? | `shale cookbook:sealed.shale dir=src seals=path_seal:src/script/builtins_store.zig` (several trees: `dir=a,b`; a header only one file sets: `headers=location:<file>`): Zig's tokens, so a comment or a string never counts; one line a forger, then PASS or FAIL |
+| `python3 -m py_compile f`, `node --check f`, `zig ast-check f`, `bash -n f`: did an edit's syntax survive? | `shale cookbook:check_syntax.shale files=f,g` (or `rev=HEAD~1..HEAD`): one verdict a file by its kind (`.zig`, `.zon`, `.roc`, `.js`, `.mjs`, `.shale`, `.py`, `.sh`), then PASS or FAIL |
+| `grep -rn ".field =" src`: does anything but its own file make a sealed value (a checked id, a path)? | `shale cookbook:check_seals.shale dir=src seals=path_seal:src/script/builtins_store.zig` (several trees: `dir=a,b`; a header only one file sets: `headers=location:<file>`): Zig's tokens, so a comment or a string never counts; one line a forger, then PASS or FAIL |
 | `curl -s URL \| jq .messages[0].id`, an API's JSON | in a heredoc, `json_read(http_get(url).body).messages[1].id` (an object a map, an array a list, from 1); `json_write(v)` back |
-| `curl -s URL \| grep X`, a wait for a deploy | `shale cookbook:http.shale url=URL grep=X` (`wait=LITERAL minutes=N`: until the body holds it; `bearer=` a Shale path to a token file) |
-| `curl -u email:KEY` a Zulip topic, or any API wanting basic auth from a secret | `shale cookbook:zulip.shale --args-stdin` (`site=`, `email=`, `key=keys:<file>`, `stream=`, `topic=`, `num=`): the key reaches curl alone, by its environment (`--variable`/`--expand-user`), as `run`'s `secrets` |
+| `curl -s URL \| grep X`, a wait for a deploy | `shale cookbook:fetch_page.shale url=URL grep=X` (`wait=LITERAL minutes=N`: until the body holds it; `bearer=` a Shale path to a token file) |
+| `curl -u email:KEY` a Zulip topic, or any API wanting basic auth from a secret | `shale cookbook:read_zulip_topic.shale --args-stdin` (`site=`, `email=`, `key=keys:<file>`, `stream=`, `topic=`, `num=`): the key reaches curl alone, by its environment (`--variable`/`--expand-user`), as `run`'s `secrets` |
 | `curl -sN .../stream \| grep @CC`, hearing a roc-chat post meant for you | `shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 key=keys:<file> once=1` (`after=` the last id handled; without `once=1`, `log=` a file each line is appended to): one line a post for the agent, `#<id> by <principal>: <first line>`. A post is for it when the server's `mentions` name the agent (roc-chat decides who a post names, skipping quoted and fenced text) and is not its own; no rule limits agents answering agents, as the roc-chat server bounds agent-to-agent traffic (15 an hour since a human post); at 12 of the agent's own it prints one `budget:` line, once a crossing, and runs on. The stream is held in windows of `window=` seconds (20), so a post is heard at most a window late. It reconnects by itself, so no retry loop of your own: an ended stream (a deploy restarts the server), no connection or any status but 401, 403 and 404 prints `reconnecting after <reason>, from after=<id>, in <n> s`, waits (2, 5, 15, 30, then 60 s) and resumes, nothing missed or heard twice. A 401 or 403 (the key revoked or wrong), a 404 (no such conversation), a gap or a message without `mentions` (a server older than them) stops it nonzero, named; the windows run in batches, each a child run of the recipe with its own 63 curls (windows and reconnects together, about 21 minutes of quiet at 20 s windows), one after another from the last id, so a run listens through about 22 hours of quiet (63 batches) before it stops naming the `after=` to start it again with; a batch's lines reach the run's output when the batch ends (with `once=1`, at the post), and `log=` as heard. **`conv=all`** listens on the agent's one stream (roc-chat's `GET /stream`), every conversation it is in and every channel topic that names it: a post is `#<id> in conversation <c> by <principal>: <first line>`, or `#<id> in topic <channel>/<topic> by ...`, `after=` is the last event's place (`<at>.<spot>.<message>`, the spot a conversation's number or `<channel key>/<topic key>`, which the stop names; none or `0` is live only), a repeat the server's resume sends is heard once, and the budget warning is per conversation |
 | `curl -X POST --data ... -c jar -b jar`, a response's headers | in a heredoc, `http("POST", url, {body, headers})`: `{status, headers, body}`, the headers by lowercased name (`r.headers["set-cookie"]`), a cookie sent back as a `"Cookie: ..."` header |
 | `git tag -a v6 X -m ... && git push origin v6`, `git commit --amend`, ahead/behind | `git_tag(repo, "v6", {rev, msg})`, `git_push(repo, {tag = "v6"})`; `git_commit(repo, msg, {amend = true})`; `git_upstream(repo)` |
@@ -304,7 +304,7 @@ has none of it):
   parse stops, naming the line. **The
   analysis is Zig's parser and its tokens, not types**: what it cannot
   see (a method reached through a value), `zig build` judges after, with
-  `cookbook/zig/move_judge.shale` (and `same_tests.shale` for the test
+  `cookbook/zig/judge_move.shale` (and `check_same_tests.shale` for the test
   names).
   `zig_move(from, to, names, {comment, after}?)` moves top-level
   declarations (a name, or `{kind, name}` when one name is two) from one
@@ -470,14 +470,14 @@ prints is in the box after it, exactly.
 
 The short recipes are here, each tested as written. **The longer ones are
 files** in `cookbook/`: `look.shale` (lines by number, and a literal's
-lines across folders, mounts or a git revision), `prose.shale` (a phrase
-in wrapped prose, found and edited) and `zig_build.shale` (a build's
-verdict without its noise) for any project; `disk.shale` (a run stopped
+lines across folders, mounts or a git revision), `find_phrase.shale` (a phrase
+in wrapped prose, found and edited) and `run_zig_build.shale` (a build's
+verdict without its noise) for any project; `check_disk_space.shale` (a run stopped
 under a floor of free disk, `report=1` the growth spots' sizes, each verify's
 first check); `times.shale` (a library: a stage's time against its recent
-runs); a book's prose lints in `prose/`: `negatives.shale` (the negative
+runs); a book's prose lints in `prose/`: `find_negatives.shale` (the negative
 sentences a book's voice rule rewrites or keeps, against a keep-table, with
-a `held` count) and `term_index.shale` (the index of a book's terms, and the
+a `held` count) and `build_term_index.shale` (the index of a book's terms, and the
 terms used before the chapter that teaches them); the Zig ones in
 [`cookbook/zig/`](../cookbook/zig/README.md) find a file's seams, move
 declarations along them and judge the move; `roc/` and `zig17/` are those
@@ -498,7 +498,7 @@ Shale's keeps its custom scripts, with a short README in their folder
 naming them and the cookbook recipes it relies on.
 
 **A recipe over a whole tree** keeps each file's work in a function and
-calls `yield()` after each file, as `cookbook/sealed.shale` and the name
+calls `yield()` after each file, as `cookbook/check_seals.shale` and the name
 hunts do: what a file's call made (its tokens, its lines) is let go there,
 so the run's memory is one file's, not the tree's. Without it a tree of a
 few hundred files runs out of arena.
@@ -637,7 +637,7 @@ string, a test's name or a comment (it counts the comments' mentions in
 analysis is tokens, not types:** a name reached through a module
 (`timeouts.pastDeadline`) is after a `.` and is left, so the qualified
 uses get their own `edit`, and `zig build` judges after, with
-`cookbook/zig/move_judge.shale` (and `same_tests.shale` for the test
+`cookbook/zig/judge_move.shale` (and `check_same_tests.shale` for the test
 names). `opts.lines = {first, last}` limits it to a range.
 
 **Moving a block to another file, then its uses:** move the declarations, then rename what the old file still says to the
@@ -814,7 +814,7 @@ the first two can give a quiet wrong answer, an empty list:
   starts there or is handed its folder in an argument (with or without
   `want`). Only `run`'s `secrets = {NAME = "keys:file"}` takes one, the
   value in the program's environment and scrubbed from its output as
-  `<secret NAME>`; `http_get`'s `bearer` and `cookbook:http.shale`'s
+  `<secret NAME>`; `http_get`'s `bearer` and `cookbook:fetch_page.shale`'s
   `bearer=keys:file` use it. **The one write path is `run`'s
   `stdout_secret = "keys:NAME"`:** the program's stdout goes straight to
   that file, never to the script, so a secret received is stored without
@@ -868,7 +868,7 @@ that prints the secret alone; the script never takes it apart.
 
 **Using it** is `run`'s `secrets`, the value in the program's environment
 and scrubbed from its output. curl reads it there with `--variable`, as
-`cookbook/zulip.shale` does:
+`cookbook/read_zulip_topic.shale` does:
 
 ```lua
 run({"curl", "-s", "--variable", "%EXAMPLE_KEY",
@@ -899,7 +899,7 @@ failure, a missing binary included, into a refusal). It passes exactly:
   to `~/.local/state/shale/wants.tsv`: the date (UTC), the session, the
   kind, the tag, the text, and the command's first 160 bytes, tabs and
   newlines escaped. An escape that cannot be logged (no `HOME`, a write
-  that fails) is refused, not run. `shale cookbook:wants.shale` reads it
+  that fails) is refused, not run. `shale cookbook:read_wants.shale` reads it
   back (today's, or `since=`, with counts by kind, tag and session),
   through a mount over that folder (`state = ~/.local/state/shale ro`).
 
@@ -941,7 +941,7 @@ what the gate refuses with what to do instead.
 - **No network but a program's**: `http(method, url, {body, headers,
   bearer, timeout_ms})` (the Linux prelude's, by `curl`) gives `{status,
   headers, body, ms}`, `http_get(url, ...)` its GET, and
-  `cookbook:http.shale` is a GET from a launch line; and **no
+  `cookbook:fetch_page.shale` is a GET from a launch line; and **no
   environment**: a script cannot read a variable, only give one to a
   program (`env`, `secrets`).
 - **Git is a prelude over `git`**, not a library: each call is a program

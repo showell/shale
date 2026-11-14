@@ -1,5 +1,5 @@
 -- Reports the rows: only functions besides its `use`, and a library can't
 -- `use`, so it runs.
-use("cookbook:roc/findings.shale")
+use("cookbook:findings.shale")
 
 function rows() return {} end

@@ -323,7 +323,7 @@ test "zig_move and zig_rename: `const` that qualifies a pointer declares nothing
 /// Its report is a row per list, `name:line` each.
 const replay = "const W = \"" ++ webbox_root ++ "\"\n" ++
     \\-- The history is 0.16 source; Zig 0.17 removed `**` on arrays and strings,
-    \\-- so its four uses become what cookbook/zig17/array_mult.shale writes, each
+    \\-- so its four uses become what cookbook/zig17/rewrite_array_mult.shale writes, each
     \\-- on its own line (line numbers kept).
     \\function to17(src)
     \\  for p in {{"\"x\" ** 100", "&@as([100]u8, @splat('x'))"}, {"\"x\" ** 40", "&@as([40]u8, @splat('x'))"}, {"\"u\" ** 2000000", "&@as([2000000]u8, @splat('u'))"}, {"&([_]u8{'x'} ** n)", "&(@as([n]u8, @splat('x')))"}} do src = substitute(src, p[1], p[2], {missing_ok = true}) end

@@ -240,12 +240,12 @@ test "cli: --root / is the filesystem's root: real(\"\") is `/`, not the working
     try testing.expectEqualStrings("made", made);
 }
 
-test "cli: cookbook/http.shale's wait says, by its own words, a wait of more fetches than a run's 64 programs, before it fetches" {
+test "cli: cookbook/fetch_page.shale's wait says, by its own words, a wait of more fetches than a run's 64 programs, before it fetches" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     const io = threaded.io();
     const a = testing.allocator;
-    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "cookbook/http.shale", "url=http://127.0.0.1:1/", "wait=x", "minutes=2", "every=1" } });
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "cookbook/fetch_page.shale", "url=http://127.0.0.1:1/", "wait=x", "minutes=2", "every=1" } });
     defer a.free(r.stdout);
     defer a.free(r.stderr);
     errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
@@ -420,7 +420,7 @@ test "cli: a recipe's launch value where a program reads options is refused when
     for ([_]struct { []const []const u8, []const u8 }{
         // `git grep -O<cmd>` would run a command over the files it found.
         .{ &.{ shale_exe, "cookbook/look.shale", "find=fn", "rev=--open-files-in-pager=true" }, "`look`'s `rev` is \"--open-files-in-pager=true\"" },
-        .{ &.{ shale_exe, "cookbook/zig_build.shale", "step=--help" }, "`zig_build`'s `step` is \"--help\"" },
+        .{ &.{ shale_exe, "cookbook/run_zig_build.shale", "step=--help" }, "`run_zig_build`'s `step` is \"--help\"" },
     }) |c| {
         const r = try std.process.run(a, io, .{ .argv = c[0] });
         defer a.free(r.stdout);

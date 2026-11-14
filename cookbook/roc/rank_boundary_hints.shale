@@ -1,0 +1,275 @@
+-- This recipe ranks cheap hints that one Roc module does another's work: a
+-- module whose public names carry another module's noun, and a public member
+-- that only one other module uses, most of all one that module draws with.
+-- They are candidates for a review, not findings to fix on sight.
+--
+--   cd <repo> && shale <shale>/cookbook/roc/rank_boundary_hints.shale root=safari \
+--     clients=*_widget,widget_kit
+--   shale cookbook:roc/rank_boundary_hints.shale self_test=1
+--
+-- The arguments:
+--   root       the folder of the modules, `.` by default;
+--   glob       which of its files are the modules, relative to the root,
+--              `*.roc` by default; several globs may be given, separated by
+--              commas. A file that declares no type (an app, a package
+--              header) is read as a user only;
+--   clients    the code that uses the modules from outside the root, read as
+--              users only, as print_module_types.shale reads `clients=`: a folder or a
+--              glob of folders, or a glob ending in `.roc`, named as the root
+--              is;
+--   packages   where a package's modules are, as print_module_types.shale takes it;
+--   self_test  with `self_test=1`, check the plants in
+--              `cookbook/roc/plants/rank_boundary_hints/`.
+--
+-- The hints:
+--
+--   fed_to_one     A member of a module M's types whose production uses
+--              outside M all sit in one other module N. A use is counted as
+--              print_module_types.shale counts one (member_uses.shale): a name through
+--              N's import of M, or a call on a receiver N plainly types as
+--              M's type. Uses in tests are no use: an `expect`, a value only
+--              expects read, or any file under the root's `gates/` folder,
+--              which is read for that. A member some other file may call by
+--              method name on a receiver of no known type is left out, and
+--              counted in the summary, since its one user is not sure. When
+--              the function in N around a use builds a shape (a tag in
+--              SHAPE_TAGS, or a `Shapes.` call) or is annotated to give one
+--              (its result names a type `Shape`), N draws with the member: the
+--              strongest form, with those functions named. When N only
+--              imports Shapes, that is said too.
+--   borrowed_noun  A member of M's types whose snake_case name starts with
+--              another module's name, in snake_case, and an underscore:
+--              `sky_top_stop` in Backdrop when there is a Sky module, but not
+--              `skyline` and not a bare `sky`. The longest such module is
+--              named.
+--
+-- The lines come strongest first: fed_to_one with drawing in a function,
+-- then with Shapes imported, then the rest of fed_to_one, each by uses, most
+-- first; then borrowed_noun. They sit between two copies of the summary
+-- (cookbook/findings.shale). Hints don't gate: the run fails only when a
+-- file doesn't parse or an import names no file.
+-- budget: steps=4000000000 arena_bytes=3000000000 output_bytes=4000000 reads=100000
+
+const SELF_TEST = arg("self_test", "") == "1"
+use("cookbook:roc/declared.shale")
+use("cookbook:roc/member_uses.shale")
+use("cookbook:roc/module_family.shale")
+use("cookbook:findings.shale")
+
+-- The tags that build a shape or its paint: lib's Shapes.Shape and
+-- Brush.Fill.
+const SHAPE_TAGS = {Poly = true, Disc = true, Rect = true, Image = true, Flat = true, Span = true, Radial = true, Linear = true, Ellipse = true, Glow = true}
+
+-- A module's name in snake_case: `TruckBody` gives `truck_body`.
+function snake_name(module)
+  return join(name_words(module), "_")
+end
+
+-- The paths the comma-separated globs `globs` give under `root`, normalized
+-- and sorted, each once.
+function module_paths(root, globs)
+  local seen = {}
+  for g in split(globs, ",") do
+    local pattern = trim(g)
+    if pattern ~= "" then
+      for p in glob(path_join(root, pattern)) do seen[path_normal(p)] = true end
+    end
+  end
+  return sort(keys(seen))
+end
+
+-- The functions around the uses `sites` in the file `info` that build a
+-- shape, each as `name (Tag, Shapes.call, gives a Shape)` with what showed
+-- it.
+function drawing_functions(st, info, sites)
+  local tree = info.nodes
+  local cx = typing_context(st, info)
+  local done = {}
+  local out = {}
+  for site in sites do
+    local s = cx.scope[site.at]
+    if s ~= 0 and not has_key(done, tostring(s)) and tree[s].kind == "s-decl" then
+      done[tostring(s)] = true
+      local built = {}
+      local j = s + 1
+      while j <= #tree and tree[j].depth > tree[s].depth do
+        local n = tree[j]
+        if n.kind == "e-tag" then
+          local parts = split(get(n, "raw", ""), ".")
+          if has_key(SHAPE_TAGS, parts[#parts]) then built[parts[#parts]] = true end
+        end
+        if n.kind == "e-ident" and starts_with(get(n, "raw", ""), "Shapes.") then built[get(n, "raw", "")] = true end
+        j = j + 1
+      end
+      -- A function annotated to give a Shape draws, though a helper of its
+      -- own builds the shape.
+      local name = get(tree[tree[s].kids[1]], "raw", "")
+      for anno in get(cx.beside, tree[s].parent .. "\t" .. name, {}) do
+        local ty = tree[anno].kids[1]
+        local result = tree[ty].kind == "ty-fn" and tree[ty].kids[#tree[ty].kids] or ty
+        if has_key(mentioned_type_names(tree, result, {}), "Shape") then built["gives a Shape"] = true end
+      end
+      if #keys(built) > 0 then push(out, get(tree[tree[s].kids[1]], "raw", "?") .. " (" .. join(sort(keys(built)), ", ") .. ")") end
+    end
+  end
+  return out
+end
+
+-- The production uses among `rec.sites` in the file `path`.
+function production_sites(st, rec, path)
+  local info = st.files[path]
+  local fc = file_context(st, info)
+  local out = {}
+  for site in rec.sites do
+    if site.path == path and not in_tests(fc, fc.ctx[site.at]) then push(out, site) end
+  end
+  return out
+end
+
+-- The hints for the modules in `root` that `globs` names, with `clients=` and
+-- `packages=` as `clients` and `packages_arg`, as `{summary, lines, refused,
+-- lost}`.
+function hints(root, globs, clients, packages_arg, trees)
+  refuse_climbing(root, "", clients)
+  local st = {files = {}, types = {}, trees = trees, packages = package_folders(root, packages_arg, trees), dir_packages = {}, app_of = {}, refused = {}, refusals = {}, lost = {}, contexts = {}, typing = {}, resolved = {}, precision = {}, member_rec = {}, member_list = {}, members_by_name = {}, asked = {}, asked_files = {}}
+  local paths = module_paths(root, globs)
+  if #paths == 0 then fail("rank_boundary_hints: glob=" .. globs .. " names no file under " .. root) end
+  load_files(st, paths)
+  local users = {}
+  for p in paths do push(users, p) end
+  local gates = {}
+  for p in glob(path_join(root, "gates/**/*.roc")) do push(gates, path_normal(p)) end
+  load_files(st, gates)
+  for p in sort(gates) do push(users, p) end
+  if clients ~= "" then
+    local skip = set_of(users)
+    local cl = client_files(clients, skip)
+    load_files(st, cl.paths)
+    st.app_of = cl.app_of
+    for p in cl.paths do push(users, p) end
+  end
+  load_imports(st)
+  -- The modules: the files the glob names that declare a type.
+  local modules = {}
+  local snake_of = {}
+  for p in paths do
+    local info = st.files[p]
+    if info.err == "" and #info.types > 0 then
+      push(modules, p)
+      snake_of[p] = snake_name(info.module)
+      st.asked_files[p] = true
+      for t in info.types do st.asked[t.id] = true end
+    end
+  end
+  local owned = {}
+  for p in modules do
+    local from = #st.member_list + 1
+    asked_members(st, p)
+    for k = from, #st.member_list do push(owned, {path = p, rec = st.member_list[k]}) end
+  end
+  for p in users do
+    if st.files[p].err == "" then count_uses(st, st.files[p], "") end
+  end
+  local fed = {}
+  local pooled_out = 0
+  local drawing = 0
+  for o in owned do
+    local rec = o.rec
+    local others = {}
+    for q in keys(rec.prod) do
+      if q ~= o.path then push(others, q) end
+    end
+    if #others == 1 then
+      local n_path = others[1]
+      local unsure = 0
+      for set in {rec.method_prod, rec.op_prod} do
+        for q in keys(set) do
+          if q ~= o.path and q ~= n_path then unsure = unsure + 1 end
+        end
+      end
+      if unsure > 0 then
+        pooled_out = pooled_out + 1
+      else
+        local n_info = st.files[n_path]
+        local sites = production_sites(st, rec, n_path)
+        local draws = drawing_functions(st, n_info, sites)
+        local rank = 3
+        local note = ""
+        if #draws > 0 then
+          rank = 1
+          drawing = drawing + 1
+          note = "; " .. n_info.module .. " draws with it in " .. join(draws, ", ")
+        elseif has_key(n_info.imports, "Shapes") then
+          rank = 2
+          note = "; " .. n_info.module .. " imports Shapes"
+        end
+        local m = st.files[o.path].module
+        local text = o.path .. ":" .. rec.line .. ": fed_to_one: " .. m .. "." .. rec.label .. " is used only by " .. n_info.module .. ", " .. plural(#sites, "use") .. note
+        push(fed, {key = rank .. "/" .. (100000 - #sites) .. "/" .. m .. "." .. rec.label, text = text})
+      end
+    end
+  end
+  local borrowed = {}
+  for o in owned do
+    local name = split(o.rec.label, ".")
+    name = name[#name]
+    local best = ""
+    local best_module = ""
+    for q in modules do
+      local s = snake_of[q]
+      if q ~= o.path and starts_with(name, s .. "_") and #s > #best then
+        best = s
+        best_module = st.files[q].module
+      end
+    end
+    if best ~= "" then push(borrowed, o.path .. ":" .. o.rec.line .. ": borrowed_noun: " .. st.files[o.path].module .. "." .. o.rec.label .. " names the module " .. best_module) end
+  end
+  sort(fed, {"key"})
+  local lines_out = {}
+  for f in fed do push(lines_out, f.text) end
+  for b in borrowed do push(lines_out, b) end
+  local summary = "rank_boundary_hints (Roc): " .. plural(#users, "file") .. ", " .. plural(#modules, "module") .. ", " .. plural(#owned, "public member") .. "; fed_to_one " .. #fed .. " (" .. drawing .. " drawn with), borrowed_noun " .. #borrowed .. "; " .. pooled_out .. " more used by one module but maybe called by method name elsewhere, left out"
+  return {summary = summary, lines = lines_out, refused = st.refused, lost = st.lost}
+end
+
+function self_test()
+  local at = "cookbook:roc/plants/rank_boundary_hints/"
+  local failures = {}
+  local trees = {}
+  local loud = hints(at .. "loud_pair", "*.roc", "", "", trees)
+  local ls = loud.lines
+  check(failures, #loud.refused == 0 and #loud.lost == 0, "loud: refused or lost: " .. join(loud.refused, "; ") .. join(loud.lost, "; "))
+  -- Sun.glow is called as a method on a parameter typed as a Sun, and the
+  -- two drawn-with members tie on uses, so they go by name. Backdrop's
+  -- sun_shapes borrows Sun's noun as sky_top_stop borrows Sky's.
+  -- Sun.ring_size's user halo builds its shape through a helper, and is
+  -- annotated to give one.
+  local want = {
+    at .. "loud_pair/Sun.roc:10: fed_to_one: Sun.glow is used only by Backdrop, 1 use; Backdrop draws with it in sun_shapes (Disc, gives a Shape)",
+    at .. "loud_pair/Sun.roc:6: fed_to_one: Sun.look is used only by Backdrop, 1 use; Backdrop draws with it in sun_shapes (Disc, gives a Shape)",
+    at .. "loud_pair/Sun.roc:26: fed_to_one: Sun.ring_size is used only by Backdrop, 1 use; Backdrop draws with it in halo (gives a Shape)",
+    at .. "loud_pair/Sun.roc:14: fed_to_one: Sun.tint is used only by Backdrop, 1 use",
+    at .. "loud_pair/Backdrop.roc:8: borrowed_noun: Backdrop.sky_top_stop names the module Sky",
+    at .. "loud_pair/Backdrop.roc:16: borrowed_noun: Backdrop.sun_shapes names the module Sun",
+  }
+  check(failures, join(ls, "\n") == join(want, "\n"), "loud lines, got:\n" .. join(ls, "\n"))
+  check(failures, loud.summary == "rank_boundary_hints (Roc): 4 files, 4 modules, 13 public members; fed_to_one 4 (3 drawn with), borrowed_noun 2; 0 more used by one module but maybe called by method name elsewhere, left out", "loud summary: " .. loud.summary)
+  local quiet = hints(at .. "quiet_pair", "*.roc", "", "", trees)
+  check(failures, #quiet.refused == 0 and #quiet.lost == 0, "quiet: refused or lost: " .. join(quiet.refused, "; ") .. join(quiet.lost, "; "))
+  check(failures, #quiet.lines == 0, "quiet lines, got:\n" .. join(quiet.lines, "\n"))
+  check(failures, quiet.summary == "rank_boundary_hints (Roc): 3 files, 2 modules, 9 public members; fed_to_one 0 (0 drawn with), borrowed_noun 0; 0 more used by one module but maybe called by method name elsewhere, left out", "quiet summary: " .. quiet.summary)
+  for f in failures do print("FAIL: " .. f) end
+  if #failures > 0 then fail("rank_boundary_hints: " .. #failures .. " self-test checks failed") end
+  print("rank_boundary_hints: self test passed")
+  return nil
+end
+
+if SELF_TEST then
+  self_test()
+else
+  local r = hints(arg("root", "."), arg("glob", "*.roc"), arg("clients", ""), arg("packages", ""), {})
+  print_findings(r.summary, r.lines)
+  for l in r.lost do print("lost: " .. l) end
+  for l in r.refused do print("refused: " .. l) end
+  if #r.lost > 0 or #r.refused > 0 then fail("rank_boundary_hints: " .. #r.lost .. " imports name no file and " .. #r.refused .. " files don't parse (named above); the hints count the rest") end
+end
