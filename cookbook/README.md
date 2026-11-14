@@ -42,6 +42,9 @@ with `--args-stdin`, one `NAME=VALUE` a line.
   one agent. `shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 key=keys:<file> once=1`
 - `look.shale`: shows lines by number, and a literal's lines across folders,
   mounts or a git revision. `shale cookbook:look.shale at=src/io.zig:690-730`
+- `map_repos.shale`: maps the repos in a folder: each one's branch, last
+  commit, recent commits, uncommitted files, upstream, and the repos its
+  README names. `cd ~/showell_repos && shale cookbook:map_repos.shale` (`in=lanes`, `dot=1`, `json=1`)
 - `merge_conflicts.shale` (library): parses the markers git leaves in a
   conflicted file, so a resolution is a few lines. `use("cookbook:merge_conflicts.shale")`
 - `prune_merged_branches.shale`: finds the work branches merged into the

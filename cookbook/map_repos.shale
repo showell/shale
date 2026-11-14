@@ -1,0 +1,210 @@
+-- This recipe maps the repos in one folder: for each, its branch, its last
+-- commit and how long ago, its commits in the last 30 days, its uncommitted
+-- files, how far it is from its upstream, the repo it is a worktree of, its
+-- README's title, and the other repos its README names. A README names a
+-- repo when the repo's folder name appears in it as a whole word, case and
+-- all, so `roc-apps` never counts as `roc`. That is a map of what the READMEs
+-- say, not of what the builds use.
+--
+-- Run it from the folder that holds the repos. `in=lanes` maps a folder
+-- inside it instead (its worktrees, say), with the README links still to the
+-- repos at the top. A folder with no .git is listed at the end, not mapped.
+-- `dot=1` prints the README links as a Graphviz graph instead of the table,
+-- and `json=1` prints every row as JSON, for a page to draw from.
+--
+--   cd ~/showell_repos && shale shale/cookbook/map_repos.shale
+--   cd ~/showell_repos && shale shale/cookbook/map_repos.shale in=lanes
+--   cd ~/showell_repos && shale shale/cookbook/map_repos.shale dot=1
+--
+-- budget: steps=200000000 reads=20000 arena_bytes=1000000000
+
+const IN = arg("in", ".")
+const DOT = arg("dot", 0)
+const JSON = arg("json", 0)
+const RECENT_DAYS = 30
+const LOG_CAP = 1000
+const TODAY = now() // 86400
+
+-- A run starts at most 64 programs and each repo takes three (its log, its
+-- upstream, its status), so a parent run maps the repos in parts of
+-- PART_SIZE, each a child run of this script (`part=K json=1`), and joins
+-- their rows. `self=` names the script a part runs, for a lane's copy.
+const PART = arg("part", 0)
+const PART_SIZE = 20
+const SELF_PATH = arg("self", "cookbook:map_repos.shale")
+
+-- Days since 1970-01-01 for a civil date (Howard Hinnant's algorithm).
+function days_from_civil(y, m, d)
+  if m <= 2 then y = y - 1 end
+  local era = y // 400
+  local yoe = y - era * 400
+  local mp = (m + 9) % 12
+  local doy = (153 * mp + 2) // 5 + d - 1
+  local doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
+  return era * 146097 + doe - 719468
+end
+
+-- The day number of a git ISO date, `2026-11-14T17:34:50+00:00`.
+function day_of(iso)
+  local parts = split(sub(iso, 1, 10), "-")
+  return days_from_civil(tonumber(parts[1]), tonumber(parts[2]), tonumber(parts[3]))
+end
+
+function path_of(name)
+  if IN == "." then return name end
+  return IN .. "/" .. name
+end
+
+-- Where a repo's HEAD file is. A worktree's .git is a file naming its git
+-- folder absolutely, `gitdir: /.../dog-park/.git/worktrees/dog-park-page`,
+-- and a path here is relative, so that is read as its main repo's folder at
+-- the top of the run's root.
+function head_path_of(path)
+  if exists(path .. "/.git/HEAD") then return path .. "/.git/HEAD" end
+  local gitdir = trim(read_or(path .. "/.git", ""))
+  local at = find(gitdir, "/.git/worktrees/")
+  if at == nil then return "" end
+  local main_parts = split(sub(gitdir, 1, at - 1), "/")
+  return main_parts[#main_parts] .. sub(gitdir, at, #gitdir) .. "/HEAD"
+end
+
+-- The main repo a worktree belongs to, or "" for a repo of its own.
+function worktree_of(path)
+  local head = head_path_of(path)
+  if head == "" or starts_with(head, path .. "/.git/") then return "" end
+  return split(head, "/")[1]
+end
+
+function branch_of(path)
+  local head_path = head_path_of(path)
+  local head = ""
+  if head_path ~= "" then head = read_or(head_path, "") end
+  if head == "" then return "?" end
+  local name = trim(join(split(head, "ref: refs/heads/"), ""))
+  if #name == 40 then return "(detached)" end
+  return name
+end
+
+function readme_of(path)
+  for name in {"README.md", "README", "readme.md"} do
+    if exists(path .. "/" .. name) then return read(path .. "/" .. name) end
+  end
+  return ""
+end
+
+function title_of(text)
+  for l in lines(text) do
+    if starts_with(l, "# ") then return trim(sub(l, 3, #l)) end
+  end
+  return ""
+end
+
+function map_repo(repo, names, edges)
+  local path = path_of(repo)
+  local log = git_log(path, {n = LOG_CAP})
+  local last_date = ""
+  local last_subject = "(no commits)"
+  local days = -1
+  if #log > 0 then
+    last_date = sub(log[1].date, 1, 10)
+    last_subject = sub(log[1].subject, 1, 60)
+    days = TODAY - day_of(log[1].date)
+  end
+  local recent = 0
+  for c in log do
+    if TODAY - day_of(c.date) <= RECENT_DAYS then recent = recent + 1 end
+  end
+  local recent_text = "" .. recent
+  if recent == LOG_CAP then recent_text = LOG_CAP .. "+" end
+  local up = git_upstream(path)
+  local sync = "no upstream"
+  if up ~= nil then sync = "+" .. up.ahead .. " -" .. up.behind end
+  local text = readme_of(path)
+  local seen = {}
+  local links = {}
+  for t in re_find_all(text, "[A-Za-z0-9_-]+") do
+    if get(names, t.text, false) and t.text ~= repo and not get(seen, t.text, false) then
+      seen[t.text] = true
+      push(links, t.text)
+      push(edges, {from = repo, to = t.text})
+    end
+  end
+  sort(links)
+  return {
+    repo = repo,
+    of = worktree_of(path),
+    branch = branch_of(path),
+    last = last_date,
+    days = days,
+    recent = recent_text,
+    dirty = #git_status(path),
+    sync = sync,
+    subject = last_subject,
+    title = sub(title_of(text), 1, 50),
+    links = join(links, ","),
+  }
+end
+
+-- The folders in `folder`, by name, and its symbolic links, which the store
+-- follows none of (a lane can be a link to a checkout elsewhere).
+function entries_of(folder)
+  local dirs = {}
+  local links = {}
+  for e in walk_all(folder, {depth = 1}) do
+    local parts = split(e.path, "/")
+    local name = parts[#parts]
+    if e.kind == "directory" then push(dirs, name) elseif e.kind == "other" then push(links, name) end
+  end
+  sort(dirs)
+  sort(links)
+  return {dirs = dirs, links = links}
+end
+
+local listed = entries_of(IN)
+local repos = {}
+local strays = {}
+for e in listed.dirs do
+  if exists(path_of(e) .. "/.git") then push(repos, e) else push(strays, e) end
+end
+
+-- The names a README can link to: the repos at the top of the root.
+local names = {}
+for e in entries_of(".").dirs do
+  if exists(e .. "/.git") then names[e] = true end
+end
+
+local rows = {}
+local edges = {}
+if PART > 0 then
+  local first = (PART - 1) * PART_SIZE + 1
+  local final = PART * PART_SIZE
+  if final > #repos then final = #repos end
+  for i = first, final do push(rows, map_repo(repos[i], names, edges)) end
+else
+  local parts = (#repos + PART_SIZE - 1) // PART_SIZE
+  for k = 1, parts do
+    local r = run({"shale", "--root", ".", SELF_PATH, "in=" .. IN, "part=" .. k, "json=1"}, {timeout_ms = 300000, whole = 1000000})
+    local got = nil
+    for l in lines(r.out) do
+      if starts_with(l, "{") then got = json_read(l) end
+    end
+    if r.code ~= 0 or got == nil then fail("map_repos: part " .. k .. " exited " .. r.code .. ": " .. r.out) end
+    for row in got.rows do push(rows, row) end
+    for e in got.edges do push(edges, e) end
+  end
+end
+sort(rows, "days")
+
+if JSON == 1 then
+  print(json_write({rows = rows, edges = edges, strays = strays, links = listed.links, today = TODAY}))
+elseif DOT == 1 then
+  print("digraph repos {")
+  print("  rankdir=LR;")
+  for e in edges do print("  \"" .. e.from .. "\" -> \"" .. e.to .. "\";") end
+  print("}")
+else
+  print(table(rows, {"repo", "of", "branch", "last", "days", "recent", "dirty", "sync", "links"}))
+  print(#repos .. " repos, " .. #edges .. " README links; recent = commits in the last " .. RECENT_DAYS .. " days (at most " .. LOG_CAP .. " read)")
+  if #strays > 0 then print("not repos: " .. join(strays, ", ")) end
+  if #listed.links > 0 then print("symbolic links, not followed: " .. join(listed.links, ", ")) end
+end
