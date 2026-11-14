@@ -10,7 +10,7 @@ The orchestrator drafted this prompt from Steve's plan. A cold agent worked for 
 
 ### Which notes are real
 
-The repository's `notes/` holds 12 notes, a sample copied from the old surface, essay-repl-server, a Python server. That one holds 522 notes, up from Session 7's 514, since the notes keep growing. So "my real notes in `notes/`" could mean either. The agent read the 12 as the sample the prompt points at, and counted every feature over all 522, since that's what Steve actually writes, and twelve notes are too few to count by.
+The repository's `notes/` holds 12 notes, a sample copied from the old surface, essay-repl-server, a Python server. That one holds 522, up from Session 7's 514, since the notes keep growing. So "my real notes in `notes/`" could mean either. The agent read the 12 as the sample the prompt points at, and counted every feature over all 522, since that's what Steve actually writes, and twelve notes are too few to count by.
 
 ### Counting before designing
 
@@ -18,9 +18,9 @@ It wrote `scripts/features.shale`, which walks each note line by line, tracks co
 
 {{fence repos:essay-surface/journal/format-types.md "paragraph                     522"}}
 
-The counts took several passes. Images first counted as links, which the agent fixed before reading the numbers. A first scan found 126 headings with a style in them, and every one was a Roc doc comment inside a code fence of one note; a rerun that skipped fences found 7 notes. Then the examples corrected two readings. The five "links inside italics" were all subtitles, the italic line under a note's title, so the subtitle gets a type of its own. And the lists nested two deep also matched lines of a diff, so their count is a ceiling. A hand count found the subtitle in 296 notes.
+The counts took several passes. Images first counted as links, which the agent fixed before reading the numbers. A first scan found 126 headings with a style in them, and every one was a Roc doc comment inside a code fence of one note; a rerun that skipped fences found 7 notes. Then the examples corrected two readings. The five "links inside italics" were all subtitles, the italic line under a note's title, so the subtitle gets a type of its own. And the lists nested two deep also matched diff lines, so their count is a ceiling. A hand count found the subtitle in 296 notes.
 
-There was a stop and a waste. Nesting checks pushed the survey over its step budget, and a cheap `find` of each pattern's literal before its regex brought it back under, at 19.5 seconds a run. Then, to see examples of six features, the agent launched it six times, 117 seconds in all, where one run that printed all six would have taken 20.
+Nesting checks pushed the survey over its step budget, and a cheap `find` of each pattern's literal before its regex brought it back under, at 19.5 seconds a run. Then, to see examples of six features, the agent launched it six times, 117 seconds in all, where one run that printed all six would have taken 20.
 
 Count your real data before you design a format for it, and keep the counter. The agent kept features.shale because the counts are the argument: a reply that questions one is answered by running it again.
 
@@ -40,7 +40,7 @@ Every compile check said `No errors found` in a few milliseconds, which is fast 
 
 {{fence repos:essay-surface/journal/format-types.md "plant 1, Tabel in Block"}}
 
-Both went red, so the check from `Note.roc` reads the types of every module it imports. Then came the hunts, Shale scripts that read Roc's parse tree and look for weak names and layouts. They found five things on their first pass: three names (two `container` hits, on a list's `items` and `Item`, and a `singular_list` hit, on a table's `header`) and two layout hits (`unstack`, on `Table` and `Widget`). A list's `Item` became a `Point`, a table's `header` became `column_headings`, and the two short records went onto one line each. A numbered list's `first` became `first_number` too, since `first` read as its first point. One edit stopped on a doc line quoted wrong, and nothing in that file was written.
+Both went red, so the check from `Note.roc` reads the types of every module it imports. Then the hunts, Shale scripts that read Roc's parse tree for weak names and layouts, found five things on their first pass: three names (two `container` hits, on a list's `items` and `Item`, and a `singular_list` hit, on a table's `header`) and two layout hits (`unstack`, on `Table` and `Widget`). A list's `Item` became a `Point`, a table's `header` became `column_headings`, and the two short records went onto one line each. A numbered list's `first` became `first_number` too, since `first` read as its first point. One edit stopped on a doc line quoted wrong, and nothing in that file was written.
 
 Did compiling matter? It was cheap: about two minutes went to writing and checking the types, and about twelve to reading and counting. And it bought a lot. The plants and the hunts ran on real code, not on a sketch someone would translate later. When you ask for a design, ask for it in a form a tool can check, so the first review is the compiler's.
 
