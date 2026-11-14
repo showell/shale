@@ -8,11 +8,11 @@ Session 4 asks whether those checks can fail:
 
 A cold agent worked for about seventeen minutes. Steve stepped in once, with two replies that the orchestrator passed on mid-run.
 
-Session 3 saw `NOT SAFE` once, for one fault. Can every stage really go red? Asking that is reading a gate at trust speed, a third speed after scroll and review: what proves the gate is watching?
+Can every stage really go red? Session 3 saw `NOT SAFE` once, for one fault. Asking whether a gate can fail is reading it at trust speed, a third speed after scroll and review: what proves the gate is watching?
 
 ### One fault per stage
 
-This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that test nothing, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Fixtures sometimes irritate Steve, because they can slow gates, often through needless rebuilds.
+This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that test nothing, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Steve is wary of fixtures, because they can slow gates, often through needless rebuilds.
 
 `full.shale` has six stages, and its first, `fast`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `full.shale` runs it, the fault out, then proof that the tree is back and `fast.shale` passes:
 

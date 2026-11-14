@@ -8,7 +8,7 @@ Session 5 turns a chore into a script:
 
 A cold agent built the release script and proved it on a dev port, away from the live server, in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
 
-By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A script runs the same steps in the same order each time, and that sameness is what we mean by boring.
+Boring is the goal. Steve's real replies now lived on the surface, and every release was still a chore done by hand. A script runs the same steps in the same order each time, and that sameness is what we mean by boring.
 
 ### A release, in order
 
@@ -24,7 +24,7 @@ A failed release puts the old binary back, checks it the same way, and says so o
 
 ### A check that talked to the wrong server
 
-The first surprise came before the release script was written. The agent set up a trial with an "old" server on the dev port, 9300, and the checks' own servers listened there too. Run beside it, as a trial release would run it, the smoke check (a few requests through a server of its own) failed, and its log shows why:
+The first surprise came before the release script was written. The agent set up a trial with an "old" server on the dev port, 9300, and the checks' own servers listened there too. Run beside it, as a trial release would run it, the smoke check failed, and its log shows why:
 
 {{fence repos:essay-surface/journal/friday.md "the page: 404" from "── stopped at" to "bind: address"}}
 
@@ -32,7 +32,7 @@ The smoke's server logged "listening", then failed to bind, and the smoke went o
 
 ### The trap, sprung
 
-In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. This session's first trial sprang it. This one ran out of its step budget just after the swap:
+In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. It sprang again in this session's first trial, which ran out of its step budget just after the swap:
 
 {{fence repos:essay-surface/journal/friday.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
 
@@ -88,5 +88,3 @@ digraph checks {
 *A check for each moment. Each runs the one before it, so a release has passed them all.*
 
 The real release was boring because this session's surprises, the wrong server and the budget stop, were found on the dev port first.
-
-Along the way, Steve asked the orchestrator to watch for a nuisance that Shale itself could fix.

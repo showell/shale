@@ -8,7 +8,7 @@ Session 2 asks for the feature the surface exists for:
 
 A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after looking at the result in his browser, and the orchestrator made that fix.
 
-The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read some of the agent's scripts at review speed, the slower read a script gets when the agent proposes to keep it: does it earn its place?
+The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off.
 
 ### A reply finds its paragraph
 
@@ -55,11 +55,11 @@ Sixteen hand-written anchoring tests passed on their first run. To see whether t
 
 {{fence repos:essay-surface/journal/tuesday.md "--- FAIL: TestAnchorTypoFixed"}}
 
-At review speed, this script is one-time: a fault left in place would prove nothing more. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
+This script is for one use: a fault left in place would prove nothing more. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
 
 ### A script worth keeping
 
-`scripts/comments_smoke.shale` runs the whole comment flow through the real server. It posts a comment, fixes a typo and adds a paragraph above it on disk while the server runs, then deletes the paragraph. Its checks go through one small function:
+Some of the agent's scripts get a read at review speed, the slower read a script gets when the agent proposes to keep it: does it earn its place? `scripts/comments_smoke.shale` runs the whole comment flow through the real server. It posts a comment, fixes a typo and adds a paragraph above it on disk while the server runs, then deletes the paragraph. Its checks go through one small function:
 
 {{function repos:essay-surface/scripts/comments_smoke.shale want}}
 
@@ -67,7 +67,11 @@ The end of the script shows how it holds a server:
 
 {{lines repos:essay-surface/scripts/comments_smoke.shale from "local job = essay_start(" to "for l in result.value do print(l) end"}}
 
-`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. A budget stop is the one stop `attempt` can't catch, and the server stayed up until the agent stopped it by its job record. The budget line at the top of `bench.shale` now leaves room.
+`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. Its run on all the real notes stopped on its budget for what a run keeps at each `yield`:
+
+{{fence repos:essay-surface/journal/tuesday.md "bench.shale:140:5"}}
+
+A budget stop is the one stop `attempt` can't catch, so the server stayed up until the agent stopped it by its job record. The bench's budget line now leaves room.
 
 A run of the smoke test prints each check it passed, from the first post to the orphan:
 

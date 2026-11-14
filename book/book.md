@@ -81,7 +81,7 @@ The same goes for recipes, scripts saved to a file because their question came b
 
 ### Four words for what's next
 
-Four words come up from the first session on. `run` needs a timeout and a keep, how much of a program's output to hold on to, and two of the four are keeps:
+Four words come up from the first session on. `run` needs a timeout and a keep. A keep is how much of a program's output `run` holds on to. `whole` and `tail` are the two keeps:
 - **`want`:** the reason a script gives for running a risky program, written `want = "tag: why"`. Shale logs it.
 - **`whole`:** a keep in bytes. `run` holds all of the output up to that size, and each stage in fast.shale holds up to 400,000 bytes.
 - **`tail`:** a keep in lines. `run` holds the program's last lines, where its verdict usually sits.
@@ -175,11 +175,11 @@ To pick a dozen varied samples, the agent surveyed every real note in the old su
 
 {{fence repos:essay-surface/journal/monday.md "the step budget (5000000 steps) ran out"}}
 
-Steps are the first budget on Meet Shale's list. A regex search costs steps for its whole pattern at every byte it examines, so a few patterns over five hundred notes spent the step budget, which stopped the run long before it could run away. The agent switched to `grep`, a builtin, and hit the memory budget next. The docs give the fix: do each file's work in a function, and call `yield()` after each file, so the run holds one file at a time.
+Steps are the first budget on Meet Shale's list. A regex search costs steps for its whole pattern at every byte it examines, so a few patterns over five hundred notes spent the step budget, and the budget stopped the run before it ran on. The agent switched to `grep`, a builtin, and hit the memory budget next. The docs give the fix: do each file's work in a function, and call `yield()` after each file, so the run holds one file at a time.
 
 {{fence repos:essay-surface/journal/monday.md "wt = wt + 1" from "function measure(p)" to "print(#all"}}
 
-`{path = ..., bytes = ...}` is a map, and `#` is a length. `glob` lists files, and `stat` gives a file's size. The script reads the notes, runs no programs, and ended well. Smaller stops came throughout, a guessed field name or builtin, each named in one line and fixed in the next call.
+`{path = ..., bytes = ...}` is a map, and `#` is a length. `glob` lists files, and `stat` gives a file's size. The script reads the notes, runs no programs, and ended well. Smaller stops came throughout: a guessed field name, a guessed builtin. Each was named in one line and fixed in the next call.
 
 ### A gate before a commit
 
@@ -233,7 +233,7 @@ Session 2 asks for the feature the surface exists for:
 
 A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after looking at the result in his browser, and the orchestrator made that fix.
 
-The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read some of the agent's scripts at review speed, the slower read a script gets when the agent proposes to keep it: does it earn its place?
+The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off.
 
 ### A reply finds its paragraph
 
@@ -280,11 +280,11 @@ Sixteen hand-written anchoring tests passed on their first run. To see whether t
 
 {{fence repos:essay-surface/journal/tuesday.md "--- FAIL: TestAnchorTypoFixed"}}
 
-At review speed, this script is one-time: a fault left in place would prove nothing more. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
+This script is for one use: a fault left in place would prove nothing more. The agent did the same for the front end: `check.shale` now runs `node --check comments.js`, since `go test` never parses it, and one seeded syntax error turned that stage red.
 
 ### A script worth keeping
 
-`scripts/comments_smoke.shale` runs the whole comment flow through the real server. It posts a comment, fixes a typo and adds a paragraph above it on disk while the server runs, then deletes the paragraph. Its checks go through one small function:
+Some of the agent's scripts get a read at review speed, the slower read a script gets when the agent proposes to keep it: does it earn its place? `scripts/comments_smoke.shale` runs the whole comment flow through the real server. It posts a comment, fixes a typo and adds a paragraph above it on disk while the server runs, then deletes the paragraph. Its checks go through one small function:
 
 {{function repos:essay-surface/scripts/comments_smoke.shale want}}
 
@@ -292,7 +292,11 @@ The end of the script shows how it holds a server:
 
 {{lines repos:essay-surface/scripts/comments_smoke.shale from "local job = essay_start(" to "for l in result.value do print(l) end"}}
 
-`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. A budget stop is the one stop `attempt` can't catch, and the server stayed up until the agent stopped it by its job record. The budget line at the top of `bench.shale` now leaves room.
+`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. Its run on all the real notes stopped on its budget for what a run keeps at each `yield`:
+
+{{fence repos:essay-surface/journal/tuesday.md "bench.shale:140:5"}}
+
+A budget stop is the one stop `attempt` can't catch, so the server stayed up until the agent stopped it by its job record. The bench's budget line now leaves room.
 
 A run of the smoke test prints each check it passed, from the first post to the orphan:
 
@@ -364,8 +368,6 @@ The audit, which reads every rendered note for markdown left over, passed that f
 
 `fast.shale` runs on every edit, in about three seconds, and stops at the first failing stage, naming the failed tests. `full.shale` runs before anything ships, holds every stage to a CPU budget, and ends on one line: `SAFE TO SHIP`, or `NOT SAFE` and the stages that failed.
 
-The session's report closed with the decisions Steve might reverse, among them the comments folder's parent from One loop.
-
 ## Session 4: making the checks fail
 
 Session 4 asks whether those checks can fail:
@@ -374,11 +376,11 @@ Session 4 asks whether those checks can fail:
 
 A cold agent worked for about seventeen minutes. Steve stepped in once, with two replies that the orchestrator passed on mid-run.
 
-Session 3 saw `NOT SAFE` once, for one fault. Can every stage really go red? Asking that is reading a gate at trust speed, a third speed after scroll and review: what proves the gate is watching?
+Can every stage really go red? Session 3 saw `NOT SAFE` once, for one fault. Asking whether a gate can fail is reading it at trust speed, a third speed after scroll and review: what proves the gate is watching?
 
 ### One fault per stage
 
-This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that test nothing, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Fixtures sometimes irritate Steve, because they can slow gates, often through needless rebuilds.
+This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that test nothing, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Steve is wary of fixtures, because they can slow gates, often through needless rebuilds.
 
 `full.shale` has six stages, and its first, `fast`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `full.shale` runs it, the fault out, then proof that the tree is back and `fast.shale` passes:
 
@@ -448,7 +450,7 @@ Session 5 turns a chore into a script:
 
 A cold agent built the release script and proved it on a dev port, away from the live server, in about sixteen minutes. Steve didn't step in, and the orchestrator ran the real release.
 
-By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A script runs the same steps in the same order each time, and that sameness is what we mean by boring.
+Boring is the goal. Steve's real replies now lived on the surface, and every release was still a chore done by hand. A script runs the same steps in the same order each time, and that sameness is what we mean by boring.
 
 ### A release, in order
 
@@ -464,7 +466,7 @@ A failed release puts the old binary back, checks it the same way, and says so o
 
 ### A check that talked to the wrong server
 
-The first surprise came before the release script was written. The agent set up a trial with an "old" server on the dev port, 9300, and the checks' own servers listened there too. Run beside it, as a trial release would run it, the smoke check (a few requests through a server of its own) failed, and its log shows why:
+The first surprise came before the release script was written. The agent set up a trial with an "old" server on the dev port, 9300, and the checks' own servers listened there too. Run beside it, as a trial release would run it, the smoke check failed, and its log shows why:
 
 {{fence repos:essay-surface/journal/friday.md "the page: 404" from "── stopped at" to "bind: address"}}
 
@@ -472,7 +474,7 @@ The smoke's server logged "listening", then failed to bind, and the smoke went o
 
 ### The trap, sprung
 
-In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. This session's first trial sprang it. This one ran out of its step budget just after the swap:
+In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. It sprang again in this session's first trial, which ran out of its step budget just after the swap:
 
 {{fence repos:essay-surface/journal/friday.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
 
@@ -529,19 +531,17 @@ digraph checks {
 
 The real release was boring because this session's surprises, the wrong server and the budget stop, were found on the dev port first.
 
-Along the way, Steve asked the orchestrator to watch for a nuisance that Shale itself could fix.
-
 ## Session 6: the language gets better
 
 Session 6 opens with a reply:
 
-*Steve's reply, in conversation*
+*Steve's reply*
 
 > go ahead with the jobs feature
 
 This session began from a reply in conversation, not from a written prompt. During Session 5, Steve asked the orchestrator to watch for a nuisance that Shale itself could fix, and it found one. Three times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, and in the first release trial, on a budget stop. Each time, someone noticed and stopped it by hand. Session 4 had a cousin of the trap: a stop between a fault going in and coming out left the fault in the tree, and `--undo-on-stop` already covered files.
 
-Three times is a pattern, and a pattern of hand cleanup is a gap in the language. So right after Session 5, a cold agent closed it in Shale itself, in about sixteen minutes. Steve's reply came the next morning, and the merge followed. He stepped in once more, to choose the child run below from three options.
+Three times is a pattern, and a pattern of hand cleanup is a gap in the language. So right after Session 5, a cold agent closed it in Shale itself, in about sixteen minutes, on a branch of its own. Steve's reply, the next morning, approved merging it. This session is that merge, its gates, and what the new rule asked of the release script. He stepped in once more, to choose the child run below from three options.
 
 ### The rule
 
@@ -610,7 +610,7 @@ Session 7 asks for the first feature to come out of daily use:
 
 Steve asked for this in conversation, and the orchestrator wrote the prompt from his words. A cold agent worked for about eleven minutes, Steve didn't step in, and the orchestrator ran the release.
 
-The request was small: Steve wanted to click the URLs in his notes. Small can still be hard. A renderer that links URLs can get them subtly wrong in a dozen ways: a sentence's period pulled into the link, a parenthesis that belongs to the prose, a URL inside code, a URL that carries markup into the page. Steve called it a can of worms.
+Steve wanted to click the URLs in his notes, a small request that can still be hard. A renderer that links URLs can get them subtly wrong in a dozen ways: a sentence's period pulled into the link, a parenthesis that belongs to the prose, a URL inside code, a URL that carries markup into the page. Steve called it a can of worms.
 
 ### The real URLs first
 
@@ -652,7 +652,7 @@ The after pages came from the same audit. The comparison took two stops. The fir
 
 {{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
 
-A regex search pays for its whole pattern at every byte it examines, and the comparison searched 7 MB of pages twice. That made six regex stops in four sessions. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back.
+A regex search pays for its whole pattern at every byte it examines, and the comparison searched 7 MB of pages twice. That's the fourth regex stop this book has shown, and the journals hold six. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back.
 
 The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
 
@@ -674,11 +674,11 @@ The full check said `SAFE TO SHIP`. Then the orchestrator ran the release script
 
 {{fence repos:essay-surface/journal/links.md "comments kept: 4 files, 11 comments"}}
 
-All eleven comments were kept and back on their pages, and the rollback now names a real commit, since the server it replaced came from an earlier release. Green again ✅
+All eleven comments were kept and back on their pages, and the rollback now names a real commit, `8218ffc`, where Session 5's said `unknown`, since the server it replaced came from an earlier release. Green again ✅
 
 ### A second change to the language
 
-The same day, after this session, the regex nuisance became Shale's second language change. `re_find_all` became a builtin, `re_lines` moved into the host, and a search now passes over the bytes no match can begin with. Over 5.3 MB of markdown, a search for links fell from 80 million steps to 3.9 million, and tests hold both to the results of the Shale they replaced. The work had asked for it six times.
+The same day, after this session, the regex nuisance became Shale's second language change. `re_find_all` and `re_lines` became builtins, and a search now passes over the bytes no match can begin with. Over 5.3 MB of markdown, a search for links fell from 80 million steps to 3.9 million, and tests hold both to the results of the Shale they replaced. The work had asked for it six times.
 
 ### The gates now
 
@@ -709,7 +709,7 @@ A check that's too slow stops getting run, so each is held to a CPU budget, whic
 
 ### Prove it can fail
 
-Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault turned only three tests red, because one test's panic ended the run; once that test failed plainly, the same fault turned twelve red. In Session 4 one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
+Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault turned only three tests red, because one test's panic ended the run; once that test failed plainly, the same fault turned twelve red. In Session 4 a plant found a security hole every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
 
 ### Look with your own eyes
 

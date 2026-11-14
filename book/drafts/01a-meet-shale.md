@@ -33,7 +33,7 @@ The same goes for recipes, scripts saved to a file because their question came b
 
 ### Four words for what's next
 
-Four words come up from the first session on. `run` needs a timeout and a keep, how much of a program's output to hold on to, and two of the four are keeps:
+Four words come up from the first session on. `run` needs a timeout and a keep. A keep is how much of a program's output `run` holds on to. `whole` and `tail` are the two keeps:
 - **`want`:** the reason a script gives for running a risky program, written `want = "tag: why"`. Shale logs it.
 - **`whole`:** a keep in bytes. `run` holds all of the output up to that size, and each stage in fast.shale holds up to 400,000 bytes.
 - **`tail`:** a keep in lines. `run` holds the program's last lines, where its verdict usually sits.

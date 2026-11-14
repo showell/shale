@@ -53,5 +53,3 @@ The audit, which reads every rendered note for markdown left over, passed that f
 ### The gates now
 
 `fast.shale` runs on every edit, in about three seconds, and stops at the first failing stage, naming the failed tests. `full.shale` runs before anything ships, holds every stage to a CPU budget, and ends on one line: `SAFE TO SHIP`, or `NOT SAFE` and the stages that failed.
-
-The session's report closed with the decisions Steve might reverse, among them the comments folder's parent from One loop.

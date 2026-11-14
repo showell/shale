@@ -4,13 +4,13 @@
 
 Session 6 opens with a reply:
 
-*Steve's reply, in conversation*
+*Steve's reply*
 
 > go ahead with the jobs feature
 
 This session began from a reply in conversation, not from a written prompt. During Session 5, Steve asked the orchestrator to watch for a nuisance that Shale itself could fix, and it found one. Three times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, and in the first release trial, on a budget stop. Each time, someone noticed and stopped it by hand. Session 4 had a cousin of the trap: a stop between a fault going in and coming out left the fault in the tree, and `--undo-on-stop` already covered files.
 
-Three times is a pattern, and a pattern of hand cleanup is a gap in the language. So right after Session 5, a cold agent closed it in Shale itself, in about sixteen minutes. Steve's reply came the next morning, and the merge followed. He stepped in once more, to choose the child run below from three options.
+Three times is a pattern, and a pattern of hand cleanup is a gap in the language. So right after Session 5, a cold agent closed it in Shale itself, in about sixteen minutes, on a branch of its own. Steve's reply, the next morning, approved merging it. This session is that merge, its gates, and what the new rule asked of the release script. He stepped in once more, to choose the child run below from three options.
 
 ### The rule
 

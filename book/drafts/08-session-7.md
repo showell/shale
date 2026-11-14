@@ -8,7 +8,7 @@ Session 7 asks for the first feature to come out of daily use:
 
 Steve asked for this in conversation, and the orchestrator wrote the prompt from his words. A cold agent worked for about eleven minutes, Steve didn't step in, and the orchestrator ran the release.
 
-The request was small: Steve wanted to click the URLs in his notes. Small can still be hard. A renderer that links URLs can get them subtly wrong in a dozen ways: a sentence's period pulled into the link, a parenthesis that belongs to the prose, a URL inside code, a URL that carries markup into the page. Steve called it a can of worms.
+Steve wanted to click the URLs in his notes, a small request that can still be hard. A renderer that links URLs can get them subtly wrong in a dozen ways: a sentence's period pulled into the link, a parenthesis that belongs to the prose, a URL inside code, a URL that carries markup into the page. Steve called it a can of worms.
 
 ### The real URLs first
 
@@ -50,7 +50,7 @@ The after pages came from the same audit. The comparison took two stops. The fir
 
 {{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
 
-A regex search pays for its whole pattern at every byte it examines, and the comparison searched 7 MB of pages twice. That made six regex stops in four sessions. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back.
+A regex search pays for its whole pattern at every byte it examines, and the comparison searched 7 MB of pages twice. That's the fourth regex stop this book has shown, and the journals hold six. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back.
 
 The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
 
@@ -72,11 +72,11 @@ The full check said `SAFE TO SHIP`. Then the orchestrator ran the release script
 
 {{fence repos:essay-surface/journal/links.md "comments kept: 4 files, 11 comments"}}
 
-All eleven comments were kept and back on their pages, and the rollback now names a real commit, since the server it replaced came from an earlier release. Green again ✅
+All eleven comments were kept and back on their pages, and the rollback now names a real commit, `8218ffc`, where Session 5's said `unknown`, since the server it replaced came from an earlier release. Green again ✅
 
 ### A second change to the language
 
-The same day, after this session, the regex nuisance became Shale's second language change. `re_find_all` became a builtin, `re_lines` moved into the host, and a search now passes over the bytes no match can begin with. Over 5.3 MB of markdown, a search for links fell from 80 million steps to 3.9 million, and tests hold both to the results of the Shale they replaced. The work had asked for it six times.
+The same day, after this session, the regex nuisance became Shale's second language change. `re_find_all` and `re_lines` became builtins, and a search now passes over the bytes no match can begin with. Over 5.3 MB of markdown, a search for links fell from 80 million steps to 3.9 million, and tests hold both to the results of the Shale they replaced. The work had asked for it six times.
 
 ### The gates now
 
