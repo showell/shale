@@ -138,8 +138,9 @@ expressions, not Lua's `%d`), are in
   or show line ranges), `run.shale` (a program's verdict and tail),
   `zig_build.shale`, `rename_words.shale`, `syntax.shale`, `http.shale`.
   Hunts over a Zig tree are in [cookbook/zig/](cookbook/zig/README.md)
-  (`seams`, `smells`, `dead`, `clones`, ...), and Roc's in
-  [cookbook/roc/](cookbook/roc/README.md).
+  (`seams`, `smells`, `dead`, `clones`, ...), Roc's in
+  [cookbook/roc/](cookbook/roc/README.md), and Go's in
+  [cookbook/go/](cookbook/go/README.md).
 - **[The tutorial](https://lynrummy.com/shale/tutorial.html)**: fifteen
   lessons that run in the browser, the language from the start
   (`web/lessons.js`).
@@ -304,9 +305,11 @@ no `host` there, so `run`, git and jobs are not in it.
 sample's scripts and every lesson's cell, each held to the output it pins;
 and `cookbook-test`: every cookbook recipe that reads `arg("self_test")`,
 run with `self_test=1` on its plants, a failure named by recipe. The Roc
-name hunt needs roc-ast at `~/tools/roc-ast/bin/roc-ast`, and the method
-rewrite roc-types at `~/tools/roc-types/bin/roc-types`; each fails, saying
-how to install it, without it, and CI unpacks the release assets there. The
+name hunt needs roc-ast at `~/tools/roc-ast/bin/roc-ast`, the method
+rewrite roc-types at `~/tools/roc-types/bin/roc-types`, and the Go hunts
+go-ast at `~/tools/go-ast/bin/go-ast`; each fails, saying how to install
+it, without it. CI unpacks the Roc release assets there and builds go-ast
+with its Go. The
 Zig tools' tests read zig-webbox's checkout too: they replay splits from its
 history and walk its sources beside this repo's. **`consumers`** runs this
 repo's own docs check, metal-vmm's queue tool by this tree's `shale`, then
@@ -351,6 +354,9 @@ and `zig build shale-scale` (the largest site each site example fits).
 - [cookbook/roc/README.md](cookbook/roc/README.md): recipes for a Roc
   tree: long lines laid out by `roc fmt`, and two archives judged the same
   machine code.
+- [cookbook/go/README.md](cookbook/go/README.md): hunts over a Go tree,
+  from Go's own parser: awkward names, nested calls, long and deep
+  functions.
 - [docs/designs/DESIGN-shale-stream.md](docs/designs/DESIGN-shale-stream.md):
   a background run's output streamed as it runs; proposed, parked.
 

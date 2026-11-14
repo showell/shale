@@ -44,6 +44,7 @@ test {
     _ = @import("shale_ro_links_test.zig");
     _ = @import("shale_use_test.zig");
     _ = @import("shale_cookbook_test.zig");
-    _ = @import("shale_host_roc.zig");
+    _ = @import("shale_host_flat_tree.zig");
     _ = @import("shale_roc_tree_test.zig");
+    _ = @import("shale_go_tree_test.zig");
 }

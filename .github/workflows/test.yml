@@ -85,6 +85,21 @@ jobs:
           tar -xzf /tmp/roc-ast.tar.gz -C ~/tools/roc-ast
           test -x ~/tools/roc-ast/bin/roc-ast
 
+      # `test`'s go_tree tests and the Go recipes' self-tests read Go's
+      # parser's tree from ~/tools/go-ast/bin/go-ast: Shale's tools/go_ast,
+      # standard library only, built here by tools/go_ast/go.mod's Go.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: shale/tools/go_ast/go.mod
+          cache: false
+
+      - name: Install go-ast
+        working-directory: shale/tools/go_ast
+        run: |
+          mkdir -p ~/tools/go-ast/bin
+          CGO_ENABLED=0 go build -trimpath -o ~/tools/go-ast/bin/go-ast .
+          test -x ~/tools/go-ast/bin/go-ast
+
       # methods.shale's typed plant reads Roc's checker's types from
       # ~/tools/roc-types/bin/roc-types: the asset built by roc-types.yml from
       # Shale's tools/roc_types, its URL and sha256 read from

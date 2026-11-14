@@ -431,9 +431,9 @@ pub fn build(b: *std.Build) void {
     // would pass unrun); none found fails. Each runs from this tree with the
     // mounts pinned (SHALE_MOUNTS), `cookbook` this tree's own, read-only, so
     // a worktree or CI checkout tests its own plants, and `tools` `~/tools`
-    // (an empty folder when there is none), where roc-ast and roc-types live:
-    // the Roc name hunt and the method rewrite fail without them, saying how
-    // to install them; CI installs the release assets there. `scratch`, a
+    // (an empty folder when there is none), where roc-ast, roc-types and
+    // go-ast live: the Roc name hunt, the method rewrite and the Go hunts fail
+    // without them, saying how to install them; CI installs them there. `scratch`, a
     // fresh folder deleted after, is where a self-test plants what it writes
     // (branch_prune's repos). This `shale` is first on PATH, so a self-test
     // that judges each plant in a child run (methods') runs this tree's
@@ -460,7 +460,7 @@ pub fn build(b: *std.Build) void {
         run.stdio = .inherit;
         run.step.dependOn(quick);
         test_step.dependOn(&run.step);
-        b.step("cookbook-test", "Every cookbook recipe's self-test (`self_test=1`), each recipe that reads arg(\"self_test\"), by this tree's `shale` (the Roc name hunt needs ~/tools/roc-ast/bin/roc-ast, the method rewrite ~/tools/roc-types/bin/roc-types)").dependOn(&run.step);
+        b.step("cookbook-test", "Every cookbook recipe's self-test (`self_test=1`), each recipe that reads arg(\"self_test\"), by this tree's `shale` (the Roc name hunt needs ~/tools/roc-ast/bin/roc-ast, the method rewrite ~/tools/roc-types/bin/roc-types, the Go hunts ~/tools/go-ast/bin/go-ast)").dependOn(&run.step);
     }
 
     // `zig build consumers` runs each application's own checks against

@@ -360,6 +360,17 @@ has none of it):
   are still read; a missing file's `err` is `no such file`; `err` is `""`
   for a file read. A step is charged a node; one program runs for the
   paths, and one more for each refusal.
+  `go_tree(paths)` is the same for Go: Go's own parser (the standard
+  library's go/parser) through go-ast (Shale's `tools/go_ast`, installed by
+  `shale tools/go_ast/install.shale` as `go-ast/bin/go-ast` under the
+  `tools` mount), which writes roc-ast's format, so one host reader takes
+  both. A node's `kind` is go/ast's type name (`FuncDecl`, `CallExpr`,
+  `Ident`), its attributes its scalars (`name`, `value`, `lit`, `op`,
+  `tok`, `text`), and `role` is the field of its parent that holds it
+  (`Fun`, `Args`, `Body`, `Results`), so a recipe never guesses which kid is
+  which; `tools/go_ast/main.go`'s header has the format. A file that does
+  not parse, or cannot be read, is that file's `err`. The Go recipes are
+  [`cookbook/go/`](../cookbook/go/README.md).
   **The types beside the tree:** roc-types (Shale's `tools/roc_types`) is
   Roc's own checker at the same pin, through the compiler's embedding API:
   given an app, it writes every expression's and pattern's type, by

@@ -1,0 +1,18 @@
+-- Builds go-ast and installs it where Shale may run it, at
+-- ~/tools/go-ast/bin/go-ast under the `tools` mount. go-ast is Go's own
+-- parser (the standard library's go/parser, nothing else), so the build
+-- needs only the `go` on PATH, and the tree is that Go's. Run from Shale's
+-- checkout:
+--   shale tools/go_ast/install.shale
+--
+-- CI builds it the same way (.github/workflows/test.yml, "Install go-ast").
+
+-- The tools mount is read-only to Shale, so `go build` makes the folders.
+local exe = "tools:go-ast/bin/go-ast"
+local built = run({"go", "build", "-trimpath", "-o", real(exe), "."}, {timeout_ms = 300000, tail = 20, cwd = "tools/go_ast", env = {CGO_ENABLED = "0"}})
+print(built.out)
+if built.ended ~= "exit" or built.code ~= 0 then fail("go-ast: the build " .. (built.ended == "exit" and ("exited " .. built.code) or built.ended) .. "; nothing installed (its last lines are above)") end
+if not exists(exe) then fail("go-ast: the build finished but left no ~/tools/go-ast/bin/go-ast") end
+local said = run({real(exe), "--flat"}, {timeout_ms = 10000, stdin = "", head = 1})
+if not starts_with(said.out, "go-ast flat ") then fail("go-ast: the installed binary's first line is not its header: " .. said.out) end
+print("go-ast: installed at ~/tools/go-ast/bin/go-ast, " .. trim(said.out))

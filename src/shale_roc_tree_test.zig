@@ -1,7 +1,7 @@
 //! Tests `roc_tree` through the real roc-ast (`~/tools/roc-ast/bin/roc-ast`,
 //! mounted as `tools`, as `zig build cookbook-test` mounts it): a small Roc
 //! file's tree, a file roc-ast refuses between two it reads, and an empty
-//! file. The dump's reading alone is tested in src/shale_host_roc.zig.
+//! file. The dump's reading alone is tested in src/shale_host_flat_tree.zig.
 
 const std = @import("std");
 const testing = std.testing;
