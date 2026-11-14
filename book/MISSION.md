@@ -91,3 +91,15 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 **AI. Every chapter teaches a lesson.** Each chapter, with the possible exception of the first two, has at least one concrete lesson: advice the reader can act on, stated as a rule, and earned by a moment in the chapter. A lesson takes an opinionated, authoritative tone: do this, never that, and why. Descriptions and other prose keep a more balanced tone (Steve, 2026-11-14). `book/personas/lessons.md` is the cold reader that checks this.
 
 **AJ. Shale isn't a token saver.** Never portray Shale as something that saves tokens: it may add to token costs. It also slows you down at first, while you build up recipes. The book's other points matter far more (Steve, 2026-11-14). Meet Shale says this once, plainly, and then gives the main advantage over bash: Shale is a higher-level language, one in which you build up real primitives (Steve, 2026-11-14). There's no "trying this yourself" section with costs, since the book has no record of them.
+
+## 6. Part Two
+
+**PA. Part Two: four languages, one workflow.** Part Two makes the essay surface richer, with dot diagrams and small widgets in a note. Shale is the glue the agent builds, checks, refactors and ships with. Go does the plumbing, Roc expresses the features, and JavaScript does what JavaScript always does. Its premise is that true multi-lingual development is far more feasible with agents, for the same reason dialects are cheap for them. The book's central theme still holds: building your own workflow, now in app territory (Steve, 2026-11-14).
+
+**PB. A format from first principles, not a port.** We don't port the markdown renderer to Roc. We declare up front that we're building something inspired by markdown, from first principles. It doesn't need all of markdown's power, and none of CommonMark's rigor. Markdown isn't a perfect fit for some of what we want, such as extending widgets. "Our book is more about building your own tools that work perfectly for you" (Steve, 2026-11-14).
+
+**PC. Where Roc runs, organically.** Roc on the server, in the browser, or both: let requirements dictate. The book shows the choice being made when a feature forces it, never decided in advance (Steve, 2026-11-14).
+
+**PD. Types as the prompt.** Each Part Two session opens with types: the prompt gives the mission, and the agent's first report is a proposed set of Roc types for Steve to reply to, before any code. This paradigm is new for us, precisely because our past work was so driven by porting. The book is honest about where we get the types wrong (Steve, 2026-11-14).
+
+**PE. Read Roc, rarely write it.** Part Two mirrors Part One's premise: the reader reads Roc and judges it, and the agent writes it. A "Meet Roc" interlude opens Part Two, like Meet Shale, with one real function from the project. Roc's unusual features arrive only when a session needs them (Steve, 2026-11-14).
