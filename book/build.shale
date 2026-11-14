@@ -454,6 +454,10 @@ function lint_findings(ls)
     if uses > parse_int(row.key) then push(found, "`" .. row.value .. "` is used " .. uses .. " times, and " .. REFRAINS .. " allows " .. row.key) end
   end
   for m in re_find_all(text, "\\bchapters? [0-9]+") do push(found, "a chapter named by number: `" .. m.text .. "`") end
+  -- MISSION AE: the book says "skills" exactly once, anywhere, quotes and
+  -- code included, in the paragraph on why the project has no skills files.
+  local skill_uses = #re_find_all(lower(join(ls, "\n")), "\\bskills?\\b")
+  if skill_uses ~= 1 then push(found, "the word `skills` appears " .. skill_uses .. " times, and MISSION AE allows exactly one: the paragraph on why this project has no skills files") end
   return found
 end
 
