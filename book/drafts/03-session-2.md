@@ -1,12 +1,12 @@
 # Draft
 
-## Tuesday: replies that stay put
+## Session 2: replies that stay put
 
-Tuesday's prompt asks for the feature the surface exists for:
+The second prompt asks for the feature the surface exists for:
 
 {{quote repos:essay-surface/journal/prompts/tuesday.md}}
 
-As on Monday, the roles are turned around: the agent writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. Today we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
+As in the first prompt, the roles are turned around: the agent writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
 
 ### Arguing from real paragraphs
 
@@ -79,7 +79,7 @@ The end of the script shows how it holds a server:
 
 {{lines repos:essay-surface/scripts/comments_smoke.shale from "local job = essay_start(" to "for l in result.value do print(l) end"}}
 
-`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once today. A budget stop is the one stop `attempt` can't catch, and the server stayed up until the agent stopped it by its job record. The budget line at the top of `bench.shale` now leaves room.
+`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. A budget stop is the one stop `attempt` can't catch, and the server stayed up until the agent stopped it by its job record. The budget line at the top of `bench.shale` now leaves room.
 
 A run of the smoke test prints each check it passed, from the first post to the orphan:
 
@@ -91,7 +91,7 @@ Green again ✅
 
 The report's last item to check from now on was an eye test the agent couldn't run, since the box has no browser. Steve opened a note in his, and found no way to reply. The buttons sat at opacity 0 and appeared only on hover. On the old surface, reply buttons follow only prose paragraphs, so a button that appears on hover had him hunting for buttons that might not exist. His words: "Hover is an anti-feature."
 
-The fix set the buttons at opacity 0.6. Their first label was "note", which already meant the essays, so a second commit made it "reply". Steve has written his real replies on the new surface ever since. The first landed on a bullet about "a rename pass", and it read back correctly from the comments file. On Thursday, hidden reply buttons become a check that runs without a browser.
+The fix set the buttons at opacity 0.6. Their first label was "note", which already meant the essays, so a second commit made it "reply". Steve has written his real replies on the new surface ever since. The first landed on a bullet about "a rename pass", and it read back correctly from the comments file. In Session 4, hidden reply buttons become a check that runs without a browser.
 
 ### What's a check now
 

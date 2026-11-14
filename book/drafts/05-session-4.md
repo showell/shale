@@ -1,16 +1,16 @@
 # Draft
 
-## Thursday: making the checks fail
+## Session 4: making the checks fail
 
 {{quote repos:essay-surface/journal/prompts/thursday.md}}
 
-Wednesday ended on `SAFE TO SHIP`. Could that line ever say anything else?
+Session 3 ended on `SAFE TO SHIP`. Could that line ever say anything else?
 
 ### One fault per stage
 
-Thursday seeded one fault in each stage, a plant in our word, ran the stage, and took the fault out. Plants sometimes irritate Steve, because they slow gates, often through needless rebuilds. Done once and removed, they catch tests that test nothing, as Wednesday's deaf watch did.
+This session seeded one fault in each stage, a plant in our word, ran the stage, and took the fault out. Plants sometimes irritate Steve, because they slow gates, often through needless rebuilds. Done once and removed, they catch tests that test nothing, as the deaf watch did in Session 3.
 
-`full.shale` has six stages, and its first, `fast`, has five of its own, so Thursday had eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `full.shale` runs it, the fault out, then proof that the tree is back and `fast.shale` passes:
+`full.shale` has six stages, and its first, `fast`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `full.shale` runs it, the fault out, then proof that the tree is back and `fast.shale` passes:
 
 {{fence repos:essay-surface/journal/thursday.md "plant 1, fast's gofmt stage" from "OLD, NEW)" to "after: exit"}}
 
@@ -44,7 +44,7 @@ It passed before the plant, failed with it, and passed after: green again ✅. T
 
 ### Fixtures, and what they cost
 
-Three kinds of fixture stayed, each one data the check reads. The audit reads a known-bad page and a known-good one before any real note, in under 5 ms, and a plant that blinded the audit stopped it there, before any server started. Wednesday's hidden panic became data for the part of `fast.shale` that reads `go test` output:
+Three kinds of fixture stayed, each one data the check reads. The audit reads a known-bad page and a known-good one before any real note, in under 5 ms, and a plant that blinded the audit stopped it there, before any server started. The hidden panic from Session 3 became data for the part of `fast.shale` that reads `go test` output:
 
 {{lines repos:essay-surface/scripts/fast.shale from "A known-bad go test -v output" to "misreads testdata"}}
 
@@ -54,25 +54,25 @@ The rest of the plants proved their stages once and left. A known-bad Go file wo
 
 ### Reply buttons, without a browser
 
-On Tuesday every check passed, and Steve opened a page with no visible way to reply: the buttons sat at `opacity:0` until hovered. `buttons_test.go` works out the CSS cascade itself, on the stylesheet the page is served with. It judges each place `comments.js` puts a button, at every width a media query names, light and dark. A button counts as hidden under `display:none`, `visibility:hidden`, or opacities that multiply out to under 0.5. CSS it can't judge, such as `!important`, stops the test. It never runs the script, and it misses clipping and contrast.
+In Session 2 every check passed, and Steve opened a page with no visible way to reply: the buttons sat at `opacity:0` until hovered. `buttons_test.go` works out the CSS cascade itself, on the stylesheet the page is served with. It judges each place `comments.js` puts a button, at every width a media query names, light and dark. A button counts as hidden under `display:none`, `visibility:hidden`, or opacities that multiply out to under 0.5. CSS it can't judge, such as `!important`, stops the test. It never runs the script, and it misses clipping and contrast.
 
-Its fixtures are seven small sheets, five known-bad and two known-good, at 0.02 s inside `go test`. Tuesday's is the real one, from git:
+Its fixtures are seven small sheets, five known-bad and two known-good, at 0.02 s inside `go test`. One is the real sheet from Session 2, taken from git:
 
 {{fence repos:essay-surface/journal/thursday.md "the known-bad and known-good sheets for the reply-button check" from "testdata/buttons/tuesday.css" to "faint-article.css"}}
 
-Putting Tuesday's `opacity:0` back turned the test red at widths of 51 and 80rem. The checker got a plant of its own, opacities no longer multiplied, and `faint-article.css` caught it:
+Putting its `opacity:0` back turned the test red at widths of 51 and 80rem. The checker got a plant of its own, opacities no longer multiplied, and `faint-article.css` caught it:
 
 {{fence repos:essay-surface/journal/thursday.md "faint-article.css: want" from "--- FAIL" to "faint-article.css: want"}}
 
 ### Steve's two replies
 
-Two replies to Wednesday's report arrived mid-run. The first asked for a defensive check that the comments folder's parent exists. The server already failed there, but by accident. Now it checks first, names the path, and makes nothing:
+Two replies to the report from Session 3 arrived mid-run. The first asked for a defensive check that the comments folder's parent exists. The server already failed there, but by accident. Now it checks first, names the path, and makes nothing:
 
 {{fence repos:essay-surface/journal/thursday.md "made: false"}}
 
 The second put phones out of scope. The README says so in one sentence, and the by-hand list keeps only the desktop browser. The narrow-window CSS stays: out of scope means unchecked, not removed.
 
-`full.shale` went from 30.9 s to 23.3 s, mostly from a quieter box; Thursday's additions cost tens of milliseconds.
+`full.shale` went from 30.9 s to 23.3 s, mostly from a quieter box; this session's additions cost tens of milliseconds.
 
 ### Now a gate
 

@@ -1,14 +1,14 @@
 # Draft
 
-## Wednesday: a check for each moment
+## Session 3: a check for each moment
 
 {{quote repos:essay-surface/journal/prompts/wednesday.md}}
 
-By Wednesday the essay surface had four scripts, and Tuesday's report listed what to run and when. A list is something to remember. Today it became two commands.
+By now the essay surface had four scripts, and the last session's report listed what to run and when. A list is something to remember. This session made it two commands.
 
 ### Measure, then listen
 
-Monday's numbers had already named the cost: the index checked every note's file on every request. Before touching it, the agent measured the parts of its plan. One survey counted where the 505 real notes keep their dates: nearly always on line 3, in the paragraph after the title. Another timed `git log` on the notes at 0.8 s, slowed by 3,961 unpacked objects. That repository is Steve's, so the agent left it alone, and the server pays the cost once, at start-up.
+The first session's numbers had already named the cost: the index checked every note's file on every request. Before touching it, the agent measured the parts of its plan. One survey counted where the 505 real notes keep their dates: nearly always on line 3, in the paragraph after the title. Another timed `git log` on the notes at 0.8 s, slowed by 3,961 unpacked objects. That repository is Steve's, so the agent left it alone, and the server pays the cost once, at start-up.
 
 The new server hears changes from the kernel, through Linux's inotify, and reads the kernel's queue of events at the start of each request. The kernel queues an event before the write returns, so the next request always sees it. The index page is kept until a note changes. Before, the index took fifteen times as long as a note:
 
@@ -40,7 +40,7 @@ A run that spends more CPU than its `cpu_budget_ms` stops, naming the stage. The
 
 ### A check before shipping
 
-`full.shale` runs `fast.shale` first, then five stages on all of Steve's real notes: the Go tests under the race detector, Tuesday's anchoring simulation (which replays edits to see where comments land), Monday's audit of every rendered note, the dates comparison, and the bench. Every stage runs, even after one fails, so the last line names every stage that failed:
+`full.shale` runs `fast.shale` first, then five stages on all of Steve's real notes: the Go tests under the race detector, the anchoring simulation from Session 2 (which replays edits to see where comments land), the audit of every rendered note from Session 1, the dates comparison, and the bench. Every stage runs, even after one fails, so the last line names every stage that failed:
 
 {{lines repos:essay-surface/scripts/full.shale from "local failed = {}" to "SAFE TO SHIP"}}
 
@@ -58,13 +58,13 @@ The store's new tests all passed on their first run. So the agent seeded a fault
 
 {{fence repos:essay-surface/journal/wednesday.md "slice bounds out of range [:-1] [recovered, repanicked]" from "slice bounds" to "0.042s"}}
 
-Tuesday's `TestCommentsFollowEdits` sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Tuesday's run gave no sign, because on Tuesday nothing failed. With the panic made a plain failure, the same deaf watch turned twelve tests red. Thursday makes that trick a habit.
+`TestCommentsFollowEdits`, written in Session 2, sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Its runs in Session 2 gave no sign, because nothing failed then. With the panic made a plain failure, the same deaf watch turned twelve tests red. The next session makes that trick a habit.
 
 Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`, which looks the same on the page. The verdict was right, `NOT SAFE: fast, race failed`, but the red fast stage showed the last lines of `go test -v`, and those were passes. Now fast keeps only the failed tests and their lines, and its stop names them:
 
 {{fence repos:essay-surface/journal/wednesday.md "1 failed: TestRender (86718 steps)" from "markdown_test.go:100" to "stopped at"}}
 
-Monday's audit, which reads every rendered note for markdown left over, passed that fault, since it never checks which tags appear; the renderer's tests caught it. Each check has its own job.
+The audit, which reads every rendered note for markdown left over, passed that fault, since it never checks which tags appear; the renderer's tests caught it. Each check has its own job.
 
 ```dot
 digraph checks {

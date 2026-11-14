@@ -1,12 +1,12 @@
 # Draft
 
-## Monday: a server and a number
+## Session 1: a server and a number
 
-Our week starts with an empty repository and this prompt:
+Our first session starts with an empty repository and this prompt:
 
 {{quote repos:essay-surface/journal/prompts/monday.md}}
 
-The prompt has the roles turned around: in practice the agent writes the notes, and Steve replies to them. Two phrases shape the day. "Speed matters to me" asks for a number, and "five hundred notes" says where to measure it. Steve has about that many on the old surface, so the agent works against those.
+The prompt has the roles turned around: in practice the agent writes the notes, and Steve replies to them. Two phrases shape the session. "Speed matters to me" asks for a number, and "five hundred notes" says where to measure it. Steve has about that many on the old surface, so the agent works against those.
 
 ### The first stop
 
@@ -32,7 +32,7 @@ This reads like Lua, on purpose. `function` declares a function, and `end` close
 
 {{fence repos:essay-surface/journal/monday.md "total bytes 4747688" from "502 notes" to "167408"}}
 
-Five hundred was the real count, with a long tail: the biggest note is 167 KB. Smaller stops came all day, a guessed field name or builtin, each named in one line and fixed in the next call.
+Five hundred was the real count, with a long tail: the biggest note is 167 KB. Smaller stops came throughout, a guessed field name or builtin, each named in one line and fixed in the next call.
 
 ### A gate before a commit
 
@@ -64,7 +64,7 @@ That was the wrong number. `http_get` starts a curl process per call, so it time
 
 {{fence repos:essay-surface/journal/monday.md "in 178ms" from "index: 200 requests" to "notes: 503 requests"}}
 
-The agent split the index's 2 ms by phase with two Go benchmarks, and found 1.1 ms of it was a `stat` of every note on every request. It went first on tomorrow's list.
+The agent split the index's 2 ms by phase with two Go benchmarks, and found 1.1 ms of it was a `stat` of every note on every request. It went first on the next session's list.
 
 ### The audit
 

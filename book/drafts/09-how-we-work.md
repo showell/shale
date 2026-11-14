@@ -2,7 +2,7 @@
 
 ## How we work
 
-A week of work leaves habits behind. Here they are in one place, since they're the real subject of the book.
+Seven sessions of work leave habits behind. Here they are in one place, since they're the real subject of the book.
 
 ### Three ways to read
 
@@ -13,7 +13,7 @@ Most of the Shale you'll meet goes by quickly. Read it at three speeds:
 
 ### A check for each moment
 
-By Friday the project had a check for every moment, each sized to how often it runs:
+By Session 5 the project had a check for every moment, each sized to how often it runs:
 
 | When | The check | Its time |
 |---|---|---|
@@ -25,19 +25,19 @@ A check that's too slow stops getting run, so each one is held to a budget, and 
 
 ### Prove it can fail
 
-Every gate on the list earned its place by failing once on purpose. On Wednesday a planted fault found a test whose panic hid twelve others. On Thursday one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
+Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault found a test whose panic hid twelve others. In Session 4 one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
 
 ### Measure a baseline
 
-After the week, Shale gained Go hunts, built on Go's own parser: names, nesting and code smells, each proved by its fixtures. Run over essay-surface, they found little. There were no vague function names and nothing nested four calls deep. Two long functions in the markdown renderer, `inline` and `link`, are the next refactor if one is wanted. A hunt that finds little in good code is still worth running: it sets the baseline, and the next change gets held to it.
+Later, Shale gained Go hunts, built on Go's own parser: names, nesting and code smells, each proved by its fixtures. Run over essay-surface, they found little. There were no vague function names and nothing nested four calls deep. Two long functions in the markdown renderer, `inline` and `link`, are the next refactor if one is wanted. A hunt that finds little in good code is still worth running: it sets the baseline, and the next change gets held to it.
 
 ### Look with your own eyes
 
-Every check passed on Tuesday, and the reply buttons were invisible. Gates hold what you already know to check. A human's first look finds what you didn't know yet, and then the agent can often turn it into a gate.
+Every check passed in Session 2, and the reply buttons were invisible. Gates hold what you already know to check. A human's first look finds what you didn't know yet, and then the agent can often turn it into a gate.
 
 ### Let the work ask
 
-Nothing this week was planned in advance. The checks, the release script and the language change all arrived because a chore came up more than once. That's how to grow a project's tools: make a script the third time you do something by hand, a gate once the script makes a judgment, and a change to the language once its gap starts to cost you.
+Nothing in this project was planned in advance. The checks, the release script and the language change all arrived because a chore came up more than once. That's how to grow a project's tools: make a script the third time you do something by hand, a gate once the script makes a judgment, and a change to the language once its gap starts to cost you.
 
 ### Your dialect
 

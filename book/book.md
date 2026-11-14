@@ -1,6 +1,6 @@
 # Automating agentic development with Shale
 
-A book for experienced developers who are new to working with agents. We follow one side project, a new essay surface built in a week of chapters, and read the Shale our agent wrote along the way.
+A book for experienced developers who are new to working with agents. We follow one side project, a new essay surface built over a series of sessions, one a chapter, and read the Shale our agent wrote along the way.
 
 This is draft 2, rough in places: prose and code, with pictures still to come.
 
@@ -26,13 +26,13 @@ You won't need to install anything to follow along. Every script in the book rea
 
 ### The project
 
-The book follows one side project from start to finish. We build a new essay surface: a small web app where an agent's notes, written in markdown, become pages, and Steve reads them in a browser and replies to any paragraph. (Monday's prompt says "where I write notes". In practice the agent writes them, and Steve reads and replies.) A Go server sits behind a plain-JavaScript front end. By the end of the week Steve was using it for real, and he wrote his replies to the drafts of this book on it.
+The book follows one side project from start to finish. We build a new essay surface: a small web app where an agent's notes, written in markdown, become pages, and Steve reads them in a browser and replies to any paragraph. (The first prompt says "where I write notes". In practice the agent writes them, and Steve reads and replies.) A Go server sits behind a plain-JavaScript front end. Steve was soon using it for real, and he wrote his replies to the drafts of this book on it.
 
-We tell it as a week, a day per chapter, because that's how the work fell into stages. It's a side project, not five calendar days: the real build took an afternoon of agent time. An essay surface isn't an agent harness, though the two have something in common. In both, a human reads what was written, replies, and steers.
+We tell it in sessions, a chapter each. A session is one stretch of work that starts with one prompt. The sessions aren't days: the real build took an afternoon of agent time, and the feature in Session 7 came the next morning. The agent's journals kept the names they were first given, so the captions under Session 1's quotes say `monday.md`. An essay surface isn't an agent harness, though the two have something in common. In both, a human reads what was written, replies, and steers.
 
 ### We, and the prompts
 
-The book says "we" for Steve and his agent. Each day opens with the prompt we gave the agent, quoted whole. Then it follows the work through the agent's own Shale, quoted from the journal the agent kept as it went. The agents were real, the prompts were real, and so were the mistakes. When something went wrong, the book says so, along with what caught it and what habit it taught.
+The book says "we" for Steve and his agent. Each session opens with the prompt we gave the agent, quoted whole. Then it follows the work through the agent's own Shale, quoted from the journal the agent kept as it went. The agents were real, the prompts were real, and so were the mistakes. When something went wrong, the book says so, along with what caught it and what habit it taught.
 
 ### What Shale adds
 
@@ -47,21 +47,21 @@ Shale builds nothing itself. `go build` makes the server. Shale runs the build, 
 
 ### Gates
 
-The thread through the whole week is gates. A gate is a script that holds work to a standard. It runs the checks, prints a verdict on its last line, and fails when the work falls short. Gates are how we write quality software with agents, because they turn a rule into something that runs on every change.
+The thread through every session is gates. A gate is a script that holds work to a standard. It runs the checks, prints a verdict on its last line, and fails when the work falls short. Gates are how we write quality software with agents, because they turn a rule into something that runs on every change.
 
-In this project, nobody planned the gates up front. They arrived when the work asked for them: a check before a commit on Monday, a fast check and a full one by Wednesday, faults planted on purpose on Thursday, a release with a rollback on Friday.
+In this project, nobody planned the gates up front. They arrived when the work asked for them: a check before a commit in the first session, a fast check and a full one by the third, faults planted on purpose in the fourth, and a release with a rollback in the fifth.
 
 ### A language that changes
 
 Shale is meant to have dialects. A dialect costs a team of humans a great deal, because everyone has to learn it. It costs an agent very little, because an agent reads the whole script, and the docs for its own dialect. So you can keep the dialect that works for your agent, and build your own library of scripts on top of the cookbook or instead of it.
 
-The week shows this happening. A nuisance came up four times, so on Saturday the language changed to fix it. For now, a reader who wants that freedom forks their own copy of Shale.
+The book shows this happening. A nuisance came up four times, so in Session 6 the language changed to fix it. For now, a reader who wants that freedom forks their own copy of Shale.
 
-First, one turn of the loop, start to finish. Then Monday, with an empty repository and a prompt.
+First, one turn of the loop, start to finish. Then Session 1, with an empty repository and a prompt.
 
 ## One loop
 
-Before the week begins, here's one complete turn of the loop the whole book is made of: an agent reports, Steve replies, the agent changes the code, and we read what it ran. It comes from Thursday, and it took a few minutes.
+Before the first session, here's one complete turn of the loop the whole book is made of: an agent reports, Steve replies, the agent changes the code, and we read what it ran. It comes from Session 4, and it took a few minutes.
 
 ```dot
 digraph loop {
@@ -86,13 +86,13 @@ digraph loop {
 
 ### The report
 
-At the end of Wednesday, the agent's report listed a few calls Steve might want to unmake. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The reply landed in a file, one JSON line per reply, shown here trimmed to its main fields:
+At the end of Session 3, the agent's report listed a few calls Steve might want to unmake. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The reply landed in a file, one JSON line per reply, shown here trimmed to its main fields:
 
 ```text
 {"name":"Steve","text":"add a defensive check","quote":"**The comments folder's parent must exist** when the server starts."}
 ```
 
-That's the whole of the steering: four words, attached to the paragraph they answer. We passed it on to Thursday's agent in a short message.
+That's the whole of the steering: four words, attached to the paragraph they answer. We passed it on to the next session's agent in a short message.
 
 ### The change
 
@@ -125,7 +125,7 @@ The same check in bash is one line: run the server, echo `$?`, list the folder. 
 
 - **Agent:** an AI model working in a terminal on our behalf. It reads, runs programs and writes code.
 - **Cold agent:** a fresh agent with no memory of our conversation, given one task and a written brief.
-- **Prompt:** what we ask an agent to do, in plain words. Each day opens with one.
+- **Prompt:** what we ask an agent to do, in plain words. Each session opens with one.
 - **Heredoc:** a Shale script written inline in a shell command, `shale <<'EOF' … EOF`, run once.
 - **Recipe:** a script saved to a file because its question came back.
 - **Mount:** a named folder a script may reach beyond its own, written `name:path`.
@@ -134,15 +134,16 @@ The same check in bash is one line: run the server, echo `$?`, list the folder. 
 - **Gate:** a check that runs the tests and prints a verdict on its last line, and fails when the work falls short.
 - **Fixture:** a small, permanent input a check must reject or accept.
 - **Fault seeding:** putting a bug in once, on purpose, to prove a test catches it. We call these plants.
-- **The old surface:** the essay surface Steve used before this week, a Python server.
+- **The old surface:** the essay surface Steve used before this project, a Python server.
+- **Session:** one stretch of work that opens with one prompt, and a chapter of this book.
 
-## Monday: a server and a number
+## Session 1: a server and a number
 
-Our week starts with an empty repository and this prompt:
+Our first session starts with an empty repository and this prompt:
 
 {{quote repos:essay-surface/journal/prompts/monday.md}}
 
-The prompt has the roles turned around: in practice the agent writes the notes, and Steve replies to them. Two phrases shape the day. "Speed matters to me" asks for a number, and "five hundred notes" says where to measure it. Steve has about that many on the old surface, so the agent works against those.
+The prompt has the roles turned around: in practice the agent writes the notes, and Steve replies to them. Two phrases shape the session. "Speed matters to me" asks for a number, and "five hundred notes" says where to measure it. Steve has about that many on the old surface, so the agent works against those.
 
 ### The first stop
 
@@ -168,7 +169,7 @@ This reads like Lua, on purpose. `function` declares a function, and `end` close
 
 {{fence repos:essay-surface/journal/monday.md "total bytes 4747688" from "502 notes" to "167408"}}
 
-Five hundred was the real count, with a long tail: the biggest note is 167 KB. Smaller stops came all day, a guessed field name or builtin, each named in one line and fixed in the next call.
+Five hundred was the real count, with a long tail: the biggest note is 167 KB. Smaller stops came throughout, a guessed field name or builtin, each named in one line and fixed in the next call.
 
 ### A gate before a commit
 
@@ -200,7 +201,7 @@ That was the wrong number. `http_get` starts a curl process per call, so it time
 
 {{fence repos:essay-surface/journal/monday.md "in 178ms" from "index: 200 requests" to "notes: 503 requests"}}
 
-The agent split the index's 2 ms by phase with two Go benchmarks, and found 1.1 ms of it was a `stat` of every note on every request. It went first on tomorrow's list.
+The agent split the index's 2 ms by phase with two Go benchmarks, and found 1.1 ms of it was a `stat` of every note on every request. It went first on the next session's list.
 
 ### The audit
 
@@ -226,13 +227,13 @@ Titles kept their markdown in 35 notes, and a lone triple backtick in a table ce
 
 `check.shale` runs before every commit: gofmt, vet and every test. The audit's count is the next gate, once something proves the audit itself is watching.
 
-## Tuesday: replies that stay put
+## Session 2: replies that stay put
 
-Tuesday's prompt asks for the feature the surface exists for:
+The second prompt asks for the feature the surface exists for:
 
 {{quote repos:essay-surface/journal/prompts/tuesday.md}}
 
-As on Monday, the roles are turned around: the agent writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. Today we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
+As in the first prompt, the roles are turned around: the agent writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
 
 ### Arguing from real paragraphs
 
@@ -305,7 +306,7 @@ The end of the script shows how it holds a server:
 
 {{lines repos:essay-surface/scripts/comments_smoke.shale from "local job = essay_start(" to "for l in result.value do print(l) end"}}
 
-`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once today. A budget stop is the one stop `attempt` can't catch, and the server stayed up until the agent stopped it by its job record. The budget line at the top of `bench.shale` now leaves room.
+`attempt` runs `flow` and gives back its result or its stop, so the server is stopped before any verdict. That is the review question for every script that starts a server, and `bench.shale` failed it once in this session. A budget stop is the one stop `attempt` can't catch, and the server stayed up until the agent stopped it by its job record. The budget line at the top of `bench.shale` now leaves room.
 
 A run of the smoke test prints each check it passed, from the first post to the orphan:
 
@@ -317,21 +318,21 @@ Green again ✅
 
 The report's last item to check from now on was an eye test the agent couldn't run, since the box has no browser. Steve opened a note in his, and found no way to reply. The buttons sat at opacity 0 and appeared only on hover. On the old surface, reply buttons follow only prose paragraphs, so a button that appears on hover had him hunting for buttons that might not exist. His words: "Hover is an anti-feature."
 
-The fix set the buttons at opacity 0.6. Their first label was "note", which already meant the essays, so a second commit made it "reply". Steve has written his real replies on the new surface ever since. The first landed on a bullet about "a rename pass", and it read back correctly from the comments file. On Thursday, hidden reply buttons become a check that runs without a browser.
+The fix set the buttons at opacity 0.6. Their first label was "note", which already meant the essays, so a second commit made it "reply". Steve has written his real replies on the new surface ever since. The first landed on a bullet about "a rename pass", and it read back correctly from the comments file. In Session 4, hidden reply buttons become a check that runs without a browser.
 
 ### What's a check now
 
 `check.shale` parses the front end and runs the anchoring simulation on the sample notes, its numbers held at what was measured, so any change to the anchoring shows its new numbers. The browser caught what every check missed, and that miss is the next check.
 
-## Wednesday: a check for each moment
+## Session 3: a check for each moment
 
 {{quote repos:essay-surface/journal/prompts/wednesday.md}}
 
-By Wednesday the essay surface had four scripts, and Tuesday's report listed what to run and when. A list is something to remember. Today it became two commands.
+By now the essay surface had four scripts, and the last session's report listed what to run and when. A list is something to remember. This session made it two commands.
 
 ### Measure, then listen
 
-Monday's numbers had already named the cost: the index checked every note's file on every request. Before touching it, the agent measured the parts of its plan. One survey counted where the 505 real notes keep their dates: nearly always on line 3, in the paragraph after the title. Another timed `git log` on the notes at 0.8 s, slowed by 3,961 unpacked objects. That repository is Steve's, so the agent left it alone, and the server pays the cost once, at start-up.
+The first session's numbers had already named the cost: the index checked every note's file on every request. Before touching it, the agent measured the parts of its plan. One survey counted where the 505 real notes keep their dates: nearly always on line 3, in the paragraph after the title. Another timed `git log` on the notes at 0.8 s, slowed by 3,961 unpacked objects. That repository is Steve's, so the agent left it alone, and the server pays the cost once, at start-up.
 
 The new server hears changes from the kernel, through Linux's inotify, and reads the kernel's queue of events at the start of each request. The kernel queues an event before the write returns, so the next request always sees it. The index page is kept until a note changes. Before, the index took fifteen times as long as a note:
 
@@ -363,7 +364,7 @@ A run that spends more CPU than its `cpu_budget_ms` stops, naming the stage. The
 
 ### A check before shipping
 
-`full.shale` runs `fast.shale` first, then five stages on all of Steve's real notes: the Go tests under the race detector, Tuesday's anchoring simulation (which replays edits to see where comments land), Monday's audit of every rendered note, the dates comparison, and the bench. Every stage runs, even after one fails, so the last line names every stage that failed:
+`full.shale` runs `fast.shale` first, then five stages on all of Steve's real notes: the Go tests under the race detector, the anchoring simulation from Session 2 (which replays edits to see where comments land), the audit of every rendered note from Session 1, the dates comparison, and the bench. Every stage runs, even after one fails, so the last line names every stage that failed:
 
 {{lines repos:essay-surface/scripts/full.shale from "local failed = {}" to "SAFE TO SHIP"}}
 
@@ -381,13 +382,13 @@ The store's new tests all passed on their first run. So the agent seeded a fault
 
 {{fence repos:essay-surface/journal/wednesday.md "slice bounds out of range [:-1] [recovered, repanicked]" from "slice bounds" to "0.042s"}}
 
-Tuesday's `TestCommentsFollowEdits` sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Tuesday's run gave no sign, because on Tuesday nothing failed. With the panic made a plain failure, the same deaf watch turned twelve tests red. Thursday makes that trick a habit.
+`TestCommentsFollowEdits`, written in Session 2, sliced `page[:i]` with `i` at -1 when the page had no orphans section, where a deleted paragraph's comments go. The panic ended the test binary, and every test after it went unreported. Its runs in Session 2 gave no sign, because nothing failed then. With the panic made a plain failure, the same deaf watch turned twelve tests red. The next session makes that trick a habit.
 
 Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`, which looks the same on the page. The verdict was right, `NOT SAFE: fast, race failed`, but the red fast stage showed the last lines of `go test -v`, and those were passes. Now fast keeps only the failed tests and their lines, and its stop names them:
 
 {{fence repos:essay-surface/journal/wednesday.md "1 failed: TestRender (86718 steps)" from "markdown_test.go:100" to "stopped at"}}
 
-Monday's audit, which reads every rendered note for markdown left over, passed that fault, since it never checks which tags appear; the renderer's tests caught it. Each check has its own job.
+The audit, which reads every rendered note for markdown left over, passed that fault, since it never checks which tags appear; the renderer's tests caught it. Each check has its own job.
 
 ```dot
 digraph checks {
@@ -414,17 +415,17 @@ digraph checks {
 
 `fast.shale` runs on every edit, in about three seconds, and stops at the first failing stage, naming the failed tests. `full.shale` runs before anything ships, holds every stage to a CPU budget, and ends on one line: `SAFE TO SHIP`, or `NOT SAFE` and the stages that failed.
 
-## Thursday: making the checks fail
+## Session 4: making the checks fail
 
 {{quote repos:essay-surface/journal/prompts/thursday.md}}
 
-Wednesday ended on `SAFE TO SHIP`. Could that line ever say anything else?
+Session 3 ended on `SAFE TO SHIP`. Could that line ever say anything else?
 
 ### One fault per stage
 
-Thursday seeded one fault in each stage, a plant in our word, ran the stage, and took the fault out. Plants sometimes irritate Steve, because they slow gates, often through needless rebuilds. Done once and removed, they catch tests that test nothing, as Wednesday's deaf watch did.
+This session seeded one fault in each stage, a plant in our word, ran the stage, and took the fault out. Plants sometimes irritate Steve, because they slow gates, often through needless rebuilds. Done once and removed, they catch tests that test nothing, as the deaf watch did in Session 3.
 
-`full.shale` has six stages, and its first, `fast`, has five of its own, so Thursday had eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `full.shale` runs it, the fault out, then proof that the tree is back and `fast.shale` passes:
+`full.shale` has six stages, and its first, `fast`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `full.shale` runs it, the fault out, then proof that the tree is back and `fast.shale` passes:
 
 {{fence repos:essay-surface/journal/thursday.md "plant 1, fast's gofmt stage" from "OLD, NEW)" to "after: exit"}}
 
@@ -458,7 +459,7 @@ It passed before the plant, failed with it, and passed after: green again ✅. T
 
 ### Fixtures, and what they cost
 
-Three kinds of fixture stayed, each one data the check reads. The audit reads a known-bad page and a known-good one before any real note, in under 5 ms, and a plant that blinded the audit stopped it there, before any server started. Wednesday's hidden panic became data for the part of `fast.shale` that reads `go test` output:
+Three kinds of fixture stayed, each one data the check reads. The audit reads a known-bad page and a known-good one before any real note, in under 5 ms, and a plant that blinded the audit stopped it there, before any server started. The hidden panic from Session 3 became data for the part of `fast.shale` that reads `go test` output:
 
 {{lines repos:essay-surface/scripts/fast.shale from "A known-bad go test -v output" to "misreads testdata"}}
 
@@ -468,39 +469,39 @@ The rest of the plants proved their stages once and left. A known-bad Go file wo
 
 ### Reply buttons, without a browser
 
-On Tuesday every check passed, and Steve opened a page with no visible way to reply: the buttons sat at `opacity:0` until hovered. `buttons_test.go` works out the CSS cascade itself, on the stylesheet the page is served with. It judges each place `comments.js` puts a button, at every width a media query names, light and dark. A button counts as hidden under `display:none`, `visibility:hidden`, or opacities that multiply out to under 0.5. CSS it can't judge, such as `!important`, stops the test. It never runs the script, and it misses clipping and contrast.
+In Session 2 every check passed, and Steve opened a page with no visible way to reply: the buttons sat at `opacity:0` until hovered. `buttons_test.go` works out the CSS cascade itself, on the stylesheet the page is served with. It judges each place `comments.js` puts a button, at every width a media query names, light and dark. A button counts as hidden under `display:none`, `visibility:hidden`, or opacities that multiply out to under 0.5. CSS it can't judge, such as `!important`, stops the test. It never runs the script, and it misses clipping and contrast.
 
-Its fixtures are seven small sheets, five known-bad and two known-good, at 0.02 s inside `go test`. Tuesday's is the real one, from git:
+Its fixtures are seven small sheets, five known-bad and two known-good, at 0.02 s inside `go test`. One is the real sheet from Session 2, taken from git:
 
 {{fence repos:essay-surface/journal/thursday.md "the known-bad and known-good sheets for the reply-button check" from "testdata/buttons/tuesday.css" to "faint-article.css"}}
 
-Putting Tuesday's `opacity:0` back turned the test red at widths of 51 and 80rem. The checker got a plant of its own, opacities no longer multiplied, and `faint-article.css` caught it:
+Putting its `opacity:0` back turned the test red at widths of 51 and 80rem. The checker got a plant of its own, opacities no longer multiplied, and `faint-article.css` caught it:
 
 {{fence repos:essay-surface/journal/thursday.md "faint-article.css: want" from "--- FAIL" to "faint-article.css: want"}}
 
 ### Steve's two replies
 
-Two replies to Wednesday's report arrived mid-run. The first asked for a defensive check that the comments folder's parent exists. The server already failed there, but by accident. Now it checks first, names the path, and makes nothing:
+Two replies to the report from Session 3 arrived mid-run. The first asked for a defensive check that the comments folder's parent exists. The server already failed there, but by accident. Now it checks first, names the path, and makes nothing:
 
 {{fence repos:essay-surface/journal/thursday.md "made: false"}}
 
 The second put phones out of scope. The README says so in one sentence, and the by-hand list keeps only the desktop browser. The narrow-window CSS stays: out of scope means unchecked, not removed.
 
-`full.shale` went from 30.9 s to 23.3 s, mostly from a quieter box; Thursday's additions cost tens of milliseconds.
+`full.shale` went from 30.9 s to 23.3 s, mostly from a quieter box; this session's additions cost tens of milliseconds.
 
 ### Now a gate
 
 Every stage of `full.shale` has been seen red once, and its kept fixtures run on every check in milliseconds. A page that hides its reply buttons fails `fast.shale` now, and so does a commenter's name that reaches the page unescaped.
 
-## Friday: shipping should be boring
+## Session 5: shipping should be boring
 
 {{quote repos:essay-surface/journal/prompts/friday.md}}
 
-By Friday the surface was in daily use, with real replies on it, and every release was a chore done by hand. A chore done by hand is done a little differently each time. A release done by a script is the same every time, and that sameness is what we mean by boring.
+By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A chore done by hand is done a little differently each time. A release done by a script is the same every time, and that sameness is what we mean by boring.
 
 ### A release, in order
 
-The agent's `release.shale` follows the prompt, in order. It stops before it touches anything unless the checkout is clean and exactly one server runs with the command line it would start. Then it runs Thursday's full check, and goes on only if the check exits 0 and its last line says SAFE TO SHIP:
+The agent's `release.shale` follows the prompt, in order. It stops before it touches anything unless the checkout is clean and exactly one server runs with the command line it would start. Then it runs the full check, and goes on only if the check exits 0 and its last line says SAFE TO SHIP:
 
 {{lines repos:essay-surface/scripts/release.shale from "-- 2: the full check." to "full check: SAFE TO SHIP"}}
 
@@ -524,13 +525,13 @@ The smoke's server logged "listening", then failed to bind, and the smoke went o
 
 ### The trap, sprung
 
-On Monday, the agent noted a trap: a run that stops after `job_start` leaves its server running. Friday's first trial sprang it. Every Shale script runs under a budget, a cap on its steps, and this one ran out just after the swap:
+In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. This session's first trial sprang it. Every Shale script runs under a budget, a cap on its steps, and this one ran out just after the swap:
 
 {{fence repos:essay-surface/journal/friday.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
 
 `attempt` catches a failure, and a budget stop is past its reach. The run stopped after the old server was down and the new one was up, so the rollback never ran. The trial was left serving a build nobody had checked. On the live server, that would have been an unchecked release with no way back but by hand, which is how the agent put the trial back.
 
-The cause was a regex over a 67 KB page, at a step a character; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses. The trap itself stayed in the language until Saturday.
+The cause was a regex over a 67 KB page, at a step a character; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses. The trap itself stayed in the language until the next session.
 
 ### A release that fails on purpose
 
@@ -567,13 +568,13 @@ RELEASED: running 92fb48b on 127.0.0.1:9301; to roll back to unknown: cd /home/s
 
 Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back. The old version reads `unknown` because it was built by hand. The full check is nearly all of the 27 seconds; the swap and its checks fit inside one. Green again ✅
 
-The release was the most boring thing we did all week, and it took the most care to make it so. Boring is what a release looks like when every surprise was found on the dev port first.
+The release was the most boring thing in the project, and it took the most care to make it so. Boring is what a release looks like when every surprise was found on the dev port first.
 
-## Saturday: the language gets better
+## Session 6: the language gets better
 
-Four times this week, an agent's run stopped after `job_start` and left a server running: on Monday, on Tuesday, on Thursday while seeding a fault, and in Friday's first trial, on a budget stop. Each time, someone noticed and cleaned up by hand.
+Four times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, again while seeding faults in Session 4, and in the first release trial, on a budget stop. Each time, someone noticed and cleaned up by hand.
 
-Four times is a pattern, and a pattern of hand cleanup is a gap in the language. So on Saturday we closed it, in Shale itself.
+Four times is a pattern, and a pattern of hand cleanup is a gap in the language. So this session closed it, in Shale itself.
 
 ### The rule
 
@@ -604,9 +605,9 @@ The feature changed what a stop does, and one script had to say something new. A
 
 {{function repos:essay-surface/scripts/release.shale rel_start}}
 
-The new server starts with `keep` false, and the old one put back by a failed release starts with it true. Before Saturday, the script's defense against the trap was a large step budget and a comment explaining it. Now the code says which server stays, and the language does the rest.
+The new server starts with `keep` false, and the old one put back by a failed release starts with it true. Before this session, the script's defense against the trap was a large step budget and a comment explaining it. Now the code says which server stays, and the language does the rest.
 
-The feature also exposed a gap in Friday's script. A budget stop after the swap would now end the new server with the run, and the run could never put the old one back. A script can't catch its own stop, so the release runs the swap and its checks as a child run, a second Shale process it can watch:
+The feature also exposed a gap in the release script itself. A budget stop after the swap would now end the new server with the run, and the run could never put the old one back. A script can't catch its own stop, so the release runs the swap and its checks as a child run, a second Shale process it can watch:
 
 {{function repos:essay-surface/scripts/release.shale rel_install_child}}
 
@@ -633,17 +634,97 @@ digraph release {
 
 ### Dialects
 
-This is what we mean by a language that agents make better. The feature came from the week's own work. The work needed it four times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.
+This is what we mean by a language that agents make better. The feature came from the project's own work. The work needed it four times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.
 
 `keep_on_stop` went into Shale's main line, since every project with a server wants it. In your own fork, a word like it is where your dialect begins. A dialect costs a human a great deal: new words to learn, old habits that no longer fit. It costs an agent very little, since the agent reads the docs every session. So Shale is meant to have dialects. Each reader keeps the one that works for their agent, and builds their own scripts on top of it.
 
 For now, that means forking your own copy of Shale and letting your agent change it. The habit matters more than the mechanism. When a cleanup happens by hand a second time, ask your agent what word the language is missing. Then read the tests on both sides, see the seeded faults turn them red, and run the gates of everything that depends on it.
 
-The best feature of the week came from its most annoying chore. Your agent's nuisances are your language's roadmap.
+The best feature so far came from the most annoying chore. Your agent's nuisances are your language's roadmap.
+
+## Session 7: a feature arrives
+
+{{quote repos:essay-surface/journal/prompts/links.md}}
+
+After six sessions the surface was in daily use, and the first request to come out of that use was small: Steve wanted to click the URLs in his notes. Small isn't the same as easy. A renderer that links URLs can get them subtly wrong in a dozen ways: a sentence's period pulled into the link, a parenthesis that belongs to the prose, a URL inside code, a URL that carries markup into the page. Steve called it a can of worms. This session shows what the earlier habits buy when a request like that arrives.
+
+### The real URLs first
+
+Before designing anything, the agent counted: 514 real notes held 125 `http://` or `https://` URLs. It printed each one with its context. Most were markdown links already, and the bare ones ended in every way the prompt names:
+
+{{fence repos:essay-surface/journal/links.md "metal-lynrummy-com.md:5" from "day-wrap-2026-11-12.md:7" to "roc-web-umbrella.md:44"}}
+
+A parenthesis then a period, bold, a table cell, a placeholder host: each became a test case. Then, before any edit, the agent kept a "before". The audit from Session 1 already fetches every real note's page, so it ran once on the unchanged server, and its pages were copied aside:
+
+{{fence repos:essay-surface/journal/links.md "before any change: every real note"}}
+
+`yield()` lets the run hold one page at a time, as Session 1 taught. Every page of the change can now be compared with the page as it was.
+
+### The cases, as fixtures
+
+The cases came before the code, as data the tests read: four files in `testdata/links/`, 62 cases in all. Sixteen must link, fifteen must not, 22 test punctuation, and nine are hostile notes. Each case is a bit of markdown and the exact HTML it must become. The parenthesis rule is the subtle one: a closing parenthesis belongs to the URL only when the URL opened it.
+
+{{lines repos:essay-surface/testdata/links/punctuation.txt from "~~ case: in parentheses, then a period" to ")</a>).</p>"}}
+
+The test checks that the folder holds exactly the four files it names, so a fifth can't be skipped. The code is one new function, `bareURL`, and one branch in the renderer's inline pass:
+
+{{lines repos:essay-surface/markdown.go from "case c == 'h' && !inLink:" to "k += len(u)"}}
+
+The new tests passed on their first run. A green is only a claim until you count what ran, so the agent counted the cases the tests read, and found all 62.
+
+### One seeded fault
+
+The hostile notes need a test that doesn't depend on exact HTML: only the renderer's own tags, every `&` an entity, and each link's href and text the same URL, escaped once. To prove that test watches, the agent took out the href's escaping, once, under `--undo-on-stop`:
+
+{{fence repos:essay-surface/journal/links.md "seed once: a bare URL's href"}}
+
+`git_diff` before and after shows the tree came back as it was. The escaping test went red by three of its rules:
+
+{{fence repos:essay-surface/journal/links.md "planted: exit 1" from "--- FAIL: TestBareURLsEscaped" to "markdown_test.go:259"}}
+
+The last line is the one that matters. A note that writes `&quot;` in a URL sends it to the href raw, and a browser reads it as a quote mark, which ends the attribute. `&quot;` is a valid entity, so the `&` rule passes it, and only the rule that href and text are one URL catches it. Then `fast.shale` passed with 50 tests, up from 48, so both new ones ran.
+
+### Every real page, before and after
+
+The after pages came from the same audit. The comparison took two stops. The first called `replace_all`, a builtin Shale doesn't have, and stopped before a line ran. The second ran out of steps:
+
+{{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
+
+That's the lesson of Session 1 again. `re_find_all` is written in Shale, in the prelude, so it spends a step a character, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. A nuisance that keeps coming back is a gap in the language, as Session 6 showed, and this one makes the case for moving Shale's regex helpers into its host, where a match would cost a step like any builtin.
+
+The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
+
+{{fence repos:essay-surface/journal/links.md "by split and find (builtins)" from "function bare(page)" to "return {n = n, plain"}}
+
+With those links taken back to text, every after page must equal its before page, byte for byte. Every one did, so the only change on 514 pages was the new links:
+
+{{fence repos:essay-surface/journal/links.md "26 bare URLs linked on 24 pages" from "linked  note" to "26 bare URLs linked"}}
+
+No URL was left as text outside code. A finder that reports nothing proves little until it has found something, so the agent ran the same finder on the before pages:
+
+{{fence repos:essay-surface/journal/links.md "before pages: 26 http" from "before pages" to "before pages"}}
+
+It found exactly the 26, so its zero is a real zero. The report also named what the prompt left alone: 15 URLs written as code, a few of which Steve may want to click. That's his call, and it's on the page for him to make.
+
+### A boring release
+
+The full check said `SAFE TO SHIP` in 25.7 s. Then we ran the release script from Session 5 on Steve's own server, unchanged. It took 26.3 s, and its last lines read like the last release's:
+
+```text
+full check: SAFE TO SHIP, 24566 ms
+comments kept: 4 files, 11 comments, in essay-dogfood/releases/2026-11-14T110736Z/comments, each compared
+ok: the index, 514 notes, the same as before
+ok: all 11 comments from before on their pages and in their files
+RELEASED: running bbd9eae on 127.0.0.1:9301; to roll back to 8218ffc: cd /home/steve && shale repos:essay-surface/scripts/release.shale data=essay-dogfood port=9301 rollback=1
+```
+
+Eleven comments kept and found where they were, and a rollback that now names a real commit, since the server it replaced came from an earlier release. Green again ✅
+
+Nothing in this session was new. The fixtures, the seeded fault, the audit of real notes and the release were each built for an earlier problem, and each took this feature without a change. That's what the habits are for: when a request arrives, the work is the feature itself.
 
 ## How we work
 
-A week of work leaves habits behind. Here they are in one place, since they're the real subject of the book.
+Seven sessions of work leave habits behind. Here they are in one place, since they're the real subject of the book.
 
 ### Three ways to read
 
@@ -654,7 +735,7 @@ Most of the Shale you'll meet goes by quickly. Read it at three speeds:
 
 ### A check for each moment
 
-By Friday the project had a check for every moment, each sized to how often it runs:
+By Session 5 the project had a check for every moment, each sized to how often it runs:
 
 | When | The check | Its time |
 |---|---|---|
@@ -666,19 +747,19 @@ A check that's too slow stops getting run, so each one is held to a budget, and 
 
 ### Prove it can fail
 
-Every gate on the list earned its place by failing once on purpose. On Wednesday a planted fault found a test whose panic hid twelve others. On Thursday one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
+Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault found a test whose panic hid twelve others. In Session 4 one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
 
 ### Measure a baseline
 
-After the week, Shale gained Go hunts, built on Go's own parser: names, nesting and code smells, each proved by its fixtures. Run over essay-surface, they found little. There were no vague function names and nothing nested four calls deep. Two long functions in the markdown renderer, `inline` and `link`, are the next refactor if one is wanted. A hunt that finds little in good code is still worth running: it sets the baseline, and the next change gets held to it.
+Later, Shale gained Go hunts, built on Go's own parser: names, nesting and code smells, each proved by its fixtures. Run over essay-surface, they found little. There were no vague function names and nothing nested four calls deep. Two long functions in the markdown renderer, `inline` and `link`, are the next refactor if one is wanted. A hunt that finds little in good code is still worth running: it sets the baseline, and the next change gets held to it.
 
 ### Look with your own eyes
 
-Every check passed on Tuesday, and the reply buttons were invisible. Gates hold what you already know to check. A human's first look finds what you didn't know yet, and then the agent can often turn it into a gate.
+Every check passed in Session 2, and the reply buttons were invisible. Gates hold what you already know to check. A human's first look finds what you didn't know yet, and then the agent can often turn it into a gate.
 
 ### Let the work ask
 
-Nothing this week was planned in advance. The checks, the release script and the language change all arrived because a chore came up more than once. That's how to grow a project's tools: make a script the third time you do something by hand, a gate once the script makes a judgment, and a change to the language once its gap starts to cost you.
+Nothing in this project was planned in advance. The checks, the release script and the language change all arrived because a chore came up more than once. That's how to grow a project's tools: make a script the third time you do something by hand, a gate once the script makes a judgment, and a change to the language once its gap starts to cost you.
 
 ### Your dialect
 

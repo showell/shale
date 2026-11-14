@@ -1,14 +1,14 @@
 # Draft
 
-## Friday: shipping should be boring
+## Session 5: shipping should be boring
 
 {{quote repos:essay-surface/journal/prompts/friday.md}}
 
-By Friday the surface was in daily use, with real replies on it, and every release was a chore done by hand. A chore done by hand is done a little differently each time. A release done by a script is the same every time, and that sameness is what we mean by boring.
+By now the surface was in daily use, with real replies on it, and every release was a chore done by hand. A chore done by hand is done a little differently each time. A release done by a script is the same every time, and that sameness is what we mean by boring.
 
 ### A release, in order
 
-The agent's `release.shale` follows the prompt, in order. It stops before it touches anything unless the checkout is clean and exactly one server runs with the command line it would start. Then it runs Thursday's full check, and goes on only if the check exits 0 and its last line says SAFE TO SHIP:
+The agent's `release.shale` follows the prompt, in order. It stops before it touches anything unless the checkout is clean and exactly one server runs with the command line it would start. Then it runs the full check, and goes on only if the check exits 0 and its last line says SAFE TO SHIP:
 
 {{lines repos:essay-surface/scripts/release.shale from "-- 2: the full check." to "full check: SAFE TO SHIP"}}
 
@@ -32,13 +32,13 @@ The smoke's server logged "listening", then failed to bind, and the smoke went o
 
 ### The trap, sprung
 
-On Monday, the agent noted a trap: a run that stops after `job_start` leaves its server running. Friday's first trial sprang it. Every Shale script runs under a budget, a cap on its steps, and this one ran out just after the swap:
+In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. This session's first trial sprang it. Every Shale script runs under a budget, a cap on its steps, and this one ran out just after the swap:
 
 {{fence repos:essay-surface/journal/friday.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
 
 `attempt` catches a failure, and a budget stop is past its reach. The run stopped after the old server was down and the new one was up, so the rollback never ran. The trial was left serving a build nobody had checked. On the live server, that would have been an unchecked release with no way back but by hand, which is how the agent put the trial back.
 
-The cause was a regex over a 67 KB page, at a step a character; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses. The trap itself stayed in the language until Saturday.
+The cause was a regex over a 67 KB page, at a step a character; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses. The trap itself stayed in the language until the next session.
 
 ### A release that fails on purpose
 
@@ -75,4 +75,4 @@ RELEASED: running 92fb48b on 127.0.0.1:9301; to roll back to unknown: cd /home/s
 
 Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back. The old version reads `unknown` because it was built by hand. The full check is nearly all of the 27 seconds; the swap and its checks fit inside one. Green again ✅
 
-The release was the most boring thing we did all week, and it took the most care to make it so. Boring is what a release looks like when every surprise was found on the dev port first.
+The release was the most boring thing in the project, and it took the most care to make it so. Boring is what a release looks like when every surprise was found on the dev port first.

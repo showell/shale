@@ -8,11 +8,11 @@ This is the one home for the book's rules. Every writer and reader of the book, 
 
 **B. The reader.** An experienced developer who has written plenty of code, but not much with agents. They're curious about programming languages and open to letting an agent do real work. Vibe coders may come later. The opening states these expectations plainly.
 
-**C. The story.** The book follows a side project: building a new essay surface from scratch, a small Go server with a plain-JavaScript front end, where the agent writes notes in markdown and Steve reads them and replies to any paragraph. Monday's and Tuesday's prompts have the roles turned around ("I write notes", "I read those comments"). Leave the prompts as written, and say the truth in the prose (Steve, 2026-11-14). It's told as a week, a day per chapter. Say plainly that the week is a side project, not five calendar days (the real build took one afternoon). It's an essay surface, not an agent harness, though the similarities are fair to point out: a human reads, replies and steers.
+**C. The story.** The book follows a side project: building a new essay surface from scratch, a small Go server with a plain-JavaScript front end, where the agent writes notes in markdown and Steve reads them and replies to any paragraph. The first two prompts have the roles turned around ("I write notes", "I read those comments"). Leave the prompts as written, and say the truth in the prose (Steve, 2026-11-14). It's told in numbered sessions, a chapter each, and a session is one stretch of work with one prompt. Say plainly, once, that the sessions aren't days: the real build took an afternoon of agent time, and the links feature came the next morning (Steve, 2026-11-14). It's an essay surface, not an agent harness, though the similarities are fair to point out: a human reads, replies and steers.
 
 **D. The narrative is honest.** Tell an abridged story of what actually happened. Mistakes happen, and the book says so, each in an instructive context: what caught it, and what habit it taught. Abridge, but never invent, and never tidy a mistake away (Steve, 2026-11-13). The journals in the essay-surface repo are the record.
 
-**E. We, and the prompts.** The book is narrated as "we": Steve and his agent. Each day opens with the prompt we gave the agent, quoted whole from `journal/prompts/<day>.md`. Agents really did the work: "this isn't remotely dishonest" (Steve).
+**E. We, and the prompts.** The book is narrated as "we": Steve and his agent. Each session opens with the prompt we gave the agent, quoted whole from `journal/prompts/`. The journals keep the weekday file names they were written under (`journal/monday.md`), since they're the record and the includes name them. Agents really did the work: "this isn't remotely dishonest" (Steve).
 
 **F. Real work, how you should work.** The book walks the reader through real work, and its theme is "this is how you should work" (Steve). Programmers want to write apps, not books, so building a book is at most an aside.
 
@@ -22,11 +22,11 @@ This is the one home for the book's rules. Every writer and reader of the book, 
 
 **H. Comparisons are welcome here.** The Roc book kept other languages out. This one names Lua honestly, uses bash as a foil, and doesn't push Shale. A later draft may even show Python recipes as valid tools for readers not ready for Shale (Steve).
 
-**I. Shale is meant to have dialects.** Dialects cost humans much more than they cost agents, so each reader keeps the dialect that works for their agent, and builds their own library of scripts on top of the cookbook or instead of it. The language evolves deliberately, and your agent makes it better. The book shows a real feature arriving during the week. For now the reader forks their own copy. Say that lightly, since it may change.
+**I. Shale is meant to have dialects.** Dialects cost humans much more than they cost agents, so each reader keeps the dialect that works for their agent, and builds their own library of scripts on top of the cookbook or instead of it. The language evolves deliberately, and your agent makes it better. The book shows a real feature arriving during the project. For now the reader forks their own copy. Say that lightly, since it may change.
 
 **J. Shale builds nothing itself.** `go build` makes the server. Shale runs the build, keeps what it said, and judges what came out. Explain that nuance honestly.
 
-**K. Gates early and throughout.** Gates are how we write quality software (Steve). They arrive when the work needs them, never contrived: a check before a commit on Monday, then fast and full checks, planted faults, a release.
+**K. Gates early and throughout.** Gates are how we write quality software (Steve). They arrive when the work needs them, never contrived: a check before a commit in Session 1, then fast and full checks, planted faults, a release.
 
 **L. Plants, honestly.** "Plant" is our word, so name the established ones. A permanent small input a check must reject or accept is a known-bad or known-good *fixture*. A fault put in once to prove a check catches it is *fault seeding*, or mutation testing. Fixtures can slow gates, often through needless rebuilds. Keep the book's examples fast, show what each costs, and say plainly why they're worth it: they catch tests that test nothing (Steve, 2026-11-13).
 
@@ -59,10 +59,10 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **V. One point per output block.** A quoted output block shows the lines that carry its point, and the sentence before it says the point. The build stops on an output block over 12 lines unless `book/long_blocks.txt` names it with a reason.
 
-**X. Diagrams are drawn from source.** A ```dot fence in a chapter is drawn by Graphviz at build time, so a diagram changes with the words around it. The first is the loop, in "One loop". The story comes first: Shale's architecture (its interpreter, written in Zig, the host, the preludes) and most of its technical detail wait for after the Monday-to-Saturday narrative (Steve, 2026-11-14).
+**X. Diagrams are drawn from source.** A ```dot fence in a chapter is drawn by Graphviz at build time, so a diagram changes with the words around it. The first is the loop, in "One loop". The story comes first: Shale's architecture (its interpreter, written in Zig, the host, the preludes) and most of its technical detail wait for after the sessions' narrative (Steve, 2026-11-14).
 
-**Y. Sessions, not days (direction, Steve, 2026-11-14).** The Monday-to-Saturday framing may give way to numbered sessions. That's more honest, and it doesn't cap the story at a week. Planned: when the links feature lands as its own chapter, rename the days to sessions in one pass. Until then, chapters stay named by day.
+**Y. Sessions, not days (Steve, 2026-11-14).** The story's chapters are numbered sessions, not weekdays. That's more honest, and it doesn't cap the story at a week. A weekday in prose is a leftover of the old framing: `book/refrains.txt` holds each weekday to zero uses, and `monday` to the one sentence that explains the journals' names. Captions that name a journal file aren't prose, so they don't count.
 
-**W. Chapters are named, never numbered,** in prose. The week's chapters are days. The build stops on "chapter 4".
+**W. Chapters are named, never numbered,** in prose. A session has a number, so "Session 4" and "in session 4" are fine, and "chapter 4" is not. The build stops on "chapter 4".
 
 **T. The essay surface is where we talk.** Decisions go in an essay, and Steve replies on the new surface itself.

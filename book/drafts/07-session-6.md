@@ -1,10 +1,10 @@
 # Draft
 
-## Saturday: the language gets better
+## Session 6: the language gets better
 
-Four times this week, an agent's run stopped after `job_start` and left a server running: on Monday, on Tuesday, on Thursday while seeding a fault, and in Friday's first trial, on a budget stop. Each time, someone noticed and cleaned up by hand.
+Four times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, again while seeding faults in Session 4, and in the first release trial, on a budget stop. Each time, someone noticed and cleaned up by hand.
 
-Four times is a pattern, and a pattern of hand cleanup is a gap in the language. So on Saturday we closed it, in Shale itself.
+Four times is a pattern, and a pattern of hand cleanup is a gap in the language. So this session closed it, in Shale itself.
 
 ### The rule
 
@@ -35,9 +35,9 @@ The feature changed what a stop does, and one script had to say something new. A
 
 {{function repos:essay-surface/scripts/release.shale rel_start}}
 
-The new server starts with `keep` false, and the old one put back by a failed release starts with it true. Before Saturday, the script's defense against the trap was a large step budget and a comment explaining it. Now the code says which server stays, and the language does the rest.
+The new server starts with `keep` false, and the old one put back by a failed release starts with it true. Before this session, the script's defense against the trap was a large step budget and a comment explaining it. Now the code says which server stays, and the language does the rest.
 
-The feature also exposed a gap in Friday's script. A budget stop after the swap would now end the new server with the run, and the run could never put the old one back. A script can't catch its own stop, so the release runs the swap and its checks as a child run, a second Shale process it can watch:
+The feature also exposed a gap in the release script itself. A budget stop after the swap would now end the new server with the run, and the run could never put the old one back. A script can't catch its own stop, so the release runs the swap and its checks as a child run, a second Shale process it can watch:
 
 {{function repos:essay-surface/scripts/release.shale rel_install_child}}
 
@@ -64,10 +64,10 @@ digraph release {
 
 ### Dialects
 
-This is what we mean by a language that agents make better. The feature came from the week's own work. The work needed it four times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.
+This is what we mean by a language that agents make better. The feature came from the project's own work. The work needed it four times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.
 
 `keep_on_stop` went into Shale's main line, since every project with a server wants it. In your own fork, a word like it is where your dialect begins. A dialect costs a human a great deal: new words to learn, old habits that no longer fit. It costs an agent very little, since the agent reads the docs every session. So Shale is meant to have dialects. Each reader keeps the one that works for their agent, and builds their own scripts on top of it.
 
 For now, that means forking your own copy of Shale and letting your agent change it. The habit matters more than the mechanism. When a cleanup happens by hand a second time, ask your agent what word the language is missing. Then read the tests on both sides, see the seeded faults turn them red, and run the gates of everything that depends on it.
 
-The best feature of the week came from its most annoying chore. Your agent's nuisances are your language's roadmap.
+The best feature so far came from the most annoying chore. Your agent's nuisances are your language's roadmap.

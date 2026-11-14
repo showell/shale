@@ -2,7 +2,7 @@
 
 ## One loop
 
-Before the week begins, here's one complete turn of the loop the whole book is made of: an agent reports, Steve replies, the agent changes the code, and we read what it ran. It comes from Thursday, and it took a few minutes.
+Before the first session, here's one complete turn of the loop the whole book is made of: an agent reports, Steve replies, the agent changes the code, and we read what it ran. It comes from Session 4, and it took a few minutes.
 
 ```dot
 digraph loop {
@@ -27,13 +27,13 @@ digraph loop {
 
 ### The report
 
-At the end of Wednesday, the agent's report listed a few calls Steve might want to unmake. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The reply landed in a file, one JSON line per reply, shown here trimmed to its main fields:
+At the end of Session 3, the agent's report listed a few calls Steve might want to unmake. One said the server needs the comments folder's parent to exist when it starts. Steve read the report on the essay surface and replied to that paragraph. The reply landed in a file, one JSON line per reply, shown here trimmed to its main fields:
 
 ```text
 {"name":"Steve","text":"add a defensive check","quote":"**The comments folder's parent must exist** when the server starts."}
 ```
 
-That's the whole of the steering: four words, attached to the paragraph they answer. We passed it on to Thursday's agent in a short message.
+That's the whole of the steering: four words, attached to the paragraph they answer. We passed it on to the next session's agent in a short message.
 
 ### The change
 
@@ -66,7 +66,7 @@ The same check in bash is one line: run the server, echo `$?`, list the folder. 
 
 - **Agent:** an AI model working in a terminal on our behalf. It reads, runs programs and writes code.
 - **Cold agent:** a fresh agent with no memory of our conversation, given one task and a written brief.
-- **Prompt:** what we ask an agent to do, in plain words. Each day opens with one.
+- **Prompt:** what we ask an agent to do, in plain words. Each session opens with one.
 - **Heredoc:** a Shale script written inline in a shell command, `shale <<'EOF' … EOF`, run once.
 - **Recipe:** a script saved to a file because its question came back.
 - **Mount:** a named folder a script may reach beyond its own, written `name:path`.
@@ -75,4 +75,5 @@ The same check in bash is one line: run the server, echo `$?`, list the folder. 
 - **Gate:** a check that runs the tests and prints a verdict on its last line, and fails when the work falls short.
 - **Fixture:** a small, permanent input a check must reject or accept.
 - **Fault seeding:** putting a bug in once, on purpose, to prove a test catches it. We call these plants.
-- **The old surface:** the essay surface Steve used before this week, a Python server.
+- **The old surface:** the essay surface Steve used before this project, a Python server.
+- **Session:** one stretch of work that opens with one prompt, and a chapter of this book.

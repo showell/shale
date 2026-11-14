@@ -5,3 +5,13 @@
 1	shale builds nothing itself
 1	slowness is a finding
 99	green again
+# The chapters are sessions, not weekdays (MISSION Y). Only the introduction's
+# sentence on the journals' file names may say monday; a caption naming a
+# journal is a path, not prose, and isn't counted.
+1	monday
+0	tuesday
+0	wednesday
+0	thursday
+0	friday
+0	saturday
+0	sunday

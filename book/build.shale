@@ -400,7 +400,7 @@ end
 -- The book's prose lints, over the whole expanded book, as `path-free`
 -- findings: an output block over MAX_OUTPUT_LINES that long_blocks.txt
 -- doesn't name, a phrase of refrains.txt used more than its allowance, and a
--- chapter named by number. Each table line is `key<TAB>value`: a block's
+-- chapter named by number. A numbered session is fine. Each table line is `key<TAB>value`: a block's
 -- first line and the reason it's long; a phrase's allowance and the phrase.
 const MAX_OUTPUT_LINES = 12
 const LONG_BLOCKS = "book/long_blocks.txt"
@@ -417,6 +417,12 @@ function table_lines(path)
     end
   end
   return rows
+end
+
+-- A caption an include wrote, which names the file a quote comes from, such
+-- as `*essay-surface/journal/monday.md*`: a path, not the book's prose.
+function source_caption(l)
+  return starts_with(l, "*") and re_find(l, "^\\*[^* ]*/[^* ]*(\\*$|, )") ~= nil
 end
 
 function lint_findings(ls)
@@ -438,7 +444,7 @@ function lint_findings(ls)
       in_code = not in_code
     elseif in_code then
       push(block, l)
-    elseif not starts_with(l, ">") then
+    elseif not starts_with(l, ">") and not source_caption(l) then
       push(prose, lower(l))
     end
   end
