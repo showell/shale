@@ -6,28 +6,37 @@ Before the sessions, here's one complete turn of the loop this book is made of, 
 
 ```dot
 digraph turn {
-  rankdir=TB;
+  rankdir=LR;
   node [shape=box, style="rounded", fontname="Helvetica", margin="0.2,0.1"];
   edge [fontname="Helvetica"];
   agent [label="The agent"];
   report [label="Its report"];
   steve [label="Steve"];
   code [label="The code"];
-  agent -> report [label="writes"];
-  steve -> report [label="replies on a line"];
-  agent -> code [label="changes and proves"];
+  agent -> report [label="1. writes"];
+  steve -> report [label="2. replies on a line of"];
+  report -> agent [label="3. carries the reply back to"];
+  agent -> code [label="4. changes and proves"];
 }
 ```
 
-*One turn of the loop, from Session 4. Each arrow reads as a sentence: the agent writes its report.*
+*One turn of the loop, from Session 4. Each arrow reads as a sentence, in order: the agent writes its report.*
 
-### The report and the reply
+### The agent writes its report
 
-The agent ended Session 3 with a report on the essay surface. One line in it named a decision Steve might want to reverse: "**The comments folder's parent must exist** when the server starts." Steve replied to that line, in four words: "add a defensive check".
+The agent ended Session 3 with a report on the essay surface. One line in it named a decision Steve might want to reverse: "**The comments folder's parent must exist** when the server starts."
 
-Reply where the context is. The line carries everything the agent needs to know about what you mean, so four words are a complete instruction. A reply in a chat window would have to restate it. The orchestrator, the agent that coordinates the others, passed the reply to the agent already at work on Session 4.
+### Steve replies on a line
 
-### The change, and how you know it's right
+Steve replied to that line, in four words: "add a defensive check".
+
+Reply where the context is. The line carries everything the agent needs to know about what you mean, so four words are a complete instruction. A reply in a chat window would have to restate it.
+
+### The reply goes back to the agent
+
+The orchestrator, the agent that coordinates the others, passed the reply to the agent already at work on Session 4.
+
+### The agent changes and proves the code
 
 The agent added the check in Go, where the server starts:
 
