@@ -61,3 +61,9 @@ Session 1 now names `bench.shale`, and states that the audit stops the server be
 - **Should the takeaway hold for a reader who never adopts Shale?** The broader lesson is easier to sell. A reader who never installs Shale but builds their own essay surface is a good outcome; a friend already "stole" Steve's surface without being sold on it (it sells itself to someone looking over your shoulder). But the essay surface isn't the book's purpose: "The book's about building stuff. Shale's the secret sauce, even if it's not a mandatory part of it." Focus on the good practices, and on the cookbook as "a very, very organic encapsulation of automated tasks that agents can orchestrate instead of reinventing."
 - **Title leads with building, Shale to the subtitle?** That's the right lean, but don't refine the working title yet.
 - **One keeper script per chapter?** Yes. Even if it isn't the central theme, it sells the reader on Shale's versatility.
+
+## Still stewing (Steve, 2026-11-14 evening)
+
+- **Which project does the book follow?** Unsettled. The book should follow a project's growth, but every project with enough cruft predates Shale. angry-gopher is finished, not growing. Steve: "we could talk about projects without focusing on a specific project." Its October reshaping was partly artificial, fixing things that weren't broken, and low-risk sweeps were safe precisely because the gates had earned that confidence.
+- **The thesis as it stands:** agents build fast with or without Shale, and easily scale to projects like a chat server with decent quality. Shale is for reshaping, gating and coordinating repos. "Still not entirely satisfying."
+- The essays behind this, on the dogfood surface (`~/essay-dogfood/notes/`): part-one-framing.note, shale-book-artifacts.md, shale-cookbook-catalog.md, death-of-refactoring.note, a-language-in-a-week.note, shales-sweet-spot.note, angry-gopher-history.note, one-loop-diagrams.note.
