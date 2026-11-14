@@ -6,6 +6,10 @@ Steve is reading the whole book cover to cover (from 2026-11-14) and sends bits 
 
 - (Steve, 2026-11-14) It's starting to pile up inaccuracies as the book's scope grows. It's structurally fine; fix once the dust settles.
 
+## Meet Shale
+
+- (Steve, 2026-11-14) State plainly that agents write Shale in a terse style, so the reader will see variable names like `ls` for a list of lines. Steve has gotten used to it: he scans for the calls, such as `lines`, and doesn't really read the variables. "The honest truth is that I skim shale scripts really fast, because I have seen a lot of it." Say this plainly, with no apology and no call to fix the style. It fits One loop's reading speeds too.
+
 ## Session 1
 
 - (Steve, 2026-11-14) "I didn't realize that the go server was using markdown early in the narrative. That slipped by me earlier." Say plainly that the agent wrote its own markdown renderer in Go (`markdown.go`, about 1,200 lines, no dependencies), so Part Two's choice reads against it.
