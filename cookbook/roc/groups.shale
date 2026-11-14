@@ -327,24 +327,6 @@ function text_up_to_group(ls, g)
   return l
 end
 
--- The line stacked group `g` of `ls` would be on one line, spaced as `roc fmt`
--- spaces it, or nil when a line break inside it does more than separate
--- items: a blank line, or a block's statements.
-function group_on_one_line(ls, g)
-  local joined = text_up_to_group(ls, g)
-  for i = g.line + 1, g.close_line do
-    local piece = trim(ls[i])
-    local before = sub(joined, #joined, #joined)
-    local closes = has_key(CLOSERS, sub(piece, 1, 1)) or (i == g.close_line and sub(piece, 1, 1) == "|")
-    if piece == "" then return nil end
-    if before ~= "," and not has_key(OPENERS, before) and not (before == "|" and i == g.line + 1) then return nil end
-    if closes and before == "," then joined = sub(joined, 1, #joined - 1) end
-    if before == "{" or sub(piece, 1, 1) == "}" or (before == "," and not closes) then joined = joined .. " " end
-    joined = joined .. piece
-  end
-  return with_annotation_rest(ls, g, joined)
-end
-
 -- `joined`, the line group `g` would be on, with the rest of its annotation
 -- when `g` is among an annotation's arguments. Stacking such a group puts the
 -- arguments after it on lines of their own, and `roc fmt` brings them back up
@@ -365,6 +347,24 @@ function with_annotation_rest(ls, g, joined)
     i = i + 1
   end
   return joined
+end
+
+-- The line stacked group `g` of `ls` would be on one line, spaced as `roc fmt`
+-- spaces it, or nil when a line break inside it does more than separate
+-- items: a blank line, or a block's statements.
+function group_on_one_line(ls, g)
+  local joined = text_up_to_group(ls, g)
+  for i = g.line + 1, g.close_line do
+    local piece = trim(ls[i])
+    local before = sub(joined, #joined, #joined)
+    local closes = has_key(CLOSERS, sub(piece, 1, 1)) or (i == g.close_line and sub(piece, 1, 1) == "|")
+    if piece == "" then return nil end
+    if before ~= "," and not has_key(OPENERS, before) and not (before == "|" and i == g.line + 1) then return nil end
+    if closes and before == "," then joined = sub(joined, 1, #joined - 1) end
+    if before == "{" or sub(piece, 1, 1) == "}" or (before == "," and not closes) then joined = joined .. " " end
+    joined = joined .. piece
+  end
+  return with_annotation_rest(ls, g, joined)
 end
 
 -- Whether group `g` is what keeps the parentheses around it on several lines.
