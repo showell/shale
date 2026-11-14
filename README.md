@@ -134,7 +134,8 @@ expressions, not Lua's `%d`), are in
   "Before you reach for the shell" table gives the Shale form of each shell
   habit (`grep -rn`, `sed -n`, `git`, `curl`, a build's errors), then the
   Linux prelude (`run`, jobs, git, http) and the traps.
-- **[cookbook/](cookbook)**, recipes to run or copy: `look.shale` (find,
+- **[cookbook/](cookbook/README.md)**, recipes to run or copy, one line
+  each in its README: `look.shale` (find,
   or show line ranges), `run.shale` (a program's verdict and tail),
   `run_zig_build.shale`, `rename_words.shale`, `check_syntax.shale`, `fetch_page.shale`.
   Hunts over a Zig tree are in [cookbook/zig/](cookbook/zig/README.md)

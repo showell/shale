@@ -25,14 +25,13 @@
 -- the header's opening sentence goes in front (`Finds ...` gives `find_`),
 -- else it says `<verb>_`. A library's leading verb moves to the end.
 --
--- `self_test=1` judges the plants, then the cookbook itself. While
--- COOKBOOK_ENFORCED is false the cookbook's breaks are only counted, on the
--- last line; set it true once the rename sweep has made the cookbook pass, and
--- `zig build test` (its `cookbook-test`) fails on any break from then on.
+-- `self_test=1` judges the plants, then the cookbook itself, so `zig build
+-- test` (its `cookbook-test`) fails on any break. COOKBOOK_ENFORCED false
+-- would only count the cookbook's breaks, on the last line.
 
 use("cookbook:findings.shale")
 
-const COOKBOOK_ENFORCED = false
+const COOKBOOK_ENFORCED = true
 
 const PLANTS = "cookbook/plants/check_recipe_names"
 
@@ -43,11 +42,11 @@ const PLANT_VERDICTS = {
   {"report_rows.shale", "runnable", "", ""},
   {"check_findings.shale", "library", "library_named_like_command", "findings_check.shale"},
   {"disk_space.shale", "runnable", "runnable_without_verb", "find_disk_space.shale"},
-  {"hunt_names.shale", "runnable", "runnable_without_verb", "hunt_name.shale"},
+  {"name_hunt.shale", "runnable", "runnable_without_verb", "hunt_name.shale"},
   {"totals.shale", "runnable", "runnable_without_verb", "<verb>_totals.shale"},
   {"checkDisk.shale", "runnable", "not_snake_case", "check_disk.shale"},
   {"Disk-Space.shale", "runnable", "not_snake_case,runnable_without_verb", "find_disk_space.shale"},
-  {"find_negatives.shale", "runnable", "runnable_without_verb", "find_negatives.shale (taken)"},
+  {"negatives.shale", "runnable", "runnable_without_verb", "find_negatives.shale (taken)"},
 }
 
 -- The verbs of the table at `path`, as a set: one a line, `#` lines and blank

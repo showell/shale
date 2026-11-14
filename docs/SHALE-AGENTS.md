@@ -469,19 +469,16 @@ prints is in the box after it, exactly.
 ## The cookbook, beside what an agent would write otherwise
 
 The short recipes are here, each tested as written. **The longer ones are
-files** in `cookbook/`: `look.shale` (lines by number, and a literal's
-lines across folders, mounts or a git revision), `find_phrase.shale` (a phrase
-in wrapped prose, found and edited) and `run_zig_build.shale` (a build's
-verdict without its noise) for any project; `check_disk_space.shale` (a run stopped
-under a floor of free disk, `report=1` the growth spots' sizes, each verify's
-first check); `times.shale` (a library: a stage's time against its recent
-runs); a book's prose lints in `prose/`: `find_negatives.shale` (the negative
-sentences a book's voice rule rewrites or keeps, against a keep-table, with
-a `held` count) and `build_term_index.shale` (the index of a book's terms, and the
-terms used before the chapter that teaches them); the Zig ones in
-[`cookbook/zig/`](../cookbook/zig/README.md) find a file's seams, move
-declarations along them and judge the move; `roc/` and `zig17/` are those
-work's. Copy one and change it; not everything is a builtin.
+files** in `cookbook/`, and
+[`cookbook/README.md`](../cookbook/README.md) lists every one in a line:
+what it does, and a launch to start it with, or the `use` that loads a
+library. Among them are `look.shale` (lines by number, and a literal's lines
+across folders, mounts or a git revision), `find_phrase.shale` (a phrase in
+wrapped prose, found and edited), `run_zig_build.shale` (a build's verdict
+without its noise), `check_disk_space.shale` (a run stopped under a floor of
+free disk, each verify's first check) and `times.shale` (a library: a
+stage's time against its recent runs). Copy one and change it; not
+everything is a builtin.
 
 **A recipe's name says what it does.** One that runs starts with a verb
 (`find_negatives.shale`), one of `cookbook/recipe_verbs.txt`; a library,
