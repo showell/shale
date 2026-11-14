@@ -56,3 +56,4 @@ Session 1 now names `bench.shale`, and states that the audit stops the server be
 ## Steve's answers, second series (2026-11-14)
 
 - **Speak to the reader as the one building ("you ask your agent")?** Lean no. "I'm not precisely sure that we're teaching users how to prompt in this book." The reader keeps watching a real build.
+- **Is the core skill judging the agent's work?** No, "not at all": the experienced reader already knows how. "That's like teaching a fish how to swim."
