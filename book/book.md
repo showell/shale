@@ -2,7 +2,7 @@
 
 A book for experienced developers who are new to working with agents. We follow one side project, a new essay surface built over a series of sessions, one a chapter, and read the Shale our agent wrote along the way.
 
-This is draft 2, rough in places: prose and code, with pictures still to come.
+This is draft 2, rough in places: prose, code and diagrams.
 
 
 
@@ -16,7 +16,7 @@ This is draft 2, rough in places: prose and code, with pictures still to come.
 
 Shale is a programming language written by agents, for agents. It looks like Lua on purpose, and it mostly works like any mainstream language: variables, functions, loops, lists and maps, strings and files. Its unique features are built for its niche, which is scripts an agent writes and a human reads.
 
-That niche is the premise of this book. You will read a lot of Shale and write very little. Your agent writes it, every time it searches your code, runs your tests, renames across a tree or ships a release. You read it as it scrolls by, judge it, and steer the agent that wrote it. Here we learn to do that well.
+That niche is the premise of this book. You will read a lot of Shale and write very little. Your agent writes it, every time it searches your code, runs your tests, renames across a tree or ships a release. You read it as it scrolls by, judge it, and steer the agent that wrote it. This book teaches you to do that well.
 
 ### Who this book is for
 
@@ -49,13 +49,13 @@ Shale builds nothing itself. `go build` makes the server. Shale runs the build, 
 
 The thread through every session is gates. A gate is a script that holds work to a standard. It runs the checks, prints a verdict on its last line, and fails when the work falls short. Gates are how we write quality software with agents, because they turn a rule into something that runs on every change.
 
-In this project, nobody planned the gates up front. They arrived when the work asked for them: a check before a commit in the first session, a fast check and a full one by the third, faults planted on purpose in the fourth, and a release with a rollback in the fifth.
+In this project, nobody planned the gates up front. They arrived when the work asked for them: a check before a commit in the first session, faults planted on purpose from the second, a fast check and a full one by the third, a planted fault for every stage in the fourth, and a release with a rollback in the fifth.
 
 ### A language that changes
 
 Shale is meant to have dialects. A dialect costs a team of humans a great deal, because everyone has to learn it. It costs an agent very little, because an agent reads the whole script, and the docs for its own dialect. So you can keep the dialect that works for your agent, and build your own library of scripts on top of the cookbook or instead of it.
 
-The book shows this happening. A nuisance came up four times, so in Session 6 the language changed to fix it. For now, a reader who wants that freedom forks their own copy of Shale.
+The book shows this happening. A nuisance came up three times, so in Session 6 the language changed to fix it. For now, a reader who wants that freedom forks their own copy of Shale.
 
 First, one turn of the loop, start to finish. Then Session 1, with an empty repository and a prompt.
 
@@ -233,7 +233,7 @@ The second prompt asks for the feature the surface exists for:
 
 {{quote repos:essay-surface/journal/prompts/tuesday.md}}
 
-As in the first prompt, the roles are turned around: the agent writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
+As in the first prompt, the "I" who reads the comments is really the agent: it writes the notes and reads Steve's replies to steer its next draft. The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
 
 ### Arguing from real paragraphs
 
@@ -368,9 +368,11 @@ A run that spends more CPU than its `cpu_budget_ms` stops, naming the stage. The
 
 {{lines repos:essay-surface/scripts/full.shale from "local failed = {}" to "SAFE TO SHIP"}}
 
-The bench needed more care, since its whole job is time. The server now logs, as it stops, how many requests it served and the CPU they took, so the bench holds each request's CPU to a budget:
+The bench needed more care, since its job is time. The server now logs, as it stops, how many requests it served and the CPU they took, so the bench holds each request's CPU to a budget:
 
-{{lines repos:essay-surface/scripts/bench.shale from "The most CPU a request may take" to "const CPU_BUDGET_US"}}
+{{lines repos:essay-surface/scripts/bench.shale from "const CPU_BUDGET_US" to "const CPU_BUDGET_US"}}
+
+Each is about twice what real notes took, in microseconds.
 
 The first version held one budget for the whole mix of requests, and the bench's 1,615 comment posts outweighed the rest: a return to the old scan would have added only about 125 µs to the average. So each phase got a server of its own. To prove the index budget, the agent put the old scan back once, and it measured 2,170 µs a request against the budget of 400. Wall-clock medians are still reported, and judged only when the box is quiet.
 
@@ -525,13 +527,13 @@ The smoke's server logged "listening", then failed to bind, and the smoke went o
 
 ### The trap, sprung
 
-In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. This session's first trial sprang it. Every Shale script runs under a budget, a cap on its steps, and this one ran out just after the swap:
+In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. This session's first trial sprang it. This one ran out of its step budget just after the swap:
 
 {{fence repos:essay-surface/journal/friday.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
 
 `attempt` catches a failure, and a budget stop is past its reach. The run stopped after the old server was down and the new one was up, so the rollback never ran. The trial was left serving a build nobody had checked. On the live server, that would have been an unchecked release with no way back but by hand, which is how the agent put the trial back.
 
-The cause was a regex over a 67 KB page, at a step a character; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses. The trap itself stayed in the language until the next session.
+The cause was a regex written in Shale, paying a step per character of a 67 KB page; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses. The trap itself stayed in the language until the next session.
 
 ### A release that fails on purpose
 
@@ -549,53 +551,35 @@ A fourth trial seeded a formatting fault, and the full check stopped it: `nothin
 
 ### The real release
 
-When it worked on dev, we ran it ourselves on the live server. It shipped, with every comment where it was:
+When it worked on dev, we ran it ourselves on the live server. It shipped, with every comment where it was. The agent's report kept its last lines:
 
-```text
-release: /home/steve/essay-dogfood on 127.0.0.1:9301
-running: pid 2484343, unknown (built before release.shale)
-…
-full check: SAFE TO SHIP, 26562 ms
-built bin/essay-surface.new: 92fb48b built 2026-11-13T17:51:07Z: Journal: Friday, the final script released once more on dev, 926 ms
-comments kept: 3 files, 7 comments, in essay-dogfood/releases/2026-11-13T175107Z/comments, each compared
-stopped the old server; its log kept
-started 92fb48b built 2026-11-13T17:51:07Z: Journal: Friday, the final script released once more on dev
-ok: the index, 508 notes, the same as before
-…
-ok: all 7 comments from before on their pages and in their files
-RELEASED: running 92fb48b on 127.0.0.1:9301; to roll back to unknown: cd /home/steve && shale repos:essay-surface/scripts/release.shale data=essay-dogfood port=9301 rollback=1
-```
+{{fence repos:essay-repl-server/notes/essay-surface-friday.md "RELEASED: running 92fb48b" from "full check: SAFE TO SHIP" to "RELEASED: running"}}
 
-Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back. The old version reads `unknown` because it was built by hand. The full check is nearly all of the 27 seconds; the swap and its checks fit inside one. Green again ✅
+Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back (shortened in the report). The old version reads `unknown` because it was built by hand. The full check is nearly all of the 27 seconds; the swap and its checks fit inside one. Green again ✅
 
 The release was the most boring thing in the project, and it took the most care to make it so. Boring is what a release looks like when every surprise was found on the dev port first.
 
 ## Session 6: the language gets better
 
-Four times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, again while seeding faults in Session 4, and in the first release trial, on a budget stop. Each time, someone noticed and cleaned up by hand.
+Three times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, and in the first release trial, on a budget stop. Each time, someone noticed and stopped it by hand. Session 4 had a cousin of the trap: a stop between a fault going in and coming out left the fault in the tree, and `--undo-on-stop` already covered files.
 
-Four times is a pattern, and a pattern of hand cleanup is a gap in the language. So this session closed it, in Shale itself.
+Three times is a pattern, and a pattern of hand cleanup is a gap in the language. So this session closed it, in Shale itself.
 
 ### The rule
 
 The rule fits in one sentence: a run that stops ends the jobs it started. A `fail`, an error or a budget, anything but the script's own end, stops each job that run started and that still runs. A run that ends normally leaves its jobs running, because a server started on purpose should stay up. A failure that `attempt` catches is no stop, since the run goes on.
 
-Some jobs must outlive even a stop, so `job_start` gained one option, `keep_on_stop`. Here is the prelude's `job_start` as it stands now, with the comment that tells an agent about both:
+Some jobs must outlive even a stop, so `job_start` gained one option, `keep_on_stop = true`.
 
-{{function repos:shale/src/shale_prelude_linux.shale job_start}}
+When a run stops, its report says what happened to each job it started, in one line apiece: stopped with the run, or left running. These two lines end a release that failed on purpose in this session's trials, after it had put the old server back with `keep_on_stop`:
 
-When a run stops, its report says what happened to each job, in one line apiece. These two are from a live run that stopped with two jobs up, one of them kept:
-
-```text
-── stopped with the run, 1 job it started: `sleep 31` (log scratch:keep-test.7WQsc0/plain.log)
-── left running (keep_on_stop): `sleep 30` (log scratch:keep-test.7WQsc0/kept.log)
-```
+{{fence repos:essay-surface/journal/saturday.md "plant: a budget stop in the child's checks" from "── stopped at" to "── left running"}}
 
 That's the same shape as every stop in this book: one line, what happened, and where to look.
 
 ### How it arrived
 
-A cold agent built it. Shale's interpreter is written in Zig, so the feature is Zig too: the interpreter keeps a list of the jobs a run starts, and ends the ones still running when the run stops. The tests cover every side of the rule. A run that ends keeps its job. A failed run ends both of its jobs and names them. A budget stop ends its job. A caught failure ends nothing. A `keep_on_stop` job survives the stop and is named apart. A job the run already stopped or waited for gets no second stop. A job another run started is never touched. Two faults seeded into the feature turned those tests red, so the tests are watching.
+A cold agent built it: each run keeps a list of the jobs it starts, and a stop ends the ones still running. The tests cover every side of the rule. A run that ends keeps its job. A failed run ends both of its jobs and names them. A budget stop ends its job. A caught failure ends nothing. A `keep_on_stop` job survives the stop and is named apart. A job the run already stopped or waited for gets no second stop. A job another run started is never touched. Two faults seeded into the feature turned those tests red, so the tests are watching.
 
 Then the feature passed Shale's own tests and the consumers gate, Shale's gate that runs the checks of every repository built on it. A change to what a stop means touches every script with a job in it, so that gate is the one that matters. It passed, and we merged it.
 
@@ -603,17 +587,17 @@ Then the feature passed Shale's own tests and the consumers gate, Shale's gate t
 
 The feature changed what a stop does, and one script had to say something new. A failed release ends with `fail`, which is a stop. It ends that way on purpose, after it has put the old server back and checked it. Under the new rule, that stop would end the old server too. So `release.shale` gained one word:
 
-{{function repos:essay-surface/scripts/release.shale rel_start}}
+{{lines repos:essay-surface/scripts/release.shale from "function rel_start(t, keep)" to "local job = job_start(rel_argv(t)"}}
 
 The new server starts with `keep` false, and the old one put back by a failed release starts with it true. Before this session, the script's defense against the trap was a large step budget and a comment explaining it. Now the code says which server stays, and the language does the rest.
 
 The feature also exposed a gap in the release script itself. A budget stop after the swap would now end the new server with the run, and the run could never put the old one back. A script can't catch its own stop, so the release runs the swap and its checks as a child run, a second Shale process it can watch:
 
-{{function repos:essay-surface/scripts/release.shale rel_install_child}}
+{{lines repos:essay-surface/scripts/release.shale from "function rel_install_child(t, before)" to "return {ok = true, lines = own}"}}
 
 A child that stops just exits nonzero, its new server ends with it, and the parent, still running, puts the old server back. We proved it with a runaway loop planted in the child's checks: the budget stopped the child, the old server came back, and both test comments were on its page.
 
-One limit remains. A `shale` killed from outside, by Ctrl-C or by a timeout around it, never reaches its own stop, so its jobs run on. That's why the release script's opening comment asks for a long timeout on the call that runs it.
+One limit remains. A `shale` killed from outside, by Ctrl-C or by a timeout around it, never reaches its own stop, so its jobs run on. That's why the release gets a long timeout, 300 seconds, on the call that runs it.
 
 ```dot
 digraph release {
@@ -634,11 +618,11 @@ digraph release {
 
 ### Dialects
 
-This is what we mean by a language that agents make better. The feature came from the project's own work. The work needed it four times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.
+This is what we mean by a language that agents make better. The feature came from the project's own work. The work needed it three times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report.
 
 `keep_on_stop` went into Shale's main line, since every project with a server wants it. In your own fork, a word like it is where your dialect begins. A dialect costs a human a great deal: new words to learn, old habits that no longer fit. It costs an agent very little, since the agent reads the docs every session. So Shale is meant to have dialects. Each reader keeps the one that works for their agent, and builds their own scripts on top of it.
 
-For now, that means forking your own copy of Shale and letting your agent change it. The habit matters more than the mechanism. When a cleanup happens by hand a second time, ask your agent what word the language is missing. Then read the tests on both sides, see the seeded faults turn them red, and run the gates of everything that depends on it.
+For now, that means forking your own copy of Shale and letting your agent change it. The habit matters more than the mechanism. When a cleanup happens by hand a third time, ask your agent what word the language is missing. Then read the tests on both sides, see the seeded faults turn them red, and run the gates of everything that depends on it.
 
 The best feature so far came from the most annoying chore. Your agent's nuisances are your language's roadmap.
 
@@ -670,7 +654,7 @@ The test checks that the folder holds exactly the four files it names, so a fift
 
 {{lines repos:essay-surface/markdown.go from "case c == 'h' && !inLink:" to "k += len(u)"}}
 
-The new tests passed on their first run. A green is only a claim until you count what ran, so the agent counted the cases the tests read, and found all 62.
+The new tests passed on their first run, so the agent counted the cases the tests read, and found all 62.
 
 ### One seeded fault
 
@@ -690,7 +674,7 @@ The after pages came from the same audit. The comparison took two stops. The fir
 
 {{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
 
-That's the lesson of Session 1 again. `re_find_all` is written in Shale, in the prelude, so it spends a step a character, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. A nuisance that keeps coming back is a gap in the language, as Session 6 showed, and this one makes the case for moving Shale's regex helpers into its host, where a match would cost a step like any builtin.
+That's the lesson of Session 1 again. `re_find_all` is written in Shale, in the prelude, so every character it reads costs a step, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. Session 6 showed what a nuisance that keeps coming back asks for, and this one makes the case for moving Shale's regex helpers into its host, where a match would cost a step like any builtin.
 
 The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
 
@@ -747,11 +731,11 @@ A check that's too slow stops getting run, so each one is held to a budget, and 
 
 ### Prove it can fail
 
-Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault found a test whose panic hid twelve others. In Session 4 one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
+Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault turned only three tests red, because one test's panic ended the run; once that test failed plainly, the same fault turned twelve red. In Session 4 one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
 
 ### Measure a baseline
 
-Later, Shale gained Go hunts, built on Go's own parser: names, nesting and code smells, each proved by its fixtures. Run over essay-surface, they found little. There were no vague function names and nothing nested four calls deep. Two long functions in the markdown renderer, `inline` and `link`, are the next refactor if one is wanted. A hunt that finds little in good code is still worth running: it sets the baseline, and the next change gets held to it.
+Between Sessions 6 and 7, apart from any prompt, Shale's cookbook gained three Go hunts. They read code through Go's own parser and flag what a reader may want to look at twice: vague names, calls nested deep, and smells such as long functions. Each is proved by plants of its own. Run over essay-surface, they found little. There were no vague function names and nothing nested four calls deep. Two long functions in the markdown renderer, `inline` and `link`, are the next refactor if one is wanted. A hunt that finds little in good code is still worth running: it sets the baseline, and the next change gets held to it.
 
 ### Look with your own eyes
 

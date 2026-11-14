@@ -2,6 +2,10 @@
 # A mantra, repeated on purpose, gets a large allowance; an accidental
 # refrain gets one. Matched in prose, any case, outside fences and quotes.
 1	a green is a claim
+0	a green is only a claim
+1	a step a character
+1	turned around
+1	is a gap in the language
 1	shale builds nothing itself
 1	slowness is a finding
 99	green again

@@ -4,7 +4,7 @@
 
 Shale is a programming language written by agents, for agents. It looks like Lua on purpose, and it mostly works like any mainstream language: variables, functions, loops, lists and maps, strings and files. Its unique features are built for its niche, which is scripts an agent writes and a human reads.
 
-That niche is the premise of this book. You will read a lot of Shale and write very little. Your agent writes it, every time it searches your code, runs your tests, renames across a tree or ships a release. You read it as it scrolls by, judge it, and steer the agent that wrote it. Here we learn to do that well.
+That niche is the premise of this book. You will read a lot of Shale and write very little. Your agent writes it, every time it searches your code, runs your tests, renames across a tree or ships a release. You read it as it scrolls by, judge it, and steer the agent that wrote it. This book teaches you to do that well.
 
 ### Who this book is for
 
@@ -37,12 +37,12 @@ Shale builds nothing itself. `go build` makes the server. Shale runs the build, 
 
 The thread through every session is gates. A gate is a script that holds work to a standard. It runs the checks, prints a verdict on its last line, and fails when the work falls short. Gates are how we write quality software with agents, because they turn a rule into something that runs on every change.
 
-In this project, nobody planned the gates up front. They arrived when the work asked for them: a check before a commit in the first session, a fast check and a full one by the third, faults planted on purpose in the fourth, and a release with a rollback in the fifth.
+In this project, nobody planned the gates up front. They arrived when the work asked for them: a check before a commit in the first session, faults planted on purpose from the second, a fast check and a full one by the third, a planted fault for every stage in the fourth, and a release with a rollback in the fifth.
 
 ### A language that changes
 
 Shale is meant to have dialects. A dialect costs a team of humans a great deal, because everyone has to learn it. It costs an agent very little, because an agent reads the whole script, and the docs for its own dialect. So you can keep the dialect that works for your agent, and build your own library of scripts on top of the cookbook or instead of it.
 
-The book shows this happening. A nuisance came up four times, so in Session 6 the language changed to fix it. For now, a reader who wants that freedom forks their own copy of Shale.
+The book shows this happening. A nuisance came up three times, so in Session 6 the language changed to fix it. For now, a reader who wants that freedom forks their own copy of Shale.
 
 First, one turn of the loop, start to finish. Then Session 1, with an empty repository and a prompt.

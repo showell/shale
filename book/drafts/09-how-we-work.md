@@ -25,11 +25,11 @@ A check that's too slow stops getting run, so each one is held to a budget, and 
 
 ### Prove it can fail
 
-Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault found a test whose panic hid twelve others. In Session 4 one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
+Every gate on the list earned its place by failing once on purpose. In Session 3 a planted fault turned only three tests red, because one test's panic ended the run; once that test failed plainly, the same fault turned twelve red. In Session 4 one found a security hole that every stage had passed. Seeding faults costs a few minutes, once. Keep as permanent fixtures only the cheap ones: data a check reads, never something that needs a build of its own.
 
 ### Measure a baseline
 
-Later, Shale gained Go hunts, built on Go's own parser: names, nesting and code smells, each proved by its fixtures. Run over essay-surface, they found little. There were no vague function names and nothing nested four calls deep. Two long functions in the markdown renderer, `inline` and `link`, are the next refactor if one is wanted. A hunt that finds little in good code is still worth running: it sets the baseline, and the next change gets held to it.
+Between Sessions 6 and 7, apart from any prompt, Shale's cookbook gained three Go hunts. They read code through Go's own parser and flag what a reader may want to look at twice: vague names, calls nested deep, and smells such as long functions. Each is proved by plants of its own. Run over essay-surface, they found little. There were no vague function names and nothing nested four calls deep. Two long functions in the markdown renderer, `inline` and `link`, are the next refactor if one is wanted. A hunt that finds little in good code is still worth running: it sets the baseline, and the next change gets held to it.
 
 ### Look with your own eyes
 

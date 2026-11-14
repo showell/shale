@@ -32,13 +32,13 @@ The smoke's server logged "listening", then failed to bind, and the smoke went o
 
 ### The trap, sprung
 
-In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. This session's first trial sprang it. Every Shale script runs under a budget, a cap on its steps, and this one ran out just after the swap:
+In the first session, the agent noted a trap: a run that stops after `job_start` leaves its server running. This session's first trial sprang it. This one ran out of its step budget just after the swap:
 
 {{fence repos:essay-surface/journal/friday.md "the step budget (5000000 steps) ran out" from "stopped the old server" to "ran out"}}
 
 `attempt` catches a failure, and a budget stop is past its reach. The run stopped after the old server was down and the new one was up, so the rollback never ran. The trial was left serving a build nobody had checked. On the live server, that would have been an unchecked release with no way back but by hand, which is how the agent put the trial back.
 
-The cause was a regex over a 67 KB page, at a step a character; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses. The trap itself stayed in the language until the next session.
+The cause was a regex written in Shale, paying a step per character of a 67 KB page; plain `split` and `find` now read the pages. The defense was a step budget twenty times what a release uses. The trap itself stayed in the language until the next session.
 
 ### A release that fails on purpose
 
@@ -56,23 +56,10 @@ A fourth trial seeded a formatting fault, and the full check stopped it: `nothin
 
 ### The real release
 
-When it worked on dev, we ran it ourselves on the live server. It shipped, with every comment where it was:
+When it worked on dev, we ran it ourselves on the live server. It shipped, with every comment where it was. The agent's report kept its last lines:
 
-```text
-release: /home/steve/essay-dogfood on 127.0.0.1:9301
-running: pid 2484343, unknown (built before release.shale)
-…
-full check: SAFE TO SHIP, 26562 ms
-built bin/essay-surface.new: 92fb48b built 2026-11-13T17:51:07Z: Journal: Friday, the final script released once more on dev, 926 ms
-comments kept: 3 files, 7 comments, in essay-dogfood/releases/2026-11-13T175107Z/comments, each compared
-stopped the old server; its log kept
-started 92fb48b built 2026-11-13T17:51:07Z: Journal: Friday, the final script released once more on dev
-ok: the index, 508 notes, the same as before
-…
-ok: all 7 comments from before on their pages and in their files
-RELEASED: running 92fb48b on 127.0.0.1:9301; to roll back to unknown: cd /home/steve && shale repos:essay-surface/scripts/release.shale data=essay-dogfood port=9301 rollback=1
-```
+{{fence repos:essay-repl-server/notes/essay-surface-friday.md "RELEASED: running 92fb48b" from "full check: SAFE TO SHIP" to "RELEASED: running"}}
 
-Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back. The old version reads `unknown` because it was built by hand. The full check is nearly all of the 27 seconds; the swap and its checks fit inside one. Green again ✅
+Read it the way you'd read any gate: the verdicts. The full check passed, the build took under a second, seven comments were kept and found where they were, and the last line says what runs and how to go back (shortened in the report). The old version reads `unknown` because it was built by hand. The full check is nearly all of the 27 seconds; the swap and its checks fit inside one. Green again ✅
 
 The release was the most boring thing in the project, and it took the most care to make it so. Boring is what a release looks like when every surprise was found on the dev port first.

@@ -28,7 +28,7 @@ The test checks that the folder holds exactly the four files it names, so a fift
 
 {{lines repos:essay-surface/markdown.go from "case c == 'h' && !inLink:" to "k += len(u)"}}
 
-The new tests passed on their first run. A green is only a claim until you count what ran, so the agent counted the cases the tests read, and found all 62.
+The new tests passed on their first run, so the agent counted the cases the tests read, and found all 62.
 
 ### One seeded fault
 
@@ -48,7 +48,7 @@ The after pages came from the same audit. The comparison took two stops. The fir
 
 {{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
 
-That's the lesson of Session 1 again. `re_find_all` is written in Shale, in the prelude, so it spends a step a character, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. A nuisance that keeps coming back is a gap in the language, as Session 6 showed, and this one makes the case for moving Shale's regex helpers into its host, where a match would cost a step like any builtin.
+That's the lesson of Session 1 again. `re_find_all` is written in Shale, in the prelude, so every character it reads costs a step, and the comparison read 7 MB of pages twice. A prelude regex has now stopped a survey in Session 1, the release trial in Session 5, and this comparison. Each time, builtins did the job instead. Session 6 showed what a nuisance that keeps coming back asks for, and this one makes the case for moving Shale's regex helpers into its host, where a match would cost a step like any builtin.
 
 The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
 

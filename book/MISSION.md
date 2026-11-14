@@ -39,7 +39,8 @@ This is the one home for the book's rules. Every writer and reader of the book, 
 - `{{function PATH NAME}}` quotes a Shale function.
 - `{{lines PATH from "A" to "B"}}` quotes the lines between two anchors.
 - `{{quote PATH}}` quotes a prompt as a block quote.
-- `{{fence PATH "TEXT"}}` quotes the one fenced block of a journal that holds TEXT, verbatim.
+- `{{fence PATH "TEXT"}}` quotes the one fenced block of a journal that holds TEXT, verbatim, and `{{fence PATH "TEXT" from "A" to "B"}}` only its lines between two anchors.
+- `{{show REPO REV:PATH}}` quotes a whole file as commit REV had it, for a script since changed or gone, and `{{show REPO REV:PATH from "A" to "B"}}` the lines between two anchors of it.
 
 Each anchor must occur exactly once, so a quote can't drift. Never paste code that a file holds.
 
