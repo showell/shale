@@ -12,11 +12,7 @@ By now the essay surface had four scripts, and the last session's report listed 
 
 ### An index that listens
 
-The new server hears changes from the kernel, through Linux's inotify, instead of checking every note's file on every request, so the index now costs about as much as a note.
-
-A note's date now comes from its first lines, or else its last commit. A fresh clone, which resets every file's time, gives the same index, and that comparison became a stage of the full check.
-
-The mistakes on the way stopped loudly: when the prelude's `edit_between` moved the store out of `server.go`, its report of `-175 +3 lines` showed it had cut the imports too.
+The new server hears changes from the kernel, through Linux's inotify, instead of checking every note's file on every request, so the index now costs about as much as a note. The index's dates changed too: a note's date comes from its first lines, or else its last commit, never from the file's time. So a fresh clone, which resets every file's time, gives the same index, and that comparison became a stage of the full check.
 
 ### A check for each edit
 
@@ -53,27 +49,6 @@ Then the full check went red on purpose: the renderer wrote `<b>` for `<strong>`
 {{fence repos:essay-surface/journal/wednesday.md "1 failed: TestRender (86718 steps)" from "markdown_test.go:100" to "stopped at"}}
 
 The audit, which reads every rendered note for markdown left over, passed that fault, since it never checks which tags appear; the renderer's tests caught it. Each check has its own job.
-
-```dot
-digraph checks {
-  rankdir=LR;
-  node [shape=box, style="rounded", fontname="Helvetica", margin="0.15,0.08"];
-  edge [fontname="Helvetica"];
-  edit [label="each edit", shape=plaintext];
-  ship [label="before shipping", shape=plaintext];
-  shipping [label="shipping", shape=plaintext];
-  fast [label="fast.shale\nformat, vet, tests, smoke\nabout 3 s of CPU"];
-  full [label="full.shale\nfast, race, the real notes\nabout 25 s"];
-  rel [label="release.shale\nfull, then a checked swap\nabout 27 s"];
-  edit -> fast;
-  ship -> full;
-  shipping -> rel;
-  fast -> full [label="runs inside", style=dashed];
-  full -> rel [label="runs inside", style=dashed];
-}
-```
-
-*A check for each moment. Each runs the one before it, so a release has passed them all.*
 
 ### The gates now
 

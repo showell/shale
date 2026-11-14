@@ -8,7 +8,7 @@ Session 2 asks for the feature the surface exists for:
 
 A cold agent took this prompt and worked for about half an hour. Steve stepped in once, after looking at the result in his browser, and the orchestrator made that fix.
 
-The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read the agent's scripts at review speed: it proposes to keep some of them, and for each we ask whether it earns its place.
+The first bullet is the hard one. The old surface stores a comment's place as a position, `"para_index": 4`, so a paragraph added above sends every comment below it one paragraph off. This time we also read some of the agent's scripts at review speed, the slower read a script gets when the agent proposes to keep it: does it earn its place?
 
 ### A reply finds its paragraph
 
@@ -47,7 +47,7 @@ The agent kept the timeout and found the waste: every simulated case recomputed 
 
 ### Seeding faults
 
-Sixteen hand-written anchoring tests passed on their first run. To see whether they could fail, the agent broke the code twice, on purpose, and put it back each time:
+Sixteen hand-written anchoring tests passed on their first run. To see whether they could fail, the agent broke the code twice, on purpose, and put it back each time. That's fault seeding, also called mutation testing, and we call each seeded fault a plant:
 
 {{fence repos:essay-surface/journal/tuesday.md "plant 1: no in-place rule"}}
 

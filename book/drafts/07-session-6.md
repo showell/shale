@@ -8,11 +8,9 @@ Session 6 opens with a reply:
 
 > go ahead with the jobs feature
 
-This session began from a reply in conversation, not from a written prompt. The orchestrator, asked to watch for a nuisance, had spotted one, and right after Session 5 a cold agent built the fix into Shale in about sixteen minutes. The reply, the next morning, started the merge. Steve stepped in once more, to choose the child run below from three options. The orchestrator handed that to a cold agent that was already making the project's scripts read better before the book quoted them.
+This session began from a reply in conversation, not from a written prompt. During Session 5, Steve asked the orchestrator to watch for a nuisance that Shale itself could fix, and it found one. Three times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, and in the first release trial, on a budget stop. Each time, someone noticed and stopped it by hand. Session 4 had a cousin of the trap: a stop between a fault going in and coming out left the fault in the tree, and `--undo-on-stop` already covered files.
 
-Three times in five sessions, an agent's run stopped after `job_start` and left a server running: in each of the first two, and in the first release trial, on a budget stop. Each time, someone noticed and stopped it by hand. Session 4 had a cousin of the trap: a stop between a fault going in and coming out left the fault in the tree, and `--undo-on-stop` already covered files.
-
-Three times is a pattern, and a pattern of hand cleanup is a gap in the language. So this session closed it, in Shale itself.
+Three times is a pattern, and a pattern of hand cleanup is a gap in the language. So right after Session 5, a cold agent closed it in Shale itself, in about sixteen minutes. Steve's reply came the next morning, and the merge followed. He stepped in once more, to choose the child run below from three options.
 
 ### The rule
 
@@ -65,7 +63,7 @@ digraph release {
 
 ### Dialects
 
-This is a dialect arriving. The work needed the rule three times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report. A new word like `keep_on_stop` costs an agent little, since it reads the docs every session, while every human on a team would have to learn it. That difference is why Shale is meant to have dialects.
+This is a dialect arriving, at the price Meet Shale gave. The work needed the rule three times, the nuisance had a clear shape, and an agent turned it into a rule, its tests and a one-line report. The next agent to start a job meets `keep_on_stop` in the docs it reads anyway.
 
 `keep_on_stop` went into Shale's main line, since every project with a server needs it. A word only your project needs belongs in your own fork, and that's where your dialect begins. For now, that means forking your own copy of Shale and letting your agent change it. When a cleanup happens by hand a third time, ask your agent what word the language is missing. Your agent's nuisances are your language's roadmap.
 

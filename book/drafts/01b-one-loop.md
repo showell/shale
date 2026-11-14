@@ -59,20 +59,3 @@ That run shows the check working for real, and the test and the planted fault co
 ### Why Shale, and not bash
 
 The same check in bash is one line: run the server, echo `$?`, list the folder. It works on a good day. On a bad day, when the check is missing, the server starts listening and never exits, and the agent's shell hangs on it. The Shale version stops waiting: `run` requires a timeout, here 10 seconds, and a keep, here the last 5 lines. A program the repository doesn't track runs only with a reason, and the reason is logged. Every line of the script says what it touches, so the reader can judge it at a glance. That's the bargain the whole book rests on: slightly longer scripts that a human can read in seconds.
-
-### The words we'll use
-
-- **Agent:** an AI model working in a terminal on our behalf. It reads, runs programs and writes code.
-- **Cold agent:** a fresh agent with no memory of our conversation, given one task and a written brief.
-- **Orchestrator:** the agent Steve talks to, acting as his proxy. It writes the prompts, briefs the cold agents and checks their work.
-- **Prompt:** what we ask an agent to do, in plain words. Each session opens with one.
-- **Heredoc:** a Shale script written inline in a shell command, `shale <<'EOF' … EOF`, run once.
-- **Recipe:** a script saved to a file because its question came back.
-- **Mount:** a named folder a script may reach beyond its own, written `name:path`.
-- **Prelude:** Shale's built-in library for daily work: git, jobs, HTTP, JSON and refactors.
-- **Job:** a program that outlives the call that started it, such as a server.
-- **Gate:** a check that runs the tests and prints a verdict on its last line, and fails when the work falls short.
-- **Fixture:** a small, permanent input a check must reject or accept.
-- **Fault seeding:** putting a bug in once, on purpose, to prove a test catches it. We call these plants.
-- **The old surface:** the essay surface Steve used before this project, a Python server.
-- **Session:** one stretch of work that opens with one prompt, and a chapter of this book.

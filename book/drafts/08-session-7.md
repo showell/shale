@@ -22,7 +22,7 @@ A parenthesis then a period, bold, a table cell, a placeholder host: each became
 
 ### The cases, as fixtures
 
-The cases came before the code, as data the tests read: four files in `testdata/links/`, 62 cases in all. Sixteen must link, fifteen must not, 22 test punctuation, and nine are hostile notes. Each case is a bit of markdown and the exact HTML it must become. The parenthesis rule is the subtle one: a closing parenthesis belongs to the URL only when the URL opened it.
+The cases came before the code, as data the tests read: four files in `testdata/links/`, 62 cases in all. Of those, 16 must link, 15 must not, 22 test punctuation, and 9 are hostile notes. Each case is a bit of markdown and the exact HTML it must become. The parenthesis rule is the subtle one: a closing parenthesis belongs to the URL only when the URL opened it.
 
 {{lines repos:essay-surface/testdata/links/punctuation.txt from "~~ case: in parentheses, then a period" to ")</a>).</p>"}}
 
@@ -50,7 +50,7 @@ The after pages came from the same audit. The comparison took two stops. The fir
 
 {{fence repos:essay-surface/journal/links.md "the step budget (200000000 steps) ran out"}}
 
-A regex search pays for its whole pattern at every byte it examines, and the comparison searched 7 MB of pages twice. That made six regex stops in four sessions: two in Session 1, two in Session 3's work on dates, one in Session 5 and this one. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back.
+A regex search pays for its whole pattern at every byte it examines, and the comparison searched 7 MB of pages twice. That made six regex stops in four sessions. Each time, builtins did the job instead. Like the jobs in Session 6, that's a nuisance coming back.
 
 The third version, built on `split` and `find`, puts each link whose text is its own URL back as bare text:
 

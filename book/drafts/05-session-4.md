@@ -8,11 +8,11 @@ Session 4 asks whether those checks can fail:
 
 A cold agent worked for about seventeen minutes. Steve stepped in once, with two replies that the orchestrator passed on mid-run.
 
-Session 3 ended on `SAFE TO SHIP`. Could that line ever say anything else? This is reading a gate at trust speed, a third speed after scroll and review: what proves the gate is watching?
+Session 3 saw `NOT SAFE` once, for one fault. Can every stage really go red? Asking that is reading a gate at trust speed, a third speed after scroll and review: what proves the gate is watching?
 
 ### One fault per stage
 
-This session seeded one fault in each stage, a plant in our word, ran the stage, and took the fault out. Plants sometimes irritate Steve, because they slow gates, often through needless rebuilds. Done once and removed, they catch tests that test nothing, as the deaf watch did in Session 3.
+This session seeded one fault in each stage, ran the stage, and took the fault out. A plant done once and removed catches tests that test nothing, as the deaf watch did in Session 3. A fixture is the permanent kind: a small input a check must reject or accept, run on every check. Fixtures sometimes irritate Steve, because they can slow gates, often through needless rebuilds.
 
 `full.shale` has six stages, and its first, `fast`, has five of its own, so that made eleven plants. Every launch had the same shape: the fault in (`OLD` becomes `NEW`), the stage run exactly as `full.shale` runs it, the fault out, then proof that the tree is back and `fast.shale` passes:
 
@@ -24,7 +24,7 @@ Every stage went red for its fault, and the faults that got past every other sta
 
 ### A stop with the fault still in
 
-Plant 6's first launch gave `run` a stage name but no CPU budget for it to name, and Shale stops on that. It stopped the script between the fault going in and coming out, leaving the fault in `store.go`. The agent removed it first:
+Plant 6's first launch named a stage with no CPU budget, and Shale stops on that. It stopped the script between the fault going in and coming out, leaving the fault in `store.go`. The agent removed it first:
 
 {{fence repos:essay-surface/journal/thursday.md "the last launch stopped after planting"}}
 

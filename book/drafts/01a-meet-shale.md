@@ -15,9 +15,9 @@ If you've read Lua, this looks familiar, and that's on purpose. `local` declares
 ### What Shale adds
 
 A few features are Shale's own, and most of them show up in fast.shale:
-- **Every run has budgets:** steps, reads and output. A runaway script stops and says which budget it hit. fast.shale gives each stage a budget of its own, `cpu_budget_ms`, so a stage that turns slow fails.
+- **Every run has budgets:** steps, reads, bytes read and printed, memory, and the programs it starts. A runaway script stops and says which budget it hit. A program can get a CPU budget too, and fast.shale gives each stage one, `cpu_budget_ms`, so a stage that turns slow fails.
 - **A script works inside its own folder** and the folders it mounts. A mount is a named folder beyond its own, written `name:path`, so you can see everything a script can reach. Every path in fast.shale, such as `.` or `comments.js`, is inside its repository.
-- **A risky program runs when the script gives its reason.** A shell, an interpreter or a text tool requires a `want = "tag: why"`, and the reason is logged. `node` is an interpreter, so the js stage says why it runs.
+- **A risky program runs when the script gives its reason.** A shell, an interpreter, a text tool or a program git doesn't track requires a reason, and the reason is logged. `node` is an interpreter, so the js stage says why it runs.
 - **A stop is one line** that says where and why. When a stage fails, fast.shale ends on one line that names it, such as `vet: go exited 1`.
 - **A prelude does the daily work.** The prelude is Shale's built-in library: git, jobs, HTTP, JSON, and refactors that read code the way its compiler does. A job is a program that outlives the call that started it, such as a server. `run` comes from the prelude too.
 
@@ -33,8 +33,8 @@ The same goes for recipes, scripts saved to a file because their question came b
 
 ### Four words for what's next
 
-`run` needs a timeout and a keep: how much of a program's output to hold on to. These four words come up from the first session on:
-- **`want`:** the reason a script gives for running a risky program, written `"tag: why"`. Shale logs it.
+Four words come up from the first session on. `run` needs a timeout and a keep, how much of a program's output to hold on to, and two of the four are keeps:
+- **`want`:** the reason a script gives for running a risky program, written `want = "tag: why"`. Shale logs it.
 - **`whole`:** a keep in bytes. `run` holds all of the output up to that size, and each stage in fast.shale holds up to 400,000 bytes.
 - **`tail`:** a keep in lines. `run` holds the program's last lines, where its verdict usually sits.
 - **`must`:** `must(r)` returns a run that exited 0, and fails the script on any other, printing the output and naming the program. fast.shale's `stage` does the same job, with more to say when a test fails.

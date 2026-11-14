@@ -24,7 +24,7 @@ A failed release puts the old binary back, checks it the same way, and says so o
 
 ### A check that talked to the wrong server
 
-The first surprise came before the script ran at all. The trial put an "old" server on the dev port, 9300, and the checks' own servers listened there too. Run beside it, the smoke check (a few requests through a server of its own) failed, and its log shows why:
+The first surprise came before the release script was written. The agent set up a trial with an "old" server on the dev port, 9300, and the checks' own servers listened there too. Run beside it, as a trial release would run it, the smoke check (a few requests through a server of its own) failed, and its log shows why:
 
 {{fence repos:essay-surface/journal/friday.md "the page: 404" from "── stopped at" to "bind: address"}}
 
@@ -42,7 +42,7 @@ The cause was a regex search over a 67 KB page, which pays for its whole pattern
 
 ### A release that fails on purpose
 
-The prompt asked for a release that fails, and the agent chose its fault carefully. A fault the full check catches never reaches the swap, so it proves nothing about the rollback. It needed a fault no check covers, and found one in the server's defaults. Every check passes `-comments` explicitly. The live server passes none. So the agent seeded one fault, on a throwaway branch in its own git worktree, that moves the default comments folder inside the notes folder:
+The prompt asked for a release that fails. A fault the full check catches never reaches the swap, so it proves nothing about the rollback. The agent needed a fault no check covers, and found one in the server's defaults. Every check passes `-comments` explicitly. The live server passes none. So the agent seeded one fault, on a throwaway branch in its own git worktree, that moves the default comments folder inside the notes folder:
 
 {{fence repos:essay-surface/journal/friday.md "*comments = filepath.Join(filepath.Clean(*dir)"}}
 
@@ -52,7 +52,7 @@ The full check said SAFE TO SHIP. The release caught it on the first comment and
 
 Afterward every comments file matched byte for byte, and the bad binary was kept with its log. That's the case for a release check: the full check tests the server the way the tests start it, and the release check tests it the way it really runs, with its real flags and data.
 
-A fourth trial seeded a formatting fault, and the full check stopped it: `nothing touched`, the same server pids before and after. Then the agent removed the seeded fault's branch and worktree, since a seeded fault proves a check once.
+Another trial seeded a formatting fault, and the full check stopped it: `nothing touched`, the same server pids before and after. Then the agent removed the seeded fault's branch and worktree, since a seeded fault proves a check once.
 
 ### The real release
 
@@ -64,6 +64,29 @@ Read it the way you'd read any gate: the verdicts. The full check passed, the bu
 
 ### The gates now
 
-`release.shale` is the third gate: the full check, then the live server held to the same checks, with a rollback on any failure. The real release was boring because this session's surprises, the wrong server and the budget stop, were found on the dev port first.
+`release.shale` is the third gate: the full check, then the live server held to the same checks, with a rollback on any failure. With it, the project has a check for each moment:
+
+```dot
+digraph checks {
+  rankdir=LR;
+  node [shape=box, style="rounded", fontname="Helvetica", margin="0.15,0.08"];
+  edge [fontname="Helvetica"];
+  edit [label="each edit", shape=plaintext];
+  ship [label="before shipping", shape=plaintext];
+  shipping [label="shipping", shape=plaintext];
+  fast [label="fast.shale\nformat, vet, tests, smoke\nabout 3 s of CPU"];
+  full [label="full.shale\nfast, race, the real notes\nabout 25 s"];
+  rel [label="release.shale\nfull, then a checked swap\nabout 27 s"];
+  edit -> fast;
+  ship -> full;
+  shipping -> rel;
+  fast -> full [label="runs inside", style=dashed];
+  full -> rel [label="runs inside", style=dashed];
+}
+```
+
+*A check for each moment. Each runs the one before it, so a release has passed them all.*
+
+The real release was boring because this session's surprises, the wrong server and the budget stop, were found on the dev port first.
 
 Along the way, Steve asked the orchestrator to watch for a nuisance that Shale itself could fix.

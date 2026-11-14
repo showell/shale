@@ -26,7 +26,7 @@ To pick a dozen varied samples, the agent surveyed every real note in the old su
 
 {{fence repos:essay-surface/journal/monday.md "the step budget (5000000 steps) ran out"}}
 
-Every Shale run has budgets for steps, reads, bytes and memory. A regex search costs steps for its whole pattern at every byte it examines, so a few patterns over five hundred notes spent the step budget, which stopped the run long before it could run away. The agent switched to `grep`, a builtin, and hit the memory budget next. The docs give the fix: do each file's work in a function, and call `yield()` after each file, so the run holds one file at a time.
+Steps are the first budget on Meet Shale's list. A regex search costs steps for its whole pattern at every byte it examines, so a few patterns over five hundred notes spent the step budget, which stopped the run long before it could run away. The agent switched to `grep`, a builtin, and hit the memory budget next. The docs give the fix: do each file's work in a function, and call `yield()` after each file, so the run holds one file at a time.
 
 {{fence repos:essay-surface/journal/monday.md "wt = wt + 1" from "function measure(p)" to "print(#all"}}
 
@@ -46,7 +46,7 @@ Every program goes through `run` or a call like it, so programs are easy to spot
 
 ### The number
 
-To time a note, the agent started the server on the sample notes and sent it requests. `job_start` runs the server as a job, and `job_wait` watches its log for a line. The `want` is the reason Shale requires before it runs a program git doesn't track, like a server just built:
+To time a note, the agent started the server on the sample notes and sent it requests. `job_start` runs the server as a job, and `job_wait` watches its log for a line. Git doesn't track a server just built, so the call gives a `want`:
 
 {{fence repos:essay-surface/journal/monday.md "start the server on the sample notes" from "job_start(" to "idx.ms"}}
 
