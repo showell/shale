@@ -2,6 +2,8 @@
 
 A book for experienced developers who are new to working with agents. We follow one side project, a new essay surface built over a series of sessions, one a chapter, and read the Shale our agent wrote along the way.
 
+This is draft 2, rough in places: prose, code and diagrams.
+
 
 
 
