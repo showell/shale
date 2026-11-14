@@ -110,6 +110,8 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **AS. A diagram illustrates its chapter (Steve, 2026-11-14).** A diagram shows what the chapter tells, and never lies or sets a structure the text can't commit to. A general picture, such as the loop every session runs, waits until a real account motivates it; until then, draw the particular case the chapter walks.
 
+**AT. A chapter's story fits in a small diagram (Steve, 2026-11-14).** A few boxes, each arrow a sentence, and the headings are those sentences in order. When the diagram gets busy, cut the chapter, not the font. A diagram that tells the story well may in turn shape the prose and its headings; it still never claims what the text can't commit to (AS).
+
 ## 6. Part Two
 
 **PA. Part Two: four languages, one workflow.** Part Two makes the essay surface richer, with dot diagrams and small widgets in a note. Shale is the glue the agent builds, checks, refactors and ships with. Go does the plumbing, Roc expresses the features, and JavaScript does what JavaScript always does. Its premise is that true multi-lingual development is far more feasible with agents, for the same reason dialects are cheap for them. The book's central theme still holds: building your own workflow, now in app territory (Steve, 2026-11-14).
