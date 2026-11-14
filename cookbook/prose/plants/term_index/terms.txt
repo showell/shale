@@ -1,0 +1,11 @@
+# The plants' terms.
+## Shale
+budget
+mount
+stop | main: Four
+heredoc
+script
+## Checks
+gate
+fence | \bfences?\b
+appendix

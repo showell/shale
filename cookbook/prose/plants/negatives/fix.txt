@@ -1,0 +1,2 @@
+# fix contrast: says what a thing is by what it isn't
+contrast: The kept sentence is not new.

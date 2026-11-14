@@ -1,0 +1,296 @@
+-- budget: steps=2000000000 reads=100 read_bytes=20000000 output_bytes=400000
+-- This builds a book's index from its prose, and reports what the index says
+-- about the book's order: a term used long before the chapter that teaches it,
+-- a term with no home, and a chapter that brings in too many terms at once.
+--
+--   cd <a book's checkout> && shale <cookbook>/prose/term_index.shale book=book/book.md terms=book/index_terms.txt
+--   shale <cookbook>/prose/term_index.shale self_test=1
+--
+-- The arguments:
+--   book            the markdown document, each `## ` heading a chapter;
+--   terms           the terms and their categories (the format is below);
+--   stop_at         the heading, after `## `, of the first chapter left out,
+--                   such as the first appendix; the whole book by default;
+--   early_gap       a first mention this many chapters or more before the
+--   early_mentions  busiest chapter, with this many mentions or fewer, is a
+--                   possible forward use (3 and 2 by default);
+--   spread          a term in this many chapters or more has no home (15);
+--   new_terms       a chapter that first mentions this many terms or more
+--                   carries too many new ideas (6).
+--
+-- A term is found in a chapter when one of its patterns matches a line of that
+-- chapter's prose: every line outside a ``` fence, headings and table cells
+-- included, read in lower case. The text above the first chapter is left out.
+--
+-- The terms file has a `## Category` line above each group of terms. A term is
+-- a line `Name`, or `Name | pattern | pattern ...`, the patterns regular
+-- expressions over the lower-cased line, `\bname\b` when none is given. A part
+-- `main: Chapter title` names the chapter that teaches it, in place of the one
+-- that mentions it most. A blank line, or one that starts `#` but not `## `,
+-- is skipped.
+--
+-- The output is markdown: the index, one table per category, with each term's
+-- busiest chapter, its first, and every chapter that mentions it; then the
+-- smells. It judges nothing and exits 0; a smell is a question for the writer.
+
+const DEFAULT_LIMITS = {early_gap = 3, early_mentions = 2, spread = 15, new_terms = 6}
+
+-- The terms as `{category, name, patterns, main}`, in the file's order.
+-- `where` names the file in a stop.
+function terms_of(text, where)
+  local found = {}
+  local category = ""
+  local number = 0
+  for raw in split(text, "\n") do
+    number = number + 1
+    local l = trim(raw)
+    if starts_with(l, "## ") then
+      category = trim(sub(l, 4))
+    elseif l ~= "" and not starts_with(l, "#") then
+      if category == "" then fail("term_index: " .. where .. ":" .. number .. ": a term before any `## Category`") end
+      local parts = split(l, " | ")
+      local name = trim(parts[1])
+      local patterns = {}
+      local main = ""
+      for part in drop(parts, 1) do
+        local p = trim(part)
+        if starts_with(p, "main: ") then main = trim(sub(p, 7)) else push(patterns, p) end
+      end
+      if #patterns == 0 then push(patterns, "\\b" .. lower(name) .. "\\b") end
+      push(found, {category = category, name = name, patterns = patterns, main = main})
+    end
+  end
+  return found
+end
+
+-- The chapters above `stop_at` ("" for none) as `{number, title, lines}`,
+-- each holding its prose in lower case.
+function chapters_of(text, stop_at)
+  local found = {}
+  local now = nil
+  local fenced = false
+  for l in split(text, "\n") do
+    if starts_with(l, "```") then
+      fenced = not fenced
+    elseif not fenced then
+      if starts_with(l, "## ") then
+        local title = trim(sub(l, 4))
+        if stop_at ~= "" and title == stop_at then break end
+        now = {number = #found + 1, title = title, lines = {}}
+        push(found, now)
+      elseif now ~= nil then
+        push(now.lines, lower(l))
+      end
+    end
+  end
+  return found
+end
+
+-- How many lines of `chapter` match any of `patterns`.
+function mentions(chapter, patterns)
+  local n = 0
+  for l in chapter.lines do
+    local hit = false
+    for p in patterns do
+      if not hit and re_find(l, p) ~= nil then hit = true end
+    end
+    if hit then n = n + 1 end
+  end
+  return n
+end
+
+-- One term's entry: `{term, counts, chapters, first, most}`, `counts` holding
+-- the lines that mention it in each chapter it's in. A term found nowhere has
+-- no `first` or `most`.
+function entry_of(term, chapters)
+  local counts = {}
+  local present = {}
+  local first = nil
+  local most = nil
+  for c in chapters do
+    local n = mentions(c, term.patterns)
+    if n > 0 then
+      counts["" .. c.number] = n
+      push(present, c.number)
+      if first == nil then first = c end
+      if most == nil or n > counts["" .. most.number] then most = c end
+    end
+  end
+  if first == nil then return {term = term, counts = counts, chapters = present} end
+  if term.main ~= "" then
+    most = nil
+    for c in chapters do
+      if c.title == term.main then most = c end
+    end
+    if most == nil then fail("term_index: " .. term.name .. "'s main chapter, " .. term.main .. ", is no chapter of the book") end
+    if not has_key(counts, "" .. most.number) then fail("term_index: " .. term.name .. "'s main chapter, " .. term.main .. ", never mentions it") end
+  end
+  return {term = term, counts = counts, chapters = present, first = first, most = most}
+end
+
+function entries_of(book_text, terms_text, terms_where, stop_at)
+  local chapters = chapters_of(book_text, stop_at)
+  if #chapters == 0 then fail("term_index: the book has no `## ` chapters") end
+  local entries = {}
+  for t in terms_of(terms_text, terms_where) do push(entries, entry_of(t, chapters)) end
+  return {chapters = chapters, entries = entries}
+end
+
+function is_found(e)
+  return has_key(e, "first")
+end
+
+-- The smells, as `{early, spread, nowhere, crowded}`: the entries of the
+-- first three, and each crowded chapter as `{chapter, names}`.
+function smells_of(index, limits)
+  local early = {}
+  local spread = {}
+  local nowhere = {}
+  for e in index.entries do
+    if not is_found(e) then
+      push(nowhere, e)
+    else
+      if e.most.number - e.first.number >= limits.early_gap and e.counts["" .. e.first.number] <= limits.early_mentions then push(early, e) end
+      if #e.chapters >= limits.spread then push(spread, e) end
+    end
+  end
+  local crowded = {}
+  for c in index.chapters do
+    local fresh = {}
+    for e in index.entries do
+      if is_found(e) and e.first.number == c.number then push(fresh, e.term.name) end
+    end
+    if #fresh >= limits.new_terms then push(crowded, {chapter = c, names = fresh}) end
+  end
+  return {early = early, spread = spread, nowhere = nowhere, crowded = crowded}
+end
+
+function chapter_name(c)
+  return c.number .. ". " .. c.title
+end
+
+function print_index(index)
+  print("# The index")
+  local category = ""
+  for e in index.entries do
+    if e.term.category ~= category then
+      category = e.term.category
+      print("")
+      print("## " .. category)
+      print("")
+      print("| Term | Most in | First in | Every chapter |")
+      print("|---|---|---|---|")
+    end
+    if not is_found(e) then
+      print("| " .. e.term.name .. " | (nowhere) | | |")
+    else
+      local numbers = {}
+      for n in e.chapters do push(numbers, "" .. n) end
+      print("| " .. e.term.name .. " | " .. chapter_name(e.most) .. " | " .. chapter_name(e.first) .. " | " .. join(numbers, ", ") .. " |")
+    end
+  end
+  return nil
+end
+
+function print_smells(smells, limits)
+  print("")
+  print("# The smells")
+  print("")
+  print("## Mentioned early, dwelt on later")
+  print("")
+  print("| Term | First in | Mentions there | Most in | Mentions there |")
+  print("|---|---|---|---|---|")
+  for e in smells.early do
+    print("| " .. e.term.name .. " | " .. chapter_name(e.first) .. " | " .. e.counts["" .. e.first.number] .. " | " .. chapter_name(e.most) .. " | " .. e.counts["" .. e.most.number] .. " |")
+  end
+  print("")
+  print("## Spread across " .. limits.spread .. " chapters or more")
+  print("")
+  print("| Term | Chapters | Most in |")
+  print("|---|---|---|")
+  for e in smells.spread do print("| " .. e.term.name .. " | " .. #e.chapters .. " | " .. chapter_name(e.most) .. " |") end
+  print("")
+  print("## Found nowhere")
+  print("")
+  for e in smells.nowhere do print("- " .. e.term.name) end
+  print("")
+  print("## Chapters that first mention " .. limits.new_terms .. " terms or more")
+  print("")
+  print("| Chapter | New terms |")
+  print("|---|---|")
+  for c in smells.crowded do print("| " .. chapter_name(c.chapter) .. " | " .. join(c.names, ", ") .. " |") end
+  return nil
+end
+
+-- The names of `entries`, joined by `, `.
+function names_of(entries)
+  local names = {}
+  for e in entries do push(names, e.term.name) end
+  return join(names, ", ")
+end
+
+function stop_message(r)
+  if r.ok then return "" end
+  return r.error
+end
+
+if arg("self_test", "") ~= "" then
+  local P = "cookbook/prose/plants/term_index/"
+  local wrong = {}
+  local limits = {early_gap = 2, early_mentions = 1, spread = 4, new_terms = 3}
+  local index = entries_of(read(P .. "book.md"), read(P .. "terms.txt"), P .. "terms.txt", "Appendix")
+  if #index.chapters ~= 4 then push(wrong, "want 4 chapters above the appendix, got " .. #index.chapters) end
+  -- Each term as `name first most chapters`.
+  local got = {}
+  for e in index.entries do
+    if is_found(e) then
+      local numbers = {}
+      for n in e.chapters do push(numbers, "" .. n) end
+      push(got, e.term.name .. " " .. e.first.number .. " " .. e.most.number .. " " .. join(numbers, ","))
+    else
+      push(got, e.term.name .. " nowhere")
+    end
+  end
+  local want = "budget 1 3 1,3; mount 1 2 1,2; stop 1 4 1,2,3,4; heredoc 1 1 1,4; script 1 3 1,3; gate 2 2 2; fence nowhere; appendix nowhere"
+  if join(got, "; ") ~= want then push(wrong, "the entries: want [" .. want .. "], got [" .. join(got, "; ") .. "]") end
+  local s = smells_of(index, limits)
+  local smell_cases = {
+    {"early", names_of(s.early), "budget, stop"},
+    {"spread", names_of(s.spread), "stop"},
+    {"nowhere", names_of(s.nowhere), "fence, appendix"},
+  }
+  for c in smell_cases do
+    if c[2] ~= c[3] then push(wrong, c[1] .. ": want [" .. c[3] .. "], got [" .. c[2] .. "]") end
+  end
+  if #s.crowded ~= 1 or s.crowded[1].chapter.number ~= 1 or join(s.crowded[1].names, ", ") ~= "budget, mount, stop, heredoc, script" then
+    push(wrong, "crowded: want chapter 1 with budget, mount, stop, heredoc, script")
+  end
+  -- The whole book reads the appendix too, where `appendix` is found.
+  local whole = entries_of(read(P .. "book.md"), read(P .. "terms.txt"), P .. "terms.txt", "")
+  if #whole.chapters ~= 5 or not is_found(whole.entries[8]) then push(wrong, "the whole book: want 5 chapters and `appendix` found") end
+  local stops = {
+    {"no_category.txt", "a term before any `## Category`"},
+    {"bad_main.txt", "is no chapter of the book"},
+    {"unmentioned_main.txt", "never mentions it"},
+  }
+  for c in stops do
+    local why = stop_message(attempt(entries_of, read(P .. "book.md"), read(P .. c[1]), P .. c[1], "Appendix"))
+    if not contains(why, c[2]) then push(wrong, c[1] .. ": want a stop holding `" .. c[2] .. "`, got `" .. why .. "`") end
+  end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail(tostring(#wrong) .. " term_index plants wrong") end
+  print("term_index: " .. #index.entries .. " terms, " .. #smell_cases + 1 .. " smells and " .. #stops .. " stops as their plants say")
+else
+  local book = arg("book", "")
+  local terms = arg("terms", "")
+  if book == "" or terms == "" then fail("term_index: book= and terms= name the document and its terms (see the header)") end
+  local limits = {
+    early_gap = arg("early_gap", DEFAULT_LIMITS.early_gap),
+    early_mentions = arg("early_mentions", DEFAULT_LIMITS.early_mentions),
+    spread = arg("spread", DEFAULT_LIMITS.spread),
+    new_terms = arg("new_terms", DEFAULT_LIMITS.new_terms),
+  }
+  local index = entries_of(read(book), read(terms), terms, arg("stop_at", ""))
+  print_index(index)
+  print_smells(smells_of(index, limits), limits)
+end

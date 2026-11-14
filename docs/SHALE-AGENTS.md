@@ -475,7 +475,10 @@ in wrapped prose, found and edited) and `zig_build.shale` (a build's
 verdict without its noise) for any project; `disk.shale` (a run stopped
 under a floor of free disk, `report=1` the growth spots' sizes, each verify's
 first check); `times.shale` (a library: a stage's time against its recent
-runs); the Zig ones in
+runs); a book's prose lints in `prose/`: `negatives.shale` (the negative
+sentences a book's voice rule rewrites or keeps, against a keep-table, with
+a `held` count) and `term_index.shale` (the index of a book's terms, and the
+terms used before the chapter that teaches them); the Zig ones in
 [`cookbook/zig/`](../cookbook/zig/README.md) find a file's seams, move
 declarations along them and judge the move; `roc/` and `zig17/` are those
 work's. Copy one and change it; not everything is a builtin.

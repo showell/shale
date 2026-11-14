@@ -1,0 +1,1 @@
+# A table with comments and no kinds.

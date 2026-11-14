@@ -1,0 +1,2 @@
+# keep caution: warns of a real trap
+other: The kept sentence is not new.

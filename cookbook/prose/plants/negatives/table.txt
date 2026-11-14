@@ -1,0 +1,5 @@
+# The plants' table: one kept sentence, and one the prose doesn't hold.
+# keep caution: warns of a real trap
+# fix contrast: says what a thing is by what it isn't
+caution: The kept sentence is not new.
+caution: A sentence the prose doesn't hold.
