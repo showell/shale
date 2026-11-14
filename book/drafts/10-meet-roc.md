@@ -2,7 +2,11 @@
 
 ## Meet Roc
 
+Part One ended at How we work, and Part Two begins here, with a second language: Roc, a young, statically typed functional language whose types can carry a design.
+
 Part Two makes the notes richer: a note that holds a diagram, drawn from a description in Graphviz's dot language, and later a small live widget. That takes four languages. Go keeps doing the plumbing: it serves pages, stores replies and runs programs. Roc expresses the features, starting with a note format of our own. JavaScript does in the page what JavaScript always does. Shale is the glue, the language the agent builds, checks, refactors and ships all of it with.
+
+The server already renders markdown well. In Session 1 the agent wrote its own renderer in Go, `markdown.go`, about 1,200 lines with no dependencies, and markdown notes keep rendering through it unchanged. The new format, `.note`, is a second format beside it, and building it is a deliberate choice. Markdown holds diagrams and widgets badly. A format designed from what Steve actually writes can be small, and Session 8 counts how small. And porting takes the fun out, as Steve says, while designing from first principles, types first, is the experiment Part Two runs.
 
 Four languages is a lot to ask of a team of humans. It's far less to ask of an agent, for the same reason a dialect of Shale is cheap: the agent reads each language's docs every session. The workflow stays the same, and so does the theme: building your own workflow, now in app territory.
 
@@ -11,10 +15,10 @@ As with Shale, you'll read Roc and rarely write it. Most of it reads like any ty
 {{lines repos:essay-surface/format/Diagram.roc from "Diagram :: Str.{" to "== Err(NotDot)"}}
 
 What's worth knowing:
-- **`::` makes an opaque type.** A `Diagram` is a string inside, but only the code in the braces after `.{` can see that. `Diagram.(source)` wraps a string into a diagram, and the parameter `|Diagram.(dot)|` unwraps one. Everyone else goes through `from_source`, so every diagram in the program has passed its check.
+- **`::` makes an opaque type.** Roc names types three ways: `:` names a shape, `:=` makes a nominal type that any code can build, and `::` makes an opaque type, whose inside is hidden. A `Diagram` is a string inside, but only the code in the braces after `.{` can see that. There, the constructor `Diagram.(source)` wraps a string into a diagram, and the parameter `|Diagram.(dot)|` unwraps one. Everyone else goes through `from_source`, so every diagram in the program has passed its check. The last line, `is_eq : _`, gives diagrams the `==` the tests use.
 - **A signature sits on its own line** above its definition. `from_source` takes a string and returns a `Try`: `Ok` with a diagram, or `Err` with the reason.
 - **A tag names itself.** `NotDot` needs no declaration: square brackets list the tags a type allows, and a tag can carry a value, as `Ok(...)` does. Think of an enum whose cases you write where you use them.
-- **`|word| ...` is a function,** and `opening.starts_with(word)` calls a function on a value, as a method call would.
+- **`|word| ...` is a function,** here one passed to `any`.
 - **`##` is a doc comment, and `expect` is a test,** kept beside the code and run by `roc test`.
 
 ### Nominal and opaque
@@ -23,7 +27,7 @@ A type made with `:=` is nominal: it has a name of its own, and any code can bui
 
 {{lines repos:essay-surface/format/Note.roc from "Note := {" to "Subtitle : [NoSubtitle, Subtitle(Text)]"}}
 
-A note built from valid parts is a valid note, so there's nothing for a maker to check. The rules live in its parts: `Phrase` and `Text` are opaque, like `Diagram`. Where another language would make the subtitle a nullable field, this type names both cases as tags, and code that reads a subtitle must handle both.
+A note built from valid parts is a valid note, so there's nothing for a constructor to check. The rules live in its parts: `Phrase` and `Text` are opaque, like `Diagram`. Where another language would make the subtitle a nullable field, this type names both cases as tags, and code that reads a subtitle must handle both.
 
 ### Pure, with a few marks
 
@@ -36,12 +40,12 @@ Three marks carry most of it:
 - **`?` after a call** returns the call's `Err` from the function at once, and otherwise gives the `Ok` value.
 - **`match`** is a switch over tags, and it must cover every tag the type allows.
 
-`{ title, subtitle: ... }` is a record, and a bare `title` means the field `title` takes the variable `title`.
+The record `{ title, subtitle: ... }` uses JavaScript's shorthand for `title: title`.
 
-This function is pure: the same source always gives the same note, and it can't read a file or print. A function that acts on the world has a name ending in `!`, such as `echo!`, which prints. Which of those exist depends on the platform, the host program a Roc app runs inside. Session 9 meets one, and the choice of platform is where Roc runs.
+This function is pure: the same source always gives the same note, and it can't read a file or print. A function that acts on the world has a name ending in `!`, such as `echo!`, which prints. Which of those exist depends on the platform, the host program a Roc app runs inside, so choosing a platform is how we choose where Roc runs. Session 9 makes that choice.
 
 ### Read the types first
 
-When you review code you rarely write, start with its types. In Roc they say what can exist: a diagram that isn't dot, or a note with two titles, can't be built at all. The functions only say how.
+When you review code you rarely write, start with its types. In Roc they say what can exist: a diagram that doesn't start as dot, or a note with two titles, can't be built at all. The functions only say how source text becomes a note, and how a note becomes a page.
 
 That's enough Roc to start. Next, a session that writes types before any code.

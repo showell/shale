@@ -9,6 +9,7 @@ Steve is reading the whole book cover to cover (from 2026-11-14) and sends bits 
 ## Meet Shale
 
 - (Steve, 2026-11-14) State plainly that agents write Shale in a terse style, so the reader will see variable names like `ls` for a list of lines. Steve has gotten used to it: he scans for the calls, such as `lines`, and doesn't really read the variables. "The honest truth is that I skim shale scripts really fast, because I have seen a lot of it." Say this plainly, with no apology and no call to fix the style. It fits One loop's reading speeds too.
+- (Steve, 2026-11-14) He almost never reads Shale's raw output, such as a `── stopped at the Linux prelude:223:15 ... budget steps ...` line with its `── used:` line. The agent reads it and turns it into something human-readable. Emphasize those mechanics: Shale's output is written for the agent, and the agent translates it into what Steve needs. "Shale's job is to automate agent task and not to short-circuit what agents are perfectly good at, which is translating shale's output into what I need to consume." This touches every chapter that shows a stop or a `── used:` line. The book should say once, early, who reads that output, and later chapters can show the agent's translation beside the raw lines. A candidate MISSION rule, AL, when applied.
 
 ## Session 1
 

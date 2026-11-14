@@ -9,8 +9,8 @@
 1	shale builds nothing itself
 1	slowness is a finding
 99	green again
-# Each session from 1 to 7 closes under this heading, on purpose.
-7	the gates now
+# Sessions 1 to 7, and Session 9, close under this heading, on purpose.
+8	the gates now
 1	where a person would meet it
 1	found where they were
 1	the mainstream you know
