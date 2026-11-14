@@ -110,7 +110,7 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 - what happens if the agent gets bogged down in types before a minimum viable product, and whether that matters when we already know Roc can do the job;
 - how the human is engaged for judgment and clarification without being bogged down in details.
 
-These are observations, not a script. The answers come from the sessions.
+These are observations, not a script. The answers come from the sessions. Session 8's answers: the agent wrote types that compile without being asked, it spent about 2 minutes on the types and 12 on counting real notes, and Steve went straight to the Roc types file and skimmed the prose. His reply is in `journal/format-types.md`, and the book may quote it or paraphrase it to fit (Steve, 2026-11-14). The orchestrator's short read, with recommendations, is how the human stays engaged without being bogged down.
 
 **PG. The reader reads mainstream languages.** The reader knows how to read mainstream programming languages well enough to grok Roc. Frame Roc for that reader: show it, and explain only what a mainstream reader wouldn't guess (Steve, 2026-11-14).
 
