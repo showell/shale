@@ -52,3 +52,7 @@ Session 1 now names `bench.shale`, and states that the audit stops the server be
 - (Steve, 2026-11-14) "When an agent looks sloppy" in How we work (drift, overreach, drive past a limit; a correction lasts once it lives in a file or a check) is fundamental, and we may have to come back to it and clarify it for the reader. Some of it may improve in later generations of agents, and some are intrinsic problems agents share with humans.
 
 - (Steve, 2026-11-14, MISSION AU) The epiphany from three diagrams: the book covered the advanced workflow (an orchestrator keeping cold agents busy) before the simple one, Steve asks, Claude builds and reports, Steve replies on a line, Claude fixes. Applied to One loop, Session 1 and How we work. Still to apply when Sessions 2 to 9 are rewritten: tell the work as "the agent", drop orchestrator and cold-agent detail up front (Part Two's "short read" and "the orchestrator drives" framing included), and teach orchestration late as an advanced technique, orthogonal to Shale, if at all.
+
+## Steve's answers, second series (2026-11-14)
+
+- **Speak to the reader as the one building ("you ask your agent")?** Lean no. "I'm not precisely sure that we're teaching users how to prompt in this book." The reader keeps watching a real build.
