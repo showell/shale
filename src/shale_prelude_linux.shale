@@ -325,8 +325,9 @@ end
 
 -- Why `grep_tree` passes a walked entry by, or "" to search it, or nil when
 -- it isn't a file of the search at all (a folder, a build's own output, an
--- extension not asked for). `rest` is its path below the place searched.
-function grep_tree_skip(e, rest, exts)
+-- extension or a name not asked for). `rest` is its path below the place
+-- searched; `name_like`, a glob its file name matches, or "" for any.
+function grep_tree_skip(e, rest, exts, name_like)
   if e.kind == "directory" then return nil end
   local named = true
   for part in split(rest, "/") do
@@ -340,6 +341,7 @@ function grep_tree_skip(e, rest, exts)
     end
     if not wanted then return nil end
   end
+  if name_like ~= "" and not like(basename(e.path), name_like) then return nil end
   if e.kind ~= "file" then return "a symbolic link, never followed" end
   if not named then return "a name the store can't hold" end
   if e.size > 0 and contains(read(e.path, 0, 4096), "\0") then return "binary" end
@@ -356,7 +358,7 @@ end
 -- passed by, each in `passed`, so nothing is left out quietly. `opts`:
 -- `regex = true`, `needle` a pattern (`re_lines`'s) and not a literal;
 -- `nocase = true`, either case; `ext = {"zig", "md"}`, only files ending in
--- one of these; `context = N`, each hit with `before` and `after`, the N
+-- one of these; `like = "*_test.zig"`, only files whose names match; `context = N`, each hit with `before` and `after`, the N
 -- lines on each side; `most = N`, at most N hits (10,000), `cut` saying the
 -- search stopped there. The answer is `{hits, files, passed, cut}`: each
 -- hit `{path, line, text}`, the number of files searched, and each file
@@ -367,6 +369,7 @@ function grep_tree(place, needle, opts?)
   local regex = get(opts, "regex", false)
   local nocase = get(opts, "nocase", false)
   local exts = get(opts, "ext", {})
+  local name_like = get(opts, "like", "")
   local context = get(opts, "context", 0)
   local most = get(opts, "most", 10000)
   local answer = {hits = {}, files = 0, passed = {}, cut = false}
@@ -385,7 +388,7 @@ function grep_tree(place, needle, opts?)
     local rest = e.path
     if prefix ~= "" and starts_with(e.path, prefix) then rest = sub(e.path, #prefix + 1) end
     if prefix == "" and e.path == place then rest = basename(place) end
-    local why = grep_tree_skip(e, rest, exts)
+    local why = grep_tree_skip(e, rest, exts, name_like)
     if why ~= nil and why ~= "" then push(answer.passed, {path = e.path, why = why}) end
     if why == "" then
       answer.files = answer.files + 1

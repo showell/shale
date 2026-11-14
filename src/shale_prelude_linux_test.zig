@@ -368,6 +368,8 @@ test "linux prelude: grep_tree searches a tree, says what it passed by, and take
     // Either case, in the extensions asked for; a pattern.
     try t.expectOutput("local r = grep_tree(\"src\", \"hit\", {nocase = true, ext = {\"md\"}}) print(r.files, r.hits[1].path, r.hits[1].line, r.hits[1].text)", "1\tsrc/b.md\t1\ta hit here\n");
     try t.expectOutput("local r = grep_tree(\"src\", \"^fn (one|two)\", {regex = true, ext = {\"zig\"}}) for h in r.hits do print(h.path, h.line) end", "src/a.zig\t1\nsrc/a.zig\t3\n");
+    // A glob on the file's name: only `c.zig` of the two `.zig` files.
+    try t.expectOutput("local r = grep_tree(\"src\", \"HIT\", {like = \"c*\"}) print(r.files, #r.hits, r.hits[1].path)", "1\t1\tsrc/sub/c.zig\n");
     // One file, with a line on each side; a cap that cuts the search says so.
     try t.expectOutput("local h = grep_tree(\"src/sub/c.zig\", \"HIT\", {context = 1}).hits[1] print(h.before[1].line, h.before[1].text, h.line, h.after[1].line, h.after[1].text)", "1\tx\t2\t3\tz\n");
     try t.expectOutput("local r = grep_tree(\"src\", \"fn\", {most = 1}) print(#r.hits, r.cut)", "1\ttrue\n");

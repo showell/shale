@@ -15,8 +15,10 @@
 -- `at` is a comma-separated list of `path:first-last` (or `path:n` for one
 -- line); a mount path (`zig:lib/std/Build.zig:100-120`) works, the range
 -- after the last colon. `find` is a literal (not a pattern), looked for in
--- each file or folder of `in` (comma-separated; folders walked, their
--- .zig-cache, zig-out, zig-pkg, node_modules and .git passed by), files
+-- each file or folder of `in` (comma-separated; folders searched by the
+-- prelude's `grep_tree`: hidden folders, zig-out, zig-pkg and node_modules
+-- left out, and a link, a binary file or a name the store can't hold
+-- listed at the end as passed by), files
 -- matching `like` (`*` for all; a glob is no plain word, so it goes on
 -- stdin with `--args-stdin`) and ending in one of `ext`'s extensions
 -- (`ext=zig`, `ext=ts,tsx`: plain words, for the launch line). At most `most` lines are printed, and a
@@ -120,53 +122,54 @@ if AT ~= "" then
   end
 end
 
-function passed_by(path)
-  for part in {"/.zig-cache/", "/zig-out/", "/zig-pkg/", "/node_modules/", "/.git/"} do
-    if contains("/" .. path .. "/", part) then return true end
-  end
-  return false
-end
-
 if FIND ~= "" then
+  local exts = {}
+  for e in split(EXT, ",") do
+    if trim(e) ~= "" then push(exts, trim(e)) end
+  end
+  local name_like = LIKE
+  if name_like == "*" then name_like = "" end
   local shown = 0
   local found = 0
   local files = 0
+  local passed = {}
+  local cut = false
   for given in split(IN, ",") do
     local place = trim(given)
-    local paths = {}
-    local at_rev = {}
+    local hits = {}
     if REV ~= "" then
-      paths = files_at_rev(place)
-      at_rev = grep_at_rev(place)
+      local paths = files_at_rev(place)
+      local at_rev = grep_at_rev(place)
       if #paths == 0 then print("(not at " .. REV .. ": " .. place .. ")") end
+      for path in paths do
+        files = files + 1
+        for m in get(at_rev, path, {}) do push(hits, {path = path, line = m.line, text = m.text}) end
+      end
     -- `.` is the root, a folder `is_dir` will not be asked about.
     elseif place ~= "." and not exists(place) then
       print("(not there: " .. place .. ")")
-    elseif place == "." or is_dir(place) then
-      -- Hidden folders (.git, .zig-cache) are not entered at all.
-      local opts = {kind = "file", skip = ".*"}
-      if LIKE ~= "*" then opts = {kind = "file", skip = ".*", like = LIKE} end
-      for e in walk_all(place, opts) do
-        if not passed_by(e.path) and wanted(e.path) then push(paths, e.path) end
-      end
     else
-      push(paths, place)
+      -- A file named alone is searched whatever `ext` and `like` say.
+      local opts = {}
+      if place == "." or is_dir(place) then opts = {ext = exts, like = name_like} end
+      local r = grep_tree(place, FIND, opts)
+      files = files + r.files
+      hits = r.hits
+      for x in r.passed do push(passed, x) end
+      if r.cut then cut = true end
     end
-    for p in paths do
-      files = files + 1
-      local found_in = {}
-      if REV ~= "" then found_in = get(at_rev, p, {}) else found_in = grep_all(p, FIND) end
-      for m in found_in do
-        found = found + 1
-        if shown < MOST then
-          local text = trim(m.text)
-          if #text > WIDE then text = sub(text, 1, WIDE) .. " ..." end
-          print(p .. ":" .. m.line .. ": " .. text)
-          shown = shown + 1
-        end
+    for m in hits do
+      found = found + 1
+      if shown < MOST then
+        local text = trim(m.text)
+        if #text > WIDE then text = sub(text, 1, WIDE) .. " ..." end
+        print(m.path .. ":" .. m.line .. ": " .. text)
+        shown = shown + 1
       end
     end
   end
   if found > shown then print("... " .. (found - shown) .. " more (most=" .. MOST .. " shown; raise most= or narrow in=)") end
+  for x in passed do print("(passed by, " .. x.why .. ": " .. x.path .. ")") end
+  if cut then print("(a folder's search stopped at grep_tree's 10,000 hits: narrow in=)") end
   print(found .. " lines in " .. files .. " files")
 end
