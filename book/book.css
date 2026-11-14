@@ -8,6 +8,12 @@
   --serif: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
   --plain: system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --syn-keyword: #7a3e7d;
+  --syn-string: #3f6b2a;
+  --syn-comment: #7d776c;
+  --syn-number: #9a5a12;
+  --syn-name: #1d5a8a;
+  --syn-call: #2f6170;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -17,6 +23,12 @@
     --code-bg: #26241f;
     --rule: #3a372f;
     --accent: #e0a060;
+    --syn-keyword: #c79bc9;
+    --syn-string: #a3c48a;
+    --syn-comment: #8f897d;
+    --syn-number: #dba36a;
+    --syn-name: #8db8de;
+    --syn-call: #93bfc9;
   }
 }
 * { box-sizing: border-box; }
@@ -54,6 +66,17 @@ a { color: var(--accent); }
 code { font: 0.88em var(--mono); background: var(--code-bg); padding: 0.05em 0.25em; border-radius: 3px; }
 pre { background: var(--code-bg); padding: 0.8rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.45; }
 pre code { background: none; padding: 0; font-size: 0.84rem; }
+/* A listing's label sits inside the block it names, small and quiet. */
+figure.listing { margin: 1rem 0; background: var(--code-bg); border-radius: 6px; }
+figure.listing figcaption { padding: 0.55rem 1rem 0; color: var(--quiet); font: 0.72rem/1.4 var(--mono); overflow-wrap: anywhere; }
+figure.listing pre { margin: 0; padding-top: 0.35rem; background: none; }
+/* Shale's code blocks, colored at build time from Shale's own lexer. */
+.syn-keyword { color: var(--syn-keyword); }
+.syn-string { color: var(--syn-string); }
+.syn-comment { color: var(--syn-comment); font-style: italic; }
+.syn-number { color: var(--syn-number); }
+.syn-name { color: var(--syn-name); font-weight: 600; }
+.syn-call { color: var(--syn-call); }
 blockquote { margin: 1rem 0; padding: 0.2rem 1rem; border-left: 3px solid var(--rule); color: var(--quiet); }
 table { border-collapse: collapse; font: 0.9rem var(--plain); margin: 1rem 0; }
 th, td { border-bottom: 1px solid var(--rule); padding: 0.3rem 0.7rem; text-align: left; }

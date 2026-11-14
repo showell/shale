@@ -1,4 +1,4 @@
--- budget: steps=60000000 output_bytes=100000
+-- budget: steps=60000000 output_bytes=100000 arena_bytes=40000000
 -- This builds the Shale book into the dev channel, one page a chapter.
 --
 --   cd <shale checkout> && shale book/build.shale
@@ -13,8 +13,16 @@
 -- second; each text must occur in the file exactly once, so the quote can't
 -- drift the way a line range can. A path through a mount
 -- (`repos:roc-apps/...`) reaches another checkout. `{{show REPO REV:PATH}}`
--- is a whole file as commit REV had it, for a script since changed or gone. Each block gets a caption
--- naming where it comes from.
+-- is a whole file as commit REV had it, for a script since changed or gone.
+--
+-- Each code block gets a label, as the Safari book's do, which rides on its
+-- fence (```shale LABEL) and is set over the block as its caption. A file's
+-- block names the file and says whether it's the whole file or an excerpt: a
+-- `{{function}}` or `{{lines}}` is an excerpt. A `{{fence}}` from a journal is
+-- named by its language and the journal, and a Shale one as Shale launched
+-- from bash, which is how the journal's scripts ran. A program's output, a
+-- ```text fence from a journal, gets no label, as in the Safari book. A
+-- diagram keeps its caption line, above the drawing.
 --
 -- The build is also the book's first gate. It stops on an include that names
 -- no file or runs past its end, on any `{{` left over, and on a chapter over
@@ -48,12 +56,15 @@ end
 -- A fence's language, from the file's extension; Shale's unless named here.
 const FENCE_TAGS = {roc = "roc", go = "go", zig = "zig", js = "javascript", css = "css", md = "markdown", json = "json", txt = "text", jsonl = "json"}
 
-function fenced(path, ls)
+function fenced(path, ls, label)
   local tag = "shale"
   local m = re_find(path, "\\.(\\w+)$")
   if m ~= nil and has_key(FENCE_TAGS, m.group) then tag = FENCE_TAGS[m.group] end
-  return FENCE .. tag .. "\n" .. join(ls, "\n") .. "\n" .. FENCE
+  return FENCE .. tag .. " " .. label .. "\n" .. join(ls, "\n") .. "\n" .. FENCE
 end
+
+-- How a label names a fence's language.
+const LANGUAGE_NAMES = {shale = "Shale", roc = "Roc", go = "Go", zig = "Zig", javascript = "JavaScript", css = "CSS", markdown = "Markdown", json = "JSON"}
 
 
 -- One include, as the code block that takes its place.
@@ -76,9 +87,9 @@ function quoted(spec)
   if first < 1 or first > last or last > #ls then
     fail("book: {{file " .. spec .. "}} runs past the file's " .. #ls .. " lines")
   end
-  local where = shown_path(path) .. ", lines " .. first .. " to " .. last
-  if first == 1 and last == #ls then where = shown_path(path) .. ", the whole file" end
-  return "*" .. where .. "*\n\n" .. fenced(path, slice(ls, first, last))
+  local label = shown_path(path) .. ", an excerpt: lines " .. first .. " to " .. last
+  if first == 1 and last == #ls then label = shown_path(path) .. ", the whole file" end
+  return fenced(path, slice(ls, first, last), label)
 end
 
 -- One top-level function, with the comment lines right above it, through the
@@ -98,7 +109,7 @@ function function_of(path, name)
   local last = start
   while last <= #ls and ls[last] ~= "end" do last = last + 1 end
   if last > #ls then fail("book: " .. name .. " in " .. path .. " has no `end` at the start of a line") end
-  return "*" .. shown_path(path) .. ", the function " .. name .. "*\n\n" .. fenced(path, slice(ls, first, last))
+  return fenced(path, slice(ls, first, last), shown_path(path) .. ", an excerpt: the function " .. name)
 end
 
 -- The number of the one line of `ls` that holds `anchor`, which must occur
@@ -129,7 +140,7 @@ end
 
 function between_anchors(path, from, to)
   if not exists(path) then fail("book: {{lines " .. path .. " ...}} names no file") end
-  return "*" .. shown_path(path) .. "*\n\n" .. fenced(path, anchored_span(text_lines(read(path)), from, to, path))
+  return fenced(path, anchored_span(text_lines(read(path)), from, to, path), shown_path(path) .. ", an excerpt")
 end
 
 -- A file of prose, a prompt, as a block quote under its caption.
@@ -178,7 +189,15 @@ function fence_quote(path, text, from, to)
     for l in kept do push(b, l) end
     push(b, FENCE)
   end
-  return "*" .. shown_path(path) .. "*\n\n" .. join(b, "\n")
+  local tag = get(words(sub(b[1], 4)), 1, "")
+  if tag == "dot" then return "*" .. shown_path(path) .. "*\n\n" .. join(b, "\n") end
+  if tag == "text" then return join(b, "\n") end
+  if not has_key(LANGUAGE_NAMES, tag) then fail("book: a fence of " .. path .. " is `" .. b[1] .. "`, and a label names only " .. join(sort(keys(LANGUAGE_NAMES)), ", ")) end
+  local label = LANGUAGE_NAMES[tag]
+  if tag == "shale" then label = "Shale, launched from bash" end
+  if from ~= nil then label = label .. ", an excerpt" end
+  b[1] = FENCE .. tag .. " " .. label .. " (" .. shown_path(path) .. ")"
+  return join(b, "\n")
 end
 
 -- A file as a commit had it, for a script the project has since changed or
@@ -189,8 +208,12 @@ function shown_at(repo, spec, from, to)
   local at = find(spec, ":")
   if at == nil then fail("book: {{show " .. repo .. " " .. spec .. "}} needs REV:PATH") end
   local ls = text_lines(git_show(repo, spec))
-  if from ~= nil then ls = anchored_span(ls, from, to, spec) end
-  return "*" .. shown_path(repo) .. "/" .. sub(spec, at + 1) .. ", as of " .. sub(spec, 1, at - 1) .. "*\n\n" .. fenced(spec, ls)
+  local part = ", the whole file"
+  if from ~= nil then
+    ls = anchored_span(ls, from, to, spec)
+    part = ", an excerpt"
+  end
+  return fenced(spec, ls, shown_path(repo) .. "/" .. sub(spec, at + 1) .. " as of " .. sub(spec, 1, at - 1) .. part)
 end
 
 function expanded(text)
@@ -260,6 +283,164 @@ function parts_of(ls)
   return {title = title, front = front, chapters = chapters}
 end
 
+-- Shale's code blocks are colored with Shale's own lexer, `shale_tokens`, its
+-- tags read as a few classes: a keyword, a string, a comment, a number, a
+-- function's name where `function` declares it, and a name called, the one
+-- before a `(`. The renderer's other blocks, output and other languages, are
+-- left as they are. A block that doesn't lex stops the build, named.
+const SHALE_OPEN = "<pre><code class=\"language-shale\">"
+const CODE_CLOSE = "</code></pre>"
+const SYN_SPANS = "<span class=\"syn-[a-z]+\">|</span>"
+const SYN_OF_TAG = {comment = "syn-comment", string = "syn-string", int = "syn-number"}
+
+function html_escaped(text)
+  local s = join(split(text, "&"), "&amp;")
+  s = join(split(s, "<"), "&lt;")
+  s = join(split(s, ">"), "&gt;")
+  s = join(split(s, "\""), "&quot;")
+  return join(split(s, "'"), "&#39;")
+end
+
+function html_unescaped(s)
+  s = join(split(s, "&lt;"), "<")
+  s = join(split(s, "&gt;"), ">")
+  s = join(split(s, "&quot;"), "\"")
+  s = join(split(s, "&#39;"), "'")
+  return join(split(s, "&amp;"), "&")
+end
+
+-- Each token's class, "" for a symbol or a name that is neither declared nor
+-- called. A comment between two tokens doesn't come between them here.
+function syn_classes(tokens)
+  local classes = {}
+  local before = ""
+  local i = 0
+  for t in tokens do
+    i = i + 1
+    local class = get(SYN_OF_TAG, t.tag, "")
+    if starts_with(t.tag, "kw_") then class = "syn-keyword" end
+    if t.tag == "name" then
+      local j = i + 1
+      while j <= #tokens and tokens[j].tag == "comment" do j = j + 1 end
+      if before == "kw_function" then
+        class = "syn-name"
+      elseif j <= #tokens and tokens[j].tag == "lparen" then
+        class = "syn-call"
+      end
+    end
+    push(classes, class)
+    if t.tag ~= "comment" then before = t.tag end
+  end
+  return classes
+end
+
+-- `attempt` calls the script's own functions.
+function tokens_of(path)
+  return shale_tokens(path)
+end
+
+-- One block's escaped text, as the renderer wrote it, with its tokens in
+-- spans. `where` names the block if it doesn't lex.
+function colored_block(body, dir, where)
+  local text = html_unescaped(body)
+  if html_escaped(text) ~= body then fail("book: " .. where .. " is escaped in a way the coloring doesn't know") end
+  local path = dir .. "/block.shale"
+  replace(path, text)
+  local got = attempt(tokens_of, path)
+  if not got.ok then
+    local first = trim(get(lines(text), 1, ""))
+    remove_tree(dir)
+    local why = got.error
+    local m = re_find(why, "does not lex as Shale (at line .*)")
+    if m ~= nil then why = m.group end
+    fail("book: " .. where .. ", starting `" .. sub(first, 1, 60) .. "`, doesn't lex as Shale " .. why)
+  end
+  local tokens = got.value
+  local classes = syn_classes(tokens)
+  local pieces = {}
+  local at = 1
+  local i = 0
+  for t in tokens do
+    i = i + 1
+    if classes[i] ~= "" then
+      push(pieces, html_escaped(sub(text, at, t.start)))
+      push(pieces, "<span class=\"" .. classes[i] .. "\">" .. html_escaped(sub(text, t.start + 1, t.stop)) .. "</span>")
+      at = t.stop + 1
+    end
+  end
+  push(pieces, html_escaped(sub(text, at, #text)))
+  local html = join(pieces, "")
+  if re_replace(html, SYN_SPANS, "") ~= body then fail("book: coloring changed the text of " .. where) end
+  return html
+end
+
+-- A rendered page with its Shale blocks colored; `page_name` names the page
+-- in a stop.
+function colored_page(html, page_name, dir)
+  local parts = split(html, SHALE_OPEN)
+  local out = {parts[1]}
+  local i = 1
+  while i < #parts do
+    i = i + 1
+    local close = find(parts[i], CODE_CLOSE)
+    if close == nil then fail("book: a Shale block on " .. page_name .. " has no " .. CODE_CLOSE) end
+    local where = "Shale block " .. (i - 1) .. " of " .. page_name
+    push(out, SHALE_OPEN .. colored_block(sub(parts[i], 1, close - 1), dir, where) .. sub(parts[i], close))
+  end
+  return join(out, "")
+end
+
+-- An opening fence as the renderer takes it, its label, or "", pushed onto
+-- `labels`: the renderer drops whatever follows a fence's language.
+function unlabeled_fence(l, labels)
+  local m = re_find(l, "^```(\\S+) (.+)$")
+  if m == nil then
+    push(labels, "")
+    return l
+  end
+  push(labels, m.groups[2])
+  return FENCE .. m.groups[1]
+end
+
+-- Lines of markdown with their fences' labels taken off, and the labels.
+function unlabeled_lines(ls)
+  local out = {}
+  local labels = {}
+  local in_code = false
+  for l in ls do
+    if starts_with(l, FENCE) then
+      if in_code then push(out, l) else push(out, unlabeled_fence(l, labels)) end
+      in_code = not in_code
+    else
+      push(out, l)
+    end
+  end
+  return {lines = out, labels = labels}
+end
+
+-- A rendered page with each code block that has a label in a figure, the
+-- label its caption, as the Safari book sets a listing. `labels` holds one for
+-- each block, in order, "" for none, so a count that differs stops the build.
+function labeled_page(html, labels, page_name)
+  local parts = split(html, "<pre><code")
+  if #parts - 1 ~= #labels then fail("book: " .. page_name .. " has " .. (#parts - 1) .. " code blocks, and its markdown " .. #labels .. " fences") end
+  local out = {parts[1]}
+  local i = 1
+  while i < #parts do
+    i = i + 1
+    local label = labels[i - 1]
+    if label == "" then
+      push(out, "<pre><code" .. parts[i])
+    else
+      local close = find(parts[i], CODE_CLOSE)
+      if close == nil then fail("book: a code block on " .. page_name .. " has no " .. CODE_CLOSE) end
+      local stop = close + #CODE_CLOSE
+      push(out, "<figure class=\"listing\"><figcaption>" .. html_escaped(label) .. "</figcaption><pre><code" .. sub(parts[i], 1, stop - 1) .. "</figure>" .. sub(parts[i], stop))
+    end
+  end
+  return join(out, "")
+end
+
 const DOT_WANT = "graphviz: the book's diagrams, drawn at build time"
 
 -- A ```dot fence's source drawn as SVG by Graphviz, ready to sit in a page,
@@ -291,6 +472,7 @@ function chapter_page(chapter)
   local dot = {}
   local prose = 0
   local code = 0
+  local labels = {}
   for l in chapter.lines do
     if in_dot then
       if trim(l) == FENCE then
@@ -305,8 +487,8 @@ function chapter_page(chapter)
       in_dot = true
       dot = {}
     elseif starts_with(l, FENCE) then
+      if in_code then push(out, l) else push(out, unlabeled_fence(l, labels)) end
       in_code = not in_code
-      push(out, l)
     elseif in_code then
       code = code + 1
       push(out, l)
@@ -320,7 +502,7 @@ function chapter_page(chapter)
       push(out, l)
     end
   end
-  return {markdown = join(out, "\n"), prose = prose, code = code}
+  return {markdown = join(out, "\n"), prose = prose, code = code, labels = labels}
 end
 
 function rendered(markdown)
@@ -387,7 +569,8 @@ function pager(n, chapters)
 end
 
 function contents(book)
-  local ls = {"<h1>" .. plain(book.title) .. "</h1>", rendered(join(book.front, "\n")), "<ol class=\"contents\">"}
+  local front = unlabeled_lines(book.front)
+  local ls = {"<h1>" .. plain(book.title) .. "</h1>", labeled_page(rendered(join(front.lines, "\n")), front.labels, "the contents page"), "<ol class=\"contents\">"}
   local n = 0
   for c in book.chapters do
     n = n + 1
@@ -420,7 +603,7 @@ function table_lines(path)
 end
 
 -- A caption an include wrote, which names the file a quote comes from, such
--- as `*essay-surface/journal/monday.md*`: a path, not the book's prose.
+-- as `*essay-surface/journal/session-1.md*`: a path, not the book's prose.
 function source_caption(l)
   return starts_with(l, "*") and re_find(l, "^\\*[^* ]*/[^* ]*(\\*$|, )") ~= nil
 end
@@ -436,7 +619,7 @@ function lint_findings(ls)
   for l in ls do
     if starts_with(l, FENCE) then
       if not in_code then
-        tag = trim(sub(l, 4))
+        tag = get(words(sub(l, 4)), 1, "")
         block = {}
       elseif tag == "text" and #block > MAX_OUTPUT_LINES and not has_key(long_ok, get(block, 1, "")) then
         push(found, "an output block of " .. #block .. " lines, over " .. MAX_OUTPUT_LINES .. ", starting `" .. sub(get(block, 1, ""), 1, 80) .. "`: trim it, or name it in " .. LONG_BLOCKS)
@@ -470,19 +653,22 @@ mkdir(DEST)
 replace(DEST .. "/book.css", read(CSS))
 -- The book with every include filled in, for a reader who wants it in one file.
 replace(DEST .. "/book.md", join(whole, "\n") .. "\n")
-replace(DEST .. "/index.html", page("front", book.title, book.title, contents(book), "<nav class=\"pager\"><span></span><a href=\"chapter-1.html\">Start reading →</a></nav>", ""))
+local lex_dir = fresh_dir("scratch:", "book-lex")
+replace(DEST .. "/index.html", page("front", book.title, book.title, colored_page(contents(book), "the contents page", lex_dir), "<nav class=\"pager\"><span></span><a href=\"chapter-1.html\">Start reading →</a></nav>", ""))
 local rows = {}
 local over = {}
 local n = 0
 for c in book.chapters do
   n = n + 1
   local p = chapter_page(c)
-  local html = rendered(p.markdown)
+  local page_name = "chapter " .. n .. " (" .. c.title .. ")"
+  local html = colored_page(labeled_page(rendered(p.markdown), p.labels, page_name), page_name, lex_dir)
   local nav = sidebar(book.title, book.chapters, n, sections_of(html))
   replace(DEST .. "/chapter-" .. n .. ".html", page("chapter", book.title, c.title, html, pager(n, book.chapters), nav))
   push(rows, {chapter = n, prose = p.prose, code = p.code, title = plain(c.title)})
   if p.prose > MAX_PROSE_WORDS then push(over, n .. " (" .. p.prose .. " words)") end
 end
+remove_tree(lex_dir)
 print(table(rows, {"chapter", "prose", "code", "title"}))
 for f in lint do print("lint: " .. f) end
 if #over > 0 then fail("book: over " .. MAX_PROSE_WORDS .. " words of prose: " .. join(over, ", ")) end
