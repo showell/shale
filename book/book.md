@@ -744,3 +744,191 @@ This project's tooling grew out of the work. Steve asked for the checks in Sessi
 ### Your dialect
 
 The scripts in this book are a starting point, and the ones your agent writes for your work will be better. Fork your own Shale, and let your agent grow its words and your library of scripts together, each added the third time your work asks for it.
+
+## Meet Roc
+
+Part Two makes the notes richer: a note that holds a diagram, drawn from a description in Graphviz's dot language, and later a small live widget. That takes four languages. Go keeps doing the plumbing: it serves pages, stores replies and runs programs. Roc expresses the features, starting with a note format of our own. JavaScript does in the page what JavaScript always does. Shale is the glue, the language the agent builds, checks, refactors and ships all of it with.
+
+Four languages is a lot to ask of a team of humans. It's far less to ask of an agent, for the same reason a dialect of Shale is cheap: the agent reads each language's docs every session. The workflow stays the same, and so does the theme: building your own workflow, now in app territory.
+
+As with Shale, you'll read Roc and rarely write it. Most of it reads like any typed language you know, so this interlude explains only what you wouldn't guess. Here's a real type from the project, the diagram a note can hold:
+
+{{lines repos:essay-surface/format/Diagram.roc from "Diagram :: Str.{" to "== Err(NotDot)"}}
+
+What's worth knowing:
+- **`::` makes an opaque type.** A `Diagram` is a string inside, but only the code in the braces after `.{` can see that. `Diagram.(source)` wraps a string into a diagram, and the parameter `|Diagram.(dot)|` unwraps one. Everyone else goes through `from_source`, so every diagram in the program has passed its check.
+- **A signature sits on its own line** above its definition. `from_source` takes a string and returns a `Try`: `Ok` with a diagram, or `Err` with the reason.
+- **A tag names itself.** `NotDot` needs no declaration: square brackets list the tags a type allows, and a tag can carry a value, as `Ok(...)` does. Think of an enum whose cases you write where you use them.
+- **`|word| ...` is a function,** and `opening.starts_with(word)` calls a function on a value, as a method call would.
+- **`##` is a doc comment, and `expect` is a test,** kept beside the code and run by `roc test`.
+
+### Nominal and opaque
+
+A type made with `:=` is nominal: it has a name of its own, and any code can build it and read its fields. A note is one:
+
+{{lines repos:essay-surface/format/Note.roc from "Note := {" to "Subtitle : [NoSubtitle, Subtitle(Text)]"}}
+
+A note built from valid parts is a valid note, so there's nothing for a maker to check. The rules live in its parts: `Phrase` and `Text` are opaque, like `Diagram`. Where another language would make the subtitle a nullable field, this type names both cases as tags, and code that reads a subtitle must handle both.
+
+### Pure, with a few marks
+
+Here's the parser's entry, which reads a note's source into a `Note`, or says the first line it can't read:
+
+{{lines repos:essay-surface/format/Parse.roc from "note : Str -> Try(Note, Parse.Problem)" to "Ok({ title, subtitle: opening.subtitle, blocks: $blocks })"}}
+
+Three marks carry most of it:
+- **`var $blocks`** declares a variable that can change, and the `$` stays on its name at every use, so you can see each one that does.
+- **`?` after a call** returns the call's `Err` from the function at once, and otherwise gives the `Ok` value.
+- **`match`** is a switch over tags, and it must cover every tag the type allows.
+
+`{ title, subtitle: ... }` is a record, and a bare `title` means the field `title` takes the variable `title`.
+
+This function is pure: the same source always gives the same note, and it can't read a file or print. A function that acts on the world has a name ending in `!`, such as `echo!`, which prints. Which of those exist depends on the platform, the host program a Roc app runs inside. Session 9 meets one, and the choice of platform is where Roc runs.
+
+### Read the types first
+
+When you review code you rarely write, start with its types. In Roc they say what can exist: a diagram that isn't dot, or a note with two titles, can't be built at all. The functions only say how.
+
+That's enough Roc to start. Next, a session that writes types before any code.
+
+## Session 8: types first
+
+Part Two's sessions open with types. The prompt gives the mission, and the agent's first report is a set of Roc types for Steve to reply to, before any code. That's new for us, because our earlier Roc work was mostly porting, where the old program is the spec. Here there's no old program:
+
+{{quote repos:essay-surface/journal/prompts/format-types.md}}
+
+The orchestrator drafted this prompt from Steve's plan. A cold agent worked for about fifteen minutes, from the prompt's commit at 13:40 to the types' at 13:55. Steve stepped in once, with his reply to the report.
+
+### Which notes are real
+
+The repository's `notes/` holds 12 notes, a sample copied from Steve's older surface, essay-repl-server, which holds 522. So "my real notes in `notes/`" could mean either. The agent read the 12 as the sample the prompt points at, and counted every feature over all 522, since that's what Steve actually writes, and twelve notes are too few to count by.
+
+### Counting before designing
+
+It wrote `scripts/features.shale`, which walks each note line by line, tracks code fences as the Go renderer does, and counts each feature by the notes that use it, the times, and the first place:
+
+{{fence repos:essay-surface/journal/format-types.md "paragraph                     522"}}
+
+The counts took several passes, and the examples corrected them. Images first counted as links, since an image's `](` looks like a link's. A first scan found 126 headings with a style in them, and every one was a Roc doc comment inside a code fence of one note; skipping fences, the real count was 7 notes. The five "links inside italics" were all subtitles, the italic line under a note's title, so a type of its own keeps them. A hand count found that line in 296 notes.
+
+There was a stop and a waste. Nesting checks pushed the survey over its step budget, and a cheap `find` of each pattern's literal before its regex brought it to 19.5 seconds. Then, to see examples of six features, the agent launched it six times, 117 seconds in all, where one run that printed all six would have taken 20.
+
+Count your real data before you design a format for it, and keep the counter. The agent kept features.shale because the counts are the argument: a reply that questions one is answered by running it again.
+
+### Types that compile
+
+The prompt asked for types and no functions. It never said they must compile, and the agent wrote them as real Roc anyway: ten modules in `format/`, one type each, beside a `roc-version` file that pins the compiler. A block is one of eleven kinds:
+
+{{show repos:essay-surface ea38b4c:format/Block.roc from "Block := [" to "Language : [NoLanguage, Language(Str)]"}}
+
+A point holds one paragraph and its subpoints, and a subpoint holds no list of its own, so lists nested two deep, in at most 9 notes, have no type. The inline text makes a stronger cut:
+
+{{show repos:essay-surface ea38b4c:format/Text.roc from "Text :: List(Text.Span).{" to "Target : [Note(NoteName), Web(WebAddress)]"}}
+
+A style holds a `Phrase`, words and code with no style of its own, so bold inside italics has no type, and no check is needed to refuse it.
+
+Every compile check said `No errors found` in a few milliseconds, which is fast enough to doubt. So the agent planted two faults under `--undo-on-stop`, each put back before the next:
+
+{{fence repos:essay-surface/journal/format-types.md "plant 1, Tabel in Block"}}
+
+Both went red, so the check from `Note.roc` reads the types of every module it imports. Shale's Roc hunts then flagged five names. A list's `Item` became a `Point`, a numbered list's `first` became `first_number`, since `first` read as its first point, and a table's `header` became `column_headings`. One edit stopped on a doc line quoted wrong, and nothing in that file was written.
+
+Did compiling matter? It was cheap: about two minutes went to writing and checking the types, and about twelve to reading and counting. And it bought a lot. The plants and the hunts ran on real code, not on a sketch someone would translate later. When you ask for a design, ask for it in a form a tool can check, so the first review is the compiler's.
+
+### The short read
+
+The report was a long note on the surface: each type with what it's for and what it leaves out, a table of what the format drops, a name for the files (`.note`), and three questions. The orchestrator published it beside a short read of its own, with a recommendation for each question. Steve replied:
+
+> Looks good! The honest truth is that I jumped right to the file with the Roc types. I skimmed everything, especially the prose. The Roc types look solid enough to start building out a quick demo with.
+
+He accepted all three recommendations: Note and Block stay nominal, a list point holds one paragraph, and the divider stays.
+
+That's the shape to aim for. Steve gave his judgment where it counts, in the types, and his decisions in one line, without reading every paragraph. Write the report for a reader who skims: the types must carry the design on their own, and every question must arrive with a recommendation, so the answer can be a yes.
+
+The next session builds on these types.
+
+## Session 9: a demo, end to end
+
+The prompt opens with Steve's answers from the last session:
+
+{{quote repos:essay-surface/journal/prompts/demo.md}}
+
+A cold agent took it at about 14:01 and finished in about twenty minutes. Steve didn't step in. The orchestrator ran the release about forty minutes later.
+
+### Look before you choose
+
+The prompt leaves where Roc runs to the demo. First, the agent looked for Roc already in use, and for Graphviz and node:
+
+{{fence repos:essay-surface/journal/demo.md "def render_with_roc"}}
+
+essay-repl-server, Steve's older surface, is a Python server, and it already runs Roc in production: a headerless app on Roc's built-in platform, run once per note with the note's text as its arguments. A probe at the pinned compiler built a tiny app in 131 ms and showed that `Json.to_str` is a builtin, so a Roc program can answer in JSON without an escaper of its own.
+
+### Where Roc runs
+
+The agent chose the arrangement that already runs. `format/render_note.roc` is built into a program, `render-note`, beside the server. The Go store runs it each time a `.note` changes, with the text as arguments in parts of at most 32,000 bytes, and keeps the page it prints. A request never runs Roc.
+
+The reasons are requirements, not taste. A platform of our own needs a host written in Zig against the compiler's builtins, and the box's Roc checkout didn't match the pin. This arrangement is proven on the box. The seam is one JSON value. And a note renders when it changes, so a process per render costs a reader nothing; the demo renders in about 2 ms.
+
+The prompt asked for the costs too, and the agent named four:
+- **Arguments are the only way in.** The built-in platform gives no stdin and no file reads. Linux's argument space here is 4,194,304 bytes, twenty times the largest real note, but it's a ceiling.
+- **Two things to deploy.** `release.shale` built only the Go binary. The agent flagged it and left it, since it couldn't run a release to prove a fix.
+- **A process per note at start,** the first thing to measure if most notes move.
+- **The browser can't run it.** Widgets, or a live preview, want Roc in the page, which is a different arrangement.
+
+That last cost stays small, because the types, `Parse` and `Page` are pure and would move unchanged. Only these lines belong to the platform:
+
+{{file repos:essay-surface/format/render_note.roc:6-18}}
+
+Let a requirement place your code, never a plan made before the feature, and keep the part that depends on the place small. When the browser needs Roc, these lines change and the format doesn't.
+
+### Four stops, then a first-run render
+
+The toolchain took about three minutes in all, and never fought. The compiler stopped the agent four times, each on its own Roc: `List.take_while` doesn't exist at the pin, twice a record pattern in a `match` lacked its `..`, and an assignment can't be a match arm's whole body. So the loop in `Text.from_spans` asks each span whether it's unstyled:
+
+{{lines repos:essay-surface/format/Text.roc from "from_spans = |given| {" to "Ok(Text.(given))"}}
+
+Once it compiled, the demo note rendered right on the first run. Here's its diagram, drawn from the note's own source:
+
+{{fence repos:essay-surface/notes/format-demo.note "digraph note_to_page"}}
+
+None of the ten types changed shape. The demo pushed back once, on a link to another note by name: the renderer can't know whether that note is a `.md` or a `.note`. So the server answers `/notes/<name>` with a redirect, a route rather than a type change.
+
+### A check for the new path
+
+`scripts/note_check.shale` is a stage of the check before every commit. It checks the Roc and runs its tests, builds `render-note`, renders every `.note`, draws each diagram with the page's own viz.js, and posts replies to a real server. Its first run stopped on its first line, because the agent had appended tests after its last `roc fmt`. Then each plant went red:
+
+{{fence repos:essay-surface/journal/demo.md "plant 1, each end one byte short"}}
+
+Plant 3 is a stray module that nothing imports, with one `expect`. `roc test` said all 60 passed, which is true. So the check counts the `expect` lines in the files and holds the runner to that number:
+
+{{lines repos:essay-surface/scripts/note_check.shale from "local expects = 0" to "want all"}}
+
+Never take a test runner's count as the total. Count the tests in the files and hold the runner to it, or a test that nothing runs passes forever.
+
+The journal calls the commit check by its old name, `fast`, since renamed `check_before_commit.shale`:
+
+{{fence repos:essay-surface/journal/demo.md "fast: PASS"}}
+
+Green again ✅
+
+### A red of our own
+
+The release check, then named `full.shale` and now `check_before_release.shale`, passed every stage but the audit, which stopped on a note named `shale-book-part-two.md`. That note was the orchestrator's own, from that afternoon. The agent ran the audit on a worktree from before its change, saw the same red, and left the audit's list of faithful pages alone. When a gate goes red on something that isn't yours, prove it on the old tree, and leave its exceptions alone. The orchestrator then fixed the cause: the note had a bare code fence in a sentence, and the fix was the sentence.
+
+### The release
+
+The orchestrator shipped it, and two things blocked it: that red audit, and the cost the agent had named. A released server would have shown every `.note` as a page that can't be shown. `release.shale` now builds `render-note` with the pinned Roc, renders the demo note before touching anything, and moves the renderer with its server through every swap:
+
+{{function repos:essay-surface/scripts/release.shale rel_move_bin}}
+
+It was proved on dev first, with a release, a rollback and a roll-forward. Then it went to Steve's own server as 8deea74, with 17 comments where they were.
+
+### The eye test
+
+Steve opened the demo on his surface:
+
+> Session 9 looks good, to be clear! It's on track.
+
+That evening, after a day on the new surface in place of the old one:
+
+> The dogfooding is working! I barely notice that I'm using an 'in progress' product now.
