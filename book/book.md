@@ -50,46 +50,61 @@ Gates need a language to write them in. Next, a short tour of Shale.
 
 ## Meet Shale
 
-The quickest way to meet a language is to read some, so here's a real gate: `scripts/check_before_commit.shale`. It comes from later in the project, where it's the check the agent runs on every edit, in a few seconds. First, the helper that runs each stage:
+The quickest way to meet a language is to read some, so here's a real gate: `scripts/check_before_commit.shale`. It comes from later in the project, where the agent runs it on every edit. First, the helper that runs each stage:
 
 {{function repos:essay-surface/scripts/check_before_commit.shale stage}}
 
-Then the stages, in order: the formatter, `go vet`, a syntax check of the front end, the Go tests, and a smoke test through the real server. One more line after them prints the verdict, `fast: PASS`.
+Then the stages, in order: the formatter, `go vet`, a syntax check of the front end, the Go tests, and a smoke test through the real server.
 
 {{lines repos:essay-surface/scripts/check_before_commit.shale from "local fmt = stage(" to "checks through the real server"}}
 
 If you've read Lua, this looks familiar, and that's on purpose. `local` declares a variable, `function` and `end` frame a function, braces build a list or a map, and `..` joins strings. The rest is the mainstream you know.
 
+Agents write Shale tersely, so you'll meet names like `ls` for a list of lines. Steve scans for the calls, such as `lines`, and skips the variables: "The honest truth is that I skim shale scripts really fast, because I have seen a lot of it."
+
+An agent usually hands a one-off script to `shale` in a heredoc, bash's way of passing a block of text to a program as its input, between `<<'EOF'` and a closing `EOF`. A block captioned "Shale, launched from bash" ran that way.
+
 ### What Shale adds
 
-A few features are Shale's own, and most of them show up in check_before_commit.shale:
-- **Every run has budgets:** steps, reads, bytes read and printed, memory, and the programs it starts. A runaway script stops and says which budget it hit. A program can get a CPU budget too, and check_before_commit.shale gives each stage one, `cpu_budget_ms`, so a stage that turns slow fails.
-- **A script works inside its own folder** and the folders it mounts. A mount is a named folder beyond its own, written `name:path`, so you can see everything a script can reach. Every path in check_before_commit.shale, such as `.` or `comments.js`, is inside its repository.
-- **A risky program runs when the script gives its reason.** A shell, an interpreter, a text tool or a program git doesn't track requires a reason, and the reason is logged. `node` is an interpreter, so the js stage says why it runs.
-- **A stop is one line** that says where and why. When a stage fails, check_before_commit.shale ends on one line that names it, such as `vet: go exited 1`.
-- **A prelude does the daily work.** The prelude is Shale's built-in library: git, jobs, HTTP, JSON, and refactors that read code the way its compiler does. A job is a program that outlives the call that started it, such as a server. `run` comes from the prelude too.
+A few features are Shale's own, and most show up in check_before_commit.shale:
+- **Every run has budgets:** steps, reads, bytes read and printed, memory, and the programs it starts. A runaway script stops and says which budget it hit.
+- **A script works inside its own folder** and the folders it mounts. A mount is a named folder beyond its own, written `name:path`, so you can see everything a script can reach.
+- **A risky program runs when the script gives its reason.** A shell, an interpreter, a text tool or a program git doesn't track needs one, and Shale logs it. The js stage says why it runs `node`.
+- **A prelude does the daily work.** The prelude is Shale's built-in library: git, jobs, HTTP, JSON, and refactors that read code the way its compiler does. A job is a program that outlives the call that started it, such as a server.
 
 ### Who builds what
 
 Shale builds nothing itself. `go build` makes the server, and `go test` compiles the tests. Shale runs those programs, keeps what they said, and checks what came out: check_before_commit.shale reads go test's output and counts the tests that passed.
 
+### Who reads the output
+
+Shale's output is written for the agent. A run that stops ends on one `── stopped at` line, naming where and why, and a `── used:` line for its budgets. The agent reads them and tells Steve what he needs, and Steve almost never reads them raw. Translating output for a person is what agents already do well, so Shale leaves it to them. When this book shows a raw stop line, it says what the line means beside it.
+
+### The cookbook
+
+Shale ships with a cookbook: a folder of ready-made scripts, `cookbook/` in the Shale repository, that agents wrote. Each script in it is a recipe, general enough to work in any project. `disk.shale` stops a run when the disk runs low, `http.shale` fetches a page and prints the lines that matter, and `conflicts.shale` parses git's merge-conflict markers. Recipes get you running.
+
+A script lives in a project's `scripts/` folder instead, and encodes that project's standards, such as what every commit must pass. Your scripts are the value you add to your own ecosystem. When a second project needs one, it becomes a recipe in your own cookbook, beside Shale's or in place of it.
+
+### How an agent learns Shale
+
+There's no magic here. Steve's setup tells each agent to read Shale's README, which points it to an agent guide. The agent reads an example program for context, and scans the cookbook when a task needs a recipe. In one test, a fresh agent told only that its shell work is Shale read both guides, ran a working first script, listed the cookbook, and passed its project's commit check, in about 40 seconds.
+
 ### A language that changes
 
-Shale is meant to have dialects. A dialect costs a team of humans a great deal, since everyone must learn it, and an agent very little, since it reads the docs every session. Session 6 shows a new word arriving, and what that means for your own copy.
-
-The same goes for recipes, scripts saved to a file because their question came back. Shale has a cookbook of them, and your agent builds its own library on top of it, or instead of it.
+Shale is meant to have dialects. A dialect costs a team of humans a great deal and an agent very little, since it reads the docs every session. Session 6 shows a new word arriving, and what that means for your own copy.
 
 ### What it costs
 
-Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its recipes. What it buys, above all, is a higher-level language than bash, one where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, functions take and return lists and maps, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive your agent builds makes the next script shorter and easier to read, and the budgets and folders keep every one of them inside lines you can see.
+Shale doesn't save tokens, and it may add to them. It also slows you down at first, while your agent builds up its scripts. What it buys, above all, is a higher-level language than bash, one where you can build real primitives. A bash script strings commands together and greps their text. In Shale, `run` returns a record with the exit code and the output, and a helper like check_before_commit.shale's `stage` becomes a word the next script uses. Each primitive makes the next script shorter and easier to read.
 
 ### Four words for what's next
 
-Four words come up from the first session on. `run` needs a timeout and a keep. A keep is how much of a program's output `run` holds on to. `whole` and `tail` are the two keeps:
-- **`want`:** the reason a script gives for running a risky program, written `want = "tag: why"`. Shale logs it.
-- **`whole`:** a keep in bytes. `run` holds all of the output up to that size, and each stage in check_before_commit.shale holds up to 400,000 bytes.
-- **`tail`:** a keep in lines. `run` holds the program's last lines, where its verdict usually sits.
-- **`must`:** `must(r)` returns a run that exited 0, and fails the script on any other, printing the output and naming the program. check_before_commit.shale's `stage` does the same job, with more to say when a test fails.
+Four words come up from the first session on. `run` needs a timeout and a keep, how much of a program's output it holds on to:
+- **`want`:** the reason a script gives for running a risky program, written `want = "tag: why"`.
+- **`whole`:** a keep in bytes: all of the output up to that size.
+- **`tail`:** a keep in lines: the program's last lines, where its verdict usually sits.
+- **`must`:** `must(r)` returns a run that exited 0, and fails the script on any other, printing the output and naming the program.
 
 That's enough Shale to start. Next, one turn of the loop, from a reply to a change.
 
@@ -159,21 +174,21 @@ Session 1 starts with a new repository that holds only a README, and this prompt
 
 {{quote repos:essay-surface/journal/prompts/session-1.md}}
 
-The orchestrator wrote this prompt from Steve's plan and handed it to a cold agent, and Steve didn't step in.
+The orchestrator wrote this prompt from Steve's plan and handed it to a cold agent, a new agent that starts with only its prompt and none of our conversation. Steve didn't step in.
 
 The agent wrote the server first. It's a Go program, about 250 lines, using only Go's standard library: it reads the notes folder, turns each markdown file into an HTML page, and serves them, with an index. The markdown renderer is Go too, about a thousand lines, and the agent wrote it from scratch. Then it copied in a dozen of Steve's notes as samples and wrote the renderer's tests.
 
 ### A gate before a commit
 
-The prompt says "commit as you go", so the agent commits on its own. The prompt never asks for checks before a commit. The agent added them anyway, because checking code before you commit it is standard practice in Go, and an agent brings a language's standard practices with it, the way an experienced hire would.
+The prompt says "commit as you go", and never asks for checks before a commit. The agent added them anyway, because checking code before you commit it is standard practice in Go, and an agent brings a language's standard practices with it, the way an experienced hire would.
 
-Go ships the tools for those checks, and the agent used two of them besides the tests. `gofmt` is Go's official formatter: Go has one accepted layout for code, and `gofmt -l` lists every file that doesn't match it. `go vet` is Go's built-in checker for code that compiles but is probably wrong, such as a `Printf` whose arguments don't match its format string. `go test` runs the tests.
+Go ships the tools for those checks. `gofmt` is Go's official formatter: Go has one accepted layout for code, and `gofmt -l` lists every file that doesn't match it. `go vet` is Go's built-in checker for code that compiles but is probably wrong, such as a `Printf` whose arguments don't match its format string. `go test` runs the tests.
 
 The agent saved the three checks as `scripts/check.shale`, and it runs that script before every commit:
 
 {{show repos:essay-surface d793c5a:scripts/check.shale from "local fmt" to "test.ms"}}
 
-Read it with One loop's three questions. What does it read? Nothing: it only runs programs. What does it run? Those three programs, one after another. How does it end? With a verdict for each, or a stop. Only `go vet` goes through `must`. `gofmt -l` exits 0 even when it lists files, so the script checks its output instead, with `~=` (not equal). A failed `go test` prints what it said before `fail` stops the script. `.ms` is how long a run took.
+Read it with One loop's three questions. What does it read? Nothing: it only runs programs. What does it run? Those three programs, one after another, to check that every file is formatted, vet finds nothing, and every test passes. How does it end? With a verdict for each, or a stop.
 
 The gate's first real run listed two files that needed formatting:
 
@@ -186,6 +201,8 @@ The agent ran `gofmt -w` on both, and the next run passed:
 Green ✅
 
 Before you let an agent commit on its own, give it a gate that every commit must pass. Nobody reads an unattended commit as it lands, so the gate is the review it gets.
+
+Steve holds that standard, and he never asks for a script by name. The agent finds the scripts a project has, writes the ones it lacks, and keeps them organized for the next agent, with a reminder from him now and then.
 
 ### A green is a claim
 
@@ -205,7 +222,7 @@ Next the agent saved `scripts/bench.shale`, which times the server through one c
 
 The renderer's tests are examples the agent chose, and the notes weren't written to fit them. Steve's agents write them, as essays he replies to, with whatever markdown comes to hand. A survey of the dozen samples alone found raw HTML, fences of four tildes, and lists nested six spaces deep. The notes themselves are the only full list of what they hold, so the agent checked every one.
 
-Then it saved `scripts/audit.shale`, which starts the server on all the real notes, fetches every page, and counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Inside code those characters are legitimate. Outside it, each is worth a look, and it's usually a construct the renderer missed.
+Then it saved `scripts/audit.shale`, which starts the server on all the real notes, fetches every page, and counts markdown left over outside code: a stray `**`, a `](`, a table's `|---`, or a backtick. Outside code, each is usually a construct the renderer missed.
 
 The audit stops the server before it judges anything, so nothing that fails afterward can leave a server running. It fetches, stops, and only then checks the fetch:
 
@@ -217,9 +234,13 @@ The first full run flagged 37 pages. Most of them came from two real bugs: title
 
 {{fence repos:essay-surface/journal/session-1.md "<title>Review: gopher-roc"}}
 
-Each fix got a test, the table one copied from the note that found it. After the fixes, two pages were flagged, and both were faithful output: CommonMark renders their sources the same way.
+Each fix got a test, the table one copied from the note that found it. The title fix is one call, `TitleHTML`, where the server makes each note's title and page:
 
-Run your code over real data before you trust your own tests. Your tests hold only the cases you thought of, and Steve's real notes hold many you didn't. When real data finds a bug, copy the real case into a test. The agent's own hindsight goes one step further. Asked what it would do differently tomorrow, it said it would write the audit before the renderer's tests.
+{{show repos:essay-surface d793c5a:server.go from "n.title = TitleHTML(Title(text))" to "n.page = notePage(n, Render(text))"}}
+
+After the fixes, two pages were flagged, and both were faithful output: CommonMark renders their sources the same way.
+
+Run your code over real data before you trust your own tests. Your tests hold only the cases you thought of, and Steve's real notes hold many you didn't. When real data finds a bug, copy the real case into a test. Asked what it would do differently, the agent said it would write the audit before the renderer's tests.
 
 ### The gates now
 

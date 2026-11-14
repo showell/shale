@@ -32,7 +32,7 @@ This is the one home for the book's rules. Every writer and reader of the book, 
 
 ## 3. Quoting code
 
-**M. Quote code, not header comments.** Steve rarely reads a script's opening comment. It helps an agent find the script, and the agent reads the whole script before running it. The human reads the code, so the code must be readable (Steve, 2026-11-13). Quote functions and lines, never a header. When a recipe is badly structured, polish the recipe before quoting it.
+**M. Quote code, not header comments.** Steve rarely reads a script's opening comment. It helps an agent find the script, and the agent reads the whole script before running it. The human reads the code, so the code must be readable (Steve, 2026-11-13). Quote functions and lines, never a header. When a script is badly structured, polish the script before quoting it.
 
 **N. Every quote comes from its file, at build time.**
 - `{{file PATH}}` quotes a whole file.
@@ -101,6 +101,8 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 **AN. Curate the lessons; the narrative is a frame, not a log (Steve, 2026-11-14).** The book is for a reader new to Shale, so it teaches in the order that reader is ready for: the happy path first, and stops, budgets and Shale's own rough edges only once the reader knows what normal looks like. The sessions give the lessons a real setting, and they don't dictate which lesson comes when. Honesty means nothing shown is false, tidied, or claimed to have gone more smoothly than it did. It doesn't mean every event appears, or appears in the order it happened. The Roc book failed to engage its reader in a narrative, and this one risks the opposite: "If the narrative framing is so realistic that we can't curate lessons in the order that the reader is ready for them, the book is gonna read like a status report instead of a book for a reader who's new to shale." A problem in Shale itself, such as Session 1's `lines`, which splits a string and not a file, is fair to tell, but not early. Holding such a story back isn't dishonest, because it wasn't hard: an agent finding and fixing a problem in Shale shows how little Steve needs to do to maintain it, which is a positive story for later (Steve, 2026-11-14).
 
 **AO. The reader's starting point (Steve, 2026-11-14).** In the reader's mind, they're building the essay surface from first principles. They know nothing of Steve's setup: not his old Python surface, not how many notes he has, not that his agents gate Go code as a matter of practice. So say plainly what got built ("the agent wrote the server"), motivate every step the agent took on its own initiative (why a gate, when the prompt never asked for one), and never assume the reader has written Go. Gloss each tool in a clause: what `go vet` checks, what `gofmt` does. Steve's own Go, before he worked with agents, was about 1,000 lines: enough to grok it and know some of its philosophy, but not `go vet`. Write for that reader.
+
+**AP. Shale's output is for the agent (Steve, 2026-11-14).** Steve almost never reads Shale's raw output, such as a `── stopped at ...` line with its `── used:` line. The agent reads it and translates it into what the human needs: "Shale's job is to automate agent task and not to short-circuit what agents are perfectly good at, which is translating shale's output into what I need to consume." Meet Shale says this once. After that, the book shows a raw stop line only with the agent's translation beside it, or with its point stated.
 
 ## 6. Part Two
 
