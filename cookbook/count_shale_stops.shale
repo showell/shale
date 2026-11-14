@@ -1,0 +1,164 @@
+-- This recipe counts how an agent's Shale launches went, from a Claude Code
+-- transcript: each Bash call's command and the answer it got, paired by the
+-- call's id. A launch is a heredoc (`shale <<'TAG'`) or a script (`shale
+-- path.shale`). Each ends one of four ways: it ran, Shale stopped it (`──
+-- stopped at`), the gate refused the call before Shale saw it, or the
+-- harness denied it. A stop by the script's own `fail` is a check's verdict,
+-- counted apart; Shale's other stops are grouped by kind and by message,
+-- with quoted values blanked so that one mistake made twice counts as one
+-- line. The calls the heredocs make and the programs they `run` are counted
+-- too: where the agent works, and where it trips.
+--
+-- With no `transcript=`, it reads the newest transcript under the
+-- `projects:` mount. `since=` is an ISO time; only the calls from then on
+-- count. `most=N` sets how many lines each list shows (20).
+--
+--   shale cookbook:count_shale_stops.shale
+--   shale cookbook:count_shale_stops.shale since=2026-11-14T19:50
+--
+-- budget: steps=2000000000 reads=100000 read_bytes=4000000000 arena_bytes=4000000000
+
+const TRANSCRIPT = arg("transcript", "")
+const SINCE = arg("since", "")
+const MOST = arg("most", 20)
+const PART = 8 * 1024 * 1024
+
+function newest_transcript()
+  local best = nil
+  local best_at = -1
+  for p in glob("projects:*/*.jsonl") do
+    local s = stat(p)
+    if s.modified > best_at then
+      best = p
+      best_at = s.modified
+    end
+  end
+  if best == nil then fail("count_shale_stops: no transcript under projects:") end
+  return best
+end
+
+-- Whether a JSON value read back is a list: Shale has no `type`, so by the
+-- first byte of its JSON.
+function is_list(v)
+  return starts_with(json_write(v), "[")
+end
+
+-- A tool result's text: a string, or a list of parts with `text`.
+function result_text(content)
+  if not is_list(content) then return content end
+  local parts = {}
+  for c in content do
+    if has_key(c, "text") then push(parts, c.text) end
+  end
+  return join(parts, "\n")
+end
+
+function launch_kind(command)
+  if find(command, "shale") == nil then return "" end
+  if re_find(command, "shale[^\\n]*<<'[A-Za-z]+'") ~= nil then return "heredoc" end
+  if re_find(command, "shale[^\\n]*\\.shale") ~= nil then return "script" end
+  return ""
+end
+
+-- One stop's line, with quoted values blanked, for grouping.
+function stop_key(text)
+  local m = re_find(text, "── stopped at [^:]+:[0-9]+:[0-9]+[^:]*: ([^\\n]*)")
+  if m == nil then return nil end
+  local said = m.groups[1]
+  local cut = find(said, " (")
+  if cut ~= nil then said = sub(said, 1, cut - 1) end
+  said = re_replace(said, "\"[^\"]*\"", "\"…\"")
+  if #said > 110 then said = sub(said, 1, 110) .. "…" end
+  return said
+end
+
+function bump(counts, key)
+  counts[key] = get(counts, key, 0) + 1
+end
+
+function ranked(counts)
+  local rows = {}
+  for k in keys(counts) do push(rows, {n = counts[k], what = k}) end
+  sort(rows, "n", "desc")
+  local top = {}
+  for r in rows do if #top < MOST then push(top, r) end end
+  return top
+end
+
+local path = TRANSCRIPT
+if path == "" then path = newest_transcript() end
+
+local calls = {}
+local tally = {heredoc = 0, script = 0}
+local ends = {}
+local stop_kinds = {}
+local stop_lines = {}
+local builtins = {}
+local programs = {}
+local at = 0
+local done = false
+while not done do
+  local part = read_lines(path, at, PART)
+  for l in part.lines do
+    local is_call = find(l, "\"tool_use\"") ~= nil and find(l, "\"Bash\"") ~= nil
+    local is_answer = find(l, "\"tool_result\"") ~= nil
+    if is_call or is_answer then
+      local v = json_read(l)
+      local recent = SINCE == "" or get(v, "timestamp", "") >= SINCE
+      local content = v.message.content
+      if recent and is_list(content) then
+        for c in content do
+          if c.type == "tool_use" and c.name == "Bash" then
+            local kind = launch_kind(c.input.command)
+            if kind ~= "" then
+              calls[c.id] = kind
+              tally[kind] = tally[kind] + 1
+              if kind == "heredoc" then
+                for b in re_find_all(c.input.command, "([a-z_][a-z0-9_]*)\\(") do bump(builtins, b.groups[1]) end
+                for p in re_find_all(c.input.command, "run\\(\\{\"([^\"]+)\"") do bump(programs, p.groups[1]) end
+              end
+            end
+          elseif c.type == "tool_result" and has_key(calls, c.tool_use_id) then
+            local text = result_text(c.content)
+            local kind = calls[c.tool_use_id]
+            local key = stop_key(text)
+            if key ~= nil and starts_with(key, "fail:") then
+              bump(ends, kind .. ", stopped by its own `fail` (a check's verdict)")
+            elseif key ~= nil then
+              bump(ends, kind .. ", stopped by Shale")
+              bump(stop_kinds, split(key, ":")[1])
+              bump(stop_lines, key)
+            elseif find(text, "shale-gate:") ~= nil then
+              bump(ends, kind .. ", refused by the gate")
+            elseif find(text, "denied") ~= nil and get(c, "is_error", false) then
+              bump(ends, kind .. ", denied by the harness")
+            elseif get(c, "is_error", false) then
+              bump(ends, kind .. ", nonzero exit, no stop line")
+            else
+              bump(ends, kind .. ", ran")
+            end
+          end
+        end
+      end
+    end
+  end
+  at = part.next
+  done = part.done
+end
+
+print(path)
+print(tally.heredoc .. " heredocs, " .. tally.script .. " script launches" .. (SINCE == "" and "" or ", since " .. SINCE))
+print("")
+print(table(ranked(ends), {"n", "what"}))
+print("")
+print("Shale's stops, by kind (a script's own `fail` left out):")
+print(table(ranked(stop_kinds), {"n", "what"}))
+print("")
+print("Shale's stops, by message:")
+print(table(ranked(stop_lines), {"n", "what"}))
+print("")
+print("calls in heredocs (builtins and the script's own functions):")
+print(table(ranked(builtins), {"n", "what"}))
+print("")
+print("programs heredocs run:")
+print(table(ranked(programs), {"n", "what"}))

@@ -37,7 +37,7 @@
 
 -- The essays (`notes/*.md`, history, so its own are passed by) are
 -- essay-repl-server's: listed so the others' citations of them resolve.
-const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "dog-park", "observatory", "zig-coverage-sdk", "essay-repl-server", "cobble-webbox", "roc-webbox", "roc-chat", "roc-markdown", "chat-client", "roc-apps"}
+const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "dog-park", "observatory", "zig-coverage-sdk", "essay-repl-server", "roc-webbox", "roc-chat", "roc-markdown", "chat-client", "roc-apps"}
 -- **THE OPTIONAL SIBLINGS** (metal-vmm QUEUE 313): the Roc chat's repos,
 -- which many machines have not checked out. One that is not here is said
 -- once (`not_checked_out`), and a path cited as its own (`../roc-chat/x`,

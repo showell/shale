@@ -32,6 +32,9 @@ with `--args-stdin`, one `NAME=VALUE` a line.
   Shale, Python, shell). `shale cookbook:check_syntax.shale files=src/a.zig,roc/Walk.roc`
 - `color_shale.shale`: colors Shale source as HTML pages.
   `shale cookbook:color_shale.shale files=cookbook/look.shale out=colored`
+- `count_shale_stops.shale`: counts how an agent's Shale launches went, from a
+  Claude Code transcript: ran, stopped (by kind and message), refused, and
+  the calls and programs its heredocs use. `shale cookbook:count_shale_stops.shale` (`since=`, `transcript=`)
 - `fetch_page.shale`: fetches a page and prints its status and the lines that
   matter, or waits until it says something. `shale cookbook:fetch_page.shale url=https://example.org/version`
 - `find_phrase.shale`: finds a phrase in wrapped prose, across line breaks,
