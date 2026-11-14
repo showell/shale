@@ -108,6 +108,8 @@ Each anchor must occur exactly once, so a quote can't drift. Never paste code th
 
 **AR. Steve is a witness, not the subject (Steve, 2026-11-14).** Quote or cite Steve when his experience vouches for something the reader can use: that the process works, that it's enjoyable, that a habit pays off. Leave out circumstances that describe only him, such as his plan, his history and his setup: what he writes in a prompt to frame his judgment honestly stays out, and the judgment stays in. Show restraint in quoting his prompts. The test for each sentence about Steve: does it help the reader decide or act? If it only tells the reader about Steve, generalize it or cut it. A real person who has lived this process vouches for it, but the book is about the reader.
 
+**AS. A diagram illustrates its chapter (Steve, 2026-11-14).** A diagram shows what the chapter tells, and never lies or sets a structure the text can't commit to. A general picture, such as the loop every session runs, waits until a real account motivates it; until then, draw the particular case the chapter walks.
+
 ## 6. Part Two
 
 **PA. Part Two: four languages, one workflow.** Part Two makes the essay surface richer, with dot diagrams and small widgets in a note. Shale is the glue the agent builds, checks, refactors and ships with. Go does the plumbing, Roc expresses the features, and JavaScript does what JavaScript always does. Its premise is that true multi-lingual development is far more feasible with agents, for the same reason dialects are cheap for them. The book's central theme still holds: building your own workflow, now in app territory (Steve, 2026-11-14).
