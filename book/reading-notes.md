@@ -57,3 +57,4 @@ Session 1 now names `bench.shale`, and states that the audit stops the server be
 
 - **Speak to the reader as the one building ("you ask your agent")?** Lean no. "I'm not precisely sure that we're teaching users how to prompt in this book." The reader keeps watching a real build.
 - **Is the core skill judging the agent's work?** No, "not at all": the experienced reader already knows how. "That's like teaching a fish how to swim."
+- **Is the core lesson adoption?** Very close. The clear takeaway: readers can adopt Shale to automate agent tasks. Adopting a new language is a really hard sell, so Steve has already hedged on it. The book's structure still revolves around the simple act of building an essay surface.
