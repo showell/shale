@@ -43,3 +43,4 @@ Session 1 now names `bench.shale`, and states that the audit stops the server be
 - **Why only `go vet` uses `must`:** noise. Say what the script checks, not how each check is coded.
 - **Go code in the book:** a little, a short excerpt now and then, so the reader sees what's being checked.
 - **"Cold agent":** define it once, briefly, where it first appears. "The concept is easy, the term is ours, though, not universally known."
+- **"Recipe" and "cookbook":** define them once, cookbook first, without belaboring either. The metaphor was invented by the agents, and Steve likes it, but it's unique to Shale. "Cookbook seems more common to me. Recipes aren't completely new to some people."
