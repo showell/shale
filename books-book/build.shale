@@ -28,18 +28,29 @@
 -- chapter over MAX_PROSE_WORDS words of prose, and any negative sentence the
 -- cookbook's lint finds that negatives.txt leaves unlisted. Then it fetches
 -- every page from the channel and stops on one that fails to answer.
+--
+-- The settings below are everything a copy of this builder changes for its
+-- own book. The two taste gates are the last two: a higher MAX_PROSE_WORDS
+-- allows longer pages, and CHECK_NEGATIVES = false drops the lint.
+
+-- Where the book's files are, from the checkout's root.
 const SOURCE = "books-book/book.md"
-const STAGE = "books-book"
 const CSS = "books-book/book.css"
 const NEGATIVES_TABLE = "books-book/negatives.txt"
 const TERMS = "books-book/index_terms.txt"
+-- Where the pages go: the folder of the dev channel named STAGE.
+const STAGE = "books-book"
 const DEST = "build:roc-apps/next/" .. STAGE
--- The dev channel, as this machine serves it.
+-- The web server over that folder, which the build asks for each page; ""
+-- skips the check, for a machine with no server running.
 const CHANNEL = "http://127.0.0.1:9210/"
+-- The taste gates.
+const MAX_PROSE_WORDS = 900
+const CHECK_NEGATIVES = true
+
 const NEGATIVES = "cookbook:prose/find_negatives.shale"
 const TERM_INDEX = "cookbook:prose/build_term_index.shale"
 const DOT_WANT = "graphviz: the book's diagrams, drawn at build time"
-const MAX_PROSE_WORDS = 900
 const FENCE = "```"
 
 -- The lines of a text, without the empty one after its last newline.
@@ -532,6 +543,7 @@ end
 -- unexpanded, so a quoted file never counts. Each negative sentence is
 -- rewritten, or kept in NEGATIVES_TABLE with its kind.
 function negatives_findings()
+  if not CHECK_NEGATIVES then return {} end
   local r = run({"shale", real(NEGATIVES), "manuscript=" .. SOURCE, "table=" .. NEGATIVES_TABLE}, {timeout_ms = 60000, tail = 200})
   if r.ended == "exit" and get(r, "code", -1) == 0 then
     print(trim(r.out))
@@ -577,6 +589,7 @@ end
 
 -- Every page answers from the channel, holding its own title.
 function check_channel(files)
+  if CHANNEL == "" then return 0 end
   for f in keys(files) do
     local r = http_get(CHANNEL .. STAGE .. "/" .. f, {timeout_ms = 10000})
     if r.status ~= 200 then fail("book: the channel answers " .. r.status .. " for " .. f) end
