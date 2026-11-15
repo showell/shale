@@ -13,6 +13,9 @@ pub const shale_host_linux = @import("shale_host_linux.zig");
 pub const shale_host_setup = @import("shale_host_setup.zig");
 /// `run` on Linux: its options, a program under its deadline, its output kept.
 pub const shale_host_run = @import("shale_host_run.zig");
+/// The host's Linux system calls outside spawn and jobs: the clock, /proc,
+/// a pidfd, `stdout_secret`'s file.
+pub const shale_os_linux = @import("shale_os_linux.zig");
 /// Jobs: programs that outlive the run, under a detached reaper.
 pub const shale_jobs = @import("shale_jobs.zig");
 /// The host's job calls, over `shale_jobs`.
@@ -24,6 +27,7 @@ pub const shale_zig_move = @import("shale_zig_move.zig");
 test {
     _ = shale_keep;
     _ = shale_spawn;
+    _ = shale_os_linux;
     _ = shale_host_linux;
     _ = shale_host_setup;
     _ = shale_host_run;

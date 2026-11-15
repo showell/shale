@@ -18,6 +18,7 @@
 
 const std = @import("std");
 const linux = std.os.linux;
+const monoMs = @import("shale_os_linux.zig").monoMs;
 
 /// A program to run and how.
 pub const Spec = struct {
@@ -83,12 +84,6 @@ pub const Error = error{
 /// What `sink.write` may fail with: the sink's own `Error`.
 fn SinkError(comptime T: type) type {
     return @typeInfo(T).pointer.child.Error;
-}
-
-fn monoMs() u64 {
-    var ts: linux.timespec = undefined;
-    _ = linux.clock_gettime(.MONOTONIC, &ts);
-    return @as(u64, @intCast(ts.sec)) * 1000 + @as(u64, @intCast(ts.nsec)) / 1_000_000;
 }
 
 fn usageMs(u: linux.rusage) u64 {

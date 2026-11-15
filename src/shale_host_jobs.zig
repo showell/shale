@@ -14,6 +14,7 @@ const Run = interp.Run;
 const Error = interp.Error;
 const hl = @import("shale_host_linux.zig");
 const jobs = @import("shale_jobs.zig");
+const os_linux = @import("shale_os_linux.zig");
 const Host = hl.Host;
 
 pub fn call(h: *Host, run: *Run, pos: ast.Pos, name: []const u8, args: []const Value) Error!Value {
@@ -33,10 +34,10 @@ pub fn call(h: *Host, run: *Run, pos: ast.Pos, name: []const u8, args: []const V
         return .{ .boolean = was };
     }
     if (std.mem.eql(u8, name, "job_wait")) {
-        const began = monoMs();
+        const began = os_linux.monoMs();
         defer {
             h.time.waits += 1;
-            h.time.wait_ms += monoMs() - began;
+            h.time.wait_ms += os_linux.monoMs() - began;
         }
         return wait(h, run, pos, args);
     }
@@ -284,7 +285,7 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const limit = timeout_ms orelse return run.fail(pos, .argument, "`job_wait` needs `timeout_ms`, under the Bash call's own timeout", .{});
     if (file != null and contains == null) return run.fail(pos, .argument, "`job_wait`: `file` without `contains`: what to wait for in it", .{});
     if (contains) |c| if (c.len == 0) return run.fail(pos, .argument, "`job_wait`'s `contains` is \"\": every file holds it", .{});
-    const began = monoMs();
+    const began = os_linux.monoMs();
     // Each look reads only what the log gained, a piece at a time into one
     // host buffer, and is charged for what it reads. Reading a log of a few
     // MB whole every second would spend the step budget in a minute and pile
@@ -310,9 +311,9 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
             if (again.record.done()) return seenEnded(h, run, pos, &scan, scratch.allocator(), file orelse again.log, contains, again.record);
             return result(run, pos, "lost", null, null);
         }
-        const spent = monoMs() - began;
+        const spent = os_linux.monoMs() - began;
         if (spent >= limit) return result(run, pos, "timeout", null, null);
-        sleepMs(@min(if (gone) @as(u64, 10) else nap, limit - spent));
+        os_linux.sleepMs(@min(if (gone) @as(u64, 10) else nap, limit - spent));
         nap = @min(nap * 2, 1000);
     }
 }
@@ -397,17 +398,6 @@ fn result(run: *Run, pos: ast.Pos, ended: []const u8, code: ?u8, signal: ?u32) E
     if (code) |c| t.map.put(run.alloc, "code", .{ .int = c }) catch return run.oom(pos);
     if (signal) |n| t.map.put(run.alloc, "signal", .{ .int = n }) catch return run.oom(pos);
     return .{ .table = t };
-}
-
-fn monoMs() u64 {
-    var ts: std.os.linux.timespec = undefined;
-    _ = std.os.linux.clock_gettime(.MONOTONIC, &ts);
-    return @as(u64, @intCast(ts.sec)) * 1000 + @as(u64, @intCast(ts.nsec)) / 1_000_000;
-}
-
-fn sleepMs(ms: u64) void {
-    const ts: std.os.linux.timespec = .{ .sec = @intCast(ms / 1000), .nsec = @intCast((ms % 1000) * 1_000_000) };
-    _ = std.os.linux.nanosleep(&ts, null);
 }
 
 /// Charges a file the host read for the script as a script's read is charged.

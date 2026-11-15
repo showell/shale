@@ -8,7 +8,7 @@ const Run = interp.Run;
 const ast = script.ast;
 const Error = interp.Error;
 const std = @import("std");
-const linux = std.os.linux;
+const os_linux = @import("shale_os_linux.zig");
 const keep = @import("shale_keep.zig");
 const spawn = @import("shale_spawn.zig");
 const shale = @import("shale");
@@ -366,26 +366,24 @@ const SecretFile = struct {
             error.FileNotFound => {},
             else => return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be looked at: {s}", .{ shown, @errorName(e) }),
         }
-        const tmp = std.fmt.allocPrintSentinel(a, "{s}/.{s}.{d}.shale-tmp", .{ std.fs.path.dirname(path) orelse "/", std.fs.path.basename(path), linux.getpid() }, 0) catch return run.oom(pos);
-        const rc = linux.open(tmp, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .CLOEXEC = true, .NOFOLLOW = true }, 0o600);
-        if (linux.errno(rc) != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}", .{ shown, @tagName(linux.errno(rc)) });
-        const fd: i32 = @intCast(rc);
-        // The mode whatever the umask.
-        _ = linux.fchmod(fd, 0o600);
+        const tmp = std.fmt.allocPrintSentinel(a, "{s}/.{s}.{d}.shale-tmp", .{ std.fs.path.dirname(path) orelse "/", std.fs.path.basename(path), os_linux.selfPid() }, 0) catch return run.oom(pos);
+        var fd: i32 = -1;
+        const made = os_linux.createPrivate(tmp, &fd);
+        if (made != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}", .{ shown, @tagName(made) });
         return .{ .shown = shown, .path = a.dupeSentinel(u8, path, 0) catch return run.oom(pos), .tmp = tmp, .fd = fd };
     }
 
     /// Renames what the program printed over the secret; its bytes.
     fn store(s: *SecretFile, run: *Run, pos: ast.Pos, program: []const u8, replace: bool) Error!u64 {
-        const size = linux.lseek(s.fd, 0, linux.SEEK.END);
-        if (linux.errno(size) != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}", .{ s.shown, program, @tagName(linux.errno(size)) });
+        var size: u64 = 0;
+        const measured = os_linux.fileSize(s.fd, &size);
+        if (measured != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}", .{ s.shown, program, @tagName(measured) });
         if (size == 0) return run.fail(pos, .argument, "`run`: `{s}` exited 0 and printed nothing: nothing is stored in {s}", .{ program, s.shown });
         if (size > secret_most) return run.fail(pos, .argument, "`run`: `{s}` printed {d} bytes, past the {d} `secrets` reads: nothing is stored in {s}", .{ program, size, secret_most, s.shown });
-        if (linux.errno(linux.fsync(s.fd)) != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be synced: nothing is stored", .{s.shown});
-        _ = linux.close(s.fd);
+        if (os_linux.sync(s.fd) != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be synced: nothing is stored", .{s.shown});
+        os_linux.close(s.fd);
         s.fd = -1;
-        const rc = linux.renameat2(linux.AT.FDCWD, s.tmp, linux.AT.FDCWD, s.path, .{ .NOREPLACE = !replace });
-        switch (linux.errno(rc)) {
+        switch (os_linux.renameOver(s.tmp, s.path, replace)) {
             .SUCCESS => s.made = false,
             .EXIST => return run.fail(pos, .refused, "`run`'s `stdout_secret` {s} was made while `{s}` ran: nothing is stored; `secret_replace = true` to replace it", .{ s.shown, program }),
             else => |e| return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be written: {s}", .{ s.shown, @tagName(e) }),
@@ -394,9 +392,9 @@ const SecretFile = struct {
     }
 
     fn discard(s: *SecretFile) void {
-        if (s.fd >= 0) _ = linux.close(s.fd);
+        if (s.fd >= 0) os_linux.close(s.fd);
         s.fd = -1;
-        if (s.made) _ = linux.unlink(s.tmp);
+        if (s.made) os_linux.unlink(s.tmp);
         s.made = false;
     }
 };

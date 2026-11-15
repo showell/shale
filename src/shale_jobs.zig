@@ -11,6 +11,7 @@
 
 const std = @import("std");
 const linux = std.os.linux;
+const sleepMs = @import("shale_os_linux.zig").sleepMs;
 
 /// A job's record, as `<log>.job` holds it.
 pub const Record = struct {
@@ -162,11 +163,6 @@ pub fn alive(r: Record) bool {
     var buf: [1024]u8 = undefined;
     if (startOf(&buf, r.pid)) |s| return std.mem.eql(u8, s, r.start);
     return signalGroup(r.pgid, 0);
-}
-
-fn sleepMs(ms: u64) void {
-    const ts: linux.timespec = .{ .sec = @intCast(ms / 1000), .nsec = @intCast((ms % 1000) * 1_000_000) };
-    _ = linux.nanosleep(&ts, null);
 }
 
 /// Sends TERM to a job's group, waits up to `grace_ms`, then sends KILL.

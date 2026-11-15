@@ -141,8 +141,7 @@ pub fn main(init: std.process.Init) !u8 {
     // The Linux host: the mounts, the environment a program inherits, the
     // root and the working folder as absolute paths.
     var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const cwd_len = std.os.linux.getcwd(&cwd_buf, cwd_buf.len);
-    const cwd_abs = try arena.dupe(u8, std.mem.sliceTo(cwd_buf[0..cwd_len], 0));
+    const cwd_abs = try arena.dupe(u8, linux.shale_os_linux.cwd(&cwd_buf));
     var host: shale_host.Host = .{
         .alloc = gpa,
         .root_abs = if (root.len == 0) "/" else if (std.fs.path.isAbsolute(root)) root else try std.fs.path.join(arena, &.{ cwd_abs, root }),
@@ -252,9 +251,8 @@ fn help(arena: std.mem.Allocator, io: std.Io, pinned: ?[]const u8, home: []const
 /// This program's own path, for the jobs' reaper: `/proc/self/exe`.
 fn reaperPath(a: std.mem.Allocator) ?[]const u8 {
     var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const n = std.os.linux.readlink("/proc/self/exe", &buf, buf.len);
-    if (std.os.linux.errno(n) != .SUCCESS) return null;
-    return a.dupe(u8, buf[0..n]) catch null;
+    const exe = linux.shale_os_linux.selfExe(&buf) orelse return null;
+    return a.dupe(u8, exe) catch null;
 }
 
 /// The OS path of a script given as `name:path` through a mount; any other
