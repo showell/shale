@@ -1,0 +1,52 @@
+-- This library holds the rule for when a text names a folder: the name must
+-- stand alone. A folder's name is a whole run of letters, digits, `_` and
+-- `-`, so `dog-park` is not found inside `dog-park-page` or `dog-park_x`,
+-- and the case must match, so `Shale` never names `shale`.
+--
+-- Some names that stand alone are file names, not folders, and
+-- `in_file_name` tells them: a name followed by a dot and a letter
+-- (`docs/observatory.adoc` links a file, not the observatory repo), except
+-- `.git` (`showell/shale.git` names the repo), and a name right after a dot
+-- that follows a letter or digit (`Main.roc`, a file's extension).
+--
+-- `survey_repos.shale` and `map_repos.shale` find the READMEs' mentions by
+-- it, and `retire_checkout.shale` finds the paths that name a checkout.
+--
+--   use("cookbook:folder_names.shale")
+--   for t in re_find_all(src, NAME_RUN) do ... end
+--   if stands_alone(src, at, #name) and not in_file_name(src, at, #name) then ... end
+
+const NAME_RUN = "[A-Za-z0-9_-]+"
+
+function is_namey(ch)
+  return ch ~= "" and re_find(ch, "^[A-Za-z0-9_]$") ~= nil
+end
+
+function is_letter(ch)
+  return ch ~= "" and re_find(ch, "^[A-Za-z]$") ~= nil
+end
+
+-- Whether the `len` bytes at `at` are a whole run of NAME_RUN's characters:
+-- the byte before and the byte after are neither a letter, a digit, `_` nor
+-- `-`.
+function stands_alone(src, at, len)
+  local before = ""
+  if at > 1 then before = sub(src, at - 1, at - 1) end
+  local after = sub(src, at + len, at + len)
+  for ch in {before, after} do
+    if ch == "-" or is_namey(ch) then return false end
+  end
+  return true
+end
+
+-- Whether the name at `at` is part of a file name: `name.ext` (but not
+-- `name.git`) or `base.name`.
+function in_file_name(src, at, len)
+  local after = at + len
+  if sub(src, after, after) == "." and is_letter(sub(src, after + 1, after + 1)) then
+    local is_git = sub(src, after + 1, after + 3) == "git" and not is_namey(sub(src, after + 4, after + 4))
+    if not is_git then return true end
+  end
+  if at > 2 and sub(src, at - 1, at - 1) == "." and is_namey(sub(src, at - 2, at - 2)) then return true end
+  return false
+end

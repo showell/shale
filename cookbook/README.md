@@ -44,6 +44,9 @@ with `--args-stdin`, one `NAME=VALUE` a line.
   and with `new=` edits it. `shale cookbook:find_phrase.shale find=settled in=docs`
 - `findings.shale` (library): `print_findings(summary, lines)`, the findings
   between two copies of their summary. `use("cookbook:findings.shale")`
+- `folder_names.shale` (library): when a text names a folder: the name
+  standing alone, never inside a longer name or a file name.
+  `use("cookbook:folder_names.shale")`
 - `listen.shale`: listens to a roc-chat conversation for the posts meant for
   one agent. `shale cookbook:listen.shale site=https://chat.lynrummy.com conv=3 me=agent:2 key=keys:<file> once=1`
 - `look.shale`: shows lines by number, and a literal's lines across folders,
@@ -61,6 +64,10 @@ with `--args-stdin`, one `NAME=VALUE` a line.
   `shale cookbook:read_zulip_topic.shale --args-stdin` (site, email, key, stream, topic, num)
 - `rename_words.shale`: renames a word across a project's files, whole words
   only. `shale cookbook:rename_words.shale from=fetchUser to=loadUser in=src ext=ts,tsx`
+- `retire_checkout.shale`: says whether a checkout can be deleted, and
+  deletes nothing: BLOCKED for uncommitted work, stashes, unpushed branches,
+  worktrees, a symbolic link into it, a sibling's tracked file or a memory
+  note that names it by a path; else CLEAR. `cd ~/showell_repos && shale cookbook:retire_checkout.shale dir=roc`
 - `run.shale`: runs a command line and prints how each program ended, its
   time and the lines that matter. `shale cookbook:run.shale --args-stdin` (cmd, grep)
 - `run_zig_build.shale`: runs `zig build STEP` and prints its verdict without

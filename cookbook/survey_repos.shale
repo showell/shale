@@ -28,14 +28,16 @@
 -- A README names a folder where the folder's name stands alone: the name
 -- is a whole run of letters, digits, `_` and `-`, so `dog-park` is not
 -- counted inside `dog-park-page` or `dog-park_x`, and the case must match,
--- so `Shale` never counts as `shale`. That is `map_repos.shale`'s rule too.
+-- so `Shale` never counts as `shale`. That rule's one home is
+-- `folder_names.shale`, which `map_repos.shale` and `retire_checkout.shale`
+-- use too.
 --
 -- Some matches that stand alone are file names, not folders, and are left
--- out: a name followed by a dot and a letter (`docs/observatory.adoc`
--- links a file of its own repo, not the observatory repo), except `.git`
--- (`showell/shale.git` names the repo), and a name right after a dot that
--- follows a letter or digit (`Main.roc`, a file's extension). Each one left
--- out is listed under `== left out as file names`, with the word it was
+-- out (`folder_names.shale`'s `in_file_name`): a name followed by a dot and
+-- a letter (`docs/observatory.adoc` links a file of its own repo, not the
+-- observatory repo), except `.git` (`showell/shale.git` names the repo),
+-- and a name right after a dot that follows a letter or digit (`Main.roc`,
+-- a file's extension). Each one left out is listed under `== left out as file names`, with the word it was
 -- in, so a wrong guess is visible. What this cannot tell is a folder's name
 -- used as a plain word (the `roc` command, say): `skip=` such a folder.
 --
@@ -59,6 +61,8 @@
 -- wants `--budget programs=N`. A symbolic link is listed, not followed.
 --
 -- budget: steps=100000000 arena_bytes=400000000
+
+use("cookbook:folder_names.shale")
 
 const ROOT = arg("root", ".")
 const CONTEXTS = arg("contexts", 0)
@@ -170,26 +174,6 @@ function survey_folder(root, name, today_day)
   return row
 end
 
-function is_namey(ch)
-  return ch ~= "" and re_find(ch, "^[A-Za-z0-9_]$") ~= nil
-end
-
-function is_letter(ch)
-  return ch ~= "" and re_find(ch, "^[A-Za-z]$") ~= nil
-end
-
--- Whether the name at `at` is part of a file name: `name.ext` (but not
--- `name.git`) or `base.name`.
-function in_file_name(src, at, len)
-  local after = at + len
-  if sub(src, after, after) == "." and is_letter(sub(src, after + 1, after + 1)) then
-    local is_git = sub(src, after + 1, after + 3) == "git" and not is_namey(sub(src, after + 4, after + 4))
-    if not is_git then return true end
-  end
-  if at > 2 and sub(src, at - 1, at - 1) == "." and is_namey(sub(src, at - 2, at - 2)) then return true end
-  return false
-end
-
 -- The path-like word around `at`, to show what a match left out was in.
 function word_around(src, at, len)
   local pathy = "^[A-Za-z0-9_./~-]$"
@@ -245,7 +229,7 @@ function scan_readme(src, self, targets)
   local counts = {}
   local contexts = {}
   local left_out = {}
-  for t in re_find_all(src, "[A-Za-z0-9_-]+") do
+  for t in re_find_all(src, NAME_RUN) do
     if t.text ~= self and has_key(targets, t.text) then
       if in_file_name(src, t.at, #t.text) then
         push(left_out, {to = t.text, word = word_around(src, t.at, #t.text)})

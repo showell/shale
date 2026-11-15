@@ -43,6 +43,7 @@ read
 rename
 replace
 report
+retire
 rewrite
 run
 scan

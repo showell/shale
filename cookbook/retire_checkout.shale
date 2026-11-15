@@ -1,0 +1,629 @@
+-- This recipe says whether a checkout can be deleted. It only checks and
+-- never deletes: it ends with one verdict line, `CLEAR: <dir> can be
+-- deleted`, or `BLOCKED: <dir>` followed by every reason, one a line (and
+-- then stops, so the run exits nonzero).
+--
+--   cd ~/showell_repos && shale cookbook:retire_checkout.shale dir=roc
+--   shale cookbook:retire_checkout.shale self_test=1
+--
+-- Why it exists: a box cleanup once deleted an upstream clone that looked
+-- disposable. It had no uncommitted work and no unpushed branch, which was
+-- checked, and it was load-bearing all the same: build files in two sibling
+-- repos defaulted to it by a relative path, a build script named it through
+-- the `repos:` mount, a symbolic link in a lanes folder pointed at it, and a
+-- memory note said so. Nothing checked those, so the mistake was the
+-- system's, not the agent's. This recipe makes the check one launch, and its
+-- verdict the thing to quote before any `rm -rf`.
+--
+-- `dir` is a folder in the root, the folder that holds the repos (run it
+-- from there). It is BLOCKED for each of these, and each says how to clear:
+--
+-- 1. **Uncommitted or untracked changes** (`git status`), **and stashes**
+--    (`git stash list`). Commit and push them, or drop them on purpose.
+--    Ignored files are not counted.
+-- 2. **A local branch with commits on no remote**, named with its count
+--    (`git rev-list --count <branch> --not --remotes`), and a detached HEAD
+--    the same. Push it, or delete it with `git branch -D` once it is truly
+--    unwanted. The remotes are as the last fetch saw them: fetch first when
+--    a remote may have changed since.
+-- 3. **Worktrees**: a linked worktree registered in it (deleting the main
+--    checkout strands it), or, when it is itself a linked worktree, its
+--    branch with commits on no remote. Remove a worktree with `git -C <main>
+--    worktree remove <path>`, which is also the way to delete a worktree
+--    that comes out CLEAR. A linked worktree's branches and stashes are its
+--    main checkout's, so checks 1's stashes and 2 are its main's business
+--    and are not run on it.
+-- 4. **A symbolic link that resolves into it** (`readlink -m`), under the
+--    root, `build:` and `tools:` (`~/showell_repos`, `~/build` and `~/tools`
+--    on the box), walked 4 folders deep, hidden folders passed by (`.git`,
+--    `.zig-cache`): about 20,000 entries and a few seconds on the box. A
+--    link inside the folder itself does not count. Repoint or remove the
+--    link. A place that is not there here (no such mount) is SKIPPED, said.
+-- 5. **A tracked file of a sibling checkout that names it by a path**:
+--    `../<name>` (and so `../../<name>`, `../../../<name>`), `repos:<dir>`,
+--    `showell_repos/<dir>` (and so `~/showell_repos/<dir>`). A `.zon` path
+--    dependency is one of these (`.path = "../<name>"`) and is said as one.
+--    A `../` chain is left out only on evidence that it means another
+--    folder: taken from the file's own folder, it lands on a path that is
+--    there in the file's repo, as a repo's `"../../roc/Walk.roc"` from its
+--    `src/play/` lands on its own `roc/`. One that lands nowhere counts,
+--    since a build file also runs from worktrees at other depths. Each sibling is one `git grep`, which reads only tracked files and is
+--    cheap; a whole-tree `grep_tree` would run out of the store's read
+--    budget. Change the file to stop naming it (another path, a `-D`
+--    option), or retire that sibling first.
+-- 6. **A memory file that names its path** (the `memory:` mount, read
+--    whole, the forms of 5). Rewrite the note. Off the box there may be no
+--    such mount: the check is then SKIPPED, said in its line and in the
+--    verdict, never passed quietly.
+--
+-- A name counts only where it stands alone, so `dog-park` is never found in
+-- `dog-park-page`, and `../roc.md` is a file, not the folder:
+-- `folder_names.shale` is that rule's one home. A folder that is not a git
+-- checkout is BLOCKED as such: nothing in it is in any history.
+--
+-- `self_test=1` plants fake repos made by git in a scratch root, one for
+-- each reason, and shows each blocks for its own reason alone; a clean one
+-- and a worktree with its branch pushed come out CLEAR, a sibling named
+-- with a longer name (`clean-page` beside `clean`), a file name
+-- (`../clean.md`), a `../` chain into the sibling's own `clean/` and an
+-- untracked file do not block, and a missing memory folder and link place
+-- are SKIPPED, said. It checks that every plant is still there after.
+--
+-- budget: steps=300000000 reads=300000 arena_bytes=600000000 programs=3000
+
+use("cookbook:folder_names.shale")
+
+const DIR = arg("dir", "")
+const SELF_TEST = arg("self_test", 0)
+const LINK_DEPTH = 4
+const TEXT_WIDTH = 160
+
+function git(dir_os, args)
+  local argv = {"git", "-c", "user.email=t@t", "-c", "user.name=t", "-C", dir_os}
+  for a in args do push(argv, a) end
+  return run(argv, {timeout_ms = 60000, whole = 4000000})
+end
+
+-- As `git`, stopping the run when git exits nonzero.
+function git_ok(dir_os, args)
+  local r = git(dir_os, args)
+  if r.code ~= 0 then fail("retire_checkout: `git -C " .. dir_os .. " " .. join(args, " ") .. "` exited " .. r.code .. ": " .. trim(r.out)) end
+  return r
+end
+
+function there(p)
+  return exists(p)
+end
+
+function short(s)
+  local t = trim(s)
+  if #t > TEXT_WIDTH then t = sub(t, 1, TEXT_WIDTH) .. "…" end
+  return t
+end
+
+function plural(n, one, many)
+  if n == 1 then return n .. " " .. one end
+  return n .. " " .. many
+end
+
+-- A store path's OS path, for one whose last part may be a symbolic link,
+-- which `real` refuses: its folder's OS path and its name.
+function os_path(p)
+  local d = dirname(p)
+  if d == "" then
+    local colon = find(p, ":")
+    if colon ~= nil then d = sub(p, 1, colon) else d = "." end
+  end
+  return real(d) .. "/" .. basename(p)
+end
+
+-- An absolute OS path with its `.` and `..` parts taken out (the prelude's
+-- `path_normal` takes store paths only).
+function os_normal(p)
+  local kept = {}
+  for part in split(p, "/") do
+    if part == ".." then
+      if #kept > 0 then kept = take(kept, #kept - 1) end
+    elseif part ~= "" and part ~= "." then
+      push(kept, part)
+    end
+  end
+  return "/" .. join(kept, "/")
+end
+
+function is_under(p, folder)
+  return p == folder or starts_with(p, folder .. "/")
+end
+
+-- Whether a `../` chain that ends in the name, at `at`, names the folder.
+-- It counts unless there is evidence it means another folder: a chain that
+-- starts a word (after a quote, a space, `=`, `(`), taken from the file's
+-- own folder, lands outside the folder on a path that is there in the
+-- file's repo, as `"../../roc/Walk.roc"` from a repo's `src/play/` lands on
+-- its own `roc/`. A chain that lands nowhere still counts, since a build
+-- file is also run from worktrees at other depths, and so does one after
+-- anything else (`$ROOT/../roc`), or with no place to take it from (a
+-- memory note, `place` nil). `place` is {file_dir, repo_os, repo}, the
+-- file's folder and its repo's top as OS paths, and the repo's store path.
+function chain_names(text, at, tail_len, target_os, place)
+  if place == nil then return true end
+  local s = at
+  while s > 3 and sub(text, s - 3, s - 1) == "../" do s = s - 3 end
+  local before = ""
+  if s > 1 then before = sub(text, s - 1, s - 1) end
+  if before == "/" or before == "." or before == "$" or before == "}" or before == "-" or is_namey(before) then return true end
+  local landed = os_normal(place.file_dir .. "/" .. sub(text, s, at + 3 + tail_len - 1))
+  if is_under(landed, target_os) or not starts_with(landed, place.repo_os .. "/") then return true end
+  local a = attempt(there, place.repo .. sub(landed, #place.repo_os + 1, #landed))
+  return not (a.ok and a.value)
+end
+
+-- Whether a line names the checkout by a path: one of the forms, the name
+-- standing alone after it and not part of a file name. `place` is where a
+-- `../` chain is taken from (`chain_names`), nil for a text with none.
+function names_by_path(text, dir, name, target_os, place)
+  local forms = {{lead = "../", tail = name}, {lead = "repos:", tail = dir}, {lead = "showell_repos/", tail = dir}}
+  for f in forms do
+    local whole = f.lead .. f.tail
+    local at = find(text, whole)
+    while at ~= nil do
+      local tail_at = at + #f.lead
+      if stands_alone(text, tail_at, #f.tail) and not in_file_name(text, tail_at, #f.tail) then
+        if f.lead ~= "../" or chain_names(text, at, #f.tail, target_os, place) then return true end
+      end
+      at = find(text, whole, at + 1)
+    end
+  end
+  return false
+end
+
+function add_reason(v, kind, text)
+  push(v.reasons, {kind = kind, text = kind .. ": " .. text})
+end
+
+-- 1: uncommitted and untracked changes; stashes, for a main checkout.
+function check_changes(v, os, is_worktree)
+  local modified = 0
+  local untracked = 0
+  local shown = {}
+  for l in lines(git_ok(os, {"-c", "core.quotepath=off", "status", "--porcelain"}).out) do
+    if l ~= "" then
+      if starts_with(l, "??") then untracked = untracked + 1 else modified = modified + 1 end
+      if #shown < 5 then push(shown, sub(l, 4, #l)) end
+    end
+  end
+  local n = modified + untracked
+  if n > 0 then
+    local more = ""
+    if n > #shown then more = " and " .. (n - #shown) .. " more" end
+    add_reason(v, "uncommitted", modified .. " modified, " .. untracked .. " untracked: " .. join(shown, ", ") .. more)
+  end
+  local said = "changes: " .. plural(n, "uncommitted or untracked path", "uncommitted or untracked paths")
+  if is_worktree then
+    push(v.checks, said .. "; stashes are the main checkout's, not checked")
+    return nil
+  end
+  local stashes = {}
+  for l in lines(git_ok(os, {"stash", "list"}).out) do
+    if l ~= "" then push(stashes, l) end
+  end
+  if #stashes > 0 then add_reason(v, "stash", plural(#stashes, "stash", "stashes") .. ", the newest " .. short(stashes[1])) end
+  push(v.checks, said .. ", " .. plural(#stashes, "stash", "stashes"))
+  return nil
+end
+
+-- 2: local branches, and a detached HEAD, with commits on no remote.
+function check_branches(v, os)
+  local remotes = {}
+  for l in lines(git_ok(os, {"remote"}).out) do
+    if l ~= "" then push(remotes, l) end
+  end
+  local refs = {}
+  for l in lines(git_ok(os, {"for-each-ref", "--format=%(refname)", "refs/heads"}).out) do
+    if l ~= "" then push(refs, l) end
+  end
+  local branches = plural(#refs, "local branch", "local branches")
+  if git(os, {"symbolic-ref", "-q", "HEAD"}).code ~= 0 then
+    push(refs, "HEAD")
+    branches = branches .. " and a detached HEAD"
+  end
+  local unpushed = 0
+  for ref in refs do
+    local count = parse_int(trim(git_ok(os, {"rev-list", "--count", ref, "--not", "--remotes"}).out))
+    if count > 0 then
+      local label = ref
+      if starts_with(ref, "refs/heads/") then label = sub(ref, #"refs/heads/" + 1, #ref) else label = "HEAD (detached)" end
+      local where = "on no remote"
+      if #remotes == 0 then where = "on no remote (it has none)" end
+      add_reason(v, "branch", label .. " has " .. plural(count, "commit", "commits") .. " " .. where)
+      unpushed = unpushed + 1
+    end
+  end
+  push(v.checks, "branches: " .. branches .. ", " .. unpushed .. " with commits on no remote, against " .. plural(#remotes, "remote", "remotes") .. " as the last fetch saw them")
+  return nil
+end
+
+-- 3, for a main checkout: the linked worktrees registered in it.
+function check_worktrees_of(v, os)
+  local blocks = split(git_ok(os, {"worktree", "list", "--porcelain"}).out, "\n\n")
+  local linked = 0
+  local i = 2
+  while i <= #blocks do
+    local path = ""
+    local branch = "detached"
+    local prunable = ""
+    for l in lines(blocks[i]) do
+      if starts_with(l, "worktree ") then path = sub(l, 10, #l) end
+      if starts_with(l, "branch refs/heads/") then branch = "branch " .. sub(l, 19, #l) end
+      if starts_with(l, "prunable") then prunable = ", its folder gone (`git worktree prune`)" end
+    end
+    if path ~= "" then
+      linked = linked + 1
+      add_reason(v, "worktree", "a linked worktree at " .. path .. " (" .. branch .. ")" .. prunable)
+    end
+    i = i + 1
+  end
+  push(v.checks, "worktrees: " .. plural(linked, "linked worktree", "linked worktrees") .. " registered")
+  return nil
+end
+
+-- 3, for a linked worktree: its branch, with commits on no remote.
+function check_worktree_branch(v, os)
+  local common = trim(git_ok(os, {"rev-parse", "--path-format=absolute", "--git-common-dir"}).out)
+  local main = common
+  if ends_with(main, "/.git") then main = sub(main, 1, #main - 5) end
+  local branch = trim(git_ok(os, {"branch", "--show-current"}).out)
+  if branch == "" then branch = "HEAD (detached)" end
+  local count = parse_int(trim(git_ok(os, {"rev-list", "--count", "HEAD", "--not", "--remotes"}).out))
+  if count > 0 then add_reason(v, "worktree", "a worktree of " .. main .. ", its " .. branch .. " with " .. plural(count, "commit", "commits") .. " on no remote") end
+  push(v.checks, "worktree: a linked worktree of " .. main .. " on " .. branch .. ", " .. plural(count, "commit", "commits") .. " on no remote; its main's branches are not this folder's")
+  push(v.notes, "it is a worktree: delete it with `git -C " .. main .. " worktree remove " .. os .. "`, never rm")
+  return nil
+end
+
+-- 4: the symbolic links under the places that resolve into the folder.
+function check_links(v, os, places, depth)
+  local walked = {}
+  local entries = 0
+  local link_paths = {}
+  for place in places do
+    local a = attempt(there, place)
+    if not a.ok or not a.value then
+      local why = "not there"
+      if not a.ok then why = a.error end
+      push(v.skipped, "links under " .. place)
+      push(v.checks, "SKIPPED: links under " .. place .. ": " .. why .. "; no link there was looked for")
+    else
+      push(walked, place)
+      for e in walk_all(place, {depth = depth, skip = ".*"}) do
+        entries = entries + 1
+        if e.kind == "other" then push(link_paths, os_path(e.path)) end
+      end
+      yield()
+    end
+  end
+  local into = 0
+  if #link_paths > 0 then
+    local argv = {"readlink", "-m", "--", os}
+    for p in link_paths do push(argv, p) end
+    local outs = lines(must(run(argv, {timeout_ms = 60000, whole = 4000000})).out)
+    local target = outs[1]
+    local i = 1
+    while i <= #link_paths do
+      local link = link_paths[i]
+      local to = outs[i + 1]
+      local inside = starts_with(link, target .. "/")
+      if not inside and (to == target or starts_with(to, target .. "/")) then
+        add_reason(v, "link", link .. " -> " .. to)
+        into = into + 1
+      end
+      i = i + 1
+    end
+  end
+  push(v.checks, "links: " .. entries .. " entries under " .. join(walked, ", ") .. ", " .. depth .. " deep, hidden folders passed by; " .. plural(#link_paths, "link", "links") .. ", " .. into .. " into it")
+  return nil
+end
+
+-- 5: each sibling checkout's tracked files that name the folder by a path.
+function check_names(v, root, os, dir, name)
+  local checked = 0
+  local named = 0
+  for e in walk_all(root, {depth = 1, kind = "directory", skip = ".*"}) do
+    if exists(e.path .. "/.git") then
+      local sib_os = real(e.path)
+      if sib_os ~= os then
+        checked = checked + 1
+        local r = git(sib_os, {"grep", "-n", "-I", "--null", "-F", "-e", "../" .. name, "-e", "repos:" .. dir, "-e", "showell_repos/" .. dir})
+        if r.code ~= 0 and r.code ~= 1 then fail("retire_checkout: git grep in " .. sib_os .. " exited " .. r.code .. ": " .. trim(r.out)) end
+        for l in lines(r.out) do
+          local parts = split(l, "\0")
+          if #parts >= 3 then
+            local text = join(drop(parts, 2), " ")
+            local place = {file_dir = sib_os .. "/" .. dirname(parts[1]), repo_os = sib_os, repo = e.path}
+            if names_by_path(text, dir, name, os, place) then
+              local what = ""
+              if ends_with(parts[1], ".zon") and contains(text, ".path") then what = " (a .zon path dependency)" end
+              add_reason(v, "named", basename(e.path) .. "/" .. parts[1] .. ":" .. parts[2] .. what .. ": " .. short(text))
+              named = named + 1
+            end
+          end
+        end
+        yield()
+      end
+    end
+  end
+  push(v.checks, "names: " .. plural(checked, "sibling checkout's", "sibling checkouts'") .. " tracked files by git grep; " .. plural(named, "line names", "lines name") .. " it by a path")
+  return nil
+end
+
+-- 6: the memory files that name the folder by a path.
+function check_memory(v, memory, dir, name)
+  local a = attempt(there, memory)
+  if not a.ok or not a.value then
+    local why = "not there"
+    if not a.ok then why = a.error end
+    push(v.skipped, "memory")
+    push(v.checks, "SKIPPED: memory: " .. why .. "; no memory note was read, so none is known not to name it")
+    return nil
+  end
+  local found = grep_tree(memory, name, {})
+  local named = 0
+  for h in found.hits do
+    if names_by_path(h.text, dir, name, "", nil) then
+      add_reason(v, "memory", h.path .. ":" .. h.line .. ": " .. short(h.text))
+      named = named + 1
+    end
+  end
+  push(v.checks, "memory: " .. plural(found.files, "file", "files") .. " under " .. memory .. "; " .. plural(named, "line names", "lines name") .. " it by a path")
+  return nil
+end
+
+-- The verdict on one folder: {dir, os, reasons, checks, skipped, notes},
+-- each reason {kind, text}. `cfg` is {root, places, memory, depth}.
+function judge(dir_arg, cfg)
+  local dir = dir_arg
+  while ends_with(dir, "/") do dir = sub(dir, 1, #dir - 1) end
+  if dir == "" then fail("retire_checkout: name the folder, `dir=<folder>`, a folder in the root (run from the folder that holds the repos)") end
+  if starts_with(dir, "/") or starts_with(dir, "~") or contains(dir, ":") or contains(dir, "..") then fail("retire_checkout: `dir=" .. dir .. "` must be a folder in the root, by its name (`dir=roc`): run from the folder that holds it") end
+  local path = path_under(cfg.root, dir)
+  if not exists(path) then fail("retire_checkout: there is no folder " .. path) end
+  local os = real(path)
+  local v = {dir = dir, os = os, reasons = {}, checks = {}, skipped = {}, notes = {}}
+  local name = basename(dir)
+  if exists(path .. "/.git/HEAD") then
+    v.kind = "a checkout"
+    check_changes(v, os, false)
+    check_branches(v, os)
+    check_worktrees_of(v, os)
+  elseif exists(path .. "/.git") then
+    v.kind = "a linked worktree"
+    check_changes(v, os, true)
+    check_worktree_branch(v, os)
+  else
+    v.kind = "not a git checkout"
+    add_reason(v, "not-git", "it is not a git checkout, so nothing in it is in any history")
+  end
+  check_links(v, os, cfg.places, cfg.depth)
+  check_names(v, cfg.root, os, dir, name)
+  check_memory(v, cfg.memory, dir, name)
+  return v
+end
+
+function verdict_line(v)
+  if #v.reasons > 0 then return "BLOCKED: " .. v.dir end
+  if #v.skipped > 0 then return "CLEAR: " .. v.dir .. " can be deleted, with " .. plural(#v.skipped, "check", "checks") .. " SKIPPED: " .. join(v.skipped, ", ") end
+  return "CLEAR: " .. v.dir .. " can be deleted"
+end
+
+function print_verdict(v)
+  print("retire_checkout: " .. v.dir .. ", " .. v.os .. " (" .. v.kind .. "); this checks and deletes nothing")
+  for c in v.checks do print("  " .. c) end
+  for n in v.notes do print("  note: " .. n) end
+  print(verdict_line(v))
+  for r in v.reasons do print("  " .. r.text) end
+  return nil
+end
+
+-- The self-test's plants, under a fresh scratch folder T: `repos/` (the
+-- root), `origins/` (a bare origin for each repo that has one),
+-- `elsewhere/` (checkouts outside the root), `links/` (a link place) and
+-- `memory/`.
+const USER_BUILD = [=[const named = b.option([]const u8, "named", "") orelse b.pathFromRoot("../../../named");
+const page = "../clean-page"; // a longer name: never `clean`
+const doc = "../clean.md"; // a file name: never `clean`
+]=]
+
+const USER_ZON = [=[.{
+    .dependencies = .{
+        .zoned = .{ .path = "../zoned" },
+    },
+}
+]=]
+
+const USER_LIST = [=[.{
+    "../../clean/Walk.roc", // the user repo's own clean/ folder, from src/play/
+}
+]=]
+
+const USER_SCRIPT = [=[## scripts/run.roc -- --repo ../rooted  (run from the repo's top)
+]=]
+
+const USER_DOCS = [=[The spelled checkout lives at `~/showell_repos/spelled`.
+The script reaches it as `real("repos:spelled")`.
+]=]
+
+const MEMORY_NOTE = [=[The checkout at `~/showell_repos/remembered` is load-bearing.
+So is `repos:clean-page`, a longer name.
+]=]
+
+function plant(T, name, at)
+  local path = T .. "/" .. at .. "/" .. name
+  mkdir(path)
+  local os = real(path)
+  git_ok(os, {"init", "-q", "-b", "main"})
+  create(path .. "/README.md", "# " .. name .. "\n")
+  git_ok(os, {"add", "-A"})
+  git_ok(os, {"commit", "-q", "-m", "first"})
+  return os
+end
+
+function give_origin(T, os, name)
+  local bare = real(T) .. "/origins/" .. name .. ".git"
+  must(run({"git", "clone", "-q", "--bare", os, bare}, {timeout_ms = 60000, whole = 100000}))
+  git_ok(os, {"remote", "add", "origin", bare})
+  git_ok(os, {"fetch", "-q", "origin"})
+  return nil
+end
+
+function commit_file(os, path, file, text)
+  create(path .. "/" .. file, text)
+  git_ok(os, {"add", "-A"})
+  git_ok(os, {"commit", "-q", "-m", "add " .. file})
+  return nil
+end
+
+function link(from_os, to_os)
+  must(run({"ln", "-s", to_os, from_os}, {timeout_ms = 10000, whole = 10000}))
+  return nil
+end
+
+function kinds_of(v)
+  local ks = {}
+  for r in v.reasons do push(ks, r.kind) end
+  ks = unique(ks)
+  sort(ks)
+  return join(ks, ",")
+end
+
+function expect(what, got, want)
+  if got ~= want then fail("retire_checkout self_test: " .. what .. " is `" .. tostring(got) .. "`, should be `" .. tostring(want) .. "`") end
+  return nil
+end
+
+function expect_text(what, v, needle)
+  for r in v.reasons do
+    if contains(r.text, needle) then return nil end
+  end
+  print_verdict(v)
+  fail("retire_checkout self_test: " .. what .. ": no reason says `" .. needle .. "`")
+end
+
+function self_test()
+  local T = fresh_dir("scratch:", "retire_checkout_self_test")
+  local R = T .. "/repos"
+  for d in {"repos", "origins", "elsewhere", "links/a/b", "links/c", "memory"} do mkdir(T .. "/" .. d) end
+  local Ros = real(R)
+  local pushed = {"dirty", "untracked", "stashed", "unpushed", "has-wt", "linked", "named", "zoned", "spelled", "rooted", "remembered", "clean", "clean-page"}
+  local os = {}
+  for name in pushed do
+    os[name] = plant(T, name, "repos")
+    if name == "clean" then
+      -- A link inside the folder, into itself, never counts.
+      link(os[name] .. "/self-link", os[name] .. "/README.md")
+      git_ok(os[name], {"add", "-A"})
+      git_ok(os[name], {"commit", "-q", "-m", "a link"})
+    end
+    give_origin(T, os[name], name)
+  end
+  -- 1: a modified file; an untracked file; a stash.
+  replace(R .. "/dirty/README.md", "# dirty, changed\n")
+  create(R .. "/untracked/notes.txt", "new\n")
+  replace(R .. "/stashed/README.md", "# stashed, changed\n")
+  git_ok(os["stashed"], {"stash", "-q"})
+  -- 2: a branch two commits past every remote.
+  git_ok(os["unpushed"], {"checkout", "-q", "-b", "side"})
+  commit_file(os["unpushed"], R .. "/unpushed", "a.txt", "a\n")
+  commit_file(os["unpushed"], R .. "/unpushed", "b.txt", "b\n")
+  -- 3: a linked worktree of has-wt, outside the root; worktrees of a main
+  -- outside the root, one with its branch a commit past every remote.
+  git_ok(os["has-wt"], {"worktree", "add", "-q", "--detach", real(T) .. "/elsewhere/has-wt-side"})
+  local main_os = plant(T, "wt-main", "elsewhere")
+  give_origin(T, main_os, "wt-main")
+  git_ok(main_os, {"worktree", "add", "-q", "-b", "wt-side", Ros .. "/wt-unpushed"})
+  commit_file(Ros .. "/wt-unpushed", R .. "/wt-unpushed", "c.txt", "c\n")
+  git_ok(main_os, {"worktree", "add", "-q", "--detach", Ros .. "/wt-pushed"})
+  -- 4: a link two folders deep into linked, and one to the longer name.
+  link(real(T) .. "/links/a/b/to-linked", os["linked"] .. "/README.md")
+  link(real(T) .. "/links/c/to-clean-page", os["clean-page"])
+  -- 5: a sibling whose tracked files name three checkouts, two longer
+  -- names and a file name, and whose untracked file names clean.
+  local user_os = plant(T, "user", "repos")
+  mkdir(R .. "/user/a/b")
+  mkdir(R .. "/user/src/play")
+  mkdir(R .. "/user/scripts")
+  mkdir(R .. "/user/clean")
+  create(R .. "/user/clean/Walk.roc", "module []\n")
+  create(R .. "/user/a/b/build.zig", USER_BUILD)
+  create(R .. "/user/build.zig.zon", USER_ZON)
+  create(R .. "/user/src/play/list.zon", USER_LIST)
+  create(R .. "/user/scripts/run.roc", USER_SCRIPT)
+  create(R .. "/user/docs.md", USER_DOCS)
+  git_ok(user_os, {"add", "-A"})
+  git_ok(user_os, {"commit", "-q", "-m", "names"})
+  create(R .. "/user/notes.txt", "see ../clean, untracked\n")
+  -- 6: a memory note.
+  create(T .. "/memory/note.md", MEMORY_NOTE)
+  -- Not git at all.
+  mkdir(R .. "/plain")
+  create(R .. "/plain/notes.txt", "loose\n")
+
+  local cfg = {root = R, places = {R, T .. "/links"}, memory = T .. "/memory", depth = LINK_DEPTH}
+  local cases = {
+    {dir = "dirty", kinds = "uncommitted", says = "1 modified, 0 untracked: README.md"},
+    {dir = "untracked", kinds = "uncommitted", says = "0 modified, 1 untracked: notes.txt"},
+    {dir = "stashed", kinds = "stash", says = "1 stash"},
+    {dir = "unpushed", kinds = "branch", says = "side has 2 commits on no remote"},
+    {dir = "has-wt", kinds = "worktree", says = "elsewhere/has-wt-side (detached)"},
+    {dir = "wt-unpushed", kinds = "worktree", says = "its wt-side with 1 commit on no remote"},
+    {dir = "wt-pushed", kinds = "", says = ""},
+    {dir = "linked", kinds = "link", says = "links/a/b/to-linked -> " .. os["linked"] .. "/README.md"},
+    {dir = "named", kinds = "named", says = "user/a/b/build.zig:1: const named"},
+    {dir = "zoned", kinds = "named", says = "user/build.zig.zon:3 (a .zon path dependency)"},
+    {dir = "rooted", kinds = "named", says = "user/scripts/run.roc:1:"},
+    {dir = "spelled", kinds = "named", says = "user/docs.md:2: The script reaches it"},
+    {dir = "remembered", kinds = "memory", says = "note.md:1: The checkout at"},
+    {dir = "plain", kinds = "not-git", says = "not a git checkout"},
+    {dir = "clean", kinds = "", says = ""},
+  }
+  local rows = {}
+  for c in cases do
+    local v = judge(c.dir, cfg)
+    if kinds_of(v) ~= c.kinds then print_verdict(v) end
+    expect(c.dir .. "'s reasons", kinds_of(v), c.kinds)
+    if c.says ~= "" then expect_text(c.dir, v, c.says) end
+    push(rows, {case = c.dir, reasons = #v.reasons, verdict = verdict_line(v)})
+    yield()
+  end
+  local spelled = judge("spelled", cfg)
+  expect("spelled's reasons, `~/showell_repos/` and `repos:`", #spelled.reasons, 2)
+  local wt = judge("wt-pushed", cfg)
+  expect("wt-pushed's note", contains(wt.notes[1], "worktree remove"), true)
+
+  -- A memory folder and a link place that are not there: SKIPPED, said.
+  local bare_cfg = {root = R, places = {R, T .. "/no-links"}, memory = T .. "/no-memory", depth = LINK_DEPTH}
+  local v = judge("clean", bare_cfg)
+  expect("clean without memory: its reasons", kinds_of(v), "")
+  expect("clean without memory: skipped", join(v.skipped, ","), "links under " .. T .. "/no-links,memory")
+  expect("clean without memory: its verdict", verdict_line(v), "CLEAR: clean can be deleted, with 2 checks SKIPPED: links under " .. T .. "/no-links, memory")
+  push(rows, {case = "clean, no memory", reasons = 0, verdict = verdict_line(v)})
+  local blocked = judge("remembered", bare_cfg)
+  expect("remembered without memory: its reasons", kinds_of(blocked), "")
+
+  -- Nothing was deleted.
+  for c in cases do expect(c.dir .. " still there", exists(R .. "/" .. c.dir), true) end
+  print(table(rows, {"case", "reasons", "verdict"}))
+  print("")
+  print_verdict(judge("named", cfg))
+  remove_tree(T)
+  print("retire_checkout self_test: PASS (" .. #cases .. " cases each blocked for its own reason alone or CLEAR; longer names, a file name and untracked files never block; missing places SKIPPED, said; nothing deleted)")
+  return nil
+end
+
+if SELF_TEST == 1 then
+  self_test()
+else
+  local cfg = {root = ".", places = {".", "build:", "tools:"}, memory = "memory:", depth = LINK_DEPTH}
+  local v = judge(DIR, cfg)
+  print_verdict(v)
+  if #v.reasons > 0 then fail("retire_checkout: BLOCKED: " .. v.dir .. ", " .. plural(#v.reasons, "reason", "reasons") .. " above") end
+end
