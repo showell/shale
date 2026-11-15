@@ -7,7 +7,7 @@ Steve Howell writes programs in Roc and builds tools for working with agents. Wi
 ### Who it's for, and what you need
 
 - **Claude Code.** The agent does the writing, the setup and the builds.
-- **Linux on x86-64.** [Shale](https://github.com/showell/shale), the scripting language the builds run in, supports that platform, and this book covers setup on it alone.
+- **Linux.** [Shale](https://github.com/showell/shale), the scripting language the builds run in, runs on Linux only for now.
 - **Permission to install software.** Setup installs Graphviz with your package manager, which asks for sudo.
 - **A GitHub account, for later.** Cloning works anonymously. You'll want an account to fork a builder and to publish your book on GitHub Pages.
 - **Curiosity about the machinery.** You'll read Shale scripts as they scroll by, and the agent writes them.
