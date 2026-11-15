@@ -4,13 +4,72 @@ This is a short how-to manual. It shows how the [Safari Ride book](https://roc.l
 
 It's written for you if you have Claude Code and a GitHub account, can read a little Roc, and are curious enough about the machinery to look under the hood. The book starts Shale from the beginning.
 
-The same machinery builds this book. Its source is one markdown file, `books-book/book.md`, on the [books-book branch](https://github.com/showell/shale/tree/books-book/books-book) of the Shale repository, and every code block in it is quoted from a real file each time the book builds.
+The same machinery builds this book. Its source is one markdown file, `books-book/book.md`, on the [books-book branch](https://github.com/showell/shale/tree/books-book/books-book) of the Shale repository.
 
-The first chapter shows the book as a program. The second teaches enough Shale to run and read its scripts. The third, the heart of the book, is the cadence of drafts and replies that finds a book's voice. The fourth covers working with several agents at once, and publishing.
+The first chapter gets you set up, with this book building on your own machine. The second shows how the book is a program. The third, the heart of the book, is the cadence of drafts and replies that finds a book's voice. The fourth covers working with several agents at once, and publishing.
+
+## Getting set up
+
+Start by having Claude set up your machine. You'll give it one prompt, it will fetch four repositories and install a few tools, and you'll finish with this book built on your own machine and open in your browser. Everything after this chapter builds on that setup.
+
+### What you tell Claude first
+
+Point Claude at Shale's README before anything else. The README says how to build Shale, how to set up its mounts and how to hook it into Claude Code, and it points to `docs/SHALE-AGENTS.md`, the guide written for an agent. Open a Claude Code session in an empty folder and give it a prompt like this one:
+
+```text
+Read https://github.com/showell/shale/blob/master/README.md, then
+docs/SHALE-AGENTS.md in the same repo. Set up Shale here as the README says.
+Clone these four repos side by side in this folder: shale, zig-webbox,
+roc-apps and essay-surface, all from github.com/showell. Install Zig 0.17.0
+and Graphviz. Write ~/.config/shale/mounts with four mounts: cookbook,
+repos (this folder), build and scratch. Start a static web server on port
+9210 over build's roc-apps/next/ folder. Then check out the books-book
+branch of shale, run `shale books-book/build.shale` there, and tell me
+what it printed.
+```
+
+### The four repositories
+
+Claude clones all four into one folder, side by side, about 110 MB in all:
+
+| repository | what it's for | its size |
+|---|---|---|
+| [shale](https://github.com/showell/shale) | the language, its cookbook of recipes, and this book on the `books-book` branch | about 900 files, 35 MB |
+| [zig-webbox](https://github.com/showell/zig-webbox) | a library Shale builds against, checked out beside it | 42 files, 2 MB |
+| [roc-apps](https://github.com/showell/roc-apps) | the Safari Ride program and its book, in `canvas_apps/safari/tutorial/`, whose builders and MISSION this book quotes | about 950 files, 66 MB |
+| [essay-surface](https://github.com/showell/essay-surface) | the small web app where the agent's drafts meet the author's replies | about 100 files, 3 MB |
+
+### What Claude installs
+
+- **Zig 0.17.0**, the compiler Shale builds with.
+- **Shale**, built by `zig build` in its checkout, with its `zig-out/bin` folder on your PATH.
+- **Graphviz**, whose `dot` draws the book's diagrams.
+- **A static web server** on port 9210 over the folder the build writes, so the pages open in a browser. Any server works.
+- **A mounts file**, `~/.config/shale/mounts`. A mount names a folder outside the one a script runs in, and a script reaches it as `name:path`. The book's build uses four: `cookbook`, Shale's recipes; `repos`, the folder that holds the four checkouts; `build`, where the pages go; and `scratch`, for temporary files.
+
+Shale runs on Linux on x86-64.
+
+### What Shale is, and the hook
+
+Shale is a small scripting language that looks like Lua, made for scripts an agent writes and a person reads. Every run has budgets, a program runs only with a timeout, a script reads and writes only inside its own folder and its mounts, and a script that goes wrong stops with one line that says where and why. Its recipes, scripts general enough for any project, live in the cookbook, and the [cookbook's README](https://github.com/showell/shale/blob/master/cookbook/README.md) lists each one in a line. The differences from Lua that catch a newcomer are in [SHALE-AGENTS.md](https://github.com/showell/shale/blob/master/docs/SHALE-AGENTS.md), under "If you write Lua".
+
+The README also shows a Claude Code hook that sends every shell command Claude runs through Shale. Steve's machine runs with it on, so he reads one language as it scrolls by, each script's output stays bounded, and the agent builds up recipes that do a whole job in one launch. The hook is optional, and this book builds the same either way.
+
+### How you'll know it worked
+
+Ask Claude to run three checks and show you what each printed:
+
+```text
+shale --version
+shale cookbook:prose/find_negatives.shale self_test=1
+shale books-book/build.shale
+```
+
+The first prints `shale ReleaseSafe`. The second runs one of the cookbook's recipes on its own test cases, and passes. The third, run in the shale checkout on the `books-book` branch, builds this book: it prints a table of each page's words of prose, ends with `book: 6 pages answer at the dev channel's /books-book/`, and leaves the pages at http://localhost:9210/books-book/. Open that page in your browser, and you're reading this book, built on your machine.
 
 ## The book is a program
 
-A book about code stays true only while its quotes match the code. The Safari Ride book keeps them matched by treating the book as a program: a source file, a build that turns it into pages, and gates that stop the build when something is wrong. This chapter walks through each part, with this book's own builder as the example.
+A book about code stays true only while its quotes match the code. The Safari Ride book keeps them matched by treating the book as a program. Its prose lives in a source file. A build turns that file into pages, and pulls each piece of code into the page from the real file at that moment. Checks called gates stop the build when something is wrong: a quote that points at a missing file, a chapter that runs long, a claim the compiler contradicts. You ran this book's build in the last chapter. This chapter opens it up.
 
 ### One source file
 
@@ -18,9 +77,7 @@ The whole book is one markdown file. Its `#` line is the title, the text under t
 
 {{file books-book/examples/tiny_book.md}}
 
-The two lines in braces are includes. Each sits alone on its line and names a file. When the book builds, each include becomes a code block holding that file, or a part of it, as it stands that day. Edit the script and the next build quotes the edit, so the prose and the code move together.
-
-This book's builder knows five includes:
+The two lines in braces are includes. Each sits alone on its line and names a file. When the book builds, each include becomes a code block holding that file, or a part of it, as it stands that day. Edit the script and the next build quotes the edit, so the prose and the code move together. This book's builder knows five:
 
 | include | what it becomes |
 |---|---|
@@ -40,11 +97,7 @@ The Safari book's includes go further. Its builder reads Roc with Roc's own pars
 
 ### The build
 
-The build is a Shale script, `books-book/build.shale`. It expands the includes, splits the result at each chapter heading, renders each chapter as a page, and writes the pages to the dev channel, a folder that a web server shows. One command runs it, from the root of the checkout:
-
-```text
-shale books-book/build.shale
-```
+The build is the Shale script you ran, `books-book/build.shale`. It expands the includes, runs the gates, renders each chapter as a page, and writes the pages to the dev channel, the folder your web server shows.
 
 ```dot The build, from the source to the pages
 digraph {
@@ -61,102 +114,35 @@ digraph {
 }
 ```
 
-The expansion is one pass over the source's lines. A line that matches an include becomes its block, and any other line holding `{{` stops the build, so a mistyped include stops it in place of reaching a reader:
-
-{{function books-book/build.shale expanded}}
-
 ### Gates that stop the build
 
 A gate is a check that stops the build. Each gate here began as a mistake that repeated in an earlier book.
 
-**Every include resolves.** An include that names a missing file, a missing function or an anchor found twice stops the build with a line that says which.
+**Every include resolves.** An include that names a missing file, a missing function or an anchor found twice stops the build with a line that says which, and so does any other `{{` in the prose.
 
 **At most 900 words of prose a page.** Words outside the code count. The limit keeps chapters short, and a chapter over it gets edited down to its key ideas:
 
 {{lines books-book/build.shale from "local over = {}" to "if #over > 0 then fail("}}
 
-**Say what happens.** The Safari book's strongest voice rule is to describe a thing by what it does. A sentence built on a negative word, such as `not`, `never` or `doesn't`, usually hides a plainer positive one. The cookbook's `prose/find_negatives.shale` finds every such sentence. The build stops on each one until it's rewritten, or listed with its reason in `negatives.txt`. This book's table is empty: every negative was rewritten.
-
-{{function books-book/build.shale negatives_findings}}
+**Say what happens.** The Safari book's strongest voice rule is to describe a thing by what it does. A sentence built on a negative word, such as `not`, `never` or `doesn't`, usually hides a plainer positive one. The cookbook's `prose/find_negatives.shale` finds every such sentence, the recipe you ran with `self_test=1` during setup. The build stops on each one until it's rewritten, or listed with its reason in `negatives.txt`. This book's table is empty.
 
 **Claims checked against the compiler.** The Safari book teaches Roc's types partly through programs that fail to compile. "This fails" is a claim, so the build checks it. `{{fails turn_as_bearing}}` quotes `fails/turn_as_bearing.roc`, runs the pinned `roc check` on it, and quotes what Roc said. A program with zero errors stops the build, because the book's claim would then be false:
 
 {{function repos:roc-apps/canvas_apps/safari/tutorial/build.shale fenced_failure}}
 
-This book has the same kind of include for Shale. `{{stops PATH}}` runs a script and quotes its stop, and a script that runs to its end stops the build. The next chapter uses it.
-
-### Contents, index and diagrams
-
-The contents page is the text under the title, then each chapter with its sections, all read from the headings. Each chapter page carries the same list in a sidebar, with the current chapter's sections open.
-
-The index comes from the cookbook's `prose/build_term_index.shale`. It reads a terms file, one term a line with the patterns that find it, and writes a table for each category: each term's main chapter and every chapter that mentions it. It also reports smells, such as a term used several chapters before the one that teaches it. Those go to the writer, and stay off the page. This book's terms are in `books-book/index_terms.txt`.
-
-A diagram is a fence tagged `dot`. The build hands its source to Graphviz and puts the drawing in the page, so a diagram changes with the words around it, as the one above does.
-
-## Enough Shale to run the scripts
-
-Every script in the last chapter is Shale. You need enough of it to run the scripts, read them as they scroll by, and judge what the agent wrote. This chapter covers that much.
-
-### What Shale is
-
-Shale is a small scripting language that looks like Lua. It reads, searches and changes a project's files, and runs the project's programs. Its features fit one niche, scripts an agent writes and a person reads:
-
-- Every run has budgets for steps, reads, bytes read and bytes printed. A runaway script stops and names the budget it ran out of.
-- `run` starts a program only with a timeout and a keep (`head`, `tail` or `whole`), so a hung test stops, and a long build log comes back as its last lines.
-- A script reads and writes only under the folder it runs in and the mounts you name.
-- A stop is one line that says where and why.
-
-### Why the agent's shell goes through it
-
-On Steve's machine, every shell command Claude runs is a Shale launch. A Claude Code hook checks each Bash call, and lets through a `shale` launch or an escape whose first line names what Shale lacked. An escape runs, and lands in a log of what Shale should learn next. The hook is a few lines of settings:
-
-{{lines README.md from "Bash|Monitor" to "/ABSOLUTE/PATH/TO/shale/tools/shale-gate.sh"}}
-
-Three things follow. The author reads one language as it scrolls by, in place of bash, Python and sed mixed together. Each script's output stays bounded, which keeps the agent's context clean. And the agent builds up recipes: scripts in the cookbook that do a whole job in one launch, such as the negatives lint.
-
-The ideas in this book carry to any scripting language. Shale makes them cheap to keep, because every script the agent writes is one the author can read.
-
-### Install it
-
-Shale runs on Linux on x86-64, and builds with Zig 0.17.0 beside a checkout of zig-webbox:
-
-{{lines README.md from "git clone https://github.com/showell/shale" to "cd shale && zig build"}}
-
-Put `zig-out/bin` on your PATH. Then make a mounts file, `~/.config/shale/mounts`, with a line that names the cookbook, so any checkout can launch its recipes:
-
-```text
-cookbook = /ABSOLUTE/PATH/TO/shale/cookbook
-```
-
-This book's builder names three more mounts: `repos`, the folder that holds your checkouts, so an include can quote roc-apps; `build`, whose `roc-apps/next/` folder the dev channel serves; and `scratch`, for temporary files.
-
-### Run a recipe, and read a script
-
-A recipe runs with its values as `name=value` words:
-
-```text
-shale cookbook:prose/find_negatives.shale manuscript=book.md table=negatives.txt
-```
-
-Most recipes also take `self_test=1`, which runs the recipe on its own test cases. A recipe's header comment says what it does and what it takes, and the [cookbook's README](https://github.com/showell/shale/blob/master/cookbook/README.md) lists every recipe in a line.
-
-A script of your own is a file, or a heredoc on standard input. Here is a short one that counts the prose in each chapter of the tiny book from the last chapter, with what it printed when this book was built:
-
-{{runs books-book/examples/count_words.shale}}
-
-Most of it reads like Lua. `read` reads a file, `lines` splits a string at its line breaks, and `table` lays out a list of records as columns. The differences that catch a newcomer, such as patterns that are regular expressions, are listed in [SHALE-AGENTS.md](https://github.com/showell/shale/blob/master/docs/SHALE-AGENTS.md), under "If you write Lua".
-
-### Read a stop
-
-When a script goes wrong, Shale stops it with a line that says where and why. This script asks git for its newest commits and leaves out the timeout that `run` requires:
+This book has the same kind of include for Shale. `{{stops PATH}}` runs a script and quotes how it stopped, and a script that runs to its end stops the build. Here is one that asks git for its newest commits and leaves out the timeout that `run` requires:
 
 {{stops books-book/examples/run_without_timeout.shale}}
 
-The first line names the problem and the rule behind it. The `called from` line points at the script's own line 2, and the last line says what the run used. The agent reads a stop like this and fixes its script, and the author usually reads only the agent's one-sentence account of it. The build reruns the script every time, so the quote above is what Shale says today.
+The first line names the problem and the rule behind it, and the `called from` line points at the script's own line 2. The agent reads a stop like this and fixes its script, and you usually read only the agent's one-sentence account of it.
 
-### Build this book
+### Contents, index and diagrams
 
-To build this book yourself, clone the Shale repository, check out the `books-book` branch, set up the mounts, and run the build from the checkout's root. It prints each page's words of prose and the lint's verdict, fetches every page from the dev channel, and ends with the number of pages that answered. Any static web server works as the channel: point it at `build`'s `roc-apps/next/` folder, on port 9210.
+The contents page is the text under the title, then each chapter with its sections, all read from the headings. Each chapter page carries the same list in a sidebar.
+
+The index comes from the cookbook's `prose/build_term_index.shale`. It reads a terms file, one term a line with the patterns that find it, and writes a table for each category: each term's main chapter and every chapter that mentions it. It also reports smells, such as a term used several chapters before the one that teaches it, to the writer. This book's terms are in `books-book/index_terms.txt`.
+
+A diagram is a fence tagged `dot`. The build hands its source to Graphviz and puts the drawing in the page, so a diagram changes with the words around it, as the one above does.
 
 ## Finding the voice with the agent
 
@@ -210,6 +196,10 @@ A pull request with review comments works the same way. The surface is faster: a
 A reply that generalizes becomes a rule, and the rules live in one file, `MISSION.md`, beside the book. Every writer and reader of the book, human or agent, reads it first, and the agent reads it again after each compaction of its context. A rule says why, and quotes the author with the date of the reply, so a later reader can weigh it:
 
 {{lines repos:roc-apps/canvas_apps/safari/tutorial/MISSION.md from "**A7.**" to "**A7.**"}}
+
+This book has one too, `books-book/MISSION.md`. Its rule B came from Steve's reply to this book's first draft, which opened with a Shale script, and it's why setup now comes first:
+
+{{lines books-book/MISSION.md from "**B. Setup comes first" to "**B. Setup comes first"}}
 
 The Safari MISSION groups its rules by axis: purpose, truth, order, voice, tone, vocabulary, the code, pictures and completeness. Each axis fails in its own way and takes its own kind of read.
 
