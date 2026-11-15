@@ -4,7 +4,7 @@
 
 ## The machinery
 anchor | \banchors?\b
-book.md | book\.md
+the source file | source file | markdown file
 build.shale | build\.shale
 contents page | contents page
 dev channel | dev channel

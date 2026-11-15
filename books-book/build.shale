@@ -504,8 +504,10 @@ function contents(book, dir)
   for c in book.chapters do
     n = n + 1
     local subs = {}
+    local in_code = false
     for l in c.lines do
-      if starts_with(l, "### ") then push(subs, "<li>" .. plain(sub(l, 5)) .. "</li>") end
+      if starts_with(l, FENCE) then in_code = not in_code end
+      if not in_code and starts_with(l, "### ") then push(subs, "<li>" .. plain(sub(l, 5)) .. "</li>") end
     end
     push(ls, "<li><a href=\"chapter-" .. n .. ".html\">" .. plain(c.title) .. "</a><ol class=\"sections\">" .. join(subs, "") .. "</ol></li>")
   end
@@ -539,8 +541,19 @@ function negatives_findings()
   return {"the negatives lint found sentences to rewrite, above, or to keep in " .. NEGATIVES_TABLE}
 end
 
+-- A table row of the index with its last cell's chapter numbers made links.
+function linked_row(l)
+  local cells = cells_of(l)
+  if #cells < 4 or re_find(cells[#cells], "^[0-9, ]+$") == nil then return l end
+  local links = {}
+  for n in split(cells[#cells], ", ") do push(links, "[" .. n .. "](chapter-" .. n .. ".html)") end
+  cells[#cells] = join(links, ", ")
+  return "| " .. join(cells, " | ") .. " |"
+end
+
 -- The index's tables, from the cookbook's term index over the built book.
--- Its report of smells after the tables is the writer's, and stays out.
+-- Its report of smells after the tables is the writer's, so it goes to the
+-- build's output, and the page keeps the tables.
 function index_markdown(book_path)
   local r = run({"shale", real(TERM_INDEX), "book=" .. book_path, "terms=" .. TERMS}, {timeout_ms = 60000, head = 400})
   if r.ended ~= "exit" or get(r, "code", -1) ~= 0 then
@@ -548,11 +561,17 @@ function index_markdown(book_path)
     fail("book: the term index failed")
   end
   local kept = {}
-  local going = true
+  local smells = {}
+  local in_smells = false
   for l in lines(r.out) do
-    if starts_with(l, "## ") and contains(lower(l), "smell") then going = false end
-    if going and not starts_with(l, "── ") then push(kept, l) end
+    if l == "# The smells" then in_smells = true end
+    if in_smells then
+      if trim(l) ~= "" and not starts_with(l, "|---") then push(smells, l) end
+    elseif not starts_with(l, "── ") and l ~= "# The index" then
+      push(kept, linked_row(l))
+    end
   end
+  print(join(smells, "\n"))
   return kept
 end
 
@@ -566,47 +585,53 @@ function check_channel(files)
   return #keys(files)
 end
 
+-- The gates come first, so the channel's copy changes only when every one
+-- passes: the includes as the source expands, the negatives lint, the
+-- prose on every page and the index's own page.
 local whole = expanded(read(SOURCE))
 local lint = negatives_findings()
 local book = parts_of(whole)
 if #book.chapters == 0 then fail("book: book.md has no `##` chapters") end
-if exists(DEST) then remove_tree(DEST) end
-mkdir(DEST)
-replace(DEST .. "/book.css", read(CSS))
--- The book with every include filled in, for a reader who wants it in one
--- file, and for the index to read.
-replace(DEST .. "/book.md", join(whole, "\n") .. "\n")
-local dir = fresh_dir("scratch:", "book-lex")
-local served = {}
-local rows = {}
-local over = {}
-local front_words = prose_words(book.front)
-push(rows, {page = "contents", prose = front_words, title = plain(book.title)})
-if front_words > MAX_PROSE_WORDS then push(over, "the contents page (" .. front_words .. " words)") end
-replace(DEST .. "/index.html", page("front", book.title, book.title, contents(book, dir), "<nav class=\"pager\"><span></span><a href=\"chapter-1.html\">Start reading →</a></nav>", ""))
-served["index.html"] = plain(book.title)
+local dir = fresh_dir("scratch:", "book-build")
+replace(dir .. "/book.md", join(whole, "\n") .. "\n")
+local index = index_markdown(dir .. "/book.md")
+local rows = {{page = "index.html", prose = prose_words(book.front), title = plain(book.title)}}
 local n = 0
+for c in book.chapters do
+  n = n + 1
+  push(rows, {page = "chapter-" .. n .. ".html", prose = prose_words(c.lines), title = plain(c.title)})
+end
+push(rows, {page = "terms.html", prose = prose_words(index), title = "Index"})
+print(table(rows, {"page", "prose", "title"}))
+local over = {}
+for r in rows do
+  if r.prose > MAX_PROSE_WORDS then push(over, r.page .. " (" .. r.prose .. " words)") end
+end
+for f in lint do print("lint: " .. f) end
+if #over > 0 then fail("book: over " .. MAX_PROSE_WORDS .. " words of prose: " .. join(over, ", ")) end
+if #lint > 0 then fail("book: " .. #lint .. " lint findings, above") end
+
+-- Every page is rendered before the channel's copy is replaced, so a block
+-- that fails to render or a diagram that fails to draw leaves it as it was.
+local pages = {}
+pages["index.html"] = page("front", book.title, book.title, contents(book, dir), "<nav class=\"pager\"><span></span><a href=\"chapter-1.html\">Start reading →</a></nav>", "")
+n = 0
 for c in book.chapters do
   n = n + 1
   local html = rendered(chapter_markdown(c), dir)
   local nav = sidebar(book.title, book.chapters, n, sections_of(html))
-  local file = "chapter-" .. n .. ".html"
-  replace(DEST .. "/" .. file, page("chapter", book.title, c.title, html, pager(n, book.chapters), nav))
-  served[file] = plain(c.title)
-  local words_here = prose_words(c.lines)
-  push(rows, {page = file, prose = words_here, title = plain(c.title)})
-  if words_here > MAX_PROSE_WORDS then push(over, file .. " (" .. words_here .. " words)") end
+  pages["chapter-" .. n .. ".html"] = page("chapter", book.title, c.title, html, pager(n, book.chapters), nav)
 end
-local index = index_markdown(DEST .. "/book.md")
-local index_words = prose_words(index)
-push(rows, {page = "terms.html", prose = index_words, title = "Index"})
-if index_words > MAX_PROSE_WORDS then push(over, "the index (" .. index_words .. " words)") end
-local index_body = rendered(index, dir)
-replace(DEST .. "/terms.html", page("chapter", book.title, "Index", "<h1>Index</h1>\n" .. index_body, "<nav class=\"pager\"><a href=\"chapter-" .. n .. ".html\">← " .. plain(book.chapters[n].title) .. "</a><a href=\"index.html\">Contents</a><span></span></nav>", sidebar(book.title, book.chapters, 0, {})))
-served["terms.html"] = "Index"
+pages["terms.html"] = page("chapter", book.title, "Index", "<h1>Index</h1>\n" .. rendered(index, dir), "<nav class=\"pager\"><a href=\"chapter-" .. n .. ".html\">← " .. plain(book.chapters[n].title) .. "</a><a href=\"index.html\">Contents</a><span></span></nav>", sidebar(book.title, book.chapters, 0, {}))
+if exists(DEST) then remove_tree(DEST) end
+mkdir(DEST)
+replace(DEST .. "/book.css", read(CSS))
+-- The book with every include filled in, for a reader who wants it in one file.
+copy(dir .. "/book.md", DEST .. "/book.md")
 remove_tree(dir)
-print(table(rows, {"page", "prose", "title"}))
-for f in lint do print("lint: " .. f) end
-if #over > 0 then fail("book: over " .. MAX_PROSE_WORDS .. " words of prose: " .. join(over, ", ")) end
-if #lint > 0 then fail("book: " .. #lint .. " lint findings, above") end
+local served = {}
+for r in rows do
+  replace(DEST .. "/" .. r.page, pages[r.page])
+  served[r.page] = r.title
+end
 print("book: " .. check_channel(served) .. " pages answer at the dev channel's /" .. STAGE .. "/")

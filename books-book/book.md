@@ -34,6 +34,8 @@ A line range drifts as a file grows, so `{{lines}}` names two pieces of text ins
 
 {{function books-book/build.shale anchored_line}}
 
+The check earns its place. When this book's builder was reorganized, the quote of its word limit, further down this page, stopped the next build: the line it was anchored to had been rewritten.
+
 The Safari book's includes go further. Its builder reads Roc with Roc's own parser, so `{{code CatCrossing.cat_instant_at}}` quotes one definition by name, with its doc comment, wherever it sits in its module.
 
 ### The build
@@ -46,7 +48,6 @@ shale books-book/build.shale
 
 ```dot The build, from the source to the pages
 digraph {
-  rankdir=LR;
   node [shape=box, style=rounded];
   src [label="book.md"];
   files [label="the quoted files"];
@@ -72,7 +73,7 @@ A gate is a check that stops the build. Each gate here began as a mistake that r
 
 **At most 900 words of prose a page.** Words outside the code count. The limit keeps chapters short, and a chapter over it gets edited down to its key ideas:
 
-{{lines books-book/build.shale from "local words_here = prose_words(c.lines)" to "if words_here > MAX_PROSE_WORDS then"}}
+{{lines books-book/build.shale from "local over = {}" to "if #over > 0 then fail("}}
 
 **Say what happens.** The Safari book's strongest voice rule is to describe a thing by what it does. A sentence built on a negative word, such as `not`, `never` or `doesn't`, usually hides a plainer positive one. The cookbook's `prose/find_negatives.shale` finds every such sentence. The build stops on each one until it's rewritten, or listed with its reason in `negatives.txt`. This book's table is empty: every negative was rewritten.
 
@@ -155,7 +156,7 @@ The first line names the problem and the rule behind it. The `called from` line 
 
 ### Build this book
 
-To build this book yourself, clone the Shale repository, check out the `books-book` branch, set up the mounts, and run the build from the checkout's root. It prints each page's words of prose and the lint's verdict, fetches every page from the dev channel, and ends with the number of pages that answered.
+To build this book yourself, clone the Shale repository, check out the `books-book` branch, set up the mounts, and run the build from the checkout's root. It prints each page's words of prose and the lint's verdict, fetches every page from the dev channel, and ends with the number of pages that answered. Any static web server works as the channel: point it at `build`'s `roc-apps/next/` folder, on port 9210.
 
 ## Finding the voice with the agent
 
@@ -176,6 +177,7 @@ digraph {
   draft -> gates -> cold -> author;
   author -> draft [label="one voice fixes"];
   author -> mission [label="new rules"];
+  {rank=same; gates; cold; author;}
 }
 ```
 
@@ -235,7 +237,7 @@ In practice the agent that wrote the chapter takes the findings, keeps the ones 
 
 ### A gate the moment a mistake repeats
 
-A correction made once is a reply. When the same mistake comes back, write the check that catches it, in the same session, and add it to the build. A rule in MISSION depends on someone reading it, and a gate runs on every build. Three of the Safari book's gates began this way:
+A correction made once is a reply. When the same mistake comes back, write the check that catches it, in the same session, and add it to the build. A rule in MISSION depends on someone reading it, and a gate runs on every build. Three gates began this way:
 
 - Steve kept striking negative sentences, so `find_negatives.shale` became a gate.
 - Chapters kept growing, so the 900-word limit moved from a rule into the build.
