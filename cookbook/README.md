@@ -65,6 +65,11 @@ with `--args-stdin`, one `NAME=VALUE` a line.
   time and the lines that matter. `shale cookbook:run.shale --args-stdin` (cmd, grep)
 - `run_zig_build.shale`: runs `zig build STEP` and prints its verdict without
   the noise. `shale cookbook:run_zig_build.shale step=test`
+- `survey_repos.shale`: surveys a folder of checkouts for a map of them:
+  each folder's kind, remote, first and last commit, age and commit count
+  as a pipe table, each README's opening, and which READMEs name which
+  folders (counts, `contexts=1` sentences, a dot edge list).
+  `cd ~/showell_repos && shale cookbook:survey_repos.shale contexts=1` (`skip=`, `today=`, `root=`, `json=1`)
 - `test_times.shale`: tests the time-history library on canned runs.
   `shale cookbook:test_times.shale self_test=1`
 - `times.shale` (library): `timed_run`, a stage's time against its recent

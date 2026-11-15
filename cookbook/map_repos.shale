@@ -4,7 +4,9 @@
 -- README's title, and the other repos its README names. A README names a
 -- repo when the repo's folder name appears in it as a whole word, case and
 -- all, so `roc-apps` never counts as `roc`. That is a map of what the READMEs
--- say, not of what the builds use.
+-- say, not of what the builds use. `survey_repos.shale` is its sibling for
+-- each repo's history (first commit, age, commit count), its README's
+-- opening and the sentences that name the others.
 --
 -- Run it from the folder that holds the repos. `in=lanes` maps a folder
 -- inside it instead (its worktrees, say), with the README links still to the

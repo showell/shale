@@ -51,6 +51,7 @@ show
 sort
 split
 strip
+survey
 test
 tidy
 trace

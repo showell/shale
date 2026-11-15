@@ -1,0 +1,519 @@
+-- This recipe surveys a folder of checkouts for a map of how they relate:
+-- what each folder is, how old each repo is, what its README says first,
+-- and which READMEs name which folders. It prints what a person draws the
+-- map from and draws nothing itself, since choosing what a diagram shows is
+-- that person's job. `map_repos.shale` is its sibling for the state of each
+-- checkout today (dirty files, upstream, recent commits).
+--
+-- It prints four sections, plain lines and a pipe table that paste straight
+-- into a note:
+--
+-- * `== folders`: a pipe table, one row a folder, oldest first commit first.
+--   A row has the folder's kind (`clone`, `worktree of <main>` for a linked
+--   worktree, with the main checkout's folder name, or `not git`), its
+--   branch, its remote (a GitHub URL is shown as `owner/name`), its first
+--   and last commit dates, its age in days (from its first commit to
+--   `today`), its commit count (`git rev-list --count HEAD`) and its
+--   README's title. A worktree's history is its main checkout's plus its
+--   branch, so its age is its main's.
+-- * `== openings`: each README's first 320 characters after its title, on
+--   one line.
+-- * `== mentions`: for each README, the other folders it names and how many
+--   times, `from -> to: count, ...`. With `contexts=1`, each pair's first
+--   mention follows on its own line, with the sentence around it.
+-- * `== dot edges`: the same pairs as a Graphviz edge list, one
+--   `"from" -> "to";` a line, ready to trim by hand and wrap in a
+--   `digraph { }`.
+--
+-- A README names a folder where the folder's name stands alone: the name
+-- is a whole run of letters, digits, `_` and `-`, so `dog-park` is not
+-- counted inside `dog-park-page` or `dog-park_x`, and the case must match,
+-- so `Shale` never counts as `shale`. That is `map_repos.shale`'s rule too.
+--
+-- Some matches that stand alone are file names, not folders, and are left
+-- out: a name followed by a dot and a letter (`docs/observatory.adoc`
+-- links a file of its own repo, not the observatory repo), except `.git`
+-- (`showell/shale.git` names the repo), and a name right after a dot that
+-- follows a letter or digit (`Main.roc`, a file's extension). Each one left
+-- out is listed under `== left out as file names`, with the word it was
+-- in, so a wrong guess is visible. What this cannot tell is a folder's name
+-- used as a plain word (the `roc` command, say): `skip=` such a folder.
+--
+-- `skip=a,b` leaves folders out of the mention scan both ways: their
+-- READMEs are not read for mentions, and nothing counts as naming them.
+-- Skip the worktrees and the upstream clones, whose READMEs are another
+-- repo's. They still get a row in the table.
+--
+-- `today=YYYY-MM-DD` sets the day the ages are counted to; the default is
+-- the clock's today, in UTC. `json=1` prints the whole survey as one JSON
+-- value instead (rows, mentions, the matches left out, the folders that are
+-- symbolic links), for a page to draw from.
+--
+--   cd ~/showell_repos && shale cookbook:survey_repos.shale
+--   cd ~/showell_repos && shale cookbook:survey_repos.shale contexts=1 skip=roc,lanes
+--   shale cookbook:survey_repos.shale root=repos: today=2026-11-15
+--   shale cookbook:survey_repos.shale self_test=1
+--
+-- Each git folder costs five programs (its branch, remote, first and last
+-- commit dates, and its count), so a folder of more than about 190 repos
+-- wants `--budget programs=N`. A symbolic link is listed, not followed.
+--
+-- budget: steps=100000000 arena_bytes=400000000
+
+const ROOT = arg("root", ".")
+const CONTEXTS = arg("contexts", 0)
+const SKIP = arg("skip", "")
+const TODAY = arg("today", "")
+const JSON = arg("json", 0)
+const SELF_TEST = arg("self_test", 0)
+const OPENING_CHARS = 320
+const CONTEXT_REACH = 240
+
+function flat(s)
+  return join(words(s), " ")
+end
+
+function cell(s)
+  return join(split("" .. s, "|"), "\\|")
+end
+
+-- One git command's output, trimmed, or "" when it exits nonzero (no
+-- remote, no commits). `keep` is "head" for a command whose first line is
+-- all that is wanted, as `log --reverse` is: git has no way to give the
+-- oldest commit alone, since `--reverse` applies after `-1` limits.
+function git_out(path, args, keep)
+  local argv = {"git", "-C", real(path)}
+  for a in args do push(argv, a) end
+  local opts = {timeout_ms = 60000}
+  if keep == "head" then opts.head = 1 else opts.whole = 20000 end
+  local r = run(argv, opts)
+  if r.code ~= 0 then return "" end
+  return trim(r.out)
+end
+
+function short_remote(url)
+  local s = url
+  for prefix in {"https://github.com/", "git@github.com:"} do
+    if starts_with(s, prefix) then s = sub(s, #prefix + 1, #s) end
+  end
+  if ends_with(s, ".git") then s = sub(s, 1, #s - 4) end
+  return s
+end
+
+-- What a folder is: a clone (its own .git folder), a linked worktree (a
+-- .git file naming `<main>/.git/worktrees/<name>`), or not git at all.
+function kind_of(path)
+  if exists(path .. "/.git/HEAD") then return {kind = "clone", main = ""} end
+  if not exists(path .. "/.git") then return {kind = "not git", main = ""} end
+  local gitdir = trim(read(path .. "/.git"))
+  local at = find(gitdir, "/.git/worktrees/")
+  if at == nil then return {kind = "git file", main = ""} end
+  local main = basename(sub(gitdir, 1, at - 1))
+  return {kind = "worktree of " .. main, main = main}
+end
+
+function readme_of(path)
+  for name in {"README.md", "README", "readme.md"} do
+    if exists(path .. "/" .. name) then return {name = name, text = read(path .. "/" .. name)} end
+  end
+  return {name = "", text = ""}
+end
+
+-- A README's title (its first `# ` line outside a code fence, since a shell
+-- comment in a fence is no title; else its first line) and the line number
+-- it is on.
+function title_of(text)
+  local all = lines(text)
+  local fenced = false
+  local i = 1
+  while i <= #all do
+    if starts_with(trim(all[i]), "```") then fenced = not fenced end
+    if not fenced and starts_with(all[i], "# ") then return {text = trim(sub(all[i], 3, #all[i])), line = i} end
+    i = i + 1
+  end
+  if #all > 0 then return {text = trim(all[1]), line = 1} end
+  return {text = "", line = 0}
+end
+
+function opening_of(text, title_line)
+  local all = lines(text)
+  local out = ""
+  local i = title_line + 1
+  while i <= #all and #out < OPENING_CHARS do
+    out = out .. " " .. all[i]
+    i = i + 1
+  end
+  return sub(flat(out), 1, OPENING_CHARS)
+end
+
+function survey_folder(root, name, today_day)
+  local path = path_under(root, name)
+  local k = kind_of(path)
+  local row = {folder = name, kind = k.kind, main = k.main, branch = "", remote = "", first = "", last = "", days = "", commits = "", title = "", readme = ""}
+  if k.kind ~= "not git" then
+    row.branch = git_out(path, {"branch", "--show-current"}, "whole")
+    if row.branch == "" then row.branch = "(detached)" end
+    row.remote = short_remote(git_out(path, {"remote", "get-url", "origin"}, "whole"))
+    -- A head keep ends with a `… N lines left out …` line: the date is the first.
+    row.first = get(lines(git_out(path, {"log", "--reverse", "--format=%as"}, "head")), 1, "")
+    row.last = git_out(path, {"log", "-1", "--format=%as"}, "whole")
+    row.commits = git_out(path, {"rev-list", "--count", "HEAD"}, "whole")
+    if row.first ~= "" then row.days = today_day - seconds(row.first) // 86400 end
+  end
+  local readme = readme_of(path)
+  if readme.name ~= "" then
+    local t = title_of(readme.text)
+    row.title = t.text
+    row.readme = readme.name
+    row.opening = opening_of(readme.text, t.line)
+  end
+  return row
+end
+
+function is_namey(ch)
+  return ch ~= "" and re_find(ch, "^[A-Za-z0-9_]$") ~= nil
+end
+
+function is_letter(ch)
+  return ch ~= "" and re_find(ch, "^[A-Za-z]$") ~= nil
+end
+
+-- Whether the name at `at` is part of a file name: `name.ext` (but not
+-- `name.git`) or `base.name`.
+function in_file_name(src, at, len)
+  local after = at + len
+  if sub(src, after, after) == "." and is_letter(sub(src, after + 1, after + 1)) then
+    local is_git = sub(src, after + 1, after + 3) == "git" and not is_namey(sub(src, after + 4, after + 4))
+    if not is_git then return true end
+  end
+  if at > 2 and sub(src, at - 1, at - 1) == "." and is_namey(sub(src, at - 2, at - 2)) then return true end
+  return false
+end
+
+-- The path-like word around `at`, to show what a match left out was in.
+function word_around(src, at, len)
+  local pathy = "^[A-Za-z0-9_./~-]$"
+  local from = at
+  while from > 1 and at - from < 60 and re_find(sub(src, from - 1, from - 1), pathy) ~= nil do from = from - 1 end
+  local to = at + len - 1
+  while to < #src and to - at < 60 and re_find(sub(src, to + 1, to + 1), pathy) ~= nil do to = to + 1 end
+  return sub(src, from, to)
+end
+
+-- The sentence around `at`: back to the last sentence end, blank line or
+-- line that starts a block (a table row, a list item, a heading, a quote,
+-- a fence) before it, on to the first after it, at most CONTEXT_REACH
+-- characters each way, with `…` where the reach cut it. So a mention in a
+-- table is its row, and one in a list its item.
+function sentence_at(src, at, len)
+  local ends = "[.!?](?:[ \\t\\n]|$)|\\n[ \\t]*\\n|\\n[ \\t]*(?:[|#>*-]|```)"
+  local from = at - CONTEXT_REACH
+  local cut_front = true
+  if from <= 1 then
+    from = 1
+    cut_front = false
+  end
+  local start = from
+  for m in re_find_all(sub(src, from, at - 1), ends) do
+    -- A line that starts a block begins the sentence; any other end is
+    -- passed over whole.
+    if starts_with(m.text, "\n") and not ends_with(m.text, "\n") then
+      start = from + m.at
+    else
+      start = from + m.at - 1 + #m.text
+    end
+    cut_front = false
+  end
+  local tail_from = at + len
+  local stop = tail_from + CONTEXT_REACH
+  local cut_back = stop < #src
+  local m = re_find(sub(src, tail_from, stop), ends)
+  if m ~= nil then
+    stop = tail_from + m.at - 1
+    if sub(src, stop, stop) == "\n" then stop = stop - 1 end
+    cut_back = false
+  end
+  local text = flat(sub(src, start, stop))
+  if cut_front then text = "…" .. text end
+  if cut_back then text = text .. "…" end
+  return text
+end
+
+-- One README's mentions of the target folders: {counts, contexts, left_out},
+-- counts and contexts by target, left_out a list of {to, word}.
+function scan_readme(src, self, targets)
+  local counts = {}
+  local contexts = {}
+  local left_out = {}
+  for t in re_find_all(src, "[A-Za-z0-9_-]+") do
+    if t.text ~= self and has_key(targets, t.text) then
+      if in_file_name(src, t.at, #t.text) then
+        push(left_out, {to = t.text, word = word_around(src, t.at, #t.text)})
+      else
+        if not has_key(counts, t.text) then contexts[t.text] = sentence_at(src, t.at, #t.text) end
+        incr(counts, t.text)
+      end
+    end
+  end
+  return {counts = counts, contexts = contexts, left_out = left_out}
+end
+
+-- The folders and the symbolic links directly in `root`, by name, hidden
+-- ones (`.claude`) left out.
+function entries_of(root)
+  local dirs = {}
+  local links = {}
+  for e in walk_all(root, {depth = 1}) do
+    local name = basename(e.path)
+    if not starts_with(name, ".") then
+      if e.kind == "directory" then push(dirs, name) elseif e.kind == "other" then push(links, name) end
+    end
+  end
+  sort(dirs)
+  sort(links)
+  return {dirs = dirs, links = links}
+end
+
+function survey(root, skip_text, today_text)
+  local today_day = now() // 86400
+  local today = sub(date(now()), 1, 10)
+  if today_text ~= "" then
+    today_day = seconds(today_text) // 86400
+    today = today_text
+  end
+  local skip = {}
+  for s in split(skip_text, ",") do
+    if trim(s) ~= "" then skip[trim(s)] = true end
+  end
+  local listed = entries_of(root)
+  for s in keys(skip) do
+    if not has_item(listed.dirs, s) then fail("survey_repos: skip names `" .. s .. "`, which is no folder in " .. root) end
+  end
+  local rows = {}
+  for name in listed.dirs do
+    local row = survey_folder(root, name, today_day)
+    row.order = row.first .. " " .. name
+    if row.first == "" then row.order = "~ " .. name end
+    push(rows, row)
+    yield()
+  end
+  sort(rows, "order")
+  local targets = {}
+  for name in listed.dirs do
+    if not has_key(skip, name) then targets[name] = true end
+  end
+  local mentions = {}
+  local left_out = {}
+  for row in rows do
+    if row.readme ~= "" and not has_key(skip, row.folder) then
+      local src = read(path_under(root, row.folder) .. "/" .. row.readme)
+      local found = scan_readme(src, row.folder, targets)
+      local tos = keys(found.counts)
+      sort(tos)
+      for to in tos do push(mentions, {from = row.folder, to = to, count = found.counts[to], context = found.contexts[to]}) end
+      for l in found.left_out do push(left_out, {from = row.folder, to = l.to, word = l.word}) end
+      yield()
+    end
+  end
+  return {root = root, today = today, rows = rows, mentions = mentions, left_out = left_out, links = listed.links, skipped = keys(skip)}
+end
+
+function print_survey(s, contexts)
+  local git_rows = 0
+  print("== folders: " .. #s.rows .. " in " .. s.root .. ", ages as of " .. s.today)
+  print("| folder | kind | branch | remote | first | last | days | commits | title |")
+  print("|---|---|---|---|---|---|---:|---:|---|")
+  for r in s.rows do
+    if r.kind ~= "not git" then git_rows = git_rows + 1 end
+    print("| " .. join({cell(r.folder), cell(r.kind), cell(r.branch), cell(r.remote), r.first, r.last, "" .. r.days, r.commits, cell(r.title)}, " | ") .. " |")
+  end
+  if #s.links > 0 then print("symbolic links, not followed: " .. join(s.links, ", ")) end
+  print("")
+  print("== openings")
+  for r in s.rows do
+    if r.readme ~= "" then print(r.folder .. ": " .. r.opening) end
+  end
+  print("")
+  print("== mentions (from -> to: count), where the name stands alone")
+  local from = ""
+  local parts = {}
+  local sources = 0
+  for m in s.mentions do
+    if m.from ~= from then
+      if from ~= "" then print(from .. " -> " .. join(parts, ", ")) end
+      from = m.from
+      parts = {}
+      sources = sources + 1
+    end
+    push(parts, m.to .. ": " .. m.count)
+  end
+  if from ~= "" then print(from .. " -> " .. join(parts, ", ")) end
+  if contexts == 1 then
+    print("")
+    print("== first mentions, in context")
+    for m in s.mentions do print(m.from .. " -> " .. m.to .. ": " .. m.context) end
+  end
+  if #s.left_out > 0 then
+    print("")
+    print("== left out as file names (from -> to: count, each word once)")
+    local pairs = {}
+    local by_pair = {}
+    for l in s.left_out do
+      local pair = l.from .. " -> " .. l.to
+      if not has_key(by_pair, pair) then push(pairs, pair) end
+      push_at(by_pair, pair, l.word)
+    end
+    for pair in pairs do print(pair .. ": " .. #by_pair[pair] .. ", " .. join(unique(by_pair[pair]), " ")) end
+  end
+  print("")
+  print("== dot edges")
+  for m in s.mentions do print("  \"" .. m.from .. "\" -> \"" .. m.to .. "\";") end
+  print("")
+  local skipped = "none skipped"
+  if #s.skipped > 0 then
+    local names = s.skipped
+    sort(names)
+    skipped = "skipped " .. join(names, ", ")
+  end
+  print("survey_repos: " .. #s.rows .. " folders, " .. git_rows .. " git; " .. #s.mentions .. " mentions from " .. sources .. " READMEs, " .. #s.left_out .. " left out as file names; " .. skipped)
+end
+
+-- The self-test's plants, in a fresh folder under `scratch:`: alpha (a
+-- clone, two commits, a README naming beta twice (once as `x/beta.git`),
+-- beta-tools twice, and beta in two file names), beta (one commit, a GitHub remote, a README naming
+-- alpha twice, the worktree once and beta-tools in a table row, its title
+-- after a fenced `#` line),
+-- beta-tools (three commits, no
+-- README), alpha-wt (a worktree of alpha on `side`, one commit more, with
+-- alpha's README) and notes (not git).
+const ALPHA_README = [=[# Alpha
+
+Alpha draws with beta. The beta-tools repo builds it; see beta-tools/README.
+A file named beta.md is not a repo, and beta_x is no name.
+Clone x/beta.git; its Main.beta is a file.
+]=]
+
+const BETA_README = [=[```sh
+# a comment in a fence, not the title
+```
+# Beta
+
+Beta is used by alpha, and by alpha-wt, which is alpha on a branch.
+
+| tool | where |
+| the builder | beta-tools, beside it |
+| the docs | here |
+]=]
+
+function plant_commit(dir, day, msg)
+  local stamp = day .. "T12:00:00+00:00"
+  must(run({"git", "-C", dir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", msg},
+    {timeout_ms = 30000, whole = 10000, env = {GIT_AUTHOR_DATE = stamp, GIT_COMMITTER_DATE = stamp}}))
+end
+
+function plant_repo(T, name)
+  must(run({"git", "init", "-q", "-b", "main", real(T) .. "/" .. name}, {timeout_ms = 30000, whole = 10000}))
+  return real(T) .. "/" .. name
+end
+
+function expect(what, got, want)
+  if got ~= want then fail("survey_repos self_test: " .. what .. " is " .. tostring(got) .. ", should be " .. tostring(want)) end
+end
+
+function mention_map(s)
+  local m = {}
+  for e in s.mentions do m[e.from .. "->" .. e.to] = e end
+  return m
+end
+
+function row_map(s)
+  local m = {}
+  for r in s.rows do m[r.folder] = r end
+  return m
+end
+
+function self_test()
+  local T = fresh_dir("scratch:", "survey_repos_self_test")
+  local alpha = plant_repo(T, "alpha")
+  create(T .. "/alpha/README.md", ALPHA_README)
+  must(run({"git", "-C", alpha, "add", "README.md"}, {timeout_ms = 30000, whole = 10000}))
+  plant_commit(alpha, "2026-01-01", "first")
+  plant_commit(alpha, "2026-01-11", "second")
+  local beta = plant_repo(T, "beta")
+  must(run({"git", "-C", beta, "remote", "add", "origin", "https://github.com/x/beta.git"}, {timeout_ms = 30000, whole = 10000}))
+  create(T .. "/beta/README.md", BETA_README)
+  plant_commit(beta, "2026-01-21", "only")
+  local tools = plant_repo(T, "beta-tools")
+  plant_commit(tools, "2025-12-01", "a")
+  plant_commit(tools, "2025-12-02", "b")
+  plant_commit(tools, "2025-12-03", "c")
+  must(run({"git", "-C", alpha, "worktree", "add", "-q", "-b", "side", real(T) .. "/alpha-wt"}, {timeout_ms = 30000, whole = 10000}))
+  plant_commit(real(T) .. "/alpha-wt", "2026-01-15", "on side")
+  mkdir(T .. "/notes")
+
+  -- Unskipped: the worktree reads as a source, and is named.
+  local s = survey(T, "", "2026-02-01")
+  local rows = row_map(s)
+  expect("the folder count", #s.rows, 5)
+  expect("alpha's kind", rows["alpha"].kind, "clone")
+  expect("alpha's first", rows["alpha"].first, "2026-01-01")
+  expect("alpha's last", rows["alpha"].last, "2026-01-11")
+  expect("alpha's age", rows["alpha"].days, 31)
+  expect("alpha's commits", rows["alpha"].commits, "2")
+  expect("alpha's remote", rows["alpha"].remote, "")
+  expect("alpha's title", rows["alpha"].title, "Alpha")
+  expect("beta's title, past a fence", rows["beta"].title, "Beta")
+  expect("beta's age", rows["beta"].days, 11)
+  expect("beta's remote", rows["beta"].remote, "x/beta")
+  expect("beta-tools' age", rows["beta-tools"].days, 62)
+  expect("beta-tools' commits", rows["beta-tools"].commits, "3")
+  expect("beta-tools' readme", rows["beta-tools"].readme, "")
+  expect("alpha-wt's kind", rows["alpha-wt"].kind, "worktree of alpha")
+  expect("alpha-wt's branch", rows["alpha-wt"].branch, "side")
+  expect("alpha-wt's first", rows["alpha-wt"].first, "2026-01-01")
+  expect("alpha-wt's last", rows["alpha-wt"].last, "2026-01-15")
+  expect("alpha-wt's commits", rows["alpha-wt"].commits, "3")
+  expect("notes' kind", rows["notes"].kind, "not git")
+  expect("notes' age", rows["notes"].days, "")
+  local order = {}
+  for r in s.rows do push(order, r.folder) end
+  expect("the order", join(order, ","), "beta-tools,alpha,alpha-wt,beta,notes")
+
+  local m = mention_map(s)
+  expect("alpha -> beta", m["alpha->beta"].count, 2)
+  expect("alpha -> beta-tools", m["alpha->beta-tools"].count, 2)
+  expect("beta -> alpha", m["beta->alpha"].count, 2)
+  expect("beta -> alpha-wt", m["beta->alpha-wt"].count, 1)
+  expect("alpha-wt -> beta", m["alpha-wt->beta"].count, 2)
+  expect("alpha-wt -> beta-tools", m["alpha-wt->beta-tools"].count, 2)
+  expect("alpha-wt -> alpha", has_key(m, "alpha-wt->alpha"), false)
+  expect("the mentions", #s.mentions, 7)
+  expect("beta -> beta-tools's context, a table row", m["beta->beta-tools"].context, "| the builder | beta-tools, beside it |")
+  expect("alpha -> beta's context", m["alpha->beta"].context, "Alpha draws with beta.")
+  expect("beta -> alpha-wt's context", m["beta->alpha-wt"].context, "Beta is used by alpha, and by alpha-wt, which is alpha on a branch.")
+  expect("the left out", #s.left_out, 4)
+  expect("a name before an extension, left out", s.left_out[1].word, "beta.md")
+  expect("an extension, left out", s.left_out[2].word, "Main.beta")
+
+  -- Skipped: the worktree is neither read nor named, and keeps its row.
+  local k = survey(T, "alpha-wt", "2026-02-01")
+  local km = mention_map(k)
+  expect("the folder count, skipping", #k.rows, 5)
+  expect("alpha-wt -> beta, skipped", has_key(km, "alpha-wt->beta"), false)
+  expect("beta -> alpha-wt, skipped", has_key(km, "beta->alpha-wt"), false)
+  expect("beta -> alpha, skipping", km["beta->alpha"].count, 2)
+  expect("the mentions, skipping", #k.mentions, 4)
+  expect("the left out, skipping", #k.left_out, 2)
+  expect("a skip of no folder refused", attempt(survey, T, "nope", "2026-02-01").ok, false)
+
+  print_survey(k, 1)
+  remove_tree(T)
+  print("survey_repos self_test: PASS (kinds, ages and counts exact; a prefix name and a file name not counted; skip both ways)")
+end
+
+if SELF_TEST == 1 then
+  self_test()
+else
+  local s = survey(ROOT, SKIP, TODAY)
+  if JSON == 1 then print(json_write(s)) else print_survey(s, CONTEXTS) end
+end
