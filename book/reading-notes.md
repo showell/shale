@@ -80,3 +80,7 @@ Session 1 now names `bench.shale`, and states that the audit stops the server be
 - **No. 8, the human decides:** too simple. The agent should decide a LOT; Shale isn't about micro-managing agents or guarding the home directory.
 - **No. 9, BusyBox:** refer to it; it shares a minimalist ethos. Shale is a small language in a small niche.
 - **No. 10, the box as a codebase:** everything is kinda fractal.
+
+### A cookbook touchstone (Steve, 2026-11-15)
+
+- **The Food Lab** (J. Kenji López-Alt, 2015) joins Moby Dick and K&R as occasional inspiration: cooking as experiment, for a practice that's still evolving. Draw on the restaurant metaphor, don't commit to it: the reader is inside the restaurant, answerable for every plate. Essays: notes/the-menu.note, notes/the-food-lab.note.
