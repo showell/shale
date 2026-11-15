@@ -1,0 +1,2 @@
+-- Asks git for the three newest commits, and leaves out run's timeout.
+print(run({"git", "log", "--oneline"}, {tail = 3}).out)

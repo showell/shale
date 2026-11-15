@@ -1,0 +1,43 @@
+# The book's index terms, read by the cookbook's prose/build_term_index.shale.
+# A term is `Name`, or `Name | pattern | pattern`, each pattern a regular
+# expression over a lower-cased line of prose.
+
+## The machinery
+anchor | \banchors?\b
+book.md | book\.md
+build.shale | build\.shale
+contents page | contents page
+dev channel | dev channel
+diagram | \bdiagrams?\b | graphviz
+gate | \bgates?\b
+include | \bincludes?\b
+index | \bindex\b
+negatives lint | negatives lint | negative sentence | find_negatives
+900 words | 900 words
+claims checked by the compiler | \{\{fails | roc check
+
+## Shale
+budget | \bbudgets?\b
+cookbook | \bcookbook\b
+hook | \bhooks?\b
+mount | \bmounts?\b
+recipe | \brecipes?\b
+stop | \bstops?\b
+Shale | \bshale\b
+
+## The cadence
+cold reader | cold readers?
+essay surface | essay surface
+MISSION.md | mission\.md | \bmission\b
+nitpick round | nitpick
+one voice | one voice
+probe | \bprobes?\b
+reply | \brepl(y|ies)\b
+spine | \bspines?\b
+
+## Working with agents
+brief | \bbriefs?\b
+lane | \blanes?\b
+orchestrator | orchestrat
+publishing | \bpublish | staging
+subagent | subagents?

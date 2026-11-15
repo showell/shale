@@ -1,0 +1,10 @@
+-- Counts the words of prose in each chapter of the tiny book.
+local counts = {}
+for l in lines(read("books-book/examples/tiny_book.md")) do
+  if starts_with(l, "## ") then
+    push(counts, {chapter = sub(l, 4), words = 0})
+  elseif #counts > 0 and not starts_with(l, "{{") then
+    counts[#counts].words = counts[#counts].words + #words(l)
+  end
+end
+print(table(counts, {"chapter", "words"}))
