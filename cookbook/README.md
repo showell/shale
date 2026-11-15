@@ -19,6 +19,9 @@ with `--args-stdin`, one `NAME=VALUE` a line.
 
 - `build_on_github.shale`: runs `zig build test` on GitHub, not on the box,
   and reports the run. `shale cookbook:build_on_github.shale ref=my-branch`
+- `check_page_links.shale`: checks every link and image on a web page,
+  through its redirects, by HEAD: what doesn't answer 200, and what moved.
+  `shale cookbook:check_page_links.shale url=https://roc.lynrummy.com/`
 - `check_conflict_markers.shale`: checks that files hold no git conflict
   markers. `shale cookbook:check_conflict_markers.shale files=a.zig,docs/b.md`
 - `check_disk_space.shale`: stops a run when the disk is under a floor of
@@ -94,6 +97,8 @@ with `--args-stdin`, one `NAME=VALUE` a line.
   on. `shale cookbook:roc/check_vocabulary.shale words=vocabulary.txt`
 - `roc/compare_machine_code.shale`: says whether two builds of a Roc archive
   hold the same machine code. `shale cookbook:roc/compare_machine_code.shale old=a.a new=b.a`
+- `roc/count_roc.shale`: counts a Roc project's modules, lines, test modules,
+  test lines and `expect`s, for each folder given. `cd ~/showell_repos && shale cookbook:roc/count_roc.shale in=roc-apps/basic skip=/tutorial/`
 - `roc/declared.shale` (library): what a file declares, and a name's words,
   read from its parse tree. `use("cookbook:roc/declared.shale")`
 - `roc/find_bare_floats.shale`: finds bare `F64`s in declarations, against a

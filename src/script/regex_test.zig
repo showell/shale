@@ -54,6 +54,7 @@ test "regex: a count with nothing to repeat, after a repetition, malformed, back
         .{ "a{,3}", 1, "a count is `{n}`, `{n,}` or `{n,m}`" },
         .{ "a{5,2}", 1, "a count whose most is below its least" },
         .{ "a{101}", 1, "a count past 100" },
+        .{ "a{99999999999999999999}", 1, "a count is `{n}`, `{n,}` or `{n,m}`" },
         .{ "^{2}", 1, "are places, not bytes" },
         .{ "a{2,5}?", 6, "lazy repetition" },
     }) |c| {

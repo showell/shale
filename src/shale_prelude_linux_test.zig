@@ -73,6 +73,50 @@ const OneAnswer = struct {
     }
 };
 
+/// One HEAD answered as a server should: headers that announce a body's length
+/// and no body, the connection left open until the client closes it.
+const HeadAnswer = struct {
+    listener: std.Io.net.Server,
+
+    fn serve(self: *HeadAnswer, io: std.Io) void {
+        const stream = self.listener.accept(io) catch return;
+        defer stream.close(io);
+        var rb: [4096]u8 = undefined;
+        var r = stream.reader(io, &rb);
+        while (true) {
+            const line = r.interface.takeDelimiterInclusive('\n') catch return;
+            if (std.mem.eql(u8, line, "\r\n")) break;
+        }
+        var w = stream.writer(io, &.{});
+        w.interface.writeAll("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n") catch return;
+        // Held open: a client waiting for the five bytes waits until its time.
+        _ = r.interface.takeDelimiterInclusive('\n') catch {};
+    }
+};
+
+test "linux prelude: http of HEAD answers with the headers alone, never waiting for a body a HEAD has none of" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const io = t.threaded.io();
+    const any: std.Io.net.IpAddress = try .parse("127.0.0.1", 0);
+    var head: HeadAnswer = .{ .listener = try any.listen(io, .{ .reuse_address = true }) };
+    const port = head.listener.socket.address.getPort();
+    const served = try std.Thread.spawn(.{}, HeadAnswer.serve, .{ &head, io });
+    const a = t.arena.allocator();
+    // Once, not through the gate: the server answers one request. A HEAD that
+    // waited for the body would run out its three seconds and stop.
+    var r = t.runOnce(try std.fmt.allocPrint(a, "local r = http(\"HEAD\", \"http://127.0.0.1:{d}/x\", {{timeout_ms = 3000}}) print(r.status, #r.body, r.headers[\"content-length\"])", .{port}), .atomic);
+    defer r.deinit();
+    served.join();
+    head.listener.deinit(io);
+    if (r.stop) |s| {
+        std.debug.print("stopped: {s}\n", .{s.message});
+        return error.TestUnexpectedResult;
+    }
+    try testing.expectEqualStrings("200\t0\t5\n", r.output);
+}
+
 test "linux prelude: http_get gives the status and body, a bearer sent but never shown; no answer, or a slip, stops" {
     var t: T = undefined;
     try init(&t);

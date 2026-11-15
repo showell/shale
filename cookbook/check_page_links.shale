@@ -1,0 +1,102 @@
+-- This recipe checks every link and image on a web page: each `href` and
+-- `src` the page holds, a relative one resolved against the page's own URL,
+-- asked for with a HEAD (a GET when a server refuses HEAD), so a big page
+-- costs its headers only, and followed through up to five redirects. It
+-- prints each one whose last answer isn't 200, then each that landed well
+-- only after a redirect (`moved:`, a link worth updating), then the counts. A page
+-- the check can't fetch stops it. `outside=0` checks only the page's own
+-- site; `most=N` stops after N links.
+--
+--   shale cookbook:check_page_links.shale url=http://127.0.0.1:9210/
+--   shale cookbook:check_page_links.shale url=https://roc.lynrummy.com/ outside=0
+--
+-- Each link is one program, so a page of more links than the run's
+-- `programs` budget (1,000 unset) wants `--budget programs=N`.
+--
+-- budget: steps=200000000
+
+const URL = arg("url", "")
+const OUTSIDE = arg("outside", 1)
+const MOST = arg("most", 500)
+if URL == "" then fail("check_page_links: say `url=`, the page to check") end
+not_option("check_page_links", "url", URL)
+
+-- The page's origin (`https://host`) and its folder (`https://host/a/`).
+function origin_of(url)
+  local m = re_find(url, "^(https?://[^/]+)")
+  if m == nil then fail("check_page_links: " .. url .. " is not an http:// or https:// address") end
+  return m.groups[1]
+end
+
+function folder_of(url)
+  local after = sub(url, #origin_of(url) + 1)
+  local m = re_find(after, "^(.*/)")
+  if m == nil then return origin_of(url) .. "/" end
+  return origin_of(url) .. m.groups[1]
+end
+
+-- A link as an absolute URL, or nil for one this check passes by: a fragment,
+-- mailto: and javascript: links, and data: images.
+function resolved(link, page)
+  if link == "" or starts_with(link, "#") or starts_with(link, "mailto:") or starts_with(link, "javascript:") or starts_with(link, "data:") then return nil end
+  if starts_with(link, "http://") or starts_with(link, "https://") then return link end
+  if starts_with(link, "//") then return sub(origin_of(page), 1, find(origin_of(page), "//") - 1) .. link end
+  if starts_with(link, "/") then return origin_of(page) .. link end
+  return folder_of(page) .. link
+end
+
+-- One request's answer: a HEAD, or a GET when the server refuses HEAD.
+function asked(url)
+  local r = attempt(http, "HEAD", url, {timeout_ms = 20000})
+  if r.ok and r.value.status ~= 405 and r.value.status ~= 403 then return r.value end
+  local g = attempt(http_get, url, {timeout_ms = 20000})
+  if g.ok then return g.value end
+  return {status = 0, headers = {}, error = g.error}
+end
+
+-- Where a link ends, following up to five redirects: `{status, url, error}`,
+-- `url` the last one asked for.
+function landing_of(url)
+  local at = url
+  for hop = 1, 6 do
+    local r = asked(at)
+    local where = get(r.headers, "location", "")
+    local moved = r.status == 301 or r.status == 302 or r.status == 303 or r.status == 307 or r.status == 308
+    if not moved or where == "" or hop == 6 then return {status = r.status, url = at, error = get(r, "error", "")} end
+    at = resolved(where, at)
+  end
+end
+
+local page = http_get(URL, {timeout_ms = 20000})
+if page.status ~= 200 then fail("check_page_links: " .. URL .. " answered " .. page.status) end
+local seen = {}
+local links = {}
+for m in re_find_all(page.body, "(?:href|src)=\"([^\"]*)\"") do
+  local u = resolved(m.groups[1], URL)
+  if u ~= nil and not has_key(seen, u) then
+    seen[u] = true
+    if OUTSIDE == 1 or starts_with(u, origin_of(URL)) then push(links, u) end
+  end
+end
+local bad = 0
+local checked = 0
+local moved = {}
+for u in links do
+  if checked >= MOST then break end
+  checked = checked + 1
+  local r = landing_of(u)
+  local note = ""
+  if r.url ~= u then note = " (moved to " .. r.url .. ")" end
+  if r.status == 0 then note = " (" .. sub(r.error, 1, 80) .. ")" end
+  if r.status ~= 200 then
+    bad = bad + 1
+    print(r.status .. " " .. u .. note)
+  elseif r.url ~= u then
+    push(moved, u .. " -> " .. r.url)
+  end
+end
+-- A link that lands well after a redirect works, but is worth updating.
+for m in moved do print("moved: " .. m) end
+local cut = ""
+if checked < #links then cut = " (most=" .. MOST .. ": " .. (#links - checked) .. " not checked)" end
+print(checked .. " links checked on " .. URL .. ", " .. bad .. " not 200, " .. #moved .. " moved" .. cut)

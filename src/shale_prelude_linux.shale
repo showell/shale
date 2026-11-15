@@ -99,6 +99,9 @@ function curl_http(who, method, url, opts?)
   local ms = 30000
   local o = {whole = 16777216}
   local argv = {"curl", "-sS", "--proto", "=http,https", "-X", method, "-D", "-"}
+  -- A HEAD answer has no body: `--head` asks for one so, where `-X HEAD`
+  -- waits out the time for the body its headers announce.
+  if method == "HEAD" then argv = {"curl", "-sS", "--proto", "=http,https", "--head"} end
   if opts ~= nil then
     for k in keys(opts) do
       if k == "timeout_ms" then

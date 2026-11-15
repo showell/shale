@@ -24,6 +24,7 @@ pub const unreachable_from_requests = [_]Site{
     .{ .file = "shale_host_json.zig", .func = "hex4", .why = "a `\\u` escape in the JSON text a script hands json_read: Linux host only, so the server never compiles it, and only the admin's signed script brings a script; its tests send the edges" },
     .{ .file = "shale_host_json.zig", .func = "number", .why = "a number in the JSON text a script hands json_read: Linux host only, so the server never compiles it, and only the admin's signed script brings a script; its tests send the 64-bit edges" },
     .{ .file = "shale_host_flat_tree.zig", .func = "num", .why = "a node number, line or column in roc-ast's or go-ast's --flat lines, read by the Linux host's roc_tree and go_tree: Linux host only, so the server never compiles it; its tests read the real tools' output" },
+    .{ .file = "script/regex.zig", .func = "number", .why = "a count's digits in a regular expression, from a script, which only the admin's signed script brings; regex_test sends it a count past 100 and one past 64 bits" },
     .{ .file = "script/builtins.zig", .func = "parseInteger", .why = "parse_int's text, from a script, which only the admin's signed script brings; builtins_test sends it the edges, past 64 bits among them" },
 };
 
