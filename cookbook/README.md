@@ -15,6 +15,18 @@ recipe's header is its full documentation, and most take `self_test=1`,
 which runs it over its plants. A glob or a value with a space goes on stdin
 with `--args-stdin`, one `NAME=VALUE` a line.
 
+## Playbooks: a recurring ask, start to finish
+
+A playbook is a recipe for one thing people keep asking for. It gathers what
+the work is made from, stops when the world has moved too far for its
+assumptions (each stop says what changed and what to do), and prints the
+steps left for the writer.
+
+- `plan_repo_essay.shale`: for "give me an essay on our local repos" (a repo
+  map). It surveys the checkouts, compares them with the last map, and
+  prints the age table, the README mentions and the steps to a gated note on
+  the essay surface. `cd /home/steve && shale cookbook:plan_repo_essay.shale`
+
 ## For any project
 
 - `build_on_github.shale`: runs `zig build test` on GitHub, not on the box,

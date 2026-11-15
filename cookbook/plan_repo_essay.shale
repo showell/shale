@@ -1,0 +1,286 @@
+-- This recipe is the playbook for one ask of Steve's: "give me an essay on
+-- our local repos" (a repo map, how the repos fit together). It gathers what
+-- the essay is written from, checks first that the world still looks the way
+-- this playbook expects, and prints the steps left. Choosing what the
+-- diagrams show and writing the prose stay the writer's job.
+--
+-- It stops, before printing anything to write from, when the world has moved
+-- too far for a sensible update. Each stop says what changed and what to do:
+--
+-- * survey_repos.shale's JSON lost a field this playbook reads (the survey
+--   changed under it: update this recipe in the same change);
+-- * a folder's kind is none of `clone`, `worktree of <main>` and `not git`,
+--   or a worktree's main checkout is gone;
+-- * the READMEs name no other folder at all (the mention scan broke);
+-- * the essay surface's notes folder, or its gate or prune script, is gone
+--   (the essay has nowhere to go, or no gate to pass);
+-- * more than half of the folders came or went since the last map, so an
+--   update of it would be a new essay: write one from the survey alone and
+--   rerun with `fresh=1`, which skips this check.
+--
+-- When it passes, it prints, in this order: what changed since the last map
+-- (folders added and removed, folders with new commits, titles that changed),
+-- the older repo notes still on the surface (their diagrams are the place to
+-- start), the age table as a pipe table to paste, the README mentions to draw
+-- from, and the steps left: write the note, pass the gate, prune, hand Steve
+-- the link. Then it saves today's survey as the baseline for the next map, in
+-- `<data>/state/repo_survey-<today>.json`; the last map is the newest saved
+-- before today.
+--
+--   cd /home/steve && shale cookbook:plan_repo_essay.shale
+--   cd /home/steve && shale cookbook:plan_repo_essay.shale fresh=1
+--   cd /home/steve && shale cookbook:plan_repo_essay.shale self_test=1
+--
+-- `repos=` is the folder of checkouts (default `showell_repos`) and `data=`
+-- the essay surface's data folder (default `essay-dogfood`), both relative to
+-- the folder it runs from.
+--
+-- budget: steps=50000000 arena_bytes=400000000
+
+const REPOS = arg("repos", "showell_repos")
+const DATA = arg("data", "essay-dogfood")
+const FRESH = arg("fresh", 0)
+const SELF_TEST = arg("self_test", 0)
+
+-- The fields of survey_repos.shale's JSON this playbook reads. A field gone
+-- from it is a stop, never a blank column.
+const SURVEY_KEYS = {"today", "rows", "mentions", "links"}
+const ROW_KEYS = {"folder", "kind", "main", "branch", "remote", "first", "last", "days", "commits", "title", "readme"}
+const MENTION_KEYS = {"from", "to", "count"}
+
+function cell(s)
+  return join(split("" .. s, "|"), "\\|")
+end
+
+function survey_now(repos)
+  local r = run({"shale", real("cookbook:survey_repos.shale"), "json=1"}, {timeout_ms = 100000, whole = 8000000, cwd = repos})
+  if r.code ~= 0 then fail("plan_repo_essay: survey_repos.shale stopped:\n" .. r.out) end
+  -- Shale prints its budget and time lines around the one JSON line.
+  for l in lines(r.out) do
+    if starts_with(l, "{") then return json_read(l) end
+  end
+  fail("plan_repo_essay: survey_repos.shale printed no JSON line:\n" .. r.out)
+end
+
+function missing_keys(m, wanted)
+  local gone = {}
+  for k in wanted do
+    if not has_key(m, k) then push(gone, k) end
+  end
+  return gone
+end
+
+-- What changed from `base` to `s`: {added, removed, active, retitled}.
+function changes(s, base)
+  local before = {}
+  for row in base.rows do before[row.folder] = row end
+  local now_rows = {}
+  for row in s.rows do now_rows[row.folder] = row end
+  local d = {added = {}, removed = {}, active = {}, retitled = {}}
+  for row in s.rows do
+    if not has_key(before, row.folder) then
+      push(d.added, row.folder)
+    else
+      local b = before[row.folder]
+      if row.last ~= b.last or row.commits ~= b.commits then push(d.active, row.folder .. " (" .. b.commits .. " to " .. row.commits .. " commits)") end
+      if row.title ~= b.title then push(d.retitled, row.folder .. ": \"" .. b.title .. "\" to \"" .. row.title .. "\"") end
+    end
+  end
+  for row in base.rows do
+    if not has_key(now_rows, row.folder) then push(d.removed, row.folder) end
+  end
+  return d
+end
+
+-- The stops for a survey `s` against the last map's survey `base` (nil when
+-- there is none) and `fresh`. Pure, so the self-test can feed it worlds.
+function assess(s, base, fresh)
+  local stops = {}
+  local gone = missing_keys(s, SURVEY_KEYS)
+  if #gone > 0 then
+    push(stops, "survey_repos.shale's JSON has no " .. join(gone, ", ") .. ": the survey changed; update plan_repo_essay.shale with it")
+    return stops
+  end
+  local folders = {}
+  for row in s.rows do
+    local g = missing_keys(row, ROW_KEYS)
+    if #g > 0 then
+      push(stops, "survey_repos.shale's rows have no " .. join(g, ", ") .. ": the survey changed; update plan_repo_essay.shale with it")
+      return stops
+    end
+    folders[row.folder] = true
+  end
+  for row in s.rows do
+    if row.kind ~= "clone" and row.kind ~= "not git" and not starts_with(row.kind, "worktree of ") then
+      push(stops, row.folder .. " is a `" .. row.kind .. "`, a kind this playbook has no words for: say what it is, then teach the survey and this recipe")
+    end
+    if starts_with(row.kind, "worktree of ") and not has_key(folders, row.main) then
+      push(stops, row.folder .. " is a worktree of " .. row.main .. ", which is no folder here: retire it or find its main")
+    end
+  end
+  if #s.mentions == 0 then push(stops, "no README names another folder: the mention scan broke (run survey_repos.shale self_test=1)") end
+  for m in s.mentions do
+    local g = missing_keys(m, MENTION_KEYS)
+    if #g > 0 then
+      push(stops, "survey_repos.shale's mentions have no " .. join(g, ", ") .. ": update plan_repo_essay.shale with it")
+      return stops
+    end
+  end
+  if base ~= nil and fresh ~= 1 then
+    local d = changes(s, base)
+    local moved = #d.added + #d.removed
+    if moved * 2 > #s.rows then
+      push(stops, moved .. " of " .. #s.rows .. " folders came or went since the map of " .. base.today .. ": write a new essay from the survey, not an update, and rerun with fresh=1")
+    end
+  end
+  return stops
+end
+
+function state_dir(data)
+  return data .. "/state"
+end
+
+-- The newest saved survey from before `today`, or nil.
+function last_map(data, today)
+  local dir = state_dir(data)
+  if not exists(dir) then return nil end
+  local names = {}
+  for e in walk_all(dir, {depth = 1}) do
+    local name = basename(e.path)
+    if starts_with(name, "repo_survey-") and ends_with(name, ".json") and sub(name, 13, 22) < today then push(names, name) end
+  end
+  if #names == 0 then return nil end
+  sort(names)
+  return json_read(read(dir .. "/" .. names[#names]))
+end
+
+function save_map(data, s)
+  local dir = state_dir(data)
+  if not exists(dir) then mkdir(dir) end
+  local path = dir .. "/repo_survey-" .. s.today .. ".json"
+  if exists(path) then remove(path) end
+  create(path, json_write(s))
+  return path
+end
+
+function print_list(label, items)
+  if #items == 0 then
+    print(label .. ": none")
+  else
+    print(label .. " (" .. #items .. "): " .. join(items, ", "))
+  end
+end
+
+function print_plan(s, base, data)
+  print("== since the last map")
+  if base == nil then
+    print("no earlier map is saved: this is the first, so the essay is the whole picture")
+  else
+    local d = changes(s, base)
+    print("the last map: " .. base.today)
+    print_list("added", d.added)
+    print_list("removed", d.removed)
+    print_list("with new commits", d.active)
+    print_list("retitled", d.retitled)
+  end
+  print("")
+  print("== older repo notes on the surface (start from their diagrams; read Steve's replies in comments/)")
+  local olds = {}
+  for e in walk_all(data .. "/notes", {depth = 1}) do
+    local name = basename(e.path)
+    if find(name, "repo") ~= nil and (ends_with(name, ".note") or ends_with(name, ".md")) then push(olds, data .. "/notes/" .. name) end
+  end
+  sort(olds)
+  if #olds == 0 then print("none: the surface keeps 20 notes, and the last map rolled off") end
+  for o in olds do print(o) end
+  print("")
+  print("== the age table, oldest first (a pipe table sorts on the surface)")
+  print("| folder | what it is | kind | first commit | last commit | age (days) | commits |")
+  print("|---|---|---|---|---|---:|---:|")
+  for r in s.rows do
+    print("| " .. join({cell(r.folder), cell(r.title), cell(r.kind), r.first, r.last, "" .. r.days, "" .. r.commits}, " | ") .. " |")
+  end
+  if #s.links > 0 then print("symbolic links, not surveyed: " .. join(s.links, ", ")) end
+  print("")
+  print("== README mentions (from -> to: count), what the diagrams' arrows come from")
+  local from = ""
+  local parts = {}
+  for m in s.mentions do
+    if m.from ~= from then
+      if from ~= "" then print(from .. " -> " .. join(parts, ", ")) end
+      from = m.from
+      parts = {}
+    end
+    push(parts, m.to .. ": " .. m.count)
+  end
+  if from ~= "" then print(from .. " -> " .. join(parts, ", ")) end
+  print("")
+  print("== the steps left")
+  print("1. For what each README says about the others, in sentences: cd ~/showell_repos && shale cookbook:survey_repos.shale contexts=1")
+  print("2. Group the folders into five or six areas. Draw one diagram of the areas and one per area, each small (```dot fences).")
+  print("3. Write " .. data .. "/notes/repos-" .. s.today .. ".note: what changed, the diagrams, the age table above, and anything that looks stale.")
+  print("4. Pass the gate: cd /home/steve && shale repos:essay-surface/scripts/check_note.shale data=" .. data .. " note=repos-" .. s.today .. ".note")
+  print("5. Prune: cd /home/steve && shale repos:essay-surface/scripts/prune_notes.shale data=" .. data)
+  print("6. Hand Steve http://localhost:9301/notes/repos-" .. s.today .. ".note")
+end
+
+function expect(what, got, want)
+  if got ~= want then fail("plan_repo_essay self_test: " .. what .. " is " .. tostring(got) .. ", should be " .. tostring(want)) end
+end
+
+function plant_row(folder, kind, main, last, commits, title)
+  return {folder = folder, kind = kind, main = main, branch = "main", remote = "", first = "2026-01-01", last = last, days = 10, commits = commits, title = title, readme = "README.md"}
+end
+
+function plant_world(rows)
+  return {today = "2026-02-01", rows = rows, mentions = {{from = "a", to = "b", count = 1}}, links = {}}
+end
+
+function self_test()
+  local base = plant_world({plant_row("a", "clone", "", "2026-01-05", "3", "A"), plant_row("b", "clone", "", "2026-01-05", "2", "B"), plant_row("c", "clone", "", "2026-01-05", "1", "C"), plant_row("d", "not git", "", "", "", "")})
+  base.today = "2026-01-20"
+  local same = plant_world({plant_row("a", "clone", "", "2026-01-30", "4", "A"), plant_row("b", "clone", "", "2026-01-05", "2", "Bee"), plant_row("c", "clone", "", "2026-01-05", "1", "C"), plant_row("e", "worktree of a", "a", "2026-01-30", "5", "A")})
+  expect("a sound world's stops", #assess(same, base, 0), 0)
+  local d = changes(same, base)
+  expect("added", join(d.added, ","), "e")
+  expect("removed", join(d.removed, ","), "d")
+  expect("active", join(d.active, ","), "a (3 to 4 commits)")
+  expect("retitled", #d.retitled, 1)
+  expect("no baseline's stops", #assess(same, nil, 0), 0)
+
+  local far = plant_world({plant_row("x", "clone", "", "2026-01-30", "1", "X"), plant_row("y", "clone", "", "2026-01-30", "1", "Y"), plant_row("a", "clone", "", "2026-01-30", "1", "A")})
+  expect("a world moved too far", #assess(far, base, 0), 1)
+  expect("the same, with fresh=1", #assess(far, base, 1), 0)
+
+  local odd = plant_world({plant_row("a", "git file", "", "2026-01-30", "1", "A"), plant_row("w", "worktree of gone", "gone", "2026-01-30", "1", "W")})
+  expect("an odd kind and a dangling worktree", #assess(odd, nil, 0), 2)
+
+  local quiet = plant_world({plant_row("a", "clone", "", "2026-01-30", "1", "A")})
+  quiet.mentions = {}
+  expect("no mentions", #assess(quiet, nil, 0), 1)
+
+  local shrunk = plant_world({{folder = "a", kind = "clone", main = "", branch = "main", remote = "", first = "2026-01-01", last = "2026-01-30", days = 10, commits = "1", readme = "README.md"}})
+  expect("a row field gone", #assess(shrunk, nil, 0), 1)
+  local nofield = {rows = {}, mentions = {}, links = {}}
+  expect("a survey field gone", #assess(nofield, nil, 0), 1)
+  print("plan_repo_essay self_test: PASS (a sound world, too far, odd kinds, no mentions, a survey that changed)")
+end
+
+if SELF_TEST == 1 then
+  self_test()
+else
+  for p in {DATA .. "/notes", "repos:essay-surface/scripts/check_note.shale", "repos:essay-surface/scripts/prune_notes.shale"} do
+    if not exists(p) then fail("plan_repo_essay: " .. p .. " is gone: the essay surface moved; find where notes live now and update this recipe") end
+  end
+  local s = survey_now(REPOS)
+  local base = nil
+  if has_key(s, "today") then base = last_map(DATA, s.today) end
+  local stops = assess(s, base, FRESH)
+  if #stops > 0 then
+    for st in stops do print("STOP: " .. st) end
+    fail("plan_repo_essay: the world changed too much for this playbook (" .. #stops .. " stops above)")
+  end
+  print_plan(s, base, DATA)
+  print("")
+  print("plan_repo_essay: " .. #s.rows .. " folders, " .. #s.mentions .. " mentions; baseline saved at " .. save_map(DATA, s))
+end
