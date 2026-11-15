@@ -7,7 +7,8 @@
 -- `NAME_RUN`, the rule's one home). That is a map of what the READMEs
 -- say, not of what the builds use. `survey_repos.shale` is its sibling for
 -- each repo's history (first commit, age, commit count), its README's
--- opening and the sentences that name the others.
+-- opening and the sentences that name the others. For an essay on the
+-- repos, start with `plan_repo_essay.shale`, the playbook.
 --
 -- Run it from the folder that holds the repos. `in=lanes` maps a folder
 -- inside it instead (its worktrees, say), with the README links still to the

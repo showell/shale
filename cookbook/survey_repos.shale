@@ -3,7 +3,8 @@
 -- and which READMEs name which folders. It prints what a person draws the
 -- map from and draws nothing itself, since choosing what a diagram shows is
 -- that person's job. `map_repos.shale` is its sibling for the state of each
--- checkout today (dirty files, upstream, recent commits).
+-- checkout today (dirty files, upstream, recent commits). For an essay on
+-- the repos, start with `plan_repo_essay.shale`, the playbook that runs this.
 --
 -- It prints four sections, plain lines and a pipe table that paste straight
 -- into a note:
