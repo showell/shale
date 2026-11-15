@@ -14,6 +14,7 @@ const Run = interp.Run;
 const Error = interp.Error;
 const hl = @import("shale_host_linux.zig");
 const jobs = @import("shale_jobs.zig");
+const job_record = @import("shale_job_record.zig");
 const os_linux = @import("shale_os_linux.zig");
 const Host = hl.Host;
 
@@ -95,7 +96,7 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     for (argv) |x| for (x) |c| {
         argv_bytes += if (c == '\n' or c == '\\') 2 else 1;
     };
-    if (argv_bytes > jobs.argv_most) return run.fail(pos, .argument, "`job_start`: its argv is {d} bytes in its record, and a record holds {d}", .{ argv_bytes, jobs.argv_most });
+    if (argv_bytes > job_record.argv_most) return run.fail(pos, .argument, "`job_start`: its argv is {d} bytes in its record, and a record holds {d}", .{ argv_bytes, job_record.argv_most });
     const reaper = h.reaper orelse return run.fail(pos, .host, "`job_start`: this host has no reaper to start a job under", .{});
 
     var env: std.ArrayList([]const u8) = .empty;
@@ -123,7 +124,7 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     // (a child it left) may still write the log.
     if (std.Io.Dir.cwd().readFileAlloc(run.io, record_os, a, .limited(64 * 1024))) |text| {
         try chargeRead(run, pos, text.len);
-        if (jobs.parseRecord(text)) |old| if (jobs.alive(old) or (!old.done() and jobs.reaperAlive(old)))
+        if (job_record.parseRecord(text)) |old| if (jobs.alive(old) or (!old.done() and jobs.reaperAlive(old)))
             return run.fail(pos, .host, "`job_start`: a job still runs on {s} (pid {d}, its record {s}.job): `job_stop` or `job_wait` it, or give another log", .{ log_shown, old.pid, log_shown });
     } else |e| switch (e) {
         error.FileNotFound => {},
@@ -176,7 +177,7 @@ pub const Started = struct {
     /// The most bytes of a job's argv the stop's line shows.
     const argv_shown_most = 80;
 
-    fn make(alloc: std.mem.Allocator, record_os: []const u8, log: []const u8, argv: []const u8, r: jobs.Record, keep: bool) error{OutOfMemory}!Started {
+    fn make(alloc: std.mem.Allocator, record_os: []const u8, log: []const u8, argv: []const u8, r: job_record.Record, keep: bool) error{OutOfMemory}!Started {
         const record_copy = try alloc.dupe(u8, record_os);
         errdefer alloc.free(record_copy);
         const log_copy = try alloc.dupe(u8, log);
@@ -198,10 +199,10 @@ pub const Started = struct {
     /// its record, while it is this job's, says whether it was waited to its
     /// end; the leader's start time says whether a pid is still it.
     fn running(s: Started, io: std.Io, alloc: std.mem.Allocator) bool {
-        const ident: jobs.Record = .{ .pid = s.pid, .pgid = s.pgid, .start = s.start };
+        const ident: job_record.Record = .{ .pid = s.pid, .pgid = s.pgid, .start = s.start };
         if (std.Io.Dir.cwd().readFileAlloc(io, s.record_os, alloc, .limited(64 * 1024))) |text| {
             defer alloc.free(text);
-            if (jobs.parseRecord(text)) |r| if (r.pid == s.pid and std.mem.eql(u8, r.start, s.start) and r.done()) return false;
+            if (job_record.parseRecord(text)) |r| if (r.pid == s.pid and std.mem.eql(u8, r.start, s.start) and r.done()) return false;
         } else |_| {}
         return jobs.alive(ident);
     }
@@ -228,7 +229,7 @@ pub fn stopWithRun(h: *Host, io: std.Io, w: *std.Io.Writer) !usize {
             n_kept += 1;
             continue;
         }
-        const ident: jobs.Record = .{ .pid = j.pid, .pgid = j.pgid, .start = j.start };
+        const ident: job_record.Record = .{ .pid = j.pid, .pgid = j.pgid, .start = j.start };
         _ = jobs.stop(ident, 2000);
         if (jobs.alive(ident)) try into.appendSlice(h.alloc, " still alive after KILL");
         n_stopped += 1;
@@ -240,7 +241,7 @@ pub fn stopWithRun(h: *Host, io: std.Io, w: *std.Io.Writer) !usize {
 
 /// A job found again: its record as read now, its record's Shale path, and
 /// its log's.
-const Found = struct { record: jobs.Record, shown: []const u8, log: Value };
+const Found = struct { record: job_record.Record, shown: []const u8, log: Value };
 
 /// Finds a job by the map `job_start` returned or its record's Shale path, and
 /// reads its record.
@@ -260,7 +261,7 @@ fn find(h: *Host, run: *Run, pos: ast.Pos, v: Value, name: []const u8) Error!Fou
         else => return run.fail(pos, .store, "`{s}`: its record {s} cannot be read: {s}", .{ name, shown, @errorName(e) }),
     };
     try chargeRead(run, pos, text.len);
-    const r = jobs.parseRecord(text) orelse return run.fail(pos, .store, "`{s}`: {s} is not a job's record", .{ name, shown });
+    const r = job_record.parseRecord(text) orelse return run.fail(pos, .store, "`{s}`: {s} is not a job's record", .{ name, shown });
     return .{ .record = r, .shown = shown, .log = .{ .string = shown[0 .. shown.len - ".job".len] } };
 }
 
@@ -322,7 +323,7 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
 /// `exited`. **THE LAST LOOK**: the record is written after the reap, so the
 /// log is whole now; a line written between the look before and the end
 /// is found, never reported as an end without it.
-fn seenEnded(h: *Host, run: *Run, pos: ast.Pos, scan: *Scan, sa: std.mem.Allocator, log: Value, contains: ?[]const u8, r: jobs.Record) Error!Value {
+fn seenEnded(h: *Host, run: *Run, pos: ast.Pos, scan: *Scan, sa: std.mem.Allocator, log: Value, contains: ?[]const u8, r: job_record.Record) Error!Value {
     if (contains) |c| {
         const os = try hl.osPath(h, run, pos, log, false);
         if (try scan.look(sa, run, pos, os, c, r)) return result(run, pos, "found", null, null);
@@ -355,7 +356,7 @@ pub const Scan = struct {
     /// Whether `c` is in what the log at `os` holds now. A missing log (not yet
     /// made, or gone between the stat and the read) is `false`; any other
     /// failure stops the run rather than reading as "not yet".
-    fn look(s: *Scan, sa: std.mem.Allocator, run: *Run, pos: ast.Pos, os: []const u8, c: []const u8, r: jobs.Record) Error!bool {
+    fn look(s: *Scan, sa: std.mem.Allocator, run: *Run, pos: ast.Pos, os: []const u8, c: []const u8, r: job_record.Record) Error!bool {
         const store = webbox.store;
         const st = (store.statOrNull(run.io, sa, os) catch |e| return run.fail(pos, .store, "`job_wait`: {s} cannot be read: {s}", .{ os, @errorName(e) })) orelse return false;
         if (s.buf.len == 0) s.buf = sa.alloc(u8, piece + c.len) catch return run.oom(pos);

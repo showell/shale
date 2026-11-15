@@ -18,6 +18,8 @@ pub const shale_host_run = @import("shale_host_run.zig");
 pub const shale_os_linux = @import("shale_os_linux.zig");
 /// Jobs: programs that outlive the run, under a detached reaper.
 pub const shale_jobs = @import("shale_jobs.zig");
+/// A job's record, `<log>.job`: plain text, no system call.
+pub const shale_job_record = @import("shale_job_record.zig");
 /// The host's job calls, over `shale_jobs`.
 pub const shale_host_jobs = @import("shale_host_jobs.zig");
 pub const shale_host_zig = @import("shale_host_zig.zig");
@@ -32,6 +34,7 @@ test {
     _ = shale_host_setup;
     _ = shale_host_run;
     _ = shale_jobs;
+    _ = shale_job_record;
     _ = shale_host_jobs;
     _ = shale_host_zig;
     _ = shale_zig_ast;
