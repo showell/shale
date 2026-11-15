@@ -26,9 +26,6 @@ pub const loadMounts = setup.loadMounts;
 pub const loadPreludes = setup.loadPreludes;
 pub const baseEnv = setup.baseEnv;
 
-/// The most programs one run may start.
-pub const runs_most = 64;
-
 /// The most a `sleep` waits in one call: ten minutes.
 pub const sleep_most_ms = 600_000;
 
@@ -332,7 +329,10 @@ fn mountPath(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize, 
     if (rest.len > 0 and rest[0] == '/') return run.fail(pos, .argument, "\"{s}\" is absolute inside its mount: a mount's paths are relative to it", .{path});
     if (rest.len > 0) {
         var it = std.mem.splitScalar(u8, rest, '/');
-        while (it.next()) |part| if (!store.fatName(part)) return run.fail(pos, .argument, "\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ path, part });
+        while (it.next()) |part| {
+            if (std.mem.eql(u8, part, "..")) return run.fail(pos, .argument, "\"{s}\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)", .{path});
+            if (!store.fatName(part)) return run.fail(pos, .argument, "\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ path, part });
+        }
     }
     // A missing mount folder stops the run only when the mount is used.
     if (std.Io.Dir.cwd().openDir(run.io, m.dir, .{})) |d| d.close(run.io) else |e| switch (e) {
@@ -501,7 +501,7 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
         return .{ .string = try osPath(h, run, pos, args[0], true) };
     }
     if (std.mem.eql(u8, name, "run")) return runProgram(h, run, pos, args);
-    // A wait that is no program, so it spends none of `runs_most`.
+    // A wait that is no program, so it spends none of the `programs` budget.
     if (std.mem.eql(u8, name, "sleep")) {
         if (args.len != 1) return run.fail(pos, .argument, "`sleep` takes one argument, the ms, given {d}", .{args.len});
         const ms = switch (args[0]) {
@@ -846,7 +846,7 @@ test "host: run's options are the script's to say; what it is given wrong stops,
     try t.expectStop("host(\"run\", {}, {timeout_ms = 10, tail = 1})", .atomic, .argument, "empty argv");
     try t.expectStop("host(\"run\", {\"shale-fixture\", 3}, {timeout_ms = 10, tail = 1})", .atomic, .type, "argv[2]");
     try t.expectStop("host(\"run\", {\"no-such-program-here\"}, {timeout_ms = 1000, tail = 1})", .atomic, .host, "not found along PATH");
-    try t.expectStop("host(\"run\", {\"shale-fixture\"}, {timeout_ms = 10, tail = 1, re = \"a{2}\"})", .atomic, .argument, "`run`'s `re`");
+    try t.expectStop("host(\"run\", {\"shale-fixture\"}, {timeout_ms = 10, tail = 1, re = \"a{x}\"})", .atomic, .argument, "`run`'s `re`");
     try t.expectStop("host(\"jobs\", 1)", .atomic, .host, "`jobs`: not on this host");
     // A path option of another type is named as `run`'s.
     try t.expectStop("host(\"run\", {\"shale-fixture\"}, {timeout_ms = 10, tail = 1, cwd = 3})", .atomic, .type, "`run`: its `cwd` must be a string, not an integer");
@@ -1019,7 +1019,7 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
     try testing.expectEqualStrings("line 1\nline 2\n", try t.file("elsewhere/two.log"));
     try t.expectStop("read(\"nope:x\")", .atomic, .argument, "the mounts are `runs`, `home`, `gone`");
     try t.expectStop("read(\"gone:x\")", .atomic, .store, "not a folder there");
-    try t.expectStop("read(\"runs:../x\")", .atomic, .argument, "not a name");
+    try t.expectStop("read(\"runs:../x\")", .atomic, .argument, "climbs out of its mount with `..`: a folder beside it is reached through a mount of its own");
     try t.expectStop("read(\"runs:/etc/passwd\")", .atomic, .argument, "absolute inside its mount");
     for ([_]struct { []const u8, []const u8 }{
         .{ "runs = relative/path\n", "line 1: `runs`'s value `relative/path` is relative" },
@@ -1126,9 +1126,12 @@ test "host: the gate's fake spawn: the same bytes into both engines, the keep an
     try t.expectOutput("print(host(\"run\", {\"anything\"}, {timeout_ms = 10, re = \"a$\", head = 1, tail = 1}).out)", "alpha\n… 1 line left out …\ngamma\n\n");
     // A want lets a refused name through to the spawn.
     try t.expectOutput("print(host(\"run\", {\"bash\", \"-c\", \"x\"}, {timeout_ms = 10, tail = 1, want = \"test: a fake\"}).out)", "… 2 lines left out …\ngamma\n\n");
-    // 64 programs a run, the 65th a stop, counted per run (per engine).
-    try t.expectStop("for i = 1, 65 do host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}) end", .atomic, .budget, "64 programs a run");
-    try t.expectOutput("for i = 1, 64 do host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}) end print(\"ok\")", "ok\n");
+    // The `programs` budget: at 64, the 65th is a stop naming how to raise it,
+    // counted per run (per engine); `budget()` says what is left.
+    t.budgets.programs = 64;
+    try t.expectStop("for i = 1, 65 do host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}) end", .atomic, .budget, "64 programs a run, the `programs` budget: raise it with `--budget programs=N`");
+    try t.expectOutput("for i = 1, 64 do host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}) end print(\"ok\", budget().programs)", "ok\t0\n");
+    t.budgets.programs = 1000;
     fake.cpu_ms = 17;
     try t.expectOutput("print(host(\"run\", {\"x\"}, {timeout_ms = 10, tail = 1}).cpu_ms)", "17\n");
 }

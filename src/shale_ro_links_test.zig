@@ -210,7 +210,7 @@ test "secrets mounts: run's stdout_secret stores stdout in one, 0600, never seen
         .{ "stdout_secret = \"x\"", .refused, "is not in a mount" },
         .{ "stdout_secret = \"k:sub/x\"", .refused, "is in a folder of the mount" },
         .{ "stdout_secret = \"k:../x\"", .refused, "is in a folder of the mount" },
-        .{ "stdout_secret = \"k:..\"", .argument, "is not a name" },
+        .{ "stdout_secret = \"k:..\"", .argument, "climbs out of its mount with `..`" },
         .{ "stdout_secret = \"k:\"", .argument, "a secret is a file in the mount, not the mount" },
         .{ "stdout_secret = \"k:ln\", secret_replace = true", .refused, "is a symbolic link" },
         .{ "stdout_secret = \"k:x\", tail = 5", .argument, "takes no keep, filter or log" },

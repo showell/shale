@@ -72,7 +72,7 @@ end
 
 -- Each line holding FIND under `place` at `rev`, by path: `{path:
 -- {{line, text}, ...}}`, from one `git grep` (a `git show` a file would
--- spend a run's 64 programs on 64 files). It exits 1 when nothing is found.
+-- spend a program on each file). It exits 1 when nothing is found.
 function grep_at_rev(place)
   local argv = {"git", "-c", "color.ui=never", "--no-optional-locks", "grep", "-n", "-I", "-F", "-e", FIND, REV, "--"}
   if place ~= "." then push(argv, place) end

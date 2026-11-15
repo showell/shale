@@ -38,14 +38,13 @@
 -- printed.
 --
 -- A run's output reaches the terminal only when it
--- ends, and a run starts at most 64 programs, so the stream is held in
--- windows: one curl a window (`window=` seconds, 20 by default, under
+-- ends, so the stream is held in windows: one curl a window (`window=` seconds, 20 by default, under
 -- curl's `--max-time`), the first with no `Last-Event-ID` (the newest page),
 -- each after it resuming at the last whole frame. A post is heard at most
 -- a window late.
 -- The windows run in batches (`after_batch`, pure), each a
--- child run of this script (`batch=1`, every value passed on) with its own
--- 64 programs: 63 curls, about 21 minutes of quiet at 20 s windows. It
+-- child run of this script (`batch=1`, every value passed on) of 63 curls,
+-- about 21 minutes of quiet at 20 s windows. It
 -- ends one of three ways: a post heard with `once=1`, which the caller
 -- prints and exits 0 on; a stop (a refusal, a gap), which stops the caller
 -- with the batch's own line; or its curls spent, which it ends with
@@ -105,8 +104,8 @@ const BATCH = arg("batch", "") == "1"
 -- How the parent runs itself: no builtin names a script's own path, so
 -- it is said here, and `self=` (a hidden test knob) runs a lane's copy.
 const SELF_PATH = arg("self", "cookbook:listen.shale")
--- Of a run's 64 programs, a batch's windows take all but one, left
--- spare; `curls=` (a hidden test knob) takes fewer, to roll batches over.
+-- A batch's windows: 63 curls, so its lines reach the caller every 21
+-- minutes or so; `curls=` (a hidden test knob) takes fewer, to roll batches over.
 const WINDOWS_MOST = tonumber(arg("curls", "63"))
 -- The parent's programs: one a batch, all but one, left spare.
 const BATCHES_MOST = 63
@@ -620,8 +619,8 @@ function listen()
   return nil
 end
 
--- The listener a caller starts: batches, each a child run of this script
--- with its own 64 programs, one of the parent's each.
+-- The listener a caller starts: batches, each a child run of this script,
+-- one of the parent's programs each.
 function listen_batches()
   needed()
   if WINDOWS_MOST < 1 or WINDOWS_MOST > 63 then fail("listen: curls= is 1 to 63, a batch's programs") end

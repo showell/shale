@@ -4,8 +4,11 @@
 //! leftmost preferred), `\b \B` (ASCII word edges), capture groups (up to
 //! nine, nested or not, numbered by their `(` left to right) and groups that
 //! do not capture (`(?:...)`);
-//! `nocase` folds ASCII letters at compile time. Counted repetition,
-//! backreferences and lookaround are refused with a message.
+//! `nocase` folds ASCII letters at compile time. Counted repetition
+//! (`a{3}`, `a{2,}`, `a{2,5}`) is the part written out that many times, a
+//! count at most `count_most` and the program at most `insts_most`
+//! instructions, so it keeps the search linear. Backreferences and lookaround
+//! are refused with a message.
 //!
 //! A loop whose turn can match nothing (`(\w*(|.))*`, `(a*)*`) ends at a turn
 //! that took nothing, as a backtracker's does: its threads carry a bit for
@@ -27,6 +30,13 @@ pub const pattern_most = 256;
 
 /// The most capture groups a pattern may have: `\1` to `\9` in a replacement.
 pub const groups_most = 9;
+
+/// The largest count a `{n,m}` may give.
+pub const count_most = 100;
+
+/// The most instructions a program may have, its counts written out: a
+/// search's cost is bounded by it, and an instruction's place fits a `u16`.
+pub const insts_most = 8192;
 
 pub const Op = enum(u8) {
     /// The byte `c`.
@@ -191,7 +201,7 @@ const Reader = struct {
                     r.at += 1; // )
                     break :blk .{ .kind = .group, .inner = inner, .index = index };
                 },
-                '{' => return r.refuse(at, "`{n,m}` is not in this subset: write the part out as often as it must come (`\\d\\d\\d?`), or `\\{` for the byte"),
+                '{' => return r.refuse(at, "a count (`{n,m}`) with nothing before it to repeat: `\\{` is the byte"),
                 '*', '+', '?' => return r.refuse(at, "a `*`, `+` or `?` with nothing before it to repeat"),
                 '.' => blk: {
                     r.at += 1;
@@ -225,16 +235,65 @@ const Reader = struct {
                     if (r.at < r.p.len) switch (r.p[r.at]) {
                         '?' => return r.refuse(r.at, "lazy repetition (`*?`, `+?`, `??`) is not in this subset: every repetition takes as much as it can"),
                         '*', '+' => return r.refuse(r.at, "a repetition repeated (`a**`, `a+*`): one is enough"),
-                        '{' => return r.refuse(r.at, "`{n,m}` is not in this subset: write the part out as often as it must come (`\\d\\d\\d?`), or `\\{` for the byte"),
+                        '{' => return r.refuse(r.at, "a repetition repeated (`a*{2}`): one is enough"),
                         else => {},
                     };
                 },
-                '{' => return r.refuse(r.at, "`{n,m}` is not in this subset: write the part out as often as it must come (`\\d\\d\\d?`), or `\\{` for the byte"),
+                '{' => {
+                    if (node.kind == .start or node.kind == .end or node.kind == .boundary or node.kind == .not_boundary)
+                        return r.refuse(r.at, "`^`, `$`, `\\b` and `\\B` are places, not bytes: they cannot repeat");
+                    const count = try r.countAfter();
+                    // The part written out: `n` times, then `m - n` times
+                    // optional, or for `{n,}` once more under a `*`.
+                    for (0..count.least) |_| try list.append(r.tree, node);
+                    if (count.most) |m| {
+                        var opt = node;
+                        opt.quant = .opt;
+                        for (count.least..m) |_| try list.append(r.tree, opt);
+                    } else {
+                        var star = node;
+                        star.quant = .star;
+                        try list.append(r.tree, star);
+                    }
+                    if (r.at < r.p.len) switch (r.p[r.at]) {
+                        '?' => return r.refuse(r.at, "lazy repetition (`{2,5}?`) is not in this subset: every repetition takes as much as it can"),
+                        '*', '+', '{' => return r.refuse(r.at, "a repetition repeated (`a{2}*`): one is enough"),
+                        else => {},
+                    };
+                    continue;
+                },
                 else => {},
             };
             try list.append(r.tree, node);
         }
         return list.items;
+    }
+
+    /// The count at `{`, `{n}`, `{n,}` or `{n,m}`, read past its `}`: `most`
+    /// null for `{n,}`.
+    fn countAfter(r: *Reader) Error!struct { least: usize, most: ?usize } {
+        const at = r.at;
+        const form = "a count is `{n}`, `{n,}` or `{n,m}`, each a number of digits: `\\{` is the byte";
+        r.at += 1; // {
+        const least = (try r.number(at, form)) orelse return r.refuse(at, form);
+        var most: ?usize = least;
+        if (r.at < r.p.len and r.p[r.at] == ',') {
+            r.at += 1;
+            most = try r.number(at, form);
+        }
+        if (r.at >= r.p.len or r.p[r.at] != '}') return r.refuse(at, form);
+        r.at += 1; // }
+        if (most) |m| if (m < least) return r.refuse(at, "a count whose most is below its least (`{5,2}`): write it `{2,5}`");
+        if (least > count_most or (most orelse 0) > count_most) return r.refuse(at, "a count past 100 (`{n,m}`): write `+` or `*` for a part that may come any number of times");
+        return .{ .least = least, .most = most };
+    }
+
+    /// The digits at the reader, as a number, or null when there are none.
+    fn number(r: *Reader, at: usize, form: []const u8) Error!?usize {
+        const from = r.at;
+        while (r.at < r.p.len and std.ascii.isDigit(r.p[r.at])) r.at += 1;
+        if (r.at == from) return null;
+        return std.fmt.parseInt(usize, r.p[from..r.at], 10) catch return r.refuse(at, form);
     }
 
     /// A byte node, or under `nocase` a set of a letter's two cases.
@@ -412,6 +471,10 @@ const Emitter = struct {
     }
 
     fn emit(e: *Emitter, i: Inst) Error!u16 {
+        if (e.insts.items.len >= insts_most) {
+            e.refused.* = .{ .at = 0, .message = "the pattern, its counts written out, is more than 8192 instructions: count less (`{n,m}`), or write `+` or `*`" };
+            return error.Refused;
+        }
         try e.insts.append(e.alloc, i);
         return @intCast(e.insts.items.len - 1);
     }

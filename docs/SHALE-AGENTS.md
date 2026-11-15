@@ -128,6 +128,7 @@ Each has a Shale form, most of them one launch:
 | the habit | in Shale |
 |---|---|
 | `sed -n 40,80p f; sed -n 5,9p g` | `shale cookbook:look.shale at=f:40-80,g:5-9` |
+| `cp -r site/live/markdown dev/` | `copy("site/live/markdown", "build:roc-apps/next/markdown")`: a file or a tree, across mounts, never over a path that is already there, and a symbolic link in it stops the copy before anything is written; the answer is how many files |
 | `pkill -f pat`, `ps aux \| grep pat \| xargs kill` | `for p in procs() do if find(p.args, "pat") ~= nil then proc_stop(p) end end`: never this run or its shell |
 | `grep -rn 'text' src build.zig` | `shale cookbook:look.shale find=text in=src,build.zig ext=zig` (a value with `(`, `*` or a space: `--args-stdin`) |
 | `run({"grep", "-rn", ...})` inside a heredoc, refused even with a want | `for h in grep_tree("src", "text", {ext = {"zig"}}).hits do print(h.path .. ":" .. h.line .. ": " .. h.text) end` (`regex = true`, `nocase = true`, `context = 2` for `-A2 -B2`); one file: `grep(p, "text")`, `re_lines(read(p), pattern)`, `grep_all(p, "text")` past the call-bytes cap, `#grep(p, "text")` a count |
@@ -920,8 +921,8 @@ what the gate refuses with what to do instead.
 ## Where Shale is worse, said plainly
 
 - **Regular expressions are a subset**: up to nine capture groups (and
-  `(?:...)`), no `{n,m}`, no lookaround, no backreferences (each refused by
-  name). In return no pattern makes a search slower than linear, and its
+  `(?:...)`), counts (`{n,m}`) up to 100, no lookaround, no backreferences
+  (each refused by name). In return no pattern makes a search slower than linear, and its
   cost is bounded before it runs, and the match is the one a backtracker
   would find, loops whose turn can take nothing among them.
 - **A file is read whole by `grep` and `edit`**, at most the call-bytes cap

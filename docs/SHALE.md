@@ -769,6 +769,7 @@ error
 | `^`, `$` | the string's start, its end |
 | `\b`, `\B` | a word's edge (a letter, digit or `_` on one side and not the other, or the string's end), and a place that is not one |
 | `a\|b` | either, **the loosest** (`^error\|warn` is `^error` or `warn`), the leftmost alternative that matches taken first |
+| `{n}`, `{n,}`, `{n,m}` | **a count**: the part before it n times, at least n times, or n to m times, each count at most 100; it is the part written out that many times, so the search stays linear. `\{` is the byte |
 | `( ... )` | **a capture group**, up to nine a pattern, numbered by their `(` left to right, nested or not; one may hold alternatives, `(info\|warn)`, and repeat, `(ab)*`, keeping its last turn |
 | `(?: ... )` | a group that does not capture: alternatives or a repetition with no number, `re(?:place)?(ment)?`. `(?=`, `(?!` and other `(?` forms are refused |
 
@@ -778,7 +779,8 @@ folded before its `^`, so `[^a]` takes neither `a` nor `A`, as Python's.
 The run's cache keeps a pattern's two compilations apart.
 
 **Refused, each by name** (`argument`, saying what to write instead):
-`{n,m}`, a second `(`, `(?...)` (no lookaround, no groups that do not
+a count past 100 or one whose pattern, written out, passes 8,192
+instructions, a second `(`, `(?...)` (no lookaround, no groups that do not
 capture), `\1` (no backreferences), `\b` inside a class, lazy `*?`, a
 repetition repeated (`a**`) or of a place (`\b+`), `[:alpha:]`, and a
 pattern of more than 256 bytes. A pattern is written in a Shale string, so its `\` is written
@@ -1071,7 +1073,7 @@ that hits one stops cleanly, naming it, with its line and column. A stop
 names a budget as `budget()` spells it: `steps`, `reads`, `read_bytes`,
 `changes`, `change_bytes`, `output`, and the rest by the names below
 (`arena`, `machine`, `kept`, `depth`, `call_depth`, `source`, `nesting`),
-and on Linux `runs`, the programs a run may start ("On Linux").
+and on Linux `programs`, the programs a run may start ("On Linux").
 **Three are spelled with their unit where a host or the CLI sets them**
 (`interp.Budgets`, `--budget`): `arena_bytes` is `arena`, `output_bytes`
 is `output`, `source_bytes` is `source`.
@@ -1209,9 +1211,9 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   cannot carry (`names=a|b|a test's name, with a comma`), under a heredoc.
 - `--budget NAME=N` sets one budget: `steps`, `reads`, `read_bytes`,
   `output_bytes`, `changes`, `change_bytes`, `arena_bytes`, `call_bytes`,
-  `call_entries`, `kept_bytes` (at most 256 MiB) or `machine_bytes` (at
-  most 1 GiB). **The runner's own defaults:**
-  output 64 KiB, `call_bytes` 64 MiB, 64 programs a run; the rest the
+  `call_entries`, `kept_bytes` (at most 256 MiB), `machine_bytes` (at
+  most 1 GiB) or `programs`. **The runner's own defaults:**
+  output 64 KiB, `call_bytes` 64 MiB, 1,000 programs a run; the rest the
   core's.
 - **A script says its own budgets** in a line among the comments that
   open it, `-- budget: steps=900000000 arena_bytes=4000000000`: the same
@@ -1332,7 +1334,7 @@ three:
 - **`Options.preludes`**, the preludes after the core's, in order:
   - the Linux prelude (`src/shale_prelude_linux.shale`): `run`, `real`, `sleep`, `not_option`,
     `must`, `http`, `http_get`, `re_lines`, `head_lines`, `tail_lines`,
-    `grep_all`, `grep_tree`, `report_run`, `unique`, `path_under`, `fresh_dir`, `newest`, `create`, `edits_all`, `edit_between`, `json_read`, `json_write`; the Zig tools
+    `grep_all`, `grep_tree`, `report_run`, `copy`, `unique`, `path_under`, `fresh_dir`, `newest`, `create`, `edits_all`, `edit_between`, `json_read`, `json_write`; the Zig tools
     `zig_rename`, `zig_renames`, `zig_decls`, `zig_move`, `zig_tokens` and
     `zig_imports`; `shale_tokens`; the jobs, `job_start`, `job_alive`, `job_stop` and
     `job_wait`; and the processes, `procs` and `proc_stop` (`job_wait`'s helpers `curl_http`, `edit_words`, `edit_word_byte` and `edit_marker_shown`
@@ -1347,7 +1349,7 @@ three:
   A later prelude may not redefine an earlier one's function. **Metal's
   parse compiles none of this**: zig-webbox's `src/host_io_std.zig` says
   `shale_preludes`, and metal's host_io doesn't.
-- **A run runs at most 64 programs** (`budget runs`).
+- **A run starts at most 1,000 programs** unless its `programs` budget says otherwise (`--budget programs=N`, or a `-- budget: programs=N` line); `budget().programs` says how many are left.
 - **The gate** (`tools/shale_gate.zig`, installed on the box) is the PreToolUse
   hook that holds an agent to Shale (SHALE-AGENTS.md, "The gate").
 

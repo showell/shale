@@ -28,7 +28,7 @@ pub const Class = enum {
     host,
 };
 
-/// Which budget ran out. Each but `runs` and `cpu` names a field of `Budgets`.
+/// Which budget ran out. Each but `cpu` names a field of `Budgets`.
 pub const Budget = enum {
     /// Steps the machine takes.
     steps,
@@ -56,9 +56,8 @@ pub const Budget = enum {
     kept,
     /// The machine's own memory: the tree, the code, the frames, the operands.
     machine,
-    /// Programs a host runs. Not a field of `Budgets`: the host keeps its own
-    /// cap (the Linux CLI's is 64), counts, and says.
-    runs,
+    /// Programs a Linux run starts, `run`'s and `job_start`'s.
+    programs,
     /// A program's CPU time, past what its script stated for it (`run`'s
     /// `cpu_budget_ms`). Not a field of `Budgets`: the host judges and says.
     cpu,

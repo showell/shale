@@ -97,6 +97,8 @@ fn budget(run: *Run, pos: ast.Pos, _: []const Value) Error!Value {
         .{ "read_bytes", run.budgets.read_bytes -| run.read_bytes },
         .{ "changes", run.budgets.changes -| run.changes },
         .{ "change_bytes", run.budgets.change_bytes -| run.change_bytes },
+        // Programs a Linux run may still start (`run`, `job_start`).
+        .{ "programs", @as(u64, run.budgets.programs) -| run.host_runs },
         .{ "output", run.out_cap -| run.out_len },
         // What the values' arena may still take: a string read stays in it,
         // so a scan that reads file after file guards on this too.

@@ -27,8 +27,8 @@ function not_option(who, name, v)
   return v
 end
 
--- A wait of `ms` (0 to 600000) without a program: a run holds 64
--- programs, but may sleep as often as its steps allow. `now()` stays the
+-- A wait of `ms` (0 to 600000) without a program, so it spends none of
+-- the `programs` budget: a run may sleep as often as its steps allow. `now()` stays the
 -- run's start.
 function sleep(ms)
   return host("sleep", ms)
@@ -895,4 +895,41 @@ function report_run(argv, opts?)
     fail("run: `" .. shown .. "` " .. how)
   end
   return r
+end
+
+-- **A COPY OF A FILE OR A TREE** (2026-11-15: a published folder copied into
+-- the dev channel went to `cp -r` through `run`): `from` copied to `to`, which
+-- must not exist yet, so a copy never overwrites. A folder is copied whole,
+-- hidden files and all, and a symbolic link anywhere in it stops the copy
+-- before anything is written, since the store follows none. Each file is one
+-- read and one change, so the run's read and change budgets bound it, and a
+-- file past the call-bytes cap stops it. The answer is how many files were
+-- copied.
+function copy(from, to)
+  if exists(to) then fail("`copy`: " .. to .. " is already there, and a copy never overwrites (`remove_tree` it first)") end
+  if not is_dir(from) then
+    replace(to, read(from))
+    return 1
+  end
+  local entries = walk_all(from, {})
+  for e in entries do
+    if e.kind ~= "file" and e.kind ~= "directory" then fail("`copy`: " .. e.path .. " is a symbolic link, which the store never follows; nothing was copied") end
+  end
+  local prefix = from .. "/"
+  if ends_with(from, ":") then prefix = from end
+  if from == "." or from == "" then prefix = "" end
+  mkdir(to)
+  local files = 0
+  for e in entries do
+    local rest = e.path
+    if prefix ~= "" then rest = sub(e.path, #prefix + 1) end
+    local target = path_under(to, rest)
+    if e.kind == "directory" then
+      mkdir(target)
+    else
+      replace(target, read(e.path))
+      files = files + 1
+    end
+  end
+  return files
 end

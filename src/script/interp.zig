@@ -23,6 +23,10 @@ pub const Budgets = struct {
     arena_bytes: usize = 16 * 1024 * 1024,
     /// Calls of script functions in progress at once.
     call_depth: u32 = 64,
+    /// Programs a run may start on Linux, by `run` and `job_start` (metal starts
+    /// none). It bounds a loop that spawns without end; a script that needs more
+    /// raises it with `--budget programs=N` or its own `-- budget:` line.
+    programs: u32 = 1000,
     /// Bytes printed.
     output_bytes: usize = default_output_bytes,
     /// Store reads, by count.
@@ -243,7 +247,7 @@ pub const Run = struct {
             .depth => "calls and the expressions inside them nest deeper than the depth budget",
             .machine => std.fmt.allocPrint(self.alloc, "the machine's memory (the code, the frames, the operands) is past its budget ({d} bytes): raise it with `--budget machine_bytes=N` or the script's `-- budget: machine_bytes=N` line, up to {d}", .{ self.budgets.machine_bytes, Budgets.machine_bytes_most }) catch "the machine's memory is past its budget",
             .kept => std.fmt.allocPrint(self.alloc, "what the run keeps at a `yield` is past the kept budget ({d} bytes): raise it with `--budget kept_bytes=N` or the script's `-- budget: kept_bytes=N` line, up to {d}", .{ self.budgets.kept_bytes, Budgets.kept_bytes_most }) catch "what the run keeps at a `yield` is past the kept budget",
-            .runs => "the run's programs are past their cap",
+            .programs => std.fmt.allocPrint(self.alloc, "{d} programs a run, the `programs` budget: raise it with `--budget programs=N` or the script's `-- budget: programs=N` line", .{self.budgets.programs}) catch "the run's programs are past their budget",
             .cpu => "a program's CPU time is past its budget",
         } };
         return error.Stop;

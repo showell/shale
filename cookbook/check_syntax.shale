@@ -19,8 +19,9 @@
 -- - `.sh`: `bash -n`, as a tool exception;
 -- - `.md` and any other kind: nothing to check, said.
 --
--- A run holds 64 programs: one a file, one for every Python file, one
--- `zig fmt` for every Zig file; more is refused before the first.
+-- It takes one program a file, one for every Python file, and one `zig fmt`
+-- for every Zig file; more than the run's `programs` budget is refused before
+-- the first.
 --
 -- The tools are values (`zig=`, `roc=`, `node=`, each its name on PATH by
 -- default, or a path): a machine's PATH is not the build's. When the
@@ -80,7 +81,7 @@ end
 local programs = #by.zig + #by.roc + #by.js + #by.shale + #by.sh
 if #by.py > 0 then programs = programs + 1 end
 if #by.zig + #by.zon > 0 then programs = programs + 1 end
-if programs > 64 then fail("syntax: " .. #paths .. " files need " .. programs .. " programs, and a run holds 64: check them in parts") end
+if programs > budget().programs then fail("syntax: " .. #paths .. " files need " .. programs .. " programs, and this run's `programs` budget has " .. budget().programs .. ": check them in parts, or launch with `--budget programs=N`") end
 
 local verdict = {}
 

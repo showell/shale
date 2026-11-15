@@ -25,13 +25,8 @@ const RECENT_DAYS = 30
 const LOG_CAP = 1000
 const TODAY = now() // 86400
 
--- A run starts at most 64 programs and each repo takes three (its log, its
--- upstream, its status), so a parent run maps the repos in parts of
--- PART_SIZE, each a child run of this script (`part=K json=1`), and joins
--- their rows. `self=` names the script a part runs, for a lane's copy.
-const PART = arg("part", 0)
-const PART_SIZE = 20
-const SELF_PATH = arg("self", "cookbook:map_repos.shale")
+-- Each repo takes three programs (its log, its upstream, its status), so a
+-- folder of more than about 300 repos wants `--budget programs=N`.
 
 -- Days since 1970-01-01 for a civil date (Howard Hinnant's algorithm).
 function days_from_civil(y, m, d)
@@ -175,24 +170,7 @@ end
 
 local rows = {}
 local edges = {}
-if PART > 0 then
-  local first = (PART - 1) * PART_SIZE + 1
-  local final = PART * PART_SIZE
-  if final > #repos then final = #repos end
-  for i = first, final do push(rows, map_repo(repos[i], names, edges)) end
-else
-  local parts = (#repos + PART_SIZE - 1) // PART_SIZE
-  for k = 1, parts do
-    local r = run({"shale", "--root", ".", SELF_PATH, "in=" .. IN, "part=" .. k, "json=1"}, {timeout_ms = 300000, whole = 1000000})
-    local got = nil
-    for l in lines(r.out) do
-      if starts_with(l, "{") then got = json_read(l) end
-    end
-    if r.code ~= 0 or got == nil then fail("map_repos: part " .. k .. " exited " .. r.code .. ": " .. r.out) end
-    for row in got.rows do push(rows, row) end
-    for e in got.edges do push(edges, e) end
-  end
-end
+for repo in repos do push(rows, map_repo(repo, names, edges)) end
 sort(rows, "days")
 
 if JSON == 1 then

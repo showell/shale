@@ -82,9 +82,8 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const log_shown = try hl.strOpt(run, pos, "log", log_v);
     try run.charge(pos, argv.len);
 
-    if (run.host_runs >= hl.runs_most) {
-        run.stop = .{ .line = pos.line, .column = pos.column, .class = .budget, .budget = .runs, .function = run.function, .trail = run.calls.items, .message = std.fmt.allocPrint(a, "{d} programs a run, the most: run the rest in another", .{hl.runs_most}) catch "too many programs in one run" };
-        return error.Stop;
+    if (run.host_runs >= run.budgets.programs) {
+        return run.budgetStop(pos, .programs);
     }
     const cwd = if (cwd_v) |c| try hl.osPath(h, run, pos, c, true) else try hl.rootOf(h, run, pos);
     try hl.refuse(h, run, pos, "job_start", argv[0], cwd, want);

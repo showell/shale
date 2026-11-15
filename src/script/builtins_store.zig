@@ -76,6 +76,8 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     if (rel[0] == '/') return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root", .{ @tagName(b), rel });
     var it = std.mem.splitScalar(u8, rel, '/');
     while (it.next()) |part| {
+        // `..` is the habit worth naming: a sibling folder is a mount's.
+        if (std.mem.eql(u8, part, "..")) return run.fail(pos, .argument, "`{s}`: \"{s}\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)", .{ @tagName(b), rel });
         if (!store.fatName(part)) return run.fail(pos, .argument, "`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ @tagName(b), rel, part });
     }
     // A root of `/` takes no second `/`: `//x` is an empty part to the store.

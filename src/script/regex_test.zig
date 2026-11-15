@@ -25,12 +25,46 @@ fn refusal(pattern: []const u8) !regex.Refusal {
     return refused;
 }
 
-test "regex: `{n,m}` is refused where a part starts and after a repetition, at its brace" {
-    for ([_]struct { []const u8, usize }{ .{ "{2}", 0 }, .{ "a*{2}", 2 }, .{ "a{2}", 1 } }) |c| {
+test "regex: counted repetition is the part written out: {n}, {n,} and {n,m}, groups and all" {
+    // {n}: exactly n.
+    try testing.expectEqual(@as(usize, 3), (try found("a{3}", "aaaa")).?.end);
+    try testing.expect((try found("^a{3}$", "aa")) == null);
+    // {n,m}: as many as it can, up to m.
+    try testing.expectEqual(@as(usize, 4), (try found("a{2,4}", "aaaaa")).?.end);
+    try testing.expect((try found("^a{2,4}$", "a")) == null);
+    // {n,}: at least n, then any number.
+    try testing.expectEqual(@as(usize, 6), (try found("a{2,}", "aaaaaa")).?.end);
+    try testing.expect((try found("^a{2,}$", "a")) == null);
+    // {0} takes nothing; a class and a group count as one part each.
+    try testing.expectEqual(@as(usize, 1), (try found("ba{0}", "baa")).?.end);
+    try testing.expectEqual(@as(usize, 4), (try found("\\d{4}", "2026-11")).?.end);
+    // A group repeated: its capture is its last turn's, as a backtracker's is.
+    const g = (try found("(ab){2}", "ababab")).?;
+    try testing.expectEqual(@as(usize, 4), g.end);
+    try testing.expectEqual([2]usize{ 2, 4 }, g.groups[0].?);
+}
+
+test "regex: a count with nothing to repeat, after a repetition, malformed, backwards or too large is refused at its brace" {
+    for ([_]struct { []const u8, usize, []const u8 }{
+        .{ "{2}", 0, "a count (`{n,m}`) with nothing before it to repeat" },
+        .{ "a*{2}", 2, "a repetition repeated" },
+        .{ "a{2}*", 4, "a repetition repeated" },
+        .{ "a{x}", 1, "a count is `{n}`, `{n,}` or `{n,m}`" },
+        .{ "a{2", 1, "a count is `{n}`, `{n,}` or `{n,m}`" },
+        .{ "a{,3}", 1, "a count is `{n}`, `{n,}` or `{n,m}`" },
+        .{ "a{5,2}", 1, "a count whose most is below its least" },
+        .{ "a{101}", 1, "a count past 100" },
+        .{ "^{2}", 1, "are places, not bytes" },
+        .{ "a{2,5}?", 6, "lazy repetition" },
+    }) |c| {
         const r = try refusal(c[0]);
+        errdefer std.debug.print("{s}: at {d}: {s}\n", .{ c[0], r.at, r.message });
         try testing.expectEqual(c[1], r.at);
-        try testing.expect(std.mem.startsWith(u8, r.message, "`{n,m}` is not in this subset"));
+        try testing.expect(std.mem.indexOf(u8, r.message, c[2]) != null);
     }
+    // Counts nested past the program's bound: refused, never a crash.
+    const r = try refusal("((a{100}){100}){100}");
+    try testing.expect(std.mem.indexOf(u8, r.message, "more than 8192 instructions") != null);
 }
 
 test "regex: `\\n`, `\\t` and `\\r` are the control bytes, alone and in a class" {

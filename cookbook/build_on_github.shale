@@ -16,8 +16,8 @@
 -- and a few seconds; `run=<id>` is one look, no waiting. `wait=yes`
 -- dispatches and polls every `every` seconds (default 15) until the run
 -- is done: it is for a background task, whose exit says the verdict. Each
--- look is one program and a run holds 64 (`runs_most`), so a wait is at
--- most about 55 looks: 13 minutes at 15 s.
+-- look is one program, so a wait is at most the run's `programs` budget of
+-- looks (1,000 unset, about four hours at 15 s).
 --
 -- budget: steps=50000000
 
@@ -36,7 +36,7 @@ if WAIT ~= "yes" and WAIT ~= "no" then fail("build_on_github: `wait` is yes or n
 const SLUG = "showell/" .. REPO
 
 -- A `gh` program's output, trimmed; its failure fails the launch. `USED.n`
--- counts them against the run's 64 (`runs_most`).
+-- counts them, for the summary.
 const USED = {n = 0}
 function gh(argv)
   USED.n = USED.n + 1
@@ -114,7 +114,7 @@ else
     print("waiting on " .. v.url .. " (" .. ref .. ")")
     while v.status ~= "completed" do
       -- One program is kept for a failure's log.
-      if USED.n >= 63 then fail("build_on_github: still " .. v.status .. " after " .. v.secs .. " s, and this run's 64 programs are spent: " .. v.url) end
+      if budget().programs < 2 then fail("build_on_github: still " .. v.status .. " after " .. v.secs .. " s, and this run's `programs` budget is spent (`--budget programs=N` raises it): " .. v.url) end
       sleep(EVERY * 1000)
       v = look(id)
     end

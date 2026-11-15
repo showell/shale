@@ -143,7 +143,8 @@ const cases = [_]Case{
     .{ .src = "function f(a?, b) end", .line = 1, .column = 16, .class = .syntax, .message = "`b` is required after an optional parameter: the optional ones (`a?`) come last" },
     .{ .src = "local x = 1 ? 2", .line = 1, .column = 13, .class = .syntax, .message = "expected a value, found `?`, which marks an optional parameter (`function f(a, b?)`) and nothing else" },
     .{ .src = "local x = trim(\"a\", \"b\")", .line = 1, .column = 11, .class = .argument, .message = "`trim` takes 1 argument, given 2" },
-    .{ .src = "local x = read(\"../auth/secret\")", .line = 1, .column = 11, .class = .argument, .message = "`read`: \"../auth/secret\" has a part (\"..\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses" },
+    .{ .src = "local x = read(\"../auth/secret\")", .line = 1, .column = 11, .class = .argument, .message = "`read`: \"../auth/secret\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)" },
+    .{ .src = "local x = read(\"a/./b\")", .line = 1, .column = 11, .class = .argument, .message = "`read`: \"a/./b\" has a part (\".\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses" },
     .{ .src = "local x = read(\"/etc/passwd\")", .line = 1, .column = 11, .class = .argument, .message = "`read`: \"/etc/passwd\" is absolute: paths are relative to the data root" },
     .{ .src = "local x = ls(\"none\")", .line = 1, .column = 11, .class = .store, .message = "`ls(\"none\")`: not found (FileNotFound): `exists(p)` asks first" },
     .{ .src = "local x = read(\"none.txt\")", .line = 1, .column = 11, .class = .store, .message = "`read(\"none.txt\")`: not found (FileNotFound): `exists(p)` asks first" },
@@ -158,7 +159,7 @@ const cases = [_]Case{
     .{ .src = "while true do end", .line = 1, .column = 7, .budget = .steps, .class = .budget, .message = "the step budget (100000 steps) ran out" },
     .{ .src = "function g(x) return x + {} end print(g(1))", .line = 1, .column = 24, .function = "g", .class = .type, .message = "`+` takes integers, and its right is an empty table" },
     // Regular expressions: every construct the subset leaves out, refused by name.
-    .{ .src = "local m = re_find(\"x\", \"a{2}\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 2: `{n,m}` is not in this subset: write the part out as often as it must come (`\\d\\d\\d?`), or `\\{` for the byte" },
+    .{ .src = "local m = re_find(\"x\", \"a{x}\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 2: a count is `{n}`, `{n,}` or `{n,m}`, each a number of digits: `\\{` is the byte" },
     .{ .src = "local m = re_find(\"x\", \"a(?=b)\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 2: `(?` is not in this subset but for `(?:...)`, a group that does not capture: no lookaround, no named groups" },
     .{ .src = "local m = re_find(\"x\", \"(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 28: a tenth capture group: nine is the most (`\\9` is the last), so write this one `(?:...)` if it need not capture" },
     .{ .src = "local m = re_find(\"x\", \"(?<n>a)\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 1: `(?` is not in this subset but for `(?:...)`, a group that does not capture: no lookaround, no named groups" },
@@ -179,7 +180,7 @@ const cases = [_]Case{
     .{ .src = "local m = re_find(\"x\", \"a\\\\b+\")", .line = 1, .column = 11, .class = .argument, .message = "`re_find`'s pattern, at its byte 4: `^`, `$`, `\\b` and `\\B` are places, not bytes: they cannot repeat" },
     .{ .src = "local m = re_find(\"x\", \"x\", {nocase = true, wide = true})", .line = 1, .column = 11, .class = .argument, .message = "`re_find` takes `nocase` or `from`, not `wide`" },
     .{ .src = "local m = re_match(\"x\", rep(\"a\", 257))", .line = 1, .column = 11, .class = .argument, .message = "`re_match`'s pattern is 257 bytes, and one may be at most 256" },
-    .{ .src = "local m = re_replace(\"x\", \"a{2}\", \"b\")", .line = 1, .column = 11, .class = .argument, .message = "`re_replace`'s pattern, at its byte 2: `{n,m}` is not in this subset: write the part out as often as it must come (`\\d\\d\\d?`), or `\\{` for the byte" },
+    .{ .src = "local m = re_replace(\"x\", \"a{x}\", \"b\")", .line = 1, .column = 11, .class = .argument, .message = "`re_replace`'s pattern, at its byte 2: a count is `{n}`, `{n,}` or `{n,m}`, each a number of digits: `\\{` is the byte" },
     .{ .src = "local m = re_replace(\"x\", \"x\", \"\\\\1\")", .line = 1, .column = 11, .class = .argument, .message = "`re_replace`'s replacement has `\\1`, and its pattern has no capture group" },
 };
 

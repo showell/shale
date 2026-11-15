@@ -1085,10 +1085,10 @@ test "builtins: re_find_all gives every match as re_find does, not overlapping, 
     try testing.expectEqualStrings("`re_find_all` takes `nocase`, not `from`", from.stop.?.message);
     try f.expectStop("print(re_find_all(\"a\", \"a\", {nocase = 1}))", .type);
     try f.expectStop("print(re_find_all(1, \"a\"))", .type);
-    var refused = f.run("print(re_find_all(\"a\", \"a{2}\"))", .{});
+    var refused = f.run("print(re_find_all(\"a\", \"a{x}\"))", .{});
     defer refused.deinit();
     try testing.expectEqual(script.diag.Class.argument, refused.stop.?.class);
-    try testing.expect(std.mem.startsWith(u8, refused.stop.?.message, "`re_find_all`'s pattern, at its byte 2: `{n,m}`"));
+    try testing.expect(std.mem.startsWith(u8, refused.stop.?.message, "`re_find_all`'s pattern, at its byte 2: a count is `{n}`"));
 }
 
 test "builtins: re_find_all finds what the prelude's re_find_all, a loop of re_find, found: on a varied corpus, every pattern, with and without nocase" {

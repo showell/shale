@@ -155,8 +155,8 @@ function color_file(path, out, tally)
   return nil
 end
 
-function color_files(paths, out)
-  if #paths > 64 then fail("color_shale: " .. #paths .. " files need " .. #paths .. " programs, and a run holds 64: color them in parts") end
+function color_files(paths, out, programs_left)
+  if #paths > programs_left then fail("color_shale: " .. #paths .. " files need " .. #paths .. " programs, and this run's `programs` budget has " .. programs_left .. ": color them in parts, or launch with `--budget programs=N`") end
   local tally = {colored = 0, refused = {}, counts = {}}
   for class in CLASSES do tally.counts[class] = 0 end
   for path in paths do color_file(path, out, tally) end
@@ -309,7 +309,7 @@ function test_files(checks)
   replace(folder .. "/good.shale", "print(1) -- a\n")
   replace(folder .. "/undeclared.shale", "print(nobody)\n")
   replace(folder .. "/floats.shale", "print(1.5)\n")
-  local tally = color_files({folder .. "/good.shale", folder .. "/undeclared.shale", folder .. "/floats.shale"}, folder .. "/out")
+  local tally = color_files({folder .. "/good.shale", folder .. "/undeclared.shale", folder .. "/floats.shale"}, folder .. "/out", budget().programs)
   if tally.colored ~= 1 or #tally.refused ~= 2 then fail("self_test: the file run gave " .. json_write(tally)) end
   if not contains(tally.refused[2], "float") then fail("self_test: the refusal said " .. tally.refused[2]) end
   if tally.counts["syn-comment"] ~= 1 or tally.counts["syn-number"] ~= 1 or tally.counts["syn-keyword"] ~= 0 then fail("self_test: the counts gave " .. json_write(tally.counts)) end
@@ -319,8 +319,8 @@ function test_files(checks)
   push(checks.passed, "a file run, with what the real lexer refuses")
   local too_many = {}
   for i = 1, 65 do push(too_many, "x.shale") end
-  local over = attempt(color_files, too_many, folder .. "/out")
-  if over.ok or not contains(over.error, "a run holds 64") then fail("self_test: 65 files gave " .. json_write(over)) end
+  local over = attempt(color_files, too_many, folder .. "/out", 64)
+  if over.ok or not contains(over.error, "`programs` budget has 64") then fail("self_test: 65 files gave " .. json_write(over)) end
   push(checks.passed, "more files than a run's programs")
   return nil
 end
@@ -342,7 +342,7 @@ if arg("self_test", "") == "1" then
   self_test()
 else
   if FILES == "" or OUT == "" then fail("color_shale: files=a.shale,b.shale names the files, and out=DIR where their pages go") end
-  local tally = color_files(split(FILES, ","), OUT)
+  local tally = color_files(split(FILES, ","), OUT, budget().programs)
   for why in tally.refused do print("color_shale: refused " .. why) end
   local counts = {}
   for class in CLASSES do push(counts, sub(class, 5, #class) .. "=" .. tally.counts[class]) end

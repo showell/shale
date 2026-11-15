@@ -104,8 +104,8 @@
 -- roc-types built for a different Roc than the tree's `roc-version`. With
 -- `types=0` every candidate is tried.
 --
--- A Shale run starts at most 64 programs, and a large tree needs more. The
--- run then stops before a file it might not finish, prints `go on with
+-- A Shale run starts at most its `programs` budget of programs, and a very
+-- large tree needs more. The run then stops before a file it might not finish, prints `go on with
 -- from=N`, and the next run, given `from=N`, starts at the glob's Nth file.
 -- A file with nothing to try uses no programs. Under `apply=1`, a stopped
 -- run has already written the files the confirm kept, and the next run
@@ -127,7 +127,7 @@
 --
 -- `self_test=1` judges each plant in `cookbook/roc/plants/rewrite_method_calls/` in a
 -- child run of its own (`plant=<Name>`, run by the `shale` on PATH), so each
--- plant gets a run's 64 programs. The child copies the plants to a fresh
+-- plant gets a run's programs of its own. The child copies the plants to a fresh
 -- folder under `scratch:` and runs with `apply=1` there. The table `EXPECT`
 -- below says how many calls each plant must leave, a reason one of them must
 -- give, and how many confirms and rounds it takes; a plant with a
@@ -159,7 +159,7 @@ const MAX_ROUNDS = 6
 -- A file may take `MAX_ROUNDS` checks, a test and, under `apply=1`, two
 -- `roc fmt`s; the first file on a root also takes the baseline's check and
 -- test. A file is begun only while that many programs are left.
-const MAX_PROGRAMS = 64
+const MAX_PROGRAMS = budget().programs
 const PROGRAMS_PER_FILE = MAX_ROUNDS + 5
 
 -- The node kinds a receiver can be without parentheses, as in `f(x).len()`

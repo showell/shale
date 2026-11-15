@@ -381,6 +381,26 @@ test "linux prelude: report_run prints a program's verdict, keeps its output, an
     try expectHas(empty.stop.?.message, "`report_run`: an empty command");
 }
 
+test "linux prelude: copy copies a file or a tree whole, never over what is there, and stops on a link before writing" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.tmp.dir.createDirPath(t.threaded.io(), "site/sub");
+    try t.put("site/index.html", "<p>hi</p>\n");
+    try t.put("site/.hidden", "kept too\n");
+    try t.put("site/sub/app.wasm", "\x00asm\x01\x00\x00\x00");
+    // A tree: every file, nested and hidden alike, byte for byte.
+    try t.expectOutput("print(copy(\"site\", \"dev\")) print(read(\"dev/index.html\") == read(\"site/index.html\"), read(\"dev/.hidden\"), read(\"dev/sub/app.wasm\") == read(\"site/sub/app.wasm\"))", "3\ntrue\tkept too\n\ttrue\n");
+    // One file; a copy never overwrites.
+    try t.expectOutput("print(copy(\"site/index.html\", \"one.html\"), read(\"one.html\"))", "1\t<p>hi</p>\n\n");
+    try t.put("taken.html", "mine\n");
+    try t.expectStop("copy(\"site/index.html\", \"taken.html\")", .atomic, .fail, "is already there, and a copy never overwrites");
+    // A link anywhere in the tree stops it, and nothing is written.
+    try t.tmp.dir.symLink(t.threaded.io(), "index.html", "site/link.html", .{});
+    try t.expectStop("copy(\"site\", \"linked\")", .atomic, .fail, "is a symbolic link, which the store never follows; nothing was copied");
+    try t.expectOutput("print(exists(\"linked\"))", "false\n");
+}
+
 test "linux prelude: grep_tree searches a tree, says what it passed by, and takes a pattern, either case, extensions, context and a cap" {
     var t: T = undefined;
     try init(&t);

@@ -41,7 +41,7 @@ if #files == 0 then
   print("check_comments_only: no .zig file differs from " .. REV)
 else
   -- Every file at `rev` from one `git cat-file --batch` (a `git show` a
-  -- file would spend a run's 64 programs on 64 files): a header line,
+  -- file would spend a program on each file): a header line,
   -- `<object> blob <size>` or `<name> missing`, then that many bytes and a
   -- newline.
   local asked = {}

@@ -24,7 +24,7 @@ pub const usage =
     \\  --undo-on-stop    a run that stops puts back every path it changed (not a program's)
     \\  --args-stdin      the FILE's NAME=VALUEs on stdin, one a line, each value raw to its end
     \\  --budget NAME=N   one budget: steps, reads, read_bytes, output_bytes, changes,
-    \\                    change_bytes, arena_bytes, call_bytes, call_entries,
+    \\                    change_bytes, arena_bytes, call_bytes, call_entries, programs,
     \\                    kept_bytes (at most 256 MiB), machine_bytes (at most 1 GiB); a
     \\                    script's own `-- budget: NAME=N ...` line sets its
     \\                    budgets where this does not
@@ -84,7 +84,7 @@ pub const Refused = struct { why: []const u8 };
 /// `call_depth` too: the Zig stack's guard is `depth`, which stays, so a
 /// box-side tool walking a deep tree may raise it (the bare-metal route
 /// sets its own budgets, never through here).
-const settable = [_][]const u8{ "steps", "reads", "read_bytes", "output_bytes", "changes", "change_bytes", "arena_bytes", "call_bytes", "call_entries", "kept_bytes", "machine_bytes", "call_depth" };
+const settable = [_][]const u8{ "steps", "reads", "read_bytes", "output_bytes", "changes", "change_bytes", "arena_bytes", "call_bytes", "call_entries", "kept_bytes", "machine_bytes", "call_depth", "programs" };
 
 /// Parses `argv` (without the program's name) and the caller's `SHALE_ROOT`,
 /// if any. The `NAME=VALUE` arguments go into `args_buf`; a refusal's message
@@ -518,4 +518,15 @@ test "cli: call_depth is set by --budget and a `-- budget:` line; unset, it is 6
     try testing.expect(headerBudgets("-- budget: call_depth=500\nprint(1)\n", &c, &why) == null);
     try testing.expectEqual(@as(u32, 500), c.budgets.call_depth);
     try testing.expectError(error.Refused, parsed(&.{ "--budget", "depth=10000", "a.shale" }, null));
+}
+
+test "cli: programs is set by --budget and a `-- budget:` line; unset, it is 1000" {
+    var why: [256]u8 = undefined;
+    const unset = try parsed(&.{"a.shale"}, null);
+    try testing.expectEqual(@as(u32, 1000), unset.budgets.programs);
+    const flagged = try parsed(&.{ "--budget", "programs=5000", "a.shale" }, null);
+    try testing.expectEqual(@as(u32, 5000), flagged.budgets.programs);
+    var c = try parsed(&.{"a.shale"}, null);
+    try testing.expect(headerBudgets("-- budget: programs=64\nprint(1)\n", &c, &why) == null);
+    try testing.expectEqual(@as(u32, 64), c.budgets.programs);
 }

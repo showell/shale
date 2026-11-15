@@ -179,8 +179,8 @@ end, and fails the run.
   rewrites are safe; each call it leaves is listed with the reason. It is a
   dry run unless given `apply=1`. Run it with `--undo-on-stop`, so a run
   that stops in the middle puts back the file it was trying. A run starts
-  at most 64 programs, so on a large tree it stops and prints the `from=`
-  argument for the next run.
+  at most its `programs` budget of programs (1,000 unset), so on a very
+  large tree it stops and prints the `from=` argument for the next run.
 
       cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
 
@@ -321,6 +321,6 @@ overlap: `type-mod` and `s-type-decl` both start at the type's name. The
 file node starts after the leading comments, and a `|>` is an
 `e-arrow-call`. `roc check` can report two errors on one line, or report
 an error at the line of the definition around it, so match its errors to
-an edit by span, not by line. A Shale run starts at most 64 programs, so a
-recipe that compiles once per file must stop and resume, as
-`rewrite_method_calls.shale`'s `from=` does.
+an edit by span, not by line. A Shale run starts at most its `programs` budget
+of programs, so a recipe that compiles once per file stops and resumes past
+it, as `rewrite_method_calls.shale`'s `from=` does.
