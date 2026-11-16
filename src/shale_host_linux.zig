@@ -112,11 +112,30 @@ pub const Time = struct {
         var at: usize = 0;
         while (at < t.top_len and t.top[at].ms >= ms) at += 1;
         if (at == top_most) return;
-        const kept = alloc.dupe(u8, argv[0..@min(argv.len, 80)]) catch return;
+        const kept = keepEnds(alloc, argv) catch return;
         if (t.top_len == top_most) alloc.free(t.top[top_most - 1].argv) else t.top_len += 1;
         var i: usize = t.top_len - 1;
         while (i > at) : (i -= 1) t.top[i] = t.top[i - 1];
         t.top[at] = .{ .ms = ms, .argv = kept };
+    }
+
+    /// The most of an argv the line keeps, so three programs fit one line.
+    const argv_most = 80;
+    const elided = "…";
+
+    /// An argv past `argv_most` bytes keeps both its ends around an ellipsis,
+    /// `argv_most` bytes in all: the start names the program and the end holds
+    /// the arguments that tell one run from another, while a long path between
+    /// them (a compiler's install, a cache's hash) is what a reader can spare.
+    /// Neither cut splits a UTF-8 sequence.
+    fn keepEnds(alloc: std.mem.Allocator, argv: []const u8) ![]u8 {
+        if (argv.len <= argv_most) return alloc.dupe(u8, argv);
+        const room = argv_most - elided.len;
+        var head: usize = room / 2;
+        while (head > 0 and argv[head] & 0xC0 == 0x80) head -= 1;
+        var tail: usize = argv.len - (room - room / 2);
+        while (tail < argv.len and argv[tail] & 0xC0 == 0x80) tail += 1;
+        return std.mem.concat(alloc, u8, &.{ argv[0..head], elided, argv[tail..] });
     }
 
     pub fn deinit(t: *Time, alloc: std.mem.Allocator) void {
@@ -1099,6 +1118,33 @@ test "time: the slowest three, in order, a fourth dropped and an earlier tie kep
     w = .fixed(&buf);
     try none.print(&w);
     try testing.expectEqualStrings("── time: 0 programs, 0.0 s in all\n", w.buffered());
+}
+
+test "time: a slowest program's argv of 80 bytes is kept whole; one longer keeps its first 38 and last 39 around an ellipsis, 80 in all, never splitting a UTF-8 sequence" {
+    const a = testing.allocator;
+    const eighty = &@as([80]u8, @splat('a'));
+    const whole = try Time.keepEnds(a, eighty);
+    defer a.free(whole);
+    try testing.expectEqualStrings(eighty, whole);
+
+    const eighty_one = try Time.keepEnds(a, &@as([81]u8, @splat('a')));
+    defer a.free(eighty_one);
+    try testing.expectEqualStrings(&@as([38]u8, @splat('a')) ++ "…" ++ &@as([39]u8, @splat('a')), eighty_one);
+
+    // The fixture under a long cache dir, as `shale_cli_test` runs it: the
+    // program and its arguments both survive, the hash between them cut.
+    const long = "/home/u/a-long-cache-dir/o/0123456789abcdef0123456789abcdef/shale-fixture sleep 1200";
+    const cut = try Time.keepEnds(a, long);
+    defer a.free(cut);
+    try testing.expectEqualStrings("/home/u/a-long-cache-dir/o/0123456789a…23456789abcdef/shale-fixture sleep 1200", cut);
+    try testing.expectEqual(@as(usize, 80), cut.len);
+
+    // A two-byte `é` across either cut is dropped whole, so the kept text
+    // is a byte shorter at each end.
+    const accents = &@as([37]u8, @splat('b')) ++ "é" ++ &@as([20]u8, @splat('c')) ++ "é" ++ &@as([38]u8, @splat('d'));
+    const kept = try Time.keepEnds(a, accents);
+    defer a.free(kept);
+    try testing.expectEqualStrings(&@as([37]u8, @splat('b')) ++ "…" ++ &@as([38]u8, @splat('d')), kept);
 }
 
 /// A spawn that runs nothing: the bytes it is told to give, every time.

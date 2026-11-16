@@ -1252,6 +1252,8 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   `── time:`, once programs, job waits and sleeps took a second or more
   (always with `--verbose`): how many programs, their wall time, the
   slowest three's seconds, shares and argvs, the job waits and the sleeps.
+  An argv past 80 bytes keeps its first 38 and last 39 around a `…`, so the
+  program and the arguments that tell one run from another both show.
   A share is of programs, job waits and sleeps together. Both stream, so `> f 2>&1` keeps them in order.
 - It exits 0 if the script finished, 1 if it stopped, 2 if the run could
   not begin: the command line, the script's file (a `name:` no mount has
