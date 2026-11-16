@@ -181,6 +181,8 @@ end, and fails the run.
   that stops in the middle puts back the file it was trying. A run starts
   at most its `programs` budget of programs (1,000 unset), so on a very
   large tree it stops and prints the `from=` argument for the next run.
+  Its `glob=` takes several globs separated by commas, and a file with no
+  call to try needs no root.
 
       cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
 

@@ -13,7 +13,9 @@
 --   shale cookbook:roc/rewrite_method_calls.shale self_test=1
 --
 -- The arguments:
---   glob   the files to rewrite, `**/*.roc` by default.
+--   glob   the files to rewrite, `**/*.roc` by default; several globs may be
+--          given, separated by commas, and a file two of them match is read
+--          once.
 --   root   the app that `roc check` and `roc test` run on. Several apps,
 --          comma-separated, serve a tree that no one app imports whole,
 --          such as test-only modules with an app of their own; each file is
@@ -100,9 +102,11 @@
 -- When the types can't be read, the run stops rather than going on without
 -- them. That happens with no `root=` (roc-types reads an app, and reads a
 -- type module only through an app), a root that is not an app or that the
--- checker refuses, a file of the glob that no root imports, and a
--- roc-types built for a different Roc than the tree's `roc-version`. With
--- `types=0` every candidate is tried.
+-- checker refuses, a file of the glob with a call to try that no root
+-- imports, and a roc-types built for a different Roc than the tree's
+-- `roc-version`. A file with no call to try needs no root, as a package's
+-- header `main.roc` that nothing imports. With `types=0` every candidate
+-- is tried.
 --
 -- A Shale run starts at most its `programs` budget of programs, and a very
 -- large tree needs more. The run then stops before a file it might not finish, prints `go on with
@@ -739,17 +743,35 @@ function confirm_proven_files(ctx, root, files, baseline_test)
   return nil
 end
 
+-- The files of `globs`, several separated by commas, in the order the globs
+-- give them, each once.
+function paths_of_globs(globs)
+  local seen = {}
+  local paths = {}
+  for g in split(globs, ",") do
+    for q in glob(trim(g)) do
+      if not has_key(seen, q) then
+        seen[q] = true
+        push(paths, q)
+      end
+    end
+  end
+  return paths
+end
+
 -- The root each file is judged on, by path. With the types read, it is the
 -- first of `roots` whose app reaches the file; otherwise the one root, or
--- the file itself when there is none. A file no root reaches stops the run:
--- the types can't judge it, and a path spelled two ways (through a link)
--- would quietly find no type for any of its candidates.
-function root_of_each_file(ctx, paths, from, roots, read_types)
+-- the file itself when there is none. A file with a call to try (in the set
+-- `open`) that no root reaches stops the run: the types can't judge it, and
+-- a path spelled two ways (through a link) would quietly find no type for
+-- any of its candidates. A file with none has nothing for the types to
+-- judge, so it needs no root.
+function root_of_each_file(ctx, paths, from, roots, read_types, open)
   local out = {}
   for k = from, #paths do
     local p = paths[k]
     out[p] = #roots > 0 and roots[1] or p
-    if read_types then
+    if read_types and has_key(open, p) then
       local real_path = real(p)
       local found = ""
       for r in roots do
@@ -783,11 +805,17 @@ function run_all(paths, root, from, trees, use_types, roc)
   -- Each file's candidates, `{cands, kind_counts, open_count, all_proven}`.
   local judged = {}
   local any_open = false
+  local open = {}
   for k = from, #paths do
     local p = paths[k]
     if not has_key(trees, p) then fail("rewrite_method_calls: roc-ast gave no tree for " .. p) end
     local cands = candidates_in(trees[p], strip_suffix(basename(p), ".roc"))
-    for c in cands do if c.why_left == "" then any_open = true end end
+    for c in cands do
+      if c.why_left == "" then
+        any_open = true
+        open[p] = true
+      end
+    end
     judged[p] = {cands = cands, kind_counts = {}, open_count = 0, all_proven = false}
   end
   -- The types judge only open candidates, so with none, roc-types never runs.
@@ -795,11 +823,11 @@ function run_all(paths, root, from, trees, use_types, roc)
   if read_types then
     for r in roots do ctx.types_by_root[r] = types_by_region(ctx, r) end
   end
-  local root_of = root_of_each_file(ctx, paths, from, roots, read_types)
+  local root_of = root_of_each_file(ctx, paths, from, roots, read_types, open)
   for k = from, #paths do
     local p = paths[k]
     local j = judged[p]
-    if read_types then judge_by_types(j.kind_counts, trees[p], j.cands, p, ctx.types_by_root[root_of[p]]) end
+    if read_types and has_key(open, p) then judge_by_types(j.kind_counts, trees[p], j.cands, p, ctx.types_by_root[root_of[p]]) end
     j.all_proven = true
     for c in j.cands do
       if c.why_left == "" then
@@ -874,7 +902,9 @@ end
 -- For each plant: how many calls it must leave (`left`), a reason one of
 -- them must give (`why`), the root it is judged on (`root`, the plant
 -- itself by default), whether it runs with the types (`types`), and how
--- many confirms and trial rounds it takes. A `stop` plant must stop its
+-- many confirms and trial rounds it takes. An entry with `file` judges that
+-- plant's file, under its own name, and one with `with` reads a second
+-- plant beside it, as a glob of two files would. A `stop` plant must stop its
 -- run with that text. A plant with a `.want` file must come out as that
 -- text; one that leaves calls and has none must come out as it was.
 const EXPECT = {
@@ -901,6 +931,7 @@ const EXPECT = {
   Pin = {stop = "roc-types reads Roc nightly-2026-10-30-0602c5f", root = "TypedApp", types = true, tree_pin = "nightly-2026-10-29-a0a9fc2"},
   Second = {left = 0, root = "TypedApp,SecondApp", types = true, confirms = 1, rounds = 0},
   Unreached = {stop = "no root reaches", root = "TypedApp,SecondApp", types = true},
+  Beside = {file = "Proven", with = "NoCalls", left = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
 }
 
 -- The plants that hold no call and serve only as roots for other plants:
@@ -916,7 +947,10 @@ function self_test_plant(name)
   local scratch = fresh_dir("scratch:", "methods")
   for f in ls(PLANTS_DIR) do replace(scratch .. "/" .. f, read(PLANTS_DIR .. "/" .. f)) end
   local failures = {count = 0}
-  local p = scratch .. "/" .. name .. ".roc"
+  local file = get(want, "file", name)
+  local p = scratch .. "/" .. file .. ".roc"
+  local paths = {p}
+  if has_key(want, "with") then push(paths, scratch .. "/" .. want.with .. ".roc") end
   local with_types = has_key(want, "types")
   -- A plant with `tree_pin` runs as though the tree pinned that Roc.
   local roc = has_key(want, "tree_pin") and real("tools:roc-" .. want.tree_pin .. "/roc") or roc_bin("rewrite_method_calls", SELF_TEST)
@@ -924,13 +958,13 @@ function self_test_plant(name)
   for r in split(get(want, "root", ""), ",") do
     if r ~= "" then push(roots, scratch .. "/" .. r .. ".roc") end
   end
-  local got = run_all({p}, join(roots, ","), 1, nil, with_types, roc)
+  local got = run_all(paths, join(roots, ","), 1, nil, with_types, roc)
   if has_key(want, "stop") then fail("rewrite_method_calls: self-test: " .. name .. " ran to its end, and was to stop: " .. want.stop) end
   local left = got.lines
   report_check(failures, #left == want.left, name .. ": " .. #left .. " left, want " .. want.left .. (#left > 0 and (" (" .. join(left, "; ") .. ")") or ""))
   if has_key(want, "why") then report_check(failures, #left > 0 and contains(join(left, "\n"), want.why), name .. ": left because " .. want.why) end
-  local want_path = PLANTS_DIR .. "/" .. name .. ".want"
-  if exists(want_path) then report_check(failures, read(p) == read(want_path), name .. ": comes out as " .. name .. ".want") end
+  local want_path = PLANTS_DIR .. "/" .. file .. ".want"
+  if exists(want_path) then report_check(failures, read(p) == read(want_path), name .. ": comes out as " .. file .. ".want") end
   -- In Typed, the types turn one call and leave the other, so the trial
   -- decides neither.
   local kinds = got.ctx.type_kind_counts
@@ -948,7 +982,8 @@ function self_test_plant(name)
     local want_runs = has_key(want, "no_types_run") and 0 or #roots
     report_check(failures, runs == want_runs, name .. ": " .. runs .. " roc-types run(s), want " .. want_runs)
   end
-  if want.left > 0 and not exists(want_path) then report_check(failures, read(p) == read(PLANTS_DIR .. "/" .. name .. ".roc"), name .. ": put back as it was") end
+  if want.left > 0 and not exists(want_path) then report_check(failures, read(p) == read(PLANTS_DIR .. "/" .. file .. ".roc"), name .. ": put back as it was") end
+  if has_key(want, "with") then report_check(failures, read(paths[2]) == read(PLANTS_DIR .. "/" .. want.with .. ".roc"), name .. ": " .. want.with .. " left as it was") end
   if failures.count > 0 then fail("rewrite_method_calls: self-test: " .. name .. ": " .. failures.count .. " failed") end
   remove_tree(scratch)
   return nil
@@ -959,6 +994,10 @@ end
 function self_test()
   if not exists(ROC_TYPES_EXE) then fail("rewrite_method_calls: self-test: no " .. ROC_TYPES_EXE .. ", which the plants marked `types` are judged by: Shale's `shale tools/roc_types/install.shale` installs it") end
   local failed = {}
+  local globbed = paths_of_globs(PLANTS_DIR .. "/Proven.roc, " .. PLANTS_DIR .. "/NoC*.roc," .. PLANTS_DIR .. "/Proven.roc")
+  local globs_held = #globbed == 2 and basename(globbed[1]) == "Proven.roc" and basename(globbed[2]) == "NoCalls.roc"
+  print((globs_held and "ok    " or "FAIL  ") .. "glob=: two globs and a repeat give Proven.roc, then NoCalls.roc, each once (" .. join(globbed, ", ") .. ")")
+  if not globs_held then push(failed, "glob=") end
   for file in ls(PLANTS_DIR) do
     local name = strip_suffix(file, ".roc")
     if ends_with(file, ".roc") and not has_key(EXPECT, name) and not has_key(ROOT_PLANTS, name) then
@@ -991,7 +1030,7 @@ elseif SELF_TEST and PLANT ~= "" then
 elseif SELF_TEST then
   self_test()
 else
-  local paths = glob(GLOB)
+  local paths = paths_of_globs(GLOB)
   local total = run_all(paths, ROOT, FROM, nil, USE_TYPES, roc_bin("rewrite_method_calls", SELF_TEST))
   local summary = (APPLY and "" or "dry run: ") .. "candidates " .. total.candidates .. ", rewritten " .. total.rewritten .. ", left " .. total.left .. ", programs " .. total.ctx.programs_used .. " (checks: " .. total.ctx.confirms .. " confirming proven calls, " .. total.ctx.rounds .. " in trial rounds)"
   if total.next > 0 then summary = summary .. ", in files " .. FROM .. " to " .. (total.next - 1) .. " of " .. #paths .. ": a run holds " .. MAX_PROGRAMS .. " programs; go on with from=" .. total.next end
