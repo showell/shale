@@ -7,9 +7,7 @@ name: coverage
 
 on:
   push:
-    # coverage-ci: while the workflow is proven on its own branch; dropped
-    # before it merges.
-    branches: [master, coverage-ci]
+    branches: [master]
   pull_request:
   workflow_dispatch:
     inputs:

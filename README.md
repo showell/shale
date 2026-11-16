@@ -336,7 +336,9 @@ built Debug, for every file of build.zig's `coverage_files`; `shale
 tools/coverage.shale` reads it back as a table of each module's lines, ran,
 uncovered and exempt (`// coverage: not run, <why>` on the line), and fails
 when an uncovered count differs from `coverage/lines.txt`, the floor a
-change moves in the same commit (`floor=write`). **`doc-check`** runs
+change moves in the same commit (`floor=write`). GitHub runs it on every
+push to master and every pull request (`.github/workflows/coverage.yml`,
+on ubuntu-24.04, the box's, since the floor is measured here). **`doc-check`** runs
 `tools/doc_check.shale` from the folder that holds the repos, its fixtures
 first: in every repo's tracked docs but the history, each backticked or
 linked path must resolve, and each `` `file`'s `name` `` must be in that
