@@ -24,7 +24,10 @@ concurrency:
 
 jobs:
   coverage:
-    runs-on: ubuntu-latest
+    # The floor is the box's, so the runner is the box's Ubuntu: on 26.04,
+    # curl unfolds a folded header itself, and the prelude's own unfolding
+    # (src/shale_prelude_linux.shale, `http`) never runs.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -44,13 +47,11 @@ jobs:
           ref: main
           path: zig-coverage-sdk
 
-      # The coverage script is Shale, run by this tree's own `shale`.
-      - name: zig build
+      # The coverage script is Shale, run by this tree's own `shale`, built
+      # Debug by `zig build script` (seconds; the installed ReleaseSafe one
+      # takes LLVM minutes), the checkout its root.
+      - name: shale tools/coverage.shale
         working-directory: shale
         run: |
           zig version
-          zig build --summary failures
-
-      - name: shale tools/coverage.shale
-        working-directory: shale
-        run: zig-out/bin/shale tools/coverage.shale
+          zig build script -- --root "$PWD" tools/coverage.shale
