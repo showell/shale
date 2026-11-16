@@ -36,8 +36,8 @@ Every script runs inside guard rails that a shell does not have:
 
 Linux on x86-64 and the patched Zig that `zig-version` names (`0.17.1+patched.3`,
 from [patched-zig-compiler](https://github.com/showell/patched-zig-compiler),
-whose `tools/get_zig.sh` installs it; any other Zig stops the build at its
-first line). Shale builds against
+whose PATCHES.md says how to install it; any other Zig stops the build at
+its first line). Shale builds against
 [zig-webbox](https://github.com/showell/zig-webbox), checked out **beside**
 it:
 
