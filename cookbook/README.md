@@ -26,6 +26,12 @@ steps left for the writer.
   map). It surveys the checkouts, compares them with the last map, and
   prints the age table, the README mentions and the steps to a gated note on
   the essay surface. `cd /home/steve && shale cookbook:plan_repo_essay.shale`
+- `remove_lane.shale`: for "remove that finished lane". It fetches, runs
+  `retire_checkout.shale` on the lane and stops on anything less than a
+  plain CLEAR; then it removes the worktree (or deletes a standalone
+  clone's folder) and deletes the lane's branch, here and on origin, where
+  it is merged into origin's default branch. Never a bare `git worktree
+  remove`. `cd ~/build/lanes && shale cookbook:remove_lane.shale dir=<lane>`
 
 ## For any project
 
@@ -80,6 +86,7 @@ steps left for the writer.
   deletes nothing: BLOCKED for uncommitted work, stashes, unpushed branches,
   worktrees, a symbolic link into it, a sibling's tracked file or a memory
   note that names it by a path; else CLEAR. `cd ~/showell_repos && shale cookbook:retire_checkout.shale dir=roc`
+  (A lane is removed by `remove_lane.shale`, which runs this first.)
 - `run.shale`: runs a command line and prints how each program ended, its
   time and the lines that matter. `shale cookbook:run.shale --args-stdin` (cmd, grep)
 - `run_zig_build.shale`: runs `zig build STEP` and prints its verdict without

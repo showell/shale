@@ -40,6 +40,7 @@ print
 prune
 rank
 read
+remove
 rename
 replace
 report

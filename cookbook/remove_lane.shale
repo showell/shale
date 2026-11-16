@@ -1,0 +1,269 @@
+-- This recipe removes a finished lane: a linked worktree or a standalone
+-- clone in the folder it runs from (`~/build/lanes` on the box), and the
+-- lane's branch once it is merged. It removes nothing unless
+-- `retire_checkout.shale` says CLEAR first.
+--
+--   cd ~/build/lanes && shale cookbook:remove_lane.shale dir=apps-list
+--   shale cookbook:remove_lane.shale self_test=1
+--
+-- Why it exists: twice on 2026-11-16 a finished lane was removed with a bare
+-- `git worktree remove`, with no `retire_checkout` run first. Nothing
+-- was lost those times, but nothing would have stopped an unpushed commit or
+-- a link into the lane from going with it. This recipe makes the check and
+-- the removal one launch, so the check can't be skipped.
+--
+-- In order:
+--
+-- 1. **Fetch** the lane's origin (`git fetch --prune origin`, in the lane's
+--    main checkout for a worktree, in the lane for a clone), so the checks
+--    below see the remote as it is, not as the last fetch saw it.
+-- 2. **Run `retire_checkout.shale dir=<lane>`** as a child run from the
+--    same folder: its checks are its own, never copied here. Anything but a
+--    plain `CLEAR: <lane> can be deleted` stops the run with nothing
+--    removed: BLOCKED with its reasons, and a CLEAR with a check SKIPPED
+--    too, since a check that didn't run is not a check passed.
+-- 3. **Remove the lane.** A worktree goes by `git -C <main> worktree remove
+--    <lane>` (never `--force`: git refuses a worktree with changes, which
+--    the check has just said there are none of). A clone's folder is
+--    deleted whole, after its remote branch (5) is dealt with, since that
+--    push is made from the clone.
+-- 4. **Delete the lane's local branch** (a worktree's, in its main
+--    checkout) when it is merged: its tip an ancestor of origin's default
+--    branch (`git merge-base --is-ancestor`, as `prune_merged_branches.shale`
+--    judges), never by its name. A branch not merged is kept, said with its
+--    count of commits the default lacks; `retire_checkout` has already said
+--    each of them is on a remote. The default branch itself is never
+--    deleted, nor a detached HEAD's commit, which has no branch.
+-- 5. **Delete its remote branch** (`git push origin --delete`) when one is
+--    left on origin and is merged, by the same rule; else it is kept, said.
+--
+-- Each step prints one line, and the last line is the outcome: `removed:
+-- <lane> (...)` naming what was deleted and what was kept.
+--
+-- `self_test=1` plants a main checkout with a bare origin, its lanes in a
+-- scratch root, and a mounts file of its own (`build:`, `tools:` and
+-- `memory:` in the scratch folder, `cookbook:` this one), so
+-- `retire_checkout` checks the plants and nothing of the box. A lane with an
+-- unpushed commit is refused and left whole, its branch too; a merged lane
+-- is removed with its branch here and on origin; a lane pushed and not
+-- merged is removed and its branch kept on both sides; a merged clone is
+-- deleted with its remote branch.
+--
+-- budget: steps=200000000 reads=100000 programs=400
+
+const DIR = arg("dir", "")
+const SELF_TEST = arg("self_test", 0)
+
+function git(dir_os, args)
+  local argv = {"git", "-c", "user.email=t@t", "-c", "user.name=t", "-C", dir_os}
+  for a in args do push(argv, a) end
+  return run(argv, {timeout_ms = 60000, whole = 4000000, want = "nonzero: said by the caller"})
+end
+
+-- As `git`, stopping the run when git exits nonzero.
+function git_ok(dir_os, args)
+  local r = git(dir_os, args)
+  if r.code ~= 0 then fail("remove_lane: `git -C " .. dir_os .. " " .. join(args, " ") .. "` exited " .. r.code .. ": " .. trim(r.out)) end
+  return r
+end
+
+-- origin's default branch's name, from `origin/HEAD`, asked of origin when
+-- the checkout has no note of it; nil when it can't be known.
+function default_branch(dir_os)
+  local ref = git(dir_os, {"symbolic-ref", "--short", "refs/remotes/origin/HEAD"})
+  if ref.code ~= 0 then
+    git(dir_os, {"remote", "set-head", "origin", "--auto"})
+    ref = git(dir_os, {"symbolic-ref", "--short", "refs/remotes/origin/HEAD"})
+  end
+  local said = trim(ref.out)
+  if ref.code ~= 0 or not starts_with(said, "origin/") then return nil end
+  return sub(said, #"origin/" + 1, #said)
+end
+
+-- Whether `ref` is merged into origin's `main`: {merged, why}.
+function merged_into(dir_os, ref, main)
+  if git(dir_os, {"merge-base", "--is-ancestor", ref, "origin/" .. main}).code == 0 then return {merged = true, why = "merged into origin/" .. main} end
+  local n = parse_int(trim(git_ok(dir_os, {"rev-list", "--count", ref, "--not", "origin/" .. main}).out))
+  local commits = n .. " commits"
+  if n == 1 then commits = "1 commit" end
+  return {merged = false, why = commits .. " not in origin/" .. main}
+end
+
+-- `retire_checkout.shale dir=<dir>` as a child run from the root, with
+-- `env` its environment's additions; its output printed. Stops unless the
+-- verdict is a plain CLEAR.
+function require_clear(root, dir, env)
+  local r = run({"shale", real("cookbook:retire_checkout.shale"), "dir=" .. dir}, {cwd = root, env = env, timeout_ms = 300000, whole = 4000000, want = "nonzero: BLOCKED, said by the caller"})
+  local verdict = ""
+  for l in lines(r.out) do
+    if not starts_with(l, "──") then print(l) end
+    if starts_with(l, "CLEAR: ") or starts_with(l, "BLOCKED: ") then verdict = l end
+  end
+  if r.code ~= 0 or starts_with(verdict, "BLOCKED: ") then fail("remove_lane: " .. dir .. " is BLOCKED (the reasons above); nothing removed") end
+  if verdict ~= "CLEAR: " .. dir .. " can be deleted" then fail("remove_lane: " .. dir .. " is not plainly CLEAR (`" .. verdict .. "`): a check that didn't run is not a check passed; nothing removed") end
+  return nil
+end
+
+-- What happens to a branch: deleted when merged, else kept. `where` is
+-- "local" (the branch in `dir_os`) or "remote" (its branch on origin).
+-- Gives the line said.
+function settle_branch(dir_os, branch, main, where)
+  if main == nil then return "kept " .. where .. " " .. branch .. ": origin's default branch is not known here" end
+  if branch == main then return "kept " .. where .. " " .. branch .. ": origin's default branch" end
+  local ref = branch
+  if where == "remote" then ref = "origin/" .. branch end
+  local m = merged_into(dir_os, ref, main)
+  if not m.merged then return "kept " .. where .. " " .. branch .. ": " .. m.why end
+  if where == "remote" then git_ok(dir_os, {"push", "-q", "origin", "--delete", branch}) else git_ok(dir_os, {"branch", "-D", branch}) end
+  return "deleted " .. where .. " " .. branch .. ": " .. m.why
+end
+
+-- A step's line, said now and kept for the outcome.
+function say(said, line)
+  print("remove_lane: " .. line)
+  push(said, line)
+  return nil
+end
+
+function has_remote_branch(dir_os, branch)
+  return git(dir_os, {"rev-parse", "-q", "--verify", "refs/remotes/origin/" .. branch}).code == 0
+end
+
+-- The removal of the lane `dir` in the root `cfg.root`, `cfg.env` the
+-- child run's environment. Gives the outcome line.
+function remove_lane(cfg)
+  local dir = cfg.dir
+  while ends_with(dir, "/") do dir = sub(dir, 1, #dir - 1) end
+  if dir == "" then fail("remove_lane: name the lane, `dir=<lane>`, a folder in the root (run from the folder that holds the lanes)") end
+  if starts_with(dir, "/") or starts_with(dir, "~") or contains(dir, ":") or contains(dir, "..") or contains(dir, "/") then fail("remove_lane: `dir=" .. dir .. "` must be a folder in the root, by its name (`dir=apps-list`): run from the folder that holds it") end
+  local path = path_under(cfg.root, dir)
+  if not exists(path) then fail("remove_lane: there is no folder " .. path) end
+  local lane_os = real(path)
+  local is_clone = exists(path .. "/.git/HEAD")
+  local is_worktree = not is_clone and exists(path .. "/.git")
+  if not is_clone and not is_worktree then fail("remove_lane: " .. path .. " is not a git checkout; nothing removed") end
+  local repo_os = lane_os
+  if is_worktree then
+    local common = trim(git_ok(lane_os, {"rev-parse", "--path-format=absolute", "--git-common-dir"}).out)
+    repo_os = common
+    if ends_with(repo_os, "/.git") then repo_os = sub(repo_os, 1, #repo_os - 5) end
+  end
+  local branch = trim(git_ok(lane_os, {"branch", "--show-current"}).out)
+  git_ok(repo_os, {"fetch", "-q", "--prune", "origin"})
+  print("remove_lane: fetched origin in " .. repo_os)
+  require_clear(cfg.root, dir, cfg.env)
+  local main = default_branch(repo_os)
+  local said = {}
+  if is_worktree then
+    git_ok(repo_os, {"worktree", "remove", lane_os})
+    say(said, "removed the worktree " .. lane_os .. " of " .. repo_os)
+    if branch == "" then
+      say(said, "no branch: its HEAD was detached")
+    else
+      say(said, settle_branch(repo_os, branch, main, "local"))
+      if has_remote_branch(repo_os, branch) then say(said, settle_branch(repo_os, branch, main, "remote")) else say(said, "no remote branch " .. branch .. " on origin") end
+    end
+  else
+    if branch == "" then
+      say(said, "no branch: its HEAD was detached")
+    elseif has_remote_branch(lane_os, branch) then
+      say(said, settle_branch(lane_os, branch, main, "remote"))
+    else
+      say(said, "no remote branch " .. branch .. " on origin")
+    end
+    remove_tree(path)
+    say(said, "deleted the clone " .. lane_os .. ", its local branches with it")
+  end
+  return "removed: " .. dir .. " (" .. join(said, "; ") .. ")"
+end
+
+-- The self-test's plants, under a fresh scratch folder T: `origin.git` (a
+-- bare origin), `main` (the lanes' main checkout, outside the root),
+-- `lanes/` (the root), and `build/`, `tools/` and `memory/` for the mounts
+-- file `mounts`.
+
+function expect(what, got, want)
+  if got ~= want then fail("remove_lane self_test: " .. what .. " is `" .. tostring(got) .. "`, should be `" .. tostring(want) .. "`") end
+  return nil
+end
+
+function commit_file(os, file, text)
+  must(run({"touch", os .. "/" .. file}, {timeout_ms = 10000, whole = 10000}))
+  git_ok(os, {"add", "-A"})
+  git_ok(os, {"commit", "-q", "-m", "add " .. file .. ": " .. text})
+  return nil
+end
+
+function branch_there(os, ref)
+  return git(os, {"rev-parse", "-q", "--verify", ref}).code == 0
+end
+
+function self_test()
+  local T = fresh_dir("scratch:", "remove_lane_self_test")
+  local Tos = real(T)
+  for d in {"lanes", "build", "tools", "memory"} do mkdir(T .. "/" .. d) end
+  create(T .. "/mounts", "cookbook = " .. real("cookbook:") .. " ro\nbuild = " .. Tos .. "/build\ntools = " .. Tos .. "/tools ro\nmemory = " .. Tos .. "/memory ro\n")
+  local env = {SHALE_MOUNTS = Tos .. "/mounts"}
+  local L = T .. "/lanes"
+  local Los = real(L)
+  must(run({"git", "init", "-q", "--bare", "-b", "main", Tos .. "/origin.git"}, {timeout_ms = 30000, whole = 10000}))
+  must(run({"git", "clone", "-q", Tos .. "/origin.git", Tos .. "/main"}, {timeout_ms = 30000, whole = 10000}))
+  local M = Tos .. "/main"
+  commit_file(M, "README.md", "first")
+  git_ok(M, {"push", "-q", "origin", "HEAD:main"})
+  git_ok(M, {"remote", "set-head", "origin", "--auto"})
+  -- A lane with a commit on no remote.
+  git_ok(M, {"worktree", "add", "-q", "-b", "unpushed", Los .. "/unpushed"})
+  commit_file(Los .. "/unpushed", "a.txt", "unpushed")
+  -- A lane pushed and merged into main.
+  git_ok(M, {"worktree", "add", "-q", "-b", "merged", Los .. "/merged"})
+  commit_file(Los .. "/merged", "b.txt", "merged")
+  git_ok(Los .. "/merged", {"push", "-q", "-u", "origin", "merged"})
+  git_ok(M, {"merge", "-q", "--ff-only", "merged"})
+  git_ok(M, {"push", "-q", "origin", "main"})
+  -- A lane pushed and not merged.
+  git_ok(M, {"worktree", "add", "-q", "-b", "pushed", Los .. "/pushed"})
+  commit_file(Los .. "/pushed", "c.txt", "pushed")
+  git_ok(Los .. "/pushed", {"push", "-q", "-u", "origin", "pushed"})
+  -- A clone on a branch pushed and merged.
+  must(run({"git", "clone", "-q", Tos .. "/origin.git", Los .. "/clone"}, {timeout_ms = 30000, whole = 10000}))
+  git_ok(Los .. "/clone", {"checkout", "-q", "-b", "cloned"})
+  commit_file(Los .. "/clone", "d.txt", "cloned")
+  git_ok(Los .. "/clone", {"push", "-q", "-u", "origin", "cloned"})
+  git_ok(Los .. "/clone", {"push", "-q", "origin", "cloned:main"})
+
+  local a = attempt(remove_lane, {root = L, dir = "unpushed", env = env})
+  expect("unpushed: refused", a.ok, false)
+  expect("unpushed: the refusal says BLOCKED", contains(a.error, "remove_lane: unpushed is BLOCKED"), true)
+  expect("unpushed: still there", exists(L .. "/unpushed/a.txt"), true)
+  expect("unpushed: its branch still there", branch_there(M, "refs/heads/unpushed"), true)
+  print("refused as it should be: " .. a.error)
+
+  local merged = remove_lane({root = L, dir = "merged", env = env})
+  expect("merged: gone", exists(L .. "/merged"), false)
+  expect("merged: its local branch gone", branch_there(M, "refs/heads/merged"), false)
+  expect("merged: its branch on origin gone", git(Tos .. "/origin.git", {"rev-parse", "-q", "--verify", "refs/heads/merged"}).code == 0, false)
+  print(merged)
+
+  local pushed = remove_lane({root = L, dir = "pushed", env = env})
+  expect("pushed: gone", exists(L .. "/pushed"), false)
+  expect("pushed: its local branch kept", branch_there(M, "refs/heads/pushed"), true)
+  expect("pushed: its branch on origin kept", git(Tos .. "/origin.git", {"rev-parse", "-q", "--verify", "refs/heads/pushed"}).code == 0, true)
+  expect("pushed: the outcome says why kept", contains(pushed, "kept local pushed: 1 commit not in origin/main"), true)
+  print(pushed)
+
+  local clone = remove_lane({root = L, dir = "clone", env = env})
+  expect("clone: gone", exists(L .. "/clone"), false)
+  expect("clone: its branch on origin gone", git(Tos .. "/origin.git", {"rev-parse", "-q", "--verify", "refs/heads/cloned"}).code == 0, false)
+  print(clone)
+
+  remove_tree(T)
+  print("remove_lane self_test: PASS (an unpushed lane refused and left whole; a merged lane removed with its branch here and on origin; a pushed, unmerged lane removed and its branch kept; a merged clone deleted with its remote branch)")
+  return nil
+end
+
+if SELF_TEST == 1 then
+  self_test()
+else
+  print(remove_lane({root = ".", dir = DIR, env = {}}))
+end
