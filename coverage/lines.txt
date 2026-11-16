@@ -23,8 +23,10 @@ src/script/builtins_numbers.zig 0
 src/script/builtins.zig 0
 src/shale_suite.zig 0
 src/shale_spawn.zig 4
+src/shale_os_linux.zig 2
 src/shale_keep.zig 0
 src/shale_jobs.zig 21
+src/shale_job_record.zig 0
 src/shale_host_jobs.zig 20
 src/shale_host_run.zig 12
 src/shale_host_linux.zig 29
