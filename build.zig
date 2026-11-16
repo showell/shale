@@ -4,15 +4,12 @@
 
 const std = @import("std");
 
-// The pinned compiler: zig-version, from github.com/showell/patched-zig-compiler
-// (its tools/get_zig.sh installs it; cookbook/run_zig_build.shale finds it at
-// tools:zig-<version>/zig).
-comptime {
-    const pinned = std.mem.trim(u8, @embedFile("zig-version"), " \n");
-    if (!std.mem.eql(u8, @import("builtin").zig_version_string, pinned))
-        @compileError("this build needs Zig " ++ pinned ++ " (zig-version), not " ++
-            @import("builtin").zig_version_string ++ ": patched-zig-compiler's tools/get_zig.sh installs it");
-}
+// The Zig is pinned by zig-version for Shale's own builds (CI installs it,
+// and cookbook/run_zig_build.shale finds it at tools:zig-<version>/zig), but
+// not checked here: this file also runs inside every consumer that builds
+// Shale as a dependency, with the consumer's own Zig, and consumers move to
+// a new Zig one at a time. So Shale builds on build.zig.zon's
+// minimum_zig_version and newer.
 
 /// The files of the tests named `expensive ...`, and the only ones
 /// (`zig build fuzz`). src/script/hunt.zig imports exactly these (checked

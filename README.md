@@ -36,8 +36,9 @@ Every script runs inside guard rails that a shell does not have:
 
 Linux on x86-64 and the patched Zig that `zig-version` names (`0.17.1+patched.3`,
 from [patched-zig-compiler](https://github.com/showell/patched-zig-compiler),
-whose PATCHES.md says how to install it; any other Zig stops the build at
-its first line). Shale builds against
+whose PATCHES.md says how to install it). Shale's own builds and CI use that
+one; a project that builds Shale as a dependency may still be on 0.17.0,
+which Shale also builds on. Shale builds against
 [zig-webbox](https://github.com/showell/zig-webbox), checked out **beside**
 it:
 
