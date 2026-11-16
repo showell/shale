@@ -50,6 +50,7 @@ test {
     _ = @import("shale_tokens_test.zig");
     _ = @import("shale_ro_links_test.zig");
     _ = @import("shale_use_test.zig");
+    _ = @import("shale_undo_test.zig");
     _ = @import("shale_cookbook_test.zig");
     _ = @import("shale_host_flat_tree.zig");
     _ = @import("shale_roc_tree_test.zig");

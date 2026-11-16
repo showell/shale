@@ -8,6 +8,7 @@ const testing = std.testing;
 const T = @import("shale_test_host.zig").T;
 const host_linux = @import("shale_host_linux.zig");
 const jobs = @import("shale_jobs.zig");
+const jobs_record = @import("shale_job_record.zig");
 
 fn init(t: *T) !void {
     try t.init();
@@ -43,6 +44,42 @@ test "jobs: a job runs to its end, its output in its log, and job_wait says how 
     const rec = try t.file("j.log.job");
     try testing.expect(std.mem.indexOf(u8, rec, "\nexit=0\n") != null);
     try testing.expect(std.mem.startsWith(u8, rec, "pid="));
+}
+
+test "jobs: a job the host cannot keep, at any of its allocations, is stopped before the run stops on memory, and nothing leaks" {
+    const src = "local j = job_start({\"shale-fixture\", \"sleep\", \"5000\"}, {log = \"j.log\"}) job_stop(j) print(\"kept\")";
+    var i: usize = 0;
+    var failed: usize = 0;
+    var stopped: usize = 0;
+    while (true) : (i += 1) {
+        var t: T = undefined;
+        try init(&t);
+        defer t.deinit();
+        var failing: testing.FailingAllocator = .init(testing.allocator, .{ .fail_index = i });
+        t.host.alloc = failing.allocator();
+        var r = t.runOnce(src, .atomic);
+        defer r.deinit();
+        const s = r.stop orelse {
+            try testing.expectEqualStrings("kept\n", r.output);
+            break;
+        };
+        errdefer std.debug.print("at {d}: {s}: {s}\n", .{ i, @tagName(s.class), s.message });
+        try testing.expectEqual(.budget, s.class);
+        try testing.expectEqual(.arena, s.budget.?);
+        failed += 1;
+        // A failure before the launch starts no job; one after it, the job
+        // was stopped before the run's stop: its leader is gone.
+        const text = t.file("j.log.job") catch |e| switch (e) {
+            error.FileNotFound => continue,
+            else => return e,
+        };
+        const rec = jobs_record.parseRecord(text) orelse return error.TestUnexpectedResult;
+        try testing.expect(!jobs.alive(rec));
+        stopped += 1;
+    }
+    // A failure at the list's room, then at each of the four copies kept.
+    try testing.expect(stopped >= 5);
+    try testing.expect(failed >= stopped);
 }
 
 test "jobs: a job counts against the `programs` budget, so one past it stops before it starts" {

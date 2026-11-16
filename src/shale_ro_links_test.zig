@@ -117,6 +117,7 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
     try t.tmp.dir.createDirPath(t.threaded.io(), "keys");
     try t.put("keys/tok", "s3cret\n");
     try t.tmp.dir.symLink(t.threaded.io(), "keys", "alias", .{ .is_directory = true });
+    try t.tmp.dir.symLink(t.threaded.io(), ".", "up", .{ .is_directory = true });
     var why: []const u8 = "";
     t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/keys secrets\nall = {s}\n", .{ t.root, t.root }), "/home/x", &why);
     try testing.expectEqual(host_linux.Mount.Access.read_only, t.host.mounts[0].access);
@@ -147,7 +148,12 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
         // A folder that holds it: `cp -r . out`, `tar` of a parent.
         .{ "run({\"shale-fixture\", \"lines\", \"1\", \".\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 holds the mount `k`'s folder" },
         .{ "run({\"shale-fixture\", \"lines\", \"1\", real(\"\")}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 holds the mount `k`'s folder" },
+        // A link to a folder that holds it.
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", \"up\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 holds the mount `k`'s folder" },
     }) |c| try t.expectStop(c[0], .atomic, .refused, c[1]);
+    // An `env` value that is no string names no folder; the guard passes it
+    // by, and `run`'s own reading of `env` refuses it.
+    try t.expectStop("run({\"shale-fixture\", \"env\", \"F\"}, {timeout_ms = 10000, tail = 5, env = {F = 1}})", .atomic, .type, "");
     try testing.expectEqualStrings("s3cret\n", try t.file("keys/tok"));
     // `secrets` takes one, the value scrubbed; the mount itself is no secret.
     try t.expectOutput("print(run({\"shale-fixture\", \"env\", \"TOK\"}, {timeout_ms = 10000, tail = 5, secrets = {TOK = \"k:tok\"}}).out)", "<secret TOK>\n\n");
@@ -226,6 +232,42 @@ test "secrets mounts: run's stdout_secret stores stdout in one, 0600, never seen
     // Reads stay refused; `secrets` hands the stored value to a program.
     try t.expectStop("read(\"k:new\")", .atomic, .refused, "the mount `k` holds secrets");
     try t.expectOutput("print(run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:new\"}}).out)", "<secret X>\n\n");
+    // A secret is named by a path; a value of another type is refused.
+    try t.expectStop("run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = 3}})", .atomic, .type, "");
+}
+
+/// One run outside the gate, which must stop with `class` and `says`.
+fn onceStop(t: *T, src: []const u8, class: script_class, says: []const u8) !void {
+    var r = t.runOnce(src, .atomic);
+    defer r.deinit();
+    const s = r.stop orelse return error.TestUnexpectedResult;
+    errdefer std.debug.print("{s}: {s}: {s}\n", .{ src, @tagName(s.class), s.message });
+    try testing.expectEqual(class, s.class);
+    try testing.expect(std.mem.indexOf(u8, s.message, says) != null);
+}
+
+test "stdout_secret: a file made there while the program ran, a folder that refuses the rename, and one that cannot be looked at each stop the run, nothing stored" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const io = t.threaded.io();
+    const a = t.arena.allocator();
+    try t.tmp.dir.createDirPath(io, "keys");
+    var why: []const u8 = "";
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/keys secrets\n", .{t.root}), "/home/x", &why);
+    const keys = try std.fmt.allocPrintSentinel(a, "{s}/keys", .{t.root}, 0);
+    // The program makes the file itself (by a path its argv does not
+    // spell, which the argv guard cannot see), so the rename finds it.
+    try onceStop(&t, "run({\"sh\", \"-c\", \"printf tok; touch ke''ys/raced\"}, {timeout_ms = 10000, stdout_secret = \"k:raced\", want = \"test: a program that makes the secret's file\"})", .refused, "`run`'s `stdout_secret` k:raced was made while `sh");
+    try testing.expectEqualStrings("", try t.file("keys/raced"));
+    // The program takes the folder's write away, so the rename is refused.
+    try onceStop(&t, "run({\"sh\", \"-c\", \"printf tok; chmod 500 ke''ys\"}, {timeout_ms = 10000, stdout_secret = \"k:locked\", want = \"test: a program that locks the folder\"})", .store, "`run`'s `stdout_secret` k:locked cannot be written: ACCES");
+    try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(keys, 0o700));
+    try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(io, "keys/locked", .{}));
+    // A folder that cannot be searched: the target cannot be looked at.
+    try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(keys, 0o000));
+    defer _ = std.os.linux.chmod(keys, 0o700);
+    try onceStop(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:hidden\"})", .store, "`run`'s `stdout_secret` k:hidden cannot be looked at: AccessDenied");
 }
 
 const script_class = @import("shale").script.diag.Class;
