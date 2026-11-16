@@ -32,13 +32,13 @@
 --   cd /home/steve && shale cookbook:plan_repo_essay.shale self_test=1
 --
 -- `repos=` is the folder of checkouts (default `showell_repos`) and `data=`
--- the essay surface's data folder (default `essay-dogfood`), both relative to
+-- the essay surface's data folder (default `essays`), both relative to
 -- the folder it runs from.
 --
 -- budget: steps=50000000 arena_bytes=400000000
 
 const REPOS = arg("repos", "showell_repos")
-const DATA = arg("data", "essay-dogfood")
+const DATA = arg("data", "essays")
 const FRESH = arg("fresh", 0)
 const SELF_TEST = arg("self_test", 0)
 
