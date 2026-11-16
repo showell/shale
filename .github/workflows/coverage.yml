@@ -1,0 +1,56 @@
+# The coverage gate, `shale tools/coverage.shale`, on every push to master
+# and every pull request: `zig build script-coverage` (the coverage SDK's
+# linecov, under ptrace, over the unit binaries built Debug) read back and
+# held to coverage/lines.txt, each module's uncovered count exactly. Code
+# that lands without its tests moves a count, and this run goes red.
+name: coverage
+
+on:
+  push:
+    # coverage-ci: while the workflow is proven on its own branch; dropped
+    # before it merges.
+    branches: [master, coverage-ci]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "The shale branch, tag or commit to measure"
+        default: master
+        required: true
+
+concurrency:
+  group: coverage-${{ github.event.pull_request.number || inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          path: shale
+          # The git prelude's tests read shale's own history.
+          fetch-depth: 0
+
+      - uses: ./shale/.github/actions/unit-deps
+
+      # build.zig resolves `script-coverage` only with the SDK checked out
+      # beside shale (a lazy path dependency, ../zig-coverage-sdk).
+      - uses: actions/checkout@v4
+        with:
+          repository: showell/zig-coverage-sdk
+          ref: main
+          path: zig-coverage-sdk
+
+      # The coverage script is Shale, run by this tree's own `shale`.
+      - name: zig build
+        working-directory: shale
+        run: |
+          zig version
+          zig build --summary failures
+
+      - name: shale tools/coverage.shale
+        working-directory: shale
+        run: zig-out/bin/shale tools/coverage.shale

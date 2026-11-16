@@ -26,79 +26,10 @@ jobs:
           # The git prelude's tests read shale's own history.
           fetch-depth: 0
 
-      # build.zig.zon's `webbox` is the sibling ../zig-webbox; the other
-      # path dependency, ../zig-coverage-sdk, is lazy and `test` never
-      # fetches it.
-      - uses: actions/checkout@v4
-        with:
-          repository: showell/zig-webbox
-          ref: master
-          path: zig-webbox
-          # zig_move's tests replay zig-webbox commits by `git show`.
-          fetch-depth: 0
-
-      # shale's zig-version names the pin when there is one; otherwise
-      # patched-zig-compiler's own zig-version, its newest release.
-      - name: Zig version
-        id: zig
-        run: |
-          if [ -f shale/zig-version ]; then
-            pin=$(tr -d '[:space:]' < shale/zig-version)
-          else
-            pin=$(curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/zig-version | tr -d '[:space:]')
-          fi
-          echo "version=$pin" >> "$GITHUB_OUTPUT"
-
-      # Restore and save apart: actions/cache's own save waits for the
-      # job's success, and a red run would install Zig again every time.
-      - uses: actions/cache/restore@v4
-        id: zig-cache
-        with:
-          path: ~/zig-${{ steps.zig.outputs.version }}
-          key: zig-${{ steps.zig.outputs.version }}
-
-      - name: Install Zig
-        if: steps.zig-cache.outputs.cache-hit != 'true'
-        working-directory: shale
-        run: curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/tools/get_zig.sh | sh
-
-      - uses: actions/cache/save@v4
-        if: steps.zig-cache.outputs.cache-hit != 'true'
-        with:
-          path: ~/zig-${{ steps.zig.outputs.version }}
-          key: zig-${{ steps.zig.outputs.version }}
-
-      - name: Zig on PATH
-        run: |
-          echo "$HOME/zig-${{ steps.zig.outputs.version }}" >> "$GITHUB_PATH"
-
-      # `test`'s roc_tree tests and the Roc recipes' self-tests read Roc's
-      # parser's tree from ~/tools/roc-ast/bin/roc-ast (its --flat):
-      # roc-apps's release asset, built from Shale's tools/roc_ast at
-      # roc-chat's pin (8 MB, static, baseline CPU), its checksum checked, so
-      # it always runs here; without it the step fails, never skips.
-      - name: Install roc-ast
-        run: |
-          curl -fsSL -o /tmp/roc-ast.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-30-0602c5f/roc-ast-flat1-0602c5f-linux-x86_64.tar.gz
-          echo "5ccb92676cecb41a8b9251737eb418470cd94d7557c9fc5ebf4e2d89e540f8c5  /tmp/roc-ast.tar.gz" | sha256sum -c -
-          mkdir -p ~/tools/roc-ast
-          tar -xzf /tmp/roc-ast.tar.gz -C ~/tools/roc-ast
-          test -x ~/tools/roc-ast/bin/roc-ast
-
-      # `test`'s go_tree tests and the Go recipes' self-tests read Go's
-      # parser's tree from ~/tools/go-ast/bin/go-ast: Shale's tools/go_ast,
-      # standard library only, built here by tools/go_ast/go.mod's Go.
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: shale/tools/go_ast/go.mod
-          cache: false
-
-      - name: Install go-ast
-        working-directory: shale/tools/go_ast
-        run: |
-          mkdir -p ~/tools/go-ast/bin
-          CGO_ENABLED=0 go build -trimpath -o ~/tools/go-ast/bin/go-ast .
-          test -x ~/tools/go-ast/bin/go-ast
+      # zig-webbox beside shale, the pinned Zig, roc-ast and go-ast: what
+      # the unit tests need, coverage.yml's too. (The other path
+      # dependency, ../zig-coverage-sdk, is lazy, and `test` never fetches it.)
+      - uses: ./shale/.github/actions/unit-deps
 
       # rewrite_method_calls.shale's typed plant reads Roc's checker's types from
       # ~/tools/roc-types/bin/roc-types: the asset built by roc-types.yml from
