@@ -91,6 +91,21 @@ test "use: a library holds only functions and literal consts, each from the star
     try t.expectStop("use(\"m:nested.shale\")", .atomic, .refused, "m:nested.shale:1:1: a library uses no other library");
     try t.expectStop("use(\"m:indented.shale\")", .atomic, .syntax, "each begin at the start of a line");
     try t.expectStop("use(\"m:broken.shale\")", .atomic, .syntax, "`use(\"m:broken.shale\")`: m:broken.shale:");
+    // The index finds a function by a line that begins `function `, and a
+    // long string can hold one that the parse does not: refused, not missed.
+    try t.put("libs/long_string.shale", "const S = [=[\nfunction hidden()\n]=]\n");
+    try t.expectStop("use(\"m:long_string.shale\")", .atomic, .syntax, "`use(\"m:long_string.shale\")`: m:long_string.shale:1:1: a line inside a long string begins `function ` or `const `, which marks a library's own: begin it otherwise");
+}
+
+test "use: a library at the source budget is read and one a byte past it is refused" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const src = "use(\"m:lib.shale\")\nprint(how_many())";
+    t.budgets.source_bytes = lib.len;
+    try t.expectOutput(src, "2\n");
+    t.budgets.source_bytes = lib.len - 1;
+    try t.expectStop(src, .atomic, .store, "`use(\"m:lib.shale\")`: the library is larger than the source budget");
 }
 
 test "use: a missing library, a path not through a mount, a use not at the top level, and a name used above the use line, each refused" {

@@ -174,7 +174,7 @@ function curl_http(who, method, url, opts?)
       if had == nil then headers[name] = value else headers[name] = had .. "\n" .. value end
       prev = name
     else
-      fail("`" .. who .. " " .. url .. "`: a head line that is no header: " .. line)
+      fail("`" .. who .. " " .. url .. "`: a head line that is no header: " .. line) -- coverage: not run, curl refuses a head line with no colon itself ("Header without colon", the prelude's test)
     end
   end
   return {status = tonumber(code), headers = headers, body = sub(r.out, cut + 4, #r.out - #code - 1), ms = r.ms}

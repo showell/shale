@@ -6,6 +6,7 @@ const testing = std.testing;
 const T = @import("shale_test_host.zig").T;
 const host_linux = @import("shale_host_linux.zig");
 const linux_prelude = host_linux.linux_prelude;
+const script_mod = @import("shale").script;
 
 fn init(t: *T) !void {
     try t.init();
@@ -420,6 +421,19 @@ test "linux prelude: report_run prints a program's verdict, keeps its output, an
     try testing.expectEqual(.fail, failed.stop.?.class);
     try expectHas(failed.stop.?.message, "run: `shale-fixture exit 3` exit 3");
     try expectHas(failed.output, "the whole output not kept (no .zig-cache here: `log=PATH` keeps it)\n");
+    // A failure with a log says where its output went.
+    var logged = t.runOnce("report_run({\"shale-fixture\", \"exit\", \"3\"}, {log = \"f.log\"})", .atomic);
+    defer logged.deinit();
+    try testing.expect(logged.stop != null);
+    try expectHas(logged.output, "the whole output in f.log\n");
+    // A line of 240 bytes is printed whole; one longer, its first 240 and
+    // how many bytes are left out.
+    const x238 = &@as([238]u8, @splat('x'));
+    var long = t.runOnce("report_run({\"shale-fixture\", \"lines\", \"2\", \"" ++ x238 ++ "\"}, {tail = 2, log = \"l.log\"}) report_run({\"shale-fixture\", \"lines\", \"1\", \"" ++ x238 ++ "y\"}, {tail = 1, log = \"l.log\"})", .atomic);
+    defer long.deinit();
+    try testing.expect(long.stop == null);
+    try expectHas(long.output, "   " ++ x238 ++ " 1\n   " ++ x238 ++ " 2\n");
+    try expectHas(long.output, "   " ++ x238 ++ "y  … (1 more bytes)\n");
     var empty = t.runOnce("report_run({})", .atomic);
     defer empty.deinit();
     try expectHas(empty.stop.?.message, "`report_run`: an empty command");
@@ -480,6 +494,16 @@ test "linux prelude: grep_tree searches a tree, says what it passed by, and take
     try t.expectOutput("local h = grep_tree(\"src/sub/c.zig\", \"HIT\", {context = 1}).hits[1] print(h.before[1].line, h.before[1].text, h.line, h.after[1].line, h.after[1].text)", "1\tx\t2\t3\tz\n");
     try t.expectOutput("local r = grep_tree(\"src\", \"fn\", {most = 1}) print(#r.hits, r.cut)", "1\ttrue\n");
     try t.expectStop("grep_tree(\"src\", \"\")", .atomic, .fail, "`grep_tree` of \"\"");
+    // A pattern, or either case, reads a file a part at a time (64 KiB):
+    // a file of three parts is numbered across them.
+    var big: std.ArrayList(u8) = .empty;
+    const a = t.arena.allocator();
+    for (1..20001) |i| try big.print(a, "{s} {d}\n", .{ if (i == 3 or i == 19999) "Mark" else "line", i });
+    try testing.expect(big.items.len > 2 * 64 * 1024);
+    try t.tmp.dir.createDirPath(t.threaded.io(), "big");
+    try t.put("big/log.txt", big.items);
+    try t.expectOutput("for h in grep_tree(\"big\", \"^mark\", {regex = true, nocase = true}).hits do print(h.line, h.text) end", "3\tMark 3\n19999\tMark 19999\n");
+    try t.expectOutput("for h in grep_tree(\"big\", \"mark 1\", {nocase = true}).hits do print(h.line, h.text) end", "19999\tMark 19999\n");
 }
 
 fn touch(t: *T, name: []const u8, seconds: i64) !void {
@@ -568,6 +592,10 @@ test "linux prelude: edits_all checks every file's edits before it writes any" {
     try testing.expect(std.mem.endsWith(u8, r.output, "\n4\n"));
     try testing.expectEqualStrings("12\n", try t.file("a.txt"));
     try testing.expectEqualStrings("thrEE\n", try t.file("b.txt"));
+    // The host's half takes the pairs edits_all builds, and refuses another shape.
+    try t.expectStop("host(\"edits_write\", {\"a.txt\"})", .atomic, .type, "`edits_write`: item 1 must be `{p, {edits}}`, not ");
+    try t.expectStop("host(\"edits_write\", {{\"a.txt\", {}, 3}})", .atomic, .type, "`edits_write`: item 1 must be `{p, {edits}}`, not ");
+    try testing.expectEqualStrings("12\n", try t.file("a.txt"));
 }
 
 test "linux prelude: edits_all checks a file named twice against its first edits, so nothing is written when the second set fails" {
@@ -775,18 +803,17 @@ const RawAnswer = struct {
     }
 };
 
-test "linux prelude: http_get keeps a folded header's continued value, never passing a head line by" {
-    var t: T = undefined;
-    try init(&t);
-    defer t.deinit();
+/// `script` run once against a server that gives `answer` to one request,
+/// its `PORT` the server's port; the server is let go whatever the run did.
+fn runAgainstRaw(t: *T, answer: []const u8, script_src: []const u8) !script_mod.Result {
     const io = t.threaded.io();
     const any: std.Io.net.IpAddress = try .parse("127.0.0.1", 0);
-    var one: RawAnswer = .{ .listener = try any.listen(io, .{ .reuse_address = true }), .answer = "HTTP/1.1 200 OK\r\nX-Long: one\r\n two\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok" };
+    var one: RawAnswer = .{ .listener = try any.listen(io, .{ .reuse_address = true }), .answer = answer };
     const port = one.listener.socket.address.getPort();
     const served = try std.Thread.spawn(.{}, RawAnswer.serve, .{ &one, io });
     const a = t.arena.allocator();
-    var r = t.runOnce(try std.fmt.allocPrint(a, "local r = http_get(\"http://127.0.0.1:{d}/\") print(r.status, r.headers[\"x-long\"], r.body)", .{port}), .atomic);
-    defer r.deinit();
+    const src = try std.mem.replaceOwned(u8, a, script_src, "PORT", try std.fmt.allocPrint(a, "{d}", .{port}));
+    const r = t.runOnce(src, .atomic);
     if (r.stop != null) {
         if (one.listener.socket.address.connect(io, .{ .mode = .stream })) |s| {
             var w = s.writer(io, &.{});
@@ -796,11 +823,40 @@ test "linux prelude: http_get keeps a folded header's continued value, never pas
     }
     served.join();
     one.listener.deinit(io);
+    return r;
+}
+
+test "linux prelude: http_get keeps a folded header's continued value, never passing a head line by" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    var r = try runAgainstRaw(&t, "HTTP/1.1 200 OK\r\nX-Long: one\r\n two\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok", "local r = http_get(\"http://127.0.0.1:PORT/\") print(r.status, r.headers[\"x-long\"], r.body)");
+    defer r.deinit();
     if (r.stop) |s| {
         std.debug.print("stopped: {s}\n", .{s.message});
         return error.TestUnexpectedResult;
     }
     try testing.expectEqualStrings("200\tone two\tok\n", r.output);
+}
+
+test "linux prelude: http_get passes over a `100 Continue` head to the answer's; a head line that is no header stops in curl" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    var cont = try runAgainstRaw(&t, "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nX-One: 1\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok", "local r = http_get(\"http://127.0.0.1:PORT/\") print(r.status, r.headers[\"x-one\"], r.body)");
+    defer cont.deinit();
+    if (cont.stop) |s| {
+        std.debug.print("stopped: {s}\n", .{s.message});
+        return error.TestUnexpectedResult;
+    }
+    try testing.expectEqualStrings("200\t1\tok\n", cont.output);
+    // A head line with no colon is curl's own stop, before the prelude's
+    // reading of the head (which marks its own check as never run).
+    var bad = try runAgainstRaw(&t, "HTTP/1.1 200 OK\r\nX-One: 1\r\nno header here\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok", "http_get(\"http://127.0.0.1:PORT/\")");
+    defer bad.deinit();
+    const s = bad.stop orelse return error.TestUnexpectedResult;
+    errdefer std.debug.print("stopped: {s}\n", .{s.message});
+    try testing.expect(std.mem.indexOf(u8, s.message, "curl: (8) Header without colon") != null);
 }
 
 test "linux prelude: sleep waits without a program, so a run sleeps more often than it may run programs; its ms from 0 to ten minutes" {

@@ -300,6 +300,25 @@ pub const Peak = struct {
     }
 };
 
+test "the heap refuses past the limit and when the backing allocator refuses, says it was hit either way, and holds nothing for a refusal" {
+    var failing: std.testing.FailingAllocator = .init(std.testing.allocator, .{ .fail_index = 1 });
+    var b: Budgeted = .{ .backing = failing.allocator(), .limit = 1024 };
+    defer b.deinit();
+    const h = b.heap();
+    const m = try h.alloc(u8, 100);
+    try std.testing.expect(!b.hit);
+    try std.testing.expectEqual(@as(usize, 100), b.held);
+    // Within the limit, but the backing allocator's second allocation fails.
+    try std.testing.expectError(error.OutOfMemory, h.alloc(u8, 100));
+    try std.testing.expect(b.hit);
+    try std.testing.expectEqual(@as(usize, 100), b.held);
+    b.hit = false;
+    try std.testing.expectError(error.OutOfMemory, h.alloc(u8, 1000));
+    try std.testing.expect(b.hit);
+    h.free(m);
+    try std.testing.expectEqual(@as(usize, 0), b.held);
+}
+
 test "a Peak counts what is held now and the most ever held; it never resizes or remaps in place" {
     var peak: Peak = .{ .child = std.testing.allocator };
     const a = peak.allocator();

@@ -45,6 +45,16 @@ test "jobs: a job runs to its end, its output in its log, and job_wait says how 
     try testing.expect(std.mem.startsWith(u8, rec, "pid="));
 }
 
+test "jobs: a job counts against the `programs` budget, so one past it stops before it starts" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    t.budgets.programs = 1;
+    try testing.expectEqualStrings("exited\t0\n", try once(&t, "local j = job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"one.log\"}) local w = job_wait(j, {timeout_ms = 10000}) print(w.ended, w.code)"));
+    try onceStop(&t, "run({\"shale-fixture\", \"lines\", \"1\"}, {timeout_ms = 10000, tail = 1}) job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"two.log\"})", .budget, "1 programs a run, the `programs` budget: raise it with `--budget programs=N`");
+    try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(t.threaded.io(), "two.log.job", .{}));
+}
+
 test "jobs: a job asked about the moment it starts is alive, its group made or not" {
     // The reaper writes the record once it has forked the job, which makes
     // its own group only when it first runs: `job_alive` asked the group

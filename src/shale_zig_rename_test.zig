@@ -7,6 +7,7 @@ const testing = std.testing;
 const T = @import("shale_test_host.zig").T;
 const host_linux = @import("shale_host_linux.zig");
 const zig = @import("shale_host_zig.zig");
+const Class = @import("shale").script.diag.Class;
 
 fn init(t: *T) !void {
     try t.init();
@@ -303,4 +304,36 @@ test "zig_rename's via: `prefix.from` callers through the given prefixes alone, 
     const m = (try zig.planVia(a, callers, "marked", "isSigned", &.{"harness.UidSite"})).done;
     try testing.expectEqual(@as(usize, 1), m.plan.renamed);
     try testing.expect(std.mem.indexOf(u8, m.plan.now, "harness.UidSite.isSigned(\"a\")") != null);
+}
+
+test "zig_rename's container and via through the host: the file rewritten, `left` for via alone, and each refusal named with nothing written" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.put("h.zig", harness);
+    try t.put("c.zig", callers);
+    try testing.expectEqualStrings("6\tfalse", try lastLine(&t, "local r = zig_rename(\"h.zig\", \"marked\", \"isSigned\", {container = \"UidSite\"}) print(r.renamed, has_key(r, \"left\"))", .atomic));
+    const h = try t.file("h.zig");
+    try testing.expect(std.mem.indexOf(u8, h, "self.isSigned(id) and UidSite.isSigned(id) and isSigned(id) and @This().isSigned(id)") != null);
+    try testing.expect(std.mem.indexOf(u8, h, "_ = Other.marked(\"b\");") != null);
+    try testing.expectEqualStrings("1\t5,6", try lastLine(&t, "local r = zig_rename(\"c.zig\", \"ready\", \"indexOrBuild\", {via = \"search_index\"}) print(r.renamed, join(r.left, \",\"))", .atomic));
+    try testing.expectEqualStrings("1\t", try lastLine(&t, "local r = zig_rename(\"c.zig\", \"marked\", \"isSigned\", {via = {\"harness.UidSite\"}}) print(r.renamed, join(r.left, \",\"))", .atomic));
+    try testing.expect(std.mem.indexOf(u8, try t.file("c.zig"), "_ = search_index.indexOrBuild(1);") != null);
+
+    try t.put("loose.zig", harness ++ "fn f(s: UidSite) bool {\n    return s.marked(\"x\");\n}\n");
+    for ([_]struct { []const u8, Class, []const u8 }{
+        .{ "zig_rename(\"h.zig\", \"isSigned\", \"x\", {container = \"Nowhere\"})", .argument, "`zig_rename`: h.zig declares no container `Nowhere` (`const Nowhere = struct {...}`); nothing written" },
+        .{ "zig_rename(\"h.zig\", \"closeWindow\", \"x\", {container = \"UidSite\"})", .argument, "`zig_rename`: h.zig's `UidSite` declares no member `closeWindow`; nothing written" },
+        .{ "zig_rename(\"loose.zig\", \"marked\", \"isSigned\", {container = \"UidSite\"})", .argument, "`zig_rename`: loose.zig:21 has a `.marked` that may or may not be `UidSite`'s member: rename that one yourself, or rename it apart first; nothing written" },
+        .{ "zig_rename(\"h.zig\", \"a\", \"b\", 3)", .type, "`zig_rename`'s options are a map, not " },
+        .{ "zig_rename(\"h.zig\", \"a\", \"b\", {container = \"A\", via = \"b\"})", .argument, "`zig_rename` takes `container` or `via`, not both" },
+        .{ "zig_rename(\"h.zig\", \"a\", \"b\", {via = \"b\", container = \"A\"})", .argument, "`zig_rename` takes `container` or `via`, not both" },
+        .{ "zig_rename(\"h.zig\", \"a\", \"b\", {container = \"1A\"})", .argument, "`zig_rename`'s `container` (\"1A\") is not a Zig identifier" },
+        .{ "zig_rename(\"h.zig\", \"a\", \"b\", {via = 3})", .type, "`zig_rename`'s `via` is a prefix (\"search_index\") or a list of them, not " },
+        .{ "zig_rename(\"h.zig\", \"a\", \"b\", {via = {}})", .argument, "`zig_rename`'s `via` is empty: give the prefixes the callers use" },
+        .{ "zig_rename(\"h.zig\", \"a\", \"b\", {via = \"a..b\"})", .argument, "`zig_rename`'s `via` prefix \"a..b\" is not names joined by `.`" },
+        .{ "zig_renames(\"h.zig\", 3)", .type, "`zig_renames` takes a map of names, `{a = \"x.a\"}`, not " },
+        .{ "host(\"zig_rename\", \"h.zig\", 3, nil)", .type, "`zig_rename`'s names are `{from, to}`" },
+    }) |c| try t.expectStop(c[0], .atomic, c[1], c[2]);
+    try testing.expectEqualStrings(harness ++ "fn f(s: UidSite) bool {\n    return s.marked(\"x\");\n}\n", try t.file("loose.zig"));
 }

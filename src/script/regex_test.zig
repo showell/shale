@@ -68,6 +68,24 @@ test "regex: a count with nothing to repeat, after a repetition, malformed, back
     try testing.expect(std.mem.indexOf(u8, r.message, "more than 8192 instructions") != null);
 }
 
+test "regex: 16 loops whose turn can match nothing compile and a 17th is refused; four such loops nested compile and a fifth is refused" {
+    const loop = "(?:a*)*";
+    const sixteen = comptime blk: {
+        var s: []const u8 = "";
+        for (0..16) |_| s = s ++ loop;
+        break :blk s;
+    };
+    try testing.expectEqual(@as(usize, 0), (try found(sixteen, "b")).?.end);
+    const many = try refusal(sixteen ++ loop);
+    try testing.expectEqual(@as(usize, 0), many.at);
+    try testing.expectEqualStrings("more than 16 loops whose turn can match nothing (`(a*)*`, `(a|)+`): write some so a turn takes a byte", many.message);
+
+    try testing.expectEqual(@as(usize, 2), (try found("(?:(?:(?:(?:a*)*)*)*)*", "aab")).?.end);
+    const deep = try refusal("(?:(?:(?:(?:(?:a*)*)*)*)*)*");
+    try testing.expectEqual(@as(usize, 0), deep.at);
+    try testing.expectEqualStrings("loops whose turn can match nothing (`(a*)*`), nested more than four deep", deep.message);
+}
+
 test "regex: `\\n`, `\\t` and `\\r` are the control bytes, alone and in a class" {
     try testing.expectEqual(@as(usize, 1), (try found("\\n", "a\nb")).?.start);
     try testing.expectEqual(@as(usize, 1), (try found("\\t", "a\tb")).?.start);

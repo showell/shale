@@ -347,10 +347,12 @@ fn refused(argv: []const []const u8) ![]const u8 {
     };
 }
 
-test "cli: --undo-on-stop and --args-stdin are read; --args-stdin wants a FILE" {
+test "cli: --undo-on-stop, --args-stdin and --check are read; --args-stdin wants a FILE" {
     const c = try parsed(&.{ "--undo-on-stop", "split.shale", "--args-stdin", "n=1" }, null);
     try testing.expect(c.undo_on_stop and c.args_stdin);
+    try testing.expect(!c.check);
     try testing.expectEqualStrings("split.shale", c.file.?);
+    try testing.expect((try parsed(&.{ "--check", "split.shale" }, null)).check);
     try testing.expectEqualStrings("--args-stdin: stdin is the values of a FILE, and there is no FILE", try refused(&.{ "--args-stdin", "-e", "x" }));
     try testing.expectEqualStrings("--args-stdin: stdin is the values of a FILE, and there is no FILE", try refused(&.{"--args-stdin"}));
 }

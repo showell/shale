@@ -218,6 +218,8 @@ test "secrets mounts: run's stdout_secret stores stdout in one, 0600, never seen
         .{ "stdout_secret = \"k:x\", re = \"t\"", .argument, "takes no keep, filter or log" },
         .{ "stdout_secret = \"k:x\", log = \"out.log\"", .argument, "takes no keep, filter or log" },
         .{ "tail = 5, secret_replace = true", .argument, "`secret_replace` is `stdout_secret`'s" },
+        .{ "stdout_secret = 3", .type, "`run`'s `stdout_secret` is a path in a `secrets` mount, `\"keys:NAME\"`, not " },
+        .{ "stdout_secret = \"k:x\", secret_replace = 1", .type, "`run`: its `secret_replace` must be true or false, not " },
     }) |c| try t.expectStop(try std.fmt.allocPrint(a, "run({{\"shale-fixture\", \"both\", \"tok-x\", \"0\"}}, {{timeout_ms = 10000, {s}}})", .{c[0]}), .atomic, c[1], c[2]);
     try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(io, "keys/x", .{}));
 
