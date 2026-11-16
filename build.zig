@@ -67,8 +67,10 @@ const coverage_files = [_][]const u8{
     "src/shale_suite.zig",
     // C7: the Linux host (measured, not held to 100%).
     "src/shale_spawn.zig",
+    "src/shale_os_linux.zig",
     "src/shale_keep.zig",
     "src/shale_jobs.zig",
+    "src/shale_job_record.zig",
     "src/shale_host_jobs.zig",
     "src/shale_host_run.zig",
     "src/shale_host_linux.zig",
