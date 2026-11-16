@@ -63,6 +63,21 @@ jobs:
           grep -q '^== /.*/cookbook/roc/plants/rewrite_method_calls/Typed.roc$' /tmp/types.out
           grep -cP '^t\t' /tmp/types.out
 
+      # The fixtures of tools/roc_types/test.shale, which holds them to their
+      # records on the box: an app whose package has a package of its own and
+      # an app on the Echo platform are checked, and one with a type error in
+      # the inner package is refused. An asset that fails here is never built.
+      - name: Fixtures
+        working-directory: shale
+        run: |
+          bin="$GITHUB_WORKSPACE/out/bin/roc-types"
+          "$bin" tools/roc_types/tests/nested/app/main.roc > /tmp/nested.out
+          grep -q '^== /.*/tools/roc_types/tests/nested/inner/Inner.roc$' /tmp/nested.out
+          "$bin" tools/roc_types/tests/echo/main.roc > /tmp/echo.out
+          grep -q '^== /.*/tools/roc_types/tests/echo/main.roc$' /tmp/echo.out
+          if "$bin" tools/roc_types/tests/broken/app/main.roc > /tmp/broken.out; then exit 1; fi
+          if grep -q '^== ' /tmp/broken.out; then exit 1; fi
+
       - name: Tarball
         id: tarball
         working-directory: shale

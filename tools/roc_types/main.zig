@@ -1,10 +1,22 @@
 //! **EVERY EXPRESSION'S AND PATTERN'S TYPE, AS ROC'S OWN CHECKER INFERS IT**:
 //! `roc-types <app.roc>` checks the app and every module it reaches (its
-//! platform's and packages' too) through the compiler's embedding API
-//! (`Coordinator`), then walks each checked module with the LSP's visitor
-//! (cir_visitor.zig) and writes one fact a line for a program (Shale's
-//! cookbook/roc/types.shale reads it). The checker is roc-lang/roc's, at the
-//! commit roc-version pins, so the types are what our compiler infers.
+//! platform's and packages' too, and their packages' in turn) through the
+//! compiler's own front end, the `BuildEnv` that `roc check` and the
+//! language server build with, then walks each checked module with the
+//! LSP's visitor (cir_visitor.zig) and writes one fact a line for a program
+//! (Shale's cookbook/roc/types.shale reads it). The checker is
+//! roc-lang/roc's, at the commit roc-version pins, so the types are what our
+//! compiler infers.
+//!
+//! It goes through `BuildEnv` rather than driving the `Coordinator` itself
+//! because `Coordinator.discoverAppFromPath` falls short of `roc check` in
+//! two ways. It registers only the packages the app's own header names, so
+//! a package's own packages (book_builder's `md`) get no shorthand and their
+//! imports fail as Module Not Found. And it never marks the app as the
+//! build's root package, so the compiler withholds the Echo platform's
+//! `echo!` from an app that names no platform (`Nothing is named echo!`).
+//! `BuildEnv` resolves the whole package graph and marks the root, as
+//! `roc check` does.
 //!
 //! **THE FORMAT**: the first line says the format and whose checker,
 //! `roc-types 1 <roc-version>`, written before anything else; a change a
@@ -29,19 +41,17 @@
 //!
 //! The argument is resolved to its real, absolute path here: the compiler
 //! refuses a relative entry ("Import Path Case Mismatch"). It must be an
-//! app: a type module (no app header) is refused, `NotAnAppHeader`, so a
-//! type module's types are read through an app that imports it.
+//! app, one that names a platform or one that runs on the Echo platform: a
+//! type module (no app header) is refused, `NotAnAppHeader`, so a type
+//! module's types are read through an app that imports it.
 
 const std = @import("std");
 const base = @import("base");
 const can = @import("can");
-const eval = @import("eval");
 const types = @import("types");
 const roc_target = @import("roc_target");
-const roc_build_options = @import("roc_build_options");
 const build_options = @import("build_options");
-const Coordinator = @import("compile").coordinator.Coordinator;
-const CoreCtx = @import("ctx").CoreCtx;
+const BuildEnv = @import("compile").BuildEnv;
 const CirVisitor = @import("cir_visitor.zig").CirVisitor;
 const VisitAction = @import("cir_visitor.zig").VisitAction;
 
@@ -179,39 +189,50 @@ pub fn main(init: std.process.Init) !void {
     // reader must still see whose format follows.
     try out.flush();
 
-    var builtin_modules = try eval.BuiltinModules.init(gpa);
-    defer builtin_modules.deinit();
-    var coord = try Coordinator.init(
-        gpa,
-        .single_threaded,
-        1,
-        roc_target.RocTarget.detectNative(),
-        &builtin_modules,
-        roc_build_options.compiler_compatibility_id,
-        null,
-        CoreCtx.default(gpa, arena, io),
-    );
-    defer coord.deinit();
-    coord.enable_hosted_transform = true;
-    try coord.start();
-    coord.discoverAppFromPath(arena, .{ .entry_path = entry }) catch |e| switch (e) {
-        error.NotAnAppHeader => {
+    const cwd = try std.Io.Dir.cwd().realPathFileAlloc(io, ".", arena);
+    // No cache manager, so every module is checked here and keeps its
+    // types; and no executable artifacts, as the language server builds:
+    // the types are read, nothing is run.
+    var env = try BuildEnv.init(gpa, .single_threaded, 1, roc_target.RocTarget.detectNative(), cwd, io);
+    defer env.deinit();
+    env.setFinalizeExecutableArtifacts(false);
+
+    // `roc check`'s two phases: the package graph, then the modules. The
+    // root is held to being an app between them.
+    var stopped: ?anyerror = null;
+    if (env.discoverDependencies(entry)) {
+        const root = env.packages.get(env.discovered_pkg_name.?).?;
+        if (root.kind != .app and root.kind != .default_app) {
             std.debug.print("roc-types: {s} is not an app (NotAnAppHeader): read a type module through an app that imports it\n", .{entry});
             std.process.exit(1);
-        },
-        else => return e,
-    };
-    try coord.coordinatorLoop();
-
-    var errors: usize = 0;
-    var reports = coord.iterReports();
-    while (reports.next()) |r| {
-        if (r.report.severity.isError()) errors += 1;
-        try err.print("roc-types: {s}.{s} {t}: {s}\n", .{ r.package_name, r.module_name, r.report.severity, r.report.title });
-        try r.report.render(err, .markdown);
-        try err.writeByte('\n');
+        }
+        env.compileDiscovered() catch |e| {
+            stopped = e;
+        };
+    } else |e| {
+        stopped = e;
     }
 
+    var errors: usize = 0;
+    const drained = try env.drainReports();
+    defer env.freeDrainedReports(drained);
+    for (drained) |d| {
+        for (d.reports) |*report| {
+            if (report.severity.isError()) errors += 1;
+            try err.print("roc-types: {s} {t}: {s}\n", .{ d.abs_path, report.severity, report.title });
+            try report.render(err, .markdown);
+            try err.writeByte('\n');
+        }
+    }
+    // A build that stopped is never read for types, whether or not a report
+    // said why; one that said nothing is named by its error.
+    if (stopped) |e| {
+        try err.print("roc-types: the build stopped ({t}), {d} error report(s): no module written\n", .{ e, errors });
+        try err.flush();
+        std.process.exit(1);
+    }
+
+    const coord = env.coordinator.?;
     var failed: usize = 0;
     var pkgs = coord.packages.iterator();
     while (pkgs.next()) |kv| {
