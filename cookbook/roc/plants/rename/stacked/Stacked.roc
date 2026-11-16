@@ -1,0 +1,26 @@
+module [matches, Opts, Flags, make]
+
+## A stacked annotation: its first line ends in `,`, and its type goes on
+## below.
+matches : List(Str),
+	Str -> Bool
+matches = |words, text| words.contains(text)
+
+## A record type a field a line, each line ending in `,`: the field is left.
+Opts : {
+	matches : Bool,
+	# A comment between the fields.
+	limit : U64,
+}
+
+## The field last, before the closing bracket.
+Flags : {
+	limit : U64,
+	matches : Bool,
+}
+
+make : Bool -> Opts
+make = |m| {
+	matches: m,
+	limit: 3,
+}

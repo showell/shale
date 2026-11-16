@@ -45,15 +45,20 @@
 -- side, in code. A `from` in a comment or inside a string is left and
 -- counted (`left in comments`, `left in strings`), since those are often
 -- prose; a `${...}` interpolation is code. A `from` followed by `:` is a
--- record field when it comes after `{` or `,`, or its line ends in `,`;
--- otherwise it is a declaration.
+-- record field when it comes after `{` or `,`, or when its line ends in `,`
+-- and the next line of code goes on with the record (another field, a
+-- `..` spread, or the closing bracket). Otherwise it is a declaration, and a
+-- stacked annotation is one: `f : List(a),` with the rest of its type,
+-- `Str -> Bool`, on the line below.
 --
 -- What it can't see: the text is read line by line, not parsed, so a
 -- multi-line string's lines read as code. A record field written as a pun
 -- (`{ from }`, `{ from, other }`) is renamed with the variable, which changes
 -- the field's name. An import's alias (`import pkg.Ride as R`) and a name
 -- an import exposes (`exposing [from]`) are not followed under `module=`.
--- `roc check` judges the result.
+-- A stacked annotation whose next line is a lone type variable (`a,`) reads
+-- as a field's line, since a pun looks the same. `roc check` judges the
+-- result.
 --
 -- The output is one line per file that changed or holds a left mention, then
 -- the total. The run fails when nothing was renamed: a rename that renames
@@ -135,17 +140,43 @@ function qualifier_of(line, dot)
   return sub(line, s, dot - 1)
 end
 
+-- Whether a line of code goes on with a record after a field's line: it is
+-- another field (`name :`, `name:`, or a pun, `name,` or `name`), a spread
+-- (`..base`), or the bracket that closes the record. A stacked annotation's
+-- next line is the rest of its type instead (`Str -> Bool`, `List(a),`).
+function goes_on_with_record(next)
+  if next == "" or starts_with(next, "}") or starts_with(next, ")") or starts_with(next, "]") or starts_with(next, "..") then return true end
+  local e = 1
+  while e <= #next and is_ident(sub(next, e, e)) do e = e + 1 end
+  if e == 1 or contains(UPPER, sub(next, 1, 1)) then return false end
+  local rest = trim(sub(next, e))
+  return rest == "" or starts_with(rest, ",") or (starts_with(rest, ":") and not starts_with(rest, ":=") and not starts_with(rest, "::"))
+end
+
 -- Whether the name at `at`, ending before `stop`, is a record field's
--- declaration: `name:` after `{` or `,`, or on a line that ends in `,`.
-function is_field_def(line, at, stop)
+-- declaration: `name:` after `{` or `,`, or on a line that ends in `,`
+-- when `next`, the next line of code, goes on with the record. A line that
+-- ends in `,` with the rest of a type below it is a stacked annotation's
+-- first line (`f : List(a),` then `Str -> Bool`), a declaration.
+function is_field_def(line, at, stop, next)
   local rest = trim(sub(line, stop))
   if not starts_with(rest, ":") or starts_with(rest, ":=") or starts_with(rest, "::") then return false end
   local before = trim(sub(line, 1, at - 1))
   if ends_with(before, "{") or ends_with(before, ",") then return true end
-  return ends_with(trim(line), ",")
+  return ends_with(trim(line), ",") and goes_on_with_record(next)
 end
 
-function is_wanted(line, at, stop, in_module)
+-- The next line of code after line `i` of `all`, trimmed: blank lines and
+-- comment lines are passed over, and the file's end gives "".
+function next_code_line(all, i)
+  for k = i + 1, #all do
+    local t = trim(all[k])
+    if t ~= "" and not starts_with(t, "#") then return t end
+  end
+  return ""
+end
+
+function is_wanted(line, at, stop, in_module, next)
   if at > 1 and sub(line, at - 1, at - 1) == "." then
     local q = qualifier_of(line, at - 1)
     if q ~= "" and contains(UPPER, sub(q, 1, 1)) then return MODULE == "" or q == MODULE end
@@ -153,11 +184,13 @@ function is_wanted(line, at, stop, in_module)
   end
   if MOVE then return false end
   if MODULE ~= "" and not in_module then return false end
-  if is_field_def(line, at, stop) then return FIELDS end
+  if is_field_def(line, at, stop, next) then return FIELDS end
   return true
 end
 
-function rename_line(line, in_module, counts)
+-- `next` is the line of code after this one (`next_code_line`), which
+-- tells a field's line that ends in `,` from a stacked annotation's.
+function rename_line(line, in_module, counts, next)
   local out = ""
   local copied = 1
   local pos = 1
@@ -174,7 +207,7 @@ function rename_line(line, in_module, counts)
         counts.comments = counts.comments + 1
       elseif where == "string" then
         counts.strings = counts.strings + 1
-      elseif MOVE and is_wanted(line, at, stop, in_module) then
+      elseif MOVE and is_wanted(line, at, stop, in_module, next) then
         -- A move rewrites the qualifier too; `in_module` is whether this
         -- is the new module's own file, where the name stands bare.
         local start = at - 1 - #qualifier_of(line, at - 1)
@@ -184,7 +217,7 @@ function rename_line(line, in_module, counts)
         copied = stop
         pos = stop
         counts.renamed = counts.renamed + 1
-      elseif is_wanted(line, at, stop, in_module) then
+      elseif is_wanted(line, at, stop, in_module, next) then
         out = out .. sub(line, copied, at - 1) .. TO
         copied = stop
         pos = stop
@@ -302,13 +335,15 @@ function rename_file(p, is_book)
   if MOVE then in_module = basename(p) == TO_MODULE .. ".roc" end
   if MODULE ~= "" and (MOVE or not in_module) and not is_book and not contains(was, MODULE .. "." .. FROM) then return result end
   local out = {}
-  for line in split(was, "\n") do
+  local all = split(was, "\n")
+  for i = 1, #all do
+    local line = all[i]
     if not contains(line, FROM) then
       push(out, line)
     elseif is_book then
       push(out, rename_book_line(line, counts))
     else
-      push(out, rename_line(line, in_module, counts))
+      push(out, rename_line(line, in_module, counts, next_code_line(all, i)))
     end
   end
   if MOVE and not is_book and counts.renamed > 0 then
@@ -385,6 +420,13 @@ function self_test()
   expect_ok("portion fields=1", r, {"shapes.roc: 11 renamed, 2 left in comments, 2 left in strings"}, wrong)
   expect_same("portion fields=1", d .. "/shapes.roc", plants .. "portion/shapes.fields.want", wrong)
 
+  -- A stacked annotation's first line ends in `,` as a field's line does:
+  -- the annotation is renamed, and the fields a line each are left.
+  d = copy_plants("stacked", scratch)
+  r = child({"glob=" .. d .. "/*.roc", "from=matches", "to=fits"})
+  expect_ok("stacked", r, {"Stacked.roc: 3 renamed", "3 renamed in 1 file of 1"}, wrong)
+  expect_same("stacked", d .. "/Stacked.roc", plants .. "stacked/Stacked.want", wrong)
+
   d = copy_plants("rider", scratch)
   r = child({"glob=" .. d .. "/*.roc", "from=Rider", "to=Cyclist", "module=Ride", "book=" .. d .. "/book.md"})
   expect_ok("Rider module=Ride", r, {"Ride.roc: 5 renamed", "Uses.roc: 1 renamed", "book.md: 2 renamed, 2 left in strings", "8 renamed in 3 files of 3"}, wrong)
@@ -430,7 +472,7 @@ function self_test()
   remove_tree(scratch)
   for w in wrong do print("FAIL " .. w) end
   if #wrong > 0 then fail("rename self_test: " .. #wrong .. " wrong") end
-  print("rename (Roc) self_test: PASS (portion, fields=1, module=Ride with a book, skip=, dry=1, two renames of nothing that fail, and to_module= moves: imports added, kept, dropped, already there, refused, dry, and of nothing)")
+  print("rename (Roc) self_test: PASS (portion, fields=1, a stacked annotation beside fields a line each, module=Ride with a book, skip=, dry=1, two renames of nothing that fail, and to_module= moves: imports added, kept, dropped, already there, refused, dry, and of nothing)")
   return nil
 end
 
