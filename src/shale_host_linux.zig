@@ -188,7 +188,7 @@ pub const Host = struct {
     }
 
     pub fn options(h: *Host) struct { host: interp.Host, path_hook: interp.PathHook } {
-        return .{ .host = .{ .ctx = h, .call = call }, .path_hook = .{ .ctx = h, .resolve = resolve, .may_change = mayChange } };
+        return .{ .host = .{ .ctx = h, .call = call }, .path_hook = .{ .ctx = h, .resolve = resolve, .may_change = mayChange, .absolute_hint = absoluteHint } };
     }
 
     pub fn record(h: *Host, comptime fmt: []const u8, args: anytype) void {
@@ -219,6 +219,41 @@ fn resolve(ctx: *anyopaque, run: *Run, pos: ast.Pos, path: []const u8) Error!?[]
     const os = try mountPath(h, run, pos, path, colon, m);
     try refuseSecretsUnder(h, run, pos, path, try absolute(h, run, pos, os));
     return os;
+}
+
+/// An absolute path as a script writes it (`PathHook.absolute_hint`): through
+/// the deepest of the root and the mounts whose folder holds it, a tie going
+/// to the root. A path in a `secrets` mount's folder gets none, so the stop
+/// names neither that mount nor where its folder is (`shale --help` names the
+/// mount but never its folder). Neither does a path whose rest is no script's
+/// path (a `..`, a name FAT refuses): spelling it would only move the stop.
+/// The folders are the ones the CLI was given (`root_abs`, a mount's `dir`),
+/// as the script's author sees them, not a gated test's copy of the root.
+fn absoluteHint(ctx: *anyopaque, run: *Run, pos: ast.Pos, abs_given: []const u8) Error!?interp.AbsoluteHint {
+    const h: *Host = @ptrCast(@alignCast(ctx));
+    const abs = setup.trimSlash(abs_given);
+    for (h.mounts) |m| if (m.secrets and setup.inFolder(abs, setup.trimSlash(m.dir))) return null;
+    var best_dir = setup.trimSlash(h.root_abs);
+    var best: ?Mount = null;
+    var held = setup.inFolder(abs, best_dir);
+    for (h.mounts) |m| {
+        if (m.secrets) continue;
+        const dir = setup.trimSlash(m.dir);
+        if (!setup.inFolder(abs, dir)) continue;
+        if (held and dir.len <= best_dir.len) continue;
+        best_dir = dir;
+        best = m;
+        held = true;
+    }
+    if (!held) return null;
+    const rest = if (std.mem.eql(u8, best_dir, "/")) abs[1..] else if (abs.len == best_dir.len) "" else abs[best_dir.len + 1 ..];
+    if (rest.len > 0) {
+        var it = std.mem.splitScalar(u8, rest, '/');
+        while (it.next()) |part| if (!store.fatName(part)) return null;
+    }
+    const tail = if (rest.len == 0) "." else rest;
+    const m = best orelse return .{ .mount = null, .spelled = tail };
+    return .{ .mount = m.name, .spelled = std.fmt.allocPrint(run.alloc, "{s}:{s}", .{ m.name, tail }) catch return run.oom(pos) };
 }
 
 /// A secret's file, for `run`'s `secrets`: its OS path, through any mount,

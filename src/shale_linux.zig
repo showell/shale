@@ -49,6 +49,7 @@ test {
     // The Zig tools' tests are src/shale_zig_tools_test.zig's, a root of their own.
     _ = @import("shale_tokens_test.zig");
     _ = @import("shale_ro_links_test.zig");
+    _ = @import("shale_abs_path_test.zig");
     _ = @import("shale_use_test.zig");
     _ = @import("shale_undo_test.zig");
     _ = @import("shale_cookbook_test.zig");

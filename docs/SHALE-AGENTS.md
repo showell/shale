@@ -797,7 +797,12 @@ the first two can give a quiet wrong answer, an empty list:
   answer; the git prelude's calls stop by themselves (`git_commit` gives
   the new head, `git_push` nothing), so no `must` around them.
 - **A path is the root's.** Another place is a mount, `name:path`; the
-  box's are in `~/.config/shale/mounts`. An absolute path is refused.
+  box's are in `~/.config/shale/mounts`. An absolute path is refused, and
+  the stop says how to write it: for `/tmp/claude-1000/<session>/x.out` it
+  names the mount `scratch` and the path `scratch:<session>/x.out` (the
+  deepest mount that holds it, or the root's own path). One that no mount
+  holds, or that is in a `secrets` mount's folder, gets the plain stop,
+  which points at `shale --help`'s list of mounts.
   A mount line ending in ` ro` is read-only: every change through it
   (`edit`, `replace`, `create`, `append`, `remove`, `mkdir`,
   `remove_tree`, `edits_all`, `edit_between`, `zig_rename`, `zig_move`) stops, `refused:

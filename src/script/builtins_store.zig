@@ -73,7 +73,7 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
         if (!allow_root) return run.fail(pos, .argument, "`{s}(\"\")` would act on the whole root: name a path of at least one part", .{@tagName(b)});
         return .{ .path_full = run.root, .path_rel = "", .path_seal = .{} };
     }
-    if (rel[0] == '/') return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root", .{ @tagName(b), rel });
+    if (rel[0] == '/') return absoluteStop(run, pos, b, rel);
     var it = std.mem.splitScalar(u8, rel, '/');
     while (it.next()) |part| {
         // `..` is the habit worth naming: a sibling folder is a mount's.
@@ -84,6 +84,21 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     const sep = if (std.mem.endsWith(u8, run.root, "/")) "" else "/";
     const full = std.fmt.allocPrint(run.alloc, "{s}{s}{s}", .{ run.root, sep, rel }) catch return run.oom(pos);
     return .{ .path_full = full, .path_rel = rel, .path_seal = .{} };
+}
+
+/// The stop for an absolute path, the one home of its words, since every builtin's path
+/// comes through `pathArg`. Where the host knows the folder that holds it
+/// (`PathHook.absolute_hint`), the stop says how to write it there; a host that knows
+/// none points at `shale --help`, which lists its mounts. Without a host (metal), the
+/// root is all there is.
+fn absoluteStop(run: *Run, pos: ast.Pos, b: B, abs: []const u8) Error {
+    const who = @tagName(b);
+    const hook = run.path_hook orelse return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root", .{ who, abs });
+    const f = hook.absolute_hint orelse return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root", .{ who, abs });
+    const hint = (try f(hook.ctx, run, pos, abs)) orelse
+        return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root, or a mount's, `name:path` (`shale --help` lists this box's mounts)", .{ who, abs });
+    if (hint.mount) |m| return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: it's under the mount `{s}:`, so write \"{s}\"", .{ who, abs, m, hint.spelled });
+    return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: it's under the data root, so write \"{s}\"", .{ who, abs, hint.spelled });
 }
 
 /// A store error in plain words; its name follows in parentheses.

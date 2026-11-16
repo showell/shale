@@ -1044,6 +1044,15 @@ print(SELF_TEST_PIN)                 -- and its const
 - A script's path is joined to the root.
 - Every part must be a name FAT holds, so `.`, `..`, empty parts and a
   leading `/` are refused before the store is asked.
+- The stop for a leading `/` says how to write the path where the host
+  knows a folder that holds it (`PathHook.absolute_hint`). On Linux that is
+  the deepest of the root and the mounts whose folder holds it: the stop for
+  `/tmp/claude-1000/<session>/x.out` names the mount `scratch` and says to
+  write `scratch:<session>/x.out`, and one under the root gives the root's
+  own path. A path no folder holds, one in a `secrets` mount's folder and
+  one that is still no script's path (a `..` in it) get the plain stop,
+  which names no mount and points at `shale --help`'s list of them. Metal's
+  stop is the plain one, without the pointer.
 - `""` is the root (and so is `"."`), for `ls`, `stat`, `exists`, `is_dir` and `walk` only. Every
   change needs a path of at least one part.
 - The store's own limits (a name's length, a path's, its depth) still

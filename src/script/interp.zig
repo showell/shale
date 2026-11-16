@@ -122,6 +122,17 @@ pub const PathHook = struct {
     /// read-only mount does). Exists only where the host's `host_io` declares
     /// `shale_change_check`; on metal, it is `void`.
     may_change: if (change_check_on) ?*const fn (ctx: *anyopaque, run: *Run, pos: ast.Pos, rel: []const u8, full: []const u8) Error!void else void = if (change_check_on) null else {},
+    /// Asked for an absolute path a script gave, which the store refuses: the folder of
+    /// the host's that holds it, so the stop can say how to spell it
+    /// (`builtins_store.absoluteStop`). Null when the host knows none that may be named.
+    absolute_hint: ?*const fn (ctx: *anyopaque, run: *Run, pos: ast.Pos, abs: []const u8) Error!?AbsoluteHint = null,
+};
+
+/// An absolute path spelled as a script's (`PathHook.absolute_hint`): `mount` is the
+/// mount whose folder holds it, null for the root, and `spelled` the path to write.
+pub const AbsoluteHint = struct {
+    mount: ?[]const u8,
+    spelled: []const u8,
 };
 
 pub const change_check_on = @hasDecl(@import("host_io"), "shale_change_check") and @import("host_io").shale_change_check;
