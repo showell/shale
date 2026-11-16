@@ -2,7 +2,7 @@
 //! (Shale's tools/roc_ast, Roc's own parser's tree) or of go-ast (Shale's
 //! tools/go_ast, Go's go/parser), turned into nodes, so a recipe walks a
 //! list. The prelude's `roc_tree(paths)` and `go_tree(paths)` run the tool
-//! and call `host("roc_tree", out)` or `host("go_tree", out)` with what it
+//! and call `host("roc_tree", out, ending)` or `host("go_tree", out, ending)` with what it
 //! wrote. The two tools write one format, so one reader takes both.
 //!
 //! **THE FORMAT** (tools/roc_ast/main.zig and tools/go_ast/main.go say how
@@ -16,7 +16,8 @@
 //! 0 is a root's, and an attribute names its node. A kind, name or value
 //! escapes `\`, tab, newline and carriage return as `\\`, `\t`, `\n`, `\r`.
 //! A line that is none of these ends the trees: the tool's refusal, given
-//! back as `said`.
+//! back as `said`. So does a node or attribute line that does not read, in
+//! the output of a run that did not exit 0 (`Ending.cut`).
 //!
 //! Reading is pure (`parseFlat`); `call` makes Shale's values and charges a
 //! step per node.
@@ -122,9 +123,17 @@ fn num(s: []const u8) ?usize {
     return std.fmt.parseInt(usize, s, 10) catch null;
 }
 
+/// How a tool's output ended. A run that exited 0 (`whole`) holds only
+/// whole lines, so a line that does not read is refused. A run that stopped
+/// another way (`cut`) may have stopped in the middle of a line, and its
+/// message may follow on the same line, so such a line ends the trees and
+/// is given back as `said`: the last tree before it may be short, which the
+/// prelude knows (`flat_tool_trees` runs that file again alone).
+pub const Ending = enum { whole, cut };
+
 /// Reads a tool's `--flat` output: each `== path` and its nodes, and the
 /// first line past the trees, if any. Strings point into `text` or `a`.
-pub fn parseFlat(a: std.mem.Allocator, text: []const u8, comptime tool: Tool) error{OutOfMemory}!Outcome {
+pub fn parseFlat(a: std.mem.Allocator, text: []const u8, comptime tool: Tool, ending: Ending) error{OutOfMemory}!Outcome {
     var files: std.ArrayList(File) = .empty;
     var it = std.mem.splitScalar(u8, text, '\n');
     var n: usize = 0;
@@ -147,42 +156,47 @@ pub fn parseFlat(a: std.mem.Allocator, text: []const u8, comptime tool: Tool) er
         }
         const node_line = std.mem.startsWith(u8, raw, "n\t");
         if (!node_line and !std.mem.startsWith(u8, raw, "a\t")) return .{ .ok = .{ .files = files.items, .said = raw } };
-        const bad = struct {
-            fn at(line: usize, why: []const u8) Outcome {
-                return .{ .bad = .{ .line = line, .why = why } };
-            }
-        }.at;
-        if (files.items.len == 0) return bad(n, "a node before any `== path`");
-        const file = &files.items[files.items.len - 1];
-        var f: [6][]const u8 = undefined;
-        var count: usize = 0;
-        var fit = std.mem.splitScalar(u8, raw[2..], '\t');
-        while (fit.next()) |x| {
-            if (count == f.len) return bad(n, "a line with too many fields");
-            f[count] = x;
-            count += 1;
-        }
-        if (node_line) {
-            if (count != 6) return bad(n, "a node line without its six fields");
-            const parent = num(f[0]) orelse return bad(n, "a node's parent");
-            if (parent > file.nodes.items.len) return bad(n, "a node's parent not yet read");
-            const kind = unescape(a, f[1]) catch return bad(n, "a bad escape");
-            if (kind.len == 0) return bad(n, "a node with no kind");
-            var span: [4]usize = undefined;
-            for (f[2..6], 0..) |x, k| span[k] = num(x) orelse return bad(n, "a span's number");
-            const depth = if (parent == 0) 0 else file.nodes.items[parent - 1].depth + 1;
-            try file.nodes.append(a, .{ .kind = kind, .depth = depth, .parent = parent, .line = span[0], .col = span[1], .end_line = span[2], .end_col = span[3] });
-            if (parent > 0) try file.nodes.items[parent - 1].kids.append(a, file.nodes.items.len);
-        } else {
-            if (count != 3) return bad(n, "an attribute line without its three fields");
-            const at = num(f[0]) orelse return bad(n, "an attribute's node");
-            if (at == 0 or at > file.nodes.items.len) return bad(n, "an attribute's node not yet read");
-            const name = unescape(a, f[1]) catch return bad(n, "a bad escape");
-            const value = unescape(a, f[2]) catch return bad(n, "a bad escape");
-            if (try addAttr(a, file, at, name, value)) |why| return bad(n, why);
-        }
+        if (try treeLine(a, files.items, raw, node_line)) |why| switch (ending) {
+            .whole => return .{ .bad = .{ .line = n, .why = why } },
+            .cut => return .{ .ok = .{ .files = files.items, .said = raw } },
+        };
     }
     return .{ .ok = .{ .files = files.items, .said = null } };
+}
+
+/// One node or attribute line, added to the last file; why it does not
+/// read, or null.
+fn treeLine(a: std.mem.Allocator, files: []File, raw: []const u8, node_line: bool) error{OutOfMemory}!?[]const u8 {
+    if (files.len == 0) return "a node before any `== path`";
+    const file = &files[files.len - 1];
+    var f: [6][]const u8 = undefined;
+    var count: usize = 0;
+    var fit = std.mem.splitScalar(u8, raw[2..], '\t');
+    while (fit.next()) |x| {
+        if (count == f.len) return "a line with too many fields";
+        f[count] = x;
+        count += 1;
+    }
+    if (node_line) {
+        if (count != 6) return "a node line without its six fields";
+        const parent = num(f[0]) orelse return "a node's parent";
+        if (parent > file.nodes.items.len) return "a node's parent not yet read";
+        const kind = unescape(a, f[1]) catch return "a bad escape";
+        if (kind.len == 0) return "a node with no kind";
+        var span: [4]usize = undefined;
+        for (f[2..6], 0..) |x, k| span[k] = num(x) orelse return "a span's number";
+        const depth = if (parent == 0) 0 else file.nodes.items[parent - 1].depth + 1;
+        try file.nodes.append(a, .{ .kind = kind, .depth = depth, .parent = parent, .line = span[0], .col = span[1], .end_line = span[2], .end_col = span[3] });
+        if (parent > 0) try file.nodes.items[parent - 1].kids.append(a, file.nodes.items.len);
+    } else {
+        if (count != 3) return "an attribute line without its three fields";
+        const at = num(f[0]) orelse return "an attribute's node";
+        if (at == 0 or at > file.nodes.items.len) return "an attribute's node not yet read";
+        const name = unescape(a, f[1]) catch return "a bad escape";
+        const value = unescape(a, f[2]) catch return "a bad escape";
+        if (try addAttr(a, file, at, name, value)) |why| return why;
+    }
+    return null;
 }
 
 fn put(run: *Run, pos: Pos, t: *script.value.Table, k: []const u8, v: Value) Error!void {
@@ -193,12 +207,17 @@ fn int(n: usize) Value {
     return .{ .int = @intCast(n) };
 }
 
-/// `host("roc_tree", out)` or `host("go_tree", out)`: `{files = {{path,
+/// `host("roc_tree", out, ending)` or `host("go_tree", out, ending)`, the
+/// ending "whole" or "cut" (`Ending`): `{files = {{path,
 /// nodes}, ...}[, said]}`, each node `{kind, depth, parent, kids, line, col,
 /// end_line, end_col}` and its attributes. Charges the text's bytes and a
 /// step per node.
 pub fn call(backing: std.mem.Allocator, run: *Run, pos: Pos, args: []const Value, comptime tool: Tool) Error!Value {
-    if (args.len != 1) return run.fail(pos, .argument, "`" ++ tool.builtin() ++ "`'s reading takes " ++ tool.program() ++ "'s output, given {d} arguments", .{args.len});
+    if (args.len != 2) return run.fail(pos, .argument, "`" ++ tool.builtin() ++ "`'s reading takes " ++ tool.program() ++ "'s output and how its run ended, given {d} arguments", .{args.len});
+    const ending: Ending = switch (args[1]) {
+        .string => |s| std.meta.stringToEnum(Ending, s) orelse return run.fail(pos, .argument, "`" ++ tool.builtin() ++ "`'s reading takes how the run ended, \"whole\" or \"cut\", not \"{s}\"", .{s}),
+        else => |v| return run.fail(pos, .type, "`" ++ tool.builtin() ++ "`'s reading takes how the run ended, \"whole\" or \"cut\", not {s}", .{v.typeName()}),
+    };
     const text = switch (args[0]) {
         .string => |s| s,
         else => |v| return run.fail(pos, .type, "`" ++ tool.builtin() ++ "`'s reading takes a text, not {s}", .{v.typeName()}),
@@ -206,7 +225,7 @@ pub fn call(backing: std.mem.Allocator, run: *Run, pos: Pos, args: []const Value
     try script.builtins.chargeBytes(run, pos, text.len);
     var arena = std.heap.ArenaAllocator.init(backing);
     defer arena.deinit();
-    const dump = switch (parseFlat(arena.allocator(), text, tool) catch return run.oom(pos)) {
+    const dump = switch (parseFlat(arena.allocator(), text, tool, ending) catch return run.oom(pos)) {
         .ok => |d| d,
         .bad => |b| return run.fail(pos, .argument, "`" ++ tool.builtin() ++ "`: " ++ tool.program() ++ "'s output line {d} is not a tree's: {s}", .{ b.line, b.why }),
     };
@@ -265,7 +284,7 @@ test "parseFlat: nodes, parents, depths, kids, spans and attributes, two files, 
         "n\t0\tfile\t1\t1\t1\t2\n" ++
         "a\t1\tline-doc\tkept\n" ++
         "/x/c.roc: 1 parse problem(s): no tree\n";
-    const got = (try parseFlat(arena.allocator(), text, .roc)).ok;
+    const got = (try parseFlat(arena.allocator(), text, .roc, .whole)).ok;
     try std.testing.expectEqual(@as(usize, 2), got.files.len);
     try std.testing.expectEqualStrings("/x/c.roc: 1 parse problem(s): no tree", got.said.?);
     const ns = got.files[0].nodes.items;
@@ -288,7 +307,7 @@ test "parseFlat: escapes undone, so a string holding quotes, parens, tabs and ba
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     // roc-ast's own line for `x = "a\") (b"`: the source's backslash escaped.
-    const got = (try parseFlat(arena.allocator(), "roc-ast flat 1 nightly-x-abc\n== /x\nn\t0\te-string-part\t3\t6\t3\t13\na\t1\traw\ta\\\\\") (b\\tc\\nd\\r\n", .roc)).ok;
+    const got = (try parseFlat(arena.allocator(), "roc-ast flat 1 nightly-x-abc\n== /x\nn\t0\te-string-part\t3\t6\t3\t13\na\t1\traw\ta\\\\\") (b\\tc\\nd\\r\n", .roc, .whole)).ok;
     try std.testing.expectEqualStrings("a\\\") (b\tc\nd\r", got.files[0].nodes.items[0].attrs.items[0].value);
 }
 
@@ -309,25 +328,25 @@ test "parseFlat: refused: a node before a path, short or long lines, a parent or
         .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\traw\tx\na\t1\traw\ty\n", .why = "an attribute twice in one node" },
         .{ .text = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\t2\na\t1\tkind\tx\n", .why = "an attribute takes a node field's name" },
     };
-    for (cases) |c| try std.testing.expectEqualStrings(c.why, (try parseFlat(a, c.text, .roc)).bad.why);
+    for (cases) |c| try std.testing.expectEqualStrings(c.why, (try parseFlat(a, c.text, .roc, .whole)).bad.why);
 }
 
 test "parseFlat: the header first: format 1 read and passed over; none, or another number, refused naming the install" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const ok = (try parseFlat(a, "roc-ast flat 1 nightly-2026-10-30-0602c5f\n== /x\nn\t0\tfile\t1\t1\t1\t2\n", .roc)).ok;
+    const ok = (try parseFlat(a, "roc-ast flat 1 nightly-2026-10-30-0602c5f\n== /x\nn\t0\tfile\t1\t1\t1\t2\n", .roc, .whole)).ok;
     try std.testing.expectEqual(@as(usize, 1), ok.files.len);
     try std.testing.expectEqual(@as(usize, 1), ok.files[0].nodes.items.len);
     // An older roc-ast's --flat, no header: its first line is a file's.
-    const old = (try parseFlat(a, "== /x\nn\t0\tfile\t1\t1\t1\t2\n", .roc)).bad;
+    const old = (try parseFlat(a, "== /x\nn\t0\tfile\t1\t1\t1\t2\n", .roc, .whole)).bad;
     try std.testing.expect(std.mem.indexOf(u8, old.why, "no `roc-ast flat 1` header") != null);
     try std.testing.expect(std.mem.indexOf(u8, old.why, "install.shale") != null);
-    const next = (try parseFlat(a, "roc-ast flat 2 nightly-2027-01-01-abc\n== /x\n", .roc)).bad;
+    const next = (try parseFlat(a, "roc-ast flat 2 nightly-2027-01-01-abc\n== /x\n", .roc, .whole)).bad;
     try std.testing.expect(std.mem.indexOf(u8, next.why, "another format than 1") != null);
     try std.testing.expectEqual(@as(usize, 1), next.line);
     // `1` must be the whole word, never a prefix (`10`).
-    try std.testing.expect((try parseFlat(a, "roc-ast flat 10 p\n", .roc)) == .bad);
+    try std.testing.expect((try parseFlat(a, "roc-ast flat 10 p\n", .roc, .whole)) == .bad);
 }
 
 test "parseFlat: each tool's header is its own: go-ast's read as Go's, refused as Roc's, and roc-ast's refused as Go's" {
@@ -335,14 +354,33 @@ test "parseFlat: each tool's header is its own: go-ast's read as Go's, refused a
     defer arena.deinit();
     const a = arena.allocator();
     const go_text = "go-ast flat 1 go1.27.4\n== /x/a.go\nn\t0\tFile\t1\t1\t3\t2\nn\t1\tIdent\t1\t9\t1\t10\na\t2\trole\tName\na\t2\tname\ta\n";
-    const got = (try parseFlat(a, go_text, .go)).ok;
+    const got = (try parseFlat(a, go_text, .go, .whole)).ok;
     try std.testing.expectEqual(@as(usize, 2), got.files[0].nodes.items.len);
     try std.testing.expectEqualStrings("Name", got.files[0].nodes.items[1].attrs.items[0].value);
-    const as_roc = (try parseFlat(a, go_text, .roc)).bad;
+    const as_roc = (try parseFlat(a, go_text, .roc, .whole)).bad;
     try std.testing.expect(std.mem.indexOf(u8, as_roc.why, "no `roc-ast flat 1` header") != null);
-    const as_go = (try parseFlat(a, "roc-ast flat 1 p\n== /x\n", .go)).bad;
+    const as_go = (try parseFlat(a, "roc-ast flat 1 p\n== /x\n", .go, .whole)).bad;
     try std.testing.expect(std.mem.indexOf(u8, as_go.why, "no `go-ast flat 1` header") != null);
     try std.testing.expect(std.mem.indexOf(u8, as_go.why, "tools/go_ast/install.shale") != null);
-    const next = (try parseFlat(a, "go-ast flat 2 go1.30\n", .go)).bad;
+    const next = (try parseFlat(a, "go-ast flat 2 go1.30\n", .go, .whole)).bad;
     try std.testing.expect(std.mem.indexOf(u8, next.why, "go-ast's --flat is another format than 1") != null);
+}
+
+test "parseFlat: a line that does not read is refused in a whole output, and in a cut one ends the trees as `said`, the trees before it kept" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // A stop in the middle of an attribute line, its message after it.
+    const text = "roc-ast flat 1 p\n== /x/a.roc\nn\t0\tfile\t1\t1\t1\t2\n== /x/b.roc\nn\t0\tfile\t1\t1\t1\t2\na\t1\trawerror: IsDir\n";
+    const whole = (try parseFlat(a, text, .roc, .whole)).bad;
+    try std.testing.expectEqual(@as(usize, 6), whole.line);
+    try std.testing.expectEqualStrings("an attribute line without its three fields", whole.why);
+    const cut = (try parseFlat(a, text, .roc, .cut)).ok;
+    try std.testing.expectEqual(@as(usize, 2), cut.files.len);
+    try std.testing.expectEqual(@as(usize, 1), cut.files[1].nodes.items.len);
+    try std.testing.expectEqualStrings("a\t1\trawerror: IsDir", cut.said.?);
+    // Whole lines read the same either way.
+    const clean = "roc-ast flat 1 p\n== /x\nn\t0\tfile\t1\t1\t1\t2\n/x: refused\n";
+    try std.testing.expectEqualStrings("/x: refused", (try parseFlat(a, clean, .roc, .cut)).ok.said.?);
+    try std.testing.expectEqualStrings("/x: refused", (try parseFlat(a, clean, .roc, .whole)).ok.said.?);
 }

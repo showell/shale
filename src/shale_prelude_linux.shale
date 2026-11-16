@@ -545,7 +545,9 @@ function flat_tool_trees(tool, paths)
         j = j + 1
       end
       local r = run({real(exe), "--flat"}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
-      local got = host(tool .. "_tree", r.out)
+      local ending = "cut"
+      if r.ended == "exit" and r.code == 0 then ending = "whole" end
+      local got = host(tool .. "_tree", r.out, ending)
       local kept = {}
       for f in got.files do
         if i >= j or f.path ~= reals[i - base + 1] then fail(who .. ": " .. prog .. "'s tree " .. (i - base + 1) .. " is " .. f.path .. "'s, not the path given there") end
@@ -578,7 +580,9 @@ function flat_tool_trees(tool, paths)
           local found = false
           while not found and i < j do
             local one = run({real(exe), "--flat"}, {timeout_ms = 300000, stdin = real(paths[i]), whole = 64000000})
-            local alone = host(tool .. "_tree", one.out)
+            local alone_ending = "cut"
+            if one.ended == "exit" and one.code == 0 then alone_ending = "whole" end
+            local alone = host(tool .. "_tree", one.out, alone_ending)
             if one.ended == "exit" and one.code == 0 and #alone.files == 1 and not has_key(alone, "said") then
               push(out, {path = paths[i], nodes = alone.files[1].nodes, err = ""})
             else

@@ -68,14 +68,16 @@ test "roc_tree: a small file: kinds, depths, spans, parents and kids, raw and na
     );
 }
 
-test "roc_tree: a file roc-ast refuses is its err, and the files after it are still read; a missing file, and a stop roc-ast leaves unflushed" {
+test "roc_tree: a file roc-ast refuses is its err, and the files after it are still read; a missing file, and a stop before roc-ast flushed any tree" {
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
     try t.put("ok.roc", "module [x]\n\nx = 1\n");
     try t.put("bad.roc", "x = (\n");
-    // A folder roc-ast cannot read stops it before it flushes the trees
-    // ahead of it: the last of them runs again alone.
+    // A folder roc-ast cannot read stops it before it flushes the small
+    // trees ahead of it, so none came back: each file from the batch's start
+    // runs alone until the folder's stop. (A stop after trees were flushed
+    // is the next test's.)
     try t.expectOutput(
         \\if not exists("dir.roc") then mkdir("dir.roc") end
         \\for f in roc_tree({"ok.roc", "bad.roc", "ok.roc", "ok.roc", "dir.roc", "ok.roc", "gone.roc", "ok.roc"}) do
@@ -110,4 +112,42 @@ test "roc_tree: an empty file is a tree of three nodes; no paths is no files" {
         \\0
         \\
     );
+}
+
+test "roc_tree: a stop after roc-ast flushed some trees drops the last it flushed, which may be cut short, and runs it again alone" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    // Trees far past roc-ast's output buffer, so the first is flushed whole
+    // and the second is being flushed when the folder stops the run.
+    var big: std.ArrayList(u8) = .empty;
+    try big.appendSlice(a, "module [x1]\n\n");
+    for (1..3001) |i| try big.print(a, "x{d} = {d}\n", .{ i, i });
+    try t.put("big.roc", big.items);
+    try t.put("big2.roc", big.items);
+    // Each tree's nodes are maps in the run's arena: two such trees pass
+    // the default 16 MiB.
+    t.budgets.arena_bytes = 256 * 1024 * 1024;
+    try t.put("ok.roc", "module [x]\n\nx = 1\n");
+    try t.expectOutput(
+        \\if not exists("dir.roc") then mkdir("dir.roc") end
+        \\local trees = roc_tree({"big.roc", "big2.roc", "ok.roc", "dir.roc"})
+        \\for f in trees do print(f.path .. " " .. #f.nodes .. " [" .. f.err .. "]") end
+    ,
+        \\big.roc 9006 []
+        \\big2.roc 9006 []
+        \\ok.roc 9 []
+        \\dir.roc 0 [error: IsDir]
+        \\
+    );
+}
+
+test "roc_tree: the host's reading takes the output and how its run ended, and refuses another ending" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.expectStop("host(\"roc_tree\", \"\")", .atomic, .argument, "`roc_tree`'s reading takes roc-ast's output and how its run ended, given 1 arguments");
+    try t.expectStop("host(\"roc_tree\", \"\", \"half\")", .atomic, .argument, "`roc_tree`'s reading takes how the run ended, \"whole\" or \"cut\", not \"half\"");
+    try t.expectStop("host(\"roc_tree\", \"\", 1)", .atomic, .type, "`roc_tree`'s reading takes how the run ended, \"whole\" or \"cut\", not ");
 }
