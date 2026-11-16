@@ -269,33 +269,42 @@ test "parse: an allocation that fails anywhere in a `use`d library's load or che
     try testing.expect(failed > 10);
 }
 
-test "parse: an allocation that fails while looking ahead, or deep in a long prelude's check, is OutOfMemory" {
-    const parse_mod = @import("parse.zig");
-    // A prelude long enough that its check's arena takes more than one block.
-    var long: std.ArrayList(u8) = .empty;
-    defer long.deinit(testing.allocator);
-    for (0..600) |i| try long.print(testing.allocator, "function f{d}(x)\n  local s = \"a\\tb\" .. x\n  return s\nend\n", .{i});
-    const preludes = [_]parse_mod.Prelude{.{ .name = "a long prelude", .source = long.items }};
-    // The token after a key's name is a string with an escape: the lookahead
-    // allocates. (The source does not parse; an allocation fails first.)
-    const src = "local t = {a \"x\\ty\"}";
+/// How many allocations, failed one at a time from the first, end a parse
+/// of `src` after `preludes` in OutOfMemory before one gets through to its
+/// syntax stop. Every allocation counted, the tree's and the lexer's too,
+/// all of it given back by the arena under the counter.
+fn oomsBeforeStop(src: []const u8, preludes: []const @import("parse.zig").Prelude) !usize {
     var oom: usize = 0;
     var i: usize = 0;
     while (true) : (i += 1) {
-        // Every allocation counted, the tree's and the lexer's too, all of
-        // it given back by the arena under the counter.
         var under = std.heap.ArenaAllocator.init(testing.allocator);
         defer under.deinit();
         var failing: testing.FailingAllocator = .init(under.allocator(), .{ .fail_index = i });
         var stop: ?diag.Stop = null;
-        if (parse_mod.parseMeasured(failing.allocator(), failing.allocator(), src, 200, &stop, null, &preludes)) |_| {
+        if (@import("parse.zig").parseMeasured(failing.allocator(), failing.allocator(), src, 200, &stop, null, preludes)) |_| {
             return error.TestUnexpectedResult;
         } else |e| switch (e) {
             error.OutOfMemory => oom += 1,
-            error.Parse => break,
+            error.Parse => return oom,
         }
     }
-    try testing.expect(oom > 10);
+}
+
+test "parse: an allocation that fails while looking ahead, or deep in a long prelude's check, is OutOfMemory" {
+    // A prelude long enough that its check's arena takes more than one block.
+    var long: std.ArrayList(u8) = .empty;
+    defer long.deinit(testing.allocator);
+    for (0..600) |i| try long.print(testing.allocator, "function f{d}(x)\n  local s = \"a\\tb\" .. x\n  return s\nend\n", .{i});
+    // The token after a key's name is a string with an escape: the lookahead
+    // allocates. (The source does not parse; an allocation fails first.)
+    const src = "local t = {a \"x\\ty\"}";
+    const short = try oomsBeforeStop(src, &.{.{ .name = "a short prelude", .source = "function f0(x)\n  return x\nend\n" }});
+    const deep = try oomsBeforeStop(src, &.{.{ .name = "a long prelude", .source = long.items }});
+    // Each fails before the stop, the lookahead's among them; the long one's
+    // check fails at more places than the short one's, inside the blocks its
+    // arena takes past the first.
+    try testing.expect(short > 2);
+    try testing.expect(deep > short + 1);
 }
 
 /// The allocations a parse of `src` after `preludes` makes, at `nesting`;
