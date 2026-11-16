@@ -24,12 +24,13 @@ jobs:
           ref: ${{ inputs.ref }}
           path: shale
 
+      # roc-types builds with the Zig the pinned Roc builds with, which its
+      # own zig-version names, not Shale's.
       - name: Install Zig
-        working-directory: shale
+        working-directory: shale/tools/roc_types
         run: |
           curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/tools/get_zig.sh | sh
-          ls -d "$HOME"/zig-* | head -1 > /tmp/zigdir
-          echo "$(cat /tmp/zigdir)" >> "$GITHUB_PATH"
+          echo "$HOME/zig-$(tr -d '[:space:]' < zig-version)" >> "$GITHUB_PATH"
 
       # The archive build.zig.zon pins leaves out vendor/, which Roc's
       # modules import, so the build forks to a full checkout of the commit.

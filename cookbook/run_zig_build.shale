@@ -12,8 +12,11 @@
 --   args=test -Dtest-file=src/floor_sim.zig --summary all
 --   ARGS
 --
--- `zig` is the compiler (default `zig` on the PATH; another through a
--- ` tools` mount, such as `zig016:zig`), `step` a step's name, `args` more words after
+-- `zig` is the compiler: by default the one `dir`'s `zig-version` pins,
+-- installed side by side at `tools:zig-<version>/zig` as Roc's pins are (it
+-- stops, naming the install, when that is not there), and with no
+-- `zig-version`, `zig` on the PATH. Another goes through a ` tools` mount,
+-- such as `zig016:zig`. `step` a step's name, `args` more words after
 -- it (split on spaces), `dir` where to run, `minutes` the time it gets.
 --
 -- With `grep=`, in place of `zig build fuzz 2>&1 | grep FAIL`, it also
@@ -26,11 +29,30 @@
 --
 -- budget: steps=400000000 arena_bytes=1000000000
 
-const ZIG = arg("zig", "zig")
 const STEP = arg("step", "")
 not_option("run_zig_build", "step", STEP)
 const ARGS = arg("args", "")
 const DIR = arg("dir", ".")
+
+-- The compiler `zig=` names, else the one `dir`'s zig-version pins, else
+-- `zig` on the PATH.
+function compiler()
+  local given = arg("zig", "")
+  if given ~= "" then return given end
+  local pin_file = "zig-version"
+  if DIR ~= "." then pin_file = DIR .. "/zig-version" end
+  if not exists(pin_file) then return "zig" end
+  local pin = trim(read(pin_file))
+  local at = "tools:zig-" .. pin .. "/zig"
+  if not exists(at) then
+    local from = "https://ziglang.org/download/" .. pin .. "/"
+    if contains(pin, "+") then from = "https://github.com/showell/patched-zig-compiler/releases/tag/" .. split(pin, "+")[2] end
+    fail("run_zig_build: " .. pin_file .. " pins Zig " .. pin .. ", and " .. at .. " is not there. Install it from " .. from .. ": check zig-x86_64-linux-" .. pin .. ".tar.xz against its .sha256 and unpack it as ~/tools/zig-" .. pin)
+  end
+  return at
+end
+
+const ZIG = compiler()
 const MINUTES = arg("minutes", 10)
 const LOG = arg("log", ".zig-cache/run_zig_build.log")
 const GREP = arg("grep", "")
@@ -38,6 +60,7 @@ const MOST = arg("most", 60)
 
 local argv = {ZIG, "build"}
 if contains(ZIG, ":") then argv = {real(ZIG), "build"} end
+print("zig: " .. ZIG)
 if STEP ~= "" then push(argv, STEP) end
 -- `--summary all` goes to the build itself, before any `--` (after it, the
 -- words are the step's own).

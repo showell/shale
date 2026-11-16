@@ -10,7 +10,8 @@ const std = @import("std");
 
 // **BUILT WITH THE ZIG THE PINNED ROC BUILDS WITH** (its build.zig.zon's
 // minimum_zig_version), not this repo's: Roc's own build.zig runs as the
-// dependency's, and another Zig refuses it. The patched 0.17.0.
+// dependency's, and another Zig refuses it. The patched 0.17.0, which
+// zig-version beside this file names for CI's install.
 comptime {
     const want = std.SemanticVersion{ .major = 0, .minor = 17, .patch = 0 };
     if (@import("builtin").zig_version.order(want) != .eq)

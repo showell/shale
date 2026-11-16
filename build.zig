@@ -4,6 +4,16 @@
 
 const std = @import("std");
 
+// The pinned compiler: zig-version, from github.com/showell/patched-zig-compiler
+// (its tools/get_zig.sh installs it; cookbook/run_zig_build.shale finds it at
+// tools:zig-<version>/zig).
+comptime {
+    const pinned = std.mem.trim(u8, @embedFile("zig-version"), " \n");
+    if (!std.mem.eql(u8, @import("builtin").zig_version_string, pinned))
+        @compileError("this build needs Zig " ++ pinned ++ " (zig-version), not " ++
+            @import("builtin").zig_version_string ++ ": patched-zig-compiler's tools/get_zig.sh installs it");
+}
+
 /// The files of the tests named `expensive ...`, and the only ones
 /// (`zig build fuzz`). src/script/hunt.zig imports exactly these (checked
 /// below); src/script/hunt_guard_test.zig, handed the list, fails on such a
