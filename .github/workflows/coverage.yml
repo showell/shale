@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           path: shale
@@ -39,7 +39,7 @@ jobs:
 
       # build.zig resolves `script-coverage` only with the SDK checked out
       # beside shale (a lazy path dependency, ../zig-coverage-sdk).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: showell/zig-coverage-sdk
           ref: main

@@ -10,7 +10,7 @@ description: zig-webbox beside shale, the pinned Zig on PATH, roc-ast and go-ast
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         repository: showell/zig-webbox
         ref: master
@@ -33,7 +33,7 @@ runs:
 
     # Restore and save apart: actions/cache's own save waits for the
     # job's success, and a red run would install Zig again every time.
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v6
       id: zig-cache
       with:
         path: ~/zig-${{ steps.zig.outputs.version }}
@@ -45,7 +45,7 @@ runs:
       working-directory: shale
       run: curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/tools/get_zig.sh | sh
 
-    - uses: actions/cache/save@v4
+    - uses: actions/cache/save@v6
       if: steps.zig-cache.outputs.cache-hit != 'true'
       with:
         path: ~/zig-${{ steps.zig.outputs.version }}
@@ -73,7 +73,7 @@ runs:
     # The go_tree tests and the Go recipes' self-tests read Go's parser's
     # tree from ~/tools/go-ast/bin/go-ast: Shale's tools/go_ast, standard
     # library only, built here by tools/go_ast/go.mod's Go.
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@v7
       with:
         go-version-file: shale/tools/go_ast/go.mod
         cache: false
