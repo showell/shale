@@ -1032,8 +1032,10 @@ pub const PreludeFunction = struct { name: []const u8, at: usize, line: u32 };
 
 /// A prelude after the core's: its name as a stop shows it ("the Linux
 /// prelude"), and its source, which holds only functions, each from the
-/// start of a line.
-pub const Prelude = struct { name: []const u8, source: []const u8 };
+/// start of a line. `fixed` says the source is compiled into the host (the
+/// Linux and git preludes), the same every run of the process, so a list of
+/// fixed preludes is parsed whole once a process (`sound_lists`).
+pub const Prelude = struct { name: []const u8, source: []const u8, fixed: bool = false };
 
 /// Whether this host hands the parse preludes after the core's. A host with
 /// an operating system says so with `host_io.shale_preludes`; metal's does
@@ -1119,10 +1121,14 @@ fn indexAt(index: []const PreludeFunction, name: []const u8) ?usize {
 
 /// Checks prelude `k` before the script: it takes no name an earlier prelude
 /// has, none twice, and holds only functions that parse, in a parse of its
-/// own thrown away after. A failure is a stop naming the prelude, at its
+/// own thrown away after: once a process for a list of fixed preludes that
+/// passes (`sound_lists`). A failure is a stop naming the prelude, at its
 /// line.
 fn checkPrelude(p: *Parser, k: usize) Error!void {
     const x = p.extra[k - 1];
+    const fixed = for (p.extra[0..k]) |e| (if (!e.prelude.fixed) break false) else true;
+    const key = soundKey(p, k);
+    if (fixed) for (&sound_lists) |*s| if (s.load(.monotonic) == key) return;
     for (x.index, 0..) |f, i| {
         const pos: ast.Pos = .{ .line = f.line, .column = 1 };
         if (preludeAt(f.name) != null) return p.failf(pos, .name, "{s}'s `{s}` is the prelude's already: a later prelude may not redefine an earlier one's function", .{ x.prelude.name, f.name });
@@ -1142,6 +1148,30 @@ fn checkPrelude(p: *Parser, k: usize) Error!void {
             return p.failAt(.{ .line = s.line, .column = s.column }, s.class, message);
         },
     };
+    if (fixed) sound_lists[sound_next.fetchAdd(1, .monotonic) % sound_lists.len].store(key, .monotonic);
+}
+
+/// The lists of fixed preludes this process has parsed whole and found
+/// sound, each as `soundKey`, so such a list is parsed whole once a process,
+/// not once a run. A test binary runs thousands of scripts over the Linux
+/// and git preludes, and their whole parse was a third of the Linux host's
+/// tests' time (in Debug). Only a list that passed is kept, so a broken
+/// prelude stops every run it is given to; a prelude read from a file is
+/// never fixed, and is parsed whole every run. Atomics, for a host that runs
+/// scripts on several threads: a race at worst parses a list twice.
+var sound_lists: [8]std.atomic.Value(u64) = @splat(.init(0));
+var sound_next: std.atomic.Value(usize) = .init(0);
+
+/// Preludes 1 to `k` as `sound_lists` holds them: the hash of each one's
+/// name and source, in order, each length first, and the nesting budget the
+/// parse is held to; never 0, the empty slot.
+fn soundKey(p: *const Parser, k: usize) u64 {
+    var h = std.hash.Wyhash.init(p.max_nesting);
+    for (p.extra[0..k]) |x| for ([_][]const u8{ x.prelude.name, x.prelude.source }) |part| {
+        h.update(std.mem.asBytes(&part.len));
+        h.update(part);
+    };
+    return h.final() | 1;
 }
 
 /// The most preludes and libraries one parse holds.

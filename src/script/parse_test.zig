@@ -298,6 +298,63 @@ test "parse: an allocation that fails while looking ahead, or deep in a long pre
     try testing.expect(oom > 10);
 }
 
+/// The allocations a parse of `src` after `preludes` makes, at `nesting`;
+/// null when it stops, its message in `said`.
+fn parseCounted(src: []const u8, preludes: []const @import("parse.zig").Prelude, nesting: u32, said: *[]const u8) !?usize {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var counted: testing.FailingAllocator = .init(arena.allocator(), .{});
+    var stop: ?diag.Stop = null;
+    _ = @import("parse.zig").parseMeasured(counted.allocator(), counted.allocator(), src, nesting, &stop, null, preludes) catch |e| switch (e) {
+        error.Parse => {
+            said.* = try testing.allocator.dupe(u8, stop.?.message);
+            return null;
+        },
+        else => return e,
+    };
+    return counted.allocations;
+}
+
+test "parse: a list of fixed preludes is parsed whole once a process, at each nesting budget; a broken one stops every run, and one not fixed is parsed every run" {
+    const parse_mod = @import("parse.zig");
+    // Names no other test's prelude has, so no earlier test kept them.
+    const sound = "function once_a_process_deep(x)\n  return ((((((((((((((((x))))))))))))))))\nend\nfunction once_a_process_unused()\n  return 1\nend\n";
+    const fixed = [_]parse_mod.Prelude{.{ .name = "a fixed prelude", .source = sound, .fixed = true }};
+    const loose = [_]parse_mod.Prelude{.{ .name = "a fixed prelude", .source = sound }};
+    const src = "print(once_a_process_deep(1))\n";
+    var said: []const u8 = "";
+    // Fixed: the first parse checks the whole prelude, the second does not.
+    const first = (try parseCounted(src, &fixed, 200, &said)).?;
+    const second = (try parseCounted(src, &fixed, 200, &said)).?;
+    try testing.expect(second < first);
+    try testing.expectEqual(second, (try parseCounted(src, &fixed, 200, &said)).?);
+    // Not fixed: each parse checks it whole, as the first fixed one did.
+    try testing.expectEqual(first, (try parseCounted(src, &loose, 200, &said)).?);
+    try testing.expectEqual(first, (try parseCounted(src, &loose, 200, &said)).?);
+    // Under a nesting budget the prelude's unused function passes and the
+    // deep one does not, the list kept at 200 is checked again, and stops.
+    for (0..2) |_| {
+        try testing.expectEqual(@as(?usize, null), try parseCounted("print(1)\n", &fixed, 12, &said));
+        defer testing.allocator.free(said);
+        try testing.expectEqualStrings("a fixed prelude: the source nests deeper than the nesting budget", said);
+    }
+    // A fixed prelude that does not parse stops every run, never kept.
+    const broken = [_]parse_mod.Prelude{.{ .name = "a fixed broken prelude", .source = "function once_a_process_broken()\n  return 1\nend\nprint(2)\n", .fixed = true }};
+    for (0..2) |_| {
+        try testing.expectEqual(@as(?usize, null), try parseCounted("print(1)\n", &broken, 200, &said));
+        defer testing.allocator.free(said);
+        try testing.expect(std.mem.indexOf(u8, said, "a fixed broken prelude holds only functions") != null);
+    }
+    // A sound fixed list, then a list of it and one more fixed: the second
+    // prelude is checked under its own key, and its name clash stops.
+    const clash = [_]parse_mod.Prelude{ fixed[0], .{ .name = "a second fixed prelude", .source = "function once_a_process_unused()\n  return 2\nend\n", .fixed = true } };
+    for (0..2) |_| {
+        try testing.expectEqual(@as(?usize, null), try parseCounted(src, &clash, 200, &said));
+        defer testing.allocator.free(said);
+        try testing.expect(std.mem.indexOf(u8, said, "is a fixed prelude's already") != null);
+    }
+}
+
 /// One input for `std.testing.fuzz`: a source of the language's pieces, which parses or
 /// stops cleanly, a stop of one line inside the source, and gives back all it borrowed.
 fn parseOne(_: void, smith: *std.testing.Smith) anyerror!void {

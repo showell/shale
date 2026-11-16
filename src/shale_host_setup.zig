@@ -9,10 +9,10 @@ const shale = @import("shale");
 
 /// The script-facing names over `host` (`run`, `real`) and the helpers only
 /// Linux has.
-pub const linux_prelude: script.parse.Prelude = .{ .name = "the Linux prelude", .source = @embedFile("shale_prelude_linux.shale") };
+pub const linux_prelude: script.parse.Prelude = .{ .name = "the Linux prelude", .source = @embedFile("shale_prelude_linux.shale"), .fixed = true };
 
 /// Git over `run`. Loads after the Linux prelude, whose `run` and `real` it calls.
-pub const git_prelude: script.parse.Prelude = .{ .name = "the git prelude", .source = @embedFile("shale_prelude_git.shale") };
+pub const git_prelude: script.parse.Prelude = .{ .name = "the git prelude", .source = @embedFile("shale_prelude_git.shale"), .fixed = true };
 
 /// A named folder outside the root, reached as `name:path`.
 pub const Mount = struct {
