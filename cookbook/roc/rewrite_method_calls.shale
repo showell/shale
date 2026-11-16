@@ -117,8 +117,9 @@
 -- cache (`~/.cache/roc`), so a tree of a few dozen files can fill several
 -- gigabytes there.
 --
--- The output is the summary line (`candidates N, rewritten N, left N`, and
--- the programs used), a line `path:line: Module.fn: why` for each call that
+-- The output is the summary line (`files N, candidates N, rewritten N, left
+-- N`, and the programs used, the files being those begun, so a gate can tell
+-- that the glob found what it meant), a line `path:line: Module.fn: why` for each call that
 -- stays, the count of each kind the types found, and the summary again
 -- (cookbook/findings.shale).
 --
@@ -1032,7 +1033,7 @@ elseif SELF_TEST then
 else
   local paths = paths_of_globs(GLOB)
   local total = run_all(paths, ROOT, FROM, nil, USE_TYPES, roc_bin("rewrite_method_calls", SELF_TEST))
-  local summary = (APPLY and "" or "dry run: ") .. "candidates " .. total.candidates .. ", rewritten " .. total.rewritten .. ", left " .. total.left .. ", programs " .. total.ctx.programs_used .. " (checks: " .. total.ctx.confirms .. " confirming proven calls, " .. total.ctx.rounds .. " in trial rounds)"
+  local summary = (APPLY and "" or "dry run: ") .. "files " .. total.files .. ", candidates " .. total.candidates .. ", rewritten " .. total.rewritten .. ", left " .. total.left .. ", programs " .. total.ctx.programs_used .. " (checks: " .. total.ctx.confirms .. " confirming proven calls, " .. total.ctx.rounds .. " in trial rounds)"
   if total.next > 0 then summary = summary .. ", in files " .. FROM .. " to " .. (total.next - 1) .. " of " .. #paths .. ": a run holds " .. MAX_PROGRAMS .. " programs; go on with from=" .. total.next end
   local finding_lines = total.lines
   if USE_TYPES then
