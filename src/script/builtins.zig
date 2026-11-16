@@ -89,6 +89,14 @@ pub fn plural(n: usize) []const u8 {
     return if (n == 1) "" else "s";
 }
 
+/// The name a stop gives builtin `b`: the host call running (`real`, `run`,
+/// `zig_rename`) where `b` is `host`, so a stop the host's code meets in a
+/// builtin's checks (`stringArg`, `pathArg`) names what the script called.
+pub fn nameOf(run: *const Run, b: B) []const u8 {
+    if (b == .host and run.host_call.len > 0) return run.host_call;
+    return @tagName(b);
+}
+
 pub fn tooMany(run: *Run, pos: ast.Pos, b: B) Error {
     return run.fail(pos, .argument, "`{s}` takes at most {d} arguments", .{ @tagName(b), specs.get(b).at_most });
 }
@@ -124,14 +132,14 @@ pub fn scalarText(run: *Run, pos: ast.Pos, v: Value, buf: *[24]u8, what: []const
 pub fn stringArg(run: *Run, pos: ast.Pos, b: B, v: Value, what: []const u8) Error![]const u8 {
     return switch (v) {
         .string => |s| s,
-        else => run.fail(pos, .type, "`{s}`: {s} must be a string, not {s}", .{ @tagName(b), what, v.typeName() }),
+        else => run.fail(pos, .type, "`{s}`: {s} must be a string, not {s}", .{ nameOf(run, b), what, v.typeName() }),
     };
 }
 
 pub fn intArg(run: *Run, pos: ast.Pos, b: B, v: Value, what: []const u8) Error!i64 {
     return switch (v) {
         .int => |i| i,
-        else => run.fail(pos, .type, "`{s}`: {s} must be an integer, not {s}", .{ @tagName(b), what, v.typeName() }),
+        else => run.fail(pos, .type, "`{s}`: {s} must be an integer, not {s}", .{ nameOf(run, b), what, v.typeName() }),
     };
 }
 
@@ -140,9 +148,9 @@ pub fn listArg(run: *Run, pos: ast.Pos, b: B, v: Value) Error!*value.Table {
     return switch (v) {
         .table => |t| switch (t.kind) {
             .empty, .list => t,
-            .map => run.fail(pos, .type, "`{s}` takes a list, given a map", .{@tagName(b)}),
+            .map => run.fail(pos, .type, "`{s}` takes a list, given a map", .{nameOf(run, b)}),
         },
-        else => run.fail(pos, .type, "`{s}` takes a list, not {s}", .{ @tagName(b), v.typeName() }),
+        else => run.fail(pos, .type, "`{s}` takes a list, not {s}", .{ nameOf(run, b), v.typeName() }),
     };
 }
 
@@ -151,9 +159,9 @@ pub fn mapArg(run: *Run, pos: ast.Pos, b: B, v: Value) Error!*value.Table {
     return switch (v) {
         .table => |t| switch (t.kind) {
             .empty, .map => t,
-            .list => run.fail(pos, .type, "`{s}` takes a map, given a list (`#l` is a list's length)", .{@tagName(b)}),
+            .list => run.fail(pos, .type, "`{s}` takes a map, given a list (`#l` is a list's length)", .{nameOf(run, b)}),
         },
-        else => run.fail(pos, .type, "`{s}` takes a map, not {s}", .{ @tagName(b), v.typeName() }),
+        else => run.fail(pos, .type, "`{s}` takes a map, not {s}", .{ nameOf(run, b), v.typeName() }),
     };
 }
 

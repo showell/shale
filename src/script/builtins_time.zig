@@ -49,6 +49,9 @@ fn hostCall(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const name = try bi.stringArg(run, pos, .host, args[0], "its call's name");
     try run.charge(pos, name.len);
     const h = run.host orelse return run.fail(pos, .host, "`{s}`: not on this host", .{name});
+    const outer = run.host_call;
+    run.host_call = name;
+    defer run.host_call = outer;
     return h.call(h.ctx, run, pos, name, args[1..]);
 }
 

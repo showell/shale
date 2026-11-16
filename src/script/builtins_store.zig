@@ -70,15 +70,15 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     // follows the root's rules.
     if (run.path_hook) |h| if (try h.resolve(h.ctx, run, pos, rel)) |full| return .{ .path_full = full, .path_rel = rel, .path_seal = .{} };
     if (rel.len == 0) {
-        if (!allow_root) return run.fail(pos, .argument, "`{s}(\"\")` would act on the whole root: name a path of at least one part", .{@tagName(b)});
+        if (!allow_root) return run.fail(pos, .argument, "`{s}(\"\")` would act on the whole root: name a path of at least one part", .{bi.nameOf(run, b)});
         return .{ .path_full = run.root, .path_rel = "", .path_seal = .{} };
     }
     if (rel[0] == '/') return absoluteStop(run, pos, b, rel);
     var it = std.mem.splitScalar(u8, rel, '/');
     while (it.next()) |part| {
         // `..` is the habit worth naming: a sibling folder is a mount's.
-        if (std.mem.eql(u8, part, "..")) return run.fail(pos, .argument, "`{s}`: \"{s}\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)", .{ @tagName(b), rel });
-        if (!store.fatName(part)) return run.fail(pos, .argument, "`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ @tagName(b), rel, part });
+        if (std.mem.eql(u8, part, "..")) return run.fail(pos, .argument, "`{s}`: \"{s}\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)", .{ bi.nameOf(run, b), rel });
+        if (!store.fatName(part)) return run.fail(pos, .argument, "`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ bi.nameOf(run, b), rel, part });
     }
     // A root of `/` takes no second `/`: `//x` is an empty part to the store.
     const sep = if (std.mem.endsWith(u8, run.root, "/")) "" else "/";
@@ -92,7 +92,7 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
 /// none points at `shale --help`, which lists its mounts. Without a host (metal), the
 /// root is all there is.
 fn absoluteStop(run: *Run, pos: ast.Pos, b: B, abs: []const u8) Error {
-    const who = @tagName(b);
+    const who = bi.nameOf(run, b);
     const hook = run.path_hook orelse return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root", .{ who, abs });
     const f = hook.absolute_hint orelse return run.fail(pos, .argument, "`{s}`: \"{s}\" is absolute: paths are relative to the data root", .{ who, abs });
     const hint = (try f(hook.ctx, run, pos, abs)) orelse
@@ -131,7 +131,7 @@ pub fn storeHint(e: anyerror) []const u8 {
 
 pub fn storeFailed(run: *Run, pos: ast.Pos, b: B, rel: []const u8, e: anyerror) Error {
     if (e == error.OutOfMemory) return run.oom(pos);
-    return run.fail(pos, .store, "`{s}(\"{s}\")`: {s} ({s}){s}", .{ @tagName(b), rel, storeWords(e), @errorName(e), storeHint(e) });
+    return run.fail(pos, .store, "`{s}(\"{s}\")`: {s} ({s}){s}", .{ bi.nameOf(run, b), rel, storeWords(e), @errorName(e), storeHint(e) });
 }
 
 pub fn countRead(run: *Run, pos: ast.Pos) Error!void {

@@ -176,6 +176,10 @@ pub const Run = struct {
     /// The host's door and hook, where it has them (`Host`, `PathHook`).
     host: ?Host = null,
     path_hook: ?PathHook = null,
+    /// The host call running (`host("real", ...)`'s `real`), "" outside one: a stop
+    /// that the host's code reaches through a builtin's checks names it, not `host`
+    /// (`builtins.nameOf`).
+    host_call: []const u8 = "",
     line_hook: if (line_hook_on) ?LineHook else void = if (line_hook_on) null else {},
     /// How a change's diff is printed (`Diffs`).
     diffs: Diffs = .full,

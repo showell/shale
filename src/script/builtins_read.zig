@@ -88,7 +88,7 @@ pub fn readSized(run: *Run, pos: ast.Pos, b: B, p: Path, size: u64, offset: u64,
 pub fn readSizedIn(into: std.mem.Allocator, run: *Run, pos: ast.Pos, b: B, p: Path, size: u64, offset: u64, n: ?u64) Error![]const u8 {
     if (offset >= size) return "";
     const want = @min(n orelse size - offset, size - offset);
-    if (want > run.budgets.call_bytes) return run.fail(pos, .argument, "`{s}` brings at most {d} bytes in one call, and this would be {d}: read it in parts, `read(p, offset, n)`", .{ @tagName(b), run.budgets.call_bytes, want });
+    if (want > run.budgets.call_bytes) return run.fail(pos, .argument, "`{s}` brings at most {d} bytes in one call, and this would be {d}: read it in parts, `read(p, offset, n)`", .{ bi.nameOf(run, b), run.budgets.call_bytes, want });
     if (want > run.budgets.read_bytes -| run.read_bytes) return run.budgetStop(pos, .read_bytes);
     const buf = into.alloc(u8, @intCast(want)) catch return run.oom(pos);
     const got = store.readAt(run.io, run.alloc, p.full(), offset, buf) catch |e| return storeFailed(run, pos, b, p.rel(), e);
@@ -207,7 +207,7 @@ fn grepFile(run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
 }
 
 fn lineTooLong(run: *Run, pos: ast.Pos, b: B, at: u64, cap: u64) Error {
-    return run.fail(pos, .argument, "`{s}`: the line at offset {d} runs past {d} bytes, the most one call brings", .{ @tagName(b), at, cap });
+    return run.fail(pos, .argument, "`{s}`: the line at offset {d} runs past {d} bytes, the most one call brings", .{ bi.nameOf(run, b), at, cap });
 }
 
 /// `line_at(p, offset)` returns the whole line holding byte `offset`, without
@@ -261,8 +261,8 @@ fn scanner(comptime how: Scan) bi.Impl {
             const b: B = if (how == .count) .count_in else .find_in;
             const p = try pathArg(run, pos, b, args[0], false);
             const needle = try bi.stringArg(run, pos, b, args[1], "what it looks for");
-            if (needle.len == 0) return run.fail(pos, .argument, "`{s}` of \"\" is an error: there is nothing to look for", .{@tagName(b)});
-            if (needle.len > scan_chunk) return run.fail(pos, .argument, "`{s}`: what it looks for is longer than {d} bytes", .{ @tagName(b), scan_chunk });
+            if (needle.len == 0) return run.fail(pos, .argument, "`{s}` of \"\" is an error: there is nothing to look for", .{bi.nameOf(run, b)});
+            if (needle.len > scan_chunk) return run.fail(pos, .argument, "`{s}`: what it looks for is longer than {d} bytes", .{ bi.nameOf(run, b), scan_chunk });
             const r = try scan(run, pos, b, p, needle, how == .find, try rangeArgs(run, pos, b, args[2..]));
             return switch (how) {
                 .count => .{ .int = @intCast(r.count) },
@@ -289,9 +289,9 @@ const Range = struct { offset: u64 = 0, n: ?u64 = null };
 fn rangeArgs(run: *Run, pos: ast.Pos, b: B, args: []const Value) Error!Range {
     if (args.len == 0) return .{};
     const offset = try bi.intArg(run, pos, b, args[0], "its offset");
-    if (offset < 0) return run.fail(pos, .argument, "`{s}`: offset {d} is before the file's start", .{ @tagName(b), offset });
+    if (offset < 0) return run.fail(pos, .argument, "`{s}`: offset {d} is before the file's start", .{ bi.nameOf(run, b), offset });
     const n: ?i64 = if (args.len > 1) try bi.intArg(run, pos, b, args[1], "its count of bytes") else null;
-    if (n != null and n.? < 0) return run.fail(pos, .argument, "`{s}`: a count of {d} bytes", .{ @tagName(b), n.? });
+    if (n != null and n.? < 0) return run.fail(pos, .argument, "`{s}`: a count of {d} bytes", .{ bi.nameOf(run, b), n.? });
     return .{ .offset = @intCast(offset), .n = if (n) |x| @intCast(x) else null };
 }
 
@@ -311,7 +311,7 @@ fn scan(run: *Run, pos: ast.Pos, b: B, p: Path, needle: []const u8, first_only: 
     const file_size = try fileSize(run, pos, b, p);
     const start = @min(range.offset, file_size);
     const end = if (range.n) |n| start + @min(n, file_size - start) else file_size;
-    if (end - start > run.budgets.call_bytes) return run.fail(pos, .argument, "`{s}` scans at most {d} bytes in one call, and this would be {d}: scan it in parts, `{s}(p, {s}offset, n)`", .{ @tagName(b), run.budgets.call_bytes, end - start, @tagName(b), if (b == .count_lines) "" else "s, " });
+    if (end - start > run.budgets.call_bytes) return run.fail(pos, .argument, "`{s}` scans at most {d} bytes in one call, and this would be {d}: scan it in parts, `{s}(p, {s}offset, n)`", .{ bi.nameOf(run, b), run.budgets.call_bytes, end - start, bi.nameOf(run, b), if (b == .count_lines) "" else "s, " });
     const keep_most = needle.len - 1;
     // Reading at most `needle.len - 1` past the range guarantees every match
     // found starts in it.

@@ -72,7 +72,32 @@ test "an absolute path's stop: the deepest mount or the root that holds it, and 
     // A change and a program's folder take the same stop, and nothing is written.
     try expectSays(&t, try std.mem.replaceOwned(u8, a, "replace(\"R/scr/tasks/new.txt\", \"x\")", "R", r), try std.mem.replaceOwned(u8, a, "`replace`: \"R/scr/tasks/new.txt\" is absolute: it's under the mount `outer:`, so write \"outer:tasks/new.txt\"", "R", r));
     try testing.expectError(error.FileNotFound, t.file("scr/tasks/new.txt"));
-    try t.expectStop(try std.mem.replaceOwned(u8, a, "run({\"shale-fixture\", \"pwd\"}, {timeout_ms = 10000, tail = 1, cwd = \"R/scr/deep\"})", "R", r), .atomic, .argument, "is absolute: it's under the mount `deep:`, so write \"deep:.\"");
+    // A host call's stop names the call the script made, never `host`.
+    for ([_]struct { []const u8, []const u8 }{
+        .{ "run({\"shale-fixture\", \"pwd\"}, {timeout_ms = 10000, tail = 1, cwd = \"R/scr/deep\"})", "`run`: \"R/scr/deep\" is absolute: it's under the mount `deep:`, so write \"deep:.\"" },
+        .{ "real(\"R/scr/deep/x.zig\")", "`real`: \"R/scr/deep/x.zig\" is absolute: it's under the mount `deep:`, so write \"deep:x.zig\"" },
+        .{ "zig_rename(\"/etc/a.zig\", \"x\", \"y\")", "`zig_rename`: \"/etc/a.zig\" " ++ plain },
+        .{ "real(\"R/scr/../x\")", "`real`: \"R/scr/../x\" " ++ plain },
+    }) |c| try expectSays(&t, try std.mem.replaceOwned(u8, a, c[0], "R", r), try std.mem.replaceOwned(u8, a, c[1], "R", r));
+}
+
+test "an absolute path's stop, and a host call's in a builtin's checks: the call is named, and `host` itself where no call runs" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    for ([_]struct { []const u8, []const u8 }{
+        .{ "real(3)", "`real`: its path must be a string, not an integer" },
+        .{ "zig_rename(\"a/../b.zig\", \"x\", \"y\")", "`zig_rename`: \"a/../b.zig\" climbs out of the root with `..`" },
+        .{ "host(3)", "`host`: its call's name must be a string, not an integer" },
+    }) |c| {
+        var res = t.run(c[0], .atomic);
+        defer res.deinit();
+        const s = res.stop orelse return error.TestUnexpectedResult;
+        errdefer std.debug.print("{s}: {s}\n", .{ c[0], s.message });
+        try testing.expect(std.mem.startsWith(u8, s.message, c[1]));
+    }
+    // The name does not outlive its call: a later stop of the script's own is its own.
+    try t.expectStop("local p = real(\"\") print(read(\"/etc/x\"))", .atomic, .argument, "`read`: \"/etc/x\"");
 }
 
 test "an absolute path's stop: a path in a secrets mount's folder names neither the mount nor its folder, even inside a mount that may be named" {
