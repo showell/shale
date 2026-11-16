@@ -26,7 +26,7 @@
 --
 -- budget: steps=200000000
 
-const DEFAULT_REPOS = "roc-chat,roc-markdown,chat-client,chat-markdown,roc-webbox,roc-apps,shale,metal-vmm,angry-gopher,zig-metal-unikernel,zig-webbox,zig-coverage-sdk,dog-park"
+const DEFAULT_REPOS = "roc-chat,roc-markdown,chat-client,chat-markdown,roc-webbox,roc-apps,shale,metal-vmm,angry-gopher,zig-metal-unikernel,zig-webbox,zig-coverage-sdk"
 const REPOS = arg("repos", DEFAULT_REPOS)
 const PREFIXES = arg("prefixes", "claude/,box/")
 const DELETE = arg("delete", "0") == "1"

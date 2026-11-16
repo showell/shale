@@ -57,7 +57,7 @@ function path_of(name)
 end
 
 -- Where a repo's HEAD file is. A worktree's .git is a file naming its git
--- folder absolutely, `gitdir: /.../dog-park/.git/worktrees/dog-park-page`,
+-- folder absolutely, `gitdir: /.../roc-chat/.git/worktrees/roc-chat-page`,
 -- and a path here is relative, so that is read as its main repo's folder at
 -- the top of the run's root.
 function head_path_of(path)

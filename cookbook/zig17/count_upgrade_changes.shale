@@ -12,7 +12,7 @@
 -- budget: steps=900000000 reads=100000 arena_bytes=4000000000
 
 const ONLY = arg("only", "")
-const REPOS = {"zig-coverage-sdk", "zig-webbox", "metal-vmm", "shale", "zig-metal-unikernel", "angry-gopher", "dog-park", "observatory"}
+const REPOS = {"zig-coverage-sdk", "zig-webbox", "metal-vmm", "shale", "zig-metal-unikernel", "angry-gopher", "observatory"}
 
 -- {name, pattern}: each a change in the 0.17 release notes.
 const CHANGES = {

@@ -1,6 +1,6 @@
 -- **THE GIT PRELUDE** (metal-vmm QUEUE 233, chunk 3; the dogfood design's
 -- "Git"): git over `run`, no reading of `.git` itself. A `repo` is a
--- Shale path (`""` or `"."` the root, `repos:dog-park`), given to git as
+-- Shale path (`""` or `"."` the root, `repos:roc-chat`), given to git as
 -- `-C` by its `real` path. The reading calls give data and take no lock
 -- (git's `--no-optional-locks`: a `status` never rewrites the index, though a
 -- `diff` still refreshes its stat data, as git 2.43 does); the
@@ -42,7 +42,7 @@ end
 -- `repo`'s real path, `"."` and `""` the root's; a stop, naming the call
 -- as `shown`, when it is not a folder.
 function git_real(repo, shown)
-  if not attempt(git_text, repo).ok then fail(shown .. ": its repo is a path (a string), such as \"\" or \"repos:dog-park\"") end
+  if not attempt(git_text, repo).ok then fail(shown .. ": its repo is a path (a string), such as \"\" or \"repos:roc-chat\"") end
   if repo == "." then repo = "" end
   if repo ~= "" and not is_dir(repo) then fail(shown .. ": " .. repo .. " is not a folder") end
   return real(repo)

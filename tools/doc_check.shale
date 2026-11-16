@@ -35,7 +35,7 @@
 --   ... shale/tools/doc_check.shale self_test=1    its fixtures first
 -- `zig build doc-check` runs both, with this tree's `shale`.
 
-const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "dog-park", "observatory", "zig-coverage-sdk", "roc-webbox", "roc-chat", "roc-markdown", "chat-client", "roc-apps"}
+const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "observatory", "zig-coverage-sdk", "roc-webbox", "roc-chat", "roc-markdown", "chat-client", "roc-apps"}
 -- **THE OPTIONAL SIBLINGS** (metal-vmm QUEUE 313): the Roc chat's repos,
 -- which many machines have not checked out. One that is not here is said
 -- once (`not_checked_out`), and a path cited as its own (`../roc-chat/x`,
@@ -633,7 +633,7 @@ function self_test()
       "Gone: `src/gone.zig`. Sibling: zig-webbox's `src/w.zig`. Both have `src/both.zig`.\n" ..
       "A name gone: `src/a.zig`'s `nothing_here`. Nested: `src/a.zig`'s `Inner.depth`, and `depth` (src/a.zig) alone.\n" ..
       "Made up: `src/a.zig`'s `Inner.bogus`, and `ghost` (src/a.zig), which only a comment names. Broken: `src/bad.zig`'s `x`.\n" ..
-      "Not paths: `zig build test`, `a/b`, `src/**/*.zig`, `~/.config/x`, `https://x.y/z.md`, `repos:dog-park`.\n" ..
+      "Not paths: `zig build test`, `a/b`, `src/**/*.zig`, `~/.config/x`, `https://x.y/z.md`, `repos:roc-chat`.\n" ..
       "Whose: `src/both.zig`, on a line naming no repo.\n" ..
       "Passed by: `.zig`, `_test.zig`, `std.json`, `1/../2`, `data/`, `./auth`; built: `zig-out/bin/x.elf`; a sibling itself: `../zig-webbox`, `angry-gopher/`.\n" ..
       "```\nsrc/in_a_fence.zig\n```\n" ..

@@ -164,10 +164,12 @@ own project, and for working on Shale itself.
   with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`.
 - **On a live site:** a signed script, run by the site itself
   (`script_route`, `zig build shale-sign`):
-  [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com) and
-  [dog-park](https://github.com/showell/dog-park), on Linux and on
-  [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel). The
-  two name `.shale` in their `build.zig.zon`s; the kernel takes `-Dshale-root`.
+  [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com), on
+  Linux and on
+  [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel). It
+  names `.shale` in its `build.zig.zon`; the kernel takes `-Dshale-root`.
+  [dog-park](https://github.com/showell/dog-park) ran it too, until that repo
+  was retired on 2026-11-16.
   The installed suite (`shale_suite`) is built and tested, and no site runs
   it yet. Every effect goes through zig-webbox's `store`, so a script does
   the same on Linux and on metal.
@@ -318,7 +320,7 @@ with its Go. The
 Zig tools' tests read zig-webbox's checkout too: they replay splits from its
 history and walk its sources beside this repo's. **`consumers`** runs this
 repo's own docs check, metal-vmm's queue tool by this tree's `shale`, then
-dog-park's `zig build test`, zig-metal-unikernel's `zig build gopher` and
+zig-metal-unikernel's `zig build gopher` and
 angry-gopher's `ops/check_zig`, one at a time; it needs those checkouts
 beside this one, and fails naming one that is missing. Run it before a change
 here goes to master. **`fuzz`** runs the hunt: the tests named `expensive fuzz: ...` or
@@ -370,5 +372,5 @@ and `zig build shale-scale` (the largest site each site example fits).
 | | |
 |---|---|
 | Source | its history before this repo is zig-webbox's (`git -C ../zig-webbox log -- src/script`) |
-| Runs | on the box, as every agent's shell; in angry-gopher and dog-park on Linux and metal, through their builds |
+| Runs | on the box, as every agent's shell; in angry-gopher on Linux and metal, through its build |
 | Tests | the modules' unit tests; the request-edge harness for its number parses runs in angry-gopher |

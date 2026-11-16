@@ -4,7 +4,7 @@
 -- remember each language's own command.
 --
 --   shale cookbook:check_syntax.shale files=src/a.zig,roc/Walk.roc,tools/x.mjs
---   shale cookbook:check_syntax.shale rev=HEAD~1..HEAD repo=repos:dog-park
+--   shale cookbook:check_syntax.shale rev=HEAD~1..HEAD repo=repos:roc-chat
 --
 -- By kind:
 -- - `.zig`: `zig ast-check`, and `zig fmt --check` said apart (`fmt:`);

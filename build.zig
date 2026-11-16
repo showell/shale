@@ -476,7 +476,7 @@ pub fn build(b: *std.Build) void {
     // this tree. A sibling that is not there fails the step by name. Not in
     // `test`: it needs the siblings, and minutes. Run it before a Shale
     // change is pushed to master.
-    const consumers = b.step("consumers", "This tree's own docs checked, then each application's own checks against this tree: metal-vmm's queue tool, dog-park's tests, the kernel's gopher.elf, angry-gopher's ops/check_zig (needs the sibling checkouts)");
+    const consumers = b.step("consumers", "This tree's own docs checked, then each application's own checks against this tree: metal-vmm's queue tool, the kernel's gopher.elf, angry-gopher's ops/check_zig (needs the sibling checkouts)");
     const own_docs = docCheck(b, runner.getEmittedBin(), parent);
     own_docs.addArg("only=shale");
     var prev: ?*std.Build.Step = &own_docs.step;
@@ -497,7 +497,6 @@ pub fn build(b: *std.Build) void {
         prev = &run.step;
     }
     for ([_]struct { repo: []const u8, cmd: []const u8 }{
-        .{ .repo = "dog-park", .cmd = "zig build test" },
         .{ .repo = "zig-metal-unikernel", .cmd = "zig build gopher" },
         .{ .repo = "angry-gopher", .cmd = "./ops/check_zig" },
     }) |c| {

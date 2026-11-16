@@ -51,7 +51,7 @@ The usual traps, each with what avoids it:
 | where | modes | its budgets |
 |---|---|---|
 | lynrummy.com (`POST /admin/script`, angry-gopher's `admin_script`) | atomic (changes, holds the turn); background (reads only, in slices) | atomic: 2,000,000 steps, 500 reads, 16 MiB read, 100 changes, 8 MiB arena; background: the same but 10,000 reads |
-| Dog Park (`POST /admin/script`, its `src/play/shale.zig`) | background only: an atomic run is refused | 50,000,000 steps, 10,000 reads, 256 MiB read, no changes, 8 MiB arena |
+| Dog Park, retired 2026-11-16 (`POST /admin/script`, its src/play/shale.zig) | background only: an atomic run is refused | 50,000,000 steps, 10,000 reads, 256 MiB read, no changes, 8 MiB arena |
 | an installed suite (`src/shale_suite.zig`) | background, on a schedule | the application's background budgets, its output at most 64 KiB |
 | Linux, `shale` | atomic | Shale's defaults (the budgets' table), each settable with `--budget NAME=N` |
 

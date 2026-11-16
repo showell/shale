@@ -134,7 +134,7 @@ Each has a Shale form, most of them one launch:
 | `run({"grep", "-rn", ...})` inside a heredoc, refused even with a want | `for h in grep_tree("src", "text", {ext = {"zig"}}).hits do print(h.path .. ":" .. h.line .. ": " .. h.text) end` (`regex = true`, `nocase = true`, `context = 2` for `-A2 -B2`); one file: `grep(p, "text")`, `re_lines(read(p), pattern)`, `grep_all(p, "text")` past the call-bytes cap, `#grep(p, "text")` a count |
 | `run({"sed", "-i", ...})` inside a heredoc, refused even with a want | `edit(p, old, new)`: a literal, stopping the run when `old` isn't there, so no edit misses quietly; `re_replace(s, pattern, new)` then `replace(p, s)` for a regex |
 | `grep -rn 'a phrase' docs` over prose, which misses one a line break splits | `shale cookbook:find_phrase.shale find="a phrase" in=docs` (phrase on stdin with `--args-stdin`): each paragraph, list item, quote and comment block read whole (never a code fence), so a break, an indent or a run of spaces inside the phrase is one space; a hit says `path:line` where it starts, `(N lines)` when it crosses breaks, `(markup inside)` when only `*` or a backtick splits it; `new=` shows the edit and `write=1` makes it, rewrapping only the lines the edit moves |
-| grep in Zig's std, a sibling repo | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:dog-park/src` |
+| grep in Zig's std, a sibling repo | the same, through a mount: `in=zig:lib/std/Build.zig`, `repos:roc-chat/app` |
 | `zig build test 2>&1 \| grep error \| sort \| uniq -c` | `shale cookbook:run_zig_build.shale step=test` (`zig=` another compiler, through a `tools` mount): the summary, each error once with its count, failed tests by name, the whole output kept in a log |
 | `zig build fuzz 2>&1 \| grep FAIL` | the same with `grep=FAIL,hunts ran` (a value with a space: on stdin, `--args-stdin`): every output line holding one of the literals, after the summary |
 | `roc check f && roc test f 2>&1 \| tail`, any other program and its verdict | `shale cookbook:run.shale` with `cmd=roc check f && roc test f` on stdin (`--args-stdin`): each command in order until one fails, how it ended and its time, its last lines (`tail=`), lines holding `grep=` literals, the whole output in .zig-cache/run.log where that folder is (else `log=PATH`, or not kept, said); `want=tag: why` for a program `run` refuses (`node`, `sh`); inside a heredoc, `report_run(argv, {grep, tail, keep_going})`, the same verdict with no child run |
@@ -396,7 +396,7 @@ has none of it):
 
 **Git, in the git prelude** (`src/shale_prelude_git.shale`). Every call
 runs git under `run`. A `repo` is a Shale path, `""`
-or `"."` for the root and `repos:dog-park` for a mount.
+or `"."` for the root and `repos:roc-chat` for a mount.
 - **Reading:** `git_status(repo)` gives `{code, path[, from]}`.
   `git_log(repo, {n, range, ref, fields})` gives `{hash, subject, date,
   author}`, `date` in ISO 8601 with a numeric offset (`+00:00`, never `Z`,

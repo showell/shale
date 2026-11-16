@@ -5,9 +5,9 @@
 -- suits a release's checks: a `/version`, a page's text, a wait for a new
 -- commit to serve.
 --
---   shale cookbook:fetch_page.shale url=https://dogpark.lynrummy.com/version
---   shale cookbook:fetch_page.shale url=https://dogpark.lynrummy.com/ grep=Begin,Game
---   shale cookbook:fetch_page.shale url=https://dogpark.lynrummy.com/version wait=5419352 minutes=10
+--   shale cookbook:fetch_page.shale url=https://lynrummy.com/version
+--   shale cookbook:fetch_page.shale url=https://roc.lynrummy.com/ grep=Safari,Roc
+--   shale cookbook:fetch_page.shale url=https://lynrummy.com/version wait=<commit> minutes=10
 --   shale cookbook:fetch_page.shale url=https://chat.example/api/v1/messages json=messages.1.id
 --
 -- `json` reads the body as JSON (`json_read`) and prints the value at a
