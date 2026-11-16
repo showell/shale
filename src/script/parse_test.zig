@@ -233,6 +233,42 @@ test "parse: an allocation that fails, anywhere in the lexer, the lookahead or a
     try testing.expect(failed > 10);
 }
 
+/// A loader that gives every `use` the library its `ctx` points at.
+fn loadFixedLibrary(ctx: *anyopaque, into: std.mem.Allocator, _: []const u8, _: *[]const u8) error{OutOfMemory}!?[]const u8 {
+    const library: *const []const u8 = @ptrCast(@alignCast(ctx));
+    return try into.dupe(u8, library.*);
+}
+
+test "parse: an allocation that fails anywhere in a `use`d library's load or check is OutOfMemory and nothing leaks" {
+    const parse_mod = @import("parse.zig");
+    // Long enough that its check's arena takes more than one block, so an
+    // allocation fails inside the check as well as before it.
+    var long: std.ArrayList(u8) = .empty;
+    defer long.deinit(testing.allocator);
+    try long.appendSlice(testing.allocator, "const A = 1\n");
+    try long.appendSlice(testing.allocator, "function f()\n  return A\nend\n");
+    for (0..150) |i| try long.print(testing.allocator, "function g{d}(x)\n  local s = \"a\\tb\" .. x\n  return s\nend\n", .{i});
+    var library: []const u8 = long.items;
+    const loader: parse_mod.Loader = .{ .ctx = @ptrCast(&library), .load = loadFixedLibrary };
+    const src = "use(\"m:l.shale\")\nprint(f())\n";
+    var i: usize = 0;
+    var failed: usize = 0;
+    while (true) : (i += 1) {
+        var failing: testing.FailingAllocator = .init(testing.allocator, .{ .fail_index = i });
+        var tree = std.heap.ArenaAllocator.init(failing.allocator());
+        defer tree.deinit();
+        var stop: ?diag.Stop = null;
+        if (parse_mod.parseWith(tree.allocator(), failing.allocator(), src, 200, &stop, null, &.{}, loader)) |_| {
+            break;
+        } else |e| {
+            if (e != error.OutOfMemory) std.debug.print("at {d}: {t} {?s}\n", .{ i, e, if (stop) |s| s.message else null });
+            try testing.expectEqual(error.OutOfMemory, e);
+            failed += 1;
+        }
+    }
+    try testing.expect(failed > 10);
+}
+
 test "parse: an allocation that fails while looking ahead, or deep in a long prelude's check, is OutOfMemory" {
     const parse_mod = @import("parse.zig");
     // A prelude long enough that its check's arena takes more than one block.

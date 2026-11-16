@@ -907,10 +907,17 @@ pub const Parser = struct {
         const k = self.extra.len + 1;
         const lib: Library = .{ .use_line = pos.line, .consts = try self.alloc.dupe(PreludeFunction, consts.items) };
         try self.libraryNames(pos, path, functions.items, lib.consts);
-        const loaded = try self.scratch.alloc(?u32, functions.items.len);
+        // Both are made before the slot joins `extra`, because parse's defer
+        // frees every slot there: a slot taken first, whose allocation then
+        // failed, would be freed unmade.
+        const functions_index = try self.scratch.dupe(PreludeFunction, functions.items);
+        const loaded = self.scratch.alloc(?u32, functions.items.len) catch |e| {
+            self.scratch.free(functions_index);
+            return e;
+        };
         @memset(loaded, null);
         self.extra = self.extra.ptr[0..k];
-        self.extra[k - 1] = .{ .prelude = .{ .name = path, .source = source }, .index = try self.scratch.dupe(PreludeFunction, functions.items), .loaded = loaded, .library = lib };
+        self.extra[k - 1] = .{ .prelude = .{ .name = path, .source = source }, .index = functions_index, .loaded = loaded, .library = lib };
         try checkLibrary(self, k, pos);
         // Each `const`, bound on this line: its literal parsed from the
         // library, its name the script's from here on.
