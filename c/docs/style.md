@@ -86,8 +86,10 @@ and its self-test plants a break of each one.
   `VEC_DEFINE`, `TRY`, `EXPECT`. A macro used as an expression is named like
   a function: `at`, `str_sub`, `buf_lit`. `S` is short, because every
   literal goes through it.
-- A name Shale's Zig has keeps that name: `held`, `limit`, `chunk_least`
-  becomes `ARENA_CHUNK_LEAST`, and `budgetStop` becomes `run_budget_stop`.
+- Until the cut-over, a name Shale's Zig has keeps that name, so the two
+  line up: `held`, `limit`, `chunk_least` becomes `ARENA_CHUNK_LEAST`, and
+  `budgetStop` becomes `run_budget_stop`. After it, a name is whatever
+  reads best in C (`after-cutover.md`, "Idioms to take up").
 
 ## Comments
 
@@ -154,6 +156,10 @@ and its self-test plants a break of each one.
   run's `RunCtx`, never in a return value.
 - A lookup that can miss returns `bool` and fills an out-parameter, or
   returns `NULL` or `SIZE_MAX`.
+- A function that holds OS resources (a file descriptor, a child process)
+  releases them on its error paths through one `goto` label at its end, as
+  ordinary C does: `fail:` closes what is open and returns `STOP`. `goto` is
+  for that alone. Memory needs none, since the arena owns it.
 - A bug in the C (a bad index, an arena misuse, a stop that names no
   budget) aborts with one line on stderr. It is never a script's stop.
 - A message a stop prints is Zig Shale's text, byte for byte. Where Zig
