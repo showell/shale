@@ -437,6 +437,18 @@ TEST(the_command_line_and_the_header_set_budgets_the_command_line_winning) {
     arena_deinit(&a);
 }
 
+TEST(the_parsers_own_lookups_end_the_process_on_a_miss) {
+    // A local's slot the frame doesn't hold, and a prelude function its own
+    // index lacks, are the parser's bugs, never a script's stop.
+    Arena a = arena_make(1 << 20);
+    Parser p;
+    parse_init(&p, &a, S("local x = 1\n"), 200);
+    EXPECT_DIES((void)parse_is_const(&p, 7));
+    PreludeFunctions none = {NULL, 0};
+    EXPECT_DIES((void)parse_index_sure(none, S("twice")));
+    arena_deinit(&a);
+}
+
 TEST_MAIN(TEST_CASE(a_script_parses_to_its_tree_each_name_a_slot),
           TEST_CASE(a_minus_folds_into_its_literal_and_nil_comparisons_get_their_own_ops),
           TEST_CASE(a_core_prelude_function_is_parsed_at_its_first_call_and_only_then),
@@ -450,4 +462,5 @@ TEST_MAIN(TEST_CASE(a_script_parses_to_its_tree_each_name_a_slot),
           TEST_CASE(a_use_binds_its_consts_on_its_line_and_its_functions_load_at_their_call),
           TEST_CASE(statements_hold_their_own_rules),
           TEST_CASE(a_stop_partway_leaves_the_parsers_state_as_it_was),
-          TEST_CASE(the_command_line_and_the_header_set_budgets_the_command_line_winning))
+          TEST_CASE(the_command_line_and_the_header_set_budgets_the_command_line_winning),
+          TEST_CASE(the_parsers_own_lookups_end_the_process_on_a_miss))

@@ -652,6 +652,13 @@ static inline STATUS_MUST_USE Status compile_expr(Compiler *c, const Expr *e, ui
     return OK;
 }
 
+// A function's end leaves no operand on the stack: every expression's push
+// is popped by what takes it. One left is a bug in the C, which would hand
+// the next function's frame a value it never made.
+static inline void compile_operands_settled(const Compiler *c) {
+    if (c->operands != 0) c_bug("compile: a function ends with operands left on the stack");
+}
+
 static inline STATUS_MUST_USE Status compile_function(Compiler *c, const Function *f, CodeFunc *out) {
     c->hidden = f->frame;
     c->frame = f->frame;
@@ -660,7 +667,7 @@ static inline STATUS_MUST_USE Status compile_function(Compiler *c, const Functio
     uint32_t entry = (uint32_t)c->code.ops.len;
     TRY(compile_block(c, f->body, 0));
     TRY(compile_emit(c, OP_RET_NIL, 0, 0, f->pos));
-    if (c->operands != 0) c_bug("compile: a function ends with operands left on the stack");
+    compile_operands_settled(c);
     out->name = f->name;
     out->pos = f->pos;
     out->entry = entry;

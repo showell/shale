@@ -12,7 +12,7 @@ use("build:lib.shale")
 -- full tier: the faults below planted in a copy of c/script, each caught by
 -- test_regex.c under asan (`run_plants`).
 
-const REGEX_TESTS = 16
+const REGEX_TESTS = 17
 const REGEX_ZIG_TESTS = 10
 const REGEX_PLANTS = {
   {name = "a split follows its less preferred way first",

@@ -45,5 +45,15 @@ TEST(a_size_saturates_only_past_size_max) {
     EXPECT_EQ(cli_size_saturated(UINT64_MAX), SIZE_MAX);
 }
 
+TEST(a_budget_of_no_settable_kind_ends_the_process) {
+    Budgets b = budgets_default();
+    cli_set_budget(&b, SET_STEPS, 9);
+    EXPECT_EQ(cli_budget_value(&b, SET_STEPS), 9);
+    EXPECT_DIES(cli_set_budget(&b, SET_COUNT, 9));
+    EXPECT_DIES((void)cli_budget_value(&b, SET_COUNT));
+    EXPECT_EQ(b.steps, 9);
+}
+
 TEST_MAIN(TEST_CASE(a_budget_past_its_fields_type_saturates_and_never_wraps),
-          TEST_CASE(a_size_saturates_only_past_size_max))
+          TEST_CASE(a_size_saturates_only_past_size_max),
+          TEST_CASE(a_budget_of_no_settable_kind_ends_the_process))

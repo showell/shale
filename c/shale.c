@@ -613,11 +613,9 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         // REMEDY: only paths may_change let through are journaled, and a
         // secrets folder's path is refused before that (paths_resolve); the
         // lines are asked paths_names_secret, the hook path_fail asks, and
-        // one that names a secrets folder ends the process.
-        bool names = false;
-        Pos none = {0, 0};
-        if (paths_names_secret(&lh.paths, &rs.path, none, buf_view(&undone), &names) != OK) return not_ported(o, S("an undo past the arena"));
-        if (names) c_bug("shale: an undo line names a secrets mount's folder");
+        // one that names a secrets folder ends the process
+        // (paths_report_names_no_secret; test_paths holds its death).
+        if (paths_report_names_no_secret(&lh.paths, &rs.path, buf_view(&undone)) != OK) return not_ported(o, S("an undo past the arena"));
         say(o, buf_view(&undone));
     }
     int exit_code = flush_and_exit(o, ran == OK ? EXIT_FINISHED : EXIT_STOPPED);

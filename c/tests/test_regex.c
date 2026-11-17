@@ -661,6 +661,10 @@ TEST(a_hostile_search_stays_linear) {
     }
 }
 
+TEST(a_bug_in_the_regex_ends_the_process) {
+    EXPECT_DIES(regex_bug("a planted bug"));
+}
+
 TEST_MAIN(
     TEST_CASE(counted_repetition_is_the_part_written_out),
     TEST_CASE(a_bad_count_is_refused_at_its_brace),
@@ -677,5 +681,6 @@ TEST_MAIN(
     TEST_CASE(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it_evicts),
     TEST_CASE(each_group_captures_its_own_part),
     TEST_CASE(an_empty_turn_ends_its_loop_as_a_backtrackers_does),
-    TEST_CASE(a_hostile_search_stays_linear)
+    TEST_CASE(a_hostile_search_stays_linear),
+    TEST_CASE(a_bug_in_the_regex_ends_the_process)
 )

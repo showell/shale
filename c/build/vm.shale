@@ -14,7 +14,7 @@ use("build:lib.shale")
 -- script, the oracle. In the full tier: the faults below planted in a copy
 -- of c/script, each caught by test_vm.c.
 
-const VM_TESTS = 16
+const VM_TESTS = 19
 const VM_SCRIPTS = {
   {name = "runs", argv = {"--verbose"}, source = "function f(x) return x end\nprint(f(trim(\" a \")), #\"abc\" * 2, upper(\"x\") .. 1)\nlocal t = {3, 1, 2}\nprint(join(sort(t), \",\"))\n"},
   {name = "stops", argv = {}, source = "function g(n) return h(n) end\nfunction h(n) return n // 0 end\nprint(attempt(g, 1).error)\ng(2)\n"},

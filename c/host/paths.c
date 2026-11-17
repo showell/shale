@@ -169,6 +169,20 @@ static bool paths_text_names_dir(Str text, Str dir) {
 
 // The `PathHook.names_secret` check: whether `text` holds a secrets mount's
 // folder, as the mounts file names it or as this run sees it.
+static STATUS_MUST_USE Status paths_names_secret(void *ctx, PathRun *r, Pos pos, Str text, bool *names);
+
+// The secrets rule's check of a report the host writes past every stop's
+// (the undo's lines): one that names a secrets mount's folder is a bug in
+// the C, and the process ends before it is said. STOP when the arena
+// refuses the check.
+static inline STATUS_MUST_USE Status paths_report_names_no_secret(Paths *h, PathRun *r, Str text) {
+    bool names = false;
+    Pos none = {0, 0};
+    TRY(paths_names_secret(h, r, none, text, &names));
+    if (names) c_bug("paths: a report line names a secrets mount's folder");
+    return OK;
+}
+
 static STATUS_MUST_USE Status paths_names_secret(void *ctx, PathRun *r, Pos pos, Str text, bool *names) {
     Paths *h = ctx;
     *names = false;

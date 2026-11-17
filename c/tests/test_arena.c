@@ -313,6 +313,15 @@ TEST(a_misuse_ends_the_process) {
     arena_deinit(&a);
 }
 
+TEST(a_mark_past_the_most_open_ends_the_process) {
+    Arena a = arena_make(1 << 20);
+    for (size_t n = 0; n < ARENA_MARKS_MOST; n++) (void)arena_mark(&a);
+    EXPECT_EQ(a.marks_len, ARENA_MARKS_MOST);
+    EXPECT_DIES((void)arena_mark(&a));
+    EXPECT_EQ(a.marks_len, ARENA_MARKS_MOST);
+    arena_deinit(&a);
+}
+
 TEST_MAIN(
     TEST_CASE(the_budget_refuses_past_its_limit_and_says_it_was_hit),
     TEST_CASE(chunks_start_at_the_least_and_double),
@@ -334,5 +343,6 @@ TEST_MAIN(
     TEST_CASE(the_arena_never_holds_more_than_its_limit_whatever_grows_in_it),
     TEST_CASE(deinit_gives_back_every_chunk_and_keeps_the_limit),
     TEST_CASE(dup_copies_into_the_arena_and_is_refused_when_full),
-    TEST_CASE(a_misuse_ends_the_process)
+    TEST_CASE(a_misuse_ends_the_process),
+    TEST_CASE(a_mark_past_the_most_open_ends_the_process)
 )

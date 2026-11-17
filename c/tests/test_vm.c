@@ -315,7 +315,56 @@ TEST(a_stop_whose_format_escapes_a_brace_falls_back_to_that_format_raw) {
     ran_free(&x);
 }
 
-TEST_PART(vm, TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(the_step_budget_stops_one_past_it),
+TEST(the_compilers_own_checks_end_the_process) {
+    Arena a = arena_make(1 << 20);
+    Compiler c;
+    memset(&c, 0, sizeof c);
+    c.arena = &a;
+    c.code.ops = VmOpVec_make(&a);
+    c.code.enters = VmEnterVec_make(&a);
+    Pos p = {1, 1};
+    EXPECT(compile_emit(&c, OP_NOP, 0, 0, p) == OK);
+    EXPECT(compile_emit(&c, OP_JUMP, 0, 0, p) == OK);
+    // A jump takes its target; an op that does not jump is a bug to patch.
+    compile_patch(&c, 1, 9);
+    EXPECT_EQ(at(c.code.ops, 1).a, 9);
+    EXPECT_DIES(compile_patch(&c, 0, 9));
+    EXPECT_EQ(at(c.code.ops, 0).a, 0);
+    // A function's end with an operand left, and a pop past what was pushed.
+    compile_operands_settled(&c);
+    compile_push(&c, 1);
+    EXPECT_DIES(compile_operands_settled(&c));
+    compile_pop(&c, 1);
+    compile_operands_settled(&c);
+    EXPECT_DIES(compile_pop(&c, 1));
+    arena_deinit(&a);
+}
+
+TEST(a_store_builtin_on_a_run_with_no_store_ends_the_process) {
+    static Run r;
+    memset(&r, 0, sizeof r);
+    EXPECT(r.store == NULL);
+    EXPECT_DIES((void)builtin_store_of(&r));
+}
+
+TEST(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process) {
+    // Each answer for a value no case names would be a plausible lie: an
+    // operator's text "", a table's kind "an empty table", a count's sign.
+    EXPECT_STR(run_op_text(BINOP_CONCAT), S(".."));
+    EXPECT_DIES((void)run_op_text((BinOp)99));
+    int64_t got = 0;
+    EXPECT(run_int_arith(BINOP_MOD, -7, 3, &got));
+    EXPECT_EQ_I(got, 2);
+    EXPECT_DIES((void)run_int_arith(BINOP_CONCAT, 1, 2, &got));
+    Value v;
+    value_int(&v, 1);
+    v.tag = (ValueTag)9;
+    EXPECT_DIES((void)value_type_name(&v));
+    EXPECT_DIES((void)flat_int((size_t)INT64_MAX + 1));
+    EXPECT_EQ_I(flat_int((size_t)INT64_MAX), INT64_MAX);
+}
+
+TEST_PART(vm, TEST_CASE(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process), TEST_CASE(the_compilers_own_checks_end_the_process), TEST_CASE(a_store_builtin_on_a_run_with_no_store_ends_the_process), TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(the_step_budget_stops_one_past_it),
           TEST_CASE(the_call_depth_budget_names_every_call), TEST_CASE(attempt_makes_a_stop_a_value_and_the_run_goes_on),
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
           TEST_CASE(yield_keeps_what_is_reached_and_charges_the_copy), TEST_CASE(the_output_budget_writes_what_fits),

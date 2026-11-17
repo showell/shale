@@ -956,6 +956,32 @@ TEST(a_step_budget_met_in_the_walk_of_a_path_stops_one_past_it) {
     fx_deinit(&f);
 }
 
+TEST(a_message_whose_arguments_miss_its_placeholders_ends_the_process) {
+    Arena a = arena_make(1 << 20);
+    Buf b = buf_make(&a);
+    MsgArgs none = {NULL, 0};
+    EXPECT_EQ(msg_format(&b, S("`{s}` and {{braces}}"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))), OK);
+    EXPECT_STR(buf_view(&b), S("`x` and {braces}"));
+    // A placeholder with no argument, and an argument with no placeholder.
+    EXPECT_DIES(if (msg_format(&b, S("`{s}` is {s}"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))) != OK) {});
+    EXPECT_DIES(if (msg_format(&b, S("no placeholder"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))) != OK) {});
+    EXPECT_DIES(if (msg_format(&b, S("{s}"), none) != OK) {});
+    arena_deinit(&a);
+}
+
+TEST(a_host_report_line_naming_a_secrets_folder_ends_the_process) {
+    Fx f;
+    fx_init(&f);
+    sx_mkdir(&f.base, "keys");
+    fx_mounts(&f, "k = R/keys secrets\n");
+    fx_again(&f);
+    // The undo's line for a file outside the folder is said.
+    EXPECT_EQ(paths_report_names_no_secret(&f.paths, &f.run, fx_r(&f, "undo: put back R/notes.txt")), OK);
+    // One naming the folder ends the process before it is said.
+    EXPECT_DIES(if (paths_report_names_no_secret(&f.paths, &f.run, fx_r(&f, "undo: put back R/keys/tok")) != OK) {});
+    fx_deinit(&f);
+}
+
 TEST_MAIN(
     TEST_CASE(every_way_out_of_the_root_is_refused_before_the_store_is_asked),
     TEST_CASE(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_files_mistakes_by_line),
@@ -979,5 +1005,7 @@ TEST_MAIN(
     TEST_CASE(undo_a_relative_root_is_taken_against_the_working_folder_so_real_gives_an_absolute_path),
     TEST_CASE(undo_on_stop_puts_back_an_edit_a_file_made_a_folder_made_a_file_removed_an_executable_s_bytes_and_mode),
     TEST_CASE(undo_of_nothing_there_whose_path_is_gone_already_is_put_back_as_nothing),
-    TEST_CASE(a_step_budget_met_in_the_walk_of_a_path_stops_one_past_it)
+    TEST_CASE(a_step_budget_met_in_the_walk_of_a_path_stops_one_past_it),
+    TEST_CASE(a_message_whose_arguments_miss_its_placeholders_ends_the_process),
+    TEST_CASE(a_host_report_line_naming_a_secrets_folder_ends_the_process)
 )

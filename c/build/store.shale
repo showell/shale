@@ -14,7 +14,7 @@ use("build:lib.shale")
 -- a copy of c/, c/tests/store copied whole beside it (its fixture.c reaches
 -- the copy's c/host), each caught by its `aim` tests (`run_plants`).
 
-const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 23}
+const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 25}
 const STORE_ZIG_TESTS = {["src/shale_abs_path_test.zig"] = 3, ["src/shale_undo_test.zig"] = 4, ["src/shale_ro_links_test.zig"] = 9}
 const STORE_PLANTS = {
   {name = "a folder that begins with a mount's name is in it", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
