@@ -595,7 +595,7 @@ static STATUS_MUST_USE Status host_zig_read(Run *r, Pos pos, const StorePath *p,
     TRY(builtin_count_read(r, pos));
     uint64_t size = 0;
     TRY(builtin_file_size(r, pos, BUILTIN_HOST, p, &size));
-    TRY(builtin_read_sized(r, pos, BUILTIN_HOST, p, size, 0, false, 0, out));
+    TRY(builtin_read_sized(r, pos, BUILTIN_HOST, p, size, 0, BUILTIN_TO_END, out));
     return builtin_charge_bytes(r, pos, out->len);
 }
 

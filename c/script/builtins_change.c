@@ -265,7 +265,7 @@ static STATUS_MUST_USE Status change_plan(Run *r, Pos pos, const StorePath *p, E
     uint64_t size = 0;
     TRY(builtin_file_size(r, pos, b, p, &size));
     Str was = {0};
-    TRY(builtin_read_sized(r, pos, b, p, size, 0, false, 0, &was));
+    TRY(builtin_read_sized(r, pos, b, p, size, 0, BUILTIN_TO_END, &was));
     Spans spans = Spans_make(r->ctx.values);
     Str now = was;
     size_t replaced_n = 0;

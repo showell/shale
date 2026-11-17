@@ -650,7 +650,7 @@ static STATUS_MUST_USE Status host_zig_move_in(Paths *h, Arena *sa, Run *r, Pos 
     if (found) {
         uint64_t size = 0;
         TRY(builtin_file_size(r, pos, BUILTIN_HOST, &q, &size));
-        TRY(builtin_read_sized(r, pos, BUILTIN_HOST, &q, size, 0, false, 0, &to_src));
+        TRY(builtin_read_sized(r, pos, BUILTIN_HOST, &q, size, 0, BUILTIN_TO_END, &to_src));
         TRY(builtin_charge_bytes(r, pos, to_src.len));
     }
     Buf req = buf_make(sa);

@@ -148,7 +148,7 @@ static STATUS_MUST_USE Status host_shale_tokens(Run *r, Pos pos, ConstValues arg
     uint64_t size = 0;
     TRY(builtin_file_size(r, pos, BUILTIN_HOST, &p, &size));
     Str src = S("");
-    TRY(builtin_read_sized(r, pos, BUILTIN_HOST, &p, size, 0, false, 0, &src));
+    TRY(builtin_read_sized(r, pos, BUILTIN_HOST, &p, size, 0, BUILTIN_TO_END, &src));
     TRY(builtin_charge_bytes(r, pos, src.len));
     Lexer lx;
     lexer_init(&lx, r->ctx.values, src);

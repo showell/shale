@@ -219,14 +219,18 @@ static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, cons
     return OK;
 }
 
-// `n` bytes from `offset` (to the end when `!has_n`) of a file whose size is
-// known: "" at or past the end; at most the call-bytes cap and what the
-// read-bytes budget has left; the bytes read charged a step per 16.
-static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t offset, bool has_n, uint64_t n, Str *out) {
+// An `n` of bytes that runs to a file's end: a count a script gives is at
+// most INT64_MAX.
+#define BUILTIN_TO_END UINT64_MAX
+
+// `n` bytes from `offset` (to the end for BUILTIN_TO_END) of a file whose
+// size is known: "" at or past the end; at most the call-bytes cap and what
+// the read-bytes budget has left; the bytes read charged a step per 16.
+static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t offset, uint64_t n, Str *out) {
     *out = S("");
     if (offset >= size) return OK;
     uint64_t left = size - offset;
-    uint64_t want = has_n && n < left ? n : left;
+    uint64_t want = n < left ? n : left;
     uint64_t cap = r->ctx.budgets.call_bytes;
     if (want > cap) {
         return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` brings at most {d} bytes in one call, and this would be {d}: read it in parts, `read(p, offset, n)`",
@@ -274,20 +278,16 @@ static STATUS_MUST_USE Status bi_read(Run *r, Pos pos, ConstValues args, Value *
     StorePath p;
     TRY(builtin_path(r, pos, BUILTIN_READ, &at(args, 0), false, &p));
     uint64_t offset = 0;
-    bool has_n = false;
-    uint64_t n = 0;
+    uint64_t n = BUILTIN_TO_END;
     if (args.len > 1) {
         TRY(builtin_offset_arg(r, pos, BUILTIN_READ, &at(args, 1), &offset));
-        if (args.len > 2) {
-            TRY(builtin_count_arg(r, pos, BUILTIN_READ, &at(args, 2), &n));
-            has_n = true;
-        }
+        if (args.len > 2) TRY(builtin_count_arg(r, pos, BUILTIN_READ, &at(args, 2), &n));
     }
     TRY(builtin_count_read(r, pos));
     uint64_t size = 0;
     TRY(builtin_file_size(r, pos, BUILTIN_READ, &p, &size));
     Str got = {0};
-    TRY(builtin_read_sized(r, pos, BUILTIN_READ, &p, size, offset, has_n, n, &got));
+    TRY(builtin_read_sized(r, pos, BUILTIN_READ, &p, size, offset, n, &got));
     value_string(out, got);
     return OK;
 }
@@ -307,7 +307,7 @@ static STATUS_MUST_USE Status bi_read_or(Run *r, Pos pos, ConstValues args, Valu
     }
     if (st.kind != STORE_KIND_FILE) return builtin_store_failed(r, pos, BUILTIN_READ_OR, p.rel, STORE_IS_DIR);
     Str got = {0};
-    TRY(builtin_read_sized(r, pos, BUILTIN_READ_OR, &p, st.size, 0, false, 0, &got));
+    TRY(builtin_read_sized(r, pos, BUILTIN_READ_OR, &p, st.size, 0, BUILTIN_TO_END, &got));
     value_string(out, got);
     return OK;
 }
@@ -356,7 +356,7 @@ static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, V
     uint64_t start = builtin_min_u64(offset, size);
     Buf got = buf_make(r->ctx.values);
     Str first = {0};
-    TRY(builtin_read_sized(r, pos, b, &p, size, start, true, n, &first));
+    TRY(builtin_read_sized(r, pos, b, &p, size, start, n, &first));
     if (buf_str(&got, first) != OK) return run_values_oom(r, pos);
     uint64_t end = start + got.len;
     // Extend a piece at a time to the end of the last line.
@@ -364,7 +364,7 @@ static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, V
         for (;;) {
             if (end - start >= cap) return builtin_line_too_long(r, pos, b, start, cap);
             Str piece = {0};
-            TRY(builtin_read_sized(r, pos, b, &p, size, end, true, builtin_min_u64(BUILTIN_LINE_PIECE, cap - (end - start)), &piece));
+            TRY(builtin_read_sized(r, pos, b, &p, size, end, builtin_min_u64(BUILTIN_LINE_PIECE, cap - (end - start)), &piece));
             if (piece.len == 0) break;
             const char *nl = mem_find_byte(piece.ptr, '\n', piece.len);
             if (nl != NULL) {
@@ -441,7 +441,7 @@ static STATUS_MUST_USE Status bi_grep(Run *r, Pos pos, ConstValues args, Value *
                          run_unum(r, cap), S(" bytes in one call, and "), p.rel, S(" is "), run_unum(r, size), S(": `read_lines` and `contains` go through it a part at a time"));
     }
     Str whole = {0};
-    TRY(builtin_read_sized(r, pos, b, &p, size, 0, false, 0, &whole));
+    TRY(builtin_read_sized(r, pos, b, &p, size, 0, BUILTIN_TO_END, &whole));
     Finder f;
     finder_init(&f, r, pos, needle);
     Table *list = NULL;
@@ -496,7 +496,7 @@ static STATUS_MUST_USE Status bi_line_at(Run *r, Pos pos, ConstValues args, Valu
     while (lo > 0) {
         uint64_t take = builtin_min_u64(lo, piece_max);
         Str piece = {0};
-        TRY(builtin_read_sized(r, pos, b, &p, size, lo - take, true, take, &piece));
+        TRY(builtin_read_sized(r, pos, b, &p, size, lo - take, take, &piece));
         size_t start = builtin_line_start(piece, piece.len);
         if (start > 0) {
             lo = lo - take + start;
@@ -508,7 +508,7 @@ static STATUS_MUST_USE Status bi_line_at(Run *r, Pos pos, ConstValues args, Valu
     uint64_t hi = offset;
     while (hi < size) {
         Str piece = {0};
-        TRY(builtin_read_sized(r, pos, b, &p, size, hi, true, builtin_min_u64(piece_max, size - hi), &piece));
+        TRY(builtin_read_sized(r, pos, b, &p, size, hi, builtin_min_u64(piece_max, size - hi), &piece));
         size_t nl = builtin_line_end(piece, 0);
         if (nl < piece.len) {
             hi += nl;
@@ -519,7 +519,7 @@ static STATUS_MUST_USE Status bi_line_at(Run *r, Pos pos, ConstValues args, Valu
     }
     if (hi - lo > cap) return builtin_line_too_long(r, pos, b, offset, cap);
     Str got = {0};
-    TRY(builtin_read_sized(r, pos, b, &p, size, lo, true, hi - lo, &got));
+    TRY(builtin_read_sized(r, pos, b, &p, size, lo, hi - lo, &got));
     value_string(out, got);
     return OK;
 }
@@ -527,10 +527,9 @@ static STATUS_MUST_USE Status bi_line_at(Run *r, Pos pos, ConstValues args, Valu
 // How much of a file a scan holds at once.
 enum { BUILTIN_SCAN_CHUNK = 64 * 1024 };
 
-// A scan's range: from `offset`, `n` bytes, or to the end.
+// A scan's range: from `offset`, `n` bytes, or to the end (BUILTIN_TO_END).
 typedef struct {
     uint64_t offset;
-    bool has_n;
     uint64_t n;
 } ScanRange;
 
@@ -547,13 +546,11 @@ typedef struct {
 
 // The range a scan's last arguments ask.
 static STATUS_MUST_USE Status builtin_range_args(Run *r, Pos pos, Builtin b, ConstValues args, size_t from, ScanRange *out) {
-    memset(out, 0, sizeof *out);
+    out->offset = 0;
+    out->n = BUILTIN_TO_END;
     if (args.len <= from) return OK;
     TRY(builtin_offset_arg(r, pos, b, &at(args, from), &out->offset));
-    if (args.len > from + 1) {
-        TRY(builtin_count_arg(r, pos, b, &at(args, from + 1), &out->n));
-        out->has_n = true;
-    }
+    if (args.len > from + 1) TRY(builtin_count_arg(r, pos, b, &at(args, from + 1), &out->n));
     return OK;
 }
 
@@ -566,7 +563,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const Sto
     uint64_t file_size = 0;
     TRY(builtin_file_size(r, pos, b, p, &file_size));
     uint64_t start = builtin_min_u64(range.offset, file_size);
-    uint64_t end = range.has_n ? start + builtin_min_u64(range.n, file_size - start) : file_size;
+    uint64_t end = start + builtin_min_u64(range.n, file_size - start);
     uint64_t cap = r->ctx.budgets.call_bytes;
     if (end - start > cap) {
         Str who = builtin_who(r, b);
