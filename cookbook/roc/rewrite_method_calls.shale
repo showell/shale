@@ -102,8 +102,8 @@
 --   - a concrete type of another kind (`List(U8)` for a `Str` call, a
 --     record, a tag union, a function) leaves the call untried, with a
 --     reason like `the first argument is a List, not a Str`;
---   - a type whose head names the module (`Str`, `List(...)`, `MessageRef`
---     or `X.MessageRef`) proves the call;
+--   - a type whose head is the module itself (`Str`, `List(...)`, `Point`)
+--     proves the call (`proves_module_call`, below);
 --   - a type variable, or no type at that spot, leaves the call to the trial.
 -- The summary counts each kind. The files whose open calls are all proven
 -- are written at once, and one `roc check` and one `roc test` on their root
@@ -618,11 +618,27 @@ function with_article(word)
   return "a " .. word
 end
 
+-- Whether a first argument whose type has the head `head` proves a call of
+-- module `module`, that is, whether `x.fn(...)` finds the module's `fn`. A
+-- method is looked up in the block of the type's own declaration, so the
+-- head must be the module's own type. roc-types writes a type by the name
+-- it is declared with (no import's alias, and never a package's
+-- shorthand): a type module's own type, or a builtin, bare (`Str`, `Point`,
+-- `Meter` from a package imported as `pk.Meter`), and a type declared
+-- inside a module's block qualified by that module (`Shapes.Shape`). So
+-- the one form that proves is the bare module name, a package's type
+-- module included. A qualified head never does, even one whose last
+-- segment names the module: `Type.Game` is Type's, not Game's, and
+-- `History.History` is a type in History's block, not History itself.
+function proves_module_call(head, module)
+  return head == module
+end
+
 -- Judges each open candidate of the file at `p` by its first argument's
 -- type in `types` (from the root that reaches the file). A concrete other
--- type leaves the call, with that reason; a type whose head is the
--- module's marks it `proven`; the rest stay open for the trial. Each kind
--- is counted in `kind_counts`.
+-- type leaves the call, with that reason; a type that proves the call
+-- (`proves_module_call`) marks it `proven`; the rest stay open for the
+-- trial. Each kind is counted in `kind_counts`.
 function judge_by_types(kind_counts, t, cands, p, types)
   local real_path = real(p)
   for c in cands do
@@ -637,8 +653,7 @@ function judge_by_types(kind_counts, t, cands, p, types)
           incr(kind_counts, "a type variable")
           c.kind = "a type variable"
         else
-          local segments = split(h.head, ".")
-          if h.head == c.module or segments[#segments] == c.module then
+          if proves_module_call(h.head, c.module) then
             incr(kind_counts, "the module's type")
             c.proven = true
           else
@@ -999,17 +1014,25 @@ const EXPECT = {
   Second = {left = 0, root = "TypedApp,SecondApp", types = true, confirms = 1, rounds = 0},
   Unreached = {stop = "no root reaches", root = "TypedApp,SecondApp", types = true},
   Beside = {file = "Proven", with = "NoCalls", left = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
+  -- A qualified type whose last segment names the module proves nothing,
+  -- and the compiler agrees: the trial refuses both calls.
+  LastSegment = {left = 2, why = "the first argument is a Shelf.Book, not a Book", root = "TypedApp", types = true, confirms = 0, rounds = 0},
+  LastSegmentTried = {file = "LastSegment", left = 2, why = "roc check: missing method"},
+  -- A package's type module, imported as `pk.Meter`, proves its calls.
+  Packaged = {left = 0, root = "PkgApp", types = true, confirms = 1, rounds = 0},
   -- `trials=0`: the types alone count, and the plant comes out as it was.
   -- ProvenFails' three calls are all proven, where the trial leaves two:
   -- the count's cost, held here.
   TypedCount = {file = "Typed", count = true, proven = 1, unsettled = 0, left = 1, why = "the first argument is a List, not a Str", root = "TypedApp", types = true},
   ProvenFailsCount = {file = "ProvenFails", count = true, proven = 3, unsettled = 0, left = 0, root = "TypedApp", types = true},
   ProvenFrom = {file = "Proven", count = true, types_from = true, proven = 2, unsettled = 0, left = 0, root = "TypedApp", types = true},
+  LastSegmentCount = {file = "LastSegment", count = true, proven = 0, unsettled = 0, left = 2, why = "the first argument is a Shelf.Shelf, not a Shelf", root = "TypedApp", types = true},
+  PackagedCount = {file = "Packaged", count = true, proven = 1, unsettled = 0, left = 0, root = "PkgApp", types = true},
 }
 
 -- The plants that hold no call and serve only as roots for other plants:
 -- roc-types reads an app, and an app names its platform.
-const ROOT_PLANTS = {TypedApp = true, TypedPf = true, SecondApp = true}
+const ROOT_PLANTS = {TypedApp = true, TypedPf = true, SecondApp = true, PkgApp = true, PlantPkg = true, Meter = true, Shelf = true, Book = true}
 
 -- The child run `plant=<name>`: copies the plants to a fresh scratch folder
 -- and runs the one plant there with `apply=1`, then checks the result
