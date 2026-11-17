@@ -606,10 +606,26 @@ TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_p
     bool names = false;
     EXPECT_EQ(paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, "x R/keys y"), &names), OK);
     EXPECT(names);
-    EXPECT_EQ(paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, "R/keysx"), &names), OK);
-    EXPECT(names);
     EXPECT_EQ(paths_names_secret(&f.paths, &f.run, fx_pos(), S("keys/tok"), &names), OK);
     EXPECT(!names);
+    // The folder itself, wherever it stands in a message.
+    const char *naming[] = {"R/keys", "R/keys/tok", "R/keys.", "`R/keys`", "R/keys: shut", "R/keys2 or R/keys/t", "R/keys.bak and R/keys"};
+    SLICE_TYPE(Lits, const char *const);
+    Lits namings = {naming, 7};
+    for (size_t k = 0; k < namings.len; k++) {
+        names = false;
+        EXPECT_EQ(paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, at(namings, k)), &names), OK);
+        EXPECT(names);
+    }
+    // A sibling whose name only begins with the folder's is not it, so its
+    // stop is a message, never the end of the process.
+    const char *sibling[] = {"R/keysx", "R/keys2/f.txt/x", "R/keys-old", "R/keys_1", "R/keys.bak/tok"};
+    Lits siblings = {sibling, 5};
+    for (size_t k = 0; k < siblings.len; k++) {
+        names = true;
+        EXPECT_EQ(paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, at(siblings, k)), &names), OK);
+        EXPECT(!names);
+    }
     // A mount's folder is a host text too, held to the same check.
     EXPECT_DIES(if (path_fail(&f.run, fx_pos(), CLASS_STORE, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(S("k")), MSG_FROM_HOST(fx_r(&f, "R/keys")))) != OK) {});
     // So a mount's folder missing or shut is said by the mount's name alone

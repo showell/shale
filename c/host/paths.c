@@ -135,6 +135,35 @@ static bool paths_any_secrets(const Paths *h) {
     return false;
 }
 
+// Whether byte `c` can continue a file's name in a message: a letter, a
+// digit, `_` or `-`.
+static bool paths_name_byte(uint8_t c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+}
+
+// Whether `text` holds the folder `dir` itself, anywhere in it, rather than
+// a sibling whose name only begins with the folder's (`keys2`, `keys.bak`).
+// DRAGON: the secrets rule. A plain substring test takes `R/keys2/f` for
+// `R/keys`, and the check's caller then ends the process, skipping the
+// jobs' end and the undo; too narrow a test would let the folder through.
+// REMEDY: an occurrence is a sibling only when a name byte follows it, or a
+// `.` and then a name byte, so the folder at a message's end (`R/keys.`) or
+// before `/`, a quote or a space still counts; every occurrence is tried,
+// and test_paths holds both sides.
+static bool paths_text_names_dir(Str text, Str dir) {
+    if (dir.len == 0 || dir.len > text.len) return false;
+    for (size_t i = 0; i + dir.len <= text.len; i++) {
+        if (!str_eq(str_sub(text, i, i + dir.len), dir)) continue;
+        size_t after = i + dir.len;
+        if (after == text.len) return true;
+        uint8_t c = str_byte(text, after);
+        if (paths_name_byte(c)) continue;
+        if (c == '.' && after + 1 < text.len && paths_name_byte(str_byte(text, after + 1))) continue;
+        return true;
+    }
+    return false;
+}
+
 // The `PathHook.names_secret` check: whether `text` holds a secrets mount's
 // folder, as the mounts file names it or as this run sees it.
 static STATUS_MUST_USE Status paths_names_secret(void *ctx, PathRun *r, Pos pos, Str text, bool *names) {
@@ -145,7 +174,7 @@ static STATUS_MUST_USE Status paths_names_secret(void *ctx, PathRun *r, Pos pos,
         if (!m->secrets) continue;
         Str dir = S("");
         TRY(paths_run_dir_of(h, r, pos, m, &dir));
-        if (memmem(text.ptr, text.len, m->dir.ptr, m->dir.len) != NULL || memmem(text.ptr, text.len, dir.ptr, dir.len) != NULL) {
+        if (paths_text_names_dir(text, m->dir) || paths_text_names_dir(text, dir)) {
             *names = true;
             return OK;
         }
