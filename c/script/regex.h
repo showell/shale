@@ -63,12 +63,17 @@ typedef enum {
     REGEX_OP_MATCH,
 } RegexOp;
 
+// Six bytes, as Zig's: `op` is a RegexOp held in a uint8_t, Zig's `enum(u8)`.
+// TCC 0.9.27 miscompiles a 12-byte struct returned by value (with a 4-byte
+// enum `op`, regex_inst's answer clobbered a uint16_t local of its caller).
 typedef struct {
-    RegexOp op;
+    uint8_t op;
     uint8_t c;
     uint16_t x;
     uint16_t y;
 } RegexInst;
+
+_Static_assert(sizeof(RegexInst) == 6, "an instruction is Zig's six bytes, which TCC returns by value correctly");
 
 // 256 bits, one a byte.
 typedef struct {

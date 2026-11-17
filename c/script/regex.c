@@ -431,8 +431,6 @@ static STATUS_MUST_USE Status regex_group(RegexReader *r, RegexNode *out) {
 }
 
 // A sequence up to the end, a `|`, or, in a group, its `)`.
-// The recursion through regex_group is at most one level a `(`, so at most
-// 256 deep: a pattern longer than REGEX_PATTERN_MOST is refused before this.
 static STATUS_MUST_USE Status regex_seq(RegexReader *r, bool in_group, RegexSeq *out) {
     RegexNodeVec list = RegexNodeVec_make(r->tree);
     while (r->at < r->p.len) {
@@ -580,7 +578,7 @@ static STATUS_MUST_USE Status regex_emit(RegexEmitter *e, RegexInst i, uint16_t 
 }
 
 static RegexInst regex_inst(RegexOp op, uint8_t c, uint16_t x, uint16_t y) {
-    RegexInst i = {op, c, x, y};
+    RegexInst i = {(uint8_t)op, c, x, y};
     return i;
 }
 
@@ -626,10 +624,7 @@ static STATUS_MUST_USE Status regex_emit_atom(RegexEmitter *e, const RegexNode *
     case REGEX_NODE_GROUP: break;
     }
     if (n->index == 0) return regex_emit_alt(e, n->inner);
-    // An unsigned, not a uint16_t: TCC 0.9.27 loses a uint16_t local made
-    // from this cast (it gave 0 for group 2, and its end's save went to
-    // group 1's slot).
-    unsigned k = n->index - 1u;
+    uint16_t k = (uint16_t)(n->index - 1);
     TRY(regex_emit(e, regex_inst(REGEX_OP_SAVE, 0, (uint16_t)(2 * k), 0), NULL));
     TRY(regex_emit_alt(e, n->inner));
     return regex_emit(e, regex_inst(REGEX_OP_SAVE, 0, (uint16_t)(2 * k + 1), 0), NULL);
@@ -809,10 +804,10 @@ static STATUS_MUST_USE Status regex_states(Arena *a, RegexRefusal *refused, Rege
 }
 
 static STATUS_MUST_USE Status regex_compile_in(Arena *a, Arena *tree, Str pattern, RegexOptions options, RegexProgram *out, RegexRefusal *refused) {
-    RegexReader r = {pattern, 0, tree, refused, options, RegexSetVec_make(a), 0};
+    RegexReader r = {.p = pattern, .tree = tree, .refused = refused, .options = options, .sets = RegexSetVec_make(a)};
     RegexAlt top;
     TRY(regex_alt(&r, false, &top));
-    RegexEmitter e = {RegexInstVec_make(a), refused, 0, RegexRangeVec_make(tree)};
+    RegexEmitter e = {.insts = RegexInstVec_make(a), .refused = refused, .ranges = RegexRangeVec_make(tree)};
     TRY(regex_emit_alt(&e, top));
     TRY(regex_emit(&e, regex_inst(REGEX_OP_MATCH, 0, 0, 0), NULL));
     RegexProgram p;
@@ -835,6 +830,7 @@ static STATUS_MUST_USE Status regex_compile_in(Arena *a, Arena *tree, Str patter
 // owner frees it.
 static STATUS_MUST_USE Status regex_compile(Arena *a, Str pattern, RegexOptions options, RegexProgram *out, RegexRefusal *refused) {
     refused->refused = false;
+    // DRAGON: the C stack. The reader, regex_nullable and the emitter each recurse once a `(`, with no depth budget of their own, so a pattern of thousands of `(` would overflow the stack. This cap, checked before a byte is read, bounds them at 256 levels of a few hundred bytes each.
     if (pattern.len > REGEX_PATTERN_MOST) return regex_refuse(refused, REGEX_PATTERN_MOST, S("a pattern of more than 256 bytes"));
     // DRAGON: the arena budget. The tree is a second arena, given back before this returns, and its limit is what `a` had left, so a compile holds at most twice that at its peak, never more than the budget's owner gave. A pattern of 256 bytes bounds the tree to a few hundred KiB before the emitter's 8192 instructions refuse it.
     Arena tree = arena_make(arena_sat_sub(a->limit, a->held));
