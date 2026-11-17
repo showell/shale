@@ -179,7 +179,7 @@ typedef struct {
     // The depth budget. A node at this static depth or past it stops any run
     // that reaches it, so it compiles to its enter and nothing under it. This
     // also bounds the compiler's own recursion, as the walker's is bounded.
-    uint32_t depth_most;
+    uint32_t depth_max;
     Code code;
     // The first enter not yet hung on an op.
     uint32_t pending;
@@ -187,7 +187,7 @@ typedef struct {
     uint32_t hidden;
     uint32_t frame;
     uint32_t operands;
-    uint32_t operands_most;
+    uint32_t operands_max;
     CompileLoopVec loops;
 } Compiler;
 
@@ -255,7 +255,7 @@ static inline void compile_patch(Compiler *c, uint32_t op, uint32_t target) {
 
 static inline void compile_push(Compiler *c, uint32_t n) {
     c->operands += n;
-    if (c->operands > c->operands_most) c->operands_most = c->operands;
+    if (c->operands > c->operands_max) c->operands_max = c->operands;
 }
 
 static inline void compile_pop(Compiler *c, uint32_t n) {
@@ -405,7 +405,7 @@ static inline STATUS_MUST_USE Status compile_list_for(Compiler *c, const Stmt *s
 
 static inline STATUS_MUST_USE Status compile_stmt(Compiler *c, const Stmt *s, uint32_t d) {
     TRY(compile_enter(c, s->pos, d));
-    if (d >= c->depth_most) return compile_emit(c, OP_NOP, 0, 0, s->pos);
+    if (d >= c->depth_max) return compile_emit(c, OP_NOP, 0, 0, s->pos);
     switch (s->kind) {
     case STMT_LOCAL:
         if (s->as.local.value != NULL) {
@@ -553,7 +553,7 @@ static inline STATUS_MUST_USE Status compile_call(Compiler *c, Pos pos, const Ca
 
 static inline STATUS_MUST_USE Status compile_expr(Compiler *c, const Expr *e, uint32_t d) {
     TRY(compile_enter(c, e->pos, d));
-    if (d >= c->depth_most) {
+    if (d >= c->depth_max) {
         // No run gets past this node's enter; a placeholder keeps the operand
         // count right.
         TRY(compile_emit(c, OP_PUSH_NIL, 0, 0, e->pos));
@@ -663,7 +663,7 @@ static inline STATUS_MUST_USE Status compile_function(Compiler *c, const Functio
     c->hidden = f->frame;
     c->frame = f->frame;
     c->operands = 0;
-    c->operands_most = 0;
+    c->operands_max = 0;
     uint32_t entry = (uint32_t)c->code.ops.len;
     TRY(compile_block(c, f->body, 0));
     TRY(compile_emit(c, OP_RET_NIL, 0, 0, f->pos));
@@ -672,18 +672,18 @@ static inline STATUS_MUST_USE Status compile_function(Compiler *c, const Functio
     out->pos = f->pos;
     out->entry = entry;
     out->frame = c->frame;
-    out->operands = c->operands_most;
+    out->operands = c->operands_max;
     return OK;
 }
 
 // Compiles `program` into `a`. STOP only when the arena refuses, which the
 // caller reads as the machine budget.
-static inline STATUS_MUST_USE Status compile_program(Arena *a, const Program *program, uint32_t most_args, uint32_t depth_most, Code *out) {
+static inline STATUS_MUST_USE Status compile_program(Arena *a, const Program *program, uint32_t most_args, uint32_t depth_max, Code *out) {
     Compiler c;
     memset(&c, 0, sizeof c);
     c.arena = a;
     c.most_args = most_args;
-    c.depth_most = depth_most;
+    c.depth_max = depth_max;
     c.code.ops = VmOpVec_make(a);
     c.code.enters = VmEnterVec_make(a);
     c.code.ints = IntVec_make(a);
