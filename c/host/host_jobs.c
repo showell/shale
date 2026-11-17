@@ -35,7 +35,7 @@ static STATUS_MUST_USE Status host_jobs_read(Run *r, Pos pos, Str os, Bytes *out
     close(fd);
     if (!read_ok) return run_values_oom(r, pos);
     if (err != 0) *why = store_err_name(store_err_of(err));
-    if (why->len == 0 && out->len > JOBS_RECORD_MOST) *why = S("StreamTooLong");
+    if (why->len == 0 && out->len > JOBS_RECORD_MAX) *why = S("StreamTooLong");
     return OK;
 }
 

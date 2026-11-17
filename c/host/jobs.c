@@ -206,9 +206,9 @@ typedef enum {
 } JobsLaunched;
 
 // The most a job's record may hold, as Zig's `.limited(64 * 1024)`.
-enum { JOBS_RECORD_MOST = 64 * 1024 };
+enum { JOBS_RECORD_MAX = 64 * 1024 };
 
-// `fd` read to its end, at most one byte past JOBS_RECORD_MOST (so a longer
+// `fd` read to its end, at most one byte past JOBS_RECORD_MAX (so a longer
 // file shows as one), into `*out` in `a` at its length; `*err` is the errno
 // of a read that failed, what came before it kept, else 0. False when the
 // arena refuses. The read goes into a buffer of its own, a big allocation
@@ -218,10 +218,10 @@ enum { JOBS_RECORD_MOST = 64 * 1024 };
 // arena out in 40 seconds.
 static bool jobs_read_capped(Arena *a, int fd, Bytes *out, int *err) {
     *err = 0;
-    _Static_assert(JOBS_RECORD_MOST + 1 >= ARENA_BIG, "the read's buffer is a big allocation, which a free gives back");
-    char *buf = arena_alloc(a, JOBS_RECORD_MOST + 1, 1);
+    _Static_assert(JOBS_RECORD_MAX + 1 >= ARENA_BIG, "the read's buffer is a big allocation, which a free gives back");
+    char *buf = arena_alloc(a, JOBS_RECORD_MAX + 1, 1);
     if (buf == NULL) return false;
-    Bytes room = {buf, JOBS_RECORD_MOST + 1};
+    Bytes room = {buf, JOBS_RECORD_MAX + 1};
     size_t len = 0;
     while (len < room.len) {
         ssize_t got = read(fd, &at(room, len), room.len - len);
@@ -251,7 +251,7 @@ static bool jobs_read_small(Arena *a, const char *path, Bytes *out) { // cstr: N
     int err = 0;
     bool read_ok = jobs_read_capped(a, fd, &text, &err);
     close(fd);
-    if (!read_ok || err != 0 || text.len > JOBS_RECORD_MOST) return false;
+    if (!read_ok || err != 0 || text.len > JOBS_RECORD_MAX) return false;
     *out = text;
     return true;
 }
