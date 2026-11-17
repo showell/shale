@@ -675,15 +675,20 @@ const VM_SCRIPTS = {
   {name = "budget", argv = {"--budget", "steps=500"}, source = "local s = \"\"\nwhile true do s = s .. \"x\" end\n"},
 }
 const VM_PLANTS = {
-  {name = "an attempt catches a budget", dir = "script", file = "vm.c", caught_by = "test_vm",
+  {name = "an attempt catches a budget",
+   aim = "a_budget_is_never_caught", dir = "script", file = "vm.c", caught_by = "test_vm",
    old = "if (s.cls == CLASS_BUDGET || r->unported) return OK;", new = "if (r->unported) return OK;"},
-  {name = "an attempt leaves its call in the trail", dir = "script", file = "vm.c", caught_by = "test_vm",
+  {name = "an attempt leaves its call in the trail",
+   aim = "attempt_makes_a_stop_a_value_and_the_run_goes_on", dir = "script", file = "vm.c", caught_by = "test_vm",
    old = "        r->ctx.calls.len = i - 1;", new = "        (void)0;"},
-  {name = "`%` keeps the dividend's sign", dir = "script", file = "run.h", caught_by = "test_vm",
+  {name = "`%` keeps the dividend's sign",
+   aim = "division_floors_and_an_overflow_stops", dir = "script", file = "run.h", caught_by = "test_vm",
    old = "if (got != 0 && ((got < 0) != (b < 0))) got += b;", new = "if (0) got += b;"},
-  {name = "a chain never grows in place", dir = "script", file = "run.h", caught_by = "test_vm",
+  {name = "a chain never grows in place",
+   aim = "a_chain_grows_its_string_in_place", dir = "script", file = "run.h", caught_by = "test_vm",
    old = "bool in_place = same && total <= r->tail_cap;", new = "bool in_place = false;"},
-  {name = "the output budget writes nothing of what overflows", dir = "script", file = "run.h", caught_by = "test_vm",
+  {name = "the output budget writes nothing of what overflows",
+   aim = "the_output_budget_writes_what_fits", dir = "script", file = "run.h", caught_by = "test_vm",
    old = "if (buf_str(&r->out, str_sub(bytes, 0, room)) != OK)", new = "if (buf_str(&r->out, str_sub(bytes, 0, 0)) != OK)"},
 }
 
