@@ -192,7 +192,7 @@ typedef struct {
 } Compiler;
 
 static inline STATUS_MUST_USE Status compile_enter(Compiler *c, Pos pos, uint32_t depth) {
-    VmEnter e = {pos, depth};
+    VmEnter e = {.pos = pos, .depth = depth};
     return VmEnterVec_push(&c->code.enters, e);
 }
 
