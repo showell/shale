@@ -156,6 +156,9 @@ test "jobs: an argv with a newline or a backslash reads back as it was, and none
         try std.testing.expect(!r.done());
     }
     try std.testing.expect(parseCopy("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\npid=7\n") == null);
+    // A key other than the pid's twice, which the pgid rule alone would not
+    // refuse.
+    try std.testing.expect(parseCopy("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\nstarted=8\n") == null);
     try std.testing.expect(parseCopy("pid=42\npgid=42\nstart=1\nstarted=9\nargv=a\\qb\nreaper=1\nreaper_start=5\n") == null);
     // A record too big for its buffer is none, never one cut short.
     var small: [64]u8 = undefined;

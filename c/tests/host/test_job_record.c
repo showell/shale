@@ -82,6 +82,9 @@ TEST(an_argv_with_a_newline_or_a_backslash_reads_back_and_none_overrides_a_key) 
     }
     JobRecord r;
     EXPECT(!parse_copy(S("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\npid=7\n"), &r));
+    // A key other than the pid's twice, which the pgid rule alone would not
+    // refuse.
+    EXPECT(!parse_copy(S("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\nstarted=8\n"), &r));
     EXPECT(!parse_copy(S("pid=42\npgid=42\nstart=1\nstarted=9\nargv=a\\qb\nreaper=1\nreaper_start=5\n"), &r));
     // A record too big for its buffer is none, never one cut short.
     char small_bytes[64];
