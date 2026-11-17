@@ -78,8 +78,11 @@ part's own tests. A new test file that includes ran.c is a part too: end it
 with `TEST_PART`, include it from ran_tests.c and add it to
 `TEST_PARTS_MAIN`.
 
-When the full tier passes 90 seconds, stop and propose ways to cut it,
-ranked by what they'd save, before adding more to it.
+When the full tier passes 150 seconds of wall time on an idle box, stop
+and propose ways to cut it, ranked by what they'd save, before adding more
+to it. (The line was 90 s until 2026-11-17, when the idle tier measured
+135 s; the one-time plants and the Zig's removal are expected to bring it
+down.)
 
 ## After the cut-over
 
