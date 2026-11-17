@@ -155,7 +155,13 @@ and its self-test plants a break of each one.
 - `c/build.shale` holds each file's printed count to its `TEST(` lines.
 - A test asserts every side: what changed, what didn't, and what was
   refused.
+- `TEST_ONLY=a,b` runs only the cases it names; a name no case has fails
+  the run.
 - Each piece has planted faults in `c/build.shale`, and its full tier
-  (`full=1`, run before a merge) fails unless a test catches each one. The
-  fast tier, the loop between edits, runs every test under tcc and the
-  discipline check, in a few seconds.
+  (`full=1`, run before a merge) fails unless a test catches each one. A
+  plant names its `aim`, the tests that catch it, and its run is those
+  tests alone.
+- The fast tier, the loop between edits, runs every test under tcc (but
+  those that wait out real time, `SLOW_TESTS`) and the discipline check, in
+  about a second. The full tier adds ASan for the tests and -O2 for its
+  warnings alone: no test is built or run at -O2.

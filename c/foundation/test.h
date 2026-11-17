@@ -8,6 +8,8 @@
 // run), and the run exits 1. There is no skip: a `TEST` left out of
 // `TEST_MAIN` is a static function nothing calls, which GCC's `-Wall -Werror`
 // refuses, and `c/build.shale` holds each file's printed count to its `TEST`s.
+// `TEST_ONLY=a,b` in the environment runs only the cases it names (a plant's
+// aimed tests, a tier's part of a file), each name one a case has.
 
 #ifndef SHALE_TEST_H
 #define SHALE_TEST_H
@@ -143,13 +145,57 @@ static inline void test_trap(const char *file, int line, uint64_t i, size_t len)
             test_fail(__FILE__, __LINE__, S("`" #stmt "` did not abort"));          \
     } while (0)
 
+// Whether `name` is one of the comma-separated names in `only`.
+static inline bool test_named(Str only, Str name) {
+    size_t from = 0;
+    for (size_t i = 0; i <= only.len; i++) {
+        if (i < only.len && str_byte(only, i) != ',') continue;
+        if (str_eq(str_sub(only, from, i), name)) return true;
+        from = i + 1;
+    }
+    return false;
+}
+
+// Whether every comma-separated name in `only` names a case; the first that
+// doesn't goes in `missing`.
+static inline bool test_all_named(TestCases cases, Str only, Str *missing) {
+    size_t from = 0;
+    for (size_t i = 0; i <= only.len; i++) {
+        if (i < only.len && str_byte(only, i) != ',') continue;
+        Str name = str_sub(only, from, i);
+        bool found = false;
+        for (size_t k = 0; k < cases.len; k++) {
+            if (str_eq(at(cases, k).name, name)) found = true;
+        }
+        if (!found) {
+            *missing = name;
+            return false;
+        }
+        from = i + 1;
+    }
+    return true;
+}
+
+// Runs the cases, or with `TEST_ONLY` set, only those it names (`a,b`), so a
+// planted fault runs only the tests aimed at it. A name in it that names no
+// case fails the run, so an aim that went stale can't pass by running
+// nothing. The count printed is of the cases that ran.
 static inline int test_run(TestCases cases, Str file) {
     TestState *t = test_state();
+    const char *only_env = getenv("TEST_ONLY");
+    Str only = {"", 0};
+    if (only_env != NULL) only = (Str){only_env, strlen(only_env)};
+    Str missing = {"", 0};
+    if (only_env != NULL && !test_all_named(cases, only, &missing)) {
+        fprintf(stderr, "%.*s: no test named `%.*s`\n", (int)file.len, file.ptr, (int)missing.len, missing.ptr);
+        return 1;
+    }
     // `ran` and `k` are volatile: they change between setjmp and a longjmp
     // back to it.
     volatile size_t ran = 0;
     for (volatile size_t k = 0; k < cases.len; k++) {
         const TestCase *c = &at(cases, k);
+        if (only_env != NULL && !test_named(only, c->name)) continue;
         t->current = c->name;
         if (setjmp(t->back) == 0) {
             c->fn();
