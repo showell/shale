@@ -190,11 +190,70 @@ static void ran_run(Ran *x, Str src, Budgets b) {
     }
 }
 
+// Prints each path left under `dir` to stderr, so a folder that would not
+// delete says what kept it.
+static void ran_say_left(Arena *a, Str dir) {
+    StoreCPath cp;
+    const char *c = NULL;
+    if (store_cstr(&cp, dir, &c) != STORE_OK) return;
+    DIR *d = opendir(c);
+    if (d == NULL) return;
+    struct dirent *ent = readdir(d);
+    while (ent != NULL) {
+        Str n = {ent->d_name, strlen(ent->d_name)};
+        Str child = S("");
+        if (!str_eq(n, S(".")) && !str_eq(n, S("..")) && store_join(a, dir, n, &child)) {
+            fprintf(stderr, "  left: %.*s\n", (int)child.len, child.ptr);
+            if (ent->d_type == DT_DIR) ran_say_left(a, child);
+        }
+        ent = readdir(d);
+    }
+    closedir(d);
+}
+
+// How long ran_free waits for a job's reaper to end.
+enum { RAN_REAPER_WAIT_MS = 10000, RAN_REAPER_TICK_MS = 10 };
+
+// Waits for the reaper of each job the run started to end. A reaper writes
+// its job's end into the record beside the log after the job exits, so a
+// folder deleted while one runs gets that record back and will not delete. A
+// record that cannot be read, or a reaper still there after
+// RAN_REAPER_WAIT_MS (a job the test left running), ends the test, said on
+// stderr.
+static void ran_wait_reapers(Ran *x) {
+    for (size_t i = 0; i < x->lh.started.len; i++) {
+        const HostStarted *j = &at(x->lh.started, i);
+        char *p = spawn_cstr(&x->host, j->record_os);
+        Bytes text = {NULL, 0};
+        JobRecord rec;
+        if (p == NULL || !jobs_read_small(&x->host, p, &text) || !job_record_parse(text, &rec)) {
+            fprintf(stderr, "ran_free: the record of `%.*s` at %.*s cannot be read, so its reaper cannot be waited for\n", (int)j->argv.len, j->argv.ptr, (int)j->record_os.len, j->record_os.ptr);
+            abort();
+        }
+        uint64_t waited = 0;
+        while (jobs_reaper_alive(&rec)) {
+            if (waited >= RAN_REAPER_WAIT_MS) {
+                fprintf(stderr, "ran_free: the reaper of `%.*s` (pid %d) still runs after %d ms: the test left its job running\n", (int)j->argv.len, j->argv.ptr, (int)rec.reaper, RAN_REAPER_WAIT_MS);
+                abort();
+            }
+            jobs_sleep_ms(RAN_REAPER_TICK_MS);
+            waited += RAN_REAPER_TICK_MS;
+        }
+    }
+}
+
 static void ran_free(Ran *x) {
     // A Zig call's zig-ast ends with the run, as the CLI ends it.
     host_zig_stop();
     regex_cache_deinit(&x->r.patterns);
-    if (store_os_delete_tree(&x->host, x->dir) != STORE_OK) abort();
+    ran_wait_reapers(x);
+    StoreErr del = store_os_delete_tree(&x->host, x->dir);
+    if (del != STORE_OK) {
+        Str why = store_err_name(del);
+        fprintf(stderr, "ran_free: %.*s could not be deleted: %.*s\n", (int)x->dir.len, x->dir.ptr, (int)why.len, why.ptr);
+        ran_say_left(&x->host, x->dir);
+        abort();
+    }
     arena_deinit(&x->output);
     arena_deinit(&x->machine);
     arena_deinit(&x->values);
