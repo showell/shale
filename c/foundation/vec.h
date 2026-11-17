@@ -73,8 +73,7 @@ static inline Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len,
             return STOP;                                                                     \
         }                                                                                    \
         void *p = v->ptr;                                                                    \
-        Status s = vec_grow_raw(v->arena, &p, &v->cap, v->len, v->len + more, sizeof(T),     \
-                                _Alignof(T));                                                \
+        Status s = vec_grow_raw(v->arena, &p, &v->cap, v->len, v->len + more, sizeof(T), _Alignof(T)); \
         v->ptr = p;                                                                          \
         return s;                                                                            \
     }                                                                                        \

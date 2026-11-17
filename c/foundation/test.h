@@ -59,7 +59,8 @@ static inline void test_fail(const char *file, int line, Str what) { // cstr: __
 
 #define EXPECT_EQ(a, b)                                                                     \
     do {                                                                                    \
-        uint64_t test_a_ = (uint64_t)(a), test_b_ = (uint64_t)(b);                          \
+        uint64_t test_a_ = (uint64_t)(a);                                                   \
+        uint64_t test_b_ = (uint64_t)(b);                                                   \
         if (test_a_ != test_b_) {                                                           \
             fprintf(stderr, "  %s is %llu, %s is %llu\n", #a, (unsigned long long)test_a_,  \
                     #b, (unsigned long long)test_b_);                                       \
@@ -69,7 +70,8 @@ static inline void test_fail(const char *file, int line, Str what) { // cstr: __
 
 #define EXPECT_STR(a, b)                                                                    \
     do {                                                                                    \
-        Str test_a_ = (a), test_b_ = (b);                                                   \
+        Str test_a_ = (a);                                                                  \
+        Str test_b_ = (b);                                                                  \
         if (!str_eq(test_a_, test_b_)) {                                                    \
             fprintf(stderr, "  got  \"%.*s\"\n  want \"%.*s\"\n", (int)test_a_.len,         \
                     test_a_.ptr, (int)test_b_.len, test_b_.ptr);                            \

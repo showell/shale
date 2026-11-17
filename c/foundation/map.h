@@ -167,8 +167,7 @@ static inline void map_core_remove_at(MapCore *m, size_t e) {
         }                                                                                    \
         TRY(map_core_reserve_one(&m->core));                                                 \
         void *p = m->values;                                                                 \
-        Status s = vec_grow_raw(m->core.arena, &p, &m->values_cap, m->core.len,              \
-                                m->core.len + 1, sizeof(V), _Alignof(V));                    \
+        Status s = vec_grow_raw(m->core.arena, &p, &m->values_cap, m->core.len, m->core.len + 1, sizeof(V), _Alignof(V)); \
         m->values = p;                                                                       \
         TRY(s);                                                                              \
         uint64_t h = map_hash(key);                                                          \
