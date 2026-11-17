@@ -397,6 +397,13 @@ test "jobs: a link planted at the record's temp file is replaced, never followed
     const text = try tmp.dir.readFileAlloc(io, "x.log.job", a, .limited(1024));
     try std.testing.expect(std.mem.startsWith(u8, text, "pid=42\npgid=42\n"));
     try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(io, "x.log.job.7.tmp", .{}));
+    // A record that cannot be renamed into place (a folder is there) is no
+    // write, and its temp file is not left behind.
+    try tmp.dir.createDirPath(io, "y.log.job");
+    const y = try std.fmt.allocPrintSentinel(a, "{s}/y.log.job", .{dir}, 0);
+    const y_temp = try std.fmt.allocPrintSentinel(a, "{s}/y.log.job.7.tmp", .{dir}, 0);
+    try std.testing.expect(!writeRecord(y, y_temp, .{ .pid = 42, .pgid = 42, .start = "1", .started = 9, .argv = "x", .reaper = 1, .reaper_start = "5" }));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(io, "y.log.job.7.tmp", .{}));
 }
 
 test "jobs: a process's start time is its stat's 22nd field; none for a process not there" {
