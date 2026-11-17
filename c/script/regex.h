@@ -170,6 +170,8 @@ typedef struct {
 
 typedef struct {
     bool found;
+    // Written only when `found`: a miss leaves it unset, so a search per line
+    // zeroes nothing it will not read.
     RegexFound match;
     // Positions examined; a search costs this times the program's states.
     uint64_t positions;

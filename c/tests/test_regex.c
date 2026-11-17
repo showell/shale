@@ -424,6 +424,36 @@ TEST(a_search_stops_unfinished_past_the_bytes_it_may_skip_as_past_the_positions_
     EXPECT(!cut_short.found);
     EXPECT(!cut_short.finished);
     EXPECT_EQ(cut_short.positions, 1);
+    // Into an answer of the caller's: a miss sets its counts and leaves its
+    // `match` unwritten, and a hit writes it.
+    RegexSearched into;
+    memset(&into, 0xab, sizeof into);
+    RegexSearched sentinel = into;
+    RegexMost all = {UINT64_MAX, UINT64_MAX};
+    regex_search_into(&c.p, &c.sc, S("aaa"), 0, all, &into);
+    EXPECT(!into.found);
+    EXPECT(into.finished);
+    EXPECT_EQ(into.positions, 0);
+    EXPECT_EQ(into.skipped, 3);
+    EXPECT(memcmp(&into.match, &sentinel.match, sizeof into.match) == 0);
+    regex_search_into(&c.p, &c.sc, S("az"), 0, all, &into);
+    EXPECT(into.found);
+    EXPECT_EQ(into.match.start, 1);
+    EXPECT_EQ(into.match.end, 2);
+    EXPECT(!group_of(into, 1).matched);
+    arena_deinit(&c.arena);
+    // A match seen, then the positions run out while a longer one is still
+    // alive: unfinished, and nothing found.
+    compiled_make(&c, S("ab*"), opts(false));
+    RegexMost short_of = {2, UINT64_MAX};
+    RegexSearched seen = regex_search_within(&c.p, &c.sc, S("abbb"), 0, short_of);
+    EXPECT(!seen.finished);
+    EXPECT(!seen.found);
+    EXPECT_EQ(seen.positions, 2);
+    regex_search_into(&c.p, &c.sc, S("abbb"), 0, all, &into);
+    EXPECT(into.finished);
+    EXPECT(into.found);
+    EXPECT_EQ(into.match.end, 4);
     arena_deinit(&c.arena);
 }
 

@@ -1020,27 +1020,40 @@ static size_t regex_next_first(const RegexSet *first, int only, Str s, size_t fr
     return SIZE_MAX;
 }
 
-static RegexSearched regex_searched(bool finished, uint64_t positions, uint64_t skipped, uint64_t work) {
-    RegexSearched r;
-    memset(&r, 0, sizeof r);
-    r.finished = finished;
-    r.positions = positions;
-    r.skipped = skipped;
-    r.work = work;
-    return r;
+// A match's place and groups from the thread that reached `match`.
+static RegexFound regex_found(RegexThread *t, size_t end) {
+    RegexCapSlots caps = regex_caps(t);
+    RegexFound f;
+    f.start = at(caps, 0);
+    f.end = end;
+    RegexGroups groups = {f.groups, REGEX_GROUPS_MOST};
+    for (size_t k = 0; k < groups.len; k++) {
+        size_t a = at(caps, 1 + 2 * k);
+        size_t b = at(caps, 2 + 2 * k);
+        bool both = a != SIZE_MAX && b != SIZE_MAX;
+        RegexGroup g = {both, both ? a : 0, both ? b : 0};
+        at(groups, k) = g;
+    }
+    return f;
 }
 
 // The leftmost match of `p` in `s` that starts at `from` or later, the one a
 // backtracker finds first, with `^`, `$` and `\b` seeing the whole of `s`;
-// unfinished past either of `most`'s counts.
-static RegexSearched regex_search_within(const RegexProgram *p, RegexScratch *sc, Str s, size_t from, RegexMost most) {
+// unfinished past either of `most`'s counts. The answer goes into `*r`, and a
+// miss never writes its `match`, so a search zeroes none of its 272 bytes. A
+// caller that searches once a line (re_lines, `run`'s `re`) wants this form:
+// GCC builds a RegexSearched returned by value apart and copies it out whole,
+// a `rep movsq` a search, which the wrappers below still pay.
+static void regex_search_into(const RegexProgram *p, RegexScratch *sc, Str s, size_t from, RegexMost most, RegexSearched *r) {
     if (from > s.len) regex_bug("a search from past the string's end");
+    r->found = false;
+    r->finished = true;
     RegexList *clist = &sc->a;
     RegexList *nlist = &sc->b;
     regex_list_reset(clist);
     bool matched = false;
+    // Read only once `matched` is set, which sets it whole first.
     RegexThread match;
-    memset(&match, 0, sizeof match);
     size_t match_end = 0;
     uint64_t positions = 0;
     uint64_t skipped = 0;
@@ -1054,11 +1067,17 @@ static RegexSearched regex_search_within(const RegexProgram *p, RegexScratch *sc
         if (skips && !matched && clist->len == 0) {
             size_t next = regex_next_first(&p->first, only, s, pos);
             skipped += (next == SIZE_MAX ? s.len : next) - pos;
-            if (skipped > most.skipped) return regex_searched(false, positions, skipped, work);
-            if (next == SIZE_MAX) return regex_searched(true, positions, skipped, work);
+            if (skipped > most.skipped) {
+                r->finished = false;
+                break;
+            }
+            if (next == SIZE_MAX) break;
             pos = next;
         }
-        if (positions == most.positions) return regex_searched(false, positions, skipped, work);
+        if (positions == most.positions) {
+            r->finished = false;
+            break;
+        }
         positions++;
         // A new start at each position, least preferred, until a match.
         if (!matched && (!p->anchored || pos == 0)) regex_add(p, sc, clist, regex_start_thread(pos), pos, s, &work);
@@ -1092,20 +1111,18 @@ static RegexSearched regex_search_within(const RegexProgram *p, RegexScratch *sc
         if (pos == s.len) break;
         if (clist->len == 0 && (matched || p->anchored)) break;
     }
-    RegexSearched r = regex_searched(true, positions, skipped, work);
-    if (!matched) return r;
-    RegexCapSlots caps = regex_caps(&match);
-    r.found = true;
-    r.match.start = at(caps, 0);
-    r.match.end = match_end;
-    RegexGroups groups = {r.match.groups, REGEX_GROUPS_MOST};
-    for (size_t k = 0; k < groups.len; k++) {
-        size_t a = at(caps, 1 + 2 * k);
-        size_t b = at(caps, 2 + 2 * k);
-        bool both = a != SIZE_MAX && b != SIZE_MAX;
-        RegexGroup g = {both, both ? a : 0, both ? b : 0};
-        at(groups, k) = g;
-    }
+    r->positions = positions;
+    r->skipped = skipped;
+    r->work = work;
+    // An unfinished search found nothing, though a match had been seen.
+    if (!r->finished || !matched) return;
+    r->found = true;
+    r->match = regex_found(&match, match_end);
+}
+
+static inline RegexSearched regex_search_within(const RegexProgram *p, RegexScratch *sc, Str s, size_t from, RegexMost most) {
+    RegexSearched r;
+    regex_search_into(p, sc, s, from, most, &r);
     return r;
 }
 
