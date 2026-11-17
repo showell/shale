@@ -45,7 +45,15 @@ pub fn reaperAlive(r: Record) bool {
     return std.mem.eql(u8, s, r.reaper_start);
 }
 
+/// Signals the group `pgid`; whether the kernel took it. A pgid below 2 is
+/// refused before any `kill`.
 fn signalGroup(pgid: i32, sig: u32) bool {
+    // DRAGON: the process boundary. A pgid comes from a record's text, and
+    // `kill(-1, sig)` signals every process the user may signal, `kill(0,
+    // sig)` this process's own group.
+    // REMEDY: the reaper's fork gives a leader's pid, never 0 or 1, so a pgid
+    // below 2 is a forged or broken record's, and is refused here.
+    if (pgid < 2) return false;
     const rc = linux.syscall2(.kill, @as(usize, @bitCast(@as(isize, -pgid))), sig);
     return linux.errno(rc) == .SUCCESS;
 }
@@ -157,7 +165,8 @@ pub fn launch(a: std.mem.Allocator, io: std.Io, reaper: []const u8, record: []co
                 _ = linux.fcntl(reaper_started_fd, linux.F.SETFD, 0);
             } else _ = linux.dup2(started[1], reaper_started_fd);
             _ = linux.close_range(reaper_started_fd + 1, std.math.maxInt(i32), .{ .UNSHARE = false, .CLOEXEC = false });
-            const devnull: i32 = @intCast(linux.open("/dev/null", .{ .ACCMODE = .RDWR }, 0));
+            // CLOEXEC, so the copy beside 0 to 2 never reaches the reaper.
+            const devnull: i32 = @intCast(linux.open("/dev/null", .{ .ACCMODE = .RDWR, .CLOEXEC = true }, 0));
             _ = linux.dup2(devnull, 0);
             _ = linux.dup2(devnull, 1);
             _ = linux.dup2(devnull, 2);
@@ -198,7 +207,14 @@ fn nowSeconds() i64 {
 fn writeRecord(record: [*:0]const u8, tmp: [*:0]const u8, r: Record) bool {
     var buf: [8192]u8 = undefined;
     const text = job_record.formatRecord(&buf, r) orelse return false;
-    const fd = linux.open(tmp, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
+    // DRAGON: the temp file is a name in the log's folder, which another
+    // process may write: a link planted there would be followed, and the
+    // file it names truncated and written.
+    // REMEDY: what is there is unlinked (a link itself, never what it
+    // names), and the file is made new, `EXCL` and `NOFOLLOW`, so one planted
+    // between the two is refused, never followed.
+    _ = linux.unlink(tmp);
+    const fd = linux.open(tmp, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true }, 0o644);
     if (linux.errno(fd) != .SUCCESS) return false;
     const w = linux.write(@intCast(fd), text.ptr, text.len);
     _ = linux.close(@intCast(fd));
@@ -229,13 +245,14 @@ pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []c
     _ = linux.fcntl(reaper_started_fd, linux.F.SETFD, linux.FD_CLOEXEC);
     var own_buf: [1024]u8 = undefined;
     const reaper_start = startOf(&own_buf, linux.getpid()) orelse return 2;
-    const log_fd = linux.open(log, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
+    // CLOEXEC, so the job has its log as 1 and 2 alone.
+    const log_fd = linux.open(log, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true }, 0o644);
     if (linux.errno(log_fd) != .SUCCESS) return 2;
     const pid = linux.fork();
     if (linux.errno(pid) != .SUCCESS) return 2;
     if (pid == 0) {
         _ = linux.setsid();
-        const devnull: i32 = @intCast(linux.open("/dev/null", .{ .ACCMODE = .RDONLY }, 0));
+        const devnull: i32 = @intCast(linux.open("/dev/null", .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0));
         _ = linux.dup2(devnull, 0);
         _ = linux.dup2(@intCast(log_fd), 1);
         _ = linux.dup2(@intCast(log_fd), 2);
@@ -345,6 +362,41 @@ test "jobs: a reaper gone before its record is NoRecord at once, the pipe's end 
     _ = linux.clock_gettime(.MONOTONIC, &t1);
     // No deadline was waited out.
     try std.testing.expect(t1.sec - t0.sec < 3);
+}
+
+test "jobs: a pgid below 2 is refused before any kill; a real group is signalled" {
+    // Signal 0 only asks, so the test signals nobody. Unguarded, `kill(-1,
+    // 0)` and `kill(0, 0)` both succeed.
+    try std.testing.expect(!signalGroup(1, 0));
+    try std.testing.expect(!signalGroup(0, 0));
+    try std.testing.expect(!signalGroup(-7, 0));
+    // The test's own group is there to be asked.
+    try std.testing.expect(signalGroup(@intCast(linux.syscall1(.getpgid, 0)), 0));
+}
+
+test "jobs: a link planted at the record's temp file is replaced, never followed" {
+    const io = std.testing.io;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const a = arena.allocator();
+    const dir = try tmp.dir.realPathFileAlloc(io, ".", a);
+    const record = try std.fmt.allocPrintSentinel(a, "{s}/x.log.job", .{dir}, 0);
+    const temp = try std.fmt.allocPrintSentinel(a, "{s}/x.log.job.7.tmp", .{dir}, 0);
+    const victim = try std.fmt.allocPrintSentinel(a, "{s}/victim", .{dir}, 0);
+    try tmp.dir.writeFile(io, .{ .sub_path = "victim", .data = "keep\n" });
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlink(victim, temp)));
+    try std.testing.expect(writeRecord(record, temp, .{ .pid = 42, .pgid = 42, .start = "1", .started = 9, .argv = "x", .reaper = 1, .reaper_start = "5" }));
+    // The file the link named is as it was.
+    try std.testing.expectEqualStrings("keep\n", try tmp.dir.readFileAlloc(io, "victim", a, .limited(64)));
+    // The record is a file of its own, the record's text, and the temp gone.
+    var st: linux.Statx = undefined;
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.statx(linux.AT.FDCWD, record, linux.AT.SYMLINK_NOFOLLOW, .{ .TYPE = true }, &st)));
+    try std.testing.expect(st.mode & linux.S.IFMT == linux.S.IFREG);
+    const text = try tmp.dir.readFileAlloc(io, "x.log.job", a, .limited(1024));
+    try std.testing.expect(std.mem.startsWith(u8, text, "pid=42\npgid=42\n"));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(io, "x.log.job.7.tmp", .{}));
 }
 
 test "jobs: a process's start time is its stat's 22nd field; none for a process not there" {

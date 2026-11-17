@@ -36,8 +36,9 @@ pub const Record = struct {
 /// Parses a record's text. Returns `null` if it is not a record: a key
 /// missing (`formatRecord` writes each of the first seven), one it does not
 /// know or twice, a line that is no `key=value`, or an `argv` escaped
-/// wrongly. A missing `start` read as "" would make `alive` say false of a
-/// job that runs. `argv` is unescaped in place, so `text` is changed.
+/// wrongly, or a `pgid` that is not the `pid`. A missing `start` read as ""
+/// would make `alive` say false of a job that runs. `argv` is unescaped in
+/// place, so `text` is changed.
 pub fn parseRecord(text: []u8) ?Record {
     var r: Record = .{};
     const keys = [_][]const u8{ "pid", "pgid", "start", "started", "argv", "reaper", "reaper_start", "exit", "signal", "ended" };
@@ -71,7 +72,10 @@ pub fn parseRecord(text: []u8) ?Record {
         }
     }
     for (seen[0..required]) |s| if (!s) return null;
-    if (r.pid <= 0 or r.pgid <= 0) return null;
+    // The reaper starts the job as its group's leader, so it writes the two
+    // the same: a record where they differ names some other group, a stale
+    // or forged record's, and what reads it would signal that group.
+    if (r.pid <= 0 or r.pgid != r.pid) return null;
     return r;
 }
 
@@ -132,6 +136,15 @@ test "jobs: a record reads back as it was written, and a broken one is none" {
     try std.testing.expect(parseCopy("pid=42\npgid=42\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n") == null);
     try std.testing.expect(parseCopy("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\nexitt=3\n") == null);
     try std.testing.expect(parseCopy("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\ngarbage\n") == null);
+}
+
+test "jobs: a record whose pgid is not its pid is none, so no other group is signalled" {
+    const same = parseCopy("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n") orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(i32, 42), same.pgid);
+    try std.testing.expect(parseCopy("pid=42\npgid=43\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n") == null);
+    try std.testing.expect(parseCopy("pid=42\npgid=1\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n") == null);
+    try std.testing.expect(parseCopy("pid=0\npgid=0\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n") == null);
+    try std.testing.expect(parseCopy("pid=-5\npgid=-5\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n") == null);
 }
 
 test "jobs: an argv with a newline or a backslash reads back as it was, and none overrides a key; a key twice is none" {

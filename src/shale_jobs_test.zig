@@ -150,10 +150,10 @@ test "jobs: a job started on a log whose job or reaper still lives is refused, i
     const none = 0x7ffffff0;
     var buf: [1024]u8 = undefined;
     const me = std.os.linux.getpid();
-    const my_group: i32 = @intCast(std.os.linux.syscall1(.getpgid, 0));
     const my_start = jobs.startOf(&buf, me).?;
-    // Its job lives (this test's own group stands in), its reaper gone.
-    const busy = try std.fmt.allocPrint(a, "pid={d}\npgid={d}\nstart={s}\nstarted=0\nargv=x\nreaper={d}\nreaper_start=1\n", .{ me, my_group, my_start, none });
+    // Its job lives (this test's own process stands in, by its start time),
+    // its reaper gone.
+    const busy = try std.fmt.allocPrint(a, "pid={d}\npgid={d}\nstart={s}\nstarted=0\nargv=x\nreaper={d}\nreaper_start=1\n", .{ me, me, my_start, none });
     try t.put("busy.log.job", busy);
     try onceStop(&t, "job_start({\"shale-fixture\", \"exit\", \"0\"}, {log = \"busy.log\"})", .host, "a job still runs on busy.log");
     try testing.expectEqualStrings(busy, try t.file("busy.log.job"));
@@ -499,4 +499,70 @@ test "jobs: a process that left the job's group (`setsid`) is neither signalled 
     // It outlives the job, out of its reach; the test ends it.
     const g = try grandchildPid(try t.file("away.log"));
     try testing.expect(!goneOrKill(g));
+}
+
+test "jobs: a record whose pgid is not its pid is refused by every job call, so a forged one signals no other group" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    // The group the forged record names is a job of this test's own, so a
+    // red signals nothing but it.
+    try testing.expectEqualStrings("true\n", try once(&t, "local j = job_start({\"shale-fixture\", \"sleep\", \"20000\"}, {log = \"victim.log\"}) print(job_alive(j))"));
+    const text = try t.tmp.dir.readFileAlloc(t.threaded.io(), "victim.log.job", a, .limited(64 * 1024));
+    const victim = jobs_record.parseRecord(text) orelse return error.TestUnexpectedResult;
+    // No process has the leader's id, so only the group is left to ask.
+    const none = 0x7ffffff0;
+    try t.put("forged.log.job", try std.fmt.allocPrint(a, "pid={d}\npgid={d}\nstart=1\nstarted=0\nargv=x\nreaper={d}\nreaper_start=1\n", .{ none, victim.pgid, none }));
+    try onceStop(&t, "job_stop(\"forged.log.job\")", .store, "`job_stop`: forged.log.job is not a job's record");
+    try onceStop(&t, "job_alive(\"forged.log.job\")", .store, "`job_alive`: forged.log.job is not a job's record");
+    // The group it named was not signalled.
+    try testing.expectEqualStrings("true\n", try once(&t, "print(job_alive(\"victim.log.job\"))"));
+    try testing.expectEqualStrings("true\n", try once(&t, "print(job_stop(\"victim.log.job\"))"));
+}
+
+/// The open fds of `pid`, as /proc/<pid>/fd lists them, sorted: "0 1 2".
+fn fdsOf(a: std.mem.Allocator, io: std.Io, pid: i32) ![]const u8 {
+    const path = try std.fmt.allocPrint(a, "/proc/{d}/fd", .{pid});
+    var dir = try std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true });
+    defer dir.close(io);
+    var fds: std.ArrayList(u32) = .empty;
+    var it = dir.iterate();
+    while (try it.next(io)) |e| try fds.append(a, try std.fmt.parseInt(u32, e.name, 10));
+    std.mem.sort(u32, fds.items, {}, std.sort.asc(u32));
+    var out: std.ArrayList(u8) = .empty;
+    for (fds.items, 0..) |fd, i| {
+        if (i > 0) try out.append(a, ' ');
+        try out.print(a, "{d}", .{fd});
+    }
+    return out.items;
+}
+
+/// `fdsOf(pid)` once it is "0 1 2", or what it last was after 2 s: the
+/// reaper closes its end of the started pipe just after `launch` returns,
+/// and the job holds the reaper's fds until its exec.
+fn settledFds(a: std.mem.Allocator, io: std.Io, pid: i32) ![]const u8 {
+    var last: []const u8 = "";
+    for (0..200) |_| {
+        last = try fdsOf(a, io, pid);
+        if (std.mem.eql(u8, last, "0 1 2")) return last;
+        std.Io.sleep(io, .fromMilliseconds(10), .awake) catch {};
+    }
+    return last;
+}
+
+test "jobs: the reaper and the job hold 0, 1 and 2 alone: no /dev/null and no log fd leaks past them" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    const io = t.threaded.io();
+    try testing.expectEqualStrings("true\n", try once(&t, "local j = job_start({\"shale-fixture\", \"sleep\", \"20000\"}, {log = \"fds.log\"}) print(job_alive(j))"));
+    const text = try t.tmp.dir.readFileAlloc(io, "fds.log.job", a, .limited(64 * 1024));
+    const r = jobs_record.parseRecord(text) orelse return error.TestUnexpectedResult;
+    const reaper = settledFds(a, io, r.reaper);
+    const job = settledFds(a, io, r.pid);
+    try testing.expectEqualStrings("true\n", try once(&t, "print(job_stop(\"fds.log.job\"))"));
+    // One string, so a red says both sides.
+    try testing.expectEqualStrings("reaper 0 1 2, job 0 1 2", try std.fmt.allocPrint(a, "reaper {s}, job {s}", .{ try reaper, try job }));
 }
