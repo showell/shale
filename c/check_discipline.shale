@@ -25,8 +25,9 @@
 --               its own, and `else` follows its `}` on the same line;
 --   tab:        no tab: four spaces a level;
 --   comment:    `//` comments, `/* */` only inside a macro (a line ending `\`);
---   top level:  a line at column 0 starts one of the openings in TOP below,
---               or closes one, so a reader splits a file into its items;
+--   top level:  a line at column 0 starts one of the openings in TOP below
+--               (`int main(` the command's, c/shale.c, or a test fixture's), or closes one,
+--               so a reader splits a file into its items;
 --   inline:     a function in a header is `static inline`;
 --   header:     a header's first line is `// <its name>: `, its guard
 --               `SHALE_<NAME>_H`, and its last line `#endif`.
