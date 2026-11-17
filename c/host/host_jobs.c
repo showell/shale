@@ -174,6 +174,8 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     TRY(host_str_opt(r, pos, S("log"), &log_v, &log_shown));
     TRY(run_charge(r, pos, n));
     if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
+    SpawnStrs argv_s = {argv.ptr, argv.len};
+    TRY(host_refuse_nul(r, pos, S("job_start"), argv_s, env_t, NULL));
     Str cwd = S("");
     if (has_cwd) {
         Str given = S("");
@@ -182,7 +184,6 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     } else {
         TRY(paths_root_of(&h->paths, &rs->path, pos, &cwd));
     }
-    TRY(host_refuse(h, r, pos, S("job_start"), at(argv, 0), cwd, has_want));
     size_t n_env = env_t != NULL ? ValueMap_len(&env_t->map) : 0;
     Str *keys = ARENA_ARRAY(a, Str, n_env);
     Str *vals = ARENA_ARRAY(a, Str, n_env);
@@ -202,6 +203,9 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     PathsStrs env_keys = {keys, n_str};
     PathsStrs env_vals = {vals, n_str};
     TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, S("job_start"), argv_c, cwd, env_keys, env_vals));
+    // The secrets guard before `host_refuse`, which hands argv[0] to git
+    // (the DRAGON at host_run.c's call).
+    TRY(host_refuse(h, r, pos, S("job_start"), at(argv, 0), cwd, has_want));
     // Its record holds the argv, escaped: one too long is said here, not as
     // a record the reaper could not write.
     uint64_t argv_bytes = n - 1;
@@ -240,11 +244,12 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     if (jobs_find(a, at(argv, 0), senv, cwd, &found, &program) != OK) return run_values_oom(r, pos);
     Str argv0 = at(argv, 0);
     if (!found) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(memchr(argv0.ptr, '/', argv0.len) == NULL ? S(" along PATH") : S(""))));
+    // The reaper truncates the log and writes the record: changes the host
+    // makes for the script, so each asks `may_change` (host_change_os_path).
     Str log_os = S("");
-    TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), log_shown, false, &log_os));
-    Buf rb = buf_make(a);
-    if (buf_str(&rb, log_os) != OK || buf_lit(&rb, ".job") != OK) return run_values_oom(r, pos);
-    Str record_os = buf_view(&rb);
+    TRY(host_change_os_path(h, r, pos, log_shown, S(""), &log_os));
+    Str record_os = S("");
+    TRY(host_change_os_path(h, r, pos, log_shown, S(".job"), &record_os));
     // The reaper writes the log and the record there; it does not make room.
     size_t slash = log_os.len;
     while (slash > 0 && str_byte(log_os, slash - 1) != '/') slash--;
@@ -364,14 +369,16 @@ static uint64_t host_scan_from(HostScan *s, uint64_t size, int32_t pid, int64_t 
 
 // Whether `c` is in what the log at `os` holds now. A missing log is false;
 // any other failure stops the run rather than reading as "not yet".
-static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos pos, Str os, Str c, const JobRecord *rec, bool *found) {
+// `shown` is the script's path for `os`, which every message names: `os`
+// is a mount's folder.
+static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos pos, Str os, Str shown, Str c, const JobRecord *rec, bool *found) {
     *found = false;
     const char *p = NULL;
     if (store_cstr(sa, os, &p) != STORE_OK) return run_values_oom(r, pos);
     struct stat st;
     if (stat(p, &st) != 0) {
         if (errno == ENOENT) return OK;
-        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_HOST(os), MSG_FROM_HOST(store_err_name(store_err_of(errno)))));
+        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(store_err_of(errno)))));
     }
     uint64_t size = (uint64_t)st.st_size;
     if (s->buf.len == 0) {
@@ -387,7 +394,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
             s->done = 0;
             return OK;
         }
-        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_HOST(os), MSG_FROM_HOST(store_err_name(store_err_of(errno)))));
+        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(store_err_of(errno)))));
     }
     while (from < size) {
         size_t want = s->buf.len < size - from ? s->buf.len : (size_t)(size - from);
@@ -395,7 +402,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
         if (got < 0) {
             int e = errno;
             close(fd);
-            return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_HOST(os), MSG_FROM_HOST(store_err_name(store_err_of(e)))));
+            return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(store_err_of(e)))));
         }
         size_t n = (size_t)got;
         Status charged = host_jobs_charge_read(r, pos, n);
@@ -434,7 +441,7 @@ static STATUS_MUST_USE Status host_wait_seen_ended(Host *h, Run *r, Pos pos, Hos
         Str os = S("");
         TRY(paths_os_path(&h->paths, &builtin_store_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, false, &os));
         bool found = false;
-        TRY(host_scan_look(scan, sa, r, pos, os, o->contains, rec, &found));
+        TRY(host_scan_look(scan, sa, r, pos, os, given, o->contains, rec, &found));
         if (found) return host_jobs_result(r, pos, S("found"), false, 0, false, 0, out);
     }
     return host_jobs_result(r, pos, S("exited"), rec->has_exit, rec->exit, rec->has_signal, rec->signal, out);
@@ -456,7 +463,7 @@ static STATUS_MUST_USE Status host_wait_loop(Host *h, Run *r, Pos pos, ConstValu
             Str os = S("");
             TRY(paths_os_path(&h->paths, &builtin_store_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, false, &os));
             bool found = false;
-            TRY(host_scan_look(&scan, sa, r, pos, os, o->contains, &j.record, &found));
+            TRY(host_scan_look(&scan, sa, r, pos, os, given, o->contains, &j.record, &found));
             if (found) return host_jobs_result(r, pos, S("found"), false, 0, false, 0, out);
         }
         if (job_record_done(j.record)) return host_wait_seen_ended(h, r, pos, &scan, sa, o, j.log, &j.record, out);

@@ -638,6 +638,39 @@ static bool host_pattern_matches(void *ctx, Str line, uint64_t *work) {
     return got.found;
 }
 
+// What `host_open_regular` gives besides an fd: the path is not a regular
+// file (a FIFO, a device, a folder).
+enum { HOST_NOT_REGULAR = -1 };
+
+// Opens `c`, which must be a regular file, for writing (made if missing,
+// truncated) or reading: 0 with `*fd` set, HOST_NOT_REGULAR, or the errno.
+// Zig's `openRegular`.
+// DRAGON: the run's deadline and the store's boundaries. A FIFO or a device
+// at the path would hold the open, and `shale` with it, until a reader or a
+// writer came; a link planted at the last part would be followed.
+// REMEDY: O_NONBLOCK so the open returns at once (a FIFO with no reader is
+// ENXIO), O_NOFOLLOW so a link is refused (ELOOP), then fstat must say a
+// regular file before O_NONBLOCK is cleared and the fd handed back.
+static int host_open_regular(const char *c, bool write, int *fd) { // cstr: NUL-ended for the kernel
+    int flags = write ? O_WRONLY | O_CREAT | O_TRUNC : O_RDONLY;
+    int got = open(c, flags | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0666);
+    if (got < 0) return errno == ENXIO ? HOST_NOT_REGULAR : errno;
+    struct stat st;
+    if (fstat(got, &st) != 0) {
+        int e = errno;
+        close(got);
+        return e;
+    }
+    if (!S_ISREG(st.st_mode)) {
+        close(got);
+        return HOST_NOT_REGULAR;
+    }
+    int fl = fcntl(got, F_GETFL, 0);
+    if (fl >= 0) fcntl(got, F_SETFL, fl & ~O_NONBLOCK);
+    *fd = got;
+    return 0;
+}
+
 // ── `stdout_secret`'s file ──
 
 // Zig's `std.os.linux.E` tag of an errno, as `@tagName` gives it.
@@ -724,15 +757,26 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     return OK;
 }
 
-// Renames what the program printed over the secret, giving its bytes.
+// Stops the run when the program printed past HOST_SECRET_MOST, however it
+// ended: one held to the cap by RLIMIT_FSIZE ends by SIGXFSZ (or its write
+// fails) with one byte past it written. Zig's `refuseOver`.
+static STATUS_MUST_USE Status host_secret_refuse_over(Run *r, Pos pos, HostSecretFile *s, Str program) {
+    off_t end = lseek(s->fd, 0, SEEK_END);
+    if (end < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown), MSG_FROM_SCRIPT(program), MSG_FROM_HOST(host_errno_tag(errno))));
+    uint64_t size = (uint64_t)end;
+    if (size > HOST_SECRET_MOST) {
+        return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: `{s}` printed {d} bytes, past the {d} `secrets` reads: nothing is stored in {s}"), MSG_ARGS(MSG_FROM_SCRIPT(program), MSG_FROM_HOST(run_unum(r, size)), MSG_FROM_HOST(S("65536")), MSG_FROM_SCRIPT(s->shown)));
+    }
+    return OK;
+}
+
+// Renames what the program printed over the secret, giving its bytes. Past
+// the cap was refused before (`host_secret_refuse_over`).
 static STATUS_MUST_USE Status host_secret_store(Run *r, Pos pos, HostSecretFile *s, Str program, bool replace, uint64_t *bytes) {
     off_t end = lseek(s->fd, 0, SEEK_END);
     if (end < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown), MSG_FROM_SCRIPT(program), MSG_FROM_HOST(host_errno_tag(errno))));
     uint64_t size = (uint64_t)end;
     if (size == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: `{s}` exited 0 and printed nothing: nothing is stored in {s}"), MSG_ARGS(MSG_FROM_SCRIPT(program), MSG_FROM_SCRIPT(s->shown)));
-    if (size > HOST_SECRET_MOST) {
-        return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: `{s}` printed {d} bytes, past the {d} `secrets` reads: nothing is stored in {s}"), MSG_ARGS(MSG_FROM_SCRIPT(program), MSG_FROM_HOST(run_unum(r, size)), MSG_FROM_HOST(S("65536")), MSG_FROM_SCRIPT(s->shown)));
-    }
     if (fsync(s->fd) != 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be synced: nothing is stored"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown)));
     close(s->fd);
     s->fd = -1;
@@ -874,13 +918,13 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
         // value goes to the environment and the scrubber alone.
         const char *c = NULL;
         if (store_cstr(a, path, &c) != STORE_OK) return run_values_oom(r, pos);
-        int fd = open(c, O_RDONLY | O_CLOEXEC);
+        // Neither waited on (a FIFO) nor followed (a link): host_open_regular.
+        int fd = -1;
+        int err = host_open_regular(c, false, &fd);
+        if (err == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret `{s}`'s file {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path)));
         char *bytes = NULL;
         size_t len = 0;
-        int err = 0;
-        if (fd < 0) {
-            err = errno;
-        } else {
+        if (err == 0) {
             bytes = arena_alloc(a, HOST_SECRET_MOST + 1, 1);
             if (bytes == NULL) {
                 close(fd);
@@ -990,18 +1034,78 @@ static void host_run_record(Host *h, Run *r, Str joined, Str shown_env, const Ru
     if (s == OK) host_record(h, buf_view(&b));
 }
 
+static bool host_has_nul(Str s) {
+    return s.len > 0 && memchr(s.ptr, 0, s.len) != NULL;
+}
+
+// `host_refuse_nul`'s look at one map, `env` or `secrets`: a name, and for
+// `env` a string value, holding a NUL.
+static STATUS_MUST_USE Status host_refuse_nul_map(Run *r, Pos pos, Str who, Str opt, Table *t) {
+    if (t == NULL) return OK;
+    bool env = str_eq(opt, S("env"));
+    for (size_t j = 0; j < ValueMap_len(&t->map); j++) {
+        Str k = ValueMap_key_at(&t->map, j);
+        if (host_has_nul(k)) return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `{s}` has a name that holds a NUL byte, where the kernel would end it"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(opt)));
+        Value x = ValueMap_value_at(&t->map, j);
+        if (env && x.tag == VALUE_STRING && host_has_nul(x.as.string)) {
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` {s} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k)));
+        }
+    }
+    return OK;
+}
+
+// Refuses a NUL byte in a program's argument, in an `env` name or value, or
+// in a `secrets` name: Zig's `refuseNul`. `run` and `job_start` call it
+// before any other guard.
+// DRAGON: the secrets rule. A Shale string may hold a NUL, and the kernel
+// ends an argument at it: `"keys\0x"` passes the secrets folder's guard whole
+// and reaches the program as `keys`.
+// REMEDY: this runs first, so every guard after it tests exactly the bytes
+// the program is handed; test_run_guards plants each kind.
+static STATUS_MUST_USE Status host_refuse_nul(Run *r, Pos pos, Str who, SpawnStrs argv, Table *env, Table *secrets) {
+    for (size_t i = 0; i < argv.len; i++) {
+        if (host_has_nul(at(argv, i))) {
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s argument {d} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(run_unum(r, i + 1))));
+        }
+    }
+    TRY(host_refuse_nul_map(r, pos, who, S("env"), env));
+    return host_refuse_nul_map(r, pos, who, S("secrets"), secrets);
+}
+
+// A path the host itself writes for the script (`run`'s log, a job's log and
+// record, `suffix` added to the script's path first), as an OS path, once
+// `may_change` let it change: Zig's `changeOsPath`.
+// DRAGON: the store's boundaries and the undo journal. A file the host opens
+// for writing outside `change_may` would write through a read-only mount and
+// past `--undo-on-stop`'s journal.
+// REMEDY: every such open takes its path from here; test_run_guards plants a
+// log into a read-only mount and one put back by an undo.
+static STATUS_MUST_USE Status host_change_os_path(Host *h, Run *r, Pos pos, Str given, Str suffix, Str *out) {
+    RunStore *rs = builtin_store_of(r);
+    Str full = given;
+    if (suffix.len > 0) {
+        Buf b = buf_make(r->ctx.values);
+        if (buf_str(&b, given) != OK || buf_str(&b, suffix) != OK) return run_values_oom(r, pos);
+        full = buf_view(&b);
+    }
+    StorePath p;
+    TRY(path_arg(&rs->path, pos, builtin_who(r, BUILTIN_HOST), full, false, &p));
+    TRY(change_may(r, pos, &p));
+    return paths_absolute(&h->paths, &rs->path, pos, mounts_trim_slash(p.full), out);
+}
+
 // Runs the program, streams its output through the scrubber to the log and
 // the keep, and gives the answer: Zig's `runProgram` after its options.
 static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnStrs argv, const RunOpts *o, HostRunHeld *held, Value *out) {
     Arena *a = r->ctx.values;
     RunStore *rs = builtin_store_of(r);
+    TRY(host_refuse_nul(r, pos, S("run"), argv, o->env, o->secrets));
     Str cwd = S("");
     if (o->has_cwd) {
         TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), o->cwd.as.string, true, &cwd));
     } else {
         TRY(paths_root_of(&h->paths, &rs->path, pos, &cwd));
     }
-    TRY(host_refuse(h, r, pos, S("run"), at(argv, 0), cwd, o->has_want));
     size_t n_env = o->env != NULL ? ValueMap_len(&o->env->map) : 0;
     Str *keys = ARENA_ARRAY(a, Str, n_env);
     Str *vals = ARENA_ARRAY(a, Str, n_env);
@@ -1021,6 +1125,11 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     PathsStrs env_keys = {keys, n_str};
     PathsStrs env_vals = {vals, n_str};
     TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, S("run"), argv_c, cwd, env_keys, env_vals));
+    // DRAGON: the secrets rule. `host_refuse` hands argv[0] to git
+    // (`ls-files`), which must never be shown a secret's path.
+    // REMEDY: the secrets guard runs first, so a path into a secrets folder
+    // stops the run before git starts; test_run_guards plants the swap.
+    TRY(host_refuse(h, r, pos, S("run"), at(argv, 0), cwd, o->has_want));
 
     Buf shown_env = buf_make(a);
     SpawnStrs env = {NULL, 0};
@@ -1047,11 +1156,15 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     if (o->has_log) {
         log_shown = o->log.as.string;
         Str path = S("");
-        TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), log_shown, false, &path));
+        // The log is a change the host makes for the script: `may_change`
+        // first, then an open that neither waits on a FIFO nor follows a
+        // link (both DRAGONs at their functions).
+        TRY(host_change_os_path(h, r, pos, log_shown, S(""), &path));
         const char *c = NULL;
         if (store_cstr(a, path, &c) != STORE_OK) return run_values_oom(r, pos);
-        held->log_fd = open(c, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
-        if (held->log_fd < 0) return host_fail(r, pos, CLASS_STORE, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(store_err_name(store_err_of(errno)))));
+        int opened = host_open_regular(c, true, &held->log_fd);
+        if (opened == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: its log {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
+        if (opened != 0) return host_fail(r, pos, CLASS_STORE, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(store_err_name(store_err_of(opened)))));
         sink_out.log_fd = held->log_fd;
     }
     Buf whole_buf = buf_make(sa);
@@ -1105,6 +1218,14 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     spec.has_stdin = has_stdin;
     spec.stdin_bytes = stdin_bytes;
     spec.stdout_fd = held->has_secret ? held->secret.fd : -1;
+    // DRAGON: the budgets. The secret's file is the program's stdout, which
+    // no pipe bounds: it could fill the disk before the cap is checked at
+    // exit.
+    // REMEDY: RLIMIT_FSIZE at the cap plus one, set in the child before exec
+    // (spawn.c), so the kernel stops the file one byte past the cap and
+    // `host_secret_refuse_over` sees it; test_run_guards prints 10 MB at it.
+    spec.has_file_most = held->has_secret;
+    spec.file_most = HOST_SECRET_MOST + 1;
     spec.timeout_ms = o->timeout_ms;
     SpawnOutcome outcome;
     memset(&outcome, 0, sizeof outcome);
@@ -1132,6 +1253,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     // Stored only on exit 0, so a failed program leaves nothing half made.
     bool secret_stored = false;
     uint64_t secret_bytes = 0;
+    if (held->has_secret) TRY(host_secret_refuse_over(r, pos, &held->secret, argv0));
     if (held->has_secret && outcome.ended == SPAWN_EXIT && outcome.code == 0) {
         TRY(host_secret_store(r, pos, &held->secret, argv0, o->secret_replace, &secret_bytes));
         secret_stored = true;

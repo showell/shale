@@ -63,6 +63,12 @@ typedef struct {
     // An open file stdout goes to instead of the pipe (`run`'s
     // `stdout_secret`); stderr stays on the pipe. -1 for the pipe.
     int stdout_fd;
+    // When `has_file_most`, the most bytes the program may write to any file
+    // (RLIMIT_FSIZE, set in the child before exec), so `stdout_fd`'s file
+    // cannot grow without bound while it runs: past it the kernel ends the
+    // program with SIGXFSZ, or its write fails.
+    bool has_file_most;
+    uint64_t file_most;
     // When the program's group gets TERM.
     uint64_t timeout_ms;
     // The time between TERM and KILL.
@@ -261,7 +267,7 @@ static void spawn_child_fail(int err_w, uint32_t code) {
 // The child between fork and exec. It never returns: it execs, or writes an
 // errno to `err_w` and exits 127 (a `chdir`'s as 1000 plus its errno).
 // DRAGON: the process boundary. Between fork and exec the child holds a copy of the parent's memory and locks, so a malloc, a stdio call or anything not async-signal-safe can deadlock or corrupt it. It makes only raw system calls on memory built before the fork (the paths, argv and envp), and leaves by exec or _exit, never by return.
-static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
+static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, bool has_file_most, uint64_t file_most, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
     // DRAGON: the process boundary. The death signal ends the child when `shale` dies, so a program never outlives it; but `shale` may die before the prctl, and then the child's parent is already init and no signal will come. The getppid check closes that race: a child whose parent changed exits at once.
     prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
     if (getppid() != parent) _exit(127);
@@ -274,6 +280,16 @@ static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_f
     dup2(in_fd, 0);
     dup2(stdout_fd >= 0 ? stdout_fd : out_w, 1);
     dup2(out_w, 2);
+    // DRAGON: the budgets. `stdout_secret`'s file is the program's stdout,
+    // which no pipe bounds, so it could fill the disk before the cap is
+    // checked at exit.
+    // REMEDY: the hard and soft RLIMIT_FSIZE, one raw prlimit64 (async-signal
+    // safe, nothing allocated), so the kernel holds it to `file_most` bytes;
+    // a failure exits 127 before exec, never running the program unbounded.
+    if (has_file_most) {
+        struct rlimit lim = {(rlim_t)file_most, (rlim_t)file_most};
+        if (syscall(SYS_prlimit64, 0, RLIMIT_FSIZE, &lim, NULL) != 0) spawn_child_fail(err_w, EPERM);
+    }
     if (cwd != NULL && chdir(cwd) != 0) spawn_child_fail(err_w, 1000 + (uint32_t)errno);
     int last = ENOENT;
     for (size_t i = 0; i < paths.len; i++) {
@@ -635,7 +651,7 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
     pid_t parent = getpid();
     pid_t pid = fork();
     if (pid < 0) return SPAWN_REFUSED;
-    if (pid == 0) spawn_child(parent, cwd, at(in_pipe, 0), spec->stdout_fd, at(out_pipe, 1), at(err_pipe, 1), paths, argv, envp);
+    if (pid == 0) spawn_child(parent, cwd, at(in_pipe, 0), spec->stdout_fd, spec->has_file_most, spec->file_most, at(out_pipe, 1), at(err_pipe, 1), paths, argv, envp);
 
     spawn_close(&at(out_pipe, 1));
     spawn_close(&at(err_pipe, 1));

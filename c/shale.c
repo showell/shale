@@ -585,6 +585,9 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     RunHost host = {&lh, host_call};
     r.host = host;
     Status ran = run_ended(&r.ctx, vm_main(&r, &code));
+    // The run's zig-ast, if a Zig call started one, ends with the run, before
+    // any report line, so no early return below can skip it.
+    host_zig_stop();
     write_stdout(buf_view(&r.out));
     RunUsed used = {r.steps, r.reads, r.read_bytes, r.out.len};
     Names effects = {NULL, 0};
@@ -600,9 +603,13 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         bool all = false;
         Buf undone = buf_make(&host_arena);
         if (undo_changes(&lh.paths, &undone, &all) != OK) return not_ported(o, S("an undo past the arena"));
-        // DRAGON: the secrets rule. The undo's lines name absolute paths.
-        // REMEDY: only paths may_change let through are journaled, none
-        // under a secrets folder; the lines are put to the one check too.
+        // DRAGON: the secrets rule. The undo's lines name absolute paths,
+        // which no stop's check sees: they are said here, not through
+        // path_fail.
+        // REMEDY: only paths may_change let through are journaled, and a
+        // secrets folder's path is refused before that (paths_resolve); the
+        // lines are asked paths_names_secret, the hook path_fail asks, and
+        // one that names a secrets folder ends the process.
         bool names = false;
         Pos none = {0, 0};
         if (paths_names_secret(&lh.paths, &rs.path, none, buf_view(&undone), &names) != OK) return not_ported(o, S("an undo past the arena"));
@@ -613,8 +620,6 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         say(o, buf_view(&undone));
     }
     int exit_code = flush_and_exit(o, ran == OK ? EXIT_FINISHED : EXIT_STOPPED);
-    // The run's zig-ast, if a Zig call started one, ends with the run.
-    host_zig_stop();
     arena_deinit(&host_arena);
     regex_cache_deinit(&r.patterns);
     arena_deinit(&output);

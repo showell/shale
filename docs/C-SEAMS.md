@@ -123,15 +123,24 @@ caller to drop them in time, so these tests are written, under ASan, before
   keeps a view of the live call vec, not a copy);
 - a yield's copy, with everything it keeps read after the reset it makes.
 
-## The secrets rule's one check
+## The secrets rule's check
 
-A secrets mount's path must never appear in a message. **`run_fail` is the
-one check**: every stop's message passes through it (`run_fail_built`,
-`run_budget_stop` and `run_oom` call it), so the C asks the `PathHook`
-there whether the message names a path under a secrets mount, and refuses
-it there, rather than at each place a message is built from a path. A
-message that is not a stop's (a report line, a `--verbose` effect) goes
-through the same check before it is written.
+A secrets mount's path must never appear in a message. **`path_fail`
+(c/host/path_run.c) checks the arguments the host makes**: a stop built
+there, which is every stop path_run.c and paths.c build from a path and
+every one host_run.c's `host_fail` and `host_fail_plain` make (host_jobs.c
+uses them too), asks the `PathHook`'s `names_secret` of each argument marked
+as the host's (an OS path, a mount's folder), and one that names a secrets
+mount's folder ends the process, a bug in the C, before any message is
+made. The script's own text is not checked: it may come back. `--undo-on-
+stop`'s lines are asked the same hook before they are said (c/shale.c).
+
+**What no check sees:** a stop made by `run_failf` (zig_ast.c, host_call.c,
+the VM's own), the `── ran` records, the time line and the `── stopped with
+the run` line. Today these hold only the script's own text (its argv, its
+paths as it wrote them) and fixed words, never a path the host made; a new
+one that puts an OS path in any of them must go through `path_fail`
+instead.
 
 ## The host interface
 

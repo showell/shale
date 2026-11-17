@@ -7,15 +7,16 @@
 use("build:lib.shale")
 
 -- ── The host builtins: their own block ──────────────────────────────────
--- c/tests/host_builtins/test_host_run.c, held here to HOST_BUILTINS_TESTS:
--- a part of c/tests/ran_tests.c, which the ran block runs under every build
--- and holds to its `TEST(` count. It runs sources as the C `shale` does
--- (c/tests/ran.c), and its job test runs c/out/tcc/shale as the reaper,
+-- c/tests/host_builtins/test_host_run.c and test_run_guards.c (the guards
+-- before and while a program runs), held here to HOST_BUILTINS_TESTS: parts
+-- of c/tests/ran_tests.c, which the ran block runs under every build and
+-- holds to their `TEST(` counts. They run sources as the C `shale` does
+-- (c/tests/ran.c), and their job tests run c/out/tcc/shale as the reaper,
 -- which the command's block built. In the full tier: the
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 10}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 10, ["c/tests/host_builtins/test_run_guards.c"] = 7}
 const HOST_BUILTINS_PLANTS = {
   {name = "a secret's start at a read's end is passed on raw", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",

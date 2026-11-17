@@ -1,9 +1,9 @@
 // path_run.c: a script's path as the core takes it, the port of Zig
 // Shale's `builtins_store.pathArg` and `absoluteStop` (src/script/
 // builtins_store.zig) and of the hook a host hangs on every path,
-// `interp.PathHook`. Also where every stop built from a path is made
-// (`path_fail`), which holds the secrets rule's one check, and the store's
-// failure in words (`path_store_failed`).
+// `interp.PathHook`. Also where the stops built from a path, and the host's,
+// are made (`path_fail`, which checks their host-made arguments against the
+// secrets rule), and the store's failure in words (`path_store_failed`).
 //
 // A path is the root's unless the hook resolves it (a mount's, on Linux):
 // every part a name FAT holds, so `.`, `..`, empty parts and a leading `/`
@@ -145,16 +145,19 @@ static STATUS_MUST_USE Status msg_format(Buf *b, Str fmt, MsgArgs args) {
 
 // Stops the run at `pos` with Zig's message `fmt` of `args`, or `fmt` itself
 // when the arena refuses it, as Zig's `Run.fail` falls back to its format
-// string. Every stop built from a path, in path_run.c and paths.c, is made
-// here.
+// string. The stops path_run.c and paths.c build from a path are made here,
+// and so are the host's (host_run.c's `host_fail`, which host_jobs.c uses).
 // DRAGON: the secrets rule. A host-made argument (an OS path, a mount's
 // folder) that names a secrets mount's folder would print where the tokens
 // are.
-// REMEDY: the rule's one check, here: such an argument ends the process, a
-// bug in the C, before any message is made. A script's own text may come
-// back (the plain absolute stop gives back what the script wrote); no host
-// text may, a mount's folder included (paths.c's `paths_mount_path` names a
-// secrets mount alone).
+// REMEDY: such an argument ends the process here, a bug in the C, before any
+// message is made. A script's own text may come back (the plain absolute
+// stop gives back what the script wrote); no host text may, a mount's folder
+// included (paths.c's `paths_mount_path` names a secrets mount alone). This
+// is not every message: a `run_failf` stop (zig_ast.c, host_call.c), the
+// `── ran` records, the time line and the "stopped with the run" line pass
+// no check, and hold only the script's own text and fixed words today
+// (docs/C-SEAMS.md, "The secrets rule's check").
 // test_paths plants a host argument that names one.
 static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str fmt, MsgArgs args) {
     if (r->hook != NULL && r->hook->names_secret != NULL) {
