@@ -273,7 +273,7 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
     Str rel = given;
     if (str_eq(given, S("."))) {
         rel = S("");
-    } else if (given.len >= 2 && str_eq(str_sub(given, given.len - 2, given.len), S(":.")) && memchr(given.ptr, '/', given.len) == NULL) {
+    } else if (given.len >= 2 && str_eq(str_sub(given, given.len - 2, given.len), S(":.")) && str_find_byte(given, '/') == NULL) {
         rel = str_sub(given, 0, given.len - 1);
     }
     TRY(path_charge(r, pos, given.len));

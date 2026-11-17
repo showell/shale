@@ -319,7 +319,7 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
 // Where `path`'s first part's `:` is, when it has one.
 static bool paths_colon(Str path, size_t *colon) {
     size_t first_end = path_part_end(path, 0);
-    const char *c = first_end > 0 ? memchr(path.ptr, ':', first_end) : NULL;
+    const char *c = str_find_byte(str_sub(path, 0, first_end), ':');
     if (c == NULL) return false;
     *colon = (size_t)(c - path.ptr);
     return true;
@@ -562,7 +562,7 @@ static STATUS_MUST_USE Status paths_secret_target(Paths *h, PathRun *r, Pos pos,
     }
     Str rest = str_sub(path, colon + 1, path.len);
     if (rest.len == 0 || str_eq(rest, S("."))) return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\": a secret is a file in the mount, not the mount"), MSG_ARGS(MSG_FROM_SCRIPT(path)));
-    if (memchr(rest.ptr, '/', rest.len) != NULL) {
+    if (str_find_byte(rest, '/') != NULL) {
         return path_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` \"{s}\" is in a folder of the mount: a secret is a file directly in it, `\"{s}:NAME\"`"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_HOST(m->name)));
     }
     Str os = S("");
@@ -586,7 +586,7 @@ static STATUS_MUST_USE Status paths_names_folder(PathRun *r, Pos pos, Str arg, S
         *out = PATHS_NAMES_INSIDE;
         return OK;
     }
-    const char *eq = arg.len > 0 ? memchr(arg.ptr, '=', arg.len) : NULL;
+    const char *eq = str_find_byte(arg, '=');
     Str after_eq = eq != NULL ? str_sub(arg, (size_t)(eq - arg.ptr) + 1, arg.len) : S("");
     for (int k = 0; k < 2; k++) {
         Str p = k == 0 ? arg : after_eq;

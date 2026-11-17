@@ -53,7 +53,7 @@ static STATUS_MUST_USE Status host_re_lines(Run *r, Pos pos, ConstValues args, V
     int64_t n = 0;
     Str rest = s;
     while (rest.len > 0) {
-        const char *nl = memchr(rest.ptr, '\n', rest.len);
+        const char *nl = str_find_byte(rest, '\n');
         size_t end = nl == NULL ? rest.len : (size_t)(nl - rest.ptr);
         Str line = str_sub(rest, 0, end);
         rest = nl == NULL ? S("") : str_sub(rest, end + 1, rest.len);

@@ -154,7 +154,7 @@ static bool jobs_runnable(Arena *a, Str p) {
 // STOP when the arena refuses.
 static STATUS_MUST_USE Status jobs_find(Arena *a, Str argv0, SpawnStrs env, Str cwd, bool *found, Str *out) {
     *found = false;
-    if (argv0.len > 0 && memchr(argv0.ptr, '/', argv0.len) != NULL) {
+    if (str_find_byte(argv0, '/') != NULL) {
         Str p = argv0;
         if (str_byte(argv0, 0) != '/' && !jobs_join(a, cwd, argv0, &p)) return STOP;
         if (jobs_runnable(a, p)) {
@@ -169,7 +169,7 @@ static STATUS_MUST_USE Status jobs_find(Arena *a, Str argv0, SpawnStrs env, Str 
     }
     Str rest = path;
     while (1) {
-        const char *colon = rest.len > 0 ? memchr(rest.ptr, ':', rest.len) : NULL;
+        const char *colon = str_find_byte(rest, ':');
         size_t to = colon != NULL ? (size_t)(colon - rest.ptr) : rest.len;
         Str dir = str_sub(rest, 0, to);
         if (dir.len > 0) {

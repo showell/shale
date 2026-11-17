@@ -194,7 +194,7 @@ static StoreErr store_cstr(Arena *a, Str s, const char **out) {
     // Zig copies a path into a PATH_MAX buffer for the kernel, and one that
     // does not fit with its NUL is NameTooLong.
     if (s.len >= PATH_MAX) return STORE_NAME_TOO_LONG;
-    if (s.len > 0 && memchr(s.ptr, 0, s.len) != NULL) return STORE_BAD_PATH_NAME;
+    if (str_find_byte(s, 0) != NULL) return STORE_BAD_PATH_NAME;
     char *c = arena_alloc(a, s.len + 1, 1);
     if (c == NULL) return STORE_OUT_OF_MEMORY;
     Bytes room = {c, s.len + 1};

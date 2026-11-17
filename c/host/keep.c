@@ -267,7 +267,7 @@ static STATUS_MUST_USE Status keep_end_line(Keep *k) {
 static STATUS_MUST_USE Status keep_feed(Keep *k, Str bytes) {
     Str rest = bytes;
     while (rest.len > 0) {
-        const char *nl = memchr(rest.ptr, '\n', rest.len);
+        const char *nl = str_find_byte(rest, '\n');
         size_t piece_len = nl != NULL ? (size_t)(nl - rest.ptr) : rest.len;
         size_t room = KEEP_LINE_MOST - k->line.len;
         if (piece_len > room) k->line_over = true;

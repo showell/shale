@@ -205,7 +205,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     size_t ne = 0;
     for (size_t i = 0; i < h->env.len; i++) {
         Str e = at(h->env, i);
-        const char *eq = e.len > 0 ? memchr(e.ptr, '=', e.len) : NULL;
+        const char *eq = str_find_byte(e, '=');
         Str k = eq != NULL ? str_sub(e, 0, (size_t)(eq - e.ptr)) : e;
         bool over = false;
         for (size_t j = 0; !over && j < n_env; j++) over = str_eq(ValueMap_key_at(&env_t->map, j), k);
@@ -224,7 +224,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     Str program = S("");
     if (jobs_find(a, at(argv, 0), senv, cwd, &found, &program) != OK) return run_values_oom(r, pos);
     Str argv0 = at(argv, 0);
-    if (!found) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(memchr(argv0.ptr, '/', argv0.len) == NULL ? S(" along PATH") : S(""))));
+    if (!found) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
     // The reaper truncates the log and writes the record: changes the host
     // makes for the script, so each asks `may_change` (host_change_os_path).
     Str log_os = S("");

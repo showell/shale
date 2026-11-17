@@ -209,7 +209,7 @@ static char **spawn_cstr_list(Arena *a, SpawnStrs items) {
 // argv[0] itself. False when the arena refuses.
 static bool spawn_candidates(Arena *a, Str argv0, SpawnStrs env, SpawnCStrs *paths) {
     Str path = S("/usr/local/bin:/usr/bin:/bin");
-    if (memchr(argv0.ptr, '/', argv0.len) != NULL) {
+    if (str_find_byte(argv0, '/') != NULL) {
         path = S("");
     } else {
         for (size_t i = 0; i < env.len; i++) {

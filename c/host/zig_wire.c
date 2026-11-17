@@ -117,7 +117,7 @@ typedef enum {
 // A field's text, its escapes undone, `wire.unescape`; a field with no
 // escape is given back as it is, copied nowhere.
 static ZigWireRead zig_wire_unescape(Arena *a, Str s, Str *out) {
-    if (s.len == 0 || memchr(s.ptr, '\\', s.len) == NULL) {
+    if (str_find_byte(s, '\\') == NULL) {
         *out = s;
         return ZIG_WIRE_LINE;
     }
@@ -161,7 +161,7 @@ static ZigWireRead zig_wire_next(ZigWireLines *l, Arena *a, ZigWireFields into, 
     *n = 0;
     if (l->at >= l->body.len) return ZIG_WIRE_DONE;
     Str rest = str_sub(l->body, l->at, l->body.len);
-    const char *nl = memchr(rest.ptr, '\n', rest.len);
+    const char *nl = str_find_byte(rest, '\n');
     if (nl == NULL) return ZIG_WIRE_BAD_FRAME;
     size_t end = (size_t)(nl - rest.ptr);
     Str text = str_sub(rest, 0, end);

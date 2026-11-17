@@ -137,7 +137,7 @@ static MountsResult mounts_parse(Arena *a, Str text, Str home, Mounts *out, Str 
         n++;
         Str line = mounts_trim(raw, true);
         if (line.len == 0 || str_byte(line, 0) == '#') continue;
-        const char *eq = memchr(line.ptr, '=', line.len);
+        const char *eq = str_find_byte(line, '=');
         if (eq == NULL) return mounts_malformed(a, why, n, S("the line is not `name = value`"), none);
         size_t eq_at = (size_t)(eq - line.ptr);
         Str name = mounts_trim(str_sub(line, 0, eq_at), false);

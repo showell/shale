@@ -158,7 +158,7 @@ static char *host_zig_cstr(Arena *a, Str s) {
 static bool host_zig_candidates(Arena *a, Str exe, HostZigCStrs *out) {
     const char *path_c = getenv("PATH"); // cstr: the environment's
     Str path = path_c != NULL ? host_zig_from_c(path_c) : S("/usr/local/bin:/bin/:/usr/bin");
-    if (exe.len > 0 && memchr(exe.ptr, '/', exe.len) != NULL) path = S("");
+    if (str_find_byte(exe, '/') != NULL) path = S("");
     size_t n = 1;
     for (size_t i = 0; i < path.len; i++) n += at(path, i) == ':';
     char **list = ARENA_ARRAY(a, char *, n);

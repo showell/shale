@@ -133,7 +133,7 @@ static bool flat_num(Str s, size_t *out) {
 // `\` is itself. Any other escape, or a `\` at the end, sets `*bad`.
 static STATUS_MUST_USE Status flat_unescape(Arena *a, Str s, Str *out, bool *bad) {
     *bad = false;
-    if (s.len == 0 || memchr(s.ptr, '\\', s.len) == NULL) {
+    if (str_find_byte(s, '\\') == NULL) {
         *out = s;
         return OK;
     }
@@ -212,7 +212,7 @@ static STATUS_MUST_USE Status flat_tree_line(Arena *a, FlatFiles *files, Str raw
     size_t count = 0;
     Str rest = str_sub(raw, 2, raw.len);
     for (;;) {
-        const char *tab = rest.len == 0 ? NULL : memchr(rest.ptr, '\t', rest.len);
+        const char *tab = str_find_byte(rest, '\t');
         size_t end = tab == NULL ? rest.len : (size_t)(tab - rest.ptr);
         if (count == f.len) {
             *why = S("a line with too many fields");
@@ -335,7 +335,7 @@ static STATUS_MUST_USE Status flat_parse(Arena *a, Str text, FlatTool tool, Flat
     bool more = true;
     while (more) {
         // Zig's `splitScalar` on `\n`: what follows the last `\n` is a line.
-        const char *nl = rest.len == 0 ? NULL : memchr(rest.ptr, '\n', rest.len);
+        const char *nl = str_find_byte(rest, '\n');
         size_t end = nl == NULL ? rest.len : (size_t)(nl - rest.ptr);
         Str raw = str_sub(rest, 0, end);
         if (nl == NULL) {
@@ -350,7 +350,7 @@ static STATUS_MUST_USE Status flat_parse(Arena *a, Str text, FlatTool tool, Flat
             bool another = false;
             if (str_starts_with(raw, said)) {
                 Str words = str_sub(raw, said.len, raw.len);
-                const char *sp = words.len == 0 ? NULL : memchr(words.ptr, ' ', words.len);
+                const char *sp = str_find_byte(words, ' ');
                 Str first = str_sub(words, 0, sp == NULL ? words.len : (size_t)(sp - words.ptr));
                 if (str_eq(first, S(FLAT_FORMAT))) {
                     header = true;

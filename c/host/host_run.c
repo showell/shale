@@ -489,7 +489,7 @@ static STATUS_MUST_USE Status host_refuse(Host *h, Run *r, Pos pos, Str who, Str
             return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: {s}; {{want = \"tag: why\"}} to run it anyway"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(base), MSG_FROM_HOST(((Str){grp->why, strlen(grp->why)}))));
         }
     }
-    if (argv0.len == 0 || memchr(argv0.ptr, '/', argv0.len) == NULL || host_under_tools_mount(h, argv0)) return OK;
+    if (str_find_byte(argv0, '/') == NULL || host_under_tools_mount(h, argv0)) return OK;
     bool known = false;
     TRY(host_tracked(h, r, pos, argv0, cwd, &known));
     if (known) return OK;
@@ -881,7 +881,7 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
     size_t n = 0;
     for (size_t i = 0; i < h->env.len; i++) {
         Str e = at(h->env, i);
-        const char *eq = e.len > 0 ? memchr(e.ptr, '=', e.len) : NULL;
+        const char *eq = str_find_byte(e, '=');
         Str k = eq != NULL ? str_sub(e, 0, (size_t)(eq - e.ptr)) : e;
         bool over = false;
         for (size_t j = 0; !over && j < extra; j++) over = str_eq(ValueMap_key_at(&o->env->map, j), k);
@@ -1029,7 +1029,7 @@ static void host_run_record(Host *h, Run *r, Str joined, Str shown_env, const Ru
 }
 
 static bool host_has_nul(Str s) {
-    return s.len > 0 && memchr(s.ptr, 0, s.len) != NULL;
+    return str_find_byte(s, 0) != NULL;
 }
 
 // `host_refuse_nul`'s look at one map, `env` or `secrets`: a name, and for
@@ -1229,7 +1229,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     case SPAWN_OK: break;
     case SPAWN_OUT_OF_MEMORY: return run_values_oom(r, pos);
     case SPAWN_SINK_STOPPED: return sa->hit ? host_stream_over(r, pos, most) : run_values_oom(r, pos);
-    case SPAWN_NOT_FOUND: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(memchr(argv0.ptr, '/', argv0.len) == NULL ? S(" along PATH") : S(""))));
+    case SPAWN_NOT_FOUND: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
     case SPAWN_NOT_RUNNABLE: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is there but cannot be run (its permissions, or not a program)"), MSG_ARGS(MSG_FROM_SCRIPT(argv0)));
     case SPAWN_NO_CWD: return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`: its cwd is not a folder that can be entered"));
     case SPAWN_REFUSED: return host_fail_plain(r, pos, CLASS_HOST, S("`run`: the program could not be started (a pipe, a fork or a pidfd refused)"));

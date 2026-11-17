@@ -140,6 +140,19 @@ TEST(str_eq_and_starts_with_answer_both_ways) {
     EXPECT(str_starts_with(S("x"), S("")));
 }
 
+TEST(str_find_byte_finds_the_first_and_never_searches_a_null) {
+    Str s = S("a=b=c");
+    EXPECT(str_find_byte(s, '=') == &at(s, 1));
+    EXPECT(str_find_byte(s, 'c') == &at(s, 4));
+    EXPECT(str_find_byte(s, 'x') == NULL);
+    EXPECT(str_find_byte(S("a\0b"), 0) != NULL);
+    // memchr on NULL is undefined even with a length of 0, which UBSan
+    // flags: an empty Str may hold NULL, so the helper never searches one.
+    Str empty = {NULL, 0};
+    EXPECT(str_find_byte(empty, 'a') == NULL);
+    EXPECT(str_find_byte(S(""), 'a') == NULL);
+}
+
 TEST(str_byte_reads_bytes_unsigned) {
     EXPECT_EQ(str_byte(S("\xff"), 0), 255);
     EXPECT_TRAPS((void)str_byte(S("a"), 1));
@@ -160,5 +173,6 @@ TEST_MAIN(
     TEST_CASE(an_index_past_32_bits_traps_and_never_wraps_into_range),
     TEST_CASE(SLICE_SUB_keeps_the_type_and_its_bounds),
     TEST_CASE(str_eq_and_starts_with_answer_both_ways),
+    TEST_CASE(str_find_byte_finds_the_first_and_never_searches_a_null),
     TEST_CASE(str_byte_reads_bytes_unsigned)
 )

@@ -136,4 +136,11 @@ static inline bool str_starts_with(Str s, Str prefix) {
     return s.len >= prefix.len && (prefix.len == 0 || memcmp(s.ptr, prefix.ptr, prefix.len) == 0);
 }
 
+// The first `c` in `s`, or NULL when there is none. memchr on a NULL pointer
+// is undefined even with a length of 0, and an empty Str may hold NULL, so
+// every search of a Str's bytes for one byte comes here.
+static inline const char *str_find_byte(Str s, char c) {
+    return s.len == 0 ? NULL : memchr(s.ptr, c, s.len);
+}
+
 #endif
