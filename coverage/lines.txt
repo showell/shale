@@ -29,7 +29,7 @@ src/shale_jobs.zig 19
 src/shale_job_record.zig 0
 src/shale_host_jobs.zig 18
 src/shale_host_run.zig 12
-src/shale_host_linux.zig 13
+src/shale_host_linux.zig 12
 src/shale_host_zig.zig 29
 src/shale_host_setup.zig 4
 src/script/cli.zig 0

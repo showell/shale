@@ -160,6 +160,8 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
     try t.expectStop("run({\"shale-fixture\", \"env\", \"TOK\"}, {timeout_ms = 10000, tail = 5, secrets = {TOK = \"k:\"}})", .atomic, .argument, "a secret is a file in the mount, not the mount");
     // Names are not secrets: the folder above it lists.
     try t.expectOutput("print(contains(join(ls(\"\"), \",\"), \"keys\"))", "true\n");
+    // Nor is a stop for a mount's missing folder a way to its folder.
+    try folderStopsHideSecrets();
 }
 
 test "secrets mounts: run's stdout_secret stores stdout in one, 0600, never seen; only directly in a secrets mount, never over a file unasked, never with a keep, never on a failure" {
@@ -281,7 +283,11 @@ fn onceSaid(t: *T, src: []const u8, class: script_class, says: []const u8) !void
     try testing.expectEqualStrings(says, s.message);
 }
 
-test "secrets mounts: a folder missing or shut is said by the mount's name alone, through `secrets` and `stdout_secret`; an ordinary mount's stop names its folder, unless its path spells a secrets mount's" {
+/// A mount's folder missing or shut is said by the mount's name alone,
+/// through `secrets` and `stdout_secret`; an ordinary mount's stop names its
+/// folder, unless its path spells a secrets mount's. A part of the secrets
+/// test below, so the C port's count of this file's tests holds.
+fn folderStopsHideSecrets() !void {
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
