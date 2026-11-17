@@ -66,13 +66,17 @@ anything. The `── time:` line is let go whole: its numbers, whether
 it is printed, and the order it names programs in (Steve, 2026-11-17).
 
 **Arena bytes are outside the frozen surface** (docs/C-SEAMS.md,
-"Fidelity"), so an input that observes them is **judged by class**: its
-oracle stops on the arena budget, or its source reads `arena_bytes` outside
-a comment. The harness finds these from the run and the source, never from
-a list. Its stop's class and message are compared still; the digits of its
+"Fidelity"), and so is the exact step of a `budget kept` or `budget
+machine` stop, which hangs on the same layouts. An input that observes them
+is **judged by class**: its oracle stops on the arena, kept or machine
+budget, or its source reads `arena_bytes` outside a comment. The harness
+finds these from the run and the source, never from a list. Its stop's
+class, place and message are compared still; the digits of its
 `── used:` line and its stop's `(N steps)` are let go, and, when it reads
 `arena_bytes`, every digit of its output. The summary counts them and names
-each one.
+each one. `shale tools/differ/plants/kept_class.shale shale=<path>` is the
+plant: a kept-budget stop at another step passes, one with another message
+or class fails, and an ordinary stop at another step still fails.
 
 If the two `old` runs differ, the input is **nondeterministic**: it is
 reported as a finding of the harness and never judged. An input that fails

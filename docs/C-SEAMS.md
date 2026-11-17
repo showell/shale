@@ -61,9 +61,10 @@ Zig size and no Zig probe of them.
   gives the bytes back, is a nicety for the regex cache and a long call's
   arguments, not a fidelity requirement.
 - **The differ judges these runs by class.** `tools/differ.shale` finds the
-  inputs that observe arena bytes mechanically (an arena stop, or a read of
-  `arena_bytes`), compares their stop's class and message but not those
-  numbers, and counts them in its summary as judged by class.
+  inputs that observe the layouts mechanically (an arena, kept or machine
+  stop, or a read of `arena_bytes`), compares their stop's class, place and
+  message but not those numbers or the step count, and counts them in its
+  summary as judged by class.
 
 ## The VM, the stops and the budgets
 
