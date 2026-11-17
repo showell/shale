@@ -29,7 +29,6 @@ use("differ:lib.shale")
 const LEFT_OUT = {
   {origin = "cookbook/check_disk_space.shale", why = "reads the box's free disk space, which moves between runs and boxes"},
   {origin = "src/shale_procs_test.zig:87", why = "its stop's step count follows procs(), the box's process list, which moves between runs"},
-  {origin = "tools/differ/stops/budget_arena_creates.shale", why = "how many files it creates before its arena stop follows the arena's layouts (outside the frozen surface), which differ between the Zig and the C at the padded path"},
 }
 
 local oracle = arg("oracle", "repos:shale/zig-out/bin/shale")

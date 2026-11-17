@@ -5,9 +5,9 @@ usage: shale [--root DIR] [--verbose] [--undo-on-stop] [--check] [--budget NAME=
   --undo-on-stop    a run that stops puts back every path it changed (not a program's)
   --args-stdin      the FILE's NAME=VALUEs on stdin, one a line, each value raw to its end
   --budget NAME=N   one budget: steps, reads, read_bytes, output_bytes, changes,
-                    change_bytes, arena_bytes, call_bytes, call_entries, programs,
-                    kept_bytes (at most 256 MiB), machine_bytes (at most 1 GiB); a
-                    script's own `-- budget: NAME=N ...` line sets its
+                    change_bytes, arena_bytes, call_bytes, call_entries, call_depth,
+                    programs, kept_bytes (at most 256 MiB), machine_bytes (at most
+                    1 GiB); a script's own `-- budget: NAME=N ...` line sets its
                     budgets where this does not
   -e SOURCE         the script itself, in place of a file (neither: stdin is the script)
   NAME=VALUE        a value the script reads with arg("NAME", default)

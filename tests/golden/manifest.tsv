@@ -967,6 +967,7 @@ stops-argument_wrong_count	stops	tools/differ/stops/argument_wrong_count.shale	1
 stops-arithmetic_divide_zero	stops	tools/differ/stops/arithmetic_divide_zero.shale	1	
 stops-arithmetic_overflow	stops	tools/differ/stops/arithmetic_overflow.shale	1	
 stops-budget_arena	stops	tools/differ/stops/budget_arena.shale	1	stop
+stops-budget_arena_creates	stops	tools/differ/stops/budget_arena_creates.shale	1	
 stops-budget_arena_job_poll	stops	tools/differ/stops/budget_arena_job_poll.shale	1	
 stops-budget_call_depth	stops	tools/differ/stops/budget_call_depth.shale	1	
 stops-budget_changes	stops	tools/differ/stops/budget_changes.shale	1	

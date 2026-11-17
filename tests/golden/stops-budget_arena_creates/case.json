@@ -1,0 +1,1 @@
+{"id":"stops-budget_arena_creates","source":"stops","origin":"tools/differ/stops/budget_arena_creates.shale","files":["budget_arena_creates.shale"],"steps":[{"argv":["{case}/budget_arena_creates.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
