@@ -17,7 +17,7 @@ use("build:lib.shale")
 
 const PARSE_PLANTS = {
   {name = "a `break` outside a loop words its stop its own way",
-   aim = "statements_hold_their_own_rules", dir = "script", file = "parse.h", caught_by = "test_parse",
+   aim = "statements_hold_their_own_rules", dir = "script", file = "parse_stmt.h", caught_by = "test_parse",
    old = [=[S("`break` outside a loop")]=], new = [=[S("`break` is outside a loop")]=]},
 }
 
