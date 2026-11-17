@@ -474,7 +474,9 @@ static int run_script(Out *o, Command *c, MountVec mounts, Str mounts_from, Str 
     r.out_cap = b.output_bytes;
     // The whole output budget at once, as Zig's runner allocates it, so the
     // buffer never grows past its arena.
-    if (buf_reserve(&r.out, r.out_cap) != OK) return not_ported(o, S("an output budget past the system's memory"));
+    r.out.ptr = arena_alloc(&output, r.out_cap, 1);
+    r.out.cap = r.out_cap;
+    if (r.out.ptr == NULL) return not_ported(o, S("an output budget past the system's memory"));
     r.args = args;
     r.args_len = args_len;
     r.steps = reader.used.steps;
