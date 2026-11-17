@@ -1,17 +1,12 @@
-// host_call.c: the Linux host's `host(name, ...)` calls, the part of Zig
-// Shale's src/shale_host_linux.zig `call` the C runs: `real` (a Shale path's
-// OS path), `may_change` (the hook asked of a path before `edits_all` writes
-// any), `edits_write` (`edits_all`'s write), and `re_lines`, `shale_tokens`
-// (host_text.c), `json_read` and `json_write` (host_json.c). Every other call
-// is refused as not ported yet; `run`, the jobs and the rest are their own
-// lanes.
-// any), `edits_write` (`edits_all`'s write), and the Zig tools through
-// host_zig.c. Every other call is refused as not ported yet; `run`, the jobs
-// and the rest are their own lanes.
+// host_call.c: the Linux host's `host(name, ...)` calls, Zig Shale's
+// src/shale_host_linux.zig `call`: `run` and `sleep` (host_run.c), the jobs
+// (host_jobs.c), `real`, the Zig tools (host_zig.c), `re_lines` and
+// `shale_tokens` (host_text.c), `json_read` and `json_write` (host_json.c),
+// and `may_change` and `edits_write`, which `edits_all` calls. `procs`,
+// `proc_stop`, `roc_tree` and `go_tree` are refused as not ported yet.
 //
-// Include paths.c, builtins_change.c, host_run.c and host_jobs.c first.
-// Include paths.c, builtins_change.c, host_json.c and host_text.c first.
-// Include paths.c, builtins_change.c and host_zig.c first.
+// Include paths.c, builtins_change.c, host_run.c, host_jobs.c, host_json.c,
+// host_text.c and host_zig.c first.
 
 // The `RunHost.call` of the Linux host, `ctx` its Host.
 static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out) {

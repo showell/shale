@@ -10,6 +10,19 @@
 
 #include "../ran.c"
 
+// A source run on a fresh root with no mounts.
+static void ran_source(Ran *x, Str src, Budgets b) {
+    RanOpts none = {NULL, false, false};
+    ran_init(x, none);
+    ran_run(x, src, b);
+}
+
+static Budgets cli_budgets(void) {
+    Budgets b = budgets_default();
+    b.output_bytes = 64 * 1024;
+    return b;
+}
+
 static Str host_text_of(Ran *x) {
     return buf_view(&x->r.out);
 }

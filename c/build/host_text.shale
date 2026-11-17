@@ -72,26 +72,6 @@ const HOST_TEXT_PLANTS = {
    old = "run_unum(r, lx.err.line), S(\": \"), lx.err.message);", new = "run_unum(r, lx.err.line), S(\": \"), S(\"\"));"},
 }
 
--- One plant, the `k`th, as `start_plant` makes one, but with c/tests/ran.c
--- and c/tests/text beside the copy of c/, so the test reaches the copy's
--- c/host. `finish_plant` judges it.
-function host_text_start_plant(t, p, k)
-  local dir = OUT .. "/plants/host-text-" .. k
-  if exists(dir) then remove_tree(dir) end
-  mkdir(dir .. "/tests")
-  for d in PLANT_DIRS do
-    if exists("c/" .. d) then copy("c/" .. d, dir .. "/" .. d) end
-  end
-  copy("c/tests/ran.c", dir .. "/tests/ran.c")
-  copy("c/tests/text", dir .. "/tests/text")
-  local file = dir .. "/" .. p.dir .. "/" .. p.file
-  replace(file, replaced_once(read(file), p.old, p.new, p.name))
-  local bin = dir .. "/bin/" .. basename(p.caught_by)
-  compile_to(t, "host text plants", "asan", dir .. "/tests/" .. p.caught_by .. ".c", dir .. "/foundation", bin)
-  local log = dir .. "/run.log"
-  local job = job_start({real(bin)}, {log = log, env = {TEST_ONLY = p.aim}, want = WANT})
-  return {job = job, log = log, dir = dir, p = p}
-end
 
 -- One script's run by `argv` in a folder of its own, `<script>-<who>`, which
 -- holds a copy of the script: a script that writes files leaves each run
@@ -135,20 +115,7 @@ function host_text_block(t)
   host_text_scripts(t)
   print("host text: " .. #HOST_TEXT_SCRIPTS .. " scripts run as Zig runs them, under " .. #t.builds .. " build(s)")
   if not t.full then return nil end
-  local t0 = clock_ms()
-  local said = {}
-  local pending = nil
-  local k = 0
-  for p in HOST_TEXT_PLANTS do
-    k = k + 1
-    local started = host_text_start_plant(t, p, k)
-    if pending ~= nil then push(said, finish_plant(pending)) end
-    pending = started
-  end
-  if pending ~= nil then push(said, finish_plant(pending)) end
-  phase_wall(t, "host text plants", clock_ms() - t0)
-  print("host text plants: " .. #said .. " of " .. #HOST_TEXT_PLANTS .. " caught")
-  for l in said do print(l) end
+  run_plants(t, "host text plants", HOST_TEXT_PLANTS)
   return nil
 end
 -- ── end of the host text block ──────────────────────────────────────────
