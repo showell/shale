@@ -30,6 +30,7 @@
 #include "../host/host_jobs.c"
 #include "../host/host_json.c"
 #include "../host/host_text.c"
+#include "../host/flat_tree.c"
 #include "../host/zig_wire.c"
 #include "../host/zig_ast.c"
 #include "../host/host_zig.c"

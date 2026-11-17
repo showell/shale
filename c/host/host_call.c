@@ -1,12 +1,13 @@
 // host_call.c: the Linux host's `host(name, ...)` calls, Zig Shale's
 // src/shale_host_linux.zig `call`: `run` and `sleep` (host_run.c), the jobs
 // (host_jobs.c), `real`, the Zig tools (host_zig.c), `re_lines` and
-// `shale_tokens` (host_text.c), `json_read` and `json_write` (host_json.c),
-// and `may_change` and `edits_write`, which `edits_all` calls. `procs`,
-// `proc_stop`, `roc_tree` and `go_tree` are refused as not ported yet.
+// `shale_tokens` (host_text.c), `roc_tree` and `go_tree` (flat_tree.c),
+// `json_read` and `json_write` (host_json.c), and `may_change` and
+// `edits_write`, which `edits_all` calls. `procs` and `proc_stop` are refused
+// as not ported yet.
 //
 // Include paths.c, builtins_change.c, host_run.c, host_jobs.c, host_json.c,
-// host_text.c and host_zig.c first.
+// host_text.c, flat_tree.c and host_zig.c first.
 
 // The `RunHost.call` of the Linux host, `ctx` its Host.
 static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out) {
@@ -26,6 +27,8 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
     }
     if (str_eq(name, S("re_lines"))) return host_re_lines(r, pos, args, out);
     if (str_eq(name, S("shale_tokens"))) return host_shale_tokens(r, pos, args, out);
+    if (str_eq(name, S("roc_tree"))) return host_flat_tree(r, pos, args, FLAT_ROC, out);
+    if (str_eq(name, S("go_tree"))) return host_flat_tree(r, pos, args, FLAT_GO, out);
     if (str_eq(name, S("json_read"))) return host_json_read(r, pos, args, out);
     if (str_eq(name, S("json_write"))) return host_json_write(r, pos, args, out);
     if (str_eq(name, S("edits_write"))) {
@@ -45,7 +48,7 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
     if (zig) return zs;
     // Zig's host has these and the C does not run them yet; any other name
     // is none of Zig's host's either.
-    bool zigs = str_eq(name, S("procs")) || str_eq(name, S("proc_stop")) || str_eq(name, S("roc_tree")) || str_eq(name, S("go_tree"));
+    bool zigs = str_eq(name, S("procs")) || str_eq(name, S("proc_stop"));
     if (!zigs) return run_failf(r, pos, CLASS_HOST, "`{s}`: not on this host", S("`"), name, S("`: not on this host"));
     Msg m;
     msg_init(&m, r->ctx.values);
