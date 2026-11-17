@@ -19,6 +19,13 @@ const PRELUDE_TESTS = {"src/script/prelude_test.zig", "src/shale_prelude_linux_t
 -- The docs whose shale blocks the tests run.
 const DOCS = {"docs/SHALE.md", "docs/SHALE-AGENTS.md"}
 
+-- The real path of every run's folder (`padded_base`), in bytes. A run's
+-- step counts hang on the lengths of the paths it is handed (a prelude scans
+-- them), so the folder a run's work, case, binary and home live in is padded
+-- to this length on every box, GitHub's /home/runner, a cloud's /root or a
+-- laptop's: the goldens and the differ's two binaries see the same lengths.
+const WORK_PATH_BYTES = 160
+
 -- The wrapper that keeps a step's stdout and stderr apart: `run` gives the
 -- two as one.
 const WRAP = [=[exec "$@" <"$DIFFER_IN" >"$DIFFER_OUT" 2>"$DIFFER_ERR"]=]
@@ -358,15 +365,17 @@ function surface_status()
   return "docs/SURFACE.txt is here, and no generator reads it yet: write `surface_stops` to fill build:differ/surface from it"
 end
 
--- Every input, its written sources under `base`/inputs.
-function collect(base)
+-- Every input, its written sources under `base`/inputs. `opts.cookbook =
+-- false` leaves out the cookbook's self-tests (the golden tests', which the
+-- C full tier runs live instead).
+function collect(base, opts?)
   local dir = base .. "/inputs"
   if exists(dir) then remove_tree(dir) end
   mkdir(dir)
   local c = {inputs = {}, seen = {}, n = 0, dups = 0, dir = dir}
   collect_zig(c)
   collect_docs(c)
-  collect_cookbook(c)
+  if opts == nil or get(opts, "cookbook", true) then collect_cookbook(c) end
   collect_lessons(c)
   collect_dir(c, "tools/differ/stops", "stops")
   collect_dir(c, base .. "/surface", "stops")
@@ -798,10 +807,30 @@ function mounts_files(cfg, inputs)
   return nil
 end
 
+-- `base` padded: a folder below it whose real path is WORK_PATH_BYTES
+-- long, named by `p`s (folders of 63 when one name would pass the store's
+-- 96), so where the base is on a box moves no step count. No symbolic link:
+-- the store follows none. A base whose real path leaves no room is refused.
+function padded_base(base)
+  mkdir(base)
+  local prefix = real(base)
+  local left = WORK_PATH_BYTES - #prefix
+  if left < 2 then fail("differ: the base " .. base .. " is " .. prefix .. ", " .. #prefix .. " bytes: the run's folder is padded to " .. WORK_PATH_BYTES .. " bytes (WORK_PATH_BYTES, tools/differ/lib.shale), so a base's real path is at most " .. (WORK_PATH_BYTES - 2)) end
+  local p = base
+  while left > 65 do
+    p = p .. "/" .. rep("p", 63)
+    left = left - 64
+  end
+  p = p .. "/" .. rep("p", left - 1)
+  mkdir(p)
+  if #real(p) ~= WORK_PATH_BYTES then fail("differ: the padded base " .. real(p) .. " is " .. #real(p) .. " bytes, not " .. WORK_PATH_BYTES) end
+  return p
+end
+
 -- The run's folders and environment under `base`, as every run shares them
 -- (the differ's header, "Each input runs three times"): the binary's one
 -- path, the cookbook copied from `cookbook_from` (the checkout's
--- `cookbook`, or the goldens' frozen copy), git's pinned identity, the
+-- `cookbook`), git's pinned identity, the
 -- mounts file and the pinned environment. `check` runs every step as
 -- `--check`.
 function harness(base, cookbook_from, check)
@@ -824,6 +853,7 @@ function harness(base, cookbook_from, check)
   cfg.check = check
   cfg.bin_real = real(cfg.bin) .. "/shale"
   cfg.timeout_ms = 300000
+  cfg.hashes = {}
   cfg.env = {
     SHALE_MOUNTS = cfg.mounts_real, SHALE_PRELUDE = "", SHALE_NOW = PINNED_NOW,
     SHALE_ROOT = cfg.work_real .. "/root", HOME = real(base .. "/home"),
@@ -867,10 +897,15 @@ function normal_text(text, judge)
   return out
 end
 
--- A text's SHA-256.
-function sha256(text)
+-- A text's SHA-256, a short one's kept in `cfg.hashes`: the fixtures' files
+-- repeat from case to case, and each hash is a program run.
+function sha256(cfg, text)
+  local small = #text <= 4096
+  if small and has_key(cfg.hashes, text) then return cfg.hashes[text] end
   local r = must(run({"sha256sum"}, {stdin = text, timeout_ms = 60000, tail = 2}))
-  return sub(trim(r.out), 1, 64)
+  local h = sub(trim(r.out), 1, 64)
+  if small then cfg.hashes[text] = h end
+  return h
 end
 
 -- The files a run left, as one text: the manifest's lines masked as the
@@ -886,22 +921,23 @@ function files_text(cfg, d, fm)
   for l in lines(man) do
     local f = split(l, "\t")
     local kind = get(f, 2, "")
-    local body = nil
+    local body = ""
     if kind == "f" then
       local p = d .. "/tree/" .. f[1]
-      if is_git_index(f[1]) then body = git_index_view(p) end
-      if body == nil then body = read(p) end
+      local staged = nil
+      if is_git_index(f[1]) then staged = git_index_view(p) end
+      if staged == nil then body = read(p) else body = staged end
       body = portable(cfg, body)
       f[4] = tostring(#body)
     elseif kind == "d" then
       f[4] = "-"
     end
-    push(rows, {masked = fresh_mask(portable(cfg, join(f, "\t")), fm), body = body})
+    push(rows, {masked = fresh_mask(portable(cfg, join(f, "\t")), fm), body = body, file = kind == "f"})
   end
   sort(rows, "masked")
   local out = {}
   for r in rows do
-    if r.body == nil then push(out, r.masked) else push(out, r.masked .. "\tsha256 " .. sha256(fresh_mask(r.body, fm))) end
+    if not r.file then push(out, r.masked) else push(out, r.masked .. "\tsha256 " .. sha256(cfg, fresh_mask(r.body, fm))) end
   end
   return join(out, "\n") .. "\n"
 end
@@ -954,6 +990,21 @@ function case_steps(cfg, dir, c)
     push(steps, step)
   end
   return steps
+end
+
+-- Golden runs with one base share its work folder: a second run with the
+-- same base (`base=`, `default` unset) of a script whose path holds
+-- `script` stops this one before it touches anything.
+function refuse_second_run(script, base, default)
+  for p in procs() do
+    if p.name == "shale" and contains(p.args, script) then
+      local m = re_find(p.args, " base=([^ ]+)")
+      local theirs = default
+      if m ~= nil then theirs = m.group end
+      if theirs == base then fail("golden: another golden run is using " .. base .. ": wait for it, or give this one its own `base=` (pid " .. p.pid .. ": " .. p.args .. ")") end
+    end
+  end
+  return nil
 end
 
 -- A case's id from its input's origin: stable across a regeneration, never

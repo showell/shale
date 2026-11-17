@@ -1,0 +1,65 @@
+-- tools/differ/golden_run.shale: every golden case (tests/golden/<id>/) run
+-- under one binary and held to the output frozen beside it. tests/golden.shale
+-- launches it with the `differ` mount its library is read through, and its
+-- header has the arguments: `bin`, `base`, `dir`, `only` and `keep`.
+--
+-- Each case runs as the differ runs an input (tools/differ/lib.shale's
+-- `launch`): in a fresh work folder at one path under `base`, its files
+-- copied to `base`/case, under the harness's mounts (the checkout's
+-- cookbook among them, for a case that `use`s a recipe) and pinned
+-- environment. What it did is masked as the
+-- differ masks it (`masked_side`) and compared with `expected/`, file by
+-- file; a failure prints the first line that differs.
+--
+-- budget: programs=200000 steps=2000000000 reads=2000000 read_bytes=8000000000 arena_bytes=1500000000 changes=500000 change_bytes=4000000000 output_bytes=4000000 kept_bytes=268435456
+
+use("differ:lib.shale")
+
+local bin = arg("bin", "c/out/release/shale")
+local base = arg("base", "build:golden")
+local dir = arg("dir", "tests/golden")
+local only = arg("only", "")
+local keep_all = arg("keep", 0)
+if not exists(dir .. "/manifest.tsv") then fail("golden: no " .. dir .. "/manifest.tsv: freeze the goldens first (`shale tests/golden.shale freeze=1`)") end
+
+refuse_second_run("tools/differ/golden_", base, "build:golden")
+base = padded_base(base)
+if exists(base .. "/keep") then remove_tree(base .. "/keep") end
+local cfg = harness(base, "cookbook", false)
+install(bin, cfg)
+local started = clock()
+local counts = {pass = 0, fail = 0}
+local by_source = {}
+local ms = 0
+for l in lines(read(dir .. "/manifest.tsv")) do
+  if not starts_with(l, "#") and l ~= "" then
+    local f = split(l, "\t")
+    local id = f[1]
+    if only == "" or contains(id, only) or contains(f[3], only) then
+      local cdir = dir .. "/" .. id
+      local c = json_read(read(cdir .. "/case.json"))
+      local dest = cfg.keep .. "/" .. id
+      ms = ms + launch(cfg, {id = id, steps = case_steps(cfg, cdir, c)}, dest)
+      local got = masked_side(cfg, dest, #c.steps, c.prefixes, c.judge)
+      local want = {}
+      for g in got do push(want, {name = g.name, text = read(cdir .. "/expected/" .. g.name)}) end
+      local d = differ_masked(want, got)
+      incr(by_source, c.source)
+      if d == nil then
+        counts.pass = counts.pass + 1
+        if keep_all == 0 then remove_tree(dest) end
+      else
+        counts.fail = counts.fail + 1
+        print("FAIL " .. id .. " (" .. c.origin .. "): " .. d.what .. " " .. d.where)
+        print("    expected: " .. clip(d.a))
+        print("    got:      " .. clip(d.b))
+      end
+      yield()
+    end
+  end
+end
+local rows = {}
+for s in sort(keys(by_source)) do push(rows, {source = s, cases = by_source[s]}) end
+print(table(rows, {"source", "cases"}))
+print("── golden: " .. (counts.pass + counts.fail) .. " cases under " .. bin .. ": " .. counts.pass .. " pass, " .. counts.fail .. " fail; " .. (clock() - started) .. " s wall, " .. ms .. " ms in the binary's runs")
+if counts.fail > 0 then fail("golden: " .. counts.fail .. " cases differ from their frozen output (kept under " .. base .. "/keep)") end

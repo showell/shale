@@ -34,7 +34,10 @@ for p in procs() do
   end
 end
 
-local got = collect(DIFFER)
+-- The runs' own folder, padded (`padded_base`), so the inputs' paths are the
+-- same length on every box; the kept trees and the reports stay in DIFFER.
+local RUN = padded_base(DIFFER .. "/run")
+local got = collect(RUN)
 local inputs = {}
 for inp in got.inputs do
   if only == "" or contains(inp.id, only) or contains(inp.origin, only) then push(inputs, inp) end
@@ -56,7 +59,9 @@ end
 
 mkdir(DIFFER .. "/reports")
 if reuse == 0 and exists(DIFFER .. "/keep") then remove_tree(DIFFER .. "/keep") end
-local cfg = harness(DIFFER, "cookbook", check_only == 1)
+local cfg = harness(RUN, "cookbook", check_only == 1)
+cfg.keep = DIFFER .. "/keep"
+mkdir(cfg.keep)
 mounts_files(cfg, inputs)
 
 local started = clock()

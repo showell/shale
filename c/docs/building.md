@@ -41,6 +41,21 @@ merge, and defer it while you're about 90% sure it has nothing new to say.
 | The code at `-O2 -Werror`, run nowhere | GCC | full | the warnings only the optimizer finds (`-Wrestrict`, some `-Warray-bounds`) |
 | Every planted fault not yet proven | TCC, or GCC's ASan where the plant names `build = "asan"` | full | each test proven able to fail, once |
 | `c/shale.c` at `-O2` | GCC | full | the binary the differential harness judges against Zig Shale |
+| The golden tests, `tests/golden.shale`, under that binary | Shale | full | every input the differ judges, held to the Zig oracle's frozen output, with no Zig at hand |
+| The cookbook's self-tests, live, under that binary | Shale | full | every recipe that reads `arg("self_test"`, run with `self_test=1`, as Zig's `cookbook-test` step runs them |
+
+**The golden tests** (`tools/differ/README.md`, "The golden tests") are
+every input the differential harness collects, frozen in `tests/golden/`
+with the output Zig Shale gave it, masked as the differ masks it. The full
+tier runs them last, under `c/out/release/shale`, as a phase of its own
+(`golden`). `shale tests/golden.shale bin=<path>` runs them under any
+binary; `shale tests/golden.shale freeze=1` rebuilds them from the oracle,
+and refuses a changed case that `refreeze=` does not name. Their run's folder
+is padded to a fixed length, so they hold on any box. The cookbook's
+self-tests are not frozen: the full tier runs them live after the goldens
+(`cookbook`), each recipe from this tree with `self_test=1` under the -O2
+binary, first on PATH, with `cookbook`, `tools` and a fresh `scratch` as its
+mounts, as build.zig's `cookbook-test` does; a failure is named by recipe.
 
 No test runs at `-O2` during the port (Steve, 2026-11-17): the
 optimizer's value then is its warnings, and the sanitizers at `-O0` are
@@ -155,6 +170,6 @@ leaves the old link, the old binary and a neighboring link as they were.
 | Fast tier | TCC | every edit, during the port and after |
 | Safety net | GCC `-O0`, ASan and UBSan | before a merge |
 | Warnings | GCC `-O2 -Werror`, run nowhere | before a merge |
-| Judged binary | GCC `-O2` | the differential harness, through the cut-over |
+| Judged binary | GCC `-O2` | the golden tests in the full tier; the differential harness, through the cut-over |
 | Release | GCC `-O2`, a chosen `-march`, then profile-guided | after the cut-over |
 | Playground | Clang to wasm | later, a tiebreaker |

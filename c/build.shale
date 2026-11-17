@@ -12,7 +12,10 @@
 --                                then GCC's -O2 for its warnings and ASan for
 --                                the tests, and every block's full-only
 --                                checks: the harness fixture, the compiler's
---                                refusals, and every planted fault.
+--                                refusals, and every planted fault; then the
+--                                golden tests (tests/golden.shale) and the
+--                                cookbook's self-tests under the -O2 binary,
+--                                c/out/release/shale.
 --
 -- **The builds.** `tcc` runs each test file (`tcc -run`). `release` is
 -- -std=c11 -O2 -Wall -Wextra -Werror for its warnings alone: each test file
@@ -67,7 +70,7 @@
 -- (c/build/binary.shale): what bench/baseline.shale times.
 --
 -- Run from the repository's root: shale c/build.shale [full=1 [plants=all]]
--- budget: programs=100 arena_bytes=268435456
+-- budget: programs=200 arena_bytes=268435456
 
 const OUT = "c/out"
 const BLOCKS = {"foundation", "discipline", "regex", "command", "ran", "vm", "host", "store", "builtins", "host_builtins", "host_procs", "host_text", "host_zig", "gate"}
@@ -100,6 +103,10 @@ function report_phases(full)
   local order = {}
   if full then push(order, "pool") end
   for b in BLOCKS do push(order, b) end
+  if full then
+    push(order, "golden")
+    push(order, "cookbook")
+  end
   for b in order do
     local p = json_read(read(OUT .. "/phases/" .. b .. ".json"))
     for name in p.order do
@@ -201,6 +208,80 @@ for b in BLOCKS do
   local args = block_args
   if full and has_item(POOLED, b) then args = {"full=1", "builds=" .. said_builds, "stage=prebuilt"} end
   run_block(b, args, mounts, false)
+end
+
+-- The golden tests: every input the differ judges, frozen with the Zig
+-- oracle's output (tests/golden.shale), held under the -O2 binary the
+-- command block built. It runs with the box's own mounts, not the blocks'
+-- `build` mount, and its time is a phase of its own.
+if full then
+  local g = run({"shale", "tests/golden.shale", "bin=" .. OUT .. "/release/shale"}, {timeout_ms = 900000, tail = 60, not_re = "^── (budgets from the script's header|time: )"})
+  print(trim(g.out))
+  if get(g, "code", -1) ~= 0 then fail("the golden tests (tests/golden.shale bin=" .. OUT .. "/release/shale) failed: their output is above") end
+  mkdir(OUT .. "/phases")
+  local text = json_write({order = {"golden"}, phases = {golden = {programs = 1, ms = g.ms, cpu_ms = get(g, "cpu_ms", 0)}}})
+  local file = OUT .. "/phases/golden.json"
+  if exists(file) then replace(file, text) else create(file, text) end
+end
+
+-- The cookbook's self-tests, live, as Zig's `cookbook-test` step runs them
+-- (build.zig): every recipe under cookbook/ that reads `arg("self_test"`,
+-- in sorted order, run from this tree with `self_test=1` by the binary under
+-- test, first on PATH so a self-test's child runs are the same binary, under
+-- a mounts file of `cookbook` (this tree's, read-only), `tools` (the box's,
+-- or an empty folder) and `scratch` (a fresh folder, removed after). Each
+-- says `ok` with its last line, or FAIL with its last 30; a failure is named
+-- by recipe once all have run. The goldens freeze no recipe: a recipe and
+-- its self-test change together.
+function cookbook_self_tests(bin)
+  local dir = OUT .. "/cookbook-test"
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir .. "/scratch")
+  local tools = attempt(real, "tools:.")
+  local tools_path = ""
+  if tools.ok then
+    tools_path = tools.value
+  else
+    mkdir(dir .. "/tools")
+    tools_path = real(dir .. "/tools")
+  end
+  create(dir .. "/mounts", "cookbook = " .. real("cookbook") .. " ro\ntools = " .. tools_path .. " ro tools\nscratch = " .. real(dir .. "/scratch") .. "\n")
+  local recipes = {}
+  for p in glob("cookbook/**/*.shale") do
+    if contains(read(p), "arg(\"self_test\"") then push(recipes, p) end
+  end
+  sort(recipes)
+  if #recipes == 0 then fail("cookbook-test: no recipe in cookbook/ reads arg(\"self_test\")") end
+  local bad = {}
+  local ms = 0
+  local cpu = 0
+  local env = {SHALE_MOUNTS = real(dir .. "/mounts"), PATH = real(dirname(bin)) .. ":/usr/local/bin:/usr/bin:/bin"}
+  for r in recipes do
+    local got = run({real(bin), r, "self_test=1"}, {timeout_ms = 600000, tail = 30, env = env, want = "c-tests: the binary under test runs the cookbook's self-tests"})
+    ms = ms + got.ms
+    cpu = cpu + get(got, "cpu_ms", 0)
+    local out = trim(got.out)
+    if get(got, "code", -1) == 0 then
+      local ls = lines(out)
+      print("cookbook-test: ok   " .. r .. ": " .. get(ls, #ls, ""))
+    else
+      print("cookbook-test: FAIL " .. r .. ", its last lines:")
+      for l in lines(out) do print("    " .. l) end
+      push(bad, r)
+    end
+    yield()
+  end
+  remove_tree(dir)
+  if #bad > 0 then fail("cookbook-test: self-test failed: " .. join(bad, " ")) end
+  print("cookbook-test: " .. #recipes .. " recipes' self-tests passed")
+  return {ms = ms, cpu_ms = cpu, programs = #recipes}
+end
+
+if full then
+  local c = cookbook_self_tests(OUT .. "/release/shale")
+  local text = json_write({order = {"cookbook"}, phases = {cookbook = c}})
+  local file = OUT .. "/phases/cookbook.json"
+  if exists(file) then replace(file, text) else create(file, text) end
 end
 
 report_phases(full)

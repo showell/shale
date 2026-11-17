@@ -1,0 +1,222 @@
+-- tools/differ/golden_freeze.shale: the goldens rebuilt from the oracle.
+-- tests/golden.shale launches it (`freeze=1`) with the `differ` mount its
+-- library is read through; that header has the arguments: `oracle`, `base`,
+-- `dir`, `only` and `refreeze`.
+--
+-- Every input the differ collects (tools/differ/lib.shale's `collect`) but
+-- the cookbook's self-tests, which the C full tier runs live (c/build.shale,
+-- "The cookbook's self-tests"), is made a case, `<dir>/<id>/` (`case_id`: its origin, never a run's
+-- numbering), and run twice under the oracle as the golden runner runs it
+-- (`case_steps`, then `launch`). The two runs masked (`masked_side`) must
+-- agree, or the input is nondeterministic and left out, said in
+-- `left_out.tsv` with the first line the runs differ at; so is every input of
+-- LEFT_OUT, with why. An input the differ judges by class (`layout_observer`:
+-- its oracle stops on the arena, kept or machine budget, or it reads
+-- `arena_bytes`) keeps that judgment in its `case.json`, so what is frozen is
+-- its stop's class, place and message, its numbers `#`.
+--
+-- **A re-freeze is per case.** The new goldens are built under `base` first
+-- and compared with `<dir>`'s: a case whose expected output changed, or that
+-- is gone, stops the run with nothing written unless `refreeze=` names it
+-- (ids, by commas); a new case is added and listed.
+--
+-- budget: programs=200000 steps=2000000000 reads=2000000 read_bytes=8000000000 arena_bytes=1500000000 changes=500000 change_bytes=4000000000 output_bytes=4000000 kept_bytes=268435456
+
+use("differ:lib.shale")
+
+-- Inputs never frozen, by origin, with why (a nondeterministic one the two
+-- runs miss belongs here).
+const LEFT_OUT = {
+  {origin = "cookbook/check_disk_space.shale", why = "reads the box's free disk space, which moves between runs and boxes"},
+  {origin = "src/shale_procs_test.zig:87", why = "its stop's step count follows procs(), the box's process list, which moves between runs"},
+  {origin = "tools/differ/stops/budget_arena_creates.shale", why = "how many files it creates before its arena stop follows the arena's layouts (outside the frozen surface), which differ between the Zig and the C at the padded path"},
+}
+
+local oracle = arg("oracle", "repos:shale/zig-out/bin/shale")
+local base = arg("base", "build:golden")
+local dir = arg("dir", "tests/golden")
+local only = arg("only", "")
+local refreeze = arg("refreeze", "")
+local named = {}
+for id in split(refreeze, ",") do
+  if trim(id) ~= "" then named[trim(id)] = true end
+end
+
+function left_out_why(origin)
+  for l in LEFT_OUT do
+    if l.origin == origin then return l.why end
+  end
+  return nil
+end
+
+-- A case's files and steps from a differ input, written under `cdir`: each
+-- argv word that is one of the input's files becomes `{case}/<name>`.
+function case_of(cfg, inp, id, cdir, root_real, inputs_real)
+  local c = {id = id, source = inp.source, origin = inp.origin, files = {}, steps = {}}
+  local from_of = {}
+  local k = 0
+  for step in inp.steps do
+    k = k + 1
+    local argv = {}
+    for a in step.argv do
+      local from = nil
+      local name = nil
+      if starts_with(a, inputs_real .. "/") then
+        local rest = sub(a, #inputs_real + 2)
+        from = cfg.inputs .. "/" .. rest
+        if rest == inp.id .. ".shale" then
+          name = "script.shale"
+        else
+          local m = re_find(rest, "-([0-9]+)\\.shale$")
+          if m == nil then fail("golden: " .. inp.origin .. ": an input file " .. rest .. " the freeze cannot name") end
+          name = "cell-" .. sub("00" .. m.group, -2) .. ".shale"
+        end
+      elseif starts_with(a, root_real .. "/") then
+        from = sub(a, #root_real + 2)
+        name = basename(from)
+      end
+      if from == nil then
+        push(argv, a)
+      else
+        if has_key(from_of, name) and from_of[name] ~= from then fail("golden: " .. inp.origin .. ": two files named " .. name .. " (" .. from_of[name] .. ", " .. from .. ")") end
+        if not has_key(from_of, name) then
+          from_of[name] = from
+          copy(from, cdir .. "/" .. name)
+          push(c.files, name)
+        end
+        push(argv, "{case}/" .. name)
+      end
+    end
+    local s = {argv = argv, stdin = "", mounts = get(step, "mount_lines", {})}
+    if step.stdin ~= "" then
+      s.stdin = "stdin-" .. k .. ".txt"
+      create(cdir .. "/" .. s.stdin, step.stdin)
+      push(c.files, s.stdin)
+    end
+    push(c.steps, s)
+  end
+  return c
+end
+
+-- The ids a manifest lists, as a map to its row.
+function manifest_ids(p)
+  local out = {}
+  if not exists(p) then return out end
+  for l in lines(read(p)) do
+    if not starts_with(l, "#") and l ~= "" then out[split(l, "\t")[1]] = l end
+  end
+  return out
+end
+
+-- How a case's expected output differs from the frozen one, or nil.
+function changed_from(old_dir, new_dir)
+  local old_names = sort(ls(old_dir .. "/expected"))
+  local new_names = sort(ls(new_dir .. "/expected"))
+  if join(old_names, " ") ~= join(new_names, " ") then return {what = "its files", where = "", a = join(old_names, " "), b = join(new_names, " ")} end
+  for n in new_names do
+    local d = first_diff(read(old_dir .. "/expected/" .. n), read(new_dir .. "/expected/" .. n), EXACT)
+    if d ~= nil then return {what = n, where = "line " .. d.line, a = d.a, b = d.b} end
+  end
+  return nil
+end
+
+refuse_second_run("tools/differ/golden_", base, "build:golden")
+base = padded_base(base)
+local stage = base .. "/stage"
+if exists(stage) then remove_tree(stage) end
+mkdir(stage)
+local got = collect(base, {cookbook = false})
+if exists(base .. "/keep") then remove_tree(base .. "/keep") end
+local cfg = harness(base, "cookbook", false)
+install(oracle, cfg)
+local started = clock()
+local root_real = real(".")
+local inputs_real = real(cfg.inputs)
+local ids = {}
+local rows = {}
+local left = {}
+local by_source = {}
+for inp in got.inputs do
+  if only == "" or contains(inp.id, only) or contains(inp.origin, only) then
+    local why = left_out_why(inp.origin)
+    if why ~= nil then
+      push(left, {origin = inp.origin, why = why})
+    else
+      local id = case_id(inp)
+      if has_key(ids, id) then fail("golden: two inputs make the case " .. id .. ": " .. ids[id] .. " and " .. inp.origin) end
+      ids[id] = inp.origin
+      local cdir = stage .. "/" .. id
+      mkdir(cdir)
+      local c = case_of(cfg, inp, id, cdir, root_real, inputs_real)
+      local text = read(inp.text_path)
+      c.prefixes = fresh_prefixes(text)
+      local run_inp = {id = id, steps = case_steps(cfg, cdir, c)}
+      local da = cfg.keep .. "/" .. id .. "/a"
+      local db = cfg.keep .. "/" .. id .. "/b"
+      launch(cfg, run_inp, da)
+      launch(cfg, run_inp, db)
+      local ao = layout_observer(da, #c.steps, text)
+      local arena = {}
+      if ao.stop then push(arena, "stop") end
+      if ao.kept ~= "" then push(arena, ao.kept) end
+      if ao.reads then push(arena, "reads") end
+      c.judge = {class = #arena > 0, digits = ao.reads}
+      c.arena = join(arena, " ")
+      local sa = masked_side(cfg, da, #c.steps, c.prefixes, c.judge)
+      local d = differ_masked(sa, masked_side(cfg, db, #c.steps, c.prefixes, c.judge))
+      if d ~= nil then
+        push(left, {origin = inp.origin, why = "nondeterministic under the oracle: " .. d.what .. " " .. d.where .. ": `" .. clip(d.a) .. "` then `" .. clip(d.b) .. "`"})
+        remove_tree(cdir)
+      else
+        create(cdir .. "/case.json", json_write(c) .. "\n")
+        mkdir(cdir .. "/expected")
+        for s in sa do create(cdir .. "/expected/" .. s.name, s.text) end
+        push(rows, join({id, inp.source, inp.origin, tostring(#c.steps), c.arena}, "\t"))
+        incr(by_source, inp.source)
+      end
+      remove_tree(cfg.keep .. "/" .. id)
+    end
+    yield()
+  end
+end
+
+create(stage .. "/manifest.tsv", "# the golden cases (tools/differ/golden_freeze.shale): id, source, origin, steps, judged by class (arena stop, kept or machine stop, reads arena_bytes)\n" .. join(rows, "\n") .. "\n")
+local left_rows = {}
+for l in left do push(left_rows, l.origin .. "\t" .. l.why) end
+create(stage .. "/left_out.tsv", "# the inputs the differ collects that are not frozen: origin, why\n" .. join(left_rows, "\n") .. "\n")
+
+-- The new goldens against the frozen ones: a change or a loss is per case.
+local old = manifest_ids(dir .. "/manifest.tsv")
+local added = 0
+local refrozen = {}
+local refused = {}
+for id in keys(ids) do
+  if exists(stage .. "/" .. id) then
+    if has_key(old, id) then
+      local d = changed_from(dir .. "/" .. id, stage .. "/" .. id)
+      if d ~= nil then
+        local l = id .. ": " .. d.what .. " " .. d.where .. ": was `" .. clip(d.a) .. "`, now `" .. clip(d.b) .. "`"
+        if has_key(named, id) then push(refrozen, l) else push(refused, l) end
+      end
+    else
+      added = added + 1
+    end
+  end
+end
+for id in sort(keys(old)) do
+  if not exists(stage .. "/" .. id) then
+    local l = id .. ": gone (no longer collected, or left out)"
+    if has_key(named, id) then push(refrozen, l) else push(refused, l) end
+  end
+end
+for l in refrozen do print("refrozen: " .. l) end
+for l in refused do print("CHANGED: " .. l) end
+local src_rows = {}
+for s in sort(keys(by_source)) do push(src_rows, {source = s, cases = by_source[s]}) end
+print(table(src_rows, {"source", "cases"}))
+print("── " .. #rows .. " cases frozen (" .. added .. " new, " .. #refrozen .. " refrozen by name), " .. #left .. " left out (" .. stage .. "/left_out.tsv); " .. (clock() - started) .. " s")
+for l in left do print("  left out: " .. l.origin .. ": " .. l.why) end
+if #refused > 0 then fail("golden: " .. #refused .. " cases changed or gone, none named in refreeze=: nothing written (the new goldens are under " .. stage .. ")") end
+if exists(dir) then remove_tree(dir) end
+copy(stage, dir)
+print("── written: " .. dir)

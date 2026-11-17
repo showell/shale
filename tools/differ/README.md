@@ -11,6 +11,13 @@ port) must match it in every output:
 bench/baseline.shale's `shale=`). The script's header lists the rest of its
 arguments: `only=`, `predict=`, `keep=1`, `reuse=1`, `list=1` and `check=1`.
 
+**Its functions are a library**, `tools/differ/lib.shale`, which the golden
+tests share (below). A library is read through a mount, so
+`tools/differ.shale` launches the run: it writes `<base>/launch.mounts`,
+naming this checkout's `tools/differ` as `differ` beside the `build`,
+`tools`, `repos` and `scratch` mounts it was given, and runs
+`tools/differ/differ_run.shale` under it with the same arguments.
+
 **`base=<folder>`** puts the work, the kept runs and the reports there in
 place of `build:differ`, so two runs at once (two lanes) share nothing.
 
@@ -155,3 +162,77 @@ how the harness lets each go, so the inputs they touch are still judged:
   shale=<path>` is the plant: an index written again with the same entries
   passes, and one staging another blob, the work tree left alone, fails on
   the index.
+
+## The golden tests
+
+**Every input the differ judges is frozen with the oracle's output**, so a
+binary is tested with no Zig at hand (Steve, 2026-11-17), and the oracle and
+the Zig can go. The cookbook's self-tests are the exception: they are not
+frozen, and the C full tier runs them live under the binary
+(`c/build.shale`'s `cookbook_self_tests`, as Zig's `cookbook-test` step
+does), so a recipe and its self-test change together:
+
+    cd ~/showell_repos/shale && shale tests/golden.shale [bin=<path>]
+
+runs every case under `bin` (`c/out/release/shale`, the C build under test,
+unset) in `build:golden` (`base=`), and prints each case that fails with its
+first differing line, then the count. A second golden run with the same base
+stops before it touches anything. The full tier runs it (`c/build.shale
+full=1`). tests/golden.shale's header has its arguments.
+
+**The run's folder is padded to one length on every box.** A run's step
+counts hang on the lengths of the paths it is handed (a prelude scans them;
+18 cases moved when the base moved), so the runner, the freeze and the
+differ each run in a folder below their base whose real path is
+`WORK_PATH_BYTES` (160) bytes long (`padded_base`, tools/differ/lib.shale):
+folders named by `p`s, 63 at a time, since a store name holds at most 96. No
+symbolic link is used, since the store follows none. A base whose real path
+is past 158 bytes is refused, naming the limit. So the goldens hold from
+GitHub's /home/runner, a cloud's /root or a laptop alike: they pass from
+`build:golden` and from `scratch:golden-portable`, whose prefixes differ in
+length.
+
+**A case** is `tests/golden/<id>/`, its id from its input's origin, never a
+run's numbering, so a regeneration diffs cleanly
+(`src/script/interp_test.zig:192` is `zig-tests-script-interp_test-192`,
+`tools/differ/store/store_budgets.shale [--budget reads=3]` is
+`store-store_budgets-budget-reads-3`):
+
+- its files: a Zig test's or a doc block's source as `script.shale`, a
+  lesson's cells as `cell-NN.shale`, a hand-written probe and its fixture by
+  their own names, a step's stdin as `stdin-K.txt`;
+- `case.json`: each step's argv (`{case}/<name>` for one of its files), its
+  stdin's file and its own mounts (`mount_lines`); the `fresh_dir` prefixes
+  its source passes; and how it is judged (`judge`, `arena`);
+- `expected/`: the oracle's run, masked: `meta` (each step's ending and what
+  was left running), `K.out` and `K.err` for each step, and `files` (the
+  files the run left, each regular file's SHA-256 after its line).
+
+`tests/golden/manifest.tsv` lists the cases (id, source, origin, steps,
+judged by class), and `tests/golden/left_out.tsv` the inputs not frozen and
+why. Every case's run has the checkout's own cookbook as its `cookbook`
+mount, for a case that `use`s a recipe.
+
+**A case runs as the differ runs an input** (`launch`): in a fresh work
+folder, its files copied to `<base>/case`, under the harness's mounts and
+pinned environment. It is masked as the differ masks it, and the golden file
+holds the masked form: the `── time:` line out, `fresh_dir`'s names
+numbered, and, for an input the differ judges by class, the numbers `#`, so
+what is frozen is its stop's class, place and message. Three masks more make
+a golden file the box's no more: the base's path is `{base}` and the tools
+mount's `{tools}`, a folder's size in `files` is `-` (the filesystem's), and
+a file's size is that of its masked bytes.
+
+**The freeze** rebuilds the goldens from the oracle:
+
+    cd ~/showell_repos/shale && shale tests/golden.shale freeze=1 [refreeze=<id>,<id>]
+
+It runs every input twice under the oracle
+(`oracle=repos:shale/zig-out/bin/shale` unset) as the runner does; an input
+whose two runs differ is nondeterministic and left out, with the line they
+differ at, and so is each origin in `golden_freeze.shale`'s `LEFT_OUT`, with
+why; it collects no cookbook self-test. It builds the new goldens in its
+padded folder under `build:golden` first, and writes
+them only when no case's expected output changed or went but those
+`refreeze=` names: a re-freeze is a deliberate act, a case at a time. A new
+case is added and counted.
