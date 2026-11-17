@@ -9,7 +9,14 @@ port) must match it in every output:
 
 `old` and `new` are Shale paths to two `shale` binaries (a mount's, like
 bench/baseline.shale's `shale=`). The script's header lists the rest of its
-arguments: `only=`, `predict=`, `keep=1`, `reuse=1` and `list=1`.
+arguments: `only=`, `predict=`, `keep=1`, `reuse=1`, `list=1` and `check=1`.
+
+**`base=<folder>`** puts the work, the kept runs and the reports there in
+place of `build:differ`, so two runs at once (two lanes) share nothing.
+
+**`check=1`** runs every step with `--check` before its own words, so a
+binary that only parses and reports, as the C port's first phase does, is
+judged on that alone: what the check prints on stderr and how it exits.
 
 ## The inputs
 

@@ -1,0 +1,3 @@
+-- A `:` method call: refused.
+local s = "a"
+print(s:upper())

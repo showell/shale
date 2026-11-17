@@ -19,7 +19,12 @@
 --             the failures');
 --   reuse     1: run nothing, and judge the runs a `keep=1` run left;
 --   list      1: list the inputs in build:differ/inputs.tsv and stop,
---             running nothing.
+--             running nothing;
+--   base      the folder for the work, the kept runs and the reports
+--             (build:differ unset), so two runs at once share none;
+--   check     1: run every step as `--check` (the words `--check`, then
+--             the step's own), so a binary that only parses (the C port's
+--             first phase) is judged on what the check prints and exits.
 --
 -- **The inputs are collected, never listed by hand** (`collect_*` below):
 --   zig-tests     each Shale source a Zig test hands a runner helper
@@ -88,10 +93,13 @@ const DOCS = {"docs/SHALE.md", "docs/SHALE-AGENTS.md"}
 -- listed in the report as skipped, with its reason.
 const SKIP_IF = {"proc_stop(", "http(", "http_get(", "keep_on_stop"}
 
-const WORK = "build:differ/work"
-const KEEP = "build:differ/keep"
-const INPUTS = "build:differ/inputs"
-const BIN = "build:differ/bin"
+-- Where every run's files go: `base=` gives another folder, so two runs at
+-- once (two lanes) never share a work folder, a binary or a report.
+const DIFFER = arg("base", "build:differ")
+const WORK = DIFFER .. "/work"
+const KEEP = DIFFER .. "/keep"
+const INPUTS = DIFFER .. "/inputs"
+const BIN = DIFFER .. "/bin"
 
 -- The wrapper that keeps a step's stdout and stderr apart: `run` gives the
 -- two as one.
@@ -373,7 +381,7 @@ function collect()
   collect_cookbook(c)
   collect_lessons(c)
   collect_dir(c, "tools/differ/stops", "stops")
-  collect_dir(c, "build:differ/surface", "stops")
+  collect_dir(c, DIFFER .. "/surface", "stops")
   collect_dir(c, "tools/differ/cli", "cli")
   return {inputs = c.inputs, dups = c.dups}
 end
@@ -402,6 +410,7 @@ function launch(cfg, inp, side)
     cfg.env.DIFFER_OUT = real(dest) .. "/" .. k .. ".out"
     cfg.env.DIFFER_ERR = real(dest) .. "/" .. k .. ".err"
     local argv = {"sh", "-c", WRAP, "differ", cfg.bin_real}
+    if cfg.check then push(argv, "--check") end
     for a in step.argv do push(argv, a) end
     local r = run(argv, {cwd = WORK .. "/root", timeout_ms = cfg.timeout_ms, tail = 5, env = cfg.env, want = "differ: the binary under test, its stdout and stderr kept apart"})
     ms = ms + r.ms
@@ -773,6 +782,7 @@ local predict = arg("predict", "")
 local keep_all = arg("keep", 0)
 local list_only = arg("list", 0)
 local reuse = arg("reuse", 0)
+local check_only = arg("check", 0)
 if list_only == 0 and (old == "" or new == "") then fail("differ: name both binaries, old=<path> new=<path> (Shale paths)") end
 
 -- Every run shares build:differ (its inputs, its work folder, its kept
@@ -801,39 +811,40 @@ print("── " .. surface_status())
 if list_only == 1 then
   local l = {}
   for inp in inputs do push(l, join({inp.id, inp.source, inp.origin, #inp.steps .. " step(s)", inp.skip}, "\t")) end
-  replace_or_create("build:differ/inputs.tsv", join(l, "\n") .. "\n")
-  print("── the list: build:differ/inputs.tsv")
+  replace_or_create(DIFFER .. "/inputs.tsv", join(l, "\n") .. "\n")
+  print("── the list: " .. DIFFER .. "/inputs.tsv")
   return
 end
 
 mkdir(BIN)
-mkdir("build:differ/cap")
-mkdir("build:differ/home")
-mkdir("build:differ/reports")
+mkdir(DIFFER .. "/cap")
+mkdir(DIFFER .. "/home")
+mkdir(DIFFER .. "/reports")
 if reuse == 0 then
   if exists(KEEP) then remove_tree(KEEP) end
   mkdir(KEEP)
 end
-if exists("build:differ/pinned") then remove_tree("build:differ/pinned") end
-copy("cookbook", "build:differ/pinned/cookbook")
-replace_or_create("build:differ/gitconfig", "[user]\n\tname = Differ\n\temail = differ@example.org\n[init]\n\tdefaultBranch = master\n")
+if exists(DIFFER .. "/pinned") then remove_tree(DIFFER .. "/pinned") end
+copy("cookbook", DIFFER .. "/pinned/cookbook")
+replace_or_create(DIFFER .. "/gitconfig", "[user]\n\tname = Differ\n\temail = differ@example.org\n[init]\n\tdefaultBranch = master\n")
 reset_work({})
 local work_real = real(WORK)
-local mounts = "cookbook = " .. real("build:differ/pinned/cookbook") .. " ro\n" .. "tools = " .. real("tools:") .. " ro tools\n" .. "scratch = " .. work_real .. "/scratch\n"
-replace_or_create("build:differ/mounts", mounts)
-replace_or_create("build:differ/cap/stdin", "")
+local mounts = "cookbook = " .. real(DIFFER .. "/pinned/cookbook") .. " ro\n" .. "tools = " .. real("tools:") .. " ro tools\n" .. "scratch = " .. work_real .. "/scratch\n"
+replace_or_create(DIFFER .. "/mounts", mounts)
+replace_or_create(DIFFER .. "/cap/stdin", "")
 local cfg = {
-  cap = "build:differ/cap",
+  cap = DIFFER .. "/cap",
+  check = check_only == 1,
   bin_real = real(BIN) .. "/shale",
   work_real = work_real,
   timeout_ms = 300000,
   env = {
-    SHALE_MOUNTS = real("build:differ/mounts"), SHALE_PRELUDE = "", SHALE_NOW = PINNED_NOW,
-    SHALE_ROOT = work_real .. "/root", HOME = real("build:differ/home"),
+    SHALE_MOUNTS = real(DIFFER .. "/mounts"), SHALE_PRELUDE = "", SHALE_NOW = PINNED_NOW,
+    SHALE_ROOT = work_real .. "/root", HOME = real(DIFFER .. "/home"),
     PATH = real(BIN) .. ":/usr/local/bin:/usr/bin:/bin", TZ = "UTC", LC_ALL = "C",
-    GIT_CEILING_DIRECTORIES = real("build:differ"), GIT_CONFIG_NOSYSTEM = "1", GIT_CONFIG_GLOBAL = real("build:differ/gitconfig"),
+    GIT_CEILING_DIRECTORIES = real(DIFFER), GIT_CONFIG_NOSYSTEM = "1", GIT_CONFIG_GLOBAL = real(DIFFER .. "/gitconfig"),
     GIT_AUTHOR_DATE = PINNED_GIT_DATE, GIT_COMMITTER_DATE = PINNED_GIT_DATE,
-    DIFFER_IN = real("build:differ/cap/stdin"), DIFFER_OUT = "", DIFFER_ERR = "",
+    DIFFER_IN = real(DIFFER .. "/cap/stdin"), DIFFER_OUT = "", DIFFER_ERR = "",
   },
 }
 
@@ -952,8 +963,10 @@ end
 -- The TSV: a row an input.
 const COLUMNS = {"id", "source", "origin", "verdict", "arena", "area", "what", "where", "old", "new"}
 local stamp = substitute(substitute(date(now()), ":", ""), "-", "")
-local tsv = "build:differ/reports/" .. stamp .. ".tsv"
-local body = {"# differ: old " .. old .. ", new " .. new, join(COLUMNS, "\t")}
+local tsv = DIFFER .. "/reports/" .. stamp .. ".tsv"
+local mode = ""
+if check_only == 1 then mode = ", every step as --check" end
+local body = {"# differ: old " .. old .. ", new " .. new .. mode, join(COLUMNS, "\t")}
 for row in rows do
   local f = {}
   for c in COLUMNS do push(f, substitute(tostring(row[c]), "\t", " ", {missing_ok = true})) end

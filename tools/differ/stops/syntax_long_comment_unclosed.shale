@@ -1,0 +1,4 @@
+-- A block comment never closed: syntax.
+print(1)
+--[=[ never
+closed ]]

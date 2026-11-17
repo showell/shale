@@ -1,0 +1,2 @@
+-- A required parameter after an optional one: syntax.
+function f(a?, b) return b end

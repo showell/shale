@@ -1,0 +1,2 @@
+-- A string with no closing quote: syntax.
+local s = "abc

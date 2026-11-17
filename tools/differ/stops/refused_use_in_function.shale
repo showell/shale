@@ -1,0 +1,4 @@
+-- `use` inside a function: refused.
+function f()
+  use("cookbook:times.shale")
+end

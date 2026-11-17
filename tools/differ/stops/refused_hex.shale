@@ -1,0 +1,2 @@
+-- A hexadecimal literal: refused.
+print(0x10)

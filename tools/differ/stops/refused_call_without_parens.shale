@@ -1,0 +1,2 @@
+-- A call with no parentheses: refused.
+print "a"

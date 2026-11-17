@@ -1,0 +1,3 @@
+-- An `end` with nothing open: syntax.
+print(1)
+end

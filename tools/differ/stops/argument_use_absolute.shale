@@ -1,0 +1,2 @@
+-- A library named by an absolute path: argument.
+use("/etc/lib.shale")

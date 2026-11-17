@@ -1,0 +1,2 @@
+-- Lua's string library: refused.
+print(string.upper("a"))

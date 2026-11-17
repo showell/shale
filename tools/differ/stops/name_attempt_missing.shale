@@ -1,0 +1,3 @@
+-- `attempt` of a function not declared above: name.
+print(attempt(later, 1).ok)
+function later(x) return x end

@@ -9,7 +9,10 @@
 --   reasons  `at_unchecked` without a literal, non-empty reason won't compile;
 --   must use a Status left unused, bare or cast to void, won't compile;
 --   plants   each planted fault in the foundation is caught (`PLANTS` below);
---   discipline  c/check_discipline.shale, and its own self-test.
+--   discipline  c/check_discipline.shale, and its own self-test;
+--   command  c/shale.c, the C `shale`, under each compiler, its preludes
+--            written first (c/gen_preludes.shale), each binary's `--check`
+--            held to a script that parses and one that stops.
 -- It reads each compiler's version first. A compiler that is missing fails the
 -- run, loud, after everything it can run has run.
 --
@@ -269,6 +272,34 @@ function check_must_use()
   return refused
 end
 
+-- The C `shale` under `build`, at c/out/<build>/shale, then its `--check` of
+-- one script that parses and one that stops, each held to Zig's exact report.
+-- Gives the compile's time.
+function build_command(build)
+  local dir = OUT .. "/" .. build
+  mkdir(dir)
+  local bin = dir .. "/shale"
+  local argv = {"tcc", "-std=c11", "-Wall", "-Werror"}
+  if build ~= "tcc" then argv = gcc_flags(build, FOUNDATION) end
+  for a in {"-I" .. OUT .. "/gen", "-Ic", "c/shale.c", "-o", bin} do push(argv, a) end
+  local c = run(argv, {timeout_ms = 120000, tail = 40})
+  if c.code ~= 0 then fail("`" .. build .. "` could not compile c/shale.c:\n" .. c.out) end
+  local good = OUT .. "/command/good.shale"
+  local bad = OUT .. "/command/bad.shale"
+  if exists(OUT .. "/command") then remove_tree(OUT .. "/command") end
+  mkdir(OUT .. "/command")
+  create(good, "function f(x) return x end\nprint(f(trim(\" a \")))\n")
+  create(bad, "print(1)\nlocal x = 1 @ 2\n")
+  create(OUT .. "/command/mounts", "")
+  local env = {SHALE_PRELUDE = "", SHALE_MOUNTS = real(OUT .. "/command/mounts")}
+  local g = run({bin, "--check", good}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
+  if g.code ~= 0 or trim(g.out) ~= "── checked: it parses and compiles; nothing ran" then fail("`" .. build .. "`'s shale --check of a script that parses said:\n" .. g.out) end
+  local b = run({bin, "--check", bad}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
+  local said = "── stopped at " .. bad .. ":2:13: syntax: a character no token starts with, `@` (0 steps)\n── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes"
+  if b.code ~= 1 or trim(b.out) ~= said then fail("`" .. build .. "`'s shale --check of a script that stops said:\n" .. b.out) end
+  return c.ms
+end
+
 function seconds(ms)
   return (ms // 1000) .. "." .. ((ms % 1000) // 100) .. " s"
 end
@@ -294,6 +325,11 @@ if not harness_holds(FOUNDATION, OUT .. "/asan") then fail("the harness fixture 
 print("harness: the fixture's 6 failures, each named with its line, and its count")
 print("reasons: " .. check_reasons() .. " unchecked indexes without a literal reason refused by the compiler")
 print("must use: " .. check_must_use() .. " dropped Status answers refused by GCC under -Werror")
+
+print(trim(must(run({"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5})).out))
+for b in builds do
+  print("command " .. b .. ": c/out/" .. b .. "/shale built in " .. seconds(build_command(b)) .. "; its --check holds a script that parses and one that stops")
+end
 
 local said = run_plants()
 print("plants: " .. #said .. " of " .. #PLANTS .. " caught")

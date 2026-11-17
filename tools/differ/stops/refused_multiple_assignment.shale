@@ -1,0 +1,4 @@
+-- Two targets in one assignment: refused.
+local a = 1
+local b = 2
+a, b = b, a
