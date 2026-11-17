@@ -12,15 +12,25 @@ typedef struct {
 
 static void lex_start(LexRun *r, Str src) {
     r->arena = arena_make(1 << 20);
-    r->lx = lexer_make(&r->arena, src);
+    lexer_init(&r->lx, &r->arena, src);
 }
 
 // The next token, which must lex.
-static Token next_ok(LexRun *r) {
+static void next_ok(LexRun *r, Token *t) {
+    memset(t, 0, sizeof *t);
+    EXPECT(lexer_next(&r->lx, t) == OK);
+}
+
+static Tag next_tag(LexRun *r) {
     Token t;
-    memset(&t, 0, sizeof t);
-    EXPECT(lexer_next(&r->lx, &t) == OK);
-    return t;
+    next_ok(r, &t);
+    return t.tag;
+}
+
+static uint32_t next_line(LexRun *r) {
+    Token t;
+    next_ok(r, &t);
+    return t.line;
 }
 
 // Lexes `src` to its end or its error; true when it ends in an error.
@@ -66,23 +76,34 @@ TEST(names_keywords_ints_strings_every_symbol_and_comments) {
     };
     SLICE_TYPE(Tags, const Tag);
     Tags tags = {want, sizeof want / sizeof(Tag)};
-    for (size_t i = 0; i < tags.len; i++) EXPECT_EQ(next_ok(&r).tag, at(tags, i));
+    for (size_t i = 0; i < tags.len; i++) EXPECT_EQ(next_tag(&r), at(tags, i));
     arena_deinit(&r.arena);
 }
 
 TEST(a_string_undoes_its_escapes_and_the_largest_integer_is_one) {
     LexRun r;
     lex_start(&r, S("\"a\\n\\t\\\\\\\"b\" 'c' 9223372036854775807 \"\\x41\\0\""));
-    EXPECT_STR(next_ok(&r).text, S("a\n\t\\\"b"));
-    EXPECT_STR(next_ok(&r).text, S("c"));
-    Token big = next_ok(&r);
+    {
+        Token t;
+        next_ok(&r, &t);
+        EXPECT_STR(t.text, S("a\n\t\\\"b"));
+    }
+    {
+        Token t;
+        next_ok(&r, &t);
+        EXPECT_STR(t.text, S("c"));
+    }
+    Token big;
+    next_ok(&r, &big);
     EXPECT(big.value == INT64_MAX);
     EXPECT(!big.min_magnitude);
-    Token hex = next_ok(&r);
+    Token hex;
+    next_ok(&r, &hex);
     EXPECT_EQ(hex.text.len, 2);
     EXPECT_EQ(str_byte(hex.text, 0), 'A');
     EXPECT_EQ(str_byte(hex.text, 1), 0);
-    Token e = next_ok(&r);
+    Token e;
+    next_ok(&r, &e);
     EXPECT_EQ(e.tag, TAG_EOF);
     EXPECT_EQ(e.line, 1);
     arena_deinit(&r.arena);
@@ -91,7 +112,8 @@ TEST(a_string_undoes_its_escapes_and_the_largest_integer_is_one) {
 TEST(the_smallest_integers_magnitude_is_marked_and_one_past_is_refused) {
     LexRun r;
     lex_start(&r, S("9223372036854775808"));
-    Token t = next_ok(&r);
+    Token t;
+    next_ok(&r, &t);
     EXPECT(t.min_magnitude);
     EXPECT(t.value == INT64_MIN);
     arena_deinit(&r.arena);
@@ -164,27 +186,30 @@ TEST(long_strings_take_their_level_drop_the_first_newline_and_keep_bytes_raw) {
     LexRun r;
     for (size_t i = 0; i < all.len; i++) {
         lex_start(&r, at(all, i).src);
-        Token t = next_ok(&r);
+        Token t;
+        next_ok(&r, &t);
         EXPECT_EQ(t.tag, TAG_STRING);
         EXPECT(t.is_long);
         EXPECT_STR(t.text, at(all, i).says);
-        EXPECT_EQ(next_ok(&r).tag, TAG_EOF);
+        EXPECT_EQ(next_tag(&r), TAG_EOF);
         arena_deinit(&r.arena);
     }
     // What follows a long string of three lines is placed on its own line.
     lex_start(&r, S("x = [=[\none\ntwo]=] y\nz"));
-    next_ok(&r);
-    next_ok(&r);
-    Token s = next_ok(&r);
+    (void)next_tag(&r);
+    (void)next_tag(&r);
+    Token s;
+    next_ok(&r, &s);
     EXPECT_EQ(s.line, 1);
     EXPECT_EQ(s.column, 5);
     EXPECT_EQ(s.long_string.level, 1);
     EXPECT_EQ(s.long_string.close_line, 3);
     EXPECT_EQ(s.long_string.close_column, 4);
-    Token y = next_ok(&r);
+    Token y;
+    next_ok(&r, &y);
     EXPECT_EQ(y.line, 3);
     EXPECT_EQ(y.column, 8);
-    EXPECT_EQ(next_ok(&r).line, 4);
+    EXPECT_EQ(next_line(&r), 4);
     arena_deinit(&r.arena);
 }
 
@@ -211,12 +236,13 @@ TEST(a_block_comment_is_passed_by_its_lines_after_placed_right) {
     static const PlaceCase want[] = {{S("x"), 1, 1}, {S("y"), 2, 8}, {S("z"), 3, 1}, {S("w"), 4, 1}, {S("v"), 5, 1}};
     PlaceCases all = {want, sizeof want / sizeof(PlaceCase)};
     for (size_t i = 0; i < all.len; i++) {
-        Token t = next_ok(&r);
+        Token t;
+        next_ok(&r, &t);
         EXPECT_STR(t.text, at(all, i).src);
         EXPECT_EQ(t.line, at(all, i).line);
         EXPECT_EQ(t.column, at(all, i).column);
     }
-    EXPECT_EQ(next_ok(&r).tag, TAG_EOF);
+    EXPECT_EQ(next_tag(&r), TAG_EOF);
     arena_deinit(&r.arena);
     EXPECT(lex_fails(&r, S("x = 1\n  --[=[ never closed ]]")));
     EXPECT_EQ(r.lx.err.line, 2);
@@ -250,10 +276,12 @@ TEST(next_or_comment_gives_each_comment_in_place_and_every_token_holds_its_bytes
     static const SaysCase spans[] = {{S("ab"), S("")}, {S("12"), S("")}, {S("~="), S("")}, {S("\"a\\n\""), S("")}, {S("'b'"), S("")}, {S("[=[\nc]=]"), S("")}, {S("x"), S("")}};
     SaysCases sp = {spans, sizeof spans / sizeof(SaysCase)};
     for (size_t i = 0; i < sp.len; i++) {
-        Token t = next_ok(&r);
+        Token t;
+        next_ok(&r, &t);
         EXPECT_STR(str_sub(s2, t.start, t.stop), at(sp, i).src);
     }
-    Token e = next_ok(&r);
+    Token e;
+    next_ok(&r, &e);
     EXPECT_EQ(e.start, s2.len);
     EXPECT_EQ(e.stop, s2.len);
     arena_deinit(&r.arena);
@@ -270,7 +298,8 @@ TEST(a_string_across_its_line_or_never_closed_stops_at_its_quote) {
     arena_deinit(&r.arena);
     // The arena's refusal is no lex error: the caller reads it as Zig's OutOfMemory.
     Arena tiny = arena_make(8);
-    Lexer lx = lexer_make(&tiny, S("\"a string longer than the arena allows\""));
+    Lexer lx;
+    lexer_init(&lx, &tiny, S("\"a string longer than the arena allows\""));
     Token t;
     EXPECT(lexer_next(&lx, &t) == STOP);
     EXPECT(lx.oom);

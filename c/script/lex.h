@@ -123,14 +123,12 @@ typedef struct {
 
 SLICE_TYPE(RefusedWords, const RefusedWord);
 
-static inline Lexer lexer_make(Arena *a, Str src) {
-    Lexer lx;
-    memset(&lx, 0, sizeof lx);
-    lx.src = src;
-    lx.line = 1;
-    lx.column = 1;
-    lx.arena = a;
-    return lx;
+static inline void lexer_init(Lexer *lx, Arena *a, Str src) {
+    memset(lx, 0, sizeof *lx);
+    lx->src = src;
+    lx->line = 1;
+    lx->column = 1;
+    lx->arena = a;
 }
 
 // A word's keyword tag, or TAG_NAME.
@@ -329,14 +327,12 @@ static inline STATUS_MUST_USE Status lex_skip_space_and_comments(Lexer *lx) {
     return OK;
 }
 
-static inline Token lex_token(Tag tag, Str text, uint32_t line, uint32_t column) {
-    Token t;
-    memset(&t, 0, sizeof t);
-    t.tag = tag;
-    t.text = text;
-    t.line = line;
-    t.column = column;
-    return t;
+static inline void lex_token(Token *t, Tag tag, Str text, uint32_t line, uint32_t column) {
+    memset(t, 0, sizeof *t);
+    t->tag = tag;
+    t->text = text;
+    t->line = line;
+    t->column = column;
 }
 
 static inline STATUS_MUST_USE Status lex_number(Lexer *lx, uint32_t line, uint32_t column, Token *out) {
@@ -359,7 +355,7 @@ static inline STATUS_MUST_USE Status lex_number(Lexer *lx, uint32_t line, uint32
         }
         v = v * 10 + d;
     }
-    *out = lex_token(TAG_INT, text, line, column);
+    lex_token(out, TAG_INT, text, line, column);
     if (!over && v <= (uint64_t)INT64_MAX) {
         out->value = (int64_t)v;
         return OK;
@@ -423,7 +419,7 @@ static inline STATUS_MUST_USE Status lex_string(Lexer *lx, uint32_t line, uint32
         }
         if (buf_byte(&b, (char)byte) != OK) return lex_oom(lx);
     }
-    *out = lex_token(TAG_STRING, buf_view(&b), line, column);
+    lex_token(out, TAG_STRING, buf_view(&b), line, column);
     return OK;
 }
 
@@ -459,7 +455,7 @@ static inline STATUS_MUST_USE Status lex_scan(Lexer *lx, Token *out) {
     uint32_t line = lx->line;
     uint32_t column = lx->column;
     if (lx->at >= lx->src.len) {
-        *out = lex_token(TAG_EOF, S(""), line, column);
+        lex_token(out, TAG_EOF, S(""), line, column);
         return OK;
     }
     size_t start = lx->at;
@@ -473,7 +469,7 @@ static inline STATUS_MUST_USE Status lex_scan(Lexer *lx, Token *out) {
         Str word = str_sub(lx->src, start, lx->at);
         Str why = lex_refused_word(word);
         if (why.len > 0) return lex_fail(lx, line, column, true, why);
-        *out = lex_token(lex_keyword(word), word, line, column);
+        lex_token(out, lex_keyword(word), word, line, column);
         return OK;
     }
     if (lex_is_digit(c)) return lex_number(lx, line, column, out);
@@ -541,7 +537,7 @@ static inline STATUS_MUST_USE Status lex_scan(Lexer *lx, Token *out) {
     default:
         return lex_fail_stray(lx, line, column, c);
     }
-    *out = lex_token(tag, str_sub(lx->src, start, lx->at), line, column);
+    lex_token(out, tag, str_sub(lx->src, start, lx->at), line, column);
     return OK;
 }
 
@@ -569,7 +565,7 @@ static inline STATUS_MUST_USE Status lexer_next_or_comment(Lexer *lx, Token *out
     uint32_t line = lx->line;
     uint32_t column = lx->column;
     TRY(lex_comment(lx));
-    *out = lex_token(TAG_COMMENT, str_sub(lx->src, start, lx->at), line, column);
+    lex_token(out, TAG_COMMENT, str_sub(lx->src, start, lx->at), line, column);
     out->start = start;
     out->stop = lx->at;
     return OK;

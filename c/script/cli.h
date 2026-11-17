@@ -91,11 +91,10 @@ typedef struct {
 
 // The CLI's default budgets: output 64 KiB and call bytes 64 MiB; the rest
 // are the core's.
-static inline Budgets cli_defaults(void) {
-    Budgets b = budgets_default();
-    b.output_bytes = 64 * 1024;
-    b.call_bytes = 64 * 1024 * 1024;
-    return b;
+static inline void cli_defaults(Budgets *b) {
+    *b = budgets_default();
+    b->output_bytes = 64 * 1024;
+    b->call_bytes = 64 * 1024 * 1024;
 }
 
 // Zig's `builtins.parseInteger`: an optional `-`, then decimal digits, within
@@ -236,7 +235,7 @@ static inline STATUS_MUST_USE Status cli_budget_word(Command *c, Str who, Str v,
 static inline STATUS_MUST_USE Status cli_parse(Str *argv, size_t argc, bool has_env_root, Str env_root, Command *c, Buf *why) {
     memset(c, 0, sizeof *c);
     c->root = has_env_root ? env_root : S(".");
-    c->budgets = cli_defaults();
+    cli_defaults(&c->budgets);
     SLICE_TYPE(Argv, Str);
     Argv all = {argv, argc};
     ArgSlots slots = {c->args, CLI_ARGS_MOST};
@@ -466,7 +465,8 @@ static inline STATUS_MUST_USE Status cli_unread_arg(Arena *a, const Program *pro
             if (str_eq(at(prog->args_read, k), name)) read = true;
         }
         if (read) continue;
-        Msg m = msg_make(a);
+        Msg m;
+        msg_init(&m, a);
         msg_str(&m, S("`"));
         msg_str(&m, name);
         msg_str(&m, S("=` is given, and the script reads no `arg(\""));

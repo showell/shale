@@ -40,7 +40,7 @@ static STATUS_MUST_USE Status fake_load(void *ctx, Arena *into, Str path, Str *w
 
 static void parse_with(Parsed *r, Str source, Preludes extra, FakeLibrary *lib) {
     r->arena = arena_make(1 << 24);
-    r->p = parse_make(&r->arena, source, 200);
+    parse_init(&r->p, &r->arena, source, 200);
     Loader none = {NULL, NULL};
     Loader loader = {lib, fake_load};
     r->status = parse_program(&r->p, core(), extra, lib != NULL ? loader : none, &r->prog);

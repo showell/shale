@@ -185,6 +185,12 @@ static STATUS_MUST_USE Status reader_why_parts(Str *why, bool *got, Arena *a, St
 
 #define reader_why(why, got, n, a, ...) reader_why_parts((why), (got), (a), (StrPieces){{__VA_ARGS__}}, (n))
 
+// Zig's `inFolder`: whether `abs` is the folder `dir` or a path below it.
+static bool in_folder(Str abs, Str dir) {
+    if (str_eq(dir, S("/"))) return abs.len > 0 && str_byte(abs, 0) == '/';
+    return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');
+}
+
 // A charge past the step budget: Zig's `charge` leaves the count one past it,
 // and the budget's stop says how many steps it had.
 static STATUS_MUST_USE Status steps_ran_out(LibraryReader *r, Str *why) {
@@ -288,14 +294,22 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     bool linked = false;
     TRY(refuse_links(r, m->dir, rest, str_sub(path, 0, colon + 1), why, &linked));
     if (linked) return OK;
+    Str full = m->dir;
+    if (rest.len > 0) TRY(join(a, m->dir, rest, &full));
+    // DRAGON: the secrets rule. A secrets mount's folder may sit inside another
+    // mount's, and a library read through the outer one would put a token's
+    // bytes in a parse's messages (a name, a number). Zig's
+    // `refuseSecretsUnder` refuses every path in such a folder; so does this.
+    for (size_t k = 0; k < r->mounts.len; k++) {
+        const Mount *sm = &at(r->mounts, k);
+        if (sm->secrets && in_folder(full, sm->dir)) return reader_why(why, got, 5, a, S("\""), path, S("\" is in the mount `"), sm->name, S("`, which holds secrets"));
+    }
     // `countRead`: the read's count first, then the file's size.
     if (r->used.reads >= r->budgets.reads) {
         *why = S("the store-read budget (count) ran out");
         return OK;
     }
     r->used.reads++;
-    Str full = {0};
-    TRY(join(a, m->dir, rest, &full));
     const char *full_c = c_string(a, full);
     struct stat st;
     if (full_c == NULL) return STOP;
@@ -376,7 +390,8 @@ static int check(Out *o, Command *c, MountVec mounts, Str mounts_from, Str sourc
         return flush_and_exit(o, EXIT_STOPPED);
     }
     Arena tree = arena_make(b.machine_bytes + PARSE_ROOM);
-    Parser p = parse_make(&tree, source, b.nesting);
+    Parser p;
+    parse_init(&p, &tree, source, b.nesting);
     LibraryReader reader = {a, mounts, mounts_from, b, none};
     Loader loader = {&reader, load_library};
     Program prog = {0};

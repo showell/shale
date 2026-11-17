@@ -210,9 +210,9 @@ typedef struct {
     Status s;
 } Msg;
 
-static inline Msg msg_make(Arena *a) {
-    Msg m = {buf_make(a), OK};
-    return m;
+static inline void msg_init(Msg *m, Arena *a) {
+    m->b = buf_make(a);
+    m->s = OK;
 }
 
 static inline void msg_str(Msg *m, Str s) {
@@ -242,7 +242,8 @@ static inline STATUS_MUST_USE Status parse_set_stop(Parser *p, Pos pos, StopClas
 // and the level that would hold it.
 static inline STATUS_MUST_USE Status parse_fail(Parser *p, Pos pos, StopClass cls, Str message) {
     if (cls == CLASS_SYNTAX && p->after_long && pos.line == p->tok.line && pos.column == p->tok.column) {
-        Msg m = msg_make(p->arena);
+        Msg m;
+        msg_init(&m, p->arena);
         msg_str(&m, message);
         msg_str(&m, S(" (the long string at "));
         msg_u64(&m, p->after_long_open.line);
@@ -281,7 +282,8 @@ SLICE_TYPE(StrParts, const Str);
 // A stop whose message is the first `n` of `parts` joined.
 static inline STATUS_MUST_USE Status parse_fail_parts(Parser *p, Pos pos, StopClass cls, StrPieces parts, size_t n) {
     StrParts all = {parts.piece, n};
-    Msg m = msg_make(p->arena);
+    Msg m;
+    msg_init(&m, p->arena);
     for (size_t k = 0; k < all.len; k++) msg_str(&m, at(all, k));
     return parse_fail_msg(p, pos, cls, &m);
 }
@@ -320,7 +322,8 @@ static inline Str parse_describe(Parser *p, Token t) {
     case TAG_QUESTION: return S("`?`, which marks an optional parameter (`function f(a, b?)`) and nothing else");
     default: break;
     }
-    Msg m = msg_make(p->arena);
+    Msg m;
+    msg_init(&m, p->arena);
     if (t.tag == TAG_NAME) {
         msg_str(&m, S("the name `"));
         msg_str(&m, t.text);
@@ -483,7 +486,8 @@ static inline bool parse_frame_has(const Frame *f, Str name) {
 // whose fix (a parameter) is right either way; so does a source that doesn't
 // lex, or an arena that refuses.
 static inline bool parse_assigned_again(Arena *a, Str src, Str name) {
-    Lexer lx = lexer_make(a, src);
+    Lexer lx;
+    lexer_init(&lx, a, src);
     Tag before = TAG_EOF;
     Token current = {0};
     if (lexer_next(&lx, &current) != OK) return true;
@@ -618,12 +622,10 @@ static inline bool parse_block_ends(Tag tag) {
     return tag == TAG_EOF || tag == TAG_KW_END || tag == TAG_KW_ELSE || tag == TAG_KW_ELSEIF;
 }
 
-static inline Stmt parse_stmt(Pos pos, StmtKind kind) {
-    Stmt s;
-    memset(&s, 0, sizeof s);
-    s.pos = pos;
-    s.kind = kind;
-    return s;
+static inline void parse_stmt_init(Stmt *s, Pos pos, StmtKind kind) {
+    memset(s, 0, sizeof *s);
+    s->pos = pos;
+    s->kind = kind;
 }
 
 // The statements at the stack's top from `from`, copied out.
@@ -656,7 +658,8 @@ static inline STATUS_MUST_USE Status parse_if_statement(Parser *p, Pos pos, Stmt
     first.cond = cond;
     TRY(parse_block(p, &first.body));
     TRY(ArmVec_push(&p->arms, first));
-    Stmt s = parse_stmt(pos, STMT_IF);
+    Stmt s;
+    parse_stmt_init(&s, pos, STMT_IF);
     for (;;) {
         if (p->tok.tag == TAG_KW_ELSEIF) {
             TRY(parse_advance(p));
@@ -706,7 +709,8 @@ static inline STATUS_MUST_USE Status parse_for_statement(Parser *p, Pos pos, Stm
     TRY(parse_expect(p, TAG_NAME, S("a name after `for`"), &name_tok));
     if (p->tok.tag == TAG_COMMA) return parse_fail(p, parse_here(p), CLASS_REFUSED, S("several loop names are not in this language: `for k in keys(m) do ... m[k] ... end`"));
     if (p->tok.tag == TAG_ASSIGN) {
-        Stmt s = parse_stmt(pos, STMT_NUMERIC_FOR);
+        Stmt s;
+        parse_stmt_init(&s, pos, STMT_NUMERIC_FOR);
         TRY(parse_advance(p));
         TRY(parse_expr(p, &s.as.numeric_for.from));
         TRY(parse_expect(p, TAG_COMMA, S("`,` between the loop's start and end"), &t));
@@ -721,7 +725,8 @@ static inline STATUS_MUST_USE Status parse_for_statement(Parser *p, Pos pos, Stm
         *out = s;
         return OK;
     }
-    Stmt s = parse_stmt(pos, STMT_LIST_FOR);
+    Stmt s;
+    parse_stmt_init(&s, pos, STMT_LIST_FOR);
     TRY(parse_expect(p, TAG_KW_IN, S("`=` or `in` after the loop's name"), &t));
     TRY(parse_expr(p, &s.as.list_for.list));
     TRY(parse_expect(p, TAG_KW_DO, S("`do` after the `for`"), &t));
@@ -747,7 +752,8 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
         TRY(parse_expect(p, TAG_NAME, S("a name after `local`"), &t));
         if (p->tok.tag == TAG_COMMA) return parse_fail(p, parse_here(p), CLASS_REFUSED, S("declaring several locals at once is not in this language: one `local` each"));
         if (p->tok.tag == TAG_LT) return parse_fail(p, parse_here(p), CLASS_REFUSED, S("attributes (`<const>`, `<close>`) are not in this language"));
-        Stmt s = parse_stmt(pos, STMT_LOCAL);
+        Stmt s;
+        parse_stmt_init(&s, pos, STMT_LOCAL);
         s.as.local.value = NULL;
         if (p->tok.tag == TAG_ASSIGN) {
             TRY(parse_advance(p));
@@ -764,7 +770,8 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
         TRY(parse_expect(p, TAG_NAME, S("a name after `const`"), &t));
         if (p->tok.tag != TAG_ASSIGN) return parse_fail(p, parse_here(p), CLASS_SYNTAX, S("a `const` needs its value: `const NAME = ...`"));
         TRY(parse_advance(p));
-        Stmt s = parse_stmt(pos, STMT_CONSTANT);
+        Stmt s;
+        parse_stmt_init(&s, pos, STMT_CONSTANT);
         TRY(parse_single_value(p, &s.as.constant.value));
         TRY(parse_declare(p, t.text, pos, &s.as.constant.slot));
         at(p->frame.locals, p->frame.locals.len - 1).constant = true;
@@ -779,7 +786,8 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
         return parse_if_statement(p, pos, out);
     case TAG_KW_WHILE: {
         TRY(parse_advance(p));
-        Stmt s = parse_stmt(pos, STMT_WHILE);
+        Stmt s;
+        parse_stmt_init(&s, pos, STMT_WHILE);
         TRY(parse_expr(p, &s.as.while_.cond));
         TRY(parse_expect(p, TAG_KW_DO, S("`do` after the `while` condition"), &t));
         p->frame.loops++;
@@ -793,7 +801,8 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
         return parse_for_statement(p, pos, out);
     case TAG_KW_DO: {
         TRY(parse_advance(p));
-        Stmt s = parse_stmt(pos, STMT_DO);
+        Stmt s;
+        parse_stmt_init(&s, pos, STMT_DO);
         TRY(parse_block(p, &s.as.do_));
         TRY(parse_expect(p, TAG_KW_END, S("`end` to close the `do`"), &t));
         *out = s;
@@ -801,7 +810,8 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
     }
     case TAG_KW_RETURN: {
         TRY(parse_advance(p));
-        Stmt s = parse_stmt(pos, STMT_RETURN);
+        Stmt s;
+        parse_stmt_init(&s, pos, STMT_RETURN);
         s.as.return_ = NULL;
         if (!parse_block_ends(p->tok.tag) && p->tok.tag != TAG_SEMICOLON) {
             TRY(parse_expr(p, &s.as.return_));
@@ -813,17 +823,17 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
     case TAG_KW_BREAK:
         TRY(parse_advance(p));
         if (p->frame.loops == 0) return parse_fail(p, pos, CLASS_SYNTAX, S("`break` outside a loop"));
-        *out = parse_stmt(pos, STMT_BREAK);
+        parse_stmt_init(out, pos, STMT_BREAK);
         return OK;
     case TAG_KW_CONTINUE:
         TRY(parse_advance(p));
         if (p->frame.loops == 0) return parse_fail(p, pos, CLASS_SYNTAX, S("`continue` outside a loop"));
-        *out = parse_stmt(pos, STMT_CONTINUE);
+        parse_stmt_init(out, pos, STMT_CONTINUE);
         return OK;
     case TAG_KW_FUNCTION:
         if (p->in_function || p->frame.depth > 1) return parse_fail(p, pos, CLASS_REFUSED, S("functions are top-level statements only: nested functions and closures are not in this language"));
         TRY(parse_function(p, pos));
-        *out = parse_stmt(pos, STMT_DO);
+        parse_stmt_init(out, pos, STMT_DO);
         return OK;
     default:
         break;
@@ -844,7 +854,8 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
             return parse_fail(p, target->pos, CLASS_SYNTAX, S("only a local or an element `t[k]`, `t.k` can be assigned"));
         }
         TRY(parse_advance(p));
-        Stmt s = parse_stmt(pos, STMT_ASSIGN);
+        Stmt s;
+        parse_stmt_init(&s, pos, STMT_ASSIGN);
         s.as.assign.target = target;
         TRY(parse_expr(p, &s.as.assign.value));
         if (p->tok.tag == TAG_COMMA) return parse_fail(p, parse_here(p), CLASS_REFUSED, S("multiple values are not in this language"));
@@ -853,7 +864,8 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
     }
     if (p->tok.tag == TAG_COMMA) return parse_fail(p, parse_here(p), CLASS_REFUSED, S("multiple assignment is not in this language: one assignment each"));
     if (target->kind != EXPR_CALL) return parse_fail_cat(p, pos, CLASS_SYNTAX, 2, S("a statement must be a call or an assignment, found "), parse_describe(p, p->tok));
-    Stmt s = parse_stmt(pos, STMT_CALL);
+    Stmt s;
+    parse_stmt_init(&s, pos, STMT_CALL);
     s.as.call = target;
     *out = s;
     return OK;
@@ -1009,7 +1021,8 @@ static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
     // prelude's, not the script's.
     Str shown = name;
     if (p->in_prelude != PARSE_SCRIPT) {
-        Msg m = msg_make(p->arena);
+        Msg m;
+        msg_init(&m, p->arena);
         msg_str(&m, parse_prelude_name(p, p->in_prelude));
         msg_str(&m, S("'s "));
         msg_str(&m, name);
@@ -1070,7 +1083,7 @@ static inline STATUS_MUST_USE Status parse_load_prelude(Parser *p, size_t k, siz
     uint32_t saved_nesting = p->nesting;
     Str src = k == 0 ? p->core : at(p->extra, k - 1).prelude.source;
     PreludeFunction f = k == 0 ? at(p->core_index, i) : at(at(p->extra, k - 1).index, i);
-    p->lexer = lexer_make(p->arena, src);
+    lexer_init(&p->lexer, p->arena, src);
     p->lexer.at = f.at;
     p->lexer.line = f.line;
     p->has_ahead = false;
@@ -1512,31 +1525,30 @@ static inline STATUS_MUST_USE Status parse_table(Parser *p, Pos pos, Expr **out)
 
 // ── checking a prelude or a library ──
 
-static inline Parser parse_make(Arena *a, Str source, uint32_t max_nesting) {
-    Parser p;
-    memset(&p, 0, sizeof p);
-    p.arena = a;
-    p.lexer = lexer_make(a, source);
-    p.max_nesting = max_nesting;
-    p.frame.locals = LocalVec_make(a);
-    p.stmts = StmtVec_make(a);
-    p.exprs = ExprVec_make(a);
-    p.arms = ArmVec_make(a);
-    p.entries = EntryVec_make(a);
-    p.args_read = StrVec_make(a);
-    p.functions = FunctionVec_make(a);
-    p.function_names = FunctionNames_make(a);
-    p.consts = StrVec_make(a);
-    p.const_owner = OwnerVec_make(a);
-    p.in_prelude = PARSE_SCRIPT;
-    return p;
+// A parser of `source`, its working lists in `a`.
+static inline void parse_init(Parser *p, Arena *a, Str source, uint32_t max_nesting) {
+    memset(p, 0, sizeof *p);
+    p->arena = a;
+    lexer_init(&p->lexer, a, source);
+    p->max_nesting = max_nesting;
+    p->frame.locals = LocalVec_make(a);
+    p->stmts = StmtVec_make(a);
+    p->exprs = ExprVec_make(a);
+    p->arms = ArmVec_make(a);
+    p->entries = EntryVec_make(a);
+    p->args_read = StrVec_make(a);
+    p->functions = FunctionVec_make(a);
+    p->function_names = FunctionNames_make(a);
+    p->consts = StrVec_make(a);
+    p->const_owner = OwnerVec_make(a);
+    p->in_prelude = PARSE_SCRIPT;
 }
 
 // A parser of prelude or library `k`'s source alone, to check it and be thrown
 // away: its own loaded slots, so the check leaves the real parse's alone.
 static inline STATUS_MUST_USE Status parse_throwaway(Parser *p, size_t k, Parser *q) {
     if (p->extra.len > PARSE_EXTRAS_MOST) return parse_fail(p, parse_pos(1, 1), CLASS_ARGUMENT, S("more than 16 preludes"));
-    *q = parse_make(p->arena, at(p->extra, k - 1).prelude.source, p->max_nesting);
+    parse_init(q, p->arena, at(p->extra, k - 1).prelude.source, p->max_nesting);
     q->in_prelude = k;
     q->core = p->core;
     q->core_index = p->core_index;
@@ -1694,7 +1706,8 @@ static inline STATUS_MUST_USE Status parse_library_name_was(Parser *p, Str path,
         *was = S("the prelude's");
         return OK;
     }
-    Msg m = msg_make(p->arena);
+    Msg m;
+    msg_init(&m, p->arena);
     for (size_t k = 0; k < p->extra.len; k++) {
         const Extra *e = &at(p->extra, k);
         if (parse_index_at(e->index, name) < 0 && !(e->is_library && parse_index_at(e->library.consts, name) >= 0)) continue;
@@ -1769,14 +1782,15 @@ static inline STATUS_MUST_USE Status parse_library_consts(Parser *p, size_t k, P
         Token saved_tok = p->tok;
         bool saved_has_ahead = p->has_ahead;
         Token saved_ahead = p->ahead;
-        p->lexer = lexer_make(p->arena, x->prelude.source);
+        lexer_init(&p->lexer, p->arena, x->prelude.source);
         p->lexer.at = c.at;
         p->lexer.line = c.line;
         p->has_ahead = false;
         p->in_prelude = k;
         // `const`, its name, `=`, then the value's first token.
         for (int t = 0; t < 4; t++) TRY(parse_advance(p));
-        Stmt s = parse_stmt(pos, STMT_CONSTANT);
+        Stmt s;
+        parse_stmt_init(&s, pos, STMT_CONSTANT);
         TRY(parse_expr(p, &s.as.constant.value));
         p->in_prelude = PARSE_SCRIPT;
         p->lexer = saved_lexer;
@@ -1850,7 +1864,8 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
     TRY(parse_check_library(p, k, pos));
     size_t from = p->stmts.len;
     TRY(parse_library_consts(p, k, pos));
-    Stmt s = parse_stmt(pos, STMT_DO);
+    Stmt s;
+    parse_stmt_init(&s, pos, STMT_DO);
     TRY(parse_take_stmts(p, from, &s.as.do_));
     *out = s;
     return OK;
