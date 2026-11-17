@@ -78,6 +78,24 @@ TEST(str_sub_takes_a_part_and_traps_past_either_end) {
     EXPECT_TRAPS((void)str_sub(s, 6, 6));
 }
 
+TEST(a_part_of_an_empty_slice_keeps_its_null_and_never_adds_to_it) {
+    // `NULL + 0` is undefined in C, and an empty Str may hold NULL (an empty
+    // file's text, as `shale --check` reads it). GCC's UBSan doesn't flag
+    // it, so the C never computes it, and the part holds the NULL as it was.
+    Str empty = {NULL, 0};
+    Str part = str_sub(empty, 0, 0);
+    EXPECT(part.ptr == NULL);
+    EXPECT_EQ(part.len, 0);
+    Ints none = {NULL, 0};
+    Ints sub = SLICE_SUB(Ints, none, 0, 0);
+    EXPECT(sub.ptr == NULL);
+    EXPECT_EQ(sub.len, 0);
+    // A part from 0 of a slice that holds memory keeps its pointer too.
+    Str s = S("abc");
+    EXPECT(str_sub(s, 0, 2).ptr == s.ptr);
+    EXPECT_TRAPS((void)str_sub(empty, 0, 1));
+}
+
 TEST(str_sub_evaluates_each_argument_once) {
     // A macro would check an argument with a side effect as one value and
     // use it as another (a part from 3 of length SIZE_MAX).
@@ -137,6 +155,7 @@ TEST_MAIN(
     TEST_CASE(at_unchecked_reads_what_at_reads),
     TEST_CASE(S_is_the_literal_without_its_nul),
     TEST_CASE(str_sub_takes_a_part_and_traps_past_either_end),
+    TEST_CASE(a_part_of_an_empty_slice_keeps_its_null_and_never_adds_to_it),
     TEST_CASE(str_sub_evaluates_each_argument_once),
     TEST_CASE(an_index_past_32_bits_traps_and_never_wraps_into_range),
     TEST_CASE(SLICE_SUB_keeps_the_type_and_its_bounds),

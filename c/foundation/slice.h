@@ -80,17 +80,21 @@ static inline void slice_range_check(uint64_t from, uint64_t to, size_t len, con
     slice_bounds_failed(file, line, from > to ? from : to, len);
 }
 
-// The part `[from, to)` of a typed slice, as the same type.
-// DRAGON: bounds. `from` is evaluated three times and `to` twice, so an argument with a side effect would be checked as one value and used as another (`k++` with k = 2 on "abc" makes a part from 3 of length SIZE_MAX, and GCC says nothing). check_discipline's `slice args` rule refuses `++`, `--`, `=` and a call in its arguments.
+// The part `[from, to)` of a typed slice, as the same type. A part from 0
+// keeps `ptr` as it is: an empty slice may hold NULL, and `NULL + 0` is
+// undefined in C (clang's -fsanitize=pointer-overflow says so; GCC's doesn't).
+// DRAGON: bounds. `from` is evaluated four times and `to` twice, so an argument with a side effect would be checked as one value and used as another (`k++` with k = 2 on "abc" makes a part from 3 of length SIZE_MAX, and GCC says nothing). check_discipline's `slice args` rule refuses `++`, `--`, `=` and a call in its arguments.
 #define SLICE_SUB(Type, s, from, to)                                            \
     (slice_range_check((from), (to), (s).len, __FILE__, __LINE__),              \
-     (Type){(s).ptr + (from), (size_t)(to) - (size_t)(from)})
+     (Type){(from) == 0 ? (s).ptr : (s).ptr + (from),                          \
+            (size_t)(to) - (size_t)(from)})
 
 // The part `[from, to)` of a Str. A function, so each argument is evaluated
-// once; the macro only hands it the caller's place for a trap.
+// once; the macro only hands it the caller's place for a trap. A part from 0
+// keeps `ptr`, as SLICE_SUB's does.
 static inline Str str_sub_at(Str s, uint64_t from, uint64_t to, const char *file, int line) { // cstr: __FILE__
     slice_range_check(from, to, s.len, file, line);
-    Str part = {s.ptr + (size_t)from, (size_t)(to - from)};
+    Str part = {from == 0 ? s.ptr : s.ptr + (size_t)from, (size_t)(to - from)};
     return part;
 }
 
