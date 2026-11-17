@@ -182,6 +182,8 @@ static void ran_run(Ran *x, Str src, Budgets b) {
 }
 
 static void ran_free(Ran *x) {
+    // A Zig call's zig-ast ends with the run, as the CLI ends it.
+    host_zig_stop();
     regex_cache_deinit(&x->r.patterns);
     if (store_os_delete_tree(&x->host, x->dir) != STORE_OK) abort();
     arena_deinit(&x->output);
