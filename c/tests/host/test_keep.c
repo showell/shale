@@ -186,13 +186,13 @@ static STATUS_MUST_USE Status oracle(Arena *a, Str out, KeepOptions o, Str *said
     Strs lines = Strs_make(a);
     for (size_t i = 0; i < all.len; i++) {
         Str l = at(all, i);
-        Str head = str_sub(l, 0, l.len < KEEP_LINE_MOST ? l.len : KEEP_LINE_MOST);
+        Str head = str_sub(l, 0, l.len < KEEP_LINE_MAX ? l.len : KEEP_LINE_MAX);
         if (o.not_re.matches == NULL || !o.not_re.matches(o.not_re.ctx, head, &work)) TRY(Strs_push(&lines, l));
     }
     Bools hits = Bools_make(a);
     for (size_t i = 0; i < lines.len; i++) {
         Str l = at(lines, i);
-        Str head = str_sub(l, 0, l.len < KEEP_LINE_MOST ? l.len : KEEP_LINE_MOST);
+        Str head = str_sub(l, 0, l.len < KEEP_LINE_MAX ? l.len : KEEP_LINE_MAX);
         TRY(Bools_push(&hits, o.re.matches == NULL || o.re.matches(o.re.ctx, head, &work)));
     }
     Strs passed = Strs_make(a);
@@ -337,12 +337,12 @@ TEST(the_edges) {
     EXPECT(kept_of(&a, S("1\n2\n3\n4\n5\n6\n7\n"), o, 3, &many));
     EXPECT_STR(many.out, S("1\n2\n\xe2\x80\xa6 3 lines left out \xe2\x80\xa6\n6\n7\n"));
     EXPECT_EQ(many.total, 7);
-    // A line past KEEP_LINE_MOST is matched on its first part and kept cut.
+    // A line past KEEP_LINE_MAX is matched on its first part and kept cut.
     Buf huge = buf_make(&a);
     EXPECT(buf_lit(&huge, "error ") == OK);
     // One append of the z's: GCC 13 at -O2 takes buf_byte's first growth
     // of a buffer for a write past an empty one (-Warray-bounds), wrongly.
-    static char zs[KEEP_LINE_MOST + 10];
+    static char zs[KEEP_LINE_MAX + 10];
     memset(zs, 'z', sizeof zs);
     EXPECT(buf_str(&huge, (Str){zs, sizeof zs}) == OK);
     EXPECT(buf_lit(&huge, " tail\nok\n") == OK);
@@ -356,16 +356,16 @@ TEST(the_edges) {
     EXPECT_STR(h.out, S("error zz\xe2\x80\xa6\n"));
     EXPECT_EQ(h.matched, 1);
     EXPECT_EQ(h.total, 2);
-    // With a width past KEEP_LINE_MOST, the line is held to its first
-    // KEEP_LINE_MOST bytes and still marked cut, as Zig's `line_over` says.
+    // With a width past KEEP_LINE_MAX, the line is held to its first
+    // KEEP_LINE_MAX bytes and still marked cut, as Zig's `line_over` says.
     KeepOptions wide;
     keep_options_default(&wide);
     wide.head = 1;
     wide.width = 100000;
     Kept w;
-    EXPECT(kept_of(&a, str_sub(buf_view(&huge), 6, 6 + KEEP_LINE_MOST + 10), wide, 4096, &w));
-    EXPECT_EQ(w.out.len, KEEP_LINE_MOST + 4);
-    EXPECT_STR(str_sub(w.out, KEEP_LINE_MOST, w.out.len), S("\xe2\x80\xa6\n"));
+    EXPECT(kept_of(&a, str_sub(buf_view(&huge), 6, 6 + KEEP_LINE_MAX + 10), wide, 4096, &w));
+    EXPECT_EQ(w.out.len, KEEP_LINE_MAX + 4);
+    EXPECT_STR(str_sub(w.out, KEEP_LINE_MAX, w.out.len), S("\xe2\x80\xa6\n"));
     EXPECT_EQ(w.total, 1);
     // head 0 and tail 0: nothing kept, the counts still counted.
     KeepOptions no;

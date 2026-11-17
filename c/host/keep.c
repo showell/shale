@@ -10,14 +10,14 @@
 // belongs to exactly one of the head, the tail's ring, the context ring and
 // the scratch slot a line is cut into, so the bytes held stay bounded by
 // `(head + tail + before + 1)` slots of at most twice `width` plus the cut
-// mark, and one line of at most `KEEP_LINE_MOST`, whatever the program
+// mark, and one line of at most `KEEP_LINE_MAX`, whatever the program
 // prints.
 
 #include "buf.h"
 
 // The most of one line the filter reads. A longer line is matched on its
-// first `KEEP_LINE_MOST` bytes and kept cut, as any long line is.
-enum { KEEP_LINE_MOST = 64 * 1024 };
+// first `KEEP_LINE_MAX` bytes and kept cut, as any long line is.
+enum { KEEP_LINE_MAX = 64 * 1024 };
 
 // The mark a cut line ends with, U+2026.
 #define KEEP_CUT_MARK "\xe2\x80\xa6"
@@ -84,9 +84,9 @@ VEC_DEFINE(KeepHead, KeepSlot);
 typedef struct {
     Arena *arena;
     KeepOptions o;
-    // The line being read, up to `KEEP_LINE_MOST` bytes of it.
+    // The line being read, up to `KEEP_LINE_MAX` bytes of it.
     Buf line;
-    // Whether the line being read ran past `KEEP_LINE_MOST`.
+    // Whether the line being read ran past `KEEP_LINE_MAX`.
     bool line_over;
     // Where a line is cut before it is passed on; a buffer handed back by
     // the ring it displaced, or empty.
@@ -261,7 +261,7 @@ static STATUS_MUST_USE Status keep_end_line(Keep *k) {
 // Takes the program's next bytes, any number.
 // DRAGON: memory. The bytes are a program's, unbounded, and a line may
 // never end, so a line held whole could grow with the output.
-// REMEDY: the line being read is held to KEEP_LINE_MOST (`room`), the rest
+// REMEDY: the line being read is held to KEEP_LINE_MAX (`room`), the rest
 // of it only marked as `line_over`, so one endless line holds 64 KiB, not
 // the output. test_keep's flood and test_spawn's 2 MB line hold it.
 static STATUS_MUST_USE Status keep_feed(Keep *k, Str bytes) {
@@ -269,7 +269,7 @@ static STATUS_MUST_USE Status keep_feed(Keep *k, Str bytes) {
     while (rest.len > 0) {
         const char *nl = str_find_byte(rest, '\n');
         size_t piece_len = nl != NULL ? (size_t)(nl - rest.ptr) : rest.len;
-        size_t room = KEEP_LINE_MOST - k->line.len;
+        size_t room = KEEP_LINE_MAX - k->line.len;
         if (piece_len > room) k->line_over = true;
         TRY(buf_str(&k->line, str_sub(rest, 0, piece_len < room ? piece_len : room)));
         if (nl != NULL) {

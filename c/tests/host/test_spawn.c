@@ -561,7 +561,7 @@ TEST(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds) {
     EXPECT_STR(kept.out, buf_view(&want));
     EXPECT(!held.hit);
     EXPECT(held.held < 256 * 1024);
-    // One line of 2 MB with no newline: read past KEEP_LINE_MOST, kept cut.
+    // One line of 2 MB with no newline: read past KEEP_LINE_MAX, kept cut.
     Arena held2 = arena_make(1 << 20);
     Keep k2;
     EXPECT(keep_init(&k2, &held2, ko) == OK);
