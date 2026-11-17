@@ -1,7 +1,8 @@
 # bench: Shale's speed baseline
 
-`bench/baseline.shale` measures Shale where its speed matters, so a rewrite
-can be judged against today's Zig Shale on the same inputs:
+`bench/baseline.shale` measures Shale where its speed matters, so C Shale
+(the default) can be judged against the Zig Shale it replaced, and each
+change to it against the last, on the same inputs:
 
 - **the runtime:** ten workloads in `bench/workloads/`, each run as a fresh
   process of the binary under test, five times, with the median wall and
@@ -10,15 +11,28 @@ can be judged against today's Zig Shale on the same inputs:
   about 500 files, `re_lines` over 16 MB, `json_read` and `json_write` of
   a 7.5 MB document, startup (50 launches), `run` overhead (200 runs of
   `true`) and a pure interpreter loop;
-- **the build:** release, debug and the tests' build (`zig build quick`,
-  which compiles every test binary), each **cold** (an empty cache of its
-  own, local and global) and **incremental** (one comment line appended
-  to `src/script/interp.zig`, then the same command again).
+- **the build:** release, debug and the tests' build, each **cold** and
+  **incremental** (one comment line appended to a core file, then the same
+  command again), as `c/build.shale` makes them:
+  - **release:** `c/shale.c` at GCC `-O2`, by the command block's own
+    compile line (`shale c/build.shale binary=release`, which runs
+    `c/build/binary.shale`: the preludes generated, then the compile), into
+    `<prefix>/bin/shale`, the binary the runtime workloads then run;
+  - **debug:** the same under TCC (`binary=tcc`);
+  - **test:** the fast tier (`shale c/build.shale`), which builds **and
+    runs** every C test, where the Zig's `zig build quick` only compiles
+    its tests: so C's test row is not the same work as the Zig's.
 
-Each run writes one TSV, `bench/baselines/<date>-<commit>-<label>-<part>-<clean|notclean>.tsv`, where `<label>` is `label=` or the binary under test's folder and name, so two binaries measured at one commit never share a file (a file already there stops the run).
+  **C has no build cache**, so its cold and incremental builds are the same
+  compile from nothing. Both rows are kept, with the same command (the
+  incremental one after a comment line in `c/script/vm.c`), so a C TSV has
+  the Zig's rows and the two line up row by row.
+
+Each run writes one TSV, `bench/baselines/<date>-<commit>-<label>-<part>-<clean|notclean>.tsv`, where `<label>` is `label=`, or `built-c` or `built-zig` for a binary the run built, or the binary under test's folder and name, so two binaries measured at one commit never share a file (a file already there stops the run).
 Its `#` lines say what the box was (its load before and after, heavy
-processes, the CPU, the kernel, the compiler, the source's commit and
-whether it was dirty), and each row gives a workload's medians. For a
+processes, the CPU, the kernel, the implementation, the compilers, the
+source's commit and whether it was dirty), and each row gives a workload's
+medians. For a
 workload that runs programs, `shale_*` is Shale's own part and `child_*`
 the programs': `run_true` adds up `run`'s own measure of each `true`, and
 `hunt_names` takes roc-ast's wall time from its `--verbose` report and
@@ -39,16 +53,20 @@ and no TSV is written. The same applies to a build that fails.
 all under `<build>/bench/inputs` (outside the repo, `<build>` being the `build:` mount). The workloads run with
 a mounts file of their own (`cookbook` is the pinned Shale's, `tools` the
 box's) and no user prelude. So a run months later reads the same bytes. The
-build clones the source's HEAD under `<build>/bench/src`, with
-zig-webbox beside it, and never builds in the checkout.
+build clones the source's HEAD under `<build>/bench/src` (for the Zig, with
+zig-webbox beside it) and never builds in the checkout. A fresh clone has
+all the C build needs: `c/out/gen/preludes.h` is not tracked, and the build
+writes it from `src/`'s preludes.
 
 ## A dry run
 
     cd ~/showell_repos/shale && shale bench/baseline.shale
 
 This runs on a busy box, stamps every row `not clean`, and prints the
-reasons a clean run would be refused. It took 26 minutes on the busy box on
-2026-11-17, 25 of them in the builds; the runtime half takes about a minute. Its numbers show that the harness works; they
+reasons a clean run would be refused. For C Shale on the busy box on
+2026-11-17, the builds took about 80 seconds (the two release compiles
+most of it) and the runtime half about a minute; with `impl=zig` the builds
+took about 25 minutes. Its numbers show that the harness works; they
 are not a baseline. `bench/baselines/2026-11-17-0e25229-notclean.tsv` is
 one, kept as the format's example.
 
@@ -76,20 +94,23 @@ or below 0.30, and none of `zig`, `roc`, `roc-ast`, `roc-types`, `node`,
    `bench/baselines/<date>-<commit>-<label>-<part>-clean.tsv`. Commit that file.
 5. **Restart** the services and the agents.
 
-## Measuring another implementation
+## Measuring the Zig Shale
 
-The binary and the build are arguments, so the same harness measures a
-rewrite with no edit beyond them. Values with spaces go on stdin:
+`impl=zig` measures the Zig Shale, until it is deleted: its builds are
+`zig build` (release), `zig build script` (debug) and `zig build quick`
+(the tests, compiled only), each in a cache of its own, with zig-webbox
+cloned beside the source and `src/script/interp.zig` the incremental
+build's file:
+
+    cd ~/showell_repos/shale && shale bench/baseline.shale impl=zig clean=1
+
+`IMPLS` in the harness holds each implementation's defaults, and every one
+is an argument too, so a build is changed with no edit to the harness.
+Values with spaces go on stdin:
 
     cd ~/showell_repos/shale && shale bench/baseline.shale --args-stdin <<'ARGS'
-    clean=1
-    src=repos:shale-c
-    siblings=
-    build_release=make -C {src} BUILD={cache} PREFIX={prefix} release
-    build_debug=make -C {src} BUILD={cache} PREFIX={prefix} debug
-    build_test=make -C {src} BUILD={cache} PREFIX={prefix} tests
-    touch=src/interp.c
-    compiler_version=cc --version
+    impl=zig
+    build_test={zig} build test --cache-dir {cache} --prefix {prefix}
     ARGS
 
 `{src}`, `{cache}`, `{global}`, `{prefix}` and `{zig}` are filled in for
@@ -99,4 +120,5 @@ the same folders for the incremental one. `{global}` is each build's
 (`<prefix>/bin/shale`), which the runtime workloads then run;
 `shale=<path>` with `part=runtime` measures a binary already built instead,
 and `part=build` builds only. Compare two TSVs row by row: the inputs are
-the same, so a row's check is the same too.
+the same, so a row's check is the same too (the test row aside, which is
+not the same work in the two).
