@@ -48,7 +48,7 @@ typedef struct {
     size_t consts_len;
     // The last string a `..` chain built: its buffer, how much of it the
     // string fills, and the buffer's size, so `s = s .. x` is linear.
-    char *tail_ptr;
+    char *tail_ptr; // cstr: its size is `tail_cap`
     size_t tail_used;
     size_t tail_cap;
     // The patterns `re_find` and its kin compiled.

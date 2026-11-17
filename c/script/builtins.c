@@ -833,7 +833,7 @@ static STATUS_MUST_USE Status bi_human(Run *r, Pos pos, ConstValues args, Value 
     int64_t n = 0;
     TRY(builtin_int_arg(r, pos, BUILTIN_HUMAN, &at(args, 0), S("its size"), &n));
     TRY(run_charge(r, pos, 16));
-    static const Str units_all[] = {S("B"), S("KiB"), S("MiB"), S("GiB"), S("TiB"), S("PiB"), S("EiB")};
+    static const Str units_all[7] = {S("B"), S("KiB"), S("MiB"), S("GiB"), S("TiB"), S("PiB"), S("EiB")};
     Names units = {units_all, 7};
     bool neg = n < 0;
     uint64_t mag = neg ? (uint64_t)(-(n + 1)) + 1 : (uint64_t)n;

@@ -627,7 +627,7 @@ function build_command(t, build)
   local dir = OUT .. "/" .. build
   mkdir(dir)
   local bin = dir .. "/shale"
-  local argv = {"tcc", "-std=c11", "-Wall", "-Werror"}
+  local argv = {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. FOUNDATION}
   if build ~= "tcc" then argv = gcc_flags(build, FOUNDATION) end
   for a in {"-I" .. OUT .. "/gen", "-Ic", "c/shale.c", "-o", bin} do push(argv, a) end
   local c = run_in(t, "command " .. build, argv, {timeout_ms = 120000, tail = 40})
@@ -659,6 +659,65 @@ function command_block(t)
   return nil
 end
 -- ── end of the command's block ─────────────────────────────────────────
+
+-- ── The VM: c/script's values, compiler, VM and core builtins ──────────
+-- test_vm.c runs in the foundation's block with every test file. Here, in
+-- both tiers: its count held to VM_TESTS, then each command binary the
+-- command's block built runs scripts that use only what the C runs, its
+-- output, report and exit held to the installed Zig `shale`'s on the same
+-- script, the oracle. In the full tier: the faults below planted in a copy
+-- of c/script, each caught by test_vm.c under asan.
+
+const VM_TESTS = 15
+const VM_SCRIPTS = {
+  {name = "runs", argv = {"--verbose"}, source = "function f(x) return x end\nprint(f(trim(\" a \")), #\"abc\" * 2, upper(\"x\") .. 1)\nlocal t = {3, 1, 2}\nprint(join(sort(t), \",\"))\n"},
+  {name = "stops", argv = {}, source = "function g(n) return h(n) end\nfunction h(n) return n // 0 end\nprint(attempt(g, 1).error)\ng(2)\n"},
+  {name = "budget", argv = {"--budget", "steps=500"}, source = "local s = \"\"\nwhile true do s = s .. \"x\" end\n"},
+}
+const VM_PLANTS = {
+  {name = "an attempt catches a budget", dir = "script", file = "vm.c", caught_by = "test_vm",
+   old = "if (s.cls == CLASS_BUDGET || r->unported) return OK;", new = "if (r->unported) return OK;"},
+  {name = "an attempt leaves its call in the trail", dir = "script", file = "vm.c", caught_by = "test_vm",
+   old = "        r->ctx.calls.len = i - 1;", new = "        (void)0;"},
+  {name = "`%` keeps the dividend's sign", dir = "script", file = "run.h", caught_by = "test_vm",
+   old = "if (got != 0 && ((got < 0) != (b < 0))) got += b;", new = "if (0) got += b;"},
+  {name = "a chain never grows in place", dir = "script", file = "run.h", caught_by = "test_vm",
+   old = "bool in_place = same && total <= r->tail_cap;", new = "bool in_place = false;"},
+  {name = "the output budget writes nothing of what overflows", dir = "script", file = "run.h", caught_by = "test_vm",
+   old = "if (buf_str(&r->out, str_sub(bytes, 0, room)) != OK)", new = "if (buf_str(&r->out, str_sub(bytes, 0, 0)) != OK)"},
+}
+
+function vm_block(t)
+  local n = test_count("c/tests/test_vm.c")
+  if n ~= VM_TESTS then fail("c/tests/test_vm.c has " .. n .. " TEST(s), and VM_TESTS says " .. VM_TESTS) end
+  local dir = OUT .. "/vm"
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir)
+  create(dir .. "/mounts", "")
+  local env = {SHALE_PRELUDE = "", SHALE_MOUNTS = real(dir .. "/mounts"), SHALE_NOW = "1700000000"}
+  for s in VM_SCRIPTS do
+    local file = dir .. "/" .. s.name .. ".shale"
+    create(file, s.source)
+    local zig_argv = {"shale"}
+    for w in s.argv do push(zig_argv, w) end
+    push(zig_argv, file)
+    local z = run_in(t, "vm", zig_argv, {timeout_ms = 20000, whole = 100000, env = env})
+    for b in t.builds do
+      local argv = {OUT .. "/" .. b .. "/shale"}
+      for w in s.argv do push(argv, w) end
+      push(argv, file)
+      local c = run_in(t, "vm", argv, {timeout_ms = 20000, whole = 100000, env = env, want = WANT})
+      if get(c, "code", -1) ~= z.code or c.out ~= z.out then
+        fail("`" .. b .. "`'s shale ran " .. s.name .. ".shale unlike Zig's:\n--- zig (" .. z.code .. ")\n" .. z.out .. "\n--- c (" .. get(c, "code", -1) .. ")\n" .. c.out)
+      end
+    end
+  end
+  print("vm: " .. n .. " C tests; " .. #VM_SCRIPTS .. " scripts run as Zig runs them, under " .. #t.builds .. " build(s)")
+  if not t.full then return nil end
+  run_plants(t, "vm plants", VM_PLANTS)
+  return nil
+end
+-- ── end of the VM's block ──────────────────────────────────────────────
 
 -- ── The host's process plumbing, c/host ─────────────────────────────────
 -- keep.c, job_record.c and spawn.c, apart from the foundation and the
@@ -924,6 +983,7 @@ foundation_block(t)
 discipline_block(t)
 regex_block(t)
 command_block(t)
+vm_block(t)
 host_block(t)
 
 report_phases(t)

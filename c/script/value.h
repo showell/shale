@@ -44,13 +44,13 @@ typedef enum {
     TABLE_MAP,
 } TableKind;
 
-struct Table {
+typedef struct Table {
     TableKind kind;
     // A list's items, index 1 first. Only `pop` shrinks one.
     ValueVec list;
     // A map's entries, its keys in the order they were first set.
     ValueMap map;
-};
+} Table;
 
 static inline void value_nil(Value *v) {
     v->tag = VALUE_NIL;

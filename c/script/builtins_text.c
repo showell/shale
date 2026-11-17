@@ -62,9 +62,10 @@ static STATUS_MUST_USE Status finder_find(const Finder *f, Str hay, size_t from,
     return run_charge(f->r, f->pos, stops - paid_stops + left / BUILTIN_BYTES_PER_STEP + (left % BUILTIN_BYTES_PER_STEP != 0 ? 1 : 0));
 }
 
-static Finder finder_make(Run *r, Pos pos, Str needle) {
-    Finder f = {r, pos, needle};
-    return f;
+static void finder_init(Finder *f, Run *r, Pos pos, Str needle) {
+    f->r = r;
+    f->pos = pos;
+    f->needle = needle;
 }
 
 // ── text ──
@@ -76,7 +77,8 @@ static STATUS_MUST_USE Status bi_split(Run *r, Pos pos, ConstValues args, Value 
     TRY(builtin_string_arg(r, pos, BUILTIN_SPLIT, &at(args, 1), S("its separator"), &sep));
     if (sep.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`split` by \"\" is an error: there is no empty separator"));
     TRY(builtin_charge_bytes(r, pos, s.len));
-    Finder f = finder_make(r, pos, sep);
+    Finder f;
+    finder_init(&f, r, pos, sep);
     Table *o = NULL;
     TRY(run_new_table(r, pos, &o));
     size_t k = 0;
@@ -177,7 +179,8 @@ static STATUS_MUST_USE Status builtin_looks(Run *r, Pos pos, Builtin b, ConstVal
         value_bool(out, s.len >= t.len && str_eq(str_sub(s, s.len - t.len, s.len), t));
         return OK;
     }
-    Finder f = finder_make(r, pos, t);
+    Finder f;
+    finder_init(&f, r, pos, t);
     bool found = false;
     size_t i = 0;
     TRY(finder_find(&f, s, 0, &found, &i));
@@ -212,7 +215,8 @@ static STATUS_MUST_USE Status bi_find(Run *r, Pos pos, ConstValues args, Value *
         from = (size_t)(f - 1);
     }
     TRY(builtin_charge_bytes(r, pos, s.len - from));
-    Finder fd = finder_make(r, pos, t);
+    Finder fd;
+    finder_init(&fd, r, pos, t);
     bool found = false;
     size_t i = 0;
     TRY(finder_find(&fd, s, from, &found, &i));
@@ -435,7 +439,8 @@ static STATUS_MUST_USE Status bi_substitute(Run *r, Pos pos, ConstValues args, V
     }
     if (old.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`substitute` of \"\" is an error: there is nothing to replace"));
     TRY(builtin_charge_bytes(r, pos, s.len));
-    Finder f = finder_make(r, pos, old);
+    Finder f;
+    finder_init(&f, r, pos, old);
     size_t n = 0;
     size_t k = 0;
     for (;;) {
@@ -531,7 +536,8 @@ static STATUS_MUST_USE Status bi_between(Run *r, Pos pos, ConstValues args, Valu
     TRY(builtin_string_arg(r, pos, BUILTIN_BETWEEN, &at(args, 0), S("its first argument"), &s));
     TRY(builtin_string_arg(r, pos, BUILTIN_BETWEEN, &at(args, 1), S("what it starts after"), &a));
     TRY(builtin_string_arg(r, pos, BUILTIN_BETWEEN, &at(args, 2), S("what it ends before"), &b));
-    Finder fa = finder_make(r, pos, a);
+    Finder fa;
+    finder_init(&fa, r, pos, a);
     bool found = false;
     size_t i = 0;
     TRY(finder_find(&fa, s, 0, &found, &i));
@@ -543,7 +549,8 @@ static STATUS_MUST_USE Status bi_between(Run *r, Pos pos, ConstValues args, Valu
         value_string(out, str_sub(s, start, s.len));
         return OK;
     }
-    Finder fb = finder_make(r, pos, b);
+    Finder fb;
+    finder_init(&fb, r, pos, b);
     size_t end = 0;
     TRY(finder_find(&fb, s, start, &found, &end));
     if (!found) return OK;
