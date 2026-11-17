@@ -120,7 +120,7 @@ static inline STATUS_MUST_USE Status map_core_reserve_one(MapCore *m) {
     // REMEDY: this check refuses the put first. No test reaches it: the
     // arena budget stops a map long before.
     if (m->len >= UINT32_MAX - 1) {
-        m->arena->hit = true;
+        arena_set_hit(m->arena);
         return STOP;
     }
     void *k = m->keys;

@@ -868,6 +868,8 @@ static STATUS_MUST_USE Status vm_run(Machine *m) {
         }
         if (s == OK) continue;
         m->pc = pc;
+        // A STOP with no stop recorded is an arena's refusal, and
+        // run_values_oom aborts on one no arena made.
         if (!r->ctx.stopped) TRY(run_values_oom(r, op->pos));
         bool caught = false;
         TRY(vm_caught(m, &caught));

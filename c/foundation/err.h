@@ -259,6 +259,19 @@ static inline STATUS_MUST_USE Status run_budget_stop(RunCtx *r, Pos pos, BudgetK
     return s;
 }
 
+// A refusal read as budget `k`'s stop, once it is held to being one: an arena
+// refused (arena_set_hit) since the last refusal read so, and no stop is
+// recorded already. Either missing is a bug in the C, which ends the process
+// rather than say a budget ran out.
+static inline STATUS_MUST_USE Status run_refused_stop(RunCtx *r, Pos pos, BudgetKind k) {
+    if (r->stopped) c_bug("err: an arena's refusal read as a stop over a stop already recorded");
+    bool *refused = arena_refused_slot();
+    if (!*refused) c_bug("err: a STOP read as an arena's refusal when no arena refused");
+    Status s = run_budget_stop(r, pos, k);
+    *refused = false;
+    return s;
+}
+
 // An allocation the arena refused, read as the arena budget: every
 // out-of-memory of a run is.
 // DRAGON: the arena budget. A container's STOP records no stop, so one
@@ -266,9 +279,10 @@ static inline STATUS_MUST_USE Status run_budget_stop(RunCtx *r, Pos pos, BudgetK
 // zeroed Stop that names no budget.
 // REMEDY: each caller of a container calls this at its boundary, and
 // run_ended, which c/shale.c and the tests' runner pass every run through,
-// aborts on a STOP that skipped it; test_err catches its plant.
+// aborts on a STOP that skipped it; test_err catches its plant. A STOP no
+// arena refused is not read as one here: run_refused_stop aborts on it.
 static inline STATUS_MUST_USE Status run_oom(RunCtx *r, Pos pos) {
-    return run_budget_stop(r, pos, BUDGET_ARENA);
+    return run_refused_stop(r, pos, BUDGET_ARENA);
 }
 
 // The top level's check of a run's answer before anything reports it: a STOP

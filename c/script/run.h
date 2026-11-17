@@ -148,7 +148,7 @@ static inline STATUS_MUST_USE Status run_values_oom(Run *r, Pos pos) {
 
 // A refused allocation in the machine's memory: its budget.
 static inline STATUS_MUST_USE Status run_machine_oom(Run *r, Pos pos) {
-    return run_budget_stop(&r->ctx, pos, BUDGET_MACHINE);
+    return run_refused_stop(&r->ctx, pos, BUDGET_MACHINE);
 }
 
 static inline uint64_t run_sat_sub(uint64_t a, uint64_t b) {

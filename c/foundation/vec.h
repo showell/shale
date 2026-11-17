@@ -40,7 +40,7 @@ static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *
     // REMEDY: this division refuses such a capacity before the multiply, and
     // test_vec catches its plant.
     if (new_cap > SIZE_MAX / elem) {
-        a->hit = true;
+        arena_set_hit(a);
         return STOP;
     }
     size_t bytes = new_cap * elem;
@@ -87,7 +87,7 @@ static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *
         /* REMEDY: this check refuses such a `more` before the sum, and test_vec */          \
         /* catches its plant. */                                                             \
         if (more > SIZE_MAX - v->len) {                                                      \
-            v->arena->hit = true;                                                            \
+            arena_set_hit(v->arena);                                                         \
             return STOP;                                                                     \
         }                                                                                    \
         void *p = v->ptr;                                                                    \

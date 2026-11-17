@@ -421,8 +421,13 @@ static void write_stdout(Str out) {
     }
 }
 
-// The machine budget's stop.
+// The machine budget's stop, for a parse or a compile that an arena refused
+// (the machine's tree, or the library reader's). A STOP no arena refused is a
+// bug in the C, never a budget.
 static void machine_stop(Stop *stop) {
+    bool *refused = arena_refused_slot();
+    if (!*refused) c_bug("shale: a parse or compile stopped with no stop recorded and no arena's refusal");
+    *refused = false;
     memset(stop, 0, sizeof *stop);
     stop->line = 1;
     stop->column = 1;

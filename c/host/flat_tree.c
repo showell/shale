@@ -524,6 +524,9 @@ static STATUS_MUST_USE Status flat_read(Run *r, Pos pos, Str text, FlatTool tool
     FlatDump d;
     Status s = flat_parse(&scratch, text, tool, ending, &d);
     if (s != OK) {
+        // The reading stops only when its arena refuses; any other STOP is a
+        // bug in the C, not the arena budget.
+        if (!scratch.hit) c_bug("flat_tree: a reading stopped with no refusal of its arena");
         s = run_values_oom(r, pos);
     } else if (d.bad) {
         s = run_fail_parts(r, pos, CLASS_ARGUMENT, flat_fallback(tool, FLAT_SAID_NOT_A_TREE),

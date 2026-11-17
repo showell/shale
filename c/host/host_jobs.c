@@ -24,10 +24,10 @@ static STATUS_MUST_USE Status host_jobs_read(Run *r, Pos pos, Str os, Bytes *out
     *why = S("");
     StoreCPath cp;
     const char *c = NULL;
-    if (store_cstr(&cp, os, &c) != STORE_OK) return run_values_oom(r, pos);
-    int fd = open(c, O_RDONLY | O_CLOEXEC);
+    StoreErr ce = store_cstr(&cp, os, &c);
+    int fd = ce == STORE_OK ? open(c, O_RDONLY | O_CLOEXEC) : -1;
     if (fd < 0) {
-        *why = store_err_name(store_err_of(errno));
+        *why = store_err_name(ce != STORE_OK ? ce : store_err_of(errno));
         return OK;
     }
     int err = 0;
@@ -239,8 +239,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
         Str dir = str_sub(log_os, 0, slash > 1 ? slash - 1 : 1);
         StoreCPath dir_cp;
         const char *dc = NULL;
-        if (store_cstr(&dir_cp, dir, &dc) != STORE_OK) return run_values_oom(r, pos);
-        if (access(dc, F_OK) != 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
+        if (store_cstr(&dir_cp, dir, &dc) != STORE_OK || access(dc, F_OK) != 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
     }
     // A log a job still runs on is refused: its record is the job's only
     // handle, and the old reaper would write its end over the new record.
@@ -357,11 +356,11 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
     *found = false;
     StoreCPath cp;
     const char *p = NULL;
-    if (store_cstr(&cp, os, &p) != STORE_OK) return run_values_oom(r, pos);
+    StoreErr ce = store_cstr(&cp, os, &p);
     struct stat st;
-    if (stat(p, &st) != 0) {
-        if (errno == ENOENT) return OK;
-        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(store_err_of(errno)))));
+    if (ce != STORE_OK || stat(p, &st) != 0) {
+        if (ce == STORE_OK && errno == ENOENT) return OK;
+        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(ce != STORE_OK ? ce : store_err_of(errno)))));
     }
     uint64_t size = (uint64_t)st.st_size;
     if (s->buf.len == 0) {

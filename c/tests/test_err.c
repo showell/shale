@@ -129,6 +129,15 @@ TEST(a_stop_on_no_budget_ends_the_process) {
     arena_deinit(&machine);
 }
 
+// An arena's refusal, as a container's STOP leaves one: what run_oom is
+// held to there being.
+static void refuse_once(void) {
+    Arena none = arena_make(0);
+    EXPECT(arena_alloc(&none, 1, 1) == NULL);
+    EXPECT(none.hit);
+    EXPECT(*arena_refused_slot());
+}
+
 TEST(run_oom_is_the_arena_budget_with_its_function_and_trail) {
     Arena v = arena_make(1 << 20);
     Arena machine = arena_make(1 << 20);
@@ -139,7 +148,9 @@ TEST(run_oom_is_the_arena_budget_with_its_function_and_trail) {
     EXPECT(CallVec_push(&r.calls, inner) == OK);
     r.function = S("g");
     Pos at = {7, 4};
+    refuse_once();
     EXPECT(run_oom(&r, at) == STOP);
+    EXPECT(!*arena_refused_slot());
     EXPECT_EQ(r.stop.cls, CLASS_BUDGET);
     EXPECT_EQ(r.stop.budget, BUDGET_ARENA);
     EXPECT_STR(r.stop.message, S("the arena budget ran out"));
@@ -233,9 +244,46 @@ TEST(a_stop_with_no_stop_recorded_ends_the_process) {
     EXPECT_DIES(EXPECT(run_ended(&r, STOP) == STOP));
     EXPECT(!r.stopped);
     Pos at_one = {1, 2};
+    refuse_once();
     EXPECT(run_oom(&r, at_one) == STOP);
     EXPECT(run_ended(&r, STOP) == STOP);
     EXPECT_EQ(r.stop.budget, BUDGET_ARENA);
+    arena_deinit(&values);
+    arena_deinit(&machine);
+}
+
+TEST(a_stop_read_as_a_refusal_no_arena_made_ends_the_process) {
+    // A STOP that no arena refused, read as a budget, would say the budget
+    // ran out when a bug in the C stopped the run.
+    Arena values = arena_make(1 << 20);
+    Arena machine = arena_make(1 << 20);
+    RunCtx r = run_ctx_make(&values, &machine, budgets_default());
+    Pos at = {1, 2};
+    *arena_refused_slot() = false;
+    EXPECT_DIES(EXPECT(run_oom(&r, at) == STOP));
+    EXPECT_DIES(EXPECT(run_refused_stop(&r, at, BUDGET_MACHINE) == STOP));
+    EXPECT(!r.stopped);
+    // One refusal is read once: a second STOP after it has none behind it.
+    refuse_once();
+    EXPECT(run_oom(&r, at) == STOP);
+    r.stopped = false;
+    EXPECT_DIES(EXPECT(run_oom(&r, at) == STOP));
+    arena_deinit(&values);
+    arena_deinit(&machine);
+}
+
+TEST(a_refusal_read_over_a_recorded_stop_ends_the_process) {
+    // A refusal read as the arena budget over a stop already recorded would
+    // write the budget over the stop the run had.
+    Arena values = arena_make(1 << 20);
+    Arena machine = arena_make(1 << 20);
+    RunCtx r = run_ctx_make(&values, &machine, budgets_default());
+    Pos at = {3, 4};
+    EXPECT(run_fail(&r, at, CLASS_INDEX, S("no key")) == STOP);
+    refuse_once();
+    EXPECT_DIES(EXPECT(run_oom(&r, at) == STOP));
+    EXPECT_EQ(r.stop.cls, CLASS_INDEX);
+    *arena_refused_slot() = false;
     arena_deinit(&values);
     arena_deinit(&machine);
 }
@@ -254,5 +302,7 @@ TEST_MAIN(
     TEST_CASE(a_report_gives_the_calls_innermost_first),
     TEST_CASE(a_report_names_a_line_in_the_prelude_as_the_preludes),
     TEST_CASE(a_report_the_arena_refuses_says_so),
-    TEST_CASE(a_stop_with_no_stop_recorded_ends_the_process)
+    TEST_CASE(a_stop_with_no_stop_recorded_ends_the_process),
+    TEST_CASE(a_stop_read_as_a_refusal_no_arena_made_ends_the_process),
+    TEST_CASE(a_refusal_read_over_a_recorded_stop_ends_the_process)
 )

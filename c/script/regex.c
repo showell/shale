@@ -856,7 +856,7 @@ static STATUS_MUST_USE Status regex_compile(Arena *a, Str pattern, RegexOptions 
     // at most twice what was left, at its peak, and nothing after.
     Arena tree = arena_make(arena_sat_sub(a->limit, a->held));
     Status s = regex_compile_in(a, &tree, pattern, options, out, refused);
-    if (s != OK && !refused->refused) a->hit = true;
+    if (s != OK && !refused->refused) arena_set_hit(a);
     arena_deinit(&tree);
     return s;
 }

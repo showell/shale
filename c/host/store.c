@@ -211,6 +211,13 @@ static StoreErr store_cstr(StoreCPath *buf, Str s, const char **out) {
     return STORE_OK;
 }
 
+// The errno the kernel's call would have failed with on a path store_cstr
+// refused, so its caller's own error path says it: ENAMETOOLONG past
+// PATH_MAX, EINVAL for a NUL inside. Neither is an arena's refusal.
+static inline int store_cstr_errno(StoreErr e) {
+    return e == STORE_NAME_TOO_LONG ? ENAMETOOLONG : EINVAL;
+}
+
 // ── the bare-metal host's limits ────────────────────────────────────────
 
 // The two roots as the bare-metal host spells them, `data` and `auth`: a

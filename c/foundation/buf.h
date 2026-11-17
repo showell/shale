@@ -26,7 +26,7 @@ static inline STATUS_MUST_USE Status buf_reserve(Buf *b, size_t more) {
     // REMEDY: this check refuses such a `more` before the sum, and test_buf
     // catches its plant.
     if (more > SIZE_MAX - b->len) {
-        b->arena->hit = true;
+        arena_set_hit(b->arena);
         return STOP;
     }
     void *p = b->ptr;

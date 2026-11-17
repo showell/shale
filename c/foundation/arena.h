@@ -81,6 +81,27 @@ typedef struct {
     size_t backing_ok_left;
 } Arena;
 
+// Whether any arena refused since a run last read a refusal as its budget's
+// stop (err.h's run_oom). One flag for the process, not one an arena: a run's
+// refusals come from its values, its machine and a dozen scratch arenas, and
+// the stop that reads one is held to there being one, whichever refused.
+// DRAGON: the arena budget. A STOP that no arena refused, read as the arena
+// budget, would say a budget ran out when a bug in the C stopped the run.
+// REMEDY: every refusal sets this through arena_set_hit (no `hit = true`
+// anywhere else), run_oom aborts unless it is set and clears it, and
+// test_err's death tests hold both.
+static inline bool *arena_refused_slot(void) {
+    static bool refused;
+    return &refused;
+}
+
+// Marks `a` as having refused an allocation, and the process as holding a
+// refusal no stop has read yet.
+static inline void arena_set_hit(Arena *a) {
+    a->hit = true;
+    *arena_refused_slot() = true;
+}
+
 // Which mark: a reset gives back what came after it.
 typedef struct {
     size_t depth;
@@ -131,19 +152,19 @@ static inline ArenaChunk *arena_take(Arena *a, size_t total) {
     // rule), and `total` is at most what is left, so `held + total` can't
     // wrap.
     if (total > arena_sat_sub(a->limit, a->held)) {
-        a->hit = true;
+        arena_set_hit(a);
         return NULL;
     }
     if (a->backing_faults) {
         if (a->backing_ok_left == 0) {
-            a->hit = true;
+            arena_set_hit(a);
             return NULL;
         }
         a->backing_ok_left--;
     }
     ArenaChunk *c = malloc(total);
     if (c == NULL) {
-        a->hit = true;
+        arena_set_hit(a);
         return NULL;
     }
     c->next = NULL;
@@ -187,7 +208,7 @@ static inline void *arena_alloc(Arena *a, size_t len, size_t align) {
     // catches its plant. Every container's growth ends here, so it is the
     // last check before the heap.
     if (len > SIZE_MAX - sizeof(ArenaChunk) - align) {
-        a->hit = true;
+        arena_set_hit(a);
         return NULL;
     }
     size_t need = sizeof(ArenaChunk) + len + align;
@@ -328,7 +349,7 @@ static inline void arena_deinit(Arena *a) {
 }
 
 static inline void *arena_refuse(Arena *a) {
-    a->hit = true;
+    arena_set_hit(a);
     return NULL;
 }
 

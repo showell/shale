@@ -717,7 +717,8 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     TRY(paths_secret_target(&h->paths, &builtin_store_of(r)->path, pos, shown, &path));
     StoreCPath cp;
     const char *c = NULL;
-    if (store_cstr(&cp, path, &c) != STORE_OK) return run_values_oom(r, pos);
+    StoreErr ce = store_cstr(&cp, path, &c);
+    if (ce != STORE_OK) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(ce))));
     struct stat st;
     // DRAGON: the secrets rule. The path is a secrets mount's file, which
     // no message may name.
@@ -738,9 +739,9 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     if (buf_str(&t, dir) != OK || buf_lit(&t, "/.") != OK || buf_str(&t, base) != OK || buf_byte(&t, '.') != OK || buf_u64(&t, (uint64_t)getpid()) != OK || buf_lit(&t, ".shale-tmp") != OK) return run_values_oom(r, pos);
     StoreCPath tmp_cp;
     const char *tmp = NULL;
-    if (store_cstr(&tmp_cp, buf_view(&t), &tmp) != STORE_OK) return run_values_oom(r, pos);
-    int fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
-    if (fd < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(host_errno_tag(errno))));
+    StoreErr tmp_e = store_cstr(&tmp_cp, buf_view(&t), &tmp);
+    int fd = tmp_e == STORE_OK ? open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600) : -1;
+    if (fd < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(host_errno_tag(tmp_e == STORE_OK ? errno : store_cstr_errno(tmp_e)))));
     // 0600 whatever the umask. Its answer is not read: the open's own mode
     // already holds the file to 0600 or less.
     int chmodded = fchmod(fd, 0600);
@@ -914,10 +915,10 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
         // value goes to the environment and the scrubber alone.
         StoreCPath cp;
         const char *c = NULL;
-        if (store_cstr(&cp, path, &c) != STORE_OK) return run_values_oom(r, pos);
+        StoreErr ce = store_cstr(&cp, path, &c);
         // Neither waited on (a FIFO) nor followed (a link): host_open_regular.
         int fd = -1;
-        int err = host_open_regular(c, false, &fd);
+        int err = ce == STORE_OK ? host_open_regular(c, false, &fd) : store_cstr_errno(ce);
         if (err == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret `{s}`'s file {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path)));
         char *bytes = NULL;
         size_t len = 0;
@@ -1160,8 +1161,8 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
         TRY(host_change_os_path(h, r, pos, log_shown, S(""), &path));
         StoreCPath cp;
         const char *c = NULL;
-        if (store_cstr(&cp, path, &c) != STORE_OK) return run_values_oom(r, pos);
-        int opened = host_open_regular(c, true, &held->log_fd);
+        StoreErr ce = store_cstr(&cp, path, &c);
+        int opened = ce == STORE_OK ? host_open_regular(c, true, &held->log_fd) : store_cstr_errno(ce);
         if (opened == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: its log {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
         if (opened != 0) return host_fail(r, pos, CLASS_STORE, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(store_err_name(store_err_of(opened)))));
         sink_out.log_fd = held->log_fd;
