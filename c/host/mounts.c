@@ -51,6 +51,20 @@ static bool mounts_in_folder(Str abs, Str dir) {
     return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');
 }
 
+// Zig's `spellsSecretFolder`: whether `text` holds a secrets mount's folder,
+// as the mounts file names it, anywhere in it. A stop for a mount whose
+// folder is missing prints the folder only when it does not.
+static bool mounts_spell_secret_folder(MountsItems ms, Str text) {
+    for (size_t k = 0; k < ms.len; k++) {
+        Str dir = at(ms, k).dir;
+        if (!at(ms, k).secrets || dir.len > text.len) continue;
+        for (size_t i = 0; i + dir.len <= text.len; i++) {
+            if (str_eq(str_sub(text, i, i + dir.len), dir)) return true;
+        }
+    }
+    return false;
+}
+
 static bool mounts_valid_name(Str s) {
     for (size_t i = 0; i < s.len; i++) {
         uint8_t c = str_byte(s, i);

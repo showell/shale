@@ -309,7 +309,12 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     const char *dir_c = c_string(a, m->dir);
     struct stat dst;
     if (dir_c == NULL) return STOP;
-    if (stat(dir_c, &dst) != 0 || !S_ISDIR(dst.st_mode)) return reader_why(why, got, 5, a, S("the mount `"), m->name, S("` is "), m->dir, S(", which is not a folder there"));
+    if (stat(dir_c, &dst) != 0 || !S_ISDIR(dst.st_mode)) {
+        // A folder whose path spells a secrets mount's is not named (a
+        // secrets mount itself was refused above).
+        if (mounts_spell_secret_folder(r->mounts, m->dir)) return reader_why(why, got, 3, a, S("the mount `"), m->name, S("`'s folder is missing; its path holds a secrets mount's folder, so it is not named"));
+        return reader_why(why, got, 5, a, S("the mount `"), m->name, S("` is "), m->dir, S(", which is not a folder there"));
+    }
     bool linked = false;
     TRY(refuse_links(r, m->dir, rest, str_sub(path, 0, colon + 1), why, &linked));
     if (linked) return OK;

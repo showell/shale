@@ -254,7 +254,9 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
         if (to == rest.len) break;
         from = to + 1;
     }
-    // A missing mount folder stops the run only when the mount is used.
+    // A missing mount folder stops the run only when the mount is used. A
+    // stop whose folder would spell a secrets mount's names the mount alone:
+    // that folder is what the secrets rule hides.
     const char *c = NULL;
     StoreErr e = store_cstr(paths_values(r), m->dir, &c);
     if (e == STORE_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
@@ -265,10 +267,15 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
         close(fd);
     } else {
         StoreErr why = e != STORE_OK ? e : store_err_of(errno);
+        bool spells = mounts_spell_secret_folder(h->mounts, m->dir);
         if (why == STORE_FILE_NOT_FOUND || why == STORE_NOT_DIR) {
-            return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_MOUNT_FOLDER(m->dir)));
+            if (m->secrets) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is a secrets mount whose folder is missing"), MSG_ARGS(MSG_FROM_HOST(m->name)));
+            if (spells) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named"), MSG_ARGS(MSG_FROM_HOST(m->name)));
+            return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(m->dir)));
         }
-        return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_MOUNT_FOLDER(m->dir), MSG_FROM_HOST(store_err_name(why))));
+        if (m->secrets) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is a secrets mount whose folder cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(store_err_name(why))));
+        if (spells) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(store_err_name(why))));
+        return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(m->dir), MSG_FROM_HOST(store_err_name(why))));
     }
     Str dir = S("");
     TRY(paths_run_dir_of(h, r, pos, m, &dir));

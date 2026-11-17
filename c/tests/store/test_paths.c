@@ -610,12 +610,35 @@ TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_p
     EXPECT(names);
     EXPECT_EQ(paths_names_secret(&f.paths, &f.run, fx_pos(), S("keys/tok"), &names), OK);
     EXPECT(!names);
-    // The one Zig text that names a mount's folder: a secrets mount whose
-    // folder is gone, met by `run`'s `secrets`.
-    fx_mounts(&f, "gone = R/no-such secrets\n");
+    // A mount's folder is a host text too, held to the same check.
+    EXPECT_DIES(if (path_fail(&f.run, fx_pos(), CLASS_STORE, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(S("k")), MSG_FROM_HOST(fx_r(&f, "R/keys")))) != OK) {});
+    // So a mount's folder missing or shut is said by the mount's name alone
+    // when the folder is a secrets mount's, or its path spells one; an
+    // ordinary mount's names its folder.
+    sx_mkdir(&f.base, "shut/keys");
+    sx_mkdir(&f.base, "shut/plain");
+    fx_mounts(&f, "k = R/no-keys secrets\np = R/no-plain\nks = R/shut/keys secrets\nps = R/shut/plain\nin = R/no-keys/sub\nnear = R/no-keys-old\nkin = R/shut/keys/sub\n");
     Str secret = S("");
+    // Through `run`'s `secrets` and `stdout_secret`, the mount alone.
     fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("gone:tok"), &secret), CLASS_STORE, SAYS("the mount `gone` is R/no-such, which is not a folder there")));
+    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("k:tok"), &secret), CLASS_STORE, S("the mount `k` is a secrets mount whose folder is missing")));
+    fx_again(&f);
+    EXPECT(fx_said(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), S("k:tok"), &secret), CLASS_STORE, S("the mount `k` is a secrets mount whose folder is missing")));
+    // An ordinary mount's names its folder.
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("p:x")), CLASS_STORE, SAYS("the mount `p` is R/no-plain, which is not a folder there")));
+    // Unless its path spells a secrets mount's folder, inside it or only
+    // beginning with it.
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("in:x")), CLASS_STORE, S("the mount `in`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("near:x")), CLASS_STORE, S("the mount `near`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
+    // A folder there that cannot be opened: its parent shut.
+    EXPECT_EQ(sx_chmod(&f.base, "shut", 0), 0);
+    fx_again(&f);
+    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("ks:tok"), &secret), CLASS_STORE, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
+    fx_again(&f);
+    EXPECT(fx_said(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), S("ks:tok"), &secret), CLASS_STORE, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("ps:x")), CLASS_STORE, SAYS("the mount `ps` is R/shut/plain, which cannot be opened: AccessDenied")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("kin:x")), CLASS_STORE, S("the mount `kin`'s folder cannot be opened: AccessDenied; its path holds a secrets mount's folder, so it is not named")));
+    EXPECT_EQ(sx_chmod(&f.base, "shut", 0700), 0);
     fx_deinit(&f);
 }
 

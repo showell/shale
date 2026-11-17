@@ -57,13 +57,10 @@ static STATUS_MUST_USE Status path_charge(PathRun *r, Pos pos, uint64_t n) {
 }
 
 // What an argument of a stop's message is: the script's own text, which a
-// message may give back; the host's, which the secrets check reads; or the
-// one host text Zig puts a secrets mount's folder in (`MSG_MOUNT_FOLDER`,
-// paths.c's `paths_mount_path`).
+// message may give back, or the host's, which the secrets check reads.
 typedef enum {
     MSG_SCRIPT,
     MSG_HOST,
-    MSG_MOUNT_FOLDER,
     // The end of MSG_ARGS's list, never a message's.
     MSG_END,
 } MsgKind;
@@ -79,7 +76,6 @@ SLICE_TYPE(MsgArgs, const MsgArg);
 // compound literal inside the array's initializer ("index too large").
 #define MSG_FROM_SCRIPT(s) {(s), MSG_SCRIPT}
 #define MSG_FROM_HOST(s) {(s), MSG_HOST}
-#define MSG_FROM_MOUNT_FOLDER(s) {(s), MSG_MOUNT_FOLDER}
 // The list ends with an MSG_END item and is counted when it is made: a
 // brace item's comma would split a preprocessor count, and TCC 0.9.27
 // refuses `sizeof` of the compound literal when an item calls a function.
@@ -156,8 +152,9 @@ static STATUS_MUST_USE Status msg_format(Buf *b, Str fmt, MsgArgs args) {
 // are.
 // REMEDY: the rule's one check, here: such an argument ends the process, a
 // bug in the C, before any message is made. A script's own text may come
-// back (the plain absolute stop gives back what the script wrote), and so
-// may the one Zig text that names a mount's folder, MSG_MOUNT_FOLDER.
+// back (the plain absolute stop gives back what the script wrote); no host
+// text may, a mount's folder included (paths.c's `paths_mount_path` names a
+// secrets mount alone).
 // test_paths plants a host argument that names one.
 static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str fmt, MsgArgs args) {
     if (r->hook != NULL && r->hook->names_secret != NULL) {
