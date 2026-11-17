@@ -247,7 +247,9 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
     const char *c = NULL;
     StoreErr e = store_cstr(paths_values(r), m->dir, &c);
     if (e == STORE_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
-    int fd = e == STORE_OK ? open(c, O_RDONLY | O_DIRECTORY | O_CLOEXEC) : -1;
+    // O_PATH, as Zig's `openDir` without `iterate`: a folder that may be
+    // searched but not listed still opens.
+    int fd = e == STORE_OK ? open(c, O_PATH | O_DIRECTORY | O_CLOEXEC) : -1;
     if (fd >= 0) {
         close(fd);
     } else {
