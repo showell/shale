@@ -1,0 +1,125 @@
+-- c/check_discipline.shale: holds the C under c/ to three rules C itself won't.
+--   alloc:     no malloc, free, calloc or realloc (nor aligned_alloc, strdup,
+--              strndup) outside c/foundation/arena.h;
+--   raw index: no raw index on a Str or slice (`s.ptr[i]`, `*(s.ptr + i)`)
+--              outside c/foundation/slice.h: `at(s, i)`, or
+--              `at_unchecked(s, i, "why")` where a loop has proved its bounds;
+--   cstr:      no `char *` parameter or field in a header without its length:
+--              a field `ptr` with `size_t len` on the next line, or a
+--              `// cstr: <why>` on the line itself.
+-- Strings, character literals and comments are not code, so a word in one
+-- never counts. A file is judged by its own name (arena.h, slice.h), so the
+-- plants below are judged as any file is.
+--
+-- `self_test=1` writes one plant of each rule, and lines that must pass
+-- beside them, to c/out/discipline/plant.h, and fails unless exactly the
+-- plants are caught.
+--
+-- Run from the repository's root: shale c/check_discipline.shale
+
+const ALLOC = [=[\b(malloc|free|calloc|realloc|aligned_alloc|strdup|strndup)\s*\(]=]
+const RAW_INDEX = [=[\bptr\s*\[|\*\s*\(\s*[A-Za-z_][A-Za-z0-9_.>-]*ptr\s*\+]=]
+const CHAR_PARAM = [=[[(,]\s*(const\s+)?char\s*\*\s*\w+\s*[,)]]=]
+const CHAR_FIELD = [=[^\s*(const\s+)?char\s*\*\s*\w+\s*;]=]
+const LEN_FIELD = [=[^\s*size_t\s+len\s*;]=]
+
+-- The line's code: its strings and character literals emptied, its comments cut.
+function code_of(line)
+  local s = re_replace(line, [=["(\\.|[^"\\])*"]=], [=[""]=])
+  s = re_replace(s, [=['(\\.|[^'\\])*']=], "''")
+  s = re_replace(s, [=[/\*[^*]*\*/]=], "")
+  local cut = find(s, "//")
+  if cut ~= nil then s = sub(s, 1, cut - 1) end
+  return s
+end
+
+-- Each break of the rules in the file at `p`, as {path, line, rule, text}.
+function check_file(p)
+  local name = basename(p)
+  local header = ends_with(p, ".h")
+  local all = lines(read(p))
+  local found = {}
+  local n = 0
+  for raw in all do
+    n = n + 1
+    local code = code_of(raw)
+    if name ~= "arena.h" and re_find(code, ALLOC) ~= nil then
+      push(found, {path = p, line = n, rule = "alloc", text = raw})
+    end
+    if name ~= "slice.h" and re_find(code, RAW_INDEX) ~= nil then
+      push(found, {path = p, line = n, rule = "raw index", text = raw})
+    end
+    if header and find(raw, "// cstr: ") == nil then
+      local paired = false
+      if re_find(code, CHAR_FIELD) ~= nil and re_find(code, "\\bptr\\s*;") ~= nil and n < #all then
+        paired = re_find(all[n + 1], LEN_FIELD) ~= nil
+      end
+      if not paired and (re_find(code, CHAR_PARAM) ~= nil or re_find(code, CHAR_FIELD) ~= nil) then
+        push(found, {path = p, line = n, rule = "cstr", text = raw})
+      end
+    end
+  end
+  return found
+end
+
+-- The C files under `dir`, the build's output left out.
+function c_files(dir)
+  local files = {}
+  for p in glob(dir .. "/**/*") do
+    if (ends_with(p, ".c") or ends_with(p, ".h")) and not starts_with(p, "c/out/") then push(files, p) end
+  end
+  sort(files)
+  return files
+end
+
+function check_files(files)
+  local found = {}
+  for p in files do
+    for f in check_file(p) do push(found, f) end
+  end
+  return found
+end
+
+function self_test()
+  local dir = "c/out/discipline"
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir)
+  local p = dir .. "/plant.h"
+  create(p, [=[// The discipline check's plants: lines 3 to 7 break a rule each, the rest pass.
+#include "slice.h"
+static inline void *grab(size_t n) { return malloc(n); }
+static inline char first(Str s) { return s.ptr[0]; }
+static inline char second(Str s) { return *(s.ptr + 1); }
+void name_it(const char *name);
+    const char *label;
+    int count;
+static inline void give_back(Arena *a, void *p) { arena_free(a, p, 1); }
+// a comment that says malloc(n) and s.ptr[0] and (const char *x)
+static inline char first_ok(Str s) { return at(s, 0); }
+static inline const char *said(void) { return "free(p) and s.ptr[0]"; }
+void with_reason(const char *file); // cstr: __FILE__
+typedef struct {
+    const char *ptr;
+    size_t len;
+} Good;
+static inline char unchecked(Str s) { return at_unchecked(s, 0, "s is not empty"); }
+]=])
+  local want = {"3 alloc", "4 raw index", "5 raw index", "6 cstr", "7 cstr"}
+  local got = {}
+  for f in check_file(p) do push(got, f.line .. " " .. f.rule) end
+  if join(got, ", ") ~= join(want, ", ") then
+    fail("the discipline check's self-test caught " .. join(got, ", ") .. "; it should catch exactly " .. join(want, ", "))
+  end
+  remove_tree(dir)
+  print("PASS self-test: " .. #want .. " plants caught, every other line passed")
+end
+
+if arg("self_test", 0) == 1 then
+  self_test()
+else
+  local files = c_files("c")
+  local found = check_files(files)
+  for f in found do print(f.path .. ":" .. f.line .. ": " .. f.rule .. ": " .. f.text) end
+  if #found > 0 then fail(#found .. " breaks of the C's discipline in " .. #files .. " files") end
+  print("PASS discipline: " .. #files .. " files")
+end

@@ -1,0 +1,10 @@
+FAIL expect_fails (c/tests/fixtures/harness_fails.c:12): 1 + 1 == 3
+  3 is 3, 4 is 4
+FAIL eq_fails (c/tests/fixtures/harness_fails.c:16): 3 == 4
+  got  "got"
+  want "want"
+FAIL str_fails (c/tests/fixtures/harness_fails.c:20): S("got") is S("want")
+FAIL no_trap_fails (c/tests/fixtures/harness_fails.c:25): `x = 1` did not trap
+FAIL no_death_fails (c/tests/fixtures/harness_fails.c:30): `(void)0` did not abort
+FAIL stops_at_its_first_failure (c/tests/fixtures/harness_fails.c:34): 0
+c/tests/fixtures/harness_fails.c: 6 of 7 tests failed

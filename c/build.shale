@@ -1,0 +1,249 @@
+-- c/build.shale: the C foundation's builds, each running every test, then
+-- what holds the tests themselves honest. In order:
+--   tcc      the inner loop: `tcc -run` each test file, no binary made;
+--   release  GCC, -std=c11 -O2 -Wall -Wextra -Werror;
+--   asan     GCC, -std=c11 -O0 -Wall -Wextra -Werror with
+--            -fsanitize=address,undefined, as every test run must have;
+--   counts   each file's printed count is its `TEST(` count, under every build;
+--   harness  tests/fixtures/harness_fails.c prints exactly its .expected;
+--   reasons  `at_unchecked` without a literal, non-empty reason won't compile;
+--   plants   each planted fault in the foundation is caught (`PLANTS` below);
+--   discipline  c/check_discipline.shale, and its own self-test.
+-- It reads each compiler's version first. A compiler that is missing fails the
+-- run, loud, after everything it can run has run.
+--
+-- Run from the repository's root: shale c/build.shale
+-- budget: steps=20000000 programs=200
+
+const FOUNDATION = "c/foundation"
+const OUT = "c/out"
+const WANT = "c-tests: the build's own test binary, made under c/out"
+
+-- Each fault planted in a copy of the foundation, one at a time: `file`'s
+-- `old` (there exactly once) becomes `new`, and the test file `caught_by`
+-- must fail on it (`harness` is the fixture's run).
+const PLANTS = {
+  {name = "the budget ignores what is held", file = "arena.h", caught_by = "test_arena",
+   old = "if (total > arena_sat_sub(a->limit, a->held)) {", new = "if (total > a->limit) {"},
+  {name = "chunks never double", file = "arena.h", caught_by = "test_arena",
+   old = "size_t twice = last > SIZE_MAX / 2 ? SIZE_MAX : 2 * last;", new = "size_t twice = last;"},
+  {name = "the big threshold is off by one", file = "arena.h", caught_by = "test_arena",
+   old = "    if (len >= ARENA_BIG) {\n        ArenaChunk *c = arena_take(a, need);", new = "    if (len > ARENA_BIG) {\n        ArenaChunk *c = arena_take(a, need);"},
+  {name = "a reset keeps the bigs", file = "arena.h", caught_by = "test_arena",
+   old = "    while (a->bigs != s.bigs) {", new = "    while (0 && a->bigs != s.bigs) {"},
+  {name = "a big freed under a mark leaves the mark dangling", file = "arena.h", caught_by = "test_arena",
+   old = "if (at(marks, m).bigs == c) at(marks, m).bigs = c->next;", new = "(void)at(marks, m);"},
+  {name = "any allocation grows in place", file = "arena.h", caught_by = "test_arena",
+   old = "if (!arena_is_last(a, p, old_len)) return new_len <= old_len;", new = "if (!arena_is_last(a, p, old_len)) return true;"},
+  {name = "at lets one past the end through", file = "slice.h", caught_by = "test_slice",
+   old = "if (i < len) return i;", new = "if (i <= len) return i;"},
+  {name = "a part may end past the length", file = "slice.h", caught_by = "test_slice",
+   old = "if (from <= to && to <= len) return;", new = "if (from <= to && to <= len + 1) return;"},
+  {name = "the smallest integer negated overflows", file = "buf.h", caught_by = "test_buf",
+   old = "return buf_u64(b, (uint64_t)(-(n + 1)) + 1);", new = "return buf_u64(b, (uint64_t)(-n));"},
+  {name = "growth forgets Zig's half again", file = "vec.h", caught_by = "test_vec",
+   old = "size_t extra = minimum / 2 + init;", new = "size_t extra = init;"},
+  {name = "a move copies bytes, not items", file = "vec.h", caught_by = "test_vec",
+   old = "if (len > 0) memmove(fresh, *ptr, len * elem);", new = "if (len > 0) memmove(fresh, *ptr, len);"},
+  {name = "setting a key again is dropped", file = "map.h", caught_by = "test_map",
+   old = "            at(vals, e) = v;                                                                 \\\n            return OK;", new = "            (void)vals;                                                                      \\\n            return OK;"},
+  {name = "a removal leaves the values behind", file = "map.h", caught_by = "test_map",
+   old = "if (after > 0) memmove(m->values + e, m->values + e + 1, after * sizeof(V));", new = "(void)after;"},
+  {name = "the arena's stop words its message its own way", file = "err.h", caught_by = "test_err",
+   old = "case BUDGET_ARENA: return S(\"the arena budget ran out\");", new = "case BUDGET_ARENA: return S(\"the arena budget is spent\");"},
+  {name = "the calls are reported outermost first", file = "err.h", caught_by = "test_err",
+   old = "const Call c = at(s->trail, k - 1);", new = "const Call c = at(s->trail, s->trail.len - k);"},
+  {name = "a failed EXPECT passes", file = "test.h", caught_by = "harness",
+   old = "if (!(cond)) test_fail(__FILE__, __LINE__, S(#cond));", new = "if (0 && !(cond)) test_fail(__FILE__, __LINE__, S(#cond));"},
+  {name = "a failure loses its line", file = "test.h", caught_by = "harness",
+   old = "(int)t->current.len, t->current.ptr, file, line,", new = "(int)t->current.len, t->current.ptr, file, line * 0,"},
+}
+
+-- The first line a compiler says of its version, or nil when it is missing.
+function version_of(argv)
+  local r = attempt(run, argv, {timeout_ms = 10000, head = 1})
+  if not r.ok then return nil end
+  if r.value.code ~= 0 then return nil end
+  return trim(r.value.out)
+end
+
+-- The flags of a GCC build, `include` the foundation's folder.
+function gcc_flags(build, include)
+  local f = {"gcc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-I" .. include}
+  if build == "release" then
+    push(f, "-O2")
+  else
+    push(f, "-O0")
+    push(f, "-g")
+    push(f, "-fsanitize=address,undefined")
+    push(f, "-fno-sanitize-recover=all")
+    push(f, "-fno-omit-frame-pointer")
+  end
+  return f
+end
+
+-- Compiles `src` under `build` and runs it, as {code, out, compile_ms, run_ms}.
+-- A compile that fails stops the run, naming it.
+function build_and_run(build, src, include, bin_dir)
+  local name = sub(basename(src), 1, #basename(src) - 2)
+  if build == "tcc" then
+    local r = run({"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. include, "-run", src}, {timeout_ms = 60000, tail = 40})
+    return {code = r.code, out = r.out, compile_ms = 0, run_ms = r.ms}
+  end
+  mkdir(bin_dir)
+  local bin = bin_dir .. "/" .. name
+  local argv = gcc_flags(build, include)
+  push(argv, src)
+  push(argv, "-o")
+  push(argv, bin)
+  local c = run(argv, {timeout_ms = 120000, tail = 40})
+  if c.code ~= 0 then fail("`" .. build .. "` could not compile " .. src .. ":\n" .. c.out) end
+  local r = run({bin}, {timeout_ms = 20000, whole = 200000, want = WANT})
+  -- A run past its timeout has no code; it is a failure, said as one.
+  if not has_key(r, "code") then return {code = -1, out = r.out .. "\n(" .. r.ended .. ")", compile_ms = c.ms, run_ms = r.ms} end
+  return {code = r.code, out = r.out, compile_ms = c.ms, run_ms = r.ms}
+end
+
+-- The `TEST(` lines in a test file: the count its run must print.
+function test_count(src)
+  local n = 0
+  for l in lines(read(src)) do
+    if starts_with(l, "TEST(") then n = n + 1 end
+  end
+  return n
+end
+
+-- Every test file under `build`, each run held to its count. Gives
+-- {tests, compile_ms, run_ms}.
+function run_build(build, tests)
+  local total = 0
+  local compile_ms = 0
+  local run_ms = 0
+  for src in tests do
+    local r = build_and_run(build, src, FOUNDATION, OUT .. "/" .. build)
+    compile_ms = compile_ms + r.compile_ms
+    run_ms = run_ms + r.run_ms
+    if r.code ~= 0 then fail("`" .. build .. "`: " .. src .. " exited " .. r.code .. ":\n" .. r.out) end
+    local n = test_count(src)
+    local said = src .. ": " .. n .. " tests passed"
+    if trim(r.out) ~= said then fail("`" .. build .. "`: " .. src .. " has " .. n .. " TEST(s), and its run said:\n" .. r.out) end
+    total = total + n
+  end
+  return {tests = total, compile_ms = compile_ms, run_ms = run_ms}
+end
+
+-- Whether the harness fixture, built over `include`, prints exactly its
+-- .expected and exits 1.
+function harness_holds(include, bin_dir)
+  local r = build_and_run("asan", "c/tests/fixtures/harness_fails.c", include, bin_dir)
+  return r.code == 1 and r.out == read("c/tests/fixtures/harness_fails.expected")
+end
+
+-- `text` with `old`, which must be there exactly once, made `new`.
+function replaced_once(text, old, new, what)
+  local i = find(text, old)
+  if i == nil then fail("plant `" .. what .. "`: its text is not in the foundation") end
+  if find(text, old, i + 1) ~= nil then fail("plant `" .. what .. "`: its text is in the foundation twice") end
+  return sub(text, 1, i - 1) .. new .. sub(text, i + #old)
+end
+
+-- The names of the tests a run's output says failed, or what ended it.
+function caught_how(out)
+  local names = {}
+  for l in lines(out) do
+    local m = re_find(l, "^FAIL (\\w+)")
+    if m ~= nil then push(names, m.group) end
+    if find(l, "ERROR: AddressSanitizer") ~= nil then push(names, "AddressSanitizer") end
+    if find(l, "ERROR: LeakSanitizer") ~= nil then push(names, "the leaks a failed test leaves") end
+    if find(l, "runtime error:") ~= nil then push(names, "UndefinedBehaviorSanitizer") end
+    if l == "(timeout)" then push(names, "its timeout") end
+  end
+  if #names == 0 then return "its exit" end
+  return join(unique(names), ", ")
+end
+
+-- Each plant in its own copy of the foundation, under the asan build: the
+-- test file it names must fail on it. Gives the lines to report.
+function run_plants()
+  local said = {}
+  local k = 0
+  for p in PLANTS do
+    k = k + 1
+    local dir = OUT .. "/plants/" .. k
+    if exists(dir) then remove_tree(dir) end
+    mkdir(OUT .. "/plants")
+    copy(FOUNDATION, dir)
+    local file = dir .. "/" .. p.file
+    replace(file, replaced_once(read(file), p.old, p.new, p.name))
+    if p.caught_by == "harness" then
+      if harness_holds(dir, dir .. "/bin") then fail("plant `" .. p.name .. "` was not caught: the harness fixture printed what it expects") end
+      push(said, "  caught: " .. p.name .. " (" .. p.file .. "), by the harness fixture")
+    else
+      local r = build_and_run("asan", "c/tests/" .. p.caught_by .. ".c", dir, dir .. "/bin")
+      if r.code == 0 then fail("plant `" .. p.name .. "` was not caught: " .. p.caught_by .. " passed with it in " .. p.file) end
+      push(said, "  caught: " .. p.name .. " (" .. p.file .. "), by " .. p.caught_by .. ": " .. caught_how(r.out))
+    end
+    remove_tree(dir)
+  end
+  return said
+end
+
+-- `at_unchecked` with no reason, an empty one or one that is no literal
+-- must not compile.
+function check_reasons()
+  local dir = OUT .. "/reasons"
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir)
+  local cases = {
+    {name = "empty", call = [=[at_unchecked(s, 0, "")]=]},
+    {name = "variable", call = [=[at_unchecked(s, 0, why)]=]},
+  }
+  for c in cases do
+    local src = dir .. "/" .. c.name .. ".c"
+    create(src, "#include \"slice.h\"\nint f(Str s, const char *why);\nint f(Str s, const char *why) { (void)why; return " .. c.call .. "; }\n")
+    local argv = gcc_flags("release", FOUNDATION)
+    push(argv, "-fsyntax-only")
+    push(argv, src)
+    local r = run(argv, {timeout_ms = 30000, tail = 5})
+    if r.code == 0 then fail("`" .. c.call .. "` compiled: an unchecked index must carry a literal reason") end
+  end
+  remove_tree(dir)
+  return #cases
+end
+
+function seconds(ms)
+  return (ms // 1000) .. "." .. ((ms % 1000) // 100) .. " s"
+end
+
+local gcc = version_of({"gcc", "--version"})
+local tcc = version_of({"tcc", "-v"})
+if gcc == nil then fail("gcc is not installed: `sudo apt install gcc` (it builds the release and the sanitizers)") end
+print("gcc: " .. gcc)
+print("tcc: " .. (tcc or "MISSING"))
+
+local tests = {}
+for p in glob("c/tests/test_*.c") do push(tests, p) end
+sort(tests)
+
+local builds = {"release", "asan"}
+if tcc ~= nil then builds = {"tcc", "release", "asan"} end
+for b in builds do
+  local r = run_build(b, tests)
+  print(b .. ": " .. r.tests .. " tests in " .. #tests .. " files passed; compile " .. seconds(r.compile_ms) .. ", run " .. seconds(r.run_ms))
+end
+
+if not harness_holds(FOUNDATION, OUT .. "/asan") then fail("the harness fixture did not print exactly tests/fixtures/harness_fails.expected") end
+print("harness: the fixture's 6 failures, each named with its line, and its count")
+print("reasons: " .. check_reasons() .. " unchecked indexes without a literal reason refused by the compiler")
+
+local said = run_plants()
+print("plants: " .. #said .. " of " .. #PLANTS .. " caught")
+for l in said do print(l) end
+
+print(trim(must(run({"shale", "c/check_discipline.shale"}, {timeout_ms = 60000, tail = 20})).out))
+print(trim(must(run({"shale", "c/check_discipline.shale", "self_test=1"}, {timeout_ms = 60000, tail = 20})).out))
+
+if tcc == nil then
+  fail("tcc is not installed, so the inner loop did not run: `sudo apt install tcc` (Ubuntu noble's tcc 0.9.27+git20200814)")
+end
+print("PASS")
