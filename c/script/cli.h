@@ -80,7 +80,7 @@ SLICE_TYPE(ArgSlots, Arg);
 
 enum {
     // The most values the command line takes, and `--args-stdin` as many.
-    CLI_ARGS_MOST = 64,
+    CLI_ARGS_MAX = 64,
 };
 
 typedef struct {
@@ -98,7 +98,7 @@ typedef struct {
     Budgets budgets;
     bool flagged[SET_COUNT];
     bool from_header[SET_COUNT];
-    Arg args[CLI_ARGS_MOST];
+    Arg args[CLI_ARGS_MAX];
     size_t args_len;
 } Command;
 
@@ -261,7 +261,7 @@ static inline STATUS_MUST_USE Status cli_parse(Str *argv, size_t argc, bool has_
     cli_defaults(&c->budgets);
     SLICE_TYPE(Argv, Str);
     Argv all = {argv, argc};
-    ArgSlots slots = {c->args, CLI_ARGS_MOST};
+    ArgSlots slots = {c->args, CLI_ARGS_MAX};
     for (size_t i = 0; i < all.len; i++) {
         Str a = at(all, i);
         if (str_eq(a, S("--verbose"))) {
@@ -295,7 +295,7 @@ static inline STATUS_MUST_USE Status cli_parse(Str *argv, size_t argc, bool has_
             // script follows, which is refused there.
             size_t eq = cli_index_of(a, '=');
             if (eq == 0) return cli_refuse(why, 2, a, S(": a value needs a name"));
-            if (c->args_len == CLI_ARGS_MOST) return cli_refuse(why, 1, S("more than 64 values"));
+            if (c->args_len == CLI_ARGS_MAX) return cli_refuse(why, 1, S("more than 64 values"));
             Arg v = {str_sub(a, 0, eq), str_sub(a, eq + 1, a.len)};
             at(slots, c->args_len) = v;
             c->args_len++;
@@ -342,9 +342,9 @@ static inline bool cli_split(Str *rest, bool *done, char sep, Str *part) {
 }
 
 // `--args-stdin`'s values, one `NAME=VALUE` a line, after the command line's,
-// into `more` (which holds up to CLI_ARGS_MOST).
+// into `more` (which holds up to CLI_ARGS_MAX).
 static inline STATUS_MUST_USE Status cli_arg_lines(Str text, const Command *c, Arg *more, size_t *more_len, Buf *why) {
-    ArgSlots out = {more, CLI_ARGS_MOST};
+    ArgSlots out = {more, CLI_ARGS_MAX};
     size_t n = c->args_len;
     for (size_t i = 0; i < n; i++) {
         ArgSlots have = {(Arg *)c->args, c->args_len};
@@ -369,7 +369,7 @@ static inline STATUS_MUST_USE Status cli_arg_lines(Str text, const Command *c, A
         for (size_t k = 0; k < n; k++) {
             if (str_eq(at(out, k).name, name)) return cli_refuse(why, 5, S("--args-stdin: line "), buf_view(&num), S(": "), name, S(" is given twice"));
         }
-        if (n == CLI_ARGS_MOST) return cli_refuse(why, 1, S("more than 64 values"));
+        if (n == CLI_ARGS_MAX) return cli_refuse(why, 1, S("more than 64 values"));
         Arg a = {name, str_sub(line, eq + 1, line.len)};
         at(out, n) = a;
         n++;
@@ -616,11 +616,11 @@ static inline STATUS_MUST_USE Status cli_unread_arg(Arena *a, const Program *pro
 
 // The longest name FAT holds on the bare-metal host, which must agree with
 // zig-webbox's store (`max_name`).
-enum { CLI_NAME_MOST = 96 };
+enum { CLI_NAME_MAX = 96 };
 
 // Whether `name` is a part of a path FAT can hold.
 static inline bool cli_fat_name(Str name) {
-    if (name.len == 0 || name.len > CLI_NAME_MOST) return false;
+    if (name.len == 0 || name.len > CLI_NAME_MAX) return false;
     if (str_eq(name, S(".")) || str_eq(name, S(".."))) return false;
     for (size_t i = 0; i < name.len; i++) {
         uint8_t c = str_byte(name, i);

@@ -839,7 +839,7 @@ static int run_main(Out *o, int argc, char **argv) {
     Buf why = buf_make(a);
     Words rest = all.len > 0 ? SLICE_SUB(Words, all, 1, all.len) : all;
     if (cli_parse(rest.ptr, rest.len, env_root != NULL, env_root != NULL ? from_c(env_root) : S(""), &c, &why) != OK) return refuse_command(o, buf_view(&why), true);
-    Arg more[CLI_ARGS_MOST];
+    Arg more[CLI_ARGS_MAX];
     size_t more_len = 0;
     const Arg *args = c.args;
     size_t args_len = c.args_len;
