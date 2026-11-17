@@ -114,7 +114,7 @@ TEST(a_message_quotes_the_budget_set_not_the_default) {
     b.steps = 900;
     RunCtx r = run_ctx_make(&v, &machine, b);
     Pos at = {1, 1};
-    run_budget_stop(&r, at, BUDGET_STEPS);
+    EXPECT(run_budget_stop(&r, at, BUDGET_STEPS) == STOP);
     EXPECT_STR(r.stop.message, S("the step budget (900 steps) ran out"));
     arena_deinit(&v);
     arena_deinit(&machine);
@@ -125,7 +125,7 @@ TEST(a_stop_on_no_budget_ends_the_process) {
     Arena machine = arena_make(1 << 20);
     RunCtx r = run_ctx_make(&v, &machine, budgets_default());
     Pos at = {1, 1};
-    EXPECT_DIES(run_budget_stop(&r, at, BUDGET_NONE));
+    EXPECT_DIES(EXPECT(run_budget_stop(&r, at, BUDGET_NONE) == STOP));
     arena_deinit(&v);
     arena_deinit(&machine);
 }
@@ -163,10 +163,10 @@ TEST(run_fail_keeps_its_class_and_has_no_budget) {
     EXPECT_EQ(r.stop.trail.len, 0);
     Buf b = buf_make(&v);
     Status built = buf_lit(&b, "built");
-    run_fail_built(&r, at, CLASS_TYPE, &b, built, S("fallback"));
+    EXPECT(run_fail_built(&r, at, CLASS_TYPE, &b, built, S("fallback")) == STOP);
     EXPECT_STR(r.stop.message, S("built"));
     EXPECT_EQ(r.stop.cls, CLASS_TYPE);
-    run_fail_built(&r, at, CLASS_TYPE, &b, STOP, S("fallback"));
+    EXPECT(run_fail_built(&r, at, CLASS_TYPE, &b, STOP, S("fallback")) == STOP);
     EXPECT_STR(r.stop.message, S("fallback"));
     arena_deinit(&v);
     arena_deinit(&machine);
@@ -224,6 +224,23 @@ TEST(a_report_the_arena_refuses_says_so) {
     arena_deinit(&full);
 }
 
+TEST(a_stop_with_no_stop_recorded_ends_the_process) {
+    // The attack: a container's STOP passed up without run_oom, so the run
+    // would end with a zeroed Stop that names no budget.
+    Arena values = arena_make(1 << 20);
+    Arena machine = arena_make(1 << 20);
+    RunCtx r = run_ctx_make(&values, &machine, budgets_default());
+    EXPECT(run_ended(&r, OK) == OK);
+    EXPECT_DIES(EXPECT(run_ended(&r, STOP) == STOP));
+    EXPECT(!r.stopped);
+    Pos at_one = {1, 2};
+    EXPECT(run_oom(&r, at_one) == STOP);
+    EXPECT(run_ended(&r, STOP) == STOP);
+    EXPECT_EQ(r.stop.budget, BUDGET_ARENA);
+    arena_deinit(&values);
+    arena_deinit(&machine);
+}
+
 TEST_MAIN(
     TEST_CASE(the_class_names_are_zigs_tag_names),
     TEST_CASE(the_budget_names_are_zigs_tag_names),
@@ -237,5 +254,6 @@ TEST_MAIN(
     TEST_CASE(a_report_names_the_place_the_class_the_budget_and_the_steps),
     TEST_CASE(a_report_gives_the_calls_innermost_first),
     TEST_CASE(a_report_names_a_line_in_the_prelude_as_the_preludes),
-    TEST_CASE(a_report_the_arena_refuses_says_so)
+    TEST_CASE(a_report_the_arena_refuses_says_so),
+    TEST_CASE(a_stop_with_no_stop_recorded_ends_the_process)
 )

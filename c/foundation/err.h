@@ -174,7 +174,7 @@ static inline RunCtx run_ctx_make(Arena *values, Arena *machine, Budgets budgets
 
 // Stops the run at `pos`, with `message` (which the caller keeps alive: a
 // literal, or made in the values' arena).
-static inline Status run_fail(RunCtx *r, Pos pos, StopClass cls, Str message) {
+static inline STATUS_MUST_USE Status run_fail(RunCtx *r, Pos pos, StopClass cls, Str message) {
     // DRAGON: use after free. The stop's trail is a view of the live call vec in the machine's arena, not a copy, and its message lives in the caller's arena. A push after the stop can move the calls (freeing a big buffer), a pop or `attempt`'s cut changes what the trail says, and a reset of either arena frees what the stop points at. Nothing in the C yet runs between a stop and its report; a port of `attempt` or yield must copy what it keeps.
     Calls trail = {r->calls.ptr, r->calls.len};
     Stop s = {pos.line, pos.column, cls, BUDGET_NONE, message, r->function, trail};
@@ -185,7 +185,7 @@ static inline Status run_fail(RunCtx *r, Pos pos, StopClass cls, Str message) {
 
 // Stops the run with the message `b` built, or `fallback` when building it was
 // refused: Zig's `allocPrint(...) catch fallback`.
-static inline Status run_fail_built(RunCtx *r, Pos pos, StopClass cls, const Buf *b, Status built, Str fallback) {
+static inline STATUS_MUST_USE Status run_fail_built(RunCtx *r, Pos pos, StopClass cls, const Buf *b, Status built, Str fallback) {
     return run_fail(r, pos, cls, built == OK ? buf_view(b) : fallback);
 }
 
@@ -244,17 +244,29 @@ static inline Str run_budget_message(RunCtx *r, BudgetKind k) {
 }
 
 // Stops the run at `pos` on budget `k`, with Zig's message for it.
-static inline Status run_budget_stop(RunCtx *r, Pos pos, BudgetKind k) {
-    run_fail(r, pos, CLASS_BUDGET, run_budget_message(r, k));
+static inline STATUS_MUST_USE Status run_budget_stop(RunCtx *r, Pos pos, BudgetKind k) {
+    Status s = run_fail(r, pos, CLASS_BUDGET, run_budget_message(r, k));
     r->stop.budget = k;
-    return STOP;
+    return s;
 }
 
 // An allocation the arena refused, read as the arena budget, as Zig reads
 // every `OutOfMemory` of a run.
-// DRAGON: the arena budget. A container's STOP means only that its arena refused, with no stop recorded; one passed up by TRY without coming through here ends the run with `stopped` false and a zeroed Stop, so the report would name no budget. Every caller of a container must call this at its boundary. Nothing checks that it does.
-static inline Status run_oom(RunCtx *r, Pos pos) {
+// DRAGON: the arena budget. A container's STOP means only that its arena refused, with no stop recorded; one passed up by TRY without coming through here would end the run with `stopped` false and a zeroed Stop, naming no budget. Every caller of a container calls this at its boundary, and run_ended below aborts the process on a STOP that skipped it.
+static inline STATUS_MUST_USE Status run_oom(RunCtx *r, Pos pos) {
     return run_budget_stop(r, pos, BUDGET_ARENA);
+}
+
+// The top level's check of a run's answer, before anything reports it: a STOP
+// with no stop recorded is a container's refusal that never reached run_oom,
+// a bug in the C, so the process ends rather than report a stop that names
+// nothing.
+static inline STATUS_MUST_USE Status run_ended(const RunCtx *r, Status s) {
+    if (s == STOP && !r->stopped) {
+        fprintf(stderr, "err: a run stopped with no stop recorded (a refusal that skipped run_oom)\n");
+        abort();
+    }
+    return s;
 }
 
 // The place a stop names: "the prelude" for a line in the prelude, else the script's name.
@@ -262,7 +274,7 @@ static inline Str stop_place(Str function, Str name) {
     return str_starts_with(function, S("the prelude's ")) ? S("the prelude") : name;
 }
 
-static inline Status stop_write_where(Buf *w, Str place, uint32_t line, uint32_t column, Str function) {
+static inline STATUS_MUST_USE Status stop_write_where(Buf *w, Str place, uint32_t line, uint32_t column, Str function) {
     TRY(buf_str(w, place));
     TRY(buf_byte(w, ':'));
     TRY(buf_u64(w, line));
@@ -279,7 +291,7 @@ static inline Status stop_write_where(Buf *w, Str place, uint32_t line, uint32_t
 // A stopped run's report, as `script.report` writes it after the effects:
 // `── stopped at name:line:column (in `f`): class budget: message (N steps)`,
 // then a `   called from ...` line for each call, innermost first.
-static inline Status stop_report(Buf *w, Str name, const Stop *s, uint64_t steps) {
+static inline STATUS_MUST_USE Status stop_report(Buf *w, Str name, const Stop *s, uint64_t steps) {
     TRY(buf_lit(w, "── stopped at "));
     TRY(stop_write_where(w, stop_place(s->function, name), s->line, s->column, s->function));
     TRY(buf_lit(w, ": "));

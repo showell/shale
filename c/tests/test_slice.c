@@ -14,7 +14,9 @@ TEST(at_reads_and_writes_inside_the_length) {
     EXPECT_EQ(at(s, 0), 10);
     EXPECT_EQ(at(s, 2), 30);
     at(s, 1) = 25;
-    EXPECT_EQ(xs[1], 25);
+    // Through a second slice of the same memory: the write reached it.
+    Ints again = {xs, 3};
+    EXPECT_EQ(at(again, 1), 25);
 }
 
 TEST(at_traps_one_past_the_end_and_far_past_it) {
@@ -76,6 +78,31 @@ TEST(str_sub_takes_a_part_and_traps_past_either_end) {
     EXPECT_TRAPS((void)str_sub(s, 6, 6));
 }
 
+TEST(str_sub_evaluates_each_argument_once) {
+    // The attack: an argument with a side effect, which a macro would check
+    // as one value and use as another (a part from 3 of length SIZE_MAX).
+    Str s = S("abc");
+    size_t k = 2;
+    Str part = str_sub(s, k++, 3);
+    EXPECT_EQ(k, 3);
+    EXPECT_STR(part, S("c"));
+    size_t to = 3;
+    EXPECT_STR(str_sub(s, 1, to--), S("bc"));
+    EXPECT_EQ(to, 2);
+    EXPECT_TRAPS((void)str_sub(s, k++, 2));
+}
+
+TEST(an_index_past_32_bits_traps_and_never_wraps_into_range) {
+    // On a 32-bit size_t (the wasm build) 2^32 + 1 would have been cut to
+    // 1 before its check; it is compared in 64 bits.
+    int xs[3] = {10, 20, 30};
+    Ints s = {xs, 3};
+    int64_t past = ((int64_t)1 << 32) + 1;
+    EXPECT_TRAPS((void)at(s, past));
+    EXPECT_TRAPS((void)str_sub(S("abc"), 0, past));
+    EXPECT_EQ(at(s, (int64_t)1), 20);
+}
+
 TEST(SLICE_SUB_keeps_the_type_and_its_bounds) {
     int xs[4] = {1, 2, 3, 4};
     Ints s = {xs, 4};
@@ -110,6 +137,8 @@ TEST_MAIN(
     TEST_CASE(at_unchecked_reads_what_at_reads),
     TEST_CASE(S_is_the_literal_without_its_nul),
     TEST_CASE(str_sub_takes_a_part_and_traps_past_either_end),
+    TEST_CASE(str_sub_evaluates_each_argument_once),
+    TEST_CASE(an_index_past_32_bits_traps_and_never_wraps_into_range),
     TEST_CASE(SLICE_SUB_keeps_the_type_and_its_bounds),
     TEST_CASE(str_eq_and_starts_with_answer_both_ways),
     TEST_CASE(str_byte_reads_bytes_unsigned)

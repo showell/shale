@@ -2,9 +2,19 @@
 -- the ones of c/docs/style.md a line-by-line reading can hold:
 --   alloc:      no malloc, free, calloc or realloc (nor aligned_alloc, strdup,
 --               strndup) outside c/foundation/arena.h;
---   raw index:  no raw index on a Str or slice (`s.ptr[i]`, `*(s.ptr + i)`)
---               outside c/foundation/slice.h: `at(s, i)`, or
---               `at_unchecked(s, i, "why")` where a loop has proved its bounds;
+--   raw index:  no `[i]` index of anything (a slice's `ptr`, a field, a local
+--               array), and no `*(s.ptr + i)`, outside c/foundation/slice.h:
+--               `at(s, i)`, or `at_unchecked(s, i, "why")` where a loop has
+--               proved its bounds; an array's size in its declaration
+--               (`char digits[20];`) is no index;
+--   mem arithmetic: no `+` or `-` in a mem* call's arguments
+--               (`memcpy(b->ptr + n, ...)`) outside c/foundation/, where each
+--               such call has a `DRAGON:` in the comment block above it; a
+--               checked part (`&at(s, i)`, a SLICE_SUB's `ptr`) needs neither;
+--   slice args: no `++`, `--`, `=` or call in a SLICE_SUB's arguments, which
+--               it evaluates more than once;
+--   must use:   a function returning `Status` is `STATUS_MUST_USE`, so GCC
+--               refuses an answer left unused;
 --   cstr:       no `char *` parameter or field in a header without its length:
 --               a field `ptr` with `size_t len` on the next line, or a
 --               `// cstr: <why>` on the line itself;
@@ -25,15 +35,22 @@
 -- plants below are judged as any file is.
 --
 -- `self_test=1` writes one plant of each rule, and lines that must pass
--- beside them, to c/out/discipline/plant.h, and fails unless exactly the
--- plants are caught.
+-- beside them, to c/out/discipline/ (plant.h and outside.h judged as any
+-- file outside the foundation, inside.h as one in it), and fails unless
+-- exactly the plants are caught.
 --
 -- Run from the repository's root: shale c/check_discipline.shale
 -- budget: steps=100000000
 
 const ALLOC = [=[\b(malloc|free|calloc|realloc|aligned_alloc|strdup|strndup)\s*\(]=]
--- DRAGON: bounds. This catches a raw index only through a field named `ptr`, so `m->index[slot]`, `m->keys[e]`, a local array's `buf[i]` and `memcpy(b->ptr + n, ...)` all pass, and "every index goes through at" holds for map.h's arrays and every mem* call only by the author's care.
-const RAW_INDEX = [=[\bptr\s*\[|\*\s*\(\s*[A-Za-z_][A-Za-z0-9_.>-]*ptr\s*\+]=]
+-- An index: a `[` after a name, a `)` or a `]`, read after each array
+-- declaration's size is taken out (ARRAY_DECL); and a pointer's sum deref'd.
+const INDEX = [=[[\w)\]]\s*\[]=]
+const PTR_SUM = [=[\*\s*\(\s*[A-Za-z_][A-Za-z0-9_.>-]*ptr\s*\+]=]
+const ARRAY_DECL = [=[\b(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)(\s+\**\s*\w+)\s*\[[^\]]*\]]=]
+const MEM_CALL = [=[\bmem(cpy|move|set|cmp)\s*\(]=]
+const SLICE_CALL = [=[\bSLICE_SUB\s*\(]=]
+const STATUS_FN = [=[\bstatic\s+(inline\s+)?Status\s+[\w#]+\s*\(]=]
 const CHAR_PARAM = [=[[(,]\s*(const\s+)?char\s*\*\s*\w+\s*[,)]]=]
 const CHAR_FIELD = [=[^\s*(const\s+)?char\s*\*\s*\w+\s*;]=]
 const LEN_FIELD = [=[^\s*size_t\s+len\s*;]=]
@@ -73,8 +90,56 @@ function opens_top(raw)
   return false
 end
 
+-- The text inside the parentheses that open at `open` in `code`, to their
+-- matching close (or the line's end).
+function args_at(code, open)
+  local depth = 0
+  local i = open
+  while i <= #code do
+    local c = sub(code, i, i)
+    if c == "(" then
+      depth = depth + 1
+    elseif c == ")" then
+      depth = depth - 1
+      if depth == 0 then return sub(code, open + 1, i - 1) end
+    end
+    i = i + 1
+  end
+  return sub(code, open + 1)
+end
+
+-- The argument texts of every call in `code` that `pattern` (ending in its
+-- `(`) starts.
+function calls_args(code, pattern)
+  local found = {}
+  for m in re_find_all(code, pattern) do push(found, args_at(code, m.at + #m.text - 1)) end
+  return found
+end
+
+-- Whether the comment block directly above line `n` holds a `DRAGON:`.
+function dragon_above(all, n)
+  local k = n - 1
+  while k >= 1 do
+    local t = trim(all[k])
+    if not (starts_with(t, "//") or starts_with(t, "/*")) then return false end
+    if find(t, "DRAGON:") ~= nil then return true end
+    k = k - 1
+  end
+  return false
+end
+
+-- Whether a SLICE_SUB's arguments do what it can't evaluate twice: an
+-- increment, a decrement, an assignment or a call.
+function slice_args_bad(args)
+  if find(args, "++") ~= nil or find(args, "--") ~= nil then return true end
+  local plain = re_replace(args, "[=!<>]=", "")
+  if find(plain, "=") ~= nil then return true end
+  return re_find(args, [=[\w\s*\(]=]) ~= nil
+end
+
 -- Each break of the rules in the file at `p`, as {path, line, rule, text}.
-function check_file(p)
+-- `in_foundation` says whether it is judged as a foundation header.
+function check_file(p, in_foundation)
   local name = basename(p)
   local header = ends_with(p, ".h")
   local all = lines(read(p))
@@ -99,8 +164,19 @@ function check_file(p)
     if name ~= "arena.h" and re_find(code, ALLOC) ~= nil then
       push(found, {path = p, line = n, rule = "alloc", text = raw})
     end
-    if name ~= "slice.h" and re_find(code, RAW_INDEX) ~= nil then
+    if name ~= "slice.h" and (re_find(re_replace(code, ARRAY_DECL, "\\1\\2"), INDEX) ~= nil or re_find(code, PTR_SUM) ~= nil) then
       push(found, {path = p, line = n, rule = "raw index", text = raw})
+    end
+    for args in calls_args(code, MEM_CALL) do
+      if re_find(re_replace(args, "->", "."), "[+-]") ~= nil and not (in_foundation and dragon_above(all, n)) then
+        push(found, {path = p, line = n, rule = "mem arithmetic", text = raw})
+      end
+    end
+    for args in calls_args(code, SLICE_CALL) do
+      if slice_args_bad(args) then push(found, {path = p, line = n, rule = "slice args", text = raw}) end
+    end
+    if re_find(code, STATUS_FN) ~= nil then
+      push(found, {path = p, line = n, rule = "must use", text = raw})
     end
     if header and find(raw, "// cstr: ") == nil then
       local paired = false
@@ -152,9 +228,20 @@ end
 function check_files(files)
   local found = {}
   for p in files do
-    for f in check_file(p) do push(found, f) end
+    for f in check_file(p, starts_with(p, "c/foundation/")) do push(found, f) end
   end
   return found
+end
+
+-- The plants in `p` caught, judged as a foundation header or not: exactly
+-- `want`, each "line rule", or the run fails. Gives how many.
+function plants_hold(p, in_foundation, want)
+  local got = {}
+  for f in check_file(p, in_foundation) do push(got, f.line .. " " .. f.rule) end
+  if join(got, ", ") ~= join(want, ", ") then
+    fail("the discipline check's self-test caught " .. join(got, ", ") .. " in " .. p .. "; it should catch exactly " .. join(want, ", "))
+  end
+  return #want
 end
 
 function self_test()
@@ -193,7 +280,7 @@ typedef struct {
     size_t len;
 } Good;
 static inline char unchecked(Str s) { return at_unchecked(s, 0, "s is not empty"); }
-static inline int calls(int a, int b) { int x = g(a, b); int ys[2] = {a, b}; Str s = (Str){"", 0}; return x + ys[0] + (int)s.len; }
+static inline int calls(int a, int b) { int x = g(a, b); int ys[2] = {a, b}; Str s = (Str){"", 0}; return x + (int)sizeof ys + (int)s.len; }
     } else if (x) {
 #define TWO(a, b) \
     /* inside a macro */ \
@@ -203,13 +290,39 @@ TEST_MAIN(
 ]=])
   local want = {"1 header", "1 header", "38 header", "3 alloc", "4 raw index", "5 raw index", "6 cstr", "7 cstr", "8 one per line", "9 one per line",
     "11 brace", "11 top level", "12 brace", "13 tab", "13 top level", "14 comment", "15 top level", "16 top level", "16 inline", "17 one per line", "17 wrapped"}
-  local got = {}
-  for f in check_file(p) do push(got, f.line .. " " .. f.rule) end
-  if join(got, ", ") ~= join(want, ", ") then
-    fail("the discipline check's self-test caught " .. join(got, ", ") .. "; it should catch exactly " .. join(want, ", "))
-  end
+  local caught = plants_hold(p, false, want)
+  local outside = dir .. "/outside.h"
+  create(outside, [=[// outside.h: the discipline check's plants for the bounds and Status rules; lines 4 to 10 break one each, the rest pass.
+#ifndef SHALE_OUTSIDE_H
+#define SHALE_OUTSIDE_H
+static inline uint32_t first_slot(MapCore *m) { return m->index[0]; }
+static inline char from_array(void) { char cs[4] = {0}; return cs[1]; }
+static inline void shift(Str *keys, size_t n) { memmove(keys, keys + 1, n * sizeof(Str)); }
+static inline Bytes bumped(Bytes b, size_t k) { return SLICE_SUB(Bytes, b, k++, 3); }
+static inline Bytes called(Bytes b) { return SLICE_SUB(Bytes, b, f(1), 3); }
+static inline Bytes assigned(Bytes b, size_t k) { return SLICE_SUB(Bytes, b, k = 1, 3); }
+static inline Status dropped(Buf *b) { return buf_byte(b, 'x'); }
+static inline STATUS_MUST_USE Status kept(Buf *b) { return buf_byte(b, 'x'); }
+static inline Bytes plain(Bytes b, size_t k) { return SLICE_SUB(Bytes, b, k, k + 1); }
+static inline bool compared(Bytes b, size_t k) { return SLICE_SUB(Bytes, b, k == 0 ? 0 : 1, 3).len >= 1; }
+static inline void copy_checked(Bytes d, Str s) { memcpy(&at(d, 0), s.ptr, s.len); }
+static inline void through_arrow(Buf *b, Str s) { memcpy(b->ptr, s.ptr, s.len); }
+static inline char declared(void) { char cs[4] = {0}; Bytes all = {cs, 4}; return at(all, 1); }
+#endif
+]=])
+  caught = caught + plants_hold(outside, false, {"4 raw index", "5 raw index", "6 mem arithmetic", "7 slice args", "8 slice args", "9 slice args", "10 must use"})
+  local inside = dir .. "/inside.h"
+  create(inside, [=[// inside.h: the mem arithmetic rule as the foundation is held to it: line 4 breaks it, line 6 passes by its DRAGON.
+#ifndef SHALE_INSIDE_H
+#define SHALE_INSIDE_H
+static inline void shift(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
+// DRAGON: bounds. A plant: the marker that lets a foundation call do its own arithmetic.
+static inline void marked(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
+#endif
+]=])
+  caught = caught + plants_hold(inside, true, {"4 mem arithmetic"})
   remove_tree(dir)
-  print("PASS self-test: " .. #want .. " plants caught, every other line passed")
+  print("PASS self-test: " .. caught .. " plants caught, every other line passed")
 end
 
 if arg("self_test", 0) == 1 then

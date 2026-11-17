@@ -40,7 +40,7 @@ SLICE_TYPE(Bytes, char);
 // test's child sets one that exits with a code of its own (`test.h`,
 // `EXPECT_TRAPS`).
 // The slot is per translation unit, which is all a test needs.
-typedef void (*BoundsTrap)(const char *file, int line, size_t i, size_t len); // cstr: __FILE__
+typedef void (*BoundsTrap)(const char *file, int line, uint64_t i, size_t len); // cstr: __FILE__
 
 // DRAGON: bounds. A trap that returns still ends in abort, but one that longjmps resumes the program after a bad index, as if it had been in bounds. Only test.h sets one, in a death test's child, and it calls `_exit`.
 static inline BoundsTrap *slice_trap_slot(void) {
@@ -48,21 +48,24 @@ static inline BoundsTrap *slice_trap_slot(void) {
     return &trap;
 }
 
-static inline void slice_bounds_failed(const char *file, int line, size_t i, size_t len) { // cstr: __FILE__
+static inline void slice_bounds_failed(const char *file, int line, uint64_t i, size_t len) { // cstr: __FILE__
     BoundsTrap trap = *slice_trap_slot();
     if (trap != NULL) trap(file, line, i, len);
-    fprintf(stderr, "%s:%d: index %zu is out of bounds for length %zu\n", file, line, i, len);
+    fprintf(stderr, "%s:%d: index %llu is out of bounds for length %zu\n", file, line, (unsigned long long)i, len);
     abort();
 }
 
-static inline size_t slice_check(size_t i, size_t len, const char *file, int line) { // cstr: __FILE__
-    if (i < len) return i;
+// `i` is taken as 64 bits and compared with the length in 64 bits, so an
+// int64_t index is never cut to a 32-bit size_t (the wasm build) before its
+// check: one past 2^32 traps there as it does on x86-64.
+static inline size_t slice_check(uint64_t i, size_t len, const char *file, int line) { // cstr: __FILE__
+    if (i < (uint64_t)len) return (size_t)i;
     slice_bounds_failed(file, line, i, len);
     return 0;
 }
 
 // The element at `i`, an lvalue. `s` is evaluated twice, `i` once.
-// DRAGON: bounds. This is the check every index has. `i` becomes a size_t, so on a 32-bit target (the wasm build) an int64_t index past 2^32 wraps into range and reads the wrong item; on x86-64 a negative one wraps past the end and traps. A trap ends the process, not the run, so a script's index is the caller's to check first, as the `index` stop: at() is the backstop.
+// DRAGON: bounds. This is the check every index has. A negative index becomes a huge one and traps. A trap ends the process, not the run, so a script's index is the caller's to check first, as the `index` stop: at() is the backstop.
 #define at(s, i) ((s).ptr[slice_check((i), (s).len, __FILE__, __LINE__)])
 
 // The element at `i` with no check. `reason` must be a non-empty string
@@ -72,19 +75,26 @@ static inline size_t slice_check(size_t i, size_t len, const char *file, int lin
     ((s).ptr[((void)sizeof(char[sizeof("" reason "") > 1 ? 1 : -1]), (i))])
 
 // `from` and `to` checked against `len`, so a part can never reach past it.
-static inline void slice_range_check(size_t from, size_t to, size_t len, const char *file, int line) { // cstr: __FILE__
-    if (from <= to && to <= len) return;
+static inline void slice_range_check(uint64_t from, uint64_t to, size_t len, const char *file, int line) { // cstr: __FILE__
+    if (from <= to && to <= (uint64_t)len) return;
     slice_bounds_failed(file, line, from > to ? from : to, len);
 }
 
 // The part `[from, to)` of a typed slice, as the same type.
-// DRAGON: bounds. `from` is evaluated three times and `to` twice, so an argument with a side effect is checked as one value and used as another: on "abc", str_sub(s, k++, 3) with k = 2 passes the check and gives a part from 3 of length SIZE_MAX, with no warning from GCC's -Wall -Wextra. Only a plain variable or a constant is safe to pass. Nothing holds callers to that.
+// DRAGON: bounds. `from` is evaluated three times and `to` twice, so an argument with a side effect would be checked as one value and used as another (on "abc", `k++` with k = 2 gave a part from 3 of length SIZE_MAX, with no warning from GCC). check_discipline's `slice args` rule refuses `++`, `--`, `=` and a call in its arguments.
 #define SLICE_SUB(Type, s, from, to)                                            \
     (slice_range_check((from), (to), (s).len, __FILE__, __LINE__),              \
      (Type){(s).ptr + (from), (size_t)(to) - (size_t)(from)})
 
-// The part `[from, to)` of a Str.
-#define str_sub(s, from, to) SLICE_SUB(Str, s, from, to)
+// The part `[from, to)` of a Str. A function, so each argument is evaluated
+// once; the macro only hands it the caller's place for a trap.
+static inline Str str_sub_at(Str s, uint64_t from, uint64_t to, const char *file, int line) { // cstr: __FILE__
+    slice_range_check(from, to, s.len, file, line);
+    Str part = {s.ptr + (size_t)from, (size_t)(to - from)};
+    return part;
+}
+
+#define str_sub(s, from, to) str_sub_at((s), (from), (to), __FILE__, __LINE__)
 
 static inline uint8_t str_byte(Str s, size_t i) {
     return (uint8_t)at(s, i);

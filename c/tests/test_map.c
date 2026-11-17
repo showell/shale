@@ -93,7 +93,8 @@ TEST(a_removal_keeps_the_others_order_and_finds_them_after) {
     Arena a = arena_make(1 << 20);
     IntMap m = IntMap_make(&a);
     Str names[5] = {S("e"), S("d"), S("c"), S("b"), S("a")};
-    for (int64_t i = 0; i < 5; i++) EXPECT(IntMap_put(&m, names[i], i) == OK);
+    MapKeys all = {names, 5};
+    for (int64_t i = 0; i < 5; i++) EXPECT(IntMap_put(&m, at(all, (size_t)i), i) == OK);
     EXPECT(IntMap_remove(&m, S("c")));
     EXPECT(!IntMap_remove(&m, S("c")));
     EXPECT(!IntMap_remove(&m, S("zz")));

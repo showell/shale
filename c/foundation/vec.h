@@ -29,7 +29,7 @@ static inline size_t vec_grow_capacity(size_t minimum, size_t elem) {
 // Makes room for `need` items of `elem` bytes in the buffer at `*ptr`, which
 // holds `len` of `*cap`. STOP when the arena refuses (its `hit` set) or the
 // size overflows.
-static inline Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len, size_t need, size_t elem, size_t align) {
+static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len, size_t need, size_t elem, size_t align) {
     if (*cap >= need) return OK;
     size_t new_cap = vec_grow_capacity(need, elem);
     // DRAGON: size overflow. `new_cap * elem` would wrap to a small buffer for a huge capacity: I64s_reserve(SIZE_MAX / 4) would get 160 bytes for 3 * 2^61 items, then grow in place and say OK. This division refuses it first. test_vec plants it.
@@ -69,7 +69,7 @@ static inline Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len,
     }                                                                                        \
                                                                                              \
     /* Room for `more` items past `len`. */                                                  \
-    static inline Status Name##_reserve(Name *v, size_t more) {                              \
+    static inline STATUS_MUST_USE Status Name##_reserve(Name *v, size_t more) {              \
         /* DRAGON: size overflow. `v->len + more` would wrap below `cap` and report room */  \
         /* the vec doesn't have, so the push after it writes past the buffer. */             \
         if (more > SIZE_MAX - v->len) {                                                      \
@@ -82,7 +82,7 @@ static inline Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len,
         return s;                                                                            \
     }                                                                                        \
                                                                                              \
-    static inline Status Name##_push(Name *v, T x) {                                         \
+    static inline STATUS_MUST_USE Status Name##_push(Name *v, T x) {                         \
         TRY(Name##_reserve(v, 1));                                                           \
         v->len++;                                                                            \
         at(*v, v->len - 1) = x;                                                              \

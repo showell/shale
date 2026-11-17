@@ -36,7 +36,12 @@ typedef struct {
     jmp_buf back;
     Str current;
     size_t failed;
+    // Set in a death test's child, where a failure exits rather than jumps.
+    bool in_child;
 } TestState;
+
+// How a death test's child ends when an EXPECT inside its `stmt` fails.
+enum { TEST_CHILD_FAILED = 2 };
 
 static inline TestState *test_state(void) {
     static TestState state;
@@ -49,6 +54,9 @@ static inline TestState *test_state(void) {
 static inline void test_fail(const char *file, int line, Str what) { // cstr: __FILE__
     TestState *t = test_state();
     fprintf(stderr, "FAIL %.*s (%s:%d): %.*s\n", (int)t->current.len, t->current.ptr, file, line, (int)what.len, what.ptr);
+    // A jump in a child would land in its copy of test_run and run the
+    // file's other tests there; the child ends, and the parent reads why.
+    if (t->in_child) _exit(TEST_CHILD_FAILED);
     longjmp(t->back, 1);
 }
 
@@ -83,7 +91,7 @@ static inline void test_fail(const char *file, int line, Str what) { // cstr: __
 // TEST_TRAPPED, so the parent knows the trap and not something else ended it.
 enum { TEST_TRAPPED = 42 };
 
-static inline void test_trap(const char *file, int line, size_t i, size_t len) { // cstr: __FILE__
+static inline void test_trap(const char *file, int line, uint64_t i, size_t len) { // cstr: __FILE__
     (void)file;
     (void)line;
     (void)i;
@@ -96,13 +104,17 @@ static inline void test_trap(const char *file, int line, size_t i, size_t len) {
 // made not dumpable), and gives how the child ended. `trap` arms the bounds
 // trap in the child. A child, not a longjmp: a jump back into the test's frame
 // would clobber what `stmt` made there (GCC's -Wclobbered).
-// DRAGON: the process boundary. The child is a fork with no exec and no death signal, so a `stmt` that never ends outlives a parent killed by its timeout; only `run`'s kill of the whole process group (src/shale_spawn.zig) ends it, not the harness. A failed EXPECT inside `stmt` longjmps the child back into test_run, which runs the file's other tests there; the child then exits 1 and the parent fails the test, but by luck, not by design.
+// DRAGON: the process boundary. The child is a fork with no exec, so it must not outlive the test: it takes SIGKILL as its death signal, and ends at once if the parent was already gone before it asked (`getppid` no longer the parent). A failed EXPECT inside `stmt` exits the child with TEST_CHILD_FAILED instead of jumping back into test_run. test_test.c checks both.
 #define TEST_IN_CHILD(stmt, trap, status)                                           \
     do {                                                                            \
         fflush(stdout);                                                             \
         fflush(stderr);                                                             \
+        pid_t test_parent_ = getpid();                                              \
         pid_t test_pid_ = fork();                                                   \
         if (test_pid_ == 0) {                                                       \
+            if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) != 0) _exit(3);           \
+            if (getppid() != test_parent_) _exit(3);                                \
+            test_state()->in_child = true;                                          \
             if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) _exit(3);                  \
             if (freopen("/dev/null", "w", stderr) == NULL) _exit(3);                \
             if (trap) *slice_trap_slot() = test_trap;                               \
@@ -159,7 +171,7 @@ static inline int test_run(TestCases cases, Str file) {
 #define TEST_MAIN(...)                                                              \
     int main(void) {                                                                \
         static const TestCase cases[] = {__VA_ARGS__};                              \
-        TestCases all = {cases, sizeof cases / sizeof cases[0]};                    \
+        TestCases all = {cases, sizeof cases / sizeof(TestCase)};                   \
         return test_run(all, S(__FILE__));                                          \
     }
 

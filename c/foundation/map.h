@@ -94,7 +94,7 @@ static inline void map_core_rebuild(MapCore *m) {
 }
 
 // A fresh index of `index_cap` slots, a power of two with room for every entry.
-static inline Status map_core_reindex(MapCore *m, size_t index_cap) {
+static inline STATUS_MUST_USE Status map_core_reindex(MapCore *m, size_t index_cap) {
     uint32_t *fresh = ARENA_ARRAY(m->arena, uint32_t, index_cap);
     if (fresh == NULL) return STOP;
     if (m->index_cap > 0) arena_free(m->arena, m->index, m->index_cap * sizeof(uint32_t));
@@ -106,7 +106,7 @@ static inline Status map_core_reindex(MapCore *m, size_t index_cap) {
 
 // Room for one more entry: the keys and the hashes, and the index kept a
 // quarter free.
-static inline Status map_core_reserve_one(MapCore *m) {
+static inline STATUS_MUST_USE Status map_core_reserve_one(MapCore *m) {
     // DRAGON: bounds. The index holds an entry's place plus one in 32 bits, so past UINT32_MAX - 1 entries the cast in `_put` and map_core_rebuild would wrap and a slot would point at the wrong entry. This check refuses the put first. No test reaches it: the arena budget stops a map long before.
     if (m->len >= UINT32_MAX - 1) {
         m->arena->hit = true;
@@ -130,11 +130,13 @@ static inline Status map_core_reserve_one(MapCore *m) {
 // Removes the entry at `e`, keeping the others' order.
 static inline void map_core_remove_at(MapCore *m, size_t e) {
     MapKeys keys = {m->keys, m->len};
+    MapHashes hashes = {m->hashes, m->len};
     (void)at(keys, e);
-    size_t after = m->len - e - 1;
-    if (after > 0) {
-        memmove(m->keys + e, m->keys + e + 1, after * sizeof(Str));
-        memmove(m->hashes + e, m->hashes + e + 1, after * sizeof(uint64_t));
+    MapKeys keys_after = SLICE_SUB(MapKeys, keys, e + 1, m->len);
+    MapHashes hashes_after = SLICE_SUB(MapHashes, hashes, e + 1, m->len);
+    if (keys_after.len > 0) {
+        memmove(&at(keys, e), keys_after.ptr, keys_after.len * sizeof(Str));
+        memmove(&at(hashes, e), hashes_after.ptr, hashes_after.len * sizeof(uint64_t));
     }
     m->len--;
     map_core_rebuild(m);
@@ -160,7 +162,7 @@ static inline void map_core_remove_at(MapCore *m, size_t e) {
     }                                                                                        \
                                                                                              \
     /* Sets `key` to `v`: a new key goes last, a key already there keeps its place. */     \
-    static inline Status Name##_put(Name *m, Str key, V v) {                                 \
+    static inline STATUS_MUST_USE Status Name##_put(Name *m, Str key, V v) {                 \
         size_t e = map_core_find(&m->core, key);                                             \
         if (e != SIZE_MAX) {                                                                 \
             Name##Values vals = {m->values, m->core.len};                                    \
@@ -211,8 +213,9 @@ static inline void map_core_remove_at(MapCore *m, size_t e) {
     static inline bool Name##_remove(Name *m, Str key) {                                     \
         size_t e = map_core_find(&m->core, key);                                             \
         if (e == SIZE_MAX) return false;                                                     \
-        size_t after = m->core.len - e - 1;                                                  \
-        if (after > 0) memmove(m->values + e, m->values + e + 1, after * sizeof(V));         \
+        Name##Values vals = {m->values, m->core.len};                                        \
+        Name##Values vals_after = SLICE_SUB(Name##Values, vals, e + 1, m->core.len);         \
+        if (vals_after.len > 0) memmove(&at(vals, e), vals_after.ptr, vals_after.len * sizeof(V)); \
         map_core_remove_at(&m->core, e);                                                     \
         return true;                                                                         \
     }                                                                                        \

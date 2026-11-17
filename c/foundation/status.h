@@ -7,8 +7,19 @@
 #ifndef SHALE_STATUS_H
 #define SHALE_STATUS_H
 
-// DRAGON: every budget. A STOP dropped on the floor (`(void)buf_str(...)`, or a call whose answer is never tested) lets the run go on past an arena refusal with its data cut short, where Zig stops. The compiler doesn't hold a caller to TRY it: GCC warns of an unused answer only under warn_unused_result, which nothing here sets.
 typedef enum { OK = 0, STOP = 1 } Status;
+
+// On every function that returns a Status. A STOP dropped on the floor lets
+// the run go on past an arena refusal with its data cut short, where Zig
+// stops, so GCC refuses an answer left unused (under -Werror), even one cast
+// to void. TCC has no such check, so there it is empty, and the GCC builds
+// hold the C to it; check_discipline's `must use` rule holds every such
+// function to carry it.
+#if defined(__GNUC__) && !defined(__TINYC__)
+#define STATUS_MUST_USE __attribute__((warn_unused_result))
+#else
+#define STATUS_MUST_USE
+#endif
 
 // Returns STOP from the enclosing function when `expr` does.
 #define TRY(expr)                           \

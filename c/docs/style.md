@@ -91,7 +91,14 @@ and its self-test plants a break of each one.
 - Every index goes through `at(s, i)`, which checks bounds in every build.
   A bad index ends the process: it is a bug in the C, not a stop of the
   script.
-- **Held:** there is no raw `ptr[i]` or `*(ptr + i)` outside `slice.h`.
+- **Held:** there is no raw `[i]` index of anything (a slice's `ptr`, a
+  field, a local array) and no `*(ptr + i)` outside `slice.h`. An array's
+  size in its declaration is no index.
+- **Held:** a `mem*` call has no `+` or `-` in its arguments outside
+  `c/foundation/`, and inside it only under a `DRAGON:` comment. A checked
+  part, `&at(s, i)` or a `SLICE_SUB`'s `ptr`, needs neither.
+- **Held:** a `SLICE_SUB`'s arguments have no `++`, `--`, `=` or call: it
+  evaluates them more than once. `str_sub` is a function and takes any.
 - A loop that has proved its own bounds may use `at_unchecked(s, i, "why")`.
   The compiler refuses one without a non-empty literal reason.
 - A buffer's spare room is indexed through a slice of its capacity:
@@ -112,6 +119,11 @@ and its self-test plants a break of each one.
 - A function that can stop returns a `Status`: `OK`, or `STOP`. What it
   gives goes through an out-parameter.
 - `TRY(expr)` returns `STOP` from the function when `expr` does.
+- **Held:** a function returning `Status` is `STATUS_MUST_USE`, so GCC
+  refuses an answer left unused, even one cast to `void` (`c/build.shale`
+  plants one).
+- The top level passes a run's answer through `run_ended`, which aborts on
+  a `STOP` with no stop recorded.
 - When an arena refuses, a container returns `STOP` and the arena's `hit`
   is set. The caller makes that the arena budget with `run_oom(ctx, pos)`.
   Every out-of-memory is the arena budget, as it is in Zig.

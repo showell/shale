@@ -90,6 +90,28 @@ TEST(a_refused_append_leaves_the_buffer_as_it_was) {
     arena_deinit(&a);
 }
 
+TEST(appending_a_view_of_itself_past_ARENA_BIG_copies_what_it_held) {
+    // The attack: `s .. s` as buf_str(b, buf_view(b)). The growth frees the
+    // big buffer the view points into, so a copy from the view after it
+    // would read freed memory.
+    Arena a = arena_make(16 * 1024 * 1024);
+    Buf b = buf_make(&a);
+    for (int i = 0; i < 100000; i++) EXPECT(buf_byte(&b, (char)('a' + i % 26)) == OK);
+    EXPECT(b.cap < 200000);
+    char *before = b.ptr;
+    EXPECT(buf_str(&b, buf_view(&b)) == OK);
+    EXPECT(b.ptr != before);
+    EXPECT_EQ(b.len, 200000);
+    Str v = buf_view(&b);
+    for (size_t i = 0; i < 200000; i++) EXPECT_EQ(str_byte(v, i), 'a' + (i % 100000) % 26);
+    // A view of only a part of itself, from the middle, copies that part.
+    buf_clear(&b);
+    EXPECT(buf_lit(&b, "0123456789") == OK);
+    EXPECT(buf_str(&b, str_sub(buf_view(&b), 3, 6)) == OK);
+    EXPECT_STR(buf_view(&b), S("0123456789345"));
+    arena_deinit(&a);
+}
+
 TEST(a_big_buffer_holds_its_live_bytes_not_every_one_it_outgrew) {
     Arena a = arena_make(16 * 1024 * 1024);
     Buf b = buf_make(&a);
@@ -105,5 +127,6 @@ TEST_MAIN(
     TEST_CASE(it_grows_by_zigs_policy_in_place_while_it_is_last),
     TEST_CASE(it_moves_and_keeps_its_bytes_when_it_is_not_last),
     TEST_CASE(a_refused_append_leaves_the_buffer_as_it_was),
+    TEST_CASE(appending_a_view_of_itself_past_ARENA_BIG_copies_what_it_held),
     TEST_CASE(a_big_buffer_holds_its_live_bytes_not_every_one_it_outgrew)
 )

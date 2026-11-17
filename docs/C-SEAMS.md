@@ -107,6 +107,33 @@ same sizes, alignments and order.
   Zig's does. Zig's error names that reach a message (`FileNotFound`,
   `AccessDenied`, ...) come from one table mapping errno to Zig's name.
 
+## Before `attempt` and yield are ported
+
+The foundation's containers hand out pointers that a growth or a reset
+frees (each marked `DRAGON:` in c/foundation). Nothing in the C holds a
+caller to drop them in time, so these tests are written, under ASan, before
+`attempt` and yield are ported, and fail on a read of freed memory:
+
+- a map key made in a buffer that later grows, or in an arena span later
+  reset, then looked up (map.h's keys are held by pointer);
+- a map value's `_ptr`, and an item's `&at(v, i)`, kept across puts and
+  pushes that move a big buffer;
+- a `buf_view` kept across an append past `ARENA_BIG`;
+- a stop's trail and message read after a push, a pop, `attempt`'s cut of
+  the calls and a reset of the machine's and the values' arenas (`run_fail`
+  keeps a view of the live call vec, not a copy);
+- a yield's copy, with everything it keeps read after the reset it makes.
+
+## The secrets rule's one check
+
+A secrets mount's path must never appear in a message. **`run_fail` is the
+one check**: every stop's message passes through it (`run_fail_built`,
+`run_budget_stop` and `run_oom` call it), so the C asks the `PathHook`
+there whether the message names a path under a secrets mount, and refuses
+it there, rather than at each place a message is built from a path. A
+message that is not a stop's (a report line, a `--verbose` effect) goes
+through the same check before it is written.
+
 ## The host interface
 
 The core makes no system call. What zig-webbox and the Linux host give
