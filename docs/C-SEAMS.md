@@ -145,7 +145,11 @@ today, the C gives as three vtables of function pointers, each returning
   hand, `prctl`'s death signal, its own process group, the parent polling
   the pipes, a pidfd and a signalfd; `src/shale_spawn.zig`), the jobs
   (`shale --reap` double-forked out of the caller's tree, a job's record as
-  text, `src/shale_jobs.zig`), `procs` and `proc_stop` (the /proc files, a pidfd,
+  text, `src/shale_jobs.zig`; when the job's leader exits, the reaper TERMs
+  its group while the leader is an unreaped zombie, reaps it, then KILLs
+  what is left at 2 seconds and writes the end only once the group is empty,
+  as `run` does, and the C's reaper, not yet ported, must match it),
+  `procs` and `proc_stop` (the /proc files, a pidfd,
   start times against a reused pid), `real`, `sleep`, `re_lines`, JSON, the
   tree readers and `edits_write`. Its time line, its records and the jobs a
   stopped run ends are the host's, written by the CLI after the report.

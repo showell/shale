@@ -50,7 +50,9 @@ the files above name none:
   running in its group before `run` returns.
 - `src/shale_jobs.zig` runs jobs. It double-forks a reaper out of the
   caller's tree (`setsid`, `fork`, `execve` of `shale --reap`), signals a
-  job's process group, and names a process by its start time from
+  job's process group (at `job_stop`, and at the leader's exit, seen by
+  `waitid` before the reap, for what it left running there), and names a
+  process by its start time from
   `/proc/<pid>/stat`, so that a reused pid is never signalled.
 - `src/shale_os_linux.zig` holds the rest. Its parts are the monotonic
   clock and sleep, this process's pid and working folder, its own path

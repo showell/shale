@@ -5,7 +5,8 @@
 //! its own session, forks the reaper and exits; the reaper, re-parented to
 //! init, execs `shale --reap`. The reaper (`reapMain`) starts the job in its
 //! own session with stdin `/dev/null` and stdout and stderr to its log, writes
-//! the job's record, waits for it, and writes how it ended. The record,
+//! the job's record, waits for it, ends what it left running in its group
+//! (TERM, a grace, KILL, as `run` does), and writes how it ended. The record,
 //! `<log>.job`, is `key=value` lines (`shale_job_record.zig`), each write a new
 //! file renamed over the old.
 
@@ -209,8 +210,9 @@ fn writeRecord(record: [*:0]const u8, tmp: [*:0]const u8, r: Record) bool {
 }
 
 /// The reaper, `shale --reap <record> <log> <cwd> <program> -- argv...`, whose
-/// environment is the job's: starts the job, writes its record, waits for it
-/// and writes how it ended. The exit code says only whether it could.
+/// environment is the job's: starts the job, writes its record, waits for it,
+/// ends its group and writes how it ended, so a job's end is written only once
+/// its group is empty. The exit code says only whether it could.
 pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []const u8) u8 {
     if (args.len < 6 or !std.mem.eql(u8, args[4], "--")) return 2;
     const record = a.dupeSentinel(u8, args[0], 0) catch return 2;
@@ -265,6 +267,15 @@ pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []c
     }
     _ = linux.write(reaper_started_fd, "s", 1);
     _ = linux.close(reaper_started_fd);
+    // The leader's exit is seen first and left unreaped (`NOWAIT`): its
+    // zombie keeps its pid the group's id, so the TERM to what it left
+    // running in its group can reach no stranger.
+    var info: linux.siginfo_t = undefined;
+    while (true) {
+        const rc = linux.waitid(.PID, @intCast(pid), &info, linux.W.EXITED | linux.W.NOWAIT, null);
+        if (linux.errno(rc) != .INTR) break;
+    }
+    _ = signalGroup(r.pgid, @backingInt(linux.SIG.TERM));
     // waitpid fills an i32; `W` reads a u32.
     var raw: i32 = 0;
     while (true) {
@@ -273,8 +284,47 @@ pub fn reapMain(a: std.mem.Allocator, args: []const []const u8, env: []const []c
     }
     const status: u32 = @bitCast(raw);
     if (linux.W.IFEXITED(status)) r.exit = linux.W.EXITSTATUS(status) else r.signal = @backingInt(linux.W.TERMSIG(status));
+    endGroup(r.pgid, group_grace_ms);
     r.ended = nowSeconds();
     return if (writeRecord(record, tmp, r)) 0 else 2;
+}
+
+/// How long what a job's leader left in its group has, after the TERM at the
+/// leader's exit, before it is KILLed: `job_stop`'s and `run`'s grace.
+const group_grace_ms: u64 = 2000;
+
+/// Whether no process is left in the group `pgid`. Asked only once its
+/// leader is reaped: until then the leader's zombie is a member.
+fn groupGone(pgid: i32) bool {
+    const rc = linux.syscall2(.kill, @as(usize, @bitCast(@as(isize, -pgid))), 0);
+    return linux.errno(rc) == .SRCH;
+}
+
+/// Waits, once a job's leader is reaped and its group has had its TERM, for
+/// the group to empty: KILL at `grace_ms`, then up to `grace_ms` more for a
+/// process stuck in the kernel, which is then left, so the job's end is
+/// still written. A process that left the group (`setsid`) is not waited for.
+fn endGroup(pgid: i32, grace_ms: u64) void {
+    // Checked every 10 ms, as `run` checks a group outliving its leader.
+    const tick: u64 = 10;
+    var waited: u64 = 0;
+    var killed = false;
+    while (!groupGone(pgid)) : (waited += tick) {
+        if (waited >= 2 * grace_ms) return;
+        // DRAGON: once the leader is reaped, its pid stays the group's id
+        // only while a member is left; a group that empties frees it, and a
+        // new group given the id would be signalled.
+        // REMEDY: the KILL goes only to a group `groupGone` found not empty
+        // a moment before, whose members hold the id; a group that empties
+        // in that moment is the one window left, as in `run`. A leader
+        // KILLed before its `setsid` never made the group, so its id is free
+        // from the reap, and the same check guards it.
+        if (!killed and waited >= grace_ms) {
+            _ = signalGroup(pgid, @backingInt(linux.SIG.KILL));
+            killed = true;
+        }
+        sleepMs(tick);
+    }
 }
 
 test "jobs: a reaper gone before its record is NoRecord at once, the pipe's end its word" {

@@ -238,7 +238,10 @@ has none of it):
     `log` is required, and there are no `secrets`. A log whose job still
     runs, or whose reaper has yet to write its end, is refused: stop or
     wait for it, or use another. Once `job_wait` says `exited`, the log
-    takes a new job at once.
+    takes a new job at once. When the job's program exits, what it left
+    running in its process group gets TERM, 2 seconds, then KILL before
+    the reaper writes its end, as `run` does; a process that left the
+    group (`setsid`) is not touched.
   - Its record is `<log>.job`. `job_alive`, `job_stop` (TERM, 2 seconds,
     then KILL) and `job_wait(job, {timeout_ms, file, contains})` take the
     job or that path, so a later call carries on.

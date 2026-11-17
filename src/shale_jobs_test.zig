@@ -440,3 +440,63 @@ test "jobs: a job the run already stopped or waited to its end makes no second s
     try testing.expectEqualStrings("── stopped with the run, 1 job it started: `shale-fixture sleep 30000` (log reused.log)", stopLine(again.stderr));
     try testing.expectEqualStrings("false\n", try once(&t, "print(job_alive(\"reused.log.job\"))"));
 }
+
+/// The pid in the fixture's `grandchild N` line of `text`, read from its
+/// `child N`: the fixture's writer writes at its own offset, so the child's
+/// `late` after it, in the same log, lands over the line's start.
+fn grandchildPid(text: []const u8) !i32 {
+    const at = std.mem.indexOf(u8, text, "child ") orelse return error.TestUnexpectedResult;
+    const rest = text[at + "child ".len ..];
+    const end = std.mem.indexOfScalar(u8, rest, '\n') orelse rest.len;
+    return std.fmt.parseInt(i32, rest[0..end], 10);
+}
+
+/// Whether `pid` is gone, its zombie reaped too. A process still there is
+/// KILLed, so a failing test leaves nothing behind.
+fn goneOrKill(pid: i32) bool {
+    var buf: [1024]u8 = undefined;
+    if (jobs.startOf(&buf, pid) == null) return true;
+    _ = std.os.linux.kill(pid, .KILL);
+    return false;
+}
+
+fn monoMs() u64 {
+    var ts: std.os.linux.timespec = undefined;
+    _ = std.os.linux.clock_gettime(.MONOTONIC, &ts);
+    return @as(u64, @intCast(ts.sec)) * 1000 + @as(u64, @intCast(ts.nsec)) / 1_000_000;
+}
+
+test "jobs: what a job's leader leaves running in its group is gone once the job's end is written, by TERM, or by KILL at the grace" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    // The leader exits 0 at once; its child would sleep 20 s. The TERM at
+    // the leader's exit ends it, so the end comes without the grace.
+    var began = monoMs();
+    try testing.expectEqualStrings("exited\t0\tfalse\n", try once(&t, "local j = job_start({\"shale-fixture\", \"grandchild-exit\", \"20000\"}, {log = \"g.log\"}) local w = job_wait(j, {timeout_ms = 10000}) print(w.ended, w.code, job_alive(j))"));
+    try testing.expect(monoMs() - began < 1_500);
+    try testing.expect(goneOrKill(try grandchildPid(try t.file("g.log"))));
+    // A child that ignores TERM is KILLed at the grace's end, still before
+    // the end is written; the leader's own exit is the job's.
+    began = monoMs();
+    try testing.expectEqualStrings("exited\t0\tfalse\n", try once(&t, "local j = job_start({\"shale-fixture\", \"grandchild-late\", \"20000\"}, {log = \"late.log\"}) local w = job_wait(j, {timeout_ms = 10000}) print(w.ended, w.code, job_alive(j))"));
+    const spent = monoMs() - began;
+    try testing.expect(spent >= 2_000 and spent < 6_000);
+    const log = try t.file("late.log");
+    errdefer std.debug.print("late.log: [{s}]\n", .{log});
+    // It outlived its leader's exit and the TERM, so it printed `late`.
+    try testing.expect(std.mem.indexOf(u8, log, "late\n") != null);
+    try testing.expect(goneOrKill(try grandchildPid(log)));
+}
+
+test "jobs: a process that left the job's group (`setsid`) is neither signalled nor waited for" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const began = monoMs();
+    try testing.expectEqualStrings("exited\t0\n", try once(&t, "local j = job_start({\"shale-fixture\", \"grandchild-escape\", \"20000\"}, {log = \"away.log\"}) local w = job_wait(j, {timeout_ms = 10000}) print(w.ended, w.code)"));
+    try testing.expect(monoMs() - began < 1_500);
+    // It outlives the job, out of its reach; the test ends it.
+    const g = try grandchildPid(try t.file("away.log"));
+    try testing.expect(!goneOrKill(g));
+}
