@@ -355,20 +355,22 @@ typedef struct {
     uint32_t walk;
 } Machine;
 
-static inline VmFrame *vm_frame(Machine *m) {
+static inline RUN_HOT VmFrame *vm_frame(Machine *m) {
     return &at(m->frames, m->frames.len - 1);
 }
 
-static inline Value *vm_slot(Machine *m, uint32_t s) {
+static inline RUN_HOT Value *vm_slot(Machine *m, uint32_t s) {
     return &at(m->r->stack, m->r->base + s);
 }
 
-static inline Value *vm_top(Machine *m) {
+static inline RUN_HOT Value *vm_top(Machine *m) {
     return &at(m->operands, m->operands.len - 1);
 }
 
-static inline Value vm_pop(Machine *m) {
-    return ValueVec_pop(&m->operands);
+static inline RUN_HOT Value vm_pop(Machine *m) {
+    Value v = at(m->operands, m->operands.len - 1);
+    m->operands.len--;
+    return v;
 }
 
 // `v` pushed onto the operands, which never grow here: a frame reserves its
@@ -377,7 +379,7 @@ static inline Value vm_pop(Machine *m) {
 // its body. The `at` of the spare room is the one compare, and a push past
 // the reserve traps as a bug in the C. Its Status is always OK, kept so a
 // caller's `return vm_push(...)` reads as every op's answer does.
-static inline STATUS_MUST_USE Status vm_push(Machine *m, Pos pos, const Value *v) {
+static inline RUN_HOT STATUS_MUST_USE Status vm_push(Machine *m, Pos pos, const Value *v) {
     (void)pos;
     Values room = {m->operands.ptr, m->operands.cap};
     at(room, m->operands.len) = *v;
@@ -385,7 +387,7 @@ static inline STATUS_MUST_USE Status vm_push(Machine *m, Pos pos, const Value *v
     return OK;
 }
 
-static STATUS_MUST_USE Status vm_push_nil(Machine *m, Pos pos) {
+static inline RUN_HOT STATUS_MUST_USE Status vm_push_nil(Machine *m, Pos pos) {
     Value v;
     value_nil(&v);
     return vm_push(m, pos, &v);
@@ -399,18 +401,9 @@ static ConstValues vm_args(Machine *m, size_t n) {
     return top;
 }
 
-// A function the compiler keeps out of the loop that calls it: an op's cold
-// work (a call, a print, a builtin), whose locals and saved registers would
-// otherwise weigh on every op. TCC takes no such attribute, and needs none.
-#if defined(__GNUC__) && !defined(__TINYC__)
-#define VM_COLD __attribute__((noinline))
-#else
-#define VM_COLD
-#endif
-
 // The enters one at a time, when the run may not fit them all: each node's
 // step, then its depth, checked in the walker's order.
-static VM_COLD STATUS_MUST_USE Status vm_enters_each(Machine *m, const VmOp *op) {
+static RUN_COLD STATUS_MUST_USE Status vm_enters_each(Machine *m, const VmOp *op) {
     Run *r = m->r;
     uint32_t walk = m->walk;
     const Budgets *b = &r->ctx.budgets;
@@ -567,7 +560,7 @@ static STATUS_MUST_USE Status vm_binary(Machine *m, const VmOp *op) {
     return vm_push(m, op->pos, &out);
 }
 
-static VM_COLD STATUS_MUST_USE Status vm_print(Machine *m, const VmOp *op) {
+static RUN_COLD STATUS_MUST_USE Status vm_print(Machine *m, const VmOp *op) {
     Run *r = m->r;
     ConstValues vals = vm_args(m, op->a);
     Positions places = {m->code->positions.ptr, m->code->positions.len};
@@ -587,7 +580,7 @@ static VM_COLD STATUS_MUST_USE Status vm_print(Machine *m, const VmOp *op) {
 // Runs one of the ops vm_run leaves to it, those whose work is rare or heavy
 // (a table made, a call, a builtin, a print); `*done` set when the top level
 // ended. It reads and sets `m->pc`, which vm_run keeps in step around it.
-static VM_COLD STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *done) {
+static RUN_COLD STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *done) {
     Run *r = m->r;
     const Code *code = m->code;
     switch (op->tag) {

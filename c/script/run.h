@@ -18,6 +18,19 @@ enum { BUILTINS_MOST_ARGS = 4 };
 
 SLICE_TYPE(ConstValues, const Value);
 
+// RUN_COLD keeps a function out of the code that calls it, and a call of it
+// off the hot path's line: a stop's path, an op's rare work, whose locals
+// and saved registers would otherwise weigh on every op. RUN_HOT makes GCC
+// inline a small one that `at`'s trap, inlined into it, makes look too big
+// to. TCC takes neither, and needs neither.
+#if defined(__GNUC__) && !defined(__TINYC__)
+#define RUN_COLD __attribute__((cold))
+#define RUN_HOT __attribute__((always_inline))
+#else
+#define RUN_COLD
+#define RUN_HOT
+#endif
+
 typedef struct Run Run;
 
 // The store a run's paths reach, its hook and its effects log, as
@@ -145,12 +158,14 @@ static inline uint64_t run_sat_sub(uint64_t a, uint64_t b) {
 // Steps, charged; `n` for a builtin's work in proportion to what it touches.
 // A charge past what is left stops one step past the budget, as a single step
 // does: the run never did that work, so the count must not grow by the charge.
-static inline STATUS_MUST_USE Status run_charge(Run *r, Pos pos, uint64_t n) {
+static inline RUN_COLD STATUS_MUST_USE Status run_charge_over(Run *r, Pos pos) {
     uint64_t budget = r->ctx.budgets.steps;
-    if (n > run_sat_sub(budget, r->steps)) {
-        r->steps = budget == UINT64_MAX ? budget : budget + 1;
-        return run_budget_stop(&r->ctx, pos, BUDGET_STEPS);
-    }
+    r->steps = budget == UINT64_MAX ? budget : budget + 1;
+    return run_budget_stop(&r->ctx, pos, BUDGET_STEPS);
+}
+
+static inline STATUS_MUST_USE Status run_charge(Run *r, Pos pos, uint64_t n) {
+    if (n > run_sat_sub(r->ctx.budgets.steps, r->steps)) return run_charge_over(r, pos);
     r->steps += n;
     return OK;
 }
