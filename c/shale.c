@@ -31,6 +31,9 @@
 #include "host/mounts.c"
 #include "host/paths.c"
 #include "host/undo.c"
+#include "host/spawn.c"
+#include "host/keep.c"
+#include "host/host_run.c"
 #include "host/host_call.c"
 #include "preludes.h"
 
@@ -419,6 +422,28 @@ static void machine_stop(Stop *stop) {
     stop->function = S("");
 }
 
+// The environment a program inherits, `K=V` each, in `environ`'s order,
+// without `ZIG_PROGRESS`, or a `zig build` that `run` runs would write its
+// progress to the pipe of the build that ran `shale`: Zig's `baseEnv`.
+static STATUS_MUST_USE Status base_env(Arena *a, SpawnStrs *out) {
+    extern char **environ;
+    size_t n = 0;
+    for (char **p = environ; *p != NULL; p++) n++; // cstr: the environment's, NULL-ended
+    Str *env = ARENA_ARRAY(a, Str, n);
+    if (env == NULL && n > 0) return STOP;
+    SLICE_TYPE(EnvRoom, Str);
+    EnvRoom room = {env, n};
+    size_t k = 0;
+    for (char **p = environ; *p != NULL; p++) {
+        Str e = from_c(*p); // cstr: the environment's, NULL-ended
+        if (str_starts_with(e, S("ZIG_PROGRESS="))) continue;
+        at(room, k++) = e;
+    }
+    out->ptr = env;
+    out->len = k;
+    return OK;
+}
+
 // The script parsed and compiled with its preludes, then either reported as
 // checked (`--check`) or run on the VM, its output on stdout and its report
 // on stderr: Zig's `Process.startWith`, `script.runWith` and `printReport`.
@@ -523,11 +548,15 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     // The host's paths: the mounts, the journal `--undo-on-stop` keeps, in
     // an arena of the host's that outlives the run's values.
     Arena host_arena = arena_make((size_t)1 << 30);
-    Paths paths;
-    paths_make(&paths, &host_arena, where.root_abs, where.cwd_abs, mounts, mounts_from);
-    paths.undo = c->undo_on_stop;
+    Host lh;
+    memset(&lh, 0, sizeof lh);
+    paths_make(&lh.paths, &host_arena, where.root_abs, where.cwd_abs, mounts, mounts_from);
+    lh.paths.undo = c->undo_on_stop;
+    SpawnStrs env = {NULL, 0};
+    if (base_env(&host_arena, &env) != OK) return not_ported(o, S("an environment past the arena"));
+    host_make(&lh, env);
     PathHook hook;
-    paths_hook(&paths, &hook);
+    paths_hook(&lh.paths, &hook);
     RunStore rs;
     memset(&rs, 0, sizeof rs);
     store_linux(&linux_store, &rs.store);
@@ -536,25 +565,27 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     rs.effects = Effects_make(&values);
     rs.diffs_summary = !c->verbose;
     r.store = &rs;
-    RunHost host = {&paths, host_call};
+    RunHost host = {&lh, host_call};
     r.host = host;
     Status ran = run_ended(&r.ctx, vm_main(&r, &code));
     write_stdout(buf_view(&r.out));
     RunUsed used = {r.steps, r.reads, r.read_bytes, r.out.len};
     Names effects = {NULL, 0};
     if (c->verbose && store_effect_lines(&rs, a, &effects) != OK) return not_ported(o, S("a report past the arena"));
-    if (cli_write_report(&o->err, name, preludes, c->verbose, effects, ran == OK ? NULL : &r.ctx.stop, used, &b) != OK) return not_ported(o, S("a report past the arena"));
+    Names records = {lh.records.ptr, lh.records.len};
+    if (cli_write_report(&o->err, name, preludes, c->verbose, effects, records, ran == OK ? NULL : &r.ctx.stop, used, &b) != OK) return not_ported(o, S("a report past the arena"));
+    if (host_time_worth_saying(&lh.time, c->verbose) && host_time_write(&o->err, &lh.time) != OK) return not_ported(o, S("a report past the arena"));
     // `--undo-on-stop`: a stopped run puts back what it changed.
     if (c->undo_on_stop && ran != OK) {
         bool all = false;
         Buf undone = buf_make(&host_arena);
-        if (undo_changes(&paths, &undone, &all) != OK) return not_ported(o, S("an undo past the arena"));
+        if (undo_changes(&lh.paths, &undone, &all) != OK) return not_ported(o, S("an undo past the arena"));
         // DRAGON: the secrets rule. The undo's lines name absolute paths.
         // REMEDY: only paths may_change let through are journaled, none
         // under a secrets folder; the lines are put to the one check too.
         bool names = false;
         Pos none = {0, 0};
-        if (paths_names_secret(&paths, &rs.path, none, buf_view(&undone), &names) != OK) return not_ported(o, S("an undo past the arena"));
+        if (paths_names_secret(&lh.paths, &rs.path, none, buf_view(&undone), &names) != OK) return not_ported(o, S("an undo past the arena"));
         if (names) {
             fprintf(stderr, "shale: an undo line names a secrets mount's folder\n");
             abort();
@@ -752,6 +783,7 @@ static int run_main(Out *o, int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+    spawn_quiet_sigpipe();
     Arena a = arena_make((size_t)1 << 30);
     Out o = {&a, buf_make(&a)};
     int code = run_main(&o, argc, argv);

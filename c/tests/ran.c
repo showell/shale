@@ -22,6 +22,9 @@
 #include "../host/mounts.c"
 #include "../host/paths.c"
 #include "../host/undo.c"
+#include "../host/spawn.c"
+#include "../host/keep.c"
+#include "../host/host_run.c"
 #include "../host/host_call.c"
 
 // How a run is made: its mounts file's text, `--verbose` (a diff in full)
@@ -44,7 +47,7 @@ typedef struct {
     Str dir;
     Str root;
     LinuxStore linux_store;
-    Paths paths;
+    Host lh;
     PathHook hook;
     RunStore store;
     Program prog;
@@ -122,9 +125,11 @@ static void ran_init(Ran *x, RanOpts o) {
     x->linux_store.has_data_base = true;
     x->linux_store.data_base = x->root;
     store_linux(&x->linux_store, &x->store.store);
-    paths_make(&x->paths, &x->host, x->root, x->dir, Mounts_items(&loaded.mounts), loaded.from);
-    x->paths.undo = o.undo;
-    paths_hook(&x->paths, &x->hook);
+    paths_make(&x->lh.paths, &x->host, x->root, x->dir, Mounts_items(&loaded.mounts), loaded.from);
+    x->lh.paths.undo = o.undo;
+    SpawnStrs env = {NULL, 0};
+    host_make(&x->lh, env);
+    paths_hook(&x->lh.paths, &x->hook);
     x->store.diffs_summary = !o.verbose;
 }
 
@@ -158,13 +163,13 @@ static void ran_run(Ran *x, Str src, Budgets b) {
     x->store.path = path;
     x->store.effects = Effects_make(&x->values);
     r->store = &x->store;
-    RunHost host = {&x->paths, host_call};
+    RunHost host = {&x->lh, host_call};
     r->host = host;
     x->ran = run_ended(&r->ctx, vm_main(r, &x->code));
-    if (x->ran != OK && x->paths.undo) {
+    if (x->ran != OK && x->lh.paths.undo) {
         Buf w = buf_make(&x->host);
         bool all = false;
-        if (undo_changes(&x->paths, &w, &all) != OK) abort();
+        if (undo_changes(&x->lh.paths, &w, &all) != OK) abort();
         x->undone = buf_view(&w);
     }
 }
@@ -185,9 +190,10 @@ static Str ran_report_of(Ran *x, Arena *a, bool verbose) {
     Buf w = buf_make(a);
     Preludes none = {NULL, 0};
     Names effects = {NULL, 0};
+    Names records = {x->lh.records.ptr, x->lh.records.len};
     if (verbose && store_effect_lines(&x->store, a, &effects) != OK) return S("(the report ran out of arena)");
     RunUsed u = {x->r.steps, x->r.reads, x->r.read_bytes, x->r.out.len};
     Budgets b = x->r.ctx.budgets;
-    if (cli_write_report(&w, S("stdin"), none, verbose, effects, x->ran == OK ? NULL : &x->r.ctx.stop, u, &b) != OK) return S("(the report ran out of arena)");
+    if (cli_write_report(&w, S("stdin"), none, verbose, effects, records, x->ran == OK ? NULL : &x->r.ctx.stop, u, &b) != OK) return S("(the report ran out of arena)");
     return buf_view(&w);
 }

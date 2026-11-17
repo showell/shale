@@ -165,11 +165,11 @@ TEST(maps_and_list_loops_take_zigs_steps) {
 
 TEST(a_builtin_not_ported_is_refused_and_never_caught) {
     static Ran x;
-    ran_source(&x, S("function h() return host(\"run\") end\nprint(attempt(h).ok)\n"), cli_budgets());
+    ran_source(&x, S("function h() return host(\"procs\") end\nprint(attempt(h).ok)\n"), cli_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT(x.r.unported);
     EXPECT_EQ(x.r.ctx.stop.cls, CLASS_HOST);
-    EXPECT_STR(x.r.ctx.stop.message, S("`host(\"run\")` is not ported to the C yet"));
+    EXPECT_STR(x.r.ctx.stop.message, S("`host(\"procs\")` is not ported to the C yet"));
     EXPECT_EQ(x.r.out.len, 0);
     ran_free(&x);
 }

@@ -492,13 +492,20 @@ typedef struct {
 // `op path: outcome`; a stop's line and its calls, innermost first, each named
 // by its source; `── finished` when verbose; and the `── used:` line when
 // verbose, stopped, or past half of a budget.
-static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes preludes, bool verbose, Names effects, const Stop *s, RunUsed u, const Budgets *b) {
+static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes preludes, bool verbose, Names effects, Names records, const Stop *s, RunUsed u, const Budgets *b) {
     if (verbose) {
         TRY(buf_lit(w, "── effects ("));
         TRY(buf_u64(w, effects.len));
         TRY(buf_lit(w, ") ──\n"));
         for (size_t k = 0; k < effects.len; k++) {
             TRY(buf_str(w, at(effects, k)));
+            TRY(buf_byte(w, '\n'));
+        }
+    }
+    if (verbose && records.len > 0) {
+        TRY(buf_lit(w, "── ran ──\n"));
+        for (size_t k = 0; k < records.len; k++) {
+            TRY(buf_str(w, at(records, k)));
             TRY(buf_byte(w, '\n'));
         }
     }

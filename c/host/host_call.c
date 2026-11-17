@@ -4,16 +4,14 @@
 // any) and `edits_write` (`edits_all`'s write). Every other call is refused
 // as not ported yet; `run`, the jobs and the rest are their own lanes.
 //
-// Include paths.c and builtins_change.c first.
+// Include paths.c, builtins_change.c and host_run.c first.
 
-// The `RunHost.call` of the Linux host, `ctx` its Paths.
+// The `RunHost.call` of the Linux host, `ctx` its Host.
 static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out) {
-    Paths *h = ctx;
-    // `run`'s ways to a secret, which its lane calls: named so the unity
-    // build has a use of each until then.
-    (void)paths_secret_path;
-    (void)paths_secret_target;
-    (void)paths_refuse_secret_args;
+    Host *lh = ctx;
+    Paths *h = &lh->paths;
+    if (str_eq(name, S("run"))) return host_run_program(lh, r, pos, args, out);
+    if (str_eq(name, S("sleep"))) return host_sleep(lh, r, pos, args, out);
     if (str_eq(name, S("real"))) {
         if (args.len != 1) return run_failf(r, pos, CLASS_ARGUMENT, "`real` takes one path, given {d}", S("`real` takes one path, given "), run_unum(r, args.len));
         Str given = {0};
