@@ -11,7 +11,16 @@
 // ended. The record, `<log>.job`, is job_record.c's `key=value` lines, each
 // write a new file renamed over the old.
 //
-// Include spawn.c and job_record.c first.
+// Include spawn_argv.c and job_record.c first. The including file defines
+// _GNU_SOURCE before its first include, for pipe2 and syscall.
+
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
 
 // The reaper's end of `jobs_launch`'s started pipe.
 enum { JOBS_STARTED_FD = 3 };

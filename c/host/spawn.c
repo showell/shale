@@ -24,6 +24,8 @@
 // and must not die of it either: `spawn_quiet_sigpipe` sets a handler that
 // does nothing, so a write to a closed stdin is an error, not a death, and a
 // program still starts with SIGPIPE's default.
+//
+// Include spawn_argv.c first: its strings and pipes are jobs.c's too.
 
 #ifndef _GNU_SOURCE
 #error "spawn.c needs _GNU_SOURCE defined before the first include: pipe2, wait4, signalfd and syscall"
@@ -43,8 +45,6 @@
 
 #include "arena.h"
 #include "status.h"
-
-SLICE_TYPE(SpawnStrs, const Str);
 
 // A program to run and how; `spawn_spec_default` gives its defaults.
 typedef struct {
@@ -139,8 +139,6 @@ typedef struct {
 
 typedef struct pollfd SpawnPollFd;
 SLICE_TYPE(SpawnPollFds, SpawnPollFd);
-// A NUL-ended string for the kernel, and a list of them ended by NULL.
-SLICE_TYPE(SpawnCStrs, char *);
 
 static void spawn_noop_handler(int sig) {
     (void)sig;
@@ -172,35 +170,6 @@ static uint64_t spawn_sat_sub(uint64_t a, uint64_t b) {
 static uint64_t spawn_usage_ms(const struct rusage *u) {
     int64_t us = ((int64_t)u->ru_utime.tv_sec + (int64_t)u->ru_stime.tv_sec) * 1000000 + (int64_t)u->ru_utime.tv_usec + (int64_t)u->ru_stime.tv_usec;
     return (uint64_t)(us / 1000);
-}
-
-// `s` with a NUL after it, in the arena; NULL when refused.
-static char *spawn_cstr(Arena *a, Str s) {
-    // DRAGON: size overflow. `s.len + 1` would wrap to 0 for a length of
-    // SIZE_MAX, and the copy would run past a zero-byte allocation.
-    // REMEDY: a length of SIZE_MAX - 1 or more is refused through the arena
-    // before the sum is taken.
-    if (s.len >= SIZE_MAX - 1) return arena_refuse(a);
-    char *p = ARENA_ARRAY(a, char, s.len + 1);
-    if (p == NULL) return NULL;
-    Bytes room = {p, s.len + 1};
-    if (s.len > 0) memcpy(room.ptr, s.ptr, s.len);
-    at(room, s.len) = 0;
-    return p;
-}
-
-// `items` as a NULL-ended list of NUL-ended strings, for execve; NULL when
-// refused.
-static char **spawn_cstr_list(Arena *a, SpawnStrs items) {
-    char **list = ARENA_ARRAY(a, char *, items.len + 1);
-    if (list == NULL) return NULL;
-    SpawnCStrs out = {list, items.len + 1};
-    for (size_t i = 0; i < items.len; i++) {
-        at(out, i) = spawn_cstr(a, at(items, i));
-        if (at(out, i) == NULL) return NULL;
-    }
-    at(out, items.len) = NULL;
-    return list;
 }
 
 // The paths `execve` tries, in order, into `*paths`: argv[0] itself if it
@@ -628,7 +597,6 @@ typedef struct {
     sigset_t old_mask;
 } SpawnFds;
 
-SLICE_TYPE(SpawnPipe, int);
 SLICE_TYPE(SpawnPipes, SpawnPipe);
 
 static void spawn_fds_make(SpawnFds *f) {

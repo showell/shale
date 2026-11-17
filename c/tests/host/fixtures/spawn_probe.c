@@ -13,6 +13,7 @@
 // of the same program.
 #define _GNU_SOURCE
 #include "../../../host/keep.c"
+#include "../../../host/spawn_argv.c"
 #include "../../../host/spawn.c"
 
 static STATUS_MUST_USE Status probe_write(void *ctx, Str bytes) {
