@@ -233,50 +233,73 @@ static STATUS_MUST_USE Status host_bool_opt(Run *r, Pos pos, Str k, const Value 
     return OK;
 }
 
-// `run`'s options, as the script gives them. An option given
-// is `has_` set; a table option's table is NULL when not given.
+// An integer option the script did not give. A script's integer is at most
+// INT64_MAX, so no option given is this.
+#define HOST_UNSET UINT64_MAX
+
+// The width a kept line is cut to when the script gives none.
+enum { HOST_WIDTH_DEFAULT = 200 };
+
+// `run`'s options, as the script gives them. An integer option not given is
+// HOST_UNSET, a value option nil (a script's map never holds nil), and a
+// table option NULL. `before`, `after` and `nocase` are 0 or false unset.
 typedef struct {
-    bool has_timeout;
     uint64_t timeout_ms;
-    bool has_re;
-    Str re;
-    bool has_not_re;
-    Str not_re;
+    // `re`, `not_re`, `want` and `stage`: strings.
+    Value re;
+    Value not_re;
     bool nocase;
     uint64_t before;
     uint64_t after;
-    bool has_head;
     uint64_t head;
-    bool has_tail;
     uint64_t tail;
     uint64_t width;
-    bool width_given;
-    bool has_whole;
     uint64_t whole;
-    // `log`, `cwd`, `stdin` and `stdout_secret`: the script's values.
-    bool has_log;
+    // `log` and `cwd`: strings. `stdin` and `stdout_secret`: checked at
+    // their use.
     Value log;
-    bool has_cwd;
     Value cwd;
-    bool has_stdin;
     Value stdin_v;
     Table *env;
     Table *secrets;
-    bool has_want;
-    Str want;
-    bool has_stdout_secret;
+    Value want;
     Value stdout_secret;
     bool secret_replace;
-    bool has_cpu_budget;
+    // HOST_UNSET is no budget: no program's CPU time passes it.
     uint64_t cpu_budget_ms;
-    bool has_stage;
-    Str stage;
+    Value stage;
 } RunOpts;
+
+// Whether the script gave a value option.
+static bool host_given(const Value *opt) {
+    return opt->tag != VALUE_NIL;
+}
+
+// A string option the script gave, checked to be one, kept as its value.
+static STATUS_MUST_USE Status host_str_value_opt(Run *r, Pos pos, Str k, const Value *x, Value *out) {
+    Str unused = S("");
+    TRY(host_str_opt(r, pos, k, x, &unused));
+    *out = *x;
+    return OK;
+}
 
 // The options read, each held to its rules.
 static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, RunOpts *o) {
     memset(o, 0, sizeof *o);
-    o->width = 200;
+    o->timeout_ms = HOST_UNSET;
+    o->head = HOST_UNSET;
+    o->tail = HOST_UNSET;
+    o->width = HOST_UNSET;
+    o->whole = HOST_UNSET;
+    o->cpu_budget_ms = HOST_UNSET;
+    value_nil(&o->re);
+    value_nil(&o->not_re);
+    value_nil(&o->log);
+    value_nil(&o->cwd);
+    value_nil(&o->stdin_v);
+    value_nil(&o->want);
+    value_nil(&o->stdout_secret);
+    value_nil(&o->stage);
     if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`'s options are a map, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(v))));
     Table *m = v->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`run`'s options are a map, `{{timeout_ms = ..., tail = ...}}`, not a list"));
@@ -284,14 +307,11 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
         Str k = ValueMap_key_at(&m->map, i);
         Value x = ValueMap_value_at(&m->map, i);
         if (str_eq(k, S("timeout_ms"))) {
-            o->has_timeout = true;
             TRY(host_int_opt(r, pos, k, &x, &o->timeout_ms));
         } else if (str_eq(k, S("re"))) {
-            o->has_re = true;
-            TRY(host_str_opt(r, pos, k, &x, &o->re));
+            TRY(host_str_value_opt(r, pos, k, &x, &o->re));
         } else if (str_eq(k, S("not_re"))) {
-            o->has_not_re = true;
-            TRY(host_str_opt(r, pos, k, &x, &o->not_re));
+            TRY(host_str_value_opt(r, pos, k, &x, &o->not_re));
         } else if (str_eq(k, S("nocase"))) {
             TRY(host_bool_opt(r, pos, k, &x, &o->nocase));
         } else if (str_eq(k, S("before"))) {
@@ -299,71 +319,57 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
         } else if (str_eq(k, S("after"))) {
             TRY(host_int_opt(r, pos, k, &x, &o->after));
         } else if (str_eq(k, S("head"))) {
-            o->has_head = true;
             TRY(host_int_opt(r, pos, k, &x, &o->head));
         } else if (str_eq(k, S("tail"))) {
-            o->has_tail = true;
             TRY(host_int_opt(r, pos, k, &x, &o->tail));
         } else if (str_eq(k, S("width"))) {
             TRY(host_int_opt(r, pos, k, &x, &o->width));
-            o->width_given = true;
         } else if (str_eq(k, S("stdout_secret"))) {
-            o->has_stdout_secret = true;
             o->stdout_secret = x;
         } else if (str_eq(k, S("secret_replace"))) {
             TRY(host_bool_opt(r, pos, k, &x, &o->secret_replace));
         } else if (str_eq(k, S("whole"))) {
-            o->has_whole = true;
             TRY(host_int_opt(r, pos, k, &x, &o->whole));
         } else if (str_eq(k, S("log"))) {
-            Str unused = S("");
-            TRY(host_str_opt(r, pos, k, &x, &unused));
-            o->has_log = true;
-            o->log = x;
+            TRY(host_str_value_opt(r, pos, k, &x, &o->log));
         } else if (str_eq(k, S("cwd"))) {
-            Str unused = S("");
-            TRY(host_str_opt(r, pos, k, &x, &unused));
-            o->has_cwd = true;
-            o->cwd = x;
+            TRY(host_str_value_opt(r, pos, k, &x, &o->cwd));
         } else if (str_eq(k, S("stdin"))) {
-            o->has_stdin = true;
             o->stdin_v = x;
         } else if (str_eq(k, S("env"))) {
             TRY(host_map_opt(r, pos, k, &x, &o->env));
         } else if (str_eq(k, S("secrets"))) {
             TRY(host_map_opt(r, pos, k, &x, &o->secrets));
         } else if (str_eq(k, S("want"))) {
-            o->has_want = true;
-            TRY(host_str_opt(r, pos, k, &x, &o->want));
+            TRY(host_str_value_opt(r, pos, k, &x, &o->want));
         } else if (str_eq(k, S("cpu_budget_ms"))) {
-            o->has_cpu_budget = true;
             TRY(host_int_opt(r, pos, k, &x, &o->cpu_budget_ms));
         } else if (str_eq(k, S("stage"))) {
-            o->has_stage = true;
-            TRY(host_str_opt(r, pos, k, &x, &o->stage));
+            TRY(host_str_value_opt(r, pos, k, &x, &o->stage));
         } else {
             return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms and stage, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
         }
     }
-    if (!o->has_timeout) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs `timeout_ms`: how long the program may take is the script's to say"));
-    if (o->has_stage && !o->has_cpu_budget) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `stage` names the program in a `cpu_budget_ms` stop, and needs one"));
-    if (o->has_stdout_secret) {
-        if (o->has_whole || o->has_re || o->has_not_re || o->has_head || o->has_tail || o->before > 0 || o->after > 0 || o->nocase || o->width_given || o->has_log) {
+    if (o->timeout_ms == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs `timeout_ms`: how long the program may take is the script's to say"));
+    if (host_given(&o->stage) && o->cpu_budget_ms == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `stage` names the program in a `cpu_budget_ms` stop, and needs one"));
+    bool filtered = host_given(&o->re) || host_given(&o->not_re) || o->before > 0 || o->after > 0 || o->nocase;
+    bool kept = o->head != HOST_UNSET || o->tail != HOST_UNSET;
+    if (host_given(&o->stdout_secret)) {
+        if (o->whole != HOST_UNSET || filtered || kept || o->width != HOST_UNSET || host_given(&o->log)) {
             return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `stdout_secret` sends stdout to the secret alone, so it takes no keep, filter or log (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`, `width`, `log`): its `out` is stderr's last {d} lines"), MSG_ARGS(MSG_FROM_HOST(S("20"))));
         }
-        o->has_tail = true;
         o->tail = HOST_SECRET_ERR_TAIL;
         return OK;
     }
     if (o->secret_replace) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `secret_replace` is `stdout_secret`'s: it says a stored secret may be replaced"));
-    if (o->has_whole) {
-        if (o->has_re || o->has_not_re || o->has_head || o->has_tail || o->before > 0 || o->after > 0 || o->nocase) {
+    if (o->whole != HOST_UNSET) {
+        if (filtered || kept) {
             return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `whole` keeps everything, and takes no filter or keep (`re`, `not_re`, `nocase`, `before`, `after`, `head`, `tail`)"));
         }
-    } else if (!o->has_head && !o->has_tail) {
+    } else if (!kept) {
         return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs a keep: `head`, `tail` (or both), or `whole = N`: what to keep of the output is the script's to say"));
     }
-    if ((o->before > 0 || o->after > 0) && !o->has_re) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `before` and `after` are a match's context, and need `re`"));
+    if ((o->before > 0 || o->after > 0) && !host_given(&o->re)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `before` and `after` are a match's context, and need `re`"));
     return OK;
 }
 
@@ -969,7 +975,7 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
 // program's output whole. `*has` false for none.
 static STATUS_MUST_USE Status host_run_stdin(Run *r, Pos pos, const RunOpts *o, bool *has, Str *out) {
     *has = false;
-    if (!o->has_stdin) return OK;
+    if (!host_given(&o->stdin_v)) return OK;
     const Value *v = &o->stdin_v;
     if (v->tag == VALUE_STRING) {
         *has = true;
@@ -1020,9 +1026,9 @@ static void host_run_record(Host *h, Run *r, Str joined, Str shown_env, const Ru
     Status s = buf_lit(&b, "run ");
     if (s == OK) s = buf_str(&b, joined);
     if (s == OK) s = buf_str(&b, shown_env);
-    if (s == OK && o->has_want) s = buf_lit(&b, " (want: ");
-    if (s == OK && o->has_want) s = buf_str(&b, o->want);
-    if (s == OK && o->has_want) s = buf_byte(&b, ')');
+    if (s == OK && host_given(&o->want)) s = buf_lit(&b, " (want: ");
+    if (s == OK && host_given(&o->want)) s = buf_str(&b, o->want.as.string);
+    if (s == OK && host_given(&o->want)) s = buf_byte(&b, ')');
     if (s == OK) s = buf_lit(&b, " -> ");
     if (s == OK) s = buf_str(&b, host_ended_word(out->ended));
     if (s == OK && out->has_code) s = buf_byte(&b, ' ');
@@ -1102,7 +1108,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     RunStore *rs = builtin_store_of(r);
     TRY(host_refuse_nul(r, pos, S("run"), argv, o->env, o->secrets));
     Str cwd = S("");
-    if (o->has_cwd) {
+    if (host_given(&o->cwd)) {
         TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), o->cwd.as.string, true, &cwd));
     } else {
         TRY(paths_root_of(&h->paths, &rs->path, pos, &cwd));
@@ -1130,7 +1136,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     // (`ls-files`), which must never be shown a secret's path.
     // REMEDY: the secrets guard runs first, so a path into a secrets folder
     // stops the run before git starts; test_run_guards plants the swap.
-    TRY(host_refuse(h, r, pos, S("run"), at(argv, 0), cwd, o->has_want));
+    TRY(host_refuse(h, r, pos, S("run"), at(argv, 0), cwd, host_given(&o->want)));
 
     Buf shown_env = buf_make(a);
     SpawnStrs env = {NULL, 0};
@@ -1139,7 +1145,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     bool has_stdin = false;
     Str stdin_bytes = S("");
     TRY(host_run_stdin(r, pos, o, &has_stdin, &stdin_bytes));
-    if (o->has_stdout_secret) {
+    if (host_given(&o->stdout_secret)) {
         TRY(host_secret_open(h, r, pos, &o->stdout_secret, o->secret_replace, &held->secret));
         held->has_secret = true;
     }
@@ -1154,7 +1160,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     memset(&sink_out, 0, sizeof sink_out);
     sink_out.log_fd = -1;
     Str log_shown = S("");
-    if (o->has_log) {
+    if (host_given(&o->log)) {
         log_shown = o->log.as.string;
         Str path = S("");
         // The log is a change the host makes for the script: `may_change`
@@ -1174,21 +1180,21 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     HostPattern patterns[2];
     SLICE_TYPE(HostPatterns, HostPattern);
     HostPatterns pats = {patterns, 2};
-    if (o->has_whole) {
+    if (o->whole != HOST_UNSET) {
         sink_out.whole = &whole_buf;
         sink_out.whole_most = o->whole;
     } else {
         KeepOptions ko;
         keep_options_default(&ko);
-        ko.head = (size_t)o->head;
-        ko.tail = (size_t)o->tail;
-        ko.width = (size_t)o->width;
+        ko.head = o->head == HOST_UNSET ? 0 : (size_t)o->head;
+        ko.tail = o->tail == HOST_UNSET ? 0 : (size_t)o->tail;
+        ko.width = o->width == HOST_UNSET ? HOST_WIDTH_DEFAULT : (size_t)o->width;
         ko.before = (size_t)o->before;
         ko.after = (size_t)o->after;
         for (size_t i = 0; i < 2; i++) {
-            bool given = i == 0 ? o->has_re : o->has_not_re;
-            if (!given) continue;
-            Str p = i == 0 ? o->re : o->not_re;
+            const Value *opt = i == 0 ? &o->re : &o->not_re;
+            if (!host_given(opt)) continue;
+            Str p = opt->as.string;
             RegexOptions ro = {o->nocase};
             RegexRefusal why;
             memset(&why, 0, sizeof why);
@@ -1270,7 +1276,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
         if (s != OK) buf_clear(&said);
     }
     host_run_record(h, r, joined, buf_view(&shown_env), o, &outcome, buf_view(&said));
-    if (o->has_log) {
+    if (host_given(&o->log)) {
         if (fsync(held->log_fd) != 0 && errno == EIO) sink_out.log_failed = true;
         Buf lb = buf_make(a);
         if (buf_lit(&lb, "log ") == OK && buf_str(&lb, log_shown) == OK && buf_str(&lb, sink_out.log_failed ? S(": a write failed, the log is short") : S("")) == OK) host_record(h, buf_view(&lb));
@@ -1279,7 +1285,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     Table *t = NULL;
     TRY(host_run_answer(r, pos, argv, &outcome, &t));
     Str kept_out = S("");
-    if (o->has_whole) {
+    if (o->whole != HOST_UNSET) {
         if (sink_out.whole_over) {
             return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: the output passed `whole = {d}` bytes ({d}): a keep, `head` and `tail`, takes any size"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, o->whole)), MSG_FROM_HOST(run_unum(r, sink_out.bytes))));
         }
@@ -1307,7 +1313,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     if (r->read_bytes > r->ctx.budgets.read_bytes) return run_budget_stop(&r->ctx, pos, BUDGET_READ_BYTES);
     // An interrupted `shale` stops here, once the program's group is gone.
     if (outcome.ended == SPAWN_INTERRUPTED) return host_fail(r, pos, CLASS_HOST, S("`run`: shale was told to stop (TERM or HUP) while `{s}` ran; it was ended"), MSG_ARGS(MSG_FROM_SCRIPT(argv0)));
-    if (o->has_cpu_budget && outcome.cpu_ms > o->cpu_budget_ms) return host_over_budget(r, pos, o->has_stage ? o->stage : joined, o->cpu_budget_ms, &outcome, kept_out);
+    if (outcome.cpu_ms > o->cpu_budget_ms) return host_over_budget(r, pos, host_given(&o->stage) ? o->stage.as.string : joined, o->cpu_budget_ms, &outcome, kept_out);
     value_table(out, t);
     return OK;
 }
