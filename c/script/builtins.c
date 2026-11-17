@@ -71,7 +71,8 @@ static STATUS_MUST_USE Status builtin_charge_bytes(Run *r, Pos pos, uint64_t n) 
     return run_charge(r, pos, n / BUILTIN_BYTES_PER_STEP + (n % BUILTIN_BYTES_PER_STEP != 0 ? 1 : 0));
 }
 
-// A scalar as `print` and `tostring` write it; a table is an error naming `what`.
+// A scalar as `print` and `tostring` write it; a table is an error naming
+// `what`.
 static STATUS_MUST_USE Status builtin_scalar_text(Run *r, Pos pos, const Value *v, IntText *t, Str what, Str *out) {
     switch (v->tag) {
     case VALUE_NIL: *out = S("nil"); return OK;

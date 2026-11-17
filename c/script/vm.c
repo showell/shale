@@ -212,7 +212,8 @@ static STATUS_MUST_USE Status copier_drain(Copier *c) {
     while (c->todo.len > 0) {
         Table *t = ValueVec_pop(&c->todo).as.table;
         Table *old = ValueVec_pop(&c->todo).as.table;
-        // A list keeps exactly its capacity, as Zig's `ensureTotalCapacityPrecise`:
+        // A list keeps exactly its capacity, as Zig's
+        // `ensureTotalCapacityPrecise`:
         // a list literal half built when an item's call yielded has reserved
         // room for the rest, and the growth rule's half again would grow a
         // kept list at every yield.
@@ -433,7 +434,8 @@ static STATUS_MUST_USE Status vm_enter_frame(Machine *m, const VmOp *op, const C
     return OK;
 }
 
-// Ends the top frame with `v`; `*more` false when it was the script's top level.
+// Ends the top frame with `v`; `*more` false when it was the script's top
+// level.
 static STATUS_MUST_USE Status vm_leave(Machine *m, const Value *v, bool *more) {
     Run *r = m->r;
     VmFrame f = VmFrameVec_pop(&m->frames);

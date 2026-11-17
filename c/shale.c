@@ -2,9 +2,10 @@
 // the command line, the mounts, the script and the preludes as the Zig runner
 // does, parses and compiles the script with them, and either stops there
 // (`--check`) or runs it on the VM (script/vm.c), printing what it printed
-// on stdout and the same report on stderr, with the same exit code. A
-// host call the C does not run yet is refused as not ported, and so are `--help`, `--version` and `--reap`. This file holds the system
-// calls; what it decides is in script/.
+// on stdout and the same report on stderr, with the same exit code. A host
+// call the C does not run yet is refused as not ported, and so are `--help`,
+// `--version` and `--reap`. This file holds the system calls; what it
+// decides is in script/.
 
 // `realpath`, `openat` and `memmem` are GNU's.
 #define _GNU_SOURCE
@@ -40,10 +41,12 @@ enum {
     EXIT_REFUSED = 2,
     // Room for the parse beyond the machine budget: the C's tree is laid out
     // for itself, and its working lists stay in the arena, so the budget's own
-    // bytes are no measure of it. DRAGON: the machine budget. The parse's
-    // arena is bounded, but not at Zig's `budget machine` stop: a source that
-    // stops there in Zig parses here. The source budget (64 KiB) bounds the
-    // tree, so the arena can't grow without end.
+    // bytes are no measure of it.
+    // DRAGON: the machine budget. The parse's arena is bounded, but not at
+    // Zig's `budget machine` stop: a source that stops there in Zig parses
+    // here.
+    // REMEDY: the source budget (64 KiB) bounds the tree, so the arena can't
+    // grow without end.
     PARSE_ROOM = 256 * 1024 * 1024,
 };
 
@@ -221,10 +224,11 @@ static STATUS_MUST_USE Status steps_ran_out(LibraryReader *r, Str *why) {
 // Zig's `refuseLinks` (src/shale_host_linux.zig): whether any part of `rest`
 // below the mount's folder `dir` is a symbolic link, each part checked with
 // `lstat` and charged a step, a missing part ending the walk. On a link,
-// `*why` names it as Zig's stop does. DRAGON: the store's boundary. The store
-// follows no link below a mount's folder, so a link there could lead a
-// library's read out of it. This walk refuses one before the read; a link
-// made between the walk and the open is a race the Zig shares.
+// `*why` names it as Zig's stop does.
+// DRAGON: the store's boundary. The store follows no link below a mount's
+// folder, so a link there could lead a library's read out of it.
+// REMEDY: this walk refuses one before the read; a link made between the
+// walk and the open is a race the Zig shares.
 static STATUS_MUST_USE Status refuse_links(LibraryReader *r, Str dir, Str rest, Str prefix, Str *why, bool *refused) {
     *refused = false;
     if (rest.len == 0) return OK;
@@ -313,8 +317,9 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     if (rest.len > 0) TRY(join(a, m->dir, rest, &full));
     // DRAGON: the secrets rule. A secrets mount's folder may sit inside another
     // mount's, and a library read through the outer one would put a token's
-    // bytes in a parse's messages (a name, a number). Zig's
-    // `refuseSecretsUnder` refuses every path in such a folder; so does this.
+    // bytes in a parse's messages (a name, a number).
+    // REMEDY: as Zig's `refuseSecretsUnder`, every path in such a folder is
+    // refused here.
     for (size_t k = 0; k < r->mounts.len; k++) {
         const Mount *sm = &at(r->mounts, k);
         if (sm->secrets && mounts_in_folder(full, sm->dir)) return reader_why(why, got, 5, a, S("\""), path, S("\" is in the mount `"), sm->name, S("`, which holds secrets"));

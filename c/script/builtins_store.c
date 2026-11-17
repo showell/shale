@@ -50,6 +50,8 @@ static STATUS_MUST_USE Status store_effect_lines(RunStore *rs, Arena *a, Names *
     const PathHook *hook = rs->path.hook;
     for (size_t k = 0; k < e.len; k++) {
         Buf b = buf_make(a);
+        // The line's room taken first, so each piece is copied into it.
+        TRY(buf_reserve(&b, at(e, k).op.len + at(e, k).path.len + at(e, k).outcome.len + 3));
         TRY(buf_str(&b, at(e, k).op));
         TRY(buf_byte(&b, ' '));
         TRY(buf_str(&b, at(e, k).path));
