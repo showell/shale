@@ -622,6 +622,23 @@ test "spawn: what the program leaves running in its group is ended before `run` 
     }
 }
 
+test "spawn: a process that left the group holding the pipe never holds `run`: the drain bounds it" {
+    var c: Collect = .{};
+    defer c.out.deinit(testing.allocator);
+    const env = [_][]const u8{"PATH=/usr/bin:/bin"};
+    // The leader exits 0 at once; its child has made a session of its own,
+    // out of the group's TERM, and would hold the output open for 20 s.
+    const o = try spawn(&.{ "grandchild-escape", "20000" }, .{ .argv = &.{}, .env = &env, .timeout_ms = 10_000 }, &c);
+    try testing.expectEqual(Ended.exit, o.ended);
+    try testing.expectEqual(@as(?u8, 0), o.code);
+    try testing.expect(o.ms >= 200 and o.ms < 1_500);
+    // It outlives the run, out of its reach; the test ends it.
+    const g = try grandchildPid(c.out.items);
+    const there = !gone(g);
+    _ = linux.kill(g, .KILL);
+    try testing.expect(there);
+}
+
 /// A sink that sends this thread a TERM when the output says "late", which
 /// the fixture's grandchild prints only once its leader has exited: a TERM
 /// to `shale` while the leader's group ends and its output drains.

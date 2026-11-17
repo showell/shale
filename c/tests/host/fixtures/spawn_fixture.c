@@ -19,6 +19,8 @@
 //     burn-child MS          a child burns MS; this waits for it
 //     grandchild-exit MS     "grandchild N", the pid of a child that sleeps
 //                            MS holding the output; this exits 0 at once
+//     grandchild-escape MS   the same, but the child leaves the group for a
+//                            session of its own, out of `run`'s reach
 //     grandchild-stay MS     the same grandchild, both ignoring TERM; this
 //                            sleeps MS too
 //     signal-parent SIG MS   SIG (15 or 1) to its parent, TERM ignored, then
@@ -57,13 +59,25 @@ static void ignore_term(void) {
 // A grandchild that sleeps `ms` holding the output. This process says its
 // pid, from the fork, so the line is there even when the group's TERM at
 // this one's exit ends the grandchild before it would have run a line.
-static void grandchild(long ms, bool deaf) {
+static void grandchild(long ms, bool deaf, bool escape) {
+    // The child says it has left the group by closing its end, so this
+    // exits only after: the group's TERM at this exit never finds it there.
+    int ready[2];
+    if (pipe(ready) != 0) _exit(3);
     pid_t pid = fork();
     if (pid == 0) {
+        close(ready[0]);
+        if (escape) setsid();
+        close(ready[1]);
         if (deaf) ignore_term();
         sleep_ms(ms);
         _exit(0);
     }
+    close(ready[1]);
+    char byte;
+    ssize_t r = read(ready[0], &byte, 1);
+    (void)r;
+    close(ready[0]);
     printf("grandchild %d\n", (int)pid);
     fflush(stdout);
 }
@@ -132,10 +146,12 @@ int main(int argc, char **argv) {
         int status = 0;
         waitpid(pid, &status, 0);
     } else if (is(verb, "grandchild-exit")) {
-        grandchild(num(arg), false);
+        grandchild(num(arg), false, false);
+    } else if (is(verb, "grandchild-escape")) {
+        grandchild(num(arg), false, true);
     } else if (is(verb, "grandchild-stay")) {
         ignore_term();
-        grandchild(num(arg), true);
+        grandchild(num(arg), true, false);
         sleep_ms(num(arg));
     } else if (is(verb, "signal-parent")) {
         ignore_term();

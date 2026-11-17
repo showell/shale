@@ -394,6 +394,30 @@ TEST(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_is_ended_before
     arena_deinit(&a);
 }
 
+TEST(attack_a_process_that_left_the_group_holding_the_pipe_never_holds_run) {
+    // The leader exits 0 at once; its child has made a session of its own,
+    // out of the group's TERM, and would hold the output open for 3 seconds.
+    // `run` returns after the drain, not when the pipe closes; the child
+    // outlives it, and the test ends it itself.
+    Arena a = arena_make(1 << 24);
+    ArgList argv;
+    Collect c;
+    collect_make(&c, &a);
+    SpawnOutcome o;
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "grandchild-escape", "3000", "");
+    EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
+    EXPECT_EQ(o.ended, SPAWN_EXIT);
+    EXPECT_EQ(o.code, 0);
+    EXPECT(o.ms >= 200 && o.ms < 1500);
+    long g = grandchild_pid(buf_view(&c.out));
+    EXPECT(g > 0);
+    bool alive = g > 0 && !ended_within(g, 0);
+    if (g > 0) kill((pid_t)g, SIGKILL);
+    EXPECT(alive);
+    arena_deinit(&a);
+}
+
 TEST(attack_a_term_to_shale_after_its_program_exits_while_the_output_drains_still_stops_the_run) {
     // The leader exits 0 at once; the sink, at the first output, waits until
     // it has, then sends this process a TERM. The loop reads it once the
@@ -656,6 +680,7 @@ TEST_MAIN(TEST_CASE(output_exit_code_stdin_cwd_and_the_environment_as_given),
           TEST_CASE(a_sink_that_stops_ends_the_programs_group_and_reaps_it_before_the_stop_is_said),
           TEST_CASE(attack_a_grandchild_that_ignores_term_ends_with_the_group_at_the_deadline),
           TEST_CASE(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_is_ended_before_run_returns),
+          TEST_CASE(attack_a_process_that_left_the_group_holding_the_pipe_never_holds_run),
           TEST_CASE(attack_a_term_to_shale_after_its_program_exits_while_the_output_drains_still_stops_the_run),
           TEST_CASE(attack_the_deadline_and_the_grace_to_the_millisecond),
           TEST_CASE(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds),

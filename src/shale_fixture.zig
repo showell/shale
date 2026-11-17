@@ -25,6 +25,9 @@
 //!     shale-fixture grandchild-late MS   the same, but the child ignores
 //!                                    TERM and prints "late" once this has
 //!                                    exited, then sleeps MS
+//!     shale-fixture grandchild-escape MS the same as grandchild-exit, but
+//!                                    the child leaves the group for a
+//!                                    session of its own
 //!     shale-fixture grandchild-signal    "grandchild N"; the child ignores
 //!                                    TERM and, once this has exited, sends
 //!                                    TERM to this one's parent, then exits
@@ -142,11 +145,12 @@ pub fn main(init: std.process.Init) !u8 {
         }
         var status: i32 = 0;
         _ = linux.wait4(pid, &status, 0, null);
-    } else if (std.mem.eql(u8, verb, "grandchild-exit") or std.mem.eql(u8, verb, "grandchild-late") or std.mem.eql(u8, verb, "grandchild-signal")) {
+    } else if (std.mem.eql(u8, verb, "grandchild-exit") or std.mem.eql(u8, verb, "grandchild-late") or std.mem.eql(u8, verb, "grandchild-signal") or std.mem.eql(u8, verb, "grandchild-escape")) {
         const linux = std.os.linux;
         const signal = std.mem.eql(u8, verb, "grandchild-signal");
         const ms = if (signal) 0 else try std.fmt.parseInt(isize, arg, 10);
-        const late = !std.mem.eql(u8, verb, "grandchild-exit");
+        const escape = std.mem.eql(u8, verb, "grandchild-escape");
+        const late = !escape and !std.mem.eql(u8, verb, "grandchild-exit");
         const leader = linux.getpid();
         const above = linux.getppid();
         // The child closes its end once it ignores TERM, so this exits only
@@ -157,6 +161,7 @@ pub fn main(init: std.process.Init) !u8 {
         if (pid == 0) {
             // Raw calls only: the child shares the parent's buffered writer.
             _ = linux.close(ready[0]);
+            if (escape) _ = linux.setsid();
             if (late) {
                 const ignore: linux.Sigaction = .{ .handler = .{ .handler = linux.SIG.IGN }, .mask = linux.sigemptyset(), .flags = 0 };
                 _ = linux.sigaction(.TERM, &ignore, null);

@@ -370,6 +370,16 @@ static bool spawn_take_signal(int sig_fd) {
     return read(sig_fd, &info, sizeof info) == (ssize_t)sizeof info;
 }
 
+// A TERM or HUP read, in a turn's poll or as the loop ends: the run stops
+// for it whenever it came, while the program runs, while its group ends or
+// while its output drains; only a timeout already said keeps its word.
+static void spawn_heard(SpawnLoop *l) {
+    if (!l->has_why) {
+        l->has_why = true;
+        l->why = SPAWN_INTERRUPTED;
+    }
+}
+
 // The group's state at `now`, before a turn: once the leader is reaped,
 // whether its group is gone, and whether it is done (gone, or left a grace
 // after its KILL).
@@ -461,13 +471,7 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
         }
     }
     if (at(fds, sig_at).revents != 0 && spawn_take_signal(l->sig_fd)) {
-        // Read while the program runs, while its group ends or while its
-        // output drains, the signal stops the run all the same; only a
-        // timeout already said keeps its word.
-        if (!l->has_why) {
-            l->has_why = true;
-            l->why = SPAWN_INTERRUPTED;
-        }
+        spawn_heard(l);
         if (!l->exited && !l->has_termed) {
             kill(-l->pid, SIGTERM);
             l->has_termed = true;
@@ -519,10 +523,7 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
         if (l.group_done) {
             // A signal that came since the last poll is taken here, not left
             // to kill `shale` without a word when the mask is put back.
-            if (spawn_take_signal(l.sig_fd) && !l.has_why) {
-                l.has_why = true;
-                l.why = SPAWN_INTERRUPTED;
-            }
+            if (spawn_take_signal(l.sig_fd)) spawn_heard(&l);
             if (l.exited && (l.out_r < 0 || now >= l.drain_until)) break;
         }
         if (spawn_turn(&l, spec, buf, sink) != OK) {
