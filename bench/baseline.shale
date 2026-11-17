@@ -484,7 +484,22 @@ local after = box_state()
 local day = sub(date(now()), 1, 10)
 local flag = "notclean"
 if stamp == "clean" then flag = "clean" end
-local out_path = "bench/baselines/" .. day .. "-" .. cfg.commit .. "-" .. flag .. ".tsv"
+-- The file names what was measured as well as when, so a run of another
+-- binary at the same commit never overwrites this one: `label=`, or else
+-- the binary under test's folder and name (`zig-out-shale`, `release-shale`),
+-- and the part. A file already there stops the run.
+local label = arg("label", "")
+if label == "" then
+  if shale_arg == "" then
+    label = "built"
+  else
+    local parts = split(cfg.bin_path, "/")
+    label = last_name(cfg.bin_path)
+    if #parts >= 2 then label = parts[#parts - 1] .. "-" .. label end
+  end
+end
+local out_path = "bench/baselines/" .. day .. "-" .. cfg.commit .. "-" .. label .. "-" .. part .. "-" .. flag .. ".tsv"
+if exists(out_path) then fail("baseline: " .. out_path .. " is there already: pass label= to name this run apart") end
 local head = {
   "# Shale's baseline (bench/baseline.shale): medians of each workload's repetitions, in ms",
   "# date\t" .. date(now()),

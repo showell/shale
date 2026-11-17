@@ -15,7 +15,7 @@ can be judged against today's Zig Shale on the same inputs:
   own, local and global) and **incremental** (one comment line appended
   to `src/script/interp.zig`, then the same command again).
 
-Each run writes one TSV, `bench/baselines/<date>-<commit>-<clean|notclean>.tsv`.
+Each run writes one TSV, `bench/baselines/<date>-<commit>-<label>-<part>-<clean|notclean>.tsv`, where `<label>` is `label=` or the binary under test's folder and name, so two binaries measured at one commit never share a file (a file already there stops the run).
 Its `#` lines say what the box was (its load before and after, heavy
 processes, the CPU, the kernel, the compiler, the source's commit and
 whether it was dirty), and each row gives a workload's medians. For a
@@ -73,7 +73,7 @@ or below 0.30, and none of `zig`, `roc`, `roc-ast`, `roc-types`, `node`,
 
    It refuses, naming why, if the box is not quiet. Otherwise it builds,
    runs every workload five times and writes
-   `bench/baselines/<date>-<commit>-clean.tsv`. Commit that file.
+   `bench/baselines/<date>-<commit>-<label>-<part>-clean.tsv`. Commit that file.
 5. **Restart** the services and the agents.
 
 ## Measuring another implementation
