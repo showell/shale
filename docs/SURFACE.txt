@@ -610,7 +610,7 @@
   type       `json_read`'s `{s}` is an integer, not {s}
   type       `json_read`'s options are a map, not a list
   type       `json_read`'s options are a map, not {s}
-### shale_host_linux (41)
+### shale_host_linux (43)
   argument   \"{s}\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)
   argument   \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses
   argument   \"{s}\" is absolute inside its mount: a mount's paths are relative to it
@@ -646,6 +646,8 @@
   store      the mount `{s}` is a secrets mount whose folder is missing
   store      the mount `{s}` is {s}, which cannot be opened: {s}
   store      the mount `{s}` is {s}, which is not a folder there
+  store      the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named
+  store      the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named
   type       `run`'s `stdout_secret` is a path in a `secrets` mount, `\"keys:NAME\"`, not {s}
   type       `run`: its `{s}` must be a map, not a list
   type       `run`: its `{s}` must be a map, not {s}
@@ -881,6 +883,8 @@
   shale_host_linux   refused    `{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`
   shale_host_linux   store      the mount `{s}` is a secrets mount whose folder cannot be opened: {s}
   shale_host_linux   store      the mount `{s}` is a secrets mount whose folder is missing
+  shale_host_linux   store      the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named
+  shale_host_linux   store      the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named
   shale_host_linux   type       `run`'s `stdout_secret` is a path in a `secrets` mount, `\"keys:NAME\"`, not {s}
   shale_host_run     argument   `run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms and stage, not `{s}`
   shale_host_run     argument   `run`'s `secret_replace` is `stdout_secret`'s: it says a stored secret may be replaced
@@ -1239,4 +1243,4 @@
 
 ## The counts
   builtins 77, host calls 22, prelude functions 93
-  stop texts 595, refusal texts 66, budgets 16 (15 a stop names), flags 11
+  stop texts 597, refusal texts 66, budgets 16 (15 a stop names), flags 11

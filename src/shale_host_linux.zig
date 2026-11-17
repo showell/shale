@@ -307,6 +307,14 @@ fn runDirOf(h: *Host, run: *Run, pos: ast.Pos, m: Mount) Error![]const u8 {
     return std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch run.oom(pos);
 }
 
+/// Whether `text` spells a `secrets` mount's folder anywhere in it: a mount
+/// inside one (`k = ~/keys secrets`, `sub = ~/keys/sub`), or one whose name
+/// only begins with it (`~/keys-old`), would print where the tokens are.
+fn spellsSecretFolder(h: *const Host, text: []const u8) bool {
+    for (h.mounts) |m| if (m.secrets and std.mem.indexOf(u8, text, m.dir) != null) return true;
+    return false;
+}
+
 fn anySecrets(h: *const Host) bool {
     for (h.mounts) |m| if (m.secrets) return true;
     return false;
@@ -398,15 +406,20 @@ fn mountPath(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize, 
         }
     }
     // A missing mount folder stops the run only when the mount is used. A
-    // secrets mount's stop names the mount alone: its folder is what the
-    // secrets rule hides (`shale --help` never prints it either).
+    // stop whose folder would spell a secrets mount's names the mount alone:
+    // that folder is what the secrets rule hides (`shale --help` never
+    // prints it either).
     if (std.Io.Dir.cwd().openDir(run.io, m.dir, .{})) |d| d.close(run.io) else |e| switch (e) {
         error.FileNotFound, error.NotDir => return if (m.secrets)
             run.fail(pos, .store, "the mount `{s}` is a secrets mount whose folder is missing", .{m.name})
+        else if (spellsSecretFolder(h, m.dir))
+            run.fail(pos, .store, "the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named", .{m.name})
         else
             run.fail(pos, .store, "the mount `{s}` is {s}, which is not a folder there", .{ m.name, m.dir }),
         else => return if (m.secrets)
             run.fail(pos, .store, "the mount `{s}` is a secrets mount whose folder cannot be opened: {s}", .{ m.name, @errorName(e) })
+        else if (spellsSecretFolder(h, m.dir))
+            run.fail(pos, .store, "the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named", .{ m.name, @errorName(e) })
         else
             run.fail(pos, .store, "the mount `{s}` is {s}, which cannot be opened: {s}", .{ m.name, m.dir, @errorName(e) }),
     }

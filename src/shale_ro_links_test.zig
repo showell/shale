@@ -281,7 +281,7 @@ fn onceSaid(t: *T, src: []const u8, class: script_class, says: []const u8) !void
     try testing.expectEqualStrings(says, s.message);
 }
 
-test "secrets mounts: a folder missing or shut is said by the mount's name alone, through `secrets` and `stdout_secret`; an ordinary mount's stop names its folder" {
+test "secrets mounts: a folder missing or shut is said by the mount's name alone, through `secrets` and `stdout_secret`; an ordinary mount's stop names its folder, unless its path spells a secrets mount's" {
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
@@ -290,11 +290,15 @@ test "secrets mounts: a folder missing or shut is said by the mount's name alone
     try t.tmp.dir.createDirPath(io, "shut/keys");
     try t.tmp.dir.createDirPath(io, "shut/plain");
     var why: []const u8 = "";
-    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/no-keys secrets\np = {s}/no-plain\nks = {s}/shut/keys secrets\nps = {s}/shut/plain\n", .{ t.root, t.root, t.root, t.root }), "/home/x", &why);
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/no-keys secrets\np = {s}/no-plain\nks = {s}/shut/keys secrets\nps = {s}/shut/plain\nin = {s}/no-keys/sub\nnear = {s}/no-keys-old\nkin = {s}/shut/keys/sub\n", .{ t.root, t.root, t.root, t.root, t.root, t.root, t.root }), "/home/x", &why);
     const missing = "the mount `k` is a secrets mount whose folder is missing";
     try onceSaid(&t, "run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:tok\"}})", .store, missing);
     try onceSaid(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:tok\"})", .store, missing);
     try onceSaid(&t, "read(\"p:x\")", .store, try std.fmt.allocPrint(a, "the mount `p` is {s}/no-plain, which is not a folder there", .{t.root}));
+    // An ordinary mount whose path spells a secrets mount's folder, inside it
+    // or only beginning with it, is not named either.
+    try onceSaid(&t, "read(\"in:x\")", .store, "the mount `in`'s folder is missing; its path holds a secrets mount's folder, so it is not named");
+    try onceSaid(&t, "read(\"near:x\")", .store, "the mount `near`'s folder is missing; its path holds a secrets mount's folder, so it is not named");
     // A folder that is there but cannot be opened: its parent shut.
     const shut = try std.fmt.allocPrintSentinel(a, "{s}/shut", .{t.root}, 0);
     try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(shut, 0o000));
@@ -303,6 +307,7 @@ test "secrets mounts: a folder missing or shut is said by the mount's name alone
     try onceSaid(&t, "run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"ks:tok\"}})", .store, shut_said);
     try onceSaid(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"ks:tok\"})", .store, shut_said);
     try onceSaid(&t, "read(\"ps:x\")", .store, try std.fmt.allocPrint(a, "the mount `ps` is {s}/shut/plain, which cannot be opened: AccessDenied", .{t.root}));
+    try onceSaid(&t, "read(\"kin:x\")", .store, "the mount `kin`'s folder cannot be opened: AccessDenied; its path holds a secrets mount's folder, so it is not named");
 }
 
 const script_class = @import("shale").script.diag.Class;
