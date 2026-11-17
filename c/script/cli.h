@@ -83,14 +83,20 @@ enum {
     CLI_ARGS_MAX = 64,
 };
 
+// Where the script is.
+typedef enum {
+    CLI_SCRIPT_STDIN,
+    CLI_SCRIPT_FILE,
+    CLI_SCRIPT_SOURCE,
+} CliScript;
+
 typedef struct {
     // `--root`, else SHALE_ROOT, else ".".
     Str root;
-    bool has_file;
+    // Stdin, a FILE (`file`) or `-e` (`source`).
+    CliScript script;
     Str file;
-    bool has_source;
     Str source;
-    bool from_stdin;
     bool verbose;
     bool undo_on_stop;
     bool args_stdin;
@@ -279,9 +285,9 @@ static inline STATUS_MUST_USE Status cli_parse(Str *argv, size_t argc, bool has_
             if (str_eq(a, S("--root"))) {
                 c->root = v;
             } else if (str_eq(a, S("-e"))) {
-                if (c->has_file || c->has_source) return cli_refuse(why, 1, S("one script: a file or -e, not both"));
+                if (c->script != CLI_SCRIPT_STDIN) return cli_refuse(why, 1, S("one script: a file or -e, not both"));
                 if (c->args_len > 0) return cli_refuse(why, 4, at(slots, 0).name, S("="), at(slots, 0).value, S(" before the script: the script first, then NAME=VALUE"));
-                c->has_source = true;
+                c->script = CLI_SCRIPT_SOURCE;
                 c->source = v;
             } else {
                 Buf who = buf_make(why->arena);
@@ -300,14 +306,13 @@ static inline STATUS_MUST_USE Status cli_parse(Str *argv, size_t argc, bool has_
             at(slots, c->args_len) = v;
             c->args_len++;
         } else {
-            if (c->has_file || c->has_source) return cli_refuse(why, 3, S("one script: "), a, S(" is a second"));
+            if (c->script != CLI_SCRIPT_STDIN) return cli_refuse(why, 3, S("one script: "), a, S(" is a second"));
             if (c->args_len > 0) return cli_refuse(why, 4, at(slots, 0).name, S("="), at(slots, 0).value, S(" before the script: the script first, then NAME=VALUE"));
-            c->has_file = true;
+            c->script = CLI_SCRIPT_FILE;
             c->file = a;
         }
     }
-    c->from_stdin = !c->has_file && !c->has_source;
-    if (c->args_stdin && !c->has_file) return cli_refuse(why, 1, S("--args-stdin: stdin is the values of a FILE, and there is no FILE"));
+    if (c->args_stdin && c->script != CLI_SCRIPT_FILE) return cli_refuse(why, 1, S("--args-stdin: stdin is the values of a FILE, and there is no FILE"));
     return OK;
 }
 
@@ -440,8 +445,12 @@ static inline STATUS_MUST_USE Status cli_write_header_budgets(Buf *w, const Comm
 
 // The script's name in a stop: its file, `-e` or `stdin`.
 static inline Str cli_script_name(const Command *c) {
-    if (c->has_file) return c->file;
-    return c->has_source ? S("-e") : S("stdin");
+    switch (c->script) {
+    case CLI_SCRIPT_FILE: return c->file;
+    case CLI_SCRIPT_SOURCE: return S("-e");
+    case CLI_SCRIPT_STDIN: break;
+    }
+    return S("stdin");
 }
 
 // What a check used, as the report's `── used:` line says it.

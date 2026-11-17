@@ -882,9 +882,9 @@ static int run_main(Out *o, int argc, char **argv) {
     Str from = loaded.from;
     Str err = {0};
     Str source = {0};
-    if (c.has_source) {
+    if (c.script == CLI_SCRIPT_SOURCE) {
         source = c.source;
-    } else if (c.has_file) {
+    } else if (c.script == CLI_SCRIPT_FILE) {
         Str file = {0};
         bool missing = 0;
         if (script_file(a, c.file, mounts, &file, &missing) != OK) return not_ported(o, S("a script path past the arena"));
