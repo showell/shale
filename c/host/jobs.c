@@ -191,28 +191,54 @@ typedef enum {
     JOBS_NO_RECORD,
 } JobsLaunched;
 
+// The most a job's record may hold, as Zig's `.limited(64 * 1024)`.
+enum { JOBS_RECORD_MOST = 64 * 1024 };
+
+// `fd` read to its end, at most one byte past JOBS_RECORD_MOST (so a longer
+// file shows as one), into `*out` in `a` at its length; `*err` is the errno
+// of a read that failed, what came before it kept, else 0. False when the
+// arena refuses. The read goes into a buffer of its own, a big allocation
+// given back once its bytes are copied: Zig's `readFileAlloc` holds a
+// record's length, and a buffer of the limit kept in the values' arena held
+// 64 KiB a call, so a script polling `job_alive` every 20 ms ran a 256 MiB
+// arena out in 40 seconds.
+static bool jobs_read_capped(Arena *a, int fd, Bytes *out, int *err) {
+    *err = 0;
+    _Static_assert(JOBS_RECORD_MOST + 1 >= ARENA_BIG, "the read's buffer is a big allocation, which a free gives back");
+    char *buf = arena_alloc(a, JOBS_RECORD_MOST + 1, 1);
+    if (buf == NULL) return false;
+    Bytes room = {buf, JOBS_RECORD_MOST + 1};
+    size_t len = 0;
+    while (len < room.len) {
+        ssize_t got = read(fd, &at(room, len), room.len - len);
+        if (got < 0 && errno == EINTR) continue;
+        if (got < 0) {
+            *err = errno;
+            break;
+        }
+        if (got == 0) break;
+        len += (size_t)got;
+    }
+    char *kept = arena_alloc(a, len, 1);
+    if (kept != NULL && len > 0) memcpy(kept, buf, len);
+    arena_free(a, buf, room.len);
+    if (kept == NULL) return false;
+    out->ptr = kept;
+    out->len = len;
+    return true;
+}
+
 // A file's bytes, at most 64 KiB, in the arena; false when it cannot be read
 // or is longer.
 static bool jobs_read_small(Arena *a, const char *path, Bytes *out) { // cstr: NUL-ended for the kernel
     int fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return false;
-    char *buf = arena_alloc(a, 64 * 1024 + 1, 1);
-    if (buf == NULL) {
-        close(fd);
-        return false;
-    }
-    Bytes room = {buf, 64 * 1024 + 1};
-    size_t len = 0;
-    while (len < room.len) {
-        ssize_t got = read(fd, &at(room, len), room.len - len);
-        if (got < 0 && errno == EINTR) continue;
-        if (got <= 0) break;
-        len += (size_t)got;
-    }
+    Bytes text = {NULL, 0};
+    int err = 0;
+    bool read_ok = jobs_read_capped(a, fd, &text, &err);
     close(fd);
-    if (len > 64 * 1024) return false;
-    out->ptr = buf;
-    out->len = len;
+    if (!read_ok || err != 0 || text.len > JOBS_RECORD_MOST) return false;
+    *out = text;
     return true;
 }
 

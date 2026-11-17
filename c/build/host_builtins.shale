@@ -16,7 +16,7 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 10, ["c/tests/host_builtins/test_run_guards.c"] = 7}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 11, ["c/tests/host_builtins/test_run_guards.c"] = 7}
 const HOST_BUILTINS_PLANTS = {
   {name = "a secret's start at a read's end is passed on raw", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",
@@ -48,6 +48,9 @@ const HOST_BUILTINS_PLANTS = {
   {name = "a job's exit code is not read from its record", file = "host_jobs.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest",
    old = "    return host_jobs_result(r, pos, S(\"exited\"), rec->has_exit, rec->exit, rec->has_signal, rec->signal, out);", new = "    return host_jobs_result(r, pos, S(\"exited\"), false, 0, rec->has_signal, rec->signal, out);"},
+  {name = "a job's record is read into a buffer the arena keeps", file = "jobs.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "a_poll_of_job_alive_holds_the_arena_flat",
+   old = "    arena_free(a, buf, room.len);", new = "    (void)room;"},
 }
 
 function host_builtins_block(t)

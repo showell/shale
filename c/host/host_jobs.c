@@ -30,27 +30,12 @@ static STATUS_MUST_USE Status host_jobs_read(Run *r, Pos pos, Str os, Bytes *out
         *why = store_err_name(store_err_of(errno));
         return OK;
     }
-    char *buf = arena_alloc(r->ctx.values, 64 * 1024 + 1, 1);
-    if (buf == NULL) {
-        close(fd);
-        return run_values_oom(r, pos);
-    }
-    Bytes room = {buf, 64 * 1024 + 1};
-    size_t len = 0;
-    while (len < room.len) {
-        ssize_t got = read(fd, &at(room, len), room.len - len);
-        if (got < 0 && errno == EINTR) continue;
-        if (got < 0) {
-            *why = store_err_name(store_err_of(errno));
-            break;
-        }
-        if (got == 0) break;
-        len += (size_t)got;
-    }
+    int err = 0;
+    bool read_ok = jobs_read_capped(r->ctx.values, fd, out, &err);
     close(fd);
-    if (why->len == 0 && len > 64 * 1024) *why = S("StreamTooLong");
-    out->ptr = buf;
-    out->len = len;
+    if (!read_ok) return run_values_oom(r, pos);
+    if (err != 0) *why = store_err_name(store_err_of(err));
+    if (why->len == 0 && out->len > JOBS_RECORD_MOST) *why = S("StreamTooLong");
     return OK;
 }
 
