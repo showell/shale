@@ -271,7 +271,7 @@ TEST(a_stop_whose_format_escapes_a_brace_falls_back_to_that_format_raw) {
     Run *r = &x.r;
     Pos pos = {1, 1};
     EditList edits = {NULL, 0};
-    SortKey keys[BUILTIN_SORT_KEYS_MOST];
+    SortKey keys[BUILTIN_SORT_KEYS_MAX];
     size_t n_keys = 0;
     Value out;
     value_nil(&out);

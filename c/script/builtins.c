@@ -129,11 +129,11 @@ static STATUS_MUST_USE Status bi_reverse(Run *r, Pos pos, ConstValues args, Valu
     return OK;
 }
 
-enum { BUILTIN_SAME_DEPTH_MOST = 200 };
+enum { BUILTIN_SAME_DEPTH_MAX = 200 };
 
 // Whether two values are the same all the way down.
 static STATUS_MUST_USE Status builtin_same_at(Run *r, Pos pos, const Value *a, const Value *b, size_t depth, bool *out) {
-    if (depth == BUILTIN_SAME_DEPTH_MOST) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`same`: tables nested more than 200 deep (does one hold itself?)"));
+    if (depth == BUILTIN_SAME_DEPTH_MAX) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`same`: tables nested more than 200 deep (does one hold itself?)"));
     TRY(run_charge(r, pos, 1));
     *out = false;
     switch (a->tag) {
@@ -310,7 +310,7 @@ SLICE_TYPE(SortRows, SortRow);
 SLICE_TYPE(SortKeys, SortKey);
 SLICE_TYPE(KeyValues, Value);
 
-enum { BUILTIN_SORT_KEYS_MOST = 8 };
+enum { BUILTIN_SORT_KEYS_MAX = 8 };
 
 static bool builtin_row_less(SortKeys keys, const SortRow *a, const SortRow *b) {
     KeyValues av = {a->keys, keys.len};
@@ -389,8 +389,8 @@ static STATUS_MUST_USE Status builtin_sort_keys(Run *r, Pos pos, const Value *ke
     if (keys_arg->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`sort`'s keys are a key's name or a list of them, not {s}", S("`sort`'s keys are a key's name or a list of them, not "), value_type_name(keys_arg));
     Table *kt = keys_arg->as.table;
     if (kt->kind != TABLE_LIST || kt->list.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`sort`'s keys are a key's name or a list of them, not an empty list or a map"));
-    if (kt->list.len > BUILTIN_SORT_KEYS_MOST) return run_failf(r, pos, CLASS_ARGUMENT, "`sort` takes at most {d} keys, given {d}", S("`sort` takes at most 8 keys, given "), run_unum(r, kt->list.len), S(""));
-    SortKeys room = {keys, BUILTIN_SORT_KEYS_MOST};
+    if (kt->list.len > BUILTIN_SORT_KEYS_MAX) return run_failf(r, pos, CLASS_ARGUMENT, "`sort` takes at most {d} keys, given {d}", S("`sort` takes at most 8 keys, given "), run_unum(r, kt->list.len), S(""));
+    SortKeys room = {keys, BUILTIN_SORT_KEYS_MAX};
     for (size_t i = 0; i < kt->list.len; i++) {
         const Value *k = &at(kt->list, i);
         Str nth = run_unum(r, (uint64_t)i + 1);
@@ -424,7 +424,7 @@ static STATUS_MUST_USE Status builtin_sort_keys(Run *r, Pos pos, const Value *ke
 // A list of maps sorted in place by its keys, stably: rows equal in every key
 // keep their order, also when descending.
 static STATUS_MUST_USE Status builtin_sort_by_keys(Run *r, Pos pos, Table *t, const Value *keys_arg, bool desc) {
-    SortKey keys_buf[BUILTIN_SORT_KEYS_MOST];
+    SortKey keys_buf[BUILTIN_SORT_KEYS_MAX];
     size_t n_keys = 0;
     TRY(builtin_sort_keys(r, pos, keys_arg, desc, keys_buf, &n_keys));
     SortKeys keys = {keys_buf, n_keys};
@@ -434,12 +434,12 @@ static STATUS_MUST_USE Status builtin_sort_by_keys(Run *r, Pos pos, Table *t, co
     for (size_t k = 0; k < keys.len; k++) key_bytes += at(keys, k).key.len;
     // Each row's keys are hashed twice: checked here, fetched below.
     TRY(run_charge(r, pos, 2 * (uint64_t)n * key_bytes));
-    ValueTag kinds[BUILTIN_SORT_KEYS_MOST];
-    bool kind_set[BUILTIN_SORT_KEYS_MOST] = {false};
+    ValueTag kinds[BUILTIN_SORT_KEYS_MAX];
+    bool kind_set[BUILTIN_SORT_KEYS_MAX] = {false};
     SLICE_TYPE(KindSlots, ValueTag);
     SLICE_TYPE(KindSet, bool);
-    KindSlots ks = {kinds, BUILTIN_SORT_KEYS_MOST};
-    KindSet kset = {kind_set, BUILTIN_SORT_KEYS_MOST};
+    KindSlots ks = {kinds, BUILTIN_SORT_KEYS_MAX};
+    KindSet kset = {kind_set, BUILTIN_SORT_KEYS_MAX};
     uint64_t bytes = 0;
     for (size_t i = 0; i < n; i++) {
         const Value *item = &at(t->list, i);
