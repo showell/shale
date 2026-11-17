@@ -60,9 +60,10 @@ and its self-test plants a break of each one.
   initializer may open on its line with `{` and close on a later one.
 - A struct's fields are one to a line, each with a comment where its name
   doesn't say enough.
-- A function returns a struct by value only when it is 8 bytes or smaller;
-  a larger one goes through an out-pointer. TCC 0.9.27 miscompiles a larger
-  return: a 12-byte one clobbered a local of its caller.
+- A struct returned by value is one 8-byte word or two of them, such as a
+  pointer and a length (`Str`). Anything else goes through an out-pointer.
+  TCC 0.9.27 miscompiles other shapes: a 12-byte return clobbered a local of
+  its caller. The differ, run under TCC, stays the guard.
 
 ## Names
 
