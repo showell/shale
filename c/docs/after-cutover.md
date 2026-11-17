@@ -91,6 +91,6 @@ The first steps are:
    counts unchanged;
 3. the books' standards, as the second user.
 
-One question waits for Steve: whether the style guide's rule table is
-generated from the standards, or stays hand-written and is gated against
-them.
+Steve decided (2026-11-17) that the style guide stays wholly
+hand-written. A gate fails when a rule's one-sentence summary is missing
+from it, or when the guide names a rule the standards don't have.
