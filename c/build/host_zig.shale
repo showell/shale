@@ -1,5 +1,5 @@
--- c/build/host_zig.shale: the host's Zig tools' block, c/host/zig_wire.c
--- and c/host/host_zig.c (`zig_rename`, `zig_decls`, `zig_move`,
+-- c/build/host_zig.shale: the host's Zig tools' block, c/host/zig_wire.c,
+-- zig_ast.c and host_zig.c (`zig_rename`, `zig_decls`, `zig_move`,
 -- `zig_tokens`, `zig_imports`). c/build.shale runs it, with the `build`
 -- mount that `use` below reads and the outer run's `tools` mount; see that
 -- file for the tiers and the blocks.
@@ -7,7 +7,7 @@
 
 use("build:lib.shale")
 
--- ── The Zig tools: c/host/zig_wire.c and c/host/host_zig.c ─────────────
+-- ── The Zig tools: c/host/zig_wire.c, zig_ast.c and host_zig.c ─────────
 -- In both tiers: c/tests/zig/test_zig_wire.c under each of `t.builds`, held
 -- to its `TEST(` count and HOST_ZIG_TESTS; then HOST_ZIG_SCRIPTS run by the
 -- installed Zig `shale` and by each build's C `shale` (the command's block

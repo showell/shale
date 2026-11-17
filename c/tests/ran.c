@@ -31,6 +31,7 @@
 #include "../host/host_json.c"
 #include "../host/host_text.c"
 #include "../host/zig_wire.c"
+#include "../host/zig_ast.c"
 #include "../host/host_zig.c"
 #include "../host/host_call.c"
 
