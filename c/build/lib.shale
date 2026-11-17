@@ -562,14 +562,7 @@ function plant_copy(dir, p)
   local file = dir .. "/" .. get(p, "dir", "foundation") .. "/" .. p.file
   replace(file, replaced_once(read(file), p.old, p.new, p.name))
   if p.caught_by == "harness" then return nil end
-  if not has_key(p, "aim") then fail("plant `" .. p.name .. "` names no `aim`, the tests of " .. p.caught_by .. " that catch it") end
-  -- In a binary of several parts, TEST_ONLY takes any part's case: the aim
-  -- is held to the part's own here.
-  local part = "c/tests/" .. p.caught_by .. ".c"
-  local names = case_names(part)
-  for a in split(p.aim, ",") do
-    if not has_item(names, a) then fail("plant `" .. p.name .. "`'s aim names `" .. a .. "`, a test " .. p.caught_by .. " doesn't have") end
-  end
+  plant_aim_holds(p)
   local files = {"c/tests/" .. plant_test_file(p)}
   for f in test_parts(files[1]) do push(files, f) end
   for f in files do
@@ -583,6 +576,18 @@ function plant_copy(dir, p)
   end
   -- The run fixture the parts of ran_tests.c share.
   copy("c/tests/ran.c", dir .. "/tests/ran.c")
+  return nil
+end
+
+-- Plant `p`'s `aim` held to its test file: named, and every name a test of
+-- `caught_by`. In a binary of several parts, TEST_ONLY takes any part's
+-- case, so the aim is held to the part's own here.
+function plant_aim_holds(p)
+  if not has_key(p, "aim") then fail("plant `" .. p.name .. "` names no `aim`, the tests of " .. p.caught_by .. " that catch it") end
+  local names = case_names("c/tests/" .. p.caught_by .. ".c")
+  for a in split(p.aim, ",") do
+    if not has_item(names, a) then fail("plant `" .. p.name .. "`'s aim names `" .. a .. "`, a test " .. p.caught_by .. " doesn't have") end
+  end
   return nil
 end
 
@@ -624,32 +629,148 @@ function phase_wall(t, phase, ms)
   return nil
 end
 
--- Each of `plants` under `phase`, with `extra` flags if given, two at a time:
--- each plant's tests run while the next one compiles. Prints how many were
--- caught, then each one's line, in order. In a block's `stage=plan` run it
--- makes the asan plants' copies and plans their compiles, and runs nothing.
+-- ── Proofs: a plant runs once, until what it stands on changes ──────────
+-- A plant is a one-time proof that its aimed tests can see its fault. Each
+-- block's plants that were caught are kept in c/out/proofs/<phase>.json
+-- (not tracked; each run that runs a plant rewrites it): a plant's proof is
+-- its own text (every field, and the block's `extra` flags) and the git
+-- hash of each file it stands on (`plant_files`). A plant whose proof is
+-- the one kept is skipped as already proven; any change to its text, its
+-- file or its tests' files runs it again. What a proof cannot see (another
+-- file its tests reach, the compilers, this harness) is `plants=all`'s, on
+-- c/build.shale's line, which forgets every proof.
+
+const PROOFS = "c/out/proofs"
+
+-- The files plant `p`'s proof stands on: the file it plants its fault in,
+-- and the test file of its aimed tests and the binary it builds (the same
+-- file, but for a part); for the harness fixture's plants, the fixture and
+-- its .expected.
+function plant_files(p)
+  local files = {"c/" .. get(p, "dir", "foundation") .. "/" .. p.file}
+  if p.caught_by == "harness" then
+    push(files, "c/tests/fixtures/harness_fails.c")
+    push(files, "c/tests/fixtures/harness_fails.expected")
+    return files
+  end
+  push(files, "c/tests/" .. p.caught_by .. ".c")
+  local b = "c/tests/" .. plant_test_file(p)
+  if not has_item(files, b) then push(files, b) end
+  return files
+end
+
+-- Plant `p`'s text held to the tree, whether it runs or is skipped: its
+-- `old` is in its file exactly once, and its aim names its tests. A plant
+-- that went stale fails here, loud, never skipped as proven.
+function plant_text_holds(p)
+  local file = "c/" .. get(p, "dir", "foundation") .. "/" .. p.file
+  if not exists(file) then fail("plant `" .. p.name .. "`: its file " .. file .. " is not there") end
+  replaced_once(read(file), p.old, p.new, p.name)
+  if p.caught_by ~= "harness" then plant_aim_holds(p) end
+  return nil
+end
+
+-- The git hash of each of `files`, by path, in one `git hash-object`.
+function file_hashes(t, phase, files)
+  local argv = {"git", "hash-object", "--"}
+  for f in files do push(argv, f) end
+  local r = must(run_in(t, phase, argv, {timeout_ms = 30000, whole = 1000000}))
+  local hs = lines(trim(r.out))
+  if #hs ~= #files then fail("`git hash-object` gave " .. #hs .. " hashes for " .. #files .. " files") end
+  local by = {}
+  local i = 0
+  for f in files do
+    i = i + 1
+    by[f] = hs[i]
+  end
+  return by
+end
+
+-- Plant `p`'s proof: its fields, sorted, `extra`, and each of its files'
+-- hashes in `hashes`.
+function plant_proof(p, hashes, extra)
+  local ks = keys(p)
+  sort(ks)
+  local ls = {}
+  for k in ks do push(ls, k .. "=" .. p[k]) end
+  local flags = {}
+  if extra ~= nil then flags = extra end
+  push(ls, "extra=" .. join(flags, " "))
+  for f in plant_files(p) do push(ls, f .. "@" .. hashes[f]) end
+  return join(ls, "\n")
+end
+
+function proofs_file(phase)
+  return PROOFS .. "/" .. re_replace(phase, "\\W", "_") .. ".json"
+end
+
+-- The proofs kept for `phase`, by plant name; none when there is no file.
+function proofs_kept(phase)
+  local f = proofs_file(phase)
+  if not exists(f) then return {} end
+  return json_read(read(f))
+end
+
+-- Which of `plants` must run: each held to the tree (`plant_text_holds`),
+-- then due unless its proof is the one kept. Gives {due, proofs}, `due`
+-- each due plant's {p, k} (`k` its place among `plants`, its folder's
+-- name), `proofs` every plant's proof by name.
+function plants_due(t, phase, plants, extra)
+  local kept = proofs_kept(phase)
+  local files = {}
+  for p in plants do
+    plant_text_holds(p)
+    for f in plant_files(p) do
+      if not has_item(files, f) then push(files, f) end
+    end
+  end
+  local hashes = {}
+  if #files > 0 then hashes = file_hashes(t, phase, files) end
+  local due = {}
+  local proofs = {}
+  local k = 0
+  for p in plants do
+    k = k + 1
+    if has_key(proofs, p.name) then fail("two plants of `" .. phase .. "` are named `" .. p.name .. "`: a plant's proof is kept by its name") end
+    proofs[p.name] = plant_proof(p, hashes, extra)
+    if get(kept, p.name, "") ~= proofs[p.name] then push(due, {p = p, k = k}) end
+  end
+  return {due = due, proofs = proofs}
+end
+
+-- Each of `plants` under `phase` that is due (`plants_due`), with `extra`
+-- flags if given, two at a time: each plant's tests run while the next one
+-- compiles. Prints how many ran and were caught and how many were skipped
+-- as already proven, then each run one's line, in order, and keeps every
+-- plant's proof. In a block's `stage=plan` run it makes the due asan
+-- plants' copies and plans their compiles, and runs nothing.
 function run_plants(t, phase, plants, extra?)
+  local d = plants_due(t, phase, plants, extra)
   if t.stage == "plan" then
-    local k = 0
-    for p in plants do
-      k = k + 1
-      if get(p, "build", "tcc") == "asan" and p.caught_by ~= "harness" then start_plant(t, phase, p, k, extra) end
+    for x in d.due do
+      if get(x.p, "build", "tcc") == "asan" and x.p.caught_by ~= "harness" then start_plant(t, phase, x.p, x.k, extra) end
     end
     return nil
   end
   local t0 = clock_ms()
   local said = {}
   local pending = nil
-  local k = 0
-  for p in plants do
-    k = k + 1
-    local started = start_plant(t, phase, p, k, extra)
+  for x in d.due do
+    local started = start_plant(t, phase, x.p, x.k, extra)
     if pending ~= nil then push(said, finish_plant(t, pending)) end
     pending = started
   end
   if pending ~= nil then push(said, finish_plant(t, pending)) end
+  -- Every plant due was caught (one that wasn't stopped the run), and the
+  -- rest kept their proofs: every plant is proven now.
+  mkdir(PROOFS)
+  local f = proofs_file(phase)
+  if exists(f) then replace(f, json_write(d.proofs)) else create(f, json_write(d.proofs)) end
   phase_wall(t, phase, clock_ms() - t0)
-  print(phase .. ": " .. #said .. " of " .. #plants .. " caught")
+  local skipped = #plants - #d.due
+  t.plants.ran = t.plants.ran + #d.due
+  t.plants.skipped = t.plants.skipped + skipped
+  print(phase .. ": " .. #d.due .. " ran, each caught; " .. skipped .. " skipped as already proven")
   for l in said do print(l) end
   return nil
 end
@@ -674,11 +795,12 @@ function block_start(full, builds, stage?)
   local s = stage
   if s == nil then s = "all" end
   if not has_item({"all", "plan", "prebuilt"}, s) then fail("stage=" .. s .. ": a block's stage is all, plan or prebuilt") end
-  return {full = full, builds = list, stage = s, planned = {}, phases = {}, phase_order = {}}
+  return {full = full, builds = list, stage = s, planned = {}, phases = {}, phase_order = {}, plants = {ran = 0, skipped = 0}}
 end
 
 -- The block's phases written to c/out/phases/<name>.json, for c/build.shale's
--- table of every block's phases; in a plan, its compiles to
+-- table of every block's phases, with how many of its plants ran and how
+-- many were skipped as already proven; in a plan, its compiles to
 -- c/out/plan/<name>.json, for c/build/pool.shale.
 function block_end(t, name)
   if t.stage == "plan" then
@@ -690,7 +812,7 @@ function block_end(t, name)
   end
   mkdir(OUT .. "/phases")
   local file = OUT .. "/phases/" .. name .. ".json"
-  local text = json_write({order = t.phase_order, phases = t.phases})
+  local text = json_write({order = t.phase_order, phases = t.phases, plants = t.plants})
   if exists(file) then replace(file, text) else create(file, text) end
   return nil
 end

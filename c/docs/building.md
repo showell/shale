@@ -39,12 +39,30 @@ merge, and defer it while you're about 90% sure it has nothing new to say.
 | The discipline check and the C `shale --check` smoke test | TCC, Shale | fast | the style rules hold; the command still works |
 | Every test under the sanitizers | GCC `-O0`, ASan and UBSan | full | use after free, overruns, leaks, undefined behavior |
 | The code at `-O2 -Werror`, run nowhere | GCC | full | the warnings only the optimizer finds (`-Wrestrict`, some `-Warray-bounds`) |
-| Every planted fault | TCC, or GCC's ASan where the plant names `build = "asan"` | full | each test proven able to fail |
+| Every planted fault not yet proven | TCC, or GCC's ASan where the plant names `build = "asan"` | full | each test proven able to fail, once |
 | `c/shale.c` at `-O2` | GCC | full | the binary the differential harness judges against Zig Shale |
 
 No test runs at `-O2` during the port (Steve, 2026-11-17): the
 optimizer's value then is its warnings, and the sanitizers at `-O0` are
 where the real bugs show up.
+
+**A plant is a one-time proof** (Steve, 2026-11-17: "We don't want
+overkill on plants... don't want to pay too much in future builds"). Once
+a plant is caught, its proof is kept in `c/out/proofs/<phase>.json`, not
+tracked: the plant's own text (its fields and the block's flags) and the
+git hash of each file it stands on, the file it plants its fault in and
+the test file of its aimed tests (and, for a part, the binary it builds;
+for the harness fixture's plants, the fixture and its `.expected`). The
+next full tier skips a plant whose proof is the one kept and runs one whose
+text or files changed, and each block says how many ran and how many were
+skipped as already proven, with the tier's total under its table of
+phases. A skipped plant is still held to the tree: its `old` must be in its
+file exactly once and its aim must name its tests, or the tier fails, loud.
+**`full=1 plants=all`** forgets every proof and runs every plant. Use it
+after a change no proof can see: a new compiler, a change to test.h (the
+harness every plant's run goes through), to `c/build/lib.shale`'s plant
+machinery, or to a file a plant's tests reach that is not its own (a
+fixture, an include).
 
 A plant builds under TCC unless only a sanitizer sees its fault: a
 plant's aimed test fails by its own `EXPECT` under either compiler, and

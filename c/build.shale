@@ -51,7 +51,10 @@
 --
 -- Plants are one-time proofs that a test can see its fault, so they live in
 -- the full tier alone: a change that adds or moves a test or a plant runs
--- `full=1` before it merges. A block's plants are a list it hands to
+-- `full=1` before it merges. A plant runs only when its text, its file or
+-- its tests' files changed since it was last caught (lib.shale, "Proofs");
+-- `full=1 plants=all` runs every one, after a change a proof cannot see:
+-- the compilers, test.h, or c/build's plant machinery. A block's plants are a list it hands to
 -- `run_plants(t, phase, plants, extra?)`, each planted in a copy of
 -- c/foundation, c/script and c/host (`dir` names the folder), and each
 -- naming in `aim` the tests that catch it: its test file runs those alone
@@ -63,7 +66,7 @@
 -- `binary=release|tcc to=<OS path>` builds the C `shale` alone, no tier
 -- (c/build/binary.shale): what bench/baseline.shale times.
 --
--- Run from the repository's root: shale c/build.shale [full=1]
+-- Run from the repository's root: shale c/build.shale [full=1 [plants=all]]
 -- budget: programs=100 arena_bytes=268435456
 
 const OUT = "c/out"
@@ -111,6 +114,16 @@ function report_phases(full)
   push(rows, {phase = "all", programs = "", wall = seconds(ms), cpu = seconds(cpu)})
   print(table(rows, {"phase", "programs", "wall", "cpu"}))
   if full then
+    local ran = 0
+    local skipped = 0
+    for b in BLOCKS do
+      local pl = get(json_read(read(OUT .. "/phases/" .. b .. ".json")), "plants", {ran = 0, skipped = 0})
+      ran = ran + pl.ran
+      skipped = skipped + pl.skipped
+    end
+    print("plants: " .. ran .. " ran, " .. skipped .. " skipped as already proven (`plants=all` runs every one)")
+  end
+  if full then
     print("* its runs overlap: its wall is the clock's, and its CPU every program's, two at a time as jobs (c/build/job.shale) or in the foreground; host vs zig's probes alone are left out")
     print("gcc compiles: every pooled block's compiles, run before any test; each one's CPU, and its count, is in its block's phase")
   end
@@ -148,6 +161,11 @@ if exists(mounts) then replace(mounts, mount_line) else create(mounts, mount_lin
 for d in {"phases", "plan", "jobs", "plants"} do
   if exists(OUT .. "/" .. d) then remove_tree(OUT .. "/" .. d) end
 end
+-- `plants=all` forgets every plant's proof (c/build/lib.shale, "Proofs"),
+-- so the full tier runs each one again.
+local plants = arg("plants", "")
+if plants ~= "" and (plants ~= "all" or not full) then fail("plants=" .. plants .. ": the one value is `all`, with full=1") end
+if plants == "all" and exists(OUT .. "/proofs") then remove_tree(OUT .. "/proofs") end
 
 -- The block `b` run (c/build/<b>.shale) with `args`; its output printed
 -- unless `quiet` and it passed.

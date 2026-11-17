@@ -228,7 +228,9 @@ and its self-test plants a break of each one.
 - Each piece has planted faults in `c/build.shale`, and its full tier
   (`full=1`, run before a merge) fails unless a test catches each one. A
   plant names its `aim`, the tests that catch it, and its run is those
-  tests alone.
+  tests alone. A plant is a one-time proof: once caught it is skipped
+  until its text, its file or its tests' files change, and `full=1
+  plants=all` runs every one (`c/docs/building.md`).
 - The fast tier, the loop between edits, runs every test under tcc (but
   those that wait out real time, `SLOW_TESTS`) and the discipline check, in
   about a second. The full tier adds ASan for the tests and -O2 for its
