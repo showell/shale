@@ -237,6 +237,9 @@ static inline Str run_budget_message(RunCtx *r, BudgetKind k) {
     // A stop on no budget is a bug in the C.
     fprintf(stderr, "err: a budget stop names no budget\n");
     abort();
+    // Never reached. TCC doesn't know `abort` ends the process, and refuses
+    // a function that might return no value.
+    return S("");
 }
 
 // Stops the run at `pos` on budget `k`, with Zig's message for it.
