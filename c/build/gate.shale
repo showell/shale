@@ -43,7 +43,7 @@ const GATE_PLANTS = {
    old = "if (b.len <= GATE_WHY_BYTES) v->why = buf_view(&b);", new = "v->why = buf_view(&b);"},
   {name = "a 65th word is taken",
    aim = "the_limits_64_words_4096_lines_and_a_refusal_past_1024_bytes", dir = "gate", file = "gate.c", caught_by = "test_gate",
-   old = "        if (n == GATE_WORDS_MOST) {", new = "        if (n == GATE_WORDS_MOST + 1) {"},
+   old = "        if (n == GATE_WORDS_MAX) {", new = "        if (n == GATE_WORDS_MAX + 1) {"},
 }
 
 -- `shale-gate` under each of `t.builds`, at c/out/<build>/shale-gate,

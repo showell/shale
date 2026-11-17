@@ -36,14 +36,14 @@ enum {
     // that won't fit is the plain refusal instead.
     GATE_WHY_BYTES = 1024,
     // The first line's words and a heredoc's lines, Zig's fixed arrays.
-    GATE_WORDS_MOST = 64,
-    GATE_LINES_MOST = 4096,
+    GATE_WORDS_MAX = 64,
+    GATE_LINES_MAX = 4096,
     // A log line's bytes before its newline, and the parts of a field kept.
     GATE_LOG_BYTES = 4095,
-    GATE_LOG_TEXT_MOST = 2048,
-    GATE_LOG_COMMAND_MOST = 160,
+    GATE_LOG_TEXT_MAX = 2048,
+    GATE_LOG_COMMAND_MAX = 160,
     // The most of the hook's input read; one byte more is refused.
-    GATE_INPUT_MOST = 1 << 20,
+    GATE_INPUT_MAX = 1 << 20,
 };
 
 typedef enum { GATE_LAUNCH, GATE_ESCAPE, GATE_REFUSED } GateKind;
@@ -195,13 +195,13 @@ static inline Str gate_piece(Str rest, size_t *from) {
 
 // A heredoc's body, `rest`, held to its tag `t`: its last line `t` (trailing
 // spaces allowed), then no line before it `t`. Its lines are `rest` split at
-// each newline, at most GATE_LINES_MOST, the empty piece after a final
+// each newline, at most GATE_LINES_MAX, the empty piece after a final
 // newline not one.
 static inline void gate_heredoc(Arena *a, Str rest, Str t, GateVerdict *v) {
     size_t pieces = 1;
     for (size_t i = 0; i < rest.len; i++) {
         if (str_byte(rest, i) == '\n') pieces++;
-        if (pieces > GATE_LINES_MOST) {
+        if (pieces > GATE_LINES_MAX) {
             gate_refuse_plain(a, v, S("a heredoc of more than 4096 lines; "));
             return;
         }
@@ -242,8 +242,8 @@ static inline void gate_classify(Arena *a, Str cmd, GateVerdict *v) {
         return;
     }
 
-    Str word_items[GATE_WORDS_MOST];
-    GateStrs words = {word_items, GATE_WORDS_MOST};
+    Str word_items[GATE_WORDS_MAX];
+    GateStrs words = {word_items, GATE_WORDS_MAX};
     size_t n = 0;
     size_t i = 0;
     while (i < first.len) {
@@ -253,7 +253,7 @@ static inline void gate_classify(Arena *a, Str cmd, GateVerdict *v) {
         }
         size_t start = i;
         while (i < first.len && str_byte(first, i) != ' ') i++;
-        if (n == GATE_WORDS_MOST) {
+        if (n == GATE_WORDS_MAX) {
             gate_refuse_plain(a, v, S("too many words; "));
             return;
         }
@@ -320,8 +320,8 @@ static inline STATUS_MUST_USE Status gate_log_put(Buf *b, Str s) {
 static inline STATUS_MUST_USE Status gate_log_line(Buf *b, Str date, Str session, const GateVerdict *e, Str cmd) {
     Str fields[6] = {
         date, session, e->escape_kind, e->tag,
-        str_sub(e->text, 0, e->text.len < GATE_LOG_TEXT_MOST ? e->text.len : GATE_LOG_TEXT_MOST),
-        str_sub(cmd, 0, cmd.len < GATE_LOG_COMMAND_MOST ? cmd.len : GATE_LOG_COMMAND_MOST),
+        str_sub(e->text, 0, e->text.len < GATE_LOG_TEXT_MAX ? e->text.len : GATE_LOG_TEXT_MAX),
+        str_sub(cmd, 0, cmd.len < GATE_LOG_COMMAND_MAX ? cmd.len : GATE_LOG_COMMAND_MAX),
     };
     GateStrs all = {fields, 6};
     for (size_t i = 0; i < all.len; i++) {

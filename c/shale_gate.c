@@ -15,7 +15,7 @@ enum {
     GATE_ARENA_LIMIT = 1 << 30,
 };
 
-// Stdin into `b`, at most GATE_INPUT_MOST bytes; false when it cannot be read
+// Stdin into `b`, at most GATE_INPUT_MAX bytes; false when it cannot be read
 // or holds more, as Zig's `allocRemaining` refuses it.
 static bool gate_read_stdin(Buf *b) {
     while (true) {
@@ -26,7 +26,7 @@ static bool gate_read_stdin(Buf *b) {
         if (n < 0) return false;
         if (n == 0) return true;
         b->len += (size_t)n;
-        if (b->len > GATE_INPUT_MOST) return false;
+        if (b->len > GATE_INPUT_MAX) return false;
     }
 }
 
