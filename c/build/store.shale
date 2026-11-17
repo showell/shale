@@ -14,8 +14,8 @@ use("build:lib.shale")
 -- a copy of c/, c/tests/store copied whole beside it (its fixture.c reaches
 -- the copy's c/host), each caught by its `aim` tests (`run_plants`).
 
-const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 22}
-const STORE_ZIG_TESTS = {["src/shale_abs_path_test.zig"] = 3, ["src/shale_undo_test.zig"] = 4, ["src/shale_ro_links_test.zig"] = 8}
+const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 23}
+const STORE_ZIG_TESTS = {["src/shale_abs_path_test.zig"] = 3, ["src/shale_undo_test.zig"] = 4, ["src/shale_ro_links_test.zig"] = 9}
 const STORE_PLANTS = {
   {name = "a folder that begins with a mount's name is in it", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
    aim = "a_folder_that_only_begins_with_another_s_name_is_not_in_it",
@@ -56,6 +56,18 @@ const STORE_PLANTS = {
   {name = "an absolute path in a secrets folder names the mount above it", file = "paths.c", dir = "host", caught_by = "store/test_paths",
    aim = "an_absolute_path_s_stop_a_path_in_a_secrets_mount_s_folder_names_neither_the_mount_nor_its_folder",
    old = "if (m->secrets && mounts_in_folder(abs, mounts_trim_slash(m->dir))) return OK;", new = "(void)m;"},
+  {name = "the mounts file's line without `=` is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
+   aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
+   old = "S(\"the line is not `name = value`\"), none);", new = "S(\"`{s}` is not `name = value`\"), MSG_ARGS(MSG_FROM_HOST(line)));"},
+  {name = "the mounts file's name that is not one is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
+   aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
+   old = "S(\"the name before `=` is not a mount's name: letters, digits, `_` and `-`\"), none);", new = "S(\"`{s}` is not a mount's name: letters, digits, `_` and `-`\"), MSG_ARGS(MSG_FROM_HOST(name)));"},
+  {name = "the mounts file's word after a path is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
+   aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
+   old = "S(\"only `ro`, `tools` and `secrets` may follow `{s}`'s path (and a path has no space)\"), MSG_ARGS(MSG_FROM_HOST(name)));", new = "S(\"`{s}` after `{s}`'s path: only `ro`, `tools` and `secrets` may follow it (and a path has no space)\"), MSG_ARGS(MSG_FROM_HOST(w), MSG_FROM_HOST(name)));"},
+  {name = "the mounts file's relative value is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
+   aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
+   old = "S(\"`{s}`'s value is relative: an absolute path, or one from `~/`\"), MSG_ARGS(MSG_FROM_HOST(name)));", new = "S(\"`{s}`'s value `{s}` is relative: an absolute path, or one from `~/`\"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_HOST(value)));"},
   {name = "Wyhash's first secret is off by one", file = "store.c", dir = "host", caught_by = "store/test_store",
    aim = "wyhash_its_test_vectors",
    old = "0xa0761d6478bd642full", new = "0xa0761d6478bd642eull"},

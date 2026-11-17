@@ -138,17 +138,17 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
         const char *says;
     } Bad;
     static const Bad bad[] = {
-        {"runs = relative/path\n", "line 1: `runs`'s value `relative/path` is relative"},
+        {"runs = relative/path\n", "line 1: `runs`'s value is relative: an absolute path, or one from `~/`"},
         {"a = /x\na = /y\n", "line 2: the mount `a` is named twice"},
-        {"# c\njust words\n", "line 2: `just words` is not `name = value`"},
-        {"bad name = /x\n", "is not a mount's name"},
+        {"# c\njust words\n", "line 2: the line is not `name = value`"},
+        {"bad name = /x\n", "line 1: the name before `=` is not a mount's name: letters, digits, `_` and `-`"},
     };
     SLICE_TYPE(Bads, const Bad);
     Bads bads = {bad, 4};
     for (size_t i = 0; i < bads.len; i++) {
         Mounts out;
         EXPECT_EQ(mounts_parse(&f.host, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
-        EXPECT(memmem(why.ptr, why.len, at(bads, i).says, strlen(at(bads, i).says)) != NULL);
+        EXPECT_STR(why, sx_cs(at(bads, i).says));
     }
     fx_deinit(&f);
 }
@@ -172,7 +172,7 @@ TEST(the_mounts_file_shale_mounts_pins_it_the_default_s_absence_is_no_mounts_a_p
     sx_put(&f.base, "mounts", "runs = runs\n");
     EXPECT_EQ(mounts_load(a, true, file, S("/h"), &got, &why), MOUNTS_MALFORMED);
     EXPECT(str_starts_with(why, file));
-    Str tail = S(": line 1: `runs`'s value `runs` is relative: an absolute path, or one from `~/`");
+    Str tail = S(": line 1: `runs`'s value is relative: an absolute path, or one from `~/`");
     EXPECT(why.len >= tail.len && str_eq(str_sub(why, why.len - tail.len, why.len), tail));
     // A link in a mount's own path is resolved once, as the user's choice.
     sx_mkdir(&f.base, "real-folder");
@@ -209,10 +209,10 @@ TEST(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing
         const char *says;
     } Bad;
     static const Bad bad[] = {
-        {"a = /x rw\n", "line 1: `rw` after `a`'s path: only `ro`, `tools` and `secrets` may follow it"},
-        {"a = /x secrets tools\n", "line 1: `a` is `secrets` and `tools`"},
+        {"a = /x rw\n", "line 1: only `ro`, `tools` and `secrets` may follow `a`'s path (and a path has no space)"},
+        {"a = /x secrets tools\n", "line 1: `a` is `secrets` and `tools`: a toolchain's programs are not tokens"},
         {"a = /x secrets secrets\n", "line 1: `secrets` twice after `a`'s path"},
-        {"a = /x y z\n", "line 1: `y` after `a`'s path"},
+        {"a = /x y z\n", "line 1: only `ro`, `tools` and `secrets` may follow `a`'s path (and a path has no space)"},
         {"a = /x ro ro\n", "line 1: `ro` twice after `a`'s path"},
     };
     SLICE_TYPE(Bads, const Bad);
@@ -220,7 +220,45 @@ TEST(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing
     for (size_t i = 0; i < bads.len; i++) {
         Mounts out;
         EXPECT_EQ(mounts_parse(&a, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
-        EXPECT(memmem(why.ptr, why.len, at(bads, i).says, strlen(at(bads, i).says)) != NULL);
+        EXPECT_STR(why, sx_cs(at(bads, i).says));
+    }
+    arena_deinit(&a);
+}
+
+TEST(secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one) {
+    Arena a = arena_make((size_t)1 << 20);
+    Str why = S("");
+    // Each line holds a planted folder, `.planted-keys`, where a secrets
+    // mount's would be, as in Zig's test of the same name.
+    typedef struct {
+        const char *text;
+        const char *says;
+    } Bad;
+    static const Bad bad[] = {
+        // No `=`: no mount can be named, so the line number alone.
+        {"# c\n/home/x/.planted-keys secrets\n", "line 2: the line is not `name = value`"},
+        // A path where the name goes: not a name, so not quoted.
+        {"/home/x/.planted-keys = /y\n", "line 1: the name before `=` is not a mount's name: letters, digits, `_` and `-`"},
+        // The name is judged before the words, so a bad one is never quoted
+        // by a later message.
+        {"~/.planted-keys = /y rw\n", "line 1: the name before `=` is not a mount's name: letters, digits, `_` and `-`"},
+        {"~/.planted-keys = /y ro ro\n", "line 1: the name before `=` is not a mount's name: letters, digits, `_` and `-`"},
+        // A path with a space: its tail is a word after the path.
+        {"keys = /home/x/my .planted-keys secrets\n", "line 1: only `ro`, `tools` and `secrets` may follow `keys`'s path (and a path has no space)"},
+        {"keys = home/x/.planted-keys secrets\n", "line 1: `keys`'s value is relative: an absolute path, or one from `~/`"},
+        {"keys = /home/x/.planted-keys secrets secrets\n", "line 1: `secrets` twice after `keys`'s path"},
+        {"keys = /home/x/.planted-keys secrets tools\n", "line 1: `keys` is `secrets` and `tools`: a toolchain's programs are not tokens"},
+        {"keys = /home/x/.planted-keys secrets\nkeys = /home/x/.planted-keys secrets\n", "line 2: the mount `keys` is named twice"},
+        // An ordinary mount's mistake still names its mount and its line.
+        {"runs = /r\n\nwork = work/.planted-keys\n", "line 3: `work`'s value is relative: an absolute path, or one from `~/`"},
+    };
+    SLICE_TYPE(Bads, const Bad);
+    Bads bads = {bad, 10};
+    for (size_t i = 0; i < bads.len; i++) {
+        Mounts out;
+        EXPECT_EQ(mounts_parse(&a, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
+        EXPECT_STR(why, sx_cs(at(bads, i).says));
+        EXPECT(memmem(why.ptr, why.len, "planted", strlen("planted")) == NULL);
     }
     arena_deinit(&a);
 }
@@ -920,6 +958,7 @@ TEST_MAIN(
     TEST_CASE(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_files_mistakes_by_line),
     TEST_CASE(the_mounts_file_shale_mounts_pins_it_the_default_s_absence_is_no_mounts_a_pinned_one_s_a_mistake),
     TEST_CASE(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing_word_or_one_twice_refused_by_line),
+    TEST_CASE(secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one),
     TEST_CASE(an_absolute_path_s_stop_the_deepest_mount_or_the_root_that_holds_it_and_how_to_write_it_there),
     TEST_CASE(an_absolute_path_s_stop_and_a_host_call_s_in_a_builtin_s_checks_the_call_is_named),
     TEST_CASE(an_absolute_path_s_stop_a_path_in_a_secrets_mount_s_folder_names_neither_the_mount_nor_its_folder),
