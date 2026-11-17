@@ -83,16 +83,12 @@ TEST(names_keywords_ints_strings_every_symbol_and_comments) {
 TEST(a_string_undoes_its_escapes_and_the_largest_integer_is_one) {
     LexRun r;
     lex_start(&r, S("\"a\\n\\t\\\\\\\"b\" 'c' 9223372036854775807 \"\\x41\\0\""));
-    {
-        Token t;
-        next_ok(&r, &t);
-        EXPECT_STR(t.text, S("a\n\t\\\"b"));
-    }
-    {
-        Token t;
-        next_ok(&r, &t);
-        EXPECT_STR(t.text, S("c"));
-    }
+    Token esc;
+    next_ok(&r, &esc);
+    EXPECT_STR(esc.text, S("a\n\t\\\"b"));
+    Token quoted;
+    next_ok(&r, &quoted);
+    EXPECT_STR(quoted.text, S("c"));
     Token big;
     next_ok(&r, &big);
     EXPECT(big.value == INT64_MAX);

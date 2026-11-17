@@ -785,14 +785,18 @@ local reuse = arg("reuse", 0)
 local check_only = arg("check", 0)
 if list_only == 0 and (old == "" or new == "") then fail("differ: name both binaries, old=<path> new=<path> (Shale paths)") end
 
--- Every run shares build:differ (its inputs, its work folder, its kept
--- trees), so a second run at once removes what the first is reading, and
--- both judge the wreck: another `shale` running a differ.shale stops this
--- one before it touches anything. (`procs` never lists this run or what
--- started it, so a plant that runs the differ is not one.)
+-- Runs with one base share its inputs, its work folder and its kept trees,
+-- so a second run at once removes what the first is reading, and both judge
+-- the wreck: another `shale` running a differ.shale with this run's base
+-- (`base=`, build:differ unset) stops this one before it touches anything.
+-- A run with another base shares nothing and goes on. (`procs` never lists
+-- this run or what started it, so a plant that runs the differ is not one.)
 for p in procs() do
   if p.name == "shale" and re_find(p.args, "(?:^| )[^ ]*tools/differ\\.shale(?: |$)") ~= nil then
-    fail("differ: another differ is running, and the two would share build:differ: wait for it (pid " .. p.pid .. ": " .. p.args .. ")")
+    local m = re_find(p.args, " base=([^ ]+)")
+    local theirs = "build:differ"
+    if m ~= nil then theirs = m.group end
+    if theirs == DIFFER then fail("differ: another differ is running, and the two would share " .. DIFFER .. ": wait for it, or give this one its own `base=` (pid " .. p.pid .. ": " .. p.args .. ")") end
   end
 end
 
