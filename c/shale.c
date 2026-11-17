@@ -3,12 +3,11 @@
 // does, parses and compiles the script with them, and either stops there
 // (`--check`) or runs it on the VM (script/vm.c), printing what it printed
 // on stdout and the same report on stderr, with the same exit code. A
-// builtin that needs the store or the host is refused as not ported yet, and
-// so are `--help`, `--version` and `--reap`. This file holds the system
+// host call the C does not run yet is refused as not ported, and so are `--help`, `--version` and `--reap`. This file holds the system
 // calls; what it decides is in script/.
 
-// `realpath` is X/Open's.
-#define _XOPEN_SOURCE 700
+// `realpath`, `openat` and `memmem` are GNU's.
+#define _GNU_SOURCE
 
 #include <errno.h>
 #include <fcntl.h>
@@ -19,10 +18,19 @@
 #include <unistd.h>
 
 #include "script/run.h"
+#include "host/store.c"
+#include "host/path_run.c"
 #include "script/regex.c"
 #include "script/builtins.c"
 #include "script/builtins_text.c"
+#include "script/builtins_store.c"
+#include "script/builtins_walk.c"
+#include "script/builtins_change.c"
 #include "script/vm.c"
+#include "host/mounts.c"
+#include "host/paths.c"
+#include "host/undo.c"
+#include "host/host_call.c"
 #include "preludes.h"
 
 enum {
@@ -30,8 +38,6 @@ enum {
     EXIT_FINISHED = 0,
     EXIT_STOPPED = 1,
     EXIT_REFUSED = 2,
-    // Zig's `loadMounts` reads at most this much of the mounts file.
-    MOUNTS_MOST = 64 * 1024,
     // Room for the parse beyond the machine budget: the C's tree is laid out
     // for itself, and its working lists stay in the arena, so the budget's own
     // bytes are no measure of it. DRAGON: the machine budget. The parse's
@@ -145,12 +151,18 @@ static void say(Out *o, Str s) {
     if (buf_str(&o->err, s) != OK) o->err.len = 0;
 }
 
-static int flush_and_exit(Out *o, int code) {
+// Writes what is said so far to stderr, and empties it.
+static void flush_err(Out *o) {
     if (o->err.len > 0) {
         size_t n = fwrite(o->err.ptr, 1, o->err.len, stderr);
         (void)n;
     }
     fflush(stderr);
+    buf_clear(&o->err);
+}
+
+static int flush_and_exit(Out *o, int code) {
+    flush_err(o);
     return code;
 }
 
@@ -175,7 +187,7 @@ static int not_ported(Out *o, Str what) {
 
 typedef struct {
     Arena *arena;
-    MountVec mounts;
+    MountsItems mounts;
     Str mounts_from;
     Budgets budgets;
     Used used;
@@ -193,12 +205,6 @@ static STATUS_MUST_USE Status reader_why_parts(Str *why, bool *got, Arena *a, St
 }
 
 #define reader_why(why, got, n, a, ...) reader_why_parts((why), (got), (a), (StrPieces){{__VA_ARGS__}}, (n))
-
-// Zig's `inFolder`: whether `abs` is the folder `dir` or a path below it.
-static bool in_folder(Str abs, Str dir) {
-    if (str_eq(dir, S("/"))) return abs.len > 0 && str_byte(abs, 0) == '/';
-    return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');
-}
 
 // A charge past the step budget: Zig's `charge` leaves the count one past it,
 // and the budget's stop says how many steps it had.
@@ -311,7 +317,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     // `refuseSecretsUnder` refuses every path in such a folder; so does this.
     for (size_t k = 0; k < r->mounts.len; k++) {
         const Mount *sm = &at(r->mounts, k);
-        if (sm->secrets && in_folder(full, sm->dir)) return reader_why(why, got, 5, a, S("\""), path, S("\" is in the mount `"), sm->name, S("`, which holds secrets"));
+        if (sm->secrets && mounts_in_folder(full, sm->dir)) return reader_why(why, got, 5, a, S("\""), path, S("\" is in the mount `"), sm->name, S("`, which holds secrets"));
     }
     // `countRead`: the read's count first, then the file's size.
     if (r->used.reads >= r->budgets.reads) {
@@ -360,7 +366,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
 // The OS path of a script named through a mount (`cookbook:look.shale`); any
 // other name as given. `*missing` is set for a `name:` that looks like a
 // mount's and is none.
-static STATUS_MUST_USE Status script_file(Arena *a, Str given, MountVec mounts, Str *out, bool *missing) {
+static STATUS_MUST_USE Status script_file(Arena *a, Str given, MountsItems mounts, Str *out, bool *missing) {
     *missing = false;
     *out = given;
     size_t colon = cli_index_of(given, ':');
@@ -406,7 +412,16 @@ static void machine_stop(Stop *stop) {
 // The script parsed and compiled with its preludes, then either reported as
 // checked (`--check`) or run on the VM, its output on stdout and its report
 // on stderr: Zig's `Process.startWith`, `script.runWith` and `printReport`.
-static int run_script(Out *o, Command *c, MountVec mounts, Str mounts_from, Str source, Preludes preludes, const Arg *args, size_t args_len, int64_t now) {
+// Where a run's paths are: the root in one spelling (its real path, "" for
+// `/`), the same made absolute, and the working folder a relative root is
+// against.
+typedef struct {
+    Str root;
+    Str root_abs;
+    Str cwd_abs;
+} Where;
+
+static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, Where where, Str source, Preludes preludes, const Arg *args, size_t args_len, int64_t now) {
     Arena *a = o->arena;
     Budgets b = c->budgets;
     Str name = cli_script_name(c);
@@ -449,6 +464,8 @@ static int run_script(Out *o, Command *c, MountVec mounts, Str mounts_from, Str 
         stopped = true;
     }
     if (stopped) {
+        // Zig's report of a run says its effects first, with `--verbose`.
+        if (c->verbose && !c->check) say(o, S("── effects (0) ──\n"));
         if (cli_write_stop(&o->err, name, &stop, reader.used, &b) != OK) return not_ported(o, S("a report past the arena"));
         int code_out = flush_and_exit(o, EXIT_STOPPED);
         arena_deinit(&tree);
@@ -484,11 +501,58 @@ static int run_script(Out *o, Command *c, MountVec mounts, Str mounts_from, Str 
     r.read_bytes = reader.used.read_bytes;
     r.stack = ValueVec_make(&machine);
     r.patterns = regex_cache_make();
+    // The store, measured under the root (and `<root>/../auth`) as the
+    // bare-metal host would hold it, as Zig's runner sets webbox's bases.
+    LinuxStore linux_store;
+    memset(&linux_store, 0, sizeof linux_store);
+    linux_store.has_data_base = true;
+    linux_store.data_base = where.root;
+    linux_store.has_auth_base = true;
+    linux_store.auth_base = S("../auth");
+    if (where.root.len > 0 && join(a, where.root, S("../auth"), &linux_store.auth_base) != OK) return not_ported(o, S("a root past the arena"));
+    // The host's paths: the mounts, the journal `--undo-on-stop` keeps, in
+    // an arena of the host's that outlives the run's values.
+    Arena host_arena = arena_make((size_t)1 << 30);
+    Paths paths;
+    paths_make(&paths, &host_arena, where.root_abs, where.cwd_abs, mounts, mounts_from);
+    paths.undo = c->undo_on_stop;
+    PathHook hook;
+    paths_hook(&paths, &hook);
+    RunStore rs;
+    memset(&rs, 0, sizeof rs);
+    store_linux(&linux_store, &rs.store);
+    PathRun path = {&r.ctx, where.root.len == 0 ? S("/") : where.root, builtin_path_charge, &r, &hook};
+    rs.path = path;
+    rs.effects = Effects_make(&values);
+    rs.diffs_summary = !c->verbose;
+    r.store = &rs;
+    RunHost host = {&paths, host_call};
+    r.host = host;
     Status ran = run_ended(&r.ctx, vm_main(&r, &code));
     write_stdout(buf_view(&r.out));
     RunUsed used = {r.steps, r.reads, r.read_bytes, r.out.len};
-    if (cli_write_report(&o->err, name, preludes, c->verbose, ran == OK ? NULL : &r.ctx.stop, used, &b) != OK) return not_ported(o, S("a report past the arena"));
+    Names effects = {NULL, 0};
+    if (c->verbose && store_effect_lines(&rs, a, &effects) != OK) return not_ported(o, S("a report past the arena"));
+    if (cli_write_report(&o->err, name, preludes, c->verbose, effects, ran == OK ? NULL : &r.ctx.stop, used, &b) != OK) return not_ported(o, S("a report past the arena"));
+    // `--undo-on-stop`: a stopped run puts back what it changed.
+    if (c->undo_on_stop && ran != OK) {
+        bool all = false;
+        Buf undone = buf_make(&host_arena);
+        if (undo_changes(&paths, &undone, &all) != OK) return not_ported(o, S("an undo past the arena"));
+        // DRAGON: the secrets rule. The undo's lines name absolute paths.
+        // REMEDY: only paths may_change let through are journaled, none
+        // under a secrets folder; the lines are put to the one check too.
+        bool names = false;
+        Pos none = {0, 0};
+        if (paths_names_secret(&paths, &rs.path, none, buf_view(&undone), &names) != OK) return not_ported(o, S("an undo past the arena"));
+        if (names) {
+            fprintf(stderr, "shale: an undo line names a secrets mount's folder\n");
+            abort();
+        }
+        say(o, buf_view(&undone));
+    }
     int exit_code = flush_and_exit(o, ran == OK ? EXIT_FINISHED : EXIT_STOPPED);
+    arena_deinit(&host_arena);
     regex_cache_deinit(&r.patterns);
     arena_deinit(&output);
     arena_deinit(&machine);
@@ -600,37 +664,19 @@ static int run_main(Out *o, int argc, char **argv) {
     const char *home_c = getenv("HOME"); // cstr: the environment's
     Str home = from_c(home_c != NULL ? home_c : "/");
     const char *pinned_mounts = getenv("SHALE_MOUNTS"); // cstr: the environment's
-    Str from = {0};
-    if (pinned_mounts != NULL) {
-        from = from_c(pinned_mounts);
-    } else if (join(a, home, S(".config/shale/mounts"), &from) != OK) {
-        return not_ported(o, S("a mounts path past the arena"));
+    MountsLoaded loaded;
+    Str mounts_why = S("");
+    MountsResult mr = mounts_load(a, pinned_mounts != NULL, pinned_mounts != NULL ? from_c(pinned_mounts) : S(""), home, &loaded, &mounts_why);
+    if (mr == MOUNTS_OUT_OF_MEMORY) return not_ported(o, S("the mounts past the arena"));
+    if (mr == MOUNTS_MALFORMED) {
+        say(o, S("shale: the mounts: "));
+        say(o, mounts_why);
+        say(o, S("\n"));
+        return flush_and_exit(o, EXIT_REFUSED);
     }
-    MountVec mounts = MountVec_make(a);
-    Str mounts_text = {0};
+    MountsItems mounts = Mounts_items(&loaded.mounts);
+    Str from = loaded.from;
     Str err = {0};
-    if (read_path(a, from, MOUNTS_MOST, &mounts_text, &err) != OK) {
-        if (pinned_mounts != NULL || !str_eq(err, S("FileNotFound"))) {
-            say(o, S("shale: the mounts: "));
-            if (pinned_mounts != NULL) say(o, S("SHALE_MOUNTS="));
-            say(o, from);
-            say(o, S(": "));
-            say(o, err);
-            say(o, S("\n"));
-            return flush_and_exit(o, EXIT_REFUSED);
-        }
-    } else {
-        buf_clear(&why);
-        if (cli_parse_mounts(a, mounts_text, home, &mounts, &why) != OK) {
-            say(o, S("shale: the mounts: "));
-            say(o, from);
-            say(o, S(": "));
-            say(o, buf_view(&why));
-            say(o, S("\n"));
-            return flush_and_exit(o, EXIT_REFUSED);
-        }
-        for (size_t k = 0; k < mounts.len; k++) at(mounts, k).dir = real_or_same(a, at(mounts, k).dir);
-    }
     Str source = {0};
     if (c.has_source) {
         source = c.source;
@@ -669,6 +715,8 @@ static int run_main(Out *o, int argc, char **argv) {
     buf_clear(&why);
     if (cli_header_budgets(source, &c, &why) != OK) return refuse_command(o, buf_view(&why), false);
     if (cli_write_header_budgets(&o->err, &c) != OK) return not_ported(o, S("a report past the arena"));
+    // Said before the run starts, as Zig's runner flushes it.
+    flush_err(o);
     // The root in one spelling, its real path, as the mounts' folders are.
     Str given_root = c.root;
     while (given_root.len > 0 && str_byte(given_root, given_root.len - 1) == '/') given_root = str_sub(given_root, 0, given_root.len - 1);
@@ -686,7 +734,11 @@ static int run_main(Out *o, int argc, char **argv) {
     if (code >= 0) return code;
     Preludes ps = {preludes, n_preludes};
     if (now == NULL) pinned_now = (int64_t)time(NULL);
-    return run_script(o, &c, mounts, from, source, ps, args, args_len, pinned_now);
+    Where where = {root, root_abs, S("")};
+    char cwd_now[PATH_MAX];
+    if (getcwd(cwd_now, sizeof cwd_now) == NULL) return not_ported(o, S("a run with no working folder"));
+    if (!arena_dup(a, from_c(cwd_now), &where.cwd_abs)) return not_ported(o, S("a working folder past the arena"));
+    return run_script(o, &c, mounts, from, where, source, ps, args, args_len, pinned_now);
 }
 
 int main(int argc, char **argv) {

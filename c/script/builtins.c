@@ -13,6 +13,14 @@ static Str builtin_name(Builtin b) {
     return at(ast_builtin_names(), (size_t)b);
 }
 
+// The name a stop gives builtin `b`, Zig's `nameOf`: the host call running
+// where `b` is `host`, so a check the host's code meets names what the
+// script called.
+static Str builtin_who(const Run *r, Builtin b) {
+    if (b == BUILTIN_HOST && r->host_call.len > 0) return r->host_call;
+    return builtin_name(b);
+}
+
 // ── the argument helpers ──
 
 static STATUS_MUST_USE Status builtin_string_arg(Run *r, Pos pos, Builtin b, const Value *v, Str what, Str *out) {
@@ -20,7 +28,7 @@ static STATUS_MUST_USE Status builtin_string_arg(Run *r, Pos pos, Builtin b, con
         *out = v->as.string;
         return OK;
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}`: {s} must be a string, not {s}", S("`"), builtin_name(b), S("`: "), what, S(" must be a string, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}`: {s} must be a string, not {s}", S("`"), builtin_who(r, b), S("`: "), what, S(" must be a string, not "), value_type_name(v));
 }
 
 static STATUS_MUST_USE Status builtin_int_arg(Run *r, Pos pos, Builtin b, const Value *v, Str what, int64_t *out) {
@@ -28,7 +36,7 @@ static STATUS_MUST_USE Status builtin_int_arg(Run *r, Pos pos, Builtin b, const 
         *out = v->as.integer;
         return OK;
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}`: {s} must be an integer, not {s}", S("`"), builtin_name(b), S("`: "), what, S(" must be an integer, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}`: {s} must be an integer, not {s}", S("`"), builtin_who(r, b), S("`: "), what, S(" must be an integer, not "), value_type_name(v));
 }
 
 // A list, or a table still empty (which becomes one).
@@ -38,9 +46,9 @@ static STATUS_MUST_USE Status builtin_list_arg(Run *r, Pos pos, Builtin b, const
             *out = v->as.table;
             return OK;
         }
-        return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a list, given a map", S("`"), builtin_name(b), S("` takes a list, given a map"));
+        return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a list, given a map", S("`"), builtin_who(r, b), S("` takes a list, given a map"));
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a list, not {s}", S("`"), builtin_name(b), S("` takes a list, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a list, not {s}", S("`"), builtin_who(r, b), S("` takes a list, not "), value_type_name(v));
 }
 
 // A map, or a table still empty.
@@ -50,9 +58,9 @@ static STATUS_MUST_USE Status builtin_map_arg(Run *r, Pos pos, Builtin b, const 
             *out = v->as.table;
             return OK;
         }
-        return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a map, given a list (`#l` is a list's length)", S("`"), builtin_name(b), S("` takes a map, given a list (`#l` is a list's length)"));
+        return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a map, given a list (`#l` is a list's length)", S("`"), builtin_who(r, b), S("` takes a map, given a list (`#l` is a list's length)"));
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a map, not {s}", S("`"), builtin_name(b), S("` takes a map, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a map, not {s}", S("`"), builtin_who(r, b), S("` takes a map, not "), value_type_name(v));
 }
 
 // The price of bulk work: a step for every 16 bytes, or part of 16, that a
@@ -575,11 +583,20 @@ static STATUS_MUST_USE Status builtin_not_ported(Run *r, Pos pos, Str what) {
     return run_failf(r, pos, CLASS_HOST, "{s} is not ported to the C yet", S("`"), what, S("` is not ported to the C yet"));
 }
 
+// The host's call `name` with the rest of the arguments, Zig's `hostCall`:
+// its name is what the stops in its checks give, until it returns.
 static STATUS_MUST_USE Status bi_host(Run *r, Pos pos, ConstValues args, Value *out) {
-    (void)out;
     Str name = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &at(args, 0), S("its call's name"), &name));
     TRY(run_charge(r, pos, name.len));
+    if (r->host.call != NULL) {
+        Str outer = r->host_call;
+        r->host_call = name;
+        ConstValues rest = SLICE_SUB(ConstValues, args, 1, args.len);
+        Status s = r->host.call(r->host.ctx, r, pos, name, rest, out);
+        r->host_call = outer;
+        return s;
+    }
     Msg m;
     msg_init(&m, r->ctx.values);
     msg_str(&m, S("host(\""));

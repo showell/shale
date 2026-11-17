@@ -11,7 +11,7 @@
 typedef struct {
     uint8_t at_least;
     uint8_t at_most;
-    // NULL for a builtin the C does not run yet, which is refused by name.
+    // NULL for `print`, the VM's own op.
     BuiltinImpl impl;
 } BuiltinSpec;
 
@@ -20,25 +20,25 @@ SLICE_TYPE(BuiltinSpecs, const BuiltinSpec);
 // Every builtin's arity, in ast.h's order, and its function where it is ported.
 static BuiltinSpecs builtin_specs(void) {
     static const BuiltinSpec specs[BUILTIN_COUNT_OF] = {
-        {1, 1, NULL},              // ls
-        {1, 1, NULL},              // stat
-        {1, 1, NULL},              // exists
-        {1, 1, NULL},              // is_dir
-        {1, 3, NULL},              // read
-        {2, 2, NULL},              // read_or
-        {1, 3, NULL},              // read_lines
-        {2, 2, NULL},              // line_at
-        {2, 2, NULL},              // grep
-        {1, 3, NULL},              // count_lines
-        {2, 4, NULL},              // count_in
-        {2, 4, NULL},              // find_in
-        {2, 2, NULL},              // replace
-        {2, 2, NULL},              // append
-        {1, 1, NULL},              // mkdir
-        {1, 1, NULL},              // remove
-        {1, 1, NULL},              // remove_tree
-        {1, 2, NULL},              // walk
-        {2, 4, NULL},              // edit
+        {1, 1, bi_ls},             // ls
+        {1, 1, bi_stat},           // stat
+        {1, 1, bi_exists},         // exists
+        {1, 1, bi_is_dir},         // is_dir
+        {1, 3, bi_read},           // read
+        {2, 2, bi_read_or},        // read_or
+        {1, 3, bi_read_lines},     // read_lines
+        {2, 2, bi_line_at},        // line_at
+        {2, 2, bi_grep},           // grep
+        {1, 3, bi_count_lines},    // count_lines
+        {2, 4, bi_count_in},       // count_in
+        {2, 4, bi_find_in},        // find_in
+        {2, 2, bi_replace},        // replace
+        {2, 2, bi_append},         // append
+        {1, 1, bi_mkdir},          // mkdir
+        {1, 1, bi_remove},         // remove
+        {1, 1, bi_remove_tree},    // remove_tree
+        {1, 2, bi_walk},           // walk
+        {2, 4, bi_edit},           // edit
         {2, 2, bi_split},          // split
         {2, 2, bi_join},           // join
         {2, 2, bi_starts_with},    // starts_with
@@ -264,6 +264,27 @@ static STATUS_MUST_USE Status collect_run(Run *r, Pos pos, Values stack, Values 
     c.seen_tables = ValueMap_make(&books);
     c.seen_strings = ValueMap_make(&books);
     c.todo = ValueVec_make(&books);
+    // The effects go first, since the run reports them however it ends;
+    // should even they not fit, the old arena is put back and the run stops
+    // with what it had.
+    if (r->store != NULL) {
+        Effects kept = Effects_make(values);
+        bool fits = Effects_reserve(&kept, r->store->effects.len) == OK;
+        for (size_t i = 0; fits && i < r->store->effects.len; i++) {
+            Effect e = at(r->store->effects, i);
+            c.bytes += e.path.len;
+            fits = arena_dup(values, e.path, &e.path) && Effects_push(&kept, e) == OK;
+        }
+        if (!fits) {
+            arena_deinit(&books);
+            arena_deinit(values);
+            *values = old;
+            return run_budget_stop(&r->ctx, pos, BUDGET_KEPT);
+        }
+        r->store->effects = kept;
+        r->store->scan_buf.ptr = NULL;
+        r->store->scan_buf.len = 0;
+    }
     Status s = OK;
     for (size_t i = 0; s == OK && i < stack.len; i++) s = copier_copy(&c, &at(stack, i));
     for (size_t i = 0; s == OK && i < operands.len; i++) s = copier_copy(&c, &at(operands, i));

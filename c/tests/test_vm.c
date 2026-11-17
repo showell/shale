@@ -1,82 +1,14 @@
 // test_vm.c: the VM (c/script/vm.c), the compiler (compile.h), the run's
 // semantics (run.h) and the values (value.h), each source parsed, compiled
-// and run as the C `shale` runs it, with no preludes. Every output, stop and
+// and run as the C `shale` runs it, with no preludes (ran.c). Every output, stop and
 // step count is the one Zig's `shale` gives the same source
 // (c/out/dev/zig_counts.shale printed them).
 
+#define _GNU_SOURCE
+
 #include "test.h"
 
-#include "../script/run.h"
-#include "../script/regex.c"
-#include "../script/builtins.c"
-#include "../script/builtins_text.c"
-#include "../script/vm.c"
-
-// One source's run: its arenas, its parse and code, and how it ended.
-typedef struct {
-    Arena tree;
-    Arena values;
-    Arena machine;
-    Arena output;
-    Program prog;
-    Code code;
-    Run r;
-    bool parsed;
-    Status ran;
-} Ran;
-
-static void ran_source(Ran *x, Str src, Budgets b) {
-    memset(x, 0, sizeof *x);
-    x->tree = arena_make((size_t)64 << 20);
-    x->values = arena_make(b.arena_bytes);
-    x->machine = arena_make(b.machine_bytes);
-    x->output = arena_make(b.output_bytes + ARENA_BIG);
-    Parser p;
-    parse_init(&p, &x->tree, src, b.nesting);
-    Loader none = {NULL, NULL};
-    Preludes no_preludes = {NULL, 0};
-    x->parsed = parse_program(&p, S(""), no_preludes, none, &x->prog) == OK;
-    if (!x->parsed) return;
-    x->parsed = compile_program(&x->tree, &x->prog, BUILTINS_MOST_ARGS, b.depth, &x->code) == OK;
-    if (!x->parsed) return;
-    Run *r = &x->r;
-    r->ctx = run_ctx_make(&x->values, &x->machine, b);
-    r->machine = &x->machine;
-    r->program = &x->prog;
-    r->now = 1700000000;
-    r->out = buf_make(&x->output);
-    r->out_cap = b.output_bytes;
-    r->out.ptr = arena_alloc(&x->output, r->out_cap, 1);
-    r->out.cap = r->out_cap;
-    if (r->out.ptr == NULL) return;
-    r->stack = ValueVec_make(&x->machine);
-    r->patterns = regex_cache_make();
-    x->ran = run_ended(&r->ctx, vm_main(r, &x->code));
-}
-
-static void ran_free(Ran *x) {
-    regex_cache_deinit(&x->r.patterns);
-    arena_deinit(&x->output);
-    arena_deinit(&x->machine);
-    arena_deinit(&x->values);
-    arena_deinit(&x->tree);
-}
-
-static Budgets cli_budgets(void) {
-    Budgets b = budgets_default();
-    b.output_bytes = 64 * 1024;
-    return b;
-}
-
-// The report a run's stop prints, as the C `shale` writes it.
-static Str ran_report(Ran *x, Arena *a) {
-    Buf w = buf_make(a);
-    Preludes none = {NULL, 0};
-    RunUsed u = {x->r.steps, 0, 0, x->r.out.len};
-    Budgets b = x->r.ctx.budgets;
-    if (cli_write_report(&w, S("stdin"), none, false, x->ran == OK ? NULL : &x->r.ctx.stop, u, &b) != OK) return S("(the report ran out of arena)");
-    return buf_view(&w);
-}
+#include "ran.c"
 
 TEST(arithmetic_and_print_take_zigs_steps) {
     static Ran x;
@@ -215,11 +147,11 @@ TEST(maps_and_list_loops_take_zigs_steps) {
 
 TEST(a_builtin_not_ported_is_refused_and_never_caught) {
     static Ran x;
-    ran_source(&x, S("function h() return read(\"x\") end\nprint(attempt(h).ok)\n"), cli_budgets());
+    ran_source(&x, S("function h() return host(\"run\") end\nprint(attempt(h).ok)\n"), cli_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT(x.r.unported);
     EXPECT_EQ(x.r.ctx.stop.cls, CLASS_HOST);
-    EXPECT_STR(x.r.ctx.stop.message, S("`read` is not ported to the C yet"));
+    EXPECT_STR(x.r.ctx.stop.message, S("`host(\"run\")` is not ported to the C yet"));
     EXPECT_EQ(x.r.out.len, 0);
     ran_free(&x);
 }

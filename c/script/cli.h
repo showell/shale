@@ -488,12 +488,20 @@ typedef struct {
     uint64_t output;
 } RunUsed;
 
-// Zig's `printReport` for a run: with `verbose`, its effects (the C's core
-// makes none yet); a stop's line and its calls, innermost first, each named
+// Zig's `printReport` for a run: with `verbose`, its effects, each line
+// `op path: outcome`; a stop's line and its calls, innermost first, each named
 // by its source; `── finished` when verbose; and the `── used:` line when
 // verbose, stopped, or past half of a budget.
-static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes preludes, bool verbose, const Stop *s, RunUsed u, const Budgets *b) {
-    if (verbose) TRY(buf_lit(w, "── effects (0) ──\n"));
+static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes preludes, bool verbose, Names effects, const Stop *s, RunUsed u, const Budgets *b) {
+    if (verbose) {
+        TRY(buf_lit(w, "── effects ("));
+        TRY(buf_u64(w, effects.len));
+        TRY(buf_lit(w, ") ──\n"));
+        for (size_t k = 0; k < effects.len; k++) {
+            TRY(buf_str(w, at(effects, k)));
+            TRY(buf_byte(w, '\n'));
+        }
+    }
     if (s != NULL) {
         TRY(buf_lit(w, "── stopped at "));
         TRY(cli_write_where(w, cli_place_of(s->function, name, preludes), s->line, s->column, s->function));
@@ -583,98 +591,6 @@ static inline STATUS_MUST_USE Status cli_unread_arg(Arena *a, const Program *pro
         *out = s;
         *found = true;
         return OK;
-    }
-    return OK;
-}
-
-// ── the mounts ──
-
-typedef struct {
-    Str name;
-    // Absolute; links in it resolved when it exists.
-    Str dir;
-    bool read_only;
-    bool tools;
-    bool secrets;
-} Mount;
-
-VEC_DEFINE(MountVec, Mount)
-
-static inline bool cli_valid_mount_name(Str s) {
-    for (size_t i = 0; i < s.len; i++) {
-        uint8_t c = str_byte(s, i);
-        if (!(lex_is_alpha(c) || lex_is_digit(c) || c == '_' || c == '-')) return false;
-    }
-    return true;
-}
-
-// `p` without its trailing `/`s, but `/` itself kept.
-static inline Str cli_trim_slash(Str p) {
-    Str t = p;
-    while (t.len > 0 && str_byte(t, t.len - 1) == '/') t = str_sub(t, 0, t.len - 1);
-    return t.len == 0 && p.len > 0 ? S("/") : t;
-}
-
-// Zig's `parseMounts`: one `name = value` a line, `#` comments and blank lines
-// passed by. STOP with `why` naming the line (its arena's refusal leaves `why`
-// empty).
-static inline STATUS_MUST_USE Status cli_parse_mounts(Arena *a, Str text, Str home, MountVec *out, Buf *why) {
-    *out = MountVec_make(a);
-    Str rest = text;
-    bool done = false;
-    Str raw = {0};
-    uint64_t n = 0;
-    while (cli_split(&rest, &done, '\n', &raw)) {
-        n++;
-        Str line = cli_trim(raw, S(" \t\r"));
-        if (line.len == 0 || str_byte(line, 0) == '#') continue;
-        Buf num = buf_make(a);
-        if (buf_u64(&num, n) != OK) return cli_refuse(why, 0, S(""));
-        Str no = buf_view(&num);
-        size_t eq = cli_index_of(line, '=');
-        if (eq == SIZE_MAX) return cli_refuse(why, 5, S("line "), no, S(": `"), line, S("` is not `name = value`"));
-        Str name = cli_trim(str_sub(line, 0, eq), S(" \t"));
-        Str words = str_sub(line, eq + 1, line.len);
-        Str value = S("");
-        bool said_ro = false;
-        bool tools = false;
-        bool secrets = false;
-        bool first = true;
-        size_t i = 0;
-        while (i < words.len) {
-            while (i < words.len && (str_byte(words, i) == ' ' || str_byte(words, i) == '\t')) i++;
-            if (i == words.len) break;
-            size_t j = i;
-            while (j < words.len && str_byte(words, j) != ' ' && str_byte(words, j) != '\t') j++;
-            Str w = str_sub(words, i, j);
-            i = j;
-            if (first) {
-                value = w;
-                first = false;
-                continue;
-            }
-            bool *flag = str_eq(w, S("ro")) ? &said_ro : str_eq(w, S("tools")) ? &tools : str_eq(w, S("secrets")) ? &secrets : NULL;
-            if (flag == NULL) return cli_refuse(why, 7, S("line "), no, S(": `"), w, S("` after `"), name, S("`'s path: only `ro`, `tools` and `secrets` may follow it (and a path has no space)"));
-            if (*flag) return cli_refuse(why, 7, S("line "), no, S(": `"), w, S("` twice after `"), name, S("`'s path"), S(""));
-            *flag = true;
-        }
-        if (secrets && tools) return cli_refuse(why, 5, S("line "), no, S(": `"), name, S("` is `secrets` and `tools`: a toolchain's programs are not tokens"));
-        if (name.len == 0 || !cli_valid_mount_name(name)) return cli_refuse(why, 5, S("line "), no, S(": `"), name, S("` is not a mount's name: letters, digits, `_` and `-`"));
-        for (size_t k = 0; k < out->len; k++) {
-            if (str_eq(at(*out, k).name, name)) return cli_refuse(why, 5, S("line "), no, S(": the mount `"), name, S("` is named twice"));
-        }
-        Str dir = {0};
-        if (str_starts_with(value, S("~/"))) {
-            Buf d = buf_make(a);
-            if (buf_str(&d, home) != OK || buf_byte(&d, '/') != OK || buf_str(&d, str_sub(value, 2, value.len)) != OK) return cli_refuse(why, 0, S(""));
-            dir = buf_view(&d);
-        } else if (value.len > 0 && str_byte(value, 0) == '/') {
-            dir = value;
-        } else {
-            return cli_refuse(why, 7, S("line "), no, S(": `"), name, S("`'s value `"), value, S("` is relative: an absolute path, or one from `~/`"));
-        }
-        Mount m = {name, cli_trim_slash(dir), said_ro || secrets, tools, secrets};
-        if (MountVec_push(out, m) != OK) return cli_refuse(why, 0, S(""));
     }
     return OK;
 }

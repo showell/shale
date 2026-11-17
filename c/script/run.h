@@ -16,7 +16,23 @@
 // The most arguments any builtin but `print` takes: Zig's `most_args`.
 enum { BUILTINS_MOST_ARGS = 4 };
 
+SLICE_TYPE(ConstValues, const Value);
+
+typedef struct Run Run;
+
+// The store a run's paths reach, its hook and its effects log, as
+// builtins_store.c defines it; NULL for a run with no store.
+typedef struct RunStore RunStore;
+
+// The core's one way out to its host, Zig's `interp.Host`: `host(name, ...)`
+// calls `call` with the name and the rest of its arguments. NULL `call` is
+// no host.
 typedef struct {
+    void *ctx;
+    Status (*call)(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out);
+} RunHost;
+
+typedef struct Run {
     // The stop's place and the calls in progress; `ctx.values` is the values'
     // arena, `ctx.function` the function the run is in.
     RunCtx ctx;
@@ -56,6 +72,11 @@ typedef struct {
     // Set when the run reached what the C does not run yet: a stop no
     // `attempt` catches.
     bool unported;
+    RunStore *store;
+    RunHost host;
+    // The host call running (`host("real", ...)`'s `real`), "" outside one:
+    // a stop the host's code meets in a builtin's checks names it.
+    Str host_call;
 } Run;
 
 // ── stops ──
@@ -447,7 +468,6 @@ static inline STATUS_MUST_USE Status run_part_len(Run *r, Pos pos, const Value *
 }
 
 SLICE_TYPE(Positions, const Pos);
-SLICE_TYPE(ConstValues, const Value);
 
 // A `..` chain's parts, evaluated, joined: `ops[k]` is the `..` part k is
 // checked at. When the first part is the whole string the last chain built and
