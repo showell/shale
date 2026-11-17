@@ -97,6 +97,25 @@ TEST(a_refused_push_leaves_the_vec_as_it_was) {
     arena_deinit(&a);
 }
 
+TEST(a_capacity_whose_size_wraps_is_refused_with_room_to_grow_in_place) {
+    // The attack: a reserve whose capacity times 8 wraps to 160 bytes. With
+    // the vec last in a roomy arena, a wrapped size would grow in place and
+    // say OK for 3 * 2^61 items.
+    Arena a = arena_make(1 << 20);
+    I64s v = I64s_make(&a);
+    EXPECT(I64s_push(&v, 1) == OK);
+    EXPECT_EQ(v.cap, 9);
+    size_t held = a.held;
+    EXPECT(I64s_reserve(&v, SIZE_MAX / 4) == STOP);
+    EXPECT(a.hit);
+    EXPECT_EQ(v.cap, 9);
+    EXPECT_EQ(v.len, 1);
+    EXPECT_EQ(a.held, held);
+    EXPECT_EQ(at(v, 0), 1);
+    EXPECT_TRAPS((void)at(v, 1));
+    arena_deinit(&a);
+}
+
 TEST(a_big_vec_holds_its_live_buffer_not_every_one_it_outgrew) {
     Arena a = arena_make(16 * 1024 * 1024);
     I64s v = I64s_make(&a);
@@ -114,5 +133,6 @@ TEST_MAIN(
     TEST_CASE(items_survive_every_move_between_two_growing_vecs),
     TEST_CASE(items_keep_their_alignment),
     TEST_CASE(a_refused_push_leaves_the_vec_as_it_was),
+    TEST_CASE(a_capacity_whose_size_wraps_is_refused_with_room_to_grow_in_place),
     TEST_CASE(a_big_vec_holds_its_live_buffer_not_every_one_it_outgrew)
 )

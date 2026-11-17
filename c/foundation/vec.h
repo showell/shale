@@ -32,6 +32,7 @@ static inline size_t vec_grow_capacity(size_t minimum, size_t elem) {
 static inline Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len, size_t need, size_t elem, size_t align) {
     if (*cap >= need) return OK;
     size_t new_cap = vec_grow_capacity(need, elem);
+    // DRAGON: size overflow. `new_cap * elem` would wrap to a small buffer for a huge capacity: I64s_reserve(SIZE_MAX / 4) would get 160 bytes for 3 * 2^61 items, then grow in place and say OK. This division refuses it first. test_vec plants it.
     if (new_cap > SIZE_MAX / elem) {
         a->hit = true;
         return STOP;
@@ -46,6 +47,7 @@ static inline Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len,
     // memmove, not memcpy: GCC at -O2 cannot prove the two buffers apart and
     // warns (-Wrestrict); they never overlap, and the cost is the same.
     if (len > 0) memmove(fresh, *ptr, len * elem);
+    // DRAGON: use after free. The old buffer is freed here, back to the system when it is big, so a pointer into the items taken before a growth (`&at(v, i)`, an Items slice, a map's `_ptr`, a buf_view) dangles after it. Nothing tracks such pointers. A caller drops them before its next push.
     if (*cap > 0) arena_free(a, *ptr, *cap * elem);
     *ptr = fresh;
     *cap = new_cap;
@@ -68,6 +70,8 @@ static inline Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len,
                                                                                              \
     /* Room for `more` items past `len`. */                                                  \
     static inline Status Name##_reserve(Name *v, size_t more) {                              \
+        /* DRAGON: size overflow. `v->len + more` would wrap below `cap` and report room */  \
+        /* the vec doesn't have, so the push after it writes past the buffer. */             \
         if (more > SIZE_MAX - v->len) {                                                      \
             v->arena->hit = true;                                                            \
             return STOP;                                                                     \

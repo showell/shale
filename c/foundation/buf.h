@@ -22,6 +22,7 @@ static inline Buf buf_make(Arena *a) {
 
 // Room for `more` bytes past `len`.
 static inline Status buf_reserve(Buf *b, size_t more) {
+    // DRAGON: size overflow. `b->len + more` would wrap below `cap` and report room the buffer doesn't have, so the append's memcpy would run past it. test_buf's refused append plants it.
     if (more > SIZE_MAX - b->len) {
         b->arena->hit = true;
         return STOP;
@@ -43,6 +44,7 @@ static inline Status buf_byte(Buf *b, char c) {
 static inline Status buf_str(Buf *b, Str s) {
     if (s.len == 0) return OK;
     TRY(buf_reserve(b, s.len));
+    // DRAGON: use after free. `s` may be a view of this same buffer (`buf_str(b, buf_view(b))`, which a port of `s .. s` would write). The reserve above moves the buffer, and past ARENA_BIG it frees the old one to the system, so this copy reads freed memory: ASan says heap-use-after-free at 100000 bytes. Nothing keeps it safe today.
     memcpy(b->ptr + b->len, s.ptr, s.len);
     b->len += s.len;
     return OK;
@@ -71,6 +73,7 @@ static inline Status buf_i64(Buf *b, int64_t n) {
 }
 
 // What the buffer holds, valid until it next grows.
+// DRAGON: use after free. A growth moves the bytes and frees a big buffer's old ones to the system, so a view kept across an append can dangle, not just go stale. Hold a view only until the buffer's next append.
 static inline Str buf_view(const Buf *b) {
     Str s = {b->ptr, b->len};
     return s;

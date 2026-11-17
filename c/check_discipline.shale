@@ -32,6 +32,7 @@
 -- budget: steps=100000000
 
 const ALLOC = [=[\b(malloc|free|calloc|realloc|aligned_alloc|strdup|strndup)\s*\(]=]
+-- DRAGON: bounds. This catches a raw index only through a field named `ptr`, so `m->index[slot]`, `m->keys[e]`, a local array's `buf[i]` and `memcpy(b->ptr + n, ...)` all pass, and "every index goes through at" holds for map.h's arrays and every mem* call only by the author's care.
 const RAW_INDEX = [=[\bptr\s*\[|\*\s*\(\s*[A-Za-z_][A-Za-z0-9_.>-]*ptr\s*\+]=]
 const CHAR_PARAM = [=[[(,]\s*(const\s+)?char\s*\*\s*\w+\s*[,)]]=]
 const CHAR_FIELD = [=[^\s*(const\s+)?char\s*\*\s*\w+\s*;]=]

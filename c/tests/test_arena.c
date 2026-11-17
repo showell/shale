@@ -214,6 +214,47 @@ TEST(an_array_whose_size_overflows_is_refused) {
     arena_deinit(&a);
 }
 
+TEST(a_size_that_wraps_with_its_header_is_refused) {
+    // The attack: a length whose chunk, 16 + len + align, wraps to a few
+    // bytes, so a tiny chunk would claim to hold it.
+    Arena a = arena_make(16 * 1024 * 1024);
+    EXPECT(arena_alloc(&a, SIZE_MAX, 1) == NULL);
+    EXPECT(a.hit);
+    EXPECT_EQ(a.held, 0);
+    a.hit = false;
+    // 16 + len + 1 is exactly 2^64, which wraps to 0.
+    EXPECT(arena_alloc(&a, SIZE_MAX - 16, 1) == NULL);
+    EXPECT(a.hit);
+    a.hit = false;
+    // The same with an alignment's room: 16 + len + 4096 is 2^64.
+    EXPECT(arena_alloc(&a, SIZE_MAX - 16 - 4095, 4096) == NULL);
+    EXPECT(a.hit);
+    a.hit = false;
+    // One under the wrap is refused by the limit, not let through.
+    EXPECT(arena_alloc(&a, SIZE_MAX - 17, 1) == NULL);
+    EXPECT(a.hit);
+    EXPECT_EQ(a.held, 0);
+    EXPECT(a.chunk == NULL);
+    EXPECT(a.bigs == NULL);
+    arena_deinit(&a);
+}
+
+TEST(an_array_whose_size_wraps_to_a_small_one_is_refused) {
+    // The attack: `n * sizeof(T)` wrapping to 0 (the empty sentinel, which
+    // is not NULL) or to 16 bytes, for an array of 2^61 items.
+    Arena a = arena_make(16 * 1024 * 1024);
+    size_t to_zero = SIZE_MAX / 8 + 1;
+    size_t to_sixteen = SIZE_MAX / 8 + 3;
+    EXPECT(ARENA_ARRAY(&a, uint64_t, to_zero) == NULL);
+    EXPECT(a.hit);
+    a.hit = false;
+    EXPECT(ARENA_ARRAY(&a, uint64_t, to_sixteen) == NULL);
+    EXPECT(a.hit);
+    EXPECT_EQ(a.held, 0);
+    EXPECT_EQ(a.used, 0);
+    arena_deinit(&a);
+}
+
 TEST(the_arena_never_holds_more_than_its_limit_whatever_grows_in_it) {
     // Small and big allocations interleaved, some bigs freed: Zig's test held
     // std's arena to 1.7x and 2.0x its count; this one holds to its limit.
@@ -290,6 +331,8 @@ TEST_MAIN(
     TEST_CASE(a_refusal_by_the_system_is_a_hit_and_holds_nothing),
     TEST_CASE(a_zero_length_allocation_holds_nothing_and_is_not_null),
     TEST_CASE(an_array_whose_size_overflows_is_refused),
+    TEST_CASE(a_size_that_wraps_with_its_header_is_refused),
+    TEST_CASE(an_array_whose_size_wraps_to_a_small_one_is_refused),
     TEST_CASE(the_arena_never_holds_more_than_its_limit_whatever_grows_in_it),
     TEST_CASE(deinit_gives_back_every_chunk_and_keeps_the_limit),
     TEST_CASE(dup_copies_into_the_arena_and_is_refused_when_full),

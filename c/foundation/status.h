@@ -7,6 +7,7 @@
 #ifndef SHALE_STATUS_H
 #define SHALE_STATUS_H
 
+// DRAGON: every budget. A STOP dropped on the floor (`(void)buf_str(...)`, or a call whose answer is never tested) lets the run go on past an arena refusal with its data cut short, where Zig stops. The compiler doesn't hold a caller to TRY it: GCC warns of an unused answer only under warn_unused_result, which nothing here sets.
 typedef enum { OK = 0, STOP = 1 } Status;
 
 // Returns STOP from the enclosing function when `expr` does.

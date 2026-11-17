@@ -50,6 +50,7 @@ typedef struct {
 SLICE_TYPE(ArenaSavedSlice, ArenaSaved);
 
 typedef struct {
+    // DRAGON: the arena budget. A caller that writes `limit` or `held` lets a run hold more than its budget, and C can't stop it: the fields are public. Only arena_take adds to `held`, after checking it against `limit`, and only arena_give_back takes from it; only tests set `limit`.
     // The most `held` may reach.
     size_t limit;
     // Every chunk's bytes, its header among them: what the arena holds.
@@ -117,6 +118,7 @@ static inline size_t arena_chunk_len(const ArenaChunk *c) {
 
 // A chunk of `total` bytes from the system, if the limit has that left.
 static inline ArenaChunk *arena_take(Arena *a, size_t total) {
+    // DRAGON: the arena budget. This is the one place `held` is checked against `limit`, so a chunk taken from the system anywhere else is a chunk the budget never sees. Every malloc in the C is the one below it (check_discipline's alloc rule), and `total` is at most what is left, so `held + total` can't wrap.
     if (total > arena_sat_sub(a->limit, a->held)) {
         a->hit = true;
         return NULL;
@@ -150,6 +152,7 @@ static inline size_t arena_fits(const Arena *a, size_t len, size_t align) {
     if (a->chunk == NULL) return SIZE_MAX;
     uintptr_t base = (uintptr_t)arena_chunk_bytes(a->chunk);
     size_t start = arena_forward(base + a->end, align) - (size_t)base;
+    // DRAGON: bounds. `start + len` would wrap for a `len` near SIZE_MAX and pass this check, handing out bytes past the chunk. Only small allocations come here (arena_alloc sends `len >= ARENA_BIG` to its own chunk first), and `start` is at most `end + align` with `align` at most 2^63, so the sum can't wrap.
     if (start + len > arena_chunk_len(a->chunk)) return SIZE_MAX;
     return start;
 }
@@ -163,6 +166,7 @@ static inline char *arena_big_bytes(ArenaChunk *c, size_t align) {
 static inline void *arena_alloc(Arena *a, size_t len, size_t align) {
     if (align == 0 || (align & (align - 1)) != 0) arena_misuse("an alignment that is not a power of two");
     if (len == 0) return arena_empty(align);
+    // DRAGON: size overflow. Without this check, `16 + len + align` wraps to a few bytes, and a huge allocation gets a tiny chunk whose writes run past it. Every container's growth ends here (vec_grow_raw, buf_reserve), so this is the last check before the heap. test_arena plants it.
     if (len > SIZE_MAX - sizeof(ArenaChunk) - align) {
         a->hit = true;
         return NULL;
@@ -228,6 +232,7 @@ static inline void arena_free(Arena *a, void *p, size_t len) {
             ArenaChunk *c = *link;
             char *from = arena_chunk_bytes(c);
             if ((char *)p >= from && (char *)p < (char *)c + c->total) {
+                // DRAGON: use after free. The chunk goes back to the system, so every pointer into it dangles from here: a buf_view, a map's `_ptr`, a key or an Items slice taken before a growth. Nothing checks that a caller holds none; buf_str(b, buf_view(b)) past ARENA_BIG is one that does (buf.h).
                 *link = c->next;
                 // A mark that remembered this chunk as its newest big now
                 // remembers the one before it.
@@ -260,6 +265,7 @@ static inline ArenaMark arena_mark(Arena *a) {
 // Gives back every chunk, small and big, made since `m`, and closes `m` and
 // every mark opened after it.
 static inline void arena_reset(Arena *a, ArenaMark m) {
+    // DRAGON: use after free. Every chunk made since the mark goes back to the system, so a pointer into one held by anything older than the mark dangles: a key in an older map, a stop's message or trail. What must outlive a reset is copied out before it (the yield's copy, not yet ported). Today only tests reset.
     if (m.depth >= a->marks_len) arena_misuse("a reset to a mark that is not open");
     ArenaSavedSlice open = {a->marks, a->marks_len};
     ArenaSaved s = at(open, m.depth);
@@ -300,6 +306,7 @@ static inline void *arena_refuse(Arena *a) {
 #define ARENA_NEW(a, T) ((T *)arena_alloc((a), sizeof(T), _Alignof(T)))
 
 // `n` of `T`, or NULL when refused (an `n` whose size overflows among them).
+// DRAGON: size overflow. `n * sizeof(T)` would wrap to a small size (to 0, the empty sentinel, at SIZE_MAX / 8 + 1 of uint64_t), and the caller would index `n` items past it. The division refuses it before the multiply. `n` is evaluated twice, so it must have no side effect. test_arena plants it.
 #define ARENA_ARRAY(a, T, n) \
     ((T *)((n) > SIZE_MAX / sizeof(T) ? arena_refuse(a) : arena_alloc((a), (n) * sizeof(T), _Alignof(T))))
 

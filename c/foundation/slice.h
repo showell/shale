@@ -42,6 +42,7 @@ SLICE_TYPE(Bytes, char);
 // The slot is per translation unit, which is all a test needs.
 typedef void (*BoundsTrap)(const char *file, int line, size_t i, size_t len); // cstr: __FILE__
 
+// DRAGON: bounds. A trap that returns still ends in abort, but one that longjmps resumes the program after a bad index, as if it had been in bounds. Only test.h sets one, in a death test's child, and it calls `_exit`.
 static inline BoundsTrap *slice_trap_slot(void) {
     static BoundsTrap trap;
     return &trap;
@@ -61,10 +62,12 @@ static inline size_t slice_check(size_t i, size_t len, const char *file, int lin
 }
 
 // The element at `i`, an lvalue. `s` is evaluated twice, `i` once.
+// DRAGON: bounds. This is the check every index has. `i` becomes a size_t, so on a 32-bit target (the wasm build) an int64_t index past 2^32 wraps into range and reads the wrong item; on x86-64 a negative one wraps past the end and traps. A trap ends the process, not the run, so a script's index is the caller's to check first, as the `index` stop: at() is the backstop.
 #define at(s, i) ((s).ptr[slice_check((i), (s).len, __FILE__, __LINE__)])
 
 // The element at `i` with no check. `reason` must be a non-empty string
 // literal saying why the index is in bounds; it costs nothing at run time.
+// DRAGON: bounds. No check at all. The reason is a comment the compiler insists on, and nothing holds it true, so every use is a raw index to read by hand. None is in the C yet.
 #define at_unchecked(s, i, reason) \
     ((s).ptr[((void)sizeof(char[sizeof("" reason "") > 1 ? 1 : -1]), (i))])
 
@@ -75,6 +78,7 @@ static inline void slice_range_check(size_t from, size_t to, size_t len, const c
 }
 
 // The part `[from, to)` of a typed slice, as the same type.
+// DRAGON: bounds. `from` is evaluated three times and `to` twice, so an argument with a side effect is checked as one value and used as another: on "abc", str_sub(s, k++, 3) with k = 2 passes the check and gives a part from 3 of length SIZE_MAX, with no warning from GCC's -Wall -Wextra. Only a plain variable or a constant is safe to pass. Nothing holds callers to that.
 #define SLICE_SUB(Type, s, from, to)                                            \
     (slice_range_check((from), (to), (s).len, __FILE__, __LINE__),              \
      (Type){(s).ptr + (from), (size_t)(to) - (size_t)(from)})

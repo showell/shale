@@ -40,6 +40,7 @@ static inline uint64_t map_hash(Str key) {
 // leaves every array whole and `len` as it was.
 typedef struct {
     Arena *arena;
+    // DRAGON: use after free. A key is held by its pointer, not copied. A key made in a buffer that later grows, or in an arena span that is later reset, dangles, and every lookup that probes its slot reads freed memory. A key in an arena that outlives the map, never reset under it, is safe.
     Str *keys;
     size_t keys_cap;
     uint64_t *hashes;
@@ -106,6 +107,7 @@ static inline Status map_core_reindex(MapCore *m, size_t index_cap) {
 // Room for one more entry: the keys and the hashes, and the index kept a
 // quarter free.
 static inline Status map_core_reserve_one(MapCore *m) {
+    // DRAGON: bounds. The index holds an entry's place plus one in 32 bits, so past UINT32_MAX - 1 entries the cast in `_put` and map_core_rebuild would wrap and a slot would point at the wrong entry. This check refuses the put first. No test reaches it: the arena budget stops a map long before.
     if (m->len >= UINT32_MAX - 1) {
         m->arena->hit = true;
         return STOP;
@@ -187,6 +189,9 @@ static inline void map_core_remove_at(MapCore *m, size_t e) {
     }                                                                                        \
                                                                                              \
     /* The value's place, or NULL when `key` is not there. */                                \
+    /* DRAGON: use after free. The place is in the values, which the next put may move, */   \
+    /* freeing a big buffer to the system: ASan sees a read of freed memory through a */     \
+    /* pointer kept across 30000 puts. Use it before the next put or remove. */              \
     static inline V *Name##_ptr(Name *m, Str key) {                                          \
         size_t e = map_core_find(&m->core, key);                                             \
         if (e == SIZE_MAX) return NULL;                                                      \

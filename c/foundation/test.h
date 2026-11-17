@@ -96,6 +96,7 @@ static inline void test_trap(const char *file, int line, size_t i, size_t len) {
 // made not dumpable), and gives how the child ended. `trap` arms the bounds
 // trap in the child. A child, not a longjmp: a jump back into the test's frame
 // would clobber what `stmt` made there (GCC's -Wclobbered).
+// DRAGON: the process boundary. The child is a fork with no exec and no death signal, so a `stmt` that never ends outlives a parent killed by its timeout; only `run`'s kill of the whole process group (src/shale_spawn.zig) ends it, not the harness. A failed EXPECT inside `stmt` longjmps the child back into test_run, which runs the file's other tests there; the child then exits 1 and the parent fails the test, but by luck, not by design.
 #define TEST_IN_CHILD(stmt, trap, status)                                           \
     do {                                                                            \
         fflush(stdout);                                                             \

@@ -175,6 +175,7 @@ static inline RunCtx run_ctx_make(Arena *values, Arena *machine, Budgets budgets
 // Stops the run at `pos`, with `message` (which the caller keeps alive: a
 // literal, or made in the values' arena).
 static inline Status run_fail(RunCtx *r, Pos pos, StopClass cls, Str message) {
+    // DRAGON: use after free. The stop's trail is a view of the live call vec in the machine's arena, not a copy, and its message lives in the caller's arena. A push after the stop can move the calls (freeing a big buffer), a pop or `attempt`'s cut changes what the trail says, and a reset of either arena frees what the stop points at. Nothing in the C yet runs between a stop and its report; a port of `attempt` or yield must copy what it keeps.
     Calls trail = {r->calls.ptr, r->calls.len};
     Stop s = {pos.line, pos.column, cls, BUDGET_NONE, message, r->function, trail};
     r->stop = s;
@@ -251,6 +252,7 @@ static inline Status run_budget_stop(RunCtx *r, Pos pos, BudgetKind k) {
 
 // An allocation the arena refused, read as the arena budget, as Zig reads
 // every `OutOfMemory` of a run.
+// DRAGON: the arena budget. A container's STOP means only that its arena refused, with no stop recorded; one passed up by TRY without coming through here ends the run with `stopped` false and a zeroed Stop, so the report would name no budget. Every caller of a container must call this at its boundary. Nothing checks that it does.
 static inline Status run_oom(RunCtx *r, Pos pos) {
     return run_budget_stop(r, pos, BUDGET_ARENA);
 }
