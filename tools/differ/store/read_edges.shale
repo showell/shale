@@ -1,0 +1,53 @@
+-- The store's reads at their edges: read_lines, line_at, count_lines,
+-- count_in, find_in, grep and read past a file's end, over CRLF, an empty
+-- file and one past 64 KiB, and the refusals of their arguments.
+-- differ-before: fixture/setup.shale
+function show(x)
+  if x == nil then return "nil" end
+  return json_write(x)
+end
+function t_read(p, o, n) return read(p, o, n) end
+function t_rl(p, o, n) return read_lines(p, o, n) end
+function t_rl1(p) return read_lines(p) end
+function t_read2(p, o) return read(p, o) end
+function t_la(p, o) return line_at(p, o) end
+function t_ci(p, s, o, n) return count_in(p, s, o, n) end
+print(show(read_lines("a.txt")))
+print(show(read_lines("a.txt", 2, 1)))
+print(show(read_lines("a.txt", 4, 1)))
+print(show(read_lines("a.txt", 7)))
+print(show(read_lines("a.txt", 99)))
+print(show(read_lines("crlf.txt")))
+print(show(read_lines("empty.txt")))
+print(show(line_at("a.txt", 3)))
+print(show(line_at("a.txt", 4)))
+print(show(line_at("a.txt", 6)))
+print(show(line_at("a.txt", 7)))
+print(show(line_at("crlf.txt", 2)))
+print(show(line_at("empty.txt", 0)))
+print(count_lines("a.txt"), count_lines("crlf.txt"), count_lines("empty.txt"), count_lines("a.txt", 0, 4), count_lines("a.txt", 4), count_lines("a.txt", 3, 0))
+print(count_in("a.txt", "o"), show(find_in("a.txt", "two")), show(find_in("a.txt", "o", 3)), show(find_in("a.txt", "zz")), count_in("a.txt", "on", 0, 1))
+print(show(grep("a.txt", "two")), show(grep("a.txt", "o")), show(grep("a.txt", "e\nt")), show(grep("crlf.txt", "\r")))
+print(show(read("a.txt", 7)), show(read("a.txt", 3, 0)), show(read("a.txt", 2, 99)), show(read_or("nope", "dflt")))
+local big = ""
+local piece = "abcdefghijklmnopqrstuvwxyz0123456789-"
+local i = 0
+while i < 2000 do big = big .. piece .. "\n" i = i + 1 end
+create("big.txt", big)
+print(#big, count_lines("big.txt"), count_in("big.txt", "9-\nab"), show(find_in("big.txt", "9-\nab", 65530)), count_in("big.txt", "\n", 65536, 100))
+print(show(line_at("big.txt", 65536)))
+local rl = read_lines("big.txt", 0, 65536)
+print(#rl.lines, rl.next, rl.done)
+print(show(attempt(t_read2, "a.txt", -1).error))
+print(show(attempt(t_read, "a.txt", 0, -1).error))
+print(show(attempt(t_rl, "a.txt", 0, 0).error))
+print(show(attempt(t_la, "a.txt", -2).error))
+print(show(attempt(t_ci, "a.txt", "", 0, 0).error))
+print(show(attempt(t_ci, "a.txt", "o", -1, 0).error))
+print(show(attempt(t_ci, "a.txt", "o", 0, -5).error))
+print(show(attempt(t_read, "d", 0, 1).error))
+print(show(attempt(t_read, "nope", 0, 1).error))
+print(show(attempt(t_read, "a.txt/x", 0, 1).error))
+print(show(attempt(t_rl1, "d").error))
+print(show(ls("d")), show(ls(".")), is_dir("d"), is_dir("a.txt"), is_dir("nope"), exists("nope"), exists("d/x"))
+print(show(stat("a.txt").size), stat("d").kind, stat("d").size > -1)

@@ -1,0 +1,18 @@
+-- walk, ls, stat and exists through a mount (`t:`, the root's own folder),
+-- `after` spelled with the mount and without.
+-- differ-before: fixture/setup.shale
+-- differ-mounts: store.mounts
+function paths(l)
+  local s = ""
+  for e in l do s = s .. e.path .. "(" .. e.kind .. ") " end
+  return s
+end
+function w2(p, o) return paths(walk(p, o)) end
+print(paths(walk("t:.")))
+print(paths(walk("t:")))
+print(paths(walk("t:.", {after = "t:d/y"})))
+print(paths(walk("t:", {after = "t:d"})))
+print(w2("t:", {after = "t:/d"}))
+print(attempt(w2, "t:", {after = "d"}).error)
+print(paths(walk("t:d", {after = "t:d/w"})))
+print(json_write(ls("t:.")), stat("t:.").kind, exists("t:"), is_dir("t:"))

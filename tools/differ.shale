@@ -41,12 +41,20 @@
 --                 build:differ/surface/*.shale, written from
 --                 docs/SURFACE.txt's stop templates once it lands);
 --   cli           tools/differ/cli/*.shale, the command line's own paths,
---                 each with its argv in a `-- differ-argv:` line.
+--                 each with its argv in a `-- differ-argv:` line;
+--   store         tools/differ/store/*.shale, probes of the store builtins'
+--                 edges that the other inputs miss, each after the fixture
+--                 its `-- differ-before:` line names, and some with mounts
+--                 of their own (`-- differ-mounts:`, `mount_lines`).
+--
+-- A hand-written input (stops, cli, store) is an input for each of its
+-- `-- differ-argv:` lines, so one probe runs at several budgets as several
+-- inputs (`hand_launches` has its other lines).
 --
 -- **Each input runs three times**: the oracle twice, then the binary under
 -- test, each run in a fresh folder at one fixed path
 -- (build:differ/work/root, its scratch mount beside it), with one mounts
--- file, one environment (`now()` pinned by SHALE_NOW, git's dates and
+-- file (an input's own mounts beside it, `mounts_files`), one environment (`now()` pinned by SHALE_NOW, git's dates and
 -- identity pinned, no user prelude, a fixed HOME and PATH) and the cookbook
 -- copied at this checkout's state. The binary itself is copied to one path
 -- (build:differ/bin/shale) for each phase, so its own path never differs.
@@ -329,26 +337,100 @@ function collect_lessons(c)
   end
 end
 
--- A hand-written input's launch: its `-- differ-argv:` line (the words
--- after the binary, `{script}` the file's own path; none is `{script}`),
--- `-- differ-stdin:` (one line given on stdin) or `-- differ-stdin-self: 1`
--- (the file itself on stdin).
-function hand_steps(p, text)
-  local argv = {real(p)}
+-- The mounts the harness itself gives every run, which an input's own
+-- mounts may not take.
+const HARNESS_MOUNTS = {"cookbook", "tools", "scratch"}
+
+-- A file named by a hand-written input's line, in the input's folder (or
+-- one below it): never `..`, a mount or an absolute path, so what an input
+-- names is the checkout's.
+function input_file(p, name, line)
+  if name == "" or starts_with(name, "/") or contains(name, ":") or contains(name, "..") then fail("differ: " .. p .. ": `" .. line .. "` names `" .. name .. "`: a file in the input's own folder") end
+  local f = dirname(p) .. "/" .. name
+  if not exists(f) then fail("differ: " .. p .. ": `" .. line .. "` names " .. f .. ", which is not there") end
+  return f
+end
+
+-- An input's own mounts, read from its `-- differ-mounts:` file: each line
+-- `name = <path> [words]` (`#` a comment), the path below the run's work
+-- folder, `root` or `scratch` first, so a mount reaches only the run's own
+-- fresh folders, never a real one (a secrets mount is a folder the input's
+-- fixture plants). Each is `{name, path, words}`; `mounts_files` writes them
+-- beside the harness's own once the work folder is known.
+function mount_lines(f)
+  local out = {}
+  for l in lines(read(f)) do
+    if trim(l) ~= "" and not starts_with(l, "#") then
+      local m = re_find(l, "^([A-Za-z0-9_]+) = ([^ ]+)((?: [a-z]+)*)$")
+      if m == nil then fail("differ: " .. f .. ": `" .. l .. "` is not `name = <path> [words]`") end
+      local name = m.groups[1]
+      local path = m.groups[2]
+      if has_item(HARNESS_MOUNTS, name) then fail("differ: " .. f .. ": `" .. name .. "` is one of the harness's own mounts") end
+      local parts = split(path, "/")
+      if parts[1] ~= "root" and parts[1] ~= "scratch" then fail("differ: " .. f .. ": `" .. path .. "` is not below the run's `root` or `scratch`") end
+      for part in parts do
+        if part == "" or part == "." or part == ".." then fail("differ: " .. f .. ": `" .. path .. "` has an empty, `.` or `..` part") end
+      end
+      if contains(m.groups[3], " tools") then fail("differ: " .. f .. ": a `tools` mount would let `run` start any program under it") end
+      push(out, {name = name, path = path, words = m.groups[3]})
+    end
+  end
+  return out
+end
+
+-- A hand-written input file's launches, one input each. Each
+-- `-- differ-argv:` line is an input of its own (the words after the
+-- binary, `{script}` the file's own path; with none, one input, `{script}`
+-- alone), so one probe runs at several budgets with no copy of it. Every
+-- launch of the file takes its other lines: `-- differ-stdin:` (one line
+-- given on stdin) or `-- differ-stdin-self: 1` (the file itself on stdin);
+-- `-- differ-before: <file>`, a script in the file's folder run first as a
+-- step of its own, in the same work folder under the harness's mounts (a
+-- fixture); `-- differ-mounts: <file>`, a mounts file in the file's folder
+-- (`mount_lines`) whose mounts the launch's own step gets beside the
+-- harness's. Each launch is `{label, steps}`, `label` the argv's words but
+-- `{script}` when the file has more than one.
+function hand_launches(p, text)
+  local argvs = {}
   local stdin = ""
+  local before = nil
+  local mounts = nil
   for l in lines(text) do
     if starts_with(l, "-- differ-argv:") then
-      argv = {}
-      for w in words(sub(l, #"-- differ-argv:" + 1)) do
-        if w == "{script}" then push(argv, real(p)) else push(argv, w) end
-      end
+      push(argvs, words(sub(l, #"-- differ-argv:" + 1)))
     elseif starts_with(l, "-- differ-stdin:") then
       stdin = trim_start(sub(l, #"-- differ-stdin:" + 1)) .. "\n"
     elseif starts_with(l, "-- differ-stdin-self: 1") then
       stdin = text
+    elseif starts_with(l, "-- differ-before:") then
+      before = {argv = {real(input_file(p, trim(sub(l, #"-- differ-before:" + 1)), l))}, stdin = ""}
+    elseif starts_with(l, "-- differ-mounts:") then
+      mounts = mount_lines(input_file(p, trim(sub(l, #"-- differ-mounts:" + 1)), l))
     end
   end
-  return {{argv = argv, stdin = stdin}}
+  if #argvs == 0 then argvs = {{"{script}"}} end
+  local out = {}
+  for a in argvs do
+    local argv = {}
+    local shown = {}
+    for w in a do
+      if w == "{script}" then
+        push(argv, real(p))
+      else
+        push(argv, w)
+        push(shown, w)
+      end
+    end
+    local step = {argv = argv, stdin = stdin}
+    if mounts ~= nil then step.mount_lines = mounts end
+    local steps = {}
+    if before ~= nil then push(steps, before) end
+    push(steps, step)
+    local label = ""
+    if #argvs > 1 then label = " [" .. join(shown, " ") .. "]" end
+    push(out, {label = label, steps = steps})
+  end
+  return out
 end
 
 function collect_dir(c, dir, source)
@@ -356,10 +438,12 @@ function collect_dir(c, dir, source)
   local n = 0
   for p in sort(glob(dir .. "/*.shale")) do
     local text = read(p)
-    c.n = c.n + 1
-    n = n + 1
-    local id = "i" .. sub("0000" .. c.n, -4)
-    push(c.inputs, {id = id, source = source, origin = p, text_path = p, steps = hand_steps(p, text), skip = skip_reason(text)})
+    for one in hand_launches(p, text) do
+      c.n = c.n + 1
+      n = n + 1
+      local id = "i" .. sub("0000" .. c.n, -4)
+      push(c.inputs, {id = id, source = source, origin = p .. one.label, text_path = p, steps = one.steps, skip = skip_reason(text)})
+    end
   end
   return n
 end
@@ -383,6 +467,7 @@ function collect()
   collect_dir(c, "tools/differ/stops", "stops")
   collect_dir(c, DIFFER .. "/surface", "stops")
   collect_dir(c, "tools/differ/cli", "cli")
+  collect_dir(c, "tools/differ/store", "store")
   return {inputs = c.inputs, dups = c.dups}
 end
 
@@ -409,6 +494,8 @@ function launch(cfg, inp, side)
     replace(cfg.cap .. "/stdin", step.stdin)
     cfg.env.DIFFER_OUT = real(dest) .. "/" .. k .. ".out"
     cfg.env.DIFFER_ERR = real(dest) .. "/" .. k .. ".err"
+    cfg.env.SHALE_MOUNTS = cfg.mounts_real
+    if has_key(step, "mounts_file") then cfg.env.SHALE_MOUNTS = step.mounts_file end
     local argv = {"sh", "-c", WRAP, "differ", cfg.bin_real}
     if cfg.check then push(argv, "--check") end
     for a in step.argv do push(argv, a) end
@@ -785,6 +872,24 @@ function replace_or_create(p, text)
   if exists(p) then replace(p, text) else create(p, text) end
 end
 
+-- The mounts file of each step that names its own (`mount_lines`): the
+-- harness's mounts, then the step's, each path made the run's work folder's,
+-- written under INPUTS as `<id>.mounts` and kept as the step's
+-- `mounts_file`, which `launch` gives as SHALE_MOUNTS.
+function mounts_files(inputs, harness_mounts, work_real)
+  for inp in inputs do
+    for step in inp.steps do
+      if has_key(step, "mount_lines") then
+        local text = harness_mounts
+        for m in step.mount_lines do text = text .. m.name .. " = " .. work_real .. "/" .. m.path .. m.words .. "\n" end
+        local f = INPUTS .. "/" .. inp.id .. ".mounts"
+        replace_or_create(f, text)
+        step.mounts_file = real(f)
+      end
+    end
+  end
+end
+
 local old = arg("old", "")
 local new = arg("new", "")
 local only = arg("only", "")
@@ -845,9 +950,11 @@ reset_work({})
 local work_real = real(WORK)
 local mounts = "cookbook = " .. real(DIFFER .. "/pinned/cookbook") .. " ro\n" .. "tools = " .. real("tools:") .. " ro tools\n" .. "scratch = " .. work_real .. "/scratch\n"
 replace_or_create(DIFFER .. "/mounts", mounts)
+mounts_files(inputs, mounts, work_real)
 replace_or_create(DIFFER .. "/cap/stdin", "")
 local cfg = {
   cap = DIFFER .. "/cap",
+  mounts_real = real(DIFFER .. "/mounts"),
   check = check_only == 1,
   bin_real = real(BIN) .. "/shale",
   work_real = work_real,

@@ -1,0 +1,49 @@
+-- More of edit's edges (a last newline gained and lost, CRLF, deletions at
+-- either end, stat's time before 1970) and every refusal of its arguments.
+-- differ-before: fixture/setup.shale
+function e3(p, a, b) return edit(p, a, b) end
+function e4(p, a, b, o) return edit(p, a, b, o) end
+function e2(p, l) return edit(p, l) end
+function fresh(p, s)
+  if exists(p) then remove(p) end
+  create(p, s)
+end
+must(run({"touch", "-d", "1969-12-31 23:59:59.5 UTC", "a.txt"}, {timeout_ms = 5000, tail = 5}))
+print(stat("a.txt").modified, walk("", {like = "a.txt"})[1].modified)
+fresh("u1", "x\ny")
+print(edit("u1", "y", "y\n"))
+fresh("u2", "x\ny\n")
+print(edit("u2", "y\n", "z"))
+fresh("u3", "x\ny\n")
+print(edit("u3", "\ny\n", ""))
+fresh("u4", "a\r\nb\r\n")
+print(edit("u4", "\r\n", "\n", {all = true}))
+fresh("u5", "ab")
+print(edit("u5", "ab", "c", {word = true}))
+fresh("u6", "one\n\n\ntwo\n\n\nthree\n")
+print(edit("u6", {{old = "one", new = "1"}, {old = "three", new = "3"}, {old = "\n\n\ntwo", new = "two"}}))
+fresh("u7", "head\nmid\ntail")
+print(edit("u7", {{old = "tail", new = ""}, {old = "head\n", new = ""}}))
+fresh("u8", "q")
+print(edit("u8", "q", ""))
+fresh("u9", "the quick brown fox\njumps over\n")
+print(attempt(e3, "u9", "the slow brown fox\n", "z").error)
+print(attempt(e4, "u9", "quick", "q", {all = 1}).error)
+local many = {}
+local i = 0
+while i < 65 do push(many, {old = "x", new = "y"}) i = i + 1 end
+print(attempt(e2, "u9", many).error)
+print(attempt(e2, "u9", {{old = "the", new = "a"}, {new = "b"}}).error)
+print(attempt(e2, "u9", {{old = "the", new = "a"}, {old = "b"}}).error)
+print(attempt(e2, "u9", {{old = "the", new = "a"}, {old = "b", new = "c", all = 1}}).error)
+print(attempt(e2, "u9", {{old = "the", new = "a"}, {old = "b", new = "c", z = 1}}).error)
+print(attempt(e2, "u9", {{old = "the", new = "a"}, "x"}).error)
+print(attempt(e2, "u9", {{old = "the", new = "a"}, {}}).error)
+print(attempt(e2, "u9", {{old = "the", new = "a"}, {old = "", new = "c"}}).error)
+print(attempt(e2, "u9", {{old = "the", new = "a"}, {old = 3, new = "c"}}).error)
+print(attempt(e2, "u9", "x").error)
+print(attempt(e2, "u9", {}).error)
+print(attempt(e3, "u9", "the", 1).error)
+print(attempt(e3, "u9", "o", "0").error)
+print(attempt(e3, "", "o", "0").error)
+print(attempt(e3, "d", "o", "0").error)

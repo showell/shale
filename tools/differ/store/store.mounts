@@ -1,0 +1,8 @@
+# The mounts the probes that name this file get beside the harness's own
+# (`-- differ-mounts: store.mounts`). Each path is below the run's work
+# folder, `root` or `scratch` first, and the harness refuses any other, so a
+# probe's mount never reaches a real folder: `k` is the fixture's planted
+# secrets folder, not a real one.
+t = root
+q = scratch/ro ro
+k = scratch/keys secrets

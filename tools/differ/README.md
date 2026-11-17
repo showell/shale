@@ -42,6 +42,30 @@ the next run with no list to keep:
   gives the words after the binary (`{script}` is the file's own path), a
   `-- differ-stdin:` line one line of stdin, and `-- differ-stdin-self: 1`
   the file itself on stdin.
+- **store:** `tools/differ/store/`, probes of the store builtins' edges
+  that the other inputs miss: edit's diffs and refusals, the reads at a
+  file's edges, walk's options and its resume, edits_write's batches,
+  symbolic links, the call-bytes cap, budget sweeps, mounts and a planted
+  secrets mount. Each runs after `fixture/setup.shale`, which builds the
+  small tree the probes read.
+
+**A hand-written input** (stops, cli, store) is one input for each of its
+`-- differ-argv:` lines, so a probe at several budgets is several inputs of
+one file: `store/store_budgets.shale` runs at every reads and changes value
+and every 25 steps of its run, and `store/call_bytes.shale` at each cap on
+either side of where an answer changes. Its origin in the report ends with
+the argv's words, `[--budget reads=3]`. Two more lines serve any of them:
+
+- **`-- differ-before: <file>`** runs a script in the input's folder first,
+  as a step of its own in the same work folder: a fixture.
+- **`-- differ-mounts: <file>`** names a mounts file in the input's folder,
+  whose mounts the input's own step gets beside the harness's (the fixture's
+  step gets the harness's alone). Each line is `name = <path> [words]`, the
+  path below the run's work folder with `root` or `scratch` first. The
+  harness refuses any other path, `..`, a `tools` mount and the harness's
+  own names, so an input's mount reaches only the run's fresh folders, never
+  a real one: `store/store.mounts`'s secrets mount is a folder the fixture
+  plants.
 
 An input that holds `proc_stop(`, `http(`, `http_get(` or `keep_on_stop` is
 skipped and listed with its reason. Each one reaches past the box's own
