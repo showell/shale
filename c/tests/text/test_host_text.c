@@ -30,7 +30,7 @@ TEST(json_read_reads_each_kind_and_json_write_writes_it_back) {
     ran_source(&x, S("local v = host(\"json_read\", \"{\\\"a\\\": [1, -2, 3.5e2, true], \\\"b\\\": null, \\\"s\\\": \\\"\\\\u00e9\\\\n\\\"}\")\n"
                      "print(host(\"json_write\", v), v.a[3])\n"),
                ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     // A fraction stays its text, a null member is left out, an escape is
     // decoded to UTF-8 and written back as a byte.
     EXPECT_STR(buf_view(&x.r.out), S("{\"a\":[1,-2,\"3.5e2\",true],\"s\":\"\xc3\xa9\\n\"}\t3.5e2\n"));
@@ -68,7 +68,7 @@ TEST(json_write_refuses_a_table_that_holds_itself) {
 TEST(re_lines_keeps_the_matching_lines_and_charges_each_search) {
     static Ran x;
     ran_source(&x, S("for m in host(\"re_lines\", \"alpha\\nbeta\\n\\ngamma beta\", \"beta\") do print(m.line, m.text) end\nprint(#host(\"re_lines\", \"a\\nb\", \"a\", {invert = true}))\n"), ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("2\tbeta\n4\tgamma beta\n1\n"));
     EXPECT_EQ(x.r.steps, 169);
     ran_free(&x);
@@ -97,7 +97,7 @@ TEST(shale_tokens_gives_each_token_comments_among_them_with_its_span) {
     static Ran x;
     text_run_with(&x, "for t in host(\"shale_tokens\", \"t.shale\") do print(t.tag, t.text, t.line, t.start, t.stop) end\nprint(#host(\"shale_tokens\", \"t.shale\", {tag = \"comment\"}))\n",
                   "root/t.shale", "local a = 1 -- x\nprint(a)\n");
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("kw_local\tlocal\t1\t0\t5\nname\ta\t1\t6\t7\nassign\t=\t1\t8\t9\nint\t1\t1\t10\t11\ncomment\t-- x\t1\t12\t16\n"
                                      "name\tprint\t2\t17\t22\nlparen\t(\t2\t22\t23\nname\ta\t2\t23\t24\nrparen\t)\t2\t24\t25\n1\n"));
     EXPECT_EQ(x.r.steps, 586);
@@ -120,7 +120,7 @@ TEST(flat_tree_reads_nodes_parents_depths_kids_spans_and_attributes_two_files_an
     ran_source(&x, S("local t = host(\"roc_tree\", \"roc-ast flat 1 v\\n== /x/a.roc\\nn\\t0\\tfile\\t1\\t1\\t5\\t14\\nn\\t1\\tstatements\\t0\\t0\\t0\\t0\\nn\\t2\\te-binop\\t5\\t8\\t5\\t14\\na\\t3\\top\\t==\\nn\\t3\\te-ident\\t+5\\t8\\t5\\t1_0\\na\\t4\\traw\\tx\\n\\n== /x/b.roc\\nn\\t-0\\tfile\\t1\\t1\\t1\\t2\\na\\t1\\tline-doc\\tk\\\\tq\\\\\\\\\\n/x/c.roc: refused\\n\", \"whole\")\n"
                      "print(host(\"json_write\", t))\n"),
                ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("{\"files\":[{\"path\":\"/x/a.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[2],\"line\":1,\"col\":1,\"end_line\":5,\"end_col\":14},{\"kind\":\"statements\",\"depth\":1,\"parent\":1,\"kids\":[3],\"line\":0,\"col\":0,\"end_line\":0,\"end_col\":0},{\"kind\":\"e-binop\",\"depth\":2,\"parent\":2,\"kids\":[4],\"line\":5,\"col\":8,\"end_line\":5,\"end_col\":14,\"op\":\"==\"},{\"kind\":\"e-ident\",\"depth\":3,\"parent\":3,\"kids\":[],\"line\":5,\"col\":8,\"end_line\":5,\"end_col\":10,\"raw\":\"x\"}]},{\"path\":\"/x/b.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[],\"line\":1,\"col\":1,\"end_line\":1,\"end_col\":2,\"line_doc\":\"k\\tq\\\\\"}]}],\"said\":\"/x/c.roc: refused\"}\n"));
     EXPECT_EQ(x.r.steps, 746);
     ran_free(&x);
@@ -133,7 +133,7 @@ TEST(flat_tree_refuses_a_line_that_does_not_read_naming_its_line_and_why) {
                      "  print(attempt(rt, s).error)\n"
                      "end\n"),
                ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`roc_tree`: roc-ast's output line 2 is not a tree's: a node before any `== path`\n"
                      "`roc_tree`: roc-ast's output line 3 is not a tree's: a node line without its six fields\n"
                      "`roc_tree`: roc-ast's output line 3 is not a tree's: a line with too many fields\n"
@@ -166,7 +166,7 @@ TEST(flat_tree_refuses_a_number_past_what_an_integer_holds_and_reads_the_most) {
                      "print(attempt(rt, \"== /x\\nn\\t0\\tfile\\t1\\t18446744073709551615\\t1\\t2\\n\").error)\n"
                      "print(rt(\"== /x\\nn\\t0\\tfile\\t9223372036854775807\\t1\\t1\\t2\\n\").files[1].nodes[1].line)\n"),
                ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`roc_tree`: roc-ast's output line 3 is not a tree's: a span's number\n"
                      "`roc_tree`: roc-ast's output line 3 is not a tree's: a span's number\n"
                      "9223372036854775807\n"));
@@ -182,7 +182,7 @@ TEST(flat_tree_reads_each_tools_header_as_its_own_and_refuses_another) {
                      "print(host(\"json_write\", host(\"go_tree\", \"go-ast flat 1 go1.27.4\\n== /x/a.go\\nn\\t0\\tFile\\t1\\t1\\t3\\t2\\nn\\t1\\tIdent\\t1\\t9\\t1\\t10\\na\\t2\\trole\\tName\\na\\t2\\tname\\ta\\n\", \"whole\")))\n"
                      "print(host(\"json_write\", host(\"roc_tree\", \"roc-ast flat 1\", \"whole\")), host(\"json_write\", host(\"roc_tree\", \"\", \"cut\")))\n"),
                ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`roc_tree`: roc-ast's output line 1 is not a tree's: no `roc-ast flat 1` header: an older roc-ast, or not its --flat; Shale's `shale tools/roc_ast/install.shale` installs the one this Shale reads\n"
                      "`roc_tree`: roc-ast's output line 1 is not a tree's: roc-ast's --flat is another format than 1, the one this Shale reads: Shale's `shale tools/roc_ast/install.shale` installs the matching roc-ast\n"
                      "`roc_tree`: roc-ast's output line 1 is not a tree's: roc-ast's --flat is another format than 1, the one this Shale reads: Shale's `shale tools/roc_ast/install.shale` installs the matching roc-ast\n"
@@ -202,7 +202,7 @@ TEST(flat_tree_ends_the_trees_at_a_line_that_does_not_read_in_a_cut_output) {
                      "print(attempt(rt, \"whole\").error)\n"
                      "print(host(\"json_write\", host(\"roc_tree\", text, \"cut\")))\n"),
                ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`roc_tree`: roc-ast's output line 6 is not a tree's: an attribute line without its three fields\n"
                      "{\"files\":[{\"path\":\"/x/a.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[],\"line\":1,\"col\":1,\"end_line\":1,\"end_col\":2}]},{\"path\":\"/x/b.roc\",\"nodes\":[{\"kind\":\"file\",\"depth\":0,\"parent\":0,\"kids\":[],\"line\":1,\"col\":1,\"end_line\":1,\"end_col\":2}]}],\"said\":\"a\\t1\\trawerror: IsDir\"}\n"));
     EXPECT_EQ(x.r.steps, 489);
@@ -219,7 +219,7 @@ TEST(flat_tree_refuses_its_arguments_first_to_last) {
                      "print(attempt(rt, {}, \"whole\").error)\n"
                      "print(attempt(rt, 5, \"nope\").error)\n"),
                ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`roc_tree`'s reading takes roc-ast's output and how its run ended, given 1 arguments\n"
                      "`go_tree`'s reading takes how the run ended, \"whole\" or \"cut\", not \"half\"\n"
                      "`go_tree`'s reading takes how the run ended, \"whole\" or \"cut\", not an integer\n"

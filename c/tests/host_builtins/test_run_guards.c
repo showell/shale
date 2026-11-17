@@ -29,7 +29,7 @@ TEST(a_nul_in_an_argument_an_env_or_a_secrets_name_is_refused_before_any_guard) 
                   "print(attempt(j, {\"echo\", \"keys\\0x\"}, {log = \"j.log\"}).error)\n"
                   "print(attempt(j, {\"echo\"}, {log = \"j.log\", env = {F = \"keys\\0x\"}}).error)\n"),
            ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`run`'s argument 2 holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw\n"
                                      "`run`'s `env` F holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw\n"
                                      "`run`'s `env` has a name that holds a NUL byte, where the kernel would end it\n"
@@ -51,7 +51,7 @@ TEST(a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked) {
                   "print(attempt(j, {\"keys/tok\"}, {log = \"j.log\"}).error)\n"
                   "print(attempt(f, {\"./nope.sh\"}, {timeout_ms = 5000, tail = 1}).error)\n"),
            ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`run`'s argument 1 names the mount `k`'s folder, which holds secrets: hand one over as `secrets`\n"
                                      "`job_start`'s argument 1 names the mount `k`'s folder, which holds secrets: hand one over as `secrets`\n"
                                      "`run` of `./nope.sh`: a program by path that git does not track (a script just written?); {want = \"tag: why\"} to run it anyway\n"));
@@ -103,7 +103,7 @@ TEST(a_log_or_a_secret_at_a_fifo_is_refused_not_waited_on) {
                   "print(attempt(f, {\"echo\"}, {timeout_ms = 5000, tail = 1, log = \"pipe\"}).error)\n"
                   "print(attempt(f, {\"echo\"}, {timeout_ms = 5000, tail = 1, secrets = {X = \"k:pipe\"}}).error)\n"),
            ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`run`: its log pipe is there and is not a file\n`run`: the secret `X`'s file k:pipe is there and is not a file\n"));
     EXPECT_EQ(x.r.host_runs, 0);
     ran_free(&x);
@@ -145,7 +145,7 @@ TEST(job_wait_names_the_script_s_path_never_the_os_path) {
                   "print(attempt(w, j, {timeout_ms = 10000, file = \"shut/x.log\", contains = \"x\"}).error)\n"),
            ran_budgets());
     EXPECT_EQ(chmod(shut, 0700), 0);
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`job_wait`: shut/x.log cannot be read: AccessDenied\n"));
     ran_free(&x);
 }

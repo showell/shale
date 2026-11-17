@@ -11,7 +11,7 @@ TEST(arithmetic_and_print_take_their_counted_steps) {
     static Ran x;
     ran_source(&x, S("local x = 1 + 2 * 3\nprint(x, \"a\" .. x)\n"), ran_budgets());
     EXPECT(x.parsed);
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("7\ta7\n"));
     EXPECT_EQ(x.r.steps, 19);
     EXPECT(!x.r.ctx.stopped);
@@ -52,7 +52,7 @@ TEST(the_call_depth_budget_names_every_call) {
 TEST(attempt_makes_a_stop_a_value_and_the_run_goes_on) {
     static Ran x;
     ran_source(&x, S("function g() fail(\"no\") end\nlocal r = attempt(g)\nprint(r.ok, r.error, r.class, r.line, #r.trail)\n"), ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("false\tno\tfail\t1\t1\n"));
     // The attempt's frame is gone: no call is left in progress.
     EXPECT_EQ(x.r.ctx.calls.len, 0);
@@ -75,7 +75,7 @@ TEST(a_budget_is_never_caught) {
 TEST(a_chain_grows_its_string_in_place) {
     static Ran x;
     ran_source(&x, S("local s = \"\"\nfor i = 1, 100 do s = s .. \"ab\" end\nprint(#s)\n"), ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("200\n"));
     EXPECT_EQ(x.r.steps, 911);
     // The last chain's buffer holds the whole string, with room to spare.
@@ -88,7 +88,7 @@ TEST(a_chain_grows_its_string_in_place) {
 TEST(yield_keeps_what_is_reached_and_charges_the_copy) {
     static Ran x;
     ran_source(&x, S("local keep = {1, {a = \"xy\"}}\nlocal drop = {}\nfor i = 1, 10 do push(drop, i) end\nyield()\nprint(keep[2].a, #drop)\n"), ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("xy\t10\n"));
     EXPECT_EQ(x.r.steps, 99);
     EXPECT_EQ(x.r.collections, 1);
@@ -136,7 +136,7 @@ TEST(an_index_past_the_append_names_the_one_that_appends) {
 TEST(maps_and_list_loops_take_their_counted_steps) {
     static Ran x;
     ran_source(&x, S("local m = {}\nm.k = 1\nprint(get(m, \"k\"), has_key(m, \"z\"), count(m))\nfor x in {5, 6} do print(x) end\n"), ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("1\tfalse\t1\n5\n6\n"));
     EXPECT_EQ(x.r.steps, 47);
     ran_free(&x);
@@ -159,7 +159,7 @@ TEST(with_no_host_host_stops_naming_the_call_and_attempt_catches_it) {
     ran_init(&y, o);
     y.no_host = true;
     ran_run(&y, S("function f() return host(\"real\", \"runs:x\") end local r = attempt(f) print(r.ok, r.class)\n"), ran_budgets());
-    EXPECT_EQ(y.ran, OK);
+    EXPECT_OK_IN(&y.r.ctx, y.ran);
     EXPECT_STR(buf_view(&y.r.out), S("false\thost\n"));
     ran_free(&y);
 }
@@ -256,7 +256,7 @@ static Value vm_int(int64_t i) {
 TEST(a_stop_whose_format_escapes_a_brace_falls_back_to_that_format_raw) {
     static Ran x;
     ran_source(&x, S(""), ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     Value edit_map[2] = {vm_str("p"), vm_table_of(&x, TABLE_MAP, S("a"), vm_int(1))};
     Value edit_str[2] = {vm_str("p"), vm_str("x")};
     Value edit_one[1] = {vm_str("p")};

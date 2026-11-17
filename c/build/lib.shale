@@ -470,7 +470,7 @@ function harness_cases()
   local file = "c/tests/fixtures/harness_fails.c"
   return {
     {only = "", code = 1, out = read("c/tests/fixtures/harness_fails.expected")},
-    {only = "passes,eq_fails", code = 1, out = "  3 is 3, 4 is 4\nFAIL eq_fails (" .. file .. ":16): 3 == 4\n" .. file .. ": 1 of 2 tests failed\n"},
+    {only = "passes,eq_fails", code = 1, out = "  3 is 3, 4 is 4\nFAIL eq_fails (" .. file .. ":17): 3 == 4\n" .. file .. ": 1 of 2 tests failed\n"},
     {only = "passes", code = 0, out = file .. ": 1 tests passed\n"},
     {only = "passes,nope", code = 1, out = file .. ": no test named `nope`\n"},
   }

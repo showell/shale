@@ -101,6 +101,10 @@ const PLANTS = {
    old = "if (only_env != NULL && !test_all_named(parts, only, &missing)) {", new = "if (0 && !test_all_named(parts, only, &missing)) {"},
   {name = "EXPECT_EQ_I prints a negative side unsigned", file = "test.h", caught_by = "harness",
    old = [==["  %s is %lld, %s is %lld\n"]==], new = [==["  %s is %llu, %s is %llu\n"]==]},
+  {name = "EXPECT_OK_IN passes a stop", file = "test.h", caught_by = "harness",
+   old = "if (test_s_ != OK) {", new = "if (0 && test_s_ != OK) {"},
+  {name = "EXPECT_OK_IN leaves out the stop's budget", file = "test.h", caught_by = "harness",
+   old = "Str test_bud_ = budget_name(test_t_->budget);", new = "Str test_bud_ = S(\"\");"},
 }
 
 -- `at_unchecked` with no reason, an empty one or one that is no literal
@@ -212,7 +216,7 @@ function foundation_block(t)
   if not harness_holds(t, "asan", harness) then
     fail("the harness fixture did not print exactly what harness_cases says: its .expected whole, and each TEST_ONLY run")
   end
-  print("harness: the fixture's 7 failures, each named with its line, and its count; TEST_ONLY's " .. (#harness_cases() - 1) .. " runs")
+  print("harness: the fixture's 10 failures, each named with its line, and its count; TEST_ONLY's " .. (#harness_cases() - 1) .. " runs")
   print("reasons: " .. check_reasons(t) .. " unchecked indexes without a literal reason refused by the compiler")
   print("must use: " .. check_must_use(t) .. " dropped Status answers refused by GCC under -Werror")
   print("name tables: " .. check_name_tables(t) .. " tables with a name left out refused by their count's assert")

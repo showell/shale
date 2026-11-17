@@ -210,6 +210,12 @@ and its self-test plants a break of each one.
   line of its own (`c/docs/building.md`).
 - A test asserts every side: what changed, what didn't, and what was
   refused.
+- A call that must give OK, where a run's context is in scope, is
+  `EXPECT_OK_IN(ctx, expr)`: on a failure it prints the stop the context
+  recorded (its place, class, budget and message), so a failing host or
+  store test says why. A Ran's context is `&x.r.ctx`, the path fixture's
+  `&f.ctx`. `EXPECT((expr) == OK)` stays for a call that has no context,
+  as a buffer's append has none.
 - `TEST_ONLY=a,b` runs only the cases it names; a name no case has fails
   the run.
 - Each piece has planted faults in `c/build.shale`, and its full tier

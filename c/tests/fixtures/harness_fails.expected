@@ -1,12 +1,18 @@
-FAIL expect_fails (c/tests/fixtures/harness_fails.c:12): 1 + 1 == 3
+FAIL expect_fails (c/tests/fixtures/harness_fails.c:13): 1 + 1 == 3
   3 is 3, 4 is 4
-FAIL eq_fails (c/tests/fixtures/harness_fails.c:16): 3 == 4
+FAIL eq_fails (c/tests/fixtures/harness_fails.c:17): 3 == 4
   got  "got"
   want "want"
-FAIL str_fails (c/tests/fixtures/harness_fails.c:20): S("got") is S("want")
-FAIL no_trap_fails (c/tests/fixtures/harness_fails.c:25): `x = 1` did not trap
-FAIL no_death_fails (c/tests/fixtures/harness_fails.c:30): `(void)0` did not abort
-FAIL stops_at_its_first_failure (c/tests/fixtures/harness_fails.c:34): 0
+FAIL str_fails (c/tests/fixtures/harness_fails.c:21): S("got") is S("want")
+FAIL no_trap_fails (c/tests/fixtures/harness_fails.c:26): `x = 1` did not trap
+FAIL no_death_fails (c/tests/fixtures/harness_fails.c:31): `(void)0` did not abort
+FAIL stops_at_its_first_failure (c/tests/fixtures/harness_fails.c:35): 0
   minus_one is -1, 2 is 2
-FAIL eq_i_fails (c/tests/fixtures/harness_fails.c:40): minus_one == 2
-c/tests/fixtures/harness_fails.c: 7 of 8 tests failed
+FAIL eq_i_fails (c/tests/fixtures/harness_fails.c:41): minus_one == 2
+  stopped at 3:7: type: `+` takes integers
+FAIL ok_says_its_stop (c/tests/fixtures/harness_fails.c:58): harness_stop(&ctx, CLASS_TYPE, BUDGET_NONE, S("`+` takes integers")) is OK
+  stopped at 3:7: budget reads: the store-read budget (count) ran out
+FAIL ok_says_its_budget (c/tests/fixtures/harness_fails.c:64): harness_stop(&ctx, CLASS_BUDGET, BUDGET_READS, S("the store-read budget (count) ran out")) is OK
+  no stop recorded
+FAIL ok_says_no_stop_was_recorded (c/tests/fixtures/harness_fails.c:70): STOP is OK
+c/tests/fixtures/harness_fails.c: 10 of 11 tests failed

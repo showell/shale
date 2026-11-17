@@ -132,7 +132,7 @@ TEST(procs_lists_a_process_whole_in_pid_order_and_never_this_one_or_one_above_it
                        "print(seen > 1, mine, ordered)\n",
                        (int)getpid(), (int)getppid(), (int)c.pid),
             ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     Str want = procs_text(&x.host, "%d\t%d\tsh\tsh -c read x sh\t%.*s\tfalse\t6\ntrue\t0\ttrue\n", (int)getpid(), (int)getuid(), (int)start.len, start.ptr);
     EXPECT_STR(buf_view(&x.r.out), want);
     // A listing stops nothing and records nothing.
@@ -172,7 +172,7 @@ TEST(a_command_line_past_one_read_is_read_whole_and_one_past_args_most_says_it_w
                        "end\n",
                        (int)w.pid, (int)c.pid),
             ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     // `sh -c read x sh ` is 16 bytes before the long one.
     EXPECT_STR(buf_view(&x.r.out), S("6016\tfalse\n1048576\ttrue\n"));
     EXPECT(procs_ended_untouched(w));
@@ -191,7 +191,7 @@ TEST(proc_stop_stops_the_process_by_pid_and_start_and_a_stale_start_is_left_alon
                                 "print(host(\"proc_stop\", {pid = found.pid, start = \"1\"}))\n",
                        (int)c.pid),
             ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("false\n"));
     EXPECT(procs_running(c));
     EXPECT_EQ(x.lh.records.len, 0);
@@ -202,7 +202,7 @@ TEST(proc_stop_stops_the_process_by_pid_and_start_and_a_stale_start_is_left_alon
     ran_run(&y,
             procs_text(&y.host, "local found = nil\nfor p in host(\"procs\") do if p.pid == %d then found = p end end\nprint(host(\"proc_stop\", found))\n", (int)c.pid),
             ran_budgets());
-    EXPECT_EQ(y.ran, OK);
+    EXPECT_OK_IN(&y.r.ctx, y.ran);
     EXPECT_STR(buf_view(&y.r.out), S("true\n"));
     EXPECT_EQ(y.lh.records.len, 1);
     EXPECT_STR(at(y.lh.records, 0), procs_text(&y.host, "process %d stopped", (int)c.pid));
@@ -215,7 +215,7 @@ TEST(proc_stop_stops_the_process_by_pid_and_start_and_a_stale_start_is_left_alon
     static Ran z;
     ran_init(&z, o);
     ran_run(&z, procs_text(&z.host, "print(host(\"proc_stop\", {pid = %d, start = \"%.*s\"}))\n", (int)c.pid, (int)start.len, start.ptr), ran_budgets());
-    EXPECT_EQ(z.ran, OK);
+    EXPECT_OK_IN(&z.r.ctx, z.ran);
     EXPECT_STR(buf_view(&z.r.out), S("false\n"));
     EXPECT_EQ(z.lh.records.len, 0);
     ran_free(&z);
@@ -251,7 +251,7 @@ TEST(procs_and_proc_stop_refuse_each_bad_call_with_its_message) {
                      "r = attempt(s, {pid = 5, start = 1})\nprint(r.class, r.error)\n"
                      "r = attempt(s, {pid = 4294967296, start = \"1\"})\nprint(r.class, r.error)\n"),
                ran_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("`procs` takes nothing, given 1 arguments: filter its list by `args` or `name`\n"
                                      "`proc_stop` takes one entry of `procs()`, given 0 arguments\n"
                                      "type\t`proc_stop` takes an entry of `procs()`, not a string\n"
@@ -292,7 +292,7 @@ TEST(attack_a_process_that_ignores_term_gets_kill_after_two_seconds) {
     uint64_t began = spawn_mono_ms();
     ran_run(&x, procs_text(&x.host, "for p in host(\"procs\") do if p.pid == %d then print(host(\"proc_stop\", p)) end end\n", (int)c.pid), ran_budgets());
     uint64_t took = spawn_mono_ms() - began;
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("true\n"));
     EXPECT(took >= 2000);
     EXPECT_EQ(x.lh.records.len, 1);

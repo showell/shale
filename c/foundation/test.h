@@ -108,6 +108,32 @@ static inline void test_fail(const char *file, int line, Str what) { // cstr: __
         }                                                                                   \
     } while (0)
 
+// `expr` must give OK; when it doesn't, the failure says the stop that the
+// run `ctx` (a `RunCtx *`) recorded: its place, class, budget if any and
+// message, or that it recorded none. A host or store test that fails then
+// says why, where `EXPECT((expr) == OK)` says only that it stopped. It
+// reads err.h's RunCtx at its use, so test.h itself still needs only slice.
+#define EXPECT_OK_IN(ctx, expr)                                                             \
+    do {                                                                                    \
+        Status test_s_ = (expr);                                                            \
+        if (test_s_ != OK) {                                                                \
+            const RunCtx *test_c_ = (ctx);                                                  \
+            if (test_c_->stopped) {                                                         \
+                const Stop *test_t_ = &test_c_->stop;                                       \
+                Str test_cls_ = stop_class_name(test_t_->cls);                              \
+                Str test_bud_ = budget_name(test_t_->budget);                               \
+                fprintf(stderr, "  stopped at %u:%u: %.*s%s%.*s: %.*s\n",                   \
+                        (unsigned)test_t_->line, (unsigned)test_t_->column,                 \
+                        (int)test_cls_.len, test_cls_.ptr, test_bud_.len > 0 ? " " : "",    \
+                        (int)test_bud_.len, test_bud_.ptr, (int)test_t_->message.len,       \
+                        test_t_->message.ptr);                                              \
+            } else {                                                                        \
+                fprintf(stderr, "  no stop recorded\n");                                    \
+            }                                                                               \
+            test_fail(__FILE__, __LINE__, S(#expr " is OK"));                               \
+        }                                                                                   \
+    } while (0)
+
 // What a bad index calls in an EXPECT_TRAPS child: it exits with
 // TEST_TRAPPED, so the parent knows the trap and not something else ended it.
 enum { TEST_TRAPPED = 42 };

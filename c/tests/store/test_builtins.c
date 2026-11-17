@@ -197,7 +197,7 @@ TEST(edit_says_a_diff_as_one_line_without_verbose) {
     RanOpts o = {NULL, false, false};
     ran_init(&x, o);
     ran_run(&x, S("replace(\"e.txt\", \"a\\nb\\n\")\nprint(edit(\"e.txt\", \"b\", \"c\\nd\"))\nprint(5000000 - budget().steps)\n"), bt_budgets());
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("edit e.txt: 1 hunk, -1 +2 lines\n1\n80\n"));
     EXPECT(bt_holds(&x, "e.txt", "a\nc\nd\n"));
     ran_free(&x);
@@ -268,7 +268,7 @@ static size_t bt_creates_hold(size_t n) {
     Budgets b = bt_budgets();
     b.changes = 100000;
     ran_run(&x, buf_view(&src), b);
-    EXPECT_EQ(x.ran, OK);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_EQ(x.r.changes, n);
     size_t taken = bt_arena_taken(&x.values);
     ran_free(&x);
