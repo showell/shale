@@ -259,7 +259,7 @@ static inline void compile_push(Compiler *c, uint32_t n) {
 }
 
 static inline void compile_pop(Compiler *c, uint32_t n) {
-    c->operands -= n;
+    c->operands = count_less_u32(c->operands, n);
 }
 
 static inline STATUS_MUST_USE Status compile_position(Compiler *c, Pos pos, uint32_t *out) {
@@ -368,7 +368,7 @@ static inline STATUS_MUST_USE Status compile_numeric_for(Compiler *c, const Stmt
     compile_patch(c, iter, end);
     compile_patch(c, stepped, end);
     compile_loop_close(c, end, next);
-    c->hidden -= 3;
+    c->hidden = count_less_u32(c->hidden, 3);
     return OK;
 }
 
@@ -399,7 +399,7 @@ static inline STATUS_MUST_USE Status compile_list_for(Compiler *c, const Stmt *s
     TRY(compile_emit(c, OP_STORE_LOCAL, h, 0, s->pos));
     compile_pop(c, 1);
     compile_loop_close(c, end, end);
-    c->hidden -= 3;
+    c->hidden = count_less_u32(c->hidden, 3);
     return OK;
 }
 

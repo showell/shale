@@ -464,8 +464,8 @@ static STATUS_MUST_USE Status vm_leave(Machine *m, const Value *v, bool *more) {
     r->base = vm_frame(m)->base;
     m->walk = vm_frame(m)->walk;
     r->ctx.function = f.caller;
-    r->depth--;
-    r->ctx.calls.len--;
+    r->depth = count_less_u32(r->depth, 1);
+    (void)CallVec_pop(&r->ctx.calls);
     m->operands.len = f.sp;
     m->pc = f.ret_pc;
     if (f.out == NULL) return vm_push(m, f.at, v);

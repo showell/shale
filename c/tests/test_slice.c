@@ -158,6 +158,15 @@ TEST(str_byte_reads_bytes_unsigned) {
     EXPECT_TRAPS((void)str_byte(S("a"), 1));
 }
 
+TEST(c_bug_ends_the_process_and_a_count_below_zero_is_one) {
+    EXPECT_DIES(c_bug("a planted bug"));
+    EXPECT_DIES(c_bug_str("a planted bug", S("its detail")));
+    EXPECT_EQ(count_less_u32(3, 3), 0);
+    EXPECT_EQ(count_less_u32(UINT32_MAX, 1), UINT32_MAX - 1);
+    EXPECT_DIES((void)count_less_u32(0, 1));
+    EXPECT_DIES((void)count_less_u32(2, 3));
+}
+
 TEST_MAIN(
     TEST_CASE(at_reads_and_writes_inside_the_length),
     TEST_CASE(at_traps_one_past_the_end_and_far_past_it),
@@ -174,5 +183,6 @@ TEST_MAIN(
     TEST_CASE(SLICE_SUB_keeps_the_type_and_its_bounds),
     TEST_CASE(str_eq_and_starts_with_answer_both_ways),
     TEST_CASE(str_find_byte_finds_the_first_and_never_searches_a_null),
-    TEST_CASE(str_byte_reads_bytes_unsigned)
+    TEST_CASE(str_byte_reads_bytes_unsigned),
+    TEST_CASE(c_bug_ends_the_process_and_a_count_below_zero_is_one)
 )

@@ -103,10 +103,10 @@ static inline STATUS_MUST_USE Status parse_loop_body(Parser *p, Token name_tok, 
     if (s == OK) {
         p->frame.loops++;
         s = parse_block(p, body);
-        p->frame.loops--;
+        p->frame.loops = (uint16_t)count_less_u32(p->frame.loops, 1);
     }
     p->frame.locals.len = mark;
-    p->frame.depth--;
+    p->frame.depth = (uint16_t)count_less_u32(p->frame.depth, 1);
     TRY(s);
     Token t = {0};
     return parse_expect(p, TAG_KW_END, S("`end` to close the `for`"), &t);
@@ -202,7 +202,7 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
         TRY(parse_expect(p, TAG_KW_DO, S("`do` after the `while` condition"), &t));
         p->frame.loops++;
         Status body = parse_block(p, &s.as.while_.body);
-        p->frame.loops--;
+        p->frame.loops = (uint16_t)count_less_u32(p->frame.loops, 1);
         TRY(body);
         TRY(parse_expect(p, TAG_KW_END, S("`end` to close the `while`"), &t));
         *out = s;
@@ -318,7 +318,7 @@ static inline STATUS_MUST_USE Status parse_block(Parser *p, Stmts *out) {
     Status s = parse_block_body(p, from, out);
     p->stmts.len = from;
     p->frame.locals.len = mark;
-    p->frame.depth--;
+    p->frame.depth = (uint16_t)count_less_u32(p->frame.depth, 1);
     parse_leave(p);
     return s;
 }

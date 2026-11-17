@@ -54,6 +54,14 @@ static inline __attribute__((noreturn)) void c_bug(const char *what) { // cstr: 
     abort();
 }
 
+// `n - k`, a count of the C's own taken down: one below zero is a bug in the
+// C, which Zig's checked arithmetic traps and C's unsigned arithmetic would
+// wrap to a count near its type's most.
+static inline uint32_t count_less_u32(uint32_t n, uint32_t k) {
+    if (k > n) c_bug("a count of the C's own taken below zero");
+    return n - k;
+}
+
 // c_bug, with what the bug was about after its words: `<what>: <detail>`.
 static inline __attribute__((noreturn)) void c_bug_str(const char *what, Str detail) { // cstr: a literal naming the bug
     fprintf(stderr, "shale: a bug in the C: %s: %.*s\n", what, (int)detail.len, detail.len == 0 ? "" : detail.ptr);

@@ -383,7 +383,7 @@ static inline STATUS_MUST_USE Status parse_enter(Parser *p) {
 }
 
 static inline void parse_leave(Parser *p) {
-    p->nesting--;
+    p->nesting = count_less_u32(p->nesting, 1);
 }
 
 static inline Expr *parse_new_expr(Parser *p, Pos pos, ExprKind kind) {
