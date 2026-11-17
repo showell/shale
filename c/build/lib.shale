@@ -489,7 +489,7 @@ end
 
 -- The folders of c/ a plant copies, so every relative `#include` between
 -- them reaches the copy.
-const PLANT_DIRS = {"foundation", "script", "host"}
+const PLANT_DIRS = {"foundation", "script", "host", "gate"}
 
 -- One plant, the `k`th of `phase`, in its own copy of the C: `p.file` in
 -- `p.dir` (`foundation` unless named; `script`, `host`) has its `old` made

@@ -1365,8 +1365,8 @@ three:
   parse compiles none of this**: zig-webbox's `src/host_io_std.zig` says
   `shale_preludes`, and metal's host_io doesn't.
 - **A run starts at most 1,000 programs** unless its `programs` budget says otherwise (`--budget programs=N`, or a `-- budget: programs=N` line); `budget().programs` says how many are left.
-- **The gate** (`tools/shale_gate.zig`, installed on the box) is the PreToolUse
-  hook that holds an agent to Shale (SHALE-AGENTS.md, "The gate").
+- **The gate** (`c/shale_gate.c`, installed on the box beside `shale`) is the
+  PreToolUse hook that holds an agent to Shale (SHALE-AGENTS.md, "The gate").
 
 What each function takes and gives is in SHALE-AGENTS.md; the tests are
 `src/shale_*_test.zig` and the host's own.

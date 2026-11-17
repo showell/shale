@@ -918,8 +918,12 @@ scratch, a log or a file to move later. `stdout_secret` is the one way in.
 ## The gate: `shale-gate` (in `~/.claude/settings.json`)
 
 **A PreToolUse hook on Bash and Monitor** holds a session to Shale
-(`tools/shale_gate.zig`, run by `tools/shale-gate.sh`, which turns any
-failure, a missing binary included, into a refusal). It passes exactly:
+(`c/shale_gate.c`, installed by `shale c/install.shale` as
+`~/tools/shale/bin/shale-gate` and run by `tools/shale-gate.sh`, which turns
+any failure, a missing binary included, into a refusal). It is a port of
+`tools/shale_gate.zig`, and while that is there the C build's full tier holds
+the two to the same answers over every case (`c/build/gate_parity.shale`).
+It passes exactly:
 
 - **a launch:** `[cd DIR && ]shale`, or an absolute path ending `/shale`,
   then any of `--verbose`, `--undo-on-stop`, `--args-stdin`, `--budget

@@ -104,14 +104,18 @@ to `gcc --coverage` then, if its counts mean what linecov's do.
 
 ## Installing: the cut-over
 
-`shale c/install.shale` puts the C binary on PATH. It runs the fast tier,
-builds `c/out/release/shale` through the command's block
-(`c/build/command.shale builds=release`, under `nice -n 19`), and smoke
-tests the binary: a print, a read, a `run`, a stop and its exit code, a
-print under the box's own prelude and mounts, `--version` and `--help`,
-each held to its exact output. Any difference stops it before anything is
-written. Then it copies the binary to `dest` (`tools:shale/bin`) as
-`shale.new`, runs it once and renames it over `shale`. It points the
+`shale c/install.shale` puts the C binary on PATH, and the C gate beside
+it. It runs the fast tier, builds `c/out/release/shale` through the
+command's block (`c/build/command.shale builds=release`) and
+`c/out/release/shale-gate` through the gate's (`c/build/gate.shale
+builds=release`), both under `nice -n 19`, and smoke tests them: a print, a
+read, a `run`, a stop and its exit code, a print under the box's own prelude
+and mounts, `--version` and `--help`, each held to its exact output, and
+the gate over a launch and a refusal. Any difference stops it before
+anything is written. Then it copies the binary to `dest` (`tools:shale/bin`)
+as `shale.new`, runs it once and renames it over `shale`, and the gate the
+same way, as `shale-gate`: the file `tools/shale-gate.sh`, the hook,
+runs. It points the
 `shale` link in `links` (`localbin:.`, which needs the mount line
 `localbin = ~/.local/bin`) at the binary by making a new link and renaming
 it over the old one. Every write is a rename, so a running `shale` never

@@ -1,6 +1,9 @@
 -- c/install.shale: the cut-over's install step. It builds C Shale's release
--- binary, holds it to the fast tier and a smoke test, copies it to
--- `dest`/shale and points the `shale` link in `links` at it.
+-- binary and its gate's, holds them to the fast tier and a smoke test, copies
+-- them to `dest`/shale and `dest`/shale-gate, and points the `shale` link in
+-- `links` at the first. tools/shale-gate.sh, the hook's wrapper, runs
+-- ~/tools/shale/bin/shale-gate, so an install to the default `dest` is the
+-- gate the hook runs.
 --
 --   shale c/install.shale               build, check, install, then say what
 --                                       changed and what `shale --version`
@@ -22,18 +25,23 @@
 -- **The build** is the build's own: the fast tier (c/build.shale), then the
 -- command's block (c/build/command.shale) under `builds=release`, which
 -- compiles c/out/release/shale with the release flags lib.shale gives and
--- holds its `--check`, `--help` and `--version` to the installed `shale`'s.
--- It runs under `nice -n 19`, since the box runs other work beside it.
+-- holds its `--check`, `--help` and `--version` to the installed `shale`'s,
+-- and the gate's block (c/build/gate.shale) under `builds=release`, which
+-- compiles c/out/release/shale-gate and runs it through the hook's wrapper.
+-- They run under `nice -n 19`, since the box runs other work beside them.
 --
 -- **The smoke test** runs the built binary over a few scripts (a print, a
 -- read, a `run`, a stop and its exit code, a print under this box's own
 -- prelude and mounts) and its `--version` and `--help`, each held to its exact
--- output. A difference stops the run before anything is written.
+-- output, and the gate over a launch, which it passes, and `ls`, which it
+-- refuses. A difference stops the run before anything is written.
 --
 -- **The writes are atomic**, so a running `shale` never sees a half-written
 -- file and PATH never lacks a `shale`. The binary is copied to `shale.new`
 -- beside its place, made executable and run once, then renamed over
--- `dest`/shale (`mv -T`, one rename(2)). The link is made as `shale.new` in
+-- `dest`/shale (`mv -T`, one rename(2)); the gate the same way, as
+-- `dest`/shale-gate, so a hook that runs while it is written runs the old
+-- gate or the new, never half of one. The link is made as `shale.new` in
 -- `links` and renamed over the old link the same way. Nothing else in `links`
 -- is touched, and the run holds every other entry there to what it was.
 --
@@ -45,6 +53,10 @@
 
 const NAME = "shale"
 const BIN = "c/out/release/shale"
+const GATE_BIN = "c/out/release/shale-gate"
+const GATE_NAME = "shale-gate"
+const GATE_LAUNCH = "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"shale a.shale\"}}"
+const GATE_REFUSED = "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}"
 const VERSION = "shale ReleaseSafe\n"
 const WANT = "c-install: the C shale built under c/out, or a planted one, run to check it"
 const MOUNT_LINE = "localbin = ~/.local/bin"
@@ -132,7 +144,22 @@ function build_release()
     {timeout_ms = 600000, tail = 40, env = {SHALE_MOUNTS = real("c/out/build.mounts")},
      want = "c-install: the release build at the lowest priority, on a busy box"}))
   print("release: " .. BIN .. " built by c/build/command.shale builds=release, its --check, --help and --version held")
+  must(run({"nice", "-n", "19", "shale", "c/build/gate.shale", "builds=release"},
+    {timeout_ms = 600000, tail = 40, env = {SHALE_MOUNTS = real("c/out/build.mounts")},
+     want = "c-install: the gate's release build at the lowest priority, on a busy box"}))
+  print("release: " .. GATE_BIN .. " built by c/build/gate.shale builds=release, run through tools/shale-gate.sh")
   return BIN
+end
+
+-- The gate at `gate` over a launch and a refusal, or why not: "" when it
+-- passed the launch saying nothing and refused `ls` naming both forms.
+function gate_differs(gate)
+  local exe = real(gate)
+  local l = run({exe}, {stdin = GATE_LAUNCH, timeout_ms = 10000, whole = 10000, want = WANT})
+  if get(l, "code", -1) ~= 0 or l.out ~= "" then return "smoke gate: a launch exited " .. get(l, "code", -1) .. ", wanted 0 and nothing said; it said:\n" .. l.out end
+  local r = run({exe}, {stdin = GATE_REFUSED, timeout_ms = 10000, whole = 10000, want = WANT})
+  if get(r, "code", -1) ~= 2 or not starts_with(r.out, "shale-gate: `ls` is not `shale`; only a launch, ") then return "smoke gate: `ls` exited " .. get(r, "code", -1) .. ", wanted 2 and its refusal; it said:\n" .. r.out end
+  return ""
 end
 
 -- What `bin` said for `said` when `want` was expected, or "" when it matched.
@@ -166,9 +193,37 @@ function smoke(bin)
   if get(h, "code", -1) ~= 0 or not starts_with(h.out, "usage: shale ") then
     push(bad, "smoke --help: exited " .. get(h, "code", -1) .. ", wanted 0 and a first line `usage: shale ...`; got:\n" .. sub(h.out, 1, 400))
   end
+  local g = gate_differs(GATE_BIN)
+  if g ~= "" then push(bad, g) end
   remove_tree(d)
   if #bad > 0 then fail("the smoke test of " .. bin .. " failed, so nothing was installed:\n" .. join(bad, "\n")) end
-  return #SMOKE + 2
+  return #SMOKE + 3
+end
+
+-- The gate copied to `dest`/shale-gate through shale-gate.new, run once
+-- there, then renamed into place; with `dry`, said and not done.
+function install_gate(dest, dry)
+  local dest_os = folder_os(dest, "dest")
+  local final_os = dest_os .. "/" .. GATE_NAME
+  local staged_os = final_os .. ".new"
+  local old = entry_at(final_os)
+  if old.kind ~= "regular file" and old.kind ~= "none" then fail(final_os .. " is a " .. old.kind .. ", not a file: the gate was not written") end
+  local would = ""
+  if dry then would = "would " end
+  print(would .. "copy " .. real(GATE_BIN) .. " to " .. staged_os .. ", chmod 755, run it on a launch and a refusal, then rename it over " .. final_os .. " (now " .. old.kind .. ")")
+  if dry then return nil end
+  if entry_at(staged_os).kind ~= "none" then remove(dest .. "/" .. GATE_NAME .. ".new") end
+  prog({"cp", real(GATE_BIN), staged_os}, "copying the gate")
+  prog({"chmod", "755", staged_os}, "making the gate executable")
+  local why = gate_differs(dest .. "/" .. GATE_NAME .. ".new")
+  if why ~= "" then
+    remove(dest .. "/" .. GATE_NAME .. ".new")
+    fail("the gate's copy at " .. staged_os .. " failed its smoke test, so it was not renamed:\n" .. why)
+  end
+  prog({"mv", "-T", "-f", staged_os, final_os}, "renaming the gate into place")
+  local now = entry_at(final_os)
+  if now.kind ~= "regular file" or now.inode == old.inode then fail(final_os .. " is not the renamed gate (" .. now.kind .. ", inode " .. now.inode .. ")") end
+  return nil
 end
 
 -- ── The install ────────────────────────────────────────────────────────
@@ -247,8 +302,10 @@ end
 -- The smoke test of `bin`, then its install: the one path a real run, a dry
 -- run and the self-test take.
 function check_and_install(bin, dest, links, dry)
-  print("smoke: " .. smoke(bin) .. " checks of " .. bin .. " passed")
-  return install(bin, dest, links, dry)
+  print("smoke: " .. smoke(bin) .. " checks of " .. bin .. " and " .. GATE_BIN .. " passed")
+  local r = install(bin, dest, links, dry)
+  install_gate(dest, dry)
+  return r
 end
 
 -- What `shale` on PATH is now: its `--version`, and the file it resolves to.
@@ -312,6 +369,8 @@ function self_test_run(bin)
   expect(r.old_link.target == p.old_target, "first: the old target was said as " .. r.old_link.target)
   local g = entry_at(p.gate_os)
   expect(g.target == gate.target and g.inode == gate.inode, "first: shale-gate's link changed")
+  expect(read(p.dest .. "/shale-gate") == read(GATE_BIN), "first: the installed gate is not the release build's bytes")
+  expect(not exists(p.dest .. "/shale-gate.new"), "first: shale-gate.new was left")
   expect(read(p.dir .. "/old/shale") == "the old shale\n", "first: the old target changed")
   local v = run({p.link_os, "--version"}, {timeout_ms = 10000, whole = 1000, want = WANT})
   expect(v.out == VERSION, "first: the link runs a shale that says " .. v.out)
@@ -320,9 +379,11 @@ function self_test_run(bin)
   -- A reinstall over that one: a new file at the name (a rename, so a new
   -- inode, where a write in place keeps it), and a new link.
   local bin_before = entry_at(real(p.dest) .. "/shale")
+  local gate_before = entry_at(real(p.dest) .. "/shale-gate")
   local link_was = entry_at(p.link_os)
   check_and_install(bin, p.dest, p.links, false)
   local bin_after = entry_at(real(p.dest) .. "/shale")
+  expect(entry_at(real(p.dest) .. "/shale-gate").inode ~= gate_before.inode, "again: the gate's inode is unchanged, so it was written in place")
   local link_now = entry_at(p.link_os)
   expect(bin_after.inode ~= bin_before.inode, "again: the binary's inode is unchanged, so it was written in place")
   expect(link_now.inode ~= link_was.inode and link_now.target == link_was.target, "again: the link was not renamed over")
@@ -349,6 +410,7 @@ function self_test_run(bin)
   expect(not a.ok, "failing: a binary that fails the smoke test was installed")
   expect(find(a.error, "the smoke test of") ~= nil, "failing: it stopped for another reason: " .. a.error)
   expect(read(f.dest .. "/shale") == "the installed shale\n", "failing: the installed binary changed")
+  expect(not exists(f.dest .. "/shale-gate"), "failing: a gate was installed")
   expect_untouched(f, gate_f, "failing")
   print("self-test failing: the smoke test stopped it; the old link, the binary and shale-gate are as they were")
 

@@ -1,0 +1,155 @@
+-- c/build/gate.shale: the gate's block, c/shale_gate.c and c/gate/gate.c.
+-- c/build.shale runs it, with the `build` mount that `use` below reads; see
+-- that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=1000 arena_bytes=268435456 changes=20000 change_bytes=1073741824 call_bytes=67108864
+--
+-- test_gate.c runs in the foundation's block with every test file. Here, in
+-- both tiers: its port of tools/shale_gate_test.zig's tests held to that
+-- file's count (a Zig test added is one the C has yet to port), the program
+-- built under each of `t.builds` at c/out/<build>/shale-gate, and each
+-- binary run through tools/shale-gate.sh, the hook's wrapper, as Zig's
+-- wrapper test runs it. In the full tier: the parity (c/build/
+-- gate_parity.shale), the release and ASan binaries each against the Zig
+-- gate built from tools/shale_gate.zig, over every case; and the faults
+-- below planted in a copy of c/gate, each caught by test_gate.c.
+
+use("build:lib.shale")
+use("build:gate_parity.shale")
+
+-- tools/shale_gate_test.zig's tests: seven ported to test_gate.c, and its
+-- wrapper test, which `wrapper_holds` ports.
+const GATE_ZIG_TESTS = 8
+const GATE_PORTED = 7
+const ZIG_GATE = "c/out/zig-gate/shale-gate"
+const GATE_WANT = "c-gate: the build's own shale-gate, or the hook's wrapper over it"
+const GATE_PLANTS = {
+  {name = "a `?` is a plain word's byte",
+   aim = "each_refusal_is_its_whole_line_word_for_word", dir = "gate", file = "gate.c", caught_by = "test_gate",
+   old = "case '>': case '(': case ')': case '*': case '?': case '\\\\':", new = "case '>': case '(': case ')': case '*': case '\\\\':"},
+  {name = "the last line's trailing spaces are kept",
+   aim = "the_launch_every_form_the_design_names", dir = "gate", file = "gate.c", caught_by = "test_gate",
+   old = "!str_eq(gate_trim_end(last, S(\" \")), t)", new = "!str_eq(last, t)"},
+  {name = "a key twice is let through",
+   aim = "the_hooks_json_is_read_as_std_json_reads_it", dir = "gate", file = "gate.c", caught_by = "test_gate",
+   old = "if (f->object && gate_keys_twice(&f->keys)) return OK;", new = "if (0 && f->object && gate_keys_twice(&f->keys)) return OK;"},
+  {name = "a high surrogate half alone is read",
+   aim = "the_hooks_json_is_read_as_std_json_reads_it", dir = "gate", file = "gate.c", caught_by = "test_gate",
+   old = "if (gate_json_peek(j) != '\\\\') return OK;", new = "if (gate_json_peek(j) != '\\\\') {\n                        TRY(gate_json_utf8(&b, u));\n                        continue;\n                    }"},
+  {name = "the log line keeps a byte more",
+   aim = "a_log_line_past_its_room_is_cut_at_4095_bytes_mid_escape", dir = "gate", file = "gate.c", caught_by = "test_gate",
+   old = "GATE_LOG_BYTES = 4095,", new = "GATE_LOG_BYTES = 4096,"},
+  {name = "a refusal past 1024 bytes is kept whole",
+   aim = "the_limits_64_words_4096_lines_and_a_refusal_past_1024_bytes", dir = "gate", file = "gate.c", caught_by = "test_gate",
+   old = "if (b.len <= GATE_WHY_BYTES) v->why = buf_view(&b);", new = "v->why = buf_view(&b);"},
+  {name = "a 65th word is taken",
+   aim = "the_limits_64_words_4096_lines_and_a_refusal_past_1024_bytes", dir = "gate", file = "gate.c", caught_by = "test_gate",
+   old = "        if (n == GATE_WORDS_MOST) {", new = "        if (n == GATE_WORDS_MOST + 1) {"},
+}
+
+-- `shale-gate` under each of `t.builds`, at c/out/<build>/shale-gate,
+-- compiled two at a time (`compile_jobs`).
+function build_gates(t)
+  local specs = {}
+  for b in t.builds do
+    push(specs, {name = "gate-" .. b, argv = compile_argv(b, "c/shale_gate.c", FOUNDATION, OUT .. "/" .. b .. "/shale-gate"), opts = {timeout_ms = 120000}})
+  end
+  local answers = compile_jobs(t, "gate builds", specs)
+  if answers == nil then return nil end
+  local i = 0
+  for a in answers do
+    i = i + 1
+    if get(a, "code", -1) ~= 0 then fail("`" .. t.builds[i] .. "` could not compile c/shale_gate.c:\n" .. a.out) end
+  end
+  return nil
+end
+
+-- tools/shale-gate.sh on the hook input `json`, SHALE_GATE `bin` (nil: the
+-- wrapper's own default) and HOME `home`: {code, out}.
+function wrapped(t, bin, home, json)
+  local env = {HOME = home}
+  if bin ~= nil then env.SHALE_GATE = bin end
+  local r = run_in(t, "gate wrapper", {"sh", "tools/shale-gate.sh"}, {stdin = json, env = env, timeout_ms = 20000, whole = 20000, want = GATE_WANT})
+  return {code = get(r, "code", -1), out = r.out}
+end
+
+function expect_wrapped(got, code, says, what)
+  if got.code ~= code or find(got.out, says) == nil then fail("the wrapper on " .. what .. " exited " .. got.code .. ", wanted " .. code .. " saying `" .. says .. "`; it said:\n" .. got.out) end
+  return nil
+end
+
+-- The binary of `build` through the wrapper, as Zig's wrapper test holds
+-- its own: a launch passes, a refusal refuses, an escape is logged once, a
+-- subagent's call is gated, input it can't read refuses, and a missing or
+-- failing binary refuses, the wrapper's default among them. Gives how many.
+function wrapper_holds(t, build)
+  local dir = OUT .. "/gate/" .. build
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir .. "/home")
+  local home = real(dir .. "/home")
+  local bin = real(OUT .. "/" .. build .. "/shale-gate")
+  local n = 0
+  local function_cases = {
+    {json = "{\"session_id\":\"s\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"shale a.shale\"}}", code = 0, says = "", what = "a launch"},
+    {json = "{\"session_id\":\"s\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls -la\"}}", code = 2, says = "`# want: <tag>: <text>`", what = "a refusal"},
+    {json = "{\"session_id\":\"s7\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"# want: sed-in-place: one edit\\nsed -i s/a/b/ x\"}}", code = 0, says = "", what = "an escape"},
+    {json = "{\"session_id\":\"s\",\"agent_id\":\"a1\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls -la\"}}", code = 2, says = "is not `shale`", what = "a subagent's refusal"},
+    {json = "{\"session_id\":\"s\",\"agent_id\":\"a1\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"shale a.shale\"}}", code = 0, says = "", what = "a subagent's launch"},
+    {json = "not json", code = 2, says = "is not the JSON it expects", what = "input it can't read"},
+  }
+  for c in function_cases do
+    expect_wrapped(wrapped(t, bin, home, c.json), c.code, c.says, c.what)
+    n = n + 1
+  end
+  local log = read(dir .. "/home/.local/state/shale/wants.tsv")
+  if #lines(log) ~= 1 or find(log, "\ts7\twant\tsed-in-place\tone edit\t# want: sed-in-place: one edit\\nsed -i s/a/b/ x\n") == nil then fail("`" .. build .. "`: the escape's log is not its one line:\n" .. log) end
+  -- No binary, one that fails, and the wrapper's default under a HOME with
+  -- no install: each refused, never passed.
+  local launch = "{\"session_id\":\"s\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"shale a.shale\"}}"
+  expect_wrapped(wrapped(t, "/no/such/shale-gate", home, launch), 2, "/no/such/shale-gate failed (exit 127), so the call is refused", "a missing binary")
+  expect_wrapped(wrapped(t, "/bin/false", home, launch), 2, "/bin/false failed (exit 1), so the call is refused", "a binary that fails")
+  expect_wrapped(wrapped(t, nil, home, launch), 2, home .. "/tools/shale/bin/shale-gate failed (exit 127), so the call is refused", "the default with no install")
+  remove_tree(dir)
+  return n + 3
+end
+
+-- The Zig gate built for the parity, from tools/shale_gate.zig, Debug (a
+-- second where ReleaseSafe takes most of a minute; the safety checks are
+-- the same), at the lowest priority.
+function build_zig_gate(t)
+  mkdir(dirname(ZIG_GATE))
+  must(run_in(t, "gate zig", {"nice", "-n", "19", "zig", "build-exe", "tools/shale_gate.zig", "-ODebug", "-femit-bin=" .. ZIG_GATE, "--cache-dir", OUT .. "/zig-gate/cache"},
+    {timeout_ms = 300000, tail = 30, want = "c-gate: the Zig gate built for the parity, at the lowest priority"}))
+  return real(ZIG_GATE)
+end
+
+function gate_block(t)
+  local zig_tests = zig_test_count("tools/shale_gate_test.zig")
+  if zig_tests ~= GATE_ZIG_TESTS then fail("tools/shale_gate_test.zig has " .. zig_tests .. " tests, and GATE_ZIG_TESTS says " .. GATE_ZIG_TESTS .. ": port the new one to c/tests/test_gate.c") end
+  local c_tests = test_count("c/tests/test_gate.c")
+  if c_tests < GATE_PORTED then fail("c/tests/test_gate.c has " .. c_tests .. " tests, fewer than the " .. GATE_PORTED .. " it ports") end
+  build_gates(t)
+  if t.stage == "plan" then
+    if t.full then run_plants(t, "gate plants", GATE_PLANTS) end
+    return nil
+  end
+  for b in t.builds do
+    local n = wrapper_holds(t, b)
+    print("gate " .. b .. ": c/out/" .. b .. "/shale-gate built; " .. n .. " runs through tools/shale-gate.sh as Zig's wrapper test holds them")
+  end
+  print("gate: " .. c_tests .. " C tests, " .. GATE_PORTED .. " of them ports of tools/shale_gate_test.zig's " .. zig_tests .. " (its wrapper test is the runs above)")
+  if not t.full then return nil end
+  local zig = build_zig_gate(t)
+  for b in {"release", "asan"} do
+    local p = parity_check("tools/shale_gate_test.zig", zig, real(OUT .. "/" .. b .. "/shale-gate"), OUT .. "/gate/parity-" .. b)
+    print("gate parity " .. b .. ": " .. p.cases .. " cases answered as the Zig gate answers them (" .. p.passed .. " passed, " .. p.refused .. " refused, " .. p.logged .. " logged)")
+  end
+  run_plants(t, "gate plants", GATE_PLANTS)
+  return nil
+end
+-- ── end of the gate's block ────────────────────────────────────────────
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
+gate_block(t)
+block_end(t, "gate")

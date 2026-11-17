@@ -220,12 +220,13 @@ already there:
   "hooks": [{"type": "command", "command": "/ABSOLUTE/PATH/TO/shale/tools/shale-gate.sh"}]}]}}
 ```
 
-- The path must be absolute, and `zig build` must have run first: **the gate
-  fails closed**, so without `zig-out/bin/shale-gate` every Bash call is
-  refused.
+- The path must be absolute, and `shale c/install.shale` must have run
+  first: **the gate fails closed**, so without
+  `~/tools/shale/bin/shale-gate` (or the binary `SHALE_GATE` names) every
+  Bash call is refused.
 - **To turn it off,** remove that block (Claude Code's `/hooks` menu shows
   it).
-- Subagents Claude starts are not gated; only the session itself is.
+- A subagent Claude starts is gated like the session that started it.
 
 ### Tell Claude how
 

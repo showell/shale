@@ -113,7 +113,7 @@ const ZIG_CITE = [=[[\w/.-]*\w\.zig:\d+]=]
 const COMMENT_RULES = {"comment wrap", "dragon remedy", "zig cite"}
 -- The folders (or c/shale.c) whose comment findings fail the check. A sweep
 -- adds its folder here once the folder is clean.
-const HELD = {"c/foundation", "c/host", "c/script", "c/shale.c", "c/tests"}
+const HELD = {"c/foundation", "c/gate", "c/host", "c/script", "c/shale.c", "c/shale_gate.c", "c/tests"}
 const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE_TYPE(", "VEC_DEFINE(", "MAP_DEFINE(", "TEST(", "TEST_MAIN(", "TEST_PART(", "TEST_PARTS_MAIN(", "_Static_assert(", "int main(", "}", ")"}
 
 -- The line's code: its strings and character literals emptied, its comments cut.
@@ -520,7 +520,7 @@ const PROBE_MODULES = {
   "c/script/builtins_change.c", "c/script/vm.c", "c/host/mounts.c", "c/host/paths.c", "c/host/undo.c",
   "c/host/spawn_argv.c", "c/host/spawn.c", "c/host/keep.c", "c/host/job_record.c", "c/host/jobs.c", "c/host/host_run.c",
   "c/host/host_jobs.c", "c/host/host_procs.c", "c/host/host_json.c", "c/host/host_text.c", "c/host/flat_tree.c", "c/host/zig_wire.c", "c/host/zig_ast.c",
-  "c/host/host_zig.c", "c/host/host_call.c",
+  "c/host/host_zig.c", "c/host/host_call.c", "c/gate/gate.c",
 }
 const PROBE_DIR = "c/out/returns"
 -- The compiler's canaries: each holds a shape a rule forbids, to see the
@@ -707,10 +707,10 @@ function probe_source(types, items)
 end
 
 -- Whether the probe reaches the file at `p` through its includes: a piece of
--- c/foundation, c/script or c/host. The rest (c/shale.c, the tests, a plant)
--- have their typedefs copied in.
+-- c/foundation, c/script, c/host or c/gate. The rest (c/shale.c,
+-- c/shale_gate.c, the tests, a plant) have their typedefs copied in.
 function probe_reaches(p)
-  return starts_with(p, "c/foundation/") or starts_with(p, "c/script/") or starts_with(p, "c/host/")
+  return starts_with(p, "c/foundation/") or starts_with(p, "c/script/") or starts_with(p, "c/host/") or starts_with(p, "c/gate/")
 end
 
 -- Each function of `files` that returns a struct of 9 to 15 bytes, as a
@@ -767,12 +767,12 @@ function check_returns(files)
   return {found = found, functions = #rets, types = #types}
 end
 
--- The C files the probe must include: each module under c/script and
--- c/host, each of them in PROBE_MODULES, or the check stops.
+-- The C files the probe must include: each module under c/script, c/host
+-- and c/gate, each of them in PROBE_MODULES, or the check stops.
 function probe_modules_hold(files)
   local module_set = set_of(PROBE_MODULES)
   for p in files do
-    local module = ends_with(p, ".c") and (starts_with(p, "c/script/") or starts_with(p, "c/host/"))
+    local module = ends_with(p, ".c") and (starts_with(p, "c/script/") or starts_with(p, "c/host/") or starts_with(p, "c/gate/"))
     if module and not has_key(module_set, p) then fail(p .. " is a module the return-size probe doesn't include: add it to PROBE_MODULES in c/check_discipline.shale") end
   end
   return nil
