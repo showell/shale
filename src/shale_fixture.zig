@@ -19,6 +19,11 @@
 //!                                    SIZE at a time, 1 ms apart
 //!     shale-fixture burn MS          spins until it has used MS of CPU
 //!     shale-fixture burn-child MS    a child burns MS; this waits for it
+//!     shale-fixture --serve          a zig-ast gone wrong, as the host starts
+//!                                    one: its header, then each request
+//!                                    answered by its command: `decls` a
+//!                                    line no host knows, `tokens` a `bad`,
+//!                                    `imports` an end, with words on stderr
 
 const std = @import("std");
 
@@ -43,7 +48,24 @@ pub fn main(init: std.process.Init) !u8 {
     if (argv.len < 2) return 2;
     const verb = argv[1];
     const arg = if (argv.len > 2) argv[2] else "";
-    if (std.mem.eql(u8, verb, "lines")) {
+    if (std.mem.eql(u8, verb, "--serve")) {
+        try w.writeAll("zig-ast serve 1 fixture\n");
+        try w.flush();
+        var in_buf: [64 * 1024]u8 = undefined;
+        var r = std.Io.File.stdin().readerStreaming(io, &in_buf);
+        while (try r.interface.takeDelimiter('\n')) |len| {
+            const body = try r.interface.readAllocAll(init.arena.allocator(), try std.fmt.parseInt(usize, len, 10));
+            const answer = if (std.mem.startsWith(u8, body, "decls\n")) "bogus\t1\n" else if (std.mem.startsWith(u8, body, "tokens\n")) "bad\tBadRequest\n" else {
+                var eb: [256]u8 = undefined;
+                var ew = std.Io.File.stderr().writer(io, &eb);
+                try ew.interface.writeAll("fixture: no answer to this\n");
+                try ew.interface.flush();
+                return 3;
+            };
+            try w.print("{d}\n{s}", .{ answer.len, answer });
+            try w.flush();
+        }
+    } else if (std.mem.eql(u8, verb, "lines")) {
         const n = try std.fmt.parseInt(usize, arg, 10);
         const text = if (argv.len > 3) argv[3] else "line";
         for (1..n + 1) |i| try w.print("{s} {d}\n", .{ text, i });

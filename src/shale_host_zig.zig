@@ -100,7 +100,7 @@ fn procOf(h: *hl.Host, run: *Run, pos: ast.Pos, who: []const u8) Error!*Proc {
     p.reader = p.child.stdout.?.readerStreaming(run.io, &p.buf);
     h.zig_ast = p;
     const said = p.reader.interface.takeDelimiter('\n') catch null;
-    if (said == null or !std.mem.startsWith(u8, said.?, wire.header)) return ended(p, run, pos, who, "its first line is not `" ++ wire.header ++ "<zig version>`");
+    if (said == null or !std.mem.startsWith(u8, said.?, wire.header)) return ended(p, run, pos, who, "gave no `" ++ wire.header ++ "<zig version>` line first");
     return p;
 }
 
