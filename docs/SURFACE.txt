@@ -718,7 +718,7 @@
   argument   `shale_tokens` takes a path and options, given {d} arguments
   argument   `shale_tokens`: no token tag `eof`: the end of a file is no token here
   argument   `shale_tokens`: {s} does not lex as Shale at line {d}: {s}
-### shale_host_zig (61)
+### shale_host_zig (67)
   argument   `zig_decls` takes `container`, not `{s}`
   argument   `zig_decls` takes a path and options, given {d} arguments
   argument   `zig_decls`: {s} does not parse as Zig: line {d} ({s})
@@ -762,6 +762,12 @@
   argument   `{comptime}` takes `tag`, not `{s}`
   argument   `{comptime}`: no token tag `{s}` ({comptime})
   argument   `{s}` changes the store, and a background run only reads: send it as an `atomic` run
+  host       `{s}`: no tools:zig-ast/bin/zig-ast, the program that reads Zig: Shale's `shale tools/zig_ast/install.shale` builds it
+  host       `{s}`: zig-ast ({s}) did not start: {t}
+  host       `{s}`: zig-ast refused the request: {s}
+  host       `{s}`: zig-ast {s}{s}{s}
+  host       `{s}`: zig-ast's answer does not read ({t})
+  host       `{s}`: zig-ast's answer has a line this host does not know
   type       `zig_decls`' `container` is a name, not {s}
   type       `zig_decls`' options are a map, not a list
   type       `zig_decls`' options are a map, not {s}
@@ -1229,4 +1235,4 @@
 
 ## The counts
   builtins 77, host calls 22, prelude functions 93
-  stop texts 587, refusal texts 66, budgets 16 (15 a stop names), flags 11
+  stop texts 593, refusal texts 66, budgets 16 (15 a stop names), flags 11

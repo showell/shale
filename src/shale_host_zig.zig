@@ -679,8 +679,16 @@ pub fn move(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Val
             // Check both files may change before writing either.
             try script.builtins_change.mayChange(run, pos, q);
             try script.builtins_change.mayChange(run, pos, p);
-        } else if (is(l, "stop")) {
-            return run.fail(pos, .argument, "{s}", .{try an.field(l, 1)});
+        } else if (is(l, "moved_untokenized")) {
+            return run.fail(pos, .argument, "`zig_move`: the moved code does not tokenize at line {d}", .{try an.int(l, 1)});
+        } else if (is(l, "shadowed")) {
+            return run.fail(pos, .argument, "`zig_move`: `{s}` is a name in the moved code already: `from_as` would shadow it; nothing written", .{from_as.?});
+        } else if (is(l, "moved_declares")) {
+            return run.fail(pos, .argument, "`zig_move`: the moved code declares `{s}` (line {d}), which `from_as` would qualify; nothing written", .{ try an.field(l, 1), try an.int(l, 2) });
+        } else if (is(l, "moved_unparsed")) {
+            return run.fail(pos, .argument, "`zig_move`: the moved code does not parse at line {d}", .{try an.int(l, 1)});
+        } else if (is(l, "from_unparsed")) {
+            return run.fail(pos, .argument, "`zig_move`: `from`, cut, does not parse at line {d}", .{try an.int(l, 1)});
         } else if (is(l, "g")) {
             group = std.meta.stringToEnum(Group, try an.field(l, 1)) orelse return an.wrong();
         } else if (is(l, "s")) {

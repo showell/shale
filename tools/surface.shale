@@ -21,7 +21,7 @@ const ZCHR = [=['(?:\\.|[^'\\])*']=]
 const ZOPEN = [=["|'|//]=]
 
 -- The files whose `refuse`, `said` and `say` make a refusal, not a stop.
-const REFUSERS = {"cli.zig", "shale_gate.zig", "script_route.zig", "shale_zig_move.zig"}
+const REFUSERS = {"cli.zig", "shale_gate.zig", "script_route.zig"}
 
 -- A stop's class as a call's argument: `, .argument,`.
 const CLASSES = [=[[(,] ?\.(syntax|refused|name|type|index|arithmetic|argument|budget|store|fail|host),]=]

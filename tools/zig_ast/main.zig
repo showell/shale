@@ -22,7 +22,9 @@
 //! a refusal is its own word and fields (`parse_error <line> <tag>`,
 //! `invalid <line>`, `no_tag`, `no_container [<n>]`, `no_member`,
 //! `unattributed <line>`, `declaration <line> <name>`, `refused <why>`, and
-//! `stop <message>` for a refusal said whole); then the values:
+//! for `from_as`, `moved_untokenized <line>`, `shadowed`, `moved_declares
+//! <name> <line>`, `moved_unparsed <line>`, `from_unparsed <line>`); then the
+//! values:
 //!
 //!   tokens: `tag <number> <name>` for each tag kept, then `tb <n>` and the
 //!     n tokens as fixed-width records (src/shale_zig_wire.zig's `Token`).
@@ -372,10 +374,10 @@ fn fromAs(a: std.mem.Allocator, w: *std.Io.Writer, done: zm.Moved, fa: []const u
     const to_z = try a.dupeSentinel(u8, done.to_now, 0);
     const toks = switch (try za.tokens(a, to_z)) {
         .ok => |ok| ok,
-        .invalid => |n| return stop(a, w, "`zig_move`: the moved code does not tokenize at line {d}", .{n}),
+        .invalid => |n| return stop(w, .{ "moved_untokenized", n }),
     };
     for (toks, 0..) |tk, i| if (tk.tag == .identifier and std.mem.eql(u8, to_z[tk.start..tk.end], fa) and (i == 0 or toks[i - 1].tag != .period))
-        return stop(a, w, "`zig_move`: `{s}` is a name in the moved code already: `from_as` would shadow it; nothing written", .{fa});
+        return stop(w, .{"shadowed"});
     // Qualify the moved code's uses of `from`'s names.
     var renames: std.ArrayList(plan.Rename) = .empty;
     var wanted: std.StringHashMapUnmanaged(void) = .empty;
@@ -385,8 +387,8 @@ fn fromAs(a: std.mem.Allocator, w: *std.Io.Writer, done: zm.Moved, fa: []const u
     };
     const q = switch (try plan.planMany(a, to_z, renames.items, null)) {
         .done => |d| d,
-        .declaration => |d| return stop(a, w, "`zig_move`: the moved code declares `{s}` (line {d}), which `from_as` would qualify; nothing written", .{ d.name, d.line }),
-        .invalid => |n| return stop(a, w, "`zig_move`: the moved code does not tokenize at line {d}", .{n}),
+        .declaration => |d| return stop(w, .{ "moved_declares", d.name, d.line }),
+        .invalid => |n| return stop(w, .{ "moved_untokenized", n }),
     };
     try wire.line(w, .{ "work", q.tokens });
     // Insert the import after `to`'s last `@import`, or first if there is none.
@@ -397,7 +399,7 @@ fn fromAs(a: std.mem.Allocator, w: *std.Io.Writer, done: zm.Moved, fa: []const u
         .ok => |ok| for (ok.decls) |d| if (std.mem.startsWith(u8, d.value, "@import(")) {
             at = d.stop;
         },
-        .parse_error => |e| return stop(a, w, "`zig_move`: the moved code does not parse at line {d}", .{e.line}),
+        .parse_error => |e| return stop(w, .{ "moved_unparsed", e.line }),
     }
     const text = if (at == 0) try std.fmt.allocPrint(a, "{s}\n\n", .{line}) else try std.fmt.allocPrint(a, "\n{s}", .{line});
     const imported = try std.mem.concat(a, u8, &.{ q.now[0..at], text, q.now[at..] });
@@ -421,7 +423,7 @@ fn fromAs(a: std.mem.Allocator, w: *std.Io.Writer, done: zm.Moved, fa: []const u
             try offsets.append(a, k);
             try made.append(a, d.name);
         },
-        .parse_error => |e| return stop(a, w, "`zig_move`: `from`, cut, does not parse at line {d}", .{e.line}),
+        .parse_error => |e| return stop(w, .{ "from_unparsed", e.line }),
     }
     var out: std.ArrayList(u8) = .empty;
     var spans: std.ArrayList(plan.Span) = .empty;
@@ -438,8 +440,9 @@ fn fromAs(a: std.mem.Allocator, w: *std.Io.Writer, done: zm.Moved, fa: []const u
     return .{ .to_qualified = q.now, .qualified_spans = q.spans, .to_imported = imported, .import_spans = import_spans, .from_pub = out.items, .pub_spans = spans.items, .qualified = q.renamed, .made_pub = made.items };
 }
 
-fn stop(a: std.mem.Allocator, w: *std.Io.Writer, comptime f: []const u8, args: anytype) ServeError!?FromAs {
-    try wire.line(w, .{ "stop", try std.fmt.allocPrint(a, f, args) });
+/// Writes the refusal `fields` names and gives null: the host says it.
+fn stop(w: *std.Io.Writer, fields: anytype) ServeError!?FromAs {
+    try wire.line(w, fields);
     return null;
 }
 
