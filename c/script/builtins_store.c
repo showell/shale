@@ -491,10 +491,10 @@ static STATUS_MUST_USE Status bi_line_at(Run *r, Pos pos, ConstValues args, Valu
         return OK;
     }
     uint64_t cap = r->ctx.budgets.call_bytes;
-    uint64_t piece_most = builtin_min_u64(BUILTIN_LINE_PIECE, cap);
+    uint64_t piece_max = builtin_min_u64(BUILTIN_LINE_PIECE, cap);
     uint64_t lo = offset;
     while (lo > 0) {
-        uint64_t take = builtin_min_u64(lo, piece_most);
+        uint64_t take = builtin_min_u64(lo, piece_max);
         Str piece = {0};
         TRY(builtin_read_sized(r, pos, b, &p, size, lo - take, true, take, &piece));
         size_t start = builtin_line_start(piece, piece.len);
@@ -508,7 +508,7 @@ static STATUS_MUST_USE Status bi_line_at(Run *r, Pos pos, ConstValues args, Valu
     uint64_t hi = offset;
     while (hi < size) {
         Str piece = {0};
-        TRY(builtin_read_sized(r, pos, b, &p, size, hi, true, builtin_min_u64(piece_most, size - hi), &piece));
+        TRY(builtin_read_sized(r, pos, b, &p, size, hi, true, builtin_min_u64(piece_max, size - hi), &piece));
         size_t nl = builtin_line_end(piece, 0);
         if (nl < piece.len) {
             hi += nl;
@@ -573,10 +573,10 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const Sto
         return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` scans at most {d} bytes in one call, and this would be {d}: scan it in parts, `{s}(p, {s}offset, n)`", S("`"), who, S("` scans at most "), run_unum(r, cap),
                          S(" bytes in one call, and this would be "), run_unum(r, end - start), S(": scan it in parts, `"), who, S("(p, "), b == BUILTIN_COUNT_LINES ? S("") : S("s, "), S("offset, n)`"));
     }
-    size_t keep_most = needle.len - 1;
+    size_t keep_max = needle.len - 1;
     // Reading at most `needle.len - 1` past the range keeps every match found
     // starting in it.
-    uint64_t size = builtin_min_u64(file_size, end + keep_most);
+    uint64_t size = builtin_min_u64(file_size, end + keep_max);
     memset(res, 0, sizeof *res);
     res->size = file_size;
     res->to_end = end == file_size;
@@ -593,7 +593,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const Sto
         rs->scan_buf.ptr = room;
         rs->scan_buf.len = 2 * BUILTIN_SCAN_CHUNK;
     }
-    size_t buf_len = (size_t)builtin_min_u64(size - start, BUILTIN_SCAN_CHUNK) + keep_most;
+    size_t buf_len = (size_t)builtin_min_u64(size - start, BUILTIN_SCAN_CHUNK) + keep_max;
     Bytes buf = SLICE_SUB(Bytes, rs->scan_buf, 0, buf_len);
     // `buf[0..kept]` holds the last window's tail, from the file's offset
     // `base`.
@@ -628,9 +628,9 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const Sto
             if (first_only) return OK;
             from = i + needle.len;
         }
-        // Keep the tail that could still start a match: the last `keep_most`
+        // Keep the tail that could still start a match: the last `keep_max`
         // bytes no match consumed.
-        size_t tail = window.len > keep_most ? window.len - keep_most : 0;
+        size_t tail = window.len > keep_max ? window.len - keep_max : 0;
         size_t next = from > tail ? from : tail;
         kept = window.len - next;
         if (kept > 0) mem_move(buf.ptr, &at(window, next), kept);
