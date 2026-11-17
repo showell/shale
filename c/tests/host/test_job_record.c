@@ -52,6 +52,9 @@ TEST(a_record_reads_back_as_it_was_written_and_a_broken_one_is_none) {
     EXPECT(job_record_done(r));
     EXPECT(!parse_copy(S("pid=x\n"), &r));
     EXPECT(!parse_copy(S(""), &r));
+    // An empty text that holds NULL is none too, and never reaches memchr.
+    Bytes none = {NULL, 0};
+    EXPECT(!job_record_parse(none, &r));
     // A record missing a key, holding one it does not know, or a line that is
     // no `key=value`, is none: never a record with a key read as empty.
     EXPECT(!parse_copy(S("pid=42\npgid=42\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));

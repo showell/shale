@@ -130,7 +130,8 @@ static bool job_record_parse(Bytes text, JobRecord *r) {
     size_t line_at = 0;
     while (line_at <= text.len) {
         Bytes rest = SLICE_SUB(Bytes, text, line_at, text.len);
-        const char *nl = memchr(rest.ptr, '\n', rest.len);
+        // An empty record's text may hold NULL, which memchr may not take.
+        const char *nl = rest.len > 0 ? memchr(rest.ptr, '\n', rest.len) : NULL;
         size_t len = nl != NULL ? (size_t)(nl - rest.ptr) : rest.len;
         Bytes line = SLICE_SUB(Bytes, rest, 0, len);
         line_at += len + 1;
