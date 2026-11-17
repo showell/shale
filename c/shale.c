@@ -463,7 +463,7 @@ static int run_script(Out *o, Command *c, MountVec mounts, Str mounts_from, Str 
     // and the calls) and the output, each in an arena under its own budget.
     Arena values = arena_make(b.arena_bytes);
     Arena machine = arena_make(b.machine_bytes);
-    Arena output = arena_make(2 * b.output_bytes + ARENA_BIG);
+    Arena output = arena_make(b.output_bytes + ARENA_BIG);
     Run r;
     memset(&r, 0, sizeof r);
     r.ctx = run_ctx_make(&values, &machine, b);
@@ -472,6 +472,9 @@ static int run_script(Out *o, Command *c, MountVec mounts, Str mounts_from, Str 
     r.now = now;
     r.out = buf_make(&output);
     r.out_cap = b.output_bytes;
+    // The whole output budget at once, as Zig's runner allocates it, so the
+    // buffer never grows past its arena.
+    if (buf_reserve(&r.out, r.out_cap) != OK) return not_ported(o, S("an output budget past the system's memory"));
     r.args = args;
     r.args_len = args_len;
     r.steps = reader.used.steps;

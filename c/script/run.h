@@ -96,17 +96,20 @@ static inline Str run_unum(Run *r, uint64_t n) {
     return buf_view(&b);
 }
 
-// Zig's `fail`: a stop whose message is the first `n` of `parts` joined, or
-// `fallback` (Zig's format text) when the arena refuses it.
-static inline STATUS_MUST_USE Status run_fail_parts(Run *r, Pos pos, StopClass cls, Str fallback, StrPieces parts, size_t n) {
-    StrParts all = {parts.piece, n};
+// Zig's `fail`: a stop whose message is `parts` joined, or `fallback` (Zig's
+// format text) when the arena refuses it. The pieces a literal leaves out are
+// empty, so all 16 are joined and no count can drop one.
+static inline STATUS_MUST_USE Status run_fail_parts(Run *r, Pos pos, StopClass cls, Str fallback, StrPieces parts) {
+    StrParts all = {parts.piece, sizeof parts.piece / sizeof(Str)};
     Msg m;
     msg_init(&m, r->ctx.values);
-    for (size_t k = 0; k < all.len; k++) msg_str(&m, at(all, k));
+    for (size_t k = 0; k < all.len; k++) {
+        if (at(all, k).len > 0) msg_str(&m, at(all, k));
+    }
     return run_fail_built(&r->ctx, pos, cls, &m.b, m.s, fallback);
 }
 
-#define run_failf(r, pos, cls, fallback, n, ...) run_fail_parts((r), (pos), (cls), S(fallback), (StrPieces){{__VA_ARGS__}}, (n))
+#define run_failf(r, pos, cls, fallback, ...) run_fail_parts((r), (pos), (cls), S(fallback), (StrPieces){{__VA_ARGS__}})
 
 // A refused allocation in the values' arena: the arena budget.
 static inline STATUS_MUST_USE Status run_values_oom(Run *r, Pos pos) {
@@ -176,11 +179,11 @@ static inline STATUS_MUST_USE Status run_map_put_bool(Run *r, Pos pos, Table *t,
 }
 
 static inline STATUS_MUST_USE Status run_not_indexable(Run *r, Pos pos, const Value *obj) {
-    return run_failf(r, pos, CLASS_TYPE, "only a list or a map can be indexed, not {s}", 2, S("only a list or a map can be indexed, not "), value_type_name(obj));
+    return run_failf(r, pos, CLASS_TYPE, "only a list or a map can be indexed, not {s}", S("only a list or a map can be indexed, not "), value_type_name(obj));
 }
 
 static inline STATUS_MUST_USE Status run_bad_key(Run *r, Pos pos, const Value *key) {
-    return run_failf(r, pos, CLASS_TYPE, "a key must be an integer (a list) or a string (a map), not {s}", 2, S("a key must be an integer (a list) or a string (a map), not "), value_type_name(key));
+    return run_failf(r, pos, CLASS_TYPE, "a key must be an integer (a list) or a string (a map), not {s}", S("a key must be an integer (a list) or a string (a map), not "), value_type_name(key));
 }
 
 // `obj[key] = v`.
@@ -201,7 +204,7 @@ static inline STATUS_MUST_USE Status run_set_index(Run *r, Pos pos, const Value 
             t->kind = TABLE_LIST;
             return OK;
         }
-        return run_failf(r, pos, CLASS_INDEX, "index {d} is outside the list (length {d}): only index {d} appends, and `push(l, x)` says so", 7,
+        return run_failf(r, pos, CLASS_INDEX, "index {d} is outside the list (length {d}): only index {d} appends, and `push(l, x)` says so",
                          S("index "), run_num(r, k), S(" is outside the list (length "), run_unum(r, len), S("): only index "), run_unum(r, (uint64_t)len + 1), S(" appends, and `push(l, x)` says so"));
     }
     if (key->tag == VALUE_STRING) {
@@ -226,7 +229,7 @@ static inline STATUS_MUST_USE Status run_get_index(Run *r, Pos pos, const Value 
         if (t->kind == TABLE_MAP) return run_fail(&r->ctx, pos, CLASS_TYPE, S("a map's keys are strings: this one is a map, indexed by an integer"));
         size_t len = t->list.len;
         if (k < 1 || (uint64_t)k > len) {
-            return run_failf(r, pos, CLASS_INDEX, "index {d} is outside the list (length {d})", 5, S("index "), run_num(r, k), S(" is outside the list (length "), run_unum(r, len), S(")"));
+            return run_failf(r, pos, CLASS_INDEX, "index {d} is outside the list (length {d})", S("index "), run_num(r, k), S(" is outside the list (length "), run_unum(r, len), S(")"));
         }
         *out = at(t->list, (size_t)(k - 1));
         return OK;
@@ -236,7 +239,7 @@ static inline STATUS_MUST_USE Status run_get_index(Run *r, Pos pos, const Value 
         if (t->kind == TABLE_LIST) return run_fail(&r->ctx, pos, CLASS_TYPE, S("a list's keys are integers: this one is a list, indexed by a string"));
         TRY(run_charge(r, pos, k.len));
         if (ValueMap_get(&t->map, k, out)) return OK;
-        return run_failf(r, pos, CLASS_INDEX, "no key \"{s}\" in the map (`has_key` asks first)", 3, S("no key \""), k, S("\" in the map (`has_key` asks first)"));
+        return run_failf(r, pos, CLASS_INDEX, "no key \"{s}\" in the map (`has_key` asks first)", S("no key \""), k, S("\" in the map (`has_key` asks first)"));
     }
     return run_bad_key(r, pos, key);
 }
@@ -250,13 +253,13 @@ static inline STATUS_MUST_USE Status run_list_to_walk(Run *r, Pos pos, const Val
         *out = t->kind == TABLE_EMPTY ? NULL : t;
         return OK;
     }
-    return run_failf(r, pos, CLASS_TYPE, "`for x in` takes a list, given {s}", 2, S("`for x in` takes a list, given "), value_type_name(l));
+    return run_failf(r, pos, CLASS_TYPE, "`for x in` takes a list, given {s}", S("`for x in` takes a list, given "), value_type_name(l));
 }
 
 // A numeric `for`'s start, end or step (`what`), `pos` its expression's.
 static inline STATUS_MUST_USE Status run_int_of(Run *r, Pos pos, const Value *v, Str what) {
     if (v->tag == VALUE_INT) return OK;
-    return run_failf(r, pos, CLASS_TYPE, "{s} must be an integer, not {s}", 3, what, S(" must be an integer, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "{s} must be an integer, not {s}", what, S(" must be an integer, not "), value_type_name(v));
 }
 
 // ── operators ──
@@ -289,8 +292,8 @@ static inline STATUS_MUST_USE Status run_unary(Run *r, Pos pos, UnOp op, const V
         value_bool(out, !value_truthy(v));
         return OK;
     case UNOP_NEG:
-        if (v->tag != VALUE_INT) return run_failf(r, pos, CLASS_TYPE, "`-` takes an integer, not {s}", 2, S("`-` takes an integer, not "), value_type_name(v));
-        if (v->as.integer == INT64_MIN) return run_failf(r, pos, CLASS_ARITHMETIC, "negating {d} overflows 64 bits", 3, S("negating "), run_num(r, v->as.integer), S(" overflows 64 bits"));
+        if (v->tag != VALUE_INT) return run_failf(r, pos, CLASS_TYPE, "`-` takes an integer, not {s}", S("`-` takes an integer, not "), value_type_name(v));
+        if (v->as.integer == INT64_MIN) return run_failf(r, pos, CLASS_ARITHMETIC, "negating {d} overflows 64 bits", S("negating "), run_num(r, v->as.integer), S(" overflows 64 bits"));
         value_int(out, -v->as.integer);
         return OK;
     case UNOP_LEN:
@@ -303,7 +306,7 @@ static inline STATUS_MUST_USE Status run_unary(Run *r, Pos pos, UnOp op, const V
             value_int(out, (int64_t)v->as.table->list.len);
             return OK;
         }
-        return run_failf(r, pos, CLASS_TYPE, "`#` takes a string or a list, not {s}", 2, S("`#` takes a string or a list, not "), value_type_name(v));
+        return run_failf(r, pos, CLASS_TYPE, "`#` takes a string or a list, not {s}", S("`#` takes a string or a list, not "), value_type_name(v));
     }
     return OK;
 }
@@ -336,8 +339,8 @@ static inline Str run_number_hint(const Value *v) {
 }
 
 static inline STATUS_MUST_USE Status run_arith(Run *r, Pos pos, BinOp op, const Value *l, const Value *rv, Value *out) {
-    if (l->tag != VALUE_INT) return run_failf(r, pos, CLASS_TYPE, "`{s}` takes integers, and its left is {s}{s}", 5, S("`"), run_op_text(op), S("` takes integers, and its left is "), value_type_name(l), run_number_hint(l));
-    if (rv->tag != VALUE_INT) return run_failf(r, pos, CLASS_TYPE, "`{s}` takes integers, and its right is {s}{s}", 5, S("`"), run_op_text(op), S("` takes integers, and its right is "), value_type_name(rv), run_number_hint(rv));
+    if (l->tag != VALUE_INT) return run_failf(r, pos, CLASS_TYPE, "`{s}` takes integers, and its left is {s}{s}", S("`"), run_op_text(op), S("` takes integers, and its left is "), value_type_name(l), run_number_hint(l));
+    if (rv->tag != VALUE_INT) return run_failf(r, pos, CLASS_TYPE, "`{s}` takes integers, and its right is {s}{s}", S("`"), run_op_text(op), S("` takes integers, and its right is "), value_type_name(rv), run_number_hint(rv));
     int64_t a = l->as.integer;
     int64_t b = rv->as.integer;
     int64_t got = 0;
@@ -367,7 +370,7 @@ static inline STATUS_MUST_USE Status run_arith(Run *r, Pos pos, BinOp op, const 
         if (got != 0 && ((got < 0) != (b < 0))) got += b;
         break;
     }
-    if (!ok) return run_failf(r, pos, CLASS_ARITHMETIC, "{d} {s} {d} overflows 64 bits", 6, run_num(r, a), S(" "), run_op_text(op), S(" "), run_num(r, b), S(" overflows 64 bits"));
+    if (!ok) return run_failf(r, pos, CLASS_ARITHMETIC, "{d} {s} {d} overflows 64 bits", run_num(r, a), S(" "), run_op_text(op), S(" "), run_num(r, b), S(" overflows 64 bits"));
     value_int(out, got);
     return OK;
 }
@@ -382,7 +385,7 @@ static inline int str_order(Str a, Str b) {
 }
 
 static inline STATUS_MUST_USE Status run_cannot_compare(Run *r, Pos pos, BinOp op, const Value *l, const Value *rv) {
-    return run_failf(r, pos, CLASS_TYPE, "`{s}` compares {s} with {s}", 6, S("`"), run_op_text(op), S("` compares "), value_type_name(l), S(" with "), value_type_name(rv));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}` compares {s} with {s}", S("`"), run_op_text(op), S("` compares "), value_type_name(l), S(" with "), value_type_name(rv));
 }
 
 static inline STATUS_MUST_USE Status run_compare(Run *r, Pos pos, BinOp op, const Value *l, const Value *rv, Value *out) {
@@ -440,7 +443,7 @@ static inline STATUS_MUST_USE Status run_part_len(Run *r, Pos pos, const Value *
         *out = run_text_len(v);
         return OK;
     }
-    return run_failf(r, pos, CLASS_TYPE, "`..` takes strings and integers, not {s}", 2, S("`..` takes strings and integers, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "`..` takes strings and integers, not {s}", S("`..` takes strings and integers, not "), value_type_name(v));
 }
 
 SLICE_TYPE(Positions, const Pos);

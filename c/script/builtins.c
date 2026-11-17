@@ -20,7 +20,7 @@ static STATUS_MUST_USE Status builtin_string_arg(Run *r, Pos pos, Builtin b, con
         *out = v->as.string;
         return OK;
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}`: {s} must be a string, not {s}", 5, S("`"), builtin_name(b), S("`: "), what, S(" must be a string, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}`: {s} must be a string, not {s}", S("`"), builtin_name(b), S("`: "), what, S(" must be a string, not "), value_type_name(v));
 }
 
 static STATUS_MUST_USE Status builtin_int_arg(Run *r, Pos pos, Builtin b, const Value *v, Str what, int64_t *out) {
@@ -28,7 +28,7 @@ static STATUS_MUST_USE Status builtin_int_arg(Run *r, Pos pos, Builtin b, const 
         *out = v->as.integer;
         return OK;
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}`: {s} must be an integer, not {s}", 6, S("`"), builtin_name(b), S("`: "), what, S(" must be an integer, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}`: {s} must be an integer, not {s}", S("`"), builtin_name(b), S("`: "), what, S(" must be an integer, not "), value_type_name(v));
 }
 
 // A list, or a table still empty (which becomes one).
@@ -38,9 +38,9 @@ static STATUS_MUST_USE Status builtin_list_arg(Run *r, Pos pos, Builtin b, const
             *out = v->as.table;
             return OK;
         }
-        return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a list, given a map", 3, S("`"), builtin_name(b), S("` takes a list, given a map"));
+        return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a list, given a map", S("`"), builtin_name(b), S("` takes a list, given a map"));
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a list, not {s}", 4, S("`"), builtin_name(b), S("` takes a list, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a list, not {s}", S("`"), builtin_name(b), S("` takes a list, not "), value_type_name(v));
 }
 
 // A map, or a table still empty.
@@ -50,9 +50,9 @@ static STATUS_MUST_USE Status builtin_map_arg(Run *r, Pos pos, Builtin b, const 
             *out = v->as.table;
             return OK;
         }
-        return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a map, given a list (`#l` is a list's length)", 3, S("`"), builtin_name(b), S("` takes a map, given a list (`#l` is a list's length)"));
+        return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a map, given a list (`#l` is a list's length)", S("`"), builtin_name(b), S("` takes a map, given a list (`#l` is a list's length)"));
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a map, not {s}", 4, S("`"), builtin_name(b), S("` takes a map, not "), value_type_name(v));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes a map, not {s}", S("`"), builtin_name(b), S("` takes a map, not "), value_type_name(v));
 }
 
 // The price of bulk work: a step for every 16 bytes, or part of 16, that a
@@ -72,7 +72,7 @@ static STATUS_MUST_USE Status builtin_scalar_text(Run *r, Pos pos, const Value *
     case VALUE_STRING: *out = v->as.string; return OK;
     case VALUE_TABLE: break;
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes scalars, not {s}: `for x in l do {s}(x) end` takes a list's items one by one", 7,
+    return run_failf(r, pos, CLASS_TYPE, "`{s}` takes scalars, not {s}: `for x in l do {s}(x) end` takes a list's items one by one",
                      S("`"), what, S("` takes scalars, not "), value_type_name(v), S(": `for x in l do "), what, S("(x) end` takes a list's items one by one"));
 }
 
@@ -191,7 +191,7 @@ static STATUS_MUST_USE Status builtin_part(Run *r, Pos pos, Builtin b, ConstValu
     TRY(builtin_list_arg(r, pos, b, &at(args, 0), &t));
     int64_t n = 0;
     TRY(builtin_int_arg(r, pos, b, &at(args, 1), S("its count"), &n));
-    if (n < 0) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}`: a count of {d}", 4, S("`"), builtin_name(b), S("`: a count of "), run_num(r, n));
+    if (n < 0) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}`: a count of {d}", S("`"), builtin_name(b), S("`: a count of "), run_num(r, n));
     size_t len = t->list.len;
     size_t k = (uint64_t)n < len ? (size_t)n : len;
     TRY(run_charge(r, pos, k));
@@ -243,7 +243,7 @@ static STATUS_MUST_USE Status bi_get(Run *r, Pos pos, ConstValues args, Value *o
     if (args.len > 2) fallback = at(args, 2);
     const Value *tv = &at(args, 0);
     const Value *kv = &at(args, 1);
-    if (tv->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`get` takes a map or a list, not {s}", 2, S("`get` takes a map or a list, not "), value_type_name(tv));
+    if (tv->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`get` takes a map or a list, not {s}", S("`get` takes a map or a list, not "), value_type_name(tv));
     Table *t = tv->as.table;
     if (kv->tag == VALUE_INT) {
         int64_t k = kv->as.integer;
@@ -261,12 +261,12 @@ static STATUS_MUST_USE Status bi_get(Run *r, Pos pos, ConstValues args, Value *o
         if (!ValueMap_get(&t->map, kv->as.string, out)) *out = fallback;
         return OK;
     }
-    return run_failf(r, pos, CLASS_TYPE, "`get`: a key must be an integer (a list) or a string (a map), not {s}", 2, S("`get`: a key must be an integer (a list) or a string (a map), not "), value_type_name(kv));
+    return run_failf(r, pos, CLASS_TYPE, "`get`: a key must be an integer (a list) or a string (a map), not {s}", S("`get`: a key must be an integer (a list) or a string (a map), not "), value_type_name(kv));
 }
 
 static STATUS_MUST_USE Status bi_count(Run *r, Pos pos, ConstValues args, Value *out) {
     const Value *tv = &at(args, 0);
-    if (tv->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`count` takes a map or a list, not {s}", 2, S("`count` takes a map or a list, not "), value_type_name(tv));
+    if (tv->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`count` takes a map or a list, not {s}", S("`count` takes a map or a list, not "), value_type_name(tv));
     Table *t = tv->as.table;
     value_int(out, (int64_t)(t->kind == TABLE_LIST ? t->list.len : ValueMap_len(&t->map)));
     return OK;
@@ -370,7 +370,7 @@ static STATUS_MUST_USE Status builtin_order_arg(Run *r, Pos pos, const Value *v,
         *desc = false;
         return OK;
     }
-    return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s order is \"asc\" or \"desc\", not \"{s}\"", 3, S("`sort`'s order is \"asc\" or \"desc\", not \""), order, S("\""));
+    return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s order is \"asc\" or \"desc\", not \"{s}\"", S("`sort`'s order is \"asc\" or \"desc\", not \""), order, S("\""));
 }
 
 static STATUS_MUST_USE Status builtin_sort_keys(Run *r, Pos pos, const Value *keys_arg, bool desc, SortKey *keys, size_t *n_keys) {
@@ -380,10 +380,10 @@ static STATUS_MUST_USE Status builtin_sort_keys(Run *r, Pos pos, const Value *ke
         *n_keys = 1;
         return OK;
     }
-    if (keys_arg->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`sort`'s keys are a key's name or a list of them, not {s}", 2, S("`sort`'s keys are a key's name or a list of them, not "), value_type_name(keys_arg));
+    if (keys_arg->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`sort`'s keys are a key's name or a list of them, not {s}", S("`sort`'s keys are a key's name or a list of them, not "), value_type_name(keys_arg));
     Table *kt = keys_arg->as.table;
     if (kt->kind != TABLE_LIST || kt->list.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`sort`'s keys are a key's name or a list of them, not an empty list or a map"));
-    if (kt->list.len > BUILTIN_SORT_KEYS_MOST) return run_failf(r, pos, CLASS_ARGUMENT, "`sort` takes at most {d} keys, given {d}", 3, S("`sort` takes at most 8 keys, given "), run_unum(r, kt->list.len), S(""));
+    if (kt->list.len > BUILTIN_SORT_KEYS_MOST) return run_failf(r, pos, CLASS_ARGUMENT, "`sort` takes at most {d} keys, given {d}", S("`sort` takes at most 8 keys, given "), run_unum(r, kt->list.len), S(""));
     SortKeys room = {keys, BUILTIN_SORT_KEYS_MOST};
     for (size_t i = 0; i < kt->list.len; i++) {
         const Value *k = &at(kt->list, i);
@@ -393,19 +393,19 @@ static STATUS_MUST_USE Status builtin_sort_keys(Run *r, Pos pos, const Value *ke
             at(room, i) = sk;
             continue;
         }
-        if (k->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`sort`'s key {d} is {s}: a key is a name or {key = name, desc = true}", 5, S("`sort`'s key "), nth, S(" is "), value_type_name(k), S(": a key is a name or {key = name, desc = true}"));
+        if (k->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`sort`'s key {d} is {s}: a key is a name or {key = name, desc = true}", S("`sort`'s key "), nth, S(" is "), value_type_name(k), S(": a key is a name or {key = name, desc = true}"));
         Table *km = k->as.table;
-        if (km->kind != TABLE_MAP) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d} is a list: a key is a name or {key = name, desc = true}", 3, S("`sort`'s key "), nth, S(" is a list: a key is a name or {key = name, desc = true}"));
+        if (km->kind != TABLE_MAP) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d} is a list: a key is a name or {key = name, desc = true}", S("`sort`'s key "), nth, S(" is a list: a key is a name or {key = name, desc = true}"));
         Value name;
-        if (!ValueMap_get(&km->map, S("key"), &name)) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d} has no `key`: {key = name, desc = true}", 3, S("`sort`'s key "), nth, S(" has no `key`: {key = name, desc = true}"));
-        if (name.tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`sort`'s key {d}: its `key` is a name, not {s}", 4, S("`sort`'s key "), nth, S(": its `key` is a name, not "), value_type_name(&name));
+        if (!ValueMap_get(&km->map, S("key"), &name)) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d} has no `key`: {key = name, desc = true}", S("`sort`'s key "), nth, S(" has no `key`: {key = name, desc = true}"));
+        if (name.tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`sort`'s key {d}: its `key` is a name, not {s}", S("`sort`'s key "), nth, S(": its `key` is a name, not "), value_type_name(&name));
         bool own = desc;
         for (size_t e = 0; e < ValueMap_len(&km->map); e++) {
             Str ek = ValueMap_key_at(&km->map, e);
             Value ev = ValueMap_value_at(&km->map, e);
             if (str_eq(ek, S("key"))) continue;
-            if (!str_eq(ek, S("desc"))) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d}: `{s}` is not one of its fields (`key`, `desc`)", 5, S("`sort`'s key "), nth, S(": `"), ek, S("` is not one of its fields (`key`, `desc`)"));
-            if (ev.tag != VALUE_BOOL) return run_failf(r, pos, CLASS_TYPE, "`sort`'s key {d}: `desc` is true or false, not {s}", 4, S("`sort`'s key "), nth, S(": `desc` is true or false, not "), value_type_name(&ev));
+            if (!str_eq(ek, S("desc"))) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d}: `{s}` is not one of its fields (`key`, `desc`)", S("`sort`'s key "), nth, S(": `"), ek, S("` is not one of its fields (`key`, `desc`)"));
+            if (ev.tag != VALUE_BOOL) return run_failf(r, pos, CLASS_TYPE, "`sort`'s key {d}: `desc` is true or false, not {s}", S("`sort`'s key "), nth, S(": `desc` is true or false, not "), value_type_name(&ev));
             own = ev.as.boolean;
         }
         SortKey sk = {name.as.string, own};
@@ -438,13 +438,13 @@ static STATUS_MUST_USE Status builtin_sort_by_keys(Run *r, Pos pos, Table *t, co
     for (size_t i = 0; i < n; i++) {
         const Value *item = &at(t->list, i);
         Str nth = run_unum(r, (uint64_t)i + 1);
-        if (item->tag != VALUE_TABLE || item->as.table->kind != TABLE_MAP) return run_failf(r, pos, CLASS_TYPE, "`sort` by a key takes a list of maps, and item {d} is {s}", 4, S("`sort` by a key takes a list of maps, and item "), nth, S(" is "), value_type_name(item));
+        if (item->tag != VALUE_TABLE || item->as.table->kind != TABLE_MAP) return run_failf(r, pos, CLASS_TYPE, "`sort` by a key takes a list of maps, and item {d} is {s}", S("`sort` by a key takes a list of maps, and item "), nth, S(" is "), value_type_name(item));
         for (size_t j = 0; j < keys.len; j++) {
             Str key = at(keys, j).key;
             Value v;
-            if (!ValueMap_get(&item->as.table->map, key, &v)) return run_failf(r, pos, CLASS_INDEX, "`sort`: item {d} has no \"{s}\"", 5, S("`sort`: item "), nth, S(" has no \""), key, S("\""));
+            if (!ValueMap_get(&item->as.table->map, key, &v)) return run_failf(r, pos, CLASS_INDEX, "`sort`: item {d} has no \"{s}\"", S("`sort`: item "), nth, S(" has no \""), key, S("\""));
             bool scalar = v.tag == VALUE_INT || v.tag == VALUE_STRING;
-            if (!scalar || (at(kset, j) && at(ks, j) != v.tag)) return run_failf(r, pos, CLASS_TYPE, "`sort` by \"{s}\" takes all integers or all strings, and item {d}'s is {s}", 6, S("`sort` by \""), key, S("\" takes all integers or all strings, and item "), nth, S("'s is "), value_type_name(&v));
+            if (!scalar || (at(kset, j) && at(ks, j) != v.tag)) return run_failf(r, pos, CLASS_TYPE, "`sort` by \"{s}\" takes all integers or all strings, and item {d}'s is {s}", S("`sort` by \""), key, S("\" takes all integers or all strings, and item "), nth, S("'s is "), value_type_name(&v));
             at(ks, j) = v.tag;
             at(kset, j) = true;
             if (v.tag == VALUE_STRING) bytes += v.as.string.len;
@@ -494,7 +494,7 @@ static STATUS_MUST_USE Status bi_sort(Run *r, Pos pos, ConstValues args, Value *
     if (second) {
         const Value *o = &at(args, 1);
         if (o->tag == VALUE_STRING && !str_eq(o->as.string, S("asc")) && !str_eq(o->as.string, S("desc"))) {
-            return run_failf(r, pos, CLASS_ARGUMENT, "`sort` of integers or strings takes an order, \"asc\" or \"desc\"; \"{s}\" would be a key, which sorts a list of maps", 3,
+            return run_failf(r, pos, CLASS_ARGUMENT, "`sort` of integers or strings takes an order, \"asc\" or \"desc\"; \"{s}\" would be a key, which sorts a list of maps",
                              S("`sort` of integers or strings takes an order, \"asc\" or \"desc\"; \""), o->as.string, S("\" would be a key, which sorts a list of maps"));
         }
         TRY(builtin_order_arg(r, pos, o, &desc));
@@ -503,7 +503,7 @@ static STATUS_MUST_USE Status bi_sort(Run *r, Pos pos, ConstValues args, Value *
     for (size_t i = 0; i < n; i++) {
         const Value *item = &at(t->list, i);
         if (item->tag != kind || (kind != VALUE_INT && kind != VALUE_STRING)) {
-            return run_failf(r, pos, CLASS_TYPE, "`sort` takes all integers or all strings, and item {d} is {s}", 4, S("`sort` takes all integers or all strings, and item "), run_unum(r, (uint64_t)i + 1), S(" is "), value_type_name(item));
+            return run_failf(r, pos, CLASS_TYPE, "`sort` takes all integers or all strings, and item {d} is {s}", S("`sort` takes all integers or all strings, and item "), run_unum(r, (uint64_t)i + 1), S(" is "), value_type_name(item));
         }
     }
     // The bound charged before sorting: a step per comparison and per byte,
@@ -546,7 +546,7 @@ static STATUS_MUST_USE Status bi_max(Run *r, Pos pos, ConstValues args, Value *o
 static STATUS_MUST_USE Status bi_abs(Run *r, Pos pos, ConstValues args, Value *out) {
     int64_t x = 0;
     TRY(builtin_int_arg(r, pos, BUILTIN_ABS, &at(args, 0), S("its integer"), &x));
-    if (x == INT64_MIN) return run_failf(r, pos, CLASS_ARITHMETIC, "abs({d}) overflows 64 bits", 3, S("abs("), run_num(r, x), S(") overflows 64 bits"));
+    if (x == INT64_MIN) return run_failf(r, pos, CLASS_ARITHMETIC, "abs({d}) overflows 64 bits", S("abs("), run_num(r, x), S(") overflows 64 bits"));
     value_int(out, x < 0 ? -x : x);
     return OK;
 }
@@ -572,7 +572,7 @@ static STATUS_MUST_USE Status bi_fail(Run *r, Pos pos, ConstValues args, Value *
 // naming the builtin or the host's call it reached.
 static STATUS_MUST_USE Status builtin_not_ported(Run *r, Pos pos, Str what) {
     r->unported = true;
-    return run_failf(r, pos, CLASS_HOST, "{s} is not ported to the C yet", 3, S("`"), what, S("` is not ported to the C yet"));
+    return run_failf(r, pos, CLASS_HOST, "{s} is not ported to the C yet", S("`"), what, S("` is not ported to the C yet"));
 }
 
 static STATUS_MUST_USE Status bi_host(Run *r, Pos pos, ConstValues args, Value *out) {
@@ -604,7 +604,7 @@ static STATUS_MUST_USE Status bi_arg(Run *r, Pos pos, ConstValues args, Value *o
         Str shown = str_sub(a->value, 0, a->value.len < 40 ? a->value.len : 40);
         if (fallback.tag == VALUE_INT) {
             int64_t n = 0;
-            if (!cli_parse_integer(a->value, &n)) return run_failf(r, pos, CLASS_ARGUMENT, "`arg`: {s}={s} is not an integer, and its default is one", 5, S("`arg`: "), name, S("="), shown, S(" is not an integer, and its default is one"));
+            if (!cli_parse_integer(a->value, &n)) return run_failf(r, pos, CLASS_ARGUMENT, "`arg`: {s}={s} is not an integer, and its default is one", S("`arg`: "), name, S("="), shown, S(" is not an integer, and its default is one"));
             value_int(out, n);
             return OK;
         }
@@ -617,7 +617,7 @@ static STATUS_MUST_USE Status bi_arg(Run *r, Pos pos, ConstValues args, Value *o
                 value_bool(out, false);
                 return OK;
             }
-            return run_failf(r, pos, CLASS_ARGUMENT, "`arg`: {s}={s} is not true or false, and its default is one", 5, S("`arg`: "), name, S("="), shown, S(" is not true or false, and its default is one"));
+            return run_failf(r, pos, CLASS_ARGUMENT, "`arg`: {s}={s} is not true or false, and its default is one", S("`arg`: "), name, S("="), shown, S(" is not true or false, and its default is one"));
         }
         Str copy = {0};
         if (!arena_dup(r->ctx.values, a->value, &copy)) return run_values_oom(r, pos);
@@ -727,7 +727,7 @@ static STATUS_MUST_USE Status builtin_digits(Buf *b, int64_t n, size_t width) {
 static STATUS_MUST_USE Status bi_date(Run *r, Pos pos, ConstValues args, Value *out) {
     int64_t t = 0;
     TRY(builtin_int_arg(r, pos, BUILTIN_DATE, &at(args, 0), S("its seconds"), &t));
-    if (t < 0 || t > BUILTIN_LAST_SECOND) return run_failf(r, pos, CLASS_ARGUMENT, "`date`: {d} is outside 1970-01-01 to 9999-12-31", 3, S("`date`: "), run_num(r, t), S(" is outside 1970-01-01 to 9999-12-31"));
+    if (t < 0 || t > BUILTIN_LAST_SECOND) return run_failf(r, pos, CLASS_ARGUMENT, "`date`: {d} is outside 1970-01-01 to 9999-12-31", S("`date`: "), run_num(r, t), S(" is outside 1970-01-01 to 9999-12-31"));
     Civil c;
     civil_from_days(floor_div(t, 86400), &c);
     int64_t rem = floor_mod(t, 86400);
@@ -821,8 +821,8 @@ static STATUS_MUST_USE Status bi_seconds(Run *r, Pos pos, ConstValues args, Valu
     TRY(run_charge(r, pos, s.len));
     Str shown = str_sub(s, 0, s.len < 40 ? s.len : 40);
     int64_t t = 0;
-    if (!builtin_parse_time(s, &t)) return run_failf(r, pos, CLASS_ARGUMENT, "`seconds`: \"{s}\" is not an RFC 3339 time (2026-10-14T03:00:00Z, or +02:00 for Z) nor a date (2026-10-14)", 3, S("`seconds`: \""), shown, S("\" is not an RFC 3339 time (2026-10-14T03:00:00Z, or +02:00 for Z) nor a date (2026-10-14)"));
-    if (t < 0 || t > BUILTIN_LAST_SECOND) return run_failf(r, pos, CLASS_ARGUMENT, "`seconds`: \"{s}\" is outside 1970-01-01 to 9999-12-31, `date`'s range", 3, S("`seconds`: \""), shown, S("\" is outside 1970-01-01 to 9999-12-31, `date`'s range"));
+    if (!builtin_parse_time(s, &t)) return run_failf(r, pos, CLASS_ARGUMENT, "`seconds`: \"{s}\" is not an RFC 3339 time (2026-10-14T03:00:00Z, or +02:00 for Z) nor a date (2026-10-14)", S("`seconds`: \""), shown, S("\" is not an RFC 3339 time (2026-10-14T03:00:00Z, or +02:00 for Z) nor a date (2026-10-14)"));
+    if (t < 0 || t > BUILTIN_LAST_SECOND) return run_failf(r, pos, CLASS_ARGUMENT, "`seconds`: \"{s}\" is outside 1970-01-01 to 9999-12-31, `date`'s range", S("`seconds`: \""), shown, S("\" is outside 1970-01-01 to 9999-12-31, `date`'s range"));
     value_int(out, t);
     return OK;
 }
@@ -908,7 +908,7 @@ static STATUS_MUST_USE Status bi_pad(Run *r, Pos pos, ConstValues args, Value *o
     } else if (v->tag == VALUE_INT) {
         TRY(builtin_cell_text(r, pos, v, S("pad"), &text));
     } else {
-        return run_failf(r, pos, CLASS_TYPE, "`pad` takes a string or an integer, not {s}", 2, S("`pad` takes a string or an integer, not "), value_type_name(v));
+        return run_failf(r, pos, CLASS_TYPE, "`pad` takes a string or an integer, not {s}", S("`pad` takes a string or an integer, not "), value_type_name(v));
     }
     Str s = {0};
     TRY(builtin_padded(r, pos, text, width, &s));
@@ -934,7 +934,7 @@ static STATUS_MUST_USE Status bi_table(Run *r, Pos pos, ConstValues args, Value 
     Cells names = {names_buf, nc};
     for (size_t i = 0; i < nc; i++) {
         const Value *c = &at(cols->list, i);
-        if (c->tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`table`: column {d} must be a string, not {s}", 4, S("`table`: column "), run_unum(r, (uint64_t)i + 1), S(" must be a string, not "), value_type_name(c));
+        if (c->tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`table`: column {d} must be a string, not {s}", S("`table`: column "), run_unum(r, (uint64_t)i + 1), S(" must be a string, not "), value_type_name(c));
         at(names, i) = c->as.string;
     }
     size_t nr = rows->list.len;
@@ -953,12 +953,12 @@ static STATUS_MUST_USE Status bi_table(Run *r, Pos pos, ConstValues args, Value 
     }
     for (size_t ri = 0; ri < nr; ri++) {
         const Value *row = &at(rows->list, ri);
-        if (row->tag != VALUE_TABLE || row->as.table->kind != TABLE_MAP) return run_failf(r, pos, CLASS_TYPE, "`table`: row {d} must be a map, not {s}", 4, S("`table`: row "), run_unum(r, (uint64_t)ri + 1), S(" must be a map, not "), value_type_name(row));
+        if (row->tag != VALUE_TABLE || row->as.table->kind != TABLE_MAP) return run_failf(r, pos, CLASS_TYPE, "`table`: row {d} must be a map, not {s}", S("`table`: row "), run_unum(r, (uint64_t)ri + 1), S(" must be a map, not "), value_type_name(row));
         for (size_t c = 0; c < nc; c++) {
             Str n = at(names, c);
             TRY(run_charge(r, pos, n.len));
             Value v;
-            if (!ValueMap_get(&row->as.table->map, n, &v)) return run_failf(r, pos, CLASS_INDEX, "`table`: row {d} has no \"{s}\"", 5, S("`table`: row "), run_unum(r, (uint64_t)ri + 1), S(" has no \""), n, S("\""));
+            if (!ValueMap_get(&row->as.table->map, n, &v)) return run_failf(r, pos, CLASS_INDEX, "`table`: row {d} has no \"{s}\"", S("`table`: row "), run_unum(r, (uint64_t)ri + 1), S(" has no \""), n, S("\""));
             if (v.tag != VALUE_INT) at(numeric, c) = false;
             Str t = {0};
             TRY(builtin_cell_text(r, pos, &v, S("table"), &t));

@@ -114,7 +114,7 @@ static STATUS_MUST_USE Status bi_join(Run *r, Pos pos, ConstValues args, Value *
         } else if (item->tag == VALUE_INT) {
             piece = int_text(&it, item->as.integer);
         } else {
-            return run_failf(r, pos, CLASS_TYPE, "`join` takes strings and integers, and item {d} is {s}", 4, S("`join` takes strings and integers, and item "), run_unum(r, (uint64_t)i + 1), S(" is "), value_type_name(item));
+            return run_failf(r, pos, CLASS_TYPE, "`join` takes strings and integers, and item {d} is {s}", S("`join` takes strings and integers, and item "), run_unum(r, (uint64_t)i + 1), S(" is "), value_type_name(item));
         }
         TRY(run_charge(r, pos, piece.len + sep.len));
         if (buf_str(&b, piece) != OK) return run_values_oom(r, pos);
@@ -211,7 +211,7 @@ static STATUS_MUST_USE Status bi_find(Run *r, Pos pos, ConstValues args, Value *
     if (args.len > 2) {
         int64_t f = 0;
         TRY(builtin_int_arg(r, pos, BUILTIN_FIND, &at(args, 2), S("where it starts"), &f));
-        if (f < 1 || f > (int64_t)s.len + 1) return run_failf(r, pos, CLASS_ARGUMENT, "`find` starts at 1 to {d} (`#s + 1`), not {d}", 4, S("`find` starts at 1 to "), run_unum(r, (uint64_t)s.len + 1), S(" (`#s + 1`), not "), run_num(r, f));
+        if (f < 1 || f > (int64_t)s.len + 1) return run_failf(r, pos, CLASS_ARGUMENT, "`find` starts at 1 to {d} (`#s + 1`), not {d}", S("`find` starts at 1 to "), run_unum(r, (uint64_t)s.len + 1), S(" (`#s + 1`), not "), run_num(r, f));
         from = (size_t)(f - 1);
     }
     TRY(builtin_charge_bytes(r, pos, s.len - from));
@@ -378,7 +378,7 @@ static STATUS_MUST_USE Status bi_tonumber(Run *r, Pos pos, ConstValues args, Val
     TRY(builtin_string_arg(r, pos, BUILTIN_TONUMBER, &at(args, 0), S("its first argument"), &s));
     TRY(run_charge(r, pos, s.len));
     int64_t n = 0;
-    if (!cli_parse_integer(s, &n)) return run_failf(r, pos, CLASS_ARGUMENT, "`tonumber`: \"{s}\" is not an integer (an optional `-`, then decimal digits)", 3, S("`tonumber`: \""), str_sub(s, 0, s.len < 40 ? s.len : 40), S("\" is not an integer (an optional `-`, then decimal digits)"));
+    if (!cli_parse_integer(s, &n)) return run_failf(r, pos, CLASS_ARGUMENT, "`tonumber`: \"{s}\" is not an integer (an optional `-`, then decimal digits)", S("`tonumber`: \""), str_sub(s, 0, s.len < 40 ? s.len : 40), S("\" is not an integer (an optional `-`, then decimal digits)"));
     value_int(out, n);
     return OK;
 }
@@ -389,7 +389,7 @@ static STATUS_MUST_USE Status bi_parse_int(Run *r, Pos pos, ConstValues args, Va
         *out = *v;
         return OK;
     }
-    if (v->tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`parse_int` takes a string (or nil, or an integer), not {s}", 2, S("`parse_int` takes a string (or nil, or an integer), not "), value_type_name(v));
+    if (v->tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`parse_int` takes a string (or nil, or an integer), not {s}", S("`parse_int` takes a string (or nil, or an integer), not "), value_type_name(v));
     TRY(run_charge(r, pos, v->as.string.len));
     int64_t n = 0;
     if (!cli_parse_integer(builtin_trim_end(builtin_trim_start(v->as.string)), &n)) {
@@ -405,7 +405,7 @@ static STATUS_MUST_USE Status bi_rep(Run *r, Pos pos, ConstValues args, Value *o
     int64_t n = 0;
     TRY(builtin_string_arg(r, pos, BUILTIN_REP, &at(args, 0), S("its first argument"), &s));
     TRY(builtin_int_arg(r, pos, BUILTIN_REP, &at(args, 1), S("how many times"), &n));
-    if (n < 0) return run_failf(r, pos, CLASS_ARGUMENT, "`rep`: {d} times", 3, S("`rep`: "), run_num(r, n), S(" times"));
+    if (n < 0) return run_failf(r, pos, CLASS_ARGUMENT, "`rep`: {d} times", S("`rep`: "), run_num(r, n), S(" times"));
     if (s.len > 0 && (uint64_t)n > UINT64_MAX / s.len) return run_budget_stop(&r->ctx, pos, BUDGET_ARENA);
     uint64_t total = (uint64_t)s.len * (uint64_t)n;
     TRY(run_charge(r, pos, total));
@@ -432,8 +432,8 @@ static STATUS_MUST_USE Status bi_substitute(Run *r, Pos pos, ConstValues args, V
         for (size_t k = 0; k < ValueMap_len(&m->map); k++) {
             Str key = ValueMap_key_at(&m->map, k);
             Value x = ValueMap_value_at(&m->map, k);
-            if (!str_eq(key, S("missing_ok"))) return run_failf(r, pos, CLASS_ARGUMENT, "`substitute` takes `missing_ok`, not `{s}`", 3, S("`substitute` takes `missing_ok`, not `"), key, S("`"));
-            if (x.tag != VALUE_BOOL) return run_failf(r, pos, CLASS_TYPE, "`substitute`: its `missing_ok` must be true or false, not {s}", 2, S("`substitute`: its `missing_ok` must be true or false, not "), value_type_name(&x));
+            if (!str_eq(key, S("missing_ok"))) return run_failf(r, pos, CLASS_ARGUMENT, "`substitute` takes `missing_ok`, not `{s}`", S("`substitute` takes `missing_ok`, not `"), key, S("`"));
+            if (x.tag != VALUE_BOOL) return run_failf(r, pos, CLASS_TYPE, "`substitute`: its `missing_ok` must be true or false, not {s}", S("`substitute`: its `missing_ok` must be true or false, not "), value_type_name(&x));
             missing_ok = x.as.boolean;
         }
     }
@@ -456,7 +456,7 @@ static STATUS_MUST_USE Status bi_substitute(Run *r, Pos pos, ConstValues args, V
             value_string(out, s);
             return OK;
         }
-        return run_failf(r, pos, CLASS_ARGUMENT, "`substitute`: \"{s}\" is not in the text, so nothing was replaced; `{missing_ok = true}` if a miss is expected", 3, S("`substitute`: \""), str_sub(old, 0, old.len < 40 ? old.len : 40), S("\" is not in the text, so nothing was replaced; `{missing_ok = true}` if a miss is expected"));
+        return run_failf(r, pos, CLASS_ARGUMENT, "`substitute`: \"{s}\" is not in the text, so nothing was replaced; `{missing_ok = true}` if a miss is expected", S("`substitute`: \""), str_sub(old, 0, old.len < 40 ? old.len : 40), S("\" is not in the text, so nothing was replaced; `{missing_ok = true}` if a miss is expected"));
     }
     if (new_text.len > 0 && n > SIZE_MAX / new_text.len) return run_budget_stop(&r->ctx, pos, BUDGET_ARENA);
     size_t total = s.len - n * old.len + n * new_text.len;
@@ -481,7 +481,7 @@ static STATUS_MUST_USE Status bi_path(Run *r, Pos pos, ConstValues args, Value *
     uint64_t total = 0;
     for (size_t i = 0; i < args.len; i++) {
         const Value *a = &at(args, i);
-        if (a->tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`path`'s part {d} is {s}, not a string", 5, S("`path`'s part "), run_unum(r, (uint64_t)i + 1), S(" is "), value_type_name(a), S(", not a string"));
+        if (a->tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`path`'s part {d} is {s}, not a string", S("`path`'s part "), run_unum(r, (uint64_t)i + 1), S(" is "), value_type_name(a), S(", not a string"));
         if (a->as.string.len > 0) total += a->as.string.len + 1;
     }
     if (total > 0) total--;
@@ -680,14 +680,14 @@ static STATUS_MUST_USE Status builtin_program(Run *r, Pos pos, Str who, Str patt
         *out = got;
         return OK;
     }
-    if (pattern.len > REGEX_PATTERN_MOST) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}`'s pattern is {d} bytes, and one may be at most {d}", 5, S("`"), who, S("`'s pattern is "), run_unum(r, pattern.len), S(" bytes, and one may be at most 256"));
+    if (pattern.len > REGEX_PATTERN_MOST) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}`'s pattern is {d} bytes, and one may be at most {d}", S("`"), who, S("`'s pattern is "), run_unum(r, pattern.len), S(" bytes, and one may be at most 256"));
     TRY(run_charge(r, pos, pattern.len + 1 + (options.nocase ? pattern.len : 0)));
     RegexRefusal refused;
     memset(&refused, 0, sizeof refused);
     size_t limit = run_sat_sub(r->ctx.budgets.machine_bytes, r->machine->held + regex_cache_held(&r->patterns));
     if (regex_cache_put(&r->patterns, pattern, options, limit, &refused, out) != OK) {
         if (!refused.refused) return run_machine_oom(r, pos);
-        return run_failf(r, pos, CLASS_ARGUMENT, "`{s}`'s pattern, at its byte {d}: {s}", 5, S("`"), who, S("`'s pattern, at its byte "), run_unum(r, (uint64_t)refused.at + 1), S(": "), refused.message);
+        return run_failf(r, pos, CLASS_ARGUMENT, "`{s}`'s pattern, at its byte {d}: {s}", S("`"), who, S("`'s pattern, at its byte "), run_unum(r, (uint64_t)refused.at + 1), S(": "), refused.message);
     }
     return OK;
 }
@@ -698,7 +698,7 @@ static STATUS_MUST_USE Status builtin_flag_option(Run *r, Pos pos, Str who, Str 
         *out = x->as.boolean;
         return OK;
     }
-    return run_failf(r, pos, CLASS_TYPE, "`{s}`: its `{s}` must be true or false, not {s}", 6, S("`"), who, S("`: its `"), name, S("` must be true or false, not "), value_type_name(x));
+    return run_failf(r, pos, CLASS_TYPE, "`{s}`: its `{s}` must be true or false, not {s}", S("`"), who, S("`: its `"), name, S("` must be true or false, not "), value_type_name(x));
 }
 
 // The options map a call may end with: `{nocase = true}`, and `re_find`'s `from`.
@@ -714,8 +714,8 @@ static STATUS_MUST_USE Status builtin_regex_options(Run *r, Pos pos, Builtin b, 
         if (b == BUILTIN_RE_FIND && str_eq(key, S("from"))) continue;
         if (!str_eq(key, S("nocase"))) {
             // `re_find_all` was the prelude's, whose `opts_only` said it so.
-            if (b == BUILTIN_RE_FIND_ALL) return run_failf(r, pos, CLASS_FAIL, "`re_find_all` takes `nocase`, not `{s}`", 3, S("`re_find_all` takes `nocase`, not `"), key, S("`"));
-            return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes `{s}`, not `{s}`", 5, S("`"), builtin_name(b), b == BUILTIN_RE_FIND ? S("` takes `nocase` or `from`, not `") : S("` takes `nocase`, not `"), key, S("`"));
+            if (b == BUILTIN_RE_FIND_ALL) return run_failf(r, pos, CLASS_FAIL, "`re_find_all` takes `nocase`, not `{s}`", S("`re_find_all` takes `nocase`, not `"), key, S("`"));
+            return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes `{s}`, not `{s}`", S("`"), builtin_name(b), b == BUILTIN_RE_FIND ? S("` takes `nocase` or `from`, not `") : S("` takes `nocase`, not `"), key, S("`"));
         }
         TRY(builtin_flag_option(r, pos, builtin_name(b), S("nocase"), &x, &o->nocase));
     }
@@ -788,9 +788,9 @@ static STATUS_MUST_USE Status bi_re_find(Run *r, Pos pos, ConstValues args, Valu
         TRY(builtin_map_arg(r, pos, BUILTIN_RE_FIND, &at(args, 2), &m));
         Value x;
         if (ValueMap_get(&m->map, S("from"), &x)) {
-            if (x.tag != VALUE_INT) return run_failf(r, pos, CLASS_TYPE, "`re_find`: its `from` must be an integer, not {s}", 2, S("`re_find`: its `from` must be an integer, not "), value_type_name(&x));
+            if (x.tag != VALUE_INT) return run_failf(r, pos, CLASS_TYPE, "`re_find`: its `from` must be an integer, not {s}", S("`re_find`: its `from` must be an integer, not "), value_type_name(&x));
             int64_t n = x.as.integer;
-            if (n < 1 || n > (int64_t)s.len + 1) return run_failf(r, pos, CLASS_ARGUMENT, "`re_find`: a `from` of {d}, and it must be 1 to {d} (the string's length and one)", 5, S("`re_find`: a `from` of "), run_num(r, n), S(", and it must be 1 to "), run_unum(r, (uint64_t)s.len + 1), S(" (the string's length and one)"));
+            if (n < 1 || n > (int64_t)s.len + 1) return run_failf(r, pos, CLASS_ARGUMENT, "`re_find`: a `from` of {d}, and it must be 1 to {d} (the string's length and one)", S("`re_find`: a `from` of "), run_num(r, n), S(", and it must be 1 to "), run_unum(r, (uint64_t)s.len + 1), S(" (the string's length and one)"));
             from = (size_t)(n - 1);
         }
     }
@@ -882,8 +882,8 @@ static STATUS_MUST_USE Status bi_re_replace(Run *r, Pos pos, ConstValues args, V
         size_t g = (size_t)(d - '1');
         if (g >= groups) {
             Str digit = str_sub(with, k + 1, k + 2);
-            if (groups == 0) return run_failf(r, pos, CLASS_ARGUMENT, "`re_replace`'s replacement has `\\{c}`, and its pattern has no capture group", 3, S("`re_replace`'s replacement has `\\"), digit, S("`, and its pattern has no capture group"));
-            return run_failf(r, pos, CLASS_ARGUMENT, "`re_replace`'s replacement has `\\{c}`, and its pattern has only {d} capture group{s}", 6, S("`re_replace`'s replacement has `\\"), digit, S("`, and its pattern has only "), run_unum(r, groups), S(" capture group"), groups == 1 ? S("") : S("s"));
+            if (groups == 0) return run_failf(r, pos, CLASS_ARGUMENT, "`re_replace`'s replacement has `\\{c}`, and its pattern has no capture group", S("`re_replace`'s replacement has `\\"), digit, S("`, and its pattern has no capture group"));
+            return run_failf(r, pos, CLASS_ARGUMENT, "`re_replace`'s replacement has `\\{c}`, and its pattern has only {d} capture group{s}", S("`re_replace`'s replacement has `\\"), digit, S("`, and its pattern has only "), run_unum(r, groups), S(" capture group"), groups == 1 ? S("") : S("s"));
         }
         at(uses, g)++;
         named += 2;

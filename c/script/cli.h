@@ -668,9 +668,12 @@ static inline STATUS_MUST_USE Status cli_parse_mounts(Arena *a, Str text, Str ho
     return OK;
 }
 
+// The longest name FAT holds on the bare-metal host: zig-webbox's `max_name`.
+enum { CLI_NAME_MOST = 96 };
+
 // Zig's `store.fatName`: a part of a path FAT can hold.
 static inline bool cli_fat_name(Str name) {
-    if (name.len == 0 || name.len > 255) return false;
+    if (name.len == 0 || name.len > CLI_NAME_MOST) return false;
     if (str_eq(name, S(".")) || str_eq(name, S(".."))) return false;
     for (size_t i = 0; i < name.len; i++) {
         uint8_t c = str_byte(name, i);

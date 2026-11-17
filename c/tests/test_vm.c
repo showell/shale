@@ -30,7 +30,7 @@ static void ran_source(Ran *x, Str src, Budgets b) {
     x->tree = arena_make((size_t)64 << 20);
     x->values = arena_make(b.arena_bytes);
     x->machine = arena_make(b.machine_bytes);
-    x->output = arena_make(2 * b.output_bytes + ARENA_BIG);
+    x->output = arena_make(b.output_bytes + ARENA_BIG);
     Parser p;
     parse_init(&p, &x->tree, src, b.nesting);
     Loader none = {NULL, NULL};
@@ -46,6 +46,7 @@ static void ran_source(Ran *x, Str src, Budgets b) {
     r->now = 1700000000;
     r->out = buf_make(&x->output);
     r->out_cap = b.output_bytes;
+    if (buf_reserve(&r->out, r->out_cap) != OK) return;
     r->stack = ValueVec_make(&x->machine);
     r->patterns = regex_cache_make();
     x->ran = run_ended(&r->ctx, vm_main(r, &x->code));

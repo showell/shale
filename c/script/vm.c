@@ -108,7 +108,7 @@ static bool builtin_changes_store(Builtin b) {
 }
 
 static STATUS_MUST_USE Status builtins_too_many(Run *r, Pos pos, Builtin b) {
-    return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes at most {d} arguments", 4, S("`"), builtin_name(b), S("` takes at most "), run_unum(r, at(builtin_specs(), (size_t)b).at_most), S(" arguments"));
+    return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes at most {d} arguments", S("`"), builtin_name(b), S("` takes at most "), run_unum(r, at(builtin_specs(), (size_t)b).at_most), S(" arguments"));
 }
 
 // Calls builtin `b` after counting its arguments against its spec.
@@ -118,8 +118,8 @@ static STATUS_MUST_USE Status builtins_call(Run *r, Pos pos, Builtin b, ConstVal
     if (args.len < s->at_least || args.len > s->at_most) {
         Str name = builtin_name(b);
         Str plural = s->at_least == 1 ? S("") : S("s");
-        if (s->at_least == s->at_most) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes {d} argument{s}, given {d}", 6, S("`"), name, S("` takes "), run_unum(r, s->at_least), S(" argument"), plural, S(", given "), run_unum(r, args.len));
-        return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes {d} to {d} arguments, given {d}", 8, S("`"), name, S("` takes "), run_unum(r, s->at_least), S(" to "), run_unum(r, s->at_most), S(" arguments, given "), run_unum(r, args.len));
+        if (s->at_least == s->at_most) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes {d} argument{s}, given {d}", S("`"), name, S("` takes "), run_unum(r, s->at_least), S(" argument"), plural, S(", given "), run_unum(r, args.len));
+        return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes {d} to {d} arguments, given {d}", S("`"), name, S("` takes "), run_unum(r, s->at_least), S(" to "), run_unum(r, s->at_most), S(" arguments, given "), run_unum(r, args.len));
     }
     if (s->impl == NULL) return builtin_not_ported(r, pos, builtin_name(b));
     return s->impl(r, pos, args, out);
@@ -212,9 +212,16 @@ static STATUS_MUST_USE Status copier_drain(Copier *c) {
     while (c->todo.len > 0) {
         Table *t = ValueVec_pop(&c->todo).as.table;
         Table *old = ValueVec_pop(&c->todo).as.table;
-        // A list keeps its capacity: a list literal half built when an item's
-        // call yielded has reserved room for the rest.
-        if (ValueVec_reserve(&t->list, old->list.cap) != OK) return run_budget_stop(&c->r->ctx, c->pos, BUDGET_KEPT);
+        // A list keeps exactly its capacity, as Zig's `ensureTotalCapacityPrecise`:
+        // a list literal half built when an item's call yielded has reserved
+        // room for the rest, and the growth rule's half again would grow a
+        // kept list at every yield.
+        if (old->list.cap > 0) {
+            Value *items = ARENA_ARRAY(c->r->ctx.values, Value, old->list.cap);
+            if (items == NULL) return run_budget_stop(&c->r->ctx, c->pos, BUDGET_KEPT);
+            t->list.ptr = items;
+            t->list.cap = old->list.cap;
+        }
         for (size_t i = 0; i < old->list.len; i++) {
             Value item = at(old->list, i);
             TRY(copier_copy(c, &item));
