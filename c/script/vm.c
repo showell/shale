@@ -244,7 +244,12 @@ SLICE_TYPE(TableSlots, Table *);
 // and the attempts' answers `outs` reach, with the run's consts. Each is
 // updated in place to its copy. A step for each value and each 16 bytes of
 // string; past the kept budget the run stops.
-// DRAGON: use after free. The old arena goes back to the system here, so any pointer into it held outside these roots dangles: a builtin's buffer, the `..` chain's tail (cleared below), a stop's message made before the yield. The VM yields only between ops, when the roots below are all it holds.
+// DRAGON: use after free. The old arena goes back to the system here, so
+// any pointer into it held outside these roots dangles: a builtin's buffer,
+// the `..` chain's tail, a stop's message made before the yield.
+// REMEDY: the VM yields only between ops, when the stack, the operands, the
+// attempts' answers and the consts are all it holds; the tail is cleared
+// below, and a stop the copy makes has its message in the fresh arena.
 static STATUS_MUST_USE Status collect_run(Run *r, Pos pos, Values stack, Values operands, TableSlots outs) {
     r->collections++;
     Arena *values = r->ctx.values;
