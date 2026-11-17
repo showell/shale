@@ -362,6 +362,12 @@ on an agent's workloads and the build's time, one TSV a run
   reached past Shale for.
 - [docs/PORTING.md](docs/PORTING.md): which modules are bound to Linux,
   and what a port to another kernel would replace.
+- [docs/SURFACE.txt](docs/SURFACE.txt): the frozen surface, every builtin,
+  stop text, budget, flag and report line, generated from the source by
+  `tools/surface.shale` and held to it by `zig build surface-check` (in
+  `test`).
+- [docs/C-SEAMS.md](docs/C-SEAMS.md): the C port's shared design, its values,
+  the arena's fidelity, the VM and the host's seams.
 - [cookbook/zig/README.md](cookbook/zig/README.md): recipes for finding a
   Zig file's seams, moving code along them and judging the move, each
   tested to parse. Recipes, not builtins: copy one and change it.
