@@ -118,6 +118,22 @@ static bool jobs_stop(const JobRecord *r, uint64_t grace_ms) {
     return true;
 }
 
+// `dir/name` in the arena, as spawn.c's candidates are made; false when
+// refused.
+static bool jobs_join(Arena *a, Str dir, Str name, Str *out) {
+    if (dir.len > SIZE_MAX / 4 || name.len > SIZE_MAX / 4) return arena_refuse(a) != NULL;
+    char *p = ARENA_ARRAY(a, char, dir.len + 1 + name.len);
+    if (p == NULL) return false;
+    Bytes room = {p, dir.len + 1 + name.len};
+    if (dir.len > 0) memcpy(room.ptr, dir.ptr, dir.len);
+    at(room, dir.len) = '/';
+    Bytes tail = SLICE_SUB(Bytes, room, dir.len + 1, room.len);
+    if (name.len > 0) memcpy(tail.ptr, name.ptr, name.len);
+    out->ptr = p;
+    out->len = room.len;
+    return true;
+}
+
 static bool jobs_runnable(Arena *a, Str p) {
     char *z = spawn_cstr(a, p);
     return z != NULL && access(z, X_OK) == 0;
@@ -130,13 +146,7 @@ static STATUS_MUST_USE Status jobs_find(Arena *a, Str argv0, SpawnStrs env, Str 
     *found = false;
     if (argv0.len > 0 && memchr(argv0.ptr, '/', argv0.len) != NULL) {
         Str p = argv0;
-        if (str_byte(argv0, 0) != '/') {
-            Buf b = buf_make(a);
-            TRY(buf_str(&b, cwd));
-            TRY(buf_byte(&b, '/'));
-            TRY(buf_str(&b, argv0));
-            p = buf_view(&b);
-        }
+        if (str_byte(argv0, 0) != '/' && !jobs_join(a, cwd, argv0, &p)) return STOP;
         if (jobs_runnable(a, p)) {
             *found = true;
             *out = p;
@@ -147,25 +157,23 @@ static STATUS_MUST_USE Status jobs_find(Arena *a, Str argv0, SpawnStrs env, Str 
     for (size_t i = 0; i < env.len; i++) {
         if (str_starts_with(at(env, i), S("PATH="))) path = str_sub(at(env, i), 5, at(env, i).len);
     }
-    size_t from = 0;
-    while (from <= path.len) {
-        size_t to = from;
-        while (to < path.len && str_byte(path, to) != ':') to++;
-        Str dir = str_sub(path, from, to);
+    Str rest = path;
+    while (1) {
+        const char *colon = rest.len > 0 ? memchr(rest.ptr, ':', rest.len) : NULL;
+        size_t to = colon != NULL ? (size_t)(colon - rest.ptr) : rest.len;
+        Str dir = str_sub(rest, 0, to);
         if (dir.len > 0) {
-            Buf b = buf_make(a);
-            TRY(buf_str(&b, dir));
-            TRY(buf_byte(&b, '/'));
-            TRY(buf_str(&b, argv0));
-            if (jobs_runnable(a, buf_view(&b))) {
+            Str p = S("");
+            if (!jobs_join(a, dir, argv0, &p)) return STOP;
+            if (jobs_runnable(a, p)) {
                 *found = true;
-                *out = buf_view(&b);
+                *out = p;
                 return OK;
             }
         }
-        from = to + 1;
+        if (colon == NULL) return OK;
+        rest = str_sub(rest, to + 1, rest.len);
     }
-    return OK;
 }
 
 // What `jobs_launch` gives: Zig's LaunchError and its OK.

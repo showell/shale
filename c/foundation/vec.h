@@ -49,7 +49,7 @@ static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *
     if (fresh == NULL) return STOP;
     // memmove, not memcpy: GCC at -O2 cannot prove the two buffers apart and
     // warns (-Wrestrict); they never overlap, and the cost is the same.
-    if (len > 0) memmove(fresh, *ptr, len * elem);
+    if (len > 0 && *cap > 0) memmove(fresh, *ptr, len * elem);
     // DRAGON: use after free. The old buffer is freed here, back to the system when it is big, so a pointer into the items taken before a growth (`&at(v, i)`, an Items slice, a map's `_ptr`, a buf_view) dangles after it. Nothing tracks such pointers. A caller drops them before its next push.
     if (*cap > 0) arena_free(a, *ptr, *cap * elem);
     *ptr = fresh;
