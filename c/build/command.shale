@@ -19,18 +19,28 @@ const PARSE_PLANTS = {
    old = [=[S("`break` outside a loop")]=], new = [=[S("`break` is outside a loop")]=]},
 }
 
--- The C `shale` under `build`, at c/out/<build>/shale (under `release`, the
--- one -O2 link, the binary the differ judges), then its `--check` of one
--- script that parses and one that stops, each held to Zig's exact report.
-function build_command(t, build)
-  local dir = OUT .. "/" .. build
-  mkdir(dir)
-  local bin = dir .. "/shale"
-  local argv = {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. FOUNDATION}
-  if build ~= "tcc" then argv = gcc_flags(build, FOUNDATION) end
-  for a in {"-I" .. OUT .. "/gen", "-Ic", "c/shale.c", "-o", bin} do push(argv, a) end
-  local c = run_in(t, "command " .. build, argv, {timeout_ms = 120000, tail = 40})
-  if c.code ~= 0 then fail("`" .. build .. "` could not compile c/shale.c:\n" .. c.out) end
+-- The C `shale` under each of `t.builds`, at c/out/<build>/shale (under
+-- `release`, the one -O2 link, the binary the differ judges), compiled two
+-- at a time (`run_jobs`).
+function build_commands(t)
+  local specs = {}
+  for b in t.builds do
+    local argv = compile_argv(b, "c/shale.c", FOUNDATION, OUT .. "/" .. b .. "/shale", {"-I" .. OUT .. "/gen", "-Ic"})
+    push(specs, {name = "command-" .. b, argv = argv, opts = {timeout_ms = 120000}})
+  end
+  local answers = run_jobs(t, "command builds", OUT .. "/jobs", specs)
+  local i = 0
+  for a in answers do
+    i = i + 1
+    if get(a, "code", -1) ~= 0 then fail("`" .. t.builds[i] .. "` could not compile c/shale.c:\n" .. a.out) end
+  end
+  return nil
+end
+
+-- The C `shale` under `build`: its `--check` of one script that parses and
+-- one that stops, each held to Zig's exact report.
+function check_command(t, build)
+  local bin = OUT .. "/" .. build .. "/shale"
   local good = OUT .. "/command/good.shale"
   local bad = OUT .. "/command/bad.shale"
   if exists(OUT .. "/command") then remove_tree(OUT .. "/command") end
@@ -49,8 +59,9 @@ end
 
 function command_block(t)
   print(trim(must(run_in(t, "command preludes", {"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5})).out))
+  build_commands(t)
   for b in t.builds do
-    build_command(t, b)
+    check_command(t, b)
     print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops")
   end
   if not t.full then return nil end

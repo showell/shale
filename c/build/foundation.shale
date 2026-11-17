@@ -22,7 +22,7 @@ const PLANTS = {
   {name = "a reset keeps the bigs",
    aim = "a_reset_gives_back_everything_since_its_mark,a_reset_to_an_outer_mark_closes_the_inner_ones,a_reset_survives_a_big_from_before_its_mark_freed_after_it", file = "arena.h", caught_by = "test_arena",
    old = "    while (a->bigs != s.bigs) {", new = "    while (0 && a->bigs != s.bigs) {"},
-  {name = "a big freed under a mark leaves the mark dangling",
+  {name = "a big freed under a mark leaves the mark dangling", build = "asan",
    aim = "a_reset_survives_a_big_from_before_its_mark_freed_after_it", file = "arena.h", caught_by = "test_arena",
    old = "if (at(marks, m).bigs == c) at(marks, m).bigs = c->next;", new = "(void)at(marks, m);"},
   {name = "any allocation grows in place",
@@ -40,7 +40,7 @@ const PLANTS = {
   {name = "str_sub is a macro again, its arguments evaluated more than once",
    aim = "str_sub_evaluates_each_argument_once", file = "slice.h", caught_by = "test_slice",
    old = "#define str_sub(s, from, to) str_sub_at((s), (from), (to), __FILE__, __LINE__)", new = "#define str_sub(s, from, to) SLICE_SUB(Str, s, from, to)"},
-  {name = "a view of the buffer itself is not rebased after the growth",
+  {name = "a view of the buffer itself is not rebased after the growth", build = "asan",
    aim = "appending_a_view_of_itself_past_ARENA_BIG_copies_what_it_held", file = "buf.h", caught_by = "test_buf",
    old = "if (inside) s = str_sub(((Str){b->ptr, b->len}), offset, offset + s.len);", new = "(void)offset;"},
   {name = "a STOP with no stop recorded is let through",
@@ -67,7 +67,7 @@ const PLANTS = {
   {name = "a buffer's reserve wraps its length",
    aim = "a_refused_append_leaves_the_buffer_as_it_was", file = "buf.h", caught_by = "test_buf",
    old = "if (more > SIZE_MAX - b->len) {", new = "if (0 && more > SIZE_MAX - b->len) {"},
-  {name = "the smallest integer negated overflows",
+  {name = "the smallest integer negated overflows", build = "asan",
    aim = "numbers_print_as_zigs_d_prints_them", file = "buf.h", caught_by = "test_buf",
    old = "return buf_u64(b, (uint64_t)(-(n + 1)) + 1);", new = "return buf_u64(b, (uint64_t)(-n));"},
   {name = "growth forgets Zig's half again",
@@ -200,11 +200,7 @@ end
 -- Every test file under each of `t.builds` (`test_file`); then, in the
 -- full tier, the harness fixture, the compiler's refusals and the plants.
 function foundation_block(t)
-  for b in t.builds do
-    local total = 0
-    for src in t.tests do total = total + test_file(t, b, b, src) end
-    print(said_of_build(b, #t.tests, total))
-  end
+  for b in t.builds do print(said_of_build(b, #t.tests, test_files(t, b, b, t.tests))) end
   if not t.full then return nil end
 
   local harness = OUT .. "/asan/harness_fails"

@@ -9,18 +9,102 @@ const WANT = "c-tests: the build's own test binary, made under c/out"
 
 -- ── The run: its programs, charged to phases ────────────────────────────
 
--- `run`, its time charged to `phase` of the run `t`.
-function run_in(t, phase, argv, opts)
-  local r = run(argv, opts)
+-- `programs` programs charged to `phase` of the run `t`, with their wall
+-- and CPU times.
+function charge(t, phase, programs, ms, cpu_ms)
   if not has_key(t.phases, phase) then
     push(t.phase_order, phase)
     t.phases[phase] = {programs = 0, ms = 0, cpu_ms = 0}
   end
   local ph = t.phases[phase]
-  ph.programs = ph.programs + 1
-  ph.ms = ph.ms + r.ms
-  ph.cpu_ms = ph.cpu_ms + get(r, "cpu_ms", 0)
+  ph.programs = ph.programs + programs
+  ph.ms = ph.ms + ms
+  ph.cpu_ms = ph.cpu_ms + cpu_ms
+  return nil
+end
+
+-- `run`, its time charged to `phase` of the run `t`.
+function run_in(t, phase, argv, opts)
+  local r = run(argv, opts)
+  charge(t, phase, 1, r.ms, get(r, "cpu_ms", 0))
   return r
+end
+
+-- ── Jobs: two programs at a time ─────────────────────────────────────────
+-- The box has two cores, so two compiles at once take about half the wall
+-- time of two in turn. A job's CPU time is not in this run's `run`s, so
+-- each job is c/build/job.shale running the program under `run` and
+-- writing `run`'s answer, `cpu_ms` among it, which is charged to the
+-- program's phase.
+
+-- `argv` started as a job, `opts` its `timeout_ms` and `env` and `want` if
+-- given; its spec and answer are files named `name` in `dir`.
+function job_run_start(dir, name, argv, opts)
+  mkdir(dir)
+  local spec = dir .. "/" .. name .. ".json"
+  local s = {argv = argv, timeout_ms = opts.timeout_ms}
+  if has_key(opts, "env") then s.env = opts.env end
+  if has_key(opts, "want") then s.want = opts.want end
+  for f in {spec, spec .. ".answer", spec .. ".log", spec .. ".log.job"} do
+    if exists(f) then remove(f) end
+  end
+  create(spec, json_write(s))
+  local job = job_start({"shale", "c/build/job.shale", "spec=" .. spec}, {log = spec .. ".log"})
+  return {job = job, spec = spec, argv = argv}
+end
+
+-- A job of `job_run_start` waited for, its CPU time charged to `phase`.
+-- Gives `run`'s answer, {ended, code (absent past the timeout), ms, cpu_ms,
+-- out}.
+function job_run_finish(t, phase, started)
+  local w = job_wait(started.job, {timeout_ms = 900000})
+  if w.ended ~= "exited" or get(w, "code", -1) ~= 0 then
+    job_stop(started.job)
+    fail("the job for `" .. join(started.argv, " ") .. "` ended " .. w.ended .. ":\n" .. read(started.spec .. ".log"))
+  end
+  local a = json_read(read(started.spec .. ".answer"))
+  charge(t, phase, 1, 0, a.cpu_ms)
+  return a
+end
+
+-- Which of `running` ({at, started}) has ended, waiting until one has:
+-- its place in the list.
+function first_ended(running)
+  while true do
+    local k = 0
+    for r in running do
+      k = k + 1
+      if not job_alive(r.started.job) then return k end
+    end
+    sleep(20)
+  end
+  return 0
+end
+
+-- Each of `specs` ({name, argv, opts}, as `job_run_start` takes them) run
+-- as a job, two at a time, under `phase`, the jobs' files in `dir`: as
+-- either ends, the next starts, so a long compile holds one slot alone. The
+-- phase's wall grows by what the clock saw. Gives the answers in `specs`'
+-- order.
+function run_jobs(t, phase, dir, specs)
+  local t0 = clock_ms()
+  local answers = {}
+  for s in specs do push(answers, false) end
+  local running = {}
+  local at = 0
+  for s in specs do
+    at = at + 1
+    if #running == 2 then
+      local k = first_ended(running)
+      answers[running[k].at] = job_run_finish(t, phase, running[k].started)
+      if k == 1 then running = {running[2]} else running = {running[1]} end
+    end
+    push(running, {at = at, started = job_run_start(dir, s.name, s.argv, s.opts)})
+  end
+  for r in running do answers[r.at] = job_run_finish(t, phase, r.started) end
+  charge(t, phase, 0, clock_ms() - t0, 0)
+  t.phases[phase].overlapped = true
+  return answers
 end
 
 -- The flags of a GCC build, `include` the foundation's folder.
@@ -48,12 +132,18 @@ function run_binary(t, phase, bin, env?)
   return {code = r.code, out = r.out}
 end
 
--- Compiles `src` under the GCC build `build` over `include` to `bin`;
--- `extra` flags (a block's `-D`s) go before `src`, and `mode` (`-c`) after
--- it when given. A compile that fails stops the run, naming it.
-function compile_to(t, phase, build, src, include, bin, extra?, mode?)
+-- The flags of the tcc build, `include` the foundation's folder.
+function tcc_flags(include)
+  return {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. include}
+end
+
+-- The argv that compiles `src` under `build` (`tcc` or a GCC build) over
+-- `include` to `bin`: `extra` flags (a block's `-D`s) before `src`, and
+-- `mode` (`-c`) after it when given. Makes `bin`'s folder.
+function compile_argv(build, src, include, bin, extra?, mode?)
   mkdir(dirname(bin))
-  local argv = gcc_flags(build, include)
+  local argv = nil
+  if build == "tcc" then argv = tcc_flags(include) else argv = gcc_flags(build, include) end
   if extra ~= nil then
     for f in extra do push(argv, f) end
   end
@@ -61,6 +151,13 @@ function compile_to(t, phase, build, src, include, bin, extra?, mode?)
   if mode ~= nil then push(argv, mode) end
   push(argv, "-o")
   push(argv, bin)
+  return argv
+end
+
+-- Compiles `src` under `build` (`compile_argv`). A compile that fails stops
+-- the run, naming it.
+function compile_to(t, phase, build, src, include, bin, extra?, mode?)
+  local argv = compile_argv(build, src, include, bin, extra, mode)
   local c = run_in(t, phase, argv, {timeout_ms = 120000, tail = 40})
   if c.code ~= 0 then fail("`" .. build .. "` could not compile " .. src .. ":\n" .. c.out) end
   return nil
@@ -130,37 +227,72 @@ function quick_cases(src, all)
   return all
 end
 
--- One test file through `build`: under tcc run and held to its count (in the
--- fast tier, a SLOW_TESTS file's quick tests alone); under `release`
--- compiled with `-c` for -O2's warnings; under asan built and run, held to
--- its count. `extra` flags go to every compiler. Gives how many tests ran.
-function test_file(t, phase, build, src, extra?)
-  local name = sub(basename(src), 1, #basename(src) - 2)
-  local bin = OUT .. "/" .. build .. "/" .. name
+-- One test file under tcc, run and held to its count (in the fast tier, a
+-- SLOW_TESTS file's quick tests alone). Gives how many tests ran.
+function tcc_test(t, phase, src, extra?)
   local all = case_names(src)
+  local argv = tcc_flags(FOUNDATION)
+  if extra ~= nil then
+    for f in extra do push(argv, f) end
+  end
+  push(argv, "-run")
+  push(argv, src)
+  local o = {timeout_ms = 60000, tail = 40, want = WANT}
+  local n = #all
+  if not t.full then
+    local quick = quick_cases(src, all)
+    if #quick < #all then o.env = {TEST_ONLY = join(quick, ",")} end
+    n = #quick
+  end
+  local r = run_in(t, phase, argv, o)
+  if not has_key(r, "code") then r = {code = -1, out = r.out .. "\n(" .. r.ended .. ")"} end
+  return held_to("tcc", src, r, n)
+end
+
+-- The test files `srcs` through `build`: under tcc each run and held to its
+-- count (`tcc_test`); under `release` each compiled with `-c` for -O2's
+-- warnings; under asan each built, then run and held to its count. The GCC
+-- compiles run two at a time (`run_jobs`); the tests run one at a time, since
+-- some hold a deadline to the millisecond. `extra` flags go to every
+-- compiler. Gives how many tests ran.
+function test_files(t, phase, build, srcs, extra?)
+  local total = 0
   if build == "tcc" then
-    local argv = {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. FOUNDATION}
-    if extra ~= nil then
-      for f in extra do push(argv, f) end
-    end
-    push(argv, "-run")
-    push(argv, src)
-    local o = {timeout_ms = 60000, tail = 40, want = WANT}
-    local n = #all
-    if not t.full then
-      local quick = quick_cases(src, all)
-      if #quick < #all then o.env = {TEST_ONLY = join(quick, ",")} end
-      n = #quick
-    end
-    local r = run_in(t, phase, argv, o)
-    if not has_key(r, "code") then r = {code = -1, out = r.out .. "\n(" .. r.ended .. ")"} end
-    return held_to(build, src, r, n)
+    for src in srcs do total = total + tcc_test(t, phase, src, extra) end
+    return total
   end
-  if build == "release" then
-    compile_to(t, phase, build, src, FOUNDATION, bin .. ".o", extra, "-c")
-    return 0
+  local specs = {}
+  local bins = {}
+  for src in srcs do
+    local name = sub(basename(src), 1, #basename(src) - 2)
+    local bin = OUT .. "/" .. build .. "/" .. name
+    local argv = nil
+    if build == "release" then
+      argv = compile_argv(build, src, FOUNDATION, bin .. ".o", extra, "-c")
+    else
+      argv = compile_argv(build, src, FOUNDATION, bin, extra)
+    end
+    push(specs, {name = build .. "-" .. name, argv = argv, opts = {timeout_ms = 120000}})
+    push(bins, bin)
   end
-  return held_to(build, src, compile_and_run(t, phase, build, src, FOUNDATION, bin, extra), #all)
+  local answers = run_jobs(t, phase, OUT .. "/jobs", specs)
+  local i = 0
+  for a in answers do
+    i = i + 1
+    if get(a, "code", -1) ~= 0 then fail("`" .. build .. "` could not compile " .. srcs[i] .. ":\n" .. a.out) end
+  end
+  if build == "release" then return 0 end
+  i = 0
+  for src in srcs do
+    i = i + 1
+    total = total + held_to(build, src, run_binary(t, phase, bins[i]), #case_names(src))
+  end
+  return total
+end
+
+-- One test file through `build`, as `test_files` takes a list.
+function test_file(t, phase, build, src, extra?)
+  return test_files(t, phase, build, {src}, extra)
 end
 
 -- What a line of a build's tests says it did.
@@ -227,12 +359,19 @@ const PLANT_DIRS = {"foundation", "script", "host"}
 -- `new`, in copies of PLANT_DIRS laid out as c/ is, so a relative
 -- `#include` (`../script/cli.h`, `../../host/keep.c`) reaches the copy. The
 -- test file `p.caught_by`, a path under c/tests (`test_parse`,
--- `host/test_keep`), is copied to its place beside them and compiled under
--- the asan build with `extra` flags if given, and its `p.aim` tests alone
--- are started as a job (`finish_plant` judges it), so the next plant's
--- compile runs while this one's tests wait. `harness` is the fixture,
--- compiled from its own path so the file names in its .expected hold, and
--- judged here. Gives {line} for a plant judged, else {job, ...}.
+-- `host/test_keep`), is copied to its place beside them (with its whole
+-- folder, when it is in one, so a fixture there reaches the copy's c/host),
+-- compiled under `p.build` with `extra` flags if given, and its `p.aim`
+-- tests alone are started as a job (`finish_plant` judges it), so the next
+-- plant's compile runs while this one's tests wait. `harness` is the
+-- fixture, compiled from its own path so the file names in its .expected
+-- hold, and judged here. Gives {line} for a plant judged, else {job, ...}.
+--
+-- A plant's build is tcc unless it names `build = "asan"`: tcc compiles a
+-- unity build about ten times faster than GCC at -O0 with the sanitizers,
+-- and a plant whose aimed test fails by its own EXPECT is caught the same
+-- under either. A fault only a sanitizer sees (a read past an end, an
+-- overflow) names asan.
 function start_plant(t, phase, p, k, extra?)
   local dir = OUT .. "/plants/" .. k
   if exists(dir) then remove_tree(dir) end
@@ -251,30 +390,28 @@ function start_plant(t, phase, p, k, extra?)
   end
   if not has_key(p, "aim") then fail("plant `" .. p.name .. "` names no `aim`, the tests of " .. p.caught_by .. " that catch it") end
   local src = dir .. "/tests/" .. p.caught_by .. ".c"
-  mkdir(dirname(src))
-  copy("c/tests/" .. p.caught_by .. ".c", src)
+  if find(p.caught_by, "/") ~= nil then
+    copy("c/tests/" .. dirname(p.caught_by), dir .. "/tests/" .. dirname(p.caught_by))
+  else
+    copy("c/tests/" .. p.caught_by .. ".c", src)
+  end
   local bin = dir .. "/bin/" .. basename(p.caught_by)
-  compile_to(t, phase, "asan", src, dir .. "/foundation", bin, extra)
-  local log = dir .. "/run.log"
-  local job = job_start({real(bin)}, {log = log, env = {TEST_ONLY = p.aim}, want = WANT})
-  return {job = job, log = log, dir = dir, p = p}
+  compile_to(t, phase, get(p, "build", "tcc"), src, dir .. "/foundation", bin, extra)
+  local job = job_run_start(dir, "run", {bin}, {timeout_ms = 60000, env = {TEST_ONLY = p.aim}, want = WANT})
+  return {job = job, dir = dir, p = p, phase = phase}
 end
 
 -- A started plant's run waited for and judged: its aimed tests must fail.
 -- Gives the line to report.
-function finish_plant(started)
+function finish_plant(t, started)
   if has_key(started, "line") then return started.line end
   local p = started.p
-  local w = job_wait(started.job, {timeout_ms = 60000})
-  local out = read(started.log)
-  local code = get(w, "code", -1)
-  if w.ended == "timeout" then
-    job_stop(started.job)
-    out = out .. "\n(timeout)"
-  end
-  if w.ended ~= "exited" and w.ended ~= "timeout" then fail("plant `" .. p.name .. "`: its run ended " .. w.ended) end
+  local a = job_run_finish(t, started.phase, started.job)
+  local out = a.out
+  local code = get(a, "code", -1)
+  if a.ended == "timeout" then out = out .. "\n(timeout)" end
   if find(out, ": no test named `") ~= nil then fail("plant `" .. p.name .. "`'s aim names a test " .. p.caught_by .. " doesn't have:\n" .. out) end
-  if w.ended == "exited" and code == 0 then fail("plant `" .. p.name .. "` was not caught: " .. p.caught_by .. "'s " .. p.aim .. " passed with it in " .. p.file) end
+  if a.ended == "exit" and code == 0 then fail("plant `" .. p.name .. "` was not caught: " .. p.caught_by .. "'s " .. p.aim .. " passed with it in " .. p.file) end
   remove_tree(started.dir)
   return "  caught: " .. p.name .. " (" .. p.file .. "), by " .. basename(p.caught_by) .. ": " .. caught_how(out)
 end
@@ -304,10 +441,10 @@ function run_plants(t, phase, plants, extra?)
   for p in plants do
     k = k + 1
     local started = start_plant(t, phase, p, k, extra)
-    if pending ~= nil then push(said, finish_plant(pending)) end
+    if pending ~= nil then push(said, finish_plant(t, pending)) end
     pending = started
   end
-  if pending ~= nil then push(said, finish_plant(pending)) end
+  if pending ~= nil then push(said, finish_plant(t, pending)) end
   phase_wall(t, phase, clock_ms() - t0)
   print(phase .. ": " .. #said .. " of " .. #plants .. " caught")
   for l in said do print(l) end

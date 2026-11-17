@@ -12,7 +12,7 @@ use("build:lib.shale")
 -- files they port are held to STORE_ZIG_TESTS, so a Zig test added there is
 -- one the C has yet to port. In the full tier: the faults below planted in
 -- a copy of c/, c/tests/store copied whole beside it (its fixture.c reaches
--- the copy's c/host), each caught by its `aim` tests under asan.
+-- the copy's c/host), each caught by its `aim` tests (`run_plants`).
 
 const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 22}
 const STORE_ZIG_TESTS = {["src/shale_abs_path_test.zig"] = 3, ["src/shale_undo_test.zig"] = 4, ["src/shale_ro_links_test.zig"] = 8}
@@ -72,26 +72,6 @@ const STORE_PLANTS = {
    aim = "a_replace_onto_a_folder_fails_and_leaves_no_temporary_file_beside_it",
    old = "if (e != STORE_OK && from != NULL) unlink(from);", new = "(void)from;"},}
 
--- One store plant, the `k`th, as `start_plant` makes one, but with
--- c/tests/store copied whole beside the copy of c/, so its fixture.c reaches
--- the copy's c/host. `finish_plant` judges it.
-function store_start_plant(t, p, k)
-  local dir = OUT .. "/plants/store-" .. k
-  if exists(dir) then remove_tree(dir) end
-  mkdir(dir .. "/tests")
-  for d in PLANT_DIRS do
-    if exists("c/" .. d) then copy("c/" .. d, dir .. "/" .. d) end
-  end
-  copy("c/tests/store", dir .. "/tests/store")
-  local file = dir .. "/" .. p.dir .. "/" .. p.file
-  replace(file, replaced_once(read(file), p.old, p.new, p.name))
-  local bin = dir .. "/bin/" .. basename(p.caught_by)
-  compile_to(t, "store plants", "asan", dir .. "/tests/" .. p.caught_by .. ".c", dir .. "/foundation", bin)
-  local log = dir .. "/run.log"
-  local job = job_start({real(bin)}, {log = log, env = {TEST_ONLY = p.aim}, want = WANT})
-  return {job = job, log = log, dir = dir, p = p}
-end
-
 function store_block(t)
   local tests = {}
   for src in keys(STORE_TESTS) do push(tests, src) end
@@ -104,27 +84,10 @@ function store_block(t)
     if n ~= STORE_ZIG_TESTS[z] then fail(z .. " has " .. n .. " tests, and STORE_ZIG_TESTS says " .. STORE_ZIG_TESTS[z] .. ": port the new one to c/tests/store") end
   end
   for b in t.builds do
-    local total = 0
-    for src in tests do total = total + test_file(t, "store " .. b, b, src) end
-    print("store " .. said_of_build(b, #tests, total))
+    print("store " .. said_of_build(b, #tests, test_files(t, "store " .. b, b, tests)))
   end
   if not t.full then return nil end
-  -- Two at a time, as `run_plants` runs them: each plant's tests run while
-  -- the next one compiles.
-  local t0 = clock_ms()
-  local said = {}
-  local pending = nil
-  local k = 0
-  for p in STORE_PLANTS do
-    k = k + 1
-    local started = store_start_plant(t, p, k)
-    if pending ~= nil then push(said, finish_plant(pending)) end
-    pending = started
-  end
-  if pending ~= nil then push(said, finish_plant(pending)) end
-  phase_wall(t, "store plants", clock_ms() - t0)
-  print("store plants: " .. #said .. " of " .. #STORE_PLANTS .. " caught")
-  for l in said do print(l) end
+  run_plants(t, "store plants", STORE_PLANTS)
   return nil
 end
 -- ── end of the store's block ─────────────────────────────────────────────

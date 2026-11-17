@@ -94,7 +94,7 @@ function report_phases(full)
   end
   push(rows, {phase = "all", programs = "", wall = seconds(ms), cpu = seconds(cpu)})
   print(table(rows, {"phase", "programs", "wall", "cpu"}))
-  if full then print("* its runs overlap: its wall is the clock's, and its programs and CPU count only those run in the foreground, not its jobs") end
+  if full then print("* its runs overlap: its wall is the clock's, and its CPU every program's, two at a time as jobs (c/build/job.shale) or in the foreground; host vs zig's probes alone are left out") end
   return nil
 end
 

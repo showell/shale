@@ -12,8 +12,9 @@ use("build:lib.shale")
 -- first (with GCC's release flags: it is a program the tests run, not a
 -- test). In the full tier: each fault in HOST_PLANTS caught by the test file
 -- it names, then spawn and the keep against this script's own `run`, Zig's,
--- on the same programs (`HOST_VS_ZIG`): every field the same, `ms` and
--- `cpu_ms` within HOST_MS_SLACK.
+-- on the same programs (`HOST_VS_ZIG`): every field the same, `cpu_ms`
+-- within HOST_MS_SLACK, and `ms` within it too, but for a program that
+-- burns CPU (HOST_VS_ZIG_CPU), whose `ms` is no less than its `cpu_ms`.
 
 const HOST_OUT = "c/out/host"
 const HOST_FIXTURE = "c/tests/host/fixtures/spawn_fixture.c"
@@ -129,6 +130,15 @@ end
 -- Zig's `run`). The others only wait, so their two runs wait side by side.
 const HOST_VS_ZIG_ALONE = {"burn", "burn-child", "spill", "spill-lines", "signal-parent"}
 
+-- The programs of HOST_VS_ZIG that burn CPU rather than wait, so their `ms`
+-- is the scheduler's: under `nice -n 19` on a busy box, `burn 300` took 413
+-- ms through the C and 847 through Zig, `cpu_ms` 300 on both (2026-11-17).
+-- Their `cpu_ms` is held to Zig's within HOST_MS_SLACK as every program's
+-- is, and their `ms` to being no less than their `cpu_ms`. The programs
+-- that wait (a sleep, a deadline, a grace) set their own wall time, and
+-- theirs is held to Zig's.
+const HOST_VS_ZIG_CPU = {"burn", "burn-child", "spill", "spill-lines"}
+
 -- The probe's run of one program: as a job, started before Zig's `run` of
 -- it, or after it for one of HOST_VS_ZIG_ALONE, then waited for. Gives
 -- {code, out}.
@@ -192,7 +202,15 @@ function host_vs_zig(t)
         if parse_int(f[k]) ~= r[k] then push(diffs, k .. " " .. f[k] .. " vs " .. r[k]) end
       end
       if c_out ~= masked_pids(r.out) then push(diffs, "out:\n" .. c_out .. "\nvs Zig's:\n" .. r.out) end
-      if not near(parse_int(f.ms), r.ms) then push(diffs, "ms " .. f.ms .. " vs " .. r.ms) end
+      if has_item(HOST_VS_ZIG_CPU, c.args[1]) then
+        -- A program that burns CPU takes the wall time the scheduler gives
+        -- it, so `ms` is held to what holds under any load: no less than
+        -- `cpu_ms`, on each side.
+        if parse_int(f.ms) < parse_int(f.cpu_ms) then push(diffs, "the C's ms " .. f.ms .. " is under its cpu_ms " .. f.cpu_ms) end
+        if r.ms < r.cpu_ms then push(diffs, "Zig's ms " .. r.ms .. " is under its cpu_ms " .. r.cpu_ms) end
+      elseif not near(parse_int(f.ms), r.ms) then
+        push(diffs, "ms " .. f.ms .. " vs " .. r.ms)
+      end
       if not near(parse_int(f.cpu_ms), r.cpu_ms) then push(diffs, "cpu_ms " .. f.cpu_ms .. " vs " .. r.cpu_ms) end
       if #diffs > 0 then fail("vs zig `" .. what .. "`: " .. join(diffs, "; ")) end
       push(said, "  same: " .. what .. ": " .. r.ended .. " " .. z_code .. ", " .. r.total_lines .. " lines; ms " .. f.ms .. " vs " .. r.ms .. ", cpu_ms " .. f.cpu_ms .. " vs " .. r.cpu_ms)
@@ -209,9 +227,7 @@ function host_block(t)
   for b in t.builds do
     local phase = "host " .. b
     host_compile(t, phase, HOST_FIXTURE, HOST_OUT .. "/" .. b .. "/spawn_fixture")
-    local total = 0
-    for src in tests do total = total + test_file(t, phase, b, src, {host_define(b)}) end
-    print("host " .. said_of_build(b, #tests, total))
+    print("host " .. said_of_build(b, #tests, test_files(t, phase, b, tests, {host_define(b)})))
   end
   if not t.full then return nil end
   run_plants(t, "host plants", HOST_PLANTS, {host_define("asan")})

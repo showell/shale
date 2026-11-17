@@ -1,0 +1,24 @@
+-- c/build/job.shale: one program of c/build.shale's, run as a job so two run
+-- at once, with its answer written where the build reads it back. A job's
+-- own CPU time is not in the build's `run`s, so this runs the program under
+-- `run` and writes what `run` said, `cpu_ms` among it, for the build to
+-- charge to the program's phase.
+--
+--   shale c/build/job.shale spec=<file>
+--
+-- `spec` is a JSON object: `argv`, `timeout_ms`, and `env` and `want` if
+-- given. The answer goes to `<spec>.answer`, a JSON object: `ended`, `code`
+-- (absent past the timeout), `ms`, `cpu_ms` and `out` (the last 60000 bytes
+-- the program printed). It is written whatever the program's exit, so the
+-- build judges every exit itself.
+
+local spec_path = arg("spec", "")
+if spec_path == "" then fail("c/build/job.shale: spec= names the job's JSON spec") end
+local spec = json_read(read(spec_path))
+local o = {timeout_ms = spec.timeout_ms, whole = 60000}
+if has_key(spec, "env") then o.env = spec.env end
+if has_key(spec, "want") then o.want = spec.want end
+local r = run(spec.argv, o)
+local answer = {ended = r.ended, ms = r.ms, cpu_ms = get(r, "cpu_ms", 0), out = r.out}
+if has_key(r, "code") then answer.code = r.code end
+replace(spec_path .. ".answer", json_write(answer))
