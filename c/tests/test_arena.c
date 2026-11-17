@@ -1,14 +1,12 @@
-// arena.h: the budget holds, chunks are sized as Zig's `value.Budgeted`
-// sizes them, big allocations come
-// and go on their own, only the last allocation moves in place, and a reset
-// gives back everything since its mark.
+// arena.h: the budget holds, chunks start at the least and double, big
+// allocations come and go on their own, only the last allocation moves in
+// place, and a reset gives back everything since its mark.
 
 #include "test.h"
 
 #include "arena.h"
 
 TEST(the_budget_refuses_past_its_limit_and_says_it_was_hit) {
-    // Zig's own test: value.zig, "the arena's budget refuses past its limit".
     Arena a = arena_make(64 * 1024);
     EXPECT(arena_alloc(&a, 40 * 1024, 1) != NULL);
     EXPECT(!a.hit);

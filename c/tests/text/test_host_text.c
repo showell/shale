@@ -193,7 +193,7 @@ TEST(flat_tree_ends_the_trees_at_a_line_that_does_not_read_in_a_cut_output) {
     ran_free(&x);
 }
 
-TEST(flat_tree_refuses_its_arguments_in_zigs_order) {
+TEST(flat_tree_refuses_its_arguments_first_to_last) {
     static Ran x;
     ran_source(&x, S("function rt0() return host(\"roc_tree\", \"\") end\n"
                      "function rt(a, b) return host(\"go_tree\", a, b) end\n"
@@ -240,5 +240,5 @@ TEST_PART(host_text, TEST_CASE(json_read_reads_each_kind_and_json_write_writes_i
           TEST_CASE(flat_tree_refuses_a_line_that_does_not_read_naming_its_line_and_why),
           TEST_CASE(flat_tree_reads_each_tools_header_as_its_own_and_refuses_another),
           TEST_CASE(flat_tree_ends_the_trees_at_a_line_that_does_not_read_in_a_cut_output),
-          TEST_CASE(flat_tree_refuses_its_arguments_in_zigs_order),
+          TEST_CASE(flat_tree_refuses_its_arguments_first_to_last),
           TEST_CASE(flat_tree_stops_one_past_the_step_budget_at_a_files_nodes));

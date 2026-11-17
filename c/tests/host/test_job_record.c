@@ -1,5 +1,5 @@
-// The job record's tests: src/shale_job_record.zig's, with the same inputs
-// and answers, and the record's text held to Zig's byte for byte.
+// The job record's tests, with Zig Shale's record tests' inputs and answers,
+// and the record's text held to Zig's byte for byte.
 #include "test.h"
 
 #include "../../host/job_record.c"
@@ -97,7 +97,7 @@ TEST(an_argv_with_a_newline_or_a_backslash_reads_back_and_none_overrides_a_key) 
     EXPECT(!job_record_format(small, big, &text));
 }
 
-TEST(the_escaped_text_is_zigs) {
+TEST(the_record_escapes_its_text_and_fits_its_buffer_exactly) {
     char buf_bytes[512];
     Bytes buf = {buf_bytes, sizeof buf_bytes};
     JobRecord w;
@@ -115,7 +115,7 @@ TEST(the_escaped_text_is_zigs) {
     EXPECT(!job_record_format(short_by_one, w, &again));
     EXPECT(job_record_format(exact, w, &again));
     EXPECT_EQ(again.len, exact.len);
-    // INT64_MIN and the largest u8 and u32 print as Zig's `{d}` does.
+    // INT64_MIN and the largest u8 and u32 print in plain decimal.
     w.started = INT64_MIN;
     w.has_exit = true;
     w.exit = 255;
@@ -125,7 +125,7 @@ TEST(the_escaped_text_is_zigs) {
     EXPECT_STR(again, S("pid=42\npgid=42\nstart=123\nstarted=-9223372036854775808\nargv=a\\\\nb \\\\ c\\nd\nreaper=1\nreaper_start=5\nexit=255\nsignal=4294967295\n"));
 }
 
-TEST(the_numbers_are_read_as_zigs_parse_int_reads_them) {
+TEST(a_number_takes_a_sign_and_inner_underscores_and_nothing_else) {
     JobRecord r;
     // `+`, `_` between digits and `-0` are Zig's; `_` first or last, a
     // space, an empty value and a value past its type are not.
@@ -169,5 +169,5 @@ TEST(a_record_whose_pgid_is_not_its_pid_is_none_so_no_other_group_is_signalled) 
 
 TEST_MAIN(TEST_CASE(a_record_reads_back_as_it_was_written_and_a_broken_one_is_none),
           TEST_CASE(an_argv_with_a_newline_or_a_backslash_reads_back_and_none_overrides_a_key),
-          TEST_CASE(the_escaped_text_is_zigs), TEST_CASE(the_numbers_are_read_as_zigs_parse_int_reads_them),
+          TEST_CASE(the_record_escapes_its_text_and_fits_its_buffer_exactly), TEST_CASE(a_number_takes_a_sign_and_inner_underscores_and_nothing_else),
           TEST_CASE(a_record_whose_pgid_is_not_its_pid_is_none_so_no_other_group_is_signalled))

@@ -1,5 +1,5 @@
-// test_lex.c: the lexer against src/script/lex.zig's own tests, and what each
-// stop says and where.
+// test_lex.c: the lexer against Zig Shale's lexer tests, and what each stop
+// says and where.
 
 #include "test.h"
 
@@ -292,7 +292,8 @@ TEST(a_string_across_its_line_or_never_closed_stops_at_its_quote) {
     EXPECT(lex_fails(&r, S("x = \"a\\")));
     EXPECT_STR(r.lx.err.message, S("a string with no closing quote"));
     arena_deinit(&r.arena);
-    // The arena's refusal is no lex error: the caller reads it as Zig's OutOfMemory.
+    // The arena's refusal is no lex error: the caller reads it as the arena
+    // budget.
     Arena tiny = arena_make(8);
     Lexer lx;
     lexer_init(&lx, &tiny, S("\"a string longer than the arena allows\""));

@@ -1,8 +1,7 @@
 // test_regex.c: regex.c through its own functions, what a pattern compiles
-// to, finds and refuses. The first ten tests are src/script/regex_test.zig's,
-// the same inputs held to the same answers; the rest hold what Zig tests
-// elsewhere (the refusals' texts, the cache) or what the C adds (the bound on
-// a hostile search's work).
+// to, finds and refuses. The first ten tests are Zig Shale's regex tests,
+// the same inputs held to the same answers; the rest hold the refusals'
+// texts, the cache, and the bound on a hostile search's work.
 #include "test.h"
 #include "../script/regex.c"
 
@@ -30,7 +29,7 @@ static void compiled_make(Compiled *c, Str pattern, RegexOptions o) {
     EXPECT(regex_scratch_make(&c->arena, &c->p, &c->sc) == OK);
 }
 
-// Where `pattern` first matches in `s`, as `found` in regex_test.zig.
+// Where `pattern` first matches in `s`.
 static RegexSearched found(Str pattern, Str s) {
     Compiled c;
     compiled_make(&c, pattern, opts(false));
@@ -420,9 +419,9 @@ TEST(a_search_stops_unfinished_past_the_bytes_it_may_skip_as_past_the_positions_
     arena_deinit(&c.arena);
 }
 
-// What the C holds beyond regex_test.zig.
+// What the C holds beyond Zig Shale's regex tests.
 
-TEST(every_refusal_of_the_reader_says_zigs_text_at_zigs_byte) {
+TEST(every_refusal_of_the_reader_says_its_text_at_its_byte) {
     static const Refused cases[25] = {
         {S("(?=a)"), 0, S("`(?` is not in this subset but for `(?:...)`, a group that does not capture: no lookaround, no named groups")},
         {S("x(?"), 1, S("`(?` is not in this subset but for `(?:...)`, a group that does not capture: no lookaround, no named groups")},
@@ -481,9 +480,9 @@ TEST(nocase_folds_bytes_and_classes_before_negation) {
     arena_deinit(&c.arena);
 }
 
-// The cache as builtins_test.zig holds it through re_find: eight entries, the
-// least recently used evicted, keyed by text and nocase, and an evicted
-// entry's memory given back (metal-vmm QUEUE 307).
+// The cache as re_find uses it: eight entries, the least recently used
+// evicted, keyed by text and nocase, and an evicted entry's memory given
+// back.
 TEST(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it_evicts) {
     RegexCache c = regex_cache_make();
     char buf[8];
@@ -495,7 +494,8 @@ TEST(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it
         at(room, 1) = (char)('a' + k);
         Str p = {buf, 2};
         EXPECT(regex_cache_get(&c, p, opts(false)) == NULL);
-        // The entry keeps its own copy of the text, so the caller's buffer may change.
+        // The entry keeps its own copy of the text, so the caller's buffer may
+        // change.
         EXPECT(regex_cache_put(&c, p, opts(false), TEST_REGEX_LIMIT, &refused, &got) == OK);
         EXPECT(got->text.ptr != buf);
         EXPECT_STR(got->text, p);
@@ -634,7 +634,7 @@ TEST_MAIN(
     TEST_CASE(a_search_that_skips_finds_what_one_examining_every_position_finds_from_every_start),
     TEST_CASE(a_pattern_that_can_match_nothing_or_begin_anywhere_skips_nothing_and_one_that_cannot_names_its_first_bytes),
     TEST_CASE(a_search_stops_unfinished_past_the_bytes_it_may_skip_as_past_the_positions_it_may_examine),
-    TEST_CASE(every_refusal_of_the_reader_says_zigs_text_at_zigs_byte),
+    TEST_CASE(every_refusal_of_the_reader_says_its_text_at_its_byte),
     TEST_CASE(nocase_folds_bytes_and_classes_before_negation),
     TEST_CASE(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it_evicts),
     TEST_CASE(each_group_captures_its_own_part),

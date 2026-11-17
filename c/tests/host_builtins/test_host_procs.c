@@ -1,7 +1,7 @@
 // test_host_procs.c: the Linux host's `procs` and `proc_stop`
 // (c/host/host_procs.c), each source run as the C `shale` runs it (ran.c),
-// with `host(...)` called bare since ran.c loads no prelude: the port of
-// src/shale_procs_test.zig. Every message is the one Zig's `shale` gives
+// with `host(...)` called bare since ran.c loads no prelude: Zig Shale's
+// procs tests. Every message is the one Zig's `shale` gives
 // the same call. The processes stopped are this test's own children, a
 // `sh` waiting on a pipe only the test writes, so no test signals anything
 // but its own.
@@ -238,7 +238,7 @@ TEST(proc_stop_refuses_this_process_those_above_it_and_pid_1_whatever_it_is_hand
     }
 }
 
-TEST(procs_and_proc_stop_refuse_what_zig_refuses_with_zigs_words) {
+TEST(procs_and_proc_stop_refuse_each_bad_call_with_its_message) {
     static Ran x;
     ran_source(&x, S("function p(a) return host(\"procs\", a) end\nfunction s(e) return host(\"proc_stop\", e) end\nfunction none() return host(\"proc_stop\") end\n"
                      "print(attempt(p, 1).error)\nprint(attempt(none).error)\n"
@@ -306,6 +306,6 @@ TEST_PART(host_procs, TEST_CASE(procs_lists_a_process_whole_in_pid_order_and_nev
           TEST_CASE(a_command_line_past_one_read_is_read_whole_and_one_past_args_most_says_it_was_cut),
           TEST_CASE(proc_stop_stops_the_process_by_pid_and_start_and_a_stale_start_is_left_alone),
           TEST_CASE(proc_stop_refuses_this_process_those_above_it_and_pid_1_whatever_it_is_handed),
-          TEST_CASE(procs_and_proc_stop_refuse_what_zig_refuses_with_zigs_words),
+          TEST_CASE(procs_and_proc_stop_refuse_each_bad_call_with_its_message),
           TEST_CASE(a_process_the_run_may_not_signal_stops_proc_stop_named_never_a_success),
           TEST_CASE(attack_a_process_that_ignores_term_gets_kill_after_two_seconds));

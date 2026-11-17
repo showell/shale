@@ -1,7 +1,7 @@
-// The keep's tests: src/shale_keep.zig's, with the same inputs and answers.
-// The random rounds draw from Zig's own generator (DefaultPrng, seed 233), so
-// they are Zig's 3000 outputs, options and cuts, and their answers fold to the
-// fingerprint Zig's test prints of the same rounds.
+// The keep's tests, with Zig Shale's keep tests' inputs and answers. The
+// random rounds draw from Zig's default generator (Xoshiro256++, seed 233),
+// so they are that test's 3000 outputs, options and cuts, and their answers
+// fold to the fingerprint it prints of the same rounds.
 #include "test.h"
 #include "../../host/keep.c"
 
@@ -99,7 +99,7 @@ static uint64_t prng_at_most(Prng *p, uint64_t n) {
     return prng_less_than(p, n + 1);
 }
 
-TEST(prng_is_zigs) {
+TEST(the_prng_gives_xoshiro256s_first_draws) {
     // Zig's own test of Xoshiro256 seeded with 0, its first three draws.
     Prng p;
     prng_init(&p, 0);
@@ -252,7 +252,7 @@ static uint64_t count_newlines(Str s) {
     return n;
 }
 
-TEST(head_and_tail_and_the_filter_against_the_oracle_on_zigs_random_outputs) {
+TEST(head_and_tail_and_the_filter_against_the_oracle_on_3000_random_outputs) {
     Prng p;
     prng_init(&p, 233);
     static const Str pieces_all[11] = {S("ok"), S("error"), S("FAIL"), S("x"), S("\n"), S("\n"), S("\n"), S("\r\n"), S("\x00"), S(" "), S("warn")};
@@ -300,8 +300,9 @@ TEST(head_and_tail_and_the_filter_against_the_oracle_on_zigs_random_outputs) {
     EXPECT_EQ(fp, 0xa929a50cc0904effULL);
 }
 
-TEST(zigs_first_round_exactly) {
-    // Round 0 as Zig's test drew it: head 0, tail 0, width 3, before 1, re `x$`.
+TEST(the_first_random_round_exactly) {
+    // Round 0 as the generator draws it: head 0, tail 0, width 3, before 1,
+    // re `x$`.
     Arena a = arena_make(1 << 20);
     KeepOptions o;
     keep_options_default(&o);
@@ -430,6 +431,6 @@ TEST(memory_stays_bounded_over_a_flood_of_lines) {
     arena_deinit(&a);
 }
 
-TEST_MAIN(TEST_CASE(prng_is_zigs), TEST_CASE(head_and_tail_and_the_filter_against_the_oracle_on_zigs_random_outputs),
-          TEST_CASE(zigs_first_round_exactly), TEST_CASE(the_edges), TEST_CASE(an_arena_refused_anywhere_stops_and_never_answers_wrong),
+TEST_MAIN(TEST_CASE(the_prng_gives_xoshiro256s_first_draws), TEST_CASE(head_and_tail_and_the_filter_against_the_oracle_on_3000_random_outputs),
+          TEST_CASE(the_first_random_round_exactly), TEST_CASE(the_edges), TEST_CASE(an_arena_refused_anywhere_stops_and_never_answers_wrong),
           TEST_CASE(memory_stays_bounded_over_a_flood_of_lines))

@@ -1,4 +1,4 @@
-// test_parse.c: the parser against src/script/parse.zig's rules: what a source
+// test_parse.c: the parser against Zig Shale's parser's rules: what a source
 // parses to, where each stop is and what it says, how the preludes load and
 // are checked, and what a `use` binds. The `shale --check` command's own
 // texts are judged by tools/differ.shale against Zig Shale.
@@ -115,7 +115,8 @@ TEST(a_core_prelude_function_is_parsed_at_its_first_call_and_only_then) {
     EXPECT_STR(at(r.prog.functions, 0).name, S("the prelude's twice"));
     EXPECT_EQ(at(r.prog.functions, 0).pos.line, 1);
     arena_deinit(&r.arena);
-    // The script's own function by a prelude's name takes its calls from its line on.
+    // The script's own function by a prelude's name takes its calls from its
+    // line on.
     parse_plain(&r, S("print(twice(\"a\"))\nfunction twice(s) return s end\nprint(twice(\"b\"))\n"));
     EXPECT(r.status == OK);
     EXPECT_EQ(r.prog.functions.len, 2);
@@ -401,7 +402,7 @@ TEST(a_stop_partway_leaves_the_parsers_state_as_it_was) {
     arena_deinit(&r.arena);
 }
 
-TEST(the_command_line_and_the_header_budgets_are_read_as_zig_reads_them) {
+TEST(the_command_line_and_the_header_set_budgets_the_command_line_winning) {
     Arena a = arena_make(1 << 20);
     Buf why = buf_make(&a);
     Command c;
@@ -449,4 +450,4 @@ TEST_MAIN(TEST_CASE(a_script_parses_to_its_tree_each_name_a_slot),
           TEST_CASE(a_use_binds_its_consts_on_its_line_and_its_functions_load_at_their_call),
           TEST_CASE(statements_hold_their_own_rules),
           TEST_CASE(a_stop_partway_leaves_the_parsers_state_as_it_was),
-          TEST_CASE(the_command_line_and_the_header_budgets_are_read_as_zig_reads_them))
+          TEST_CASE(the_command_line_and_the_header_set_budgets_the_command_line_winning))

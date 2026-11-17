@@ -1,5 +1,5 @@
-// The zig-ast wire's tests: src/shale_zig_wire.zig's own, with the same
-// bytes, then the edges the C reads by hand: identifiers, Zig's `parseInt`,
+// The zig-ast wire's tests: Zig Shale's own, with the same bytes, then the
+// edges the C reads by hand: identifiers, Zig's `parseInt`,
 // a token block's little-endian records.
 #include "test.h"
 
@@ -67,7 +67,7 @@ TEST(a_line_of_more_fields_than_there_is_room_for_a_line_with_no_newline_and_a_b
     arena_deinit(&a);
 }
 
-TEST(an_identifier_is_zigs_a_letter_or_underscore_then_word_bytes_and_no_keyword) {
+TEST(an_identifier_is_a_letter_or_underscore_then_word_bytes_and_no_keyword) {
     EXPECT(zig_wire_valid_id(S("count")));
     EXPECT(zig_wire_valid_id(S("_x9")));
     EXPECT(zig_wire_valid_id(S("While")));
@@ -82,7 +82,7 @@ TEST(an_identifier_is_zigs_a_letter_or_underscore_then_word_bytes_and_no_keyword
     EXPECT(!zig_wire_valid_id(S("threadlocal")));
 }
 
-TEST(a_count_is_read_as_zigs_parse_int_reads_it) {
+TEST(a_count_is_decimal_with_an_optional_plus_and_inner_underscores) {
     size_t n = 7;
     EXPECT(zig_wire_int(S("0"), &n));
     EXPECT_EQ(n, 0);
@@ -124,6 +124,6 @@ TEST(a_token_record_is_its_tag_start_end_and_line_little_endian) {
 
 TEST_MAIN(TEST_CASE(a_lines_fields_escape_tabs_newlines_crs_and_backslashes_and_read_back_as_written),
           TEST_CASE(a_line_of_more_fields_than_there_is_room_for_a_line_with_no_newline_and_a_bad_escape_are_refused),
-          TEST_CASE(an_identifier_is_zigs_a_letter_or_underscore_then_word_bytes_and_no_keyword),
-          TEST_CASE(a_count_is_read_as_zigs_parse_int_reads_it),
+          TEST_CASE(an_identifier_is_a_letter_or_underscore_then_word_bytes_and_no_keyword),
+          TEST_CASE(a_count_is_decimal_with_an_optional_plus_and_inner_underscores),
           TEST_CASE(a_token_record_is_its_tag_start_end_and_line_little_endian))

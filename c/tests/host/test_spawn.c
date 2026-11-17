@@ -1,6 +1,6 @@
-// spawn's tests: src/shale_spawn.zig's, on the same fixture verbs with the
-// same expectations, then the attacks on the process boundary that the Zig
-// guards against: a child that ignores TERM, a grandchild that must end with
+// spawn's tests: Zig Shale's, on the same fixture verbs with the same
+// expectations, then the attacks on the process boundary spawn guards
+// against: a child that ignores TERM, a grandchild that must end with
 // the group, at the deadline or when its leader exits, a deadline met to the
 // millisecond, output past any keep, and a TERM or HUP sent to the parent
 // while a program runs or after it has exited, while its output drains.
@@ -637,7 +637,7 @@ TEST(attack_a_program_that_never_reads_its_stdin_leaves_shale_standing) {
     arena_deinit(&a);
 }
 
-TEST(the_paths_tried_are_zigs) {
+TEST(the_paths_tried_follow_the_last_PATH) {
     Arena a = arena_make(1 << 20);
     SpawnCStrs p;
     static const Str env_all[2] = {S("PATH=/a"), S("PATH=/b::/c")};
@@ -686,4 +686,4 @@ TEST_MAIN(TEST_CASE(output_exit_code_stdin_cwd_and_the_environment_as_given),
           TEST_CASE(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds),
           TEST_CASE(attack_a_term_or_hup_the_program_sends_its_parent_mid_run_ends_its_group),
           TEST_CASE(attack_a_program_that_never_reads_its_stdin_leaves_shale_standing),
-          TEST_CASE(the_paths_tried_are_zigs))
+          TEST_CASE(the_paths_tried_follow_the_last_PATH))

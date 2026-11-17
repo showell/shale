@@ -1,12 +1,12 @@
 // ran_tests.c: the test files that run sources as the C `shale` runs them
 // (ran.c), as one binary. ran.c includes every module of c/script and
-// c/host, so each file built alone was a compile of the whole interpreter;
-// as parts of one binary (`TEST_PART`, test.h) they share one compile a
-// build. The binary prints each part's count in a line of its own, as the
-// file alone would, and c/build/ran.shale holds each line to the part's
-// `TEST(` lines. A part's own block (c/build/vm.shale, builtins.shale,
-// host_builtins.shale, host_procs.shale, host_text.shale) plants its faults and names the
-// part as what catches them.
+// c/host, so a file built alone would compile the whole interpreter; as
+// parts of one binary (`TEST_PART`, test.h) they share one compile a build.
+// The binary prints each part's count in a line of its own, as the file
+// alone would, and c/build/ran.shale holds each line to the part's `TEST(`
+// lines. A part's own block (c/build/vm.shale, builtins.shale,
+// host_builtins.shale, host_procs.shale, host_text.shale) plants its faults
+// and names the part as what catches them.
 
 #define _GNU_SOURCE
 

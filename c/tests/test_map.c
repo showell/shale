@@ -1,6 +1,5 @@
 // map.h: put, get and remove by Str key; the order keys were first set kept
-// through growth and removal, as Zig Shale's maps keep it; a refused put
-// leaves the map as it was.
+// through growth and removal; a refused put leaves the map as it was.
 
 #include "test.h"
 
@@ -72,7 +71,8 @@ TEST(a_thousand_keys_keep_their_order_through_every_growth) {
     Arena a = arena_make(16 * 1024 * 1024);
     IntMap m = IntMap_make(&a);
     for (int64_t i = 0; i < 1000; i++) {
-        // Every other one backwards, so the order is not the keys' sorted order.
+        // Every other one backwards, so the order is not the keys' sorted
+        // order.
         int64_t k = i % 2 == 0 ? i : 1000 - i;
         EXPECT(IntMap_put(&m, key_of(&a, k), k * 10) == OK);
     }

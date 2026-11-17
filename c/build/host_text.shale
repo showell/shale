@@ -119,7 +119,7 @@ const HOST_TEXT_TREE_PLANTS = {
    aim = "flat_tree_stops_one_past_the_step_budget_at_a_files_nodes",
    old = "        TRY(run_charge(r, pos, f->nodes.len));\n", new = ""},
   {name = "the ending's word is checked only once the text is one", file = "flat_tree.c", dir = "host", caught_by = "text/test_host_text",
-   aim = "flat_tree_refuses_its_arguments_in_zigs_order",
+   aim = "flat_tree_refuses_its_arguments_first_to_last",
    old = [=[} else if (!str_eq(e->as.string, S("whole"))) {]=], new = [=[} else if (!str_eq(e->as.string, S("whole")) && at(args, 0).tag == VALUE_STRING) {]=]},
 }
 

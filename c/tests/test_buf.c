@@ -22,7 +22,7 @@ TEST(appends_bytes_and_strings_in_order) {
     arena_deinit(&a);
 }
 
-TEST(numbers_print_as_zigs_d_prints_them) {
+TEST(numbers_print_in_decimal_the_extremes_among_them) {
     Arena a = arena_make(1 << 20);
     Buf b = buf_make(&a);
     EXPECT(buf_u64(&b, 0) == OK);
@@ -40,17 +40,17 @@ TEST(numbers_print_as_zigs_d_prints_them) {
     arena_deinit(&a);
 }
 
-TEST(it_grows_by_zigs_policy_in_place_while_it_is_last) {
+TEST(it_grows_by_half_again_in_place_while_it_is_last) {
     Arena a = arena_make(1 << 20);
     Buf b = buf_make(&a);
     EXPECT(buf_byte(&b, 'x') == OK);
-    // growCapacity(1) for bytes: 1 + 0 + 64.
+    // A need of 1 for bytes: 1 + 0 + 64.
     EXPECT_EQ(b.cap, 65);
     char *first = b.ptr;
     for (int i = 1; i < 65; i++) EXPECT(buf_byte(&b, 'x') == OK);
     EXPECT_EQ(b.cap, 65);
     EXPECT(buf_byte(&b, 'y') == OK);
-    // growCapacity(66): 66 + 33 + 64.
+    // A need of 66: 66 + 33 + 64.
     EXPECT_EQ(b.cap, 163);
     EXPECT(b.ptr == first);
     EXPECT_EQ(b.len, 66);
@@ -123,8 +123,8 @@ TEST(a_big_buffer_holds_its_live_bytes_not_every_one_it_outgrew) {
 
 TEST_MAIN(
     TEST_CASE(appends_bytes_and_strings_in_order),
-    TEST_CASE(numbers_print_as_zigs_d_prints_them),
-    TEST_CASE(it_grows_by_zigs_policy_in_place_while_it_is_last),
+    TEST_CASE(numbers_print_in_decimal_the_extremes_among_them),
+    TEST_CASE(it_grows_by_half_again_in_place_while_it_is_last),
     TEST_CASE(it_moves_and_keeps_its_bytes_when_it_is_not_last),
     TEST_CASE(a_refused_append_leaves_the_buffer_as_it_was),
     TEST_CASE(appending_a_view_of_itself_past_ARENA_BIG_copies_what_it_held),

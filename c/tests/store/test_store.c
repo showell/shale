@@ -1,7 +1,7 @@
-// The store's tests: zig-webbox's src/store.zig tests that reach the calls
-// Shale makes, with the same inputs and answers, then Wyhash's own vectors
-// (std/hash/wyhash.zig) for the sibling name a replace writes, and
-// std.fs.path's dirname and basename cases.
+// The store's tests: zig-webbox's store tests that reach the calls Shale
+// makes, with the same inputs and answers, then Wyhash's own vectors for the
+// sibling name a replace writes, and the dirname and basename cases of Zig's
+// standard library, which the store's must match.
 #define _GNU_SOURCE
 #include "test.h"
 
@@ -315,7 +315,7 @@ TEST(wyhash_its_test_vectors) {
     for (size_t i = 0; i < all.len; i++) EXPECT_EQ(store_wyhash(at(all, i).seed, sx_cs(at(all, i).input)), at(all, i).expected);
 }
 
-TEST(dirname_and_basename_as_zig_s_std_fs_path_gives_them) {
+TEST(dirname_and_basename_take_trailing_slashes_and_the_root) {
     Str d = S("");
     EXPECT(store_dirname(S("/a/b/c"), &d));
     EXPECT_STR(d, S("/a/b"));
@@ -348,7 +348,7 @@ TEST(a_path_with_a_nul_inside_is_refused_before_any_call) {
     sx_deinit(&f);
 }
 
-TEST(an_errno_is_named_as_zig_names_its_error) {
+TEST(an_errno_is_named_by_its_error_name) {
     EXPECT_STR(store_err_name(store_err_of(ENOENT)), S("FileNotFound"));
     EXPECT_STR(store_err_name(store_err_of(ENOTDIR)), S("NotDir"));
     EXPECT_STR(store_err_name(store_err_of(EISDIR)), S("IsDir"));
@@ -373,7 +373,7 @@ TEST_MAIN(
     TEST_CASE(a_replace_keeps_the_file_s_mode_on_linux_an_executable_script_stays_one),
     TEST_CASE(a_replace_onto_a_folder_fails_and_leaves_no_temporary_file_beside_it),
     TEST_CASE(wyhash_its_test_vectors),
-    TEST_CASE(dirname_and_basename_as_zig_s_std_fs_path_gives_them),
+    TEST_CASE(dirname_and_basename_take_trailing_slashes_and_the_root),
     TEST_CASE(a_path_with_a_nul_inside_is_refused_before_any_call),
-    TEST_CASE(an_errno_is_named_as_zig_names_its_error)
+    TEST_CASE(an_errno_is_named_by_its_error_name)
 )

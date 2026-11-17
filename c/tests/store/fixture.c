@@ -1,9 +1,8 @@
-// fixture.c: what the path hook's tests share, the port of Zig Shale's test
-// host (src/shale_test_host.zig) as far as they use it: store_fixture.c's
-// root and store, a run's context with its step charge, the Linux hook over
-// the mounts a test parses, and the builtins' path checks in the order the
-// Zig's builtins make them (`fx_look`, `fx_change`), since the builtins
-// themselves need the VM.
+// fixture.c: what the path hook's tests share: store_fixture.c's root and
+// store, a run's context with its step charge, the Linux hook over the
+// mounts a test parses, and the builtins' path checks in the order the
+// builtins make them (`fx_look`, `fx_change`), since the builtins themselves
+// need the VM.
 //
 // A test file defines _GNU_SOURCE, includes test.h, then this.
 
@@ -29,7 +28,8 @@ typedef struct {
 
 static STATUS_MUST_USE Status fx_charge(void *vm, RunCtx *ctx, Pos pos, uint64_t n) {
     Fx *f = vm;
-    // Zig's `Run.charge`: a charge past what is left stops one step past it.
+    // A charge past what is left stops one step past the budget, as a run's
+    // own charge does.
     if (n > f->steps_budget - f->steps) {
         f->steps = f->steps_budget + 1;
         return run_budget_stop(ctx, pos, BUDGET_STEPS);
@@ -66,7 +66,7 @@ static void fx_deinit(Fx *f) {
     arena_deinit(&f->host);
 }
 
-// `lit` with each `R` the root's path: the Zig tests' `replaceOwned(.., "R", t.root)`.
+// `lit` with each `R` the root's path.
 static Str fx_r(Fx *f, const char *lit) { // cstr: a test's literal
     Buf b = buf_make(&f->base.values);
     for (const char *p = lit; *p != 0; p++) {
@@ -99,8 +99,8 @@ static void fx_again(Fx *f) {
 }
 
 // A builtin that only looks, `who(path)`: its path confined with the root
-// allowed, then the store's stat, a missing path no stop. Zig's `exists`,
-// `stat`, `ls` and the reads make these calls in this order.
+// allowed, then the store's stat, a missing path no stop. `exists`, `stat`,
+// `ls` and the reads make these calls in this order.
 static STATUS_MUST_USE Status fx_look(Fx *f, const char *who, Str path) { // cstr: a builtin's name
     fx_again(f);
     StorePath p;
@@ -113,7 +113,7 @@ static STATUS_MUST_USE Status fx_look(Fx *f, const char *who, Str path) { // cst
 }
 
 // A change builtin, `who(path, data)`: its path confined (never the root),
-// the hook asked, then the store's replace. Zig's `admit` then `make`.
+// the hook asked, then the store's replace, as a change builtin does.
 static STATUS_MUST_USE Status fx_change(Fx *f, const char *who, Str path, Str data) { // cstr: a builtin's name
     fx_again(f);
     StorePath p;

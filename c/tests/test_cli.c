@@ -1,5 +1,5 @@
-// test_cli.c: the command line's budgets, set as Zig's `cast ... orelse
-// maxInt` sets them: a value past its field's type saturates, never wraps.
+// test_cli.c: the command line's budgets: a value past its field's type
+// saturates, never wraps.
 // The rest of cli.h's reading is in test_parse.c, beside the parser it needs.
 
 #include "test.h"
@@ -8,8 +8,8 @@
 
 TEST(a_budget_past_its_fields_type_saturates_and_never_wraps) {
     // Past 2^32: on a 32-bit size_t (the wasm build; `zig cc -target
-    // x86-linux-musl` builds this file so) a cast would wrap it to 1, and Zig
-    // gives SIZE_MAX. On x86-64 it fits a size_t whole.
+    // x86-linux-musl` builds this file so) a cast would wrap it to 1, where it
+    // must be SIZE_MAX. On x86-64 it fits a size_t whole.
     uint64_t past = ((uint64_t)1 << 32) + 1;
 #if SIZE_MAX == UINT64_MAX
     size_t want = (size_t)past;

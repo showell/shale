@@ -43,7 +43,7 @@ TEST(run_charges_its_output_a_step_per_16_bytes) {
     ran_free(&b);
 }
 
-TEST(run_refuses_what_zig_refuses_with_zigs_words) {
+TEST(run_refuses_each_bad_call_with_its_message) {
     static Ran x;
     ran_source(&x, S("function f(a, o) return host(\"run\", a, o) end\n"
                      "print(attempt(f, {\"bash\"}, {timeout_ms = 1, tail = 1}).error)\n"
@@ -191,8 +191,8 @@ TEST(a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest) {
 }
 
 // A loop polling a job holds the arena flat: each look's record is kept at
-// its length, not in a 64 KiB buffer of the limit. With the buffer kept,
-// 100 looks held 6.5 MB, as c/build/lib.shale's pool found at 20 ms a look.
+// its length, not in a 64 KiB buffer of the limit, which would hold 6.5 MB
+// over 100 looks.
 TEST(a_poll_of_job_alive_holds_the_arena_flat) {
     static Ran x;
     RanOpts o = {NULL, false, false};
@@ -211,7 +211,7 @@ TEST(a_poll_of_job_alive_holds_the_arena_flat) {
     ran_free(&x);
 }
 
-TEST(job_calls_refuse_what_zig_refuses) {
+TEST(job_calls_refuse_each_bad_call_with_its_message) {
     static Ran x;
     ran_source(&x, S("function s(a, o) return host(\"job_start\", a, o) end\nfunction w(j, o) return host(\"job_wait\", j, o) end\n"
                      "print(attempt(s, {\"echo\"}, {}).error)\nprint(attempt(s, {\"echo\"}, {log = \"x.log\", secrets = {}}).error)\n"
@@ -232,9 +232,9 @@ TEST(job_calls_refuse_what_zig_refuses) {
 }
 
 TEST_PART(host_run, TEST_CASE(run_keeps_the_head_and_tail_and_answers_every_field), TEST_CASE(run_charges_its_output_a_step_per_16_bytes),
-          TEST_CASE(run_refuses_what_zig_refuses_with_zigs_words), TEST_CASE(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended),
+          TEST_CASE(run_refuses_each_bad_call_with_its_message), TEST_CASE(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended),
           TEST_CASE(a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended),
           TEST_CASE(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap),
           TEST_CASE(the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv), TEST_CASE(sleep_takes_0_to_600000_ms_and_counts_its_time),
           TEST_CASE(a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest), TEST_CASE(a_poll_of_job_alive_holds_the_arena_flat),
-          TEST_CASE(job_calls_refuse_what_zig_refuses));
+          TEST_CASE(job_calls_refuse_each_bad_call_with_its_message));

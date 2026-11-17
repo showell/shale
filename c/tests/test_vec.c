@@ -1,4 +1,5 @@
-// vec.h: push, pop and index; growth by vec.h's rule for each item size; items kept through every move; a refusal leaves it as it was.
+// vec.h: push, pop and index; growth by vec.h's rule for each item size;
+// items kept through every move; a refusal leaves it as it was.
 
 #include "test.h"
 
@@ -32,16 +33,16 @@ TEST(push_pop_and_at_agree) {
     arena_deinit(&a);
 }
 
-TEST(it_grows_by_zigs_policy_for_its_item_size) {
+TEST(it_grows_by_half_again_plus_a_line_of_items) {
     Arena a = arena_make(1 << 20);
     I64s v = I64s_make(&a);
     EXPECT(I64s_push(&v, 1) == OK);
-    // growCapacity(1) for 8-byte items: 1 + 0 + 64 / 8.
+    // A need of 1 for 8-byte items: 1 + 0 + 64 / 8.
     EXPECT_EQ(v.cap, 9);
     for (int64_t i = 2; i <= 9; i++) EXPECT(I64s_push(&v, i) == OK);
     EXPECT_EQ(v.cap, 9);
     EXPECT(I64s_push(&v, 10) == OK);
-    // growCapacity(10): 10 + 5 + 8.
+    // A need of 10: 10 + 5 + 8.
     EXPECT_EQ(v.cap, 23);
     Pairs p = Pairs_make(&a);
     Pair one = {1, 2};
@@ -97,8 +98,8 @@ TEST(a_refused_push_leaves_the_vec_as_it_was) {
 }
 
 TEST(a_capacity_whose_size_wraps_is_refused_with_room_to_grow_in_place) {
-    // A reserve whose capacity times 8 wraps to 160 bytes, with the vec last
-    // in a roomy arena, would grow in place and say OK for 3 * 2^61 items.
+    // A reserve whose capacity times 8 wraps to 64 bytes, with the vec last
+    // in a roomy arena, would fit in place and say OK for 3 * 2^61 + 8 items.
     Arena a = arena_make(1 << 20);
     I64s v = I64s_make(&a);
     EXPECT(I64s_push(&v, 1) == OK);
@@ -127,7 +128,7 @@ TEST(a_big_vec_holds_its_live_buffer_not_every_one_it_outgrew) {
 
 TEST_MAIN(
     TEST_CASE(push_pop_and_at_agree),
-    TEST_CASE(it_grows_by_zigs_policy_for_its_item_size),
+    TEST_CASE(it_grows_by_half_again_plus_a_line_of_items),
     TEST_CASE(items_survive_every_move_between_two_growing_vecs),
     TEST_CASE(items_keep_their_alignment),
     TEST_CASE(a_refused_push_leaves_the_vec_as_it_was),

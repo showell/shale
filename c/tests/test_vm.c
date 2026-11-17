@@ -1,14 +1,13 @@
 // test_vm.c: the VM (c/script/vm.c), the compiler (compile.h), the run's
 // semantics (run.h) and the values (value.h), each source parsed, compiled
-// and run as the C `shale` runs it, with no preludes (ran.c). Every output, stop and
-// step count is the one Zig's `shale` gives the same source
-// (c/out/dev/zig_counts.shale printed them).
+// and run as the C `shale` runs it, with no preludes (ran.c). Every output,
+// stop and step count is the one Zig's `shale` gives the same source.
 
 // A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
 // includes test.h and ran.c before it.
 
 
-TEST(arithmetic_and_print_take_zigs_steps) {
+TEST(arithmetic_and_print_take_their_counted_steps) {
     static Ran x;
     ran_source(&x, S("local x = 1 + 2 * 3\nprint(x, \"a\" .. x)\n"), ran_budgets());
     EXPECT(x.parsed);
@@ -134,7 +133,7 @@ TEST(an_index_past_the_append_names_the_one_that_appends) {
     ran_free(&x);
 }
 
-TEST(maps_and_list_loops_take_zigs_steps) {
+TEST(maps_and_list_loops_take_their_counted_steps) {
     static Ran x;
     ran_source(&x, S("local m = {}\nm.k = 1\nprint(get(m, \"k\"), has_key(m, \"z\"), count(m))\nfor x in {5, 6} do print(x) end\n"), ran_budgets());
     EXPECT_EQ(x.ran, OK);
@@ -143,8 +142,8 @@ TEST(maps_and_list_loops_take_zigs_steps) {
     ran_free(&x);
 }
 
-// Zig's host_test.zig, "seam: with no host": `host` stops with class
-// `host`, naming the call, and `attempt` catches it like any other stop.
+// With no host, `host` stops with class `host`, naming the call, and
+// `attempt` catches it like any other stop.
 TEST(with_no_host_host_stops_naming_the_call_and_attempt_catches_it) {
     static Ran x;
     RanOpts o = {NULL, false, false};
@@ -254,7 +253,7 @@ static Value vm_int(int64_t i) {
 // tiny arena stops on its arguments before it reaches the stop. The host's
 // path_fail sites (`run`, `job_start`, `job_wait`) take Zig's format itself
 // and fall back to it, so they cannot drift and are not repeated here.
-TEST(a_stop_whose_zig_format_escapes_a_brace_falls_back_to_that_format_raw) {
+TEST(a_stop_whose_format_escapes_a_brace_falls_back_to_that_format_raw) {
     static Ran x;
     ran_source(&x, S(""), ran_budgets());
     EXPECT_EQ(x.ran, OK);
@@ -316,11 +315,11 @@ TEST(a_stop_whose_zig_format_escapes_a_brace_falls_back_to_that_format_raw) {
     ran_free(&x);
 }
 
-TEST_PART(vm, TEST_CASE(arithmetic_and_print_take_zigs_steps), TEST_CASE(the_step_budget_stops_one_past_it),
+TEST_PART(vm, TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(the_step_budget_stops_one_past_it),
           TEST_CASE(the_call_depth_budget_names_every_call), TEST_CASE(attempt_makes_a_stop_a_value_and_the_run_goes_on),
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
           TEST_CASE(yield_keeps_what_is_reached_and_charges_the_copy), TEST_CASE(the_output_budget_writes_what_fits),
           TEST_CASE(division_floors_and_an_overflow_stops), TEST_CASE(an_index_past_the_append_names_the_one_that_appends),
-          TEST_CASE(maps_and_list_loops_take_zigs_steps), TEST_CASE(with_no_host_host_stops_naming_the_call_and_attempt_catches_it),
+          TEST_CASE(maps_and_list_loops_take_their_counted_steps), TEST_CASE(with_no_host_host_stops_naming_the_call_and_attempt_catches_it),
           TEST_CASE(values_name_their_types_and_truth), TEST_CASE(integer_text_and_checked_arithmetic),
-          TEST_CASE(the_depth_budget_stops_a_deep_expression), TEST_CASE(a_stop_whose_zig_format_escapes_a_brace_falls_back_to_that_format_raw));
+          TEST_CASE(the_depth_budget_stops_a_deep_expression), TEST_CASE(a_stop_whose_format_escapes_a_brace_falls_back_to_that_format_raw));

@@ -2,10 +2,10 @@
 // spawn.c and keep.c as `run` would with `timeout_ms` and `tail`, and prints
 // the fields of `run`'s answer, then its `out`:
 //
-//     spawn_probe TIMEOUT_MS TAIL PROGRAM [ARG]...
+//   spawn_probe TIMEOUT_MS TAIL PROGRAM [ARG]...
 //
-//     ended=exit code=0 ms=12 cpu_ms=1 total_lines=3 matched_lines=3 kept_lines=3
-//     <out, as kept>
+//   ended=exit code=0 ms=12 cpu_ms=1 total_lines=3 matched_lines=3 kept_lines=3
+//   <out, as kept>
 //
 // `ended` is `run`'s word for it (an interrupted run is `interrupted`, where
 // Zig's `run` stops the script instead), and `code=-` when it did not exit.

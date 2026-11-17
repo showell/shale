@@ -1,5 +1,5 @@
-// The jobs' tests (c/host/jobs.c): Zig Shale's src/shale_jobs.zig and
-// src/shale_jobs_test.zig on the reaper and the process boundary. The reaper
+// The jobs' tests (c/host/jobs.c): Zig Shale's jobs tests on the reaper and
+// the process boundary. The reaper
 // ends what a job's leader left in its group before it writes the job's end
 // (TERM at the leader's exit, KILL at the grace), and leaves alone a process
 // that left the group; a forged pgid signals nobody; the record's temp file

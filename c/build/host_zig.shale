@@ -22,13 +22,13 @@ const HOST_ZIG_PLANTS = {
    old = [=[        } else if (c == '\t') {
             TRY(buf_lit(w, "\\t"));]=], new = [=[        } else if (c == '\t') {
             TRY(buf_byte(w, c));]=]},
-  {name = "an identifier may start with a digit", aim = "an_identifier_is_zigs_a_letter_or_underscore_then_word_bytes_and_no_keyword", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+  {name = "an identifier may start with a digit", aim = "an_identifier_is_a_letter_or_underscore_then_word_bytes_and_no_keyword", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
    old = "if (!letter && !(digit && i > 0)) return false;", new = "if (!letter && !digit) return false;"},
-  {name = "a keyword is an identifier", aim = "an_identifier_is_zigs_a_letter_or_underscore_then_word_bytes_and_no_keyword", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+  {name = "a keyword is an identifier", aim = "an_identifier_is_a_letter_or_underscore_then_word_bytes_and_no_keyword", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
    old = "if (str_eq(at(keywords, k), s)) return false;", new = "if (0 && str_eq(at(keywords, k), s)) return false;"},
-  {name = "a count may start with `_`", aim = "a_count_is_read_as_zigs_parse_int_reads_it", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+  {name = "a count may start with `_`", aim = "a_count_is_decimal_with_an_optional_plus_and_inner_underscores", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
    old = "if (at(digits, 0) == '_' || at(digits, digits.len - 1) == '_') return false;", new = "if (at(digits, digits.len - 1) == '_') return false;"},
-  {name = "a count past 64 bits wraps", aim = "a_count_is_read_as_zigs_parse_int_reads_it", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+  {name = "a count past 64 bits wraps", aim = "a_count_is_decimal_with_an_optional_plus_and_inner_underscores", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
    old = "if (n > (UINT64_MAX - d) / 10) return false;", new = "(void)0;"},
   {name = "a token's numbers are read big-endian", aim = "a_token_record_is_its_tag_start_end_and_line_little_endian", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
    old = "for (size_t k = 4; k > 0; k--) v = v << 8 | (uint8_t)at(s, from + k - 1);", new = "for (size_t k = 0; k < 4; k++) v = v << 8 | (uint8_t)at(s, from + k);"},

@@ -1,12 +1,9 @@
-// The path hook's tests: Zig Shale's tests of the mounts, the absolute-path
-// stop, read-only mounts, the no-link rule, the secrets rule and the undo
-// journal (src/shale_host_linux.zig's mounts tests, src/shale_abs_path_test.zig,
-// src/shale_ro_links_test.zig, src/shale_undo_test.zig, the CLI's
-// --undo-on-stop test, and the root's escapes of src/script/builtins_test.zig
-// and errors_test.zig), with the same inputs and answers. Where a Zig test
-// runs a script, the C makes the calls the builtin would, in its order
+// The path hook's tests: the mounts, the absolute-path stop, read-only
+// mounts, the no-link rule, the secrets rule, the undo journal and the
+// root's escapes, with Zig Shale's tests' inputs and answers. Where such a
+// test runs a script, the C makes the calls the builtin would, in its order
 // (fixture.c); what only the VM can run (a walk's entries, `edits_all`,
-// `run` itself) waits for the builtins' wrappers. Then the attacks the
+// `run` itself) is left to the tests that run scripts. Then the attacks the
 // security auditor's list names, each planted.
 #define _GNU_SOURCE
 #include "test.h"
@@ -45,7 +42,7 @@ TEST(every_way_out_of_the_root_is_refused_before_the_store_is_asked) {
         Status s = path_arg(&f.run, fx_pos(), sx_cs(at(all, i).who), sx_cs(at(all, i).path), at(all, i).allow_root, &p);
         EXPECT(fx_stopped(&f, s, CLASS_ARGUMENT, S("")));
     }
-    // The texts errors_test.zig holds them to.
+    // The texts of three of them, exactly.
     fx_again(&f);
     StorePath p;
     EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("../auth/secret"), false, &p), CLASS_ARGUMENT,
@@ -59,7 +56,8 @@ TEST(every_way_out_of_the_root_is_refused_before_the_store_is_asked) {
     PathRun bare = {&f.ctx, f.base.root, fx_charge, &f, NULL};
     fx_again(&f);
     EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("/etc/passwd"), false, &p), CLASS_ARGUMENT, S("`read`: \"/etc/passwd\" is absolute: paths are relative to the data root")));
-    // What is in the root is found, `.` is the root, and the steps are the path's bytes.
+    // What is in the root is found, `.` is the root, and the steps are the
+    // path's bytes.
     fx_again(&f);
     uint64_t before = f.steps;
     EXPECT_EQ(path_arg(&f.run, fx_pos(), S("exists"), S("chat/a.md"), true, &p), OK);
@@ -288,7 +286,8 @@ TEST(an_absolute_path_s_stop_the_deepest_mount_or_the_root_that_holds_it_and_how
         {"read", "R/scr/tasks/x.output", "`read`: \"R/scr/tasks/x.output\" is absolute: it's under the mount `outer:`, so write \"outer:tasks/x.output\""},
         {"read", "R/scr/deep/x.txt", "`read`: \"R/scr/deep/x.txt\" is absolute: it's under the mount `deep:`, so write \"deep:x.txt\""},
         {"stat", "R/scr/deep/", "`stat`: \"R/scr/deep/\" is absolute: it's under the mount `deep:`, so write \"deep:.\""},
-        // The root, below it and itself, where no mount inside it holds the path.
+        // The root, below it and itself, where no mount inside it holds the
+        // path.
         {"read", "R/src/a.zig", "`read`: \"R/src/a.zig\" is absolute: it's under the data root, so write \"src/a.zig\""},
         {"ls", "R", "`ls`: \"R\" is absolute: it's under the data root, so write \".\""},
         // A folder that only begins with a mount's folder's name is not in it.
@@ -307,7 +306,8 @@ TEST(an_absolute_path_s_stop_the_deepest_mount_or_the_root_that_holds_it_and_how
             EXPECT(fx_said(&f, fx_look(&f, at(cs, i).who, fx_r(&f, at(cs, i).path)), CLASS_ARGUMENT, fx_r(&f, at(cs, i).says)));
         }
     }
-    // A change and a program's folder take the same stop, and nothing is written.
+    // A change and a program's folder take the same stop, and nothing is
+    // written.
     EXPECT(fx_said(&f, fx_change(&f, "replace", SAYS("R/scr/tasks/new.txt"), S("x")), CLASS_ARGUMENT, SAYS("`replace`: \"R/scr/tasks/new.txt\" is absolute: it's under the mount `outer:`, so write \"outer:tasks/new.txt\"")));
     EXPECT(!sx_there(&f.base, "scr/tasks/new.txt"));
     // A host call's stop names the call the script made, never `host`.
@@ -325,9 +325,11 @@ TEST(an_absolute_path_s_stop_the_deepest_mount_or_the_root_that_holds_it_and_how
 TEST(an_absolute_path_s_stop_and_a_host_call_s_in_a_builtin_s_checks_the_call_is_named) {
     Fx f;
     fx_init(&f);
-    // `zig_rename`'s path is checked by the core's rules, its name the call's.
+    // `zig_rename`'s path is checked by the core's rules, its name the
+    // call's.
     EXPECT(fx_stopped(&f, fx_look(&f, "zig_rename", S("a/../b.zig")), CLASS_ARGUMENT, S("`zig_rename`: \"a/../b.zig\" climbs out of the root with `..`")));
-    // The name is the caller's for each call: a later stop of `read` is `read`'s.
+    // The name is the caller's for each call: a later stop of `read` is
+    // `read`'s.
     Str os_path = S("");
     EXPECT_EQ(paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S(""), true, &os_path), OK);
     EXPECT(fx_stopped(&f, fx_look(&f, "read", S("/etc/x")), CLASS_ARGUMENT, S("`read`: \"/etc/x\"")));

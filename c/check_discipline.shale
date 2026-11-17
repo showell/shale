@@ -108,7 +108,7 @@ const ZIG_CITE = [=[[\w/.-]*\w\.zig:\d+]=]
 const COMMENT_RULES = {"comment wrap", "dragon remedy", "zig cite"}
 -- The folders (or c/shale.c) whose comment findings fail the check. A sweep
 -- adds its folder here once the folder is clean.
-const HELD = {"c/host", "c/shale.c"}
+const HELD = {"c/foundation", "c/host", "c/shale.c", "c/tests"}
 const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE_TYPE(", "VEC_DEFINE(", "MAP_DEFINE(", "TEST(", "TEST_MAIN(", "TEST_PART(", "TEST_PARTS_MAIN(", "_Static_assert(", "int main(", "}", ")"}
 
 -- The line's code: its strings and character literals emptied, its comments cut.

@@ -1,13 +1,12 @@
 // err.h: the class and budget names, every budget stop's message and its
 // fallback, and a stop's report with its call chain, each against Zig
-// Shale's text (src/script/diag.zig, interp.zig's budgetStop, script.zig's
-// report).
+// Shale's text.
 
 #include "test.h"
 
 #include "err.h"
 
-TEST(the_class_names_are_zigs_tag_names) {
+TEST(every_class_has_its_name_and_the_count_traps) {
     EXPECT_STR(stop_class_name(CLASS_SYNTAX), S("syntax"));
     EXPECT_STR(stop_class_name(CLASS_REFUSED), S("refused"));
     EXPECT_STR(stop_class_name(CLASS_NAME), S("name"));
@@ -22,7 +21,7 @@ TEST(the_class_names_are_zigs_tag_names) {
     EXPECT_TRAPS((void)stop_class_name(CLASS_COUNT));
 }
 
-TEST(the_budget_names_are_zigs_tag_names) {
+TEST(every_budget_has_its_name_and_the_count_traps) {
     EXPECT_STR(budget_name(BUDGET_NONE), S(""));
     EXPECT_STR(budget_name(BUDGET_STEPS), S("steps"));
     EXPECT_STR(budget_name(BUDGET_ARENA), S("arena"));
@@ -42,7 +41,7 @@ TEST(the_budget_names_are_zigs_tag_names) {
     EXPECT_TRAPS((void)budget_name(BUDGET_COUNT));
 }
 
-TEST(the_defaults_are_zigs) {
+TEST(every_budget_has_its_default) {
     Budgets b = budgets_default();
     EXPECT_EQ(b.steps, 5000000);
     EXPECT_EQ(b.arena_bytes, 16777216);
@@ -76,7 +75,7 @@ static Str message_of(BudgetKind k, Arena *values) {
     return r.stop.message;
 }
 
-TEST(every_budget_stop_says_what_zig_says) {
+TEST(every_budget_stop_says_its_message) {
     Arena v = arena_make(1 << 20);
     EXPECT_STR(message_of(BUDGET_STEPS, &v), S("the step budget (5000000 steps) ran out"));
     EXPECT_STR(message_of(BUDGET_ARENA, &v), S("the arena budget ran out"));
@@ -96,7 +95,7 @@ TEST(every_budget_stop_says_what_zig_says) {
     arena_deinit(&v);
 }
 
-TEST(a_message_the_arena_refuses_falls_back_to_zigs_fallback) {
+TEST(a_message_the_arena_refuses_falls_back_to_a_plain_one) {
     Arena full = arena_make(0);
     EXPECT_STR(message_of(BUDGET_STEPS, &full), S("the step budget ran out"));
     EXPECT_STR(message_of(BUDGET_CALL_DEPTH, &full), S("calls nest deeper than the call-depth budget"));
@@ -191,7 +190,7 @@ TEST(a_report_names_the_place_the_class_the_budget_and_the_steps) {
 }
 
 TEST(a_report_gives_the_calls_innermost_first) {
-    // errors_test.zig's nested call: g stopped, called from f, called from the top.
+    // A nested call: g stopped, called from f, called from the top.
     Arena a = arena_make(1 << 20);
     Call calls[2] = {{2, 1, S("")}, {1, 21, S("f")}};
     Calls trail = {calls, 2};
@@ -242,11 +241,11 @@ TEST(a_stop_with_no_stop_recorded_ends_the_process) {
 }
 
 TEST_MAIN(
-    TEST_CASE(the_class_names_are_zigs_tag_names),
-    TEST_CASE(the_budget_names_are_zigs_tag_names),
-    TEST_CASE(the_defaults_are_zigs),
-    TEST_CASE(every_budget_stop_says_what_zig_says),
-    TEST_CASE(a_message_the_arena_refuses_falls_back_to_zigs_fallback),
+    TEST_CASE(every_class_has_its_name_and_the_count_traps),
+    TEST_CASE(every_budget_has_its_name_and_the_count_traps),
+    TEST_CASE(every_budget_has_its_default),
+    TEST_CASE(every_budget_stop_says_its_message),
+    TEST_CASE(a_message_the_arena_refuses_falls_back_to_a_plain_one),
     TEST_CASE(a_message_quotes_the_budget_set_not_the_default),
     TEST_CASE(a_stop_on_no_budget_ends_the_process),
     TEST_CASE(run_oom_is_the_arena_budget_with_its_function_and_trail),

@@ -1,6 +1,6 @@
 // The program spawn's tests run, so they never depend on /bin/sh: the verbs
-// of Zig Shale's src/shale_fixture.zig that spawn's tests use, and the attacks
-// on the process boundary that the C's tests plant. Each verb is one
+// of Zig Shale's test fixture that spawn's tests use, and the attacks on the
+// process boundary that the C's tests plant. Each verb is one
 // behaviour a test needs, and nothing else:
 //
 //     lines N [TEXT]         N lines, "TEXT i" (TEXT "line")
