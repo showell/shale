@@ -85,6 +85,12 @@ static STATUS_MUST_USE Status host_jobs_find(Host *h, Run *r, Pos pos, const Val
     if (str_eq(why, S("FileNotFound"))) return host_fail(r, pos, CLASS_STORE, S("`{s}`: no job's record at {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
     if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`{s}`: its record {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(why)));
     TRY(host_jobs_charge_read(r, pos, text.len));
+    // DRAGON: the record is whatever text the file at the script's path
+    // holds, and what it says (`pid`, `pgid`, `start`) decides what
+    // `job_stop` and `job_alive` send `kill`.
+    // REMEDY: job_record.c reads only a record whose pgid is its pid, so a
+    // record names a group whose leader it names, and jobs_signal_group
+    // refuses a pgid below 2 whatever the text says.
     if (!job_record_parse(text, &out->record)) return host_fail(r, pos, CLASS_STORE, S("`{s}`: {s} is not a job's record"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
     out->shown = shown;
     out->log = str_sub(shown, 0, shown.len - 4);

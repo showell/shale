@@ -19,13 +19,20 @@
 //     burn-child MS          a child burns MS; this waits for it
 //     grandchild-exit MS     "grandchild N", the pid of a child that sleeps
 //                            MS holding the output; this exits 0 at once
+//     grandchild-late MS     the same, but the child ignores TERM and prints
+//                            "late" once this has exited, then sleeps MS
 //     grandchild-escape MS   the same, but the child leaves the group for a
 //                            session of its own, out of `run`'s reach
 //     grandchild-stay MS     the same grandchild, both ignoring TERM; this
 //                            sleeps MS too
 //     signal-parent SIG MS   SIG (15 or 1) to its parent, TERM ignored, then
 //                            sleeps MS
+//     fds                    "fds 0 1 2", the fds it holds open below 64
+//     --reap RECORD ...      a reaper that says what it was handed: the same
+//                            line, written to RECORD, so a test sees the fds
+//                            the jobs' launch leaves it
 #define _GNU_SOURCE
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,7 +66,7 @@ static void ignore_term(void) {
 // A grandchild that sleeps `ms` holding the output. This process says its
 // pid, from the fork, so the line is there even when the group's TERM at
 // this one's exit ends the grandchild before it would have run a line.
-static void grandchild(long ms, bool deaf, bool escape) {
+static void grandchild(long ms, bool deaf, bool escape, bool late) {
     // The child says it has left the group by closing its end, so this
     // exits only after: the group's TERM at this exit never finds it there.
     SLICE_TYPE(Fds, int);
@@ -70,8 +77,16 @@ static void grandchild(long ms, bool deaf, bool escape) {
     if (pid == 0) {
         close(at(ready, 0));
         if (escape) setsid();
+        if (deaf || late) ignore_term();
         close(at(ready, 1));
-        if (deaf) ignore_term();
+        if (late) {
+            // Its parent's exit re-parents it. Raw calls only: the child
+            // shares the parent's stdio buffer.
+            pid_t leader = getppid();
+            while (getppid() == leader) sleep_ms(1);
+            ssize_t w = write(1, "late\n", 5);
+            (void)w;
+        }
         sleep_ms(ms);
         _exit(0);
     }
@@ -82,6 +97,21 @@ static void grandchild(long ms, bool deaf, bool escape) {
     close(at(ready, 0));
     printf("grandchild %d\n", (int)pid);
     fflush(stdout);
+}
+
+// "fds 0 1 2\n": the fds below 64 open in this process, into `room`.
+static Str fds_line(Bytes room) {
+    size_t len = 0;
+    int n = snprintf(room.ptr, room.len, "fds");
+    if (n > 0) len = (size_t)n;
+    for (int fd = 0; fd < 64; fd++) {
+        if (fcntl(fd, F_GETFD) < 0) continue;
+        n = snprintf(&at(room, len), room.len - len, " %d", fd);
+        if (n > 0) len += (size_t)n;
+    }
+    n = snprintf(&at(room, len), room.len - len, "\n");
+    if (n > 0) len += (size_t)n;
+    return (Str){room.ptr, len};
 }
 
 static bool is(Str a, const char *b) { // cstr: a literal verb
@@ -148,13 +178,28 @@ int main(int argc, char **argv) {
         int status = 0;
         waitpid(pid, &status, 0);
     } else if (is(verb, "grandchild-exit")) {
-        grandchild(num(arg), false, false);
+        grandchild(num(arg), false, false, false);
+    } else if (is(verb, "grandchild-late")) {
+        grandchild(num(arg), false, false, true);
     } else if (is(verb, "grandchild-escape")) {
-        grandchild(num(arg), false, true);
+        grandchild(num(arg), false, true, false);
     } else if (is(verb, "grandchild-stay")) {
         ignore_term();
-        grandchild(num(arg), true, false);
+        grandchild(num(arg), true, false, false);
         sleep_ms(num(arg));
+    } else if (is(verb, "fds")) {
+        char room[512];
+        Str l = fds_line((Bytes){room, sizeof room});
+        printf("%.*s", (int)l.len, l.ptr);
+    } else if (is(verb, "--reap")) {
+        // The line first, so the record's own fd is not in it.
+        char room[512];
+        Str l = fds_line((Bytes){room, sizeof room});
+        int fd = open(arg.ptr, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+        if (fd < 0) return 3;
+        ssize_t w = write(fd, l.ptr, l.len);
+        close(fd);
+        if (w < 0 || (size_t)w != l.len) return 3;
     } else if (is(verb, "signal-parent")) {
         ignore_term();
         printf("signalling\n");

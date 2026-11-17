@@ -138,7 +138,7 @@ TEST(the_numbers_are_read_as_zigs_parse_int_reads_them) {
     EXPECT(!parse_copy(S("pid=\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
     EXPECT(!parse_copy(S("pid=-\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
     EXPECT(!parse_copy(S("pid=2147483648\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
-    EXPECT(parse_copy(S("pid=2147483647\npgid=42\nstart=1\nstarted=-9223372036854775808\nargv=x\nreaper=-2147483648\nreaper_start=5\n"), &r));
+    EXPECT(parse_copy(S("pid=2147483647\npgid=2147483647\nstart=1\nstarted=-9223372036854775808\nargv=x\nreaper=-2147483648\nreaper_start=5\n"), &r));
     EXPECT_EQ_I(r.pid, 2147483647);
     EXPECT_EQ_I(r.started, INT64_MIN);
     EXPECT(!parse_copy(S("pid=42\npgid=42\nstart=1\nstarted=-9223372036854775809\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
@@ -154,6 +154,17 @@ TEST(the_numbers_are_read_as_zigs_parse_int_reads_them) {
     EXPECT(!parse_copy(S("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\\\nreaper=1\nreaper_start=5\n"), &r));
 }
 
+TEST(a_record_whose_pgid_is_not_its_pid_is_none_so_no_other_group_is_signalled) {
+    JobRecord r;
+    EXPECT(parse_copy(S("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
+    EXPECT_EQ_I(r.pgid, 42);
+    EXPECT(!parse_copy(S("pid=42\npgid=43\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
+    EXPECT(!parse_copy(S("pid=42\npgid=1\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
+    EXPECT(!parse_copy(S("pid=0\npgid=0\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
+    EXPECT(!parse_copy(S("pid=-5\npgid=-5\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
+}
+
 TEST_MAIN(TEST_CASE(a_record_reads_back_as_it_was_written_and_a_broken_one_is_none),
           TEST_CASE(an_argv_with_a_newline_or_a_backslash_reads_back_and_none_overrides_a_key),
-          TEST_CASE(the_escaped_text_is_zigs), TEST_CASE(the_numbers_are_read_as_zigs_parse_int_reads_them))
+          TEST_CASE(the_escaped_text_is_zigs), TEST_CASE(the_numbers_are_read_as_zigs_parse_int_reads_them),
+          TEST_CASE(a_record_whose_pgid_is_not_its_pid_is_none_so_no_other_group_is_signalled))

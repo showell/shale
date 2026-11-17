@@ -245,6 +245,8 @@ const SLOW_TESTS = {
     "cpu_ms_counts_what_a_program_burns_a_child_waited_for_included_and_none_it_sleeps",
     "a_term_to_shale_while_a_program_runs_ends_its_group_and_says_so_and_the_mask_is_put_back",
   }},
+  -- Its attacks wait for a job's group to end, to the grace and past it.
+  {file = "c/tests/host/test_jobs.c", waits = {}},
 }
 
 -- ── Binaries of several parts ───────────────────────────────────────────

@@ -149,7 +149,8 @@ today, the C gives as three vtables of function pointers, each returning
   text, `src/shale_jobs.zig`; when the job's leader exits, the reaper TERMs
   its group while the leader is an unreaped zombie, reaps it, then KILLs
   what is left at 2 seconds and writes the end only once the group is empty,
-  as `run` does, and the C's reaper, not yet ported, must match it),
+  as `run` does; the C's reaper, `jobs_reap_main` in c/host/jobs.c, does the
+  same),
   `procs` and `proc_stop` (the /proc files, a pidfd,
   start times against a reused pid), `real`, `sleep`, `re_lines`, JSON, the
   tree readers and `edits_write`. Its time line, its records and the jobs a

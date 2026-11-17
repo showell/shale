@@ -6,7 +6,8 @@
 // child makes its own session, forks the reaper and exits; the reaper,
 // re-parented to init, execs `shale --reap`. The reaper (`jobs_reap_main`)
 // starts the job in its own session with stdin /dev/null and stdout and
-// stderr to its log, writes the job's record, waits for it, and writes how it
+// stderr to its log, writes the job's record, waits for it, ends what it left
+// running in its group (TERM, a grace, KILL, as `run` does), and writes how it
 // ended. The record, `<log>.job`, is job_record.c's `key=value` lines, each
 // write a new file renamed over the old.
 //
@@ -64,12 +65,16 @@ static bool jobs_reaper_alive(const JobRecord *r) {
     return str_eq(s, r->reaper_start);
 }
 
+// Signals the group `pgid`; whether the kernel took it. A pgid below 2 is
+// refused before any `kill`.
 static bool jobs_signal_group(int32_t pgid, int sig) {
-    // DRAGON: the process boundary. kill(-pgid) with a pgid of 0 or 1 would
-    // signal this process's own group or every process `shale` may signal.
-    // REMEDY: a record's pgid is the leader's pid, which job_record.c reads
-    // as a positive number the reaper's fork gave; one below 2 is refused
-    // here.
+    // DRAGON: the process boundary. A pgid comes from a record's text, and
+    // kill(-1) signals every process `shale` may signal, kill(0) this
+    // process's own group.
+    // REMEDY: the reaper's fork gives a leader's pid, never 0 or 1, so a
+    // pgid below 2 is a forged or broken record's, and is refused here.
+    // job_record.c refuses a record whose pgid is not its pid, but a record
+    // is any text a file holds, so that is no proof of a fork's pid.
     if (pgid < 2) return false;
     return kill(-pgid, sig) == 0;
 }
@@ -265,7 +270,8 @@ static JobsLaunched jobs_launch(Arena *a, Str reaper, Str record, Str log, Str c
                 dup2(at(pipe_ends, 1), JOBS_STARTED_FD);
             }
             syscall(SYS_close_range, JOBS_STARTED_FD + 1, ~0u, 0u);
-            int devnull = open("/dev/null", O_RDWR);
+            // O_CLOEXEC, so the copy beside 0 to 2 never reaches the reaper.
+            int devnull = open("/dev/null", O_RDWR | O_CLOEXEC);
             dup2(devnull, 0);
             dup2(devnull, 1);
             dup2(devnull, 2);
@@ -286,6 +292,12 @@ static JobsLaunched jobs_launch(Arena *a, Str reaper, Str record, Str log, Str c
     }
     close(at(pipe_ends, 0));
     // The reaper wrote its byte or exited; either way the record is final.
+    // DRAGON: the record is the text a file in the log's folder holds, and
+    // what it says (`pid`, `pgid`, `start`) decides what `jobs_stop` and
+    // `jobs_alive` send `kill`.
+    // REMEDY: job_record.c reads only a record whose pgid is its pid, so a
+    // record names a group whose leader it names, and jobs_signal_group
+    // refuses a pgid below 2 whatever the text says.
     Bytes text = {NULL, 0};
     if (!jobs_read_small(a, zrecord, &text)) return JOBS_NO_RECORD;
     if (!job_record_parse(text, out)) return JOBS_NO_RECORD;
@@ -305,7 +317,14 @@ static bool jobs_write_record(const char *record, const char *tmp, JobRecord r) 
     Bytes buf = {room, sizeof room};
     Str text = S("");
     if (!job_record_format(buf, r, &text)) return false;
-    int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    // DRAGON: the temp file is a name in the log's folder, which another
+    // process may write: a link planted there would be followed, and the
+    // file it names truncated and written.
+    // REMEDY: what is there is unlinked (a link itself, never what it
+    // names), and the file is made new, O_EXCL and O_NOFOLLOW, so one
+    // planted between the two is refused, never followed.
+    unlink(tmp);
+    int fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0644);
     if (fd < 0) return false;
     ssize_t w = write(fd, text.ptr, text.len);
     close(fd);
@@ -316,6 +335,41 @@ static bool jobs_write_record(const char *record, const char *tmp, JobRecord r) 
     return true;
 }
 
+// How long what a job's leader left in its group has, after the TERM at the
+// leader's exit, before it is KILLed (`jobs_stop`'s and `run`'s grace), and
+// how often the group is asked whether it is empty, as spawn.c asks.
+enum { JOBS_GROUP_GRACE_MS = 2000, JOBS_GROUP_TICK_MS = 10 };
+
+// Whether no process is left in the group `pgid`. Asked only once its
+// leader is reaped: until then the leader's zombie is a member.
+static bool jobs_group_gone(int32_t pgid) {
+    return kill(-pgid, 0) != 0 && errno == ESRCH;
+}
+
+// Waits, once a job's leader is reaped and its group has had its TERM, for
+// the group to empty: KILL at `grace_ms`, then up to `grace_ms` more for a
+// process stuck in the kernel, which is then left, so the job's end is still
+// written. A process that left the group (`setsid`) is not waited for.
+static void jobs_end_group(int32_t pgid, uint64_t grace_ms) {
+    bool killed = false;
+    for (uint64_t waited = 0; !jobs_group_gone(pgid); waited += JOBS_GROUP_TICK_MS) {
+        if (waited >= 2 * grace_ms) return;
+        // DRAGON: once the leader is reaped, its pid stays the group's id
+        // only while a member is left; a group that empties frees it, and a
+        // new group given the id would be signalled.
+        // REMEDY: the KILL goes only to a group `jobs_group_gone` found not
+        // empty a moment before, whose members hold the id; a group that
+        // empties in that moment is the one window left, as in spawn.c. A
+        // leader KILLed before its `setsid` never made the group, so its id
+        // is free from the reap, and the same check guards it.
+        if (!killed && waited >= grace_ms) {
+            jobs_signal_group(pgid, SIGKILL);
+            killed = true;
+        }
+        jobs_sleep_ms(JOBS_GROUP_TICK_MS);
+    }
+}
+
 static Str jobs_arg(char **argv, size_t argc, size_t i) {
     SLICE_TYPE(Argv, char *);
     Argv all = {argv, argc};
@@ -323,8 +377,9 @@ static Str jobs_arg(char **argv, size_t argc, size_t i) {
 }
 
 // The reaper, `shale --reap <record> <log> <cwd> <program> -- argv...`, its
-// environment the job's: starts the job, writes its record, waits for it and
-// writes how it ended. The exit code says only whether it could: Zig's
+// environment the job's: starts the job, writes its record, waits for it,
+// ends its group and writes how it ended, so a job's end is written only once
+// its group is empty. The exit code says only whether it could: Zig's
 // `reapMain`. `args` are the words after `--reap`.
 // `inline`: only the CLI is a reaper.
 static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env) {
@@ -359,7 +414,8 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
     JobsStat own;
     Str reaper_start = S("");
     if (!jobs_start_of(&own, getpid(), &reaper_start)) return 2;
-    int log_fd = open(log, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    // O_CLOEXEC, so the job has its log as 1 and 2 alone.
+    int log_fd = open(log, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (log_fd < 0) return 2;
     pid_t pid = fork();
     if (pid < 0) return 2;
@@ -369,7 +425,7 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
         // REMEDY: raw system calls on what was built before the fork, then
         // exec or _exit.
         setsid();
-        int devnull = open("/dev/null", O_RDONLY);
+        int devnull = open("/dev/null", O_RDONLY | O_CLOEXEC);
         dup2(devnull, 0);
         dup2(log_fd, 1);
         dup2(log_fd, 2);
@@ -409,6 +465,13 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
     ssize_t w = write(JOBS_STARTED_FD, "s", 1);
     (void)w;
     close(JOBS_STARTED_FD);
+    // The leader's exit is seen first and left unreaped (WNOWAIT): its
+    // zombie keeps its pid the group's id, so the TERM to what it left
+    // running in its group can reach no stranger.
+    siginfo_t info;
+    while (waitid(P_PID, (id_t)pid, &info, WEXITED | WNOWAIT) < 0 && errno == EINTR) {
+    }
+    jobs_signal_group(r.pgid, SIGTERM);
     int raw = 0;
     while (waitpid(pid, &raw, 0) < 0 && errno == EINTR) {
     }
@@ -419,6 +482,7 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
         r.has_signal = true;
         r.signal = (uint32_t)WTERMSIG(raw);
     }
+    jobs_end_group(r.pgid, JOBS_GROUP_GRACE_MS);
     r.has_ended = true;
     r.ended = jobs_now_seconds();
     return jobs_write_record(record, tmp, r) ? 0 : 2;

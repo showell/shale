@@ -109,9 +109,10 @@ static bool job_record_unescape(Bytes v, Str *out) {
 // Reads a record's text into `*r`, its strings pointing into `text`. False
 // if it is not a record: one of the first seven keys missing (the format
 // writes each), a key it does not know or twice, a line that is no
-// `key=value`, a number Zig would not read, or an `argv` escaped wrongly. A
-// missing `start` read as "" would make `job_alive` say false of a job that
-// runs. `argv` is unescaped in place, so `text` is changed.
+// `key=value`, a number Zig would not read, an `argv` escaped wrongly, or a
+// `pgid` that is not the `pid`. A missing `start` read as "" would make
+// `job_alive` say false of a job that runs. `argv` is unescaped in place, so
+// `text` is changed.
 static bool job_record_parse(Bytes text, JobRecord *r) {
     static const Str keys[] = {
         S_ITEM("pid"), S_ITEM("pgid"), S_ITEM("start"), S_ITEM("started"), S_ITEM("argv"),
@@ -194,7 +195,10 @@ static bool job_record_parse(Bytes text, JobRecord *r) {
     for (size_t i = 0; i < REQUIRED; i++) {
         if (!at(seen, i)) return false;
     }
-    return r->pid > 0 && r->pgid > 0;
+    // The reaper starts the job as its group's leader, so it writes the two
+    // the same: a record where they differ names some other group, a stale
+    // or forged record's, and what reads it would signal that group.
+    return r->pid > 0 && r->pgid == r->pid;
 }
 
 // A writer into a fixed buffer that remembers whether anything did not fit.
