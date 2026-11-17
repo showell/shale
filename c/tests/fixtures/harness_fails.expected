@@ -7,4 +7,6 @@ FAIL str_fails (c/tests/fixtures/harness_fails.c:20): S("got") is S("want")
 FAIL no_trap_fails (c/tests/fixtures/harness_fails.c:25): `x = 1` did not trap
 FAIL no_death_fails (c/tests/fixtures/harness_fails.c:30): `(void)0` did not abort
 FAIL stops_at_its_first_failure (c/tests/fixtures/harness_fails.c:34): 0
-c/tests/fixtures/harness_fails.c: 6 of 7 tests failed
+  minus_one is -1, 2 is 2
+FAIL eq_i_fails (c/tests/fixtures/harness_fails.c:40): minus_one == 2
+c/tests/fixtures/harness_fails.c: 7 of 8 tests failed

@@ -35,6 +35,11 @@ TEST(stops_at_its_first_failure) {
     EXPECT(1 == 3);
 }
 
+TEST(eq_i_fails) {
+    int minus_one = -1;
+    EXPECT_EQ_I(minus_one, 2);
+}
+
 TEST_MAIN(
     TEST_CASE(passes),
     TEST_CASE(expect_fails),
@@ -42,5 +47,6 @@ TEST_MAIN(
     TEST_CASE(str_fails),
     TEST_CASE(no_trap_fails),
     TEST_CASE(no_death_fails),
-    TEST_CASE(stops_at_its_first_failure)
+    TEST_CASE(stops_at_its_first_failure),
+    TEST_CASE(eq_i_fails)
 )

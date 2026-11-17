@@ -45,7 +45,7 @@ TEST(a_record_reads_back_as_it_was_written_and_a_broken_one_is_none) {
     Bytes mine = {buf_bytes, text.len};
     JobRecord r;
     EXPECT(job_record_parse(mine, &r));
-    EXPECT_EQ(r.pid, 42);
+    EXPECT_EQ_I(r.pid, 42);
     EXPECT_STR(r.start, S("123"));
     EXPECT(r.has_exit);
     EXPECT_EQ(r.exit, 3);
@@ -74,7 +74,7 @@ TEST(an_argv_with_a_newline_or_a_backslash_reads_back_and_none_overrides_a_key) 
         JobRecord r;
         EXPECT(job_record_parse(mine, &r));
         EXPECT_STR(r.argv, at(argvs, i));
-        EXPECT_EQ(r.pid, 42);
+        EXPECT_EQ_I(r.pid, 42);
         EXPECT(!job_record_done(r));
     }
     JobRecord r;
@@ -124,9 +124,9 @@ TEST(the_numbers_are_read_as_zigs_parse_int_reads_them) {
     // `+`, `_` between digits and `-0` are Zig's; `_` first or last, a
     // space, an empty value and a value past its type are not.
     EXPECT(parse_copy(S("pid=+4_2\npgid=42\nstart=1\nstarted=-9_0\nargv=x\nreaper=-1\nreaper_start=5\nexit=-0\n"), &r));
-    EXPECT_EQ(r.pid, 42);
-    EXPECT_EQ((uint64_t)r.started, (uint64_t)(int64_t)-90);
-    EXPECT_EQ((uint64_t)(int64_t)r.reaper, (uint64_t)(int64_t)-1);
+    EXPECT_EQ_I(r.pid, 42);
+    EXPECT_EQ_I(r.started, -90);
+    EXPECT_EQ_I(r.reaper, -1);
     EXPECT(r.has_exit);
     EXPECT_EQ(r.exit, 0);
     EXPECT(!parse_copy(S("pid=_42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
@@ -136,8 +136,8 @@ TEST(the_numbers_are_read_as_zigs_parse_int_reads_them) {
     EXPECT(!parse_copy(S("pid=-\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
     EXPECT(!parse_copy(S("pid=2147483648\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
     EXPECT(parse_copy(S("pid=2147483647\npgid=42\nstart=1\nstarted=-9223372036854775808\nargv=x\nreaper=-2147483648\nreaper_start=5\n"), &r));
-    EXPECT_EQ(r.pid, 2147483647);
-    EXPECT_EQ((uint64_t)r.started, (uint64_t)INT64_MIN);
+    EXPECT_EQ_I(r.pid, 2147483647);
+    EXPECT_EQ_I(r.started, INT64_MIN);
     EXPECT(!parse_copy(S("pid=42\npgid=42\nstart=1\nstarted=-9223372036854775809\nargv=x\nreaper=1\nreaper_start=5\n"), &r));
     EXPECT(!parse_copy(S("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\nexit=256\n"), &r));
     EXPECT(!parse_copy(S("pid=42\npgid=42\nstart=1\nstarted=9\nargv=x\nreaper=1\nreaper_start=5\nexit=-1\n"), &r));

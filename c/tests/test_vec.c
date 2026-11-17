@@ -19,13 +19,13 @@ TEST(push_pop_and_at_agree) {
     EXPECT(I64s_push(&v, 5) == OK);
     EXPECT(I64s_push(&v, -6) == OK);
     EXPECT_EQ(v.len, 2);
-    EXPECT_EQ(at(v, 1), -6);
+    EXPECT_EQ_I(at(v, 1), -6);
     at(v, 0) = 7;
     I64sItems items = I64s_items(&v);
     EXPECT_EQ(items.len, 2);
-    EXPECT_EQ(at(items, 0), 7);
-    EXPECT_EQ(I64s_pop(&v), -6);
-    EXPECT_EQ(I64s_pop(&v), 7);
+    EXPECT_EQ_I(at(items, 0), 7);
+    EXPECT_EQ_I(I64s_pop(&v), -6);
+    EXPECT_EQ_I(I64s_pop(&v), 7);
     EXPECT_EQ(v.len, 0);
     EXPECT_TRAPS((void)I64s_pop(&v));
     EXPECT_TRAPS((void)at(v, 0));
@@ -60,8 +60,8 @@ TEST(items_survive_every_move_between_two_growing_vecs) {
         EXPECT(I64s_push(&y, -i) == OK);
     }
     for (size_t i = 0; i < 5000; i++) {
-        EXPECT_EQ(at(x, i), (int64_t)i);
-        EXPECT_EQ(at(y, i), -(int64_t)i);
+        EXPECT_EQ_I(at(x, i), (int64_t)i);
+        EXPECT_EQ_I(at(y, i), -(int64_t)i);
     }
     arena_deinit(&a);
 }
@@ -75,7 +75,7 @@ TEST(items_keep_their_alignment) {
         EXPECT(Pairs_push(&p, x) == OK);
         EXPECT_EQ((uintptr_t)p.ptr % _Alignof(Pair), 0);
     }
-    EXPECT_EQ(at(p, 99).b, 198);
+    EXPECT_EQ_I(at(p, 99).b, 198);
     arena_deinit(&a);
 }
 
@@ -89,7 +89,7 @@ TEST(a_refused_push_leaves_the_vec_as_it_was) {
     EXPECT(a.hit);
     EXPECT_EQ(v.len, 9);
     EXPECT_EQ(v.cap, 9);
-    EXPECT_EQ(at(v, 8), 8);
+    EXPECT_EQ_I(at(v, 8), 8);
     EXPECT(I64s_reserve(&v, SIZE_MAX) == STOP);
     EXPECT(I64s_reserve(&v, SIZE_MAX / 4) == STOP);
     EXPECT_EQ(v.len, 9);
@@ -109,7 +109,7 @@ TEST(a_capacity_whose_size_wraps_is_refused_with_room_to_grow_in_place) {
     EXPECT_EQ(v.cap, 9);
     EXPECT_EQ(v.len, 1);
     EXPECT_EQ(a.held, held);
-    EXPECT_EQ(at(v, 0), 1);
+    EXPECT_EQ_I(at(v, 0), 1);
     EXPECT_TRAPS((void)at(v, 1));
     arena_deinit(&a);
 }
@@ -121,7 +121,7 @@ TEST(a_big_vec_holds_its_live_buffer_not_every_one_it_outgrew) {
     for (int64_t i = 0; i < 20000; i++) EXPECT(I64s_push(&v, i) == OK);
     EXPECT(a.held < 2 * v.cap * sizeof(int64_t));
     EXPECT(a.bigs != NULL);
-    EXPECT_EQ(at(v, 19999), 19999);
+    EXPECT_EQ_I(at(v, 19999), 19999);
     arena_deinit(&a);
 }
 

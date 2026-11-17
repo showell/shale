@@ -94,7 +94,7 @@ TEST(allocations_are_aligned_as_asked) {
     char *p = arena_alloc(&a, 1, 1);
     char *q = arena_alloc(&a, 8, 8);
     EXPECT_EQ((uintptr_t)q % 8, 0);
-    EXPECT_EQ(q - p, 8);
+    EXPECT_EQ_I(q - p, 8);
     EXPECT(arena_alloc(&a, 1, 1) != NULL);
     char *r = arena_alloc(&a, 16, 64);
     EXPECT_EQ((uintptr_t)r % 64, 0);
@@ -107,7 +107,7 @@ TEST(only_the_last_allocation_grows_in_place) {
     EXPECT(arena_resize(&a, p, 10, 20));
     EXPECT_EQ(a.used, 20);
     char *q = arena_alloc(&a, 10, 1);
-    EXPECT_EQ(q - p, 20);
+    EXPECT_EQ_I(q - p, 20);
     EXPECT(!arena_resize(&a, p, 20, 30));
     // Any allocation may shrink, in place.
     EXPECT(arena_resize(&a, p, 20, 5));

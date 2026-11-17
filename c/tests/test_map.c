@@ -18,14 +18,14 @@ TEST(put_then_get_and_a_missing_key_is_missing) {
     EXPECT(IntMap_put(&m, S("x"), 1) == OK);
     EXPECT(IntMap_put(&m, S("y"), 2) == OK);
     EXPECT(IntMap_get(&m, S("x"), &v));
-    EXPECT_EQ(v, 1);
+    EXPECT_EQ_I(v, 1);
     EXPECT(IntMap_get(&m, S("y"), &v));
-    EXPECT_EQ(v, 2);
+    EXPECT_EQ_I(v, 2);
     EXPECT(!IntMap_get(&m, S("z"), &v));
     EXPECT_EQ(IntMap_len(&m), 2);
     *IntMap_ptr(&m, S("y")) = 20;
     EXPECT(IntMap_get(&m, S("y"), &v));
-    EXPECT_EQ(v, 20);
+    EXPECT_EQ_I(v, 20);
     arena_deinit(&a);
 }
 
@@ -53,9 +53,9 @@ TEST(setting_a_key_again_keeps_its_place) {
     EXPECT(IntMap_put(&m, S("b"), 3) == OK);
     EXPECT_EQ(IntMap_len(&m), 2);
     EXPECT_STR(IntMap_key_at(&m, 0), S("b"));
-    EXPECT_EQ(IntMap_value_at(&m, 0), 3);
+    EXPECT_EQ_I(IntMap_value_at(&m, 0), 3);
     EXPECT_STR(IntMap_key_at(&m, 1), S("a"));
-    EXPECT_EQ(IntMap_value_at(&m, 1), 2);
+    EXPECT_EQ_I(IntMap_value_at(&m, 1), 2);
     EXPECT_TRAPS((void)IntMap_key_at(&m, 2));
     EXPECT_TRAPS((void)IntMap_value_at(&m, 2));
     arena_deinit(&a);
@@ -83,7 +83,7 @@ TEST(a_thousand_keys_keep_their_order_through_every_growth) {
         EXPECT_STR(IntMap_key_at(&m, (size_t)i), key_of(&a, k));
         int64_t v = -1;
         EXPECT(IntMap_get(&m, key_of(&a, k), &v));
-        EXPECT_EQ(v, k * 10);
+        EXPECT_EQ_I(v, k * 10);
     }
     EXPECT(!IntMap_get(&m, S("k1000x"), &(int64_t){0}));
     arena_deinit(&a);
@@ -103,8 +103,8 @@ TEST(a_removal_keeps_the_others_order_and_finds_them_after) {
     EXPECT_STR(IntMap_key_at(&m, 1), S("d"));
     EXPECT_STR(IntMap_key_at(&m, 2), S("b"));
     EXPECT_STR(IntMap_key_at(&m, 3), S("a"));
-    EXPECT_EQ(IntMap_value_at(&m, 2), 3);
-    EXPECT_EQ(IntMap_value_at(&m, 3), 4);
+    EXPECT_EQ_I(IntMap_value_at(&m, 2), 3);
+    EXPECT_EQ_I(IntMap_value_at(&m, 3), 4);
     int64_t v = -1;
     EXPECT(IntMap_get(&m, S("a"), &v) && v == 4);
     EXPECT(IntMap_get(&m, S("e"), &v) && v == 0);
@@ -147,7 +147,7 @@ TEST(a_refused_put_leaves_the_map_as_it_was) {
     for (size_t i = 0; i < n; i++) {
         v = -1;
         EXPECT(IntMap_get(&m, key_of(&names, (int64_t)i), &v));
-        EXPECT_EQ(v, (int64_t)i);
+        EXPECT_EQ_I(v, (int64_t)i);
         EXPECT_STR(IntMap_key_at(&m, i), key_of(&names, (int64_t)i));
     }
     // With room again, the put that was refused goes through, and goes last.

@@ -78,7 +78,21 @@ static inline void test_fail(const char *file, int line, Str what) { // cstr: __
         }                                                                                   \
     } while (0)
 
-#define EXPECT_STR(a, b)                                                                    \
+// EXPECT_EQ for signed values: both sides as int64_t, printed signed. Under
+// EXPECT_EQ's uint64_t a failing -1 prints as 18446744073709551615, and -1
+// equals SIZE_MAX.
+#define EXPECT_EQ_I(a, b)                                                                   \
+    do {                                                                                    \
+        int64_t test_a_ = (int64_t)(a);                                                     \
+        int64_t test_b_ = (int64_t)(b);                                                     \
+        if (test_a_ != test_b_) {                                                           \
+            fprintf(stderr, "  %s is %lld, %s is %lld\n", #a, (long long)test_a_,           \
+                    #b, (long long)test_b_);                                                \
+            test_fail(__FILE__, __LINE__, S(#a " == " #b));                                 \
+        }                                                                                   \
+    } while (0)
+
+#define EXPECT_STR(a, b)                                                                  \
     do {                                                                                    \
         Str test_a_ = (a);                                                                  \
         Str test_b_ = (b);                                                                  \
