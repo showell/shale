@@ -468,6 +468,7 @@ static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind
         case CHANGE_MKDIR: e = rs->store.make_dir(rs->store.ctx, a, p->full); break;
         case CHANGE_REMOVE: e = rs->store.remove(rs->store.ctx, a, p->full); break;
         case CHANGE_REMOVE_TREE: e = rs->store.remove_tree(rs->store.ctx, a, p->full); break;
+        default: c_bug("builtins_change: a change of no kind the store makes");
         }
     }
     Effect logged = {builtin_name(b), p->rel, e == STORE_OK ? S("ok") : store_err_name(e)};

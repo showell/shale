@@ -18,7 +18,7 @@ use("build:lib.shale")
 -- each caught by its `aim` tests.
 
 const HOST_TEXT_TEST = "c/tests/text/test_host_text.c"
-const HOST_TEXT_TESTS = 15
+const HOST_TEXT_TESTS = 16
 
 -- Each script's every stop is Zig's, so a message, a charge or an order the
 -- tests do not pin is judged here.

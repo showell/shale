@@ -469,8 +469,8 @@ static STATUS_MUST_USE Status builtin_sort_by_keys(Run *r, Pos pos, Table *t, co
         KeyValues slots = {kv, keys.len};
         const Value *item = &at(t->list, i);
         for (size_t j = 0; j < keys.len; j++) {
-            bool got = ValueMap_get(&item->as.table->map, at(keys, j).key, &at(slots, j));
-            (void)got;
+            // The pass above found every key in every item.
+            if (!ValueMap_get(&item->as.table->map, at(keys, j).key, &at(slots, j))) c_bug("builtins: `sort` lost a key the pass before it found");
         }
         at(rows, i).keys = kv;
         at(rows, i).row = *item;
@@ -633,13 +633,15 @@ static STATUS_MUST_USE Status bi_arg(Run *r, Pos pos, ConstValues args, Value *o
 }
 
 // Never reached: `yield()` compiles to its own op, and a call with arguments
-// is refused by its count.
+// is refused by its count, so a call here is a bug in the C.
 static STATUS_MUST_USE Status bi_yield(Run *r, Pos pos, ConstValues args, Value *out) {
     (void)r;
     (void)pos;
     (void)args;
-    value_nil(out);
-    return OK;
+    (void)out;
+    c_bug("builtins: `yield` reached the builtins' table, past its own op");
+    // Never reached: TCC refuses a function that might return no value.
+    return STOP;
 }
 
 static int64_t builtin_capped(uint64_t n) {

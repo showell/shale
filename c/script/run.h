@@ -315,6 +315,8 @@ static inline Str run_op_text(BinOp op) {
     case BINOP_AND: return S("and");
     case BINOP_OR: return S("or");
     }
+    c_bug("run: an operator that is no BinOp");
+    // Never reached: TCC refuses a function that might return no value.
     return S("");
 }
 
@@ -340,7 +342,9 @@ static inline STATUS_MUST_USE Status run_unary(Run *r, Pos pos, UnOp op, const V
         }
         return run_failf(r, pos, CLASS_TYPE, "`#` takes a string or a list, not {s}", S("`#` takes a string or a list, not "), value_type_name(v));
     }
-    return OK;
+    c_bug("run: a unary operator that is no UnOp");
+    // Never reached: TCC refuses a function that might return no value.
+    return STOP;
 }
 
 // `a + b`, `a - b` and `a * b` on int64_t: false on overflow, `*out` then
@@ -407,7 +411,7 @@ static inline RUN_HOT bool run_int_arith(BinOp op, int64_t a, int64_t b, int64_t
         got = a / b;
         if (a % b != 0 && ((a < 0) != (b < 0))) got--;
         break;
-    default:
+    case BINOP_MOD:
         if (b == 0) return false;
         if (b == -1) {
             got = 0;
@@ -417,6 +421,7 @@ static inline RUN_HOT bool run_int_arith(BinOp op, int64_t a, int64_t b, int64_t
         got = a % b;
         if (got != 0 && ((got < 0) != (b < 0))) got += b;
         break;
+    default: c_bug("run: an integer operator that is not `+`, `-`, `*`, `//` or `%`");
     }
     *out = got;
     return true;
@@ -473,7 +478,8 @@ static inline STATUS_MUST_USE Status run_compare(Run *r, Pos pos, BinOp op, cons
     case BINOP_LT: got = order < 0; break;
     case BINOP_LE: got = order <= 0; break;
     case BINOP_GT: got = order > 0; break;
-    default: got = order >= 0; break;
+    case BINOP_GE: got = order >= 0; break;
+    default: c_bug("run: a comparison that is not `<`, `<=`, `>` or `>=`");
     }
     value_bool(out, got);
     return OK;
@@ -489,8 +495,10 @@ static inline STATUS_MUST_USE Status run_equal(Run *r, Pos pos, const Value *l, 
     case VALUE_NIL: *out = true; return OK;
     case VALUE_BOOL: *out = l->as.boolean == rv->as.boolean; return OK;
     case VALUE_INT: *out = l->as.integer == rv->as.integer; return OK;
-    default: break;
+    case VALUE_STRING: break;
+    case VALUE_TABLE: c_bug("run: `==` on a table, which the check above refuses");
     }
+    if (l->tag != VALUE_STRING) c_bug("run: a value of no tag");
     Str a = l->as.string;
     Str b = rv->as.string;
     TRY(run_charge(r, pos, a.len < b.len ? a.len : b.len));

@@ -173,7 +173,7 @@ static inline void cli_set_budget(Budgets *b, size_t k, uint64_t n) {
     case SET_MACHINE_BYTES: b->machine_bytes = nz; break;
     case SET_CALL_DEPTH: b->call_depth = n32; break;
     case SET_PROGRAMS: b->programs = n32; break;
-    case SET_COUNT: break;
+    case SET_COUNT: c_bug("cli: a budget set that is no settable budget");
     }
 }
 
@@ -194,6 +194,8 @@ static inline uint64_t cli_budget_value(const Budgets *b, size_t k) {
     case SET_PROGRAMS: return b->programs;
     case SET_COUNT: break;
     }
+    c_bug("cli: a budget read that is no settable budget");
+    // Never reached: TCC refuses a function that might return no value.
     return 0;
 }
 

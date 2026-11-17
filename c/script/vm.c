@@ -577,7 +577,11 @@ static RUN_COLD STATUS_MUST_USE Status vm_binary(Machine *m, const VmOp *op) {
         value_bool(&out, both == (bop == BINOP_EQ_NIL));
         break;
     }
-    default: TRY(run_compare(r, op->pos, bop, &lv, &rv, &out)); break;
+    case BINOP_LT:
+    case BINOP_LE:
+    case BINOP_GT:
+    case BINOP_GE: TRY(run_compare(r, op->pos, bop, &lv, &rv, &out)); break;
+    default: c_bug("vm: a binary op of an operator the compiler gives its own op");
     }
     return vm_push(m, op->pos, &out);
 }

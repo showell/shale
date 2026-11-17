@@ -92,8 +92,10 @@ static inline Str value_type_name(const Value *v) {
     case VALUE_STRING: return S("a string");
     case VALUE_TABLE: break;
     }
+    if (v->tag != VALUE_TABLE) c_bug("value: a value of no tag");
     if (v->as.table->kind == TABLE_LIST) return S("a list");
     if (v->as.table->kind == TABLE_MAP) return S("a map");
+    if (v->as.table->kind != TABLE_EMPTY) c_bug("value: a table of no kind");
     return S("an empty table");
 }
 

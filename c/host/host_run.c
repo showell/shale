@@ -811,6 +811,8 @@ static Str host_ended_word(SpawnEnded e) {
     case SPAWN_SIGNAL: return S("signal");
     case SPAWN_INTERRUPTED: return S("interrupted");
     }
+    c_bug("host_run: a program's end of no kind spawn.c says");
+    // Never reached: TCC refuses a function that might return no value.
     return S("");
 }
 

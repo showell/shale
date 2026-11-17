@@ -157,6 +157,22 @@ TEST(flat_tree_refuses_a_line_that_does_not_read_naming_its_line_and_why) {
     ran_free(&x);
 }
 
+TEST(flat_tree_refuses_a_number_past_what_an_integer_holds_and_reads_the_most) {
+    // A line or column past INT64_MAX is a line that is not a tree's, a
+    // stop: never a negative integer, never the end of the process.
+    static Ran x;
+    ran_source(&x, S("function rt(s) return host(\"roc_tree\", \"roc-ast flat 1 p\\n\" .. s, \"whole\") end\n"
+                     "print(attempt(rt, \"== /x\\nn\\t0\\tfile\\t9223372036854775808\\t1\\t1\\t2\\n\").error)\n"
+                     "print(attempt(rt, \"== /x\\nn\\t0\\tfile\\t1\\t18446744073709551615\\t1\\t2\\n\").error)\n"
+                     "print(rt(\"== /x\\nn\\t0\\tfile\\t9223372036854775807\\t1\\t1\\t2\\n\").files[1].nodes[1].line)\n"),
+               ran_budgets());
+    EXPECT_EQ(x.ran, OK);
+    EXPECT_STR(buf_view(&x.r.out), S("`roc_tree`: roc-ast's output line 3 is not a tree's: a span's number\n"
+                     "`roc_tree`: roc-ast's output line 3 is not a tree's: a span's number\n"
+                     "9223372036854775807\n"));
+    ran_free(&x);
+}
+
 TEST(flat_tree_reads_each_tools_header_as_its_own_and_refuses_another) {
     static Ran x;
     ran_source(&x, S("function rt(t, s) return host(t, s, \"whole\") end\n"
@@ -238,6 +254,7 @@ TEST_PART(host_text, TEST_CASE(json_read_reads_each_kind_and_json_write_writes_i
           TEST_CASE(shale_tokens_stops_on_a_file_that_does_not_lex_naming_the_lexers_line),
           TEST_CASE(flat_tree_reads_nodes_parents_depths_kids_spans_and_attributes_two_files_and_what_follows),
           TEST_CASE(flat_tree_refuses_a_line_that_does_not_read_naming_its_line_and_why),
+          TEST_CASE(flat_tree_refuses_a_number_past_what_an_integer_holds_and_reads_the_most),
           TEST_CASE(flat_tree_reads_each_tools_header_as_its_own_and_refuses_another),
           TEST_CASE(flat_tree_ends_the_trees_at_a_line_that_does_not_read_in_a_cut_output),
           TEST_CASE(flat_tree_refuses_its_arguments_first_to_last),

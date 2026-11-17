@@ -567,7 +567,7 @@ static STATUS_MUST_USE Status json_emit(Run *r, Pos pos, Buf *b, const Value *v,
     case VALUE_BOOL: w = v->as.boolean ? buf_lit(b, "true") : buf_lit(b, "false"); break;
     case VALUE_INT: w = buf_i64(b, v->as.integer); break;
     case VALUE_STRING: return json_emit_string(r, pos, b, v->as.string);
-    default: {
+    case VALUE_TABLE: {
         if (depth_left == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`json_write`: the value nests past 512 deep (or holds itself)"));
         Table *t = v->as.table;
         if (t->kind == TABLE_EMPTY) {
@@ -590,7 +590,9 @@ static STATUS_MUST_USE Status json_emit(Run *r, Pos pos, Buf *b, const Value *v,
             }
             w = buf_byte(b, '}');
         }
+        break;
     }
+    default: c_bug("host_json: a value of no tag");
     }
     if (w != OK) return run_values_oom(r, pos);
     return OK;

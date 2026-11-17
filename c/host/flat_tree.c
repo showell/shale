@@ -101,8 +101,11 @@ static Names flat_reserved(void) {
 }
 
 // A number as the flat format writes it: an optional `+` or `-`, then
-// decimal digits with `_` allowed between them, within 64 bits. A `-` is
-// read before zeros alone, since any other digit makes the number negative.
+// decimal digits with `_` allowed between them, at most INT64_MAX, the most
+// a Shale integer holds. A `-` is read before zeros alone, since any other
+// digit makes the number negative. A number past INT64_MAX is a line that is
+// not a tree's, a stop: Zig reads it as a usize and panics at its `@intCast`
+// to an integer, but a tool's output is input, which never ends the process.
 static bool flat_num(Str s, size_t *out) {
     Str d = s;
     bool neg = false;
@@ -122,7 +125,7 @@ static bool flat_num(Str s, size_t *out) {
             if (digit != 0) return false;
             continue;
         }
-        if (v > (UINT64_MAX - digit) / 10) return false;
+        if (v > ((uint64_t)INT64_MAX - digit) / 10) return false;
         v = v * 10 + digit;
     }
     *out = (size_t)v;
@@ -397,12 +400,13 @@ static STATUS_MUST_USE Status flat_put_text(Run *r, Pos pos, Table *t, Str key, 
 }
 
 // A size the reader counted, as a Shale integer.
-// DRAGON: the integers. A span's number may be up to 2^64 - 1, past what an
-// integer holds.
-// REMEDY: none in the code: a number of 2^63 or more reaches the script as
-// a negative integer (the cast keeps the bits). Nothing overruns, and no
-// tool writes a line or column near it.
+// DRAGON: the integers. A number past INT64_MAX would reach the script as a
+// negative integer, the cast keeping its bits.
+// REMEDY: flat_num refuses a line or column past INT64_MAX as a line that is
+// not a tree's; a depth, a parent and a kid are counts of nodes held in
+// memory, far below it. One past it here is a bug in the C, which aborts.
 static int64_t flat_int(size_t n) {
+    if ((uint64_t)n > (uint64_t)INT64_MAX) c_bug("flat_tree: a count past what an integer holds");
     return (int64_t)n;
 }
 
