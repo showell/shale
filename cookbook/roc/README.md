@@ -182,9 +182,15 @@ end, and fails the run.
   at most its `programs` budget of programs (1,000 unset), so on a very
   large tree it stops and prints the `from=` argument for the next run.
   Its `glob=` takes several globs separated by commas, and a file with no
-  call to try needs no root.
+  call to try needs no root. `trials=0` counts without the compiler: a call
+  the types prove counts as rewritable, one they leave open as `unsettled`,
+  and nothing is written, so a report runs in seconds; a proven call the
+  compiler would refuse (a literal whose type defaults) is counted, which
+  only a trial catches. `types_from=` reads the root's types from a file a
+  gate kept, in place of running roc-types again.
 
       cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc,app/Specs.roc
+      cd <repo> && shale <shale>/cookbook/roc/rewrite_method_calls.shale glob='app/*.roc' root=app/main.roc trials=0
 
 - [compare_machine_code.shale](compare_machine_code.shale) compares two builds of a Roc archive
   and says whether they hold the same machine code. Use it to confirm that

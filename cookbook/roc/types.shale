@@ -125,6 +125,17 @@ function roc_types(root, roc)
   return parse_roc_types_output(run({real(exe), real(root)}, {timeout_ms = 300000, whole = 64000000}), root, roc)
 end
 
+-- `roc_types`' record for `root`, read from `path`, a file in roc-types'
+-- format that a run of roc-types on `root` wrote and exited 0 (a gate that
+-- typed the app keeps it), so no program runs. Its first line is held to
+-- `roc`'s pin as roc-types' own is. A module may have no records: a keeper
+-- of the file may leave out the types of modules it has no use for, and
+-- keep their `== ` lines, so the modules reached stay whole.
+function roc_types_from_file(path, root, roc)
+  if not exists(path) then fail("`roc_types`: no " .. path .. ", the types of " .. root .. " to read") end
+  return parse_roc_types_output({out = read(path), ended = "exit", code = 0}, root, roc)
+end
+
 -- The app paths in a recipe's `root=` argument, which may list several,
 -- `root=a.roc,b.roc`, when no one app imports every file the recipe checks.
 -- `who` names the recipe in the failure when `root=` is empty.

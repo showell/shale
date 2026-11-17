@@ -27,6 +27,21 @@
 --   types  with `types=0`, the type checker's types (below) are not read.
 --   from   the glob's file to start at, 1 by default (see the program limit
 --          below).
+--   trials with `trials=0`, nothing is written and no compiler runs: the
+--          types alone say what would turn. A call whose first argument
+--          the types prove is counted `proven`, one they leave open is
+--          counted `unsettled` (listed, with the kind of type they gave),
+--          and the rest are `left` as ever. It is the count a report needs
+--          without the trial compiles that make a dry run slow, and it
+--          differs from a dry run's `rewritten` in two ways: a proven call
+--          that `roc check` would refuse (a literal whose type defaults, the
+--          ProvenFails plant) is counted, and an unsettled call that would
+--          compile is not. It needs the types, so not with `types=0`, and
+--          never with `apply=1`.
+--   types_from  a file in roc-types' format holding the one root's types,
+--          read in place of running roc-types (a gate that has typed the
+--          app already keeps them). Its first line is held to the tree's
+--          pin as roc-types' own is. One root only.
 -- Run it with `--undo-on-stop`, so that a run stopped in the middle of a
 -- trial (by a budget, or Ctrl-C) puts the trial's file back too.
 --
@@ -154,6 +169,12 @@ const THIS_SCRIPT = "cookbook:roc/rewrite_method_calls.shale"
 const GLOB = arg("glob", "**/*.roc")
 const ROOT = arg("root", "")
 const FROM = tonumber(arg("from", "1"))
+const TRIALS_ARG = arg("trials", "1")
+if TRIALS_ARG ~= "0" and TRIALS_ARG ~= "1" then fail("rewrite_method_calls: trials=" .. TRIALS_ARG .. ": trials must be 1 (the default) or 0") end
+const COUNT_ONLY = TRIALS_ARG == "0"
+const TYPES_FROM = arg("types_from", "")
+if COUNT_ONLY and APPLY and not SELF_TEST then fail("rewrite_method_calls: trials=0 writes nothing, so not with apply=1") end
+if COUNT_ONLY and not USE_TYPES then fail("rewrite_method_calls: trials=0 counts by the types, so not with types=0") end
 use("cookbook:roc/pinned.shale")
 use("cookbook:findings.shale")
 use("cookbook:roc/types.shale")
@@ -345,7 +366,7 @@ function candidates_in(t, own_module)
       if callee.kind == "e-ident" and m ~= nil and m.groups[1] ~= own_module then
         local module = m.groups[1]
         local fn = m.groups[2]
-        push(out, {node = i, module = module, fn = fn, line = line_at(t, n.span.from), why_left = reason_call_stays(t, i, module, fn), proven = false, from_line = 0, to_line = 0})
+        push(out, {node = i, module = module, fn = fn, line = line_at(t, n.span.from), why_left = reason_call_stays(t, i, module, fn), proven = false, kind = "", from_line = 0, to_line = 0})
       end
     end
   end
@@ -543,8 +564,13 @@ end
 -- nominal over a tag, `a and b` an `if`), and the inner expressions are
 -- parts of the desugaring, not the argument's value.
 function types_by_region(ctx, root)
-  ctx.programs_used = ctx.programs_used + 1
-  local got = roc_types(root, ctx.roc)
+  local got = nil
+  if ctx.types_from ~= "" then
+    got = roc_types_from_file(ctx.types_from, root, ctx.roc)
+  else
+    ctx.programs_used = ctx.programs_used + 1
+    got = roc_types(root, ctx.roc)
+  end
   local by_region = {}
   for path in got.paths do
     for rec in got.modules[path] do
@@ -604,10 +630,12 @@ function judge_by_types(kind_counts, t, cands, p, types)
       local key = real_path .. "|" .. t.nodes[t.nodes[c.node].kids[2]].region
       if not has_key(types.by_region, key) then
         incr(kind_counts, "no type")
+        c.kind = "no type"
       else
         local h = type_head(types.by_region[key])
         if has_key(h, "var") then
           incr(kind_counts, "a type variable")
+          c.kind = "a type variable"
         else
           local segments = split(h.head, ".")
           if h.head == c.module or segments[#segments] == c.module then
@@ -785,6 +813,33 @@ function root_of_each_file(ctx, paths, from, roots, read_types, open)
   return out
 end
 
+-- `trials=0`'s answer, the files of `paths` from the `from`th on as the
+-- types judged them (`judged`, by path): a proven call counts as
+-- rewritten, an open one the types didn't settle as unsettled, with a line
+-- naming the kind of type they gave, and a call that stays as left, with
+-- its reason. Nothing is written or compiled.
+function counted_by_types(total, paths, from, judged)
+  for k = from, #paths do
+    local p = paths[k]
+    local j = judged[p]
+    total.files = total.files + 1
+    for kind in keys(j.kind_counts) do incr(total.ctx.type_kind_counts, kind, j.kind_counts[kind]) end
+    total.candidates = total.candidates + #j.cands
+    for c in j.cands do
+      if c.why_left ~= "" then
+        total.left = total.left + 1
+        push(total.lines, p .. ":" .. c.line .. ": " .. c.module .. "." .. c.fn .. ": " .. c.why_left)
+      elseif c.proven then
+        total.rewritten = total.rewritten + 1
+      else
+        total.unsettled = total.unsettled + 1
+        push(total.lines, p .. ":" .. c.line .. ": " .. c.module .. "." .. c.fn .. ": unsettled: the types gave " .. c.kind .. ", and only a trial would tell")
+      end
+    end
+  end
+  return total
+end
+
 -- Rewrites the files of `paths` from the `from`th on, each judged on its
 -- root (`root` may name several, `a.roc,b.roc`, when `use_types`). Returns
 -- `{candidates, rewritten, left, lines, next, ctx}`: `lines` has a
@@ -792,17 +847,22 @@ end
 -- file to go on from when the program limit stopped the run, else 0.
 -- `trees` is the files' parse trees, or nil to read them here (one
 -- program). `roc` is the OS path of the tree's Roc, which roc-types' pin
--- must match.
-function run_all(paths, root, from, trees, use_types, roc)
+-- must match. `opts` may hold `count_only` (`trials=0`: the types decide,
+-- nothing is tried, and `unsettled` counts the calls they leave open) and
+-- `types_from` (the one root's types read from that file).
+function run_all(paths, root, from, trees, use_types, roc, opts?)
+  local count_only = opts ~= nil and get(opts, "count_only", false)
+  local types_from = opts ~= nil and get(opts, "types_from", "") or ""
   if use_types and root == "" then fail("rewrite_method_calls: the types need root=, an app importing every file of the glob: roc-types reads an app, and a type module only through one. Give root=, or types=0 to run without them, every candidate tried") end
   if not use_types and find(root, ",") ~= nil then fail("rewrite_method_calls: root=" .. root .. ": several roots need the types, which say which root reaches a file; give one root, or run with the types") end
   local roots = root == "" and {} or roc_types_root_apps("rewrite_method_calls", root)
-  local ctx = {programs_used = 0, type_kind_counts = {}, types_by_root = {}, roc = roc, rounds = 0, confirms = 0, confirmed = {}}
+  if types_from ~= "" and #roots ~= 1 then fail("rewrite_method_calls: types_from= holds one root's types, and root= names " .. #roots) end
+  local ctx = {programs_used = 0, type_kind_counts = {}, types_by_root = {}, roc = roc, types_from = types_from, rounds = 0, confirms = 0, confirmed = {}}
   if trees == nil then
     trees = parse_trees(paths)
     ctx.programs_used = 1
   end
-  local total = {candidates = 0, rewritten = 0, left = 0, lines = {}, files = 0, next = 0, ctx = ctx}
+  local total = {candidates = 0, rewritten = 0, left = 0, unsettled = 0, lines = {}, files = 0, next = 0, ctx = ctx}
   -- Each file's candidates, `{cands, kind_counts, open_count, all_proven}`.
   local judged = {}
   local any_open = false
@@ -838,6 +898,7 @@ function run_all(paths, root, from, trees, use_types, roc)
     end
     if j.open_count == 0 then j.all_proven = false end
   end
+  if count_only then return counted_by_types(total, paths, from, judged) end
   local baselines = {}
   for k = from, #paths do
     local p = paths[k]
@@ -933,6 +994,12 @@ const EXPECT = {
   Second = {left = 0, root = "TypedApp,SecondApp", types = true, confirms = 1, rounds = 0},
   Unreached = {stop = "no root reaches", root = "TypedApp,SecondApp", types = true},
   Beside = {file = "Proven", with = "NoCalls", left = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
+  -- `trials=0`: the types alone count, and the plant comes out as it was.
+  -- ProvenFails' three calls are all proven, where the trial leaves two:
+  -- the count's cost, held here.
+  TypedCount = {file = "Typed", count = true, proven = 1, unsettled = 0, left = 1, why = "the first argument is a List, not a Str", root = "TypedApp", types = true},
+  ProvenFailsCount = {file = "ProvenFails", count = true, proven = 3, unsettled = 0, left = 0, root = "TypedApp", types = true},
+  ProvenFrom = {file = "Proven", count = true, types_from = true, proven = 2, unsettled = 0, left = 0, root = "TypedApp", types = true},
 }
 
 -- The plants that hold no call and serve only as roots for other plants:
@@ -959,13 +1026,27 @@ function self_test_plant(name)
   for r in split(get(want, "root", ""), ",") do
     if r ~= "" then push(roots, scratch .. "/" .. r .. ".roc") end
   end
-  local got = run_all(paths, join(roots, ","), 1, nil, with_types, roc)
+  -- A plant with `types_from` reads the types from a file, as a gate keeps
+  -- them: roc-types' output on the root, written here first.
+  local types_from = ""
+  if has_key(want, "types_from") then
+    types_from = scratch .. "/root.types"
+    replace(types_from, must(run({real(roc_types_exe(roc)), real(roots[1])}, {timeout_ms = 300000, whole = 64000000})).out)
+  end
+  local count_only = has_key(want, "count")
+  local got = run_all(paths, join(roots, ","), 1, nil, with_types, roc, {count_only = count_only, types_from = types_from})
   if has_key(want, "stop") then fail("rewrite_method_calls: self-test: " .. name .. " ran to its end, and was to stop: " .. want.stop) end
+  if count_only then
+    report_check(failures, got.rewritten == want.proven, name .. ": " .. got.rewritten .. " proven, want " .. want.proven)
+    report_check(failures, got.unsettled == want.unsettled, name .. ": " .. got.unsettled .. " unsettled, want " .. want.unsettled)
+    report_check(failures, read(p) == read(PLANTS_DIR .. "/" .. file .. ".roc"), name .. ": counted, and left as it was")
+  end
+  if types_from ~= "" then report_check(failures, got.ctx.programs_used == 1, name .. ": the types read from a file, so roc-ast the one program (" .. got.ctx.programs_used .. ")") end
   local left = got.lines
   report_check(failures, #left == want.left, name .. ": " .. #left .. " left, want " .. want.left .. (#left > 0 and (" (" .. join(left, "; ") .. ")") or ""))
   if has_key(want, "why") then report_check(failures, #left > 0 and contains(join(left, "\n"), want.why), name .. ": left because " .. want.why) end
   local want_path = PLANTS_DIR .. "/" .. file .. ".want"
-  if exists(want_path) then report_check(failures, read(p) == read(want_path), name .. ": comes out as " .. file .. ".want") end
+  if exists(want_path) and not count_only then report_check(failures, read(p) == read(want_path), name .. ": comes out as " .. file .. ".want") end
   -- In Typed, the types turn one call and leave the other, so the trial
   -- decides neither.
   local kinds = got.ctx.type_kind_counts
@@ -1032,8 +1113,9 @@ elseif SELF_TEST then
   self_test()
 else
   local paths = paths_of_globs(GLOB)
-  local total = run_all(paths, ROOT, FROM, nil, USE_TYPES, roc_bin("rewrite_method_calls", SELF_TEST))
+  local total = run_all(paths, ROOT, FROM, nil, USE_TYPES, roc_bin("rewrite_method_calls", SELF_TEST), {count_only = COUNT_ONLY, types_from = TYPES_FROM})
   local summary = (APPLY and "" or "dry run: ") .. "files " .. total.files .. ", candidates " .. total.candidates .. ", rewritten " .. total.rewritten .. ", left " .. total.left .. ", programs " .. total.ctx.programs_used .. " (checks: " .. total.ctx.confirms .. " confirming proven calls, " .. total.ctx.rounds .. " in trial rounds)"
+  if COUNT_ONLY then summary = "count: files " .. total.files .. ", candidates " .. total.candidates .. ", proven " .. total.rewritten .. ", unsettled " .. total.unsettled .. ", left " .. total.left .. ", programs " .. total.ctx.programs_used .. " (no trials: the types alone decide)" end
   if total.next > 0 then summary = summary .. ", in files " .. FROM .. " to " .. (total.next - 1) .. " of " .. #paths .. ": a run holds " .. MAX_PROGRAMS .. " programs; go on with from=" .. total.next end
   local finding_lines = total.lines
   if USE_TYPES then
