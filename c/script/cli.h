@@ -27,6 +27,17 @@ static inline Str cli_usage(void) {
              "  --version         the mode this `shale` was built in (alone)\n");
 }
 
+// The build's mode as Zig's `-Doptimize=` spells it, which `shale --version`
+// says: an optimized build is `ReleaseSafe`, since `at` checks every index in
+// every build, and any other (TCC's, the sanitizers' -O0) is `Debug`.
+static inline Str cli_build_mode(void) {
+#ifdef __OPTIMIZE__
+    return S("ReleaseSafe");
+#else
+    return S("Debug");
+#endif
+}
+
 // The budgets a command line may set, in Zig's `settable` order, which is also
 // the order the header's line prints them in.
 typedef enum {

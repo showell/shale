@@ -3,9 +3,10 @@
 // does, parses and compiles the script with them, and either stops there
 // (`--check`) or runs it on the VM (script/vm.c), printing what it printed
 // on stdout and the same report on stderr, with the same exit code. A host
-// call the C does not run yet is refused as not ported, and so are `--help`
-// and `--version`. `--reap` is a job's reaper (host/jobs.c). This file holds
-// the system calls; what it decides is in script/.
+// call the C does not run yet is refused as not ported. `--help` and
+// `--version` print what Zig's do, and `--reap` is a job's reaper
+// (host/jobs.c). This file holds the system calls; what it decides is in
+// script/.
 
 // `realpath`, `openat` and `memmem` are GNU's.
 #define _GNU_SOURCE
@@ -622,6 +623,99 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     return exit_code;
 }
 
+// ── `--help` and `--version` ──
+
+// Zig's `std.fs.path.dirname` of a path as /proc/self/exe spells one (absolute,
+// no `//`): the path without its last part, `/` for a part at the root, and
+// false for `/` itself.
+static bool help_dirname(Str p, Str *out) {
+    size_t end = p.len;
+    while (end > 0 && str_byte(p, end - 1) == '/') end--;
+    while (end > 0 && str_byte(p, end - 1) != '/') end--;
+    if (end == 0) return false;
+    while (end > 1 && str_byte(p, end - 1) == '/') end--;
+    *out = str_sub(p, 0, end);
+    return true;
+}
+
+// The checkout this binary runs from, as `<checkout>/zig-out/bin/shale` would
+// be: three folders up from /proc/self/exe, when it holds
+// docs/SHALE-AGENTS.md.
+static bool help_checkout(Arena *a, Str *out) {
+    char exe[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe);
+    if (n <= 0 || (size_t)n >= sizeof exe) return false;
+    Str up = {exe, (size_t)n};
+    for (int k = 0; k < 3; k++) {
+        if (!help_dirname(up, &up)) return false;
+    }
+    Str agents = {0};
+    if (join(a, up, S("docs/SHALE-AGENTS.md"), &agents) != OK) return false;
+    const char *c = c_string(a, agents);
+    if (c == NULL || access(c, F_OK) != 0) return false;
+    return arena_dup(a, up, out);
+}
+
+// `shale --help`: Zig's `help`, the usage, where the docs are and the mounts
+// in force, on stdout, each mount with its folder but a `secrets` mount's. A
+// mounts file that does not read is said on stderr after the rest, exit 2.
+static int help_main(Out *o) {
+    Arena *a = o->arena;
+    Buf w = buf_make(a);
+    Str checkout = {0};
+    bool in_checkout = help_checkout(a, &checkout);
+    bool built = buf_str(&w, cli_usage()) == OK && buf_lit(&w, "\nThe docs (start with the first):\n") == OK;
+    if (built && in_checkout) {
+        built = buf_lit(&w, "  ") == OK && buf_str(&w, checkout) == OK && buf_lit(&w, "/docs/SHALE-AGENTS.md\n  ") == OK &&
+                buf_str(&w, checkout) == OK && buf_lit(&w, "/docs/SHALE.md\n") == OK;
+    } else if (built) {
+        built = buf_lit(&w, "  docs/SHALE-AGENTS.md and docs/SHALE.md at github.com/showell/shale\n") == OK;
+    }
+    if (!built) return not_ported(o, S("a help past the arena"));
+    const char *home_c = getenv("HOME"); // cstr: the environment's
+    const char *pinned = getenv("SHALE_MOUNTS"); // cstr: the environment's
+    MountsLoaded loaded;
+    Str why = S("");
+    MountsResult mr = mounts_load(a, pinned != NULL, pinned != NULL ? from_c(pinned) : S(""), from_c(home_c != NULL ? home_c : "/"), &loaded, &why);
+    if (mr == MOUNTS_OUT_OF_MEMORY) return not_ported(o, S("the mounts past the arena"));
+    if (mr == MOUNTS_MALFORMED) {
+        write_stdout(buf_view(&w));
+        say(o, S("shale: the mounts: "));
+        say(o, why);
+        say(o, S("\n"));
+        return flush_and_exit(o, EXIT_REFUSED);
+    }
+    built = buf_lit(&w, "\nThe mounts, `name:path` in a script (") == OK && buf_str(&w, loaded.from) == OK && buf_lit(&w, "):\n") == OK;
+    if (built && loaded.mounts.len == 0) built = buf_lit(&w, "  none\n") == OK;
+    for (size_t k = 0; built && k < loaded.mounts.len; k++) {
+        const Mount *m = &at(loaded.mounts, k);
+        built = buf_lit(&w, "  ") == OK && buf_str(&w, m->name) == OK;
+        // DRAGON: the secrets rule. Agents run `--help` to learn the language,
+        // and its output lands in their transcripts, so a secrets mount's
+        // folder printed here would name where the tokens are.
+        // REMEDY: a secrets mount is said by its name alone, as Zig's is.
+        if (m->secrets) {
+            built = built && buf_lit(&w, ":  secrets, for `run`'s `secrets` only (its folder is not shown)\n") == OK;
+            continue;
+        }
+        built = built && buf_lit(&w, ":  ") == OK && buf_str(&w, m->dir) == OK;
+        if (built && m->access == MOUNT_READ_ONLY) built = buf_lit(&w, "  ro") == OK;
+        if (built && m->tools) built = buf_lit(&w, "  tools") == OK;
+        built = built && buf_byte(&w, '\n') == OK;
+    }
+    if (!built) return not_ported(o, S("a help past the arena"));
+    write_stdout(buf_view(&w));
+    return flush_and_exit(o, EXIT_FINISHED);
+}
+
+// `shale --version`: the mode this `shale` was built in, as Zig's says it.
+static int version_main(Out *o) {
+    Buf w = buf_make(o->arena);
+    if (buf_lit(&w, "shale ") != OK || buf_str(&w, cli_build_mode()) != OK || buf_byte(&w, '\n') != OK) return not_ported(o, S("a version past the arena"));
+    write_stdout(buf_view(&w));
+    return flush_and_exit(o, EXIT_FINISHED);
+}
+
 // The preludes after the core's, as Zig's `loadPreludes`: the Linux and git
 // preludes, the repo's `.shale/prelude.shale` if present, and the user's.
 static int load_preludes(Out *o, Str root_abs, Prelude *out, size_t *n) {
@@ -695,8 +789,8 @@ static int run_main(Out *o, int argc, char **argv) {
         if (base_env(a, &env) != OK) return 2;
         return jobs_reap_main(a, argv + 2, (size_t)argc - 2, env);
     }
-    if (all.len == 2 && (str_eq(at(all, 1), S("--help")) || str_eq(at(all, 1), S("-h")))) return not_ported(o, S("`shale --help`"));
-    if (all.len == 2 && str_eq(at(all, 1), S("--version"))) return not_ported(o, S("`shale --version`"));
+    if (all.len == 2 && (str_eq(at(all, 1), S("--help")) || str_eq(at(all, 1), S("-h")))) return help_main(o);
+    if (all.len == 2 && str_eq(at(all, 1), S("--version"))) return version_main(o);
     const char *env_root = getenv("SHALE_ROOT"); // cstr: the environment's
     Command c;
     Buf why = buf_make(a);
