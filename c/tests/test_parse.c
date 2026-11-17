@@ -288,6 +288,13 @@ TEST(a_use_binds_its_consts_on_its_line_and_its_functions_load_at_their_call) {
     parse_with(&r, S("use(\"/abs/lib.shale\")\n"), none, &lib);
     expect_stop(&r, 1, 1, CLASS_ARGUMENT, S("`use(\"/abs/lib.shale\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), never by an absolute path or the root's: a script runs from other repositories' roots"));
     arena_deinit(&r.arena);
+    // An empty path, whose text may hold NULL, names no mount, and the
+    // loader is never asked for it.
+    FakeLibrary unasked = {S(""), S(""), 0};
+    parse_with(&r, S("use(\"\")\n"), none, &unasked);
+    expect_stop(&r, 1, 1, CLASS_ARGUMENT, S("`use(\"\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), never by an absolute path or the root's: a script runs from other repositories' roots"));
+    EXPECT_EQ(unasked.loads, 0);
+    arena_deinit(&r.arena);
     parse_with(&r, S("function lim() return 1 end\nuse(\"cookbook:lib.shale\")\n"), none, &lib);
     expect_stop(&r, 2, 1, CLASS_NAME, S("`use(\"cookbook:lib.shale\")`: its function `lim` (cookbook:lib.shale:4) is the script's function at line 1 already"));
     arena_deinit(&r.arena);

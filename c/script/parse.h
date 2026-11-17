@@ -1762,6 +1762,9 @@ static inline STATUS_MUST_USE Status parse_library_names(Parser *p, Pos pos, Str
 
 // Whether a `use`'s path names its library through a mount, `name:path`.
 static inline bool parse_use_path_ok(Str path) {
+    // An empty path may hold NULL, and memchr of NULL is undefined even for
+    // a length of 0; it names no mount either way.
+    if (path.len == 0) return false;
     const char *colon_at = memchr(path.ptr, ':', path.len);
     size_t colon = colon_at != NULL ? (size_t)(colon_at - path.ptr) : 0;
     if (colon == 0) return false;
