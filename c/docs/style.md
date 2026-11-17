@@ -89,10 +89,12 @@ and its self-test plants a break of each one.
   `VEC_DEFINE`, `TRY`, `EXPECT`. A macro used as an expression is named like
   a function: `at`, `str_sub`, `buf_lit`. `S` is short, because every
   literal goes through it.
-- Until the cut-over, a name Shale's Zig has keeps that name, so the two
-  line up: `held`, `limit`, `chunk_least` becomes `ARENA_CHUNK_LEAST`, and
-  `budgetStop` becomes `run_budget_stop`. After it, a name is whatever
-  reads best in C (`after-cutover.md`, "Idioms to take up").
+- A name is whatever reads best in C, not what Shale's Zig called it
+  (`after-cutover.md`, "Idioms to take up"). Until the cut-over the C kept
+  Zig's names so the two lined up; Zig's `chunk_least` is now
+  `ARENA_CHUNK_MIN`.
+- A bound is `_MAX` or `_MIN`, as C's own are (`SIZE_MAX`, `PATH_MAX`):
+  `ARENA_MARKS_MAX`, `ARENA_CHUNK_MIN`, not Zig's `_most` and `_least`.
 
 ## Comments
 

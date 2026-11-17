@@ -315,10 +315,10 @@ TEST(a_misuse_ends_the_process) {
 
 TEST(a_mark_past_the_most_open_ends_the_process) {
     Arena a = arena_make(1 << 20);
-    for (size_t n = 0; n < ARENA_MARKS_MOST; n++) (void)arena_mark(&a);
-    EXPECT_EQ(a.marks_len, ARENA_MARKS_MOST);
+    for (size_t n = 0; n < ARENA_MARKS_MAX; n++) (void)arena_mark(&a);
+    EXPECT_EQ(a.marks_len, ARENA_MARKS_MAX);
     EXPECT_DIES((void)arena_mark(&a));
-    EXPECT_EQ(a.marks_len, ARENA_MARKS_MOST);
+    EXPECT_EQ(a.marks_len, ARENA_MARKS_MAX);
     arena_deinit(&a);
 }
 

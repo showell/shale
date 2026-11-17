@@ -7,7 +7,7 @@
 // "Fidelity"):
 //
 //   - Small allocations are bumped out of chunks of at least
-//     `ARENA_CHUNK_LEAST`, each twice the last when the limit has that left.
+//     `ARENA_CHUNK_MIN`, each twice the last when the limit has that left.
 //     Each chunk is a 16-byte header, then its bytes, and `held` counts every
 //     chunk's whole size.
 //   - An allocation of `ARENA_BIG` or more has a chunk of its own, given back
@@ -36,9 +36,9 @@ typedef struct ArenaChunk {
 _Static_assert(sizeof(ArenaChunk) == 16, "the chunk header is Zig's 16 bytes");
 
 enum {
-    ARENA_CHUNK_LEAST = 16 * 1024,
+    ARENA_CHUNK_MIN = 16 * 1024,
     ARENA_BIG = 64 * 1024,
-    ARENA_MARKS_MOST = 16,
+    ARENA_MARKS_MAX = 16,
 };
 
 // What a mark remembers: the arena's place when the mark was opened.
@@ -73,7 +73,7 @@ typedef struct {
     // The big allocations' chunks, one each, newest first.
     ArenaChunk *bigs;
     // The marks open, innermost last (`arena_mark`).
-    ArenaSaved marks[ARENA_MARKS_MOST];
+    ArenaSaved marks[ARENA_MARKS_MAX];
     size_t marks_len;
     // For tests: when `backing_faults`, the system refuses once
     // `backing_ok_left` more allocations have been made.
@@ -222,11 +222,11 @@ static inline void *arena_alloc(Arena *a, size_t len, size_t align) {
     }
     size_t start = arena_fits(a, len, align);
     if (start == SIZE_MAX) {
-        // A new chunk is twice the last, at least ARENA_CHUNK_LEAST, cut to
+        // A new chunk is twice the last, at least ARENA_CHUNK_MIN, cut to
         // what the limit has left, and never smaller than `need`.
         size_t last = a->chunk != NULL ? a->chunk->total : 0;
         size_t twice = last > SIZE_MAX / 2 ? SIZE_MAX : 2 * last;
-        size_t grown = twice > ARENA_CHUNK_LEAST ? twice : ARENA_CHUNK_LEAST;
+        size_t grown = twice > ARENA_CHUNK_MIN ? twice : ARENA_CHUNK_MIN;
         size_t left = arena_sat_sub(a->limit, a->held);
         size_t want = grown < left ? grown : left;
         if (want < need) want = need;
@@ -298,11 +298,11 @@ static inline void arena_free(Arena *a, void *p, size_t len) {
 }
 
 // Opens a mark: `arena_reset` with it gives back everything allocated since.
-// Marks nest, at most `ARENA_MARKS_MOST` deep.
+// Marks nest, at most `ARENA_MARKS_MAX` deep.
 static inline ArenaMark arena_mark(Arena *a) {
-    if (a->marks_len == ARENA_MARKS_MOST) arena_misuse("more marks open than ARENA_MARKS_MOST");
+    if (a->marks_len == ARENA_MARKS_MAX) arena_misuse("more marks open than ARENA_MARKS_MAX");
     ArenaSaved s = {a->chunk, a->end, a->bigs, a->used};
-    ArenaSavedSlice room = {a->marks, ARENA_MARKS_MOST};
+    ArenaSavedSlice room = {a->marks, ARENA_MARKS_MAX};
     at(room, a->marks_len) = s;
     ArenaMark m = {a->marks_len};
     a->marks_len++;
