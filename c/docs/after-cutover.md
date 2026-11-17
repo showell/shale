@@ -58,13 +58,23 @@ During the port, some of it reads like Zig on purpose, so the fidelity
 reviewer can line the two up. Once the Zig is gone, that reason is gone:
 
 - **Names stop following Zig's.** A name is whatever reads best in C, and
-  the idiom reviewer's renames go in.
+  the idiom reviewer's renames go in. *Done (2026-11-17) for the bounds:*
+  every `_MOST` and `_least` is `_MAX` and `_MIN` (style.md, "Names").
 - **Zig's optionals become ordinary C.** A `has_x` flag beside `x` (as in
   `RunOpts`) becomes NULL for an absent pointer, or a sentinel or one
-  flags field for the rest, wherever that reads better.
+  flags field for the rest, wherever that reads better. *Done
+  (2026-11-17):* `RunOpts` and job_start's and job_wait's options (nil
+  values and `HOST_UNSET`), `SpawnSpec` and `SpawnOutcome` (an empty
+  `cwd`, a NULL `stdin_bytes`, `SPAWN_UNLIMITED`, `SPAWN_NO_CODE`), walk's
+  `depth` (`WALK_ANY_DEPTH`), the store's reads (`BUILTIN_TO_END`) and the
+  CLI's script (`CliScript`). *Kept, on purpose:* `JobRecord`'s flags (a
+  record is text, and every value of a field is one a record can hold),
+  and walk's `after`, `like`, `skip`, `kind` and `keep_reads` (an empty or
+  zero one given reads otherwise than none).
 - `RegexCache` (6,856 bytes) and `Arena` are made by value
   (`regex_cache_make`, `arena_make`); an out-pointer initializer,
-  `regex_cache_init(&c)`, is the more ordinary C.
+  `regex_cache_init(&c)`, is the more ordinary C. *Taken by the run-context
+  lane* (Steve, 2026-11-17), with `arena_make`'s new signature.
 
 ## To follow up: coding standards declared in Roc
 
