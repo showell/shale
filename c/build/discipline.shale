@@ -1,0 +1,21 @@
+-- c/build/discipline.shale: the discipline block.
+-- c/build.shale runs it, with the `build` mount that `use` below reads; see
+-- that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- ── The discipline block ────────────────────────────────────────────────
+
+-- c/check_discipline.shale over the C, then its own self-test, in both tiers.
+function discipline_block(t)
+  print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale"}, {timeout_ms = 60000, tail = 20})).out))
+  print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale", "self_test=1"}, {timeout_ms = 60000, tail = 20})).out))
+  return nil
+end
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+discipline_block(t)
+block_end(t, "discipline")

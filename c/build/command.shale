@@ -1,0 +1,66 @@
+-- c/build/command.shale: the command's block, c/shale.c and c/script's parser.
+-- c/build.shale runs it, with the `build` mount that `use` below reads; see
+-- that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- ── The command: c/shale.c and c/script's parser ───────────────────────
+-- test_lex.c and test_parse.c run in the foundation's block with every test
+-- file. Here: c/gen_preludes.shale writes the preludes the C `shale`
+-- embeds, then c/shale.c is built under each of `t.builds` (tcc in the fast
+-- tier, release and asan added in the full), and each binary's `--check` is
+-- held to a script that parses and one that stops. In the full tier: the
+-- faults below planted in a copy of c/script, each caught by its test file.
+
+const PARSE_PLANTS = {
+  {name = "a `break` outside a loop words its stop its own way",
+   aim = "statements_hold_their_own_rules", dir = "script", file = "parse.h", caught_by = "test_parse",
+   old = [=[S("`break` outside a loop")]=], new = [=[S("`break` is outside a loop")]=]},
+}
+
+-- The C `shale` under `build`, at c/out/<build>/shale (under `release`, the
+-- one -O2 link, the binary the differ judges), then its `--check` of one
+-- script that parses and one that stops, each held to Zig's exact report.
+function build_command(t, build)
+  local dir = OUT .. "/" .. build
+  mkdir(dir)
+  local bin = dir .. "/shale"
+  local argv = {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. FOUNDATION}
+  if build ~= "tcc" then argv = gcc_flags(build, FOUNDATION) end
+  for a in {"-I" .. OUT .. "/gen", "-Ic", "c/shale.c", "-o", bin} do push(argv, a) end
+  local c = run_in(t, "command " .. build, argv, {timeout_ms = 120000, tail = 40})
+  if c.code ~= 0 then fail("`" .. build .. "` could not compile c/shale.c:\n" .. c.out) end
+  local good = OUT .. "/command/good.shale"
+  local bad = OUT .. "/command/bad.shale"
+  if exists(OUT .. "/command") then remove_tree(OUT .. "/command") end
+  mkdir(OUT .. "/command")
+  create(good, "function f(x) return x end\nprint(f(trim(\" a \")))\n")
+  create(bad, "print(1)\nlocal x = 1 @ 2\n")
+  create(OUT .. "/command/mounts", "")
+  local env = {SHALE_PRELUDE = "", SHALE_MOUNTS = real(OUT .. "/command/mounts")}
+  local g = run_in(t, "command " .. build, {bin, "--check", good}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
+  if g.code ~= 0 or trim(g.out) ~= "── checked: it parses and compiles; nothing ran" then fail("`" .. build .. "`'s shale --check of a script that parses said:\n" .. g.out) end
+  local b = run_in(t, "command " .. build, {bin, "--check", bad}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
+  local said = "── stopped at " .. bad .. ":2:13: syntax: a character no token starts with, `@` (0 steps)\n── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes"
+  if b.code ~= 1 or trim(b.out) ~= said then fail("`" .. build .. "`'s shale --check of a script that stops said:\n" .. b.out) end
+  return nil
+end
+
+function command_block(t)
+  print(trim(must(run_in(t, "command preludes", {"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5})).out))
+  for b in t.builds do
+    build_command(t, b)
+    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops")
+  end
+  if not t.full then return nil end
+  run_plants(t, "parse plants", PARSE_PLANTS)
+  return nil
+end
+-- ── end of the command's block ─────────────────────────────────────────
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+command_block(t)
+block_end(t, "command")

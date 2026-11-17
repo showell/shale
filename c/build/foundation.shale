@@ -1,0 +1,189 @@
+-- c/build/foundation.shale: the foundation's block, c/foundation's tests and plants.
+-- c/build.shale runs it, with the `build` mount that `use` below reads; see
+-- that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- Each fault planted in a copy of the foundation, one at a time: `file`'s
+-- `old` (there exactly once) becomes `new`, and the test file `caught_by`
+-- must fail on it (`harness` is the fixture's run). A block's own plants
+-- (`REGEX_PLANTS`, `PARSE_PLANTS`) name `dir = "script"` for c/script.
+const PLANTS = {
+  {name = "the budget ignores what is held",
+   aim = "the_budget_refuses_past_its_limit_and_says_it_was_hit,a_chunk_near_the_limit_takes_only_what_is_left,the_arena_never_holds_more_than_its_limit_whatever_grows_in_it", file = "arena.h", caught_by = "test_arena",
+   old = "if (total > arena_sat_sub(a->limit, a->held)) {", new = "if (total > a->limit) {"},
+  {name = "chunks never double",
+   aim = "chunks_start_at_the_least_and_double", file = "arena.h", caught_by = "test_arena",
+   old = "size_t twice = last > SIZE_MAX / 2 ? SIZE_MAX : 2 * last;", new = "size_t twice = last;"},
+  {name = "the big threshold is off by one",
+   aim = "a_big_allocation_has_its_own_chunk_and_gives_it_back", file = "arena.h", caught_by = "test_arena",
+   old = "    if (len >= ARENA_BIG) {\n        ArenaChunk *c = arena_take(a, need);", new = "    if (len > ARENA_BIG) {\n        ArenaChunk *c = arena_take(a, need);"},
+  {name = "a reset keeps the bigs",
+   aim = "a_reset_gives_back_everything_since_its_mark,a_reset_to_an_outer_mark_closes_the_inner_ones,a_reset_survives_a_big_from_before_its_mark_freed_after_it", file = "arena.h", caught_by = "test_arena",
+   old = "    while (a->bigs != s.bigs) {", new = "    while (0 && a->bigs != s.bigs) {"},
+  {name = "a big freed under a mark leaves the mark dangling",
+   aim = "a_reset_survives_a_big_from_before_its_mark_freed_after_it", file = "arena.h", caught_by = "test_arena",
+   old = "if (at(marks, m).bigs == c) at(marks, m).bigs = c->next;", new = "(void)at(marks, m);"},
+  {name = "any allocation grows in place",
+   aim = "only_the_last_allocation_grows_in_place", file = "arena.h", caught_by = "test_arena",
+   old = "if (!arena_is_last(a, p, old_len)) return new_len <= old_len;", new = "if (!arena_is_last(a, p, old_len)) return true;"},
+  {name = "at lets one past the end through",
+   aim = "at_traps_one_past_the_end_and_far_past_it,at_traps_on_an_empty_slice,at_traps_on_a_slice_cut_shorter_than_its_memory,a_bad_index_with_no_trap_ends_the_process,SLICE_SUB_keeps_the_type_and_its_bounds,str_byte_reads_bytes_unsigned", file = "slice.h", caught_by = "test_slice",
+   old = "if (i < (uint64_t)len) return (size_t)i;", new = "if (i <= (uint64_t)len) return (size_t)i;"},
+  {name = "a part may end past the length",
+   aim = "str_sub_takes_a_part_and_traps_past_either_end", file = "slice.h", caught_by = "test_slice",
+   old = "if (from <= to && to <= (uint64_t)len) return;", new = "if (from <= to && to <= (uint64_t)len + 1) return;"},
+  {name = "an index is cut to 32 bits before its check",
+   aim = "an_index_past_32_bits_traps_and_never_wraps_into_range", file = "slice.h", caught_by = "test_slice",
+   old = "static inline size_t slice_check(uint64_t i,", new = "static inline size_t slice_check(uint32_t i,"},
+  {name = "str_sub is a macro again, its arguments evaluated more than once",
+   aim = "str_sub_evaluates_each_argument_once", file = "slice.h", caught_by = "test_slice",
+   old = "#define str_sub(s, from, to) str_sub_at((s), (from), (to), __FILE__, __LINE__)", new = "#define str_sub(s, from, to) SLICE_SUB(Str, s, from, to)"},
+  {name = "a view of the buffer itself is not rebased after the growth",
+   aim = "appending_a_view_of_itself_past_ARENA_BIG_copies_what_it_held", file = "buf.h", caught_by = "test_buf",
+   old = "if (inside) s = str_sub(((Str){b->ptr, b->len}), offset, offset + s.len);", new = "(void)offset;"},
+  {name = "a STOP with no stop recorded is let through",
+   aim = "a_stop_with_no_stop_recorded_ends_the_process", file = "err.h", caught_by = "test_err",
+   old = "if (s == STOP && !r->stopped) {", new = "if (0 && s == STOP && !r->stopped) {"},
+  {name = "a death test's child takes no death signal",
+   aim = "a_death_tests_child_dies_with_its_parent,a_failed_expect_in_a_child_ends_the_child_with_its_own_code", file = "test.h", caught_by = "test_test",
+   old = "if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) != 0) _exit(3);", new = "(void)0;                                                 "},
+  {name = "a failed EXPECT in a child jumps back into the test run",
+   aim = "a_failed_expect_in_a_child_ends_the_child_with_its_own_code", file = "test.h", caught_by = "test_test",
+   old = "if (t->in_child) _exit(TEST_CHILD_FAILED);", new = "(void)t->in_child;"},
+  {name = "a size that wraps with its header gets a tiny chunk",
+   aim = "a_size_that_wraps_with_its_header_is_refused", file = "arena.h", caught_by = "test_arena",
+   old = "if (len > SIZE_MAX - sizeof(ArenaChunk) - align) {", new = "if (0 && len > SIZE_MAX - sizeof(ArenaChunk) - align) {"},
+  {name = "an array's size wraps to a small one",
+   aim = "an_array_whose_size_wraps_to_a_small_one_is_refused", file = "arena.h", caught_by = "test_arena",
+   old = "((n) > SIZE_MAX / sizeof(T) ? arena_refuse(a)", new = "(0 && (n) > SIZE_MAX / sizeof(T) ? arena_refuse(a)"},
+  {name = "a vec's capacity times its item size wraps",
+   aim = "a_capacity_whose_size_wraps_is_refused_with_room_to_grow_in_place", file = "vec.h", caught_by = "test_vec",
+   old = "if (new_cap > SIZE_MAX / elem) {", new = "if (0 && new_cap > SIZE_MAX / elem) {"},
+  {name = "a vec's reserve wraps its length",
+   aim = "a_refused_push_leaves_the_vec_as_it_was", file = "vec.h", caught_by = "test_vec",
+   old = "if (more > SIZE_MAX - v->len) {", new = "if (0 && more > SIZE_MAX - v->len) {"},
+  {name = "a buffer's reserve wraps its length",
+   aim = "a_refused_append_leaves_the_buffer_as_it_was", file = "buf.h", caught_by = "test_buf",
+   old = "if (more > SIZE_MAX - b->len) {", new = "if (0 && more > SIZE_MAX - b->len) {"},
+  {name = "the smallest integer negated overflows",
+   aim = "numbers_print_as_zigs_d_prints_them", file = "buf.h", caught_by = "test_buf",
+   old = "return buf_u64(b, (uint64_t)(-(n + 1)) + 1);", new = "return buf_u64(b, (uint64_t)(-n));"},
+  {name = "growth forgets Zig's half again",
+   aim = "it_grows_by_zigs_policy_for_its_item_size,items_survive_every_move_between_two_growing_vecs", file = "vec.h", caught_by = "test_vec",
+   old = "size_t extra = minimum / 2 + init;", new = "size_t extra = init;"},
+  {name = "a move copies bytes, not items",
+   aim = "items_survive_every_move_between_two_growing_vecs", file = "vec.h", caught_by = "test_vec",
+   old = "if (len > 0) memmove(fresh, *ptr, len * elem);", new = "if (len > 0) memmove(fresh, *ptr, len);"},
+  {name = "setting a key again is dropped",
+   aim = "setting_a_key_again_keeps_its_place", file = "map.h", caught_by = "test_map",
+   old = "            at(vals, e) = v;                                                                 \\\n            return OK;", new = "            (void)vals;                                                                      \\\n            return OK;"},
+  {name = "a removal leaves the values behind",
+   aim = "a_removal_keeps_the_others_order_and_finds_them_after", file = "map.h", caught_by = "test_map",
+   old = "if (vals_after.len > 0) memmove(&at(vals, e), vals_after.ptr, vals_after.len * sizeof(V));", new = "(void)vals_after;"},
+  {name = "the arena's stop words its message its own way",
+   aim = "every_budget_stop_says_what_zig_says,a_message_the_arena_refuses_falls_back_to_zigs_fallback,run_oom_is_the_arena_budget_with_its_function_and_trail", file = "err.h", caught_by = "test_err",
+   old = "case BUDGET_ARENA: return S(\"the arena budget ran out\");", new = "case BUDGET_ARENA: return S(\"the arena budget is spent\");"},
+  {name = "the calls are reported outermost first",
+   aim = "a_report_gives_the_calls_innermost_first", file = "err.h", caught_by = "test_err",
+   old = "const Call c = at(s->trail, k - 1);", new = "const Call c = at(s->trail, s->trail.len - k);"},
+  {name = "a failed EXPECT passes", file = "test.h", caught_by = "harness",
+   old = "if (!(cond)) test_fail(__FILE__, __LINE__, S(#cond));", new = "if (0 && !(cond)) test_fail(__FILE__, __LINE__, S(#cond));"},
+  {name = "a failure loses its line", file = "test.h", caught_by = "harness",
+   old = "(int)t->current.len, t->current.ptr, file, line,", new = "(int)t->current.len, t->current.ptr, file, line * 0,"},
+  {name = "TEST_ONLY runs every test", file = "test.h", caught_by = "harness",
+   old = "if (only_env != NULL && !test_named(only, c->name)) continue;", new = "(void)test_named;"},
+  {name = "TEST_ONLY lets a name no test has through", file = "test.h", caught_by = "harness",
+   old = "if (only_env != NULL && !test_all_named(cases, only, &missing)) {", new = "if (0 && !test_all_named(cases, only, &missing)) {"},
+}
+
+-- `at_unchecked` with no reason, an empty one or one that is no literal
+-- must not compile.
+function check_reasons(t)
+  local dir = OUT .. "/reasons"
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir)
+  local cases = {
+    {name = "empty", call = [=[at_unchecked(s, 0, "")]=]},
+    {name = "variable", call = [=[at_unchecked(s, 0, why)]=]},
+  }
+  for c in cases do
+    local src = dir .. "/" .. c.name .. ".c"
+    create(src, "#include \"slice.h\"\nint f(Str s, const char *why);\nint f(Str s, const char *why) { (void)why; return " .. c.call .. "; }\n")
+    local argv = gcc_flags("release", FOUNDATION)
+    push(argv, "-fsyntax-only")
+    push(argv, src)
+    local r = run_in(t, "refusals", argv, {timeout_ms = 30000, tail = 5})
+    if r.code == 0 then fail("`" .. c.call .. "` compiled: an unchecked index must carry a literal reason") end
+  end
+  remove_tree(dir)
+  return #cases
+end
+
+-- A Status dropped, bare or cast to void, must not compile under GCC's
+-- -Werror; the same call with its answer tested must. Gives how many were
+-- refused.
+function check_must_use(t)
+  local dir = OUT .. "/must_use"
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir)
+  local cases = {
+    {name = "bare", body = "buf_byte(b, 'x');", compiles = false},
+    {name = "void", body = "(void)buf_byte(b, 'x');", compiles = false},
+    {name = "kept", body = "if (buf_byte(b, 'x') != OK) return;", compiles = true},
+  }
+  local refused = 0
+  for c in cases do
+    local src = dir .. "/" .. c.name .. ".c"
+    create(src, "#include \"buf.h\"\nvoid f(Buf *b);\nvoid f(Buf *b) { " .. c.body .. " }\n")
+    -- Compiled, not -fsyntax-only: GCC checks warn_unused_result as it
+    -- lowers the code, which -fsyntax-only never does.
+    local argv = gcc_flags("release", FOUNDATION)
+    push(argv, "-c")
+    push(argv, src)
+    push(argv, "-o")
+    push(argv, dir .. "/" .. c.name .. ".o")
+    local r = run_in(t, "refusals", argv, {timeout_ms = 30000, tail = 5})
+    if c.compiles and r.code ~= 0 then fail("`" .. c.body .. "` did not compile, so the dropped cases prove nothing:\n" .. r.out) end
+    if not c.compiles then
+      if r.code == 0 then fail("`" .. c.body .. "` compiled: a dropped Status must be refused") end
+      if find(r.out, "warn_unused_result") == nil then fail("`" .. c.body .. "` was refused for another reason:\n" .. r.out) end
+      refused = refused + 1
+    end
+  end
+  remove_tree(dir)
+  return refused
+end
+
+-- Every test file under each of `t.builds` (`test_file`); then, in the
+-- full tier, the harness fixture, the compiler's refusals and the plants.
+function foundation_block(t)
+  for b in t.builds do
+    local total = 0
+    for src in t.tests do total = total + test_file(t, b, b, src) end
+    print(said_of_build(b, #t.tests, total))
+  end
+  if not t.full then return nil end
+
+  local harness = OUT .. "/asan/harness_fails"
+  compile_to(t, "asan", "asan", "c/tests/fixtures/harness_fails.c", FOUNDATION, harness)
+  if not harness_holds(t, "asan", harness) then
+    fail("the harness fixture did not print exactly what harness_cases says: its .expected whole, and each TEST_ONLY run")
+  end
+  print("harness: the fixture's 6 failures, each named with its line, and its count; TEST_ONLY's " .. (#harness_cases() - 1) .. " runs")
+  print("reasons: " .. check_reasons(t) .. " unchecked indexes without a literal reason refused by the compiler")
+  print("must use: " .. check_must_use(t) .. " dropped Status answers refused by GCC under -Werror")
+
+  run_plants(t, "plants", PLANTS)
+  return nil
+end
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+t.tests = {}
+for p in glob("c/tests/test_*.c") do push(t.tests, p) end
+sort(t.tests)
+foundation_block(t)
+block_end(t, "foundation")
