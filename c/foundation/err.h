@@ -98,8 +98,8 @@ typedef struct {
 } Budgets;
 
 enum {
-    BUDGETS_KEPT_BYTES_MOST = 256 * 1024 * 1024,
-    BUDGETS_MACHINE_BYTES_MOST = 1024 * 1024 * 1024,
+    BUDGETS_KEPT_BYTES_MAX = 256 * 1024 * 1024,
+    BUDGETS_MACHINE_BYTES_MAX = 1024 * 1024 * 1024,
 };
 
 static inline Budgets budgets_default(void) {
@@ -230,13 +230,13 @@ static inline Str run_budget_message(RunCtx *r, BudgetKind k) {
         s = buf_lit(&b, "the machine's memory (the code, the frames, the operands) is past its budget (");
         if (s == OK) s = buf_u64(&b, g->machine_bytes);
         if (s == OK) s = buf_lit(&b, " bytes): raise it with `--budget machine_bytes=N` or the script's `-- budget: machine_bytes=N` line, up to ");
-        if (s == OK) s = buf_u64(&b, BUDGETS_MACHINE_BYTES_MOST);
+        if (s == OK) s = buf_u64(&b, BUDGETS_MACHINE_BYTES_MAX);
         return s == OK ? buf_view(&b) : S("the machine's memory is past its budget");
     case BUDGET_KEPT:
         s = buf_lit(&b, "what the run keeps at a `yield` is past the kept budget (");
         if (s == OK) s = buf_u64(&b, g->kept_bytes);
         if (s == OK) s = buf_lit(&b, " bytes): raise it with `--budget kept_bytes=N` or the script's `-- budget: kept_bytes=N` line, up to ");
-        if (s == OK) s = buf_u64(&b, BUDGETS_KEPT_BYTES_MOST);
+        if (s == OK) s = buf_u64(&b, BUDGETS_KEPT_BYTES_MAX);
         return s == OK ? buf_view(&b) : S("what the run keeps at a `yield` is past the kept budget");
     case BUDGET_PROGRAMS:
         s = buf_u64(&b, g->programs);

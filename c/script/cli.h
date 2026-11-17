@@ -142,8 +142,8 @@ static inline int cli_budget_index(Str name) {
 
 // The most budget `k` may be set to, or 0 when it has no ceiling.
 static inline uint64_t cli_most_of(size_t k) {
-    if (k == SET_KEPT_BYTES) return BUDGETS_KEPT_BYTES_MOST;
-    if (k == SET_MACHINE_BYTES) return BUDGETS_MACHINE_BYTES_MOST;
+    if (k == SET_KEPT_BYTES) return BUDGETS_KEPT_BYTES_MAX;
+    if (k == SET_MACHINE_BYTES) return BUDGETS_MACHINE_BYTES_MAX;
     return 0;
 }
 
