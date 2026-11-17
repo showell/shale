@@ -53,10 +53,12 @@ SLICE_TYPE(Names, const Str);
 
 // A class's name as a stop prints it. The names follow the enum's order.
 static inline Str stop_class_name(StopClass c) {
-    static const Str names[CLASS_COUNT] = {
-        S("syntax"), S("refused"), S("name"), S("type"), S("index"), S("arithmetic"),
-        S("argument"), S("budget"), S("store"), S("fail"), S("host"),
+    static const Str names[] = {
+        S_ITEM("syntax"), S_ITEM("refused"), S_ITEM("name"), S_ITEM("type"), S_ITEM("index"),
+        S_ITEM("arithmetic"), S_ITEM("argument"), S_ITEM("budget"), S_ITEM("store"), S_ITEM("fail"),
+        S_ITEM("host"),
     };
+    _Static_assert(sizeof names / sizeof *names == CLASS_COUNT, "a name for every class");
     Names n = {names, CLASS_COUNT};
     return at(n, (size_t)c);
 }
@@ -64,11 +66,13 @@ static inline Str stop_class_name(StopClass c) {
 // A budget's name as a stop prints it after `budget `; "" for none. The names
 // follow the enum's order.
 static inline Str budget_name(BudgetKind b) {
-    static const Str names[BUDGET_COUNT] = {
-        S(""), S("steps"), S("arena"), S("call_depth"), S("output"), S("reads"),
-        S("read_bytes"), S("changes"), S("change_bytes"), S("source"), S("nesting"),
-        S("depth"), S("kept"), S("machine"), S("programs"), S("cpu"),
+    static const Str names[] = {
+        S_ITEM(""), S_ITEM("steps"), S_ITEM("arena"), S_ITEM("call_depth"), S_ITEM("output"),
+        S_ITEM("reads"), S_ITEM("read_bytes"), S_ITEM("changes"), S_ITEM("change_bytes"),
+        S_ITEM("source"), S_ITEM("nesting"), S_ITEM("depth"), S_ITEM("kept"), S_ITEM("machine"),
+        S_ITEM("programs"), S_ITEM("cpu"),
     };
+    _Static_assert(sizeof names / sizeof *names == BUDGET_COUNT, "a name for every budget");
     Names n = {names, BUDGET_COUNT};
     return at(n, (size_t)b);
 }

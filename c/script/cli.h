@@ -47,11 +47,13 @@ typedef enum {
 } Settable;
 
 static inline Str cli_settable_name(size_t k) {
-    static const Str names[SET_COUNT] = {
-        S("steps"), S("reads"), S("read_bytes"), S("output_bytes"), S("changes"), S("change_bytes"),
-        S("arena_bytes"), S("call_bytes"), S("call_entries"), S("kept_bytes"), S("machine_bytes"),
-        S("call_depth"), S("programs"),
+    static const Str names[] = {
+        S_ITEM("steps"), S_ITEM("reads"), S_ITEM("read_bytes"), S_ITEM("output_bytes"),
+        S_ITEM("changes"), S_ITEM("change_bytes"), S_ITEM("arena_bytes"), S_ITEM("call_bytes"),
+        S_ITEM("call_entries"), S_ITEM("kept_bytes"), S_ITEM("machine_bytes"), S_ITEM("call_depth"),
+        S_ITEM("programs"),
     };
+    _Static_assert(sizeof names / sizeof *names == SET_COUNT, "a name for every settable budget");
     Names n = {names, SET_COUNT};
     return at(n, k);
 }

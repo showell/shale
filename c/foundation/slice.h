@@ -27,6 +27,11 @@ typedef struct {
 // A Str of a string literal; anything else is a compile error.
 #define S(lit) ((Str){"" lit "", sizeof(lit) - 1})
 
+// `S` as an item of a table sized by its items (`names[]`), a plain brace
+// initializer: TCC 0.9.27 refuses an unsized array of compound literals,
+// `S`'s form, with "index too large".
+#define S_ITEM(lit) {"" lit "", sizeof(lit) - 1}
+
 // A typed slice: `SLICE_TYPE(Ints, int64_t);` names a struct of `ptr` and `len`.
 #define SLICE_TYPE(Name, T) \
     typedef struct {        \
@@ -82,8 +87,13 @@ static inline void slice_range_check(uint64_t from, uint64_t to, size_t len, con
 
 // The part `[from, to)` of a typed slice, as the same type. A part from 0
 // keeps `ptr` as it is: an empty slice may hold NULL, and `NULL + 0` is
-// undefined in C (clang's -fsanitize=pointer-overflow says so; GCC's doesn't).
-// DRAGON: bounds. `from` is evaluated four times and `to` twice, so an argument with a side effect would be checked as one value and used as another (`k++` with k = 2 on "abc" makes a part from 3 of length SIZE_MAX, and GCC says nothing). check_discipline's `slice args` rule refuses `++`, `--`, `=` and a call in its arguments.
+// undefined in C11 (neither GCC's UBSan nor clang 22's flags it).
+// DRAGON: bounds. `from` is evaluated four times and `to` twice, so an
+// argument with a side effect would be checked as one value and used as
+// another (`k++` with k = 2 on "abc" makes a part from 3 of length SIZE_MAX,
+// and GCC says nothing).
+// REMEDY: check_discipline's `slice args` rule refuses `++`, `--`, `=` and a
+// call in its arguments; `str_sub`, a function, takes any argument.
 #define SLICE_SUB(Type, s, from, to)                                            \
     (slice_range_check((from), (to), (s).len, __FILE__, __LINE__),              \
      (Type){(from) == 0 ? (s).ptr : (s).ptr + (from),                          \

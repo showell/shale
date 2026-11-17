@@ -96,20 +96,26 @@ typedef enum {
 SLICE_TYPE(BuiltinNames, const Str);
 
 static inline BuiltinNames ast_builtin_names(void) {
-    static const Str names[BUILTIN_COUNT_OF] = {
-        S("ls"), S("stat"), S("exists"), S("is_dir"), S("read"), S("read_or"), S("read_lines"),
-        S("line_at"), S("grep"), S("count_lines"), S("count_in"), S("find_in"), S("replace"),
-        S("append"), S("mkdir"), S("remove"), S("remove_tree"), S("walk"), S("edit"), S("split"),
-        S("join"), S("starts_with"), S("ends_with"), S("contains"), S("find"), S("sub"),
-        S("bad_utf8"), S("trim"), S("trim_start"), S("trim_end"), S("upper"), S("lower"),
-        S("tostring"), S("tonumber"), S("parse_int"), S("lines"), S("words"), S("like"), S("rep"),
-        S("substitute"), S("path"), S("match_path"), S("basename"), S("is_name"),
-        S("strip_suffix"), S("between"), S("re_find"), S("re_match"), S("re_replace"),
-        S("re_find_all"), S("min"), S("max"), S("abs"), S("date"), S("seconds"), S("human"),
-        S("pad"), S("table"), S("push"), S("pop"), S("sort"), S("keys"), S("has_key"), S("get"),
-        S("count"), S("reverse"), S("take"), S("last"), S("same"), S("now"), S("arg"), S("fail"),
-        S("host"), S("budget"), S("call_bytes"), S("yield"), S("print"),
+    static const Str names[] = {
+        S_ITEM("ls"), S_ITEM("stat"), S_ITEM("exists"), S_ITEM("is_dir"), S_ITEM("read"),
+        S_ITEM("read_or"), S_ITEM("read_lines"), S_ITEM("line_at"), S_ITEM("grep"),
+        S_ITEM("count_lines"), S_ITEM("count_in"), S_ITEM("find_in"), S_ITEM("replace"),
+        S_ITEM("append"), S_ITEM("mkdir"), S_ITEM("remove"), S_ITEM("remove_tree"), S_ITEM("walk"),
+        S_ITEM("edit"), S_ITEM("split"), S_ITEM("join"), S_ITEM("starts_with"), S_ITEM("ends_with"),
+        S_ITEM("contains"), S_ITEM("find"), S_ITEM("sub"), S_ITEM("bad_utf8"), S_ITEM("trim"),
+        S_ITEM("trim_start"), S_ITEM("trim_end"), S_ITEM("upper"), S_ITEM("lower"),
+        S_ITEM("tostring"), S_ITEM("tonumber"), S_ITEM("parse_int"), S_ITEM("lines"),
+        S_ITEM("words"), S_ITEM("like"), S_ITEM("rep"), S_ITEM("substitute"), S_ITEM("path"),
+        S_ITEM("match_path"), S_ITEM("basename"), S_ITEM("is_name"), S_ITEM("strip_suffix"),
+        S_ITEM("between"), S_ITEM("re_find"), S_ITEM("re_match"), S_ITEM("re_replace"),
+        S_ITEM("re_find_all"), S_ITEM("min"), S_ITEM("max"), S_ITEM("abs"), S_ITEM("date"),
+        S_ITEM("seconds"), S_ITEM("human"), S_ITEM("pad"), S_ITEM("table"), S_ITEM("push"),
+        S_ITEM("pop"), S_ITEM("sort"), S_ITEM("keys"), S_ITEM("has_key"), S_ITEM("get"),
+        S_ITEM("count"), S_ITEM("reverse"), S_ITEM("take"), S_ITEM("last"), S_ITEM("same"),
+        S_ITEM("now"), S_ITEM("arg"), S_ITEM("fail"), S_ITEM("host"), S_ITEM("budget"),
+        S_ITEM("call_bytes"), S_ITEM("yield"), S_ITEM("print"),
     };
+    _Static_assert(sizeof names / sizeof *names == BUILTIN_COUNT_OF, "a name for every builtin");
     BuiltinNames n = {names, BUILTIN_COUNT_OF};
     return n;
 }

@@ -94,6 +94,12 @@ and its self-test plants a break of each one.
 
 - A string is a `Str`: a pointer and a length. A literal is `S("...")`. No
   string relies on a NUL at its end.
+- A table of names for an enum is sized by its names, `names[]`, never by the
+  enum, with `_Static_assert(sizeof names / sizeof *names == X_COUNT, ...)`:
+  sized by the enum, a name left out is zero-filled and reads as "". Its
+  items are `S_ITEM("...")`, since TCC 0.9.27 refuses an unsized array of
+  `S`'s compound literals. `c/build.shale` drops a name from each and must
+  see the assert refuse it.
 - **Held:** a header has no `char *` parameter or field without its length.
   A field `ptr` is followed by `size_t len` on the next line. Anything else
   carries `// cstr: <why>` on its line, as `__FILE__` does.
