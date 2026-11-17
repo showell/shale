@@ -52,7 +52,10 @@ copied to one path for each phase, so a message that names it is the same.
 
 The harness compares each step's ending, its stdout and its stderr (the
 `── used:` line is part of stderr), and every file the run left, by kind,
-mode and bytes (a git index by what it stages, below). The `── time:` line is let go whole: its numbers, whether
+mode and bytes (a git index by what it stages, below). Every run shares
+the `build:` mount's `differ/` folder, so one runs at a time: a run that
+finds another `tools/differ.shale` running stops before it touches
+anything. The `── time:` line is let go whole: its numbers, whether
 it is printed, and the order it names programs in (Steve, 2026-11-17).
 
 **Arena bytes are outside the frozen surface** (docs/C-SEAMS.md,
@@ -100,7 +103,10 @@ how the harness lets each go, so the inputs they touch are still judged:
 - **The `── time:` line.** It appears only past a second spent in programs
   and names the slowest three in the order of their times, so it is let go
   whole (roc/check_foreign_code and rewrite_method_calls were unjudged for
-  it on some runs).
+  it on some runs). It is taken out before the `fresh_dir` names are
+  masked: a child run's time line can name its folder, and on a busy box
+  it numbered one side's names ahead of the other's, a false failure of
+  rewrite_method_calls.
 - **A git index's stat cache.** git writes `<repo>/.git/index` (and a linked
   worktree's `<repo>/.git/worktrees/<name>/index`) with each tracked file's ctime
   and mtime to the nanosecond, its device and inode, and a checksum of the

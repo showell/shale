@@ -503,6 +503,22 @@ end
 -- the same placeholder throughout. Only the prefixes the input's own source
 -- passes `fresh_dir` as string literals are masked.
 
+-- A stream without its `── time:` lines, taken out before the names are
+-- masked: a time line is printed only past a second in programs, and may
+-- name a `fresh_dir` folder (a child run's slowest program), so a name it
+-- showed first would move every later name's number on one side alone.
+function without_time(s)
+  if not contains(s, "── time:") then return s end
+  local kept = {}
+  for l in lines(s) do
+    if not starts_with(l, "── time:") then push(kept, l) end
+  end
+  if #kept == 0 then return "" end
+  local out = join(kept, "\n")
+  if ends_with(s, "\n") then out = out .. "\n" end
+  return out
+end
+
 -- The prefixes `text` passes `fresh_dir` as string literals.
 function fresh_prefixes(text)
   local out = {}
@@ -640,7 +656,7 @@ function differ_sides(inp, x, y, judge)
     if #inp.steps > 1 then s = " (step " .. k .. ")" end
     if mx[k] ~= my[k] then return {what = "exit" .. s, where = "", a = mx[k], b = my[k]} end
     for stream in {"out", "err"} do
-      local d = first_diff(fresh_mask(read(dx .. "/" .. k .. "." .. stream), fx), fresh_mask(read(dy .. "/" .. k .. "." .. stream), fy), judge)
+      local d = first_diff(fresh_mask(without_time(read(dx .. "/" .. k .. "." .. stream)), fx), fresh_mask(without_time(read(dy .. "/" .. k .. "." .. stream)), fy), judge)
       if d ~= nil then
         local what = "std" .. stream
         if starts_with(d.a, "── used:") or starts_with(d.b, "── used:") then what = "used" end
@@ -758,6 +774,17 @@ local keep_all = arg("keep", 0)
 local list_only = arg("list", 0)
 local reuse = arg("reuse", 0)
 if list_only == 0 and (old == "" or new == "") then fail("differ: name both binaries, old=<path> new=<path> (Shale paths)") end
+
+-- Every run shares build:differ (its inputs, its work folder, its kept
+-- trees), so a second run at once removes what the first is reading, and
+-- both judge the wreck: another `shale` running a differ.shale stops this
+-- one before it touches anything. (`procs` never lists this run or what
+-- started it, so a plant that runs the differ is not one.)
+for p in procs() do
+  if p.name == "shale" and re_find(p.args, "(?:^| )[^ ]*tools/differ\\.shale(?: |$)") ~= nil then
+    fail("differ: another differ is running, and the two would share build:differ: wait for it (pid " .. p.pid .. ": " .. p.args .. ")")
+  end
+end
 
 local got = collect()
 local inputs = {}
