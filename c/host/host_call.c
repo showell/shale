@@ -43,6 +43,10 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
     bool zig = false;
     Status zs = host_zig_call(h, r, pos, name, args, out, &zig);
     if (zig) return zs;
+    // Zig's host has these and the C does not run them yet; any other name
+    // is none of Zig's host's either.
+    bool zigs = str_eq(name, S("procs")) || str_eq(name, S("proc_stop")) || str_eq(name, S("roc_tree")) || str_eq(name, S("go_tree"));
+    if (!zigs) return run_failf(r, pos, CLASS_HOST, "`{s}`: not on this host", S("`"), name, S("`: not on this host"));
     Msg m;
     msg_init(&m, r->ctx.values);
     msg_str(&m, S("host(\""));

@@ -711,9 +711,10 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     if (store_cstr(r->ctx.values, buf_view(&t), &tmp) != STORE_OK) return run_values_oom(r, pos);
     int fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(host_errno_tag(errno))));
-    if (fchmod(fd, 0600) != 0) {
-        // As Zig's `createPrivate`, whose fchmod's answer is not read.
-    }
+    // 0600 whatever the umask; its answer is not read, as in Zig's
+    // `createPrivate`.
+    int chmodded = fchmod(fd, 0600);
+    (void)chmodded;
     out->shown = shown;
     out->path = c;
     out->tmp = tmp;
