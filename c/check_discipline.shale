@@ -253,10 +253,13 @@ function c_files(dir)
   return files
 end
 
+-- Each break of the line rules in `files`. A yield after each file lets go
+-- of what reading it made, so the run holds one file's lines at a time.
 function check_files(files)
   local found = {}
   for p in files do
     for f in check_file(p, starts_with(p, "c/foundation/")) do push(found, f) end
+    yield()
   end
   return found
 end
@@ -361,19 +364,31 @@ function renamed(text, names)
   return s
 end
 
--- The outside files `p` includes, directly or through another of them, in
--- the order the probe must copy their typedefs: each after what it includes.
--- `seen` and `order` gather across calls.
-function includes_first(p, outside_set, seen, order)
-  if has_key(seen, p) then return nil end
-  seen[p] = true
-  for g in grep(p, "#include \"") do
-    local m = re_find(g.text, [=[^#include "([^"]+)"]=])
-    if m ~= nil then
-      local q = path_normal(dirname(p) .. "/" .. m.group)
-      if has_key(outside_set, q) then includes_first(q, outside_set, seen, order) end
+-- Each of the `outside` files' own `#include`s of another of them, as a map
+-- of lists.
+function include_edges(outside)
+  local outside_set = set_of(outside)
+  local edges = {}
+  for p in outside do
+    edges[p] = {}
+    for g in grep(p, "#include \"") do
+      local m = re_find(g.text, [=[^#include "([^"]+)"]=])
+      if m ~= nil then
+        local q = path_normal(dirname(p) .. "/" .. m.group)
+        if has_key(outside_set, q) then push(edges[p], q) end
+      end
     end
   end
+  return edges
+end
+
+-- `p` and the outside files it includes, directly or through another of
+-- them, in the order the probe must copy their typedefs: each after what it
+-- includes. `seen` and `order` gather across calls.
+function includes_first(p, edges, seen, order)
+  if has_key(seen, p) then return nil end
+  seen[p] = true
+  for q in edges[p] do includes_first(q, edges, seen, order) end
   push(order, p)
   return nil
 end
@@ -385,10 +400,10 @@ end
 -- files it includes. Gives {items, names}: the copied items, renamed, in an
 -- order that compiles, and the maps.
 function outside_plan(outside, wanted)
-  local outside_set = set_of(outside)
+  local edges = include_edges(outside)
   local seen = {}
   local order = {}
-  for p in outside do includes_first(p, outside_set, seen, order) end
+  for p in outside do includes_first(p, edges, seen, order) end
   local names = {}
   local items = {}
   local k = 0
@@ -399,7 +414,7 @@ function outside_plan(outside, wanted)
     -- What the files it includes define, then its own, which win.
     local reach = {}
     local reach_order = {}
-    includes_first(p, outside_set, reach, reach_order)
+    includes_first(p, edges, reach, reach_order)
     for q in reach_order do
       if q ~= p then
         for n in keys(names[q]) do map[n] = names[q][n] end
@@ -651,9 +666,8 @@ if arg("self_test", 0) == 1 then
 else
   local files = c_files("c")
   probe_modules_hold(files)
-  -- The sizes first, while the arena is fresh: the line rules' reading of
-  -- every file fills most of it.
   local sized = check_returns(files)
+  yield()
   local found = check_files(files)
   for f in sized.found do push(found, f) end
   for f in found do print(f.path .. ":" .. f.line .. ": " .. f.rule .. ": " .. f.text) end
