@@ -793,7 +793,7 @@ static STATUS_MUST_USE Status regex_states(Arena *a, RegexRefusal *refused, Rege
         for (size_t pc = rg.from; pc <= rg.to; pc++) {
             RegexEncl *en = &at(encl, pc);
             RegexIds ids = {en->ids, en->n};
-            if (ids.len > 0 && memchr(ids.ptr, rg.id, ids.len) != NULL) continue;
+            if (ids.len > 0 && mem_find_byte(ids.ptr, rg.id, ids.len) != NULL) continue;
             if (en->n == REGEX_NEST_MOST) return regex_refuse(refused, 0, S("loops whose turn can match nothing (`(a*)*`), nested more than four deep"));
             RegexIds room = {en->ids, REGEX_NEST_MOST};
             at(room, en->n) = rg.id;
@@ -1010,7 +1010,7 @@ static size_t regex_next_first(const RegexSet *first, int only, Str s, size_t fr
     if (from >= s.len) return SIZE_MAX;
     Str rest = str_sub(s, from, s.len);
     if (only >= 0) {
-        const char *hit = memchr(rest.ptr, only, rest.len);
+        const char *hit = mem_find_byte(rest.ptr, only, rest.len);
         return hit == NULL ? SIZE_MAX : from + (size_t)(hit - rest.ptr);
     }
     for (size_t i = 0; i < rest.len; i++) {

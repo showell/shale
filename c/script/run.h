@@ -451,7 +451,7 @@ static inline STATUS_MUST_USE Status run_arith(Run *r, Pos pos, BinOp op, const 
 // The byte order of two strings, a prefix first: -1, 0 or 1.
 static inline int str_order(Str a, Str b) {
     size_t n = a.len < b.len ? a.len : b.len;
-    int c = n == 0 ? 0 : memcmp(a.ptr, b.ptr, n);
+    int c = n == 0 ? 0 : mem_compare(a.ptr, b.ptr, n);
     if (c != 0) return c < 0 ? -1 : 1;
     if (a.len == b.len) return 0;
     return a.len < b.len ? -1 : 1;
@@ -562,7 +562,7 @@ static inline STATUS_MUST_USE Status run_join_chain(Run *r, Pos pos, ConstValues
         const Value *v = &at(parts, p);
         IntText t;
         Str piece = v->tag == VALUE_STRING ? v->as.string : int_text(&t, v->as.integer);
-        if (piece.len > 0) memcpy(&at(room, len), piece.ptr, piece.len);
+        if (piece.len > 0) mem_copy(&at(room, len), piece.ptr, piece.len);
         len += piece.len;
     }
     r->tail_ptr = buf;

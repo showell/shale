@@ -123,7 +123,7 @@ static bool store_fat_name(Str name) {
     for (size_t i = 0; i < name.len; i++) {
         uint8_t c = str_byte(name, i);
         if (c < 0x20 || c > 0x7E) return false;
-        if (memchr("\"*/:<>?\\|", c, 9) != NULL) return false;
+        if (mem_find_byte("\"*/:<>?\\|", c, 9) != NULL) return false;
     }
     uint8_t last = str_byte(name, name.len - 1);
     return last != '.' && last != ' ';
@@ -205,7 +205,7 @@ static StoreErr store_cstr(StoreCPath *buf, Str s, const char **out) {
     if (s.len >= PATH_MAX) return STORE_NAME_TOO_LONG;
     if (str_find_byte(s, 0) != NULL) return STORE_BAD_PATH_NAME;
     Bytes room = {buf->bytes, sizeof buf->bytes};
-    if (s.len > 0) memcpy(room.ptr, s.ptr, s.len);
+    if (s.len > 0) mem_copy(room.ptr, s.ptr, s.len);
     at(room, s.len) = 0;
     *out = buf->bytes;
     return STORE_OK;
@@ -695,7 +695,7 @@ static bool store_sibling_name(Arena *a, Str name, Str *out) {
     Bytes t = {p, 13};
     at(t, 0) = '~';
     for (size_t k = 0; k < 8; k++) at(t, 1 + k) = "0123456789abcdef"[(h >> (28 - 4 * k)) & 0xf];
-    memcpy(&at(t, 9), ".tmp", 4);
+    mem_copy(&at(t, 9), ".tmp", 4);
     out->ptr = p;
     out->len = 13;
     return true;

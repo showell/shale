@@ -37,7 +37,7 @@ static STATUS_MUST_USE Status finder_find(const Finder *f, Str hay, size_t from,
     uint64_t paid_stops = 0;
     uint64_t paid_compared = 0;
     while (k < hay.len) {
-        const char *hit = memchr(&at(hay, k), first, hay.len - k);
+        const char *hit = mem_find_byte(&at(hay, k), first, hay.len - k);
         if (hit == NULL) break;
         size_t i = (size_t)(hit - hay.ptr);
         stops++;
@@ -131,7 +131,7 @@ static STATUS_MUST_USE Status bi_lines(Run *r, Pos pos, ConstValues args, Value 
     TRY(builtin_new_list(r, pos, &o));
     size_t k = 0;
     while (k < s.len) {
-        const char *nl = memchr(&at(s, k), '\n', s.len - k);
+        const char *nl = mem_find_byte(&at(s, k), '\n', s.len - k);
         size_t end = nl != NULL ? (size_t)(nl - s.ptr) : s.len;
         TRY(builtin_push_str(r, pos, o, str_sub(s, k, end)));
         k = nl != NULL ? end + 1 : s.len;
@@ -411,7 +411,7 @@ static STATUS_MUST_USE Status bi_rep(Run *r, Pos pos, ConstValues args, Value *o
     char *p = arena_alloc(r->ctx.values, (size_t)total, 1);
     if (p == NULL) return run_values_oom(r, pos);
     Bytes o = {p, (size_t)total};
-    for (size_t k = 0; k < total; k += s.len) memcpy(&at(o, k), s.ptr, s.len);
+    for (size_t k = 0; k < total; k += s.len) mem_copy(&at(o, k), s.ptr, s.len);
     Str t = {p, (size_t)total};
     value_string(out, t);
     return OK;

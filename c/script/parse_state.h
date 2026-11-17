@@ -405,7 +405,7 @@ static inline STATUS_MUST_USE Status parse_dup(Parser *p, const void *items, siz
     Bytes part = SLICE_SUB(Bytes, all, from * elem, (from + n) * elem);
     void *fresh = arena_alloc(p->arena, part.len, align);
     if (fresh == NULL) return STOP;
-    memcpy(fresh, part.ptr, part.len);
+    mem_copy(fresh, part.ptr, part.len);
     *out = fresh;
     return OK;
 }

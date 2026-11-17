@@ -8,9 +8,16 @@
 --               proved its bounds; an array's size in its declaration
 --               (`char digits[20];`) is no index;
 --   mem arithmetic: no `+` or `-` in a mem* call's arguments
---               (`memcpy(b->ptr + n, ...)`) outside c/foundation/, where each
---               such call has a `DRAGON:` in the comment block above it; a
---               checked part (`&at(s, i)`, a SLICE_SUB's `ptr`) needs neither;
+--               (`memcpy(b->ptr + n, ...)`, `mem_copy(...)` alike) outside
+--               c/foundation/, where each such call has a `DRAGON:` in the
+--               comment block above it; a checked part (`&at(s, i)`, a
+--               SLICE_SUB's `ptr`) needs neither;
+--   raw mem:    no `memcpy(`, `memmove(`, `memcmp(` or `memchr(` outside
+--               c/foundation/: slice.h's mem_copy, mem_move, mem_compare,
+--               mem_find_byte and str_find_byte make no call for 0 bytes, so
+--               no NULL an empty Str holds reaches one (undefined in C17, and
+--               glibc's nonnull lets GCC delete a later NULL check); inside
+--               it, each raw call has a `DRAGON:` in the comment block above;
 --   slice args: no `++`, `--`, `=` or call in a SLICE_SUB's arguments, which
 --               it evaluates more than once;
 --   must use:   a function returning `Status` is `STATUS_MUST_USE`, so GCC
@@ -95,7 +102,8 @@ const ALLOC = [=[\b(malloc|free|calloc|realloc|aligned_alloc|strdup|strndup)\s*\
 const INDEX = [=[[\w)\]]\s*\[]=]
 const PTR_SUM = [=[\*\s*\(\s*[A-Za-z_][A-Za-z0-9_.>-]*ptr\s*\+]=]
 const ARRAY_DECL = [=[\b(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)(\s+\**\s*\w+)\s*\[[^\]]*\]]=]
-const MEM_CALL = [=[\bmem(cpy|move|set|cmp)\s*\(]=]
+const MEM_CALL = [=[\bmem(cpy|move|set|cmp|_copy|_move|_compare)\s*\(]=]
+const RAW_MEM = [=[\bmem(cpy|move|cmp|chr)\s*\(]=]
 const SLICE_CALL = [=[\bSLICE_SUB\s*\(]=]
 const STATUS_FN = [=[\bstatic\s+(inline\s+)?Status\s+[\w#]+\s*\(]=]
 const CHAR_PARAM = [=[[(,]\s*(const\s+)?char\s*\*\s*\w+\s*[,)]]=]
@@ -330,6 +338,9 @@ function check_file(p, in_foundation)
           push(found, {path = p, line = n, rule = "mem arithmetic", text = raw})
         end
       end
+    end
+    if find(code, "mem") ~= nil and re_find(code, RAW_MEM) ~= nil and not (in_foundation and dragon_above(all, n)) then
+      push(found, {path = p, line = n, rule = "raw mem", text = raw})
     end
     if find(code, "SLICE_SUB") ~= nil then
       for args in calls_args(code, SLICE_CALL) do
@@ -966,7 +977,7 @@ TEST_MAIN(
     "11 brace", "11 top level", "12 brace", "13 tab", "13 top level", "14 comment", "15 top level", "16 top level", "16 inline", "17 one per line", "17 wrapped"}
   caught = caught + plants_hold(p, false, want)
   local outside = dir .. "/outside.h"
-  create(outside, [=[// outside.h: the bounds, Status and stop plants: lines 4 to 11 break one each.
+  create(outside, [=[// outside.h: the plants: lines 4 to 11 and 22 to 24 break one or two each.
 #ifndef SHALE_OUTSIDE_H
 #define SHALE_OUTSIDE_H
 static inline uint32_t first_slot(MapCore *m) { return m->index[0]; }
@@ -984,23 +995,30 @@ static inline Str named(void) { return S("run_fail(\"{\")"); }
 static inline STATUS_MUST_USE Status kept(Buf *b) { return buf_byte(b, 'x'); }
 static inline Bytes plain(Bytes b, size_t k) { return SLICE_SUB(Bytes, b, k, k + 1); }
 static inline bool compared(Bytes b, size_t k) { return SLICE_SUB(Bytes, b, k == 0 ? 0 : 1, 3).len >= 1; }
-static inline void copy_checked(Bytes d, Str s) { memcpy(&at(d, 0), s.ptr, s.len); }
-static inline void through_arrow(Buf *b, Str s) { memcpy(b->ptr, s.ptr, s.len); }
+static inline void copy_checked(Bytes d, Str s) { mem_copy(&at(d, 0), s.ptr, s.len); }
+static inline void through_arrow(Buf *b, Str s) { mem_copy(b->ptr, s.ptr, s.len); }
 static inline char declared(void) { char cs[4] = {0}; Bytes all = {cs, 4}; return at(all, 1); }
+static inline bool raw_find(Str s) { return memchr(s.ptr, 'x', s.len) != NULL; }
+static inline int raw_compare(Str a, Str b) { return memcmp(a.ptr, b.ptr, a.len); }
+static inline void raw_copy(Bytes d, Str s) { memcpy(d.ptr, s.ptr, s.len); }
+static inline bool guarded(Str s) { return mem_find_byte(s.ptr, 'x', s.len) != NULL && mem_compare(s.ptr, s.ptr, s.len) == 0; }
+// A comment's memcpy(a, b, n) and a string's are no call: "memchr(p, 0, n)".
+static inline Str said_mem(void) { return S("memmove(a, b, n)"); }
 #endif
 ]=])
-  caught = caught + plants_hold(outside, false, {"4 raw index", "5 raw index", "6 mem arithmetic", "7 slice args", "8 slice args", "9 slice args", "10 must use", "11 fail brace"})
+  caught = caught + plants_hold(outside, false, {"4 raw index", "5 raw index", "6 mem arithmetic", "6 raw mem", "7 slice args", "8 slice args", "9 slice args", "10 must use", "11 fail brace", "22 raw mem", "23 raw mem", "24 raw mem"})
   local inside = dir .. "/inside.h"
-  create(inside, [=[// inside.h: the foundation's mem arithmetic: line 4 breaks it, line 7 passes.
+  create(inside, [=[// inside.h: the foundation's mem plants: lines 4 and 8 break, 7 passes.
 #ifndef SHALE_INSIDE_H
 #define SHALE_INSIDE_H
 static inline void shift(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
 // DRAGON: bounds. A plant, the marker a foundation call's arithmetic needs.
 // REMEDY: the self-test writes it, and nothing calls it.
 static inline void marked(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
+static inline void unmarked(uint64_t *xs, size_t n) { memcpy(xs, xs, n); }
 #endif
 ]=])
-  caught = caught + plants_hold(inside, true, {"4 mem arithmetic"})
+  caught = caught + plants_hold(inside, true, {"4 mem arithmetic", "4 raw mem", "8 raw mem"})
   caught = caught + comment_plants_hold(dir .. "/comments.c")
   remove_tree(dir)
   print("PASS self-test: " .. caught .. " plants caught, every other line passed")

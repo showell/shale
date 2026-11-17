@@ -369,7 +369,7 @@ static inline void *arena_refuse(Arena *a) {
 static inline bool arena_dup(Arena *a, Str s, Str *out) {
     char *p = arena_alloc(a, s.len, 1);
     if (p == NULL) return false;
-    if (s.len > 0) memcpy(p, s.ptr, s.len);
+    mem_copy(p, s.ptr, s.len);
     out->ptr = p;
     out->len = s.len;
     return true;

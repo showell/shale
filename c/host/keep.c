@@ -169,10 +169,10 @@ static STATUS_MUST_USE Status keep_cut(Keep *k, Str l, bool over) {
     size_t need = whole ? l.len : n + mark.len;
     TRY(keep_slot_room(k->arena, &k->scratch, need));
     Bytes room = {k->scratch.ptr, k->scratch.cap};
-    if (n > 0) memcpy(room.ptr, l.ptr, n);
+    if (n > 0) mem_copy(room.ptr, l.ptr, n);
     if (!whole) {
         Bytes tail = SLICE_SUB(Bytes, room, n, need);
-        memcpy(tail.ptr, mark.ptr, mark.len);
+        mem_copy(tail.ptr, mark.ptr, mark.len);
     }
     k->scratch.len = need;
     return OK;

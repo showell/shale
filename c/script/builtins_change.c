@@ -213,8 +213,8 @@ static size_t change_index_of(Str hay, size_t from, Str needle) {
 static Str change_trim(Str s) {
     size_t from = 0;
     size_t to = s.len;
-    while (from < to && memchr(" \t\r", str_byte(s, from), 3) != NULL) from++;
-    while (to > from && memchr(" \t\r", str_byte(s, to - 1), 3) != NULL) to--;
+    while (from < to && mem_find_byte(" \t\r", str_byte(s, from), 3) != NULL) from++;
+    while (to > from && mem_find_byte(" \t\r", str_byte(s, to - 1), 3) != NULL) to--;
     return str_sub(s, from, to);
 }
 

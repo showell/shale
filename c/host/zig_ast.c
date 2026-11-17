@@ -149,7 +149,7 @@ static char *host_zig_cstr(Arena *a, Str s) {
     char *p = ARENA_ARRAY(a, char, s.len + 1);
     if (p == NULL) return NULL;
     Bytes room = {p, s.len + 1};
-    if (s.len > 0) memcpy(room.ptr, s.ptr, s.len);
+    if (s.len > 0) mem_copy(room.ptr, s.ptr, s.len);
     at(room, s.len) = 0;
     return p;
 }
@@ -278,7 +278,7 @@ static bool host_zig_take(HostZigProc *p, Arena *a, size_t n, Str *out) {
         size_t have = p->to - p->from;
         size_t take = have < n - got ? have : n - got;
         Bytes from = {p->room, sizeof p->room};
-        memcpy(&at(into, got), &at(from, p->from), take);
+        mem_copy(&at(into, got), &at(from, p->from), take);
         got += take;
         p->from += take;
     }

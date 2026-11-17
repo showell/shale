@@ -147,8 +147,8 @@ static inline void map_core_remove_at(MapCore *m, size_t e) {
     MapKeys keys_after = SLICE_SUB(MapKeys, keys, e + 1, m->len);
     MapHashes hashes_after = SLICE_SUB(MapHashes, hashes, e + 1, m->len);
     if (keys_after.len > 0) {
-        memmove(&at(keys, e), keys_after.ptr, keys_after.len * sizeof(Str));
-        memmove(&at(hashes, e), hashes_after.ptr, hashes_after.len * sizeof(uint64_t));
+        mem_move(&at(keys, e), keys_after.ptr, keys_after.len * sizeof(Str));
+        mem_move(&at(hashes, e), hashes_after.ptr, hashes_after.len * sizeof(uint64_t));
     }
     m->len--;
     map_core_rebuild(m);
@@ -227,6 +227,8 @@ static inline void map_core_remove_at(MapCore *m, size_t e) {
         if (e == SIZE_MAX) return false;                                                     \
         Name##Values vals = {m->values, m->core.len};                                        \
         Name##Values vals_after = SLICE_SUB(Name##Values, vals, e + 1, m->core.len);         \
+        /* DRAGON: NULL pointers. memmove is undefined on a NULL pointer. */                 \
+        /* REMEDY: no call for an empty part, and a part past 0 points at values. */         \
         if (vals_after.len > 0) memmove(&at(vals, e), vals_after.ptr, vals_after.len * sizeof(V)); \
         map_core_remove_at(&m->core, e);                                                     \
         return true;                                                                         \

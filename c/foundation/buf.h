@@ -63,7 +63,7 @@ static inline STATUS_MUST_USE Status buf_str(Buf *b, Str s) {
     // prove a fresh buffer apart from the text and warns (-Wrestrict); the
     // two never overlap, the rebase above sees to it, and the cost is the
     // same.
-    memmove(dest.ptr, s.ptr, s.len);
+    mem_move(dest.ptr, s.ptr, s.len);
     b->len += s.len;
     return OK;
 }

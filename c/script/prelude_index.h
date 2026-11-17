@@ -36,14 +36,14 @@ static inline bool parse_next_function(Str src, size_t *at_, uint32_t *line, Pre
     while (*at_ < src.len) {
         size_t start = *at_;
         Str rest_of = str_sub(src, start, src.len);
-        const char *nl = memchr(rest_of.ptr, '\n', rest_of.len);
+        const char *nl = mem_find_byte(rest_of.ptr, '\n', rest_of.len);
         size_t end = nl != NULL ? (size_t)(nl - src.ptr) : src.len;
         Str text = str_sub(src, start, end);
         uint32_t this_line = *line;
         *at_ = end + 1;
         (*line)++;
         if (!str_starts_with(text, S("function "))) continue;
-        const char *paren = memchr(text.ptr, '(', text.len);
+        const char *paren = mem_find_byte(text.ptr, '(', text.len);
         if (paren == NULL) continue;
         Str name = str_sub(text, 9, (size_t)(paren - text.ptr));
         size_t a = 0;
@@ -62,7 +62,7 @@ static inline bool parse_next_const(Str src, size_t *at_, uint32_t *line, Prelud
     while (*at_ < src.len) {
         size_t start = *at_;
         Str rest_of = str_sub(src, start, src.len);
-        const char *nl = memchr(rest_of.ptr, '\n', rest_of.len);
+        const char *nl = mem_find_byte(rest_of.ptr, '\n', rest_of.len);
         size_t end = nl != NULL ? (size_t)(nl - src.ptr) : src.len;
         Str text = str_sub(src, start, end);
         uint32_t this_line = *line;

@@ -551,7 +551,7 @@ static inline int gate_key_order(const void *x, const void *y) {
     const Str *a = x;
     const Str *b = y;
     size_t n = a->len < b->len ? a->len : b->len;
-    int c = n == 0 ? 0 : memcmp(a->ptr, b->ptr, n);
+    int c = mem_compare(a->ptr, b->ptr, n);
     if (c != 0) return c;
     return a->len < b->len ? -1 : a->len > b->len ? 1 : 0;
 }

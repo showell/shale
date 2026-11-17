@@ -115,7 +115,7 @@ static STATUS_MUST_USE Status builtin_stat_or_null(Run *r, Pos pos, Builtin b, c
 // Whether `a` sorts before `b` by their bytes, a prefix first.
 static bool builtin_bytes_less(Str a, Str b) {
     size_t n = a.len < b.len ? a.len : b.len;
-    int c = n > 0 ? memcmp(a.ptr, b.ptr, n) : 0;
+    int c = n > 0 ? mem_compare(a.ptr, b.ptr, n) : 0;
     return c < 0 || (c == 0 && a.len < b.len);
 }
 
@@ -366,7 +366,7 @@ static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, V
             Str piece = {0};
             TRY(builtin_read_sized(r, pos, b, &p, size, end, true, builtin_min_u64(BUILTIN_LINE_PIECE, cap - (end - start)), &piece));
             if (piece.len == 0) break;
-            const char *nl = memchr(piece.ptr, '\n', piece.len);
+            const char *nl = mem_find_byte(piece.ptr, '\n', piece.len);
             if (nl != NULL) {
                 size_t i = (size_t)(nl - piece.ptr);
                 if (buf_str(&got, str_sub(piece, 0, i + 1)) != OK) return run_values_oom(r, pos);
@@ -385,7 +385,7 @@ static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, V
     TRY(run_charge(r, pos, got.len));
     Str rest = buf_view(&got);
     while (rest.len > 0) {
-        const char *nl = memchr(rest.ptr, '\n', rest.len);
+        const char *nl = mem_find_byte(rest.ptr, '\n', rest.len);
         size_t i = nl != NULL ? (size_t)(nl - rest.ptr) : rest.len;
         TRY(builtin_push_str(r, pos, list, str_sub(rest, 0, i)));
         rest = nl != NULL ? str_sub(rest, i + 1, rest.len) : S("");
@@ -411,7 +411,7 @@ static size_t builtin_line_start(Str s, size_t to) {
 static size_t builtin_line_end(Str s, size_t from) {
     size_t i = from < s.len ? from : s.len;
     if (i == s.len) return i;
-    const char *nl = memchr(&at(s, i), '\n', s.len - i);
+    const char *nl = mem_find_byte(&at(s, i), '\n', s.len - i);
     return nl != NULL ? (size_t)(nl - s.ptr) : s.len;
 }
 
@@ -633,7 +633,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const Sto
         size_t tail = window.len > keep_most ? window.len - keep_most : 0;
         size_t next = from > tail ? from : tail;
         kept = window.len - next;
-        if (kept > 0) memmove(buf.ptr, &at(window, next), kept);
+        if (kept > 0) mem_move(buf.ptr, &at(window, next), kept);
         base += next;
     }
     return OK;

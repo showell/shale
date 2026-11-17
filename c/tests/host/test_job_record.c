@@ -9,7 +9,7 @@ static bool parse_copy(Str s, JobRecord *r) {
     static char b[1024];
     Bytes room = {b, sizeof b};
     Bytes text = SLICE_SUB(Bytes, room, 0, s.len);
-    if (s.len > 0) memcpy(text.ptr, s.ptr, s.len);
+    if (s.len > 0) mem_copy(text.ptr, s.ptr, s.len);
     return job_record_parse(text, r);
 }
 

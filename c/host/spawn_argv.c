@@ -25,7 +25,7 @@ static char *spawn_cstr(Arena *a, Str s) {
     char *p = ARENA_ARRAY(a, char, s.len + 1);
     if (p == NULL) return NULL;
     Bytes room = {p, s.len + 1};
-    if (s.len > 0) memcpy(room.ptr, s.ptr, s.len);
+    if (s.len > 0) mem_copy(room.ptr, s.ptr, s.len);
     at(room, s.len) = 0;
     return p;
 }

@@ -891,7 +891,7 @@ static STATUS_MUST_USE Status builtin_padded(Run *r, Pos pos, Str text, int64_t 
     size_t text_at = width < 0 ? gap : 0;
     size_t fill_at = width < 0 ? 0 : text.len;
     memset(&at(room, fill_at), ' ', gap);
-    if (text.len > 0) memcpy(&at(room, text_at), text.ptr, text.len);
+    if (text.len > 0) mem_copy(&at(room, text_at), text.ptr, text.len);
     Str s = {p, w};
     *out = s;
     return OK;

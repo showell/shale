@@ -395,7 +395,7 @@ static bool host_group_has(const HostRefusedGroup *g, Str name) {
     Str all = {g->names, strlen(g->names)};
     size_t from = 0;
     while (from < all.len) {
-        const char *sp = memchr(&at(all, from), ' ', all.len - from);
+        const char *sp = mem_find_byte(&at(all, from), ' ', all.len - from);
         size_t to = (size_t)(sp - all.ptr);
         if (str_eq(str_sub(all, from, to), name)) return true;
         from = to + 1;
@@ -604,7 +604,7 @@ static STATUS_MUST_USE Status host_scrub_scan(HostScrub *s, bool last) {
     }
     TRY(host_out_write(s->next, buf_view(&s->scanned)));
     size_t left = buf.len - i;
-    if (left > 0) memmove(s->carry.ptr, &at(buf, i), left);
+    if (left > 0) mem_move(s->carry.ptr, &at(buf, i), left);
     s->carry.len = left;
     return OK;
 }
@@ -948,8 +948,8 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
         if (err == 0 && len > HOST_SECRET_MOST) why = S("StreamTooLong");
         if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`run`: the secret `{s}`'s file {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path), MSG_FROM_HOST(why)));
         Str v = {bytes, len};
-        while (v.len > 0 && memchr(" \t\r\n", str_byte(v, 0), 4) != NULL) v = str_sub(v, 1, v.len);
-        while (v.len > 0 && memchr(" \t\r\n", str_byte(v, v.len - 1), 4) != NULL) v = str_sub(v, 0, v.len - 1);
+        while (v.len > 0 && mem_find_byte(" \t\r\n", str_byte(v, 0), 4) != NULL) v = str_sub(v, 1, v.len);
+        while (v.len > 0 && mem_find_byte(" \t\r\n", str_byte(v, v.len - 1), 4) != NULL) v = str_sub(v, 0, v.len - 1);
         if (v.len == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: the secret `{s}`'s file {s} is empty"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path)));
         Buf kv = buf_make(a);
         if (buf_str(&kv, k) != OK || buf_byte(&kv, '=') != OK || buf_str(&kv, v) != OK) return run_values_oom(r, pos);

@@ -137,7 +137,7 @@ static Str repeated(Bytes room, Str loop, size_t n) {
     size_t len = 0;
     for (size_t k = 0; k < n; k++) {
         Bytes dest = SLICE_SUB(Bytes, room, len, len + loop.len);
-        memcpy(dest.ptr, loop.ptr, loop.len);
+        mem_copy(dest.ptr, loop.ptr, loop.len);
         len += loop.len;
     }
     Str s = {room.ptr, len};
@@ -435,7 +435,7 @@ TEST(a_search_stops_unfinished_past_the_bytes_it_may_skip_as_past_the_positions_
     EXPECT(into.finished);
     EXPECT_EQ(into.positions, 0);
     EXPECT_EQ(into.skipped, 3);
-    EXPECT(memcmp(&into.match, &sentinel.match, sizeof into.match) == 0);
+    EXPECT(mem_compare(&into.match, &sentinel.match, sizeof into.match) == 0);
     regex_search_into(&c.p, &c.sc, S("az"), 0, all, &into);
     EXPECT(into.found);
     EXPECT_EQ(into.match.start, 1);

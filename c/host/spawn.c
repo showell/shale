@@ -203,10 +203,10 @@ static bool spawn_candidates(Arena *a, Str argv0, SpawnStrs env, SpawnCStrs *pat
             char *full = ARENA_ARRAY(a, char, dir.len + 1 + argv0.len + 1);
             if (full == NULL) return false;
             Bytes room = {full, dir.len + 1 + argv0.len + 1};
-            memcpy(room.ptr, dir.ptr, dir.len);
+            mem_copy(room.ptr, dir.ptr, dir.len);
             at(room, dir.len) = '/';
             Bytes name = SLICE_SUB(Bytes, room, dir.len + 1, room.len);
-            if (argv0.len > 0) memcpy(name.ptr, argv0.ptr, argv0.len);
+            if (argv0.len > 0) mem_copy(name.ptr, argv0.ptr, argv0.len);
             at(room, room.len - 1) = 0;
             at(out, k) = full;
         }

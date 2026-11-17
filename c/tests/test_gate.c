@@ -129,7 +129,7 @@ TEST(a_log_line_is_one_line_tabs_and_newlines_shown_the_commands_first_160_bytes
     Arena a = arena_make(TEST_GATE_LIMIT);
     char cmd_bytes[19 + 300];
     Bytes cmd = {cmd_bytes, sizeof cmd_bytes};
-    memcpy(cmd_bytes, "# want: t: why\tnot\n", 19);
+    mem_copy(cmd_bytes, "# want: t: why\tnot\n", 19);
     for (size_t i = 19; i < cmd.len; i++) at(cmd, i) = 'x';
     GateVerdict e = {GATE_ESCAPE, S("want"), S("t"), S("why\tnot"), S("")};
     Buf b = buf_make(&a);

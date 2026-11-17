@@ -212,7 +212,7 @@ static void job_record_put(JobRecordOut *w, Str s) {
         return;
     }
     Bytes dest = SLICE_SUB(Bytes, w->room, w->len, w->len + s.len);
-    if (s.len > 0) memcpy(dest.ptr, s.ptr, s.len);
+    if (s.len > 0) mem_copy(dest.ptr, s.ptr, s.len);
     w->len += s.len;
 }
 

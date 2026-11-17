@@ -144,10 +144,10 @@ static bool jobs_join(Arena *a, Str dir, Str name, Str *out) {
     char *p = ARENA_ARRAY(a, char, dir.len + 1 + name.len);
     if (p == NULL) return false;
     Bytes room = {p, dir.len + 1 + name.len};
-    if (dir.len > 0) memcpy(room.ptr, dir.ptr, dir.len);
+    if (dir.len > 0) mem_copy(room.ptr, dir.ptr, dir.len);
     at(room, dir.len) = '/';
     Bytes tail = SLICE_SUB(Bytes, room, dir.len + 1, room.len);
-    if (name.len > 0) memcpy(tail.ptr, name.ptr, name.len);
+    if (name.len > 0) mem_copy(tail.ptr, name.ptr, name.len);
     out->ptr = p;
     out->len = room.len;
     return true;
@@ -234,7 +234,7 @@ static bool jobs_read_capped(Arena *a, int fd, Bytes *out, int *err) {
         len += (size_t)got;
     }
     char *kept = arena_alloc(a, len, 1);
-    if (kept != NULL && len > 0) memcpy(kept, buf, len);
+    if (kept != NULL && len > 0) mem_copy(kept, buf, len);
     arena_free(a, buf, room.len);
     if (kept == NULL) return false;
     out->ptr = kept;

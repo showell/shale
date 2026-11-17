@@ -200,7 +200,7 @@ static inline uint64_t cli_budget_value(const Budgets *b, size_t k) {
 }
 
 static inline const char *cli_find_byte(Str s, char c) {
-    return s.len == 0 ? NULL : memchr(s.ptr, c, s.len);
+    return s.len == 0 ? NULL : mem_find_byte(s.ptr, c, s.len);
 }
 
 static inline size_t cli_index_of(Str s, char c) {

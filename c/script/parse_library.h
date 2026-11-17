@@ -232,7 +232,7 @@ static inline bool parse_use_path_ok(Str path) {
     // An empty path may hold NULL, and memchr of NULL is undefined even for
     // a length of 0; it names no mount either way.
     if (path.len == 0) return false;
-    const char *colon_at = memchr(path.ptr, ':', path.len);
+    const char *colon_at = mem_find_byte(path.ptr, ':', path.len);
     size_t colon = colon_at != NULL ? (size_t)(colon_at - path.ptr) : 0;
     if (colon == 0) return false;
     for (size_t i = 0; i < colon; i++) {

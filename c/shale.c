@@ -87,11 +87,11 @@ static Str error_name(int e) {
 static const char *c_string(Arena *a, Str s) { // cstr: the system's own
     if (s.len == SIZE_MAX) return NULL;
     // A NUL would cut the path short, so a path holding one is refused.
-    if (s.len > 0 && memchr(s.ptr, 0, s.len) != NULL) return NULL;
+    if (s.len > 0 && mem_find_byte(s.ptr, 0, s.len) != NULL) return NULL;
     char *p = arena_alloc(a, s.len + 1, 1);
     if (p == NULL) return NULL;
     Bytes room = {p, s.len + 1};
-    if (s.len > 0) memcpy(room.ptr, s.ptr, s.len);
+    if (s.len > 0) mem_copy(room.ptr, s.ptr, s.len);
     at(room, s.len) = 0;
     return p;
 }
