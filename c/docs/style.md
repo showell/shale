@@ -34,7 +34,8 @@ and its self-test plants a break of each one.
   - `static inline`, or `static` in a `.c` file;
   - `typedef` or `enum`;
   - `SLICE_TYPE(`, `VEC_DEFINE(`, `MAP_DEFINE(`, `TEST(`, `TEST_MAIN(` or
-    `_Static_assert(`.
+    `_Static_assert(`;
+  - `int main(`, in the one `.c` file that is a command (`c/shale.c`).
 - Everything inside an item is indented, so the next line at column 0 starts
   the next item.
 - **Held:** a function in a header is `static inline`.

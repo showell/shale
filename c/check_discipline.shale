@@ -58,7 +58,7 @@ const LEN_FIELD = [=[^\s*size_t\s+len\s*;]=]
 -- every parenthesized and braced group is emptied.
 const TWO_DECLS = [=[^\s*(static\s+)?(const\s+)?(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)\s+\**\s*\w+\s*(\[\w*\])?\s*(=[^,;]*)?,]=]
 const DECL_INIT = [=[^\s*(static\s+)?(const\s+)?(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)\s+\**\s*\w+\s*(\[\w*\])?\s*=]=]
-const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE_TYPE(", "VEC_DEFINE(", "MAP_DEFINE(", "TEST(", "TEST_MAIN(", "_Static_assert(", "}", ")"}
+const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE_TYPE(", "VEC_DEFINE(", "MAP_DEFINE(", "TEST(", "TEST_MAIN(", "_Static_assert(", "int main(", "}", ")"}
 
 -- The line's code: its strings and character literals emptied, its comments cut.
 function code_of(line)
