@@ -382,7 +382,7 @@ fn readSecret(run: *Run, pos: ast.Pos, k: []const u8, shown: []const u8, path: [
                 if (n == 0) break;
                 len += n;
             },
-            .failed => |e| return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, os_linux.errName(e) }),
+            .failed => |e| return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, os_linux.errName(e) }), // coverage: not run, a read of a regular file the host opened fails only on a disk error (EIO)
         }
     }
     if (len > secret_most) return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, "StreamTooLong" });

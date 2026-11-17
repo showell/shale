@@ -205,6 +205,8 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
         .{ "run({\"keys/tok\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 1 names the mount `k`'s folder" },
         .{ "job_start({\"keys/tok\"}, {log = \"j.log\"})", "`job_start`'s argument 1 names the mount `k`'s folder" },
     }) |c| try t.expectStop(c[0], .atomic, .refused, c[1]);
+    // A secret's file that is not there is named as the script named it.
+    try t.expectStop("run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:missing\"}})", .atomic, .store, "`run`: the secret `X`'s file k:missing cannot be read: FileNotFound");
     // A secret's file past what `secrets` reads is refused, as a read past it.
     const huge = try a.alloc(u8, 64 * 1024 + 1);
     @memset(huge, 'x');
@@ -418,6 +420,8 @@ test "the store follows no link: to a file, to a folder, in the middle of a path
     try testing.expectEqualStrings("real", try t.file("real.txt"));
     // What is no link reads as ever, a listing names the links it holds.
     try t.expectOutput("print(read(\"real.txt\"), read(\"m:inner.txt\"), #ls(\"\"))", "real\tinner\t6\n");
+    // A log in a folder that is not there cannot be written, and is named.
+    try t.expectStop("run({\"shale-fixture\", \"lines\", \"1\"}, {timeout_ms = 10000, tail = 1, log = \"nodir/x.log\"})", .atomic, .store, "`run`: its log nodir/x.log cannot be written: FileNotFound");
     // `run`'s log at a FIFO is refused, not waited on: an open for writing
     // would wait there for a reader.
     // One run, not the gate's, whose copy of the root would wait on it.

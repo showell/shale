@@ -107,7 +107,7 @@ pub const Proc = struct {
             } else if (p.said_len < p.said.len) {
                 p.said_len += n;
             },
-            .failed => p.err_done = true,
+            .failed => p.err_done = true, // coverage: not run, a read of a pipe poll said was ready fails only on EIO
         }
     }
 
@@ -143,7 +143,7 @@ pub const Proc = struct {
                 p.to = n;
                 return true;
             },
-            .failed => return false,
+            .failed => return false, // coverage: not run, a read of a pipe poll said was ready fails only on EIO
         }
     }
 
@@ -186,7 +186,7 @@ pub const Proc = struct {
             switch (std.os.linux.errno(rc)) {
                 .SUCCESS => done += rc,
                 .AGAIN, .INTR => {},
-                else => return false,
+                else => return false, // coverage: not run, EPIPE: poll sees a gone reader as POLLERR and the write before it already failed
             }
         }
         return true;

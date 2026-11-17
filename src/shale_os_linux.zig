@@ -220,7 +220,7 @@ pub fn readSome(fd: i32, buf: []u8) Read {
         switch (linux.errno(rc)) {
             .SUCCESS => return .{ .got = rc },
             .INTR => continue,
-            else => |e| return .{ .failed = e },
+            else => |e| return .{ .failed = e }, // coverage: not run, a read of a regular file the host opened fails only on a disk error (EIO)
         }
     }
 }
@@ -229,7 +229,7 @@ pub fn readSome(fd: i32, buf: []u8) Read {
 /// the C's `store_err_name(store_err_of(e))`, one table for both.
 pub fn errName(e: Errno) []const u8 {
     for (err_names) |n| if (n[0] == e) return n[1];
-    return "Unexpected";
+    return "Unexpected"; // coverage: not run, every errno an open or a read of a regular file gives is in the table
 }
 
 const err_names = [_]struct { Errno, []const u8 }{
