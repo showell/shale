@@ -109,6 +109,9 @@ typedef struct {
     // byte cannot begin one. While no thread is alive, a search skips the rest.
     bool has_first;
     RegexSet first;
+    // The one byte in `first` when it holds just one, which a search skips to
+    // by `memchr`, else -1; found when the pattern compiles, not per search.
+    int first_only;
 } RegexProgram;
 
 typedef struct {

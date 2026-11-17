@@ -367,17 +367,24 @@ TEST(a_pattern_that_can_match_nothing_or_begin_anywhere_skips_nothing_and_one_th
         Compiled c;
         compiled_make(&c, at(ns, k), opts(false));
         EXPECT(!c.p.has_first);
+        EXPECT_EQ(c.p.first_only, -1);
         arena_deinit(&c.arena);
     }
-    static const FirstCase cases[6] = {
+    // The one-byte cases reach each word of the set: its lowest, a middle one
+    // and its highest.
+    static const FirstCase cases[9] = {
         {S("ab|cd"), S("ac"), false},
         {S("\\bstep"), S("s"), false},
         {S("step"), S("sS"), true},
         {S("(?:x|y)+z"), S("xy"), false},
         {S("a?b"), S("ab"), false},
         {S("[0-2]x"), S("012"), false},
+        {S("\tx"), S("\t"), false},
+        {S("zq[0-9]+qz"), S("z"), false},
+        {S("\xff+a"), S("\xff"), false},
     };
     FirstCases fs = {cases, sizeof cases / sizeof(FirstCase)};
+    EXPECT_EQ(fs.len, 9);
     for (size_t k = 0; k < fs.len; k++) {
         FirstCase f = at(fs, k);
         Compiled c;
@@ -385,6 +392,7 @@ TEST(a_pattern_that_can_match_nothing_or_begin_anywhere_skips_nothing_and_one_th
         EXPECT(c.p.has_first);
         EXPECT_EQ(regex_set_count(&c.p.first), f.first.len);
         for (size_t b = 0; b < f.first.len; b++) EXPECT(regex_set_has(&c.p.first, str_byte(f.first, b)));
+        EXPECT_EQ(c.p.first_only, f.first.len == 1 ? (int)str_byte(f.first, 0) : -1);
         arena_deinit(&c.arena);
     }
 }

@@ -830,6 +830,7 @@ static STATUS_MUST_USE Status regex_compile_in(Arena *a, Arena *tree, Str patter
     p.sets.ptr = r.sets.ptr;
     p.sets.len = r.sets.len;
     TRY(regex_first_bytes(tree, p.insts, p.sets, &p.has_first, &p.first));
+    p.first_only = p.has_first && regex_set_count(&p.first) == 1 ? regex_set_lowest(&p.first) : -1;
     p.groups = r.groups;
     p.anchored = regex_anchored_all(top);
     *out = p;
@@ -1045,7 +1046,7 @@ static RegexSearched regex_search_within(const RegexProgram *p, RegexScratch *sc
     uint64_t skipped = 0;
     uint64_t work = 0;
     bool skips = !p->anchored && p->has_first;
-    int only = skips && regex_set_count(&p->first) == 1 ? regex_set_lowest(&p->first) : -1;
+    int only = skips ? p->first_only : -1;
     for (size_t pos = from;; pos++) {
         // No thread alive and none matched: a start can live only at a byte
         // that can begin a match, so the bytes before the next one are passed
