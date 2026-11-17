@@ -1,0 +1,13 @@
+-- budget: arena_bytes=6500000 changes=4000
+-- 3,000 files created under a small arena, as a run that makes many changes
+-- does: each change holds its paths at their length, so the run ends under
+-- Zig. The C once copied every path it handed the kernel into the arena and
+-- kept each join's growth's slack, about twice Zig's bytes a change, and
+-- stopped on the arena here (2026-11-17).
+mkdir("d")
+local n = 0
+while n < 3000 do
+  n = n + 1
+  create("d/f" .. n, "x")
+end
+print(n .. " created")

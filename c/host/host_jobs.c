@@ -22,8 +22,9 @@ static STATUS_MUST_USE Status host_jobs_charge_read(Run *r, Pos pos, uint64_t n)
 // limit), "" when read.
 static STATUS_MUST_USE Status host_jobs_read(Run *r, Pos pos, Str os, Bytes *out, Str *why) {
     *why = S("");
+    StoreCPath cp;
     const char *c = NULL;
-    if (store_cstr(r->ctx.values, os, &c) != STORE_OK) return run_values_oom(r, pos);
+    if (store_cstr(&cp, os, &c) != STORE_OK) return run_values_oom(r, pos);
     int fd = open(c, O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
         *why = store_err_name(store_err_of(errno));
@@ -236,8 +237,9 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     while (slash > 0 && str_byte(log_os, slash - 1) != '/') slash--;
     if (slash > 0) {
         Str dir = str_sub(log_os, 0, slash > 1 ? slash - 1 : 1);
+        StoreCPath dir_cp;
         const char *dc = NULL;
-        if (store_cstr(a, dir, &dc) != STORE_OK) return run_values_oom(r, pos);
+        if (store_cstr(&dir_cp, dir, &dc) != STORE_OK) return run_values_oom(r, pos);
         if (access(dc, F_OK) != 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
     }
     // A log a job still runs on is refused: its record is the job's only
@@ -353,8 +355,9 @@ static uint64_t host_scan_from(HostScan *s, uint64_t size, int32_t pid, int64_t 
 // is a mount's folder.
 static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos pos, Str os, Str shown, Str c, const JobRecord *rec, bool *found) {
     *found = false;
+    StoreCPath cp;
     const char *p = NULL;
-    if (store_cstr(sa, os, &p) != STORE_OK) return run_values_oom(r, pos);
+    if (store_cstr(&cp, os, &p) != STORE_OK) return run_values_oom(r, pos);
     struct stat st;
     if (stat(p, &st) != 0) {
         if (errno == ENOENT) return OK;

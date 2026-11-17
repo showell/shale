@@ -102,6 +102,14 @@ static inline Str buf_view(const Buf *b) {
     return s;
 }
 
+// Gives back the room past `len` when the buffer is its arena's last
+// allocation, as Zig's `toOwnedSlice` and `allocPrint` hold a string at its
+// length: a path built and kept (a join, a mount's path) keeps no growth's
+// slack, half its length and a line again. Anything else is left as it is.
+static inline void buf_fit(Buf *b) {
+    if (b->cap > b->len && arena_is_last(b->arena, b->ptr, b->cap) && arena_resize(b->arena, b->ptr, b->cap, b->len)) b->cap = b->len;
+}
+
 static inline void buf_clear(Buf *b) {
     b->len = 0;
 }

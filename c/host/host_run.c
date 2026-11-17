@@ -715,8 +715,9 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     Str shown = v->as.string;
     Str path = S("");
     TRY(paths_secret_target(&h->paths, &builtin_store_of(r)->path, pos, shown, &path));
+    StoreCPath cp;
     const char *c = NULL;
-    if (store_cstr(r->ctx.values, path, &c) != STORE_OK) return run_values_oom(r, pos);
+    if (store_cstr(&cp, path, &c) != STORE_OK) return run_values_oom(r, pos);
     struct stat st;
     // DRAGON: the secrets rule. The path is a secrets mount's file, which
     // no message may name.
@@ -735,8 +736,9 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     if (dir.len == 0) dir = S("/");
     Buf t = buf_make(r->ctx.values);
     if (buf_str(&t, dir) != OK || buf_lit(&t, "/.") != OK || buf_str(&t, base) != OK || buf_byte(&t, '.') != OK || buf_u64(&t, (uint64_t)getpid()) != OK || buf_lit(&t, ".shale-tmp") != OK) return run_values_oom(r, pos);
+    StoreCPath tmp_cp;
     const char *tmp = NULL;
-    if (store_cstr(r->ctx.values, buf_view(&t), &tmp) != STORE_OK) return run_values_oom(r, pos);
+    if (store_cstr(&tmp_cp, buf_view(&t), &tmp) != STORE_OK) return run_values_oom(r, pos);
     int fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(host_errno_tag(errno))));
     // 0600 whatever the umask. Its answer is not read: the open's own mode
@@ -910,8 +912,9 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
         // a secret; neither may reach a message or the record.
         // REMEDY: the stops name the script's own path, `shown_path`; the
         // value goes to the environment and the scrubber alone.
+        StoreCPath cp;
         const char *c = NULL;
-        if (store_cstr(a, path, &c) != STORE_OK) return run_values_oom(r, pos);
+        if (store_cstr(&cp, path, &c) != STORE_OK) return run_values_oom(r, pos);
         // Neither waited on (a FIFO) nor followed (a link): host_open_regular.
         int fd = -1;
         int err = host_open_regular(c, false, &fd);
@@ -1155,8 +1158,9 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
         // first, then an open that neither waits on a FIFO nor follows a
         // link (both DRAGONs at their functions).
         TRY(host_change_os_path(h, r, pos, log_shown, S(""), &path));
+        StoreCPath cp;
         const char *c = NULL;
-        if (store_cstr(a, path, &c) != STORE_OK) return run_values_oom(r, pos);
+        if (store_cstr(&cp, path, &c) != STORE_OK) return run_values_oom(r, pos);
         int opened = host_open_regular(c, true, &held->log_fd);
         if (opened == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: its log {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
         if (opened != 0) return host_fail(r, pos, CLASS_STORE, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(store_err_name(store_err_of(opened)))));

@@ -16,7 +16,7 @@ use("build:lib.shale")
 -- c/, each caught by its `aim` tests.
 
 const BUILTINS_TEST_FILE = "c/tests/store/test_builtins.c"
-const BUILTINS_TESTS = 14
+const BUILTINS_TESTS = 15
 const BUILTINS_PLANTS = {
   {name = "a read past the read-bytes budget is taken", dir = "script", file = "builtins_store.c", caught_by = "store/test_builtins",
    aim = "the_read_budgets_stop_a_read_before_its_bytes_are_taken",
@@ -48,6 +48,9 @@ const BUILTINS_PLANTS = {
   {name = "a yield leaves the effects log in the arena it frees", dir = "script", file = "vm.c", caught_by = "store/test_builtins", build = "asan",
    aim = "a_yield_keeps_the_effects_log",
    old = "        r->store->effects = kept;", new = "        (void)kept;"},
+  {name = "a path built and kept holds its growth's slack", dir = "foundation", file = "buf.h", caught_by = "store/test_builtins",
+   aim = "many_creates_hold_under_1100_bytes_of_the_arena_each",
+   old = "    if (b->cap > b->len && arena_is_last(", new = "    if (0 && b->cap > b->len && arena_is_last("},
 }
 
 function builtins_block(t)

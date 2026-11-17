@@ -179,28 +179,35 @@ static bool store_join(Arena *a, Str dir, Str name, Str *out) {
     if (buf_str(&b, dir) != OK) return false;
     if (slash && buf_byte(&b, '/') != OK) return false;
     if (buf_str(&b, name) != OK) return false;
+    buf_fit(&b);
     *out = buf_view(&b);
     return true;
 }
 
-// A copy of `s` ended by a NUL, for the kernel, into `*out`: NameTooLong
-// past PATH_MAX, as Zig's posix layer answers.
+// A path ended by a NUL, for the kernel, on the caller's stack: Zig's
+// posix layer copies a path into a PATH_MAX buffer on its stack for each
+// call. A copy in the arena outlived the call, so a run of many changes,
+// each a score of calls into the kernel, held about twice the arena Zig
+// did.
+typedef struct {
+    char bytes[PATH_MAX];
+} StoreCPath;
+
+// `s` ended by a NUL in `buf`, into `*out`: NameTooLong past PATH_MAX, as
+// Zig's posix layer answers. `*out` lives as long as `buf`.
 // DRAGON: the store's boundaries. A NUL inside `s` would end the kernel's
 // copy early, so the call would act on a shorter path than the one every
 // check judged (`a\0/../x` checked as one, opened as `a`).
 // REMEDY: refused here as Zig's posix layer refuses it, BadPathName, before
 // any call; test_store plants it.
-static StoreErr store_cstr(Arena *a, Str s, const char **out) {
-    // Zig copies a path into a PATH_MAX buffer for the kernel, and one that
-    // does not fit with its NUL is NameTooLong.
+static StoreErr store_cstr(StoreCPath *buf, Str s, const char **out) {
+    // A path that does not fit with its NUL is NameTooLong.
     if (s.len >= PATH_MAX) return STORE_NAME_TOO_LONG;
     if (str_find_byte(s, 0) != NULL) return STORE_BAD_PATH_NAME;
-    char *c = arena_alloc(a, s.len + 1, 1);
-    if (c == NULL) return STORE_OUT_OF_MEMORY;
-    Bytes room = {c, s.len + 1};
+    Bytes room = {buf->bytes, sizeof buf->bytes};
     if (s.len > 0) memcpy(room.ptr, s.ptr, s.len);
     at(room, s.len) = 0;
-    *out = c;
+    *out = buf->bytes;
     return STORE_OK;
 }
 
@@ -247,9 +254,10 @@ static StoreErr store_within_limits(const LinuxStore *s, Str path) {
 
 // ── finding a name in another case ──────────────────────────────────────
 
-static bool store_exists(Arena *a, Str path) {
+static bool store_exists(Str path) {
+    StoreCPath cp;
     const char *c = NULL;
-    if (store_cstr(a, path, &c) != STORE_OK) return false;
+    if (store_cstr(&cp, path, &c) != STORE_OK) return false;
     return access(c, F_OK) == 0;
 }
 
@@ -270,8 +278,9 @@ static bool store_eq_nocase(Str x, Str y) {
 // not a folder.
 static StoreErr store_sibling(Arena *a, Str dir, Str name, bool *has, Str *found) {
     *has = false;
+    StoreCPath cp;
     const char *c = NULL;
-    StoreErr e = store_cstr(a, dir.len == 0 ? S(".") : dir, &c);
+    StoreErr e = store_cstr(&cp, dir.len == 0 ? S(".") : dir, &c);
     if (e != STORE_OK) return e;
     DIR *d = opendir(c);
     if (d == NULL) {
@@ -305,7 +314,7 @@ static StoreErr store_sibling(Arena *a, Str dir, Str name, bool *has, Str *found
 // it, is looked for in another case; a part found in no case is kept as
 // given.
 static StoreErr store_resolve(Arena *a, Str path, Str *out) {
-    if (store_exists(a, path)) {
+    if (store_exists(path)) {
         *out = path;
         return STORE_OK;
     }
@@ -339,8 +348,9 @@ static StoreErr store_retry(Arena *a, Str path, bool *has, Str *out) {
     StoreErr e = store_resolve(a, path, &p);
     if (e != STORE_OK) return e;
     if (str_eq(p, path)) return STORE_OK;
+    StoreCPath cp;
     const char *c = NULL;
-    e = store_cstr(a, p, &c);
+    e = store_cstr(&cp, p, &c);
     if (e != STORE_OK) return e;
     struct stat st;
     if (stat(c, &st) != 0) {
@@ -370,7 +380,7 @@ static StoreErr store_for_make_dir(const LinuxStore *s, Arena *a, Str path, Str 
     e = store_resolve(a, path, &p);
     if (e != STORE_OK) return e;
     Str rest = p;
-    while (!store_exists(a, rest)) {
+    while (!store_exists(rest)) {
         if (!store_fat_name(store_basename(rest))) return STORE_BAD_NAME;
         if (!store_dirname(rest, &rest)) break;
     }
@@ -401,9 +411,10 @@ static StoreKind store_kind_of(mode_t m) {
     return STORE_KIND_OTHER;
 }
 
-static StoreErr store_os_stat(Arena *a, Str path, bool follow, struct stat *st) {
+static StoreErr store_os_stat(Str path, bool follow, struct stat *st) {
+    StoreCPath cp;
     const char *c = NULL;
-    StoreErr e = store_cstr(a, path, &c);
+    StoreErr e = store_cstr(&cp, path, &c);
     if (e != STORE_OK) return e;
     int r = follow ? stat(c, st) : lstat(c, st);
     return r == 0 ? STORE_OK : store_err_of(errno);
@@ -411,9 +422,10 @@ static StoreErr store_os_stat(Arena *a, Str path, bool follow, struct stat *st) 
 
 // Makes `path` hold `data`, created with `mode` if it is not there (the
 // umask applies, as Zig's `writeFile`); a file there keeps its own mode.
-static StoreErr store_os_write_file(Arena *a, Str path, Str data, mode_t mode) {
+static StoreErr store_os_write_file(Str path, Str data, mode_t mode) {
+    StoreCPath cp;
     const char *c = NULL;
-    StoreErr e = store_cstr(a, path, &c);
+    StoreErr e = store_cstr(&cp, path, &c);
     if (e != STORE_OK) return e;
     int fd = open(c, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, mode);
     if (fd < 0) return store_err_of(errno);
@@ -437,8 +449,9 @@ static StoreErr store_os_write_file(Arena *a, Str path, Str data, mode_t mode) {
 // StreamTooLong, and a refusal of the arena OutOfMemory, as Zig's
 // `readFileAlloc` with `.limited(limit)` answers.
 static StoreErr store_os_read_file(Arena *a, Str path, size_t limit, Str *out) {
+    StoreCPath cp;
     const char *c = NULL;
-    StoreErr e = store_cstr(a, path, &c);
+    StoreErr e = store_cstr(&cp, path, &c);
     if (e != STORE_OK) return e;
     int fd = open(c, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return store_err_of(errno);
@@ -469,29 +482,49 @@ static StoreErr store_os_read_file(Arena *a, Str path, size_t limit, Str *out) {
 
 // Removes the file at `path`: IsDir for a folder, as Linux's `unlink`
 // answers it.
-static StoreErr store_os_delete_file(Arena *a, Str path) {
+static StoreErr store_os_delete_file(Str path) {
+    StoreCPath cp;
     const char *c = NULL;
-    StoreErr e = store_cstr(a, path, &c);
+    StoreErr e = store_cstr(&cp, path, &c);
     if (e != STORE_OK) return e;
     return unlink(c) == 0 ? STORE_OK : store_err_of(errno);
+}
+
+// The folder `path` opened to be listed, following no link, into `*fd`.
+// Its own function, so the recursion of store_os_delete_tree holds no path
+// buffer of its own a level.
+static StoreErr store_os_open_dir(Str path, int *fd) {
+    StoreCPath cp;
+    const char *c = NULL;
+    StoreErr e = store_cstr(&cp, path, &c);
+    if (e != STORE_OK) return e;
+    // DRAGON: the store's boundaries. A folder swapped for a link to another
+    // tree between store_os_delete_tree's unlink and this open would be
+    // entered and emptied.
+    // REMEDY: O_NOFOLLOW on the folder; a link met inside is unlinked as a
+    // file by the recursion's first step, never followed.
+    *fd = open(c, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    return *fd < 0 ? store_err_of(errno) : STORE_OK;
+}
+
+// Removes the empty folder `path`.
+static StoreErr store_os_remove_dir(Str path) {
+    StoreCPath cp;
+    const char *c = NULL;
+    StoreErr e = store_cstr(&cp, path, &c);
+    if (e != STORE_OK) return e;
+    return rmdir(c) == 0 ? STORE_OK : store_err_of(errno);
 }
 
 // Removes `path` and everything under it, following no link (a link is
 // removed, never entered); nothing there is done.
 static StoreErr store_os_delete_tree(Arena *a, Str path) {
-    StoreErr e = store_os_delete_file(a, path);
+    StoreErr e = store_os_delete_file(path);
     if (e == STORE_OK || e == STORE_FILE_NOT_FOUND) return STORE_OK;
     if (e != STORE_IS_DIR) return e;
-    const char *c = NULL;
-    e = store_cstr(a, path, &c);
+    int fd = -1;
+    e = store_os_open_dir(path, &fd);
     if (e != STORE_OK) return e;
-    // DRAGON: the store's boundaries. A folder swapped for a link to another
-    // tree between the unlink above and this open would be entered and
-    // emptied.
-    // REMEDY: O_NOFOLLOW on the folder; a link met inside is unlinked as a
-    // file by the recursion's first step, never followed.
-    int fd = open(c, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-    if (fd < 0) return store_err_of(errno);
     DIR *d = fdopendir(fd);
     if (d == NULL) {
         close(fd);
@@ -517,30 +550,41 @@ static StoreErr store_os_delete_tree(Arena *a, Str path) {
     }
     closedir(d);
     if (got != STORE_OK) return got;
-    return rmdir(c) == 0 ? STORE_OK : store_err_of(errno);
+    return store_os_remove_dir(path);
+}
+
+// Makes the one folder `path`: done when a folder is there already, NotDir
+// for a file in the way, and `*missing` true when its parent is not there.
+// Its own function, so the recursion of store_os_make_path holds no path
+// buffer of its own a level.
+static StoreErr store_os_make_dir_one(Str path, bool *missing) {
+    *missing = false;
+    StoreCPath cp;
+    const char *c = NULL;
+    StoreErr e = store_cstr(&cp, path, &c);
+    if (e != STORE_OK) return e;
+    if (mkdir(c, 0777) == 0) return STORE_OK;
+    int err = errno;
+    if (err == EEXIST) {
+        struct stat st;
+        if (stat(c, &st) != 0) return store_err_of(errno);
+        return S_ISDIR(st.st_mode) ? STORE_OK : STORE_NOT_DIR;
+    }
+    *missing = err == ENOENT;
+    return store_err_of(err);
 }
 
 // Makes the folder `path` and every folder above it that is missing; a
 // file in the way is NotDir.
-static StoreErr store_os_make_path(Arena *a, Str path) {
-    const char *c = NULL;
-    StoreErr e = store_cstr(a, path, &c);
+static StoreErr store_os_make_path(Str path) {
+    bool missing = false;
+    StoreErr e = store_os_make_dir_one(path, &missing);
+    if (!missing) return e;
+    Str parent = S("");
+    if (!store_dirname(path, &parent)) return STORE_FILE_NOT_FOUND;
+    e = store_os_make_path(parent);
     if (e != STORE_OK) return e;
-    for (int tries = 0; tries < 2; tries++) {
-        if (mkdir(c, 0777) == 0) return STORE_OK;
-        int err = errno;
-        if (err == EEXIST) {
-            struct stat st;
-            if (stat(c, &st) != 0) return store_err_of(errno);
-            return S_ISDIR(st.st_mode) ? STORE_OK : STORE_NOT_DIR;
-        }
-        if (err != ENOENT || tries == 1) return store_err_of(err);
-        Str parent = S("");
-        if (!store_dirname(path, &parent)) return STORE_FILE_NOT_FOUND;
-        e = store_os_make_path(a, parent);
-        if (e != STORE_OK) return e;
-    }
-    return STORE_OK;
+    return store_os_make_dir_one(path, &missing);
 }
 
 // ── Wyhash, for a replace's sibling name ────────────────────────────────
@@ -655,14 +699,14 @@ static bool store_sibling_name(Arena *a, Str name, Str *out) {
 static StoreErr store_linux_stat(void *ctx, Arena *a, Str path, StoreStat *out) {
     (void)ctx;
     struct stat st;
-    StoreErr e = store_os_stat(a, path, true, &st);
+    StoreErr e = store_os_stat(path, true, &st);
     if (e == STORE_FILE_NOT_FOUND) {
         bool has = false;
         Str p = path;
         StoreErr r = store_retry(a, path, &has, &p);
         if (r != STORE_OK) return r;
         if (!has) return e;
-        e = store_os_stat(a, p, true, &st);
+        e = store_os_stat(p, true, &st);
     }
     if (e != STORE_OK) return e;
     out->size = (uint64_t)st.st_size;
@@ -706,8 +750,9 @@ static StoreKind store_kind_of_dirent(unsigned char t) {
 static StoreErr store_linux_list(void *ctx, Arena *a, Str dir, StoreEntries *out) {
     (void)ctx;
     *out = StoreEntries_make(a);
+    StoreCPath cp;
     const char *c = NULL;
-    StoreErr e = store_cstr(a, dir, &c);
+    StoreErr e = store_cstr(&cp, dir, &c);
     if (e != STORE_OK) return e;
     DIR *d = opendir(c);
     if (d == NULL && errno == ENOENT) {
@@ -716,7 +761,7 @@ static StoreErr store_linux_list(void *ctx, Arena *a, Str dir, StoreEntries *out
         e = store_retry(a, dir, &has, &p);
         if (e != STORE_OK) return e;
         if (!has) return STORE_OK;
-        e = store_cstr(a, p, &c);
+        e = store_cstr(&cp, p, &c);
         if (e != STORE_OK) return e;
         d = opendir(c);
     }
@@ -745,8 +790,9 @@ static StoreErr store_linux_list(void *ctx, Arena *a, Str dir, StoreEntries *out
 static StoreErr store_linux_read_at(void *ctx, Arena *a, Str path, uint64_t offset, Bytes buf, size_t *got) {
     (void)ctx;
     *got = 0;
+    StoreCPath cp;
     const char *c = NULL;
-    StoreErr e = store_cstr(a, path, &c);
+    StoreErr e = store_cstr(&cp, path, &c);
     if (e != STORE_OK) return e;
     int fd = open(c, O_RDONLY | O_CLOEXEC);
     if (fd < 0 && errno == ENOENT) {
@@ -755,7 +801,7 @@ static StoreErr store_linux_read_at(void *ctx, Arena *a, Str path, uint64_t offs
         e = store_retry(a, path, &has, &p);
         if (e != STORE_OK) return e;
         if (!has) return STORE_FILE_NOT_FOUND;
-        e = store_cstr(a, p, &c);
+        e = store_cstr(&cp, p, &c);
         if (e != STORE_OK) return e;
         fd = open(c, O_RDONLY | O_CLOEXEC);
     }
@@ -780,7 +826,7 @@ static StoreErr store_linux_make_dir(void *ctx, Arena *a, Str path) {
     Str p = path;
     StoreErr e = store_for_make_dir(ctx, a, path, &p);
     if (e != STORE_OK) return e;
-    return store_os_make_path(a, p);
+    return store_os_make_path(p);
 }
 
 // Makes `path` hold exactly `data`, so that no stop loses it: written to a
@@ -800,17 +846,19 @@ static StoreErr store_linux_replace(void *ctx, Arena *a, Str path, Str data) {
     if (!store_sibling_name(a, store_basename(p), &tmp)) return STORE_OUT_OF_MEMORY;
     if (has_dir && !store_join(a, dir, tmp, &tmp)) return STORE_OUT_OF_MEMORY;
     struct stat st;
-    e = store_os_stat(a, p, true, &st);
+    e = store_os_stat(p, true, &st);
     if (e == STORE_OK) {
-        e = store_os_write_file(a, tmp, data, st.st_mode & 07777);
+        e = store_os_write_file(tmp, data, st.st_mode & 07777);
     } else if (e == STORE_FILE_NOT_FOUND) {
-        e = store_os_write_file(a, tmp, data, 0666);
+        e = store_os_write_file(tmp, data, 0666);
     }
     if (e != STORE_OK) return e;
+    StoreCPath from_cp;
+    StoreCPath to_cp;
     const char *from = NULL;
     const char *to = NULL;
-    e = store_cstr(a, tmp, &from);
-    if (e == STORE_OK) e = store_cstr(a, p, &to);
+    e = store_cstr(&from_cp, tmp, &from);
+    if (e == STORE_OK) e = store_cstr(&to_cp, p, &to);
     if (e == STORE_OK && rename(from, to) != 0) e = store_err_of(errno);
     if (e != STORE_OK && from != NULL) unlink(from);
     return e;
@@ -827,8 +875,9 @@ static StoreErr store_linux_append(void *ctx, Arena *a, Str path, Str bytes, uin
         e = store_linux_make_dir(ctx, a, dir);
         if (e != STORE_OK) return e;
     }
+    StoreCPath cp;
     const char *c = NULL;
-    e = store_cstr(a, p, &c);
+    e = store_cstr(&cp, p, &c);
     if (e != STORE_OK) return e;
     int fd = open(c, O_WRONLY | O_CREAT | O_CLOEXEC, 0666);
     if (fd < 0) return store_err_of(errno);
@@ -854,13 +903,13 @@ static StoreErr store_linux_append(void *ctx, Arena *a, Str path, Str bytes, uin
 // Removes the file at `path`; not there is done.
 static StoreErr store_linux_remove(void *ctx, Arena *a, Str path) {
     (void)ctx;
-    StoreErr e = store_os_delete_file(a, path);
+    StoreErr e = store_os_delete_file(path);
     if (e != STORE_FILE_NOT_FOUND) return e;
     bool has = false;
     Str p = path;
     e = store_retry(a, path, &has, &p);
     if (e != STORE_OK || !has) return e;
-    return store_os_delete_file(a, p);
+    return store_os_delete_file(p);
 }
 
 // Removes `path` and everything under it, refusing a last name FAT would

@@ -811,8 +811,9 @@ TEST(undo_a_change_past_the_journal_s_room_a_file_it_cannot_read_a_path_neither_
     EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("sealed.txt"), S("x")), CLASS_STORE, S("sealed.txt cannot be read (AccessDenied), so it could not be put back")));
     EXPECT_EQ(sx_chmod(&f.base, "sealed.txt", 0600), 0);
     // A named pipe.
+    StoreCPath fifo_cp;
     const char *fifo = NULL;
-    EXPECT_EQ(store_cstr(&f.base.values, sx_at(&f.base, "pipe"), &fifo), STORE_OK);
+    EXPECT_EQ(store_cstr(&fifo_cp, sx_at(&f.base, "pipe"), &fifo), STORE_OK);
     EXPECT_EQ(mkfifo(fifo, 0600), 0);
     EXPECT(fx_stopped(&f, fx_change(&f, "remove", S("pipe"), S("")), CLASS_REFUSED, S("pipe is neither a file nor a folder, and could not be put back")));
     // A path in a folder that cannot be searched.
@@ -909,7 +910,7 @@ TEST(undo_on_stop_puts_back_an_edit_a_file_made_a_folder_made_a_file_removed_an_
     // The folder that was there is there still, and the executable still one.
     EXPECT(sx_there(&f.base, "there"));
     struct stat st;
-    EXPECT_EQ(store_os_stat(&f.base.values, sx_at(&f.base, "x.sh"), true, &st), STORE_OK);
+    EXPECT_EQ(store_os_stat(sx_at(&f.base, "x.sh"), true, &st), STORE_OK);
     EXPECT_EQ(st.st_mode & 0777, 0755);
     fx_deinit(&f);
 }

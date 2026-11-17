@@ -119,7 +119,7 @@ TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_s
     EXPECT(store_sibling_name(a, S("topic.count"), &sib));
     Str left = S("");
     EXPECT(store_join(a, sx_at(&f, "data/chat"), sib, &left));
-    EXPECT_EQ(store_os_write_file(a, left, S("stale"), 0644), STORE_OK);
+    EXPECT_EQ(store_os_write_file(left, S("stale"), 0644), STORE_OK);
     EXPECT_EQ(s->replace(s->ctx, a, sx_at(&f, "data/chat/topic.count"), S("3 30\n")), STORE_OK);
     EXPECT_EQ(s->list(s->ctx, a, sx_at(&f, "data/chat"), &es), STORE_OK);
     EXPECT_EQ(es.len, 1);
@@ -275,7 +275,7 @@ TEST(a_replace_keeps_the_file_s_mode_on_linux_an_executable_script_stays_one) {
     EXPECT_EQ(sx_chmod(&f, "data/run.sh", 0755), 0);
     EXPECT_EQ(f.store.replace(f.store.ctx, &f.values, sx_at(&f, "data/run.sh"), S("new")), STORE_OK);
     struct stat st;
-    EXPECT_EQ(store_os_stat(&f.values, sx_at(&f, "data/run.sh"), true, &st), STORE_OK);
+    EXPECT_EQ(store_os_stat(sx_at(&f, "data/run.sh"), true, &st), STORE_OK);
     EXPECT_EQ(st.st_mode & 0777, 0755);
     Str text = S("");
     EXPECT(sx_file(&f, "data/run.sh", &text));

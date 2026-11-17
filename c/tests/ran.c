@@ -98,8 +98,8 @@ static Str ran_at(Ran *x, const char *rel) { // cstr: a test's literal
 static void ran_write(Ran *x, const char *rel, Str text) { // cstr: a test's literal
     Str p = ran_at(x, rel);
     Str dir = S("");
-    if (store_dirname(p, &dir) && store_os_make_path(&x->host, dir) != STORE_OK) abort();
-    if (store_os_write_file(&x->host, p, text, 0644) != STORE_OK) abort();
+    if (store_dirname(p, &dir) && store_os_make_path(dir) != STORE_OK) abort();
+    if (store_os_write_file(p, text, 0644) != STORE_OK) abort();
 }
 
 // Writes `text` at the folder's `rel`.
@@ -129,7 +129,7 @@ static void ran_init(Ran *x, RanOpts o) {
     if (n <= 0) abort();
     x->dir = (Str){x->dir_bytes, (size_t)n};
     x->root = ran_at(x, "root");
-    if (store_os_make_path(&x->host, x->root) != STORE_OK) abort();
+    if (store_os_make_path(x->root) != STORE_OK) abort();
     ran_write(x, "mounts", ran_d(x, o.mounts != NULL ? o.mounts : ""));
     MountsLoaded loaded;
     Str why = S("");

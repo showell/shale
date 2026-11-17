@@ -49,19 +49,20 @@ static Str sx_at(Sx *s, const char *rel) { // cstr: a test's literal
 }
 
 static void sx_mkdir(Sx *s, const char *rel) { // cstr: a test's literal
-    if (store_os_make_path(&s->values, sx_at(s, rel)) != STORE_OK) abort();
+    if (store_os_make_path(sx_at(s, rel)) != STORE_OK) abort();
 }
 
 static void sx_put(Sx *s, const char *rel, const char *text) { // cstr: test literals
     Str p = sx_at(s, rel);
     Str dir = S("");
-    if (store_dirname(p, &dir) && store_os_make_path(&s->values, dir) != STORE_OK) abort();
-    if (store_os_write_file(&s->values, p, sx_cs(text), 0644) != STORE_OK) abort();
+    if (store_dirname(p, &dir) && store_os_make_path(dir) != STORE_OK) abort();
+    if (store_os_write_file(p, sx_cs(text), 0644) != STORE_OK) abort();
 }
 
 static int sx_chmod(Sx *s, const char *rel, mode_t mode) { // cstr: a test's literal
+    StoreCPath cp;
     const char *c = NULL;
-    if (store_cstr(&s->values, sx_at(s, rel), &c) != STORE_OK) abort();
+    if (store_cstr(&cp, sx_at(s, rel), &c) != STORE_OK) abort();
     return chmod(c, mode);
 }
 
@@ -72,5 +73,5 @@ static bool sx_file(Sx *s, const char *rel, Str *out) { // cstr: a test's litera
 
 static bool sx_there(Sx *s, const char *rel) { // cstr: a test's literal
     struct stat st;
-    return store_os_stat(&s->values, sx_at(s, rel), false, &st) == STORE_OK;
+    return store_os_stat(sx_at(s, rel), false, &st) == STORE_OK;
 }

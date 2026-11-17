@@ -231,8 +231,9 @@ static MountsResult mounts_load(Arena *a, bool has_pinned, Str pinned, Str home,
     if (r != MOUNTS_OK) return r;
     for (size_t k = 0; k < out->mounts.len; k++) {
         Mount *m = &at(out->mounts, k);
+        StoreCPath cp;
         const char *c = NULL;
-        if (store_cstr(a, m->dir, &c) != STORE_OK) continue;
+        if (store_cstr(&cp, m->dir, &c) != STORE_OK) continue;
         char resolved[PATH_MAX];
         if (realpath(c, resolved) == NULL) continue;
         if (!arena_dup(a, (Str){resolved, strlen(resolved)}, &m->dir)) return MOUNTS_OUT_OF_MEMORY;

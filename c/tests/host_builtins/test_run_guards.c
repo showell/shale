@@ -91,10 +91,12 @@ TEST(a_log_or_a_secret_at_a_fifo_is_refused_not_waited_on) {
     static Ran x;
     guards_ran_with(&x, GUARDS_SECRETS_MOUNT, false);
     ran_put(&x, "root/keys/tok", "s3cret\n");
+    StoreCPath pipe_cp;
+    StoreCPath secret_cp;
     const char *pipe_c = NULL;
     const char *secret_c = NULL;
-    EXPECT_EQ(store_cstr(&x.host, ran_at(&x, "root/pipe"), &pipe_c), STORE_OK);
-    EXPECT_EQ(store_cstr(&x.host, ran_at(&x, "root/keys/pipe"), &secret_c), STORE_OK);
+    EXPECT_EQ(store_cstr(&pipe_cp, ran_at(&x, "root/pipe"), &pipe_c), STORE_OK);
+    EXPECT_EQ(store_cstr(&secret_cp, ran_at(&x, "root/keys/pipe"), &secret_c), STORE_OK);
     EXPECT_EQ(mkfifo(pipe_c, 0600), 0);
     EXPECT_EQ(mkfifo(secret_c, 0600), 0);
     ran_run(&x, S("function f(a, o) return host(\"run\", a, o) end\n"
@@ -134,8 +136,9 @@ TEST(job_wait_names_the_script_s_path_never_the_os_path) {
     EXPECT(realpath("c/out/tcc/shale", exe) != NULL);
     x.lh.reaper = ran_cs(exe);
     ran_put(&x, "root/shut/x.log", "x\n");
+    StoreCPath shut_cp;
     const char *shut = NULL;
-    EXPECT_EQ(store_cstr(&x.host, ran_at(&x, "root/shut"), &shut), STORE_OK);
+    EXPECT_EQ(store_cstr(&shut_cp, ran_at(&x, "root/shut"), &shut), STORE_OK);
     EXPECT_EQ(chmod(shut, 0), 0);
     ran_run(&x, S("function w(j, o) return host(\"job_wait\", j, o) end\n"
                   "local j = host(\"job_start\", {\"true\"}, {log = \"w.log\"})\n"
@@ -151,8 +154,9 @@ TEST(job_wait_names_the_script_s_path_never_the_os_path) {
 static Str guards_zig_fake(Ran *x, const char *rel, const char *script) { // cstr: test literals
     ran_put(x, rel, script);
     Str p = ran_at(x, rel);
+    StoreCPath cp;
     const char *c = NULL;
-    if (store_cstr(&x->host, p, &c) != STORE_OK || chmod(c, 0755) != 0) abort();
+    if (store_cstr(&cp, p, &c) != STORE_OK || chmod(c, 0755) != 0) abort();
     return p;
 }
 
@@ -165,8 +169,9 @@ TEST(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_de
     // 200,000 bytes on stderr before the answer: a host that did not drain
     // stderr would never get it.
     Str flood = guards_zig_fake(&x, "flood.sh", "#!/bin/sh\necho 'zig-ast serve 1 fake'\nread n\nhead -c \"$n\" >/dev/null\nhead -c 200000 /dev/zero | tr '\\0' x >&2\nprintf '12\\nbad\\tDrained\\n'\n");
+    StoreCPath flood_cp;
     const char *flood_c = NULL;
-    EXPECT_EQ(store_cstr(&x.host, flood, &flood_c), STORE_OK);
+    EXPECT_EQ(store_cstr(&flood_cp, flood, &flood_c), STORE_OK);
     EXPECT_EQ(setenv("SHALE_ZIG_AST", flood_c, 1), 0);
     ran_run(&x, S("host(\"zig_decls\", \"a.zig\")\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
@@ -177,8 +182,9 @@ TEST(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_de
     guards_ran_with(&y, NULL, false);
     ran_put(&y, "root/a.zig", "const a = 1;\n");
     Str hang = guards_zig_fake(&y, "hang.sh", "#!/bin/sh\necho 'zig-ast serve 1 fake'\nsleep 30\n");
+    StoreCPath hang_cp;
     const char *hang_c = NULL;
-    EXPECT_EQ(store_cstr(&y.host, hang, &hang_c), STORE_OK);
+    EXPECT_EQ(store_cstr(&hang_cp, hang, &hang_c), STORE_OK);
     EXPECT_EQ(setenv("SHALE_ZIG_AST", hang_c, 1), 0);
     ran_run(&y, S("host(\"zig_tokens\", \"a.zig\")\n"), ran_budgets());
     EXPECT_EQ(y.ran, STOP);

@@ -121,6 +121,38 @@ TEST(a_big_buffer_holds_its_live_bytes_not_every_one_it_outgrew) {
     arena_deinit(&a);
 }
 
+TEST(a_fit_gives_back_the_room_past_its_length_only_when_it_is_last) {
+    Arena a = arena_make(1 << 20);
+    Buf b = buf_make(&a);
+    EXPECT(buf_lit(&b, "/tmp/x/") == OK);
+    EXPECT(buf_lit(&b, "f1") == OK);
+    EXPECT_EQ(b.cap, 7 + 3 + 64);
+    size_t end = a.end;
+    buf_fit(&b);
+    EXPECT_EQ(b.cap, 9);
+    EXPECT_EQ(a.end, end - (7 + 3 + 64 - 9));
+    EXPECT_STR(buf_view(&b), S("/tmp/x/f1"));
+    // The next allocation starts where the string ends.
+    char *next = arena_alloc(&a, 1, 1);
+    EXPECT(next == b.ptr + 9);
+    // A buffer that is not the last keeps its room, and its arena is left
+    // as it was.
+    Buf c = buf_make(&a);
+    EXPECT(buf_lit(&c, "abc") == OK);
+    EXPECT(arena_alloc(&a, 1, 1) != NULL);
+    end = a.end;
+    buf_fit(&c);
+    EXPECT_EQ(c.cap, 3 + 1 + 64);
+    EXPECT_EQ(a.end, end);
+    EXPECT_STR(buf_view(&c), S("abc"));
+    // Nor does an empty one change.
+    Buf e = buf_make(&a);
+    buf_fit(&e);
+    EXPECT(e.ptr == NULL);
+    EXPECT_EQ(e.cap, 0);
+    arena_deinit(&a);
+}
+
 TEST_MAIN(
     TEST_CASE(appends_bytes_and_strings_in_order),
     TEST_CASE(numbers_print_in_decimal_the_extremes_among_them),
@@ -128,5 +160,6 @@ TEST_MAIN(
     TEST_CASE(it_moves_and_keeps_its_bytes_when_it_is_not_last),
     TEST_CASE(a_refused_append_leaves_the_buffer_as_it_was),
     TEST_CASE(appending_a_view_of_itself_past_ARENA_BIG_copies_what_it_held),
-    TEST_CASE(a_big_buffer_holds_its_live_bytes_not_every_one_it_outgrew)
+    TEST_CASE(a_big_buffer_holds_its_live_bytes_not_every_one_it_outgrew),
+    TEST_CASE(a_fit_gives_back_the_room_past_its_length_only_when_it_is_last)
 )

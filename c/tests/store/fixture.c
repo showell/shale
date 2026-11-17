@@ -77,8 +77,9 @@ static Str fx_r(Fx *f, const char *lit) { // cstr: a test's literal
 }
 
 static void fx_link(Fx *f, const char *target, const char *rel) { // cstr: test literals
+    StoreCPath cp;
     const char *c = NULL;
-    if (store_cstr(&f->base.values, sx_at(&f->base, rel), &c) != STORE_OK || symlink(target, c) != 0) abort();
+    if (store_cstr(&cp, sx_at(&f->base, rel), &c) != STORE_OK || symlink(target, c) != 0) abort();
 }
 
 // The mounts `text` (each `R` the root) as the host's, home `/home/x`.

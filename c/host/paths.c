@@ -89,6 +89,7 @@ static bool paths_resolve_posix(Arena *a, Str base, Str p, Str *out) {
         }
     }
     if (b.len == 0 && buf_byte(&b, '/') != OK) return false;
+    buf_fit(&b);
     *out = buf_view(&b);
     return true;
 }
@@ -113,6 +114,7 @@ static STATUS_MUST_USE Status paths_root_of(Paths *h, PathRun *r, Pos pos, Str *
 static STATUS_MUST_USE Status paths_cat(PathRun *r, Pos pos, Str a, Str b, Str c, Str *out) {
     Buf w = buf_make(paths_values(r));
     if (buf_str(&w, a) != OK || buf_str(&w, b) != OK || buf_str(&w, c) != OK) return run_oom(r->ctx, pos);
+    buf_fit(&w);
     *out = buf_view(&w);
     return OK;
 }
@@ -250,8 +252,7 @@ static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, 
         if (buf_byte(&walked, '/') != OK || buf_str(&walked, part) != OK) return run_oom(r->ctx, pos);
         shown_end += part.len + (shown_end > 0 ? 1 : 0);
         struct stat st;
-        StoreErr e = store_os_stat(paths_values(r), buf_view(&walked), false, &st);
-        if (e == STORE_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
+        StoreErr e = store_os_stat(buf_view(&walked), false, &st);
         if (e != STORE_OK) return OK;
         if (S_ISLNK(st.st_mode)) {
             return path_fail(r, pos, CLASS_REFUSED, S("{s}{s} is a symbolic link: the store follows none"), MSG_ARGS(MSG_FROM_SCRIPT(shown_prefix), MSG_FROM_SCRIPT(str_sub(rest, 0, shown_end))));
@@ -286,9 +287,9 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
     // A missing mount folder stops the run only when the mount is used. A
     // stop whose folder would spell a secrets mount's names the mount alone:
     // that folder is what the secrets rule hides.
+    StoreCPath cp;
     const char *c = NULL;
-    StoreErr e = store_cstr(paths_values(r), m->dir, &c);
-    if (e == STORE_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
+    StoreErr e = store_cstr(&cp, m->dir, &c);
     // O_PATH, as Zig's `openDir` without `iterate`: a folder that may be
     // searched but not listed still opens.
     int fd = e == STORE_OK ? open(c, O_PATH | O_DIRECTORY | O_CLOEXEC) : -1;
@@ -459,9 +460,8 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
         if (str_eq(at(h->journal, k).abs, abs)) return OK;
     }
     struct stat st;
-    StoreErr e = store_os_stat(paths_values(r), abs, false, &st);
+    StoreErr e = store_os_stat(abs, false, &st);
     Prior p = {S(""), PRIOR_ABSENT, S(""), 0};
-    if (e == STORE_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
     if (e == STORE_OK && S_ISDIR(st.st_mode)) {
         p.was = PRIOR_DIR;
     } else if (e == STORE_OK && S_ISREG(st.st_mode)) {
@@ -602,9 +602,9 @@ static STATUS_MUST_USE Status paths_names_folder(PathRun *r, Pos pos, Str arg, S
             *out = PATHS_NAMES_HOLDS;
             return OK;
         }
+        StoreCPath cp;
         const char *c = NULL;
-        StoreErr e = store_cstr(paths_values(r), abs, &c);
-        if (e == STORE_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
+        StoreErr e = store_cstr(&cp, abs, &c);
         char real[PATH_MAX];
         if (e == STORE_OK && realpath(c, real) != NULL) {
             Str rp = {real, strlen(real)};
