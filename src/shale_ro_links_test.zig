@@ -97,16 +97,53 @@ test "ro mounts: the mounts file's ` ro` and ` tools`, in either order; any othe
     try testing.expectEqual(host_linux.Mount.Access.read_only, ms[3].access);
     try testing.expectEqual(host_linux.Mount.Access.read_write, ms[4].access);
     for ([_]struct { []const u8, []const u8 }{
-        .{ "a = /x rw\n", "line 1: `rw` after `a`'s path: only `ro`, `tools` and `secrets` may follow it" },
-        .{ "a = /x secrets tools\n", "line 1: `a` is `secrets` and `tools`" },
+        .{ "a = /x rw\n", "line 1: only `ro`, `tools` and `secrets` may follow `a`'s path (and a path has no space)" },
+        .{ "a = /x secrets tools\n", "line 1: `a` is `secrets` and `tools`: a toolchain's programs are not tokens" },
         .{ "a = /x secrets secrets\n", "line 1: `secrets` twice after `a`'s path" },
-        .{ "a = /x y z\n", "line 1: `y` after `a`'s path" },
+        .{ "a = /x y z\n", "line 1: only `ro`, `tools` and `secrets` may follow `a`'s path (and a path has no space)" },
         .{ "a = /x ro ro\n", "line 1: `ro` twice after `a`'s path" },
     }) |c| {
         try testing.expectError(error.Malformed, host_linux.parseMounts(a, c[0], "/home/x", &why));
         errdefer std.debug.print("{s}: {s}\n", .{ c[0], why });
-        try testing.expect(std.mem.indexOf(u8, why, c[1]) != null);
+        try testing.expectEqualStrings(c[1], why);
     }
+}
+
+test "secrets mounts: the mounts file's mistakes name the line and the mount, never the line's text, a path or a word after one" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const a = t.arena.allocator();
+    var why: []const u8 = "";
+    // Each line holds a planted folder, `.planted-keys`, where a secrets
+    // mount's would be. Every case is judged before the test fails, so a
+    // planted echo names each message that leaks.
+    var wrong: usize = 0;
+    for ([_]struct { []const u8, []const u8 }{
+        // No `=`: no mount can be named, so the line number alone.
+        .{ "# c\n/home/x/.planted-keys secrets\n", "line 2: the line is not `name = value`" },
+        // A path where the name goes: not a name, so not quoted.
+        .{ "/home/x/.planted-keys = /y\n", "line 1: the name before `=` is not a mount's name: letters, digits, `_` and `-`" },
+        // The name is judged before the words, so a bad one is never quoted
+        // by a later message.
+        .{ "~/.planted-keys = /y rw\n", "line 1: the name before `=` is not a mount's name: letters, digits, `_` and `-`" },
+        .{ "~/.planted-keys = /y ro ro\n", "line 1: the name before `=` is not a mount's name: letters, digits, `_` and `-`" },
+        // A path with a space: its tail is a word after the path.
+        .{ "keys = /home/x/my .planted-keys secrets\n", "line 1: only `ro`, `tools` and `secrets` may follow `keys`'s path (and a path has no space)" },
+        .{ "keys = home/x/.planted-keys secrets\n", "line 1: `keys`'s value is relative: an absolute path, or one from `~/`" },
+        .{ "keys = /home/x/.planted-keys secrets secrets\n", "line 1: `secrets` twice after `keys`'s path" },
+        .{ "keys = /home/x/.planted-keys secrets tools\n", "line 1: `keys` is `secrets` and `tools`: a toolchain's programs are not tokens" },
+        .{ "keys = /home/x/.planted-keys secrets\nkeys = /home/x/.planted-keys secrets\n", "line 2: the mount `keys` is named twice" },
+        // An ordinary mount's mistake still names its mount and its line.
+        .{ "runs = /r\n\nwork = work/.planted-keys\n", "line 3: `work`'s value is relative: an absolute path, or one from `~/`" },
+    }) |c| {
+        try testing.expectError(error.Malformed, host_linux.parseMounts(a, c[0], "/home/x", &why));
+        if (!std.mem.eql(u8, c[1], why) or std.mem.indexOf(u8, why, "planted") != null) {
+            std.debug.print("{s}  said: {s}\n  want: {s}\n", .{ c[0], why, c[1] });
+            wrong += 1;
+        }
+    }
+    try testing.expectEqual(@as(usize, 0), wrong);
 }
 
 test "secrets mounts: no read, listing, change, path or argument reaches a token, by the mount or another way; run's secrets takes one, scrubbed" {

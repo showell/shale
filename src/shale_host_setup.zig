@@ -51,7 +51,10 @@ pub fn inFolder(abs: []const u8, dir: []const u8) bool {
 
 /// Parses a mounts file: one `name = value` per line, with `#` comments and
 /// blank lines. A value is an absolute path or one from `~/`. On
-/// `error.Malformed`, `why` names the line and what is wrong with it.
+/// `error.Malformed`, `why` names the line and what is wrong with it, and the
+/// mount once its name is known to be one. It never quotes the line's own
+/// text, a path or a word after one: a secrets mount's folder may be in it,
+/// and a path with a space splits into words.
 pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8, why: *[]const u8) error{ OutOfMemory, Malformed }![]Mount {
     var out: std.ArrayList(Mount) = .empty;
     var it = std.mem.splitScalar(u8, text, '\n');
@@ -61,10 +64,16 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
         const line = std.mem.trim(u8, raw, " \t\r");
         if (line.len == 0 or line[0] == '#') continue;
         const eq = std.mem.indexOfScalar(u8, line, '=') orelse {
-            why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` is not `name = value`", .{ n, line });
+            why.* = try std.fmt.allocPrint(alloc, "line {d}: the line is not `name = value`", .{n});
             return error.Malformed;
         };
         const name = std.mem.trim(u8, line[0..eq], " \t");
+        // The name is checked first, so every message after this one may
+        // name the mount: what is not a name may be a path.
+        if (name.len == 0 or !validName(name)) {
+            why.* = try std.fmt.allocPrint(alloc, "line {d}: the name before `=` is not a mount's name: letters, digits, `_` and `-`", .{n});
+            return error.Malformed;
+        }
         // The path, then any of ` ro`, ` tools` and ` secrets`.
         var words = std.mem.tokenizeAny(u8, line[eq + 1 ..], " \t");
         const value = words.next() orelse "";
@@ -74,7 +83,7 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
         var secrets = false;
         while (words.next()) |w| {
             const seen = if (std.mem.eql(u8, w, "ro")) said_ro else if (std.mem.eql(u8, w, "tools")) tools else if (std.mem.eql(u8, w, "secrets")) secrets else {
-                why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` after `{s}`'s path: only `ro`, `tools` and `secrets` may follow it (and a path has no space)", .{ n, w, name });
+                why.* = try std.fmt.allocPrint(alloc, "line {d}: only `ro`, `tools` and `secrets` may follow `{s}`'s path (and a path has no space)", .{ n, name });
                 return error.Malformed;
             };
             if (seen) {
@@ -88,10 +97,6 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
             return error.Malformed;
         }
         if (said_ro or secrets) access = .read_only;
-        if (name.len == 0 or !validName(name)) {
-            why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}` is not a mount's name: letters, digits, `_` and `-`", .{ n, name });
-            return error.Malformed;
-        }
         for (out.items) |m| if (std.mem.eql(u8, m.name, name)) {
             why.* = try std.fmt.allocPrint(alloc, "line {d}: the mount `{s}` is named twice", .{ n, name });
             return error.Malformed;
@@ -101,7 +106,7 @@ pub fn parseMounts(alloc: std.mem.Allocator, text: []const u8, home: []const u8,
         else if (value.len > 0 and value[0] == '/')
             try alloc.dupe(u8, value)
         else {
-            why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}`'s value `{s}` is relative: an absolute path, or one from `~/`", .{ n, name, value });
+            why.* = try std.fmt.allocPrint(alloc, "line {d}: `{s}`'s value is relative: an absolute path, or one from `~/`", .{ n, name });
             return error.Malformed;
         };
         try out.append(alloc, .{ .name = try alloc.dupe(u8, name), .dir = trimSlash(dir), .access = access, .tools = tools, .secrets = secrets });

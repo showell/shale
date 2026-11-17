@@ -1328,7 +1328,10 @@ three:
   folder holding it, but **a program is not sandboxed**, and one that
   builds a path itself can reach a secret), each once,
   `secrets` and `tools` not both; another word, one twice, or a path with
-  a space is a mistake named by its line. A mount's own path is resolved
+  a space is a mistake named by its line, and by its mount once the name
+  before `=` is a mount's name. The stop never quotes the line's text, a
+  path or a word after one, since a secrets mount's folder may be in it.
+  A mount's own path is resolved
   once, at load, and so is the root (`--root`) to its real path, so a
   root and a mount inside it compare as one. `m:.` is the mount's folder,
   as `.` is the root. The hook also:

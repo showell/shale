@@ -1106,13 +1106,13 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
     try t.expectStop("read(\"runs:../x\")", .atomic, .argument, "climbs out of its mount with `..`: a folder beside it is reached through a mount of its own");
     try t.expectStop("read(\"runs:/etc/passwd\")", .atomic, .argument, "absolute inside its mount");
     for ([_]struct { []const u8, []const u8 }{
-        .{ "runs = relative/path\n", "line 1: `runs`'s value `relative/path` is relative" },
+        .{ "runs = relative/path\n", "line 1: `runs`'s value is relative: an absolute path, or one from `~/`" },
         .{ "a = /x\na = /y\n", "line 2: the mount `a` is named twice" },
-        .{ "# c\njust words\n", "line 2: `just words` is not `name = value`" },
-        .{ "bad name = /x\n", "is not a mount's name" },
+        .{ "# c\njust words\n", "line 2: the line is not `name = value`" },
+        .{ "bad name = /x\n", "line 1: the name before `=` is not a mount's name: letters, digits, `_` and `-`" },
     }) |c| {
         try testing.expectError(error.Malformed, parseMounts(a, c[0], "/home/x", &why));
-        try testing.expect(std.mem.indexOf(u8, why, c[1]) != null);
+        try testing.expectEqualStrings(c[1], why);
     }
 }
 
@@ -1152,7 +1152,7 @@ test "host: the mounts file: SHALE_MOUNTS pins it; the default's absence is no m
     try t.tmp.dir.writeFile(io, .{ .sub_path = "mounts", .data = "runs = runs\n" });
     try testing.expectError(error.Malformed, loadMounts(a, io, file, "/h", &why));
     try testing.expect(std.mem.startsWith(u8, why, file));
-    try testing.expect(std.mem.endsWith(u8, why, ": line 1: `runs`'s value `runs` is relative: an absolute path, or one from `~/`"));
+    try testing.expect(std.mem.endsWith(u8, why, ": line 1: `runs`'s value is relative: an absolute path, or one from `~/`"));
 }
 
 test "time: the slowest three, in order, a fourth dropped and an earlier tie kept first; a share counts waits and sleeps; fewer than three are all said" {

@@ -1048,13 +1048,13 @@
   shale: {s}\n{s}
   ── checked: it parses and compiles; nothing ran\n
 ## shale_host_setup's refusal texts (9)
-  line {d}: `{s}` after `{s}`'s path: only `ro`, `tools` and `secrets` may follow it (and a path has no space)
   line {d}: `{s}` is `secrets` and `tools`: a toolchain's programs are not tokens
-  line {d}: `{s}` is not `name = value`
-  line {d}: `{s}` is not a mount's name: letters, digits, `_` and `-`
   line {d}: `{s}` twice after `{s}`'s path
-  line {d}: `{s}`'s value `{s}` is relative: an absolute path, or one from `~/`
+  line {d}: `{s}`'s value is relative: an absolute path, or one from `~/`
+  line {d}: only `ro`, `tools` and `secrets` may follow `{s}`'s path (and a path has no space)
+  line {d}: the line is not `name = value`
   line {d}: the mount `{s}` is named twice
+  line {d}: the name before `=` is not a mount's name: letters, digits, `_` and `-`
   {s}: {s}
   {s}{s}: {s}
 ## shale_host_linux's report texts (6)
