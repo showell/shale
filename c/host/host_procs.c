@@ -22,14 +22,14 @@
 #include <unistd.h>
 
 // The most entries `procs` gives; past it the list ends with `{more = true}`.
-enum { PROCS_MOST = 4096 };
+enum { PROCS_MAX = 4096 };
 
 // The most of a command line `procs` reads; past it the entry says
 // `args_cut = true`, so a filter knows it saw only the start.
-enum { PROCS_ARGS_MOST = 1 << 20 };
+enum { PROCS_ARGS_MAX = 1 << 20 };
 
 // The most processes `procs_lineage` walks up.
-enum { PROCS_LINEAGE_MOST = 64 };
+enum { PROCS_LINEAGE_MAX = 64 };
 
 VEC_DEFINE(ProcsPids, int32_t)
 
@@ -56,7 +56,7 @@ typedef struct {
 // This process and those above it, to pid 1's child: the ones no script may
 // stop.
 typedef struct {
-    int32_t pids[PROCS_LINEAGE_MOST];
+    int32_t pids[PROCS_LINEAGE_MAX];
     size_t len;
 } ProcsLineage;
 
@@ -175,7 +175,7 @@ static bool procs_uid(int32_t pid, int64_t *out) {
     return false;
 }
 
-// The whole of /proc/<pid>/cmdline up to PROCS_ARGS_MOST bytes, its NULs
+// The whole of /proc/<pid>/cmdline up to PROCS_ARGS_MAX bytes, its NULs
 // spaces, into the values' arena; `*gone` for a process gone (it cannot be
 // opened or read), `*cut` when there was more.
 static STATUS_MUST_USE Status procs_cmdline(Run *r, Pos pos, int32_t pid, Str *out, bool *gone, bool *cut) {
@@ -203,8 +203,8 @@ static STATUS_MUST_USE Status procs_cmdline(Run *r, Pos pos, int32_t pid, Str *o
         }
         if (got == 0) break;
         Str piece = {chunk, (size_t)got};
-        bool over = b.len + piece.len > PROCS_ARGS_MOST;
-        if (over) piece = str_sub(piece, 0, PROCS_ARGS_MOST - b.len);
+        bool over = b.len + piece.len > PROCS_ARGS_MAX;
+        if (over) piece = str_sub(piece, 0, PROCS_ARGS_MAX - b.len);
         if (buf_str(&b, piece) != OK) {
             refused = true;
             break;
@@ -231,7 +231,7 @@ static STATUS_MUST_USE Status procs_cmdline(Run *r, Pos pos, int32_t pid, Str *o
 static void procs_lineage(ProcsLineage *l) {
     l->len = 0;
     SLICE_TYPE(ProcsLineagePids, int32_t);
-    ProcsLineagePids room = {l->pids, PROCS_LINEAGE_MOST};
+    ProcsLineagePids room = {l->pids, PROCS_LINEAGE_MAX};
     int32_t pid = (int32_t)getpid();
     ProcsStatRoom buf;
     while (pid > 1 && l->len < room.len) {
@@ -316,7 +316,7 @@ static STATUS_MUST_USE Status procs_entry(Run *r, Pos pos, int32_t pid, const Pr
 
 // `procs()`: every process but this one and those above it, in pid order.
 // `args` is its command line joined by spaces (with `args_cut = true` past
-// PROCS_ARGS_MOST), `start` its start time in the kernel's ticks (what
+// PROCS_ARGS_MAX), `start` its start time in the kernel's ticks (what
 // `proc_stop` checks it by).
 static STATUS_MUST_USE Status procs_list(Run *r, Pos pos, Value *out) {
     ProcsLineage mine;
@@ -338,7 +338,7 @@ static STATUS_MUST_USE Status procs_list(Run *r, Pos pos, Value *out) {
     ProcsStatRoom buf;
     for (size_t i = 0; i < pids.len; i++) {
         int32_t pid = at(pids, i);
-        if (list->list.len == PROCS_MOST) {
+        if (list->list.len == PROCS_MAX) {
             Table *more = NULL;
             TRY(run_new_table(r, pos, &more));
             more->kind = TABLE_MAP;

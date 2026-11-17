@@ -155,7 +155,7 @@ TEST(a_command_line_past_one_read_is_read_whole_and_one_past_args_most_says_it_w
     char *one[1] = {long_p};
     ProcsArgs whole_args = {one, 1};
     ProcsChild w = procs_child(&x.host, "read x", whole_args);
-    // Past PROCS_ARGS_MOST: nine arguments of 120 KiB.
+    // Past PROCS_ARGS_MAX: nine arguments of 120 KiB.
     char *part = ARENA_ARRAY(&x.host, char, 120 * 1024 + 1);
     EXPECT(part != NULL);
     memset(part, 'x', 120 * 1024);
