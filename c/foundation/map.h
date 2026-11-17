@@ -40,7 +40,7 @@ static inline uint64_t map_hash(Str key) {
 // leaves every array whole and `len` as it was.
 typedef struct {
     Arena *arena;
-    // DRAGON: use after free. A key is held by its pointer, not copied. A key made in a buffer that later grows, or in an arena span that is later reset, dangles, and every lookup that probes its slot reads freed memory. A key in an arena that outlives the map, never reset under it, is safe.
+    // DRAGON: use after free. A key is held by its pointer, not copied, so a key made in a buffer that later grows, or in an arena span later reset, dangles, and each lookup that probes its slot reads freed memory. A key in an arena that outlives the map, never reset under it, is safe.
     Str *keys;
     size_t keys_cap;
     uint64_t *hashes;
@@ -50,7 +50,8 @@ typedef struct {
     size_t index_cap;
 } MapCore;
 
-// The slot of `key` in the index, or of the empty slot where it would go.
+// The slot of `key` in the index, or of the empty slot where it would go. The
+// index is at most three quarters full, so the probe always ends.
 static inline size_t map_core_slot(const MapCore *m, Str key, uint64_t h, bool *found) {
     MapIndex index = {m->index, m->index_cap};
     MapKeys keys = {m->keys, m->len};
@@ -131,6 +132,7 @@ static inline STATUS_MUST_USE Status map_core_reserve_one(MapCore *m) {
 static inline void map_core_remove_at(MapCore *m, size_t e) {
     MapKeys keys = {m->keys, m->len};
     MapHashes hashes = {m->hashes, m->len};
+    // `e` is checked first: at SIZE_MAX, `e + 1` wraps to 0 and the parts pass.
     (void)at(keys, e);
     MapKeys keys_after = SLICE_SUB(MapKeys, keys, e + 1, m->len);
     MapHashes hashes_after = SLICE_SUB(MapHashes, hashes, e + 1, m->len);
@@ -192,8 +194,7 @@ static inline void map_core_remove_at(MapCore *m, size_t e) {
                                                                                              \
     /* The value's place, or NULL when `key` is not there. */                                \
     /* DRAGON: use after free. The place is in the values, which the next put may move, */   \
-    /* freeing a big buffer to the system: ASan sees a read of freed memory through a */     \
-    /* pointer kept across 30000 puts. Use it before the next put or remove. */              \
+    /* freeing a big buffer to the system. Use it before the next put or remove. */          \
     static inline V *Name##_ptr(Name *m, Str key) {                                          \
         size_t e = map_core_find(&m->core, key);                                             \
         if (e == SIZE_MAX) return NULL;                                                      \

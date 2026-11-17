@@ -10,11 +10,10 @@
 typedef enum { OK = 0, STOP = 1 } Status;
 
 // On every function that returns a Status. A STOP dropped on the floor lets
-// the run go on past an arena refusal with its data cut short, where Zig
-// stops, so GCC refuses an answer left unused (under -Werror), even one cast
-// to void. TCC has no such check, so there it is empty, and the GCC builds
-// hold the C to it; check_discipline's `must use` rule holds every such
-// function to carry it.
+// the run go on past an arena refusal, where Zig stops, so GCC refuses an
+// answer left unused, even one cast to void. TCC lacks the check, so the GCC
+// builds hold the C to it, and check_discipline's `must use` rule holds every
+// such function to carry it.
 #if defined(__GNUC__) && !defined(__TINYC__)
 #define STATUS_MUST_USE __attribute__((warn_unused_result))
 #else

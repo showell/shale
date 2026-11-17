@@ -1,9 +1,11 @@
 // vec.h: a typed dynamic array in an arena, where Zig Shale's
-// `std.ArrayList(T)` goes. It grows as Zig's does, so an arena holds what Zig's
-// held for the same pushes:
+// `std.ArrayList(T)` goes. It grows by Zig's rule but for one number, so the
+// bytes it holds can differ from Zig's, which docs/C-SEAMS.md ("Fidelity")
+// allows:
 //
 //   - the new capacity for a need of `n` items is `n + n/2 + max(1, 64 / sizeof(T))`
-//     (Zig's `growCapacity`, its 64 the cache line);
+//     (Zig's `growCapacity`, which uses `std.atomic.cache_line`, 128 on
+//     x86-64, where this has 64);
 //   - it first tries to grow in place (`arena_resize`, which only the arena's
 //     last allocation can), and otherwise takes a new buffer, copies the items
 //     and frees the old one (`ensureTotalCapacityPrecise`).
@@ -18,7 +20,8 @@
 #include "arena.h"
 #include "status.h"
 
-// Zig's `growCapacity(minimum)` for items of `elem` bytes, saturating.
+// Zig's `growCapacity(minimum)`, with a 64-byte line, for items of `elem`
+// bytes, saturating.
 static inline size_t vec_grow_capacity(size_t minimum, size_t elem) {
     size_t init = 64 / elem;
     if (init < 1) init = 1;
@@ -32,7 +35,7 @@ static inline size_t vec_grow_capacity(size_t minimum, size_t elem) {
 static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len, size_t need, size_t elem, size_t align) {
     if (*cap >= need) return OK;
     size_t new_cap = vec_grow_capacity(need, elem);
-    // DRAGON: size overflow. `new_cap * elem` would wrap to a small buffer for a huge capacity: I64s_reserve(SIZE_MAX / 4) would get 160 bytes for 3 * 2^61 items, then grow in place and say OK. This division refuses it first. test_vec plants it.
+    // DRAGON: size overflow. `new_cap * elem` would wrap to a small buffer for a huge capacity: I64s_reserve(SIZE_MAX / 4) would get 160 bytes for 3 * 2^61 items and say OK. This division refuses it first. test_vec catches its plant.
     if (new_cap > SIZE_MAX / elem) {
         a->hit = true;
         return STOP;

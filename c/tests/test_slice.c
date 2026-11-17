@@ -79,8 +79,8 @@ TEST(str_sub_takes_a_part_and_traps_past_either_end) {
 }
 
 TEST(str_sub_evaluates_each_argument_once) {
-    // The attack: an argument with a side effect, which a macro would check
-    // as one value and use as another (a part from 3 of length SIZE_MAX).
+    // A macro would check an argument with a side effect as one value and
+    // use it as another (a part from 3 of length SIZE_MAX).
     Str s = S("abc");
     size_t k = 2;
     Str part = str_sub(s, k++, 3);

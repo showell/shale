@@ -1,5 +1,5 @@
-// buf.h: appends of bytes, strings and numbers; growth as Zig's ArrayList(u8)
-// grows, in place when it can and by a copy when not; and a refused append
+// buf.h: appends of bytes, strings and numbers; growth by vec.h's rule, in
+// place when it can and by a copy when not; and a refused append
 // leaves the buffer as it was.
 
 #include "test.h"
@@ -91,9 +91,9 @@ TEST(a_refused_append_leaves_the_buffer_as_it_was) {
 }
 
 TEST(appending_a_view_of_itself_past_ARENA_BIG_copies_what_it_held) {
-    // The attack: `s .. s` as buf_str(b, buf_view(b)). The growth frees the
-    // big buffer the view points into, so a copy from the view after it
-    // would read freed memory.
+    // `s .. s` is buf_str(b, buf_view(b)). The growth frees the big buffer
+    // the view points into, so a copy from the view after it would read
+    // freed memory.
     Arena a = arena_make(16 * 1024 * 1024);
     Buf b = buf_make(&a);
     for (int i = 0; i < 100000; i++) EXPECT(buf_byte(&b, (char)('a' + i % 26)) == OK);

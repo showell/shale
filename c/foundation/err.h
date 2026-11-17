@@ -51,7 +51,7 @@ typedef enum {
 
 SLICE_TYPE(Names, const Str);
 
-// A class's name as a stop prints it.
+// A class's name as a stop prints it. The names follow the enum's order.
 static inline Str stop_class_name(StopClass c) {
     static const Str names[CLASS_COUNT] = {
         S("syntax"), S("refused"), S("name"), S("type"), S("index"), S("arithmetic"),
@@ -61,7 +61,8 @@ static inline Str stop_class_name(StopClass c) {
     return at(n, (size_t)c);
 }
 
-// A budget's name as a stop prints it after `budget `; "" for none.
+// A budget's name as a stop prints it after `budget `; "" for none. The names
+// follow the enum's order.
 static inline Str budget_name(BudgetKind b) {
     static const Str names[BUDGET_COUNT] = {
         S(""), S("steps"), S("arena"), S("call_depth"), S("output"), S("reads"),
@@ -175,7 +176,7 @@ static inline RunCtx run_ctx_make(Arena *values, Arena *machine, Budgets budgets
 // Stops the run at `pos`, with `message` (which the caller keeps alive: a
 // literal, or made in the values' arena).
 static inline STATUS_MUST_USE Status run_fail(RunCtx *r, Pos pos, StopClass cls, Str message) {
-    // DRAGON: use after free. The stop's trail is a view of the live call vec in the machine's arena, not a copy, and its message lives in the caller's arena. A push after the stop can move the calls (freeing a big buffer), a pop or `attempt`'s cut changes what the trail says, and a reset of either arena frees what the stop points at. Nothing in the C yet runs between a stop and its report; a port of `attempt` or yield must copy what it keeps.
+    // DRAGON: use after free. The trail is a view of the live call vec, not a copy, and the message lives in the caller's arena. A push after the stop can move the calls, a pop or `attempt`'s cut changes what the trail says, and a reset of either arena frees what the stop points at. Nothing in the C runs between a stop and its report; whatever comes to (`attempt`, yield) must copy what it keeps.
     Calls trail = {r->calls.ptr, r->calls.len};
     Stop s = {pos.line, pos.column, cls, BUDGET_NONE, message, r->function, trail};
     r->stop = s;
@@ -252,15 +253,14 @@ static inline STATUS_MUST_USE Status run_budget_stop(RunCtx *r, Pos pos, BudgetK
 
 // An allocation the arena refused, read as the arena budget, as Zig reads
 // every `OutOfMemory` of a run.
-// DRAGON: the arena budget. A container's STOP means only that its arena refused, with no stop recorded; one passed up by TRY without coming through here would end the run with `stopped` false and a zeroed Stop, naming no budget. Every caller of a container calls this at its boundary, and run_ended below aborts the process on a STOP that skipped it.
+// DRAGON: the arena budget. A container's STOP records no stop, so one passed up by TRY past this point ends the run with `stopped` false and a zeroed Stop that names no budget. Each caller of a container calls this at its boundary, and run_ended aborts on a STOP that skipped it.
 static inline STATUS_MUST_USE Status run_oom(RunCtx *r, Pos pos) {
     return run_budget_stop(r, pos, BUDGET_ARENA);
 }
 
-// The top level's check of a run's answer, before anything reports it: a STOP
-// with no stop recorded is a container's refusal that never reached run_oom,
-// a bug in the C, so the process ends rather than report a stop that names
-// nothing.
+// The top level's check of a run's answer before anything reports it: a STOP
+// with no stop recorded (a refusal that skipped run_oom) is a bug in the C,
+// so the process ends.
 static inline STATUS_MUST_USE Status run_ended(const RunCtx *r, Status s) {
     if (s == STOP && !r->stopped) {
         fprintf(stderr, "err: a run stopped with no stop recorded (a refusal that skipped run_oom)\n");

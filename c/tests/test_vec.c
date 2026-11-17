@@ -1,5 +1,4 @@
-// vec.h: push, pop and index; growth as Zig's ArrayList(T) grows for each
-// item size; items kept through every move; a refusal leaves it as it was.
+// vec.h: push, pop and index; growth by vec.h's rule for each item size; items kept through every move; a refusal leaves it as it was.
 
 #include "test.h"
 
@@ -98,9 +97,8 @@ TEST(a_refused_push_leaves_the_vec_as_it_was) {
 }
 
 TEST(a_capacity_whose_size_wraps_is_refused_with_room_to_grow_in_place) {
-    // The attack: a reserve whose capacity times 8 wraps to 160 bytes. With
-    // the vec last in a roomy arena, a wrapped size would grow in place and
-    // say OK for 3 * 2^61 items.
+    // A reserve whose capacity times 8 wraps to 160 bytes, with the vec last
+    // in a roomy arena, would grow in place and say OK for 3 * 2^61 items.
     Arena a = arena_make(1 << 20);
     I64s v = I64s_make(&a);
     EXPECT(I64s_push(&v, 1) == OK);

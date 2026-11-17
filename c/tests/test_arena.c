@@ -1,5 +1,5 @@
 // arena.h: the budget holds, chunks are sized as Zig's `value.Budgeted`
-// sizes them (so `held` matches Zig's byte for byte), big allocations come
+// sizes them, big allocations come
 // and go on their own, only the last allocation moves in place, and a reset
 // gives back everything since its mark.
 
@@ -215,8 +215,8 @@ TEST(an_array_whose_size_overflows_is_refused) {
 }
 
 TEST(a_size_that_wraps_with_its_header_is_refused) {
-    // The attack: a length whose chunk, 16 + len + align, wraps to a few
-    // bytes, so a tiny chunk would claim to hold it.
+    // A length whose chunk, 16 + len + align, wraps to a few bytes would get
+    // a tiny chunk that claims to hold it.
     Arena a = arena_make(16 * 1024 * 1024);
     EXPECT(arena_alloc(&a, SIZE_MAX, 1) == NULL);
     EXPECT(a.hit);
@@ -240,8 +240,8 @@ TEST(a_size_that_wraps_with_its_header_is_refused) {
 }
 
 TEST(an_array_whose_size_wraps_to_a_small_one_is_refused) {
-    // The attack: `n * sizeof(T)` wrapping to 0 (the empty sentinel, which
-    // is not NULL) or to 16 bytes, for an array of 2^61 items.
+    // `n * sizeof(T)` for 2^61 items wraps to 0 (the empty sentinel, which is
+    // not NULL) or to 16 bytes.
     Arena a = arena_make(16 * 1024 * 1024);
     size_t to_zero = SIZE_MAX / 8 + 1;
     size_t to_sixteen = SIZE_MAX / 8 + 3;

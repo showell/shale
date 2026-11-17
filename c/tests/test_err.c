@@ -225,8 +225,8 @@ TEST(a_report_the_arena_refuses_says_so) {
 }
 
 TEST(a_stop_with_no_stop_recorded_ends_the_process) {
-    // The attack: a container's STOP passed up without run_oom, so the run
-    // would end with a zeroed Stop that names no budget.
+    // A container's STOP passed up without run_oom would end the run with a
+    // zeroed Stop that names no budget.
     Arena values = arena_make(1 << 20);
     Arena machine = arena_make(1 << 20);
     RunCtx r = run_ctx_make(&values, &machine, budgets_default());

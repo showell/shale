@@ -1,6 +1,6 @@
 // buf.h: a growable byte buffer in an arena, for building strings: where Zig
-// Shale's `std.ArrayList(u8)` goes. It grows as vec.h's arrays do (Zig's
-// policy), and every append either fits whole or returns STOP with the buffer
+// Shale's `std.ArrayList(u8)` goes. It grows as vec.h's arrays do, and every
+// append either fits whole or returns STOP with the buffer
 // as it was.
 
 #ifndef SHALE_BUF_H
@@ -22,7 +22,7 @@ static inline Buf buf_make(Arena *a) {
 
 // Room for `more` bytes past `len`.
 static inline STATUS_MUST_USE Status buf_reserve(Buf *b, size_t more) {
-    // DRAGON: size overflow. `b->len + more` would wrap below `cap` and report room the buffer doesn't have, so the append's memcpy would run past it. test_buf's refused append plants it.
+    // DRAGON: size overflow. `b->len + more` would wrap below `cap` and report room the buffer doesn't have, so the append's memcpy would run past it. test_buf catches its plant.
     if (more > SIZE_MAX - b->len) {
         b->arena->hit = true;
         return STOP;
@@ -43,7 +43,7 @@ static inline STATUS_MUST_USE Status buf_byte(Buf *b, char c) {
 
 static inline STATUS_MUST_USE Status buf_str(Buf *b, Str s) {
     if (s.len == 0) return OK;
-    // DRAGON: use after free. `s` may be a view of this same buffer (`buf_str(b, buf_view(b))`, as a port of `s .. s` writes). The reserve moves the buffer, and past ARENA_BIG frees the old one to the system, so a copy from `s` after it would read freed memory. A view inside the buffer is kept as its offset and rebased after the reserve; test_buf appends 100000 bytes to themselves, and build.shale plants the rebase's loss.
+    // DRAGON: use after free. `s` may be a view of this buffer (`buf_str(b, buf_view(b))`, a port of `s .. s`). The reserve can move the buffer and free the old one to the system, so a copy from `s` after it would read freed memory. A view inside the buffer is kept as an offset and rebased after the reserve; test_buf catches its plant.
     uintptr_t from = (uintptr_t)s.ptr;
     uintptr_t base = (uintptr_t)b->ptr;
     bool inside = b->ptr != NULL && from >= base && from < base + b->len;
@@ -79,8 +79,8 @@ static inline STATUS_MUST_USE Status buf_i64(Buf *b, int64_t n) {
     return buf_u64(b, (uint64_t)(-(n + 1)) + 1);
 }
 
-// What the buffer holds, valid until it next grows.
-// DRAGON: use after free. A growth moves the bytes and frees a big buffer's old ones to the system, so a view kept across an append can dangle, not just go stale. Hold a view only until the buffer's next append.
+// What the buffer holds.
+// DRAGON: use after free. A growth moves the bytes and can free the old ones to the system, so a view kept across an append can dangle, not just go stale. Hold a view only until the buffer's next append.
 static inline Str buf_view(const Buf *b) {
     Str s = {b->ptr, b->len};
     return s;

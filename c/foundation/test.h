@@ -104,7 +104,7 @@ static inline void test_trap(const char *file, int line, uint64_t i, size_t len)
 // made not dumpable), and gives how the child ended. `trap` arms the bounds
 // trap in the child. A child, not a longjmp: a jump back into the test's frame
 // would clobber what `stmt` made there (GCC's -Wclobbered).
-// DRAGON: the process boundary. The child is a fork with no exec, so it must not outlive the test: it takes SIGKILL as its death signal, and ends at once if the parent was already gone before it asked (`getppid` no longer the parent). A failed EXPECT inside `stmt` exits the child with TEST_CHILD_FAILED instead of jumping back into test_run. test_test.c checks both.
+// DRAGON: the process boundary. The child is a fork with no exec, so it must not outlive the test: it takes SIGKILL as its death signal, and ends at once if the parent was already gone before it asked (`getppid` no longer the parent). A failed EXPECT inside `stmt` exits the child with TEST_CHILD_FAILED instead of jumping back into test_run. test_test catches both plants. A child that cannot be set up exits 3.
 #define TEST_IN_CHILD(stmt, trap, status)                                           \
     do {                                                                            \
         fflush(stdout);                                                             \
@@ -145,6 +145,8 @@ static inline void test_trap(const char *file, int line, uint64_t i, size_t len)
 
 static inline int test_run(TestCases cases, Str file) {
     TestState *t = test_state();
+    // `ran` and `k` are volatile: they change between setjmp and a longjmp
+    // back to it.
     volatile size_t ran = 0;
     for (volatile size_t k = 0; k < cases.len; k++) {
         const TestCase *c = &at(cases, k);

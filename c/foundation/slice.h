@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Bytes, not necessarily UTF-8, and never NUL-terminated by contract.
+// Its bytes need not be UTF-8, and nothing relies on a NUL after them.
 typedef struct {
     const char *ptr;
     size_t len;
@@ -65,12 +65,12 @@ static inline size_t slice_check(uint64_t i, size_t len, const char *file, int l
 }
 
 // The element at `i`, an lvalue. `s` is evaluated twice, `i` once.
-// DRAGON: bounds. This is the check every index has. A negative index becomes a huge one and traps. A trap ends the process, not the run, so a script's index is the caller's to check first, as the `index` stop: at() is the backstop.
+// DRAGON: bounds. This is every index's check, and a negative index becomes a huge one and traps. A trap ends the process, not the run, so a script's index is checked first by its caller, as the `index` stop; at() is the backstop.
 #define at(s, i) ((s).ptr[slice_check((i), (s).len, __FILE__, __LINE__)])
 
 // The element at `i` with no check. `reason` must be a non-empty string
 // literal saying why the index is in bounds; it costs nothing at run time.
-// DRAGON: bounds. No check at all. The reason is a comment the compiler insists on, and nothing holds it true, so every use is a raw index to read by hand. None is in the C yet.
+// DRAGON: bounds. No check at all. The reason is a comment the compiler insists on, and nothing holds it true, so every use is a raw index to read by hand. The C has none.
 #define at_unchecked(s, i, reason) \
     ((s).ptr[((void)sizeof(char[sizeof("" reason "") > 1 ? 1 : -1]), (i))])
 
@@ -81,7 +81,7 @@ static inline void slice_range_check(uint64_t from, uint64_t to, size_t len, con
 }
 
 // The part `[from, to)` of a typed slice, as the same type.
-// DRAGON: bounds. `from` is evaluated three times and `to` twice, so an argument with a side effect would be checked as one value and used as another (on "abc", `k++` with k = 2 gave a part from 3 of length SIZE_MAX, with no warning from GCC). check_discipline's `slice args` rule refuses `++`, `--`, `=` and a call in its arguments.
+// DRAGON: bounds. `from` is evaluated three times and `to` twice, so an argument with a side effect would be checked as one value and used as another (`k++` with k = 2 on "abc" makes a part from 3 of length SIZE_MAX, and GCC says nothing). check_discipline's `slice args` rule refuses `++`, `--`, `=` and a call in its arguments.
 #define SLICE_SUB(Type, s, from, to)                                            \
     (slice_range_check((from), (to), (s).len, __FILE__, __LINE__),              \
      (Type){(s).ptr + (from), (size_t)(to) - (size_t)(from)})
@@ -100,6 +100,7 @@ static inline uint8_t str_byte(Str s, size_t i) {
     return (uint8_t)at(s, i);
 }
 
+// The `len == 0` tests keep memcmp from a NULL, which an empty Str may hold.
 static inline bool str_eq(Str a, Str b) {
     return a.len == b.len && (a.len == 0 || memcmp(a.ptr, b.ptr, a.len) == 0);
 }
