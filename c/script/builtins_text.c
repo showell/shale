@@ -609,7 +609,7 @@ static STATUS_MUST_USE Status bi_like(Run *r, Pos pos, ConstValues args, Value *
     return OK;
 }
 
-enum { BUILTIN_PATH_PARTS_MOST = 64 };
+enum { BUILTIN_PATH_PARTS_MAX = 64 };
 
 SLICE_TYPE(PathParts, Str);
 SLICE_TYPE(Reach, bool);
@@ -633,10 +633,10 @@ static STATUS_MUST_USE Status bi_match_path(Run *r, Pos pos, ConstValues args, V
     Str pattern = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_MATCH_PATH, &at(args, 0), S("its path"), &subject));
     TRY(builtin_string_arg(r, pos, BUILTIN_MATCH_PATH, &at(args, 1), S("its pattern"), &pattern));
-    Str ps_buf[BUILTIN_PATH_PARTS_MOST];
-    Str qs_buf[BUILTIN_PATH_PARTS_MOST];
-    PathParts ps = {ps_buf, BUILTIN_PATH_PARTS_MOST};
-    PathParts qs = {qs_buf, BUILTIN_PATH_PARTS_MOST};
+    Str ps_buf[BUILTIN_PATH_PARTS_MAX];
+    Str qs_buf[BUILTIN_PATH_PARTS_MAX];
+    PathParts ps = {ps_buf, BUILTIN_PATH_PARTS_MAX};
+    PathParts qs = {qs_buf, BUILTIN_PATH_PARTS_MAX};
     size_t np = 0;
     size_t nq = 0;
     if (!builtin_split_parts(subject, ps, &np)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`match_path`: a path of more than 64 parts"));
@@ -644,10 +644,10 @@ static STATUS_MUST_USE Status bi_match_path(Run *r, Pos pos, ConstValues args, V
     TRY(run_charge(r, pos, subject.len + pattern.len));
     // `can[j]`: whether the pattern's first parts so far match the path's first
     // j.
-    bool can_buf[BUILTIN_PATH_PARTS_MOST + 1];
-    bool next_buf[BUILTIN_PATH_PARTS_MOST + 1];
-    Reach can = {can_buf, BUILTIN_PATH_PARTS_MOST + 1};
-    Reach next = {next_buf, BUILTIN_PATH_PARTS_MOST + 1};
+    bool can_buf[BUILTIN_PATH_PARTS_MAX + 1];
+    bool next_buf[BUILTIN_PATH_PARTS_MAX + 1];
+    Reach can = {can_buf, BUILTIN_PATH_PARTS_MAX + 1};
+    Reach next = {next_buf, BUILTIN_PATH_PARTS_MAX + 1};
     for (size_t j = 0; j < can.len; j++) at(can, j) = false;
     at(can, 0) = true;
     for (size_t qi = 0; qi < nq; qi++) {
