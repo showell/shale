@@ -1,0 +1,389 @@
+-- c/install.shale: the cut-over's install step. It builds C Shale's release
+-- binary, holds it to the fast tier and a smoke test, copies it to
+-- `dest`/shale and points the `shale` link in `links` at it.
+--
+--   shale c/install.shale               build, check, install, then say what
+--                                       changed and what `shale --version`
+--                                       on PATH says now
+--   shale c/install.shale dry=1         build and check, then say what it
+--                                       would write, writing nothing
+--   shale c/install.shale self_test=1   build and check, then install into
+--                                       planted folders under c/out: a first
+--                                       install, a reinstall, a dry run and a
+--                                       binary that fails the smoke test
+--
+-- `dest=` is the folder the binary goes to (tools:shale/bin, ~/tools/shale/bin
+-- on this box) and `links=` the folder of the `shale` link on PATH
+-- (localbin:., ~/.local/bin). No mount reaches ~/.local/bin unless the mounts
+-- file (~/.config/shale/mounts) has this line:
+--
+--   localbin = ~/.local/bin
+--
+-- **The build** is the build's own: the fast tier (c/build.shale), then the
+-- command's block (c/build/command.shale) under `builds=release`, which
+-- compiles c/out/release/shale with the release flags lib.shale gives and
+-- holds its `--check`, `--help` and `--version` to the installed `shale`'s.
+-- It runs under `nice -n 19`, since the box runs other work beside it.
+--
+-- **The smoke test** runs the built binary over a few scripts (a print, a
+-- read, a `run`, a stop and its exit code, a print under this box's own
+-- prelude and mounts) and its `--version` and `--help`, each held to its exact
+-- output. A difference stops the run before anything is written.
+--
+-- **The writes are atomic**, so a running `shale` never sees a half-written
+-- file and PATH never lacks a `shale`. The binary is copied to `shale.new`
+-- beside its place, made executable and run once, then renamed over
+-- `dest`/shale (`mv -T`, one rename(2)). The link is made as `shale.new` in
+-- `links` and renamed over the old link the same way. Nothing else in `links`
+-- is touched, and the run holds every other entry there to what it was.
+--
+-- A real install wants a clean checkout, since the binary is built from the
+-- tree: its head is what was installed.
+--
+-- Run from the repository's root.
+-- budget: programs=300 arena_bytes=268435456
+
+const NAME = "shale"
+const BIN = "c/out/release/shale"
+const VERSION = "shale ReleaseSafe\n"
+const WANT = "c-install: the C shale built under c/out, or a planted one, run to check it"
+const MOUNT_LINE = "localbin = ~/.local/bin"
+
+-- The smoke test's scripts, each held to its exit code and its output. A
+-- `plain` script runs with no prelude and no mounts; the others under this
+-- box's own (~/.config/shale/prelude.shale and mounts), since every launch
+-- after the cut-over reads them.
+const SMOKE = {
+  {name = "print", plain = true, code = 0,
+   script = "local x = 6 * 7\nprint(\"answer \" .. x)\n",
+   out = "answer 42\n"},
+  {name = "read", plain = true, code = 0,
+   script = "for l in lines(read(\"data.txt\")) do print(upper(l)) end\nprint(#grep(\"data.txt\", \"eta\"))\n",
+   out = "ALPHA\nBETA\n1\n"},
+  {name = "run", plain = true, code = 0,
+   script = "local r = run({\"echo\", \"hi\"}, {timeout_ms = 5000, tail = 5})\nprint(r.code, trim(r.out))\n",
+   out = "0\thi\n"},
+  {name = "stop", plain = true, code = 1,
+   script = "print(\"before\")\nfail(\"planned stop\")\n",
+   out = "before\n── stopped at stop.shale:2:1: fail: planned stop (25 steps)\n── used: 25 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 7 of 65536 output bytes\n"},
+  {name = "box", plain = false, code = 0,
+   script = "print(\"under the box's prelude and mounts\")\n",
+   out = "under the box's prelude and mounts\n"},
+}
+
+-- ── Small programs ──────────────────────────────────────────────────────
+
+-- `argv` run, which must exit 0; gives its output trimmed. `what` names the
+-- step in the stop.
+function prog(argv, what)
+  local r = run(argv, {timeout_ms = 20000, whole = 100000})
+  if get(r, "code", -1) ~= 0 then
+    fail(what .. ": `" .. join(argv, " ") .. "` ended " .. get(r, "ended", "?") .. " (" .. get(r, "code", -1) .. "):\n" .. r.out)
+  end
+  return trim(r.out)
+end
+
+-- The OS path of the folder `place`, which `what=` gave. A mount that is
+-- missing stops the run, naming the mount line ~/.local/bin needs.
+function folder_os(place, what)
+  local r = attempt(real, place)
+  if not r.ok then
+    fail(what .. "=" .. place .. ": " .. r.error .. "\n~/.local/bin is reached by the mount line `" .. MOUNT_LINE .. "` in ~/.config/shale/mounts, or pass " .. what .. "=<mount>:<folder>")
+  end
+  return r.value
+end
+
+-- What is at OS path `os`, its links not followed: {kind, inode, target},
+-- `kind` stat's word for it (`regular file`, `symbolic link`) or `none`,
+-- `target` the link's text when it is one. The store follows no link, so
+-- stat and readlink look.
+function entry_at(os)
+  local s = run({"stat", "-c", "%F|%i", os}, {timeout_ms = 10000, tail = 5})
+  if get(s, "code", -1) ~= 0 then return {kind = "none", inode = "", target = ""} end
+  local parts = split(trim(s.out), "|")
+  local e = {kind = parts[1], inode = parts[2], target = ""}
+  if e.kind == "symbolic link" then e.target = prog({"readlink", os}, "reading the link " .. os) end
+  return e
+end
+
+-- Every entry in the folder at OS path `os` but `skip` and `skip`.new: a
+-- line each, its name, type, link target and inode, sorted.
+function others_in(os, skip)
+  local out = prog({"find", os, "-mindepth", "1", "-maxdepth", "1", "-printf", "%f\t%y\t%l\t%i\n"}, "listing " .. os)
+  local kept = {}
+  for l in lines(out) do
+    local name = split(l, "\t")[1]
+    if name ~= skip and name ~= skip .. ".new" then push(kept, l) end
+  end
+  sort(kept)
+  return join(kept, "\n")
+end
+
+-- ── The build and the smoke test ───────────────────────────────────────
+
+-- The fast tier, then the release binary by the command's block. Gives its
+-- path. The block reads c/out/build.mounts, which the fast tier writes.
+function build_release()
+  local fast = must(run({"shale", "c/build.shale"}, {timeout_ms = 600000, tail = 40}))
+  local passed = re_lines(fast.out, "^PASS fast")
+  if #passed ~= 1 then fail("the fast tier exited 0 but said no `PASS fast` line:\n" .. fast.out) end
+  print("fast tier: " .. passed[1].text)
+  must(run({"nice", "-n", "19", "shale", "c/build/command.shale", "builds=release"},
+    {timeout_ms = 600000, tail = 40, env = {SHALE_MOUNTS = real("c/out/build.mounts")},
+     want = "c-install: the release build at the lowest priority, on a busy box"}))
+  print("release: " .. BIN .. " built by c/build/command.shale builds=release, its --check, --help and --version held")
+  return BIN
+end
+
+-- What `bin` said for `said` when `want` was expected, or "" when it matched.
+function differs(said, code, out, want_code, want_out)
+  if code == want_code and out == want_out then return "" end
+  return "smoke " .. said .. ": exited " .. code .. ", wanted " .. want_code .. "\n--- wanted\n" .. want_out .. "--- got\n" .. out
+end
+
+-- The smoke test of the binary at `bin`: each of SMOKE, its `--version` and
+-- its `--help`. Any difference stops the run, before anything is written.
+-- Gives how many checks passed.
+function smoke(bin)
+  local d = fresh_dir("c/out", "install-smoke")
+  create(d .. "/data.txt", "alpha\nbeta\n")
+  create(d .. "/mounts", "")
+  local plain = {SHALE_PRELUDE = "", SHALE_MOUNTS = real(d .. "/mounts")}
+  local exe = real(bin)
+  local bad = {}
+  for c in SMOKE do
+    create(d .. "/" .. c.name .. ".shale", c.script)
+    local o = {cwd = d, timeout_ms = 20000, whole = 20000, want = WANT}
+    if c.plain then o.env = plain end
+    local r = run({exe, c.name .. ".shale"}, o)
+    local why = differs(c.name, get(r, "code", -1), r.out, c.code, c.out)
+    if why ~= "" then push(bad, why) end
+  end
+  local v = run({exe, "--version"}, {timeout_ms = 10000, whole = 1000, want = WANT})
+  local why = differs("--version", get(v, "code", -1), v.out, 0, VERSION)
+  if why ~= "" then push(bad, why) end
+  local h = run({exe, "--help"}, {timeout_ms = 10000, whole = 100000, env = plain, want = WANT})
+  if get(h, "code", -1) ~= 0 or not starts_with(h.out, "usage: shale ") then
+    push(bad, "smoke --help: exited " .. get(h, "code", -1) .. ", wanted 0 and a first line `usage: shale ...`; got:\n" .. sub(h.out, 1, 400))
+  end
+  remove_tree(d)
+  if #bad > 0 then fail("the smoke test of " .. bin .. " failed, so nothing was installed:\n" .. join(bad, "\n")) end
+  return #SMOKE + 2
+end
+
+-- ── The install ────────────────────────────────────────────────────────
+
+-- `bin` copied to `dest`/shale through `dest`/shale.new, renamed into place;
+-- then the `shale` link in `links` pointed at it through links/shale.new,
+-- renamed over the old link. With `dry`, says what it would do and writes
+-- nothing. Prints each step; gives {binary, old_link, new_link}.
+function install(bin, dest, links, dry)
+  local dest_os = folder_os(dest, "dest")
+  local links_os = folder_os(links, "links")
+  local final = dest .. "/" .. NAME
+  local staged = final .. ".new"
+  local final_os = dest_os .. "/" .. NAME
+  local staged_os = final_os .. ".new"
+  local link_os = links_os .. "/" .. NAME
+  local link_staged_os = link_os .. ".new"
+  local would = ""
+  if dry then would = "would " end
+
+  -- What is there now, read before any write.
+  local old_bin = entry_at(final_os)
+  local old_link = entry_at(link_os)
+  if old_link.kind ~= "symbolic link" and old_link.kind ~= "none" then
+    fail(link_os .. " is a " .. old_link.kind .. ", not a symbolic link: replace it by hand, then run this again")
+  end
+  if old_bin.kind ~= "regular file" and old_bin.kind ~= "none" then
+    fail(final_os .. " is a " .. old_bin.kind .. ", not a file: nothing was written")
+  end
+  local others = others_in(links_os, NAME)
+  local said_old = "(none)"
+  if old_link.kind ~= "none" then said_old = old_link.target end
+  print("link " .. link_os .. " points at " .. said_old)
+
+  -- The binary.
+  if not exists(dest) then
+    print(would .. "make " .. dest_os)
+    if not dry then mkdir(dest) end
+  end
+  print(would .. "copy " .. real(bin) .. " to " .. staged_os .. ", chmod 755, run its --version, then rename it over " .. final_os .. " (now " .. old_bin.kind .. ")")
+  if not dry then
+    -- A shale.new is a failed run's leftover: never a link, which the store
+    -- refuses to remove.
+    if entry_at(staged_os).kind ~= "none" then remove(staged) end
+    prog({"cp", real(bin), staged_os}, "copying the binary")
+    prog({"chmod", "755", staged_os}, "making it executable")
+    local v = run({staged_os, "--version"}, {timeout_ms = 10000, whole = 1000, want = WANT})
+    if get(v, "code", -1) ~= 0 or v.out ~= VERSION then
+      remove(staged)
+      fail("the copy at " .. staged_os .. " said " .. v.out .. ", not " .. VERSION .. "nothing was renamed")
+    end
+    prog({"mv", "-T", "-f", staged_os, final_os}, "renaming the binary into place")
+    local now = entry_at(final_os)
+    if now.kind ~= "regular file" or now.inode == old_bin.inode then
+      fail(final_os .. " is not the renamed copy (" .. now.kind .. ", inode " .. now.inode .. ")")
+    end
+  end
+
+  -- The link.
+  print(would .. "link " .. link_staged_os .. " -> " .. final_os .. ", then rename it over " .. link_os)
+  local new_link = {kind = "symbolic link", inode = "", target = final_os}
+  if not dry then
+    if entry_at(link_staged_os).kind ~= "none" then prog({"rm", "-f", link_staged_os}, "removing a leftover link") end
+    prog({"ln", "-s", final_os, link_staged_os}, "making the new link")
+    prog({"mv", "-T", "-f", link_staged_os, link_os}, "renaming the link over the old one")
+    new_link = entry_at(link_os)
+    if new_link.kind ~= "symbolic link" or new_link.target ~= final_os then
+      fail(link_os .. " is a " .. new_link.kind .. " to " .. new_link.target .. ", not a link to " .. final_os)
+    end
+    print("link " .. link_os .. " now points at " .. new_link.target .. " (was " .. said_old .. ")")
+  end
+  if others_in(links_os, NAME) ~= others then fail("an entry of " .. links_os .. " other than " .. NAME .. " changed during the install") end
+  return {binary = final_os, old_link = old_link, new_link = new_link}
+end
+
+-- The smoke test of `bin`, then its install: the one path a real run, a dry
+-- run and the self-test take.
+function check_and_install(bin, dest, links, dry)
+  print("smoke: " .. smoke(bin) .. " checks of " .. bin .. " passed")
+  return install(bin, dest, links, dry)
+end
+
+-- What `shale` on PATH is now: its `--version`, and the file it resolves to.
+function path_shale()
+  local w = prog({"which", NAME}, "finding shale on PATH")
+  local resolved = prog({"readlink", "-f", w}, "resolving " .. w)
+  local v = run({NAME, "--version"}, {timeout_ms = 10000, whole = 1000})
+  return {at = w, resolved = resolved, version = trim(v.out)}
+end
+
+-- ── The self-test ──────────────────────────────────────────────────────
+
+-- A planted install in a folder of its own under `root`: `links` holding a
+-- `shale` link to old/shale and a `shale-gate` link beside it, `bin` not
+-- made yet, as on a box before its first install.
+function plant(root, name)
+  local p = root .. "/" .. name
+  mkdir(p .. "/links")
+  mkdir(p .. "/old")
+  create(p .. "/old/shale", "the old shale\n")
+  create(p .. "/old/shale-gate", "the gate\n")
+  local o = real(p .. "/old")
+  local l = real(p .. "/links")
+  prog({"ln", "-s", o .. "/shale", l .. "/shale"}, "planting the link")
+  prog({"ln", "-s", o .. "/shale-gate", l .. "/shale-gate"}, "planting the gate's link")
+  return {dir = p, dest = p .. "/bin", links = p .. "/links", link_os = l .. "/shale", gate_os = l .. "/shale-gate", old_target = o .. "/shale"}
+end
+
+function expect(ok, what)
+  if not ok then fail("self-test: " .. what) end
+  return nil
+end
+
+-- What a plant looks like that no install has touched, `gate` the gate
+-- link's entry as planted.
+function expect_untouched(p, gate, what)
+  local l = entry_at(p.link_os)
+  expect(l.kind == "symbolic link" and l.target == p.old_target, what .. ": the link moved, to " .. l.target)
+  expect(not exists(p.dest .. "/shale.new"), what .. ": a shale.new was left")
+  expect(entry_at(p.link_os .. ".new").kind == "none", what .. ": a link shale.new was left")
+  expect(read(p.dir .. "/old/shale") == "the old shale\n", what .. ": the old target changed")
+  local g = entry_at(p.gate_os)
+  expect(g.target == gate.target and g.inode == gate.inode, what .. ": shale-gate's link changed")
+  return nil
+end
+
+function self_test_run(bin)
+  local root = fresh_dir("c/out", "install-self-test")
+  local want_bytes = read(bin)
+
+  -- A first install: `bin` made, the binary renamed in, the link swapped.
+  local p = plant(root, "first")
+  local gate = entry_at(p.gate_os)
+  local link_before = entry_at(p.link_os)
+  local r = check_and_install(bin, p.dest, p.links, false)
+  expect(read(p.dest .. "/shale") == want_bytes, "first: the installed binary is not the release build's bytes")
+  expect(not exists(p.dest .. "/shale.new"), "first: shale.new was left")
+  local l = entry_at(p.link_os)
+  expect(l.target == real(p.dest .. "/shale"), "first: the link points at " .. l.target)
+  expect(l.inode ~= link_before.inode, "first: the link's inode is unchanged, so it was not replaced by a rename")
+  expect(r.old_link.target == p.old_target, "first: the old target was said as " .. r.old_link.target)
+  local g = entry_at(p.gate_os)
+  expect(g.target == gate.target and g.inode == gate.inode, "first: shale-gate's link changed")
+  expect(read(p.dir .. "/old/shale") == "the old shale\n", "first: the old target changed")
+  local v = run({p.link_os, "--version"}, {timeout_ms = 10000, whole = 1000, want = WANT})
+  expect(v.out == VERSION, "first: the link runs a shale that says " .. v.out)
+  print("self-test first: binary renamed in, link swapped (inode " .. link_before.inode .. " to " .. l.inode .. "), shale-gate untouched")
+
+  -- A reinstall over that one: a new file at the name (a rename, so a new
+  -- inode, where a write in place keeps it), and a new link.
+  local bin_before = entry_at(real(p.dest) .. "/shale")
+  local link_was = entry_at(p.link_os)
+  check_and_install(bin, p.dest, p.links, false)
+  local bin_after = entry_at(real(p.dest) .. "/shale")
+  local link_now = entry_at(p.link_os)
+  expect(bin_after.inode ~= bin_before.inode, "again: the binary's inode is unchanged, so it was written in place")
+  expect(link_now.inode ~= link_was.inode and link_now.target == link_was.target, "again: the link was not renamed over")
+  expect(read(p.dest .. "/shale") == want_bytes, "again: the installed binary is not the release build's bytes")
+  print("self-test again: binary inode " .. bin_before.inode .. " to " .. bin_after.inode .. ", link renamed over")
+
+  -- A dry run writes nothing.
+  local q = plant(root, "dry")
+  local gate_q = entry_at(q.gate_os)
+  check_and_install(bin, q.dest, q.links, true)
+  expect(not exists(q.dest), "dry: " .. q.dest .. " was made")
+  expect_untouched(q, gate_q, "dry")
+  print("self-test dry: nothing written")
+
+  -- A binary that fails the smoke test: the run stops, and the old link,
+  -- the old binary and the folder are as they were.
+  local f = plant(root, "failing")
+  local gate_f = entry_at(f.gate_os)
+  mkdir(f.dest)
+  create(f.dest .. "/shale", "the installed shale\n")
+  local bad = f.dir .. "/bad-shale"
+  prog({"cp", "/bin/false", real(f.dir) .. "/bad-shale"}, "planting a binary that fails")
+  local a = attempt(check_and_install, bad, f.dest, f.links, false)
+  expect(not a.ok, "failing: a binary that fails the smoke test was installed")
+  expect(find(a.error, "the smoke test of") ~= nil, "failing: it stopped for another reason: " .. a.error)
+  expect(read(f.dest .. "/shale") == "the installed shale\n", "failing: the installed binary changed")
+  expect_untouched(f, gate_f, "failing")
+  print("self-test failing: the smoke test stopped it; the old link, the binary and shale-gate are as they were")
+
+  remove_tree(root)
+  print("PASS self-test")
+  return nil
+end
+
+-- ── The run ────────────────────────────────────────────────────────────
+
+local dry = arg("dry", 0) == 1
+local self_test = arg("self_test", 0) == 1
+local dest = arg("dest", "tools:shale/bin")
+local links = arg("links", "localbin:.")
+
+if self_test then
+  self_test_run(build_release())
+else
+  -- Both folders are checked before the build, so a missing mount stops in
+  -- a second, not after it.
+  folder_os(dest, "dest")
+  folder_os(links, "links")
+  local clean = git_is_clean("")
+  if not clean and not dry then fail("the checkout has changes: a real install ships a commit, so commit first") end
+  local head = git_head("")
+  if clean then print("checkout: " .. head) else print("checkout: " .. head .. " with changes (a real install would stop here)") end
+  local before = path_shale()
+  print("PATH: " .. before.at .. " -> " .. before.resolved .. ", " .. before.version)
+  local r = check_and_install(build_release(), dest, links, dry)
+  local after = path_shale()
+  if dry then
+    print("dry: nothing written; PATH's shale is still " .. after.resolved .. ", " .. after.version)
+  else
+    if after.resolved ~= r.binary then fail("PATH's shale resolves to " .. after.resolved .. ", not " .. r.binary .. ": is " .. folder_os(links, "links") .. " first on PATH?") end
+    if after.version .. "\n" ~= VERSION then fail("PATH's shale --version said " .. after.version) end
+    print("installed " .. head .. ": " .. after.at .. " -> " .. after.resolved .. ", " .. after.version)
+  end
+end
