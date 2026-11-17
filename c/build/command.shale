@@ -60,6 +60,39 @@ function check_command(t, build)
   return nil
 end
 
+-- The C `shale` under `build`, its stdout refusing every write (full, a
+-- broken pipe, closed: c/tests/fixtures/stdout_to.c): it says `shale:
+-- stdout: <error>` last and exits 1, and a run that stops still says its
+-- report and puts back what it changed first. Gives how many runs.
+function check_stdout_failed(t, build)
+  local dir = OUT .. "/command/stdout"
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir .. "/root")
+  local fx = dir .. "/stdout_to"
+  must(run_in(t, "command " .. build, {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. FOUNDATION, "-o", fx, "c/tests/fixtures/stdout_to.c"}, {timeout_ms = 30000, tail = 10}))
+  local bin = real(OUT .. "/" .. build .. "/shale")
+  local env = {SHALE_PRELUDE = "", SHALE_MOUNTS = real(OUT .. "/command/mounts")}
+  local cases = {
+    {how = "full", argv = {"-e", "print(1)"}, said = "shale: stdout: NoSpaceLeft"},
+    {how = "broken", argv = {"-e", "print(1)"}, said = "shale: stdout: BrokenPipe"},
+    {how = "closed", argv = {"-e", "print(1)"}, said = "shale: stdout: NotOpenForWriting"},
+    {how = "full", argv = {"--version"}, said = "shale: stdout: NoSpaceLeft"},
+    {how = "full", argv = {"--undo-on-stop", "-e", "create(\"x.txt\", \"a\")\nprint(1)\nfail(\"no\")\n"},
+     said = "── stopped at -e:3:1: fail: no (34 steps)\n── used: 34 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 2 of 65536 output bytes\n── undone: 1 path(s) the run changed put back\nshale: stdout: NoSpaceLeft"},
+  }
+  for c in cases do
+    local argv = {real(fx), c.how, bin}
+    for w in c.argv do push(argv, w) end
+    local r = run_in(t, "command " .. build, argv, {timeout_ms = 20000, whole = 10000, cwd = dir .. "/root", env = env, want = WANT})
+    if get(r, "code", -1) ~= 1 or trim(r.out) ~= c.said then
+      fail("`" .. build .. "`'s shale " .. join(c.argv, " ") .. " with its stdout " .. c.how .. " exited " .. get(r, "code", -1) .. " and said:\n" .. r.out .. "\nnot exit 1 and:\n" .. c.said)
+    end
+  end
+  if exists(dir .. "/root/x.txt") then fail("`" .. build .. "`'s shale --undo-on-stop with its stdout full left x.txt: the undo did not run") end
+  remove_tree(dir)
+  return #cases
+end
+
 -- The OS path of the installed Zig `shale`, the oracle, its links resolved:
 -- `--help` names the checkout its binary runs from.
 function zig_shale_path(t)
@@ -127,7 +160,8 @@ function command_block(t)
   for b in t.builds do
     check_command(t, b)
     local helps = check_help(t, b, zig)
-    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops; " .. helps .. " --help runs and --version as Zig's")
+    local failed = check_stdout_failed(t, b)
+    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops; " .. helps .. " --help runs and --version as Zig's; " .. failed .. " runs whose stdout refuses its writes exit 1 and say so")
   end
   if not t.full then return nil end
   run_plants(t, "parse plants", PARSE_PLANTS)

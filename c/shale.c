@@ -410,15 +410,48 @@ static STATUS_MUST_USE Status script_file(Arena *a, Str given, MountsItems mount
     return OK;
 }
 
-// Writes what the run printed to stdout, whole.
-static void write_stdout(Str out) {
+// A write's errno by the name Zig's posix layer gives it.
+static Str stdout_error_name(int e) {
+    switch (e) {
+    case EPIPE: return S("BrokenPipe");
+    case EBADF: return S("NotOpenForWriting");
+    case ENOSPC: return S("NoSpaceLeft");
+    case EIO: return S("InputOutput");
+    case EDQUOT: return S("DiskQuota");
+    case EFBIG: return S("FileTooBig");
+    case EACCES: return S("AccessDenied");
+    case EPERM: return S("PermissionDenied");
+    case EAGAIN: return S("WouldBlock");
+    case ECONNRESET: return S("ConnectionResetByPeer");
+    case ENOBUFS:
+    case ENOMEM: return S("SystemResources");
+    default: return S("Unexpected");
+    }
+}
+
+// Writes what the run printed to stdout, whole: "" once it is written, else
+// the name of the error that stopped the write, the rest dropped. A write
+// that takes nothing is an error too, never a loop.
+static Str write_stdout(Str out) {
     size_t done = 0;
     while (done < out.len) {
         ssize_t n = write(1, &at(out, done), out.len - done);
         if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) break;
+        if (n < 0) return stdout_error_name(errno);
+        if (n == 0) return S("Unexpected");
         done += (size_t)n;
     }
+    return S("");
+}
+
+// Says that stdout could not be written, `shale: stdout: <error>`, after
+// whatever else is said, and gives the exit code of a run that failed: what
+// a script printed and nobody read is no finished run.
+static int stdout_failed(Out *o, Str why) {
+    say(o, S("shale: stdout: "));
+    say(o, why);
+    say(o, S("\n"));
+    return EXIT_STOPPED;
 }
 
 // The machine budget's stop, for a parse or a compile that an arena refused
@@ -592,7 +625,9 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     // The run's zig-ast, if a Zig call started one, ends with the run, before
     // any report line, so no early return below can skip it.
     host_zig_stop();
-    write_stdout(buf_view(&r.out));
+    // A stdout that refuses the output does not end the run's work: the
+    // report, the jobs' end and the undo still come, then the failure.
+    Str out_failed = write_stdout(buf_view(&r.out));
     RunUsed used = {r.steps, r.reads, r.read_bytes, r.out.len};
     Names effects = {NULL, 0};
     if (c->verbose && store_effect_lines(&rs, a, &effects) != OK) return not_ported(o, S("a report past the arena"));
@@ -618,7 +653,9 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         if (paths_report_names_no_secret(&lh.paths, &rs.path, buf_view(&undone)) != OK) return not_ported(o, S("an undo past the arena"));
         say(o, buf_view(&undone));
     }
-    int exit_code = flush_and_exit(o, ran == OK ? EXIT_FINISHED : EXIT_STOPPED);
+    int ended = ran == OK ? EXIT_FINISHED : EXIT_STOPPED;
+    if (out_failed.len > 0) ended = stdout_failed(o, out_failed);
+    int exit_code = flush_and_exit(o, ended);
     arena_deinit(&host_arena);
     regex_cache_deinit(&r.patterns);
     arena_deinit(&output);
@@ -684,10 +721,11 @@ static int help_main(Out *o) {
     MountsResult mr = mounts_load(a, pinned != NULL, pinned != NULL ? from_c(pinned) : S(""), from_c(home_c != NULL ? home_c : "/"), &loaded, &why);
     if (mr == MOUNTS_OUT_OF_MEMORY) return not_ported(o, S("the mounts past the arena"));
     if (mr == MOUNTS_MALFORMED) {
-        write_stdout(buf_view(&w));
+        Str failed = write_stdout(buf_view(&w));
         say(o, S("shale: the mounts: "));
         say(o, why);
         say(o, S("\n"));
+        if (failed.len > 0) (void)stdout_failed(o, failed);
         return flush_and_exit(o, EXIT_REFUSED);
     }
     built = buf_lit(&w, "\nThe mounts, `name:path` in a script (") == OK && buf_str(&w, loaded.from) == OK && buf_lit(&w, "):\n") == OK;
@@ -709,16 +747,16 @@ static int help_main(Out *o) {
         built = built && buf_byte(&w, '\n') == OK;
     }
     if (!built) return not_ported(o, S("a help past the arena"));
-    write_stdout(buf_view(&w));
-    return flush_and_exit(o, EXIT_FINISHED);
+    Str failed = write_stdout(buf_view(&w));
+    return flush_and_exit(o, failed.len > 0 ? stdout_failed(o, failed) : EXIT_FINISHED);
 }
 
 // `shale --version`: the mode this `shale` was built in.
 static int version_main(Out *o) {
     Buf w = buf_make(o->arena);
     if (buf_lit(&w, "shale ") != OK || buf_str(&w, cli_build_mode()) != OK || buf_byte(&w, '\n') != OK) return not_ported(o, S("a version past the arena"));
-    write_stdout(buf_view(&w));
-    return flush_and_exit(o, EXIT_FINISHED);
+    Str failed = write_stdout(buf_view(&w));
+    return flush_and_exit(o, failed.len > 0 ? stdout_failed(o, failed) : EXIT_FINISHED);
 }
 
 // The preludes after the core's: the Linux and git
