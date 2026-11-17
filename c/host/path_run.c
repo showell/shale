@@ -125,20 +125,14 @@ static STATUS_MUST_USE Status msg_format(Buf *b, Str fmt, MsgArgs args) {
         }
         if (c == '{') {
             while (i < fmt.len && at(fmt, i) != '}') i++;
-            if (k >= args.len) {
-                fprintf(stderr, "path_run: a message's placeholder has no argument\n");
-                abort();
-            }
+            if (k >= args.len) c_bug("path_run: a message's placeholder has no argument");
             TRY(buf_str(b, at(args, k).text));
             k++;
             continue;
         }
         TRY(buf_byte(b, c));
     }
-    if (k != args.len) {
-        fprintf(stderr, "path_run: a message has an argument left over\n");
-        abort();
-    }
+    if (k != args.len) c_bug("path_run: a message has an argument left over");
     return OK;
 }
 
@@ -164,10 +158,7 @@ static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str 
             if (at(args, k).kind != MSG_HOST) continue;
             bool names = false;
             TRY(r->hook->names_secret(r->hook->ctx, r, pos, at(args, k).text, &names));
-            if (names) {
-                fprintf(stderr, "path_run: a stop's message names a secrets mount's folder\n");
-                abort();
-            }
+            if (names) c_bug("path_run: a stop's message names a secrets mount's folder");
         }
     }
     Buf b = buf_make(r->ctx->values);

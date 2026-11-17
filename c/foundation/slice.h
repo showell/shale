@@ -42,6 +42,25 @@ typedef struct {
 
 SLICE_TYPE(Bytes, char);
 
+// A bug in the C, never a script's stop: one line on stderr, `shale: a bug in
+// the C: <what>`, and the process ends on SIGABRT (a death test's
+// EXPECT_DIES). A script's mistake or a hostile input is a stop, with its
+// message, and never comes here. TCC doesn't take `noreturn` as ending the
+// function, so a caller that gives a value writes a return after the call,
+// never reached.
+static inline __attribute__((noreturn)) void c_bug(const char *what) { // cstr: a literal naming the bug
+    fprintf(stderr, "shale: a bug in the C: %s\n", what);
+    fflush(stderr);
+    abort();
+}
+
+// c_bug, with what the bug was about after its words: `<what>: <detail>`.
+static inline __attribute__((noreturn)) void c_bug_str(const char *what, Str detail) { // cstr: a literal naming the bug
+    fprintf(stderr, "shale: a bug in the C: %s: %.*s\n", what, (int)detail.len, detail.len == 0 ? "" : detail.ptr);
+    fflush(stderr);
+    abort();
+}
+
 // What a bad index calls before the process ends. Null ends it at once; a
 // test's child sets one that exits with a code of its own (`test.h`,
 // `EXPECT_TRAPS`).

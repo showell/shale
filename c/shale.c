@@ -612,10 +612,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         bool names = false;
         Pos none = {0, 0};
         if (paths_names_secret(&lh.paths, &rs.path, none, buf_view(&undone), &names) != OK) return not_ported(o, S("an undo past the arena"));
-        if (names) {
-            fprintf(stderr, "shale: an undo line names a secrets mount's folder\n");
-            abort();
-        }
+        if (names) c_bug("shale: an undo line names a secrets mount's folder");
         say(o, buf_view(&undone));
     }
     int exit_code = flush_and_exit(o, ran == OK ? EXIT_FINISHED : EXIT_STOPPED);

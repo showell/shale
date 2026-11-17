@@ -250,8 +250,7 @@ static inline void compile_patch(Compiler *c, uint32_t op, uint32_t target) {
     case OP_FOR_NUM_NEXT: o->c = target; return;
     default: break;
     }
-    fprintf(stderr, "compile: a patch of an op that does not jump\n");
-    abort();
+    c_bug("compile: a patch of an op that does not jump");
 }
 
 static inline void compile_push(Compiler *c, uint32_t n) {
@@ -661,10 +660,7 @@ static inline STATUS_MUST_USE Status compile_function(Compiler *c, const Functio
     uint32_t entry = (uint32_t)c->code.ops.len;
     TRY(compile_block(c, f->body, 0));
     TRY(compile_emit(c, OP_RET_NIL, 0, 0, f->pos));
-    if (c->operands != 0) {
-        fprintf(stderr, "compile: a function ends with operands left on the stack\n");
-        abort();
-    }
+    if (c->operands != 0) c_bug("compile: a function ends with operands left on the stack");
     out->name = f->name;
     out->pos = f->pos;
     out->entry = entry;

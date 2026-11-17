@@ -59,10 +59,7 @@ static STATUS_MUST_USE Status store_effect_lines(RunStore *rs, Arena *a, Names *
         bool names = false;
         Pos none = {0, 0};
         if (hook != NULL && hook->names_secret(hook->ctx, &rs->path, none, buf_view(&b), &names) != OK) return STOP;
-        if (names) {
-            fprintf(stderr, "builtins_store: a report line names a secrets mount's folder\n");
-            abort();
-        }
+        if (names) c_bug("builtins_store: a report line names a secrets mount's folder");
         at(all, k) = buf_view(&b);
     }
     out->ptr = lines;
@@ -72,10 +69,7 @@ static STATUS_MUST_USE Status store_effect_lines(RunStore *rs, Arena *a, Names *
 
 // The run's store; a store builtin on a run made with none is a bug in the C.
 static RunStore *builtin_store_of(Run *r) {
-    if (r->store == NULL) {
-        fprintf(stderr, "builtins_store: a store builtin ran on a run with no store\n");
-        abort();
-    }
+    if (r->store == NULL) c_bug("builtins_store: a store builtin ran on a run with no store");
     return r->store;
 }
 

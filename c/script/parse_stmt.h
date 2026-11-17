@@ -372,10 +372,7 @@ static inline STATUS_MUST_USE Status parse_function_named(Parser *p, Str name, u
 // C, and aborts.
 static inline size_t parse_index_sure(PreludeFunctions index, Str name) {
     int32_t i = parse_index_at(index, name);
-    if (i < 0) {
-        fprintf(stderr, "parse: a prelude function its index does not hold: %.*s\n", (int)name.len, name.ptr);
-        abort();
-    }
+    if (i < 0) c_bug_str("parse: a prelude function its index does not hold", name);
     return (size_t)i;
 }
 

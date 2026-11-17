@@ -247,10 +247,8 @@ static inline Str run_budget_message(RunCtx *r, BudgetKind k) {
     case BUDGET_COUNT: break;
     }
     // A stop on no budget is a bug in the C.
-    fprintf(stderr, "err: a budget stop names no budget\n");
-    abort();
-    // Never reached. TCC doesn't know `abort` ends the process, and refuses
-    // a function that might return no value.
+    c_bug("err: a budget stop names no budget");
+    // Never reached: TCC refuses a function that might return no value.
     return S("");
 }
 
@@ -277,10 +275,7 @@ static inline STATUS_MUST_USE Status run_oom(RunCtx *r, Pos pos) {
 // with no stop recorded (a refusal that skipped run_oom) is a bug in the C,
 // so the process ends.
 static inline STATUS_MUST_USE Status run_ended(const RunCtx *r, Status s) {
-    if (s == STOP && !r->stopped) {
-        fprintf(stderr, "err: a run stopped with no stop recorded (a refusal that skipped run_oom)\n");
-        abort();
-    }
+    if (s == STOP && !r->stopped) c_bug("err: a run stopped with no stop recorded (a refusal that skipped run_oom)");
     return s;
 }
 

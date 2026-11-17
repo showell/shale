@@ -453,8 +453,8 @@ static inline bool parse_is_const(const Parser *p, uint16_t slot) {
     for (size_t i = 0; i < p->frame.locals.len; i++) {
         if (at(p->frame.locals, i).slot == slot) return at(p->frame.locals, i).constant;
     }
-    fprintf(stderr, "parse: a local's slot that is in no frame\n");
-    abort();
+    c_bug("parse: a local's slot that is in no frame");
+    // Never reached: TCC refuses a function that might return no value.
     return false;
 }
 

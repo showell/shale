@@ -96,8 +96,7 @@ static inline void *arena_empty(size_t align) {
 // A misuse of the arena by its caller (a bad alignment, a free of memory it
 // did not hand out): a bug in the C, so the process ends.
 static inline void arena_misuse(const char *what) { // cstr: a literal naming the misuse
-    fprintf(stderr, "arena: %s\n", what);
-    abort();
+    c_bug_str("arena", (Str){what, strlen(what)});
 }
 
 static inline Arena arena_make(size_t limit) {

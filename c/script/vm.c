@@ -123,10 +123,7 @@ static STATUS_MUST_USE Status builtins_call(Run *r, Pos pos, Builtin b, ConstVal
         if (s->at_least == s->at_most) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes {d} argument{s}, given {d}", S("`"), name, S("` takes "), run_unum(r, s->at_least), S(" argument"), plural, S(", given "), run_unum(r, args.len));
         return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes {d} to {d} arguments, given {d}", S("`"), name, S("` takes "), run_unum(r, s->at_least), S(" to "), run_unum(r, s->at_most), S(" arguments, given "), run_unum(r, args.len));
     }
-    if (s->impl == NULL) {
-        fprintf(stderr, "vm: a call of `print`, the VM's own op, reached the builtins' table\n");
-        abort();
-    }
+    if (s->impl == NULL) c_bug("vm: a call of `print`, the VM's own op, reached the builtins' table");
     return s->impl(r, pos, args, out);
 }
 
@@ -712,8 +709,8 @@ static RUN_COLD STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *d
     }
     default: break;
     }
-    fprintf(stderr, "vm: op %d, one vm_run's loop runs itself, reached vm_op\n", (int)op->tag);
-    abort();
+    c_bug("vm: an op vm_run's loop runs itself reached vm_op");
+    // Never reached: TCC refuses a function that might return no value.
     return STOP;
 }
 

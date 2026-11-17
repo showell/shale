@@ -19,8 +19,7 @@ SLICE_TYPE(RegexGroups, RegexGroup);
 
 // A bug in the C, not a script's stop: the process ends.
 static void regex_bug(const char *what) { // cstr: a literal naming the bug
-    fprintf(stderr, "regex: %s\n", what);
-    abort();
+    c_bug_str("regex", (Str){what, strlen(what)});
 }
 
 static RegexWords regex_words(RegexSet *s) {

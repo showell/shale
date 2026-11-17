@@ -48,7 +48,7 @@ const PLANTS = {
    old = "if (inside) s = str_sub(((Str){b->ptr, b->len}), offset, offset + s.len);", new = "(void)offset;"},
   {name = "a STOP with no stop recorded is let through",
    aim = "a_stop_with_no_stop_recorded_ends_the_process", file = "err.h", caught_by = "test_err",
-   old = "if (s == STOP && !r->stopped) {", new = "if (0 && s == STOP && !r->stopped) {"},
+   old = "if (s == STOP && !r->stopped) c_bug(", new = "if (0 && s == STOP && !r->stopped) c_bug("},
   {name = "a death test's child takes no death signal",
    aim = "a_death_tests_child_dies_with_its_parent,a_failed_expect_in_a_child_ends_the_child_with_its_own_code", file = "test.h", caught_by = "test_test",
    old = "if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) != 0) _exit(3);", new = "(void)0;                                                 "},
