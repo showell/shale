@@ -4,8 +4,8 @@ Shale is being rewritten in C (Steve, 2026-11-17). The language is frozen
 byte for byte, and today's Zig Shale is the oracle. This page is the design
 the agents porting it share: how the C represents a run, and where it meets
 what is outside it. It holds no code. The C's style and its foundation (the
-arena, `Str`, `vec`, `map`, err.h) are on the `c-foundation` branch, in
-c/docs/style.md and c/foundation.
+arena, `Str`, `vec`, `map`, err.h) are in c/docs/style.md and c/foundation,
+and how the C is compiled is in c/docs/building.md.
 
 **What the port must match** is [`SURFACE.txt`](SURFACE.txt): every
 builtin, stop text, budget, flag and report line, generated from the Zig

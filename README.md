@@ -378,6 +378,8 @@ outside, on every input the checks hold it to
   `test`).
 - [docs/C-SEAMS.md](docs/C-SEAMS.md): the C port's shared design, its values,
   the arena's fidelity, the VM and the host's seams.
+- [c/docs/building.md](c/docs/building.md): how the C is compiled, with TCC,
+  GCC and its sanitizers, during the port and after it.
 - [cookbook/zig/README.md](cookbook/zig/README.md): recipes for finding a
   Zig file's seams, moving code along them and judging the move, each
   tested to parse. Recipes, not builtins: copy one and change it.
