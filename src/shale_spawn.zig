@@ -296,8 +296,8 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
         // again whether it is gone.
         var wait_ms: u64 = 1000;
         if (!exited and termed_at == null) wait_ms = @min(wait_ms, deadline -| now);
-        if (termed_at != null and !killed) wait_ms = @min(wait_ms, (termed_at.? + spec.grace_ms) -| now);
-        if (exited) wait_ms = @min(wait_ms, drain_until -| now);
+        if (termed_at != null and !killed and !group_done) wait_ms = @min(wait_ms, (termed_at.? + spec.grace_ms) -| now);
+        if (exited and now < drain_until) wait_ms = @min(wait_ms, drain_until - now);
         if (exited and !group_done) wait_ms = @min(wait_ms, 10);
 
         var fds: [4]linux.pollfd = undefined;
@@ -602,11 +602,18 @@ test "spawn: what the program leaves running in its group is ended before `run` 
     try testing.expect(goneOrKill(try grandchildPid(c.out.items)));
     c.out.clearRetainingCapacity();
     // A child that ignores TERM is KILLed at the grace's end, still before
-    // `run` returns; what it printed after its leader exited is kept.
-    o = try spawn(&.{ "grandchild-late", "20000" }, .{ .argv = &.{}, .env = &env, .timeout_ms = 10_000, .grace_ms = 300 }, &c);
+    // `run` returns; what it printed after its leader exited is kept. The
+    // loop waits that grace out asleep, not spinning: this process's own
+    // CPU time stays far below it.
+    var before: linux.rusage = undefined;
+    _ = linux.getrusage(linux.rusage.SELF, &before);
+    o = try spawn(&.{ "grandchild-late", "20000" }, .{ .argv = &.{}, .env = &env, .timeout_ms = 10_000, .grace_ms = 1000 }, &c);
+    var after: linux.rusage = undefined;
+    _ = linux.getrusage(linux.rusage.SELF, &after);
+    try testing.expect(usageMs(after) - usageMs(before) < 100);
     try testing.expectEqual(Ended.exit, o.ended);
     try testing.expectEqual(@as(?u8, 0), o.code);
-    try testing.expect(o.ms >= 300 and o.ms < 5_000);
+    try testing.expect(o.ms >= 1000 and o.ms < 5_000);
     try testing.expect(std.mem.endsWith(u8, c.out.items, "late\n"));
     try testing.expect(goneOrKill(try grandchildPid(c.out.items)));
 }
