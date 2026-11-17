@@ -577,16 +577,12 @@ fn grandchildPid(out: []const u8) !linux.pid_t {
     return std.fmt.parseInt(linux.pid_t, rest[0..end], 10);
 }
 
-/// Whether `pid` is gone, its zombie reaped too. A process still there is
-/// KILLed, so a failing test leaves nothing behind.
-fn goneOrKill(pid: linux.pid_t) bool {
+/// Whether `pid` is gone, its zombie reaped too. A test KILLs one still
+/// there, so a failing test leaves nothing behind.
+fn gone(pid: linux.pid_t) bool {
     var path: [64]u8 = undefined;
     const stat = std.mem.printSentinel(&path, "/proc/{d}/stat", .{pid}, 0) catch unreachable;
-    const fd = linux.open(stat, .{ .ACCMODE = .RDONLY }, 0);
-    if (linux.errno(fd) != .SUCCESS) return true;
-    _ = linux.close(@intCast(fd));
-    _ = linux.kill(pid, .KILL);
-    return false;
+    return linux.errno(linux.access(stat, 0)) != .SUCCESS;
 }
 
 test "spawn: what the program leaves running in its group is ended before `run` returns, by TERM, or by KILL at the grace" {
@@ -599,7 +595,11 @@ test "spawn: what the program leaves running in its group is ended before `run` 
     try testing.expectEqual(Ended.exit, o.ended);
     try testing.expectEqual(@as(?u8, 0), o.code);
     try testing.expect(o.ms < 1_500);
-    try testing.expect(goneOrKill(try grandchildPid(c.out.items)));
+    const termed = try grandchildPid(c.out.items);
+    if (!gone(termed)) {
+        _ = linux.kill(termed, .KILL);
+        return error.TestUnexpectedResult;
+    }
     c.out.clearRetainingCapacity();
     // A child that ignores TERM is KILLed at the grace's end, still before
     // `run` returns; what it printed after its leader exited is kept. The
@@ -615,7 +615,11 @@ test "spawn: what the program leaves running in its group is ended before `run` 
     try testing.expectEqual(@as(?u8, 0), o.code);
     try testing.expect(o.ms >= 1000 and o.ms < 5_000);
     try testing.expect(std.mem.endsWith(u8, c.out.items, "late\n"));
-    try testing.expect(goneOrKill(try grandchildPid(c.out.items)));
+    const killed = try grandchildPid(c.out.items);
+    if (!gone(killed)) {
+        _ = linux.kill(killed, .KILL);
+        return error.TestUnexpectedResult;
+    }
 }
 
 /// A sink that sends this thread a TERM when the output says "late", which
@@ -645,8 +649,43 @@ test "spawn: a TERM to shale after the program exits, while its group ends and i
     // The leader's own exit is kept beside the word.
     try testing.expectEqual(@as(?u8, 0), o.code);
     try testing.expect(o.ms < 5_000);
-    try testing.expect(goneOrKill(try grandchildPid(i.out.items)));
+    const g = try grandchildPid(i.out.items);
+    if (!gone(g)) {
+        _ = linux.kill(g, .KILL);
+        return error.TestUnexpectedResult;
+    }
     var now: linux.sigset_t = undefined;
     _ = linux.sigprocmask(linux.SIG.BLOCK, null, &now);
     try testing.expect(!linux.sigismember(&now, .TERM));
+}
+
+test "spawn: a sink that fails after the program exits KILLs what it left in its group before the failure is said" {
+    // Takes the output until the fixture's grandchild, which ignores TERM,
+    // prints "late" once its leader has exited; then fails, as the keep does
+    // at the host's cap.
+    const RefusingLate = struct {
+        out: std.ArrayList(u8) = .empty,
+        pub const Error = error{OutOfMemory};
+        fn write(r: *@This(), bytes: []const u8) error{OutOfMemory}!void {
+            try r.out.appendSlice(testing.allocator, bytes);
+            if (std.mem.indexOf(u8, r.out.items, "late\n") != null) return error.OutOfMemory;
+        }
+    };
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var r: RefusingLate = .{};
+    defer r.out.deinit(testing.allocator);
+    const env = [_][]const u8{"PATH=/usr/bin:/bin"};
+    try testing.expectError(error.OutOfMemory, run(testing.allocator, .{ .argv = &.{ fixturePath(&buf), "grandchild-late", "20000" }, .env = &env, .timeout_ms = 30_000, .grace_ms = 20_000 }, &r));
+    const g = try grandchildPid(r.out.items);
+    // The KILL is sent before the failure returns; its reaping is init's, a
+    // moment after.
+    var waited: u32 = 0;
+    while (!gone(g) and waited < 2000) : (waited += 10) {
+        const tick: linux.timespec = .{ .sec = 0, .nsec = 10_000_000 };
+        _ = linux.nanosleep(&tick, null);
+    }
+    if (!gone(g)) {
+        _ = linux.kill(g, .KILL);
+        return error.TestUnexpectedResult;
+    }
 }
