@@ -155,5 +155,7 @@ and its self-test plants a break of each one.
 - `c/build.shale` holds each file's printed count to its `TEST(` lines.
 - A test asserts every side: what changed, what didn't, and what was
   refused.
-- Each piece has planted faults in `c/build.shale`, and a build fails
-  unless a test catches each one.
+- Each piece has planted faults in `c/build.shale`, and its full tier
+  (`full=1`, run before a merge) fails unless a test catches each one. The
+  fast tier, the loop between edits, runs every test under tcc and the
+  discipline check, in a few seconds.

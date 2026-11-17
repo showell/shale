@@ -1,23 +1,45 @@
--- c/build.shale: the C foundation's builds, each running every test, then
--- what holds the tests themselves honest. In order:
---   tcc      the inner loop: `tcc -run` each test file, no binary made;
---   release  GCC, -std=c11 -O2 -Wall -Wextra -Werror;
---   asan     GCC, -std=c11 -O0 -Wall -Wextra -Werror with
---            -fsanitize=address,undefined, as every test run must have;
---   counts   each file's printed count is its `TEST(` count, under every build;
---   harness  tests/fixtures/harness_fails.c prints exactly its .expected;
---   reasons  `at_unchecked` without a literal, non-empty reason won't compile;
---   must use a Status left unused, bare or cast to void, won't compile;
---   plants   each planted fault in the foundation is caught (`PLANTS` below);
---   discipline  c/check_discipline.shale, and its own self-test;
---   command  c/shale.c, the C `shale`, under each compiler, its preludes
---            written first (c/gen_preludes.shale), each binary's `--check`
---            held to a script that parses and one that stops.
+-- c/build.shale: the C's builds and the checks that hold its tests honest,
+-- in two tiers.
+--
+--   shale c/build.shale          the fast tier, the inner loop between edits:
+--                                tcc runs every test file, each held to its
+--                                `TEST(` count, then the discipline check and
+--                                its self-test, and each block's counts: about
+--                                a second.
+--   shale c/build.shale full=1   the full tier, before a merge: the fast tier,
+--                                then every test file under GCC release
+--                                (-std=c11 -O2 -Wall -Wextra -Werror) and ASan
+--                                (-O0 with -fsanitize=address,undefined), each
+--                                held to its count, and every block's
+--                                full-only checks: the harness fixture, the
+--                                compiler's refusals, and every planted fault.
+--
+-- Every check runs in exactly one tier, and the full tier runs both.
+--
+-- **The blocks.** Each part of the C has a block below, a function taking
+-- `t`, the run: `t.full` says which tier runs, and `t.builds` lists the
+-- builds to run under, `{"tcc"}` in the fast tier and `{"tcc", "release",
+-- "asan"}` in the full. A block runs its fast checks always and its others
+-- under `if t.full then`, and the list at the bottom calls each block in
+-- turn. A new block is a function and one line in that list. `run_in(t,
+-- phase, argv, opts)` runs a program and charges its time to `phase`, and
+-- the table at the end prints each phase's programs, wall time and CPU
+-- time, so a slow run says where its time went. `compile_and_run(t, phase,
+-- build, src, include, bin)` builds and runs one file under a GCC build.
+-- The C is a unity build: a test file `#include`s the `.c` files it needs,
+-- so each test file is one compile, under tcc or GCC alike.
+--
+-- Plants are one-time proofs that a test can see its fault, so they live in
+-- the full tier alone: a change that adds or moves a test or a plant runs
+-- `full=1` before it merges. A block's plants are a list it hands to
+-- `run_plants(t, phase, plants)`, each planted in a copy of c/foundation and
+-- c/script (`dir = "script"` names a file in c/script).
+--
 -- It reads each compiler's version first. A compiler that is missing fails the
 -- run, loud, after everything it can run has run.
 --
--- Run from the repository's root: shale c/build.shale
--- budget: steps=20000000 programs=320
+-- Run from the repository's root: shale c/build.shale [full=1]
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
 
 const FOUNDATION = "c/foundation"
 const OUT = "c/out"
@@ -25,7 +47,8 @@ const WANT = "c-tests: the build's own test binary, made under c/out"
 
 -- Each fault planted in a copy of the foundation, one at a time: `file`'s
 -- `old` (there exactly once) becomes `new`, and the test file `caught_by`
--- must fail on it (`harness` is the fixture's run).
+-- must fail on it (`harness` is the fixture's run). A block's own plants
+-- (`REGEX_PLANTS`, `PARSE_PLANTS`) name `dir = "script"` for c/script.
 const PLANTS = {
   {name = "the budget ignores what is held", file = "arena.h", caught_by = "test_arena",
    old = "if (total > arena_sat_sub(a->limit, a->held)) {", new = "if (total > a->limit) {"},
@@ -85,12 +108,29 @@ const PLANTS = {
    old = "(int)t->current.len, t->current.ptr, file, line,", new = "(int)t->current.len, t->current.ptr, file, line * 0,"},
 }
 
+-- ── The run: its programs, charged to phases ────────────────────────────
+
+-- `run`, its time charged to `phase` of the run `t`.
+function run_in(t, phase, argv, opts)
+  local r = run(argv, opts)
+  if not has_key(t.phases, phase) then
+    push(t.phase_order, phase)
+    t.phases[phase] = {programs = 0, ms = 0, cpu_ms = 0}
+  end
+  local ph = t.phases[phase]
+  ph.programs = ph.programs + 1
+  ph.ms = ph.ms + r.ms
+  ph.cpu_ms = ph.cpu_ms + get(r, "cpu_ms", 0)
+  return r
+end
+
 -- The first line a compiler says of its version, or nil when it is missing.
 function version_of(argv)
   local r = attempt(run, argv, {timeout_ms = 10000, head = 1})
   if not r.ok then return nil end
   if r.value.code ~= 0 then return nil end
-  return trim(r.value.out)
+  -- `head` adds a line saying how many it left out; the version is the first.
+  return trim(lines(r.value.out)[1])
 end
 
 -- The flags of a GCC build, `include` the foundation's folder.
@@ -108,26 +148,29 @@ function gcc_flags(build, include)
   return f
 end
 
--- Compiles `src` under `build` and runs it, as {code, out, compile_ms, run_ms}.
+-- A test binary at `bin` run, as {code, out}; a run past its timeout has no
+-- code, so it is a failure, said as one.
+function run_binary(t, phase, bin)
+  local r = run_in(t, phase, {bin}, {timeout_ms = 60000, whole = 200000, want = WANT})
+  if not has_key(r, "code") then return {code = -1, out = r.out .. "\n(" .. r.ended .. ")"} end
+  return {code = r.code, out = r.out}
+end
+
+-- Compiles `src` under the GCC build `build` over `include` to `bin`, then
+-- runs it, as {code, out}; `extra` flags (a block's `-D`s) go before `src`.
 -- A compile that fails stops the run, naming it.
-function build_and_run(build, src, include, bin_dir)
-  local name = sub(basename(src), 1, #basename(src) - 2)
-  if build == "tcc" then
-    local r = run({"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. include, "-run", src}, {timeout_ms = 60000, tail = 40})
-    return {code = r.code, out = r.out, compile_ms = 0, run_ms = r.ms}
-  end
-  mkdir(bin_dir)
-  local bin = bin_dir .. "/" .. name
+function compile_and_run(t, phase, build, src, include, bin, extra?)
+  mkdir(dirname(bin))
   local argv = gcc_flags(build, include)
+  if extra ~= nil then
+    for f in extra do push(argv, f) end
+  end
   push(argv, src)
   push(argv, "-o")
   push(argv, bin)
-  local c = run(argv, {timeout_ms = 120000, tail = 40})
+  local c = run_in(t, phase, argv, {timeout_ms = 120000, tail = 40})
   if c.code ~= 0 then fail("`" .. build .. "` could not compile " .. src .. ":\n" .. c.out) end
-  local r = run({bin}, {timeout_ms = 20000, whole = 200000, want = WANT})
-  -- A run past its timeout has no code; it is a failure, said as one.
-  if not has_key(r, "code") then return {code = -1, out = r.out .. "\n(" .. r.ended .. ")", compile_ms = c.ms, run_ms = r.ms} end
-  return {code = r.code, out = r.out, compile_ms = c.ms, run_ms = r.ms}
+  return run_binary(t, phase, bin)
 end
 
 -- The `TEST(` lines in a test file: the count its run must print.
@@ -139,31 +182,17 @@ function test_count(src)
   return n
 end
 
--- Every test file under `build`, each run held to its count. Gives
--- {tests, compile_ms, run_ms}.
-function run_build(build, tests)
-  local total = 0
-  local compile_ms = 0
-  local run_ms = 0
-  for src in tests do
-    local r = build_and_run(build, src, FOUNDATION, OUT .. "/" .. build)
-    compile_ms = compile_ms + r.compile_ms
-    run_ms = run_ms + r.run_ms
-    if r.code ~= 0 then fail("`" .. build .. "`: " .. src .. " exited " .. r.code .. ":\n" .. r.out) end
-    local n = test_count(src)
-    local said = src .. ": " .. n .. " tests passed"
-    if trim(r.out) ~= said then fail("`" .. build .. "`: " .. src .. " has " .. n .. " TEST(s), and its run said:\n" .. r.out) end
-    total = total + n
-  end
-  return {tests = total, compile_ms = compile_ms, run_ms = run_ms}
+-- A test file's run held to its count: it exited 0 and said exactly that its
+-- `TEST(`s passed. Gives the count.
+function held_to_count(build, src, r)
+  if r.code ~= 0 then fail("`" .. build .. "`: " .. src .. " exited " .. r.code .. ":\n" .. r.out) end
+  local n = test_count(src)
+  local said = src .. ": " .. n .. " tests passed"
+  if trim(r.out) ~= said then fail("`" .. build .. "`: " .. src .. " has " .. n .. " TEST(s), and its run said:\n" .. r.out) end
+  return n
 end
 
--- Whether the harness fixture, built over `include`, prints exactly its
--- .expected and exits 1.
-function harness_holds(include, bin_dir)
-  local r = build_and_run("asan", "c/tests/fixtures/harness_fails.c", include, bin_dir)
-  return r.code == 1 and r.out == read("c/tests/fixtures/harness_fails.expected")
-end
+-- ── Plants ───────────────────────────────────────────────────────────────
 
 -- `text` with `old`, which must be there exactly once, made `new`.
 function replaced_once(text, old, new, what)
@@ -188,35 +217,70 @@ function caught_how(out)
   return join(unique(names), ", ")
 end
 
--- Each plant in its own copy of the foundation, under the asan build: the
--- test file it names must fail on it. Gives the lines to report.
-function run_plants()
+-- ── The foundation's block ──────────────────────────────────────────────
+
+-- Whether the harness fixture's run printed exactly its .expected and
+-- exited 1.
+function harness_holds(r)
+  return r.code == 1 and r.out == read("c/tests/fixtures/harness_fails.expected")
+end
+
+-- The folders of c/ a plant copies, so every relative `#include` between
+-- them reaches the copy.
+const PLANT_DIRS = {"foundation", "script", "host"}
+
+-- One plant, the `k`th of `phase`, in its own copy of the C: `p.file` in
+-- `p.dir` (`foundation` unless named; `script`, `host`) has its `old` made
+-- `new`, in copies of PLANT_DIRS laid out as c/ is, so a relative
+-- `#include` (`../script/cli.h`, `../../host/keep.c`) reaches the copy. The
+-- test file `p.caught_by`, a path under c/tests (`test_parse`,
+-- `host/test_keep`), is copied to its place beside them and must fail on it
+-- under the asan build, compiled with `extra` flags if given; `harness` is
+-- the fixture, compiled from its own path so the file names in its
+-- .expected hold. Gives the line to report.
+function run_plant(t, phase, p, k, extra?)
+  local dir = OUT .. "/plants/" .. k
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir .. "/tests")
+  for d in PLANT_DIRS do
+    if exists("c/" .. d) then copy("c/" .. d, dir .. "/" .. d) end
+  end
+  local file = dir .. "/" .. get(p, "dir", "foundation") .. "/" .. p.file
+  replace(file, replaced_once(read(file), p.old, p.new, p.name))
+  local line = ""
+  if p.caught_by == "harness" then
+    local r = compile_and_run(t, phase, "asan", "c/tests/fixtures/harness_fails.c", dir .. "/foundation", dir .. "/bin/harness_fails")
+    if harness_holds(r) then fail("plant `" .. p.name .. "` was not caught: the harness fixture printed what it expects") end
+    line = "  caught: " .. p.name .. " (" .. p.file .. "), by the harness fixture"
+  else
+    local src = dir .. "/tests/" .. p.caught_by .. ".c"
+    mkdir(dirname(src))
+    copy("c/tests/" .. p.caught_by .. ".c", src)
+    local r = compile_and_run(t, phase, "asan", src, dir .. "/foundation", dir .. "/bin/" .. basename(p.caught_by), extra)
+    if r.code == 0 then fail("plant `" .. p.name .. "` was not caught: " .. p.caught_by .. " passed with it in " .. p.file) end
+    line = "  caught: " .. p.name .. " (" .. p.file .. "), by " .. basename(p.caught_by) .. ": " .. caught_how(r.out)
+  end
+  remove_tree(dir)
+  return line
+end
+
+-- Each of `plants` run in turn, under `phase`, with `extra` flags if
+-- given: prints how many were caught, then each one's line.
+function run_plants(t, phase, plants, extra?)
   local said = {}
   local k = 0
-  for p in PLANTS do
+  for p in plants do
     k = k + 1
-    local dir = OUT .. "/plants/" .. k
-    if exists(dir) then remove_tree(dir) end
-    mkdir(OUT .. "/plants")
-    copy(FOUNDATION, dir)
-    local file = dir .. "/" .. p.file
-    replace(file, replaced_once(read(file), p.old, p.new, p.name))
-    if p.caught_by == "harness" then
-      if harness_holds(dir, dir .. "/bin") then fail("plant `" .. p.name .. "` was not caught: the harness fixture printed what it expects") end
-      push(said, "  caught: " .. p.name .. " (" .. p.file .. "), by the harness fixture")
-    else
-      local r = build_and_run("asan", "c/tests/" .. p.caught_by .. ".c", dir, dir .. "/bin")
-      if r.code == 0 then fail("plant `" .. p.name .. "` was not caught: " .. p.caught_by .. " passed with it in " .. p.file) end
-      push(said, "  caught: " .. p.name .. " (" .. p.file .. "), by " .. p.caught_by .. ": " .. caught_how(r.out))
-    end
-    remove_tree(dir)
+    push(said, run_plant(t, phase, p, k, extra))
   end
-  return said
+  print(phase .. ": " .. #said .. " of " .. #plants .. " caught")
+  for l in said do print(l) end
+  return nil
 end
 
 -- `at_unchecked` with no reason, an empty one or one that is no literal
 -- must not compile.
-function check_reasons()
+function check_reasons(t)
   local dir = OUT .. "/reasons"
   if exists(dir) then remove_tree(dir) end
   mkdir(dir)
@@ -230,7 +294,7 @@ function check_reasons()
     local argv = gcc_flags("release", FOUNDATION)
     push(argv, "-fsyntax-only")
     push(argv, src)
-    local r = run(argv, {timeout_ms = 30000, tail = 5})
+    local r = run_in(t, "refusals", argv, {timeout_ms = 30000, tail = 5})
     if r.code == 0 then fail("`" .. c.call .. "` compiled: an unchecked index must carry a literal reason") end
   end
   remove_tree(dir)
@@ -240,7 +304,7 @@ end
 -- A Status dropped, bare or cast to void, must not compile under GCC's
 -- -Werror; the same call with its answer tested must. Gives how many were
 -- refused.
-function check_must_use()
+function check_must_use(t)
   local dir = OUT .. "/must_use"
   if exists(dir) then remove_tree(dir) end
   mkdir(dir)
@@ -260,7 +324,7 @@ function check_must_use()
     push(argv, src)
     push(argv, "-o")
     push(argv, dir .. "/" .. c.name .. ".o")
-    local r = run(argv, {timeout_ms = 30000, tail = 5})
+    local r = run_in(t, "refusals", argv, {timeout_ms = 30000, tail = 5})
     if c.compiles and r.code ~= 0 then fail("`" .. c.body .. "` did not compile, so the dropped cases prove nothing:\n" .. r.out) end
     if not c.compiles then
       if r.code == 0 then fail("`" .. c.body .. "` compiled: a dropped Status must be refused") end
@@ -272,88 +336,67 @@ function check_must_use()
   return refused
 end
 
--- The C `shale` under `build`, at c/out/<build>/shale, then its `--check` of
--- one script that parses and one that stops, each held to Zig's exact report.
--- Gives the compile's time.
-function build_command(build)
-  local dir = OUT .. "/" .. build
-  mkdir(dir)
-  local bin = dir .. "/shale"
-  local argv = {"tcc", "-std=c11", "-Wall", "-Werror"}
-  if build ~= "tcc" then argv = gcc_flags(build, FOUNDATION) end
-  for a in {"-I" .. OUT .. "/gen", "-Ic", "c/shale.c", "-o", bin} do push(argv, a) end
-  local c = run(argv, {timeout_ms = 120000, tail = 40})
-  if c.code ~= 0 then fail("`" .. build .. "` could not compile c/shale.c:\n" .. c.out) end
-  local good = OUT .. "/command/good.shale"
-  local bad = OUT .. "/command/bad.shale"
-  if exists(OUT .. "/command") then remove_tree(OUT .. "/command") end
-  mkdir(OUT .. "/command")
-  create(good, "function f(x) return x end\nprint(f(trim(\" a \")))\n")
-  create(bad, "print(1)\nlocal x = 1 @ 2\n")
-  create(OUT .. "/command/mounts", "")
-  local env = {SHALE_PRELUDE = "", SHALE_MOUNTS = real(OUT .. "/command/mounts")}
-  local g = run({bin, "--check", good}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
-  if g.code ~= 0 or trim(g.out) ~= "── checked: it parses and compiles; nothing ran" then fail("`" .. build .. "`'s shale --check of a script that parses said:\n" .. g.out) end
-  local b = run({bin, "--check", bad}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
-  local said = "── stopped at " .. bad .. ":2:13: syntax: a character no token starts with, `@` (0 steps)\n── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes"
-  if b.code ~= 1 or trim(b.out) ~= said then fail("`" .. build .. "`'s shale --check of a script that stops said:\n" .. b.out) end
-  return c.ms
+-- Every test file under each of `t.builds`, each run held to its count;
+-- then, in the full tier, the harness fixture, the compiler's refusals and
+-- the plants.
+function foundation_block(t)
+  for b in t.builds do
+    local total = 0
+    for src in t.tests do
+      local r = nil
+      if b == "tcc" then
+        r = run_in(t, "tcc", {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. FOUNDATION, "-run", src}, {timeout_ms = 60000, tail = 40})
+      else
+        local bin = OUT .. "/" .. b .. "/" .. sub(basename(src), 1, #basename(src) - 2)
+        r = compile_and_run(t, b, b, src, FOUNDATION, bin)
+      end
+      total = total + held_to_count(b, src, r)
+    end
+    print(b .. ": " .. total .. " tests in " .. #t.tests .. " files passed")
+  end
+  if not t.full then return nil end
+
+  if not harness_holds(compile_and_run(t, "asan", "asan", "c/tests/fixtures/harness_fails.c", FOUNDATION, OUT .. "/asan/harness_fails")) then
+    fail("the harness fixture did not print exactly tests/fixtures/harness_fails.expected")
+  end
+  print("harness: the fixture's 6 failures, each named with its line, and its count")
+  print("reasons: " .. check_reasons(t) .. " unchecked indexes without a literal reason refused by the compiler")
+  print("must use: " .. check_must_use(t) .. " dropped Status answers refused by GCC under -Werror")
+
+  run_plants(t, "plants", PLANTS)
+  return nil
 end
 
-function seconds(ms)
-  return (ms // 1000) .. "." .. ((ms % 1000) // 100) .. " s"
+-- ── The discipline block ────────────────────────────────────────────────
+
+-- c/check_discipline.shale over the C, then its own self-test, in both tiers.
+function discipline_block(t)
+  print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale"}, {timeout_ms = 60000, tail = 20})).out))
+  print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale", "self_test=1"}, {timeout_ms = 60000, tail = 20})).out))
+  return nil
 end
-
-local gcc = version_of({"gcc", "--version"})
-local tcc = version_of({"tcc", "-v"})
-if gcc == nil then fail("gcc is not installed: `sudo apt install gcc` (it builds the release and the sanitizers)") end
-print("gcc: " .. gcc)
-print("tcc: " .. (tcc or "MISSING"))
-
-local tests = {}
-for p in glob("c/tests/test_*.c") do push(tests, p) end
-sort(tests)
-
-local builds = {"release", "asan"}
-if tcc ~= nil then builds = {"tcc", "release", "asan"} end
-for b in builds do
-  local r = run_build(b, tests)
-  print(b .. ": " .. r.tests .. " tests in " .. #tests .. " files passed; compile " .. seconds(r.compile_ms) .. ", run " .. seconds(r.run_ms))
-end
-
-if not harness_holds(FOUNDATION, OUT .. "/asan") then fail("the harness fixture did not print exactly tests/fixtures/harness_fails.expected") end
-print("harness: the fixture's 6 failures, each named with its line, and its count")
-print("reasons: " .. check_reasons() .. " unchecked indexes without a literal reason refused by the compiler")
-print("must use: " .. check_must_use() .. " dropped Status answers refused by GCC under -Werror")
-
-print(trim(must(run({"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5})).out))
-for b in builds do
-  print("command " .. b .. ": c/out/" .. b .. "/shale built in " .. seconds(build_command(b)) .. "; its --check holds a script that parses and one that stops")
-end
-
-local said = run_plants()
-print("plants: " .. #said .. " of " .. #PLANTS .. " caught")
-for l in said do print(l) end
-
-print(trim(must(run({"shale", "c/check_discipline.shale"}, {timeout_ms = 60000, tail = 20})).out))
-print(trim(must(run({"shale", "c/check_discipline.shale", "self_test=1"}, {timeout_ms = 60000, tail = 20})).out))
 
 -- ── c/script/regex: its own block ──────────────────────────────────────
--- test_regex.c runs above with every test file. Here: its count held to
--- REGEX_TESTS, regex_test.zig's to REGEX_ZIG_TESTS (a Zig test added is one
--- the C has yet to port), and the faults below planted in a copy of
--- c/script, each caught by test_regex.c under asan.
+-- test_regex.c runs in the foundation's block with every test file. Here,
+-- in both tiers: its count held to REGEX_TESTS, regex_test.zig's to
+-- REGEX_ZIG_TESTS (a Zig test added is one the C has yet to port). In the
+-- full tier: the faults below planted in a copy of c/script, each caught by
+-- test_regex.c under asan (`run_plants`).
 
 const REGEX_TESTS = 16
 const REGEX_ZIG_TESTS = 10
 const REGEX_PLANTS = {
-  {name = "a split follows its less preferred way first",
+  {name = "a split follows its less preferred way first", dir = "script", file = "regex.c", caught_by = "test_regex",
    old = "second.pc = i.y;\n                at(sc->stack, top) = second;\n                top++;\n                t.pc = i.x;",
    new = "second.pc = i.x;\n                at(sc->stack, top) = second;\n                top++;\n                t.pc = i.y;"},
-  {name = "the first bytes leave out a class's", old = "regex_set_union(&got, &at(sets, i.x));", new = "(void)sets;"},
-  {name = "the skip passes the byte a match begins at", old = "if (regex_set_has(first, str_byte(rest, i))) return from + i;", new = "if (regex_set_has(first, str_byte(rest, i))) return from + i + 1;"},
-  {name = "a state forgets its loops' bits", old = "return at(p->base, pc) + k;", new = "return at(p->base, pc) + 0 * k;"},
-  {name = "a count's optional copies are one short", old = "for (size_t k = least; k < most; k++) TRY(RegexNodeVec_push(&list, rest));", new = "for (size_t k = least + 1; k < most; k++) TRY(RegexNodeVec_push(&list, rest));"},
+  {name = "the first bytes leave out a class's", dir = "script", file = "regex.c", caught_by = "test_regex",
+   old = "regex_set_union(&got, &at(sets, i.x));", new = "(void)sets;"},
+  {name = "the skip passes the byte a match begins at", dir = "script", file = "regex.c", caught_by = "test_regex",
+   old = "if (regex_set_has(first, str_byte(rest, i))) return from + i;", new = "if (regex_set_has(first, str_byte(rest, i))) return from + i + 1;"},
+  {name = "a state forgets its loops' bits", dir = "script", file = "regex.c", caught_by = "test_regex",
+   old = "return at(p->base, pc) + k;", new = "return at(p->base, pc) + 0 * k;"},
+  {name = "a count's optional copies are one short", dir = "script", file = "regex.c", caught_by = "test_regex",
+   old = "for (size_t k = least; k < most; k++) TRY(RegexNodeVec_push(&list, rest));", new = "for (size_t k = least + 1; k < most; k++) TRY(RegexNodeVec_push(&list, rest));"},
 }
 
 -- The `test "` lines of a Zig test file.
@@ -365,50 +408,80 @@ function zig_test_count(src)
   return n
 end
 
--- Each regex plant in its own copy of c/script, test_regex.c beside it so its
--- `../script/regex.c` is the copy's. Gives the lines to report.
-function run_regex_plants(plants)
-  local said = {}
-  local k = 0
-  for p in plants do
-    k = k + 1
-    local dir = OUT .. "/regex_plants/" .. k
-    if exists(dir) then remove_tree(dir) end
-    mkdir(dir .. "/tests")
-    copy("c/script", dir .. "/script")
-    copy("c/tests/test_regex.c", dir .. "/tests/test_regex.c")
-    local file = dir .. "/script/regex.c"
-    replace(file, replaced_once(read(file), p.old, p.new, p.name))
-    local r = build_and_run("asan", dir .. "/tests/test_regex.c", FOUNDATION, dir .. "/bin")
-    if r.code == 0 then fail("regex plant `" .. p.name .. "` was not caught: test_regex passed with it in c/script/regex.c") end
-    push(said, "  caught: " .. p.name .. " (regex.c), by test_regex: " .. caught_how(r.out))
-    remove_tree(dir)
-  end
-  return said
+function regex_block(t)
+  local regex_tests = test_count("c/tests/test_regex.c")
+  if regex_tests ~= REGEX_TESTS then fail("c/tests/test_regex.c has " .. regex_tests .. " TEST(s), and REGEX_TESTS says " .. REGEX_TESTS) end
+  local regex_zig = zig_test_count("src/script/regex_test.zig")
+  if regex_zig ~= REGEX_ZIG_TESTS then fail("src/script/regex_test.zig has " .. regex_zig .. " tests, and REGEX_ZIG_TESTS says " .. REGEX_ZIG_TESTS .. ": port the new one to c/tests/test_regex.c") end
+  print("regex: " .. regex_tests .. " C tests, " .. regex_zig .. " of them regex_test.zig's")
+  if not t.full then return nil end
+  run_plants(t, "regex plants", REGEX_PLANTS)
+  return nil
 end
-
-local regex_tests = test_count("c/tests/test_regex.c")
-if regex_tests ~= REGEX_TESTS then fail("c/tests/test_regex.c has " .. regex_tests .. " TEST(s), and REGEX_TESTS says " .. REGEX_TESTS) end
-local regex_zig = zig_test_count("src/script/regex_test.zig")
-if regex_zig ~= REGEX_ZIG_TESTS then fail("src/script/regex_test.zig has " .. regex_zig .. " tests, and REGEX_ZIG_TESTS says " .. REGEX_ZIG_TESTS .. ": port the new one to c/tests/test_regex.c") end
-print("regex: " .. regex_tests .. " C tests, " .. regex_zig .. " of them regex_test.zig's")
-local regex_said = run_regex_plants(REGEX_PLANTS)
-print("regex plants: " .. #regex_said .. " of " .. #REGEX_PLANTS .. " caught")
-for l in regex_said do print(l) end
 -- ── end of c/script/regex's block ──────────────────────────────────────
 
--- ─────────────────────────────────────────────────────────────────────────
--- The host's process plumbing, c/host (keep.c, job_record.c, spawn.c): its
--- own block, apart from the foundation's above and the script's. In order:
---   host tests  each c/tests/host/test_*.c under tcc, release and asan, held
---               to its `TEST(` count, the spawn fixture built for each first;
---   host plants each fault in HOST_PLANTS, in a copy of c/host beside a
---               copy of its tests, caught by the test file it names;
---   vs zig      spawn and the keep against this script's own `run`, Zig's,
---               on the same programs (`HOST_VS_ZIG`): every field the same,
---               `ms` and `cpu_ms` within HOST_MS_SLACK.
+-- ── The command: c/shale.c and c/script's parser ───────────────────────
+-- test_lex.c and test_parse.c run in the foundation's block with every test
+-- file. Here: c/gen_preludes.shale writes the preludes the C `shale`
+-- embeds, then c/shale.c is built under each of `t.builds` (tcc in the fast
+-- tier, release and asan added in the full), and each binary's `--check` is
+-- held to a script that parses and one that stops. In the full tier: the
+-- faults below planted in a copy of c/script, each caught by its test file.
 
-const HOST = "c/host"
+const PARSE_PLANTS = {
+  {name = "a `break` outside a loop words its stop its own way", dir = "script", file = "parse.h", caught_by = "test_parse",
+   old = [=[S("`break` outside a loop")]=], new = [=[S("`break` is outside a loop")]=]},
+}
+
+-- The C `shale` under `build`, at c/out/<build>/shale, then its `--check` of
+-- one script that parses and one that stops, each held to Zig's exact report.
+function build_command(t, build)
+  local dir = OUT .. "/" .. build
+  mkdir(dir)
+  local bin = dir .. "/shale"
+  local argv = {"tcc", "-std=c11", "-Wall", "-Werror"}
+  if build ~= "tcc" then argv = gcc_flags(build, FOUNDATION) end
+  for a in {"-I" .. OUT .. "/gen", "-Ic", "c/shale.c", "-o", bin} do push(argv, a) end
+  local c = run_in(t, "command " .. build, argv, {timeout_ms = 120000, tail = 40})
+  if c.code ~= 0 then fail("`" .. build .. "` could not compile c/shale.c:\n" .. c.out) end
+  local good = OUT .. "/command/good.shale"
+  local bad = OUT .. "/command/bad.shale"
+  if exists(OUT .. "/command") then remove_tree(OUT .. "/command") end
+  mkdir(OUT .. "/command")
+  create(good, "function f(x) return x end\nprint(f(trim(\" a \")))\n")
+  create(bad, "print(1)\nlocal x = 1 @ 2\n")
+  create(OUT .. "/command/mounts", "")
+  local env = {SHALE_PRELUDE = "", SHALE_MOUNTS = real(OUT .. "/command/mounts")}
+  local g = run_in(t, "command " .. build, {bin, "--check", good}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
+  if g.code ~= 0 or trim(g.out) ~= "── checked: it parses and compiles; nothing ran" then fail("`" .. build .. "`'s shale --check of a script that parses said:\n" .. g.out) end
+  local b = run_in(t, "command " .. build, {bin, "--check", bad}, {timeout_ms = 20000, tail = 10, env = env, want = WANT})
+  local said = "── stopped at " .. bad .. ":2:13: syntax: a character no token starts with, `@` (0 steps)\n── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes"
+  if b.code ~= 1 or trim(b.out) ~= said then fail("`" .. build .. "`'s shale --check of a script that stops said:\n" .. b.out) end
+  return nil
+end
+
+function command_block(t)
+  print(trim(must(run_in(t, "command preludes", {"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5})).out))
+  for b in t.builds do
+    build_command(t, b)
+    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops")
+  end
+  if not t.full then return nil end
+  run_plants(t, "parse plants", PARSE_PLANTS)
+  return nil
+end
+-- ── end of the command's block ─────────────────────────────────────────
+
+-- ── The host's process plumbing, c/host ─────────────────────────────────
+-- keep.c, job_record.c and spawn.c, apart from the foundation and the
+-- script. In both tiers: each c/tests/host/test_*.c under each of
+-- `t.builds`, held to its `TEST(` count, the spawn fixture built for each
+-- first (with GCC's release flags: it is a program the tests run, not a
+-- test). In the full tier: each fault in HOST_PLANTS caught by the test file
+-- it names, then spawn and the keep against this script's own `run`, Zig's,
+-- on the same programs (`HOST_VS_ZIG`): every field the same, `ms` and
+-- `cpu_ms` within HOST_MS_SLACK.
+
 const HOST_OUT = "c/out/host"
 const HOST_FIXTURE = "c/tests/host/fixtures/spawn_fixture.c"
 const HOST_PROBE = "c/tests/host/fixtures/spawn_probe.c"
@@ -416,29 +489,29 @@ const HOST_WANT = "c-tests: the host's own test fixture and probe, built under c
 
 -- Each fault planted in a copy of c/host, as PLANTS are in the foundation.
 const HOST_PLANTS = {
-  {name = "a line exactly `width` long is cut", file = "keep.c", caught_by = "test_keep",
+  {name = "a line exactly `width` long is cut", dir = "host", file = "keep.c", caught_by = "host/test_keep",
    old = "bool whole = l.len <= k->o.width && !over;", new = "bool whole = l.len < k->o.width && !over;"},
-  {name = "a line past KEEP_LINE_MOST is kept whole", file = "keep.c", caught_by = "test_keep",
+  {name = "a line past KEEP_LINE_MOST is kept whole", dir = "host", file = "keep.c", caught_by = "host/test_keep",
    old = "if (piece_len > room) k->line_over = true;", new = "if (0 && piece_len > room) k->line_over = true;"},
-  {name = "the context before a match is passed newest first", file = "keep.c", caught_by = "test_keep",
+  {name = "the context before a match is passed newest first", dir = "host", file = "keep.c", caught_by = "host/test_keep",
    old = "            KeepSlot *s = &at(k->back, k->back_at);\n            k->back_at = (k->back_at + 1) % k->back.len;", new = "            KeepSlot *s = &at(k->back, (k->back_at + k->back_len - 1) % k->back.len);"},
-  {name = "a record's key given twice is read", file = "job_record.c", caught_by = "test_job_record",
+  {name = "a record's key given twice is read", dir = "host", file = "job_record.c", caught_by = "host/test_job_record",
    old = "if (at(seen, i)) return false;", new = "if (0 && at(seen, i)) return false;"},
-  {name = "a number may start with `_`", file = "job_record.c", caught_by = "test_job_record",
+  {name = "a number may start with `_`", dir = "host", file = "job_record.c", caught_by = "host/test_job_record",
    old = "if (at(digits, 0) == '_' || at(digits, digits.len - 1) == '_') return false;", new = "if (at(digits, digits.len - 1) == '_') return false;"},
-  {name = "the deadline passes a millisecond late", file = "spawn.c", caught_by = "test_spawn",
+  {name = "the deadline passes a millisecond late", dir = "host", file = "spawn.c", caught_by = "host/test_spawn",
    old = "if (!exited && !has_termed && now >= deadline) {", new = "if (!exited && !has_termed && now > deadline) {"},
-  {name = "the KILL reaches the leader alone, not its group", file = "spawn.c", caught_by = "test_spawn",
+  {name = "the KILL reaches the leader alone, not its group", dir = "host", file = "spawn.c", caught_by = "host/test_spawn",
    old = "    if (step.kill) {\n        kill(-l->pid, SIGKILL);", new = "    if (step.kill) {\n        kill(l->pid, SIGKILL);"},
-  {name = "the drain waits for the pipe to close", file = "spawn.c", caught_by = "test_spawn",
+  {name = "the drain waits for the pipe to close", dir = "host", file = "spawn.c", caught_by = "host/test_spawn",
    old = "if (l.exited && (l.out_r < 0 || now >= l.drain_until)) break;", new = "(void)now; if (l.exited && l.out_r < 0) break;"},
-  {name = "a sink's stop leaves the program running", file = "spawn.c", caught_by = "test_spawn",
+  {name = "a sink's stop leaves the program running", dir = "host", file = "spawn.c", caught_by = "host/test_spawn",
    old = "            if (!l.exited) {\n                kill(-pid, SIGKILL);\n                wait4(pid, &l.raw, 0, NULL);\n            }", new = "            (void)0;"},
-  {name = "a TERM to shale is taken for a timeout", file = "spawn.c", caught_by = "test_spawn",
+  {name = "a TERM to shale is taken for a timeout", dir = "host", file = "spawn.c", caught_by = "host/test_spawn",
    old = "            l->why = SPAWN_INTERRUPTED;", new = "            l->why = SPAWN_TIMEOUT;"},
-  {name = "shale's mask is not put back", file = "spawn.c", caught_by = "test_spawn",
+  {name = "shale's mask is not put back", dir = "host", file = "spawn.c", caught_by = "host/test_spawn",
    old = "if (f->masked) sigprocmask(SIG_SETMASK, &f->old_mask, NULL);", new = "(void)f->old_mask;"},
-  {name = "SIGPIPE keeps its default, and a stdin no one reads kills shale", file = "spawn.c", caught_by = "test_spawn",
+  {name = "SIGPIPE keeps its default, and a stdin no one reads kills shale", dir = "host", file = "spawn.c", caught_by = "host/test_spawn",
    old = "sigaction(SIGPIPE, &act, NULL);", new = "(void)act;"},
 }
 
@@ -464,90 +537,22 @@ const HOST_VS_ZIG = {
   {args = {"signal-parent", "15", "20000"}, timeout_ms = 30000, tail = 5},
 }
 
--- The flags of a host build, with the fixture's path for spawn's tests. A
--- program includes the c/host files it needs by their relative paths (one
+-- The `-D` that tells spawn's tests where `build`'s fixture is. A program
+-- includes the c/host files it needs by their relative paths (one
 -- translation unit), so a plant's copy is found beside its test's copy.
-function host_flags(build)
-  local fixture = "-DSPAWN_FIXTURE=\"" .. HOST_OUT .. "/" .. build .. "/spawn_fixture\""
-  if build == "tcc" then return {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. FOUNDATION, fixture} end
-  local f = gcc_flags(build, FOUNDATION)
-  push(f, fixture)
-  return f
+function host_define(build)
+  return "-DSPAWN_FIXTURE=\"" .. HOST_OUT .. "/" .. build .. "/spawn_fixture\""
 end
 
--- A program of c/tests/host compiled under `build` (tcc builds its fixtures
--- with GCC's release flags: they are programs the tests run, not tests).
-function host_compile(build, src, bin)
-  local argv = host_flags(build)
-  if build == "tcc" then argv = host_flags("release") end
-  push(argv, src)
-  push(argv, "-o")
-  push(argv, bin)
-  local c = run(argv, {timeout_ms = 120000, tail = 40})
-  if c.code ~= 0 then fail("`" .. build .. "` could not compile " .. src .. ":\n" .. c.out) end
-  return c.ms
-end
-
--- Runs the test file `src` under `build`, as {code, out, compile_ms, run_ms}.
-function host_test_run(build, src, bin_dir)
-  local name = sub(basename(src), 1, #basename(src) - 2)
-  if build == "tcc" then
-    local argv = host_flags("tcc")
-    push(argv, "-run")
-    push(argv, src)
-    local r = run(argv, {timeout_ms = 60000, tail = 40, want = HOST_WANT})
-    if not has_key(r, "code") then return {code = -1, out = r.out .. "\n(" .. r.ended .. ")", compile_ms = 0, run_ms = r.ms} end
-    return {code = r.code, out = r.out, compile_ms = 0, run_ms = r.ms}
-  end
-  mkdir(bin_dir)
-  local bin = bin_dir .. "/" .. name
-  local argv = host_flags(build)
-  push(argv, src)
-  push(argv, "-o")
-  push(argv, bin)
-  local c = run(argv, {timeout_ms = 120000, tail = 40})
-  if c.code ~= 0 then fail("`" .. build .. "` could not compile " .. src .. ":\n" .. c.out) end
-  local r = run({bin}, {timeout_ms = 60000, whole = 200000, want = HOST_WANT})
-  if not has_key(r, "code") then return {code = -1, out = r.out .. "\n(" .. r.ended .. ")", compile_ms = c.ms, run_ms = r.ms} end
-  return {code = r.code, out = r.out, compile_ms = c.ms, run_ms = r.ms}
-end
-
-function host_run_build(build, tests)
-  local dir = HOST_OUT .. "/" .. build
-  mkdir(dir)
-  local compile_ms = host_compile(build, HOST_FIXTURE, dir .. "/spawn_fixture")
-  local run_ms = 0
-  local total = 0
-  for src in tests do
-    local r = host_test_run(build, src, dir)
-    compile_ms = compile_ms + r.compile_ms
-    run_ms = run_ms + r.run_ms
-    if r.code ~= 0 then fail("`" .. build .. "`: " .. src .. " exited " .. r.code .. ":\n" .. r.out) end
-    local n = test_count(src)
-    if trim(r.out) ~= src .. ": " .. n .. " tests passed" then fail("`" .. build .. "`: " .. src .. " has " .. n .. " TEST(s), and its run said:\n" .. r.out) end
-    total = total + n
-  end
-  return {tests = total, compile_ms = compile_ms, run_ms = run_ms}
-end
-
-function host_run_plants()
-  local said = {}
-  local k = 0
-  for p in HOST_PLANTS do
-    k = k + 1
-    local dir = HOST_OUT .. "/plants/" .. k
-    if exists(dir) then remove_tree(dir) end
-    mkdir(dir .. "/tests")
-    copy(HOST, dir .. "/host")
-    copy("c/tests/host", dir .. "/tests/host")
-    local file = dir .. "/host/" .. p.file
-    replace(file, replaced_once(read(file), p.old, p.new, p.name))
-    local r = host_test_run("asan", dir .. "/tests/host/" .. p.caught_by .. ".c", dir .. "/bin")
-    if r.code == 0 then fail("host plant `" .. p.name .. "` was not caught: " .. p.caught_by .. " passed with it in " .. p.file) end
-    push(said, "  caught: " .. p.name .. " (" .. p.file .. "), by " .. p.caught_by .. ": " .. caught_how(r.out))
-    remove_tree(dir)
-  end
-  return said
+-- A fixture or probe of c/tests/host compiled with GCC's release flags to
+-- `bin`.
+function host_compile(t, phase, src, bin)
+  mkdir(dirname(bin))
+  local argv = gcc_flags("release", FOUNDATION)
+  for a in {host_define("release"), src, "-o", bin} do push(argv, a) end
+  local c = run_in(t, phase, argv, {timeout_ms = 120000, tail = 40})
+  if c.code ~= 0 then fail("could not compile " .. src .. ":\n" .. c.out) end
+  return nil
 end
 
 -- The fields of the probe's first line, as a map.
@@ -575,18 +580,18 @@ end
 
 -- Each of HOST_VS_ZIG run by this script's `run` (Zig's) and by the probe
 -- (the C's spawn and keep), every field compared. Gives the lines to report.
-function host_vs_zig()
+function host_vs_zig(t)
   local fixture = HOST_OUT .. "/release/spawn_fixture"
   local probe = HOST_OUT .. "/release/spawn_probe"
-  host_compile("release", HOST_PROBE, probe)
+  host_compile(t, "host vs zig", HOST_PROBE, probe)
   local said = {}
   for c in HOST_VS_ZIG do
     local argv = {real(fixture)}
     for a in c.args do push(argv, a) end
-    local z = attempt(run, argv, {timeout_ms = c.timeout_ms, tail = c.tail, want = HOST_WANT})
+    local z = attempt(run_in, t, "host vs zig", argv, {timeout_ms = c.timeout_ms, tail = c.tail, want = HOST_WANT})
     local pargv = {probe, "" .. c.timeout_ms, "" .. c.tail}
     for a in argv do push(pargv, a) end
-    local p = run(pargv, {timeout_ms = 120000, whole = 1000000, want = HOST_WANT})
+    local p = run_in(t, "host vs zig", pargv, {timeout_ms = 120000, whole = 1000000, want = HOST_WANT})
     local what = join(c.args, " ")
     if p.code ~= 0 then fail("vs zig `" .. what .. "`: the probe exited " .. p.code .. ":\n" .. p.out) end
     local nl = find(p.out, "\n")
@@ -618,22 +623,83 @@ function host_vs_zig()
   return said
 end
 
-local host_tests = {}
-for p in glob("c/tests/host/test_*.c") do push(host_tests, p) end
-sort(host_tests)
-for b in builds do
-  local r = host_run_build(b, host_tests)
-  print("host " .. b .. ": " .. r.tests .. " tests in " .. #host_tests .. " files passed; compile " .. seconds(r.compile_ms) .. ", run " .. seconds(r.run_ms))
+function host_block(t)
+  local tests = {}
+  for p in glob("c/tests/host/test_*.c") do push(tests, p) end
+  sort(tests)
+  for b in t.builds do
+    local phase = "host " .. b
+    host_compile(t, phase, HOST_FIXTURE, HOST_OUT .. "/" .. b .. "/spawn_fixture")
+    local total = 0
+    for src in tests do
+      local r = nil
+      if b == "tcc" then
+        r = run_in(t, phase, {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. FOUNDATION, host_define("tcc"), "-run", src}, {timeout_ms = 60000, tail = 40, want = HOST_WANT})
+        if not has_key(r, "code") then r = {code = -1, out = r.out .. "\n(" .. r.ended .. ")"} end
+      else
+        r = compile_and_run(t, phase, b, src, FOUNDATION, HOST_OUT .. "/" .. b .. "/" .. sub(basename(src), 1, #basename(src) - 2), {host_define(b)})
+      end
+      total = total + held_to_count(b, src, r)
+    end
+    print("host " .. b .. ": " .. total .. " tests in " .. #tests .. " files passed")
+  end
+  if not t.full then return nil end
+  run_plants(t, "host plants", HOST_PLANTS, {host_define("asan")})
+  local vs = host_vs_zig(t)
+  print("host vs zig: " .. #vs .. " of " .. #HOST_VS_ZIG .. " programs answered the same")
+  for l in vs do print(l) end
+  return nil
 end
-local host_said = host_run_plants()
-print("host plants: " .. #host_said .. " of " .. #HOST_PLANTS .. " caught")
-for l in host_said do print(l) end
-local vs = host_vs_zig()
-print("host vs zig: " .. #vs .. " of " .. #HOST_VS_ZIG .. " programs answered the same")
-for l in vs do print(l) end
--- ── the end of the host's block ──────────────────────────────────────────
+-- ── end of the host's block ─────────────────────────────────────────────
 
+-- ── The phases' times ───────────────────────────────────────────────────
+
+function seconds(ms)
+  return (ms // 1000) .. "." .. ((ms % 1000) // 100) .. " s"
+end
+
+-- The table of each phase's programs, wall time and CPU time.
+function report_phases(t)
+  local rows = {}
+  local ms = 0
+  local cpu = 0
+  for name in t.phase_order do
+    local ph = t.phases[name]
+    push(rows, {phase = name, programs = ph.programs, wall = seconds(ph.ms), cpu = seconds(ph.cpu_ms)})
+    ms = ms + ph.ms
+    cpu = cpu + ph.cpu_ms
+  end
+  push(rows, {phase = "all", programs = "", wall = seconds(ms), cpu = seconds(cpu)})
+  print(table(rows, {"phase", "programs", "wall", "cpu"}))
+  return nil
+end
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = {full = arg("full", 0) == 1, builds = {"tcc"}, phases = {}, phase_order = {}}
+t.gcc = version_of({"gcc", "--version"})
+local tcc = version_of({"tcc", "-v"})
+if t.gcc == nil then fail("gcc is not installed: `sudo apt install gcc` (it builds the release and the sanitizers)") end
+print("gcc: " .. t.gcc)
+print("tcc: " .. (tcc or "MISSING"))
+if tcc == nil then t.builds = {} end
+if t.full then
+  push(t.builds, "release")
+  push(t.builds, "asan")
+end
+t.tests = {}
+for p in glob("c/tests/test_*.c") do push(t.tests, p) end
+sort(t.tests)
+
+-- The blocks, in order.
+foundation_block(t)
+discipline_block(t)
+regex_block(t)
+command_block(t)
+host_block(t)
+
+report_phases(t)
 if tcc == nil then
   fail("tcc is not installed, so the inner loop did not run: `sudo apt install tcc` (Ubuntu noble's tcc 0.9.27+git20200814)")
 end
-print("PASS")
+if t.full then print("PASS full") else print("PASS fast (full=1 adds GCC release, ASan and the plants)") end
