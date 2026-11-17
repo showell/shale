@@ -11,7 +11,12 @@
 // Puts back what `h`'s journal holds, writing a line to `w` for each path it
 // could not put back and one for the whole, into `*all` whether everything
 // was. STOP only when `w`'s arena refuses a line.
-// DRAGON: the undo journal. What runs here runs after a stop, on absolute paths the journal took before the run changed them, so it deletes and writes outside any check: a journal entry made from anything but paths_note_before's path would delete or overwrite whatever it names. Only paths_note_before pushes onto the journal, after may_change has confined the path. test_undo plants a file, a folder and nothing there.
+// DRAGON: the undo journal. This runs after a stop, deleting and writing
+// absolute paths outside any check, so an entry made from anything else
+// would delete or overwrite whatever it names.
+// REMEDY: only paths_note_before pushes onto the journal, after may_change
+// has confined the path; test_paths plants a file, a folder and nothing
+// there.
 static STATUS_MUST_USE Status undo_changes(Paths *h, Buf *w, bool *all) {
     Arena *a = h->arena;
     *all = true;

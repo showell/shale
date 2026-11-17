@@ -156,7 +156,12 @@ static STATUS_MUST_USE Status paths_names_secret(void *ctx, PathRun *r, Pos pos,
 // A path (`shown`, at `abs`) that reaches a secrets mount's folder by
 // another way, the root or another mount, is refused as the mount's own
 // path is. A folder above it may be listed: names are not secrets.
-// DRAGON: the secrets rule. A root path (`keys/tok`) or another mount's (`all:keys/tok`) is not the secrets mount's by its name, so only this test of where it lands keeps it out. It compares the OS path as written, so a link would slip past; the walk of every part with lstat (paths_refuse_links) runs first and refuses any link. test_paths plants the root's, another mount's and a link's way in.
+// DRAGON: the secrets rule. A root path (`keys/tok`) or another mount's
+// (`all:keys/tok`) is not the secrets mount's by its name, and a link would
+// slip past a test of the OS path as written.
+// REMEDY: this test of where the path lands, after paths_refuse_links has
+// refused every link on the way; test_paths plants the root's, another
+// mount's and a link's way in.
 static STATUS_MUST_USE Status paths_refuse_secrets_under(Paths *h, PathRun *r, Pos pos, Str shown, Str abs) {
     for (size_t k = 0; k < h->mounts.len; k++) {
         const Mount *m = &at(h->mounts, k);
@@ -196,7 +201,13 @@ static STATUS_MUST_USE Status paths_mount_of(Paths *h, PathRun *r, Pos pos, Str 
 // each part `lstat`ed and charged a step; a missing part ends the walk.
 // The stop names the path as the script wrote it, `shown_prefix` first.
 // Zig's `refuseLinks`.
-// DRAGON: the store's boundaries. A link anywhere below the root or a mount's folder would let a path that passes every check land outside them (`dir/up -> ../../etc`). This walk is the whole of the no-link rule: each part is lstat'ed, never followed, before the store is called. A link made between this walk and the store's call is the one race it cannot see. test_paths plants a link to a file, to a folder, in the middle, in a mount and out of the root.
+// DRAGON: the store's boundaries. A link anywhere below the root or a
+// mount's folder would let a path that passes every check land outside them
+// (`dir/up -> ../../etc`). A link made between this walk and the store's call
+// is the one race it cannot see.
+// REMEDY: each part is lstat'ed, never followed, before the store is
+// called; test_paths plants a link to a file, to a folder, in the middle, in
+// a mount and out of the root.
 static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, Str rest, Str shown_prefix) {
     if (rest.len == 0) return OK;
     Buf walked = buf_make(paths_values(r));
@@ -306,7 +317,11 @@ static STATUS_MUST_USE Status paths_resolve(void *ctx, PathRun *r, Pos pos, Str 
     }
     const Mount *m = NULL;
     TRY(paths_mount_of(h, r, pos, path, colon, &m));
-    // DRAGON: the secrets rule. A secrets mount's own name is refused here, before its folder is opened or walked, for every read, listing, `stat`, `real` and change alike; only paths_secret_path and paths_secret_target take one. test_paths plants each builtin's path through it.
+    // DRAGON: the secrets rule. A secrets mount's own name reaching the store
+    // would read, list or change its tokens.
+    // REMEDY: refused here, before its folder is opened or walked, for every
+    // call; only paths_secret_path and paths_secret_target take one.
+    // test_paths plants each builtin's path through it.
     if (m->secrets) {
         return path_fail(r, pos, CLASS_REFUSED, S("\"{s}\": the mount `{s}` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_HOST(m->name)));
     }
@@ -396,7 +411,12 @@ static bool paths_under_writable_within(Paths *h, PathRun *r, Pos pos, Str abs, 
 // Refused, before anything changes, past the journal's room, for a file it
 // cannot read, and for what is neither a file nor a folder. Zig's
 // `noteBefore`.
-// DRAGON: the undo journal. A change made before its path is journaled could not be put back, so may_change calls this before every write, and it stops the run rather than let a change it could not undo through. The journal's bytes are bounded by PATHS_JOURNAL_MOST, checked against the file's size before it is read. test_undo plants the room, an unreadable file, a fifo and an unsearchable folder.
+// DRAGON: the undo journal. A change made before its path is journaled
+// could not be put back.
+// REMEDY: may_change calls this before every write, and it stops the run
+// rather than let through a change it could not undo; the room is checked
+// against the file's size before it is read. test_paths plants the room, an
+// unreadable file, a fifo and an unsearchable folder.
 static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, Str abs_in) {
     Str abs = mounts_trim_slash(abs_in);
     for (size_t k = 0; k < h->journal.len; k++) {
@@ -436,7 +456,12 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
 // by its name or by a root path into its folder (a writable mount inside it
 // decides for its own folder), then journals the path under
 // `--undo-on-stop`. Zig's `mayChange`.
-// DRAGON: the store's boundaries. A read-only mount is read-only only because every change builtin asks this before it writes (builtins_change's `admit`); a builtin that skipped it would write through `ro`. The check is of where the path lands as well as its name, so `frozen/a.zig` from the root is refused as `ro:a.zig` is. test_paths plants each.
+// DRAGON: the store's boundaries. A builtin that skipped this would write
+// through a read-only mount.
+// REMEDY: every change builtin asks it before it writes (builtins_change's
+// `admit`), and it judges where the path lands as well as its name, so
+// `frozen/a.zig` from the root is refused as `ro:a.zig` is. test_paths plants
+// each.
 static STATUS_MUST_USE Status paths_may_change(void *ctx, PathRun *r, Pos pos, Str rel, Str full) {
     Paths *h = ctx;
     Str abs = S("");
@@ -567,7 +592,13 @@ SLICE_TYPE(PathsStrs, const Str);
 // program reads. `who` is `run` or `job_start`; `env_keys` and `env_values`
 // are the `env` map's string entries, in its order. Zig's
 // `refuseSecretArgs`.
-// DRAGON: the secrets rule. This is an argv guard, not a sandbox: a program that builds a path itself, takes one after a prefix (`-Tkeys/tok`) or follows a link it made reaches a secret all the same (SHALE-AGENTS.md says so). It refuses what a script spells: the folder by its text, by `.` and `..` against the program's folder, after an option's `=`, through a link, and a folder above it. test_paths plants each.
+// DRAGON: the secrets rule. This is an argv guard, not a sandbox: a program
+// that builds a path itself, takes one after a prefix (`-Tkeys/tok`) or
+// follows a link it made reaches a secret all the same (SHALE-AGENTS.md says
+// so).
+// REMEDY: it refuses what a script spells: the folder by its text, by `.` and
+// `..` against the program's folder, after an option's `=`, through a link,
+// and a folder above it; test_paths plants each.
 static STATUS_MUST_USE Status paths_refuse_secret_args(Paths *h, PathRun *r, Pos pos, Str who, PathsStrs argv, Str cwd, PathsStrs env_keys, PathsStrs env_values) {
     for (size_t k = 0; k < h->mounts.len; k++) {
         const Mount *m = &at(h->mounts, k);

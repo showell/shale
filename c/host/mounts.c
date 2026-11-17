@@ -40,7 +40,12 @@ static Str mounts_trim_slash(Str p) {
 
 // Whether `abs` is the folder `dir` or a path below it (`dir` absolute, `/`
 // included).
-// DRAGON: the store's boundaries. Every mount's, the root's and the secrets folder's containment is this test. A prefix alone would put `/tmp/xy` inside `/tmp/x`, so a read-only or secrets mount's guard would miss a sibling that only begins with its name, or claim one; the byte after the prefix must be `/` or the end. test_mounts plants the prefix.
+// DRAGON: the store's boundaries. Every mount's, the root's and the secrets
+// folder's containment is this test, and a prefix alone would put `/tmp/xy`
+// inside `/tmp/x`, so a read-only or secrets mount's guard would miss a
+// sibling that only begins with its name, or claim one.
+// REMEDY: the byte after the prefix must be `/` or the end; test_paths
+// plants the prefix.
 static bool mounts_in_folder(Str abs, Str dir) {
     if (str_eq(dir, S("/"))) return abs.len > 0 && str_byte(abs, 0) == '/';
     return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');

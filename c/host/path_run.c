@@ -86,7 +86,10 @@ SLICE_TYPE(MsgArgs, const MsgArg);
 typedef const MsgArg MsgArgArray[];
 #define MSG_ARGS(...) msg_args_of((MsgArgArray){__VA_ARGS__, {{NULL, 0}, MSG_END}})
 
-// DRAGON: bounds. The walk to MSG_END is unchecked, so a list without its end would be read past. Only MSG_ARGS calls this, and it appends the end to every list it makes.
+// DRAGON: bounds. The walk to MSG_END is unchecked, so a list without its
+// end would be read past.
+// REMEDY: only MSG_ARGS calls this, and it appends the end to every list it
+// makes.
 static MsgArgs msg_args_of(const MsgArg *items) {
     MsgArgs open = {items, SIZE_MAX};
     size_t n = 0;
@@ -148,7 +151,14 @@ static STATUS_MUST_USE Status msg_format(Buf *b, Str fmt, MsgArgs args) {
 // when the arena refuses it, as Zig's `Run.fail` falls back to its format
 // string. Every stop built from a path, in path_run.c and paths.c, is made
 // here.
-// DRAGON: the secrets rule. This is the secrets rule's one check: a host-made argument (an OS path, a mount's folder) that names a secrets mount's folder would print where the tokens are, so the process ends here, a bug in the C, rather than say it. A script's own text may come back (the plain absolute stop gives back what the script wrote), and so may the one Zig message that names a mount's folder, MSG_MOUNT_FOLDER. test_paths plants a host argument that names one.
+// DRAGON: the secrets rule. A host-made argument (an OS path, a mount's
+// folder) that names a secrets mount's folder would print where the tokens
+// are.
+// REMEDY: the rule's one check, here: such an argument ends the process, a
+// bug in the C, before any message is made. A script's own text may come
+// back (the plain absolute stop gives back what the script wrote), and so
+// may the one Zig text that names a mount's folder, MSG_MOUNT_FOLDER.
+// test_paths plants a host argument that names one.
 static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str fmt, MsgArgs args) {
     if (r->hook != NULL && r->hook->names_secret != NULL) {
         for (size_t k = 0; k < args.len; k++) {
@@ -255,7 +265,12 @@ static STATUS_MUST_USE Status path_absolute_stop(PathRun *r, Pos pos, Str who, S
 // mount `m`; the hook resolves a mount's path; `""` is the root only when
 // `allow_root`; a leading `/`, a `..` and a part FAT refuses each stop. The
 // steps charged are the path's bytes.
-// DRAGON: the store's boundaries. Every path a builtin hands the store comes through here, so a path that skipped it could name anything the process can reach. The hook's answer is trusted whole, which is why paths.c checks a mount's every part itself. test_paths plants `..`, `/`, an empty part and the whole root.
+// DRAGON: the store's boundaries. Every path a builtin hands the store
+// comes through here, so a path that skipped it could name anything the
+// process can reach; the hook's answer is trusted whole.
+// REMEDY: `..`, a leading `/`, an empty part and the whole root are refused
+// below, and paths.c checks a mount's every part itself; test_paths plants
+// each.
 static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, bool allow_root, StorePath *out) {
     Str rel = given;
     if (str_eq(given, S("."))) {

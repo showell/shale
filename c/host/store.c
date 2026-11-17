@@ -185,7 +185,11 @@ static bool store_join(Arena *a, Str dir, Str name, Str *out) {
 
 // A copy of `s` ended by a NUL, for the kernel, into `*out`: NameTooLong
 // past PATH_MAX, as Zig's posix layer answers.
-// DRAGON: the store's boundaries. A NUL inside `s` would end the kernel's copy early, so the call would act on a shorter path than the one every check judged (`a\0/../x` checked as one, opened as `a`). It is refused as Zig's posix calls refuse it, BadPathName, before any call.
+// DRAGON: the store's boundaries. A NUL inside `s` would end the kernel's
+// copy early, so the call would act on a shorter path than the one every
+// check judged (`a\0/../x` checked as one, opened as `a`).
+// REMEDY: refused here as Zig's posix layer refuses it, BadPathName, before
+// any call; test_store plants it.
 static StoreErr store_cstr(Arena *a, Str s, const char **out) {
     // Zig copies a path into a PATH_MAX buffer for the kernel, and one that
     // does not fit with its NUL is NameTooLong.
@@ -481,7 +485,11 @@ static StoreErr store_os_delete_tree(Arena *a, Str path) {
     const char *c = NULL;
     e = store_cstr(a, path, &c);
     if (e != STORE_OK) return e;
-    // DRAGON: the store's boundaries. O_NOFOLLOW on the folder itself: a folder swapped for a link to another tree between the unlink above and this open must not be entered and emptied. A link met inside is unlinked as a file, never followed.
+    // DRAGON: the store's boundaries. A folder swapped for a link to another
+    // tree between the unlink above and this open would be entered and
+    // emptied.
+    // REMEDY: O_NOFOLLOW on the folder; a link met inside is unlinked as a
+    // file by the recursion's first step, never followed.
     int fd = open(c, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) return store_err_of(errno);
     DIR *d = fdopendir(fd);
