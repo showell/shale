@@ -113,7 +113,7 @@ static Str procs_text(Arena *a, const char *fmt, ...) { // cstr: a test's litera
 
 TEST(procs_lists_a_process_whole_in_pid_order_and_never_this_one_or_one_above_it) {
     static Ran x;
-    RanOpts o = {NULL, false, false, false};
+    RanOpts o = {NULL, false, false};
     ran_init(&x, o);
     ProcsChild c = procs_waiter(&x.host);
     Str start = procs_start_of(&x.host, c.pid);
@@ -144,7 +144,7 @@ TEST(procs_lists_a_process_whole_in_pid_order_and_never_this_one_or_one_above_it
 
 TEST(a_command_line_past_one_read_is_read_whole_and_one_past_args_most_says_it_was_cut) {
     static Ran x;
-    RanOpts o = {NULL, false, false, false};
+    RanOpts o = {NULL, false, false};
     ran_init(&x, o);
     // Past one read of 4096 bytes: read to its end.
     char *long_p = ARENA_ARRAY(&x.host, char, 6001);
@@ -182,7 +182,7 @@ TEST(a_command_line_past_one_read_is_read_whole_and_one_past_args_most_says_it_w
 
 TEST(proc_stop_stops_the_process_by_pid_and_start_and_a_stale_start_is_left_alone) {
     static Ran x;
-    RanOpts o = {NULL, false, false, false};
+    RanOpts o = {NULL, false, false};
     ran_init(&x, o);
     ProcsChild c = procs_waiter(&x.host);
     // A start that is not the process's: not `p`, left alone.
@@ -227,7 +227,7 @@ TEST(proc_stop_refuses_this_process_those_above_it_and_pid_1_whatever_it_is_hand
     ProcsPidList all = {pids, 5};
     for (size_t i = 0; i < all.len; i++) {
         static Ran x;
-        RanOpts o = {NULL, false, false, false};
+        RanOpts o = {NULL, false, false};
         ran_init(&x, o);
         ran_run(&x, procs_text(&x.host, "host(\"proc_stop\", {pid = %d, start = \"0\"})\n", at(all, i)), ran_budgets());
         EXPECT_EQ(x.ran, STOP);
@@ -285,7 +285,7 @@ TEST(a_process_the_run_may_not_signal_stops_proc_stop_named_never_a_success) {
 
 TEST(attack_a_process_that_ignores_term_gets_kill_after_two_seconds) {
     static Ran x;
-    RanOpts o = {NULL, false, false, false};
+    RanOpts o = {NULL, false, false};
     ran_init(&x, o);
     ProcsArgs none = {NULL, 0};
     ProcsChild c = procs_child(&x.host, "trap '' TERM; read x", none);

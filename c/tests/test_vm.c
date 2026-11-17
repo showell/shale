@@ -147,8 +147,9 @@ TEST(maps_and_list_loops_take_zigs_steps) {
 // `host`, naming the call, and `attempt` catches it like any other stop.
 TEST(with_no_host_host_stops_naming_the_call_and_attempt_catches_it) {
     static Ran x;
-    RanOpts metal = {NULL, false, false, true};
-    ran_init(&x, metal);
+    RanOpts o = {NULL, false, false};
+    ran_init(&x, o);
+    x.no_host = true;
     ran_run(&x, S("local x = host(\"run\", {\"zig\", \"build\"}, {})\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT_EQ(x.r.ctx.stop.cls, CLASS_HOST);
@@ -156,7 +157,8 @@ TEST(with_no_host_host_stops_naming_the_call_and_attempt_catches_it) {
     EXPECT_EQ(x.r.out.len, 0);
     ran_free(&x);
     static Ran y;
-    ran_init(&y, metal);
+    ran_init(&y, o);
+    y.no_host = true;
     ran_run(&y, S("function f() return host(\"real\", \"runs:x\") end local r = attempt(f) print(r.ok, r.class)\n"), ran_budgets());
     EXPECT_EQ(y.ran, OK);
     EXPECT_STR(buf_view(&y.r.out), S("false\thost\n"));

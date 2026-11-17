@@ -37,13 +37,12 @@
 #include "../host/host_zig.c"
 #include "../host/host_call.c"
 
-// How a run is made: its mounts file's text, `--verbose` (a diff in full),
-// `--undo-on-stop`, and whether it has no host (metal's run).
+// How a run is made: its mounts file's text, `--verbose` (a diff in full)
+// and `--undo-on-stop`.
 typedef struct {
     const char *mounts; // cstr: a test's literal
     bool verbose;
     bool undo;
-    bool no_host;
 } RanOpts;
 
 // One source's run: its arenas, its folder, its parse and code, its store
@@ -68,7 +67,8 @@ typedef struct {
     Status ran;
     // What `--undo-on-stop` said, after a stop.
     Str undone;
-    // A run with no host's calls, as metal's.
+    // A run with no host's calls, as metal's: set between ran_init and
+    // ran_run.
     bool no_host;
 } Ran;
 
@@ -141,7 +141,6 @@ static void ran_init(Ran *x, RanOpts o) {
     store_linux(&x->linux_store, &x->store.store);
     paths_make(&x->lh.paths, &x->host, x->root, x->dir, Mounts_items(&loaded.mounts), loaded.from);
     x->lh.paths.undo = o.undo;
-    x->no_host = o.no_host;
     SpawnStrs env = {NULL, 0};
     host_make(&x->lh, env);
     paths_hook(&x->lh.paths, &x->hook);
