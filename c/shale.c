@@ -185,25 +185,55 @@ static STATUS_MUST_USE Status reader_why_parts(Str *why, bool *got, Arena *a, St
 
 #define reader_why(why, got, n, a, ...) reader_why_parts((why), (got), (a), (StrPieces){{__VA_ARGS__}}, (n))
 
-// Whether any part of `rest` below the mount's folder `dir` is a symbolic
-// link. DRAGON: the store's boundary. Zig's store follows no link below a
-// mount's folder, so a link there could lead a library's read out of it. This
-// walk refuses one before the read; a link made between it and the open is a
-// race the Zig shares, through its own walk.
-static bool has_link_below(Arena *a, Str dir, Str rest) {
+// A charge past the step budget: Zig's `charge` leaves the count one past it,
+// and the budget's stop says how many steps it had.
+static STATUS_MUST_USE Status steps_ran_out(LibraryReader *r, Str *why) {
+    r->used.steps = r->budgets.steps + 1;
+    Buf b = buf_make(r->arena);
+    TRY(buf_lit(&b, "the step budget ("));
+    TRY(buf_u64(&b, r->budgets.steps));
+    TRY(buf_lit(&b, " steps) ran out"));
+    *why = buf_view(&b);
+    return OK;
+}
+
+// Zig's `refuseLinks` (src/shale_host_linux.zig): whether any part of `rest`
+// below the mount's folder `dir` is a symbolic link, each part checked with
+// `lstat` and charged a step, a missing part ending the walk. On a link,
+// `*why` names it as Zig's stop does. DRAGON: the store's boundary. The store
+// follows no link below a mount's folder, so a link there could lead a
+// library's read out of it. This walk refuses one before the read; a link
+// made between the walk and the open is a race the Zig shares.
+static STATUS_MUST_USE Status refuse_links(LibraryReader *r, Str dir, Str rest, Str prefix, Str *why, bool *refused) {
+    *refused = false;
+    if (rest.len == 0) return OK;
+    Arena *a = r->arena;
     Str sofar = dir;
     Str left = rest;
     bool done = false;
-    Str part = {0};
+    Str part;
+    size_t shown_end = 0;
     while (cli_split(&left, &done, '/', &part)) {
-        if (join(a, sofar, part, &sofar) != OK) return true;
+        if (r->used.steps >= r->budgets.steps) {
+            TRY(steps_ran_out(r, why));
+            *refused = true;
+            return OK;
+        }
+        r->used.steps++;
+        TRY(join(a, sofar, part, &sofar));
+        shown_end += part.len + (shown_end > 0 ? 1 : 0);
         const char *c = c_string(a, sofar);
+        if (c == NULL) return STOP;
         struct stat st;
-        if (c == NULL) return true;
-        if (lstat(c, &st) != 0) return false;
-        if (S_ISLNK(st.st_mode)) return true;
+        if (lstat(c, &st) != 0) return OK;
+        if (S_ISLNK(st.st_mode)) {
+            bool got;
+            TRY(reader_why(why, &got, 3, a, prefix, str_sub(rest, 0, shown_end), S(" is a symbolic link: the store follows none")));
+            *refused = true;
+            return OK;
+        }
     }
-    return false;
+    return OK;
 }
 
 // Zig's `-|`: what is left of a budget, never wrapping below zero once a
@@ -221,8 +251,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     *got = false;
     // `pathArg` charges a step a byte of the path.
     if (path.len > sat_sub(r->budgets.steps, r->used.steps)) {
-        r->used.steps = r->budgets.steps + 1;
-        *why = S("the step budget ran out");
+        TRY(steps_ran_out(r, why));
         return OK;
     }
     r->used.steps += path.len;
@@ -256,7 +285,9 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     struct stat dst;
     if (dir_c == NULL) return STOP;
     if (stat(dir_c, &dst) != 0 || !S_ISDIR(dst.st_mode)) return reader_why(why, got, 5, a, S("the mount `"), m->name, S("` is "), m->dir, S(", which is not a folder there"));
-    if (has_link_below(a, m->dir, rest)) return reader_why(why, got, 3, a, S("C Shale: \""), path, S("\" has a symbolic link in it, and the store's refusal of one is not ported yet"));
+    bool linked = false;
+    TRY(refuse_links(r, m->dir, rest, str_sub(path, 0, colon + 1), why, &linked));
+    if (linked) return OK;
     // `countRead`: the read's count first, then the file's size.
     if (r->used.reads >= r->budgets.reads) {
         *why = S("the store-read budget (count) ran out");
@@ -292,8 +323,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     // `chargeBytes`: a step for every 16 bytes read, rounded up.
     uint64_t charge = (text.len + 15) / 16;
     if (charge > sat_sub(r->budgets.steps, r->used.steps)) {
-        r->used.steps = r->budgets.steps + 1;
-        *why = S("the step budget ran out");
+        TRY(steps_ran_out(r, why));
         return OK;
     }
     r->used.steps += charge;
