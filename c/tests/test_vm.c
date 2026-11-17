@@ -10,6 +10,24 @@
 
 #include "ran.c"
 
+// A source run on a fresh root with no mounts.
+static void ran_source(Ran *x, Str src, Budgets b) {
+    RanOpts none = {NULL, false, false};
+    ran_init(x, none);
+    ran_run(x, src, b);
+}
+
+static Budgets cli_budgets(void) {
+    Budgets b = budgets_default();
+    b.output_bytes = 64 * 1024;
+    return b;
+}
+
+// The report a run's stop prints, as the C `shale` writes it.
+static Str ran_report(Ran *x, Arena *a) {
+    return ran_report_of(x, a, false);
+}
+
 TEST(arithmetic_and_print_take_zigs_steps) {
     static Ran x;
     ran_source(&x, S("local x = 1 + 2 * 3\nprint(x, \"a\" .. x)\n"), cli_budgets());

@@ -169,12 +169,6 @@ static void ran_run(Ran *x, Str src, Budgets b) {
     }
 }
 
-static void ran_source(Ran *x, Str src, Budgets b) {
-    RanOpts none = {NULL, false, false};
-    ran_init(x, none);
-    ran_run(x, src, b);
-}
-
 static void ran_free(Ran *x) {
     regex_cache_deinit(&x->r.patterns);
     if (store_os_delete_tree(&x->host, x->dir) != STORE_OK) abort();
@@ -183,12 +177,6 @@ static void ran_free(Ran *x) {
     arena_deinit(&x->values);
     arena_deinit(&x->tree);
     arena_deinit(&x->host);
-}
-
-static Budgets cli_budgets(void) {
-    Budgets b = budgets_default();
-    b.output_bytes = 64 * 1024;
-    return b;
 }
 
 // The report the run prints, as the C `shale` writes it, `verbose` with its
@@ -202,8 +190,4 @@ static Str ran_report_of(Ran *x, Arena *a, bool verbose) {
     Budgets b = x->r.ctx.budgets;
     if (cli_write_report(&w, S("stdin"), none, verbose, effects, x->ran == OK ? NULL : &x->r.ctx.stop, u, &b) != OK) return S("(the report ran out of arena)");
     return buf_view(&w);
-}
-
-static Str ran_report(Ran *x, Arena *a) {
-    return ran_report_of(x, a, false);
 }

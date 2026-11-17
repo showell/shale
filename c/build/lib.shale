@@ -395,6 +395,8 @@ function start_plant(t, phase, p, k, extra?)
   else
     copy("c/tests/" .. p.caught_by .. ".c", src)
   end
+  -- The run fixture test_vm.c and store/test_builtins.c include.
+  copy("c/tests/ran.c", dir .. "/tests/ran.c")
   local bin = dir .. "/bin/" .. basename(p.caught_by)
   compile_to(t, phase, get(p, "build", "tcc"), src, dir .. "/foundation", bin, extra)
   local job = job_run_start(dir, "run", {bin}, {timeout_ms = 60000, env = {TEST_ONLY = p.aim}, want = WANT})

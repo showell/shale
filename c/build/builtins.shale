@@ -1,0 +1,69 @@
+-- c/build/builtins.shale: the store builtins' block, c/script's
+-- builtins_store.c, builtins_walk.c and builtins_change.c and the Linux
+-- host's calls in c/host/host_call.c.
+-- c/build.shale runs it, with the `build` mount that `use` below reads; see
+-- that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- ── The store builtins ─────────────────────────────────────────────────
+-- c/tests/store/test_builtins.c, each source run as the C `shale --verbose`
+-- runs it (c/tests/ran.c) and held to Zig's output, report and files, under
+-- every build of `t.builds`, held to its `TEST(` count and to
+-- BUILTINS_TESTS. In the full tier: the faults below planted in a copy of
+-- c/, each caught by its `aim` tests under asan.
+
+const BUILTINS_TEST_FILE = "c/tests/store/test_builtins.c"
+const BUILTINS_TESTS = 14
+const BUILTINS_PLANTS = {
+  {name = "a read past the read-bytes budget is taken", dir = "script", file = "builtins_store.c", caught_by = "store/test_builtins",
+   aim = "the_read_budgets_stop_a_read_before_its_bytes_are_taken",
+   old = "if (want > run_sat_sub(r->ctx.budgets.read_bytes, r->read_bytes)) return run_budget_stop(&r->ctx, pos, BUDGET_READ_BYTES);\n    char *buf", new = "if (0) return run_budget_stop(&r->ctx, pos, BUDGET_READ_BYTES);\n    char *buf"},
+  {name = "a walk's entry is stat'ed without a read counted", dir = "script", file = "builtins_walk.c", caught_by = "store/test_builtins",
+   aim = "walk_sorts_filters_skips_resumes_and_names_its_mistakes",
+   old = "    if (has_stat) {\n        TRY(builtin_count_read(r, pos));", new = "    if (has_stat) {"},
+  {name = "a resumed walk takes the entry it ended at again", dir = "script", file = "builtins_walk.c", caught_by = "store/test_builtins",
+   aim = "walk_sorts_filters_skips_resumes_and_names_its_mistakes",
+   old = "        top->at = i + 1;", new = "        top->at = i;"},
+  {name = "a change does not ask the hook", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
+   aim = "attack_a_change_through_a_read_only_mount_is_refused_before_it_is_written,undo_on_stop_puts_back_a_file_changed_and_deletes_one_made",
+   old = "    if (h == NULL || h->may_change == NULL) return OK;", new = "    if (h != NULL || h == NULL) return OK;"},
+  {name = "the changes budget lets one more through", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
+   aim = "the_changes_budget_stops_the_change_past_it",
+   old = "if (r->changes >= r->ctx.budgets.changes)", new = "if (r->changes > r->ctx.budgets.changes)"},
+  {name = "removing a missing path is done", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
+   aim = "every_change_is_logged_with_its_outcome_a_failed_one_too",
+   old = "if (e == STORE_OK && !found) e = STORE_FILE_NOT_FOUND;", new = "(void)found;"},
+  {name = "a whole word may run on after the match", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
+   aim = "edit_prints_its_diff_holds_word_and_all_and_says_where_old_parts",
+   old = "if (e.word && (before || after)) {", new = "if (e.word && before) {"},
+  {name = "one hunk is said as hunks", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
+   aim = "edit_says_a_diff_as_one_line_without_verbose",
+   old = "(hunks != 1 && buf_byte(&h, 's') != OK)", new = "(hunks == 1 && buf_byte(&h, 's') != OK)"},
+  {name = "edits_write takes a file named twice", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
+   aim = "edits_write_writes_every_file_or_none_and_refuses_one_named_twice",
+   old = "if (str_eq(at(plans, j).p.full, p.full)) {", new = "if (0 && str_eq(at(plans, j).p.full, p.full)) {"},
+  {name = "a yield leaves the effects log in the arena it frees", dir = "script", file = "vm.c", caught_by = "store/test_builtins", build = "asan",
+   aim = "a_yield_keeps_the_effects_log",
+   old = "        r->store->effects = kept;", new = "        (void)kept;"},
+}
+
+function builtins_block(t)
+  local n = test_count(BUILTINS_TEST_FILE)
+  if n ~= BUILTINS_TESTS then fail(BUILTINS_TEST_FILE .. " has " .. n .. " TEST(s), and BUILTINS_TESTS says " .. BUILTINS_TESTS) end
+  for b in t.builds do
+    local total = test_file(t, "builtins " .. b, b, BUILTINS_TEST_FILE)
+    print("builtins " .. said_of_build(b, 1, total))
+  end
+  if not t.full then return nil end
+  run_plants(t, "builtins plants", BUILTINS_PLANTS)
+  return nil
+end
+-- ── end of the store builtins' block ───────────────────────────────────
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+builtins_block(t)
+block_end(t, "builtins")
