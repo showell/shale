@@ -7,7 +7,8 @@
 // position, so it finds the match a backtracker would find first, in at most
 // (bytes + 1) times the program's states, whatever the pattern. The counts a
 // search gives (`positions`, `skipped`, `work`) are what the builtins charge
-// steps by, so they are Zig's exactly.
+// steps by, so they are Zig's exactly. Shale has its own engine so that every
+// search is linear in its input: PCRE backtracks, and RE2 is C++.
 //
 // The functions are in regex.c, which a program includes after this header:
 // the C is one translation unit, every function `static`.
