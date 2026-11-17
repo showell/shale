@@ -1,9 +1,11 @@
-// shale.c: the C `shale` command. Today it is Zig Shale's `--check` alone
-// (src/script_runner.zig): it reads the command line, the mounts, the script
-// and the preludes as the Zig runner does, parses the script with them, and
-// prints the same report with the same exit code. Every other command line is
-// refused, naming what is not yet ported. This file holds the system calls;
-// what it decides is in script/cli.h and script/parse.h.
+// shale.c: the C `shale` command, Zig Shale's src/script_runner.zig: it reads
+// the command line, the mounts, the script and the preludes as the Zig runner
+// does, parses and compiles the script with them, and either stops there
+// (`--check`) or runs it on the VM (script/vm.c), printing what it printed
+// on stdout and the same report on stderr, with the same exit code. A
+// builtin that needs the store or the host is refused as not ported yet, and
+// so are `--help`, `--version` and `--reap`. This file holds the system
+// calls; what it decides is in script/.
 
 // `realpath` is X/Open's.
 #define _XOPEN_SOURCE 700
@@ -13,9 +15,14 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
-#include "script/cli.h"
+#include "script/run.h"
+#include "script/regex.c"
+#include "script/builtins.c"
+#include "script/builtins_text.c"
+#include "script/vm.c"
 #include "preludes.h"
 
 enum {
@@ -56,6 +63,8 @@ static Str zig_error_name(int e) {
 // `s` as a NUL-ended copy, for a system call.
 static const char *c_string(Arena *a, Str s) { // cstr: the system's own
     if (s.len == SIZE_MAX) return NULL;
+    // A NUL would cut the path short; Zig asserts there is none.
+    if (s.len > 0 && memchr(s.ptr, 0, s.len) != NULL) return NULL;
     char *p = arena_alloc(a, s.len + 1, 1);
     if (p == NULL) return NULL;
     Bytes room = {p, s.len + 1};
@@ -158,7 +167,7 @@ static int refuse_command(Out *o, Str why, bool usage) {
 static int not_ported(Out *o, Str what) {
     say(o, S("shale (C): "));
     say(o, what);
-    say(o, S(" is not ported yet: only `--check` is (shale --check FILE)\n"));
+    say(o, S(" is not ported yet\n"));
     return flush_and_exit(o, EXIT_REFUSED);
 }
 
@@ -372,7 +381,32 @@ static STATUS_MUST_USE Status script_file(Arena *a, Str given, MountVec mounts, 
     return OK;
 }
 
-static int check(Out *o, Command *c, MountVec mounts, Str mounts_from, Str source, Preludes preludes, const Arg *args, size_t args_len) {
+// Writes what the run printed to stdout, whole.
+static void write_stdout(Str out) {
+    size_t done = 0;
+    while (done < out.len) {
+        ssize_t n = write(1, &at(out, done), out.len - done);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) break;
+        done += (size_t)n;
+    }
+}
+
+// The machine budget's stop, the one Zig's Process.ready gives an OutOfMemory.
+static void machine_stop(Stop *stop) {
+    memset(stop, 0, sizeof *stop);
+    stop->line = 1;
+    stop->column = 1;
+    stop->cls = CLASS_BUDGET;
+    stop->budget = BUDGET_MACHINE;
+    stop->message = S("the machine's memory (the code, the frames, the operands) is past its budget: raise it with `--budget machine_bytes=N` or the script's `-- budget: machine_bytes=N` line");
+    stop->function = S("");
+}
+
+// The script parsed and compiled with its preludes, then either reported as
+// checked (`--check`) or run on the VM, its output on stdout and its report
+// on stderr: Zig's `Process.startWith`, `script.runWith` and `printReport`.
+static int run_script(Out *o, Command *c, MountVec mounts, Str mounts_from, Str source, Preludes preludes, const Arg *args, size_t args_len, int64_t now) {
     Arena *a = o->arena;
     Budgets b = c->budgets;
     Str name = cli_script_name(c);
@@ -398,32 +432,64 @@ static int check(Out *o, Command *c, MountVec mounts, Str mounts_from, Str sourc
     Status s = parse_program(&p, preludes_core(), preludes, loader, &prog);
     Stop stop = {0};
     bool stopped = false;
+    Code code;
+    memset(&code, 0, sizeof code);
     if (s != OK) {
         if (!p.stopped) {
-            // Zig's machine stop, the one Process.ready gives an OutOfMemory.
-            memset(&stop, 0, sizeof stop);
-            stop.line = 1;
-            stop.column = 1;
-            stop.cls = CLASS_BUDGET;
-            stop.budget = BUDGET_MACHINE;
-            stop.message = S("the machine's memory (the code, the frames, the operands) is past its budget: raise it with `--budget machine_bytes=N` or the script's `-- budget: machine_bytes=N` line");
-            stop.function = S("");
+            machine_stop(&stop);
         } else {
             stop = p.stop;
         }
         stopped = true;
     } else if (cli_unread_arg(&tree, &prog, args, args_len, &stop, &stopped) != OK) {
-        return not_ported(o, S("a check past the arena"));
+        machine_stop(&stop);
+        stopped = true;
+    } else if (!stopped && compile_program(&tree, &prog, BUILTINS_MOST_ARGS, b.depth, &code) != OK) {
+        machine_stop(&stop);
+        stopped = true;
     }
     if (stopped) {
         if (cli_write_stop(&o->err, name, &stop, reader.used, &b) != OK) return not_ported(o, S("a report past the arena"));
-        int code = flush_and_exit(o, EXIT_STOPPED);
+        int code_out = flush_and_exit(o, EXIT_STOPPED);
         arena_deinit(&tree);
-        return code;
+        return code_out;
     }
+    if (c->check) {
+        arena_deinit(&tree);
+        say(o, S("── checked: it parses and compiles; nothing ran\n"));
+        return flush_and_exit(o, EXIT_FINISHED);
+    }
+    // The values, the machine (the frames' slots, the operands, the frames
+    // and the calls) and the output, each in an arena under its own budget.
+    Arena values = arena_make(b.arena_bytes);
+    Arena machine = arena_make(b.machine_bytes);
+    Arena output = arena_make(2 * b.output_bytes + ARENA_BIG);
+    Run r;
+    memset(&r, 0, sizeof r);
+    r.ctx = run_ctx_make(&values, &machine, b);
+    r.machine = &machine;
+    r.program = &prog;
+    r.now = now;
+    r.out = buf_make(&output);
+    r.out_cap = b.output_bytes;
+    r.args = args;
+    r.args_len = args_len;
+    r.steps = reader.used.steps;
+    r.reads = reader.used.reads;
+    r.read_bytes = reader.used.read_bytes;
+    r.stack = ValueVec_make(&machine);
+    r.patterns = regex_cache_make();
+    Status ran = run_ended(&r.ctx, vm_main(&r, &code));
+    write_stdout(buf_view(&r.out));
+    RunUsed used = {r.steps, r.reads, r.read_bytes, r.out.len};
+    if (cli_write_report(&o->err, name, preludes, c->verbose, ran == OK ? NULL : &r.ctx.stop, used, &b) != OK) return not_ported(o, S("a report past the arena"));
+    int exit_code = flush_and_exit(o, ran == OK ? EXIT_FINISHED : EXIT_STOPPED);
+    regex_cache_deinit(&r.patterns);
+    arena_deinit(&output);
+    arena_deinit(&machine);
+    arena_deinit(&values);
     arena_deinit(&tree);
-    say(o, S("── checked: it parses and compiles; nothing ran\n"));
-    return flush_and_exit(o, EXIT_FINISHED);
+    return exit_code;
 }
 
 // The preludes after the core's, as Zig's `loadPreludes`: the Linux and git
@@ -438,7 +504,7 @@ static int load_preludes(Out *o, Str root_abs, Prelude *out, size_t *n) {
     at(slots, 1) = git_prelude;
     *n = 2;
     Str repo = {0};
-    if (join(a, root_abs, S(".shale/prelude.shale"), &repo) != OK) return -1;
+    if (join(a, root_abs, S(".shale/prelude.shale"), &repo) != OK) return not_ported(o, S("a prelude's path past the arena"));
     Str text = {0};
     Str err = {0};
     if (read_path(a, repo, 64 * 1024, &text, &err) == OK) {
@@ -464,7 +530,7 @@ static int load_preludes(Out *o, Str root_abs, Prelude *out, size_t *n) {
         required = true;
     } else {
         const char *home = getenv("HOME"); // cstr: the environment's
-        if (join(a, from_c(home != NULL ? home : "/"), S(".config/shale/prelude.shale"), &user) != OK) return -1;
+        if (join(a, from_c(home != NULL ? home : "/"), S(".config/shale/prelude.shale"), &user) != OK) return not_ported(o, S("a prelude's path past the arena"));
         shown = S("~/.config/shale/prelude.shale");
     }
     if (read_path(a, user, 64 * 1024, &text, &err) == OK) {
@@ -500,7 +566,6 @@ static int run_main(Out *o, int argc, char **argv) {
     Buf why = buf_make(a);
     Words rest = all.len > 0 ? SLICE_SUB(Words, all, 1, all.len) : all;
     if (cli_parse(rest.ptr, rest.len, env_root != NULL, env_root != NULL ? from_c(env_root) : S(""), &c, &why) != OK) return refuse_command(o, buf_view(&why), true);
-    if (!c.check) return not_ported(o, S("a run (any command line without `--check`)"));
     Arg more[CLI_ARGS_MOST];
     size_t more_len = 0;
     const Arg *args = c.args;
@@ -615,7 +680,8 @@ static int run_main(Out *o, int argc, char **argv) {
     int code = load_preludes(o, root_abs, preludes, &n_preludes);
     if (code >= 0) return code;
     Preludes ps = {preludes, n_preludes};
-    return check(o, &c, mounts, from, source, ps, args, args_len);
+    if (now == NULL) pinned_now = (int64_t)time(NULL);
+    return run_script(o, &c, mounts, from, source, ps, args, args_len, pinned_now);
 }
 
 int main(int argc, char **argv) {

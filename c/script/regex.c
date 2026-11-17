@@ -1078,12 +1078,12 @@ static RegexSearched regex_search_within(const RegexProgram *p, RegexScratch *sc
     return r;
 }
 
-static RegexSearched regex_search_from(const RegexProgram *p, RegexScratch *sc, Str s, size_t from, uint64_t positions_most) {
+static inline RegexSearched regex_search_from(const RegexProgram *p, RegexScratch *sc, Str s, size_t from, uint64_t positions_most) {
     RegexMost most = {positions_most, UINT64_MAX};
     return regex_search_within(p, sc, s, from, most);
 }
 
-static RegexSearched regex_search(const RegexProgram *p, RegexScratch *sc, Str s, uint64_t positions_most) {
+static inline RegexSearched regex_search(const RegexProgram *p, RegexScratch *sc, Str s, uint64_t positions_most) {
     return regex_search_from(p, sc, s, 0, positions_most);
 }
 

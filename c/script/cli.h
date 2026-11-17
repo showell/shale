@@ -450,6 +450,86 @@ static inline STATUS_MUST_USE Status cli_write_stop(Buf *w, Str name, const Stop
     return buf_lit(w, " output bytes\n");
 }
 
+// The source a stop's `function` is in, as Zig's `placeOf` names it: the
+// core's prelude, a later prelude or a `use`d library (whose functions are
+// shown as `<its name>'s f`), or the script, `name`.
+static inline Str cli_place_of(Str function, Str name, Preludes preludes) {
+    if (str_starts_with(function, S("the prelude's "))) return S("the prelude");
+    for (size_t k = 0; k < preludes.len; k++) {
+        Str pn = at(preludes, k).name;
+        if (function.len > pn.len + 3 && str_starts_with(function, pn) && str_starts_with(str_sub(function, pn.len, function.len), S("'s "))) return pn;
+    }
+    for (size_t i = 0; i + 3 <= function.len; i++) {
+        if (str_eq(str_sub(function, i, i + 3), S("'s "))) return str_sub(function, 0, i);
+    }
+    return name;
+}
+
+static inline STATUS_MUST_USE Status cli_write_where(Buf *w, Str place, uint32_t line, uint32_t column, Str function) {
+    return stop_write_where(w, place, line, column, function);
+}
+
+// What a run used, the report's last line counts.
+typedef struct {
+    uint64_t steps;
+    uint64_t reads;
+    uint64_t read_bytes;
+    uint64_t output;
+} RunUsed;
+
+// Zig's `printReport` for a run: with `verbose`, its effects (the C's core
+// makes none yet); a stop's line and its calls, innermost first, each named
+// by its source; `── finished` when verbose; and the `── used:` line when
+// verbose, stopped, or past half of a budget.
+static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes preludes, bool verbose, const Stop *s, RunUsed u, const Budgets *b) {
+    if (verbose) TRY(buf_lit(w, "── effects (0) ──\n"));
+    if (s != NULL) {
+        TRY(buf_lit(w, "── stopped at "));
+        TRY(cli_write_where(w, cli_place_of(s->function, name, preludes), s->line, s->column, s->function));
+        TRY(buf_lit(w, ": "));
+        TRY(buf_str(w, stop_class_name(s->cls)));
+        if (s->budget != BUDGET_NONE) {
+            TRY(buf_byte(w, ' '));
+            TRY(buf_str(w, budget_name(s->budget)));
+        }
+        TRY(buf_lit(w, ": "));
+        TRY(buf_str(w, s->message));
+        TRY(buf_lit(w, " ("));
+        TRY(buf_u64(w, u.steps));
+        TRY(buf_lit(w, " steps)\n"));
+        for (size_t k = s->trail.len; k > 0; k--) {
+            const Call c = at(s->trail, k - 1);
+            TRY(buf_lit(w, "   called from "));
+            TRY(cli_write_where(w, cli_place_of(c.function, name, preludes), c.line, c.column, c.function));
+            TRY(buf_byte(w, '\n'));
+        }
+    } else if (verbose) {
+        TRY(buf_lit(w, "── finished ("));
+        TRY(buf_u64(w, u.steps));
+        TRY(buf_lit(w, " steps)\n"));
+    }
+    // Zig's `pastHalf`: twice what was used past the budget, in 64 bits.
+    bool past_half = u.steps * 2 > b->steps || u.reads * 2 > b->reads || u.read_bytes * 2 > b->read_bytes || u.output * 2 > b->output_bytes;
+    if (!(verbose || s != NULL || past_half)) return OK;
+    TRY(buf_lit(w, "── used: "));
+    TRY(buf_u64(w, u.steps));
+    TRY(buf_lit(w, " of "));
+    TRY(buf_u64(w, b->steps));
+    TRY(buf_lit(w, " steps, "));
+    TRY(buf_u64(w, u.reads));
+    TRY(buf_lit(w, " of "));
+    TRY(buf_u64(w, b->reads));
+    TRY(buf_lit(w, " reads, "));
+    TRY(buf_u64(w, u.read_bytes));
+    TRY(buf_lit(w, " of "));
+    TRY(buf_u64(w, b->read_bytes));
+    TRY(buf_lit(w, " read bytes, "));
+    TRY(buf_u64(w, u.output));
+    TRY(buf_lit(w, " of "));
+    TRY(buf_u64(w, b->output_bytes));
+    return buf_lit(w, " output bytes\n");
+}
+
 // Zig's `unreadArgStop`: the first value given that no `arg("NAME")` of the
 // program reads, as a stop at 1:1 naming what it reads. `*found` is false
 // when each is read, or the program names one by a value.
