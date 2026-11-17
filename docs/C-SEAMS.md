@@ -18,67 +18,50 @@ the Zig wins.
 
 - **A value is a tagged struct:** a tag (nil, boolean, int, string, table)
   and a union of `bool`, `int64_t`, a `Str` (pointer and length) and a
-  `Table *`, as large and as aligned as Zig's `value.Value` (the probe below
-  says how large; a 16-byte slice and its tag make it 24 bytes on x86-64).
-  A string is never changed once made, and the value points at its bytes
-  in the values' arena.
+  `Table *`, laid out as the C sees fit (Fidelity, below, says why its size
+  is free). A string is never changed once made, and the value points at
+  its bytes in the values' arena.
 - **A table is one struct for list and map:** its kind (empty, list, map),
-  a list of values grown as Zig's `ArrayList` grows (vec.h), and a map
-  from `Str` to value that keeps the order keys were first set. `{}` takes
-  its kind from its first entry, as in Zig.
+  a list of values (vec.h), and a map from `Str` to value (map.h) that
+  keeps the order keys were first set. `{}` takes its kind from its first
+  entry, as in Zig.
 - **Tables are shared by reference**, and `==` on them is refused, so a
   table needs no identity beyond its pointer. The yield's copy keeps "a
   table reached twice is one table" with a forwarding map from old pointer
   to new.
-- **The values' map is not map.h during the port.** map.h keeps keys,
-  hashes and values in parallel arrays with an index from the first entry.
-  Zig's `StringArrayHashMapUnmanaged` keeps one buffer of entries (key,
-  value, a 32-bit hash) and adds an index only past a few entries. Their
-  allocations differ, so the arena would stop in a different place. Values
-  use a second map, `ValueMap`, that makes Zig's allocations in Zig's order.
-  map.h serves the C's own tables (the parser's names, the regex cache's
-  keys), which live in the machine's arena.
+- **One map serves every table:** the values' maps and the C's own (the
+  parser's names, the regex cache's keys) are all the foundation's map.h.
+  Its allocations differ from Zig's `StringArrayHashMapUnmanaged`, which
+  only moves where an arena stop lands, and that is outside the surface.
 - **A `..` chain** keeps Zig's tail buffer: the last string a chain built,
-  its used and its capacity, so that `s = s .. x` is linear and holds what
-  Zig's holds.
+  its used and its capacity, so that `s = s .. x` is linear, not
+  quadratic.
 
-## Fidelity: the arena's byte counts
+## Fidelity: what the arena may change
 
-Steve agreed on 2026-11-17 that **arena byte counts are mirrored from Zig
-during the port, and freed after the cut-over.** `budget().arena_bytes`,
-where `budget arena` stops, and where `budget kept` and `budget machine`
-stop are all observable, so the C allocates what Zig allocates, in the
-same sizes, alignments and order.
+Steve decided on 2026-11-17 that **arena byte counts are outside the frozen
+surface.** The differential harness found 4 of its 1,024 inputs that observe
+them, so mirroring Zig's layouts would buy little: the C lays out its values,
+tables, frames, ops and tree for itself, with no `_Static_assert` against a
+Zig size and no Zig probe of them.
 
-- **The arena itself already matches.** arena.h is `value.Budgeted`: its
+- **Outside the surface:** the bytes a run holds (`budget().arena_bytes`'s
+  value, the report's arena and `── used:` numbers), and the exact step at
+  which an arena stop lands. So are `budget kept` and `budget machine`'s
+  exact places, which hang on the same layouts.
+- **Inside it:** a run that stops on the arena budget under Zig stops on it
+  under C, with the same class (`budget arena`), the same message, and in
+  the same stage of the script wherever that is observable (what it printed
+  first, which effects it made). Only the step count may differ.
+- **The arena keeps Zig's shape anyway.** arena.h is `value.Budgeted`: its
   16-byte chunk header, `chunk_least`, `big`, doubling, and only the last
-  allocation growing in place. The C adds `Budgeted.heap()`'s twin, an
-  allocator whose free gives the bytes back, for the machine's regex cache
-  and a long call's arguments.
-- **The structs whose sizes reach the arena are mirrored,** each with a
-  `_Static_assert` on its size and alignment against the numbers the probe
-  gives:
-  - `value.Value` (the tag and its payload, as Zig lays out the union);
-  - `value.Table`, and the buffers its list and map make: the list's
-    `cap × sizeof(Value)`, the map's entry buffer and its index header;
-  - `diag.Call` (a trail's entry) and the `Stop` a `fail` makes;
-  - `interp.Effect`, the effects log's entry;
-  - the machine's arena: `vm.Frame`, the operand slots, `compile.Op`, and
-    `ast`'s node structs, since `budget machine` stops on what the tree and
-    the code take;
-  - the regex program's instructions, whose count is also the search's
-    step charge.
-- **The probe (a later task) is a small Zig program**, run by a `zig build`
-  step, that prints a TSV: for each type above, its `@sizeOf` and
-  `@alignOf`; and for a fixed list of operations (a list pushed to N, a map
-  put to N, a string joined N times, a yield's copy, a source parsed and
-  compiled), the sequence of `(len, align)` each makes of the arena. The C's
-  tests read the same TSV, checked in beside the C's tests, and hold the C's
-  allocations to it, a difference failing by its row. A change to the Zig's
-  layout fails the probe's own check until the TSV is regenerated.
-- **After the cut-over** the mirroring is let go: `ValueMap` can become
-  map.h, the structs can shrink, and the arena's counts become the C's
-  own, with the surface's texts unchanged.
+  allocation growing in place, so a budget means about what it means today.
+  The C adds `Budgeted.heap()`'s twin, an allocator whose free gives the
+  bytes back, for the machine's regex cache and a long call's arguments.
+- **The differ judges these runs by class.** `tools/differ.shale` finds the
+  inputs that observe arena bytes mechanically (an arena stop, or a read of
+  `arena_bytes`), compares their stop's class and message but not those
+  numbers, and counts them in its summary as judged by class.
 
 ## The VM, the stops and the budgets
 

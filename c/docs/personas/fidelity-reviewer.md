@@ -32,10 +32,13 @@ For each C function, find its Zig original and compare:
 3. **Budgets.** Where the Zig charges a step, a read or a byte, the C
    charges the same amount at the same point. A charge moved before or
    after an effect changes where a run stops.
-4. **Allocation.** The C allocates what the Zig allocates, in the same
-   order and the same sizes, so arena counts match. The layouts it mirrors
-   are in `c/layouts/zig-layouts.txt`, printed by the Zig probe; check the
-   C's `_Static_assert`s against it.
+4. **The arena.** Arena byte counts are outside the frozen surface: the C
+   lays out its values and allocates as it sees fit, and `budget().arena_bytes`
+   or the exact step an arena stop lands on may differ. An arena stop's
+   class and message are not outside it: a run that stops on the arena
+   budget under the Zig stops on it under the C, as `budget arena` with
+   Zig's message, at the same stage of the script where that shows
+   (docs/C-SEAMS.md, "Fidelity").
 5. **Improvements.** A bound the Zig doesn't have, a clearer message, a
    faster path that skips a charge. Each is a divergence. Flag it as one,
    and if it's worth keeping, add it to `c/docs/after-cutover.md` instead.

@@ -52,7 +52,18 @@ copied to one path for each phase, so a message that names it is the same.
 
 The harness compares each step's ending, its stdout and its stderr (the
 `── used:` line is part of stderr), and every file the run left, by kind,
-mode and bytes. Only the digits of a `── time:` line are let go.
+mode and bytes. The `── time:` line is let go whole: its numbers, whether
+it is printed, and the order it names programs in (Steve, 2026-11-17).
+
+**Arena bytes are outside the frozen surface** (docs/C-SEAMS.md,
+"Fidelity"), so an input that observes them is **judged by class**: its
+oracle stops on the arena budget, or its source reads `arena_bytes` outside
+a comment. The harness finds these from the run and the source, never from
+a list. Its stop's class and message are compared still; the digits of its
+`── used:` line and its stop's `(N steps)` are let go, and, when it reads
+`arena_bytes`, every digit of its output. The summary counts them and names
+each one.
+
 If the two `old` runs differ, the input is **nondeterministic**: it is
 reported as a finding of the harness and never judged. An input that fails
 runs under `old` a third time before the failure counts, since two runs can
@@ -75,13 +86,13 @@ ones predicted that passed, and the ones that failed without a prediction.
 
 ## What the oracle does not repeat
 
-Two causes make inputs nondeterministic under today's Zig Shale alone, so
+One cause makes inputs nondeterministic under today's Zig Shale alone, so
 the harness cannot judge those inputs:
 
 - **`fresh_dir`'s random names** (`mktemp`'s `XXXXXX`), which five cookbook
   self-tests print or leave on disk: remove_lane, retire_checkout,
   rewrite_method_calls, survey_repos and zig/check_const_unchanged.
-- **The `── time:` line beyond its digits.** It appears only past a second
-  spent in programs, and it names the slowest three in the order of their
-  times. A run near a second, or with two programs close in time, differs
-  from one run to the next (roc/check_foreign_code, rewrite_method_calls).
+The `── time:` line was a third (roc/check_foreign_code,
+rewrite_method_calls), until the harness let it go whole: it appears only
+past a second spent in programs and names the slowest three in the order of
+their times.

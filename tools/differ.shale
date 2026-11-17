@@ -1,8 +1,9 @@
 -- The differential harness: every input Shale's own checks hold it to, run
 -- under two binaries and compared from the outside, so a new Shale (the C
 -- rewrite) is judged against today's Zig Shale, the oracle. The language is
--- frozen byte for byte, so anything but the `── time:` line's numbers that
--- differs is a failure.
+-- frozen byte for byte, so anything that differs is a failure, but for the
+-- `── time:` line, which is let go whole, and the arena's numbers, which are
+-- outside the frozen surface (docs/C-SEAMS.md, "Fidelity").
 --
 --   cd <shale> && shale tools/differ.shale old=<path> new=<path>
 --
@@ -50,7 +51,17 @@
 --
 -- **The comparison:** each step's exit, stdout and stderr (the `── used:`
 -- line among it), and every file the run left, by its kind, mode and bytes.
--- Only the digits of a `── time:` line are let go.
+-- The `── time:` line is let go whole (Steve, 2026-11-17): its numbers,
+-- whether it is there at all, and where it falls, since a second of wall time
+-- in programs decides whether it is printed. Nothing else is, but for an
+-- input that
+-- observes arena bytes, which is **judged by class**: its oracle stops on the
+-- arena budget, or its source reads `arena_bytes` outside a `-- budget:`
+-- line (`arena_observer`, found from the run and the source, never a hand
+-- list). Its stop's class and message are compared still; the digits of its
+-- `── used:` line and its stop's `(N steps)` are let go, and, when it reads
+-- `arena_bytes`, every digit of its output, since which number is the arena's
+-- cannot be told from outside. The summary counts these inputs.
 --
 -- **The report:** one TSV row an input under build:differ/reports, and on
 -- the console the failures grouped by the area most likely responsible,
@@ -424,14 +435,30 @@ end
 
 -- ── comparing ──
 
--- A stream with the `── time:` line's digits let go, as lines.
-function normal_lines(text)
+-- A stream as lines, the `── time:` line left out wherever it is. `judge` says
+-- what else is let go for an input judged by class (`arena_observer`):
+-- `class`, the `── used:` line's digits and a stop's `(N steps)`; `digits`,
+-- every digit, for an input that reads `arena_bytes`.
+function normal_lines(text, judge)
   local out = {}
   for l in lines(text) do
-    if starts_with(l, "── time:") then push(out, re_replace(l, "[0-9]+", "#")) else push(out, l) end
+    if starts_with(l, "── time:") then
+      -- Let go whole.
+    elseif judge.digits and not starts_with(l, "── stopped at") then
+      push(out, re_replace(l, "[0-9]+", "#"))
+    elseif judge.class and starts_with(l, "── used:") then
+      push(out, re_replace(l, "[0-9]+", "#"))
+    elseif judge.class and starts_with(l, "── stopped at") then
+      push(out, re_replace(l, "\\([0-9]+ steps\\)$", "(# steps)"))
+    else
+      push(out, l)
+    end
   end
   return out
 end
+
+-- Nothing let go but the time line.
+const EXACT = {class = false, digits = false}
 
 function clip(s)
   local t = substitute(substitute(s, "\t", "\\t", {missing_ok = true}), "\r", "\\r", {missing_ok = true})
@@ -440,16 +467,18 @@ function clip(s)
 end
 
 -- The first line two texts differ at, or nil.
-function first_diff(a, b)
-  local la = normal_lines(a)
-  local lb = normal_lines(b)
+function first_diff(a, b, judge)
+  local la = normal_lines(a, judge)
+  local lb = normal_lines(b, judge)
   local n = max(#la, #lb)
   for i = 1, n do
     local x = get(la, i, "(no line)")
     local y = get(lb, i, "(no line)")
     if x ~= y then return {line = i, a = x, b = y} end
   end
-  if a ~= b and #la == #lb then
+  -- Every line matched as judged, so only a final newline can differ (a
+  -- difference let go is no difference).
+  if ends_with(a, "\n") ~= ends_with(b, "\n") then
     -- Only a final newline differs.
     return {line = n, a = "(ends with a newline: " .. tostring(ends_with(a, "\n")) .. ")", b = "(ends with a newline: " .. tostring(ends_with(b, "\n")) .. ")"}
   end
@@ -461,8 +490,9 @@ function side_dir(id, side)
 end
 
 -- How two sides of one input differ, or nil: the first difference, in the
--- order a step's ending, stdout, stderr, then the files.
-function differ_sides(inp, x, y)
+-- order a step's ending, stdout, stderr, then the files. `judge` is
+-- `normal_lines`'s.
+function differ_sides(inp, x, y, judge)
   local dx = side_dir(inp.id, x)
   local dy = side_dir(inp.id, y)
   local mx = lines(read(dx .. "/meta"))
@@ -472,7 +502,7 @@ function differ_sides(inp, x, y)
     if #inp.steps > 1 then s = " (step " .. k .. ")" end
     if mx[k] ~= my[k] then return {what = "exit" .. s, where = "", a = mx[k], b = my[k]} end
     for stream in {"out", "err"} do
-      local d = first_diff(read(dx .. "/" .. k .. "." .. stream), read(dy .. "/" .. k .. "." .. stream))
+      local d = first_diff(read(dx .. "/" .. k .. "." .. stream), read(dy .. "/" .. k .. "." .. stream), judge)
       if d ~= nil then
         local what = "std" .. stream
         if starts_with(d.a, "── used:") or starts_with(d.b, "── used:") then what = "used" end
@@ -482,7 +512,7 @@ function differ_sides(inp, x, y)
   end
   local left = #inp.steps + 1
   if mx[left] ~= my[left] then return {what = "left running", where = "", a = mx[left], b = my[left]} end
-  local man = first_diff(read(dx .. "/manifest"), read(dy .. "/manifest"))
+  local man = first_diff(read(dx .. "/manifest"), read(dy .. "/manifest"), EXACT)
   if man ~= nil then return {what = "files", where = "entry " .. man.line, a = man.a, b = man.b} end
   if #grep(dx .. "/manifest", "\tf\t") == 0 then return nil end
   local r = run({"diff", "-rq", "--no-dereference", real(dx) .. "/tree", real(dy) .. "/tree"}, {timeout_ms = 120000, head = 3})
@@ -491,7 +521,7 @@ function differ_sides(inp, x, y)
   local m = re_find(first, "^Files (.*) and (.*) differ$")
   if m == nil then return {what = "files", where = "", a = first, b = ""} end
   local rel = sub(m.groups[1], #real(dx) + #"/tree/" + 1)
-  local d = first_diff(read(dx .. "/tree/" .. rel), read(dy .. "/tree/" .. rel))
+  local d = first_diff(read(dx .. "/tree/" .. rel), read(dy .. "/tree/" .. rel), EXACT)
   if d == nil then return {what = "file " .. rel, where = "", a = "(bytes)", b = "(bytes)"} end
   return {what = "file " .. rel, where = "line " .. d.line, a = d.a, b = d.b}
 end
@@ -538,9 +568,9 @@ function area_of(inp, d, text)
   return "the VM (output)"
 end
 
--- Whether an input observes arena numbers: its oracle stops on the arena
--- budget, or its source reads `arena_bytes` (from `budget()`, `room_for`)
--- outside a `-- budget:` line.
+-- Whether an input observes arena bytes: its oracle stops on the arena
+-- budget, or its source reads `arena_bytes` (from `budget()`) outside a
+-- comment, a `-- budget:` line among them. Such an input is judged by class.
 function arena_observer(inp, text)
   local stop = false
   local d = side_dir(inp.id, "old_a")
@@ -549,7 +579,7 @@ function arena_observer(inp, text)
   end
   local reads = false
   for l in lines(text) do
-    if contains(l, "arena") and not starts_with(trim(l), "--") then reads = true end
+    if contains(l, "arena_bytes") and not starts_with(trim(l), "--") then reads = true end
   end
   return {stop = stop, reads = reads}
 end
@@ -668,7 +698,7 @@ local counts = {pass = 0, fail = 0, nondet = 0, skipped = 0}
 local by_area = {}
 local nondet = {}
 local skipped = {}
-local arena = {stop = 0, reads = 0, either = 0}
+local arena = {stop = 0, reads = 0, either = 0, stop_ids = {}, read_ids = {}}
 local pred = {hit = 0, missed = 0, extra = 0}
 local extra_ids = {}
 local missed_ids = {}
@@ -684,20 +714,23 @@ for inp in inputs do
     if ao.stop then
       arena.stop = arena.stop + 1
       row.arena = "stop"
+      push(arena.stop_ids, inp.id .. " " .. inp.origin)
     end
     if ao.reads then
       arena.reads = arena.reads + 1
       row.arena = row.arena .. " reads"
+      push(arena.read_ids, inp.id .. " " .. inp.origin)
     end
     row.arena = trim(row.arena)
     if ao.stop or ao.reads then arena.either = arena.either + 1 end
-    local twice = differ_sides(inp, "old_a", "old_b")
+    local judge = {class = ao.stop or ao.reads, digits = ao.reads}
+    local twice = differ_sides(inp, "old_a", "old_b", judge)
     local d = nil
     if twice == nil then
-      d = differ_sides(inp, "old_a", "new")
+      d = differ_sides(inp, "old_a", "new", judge)
       if d ~= nil then
         launch(cfg, inp, "old_c")
-        local third = differ_sides(inp, "old_a", "old_c")
+        local third = differ_sides(inp, "old_a", "old_c", judge)
         if third ~= nil then
           twice = third
           twice.what = twice.what .. " (on a third run)"
@@ -784,7 +817,9 @@ if predict ~= "" then
   for l in take(extra_ids, 10) do print("  failed, unpredicted: " .. l) end
 end
 print("")
-print("── arena: " .. arena.either .. " inputs observe arena numbers (" .. arena.stop .. " stop on the arena budget, " .. arena.reads .. " read `arena` in their code)")
+print("── judged by class (arena bytes are outside the surface; their numbers let go): " .. arena.either .. " inputs, " .. arena.stop .. " stopping on the arena budget, " .. arena.reads .. " reading `arena_bytes`")
+for l in arena.stop_ids do print("  arena stop: " .. l) end
+for l in arena.read_ids do print("  reads arena_bytes: " .. l) end
 print("── wall: " .. (clock() - started) .. " s in all; in the binaries' runs, old " .. phase_ms.old_a .. " + " .. phase_ms.old_b .. " ms, new " .. phase_ms.new .. " ms")
 print("── " .. tsv)
 print("── " .. #inputs .. " inputs: " .. counts.pass .. " pass, " .. counts.fail .. " fail, " .. counts.nondet .. " nondeterministic, " .. counts.skipped .. " skipped")
