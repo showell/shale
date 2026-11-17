@@ -35,8 +35,7 @@ jobs:
       # ~/tools/roc-types/bin/roc-types: the asset built by roc-types.yml from
       # Shale's tools/roc_types, its URL and sha256 read from
       # tools/roc_types/release (install.shale's too), the checksum checked.
-      # TODO: release holds placeholders until the asset is published, and
-      # this step fails on them, never skips.
+      # A placeholder there fails this step, never skips it.
       - name: Install roc-types
         working-directory: shale
         run: |
@@ -50,15 +49,17 @@ jobs:
           test -x ~/tools/roc-types/bin/roc-types
 
       # The Roc rewrites' self-tests (cookbook/roc/rewrite_method_calls.shale and
-      # check_stacking.shale) are judged by the compiler itself, the same release's
-      # (70 MB), tools:roc-nightly-2026-10-30-0602c5f/roc (each recipe's
-      # SELF_TEST_PIN).
+      # check_stacking.shale) are judged by the compiler itself, at
+      # tools:roc-nightly-2026-11-03-34bd006/roc (cookbook/roc/pinned.shale's
+      # SELF_TEST_PIN, roc-types' pin): Roc's own nightly release, its checksum
+      # checked. The runner's CPU has the SHA extension the stock build needs.
       - name: Install Roc
         run: |
-          curl -fsSL -o /tmp/roc.tar.gz https://github.com/showell/roc-apps/releases/download/toolchain-2026-10-30-0602c5f/roc-nightly-2026-10-30-0602c5f-linux-x86_64.tar.gz
-          echo "1257dc7a3a1c79ec2c4b60df2c2f54f2a9c3b92b0773f5896018897d05ca9406  /tmp/roc.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/roc.tar.gz -C ~/tools
-          test -x ~/tools/roc-nightly-2026-10-30-0602c5f/roc
+          curl -fsSL -o /tmp/roc.tar.gz https://github.com/roc-lang/nightlies/releases/download/nightly-2026-11-03-34bd006/roc_nightly-linux_x86_64-2026-11-03-34bd006.tar.gz
+          echo "d5c769579edd8e26114b5a89c16e7e074295649a6721a620c98a090eb2bb62c7  /tmp/roc.tar.gz" | sha256sum -c -
+          mkdir -p ~/tools/roc-nightly-2026-11-03-34bd006
+          tar -xzf /tmp/roc.tar.gz -C ~/tools/roc-nightly-2026-11-03-34bd006 --strip-components=1
+          test -x ~/tools/roc-nightly-2026-11-03-34bd006/roc
 
       - name: zig build test
         working-directory: shale

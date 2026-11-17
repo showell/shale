@@ -1010,7 +1010,7 @@ const EXPECT = {
   ProvenFails = {left = 2, why = "roc check: type mismatch", root = "TypedApp", types = true, confirms = 1, rounds = 2},
   Unrooted = {stop = "the types need root=", types = true},
   NotApp = {stop = "is not an app", root = "Proven", types = true},
-  Pin = {stop = "roc-types reads Roc nightly-2026-10-30-0602c5f", root = "TypedApp", types = true, tree_pin = "nightly-2026-10-29-a0a9fc2"},
+  Pin = {stop = "roc-types reads Roc nightly-2026-11-03-34bd006", root = "TypedApp", types = true, tree_pin = "nightly-2026-10-29-a0a9fc2"},
   Second = {left = 0, root = "TypedApp,SecondApp", types = true, confirms = 1, rounds = 0},
   Unreached = {stop = "no root reaches", root = "TypedApp,SecondApp", types = true},
   Beside = {file = "Proven", with = "NoCalls", left = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},

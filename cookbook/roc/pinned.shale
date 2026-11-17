@@ -4,7 +4,7 @@
 -- compiler's method lookup change from one nightly to the next.
 
 -- Every recipe's self-test runs this Roc. CI installs it from roc-apps's release.
-const SELF_TEST_PIN = "nightly-2026-10-30-0602c5f"
+const SELF_TEST_PIN = "nightly-2026-11-03-34bd006"
 
 -- The pin comes from the `roc-version` file where the run starts, or is
 -- `SELF_TEST_PIN` in a self-test. `who` names the recipe when it stops.
