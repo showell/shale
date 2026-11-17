@@ -1,0 +1,27 @@
+# Shale's baseline (bench/baseline.shale): medians of each workload's repetitions, in ms
+# date	2026-11-17T22:29:13Z
+# clean	clean
+# refused for	nothing
+# load before	0.21 0.89 1.52
+# load after	0.72 0.95 1.52
+# heavy processes	none
+# idle shale reapers	1
+# cpu	DO-Premium-Intel
+# cores	2
+# kernel	6.8.0-138-generic
+# implementation	zig
+# compiler	0.17.1+patched.3
+# source	repos:shale at 6053eb7, dirty no
+# binary under test	repos:shale/zig-out/bin/shale
+# inputs	build:bench/inputs: big.txt 17179440 bytes, doc.json 7504688 bytes
+workload	kind	reps	per	wall_ms	cpu_ms	shale_wall_ms	shale_cpu_ms	child_wall_ms	child_cpu_ms	wall_min_ms	wall_max_ms	clean	check
+grep_literal	runtime	5	1 run	286	284	286	284	0	0	240	338	clean	bench-ok 3266 files, 3705 hits
+grep_regex	runtime	5	1 run	548	541	548	541	0	0	402	576	clean	bench-ok 3266 files, 6988 hits
+hunt_names	runtime	5	1 run	2565	2558	1934	1939	565	568	2393	2647	clean	hunt_names (Roc): 435 files; state_effect 0, question 2, vague 0, name_type 0, negative 0, noun_effect 3, command_tense 0, mixed_tense 0, container 29, preposition_split 3, short_name 9, worker_name 2, stacked_preposition 0, taken_word 0, bare_participle 38, phrase_name 19, singular_list 259, world_verb 7, where_name 0
+edit_files	runtime	5	1 run	215	209	215	209	0	0	192	222	clean	bench-ok 493 files, 8501 replaced
+regex_lines	runtime	5	1 run	142	137	142	137	0	0	133	151	clean	bench-ok 17179440 bytes, 10730 lines, 0 none
+json_read	runtime	5	1 run	247	245	247	245	0	0	227	257	clean	bench-ok 40000 items, 40000 last
+json_write	runtime	5	1 run	425	422	425	422	0	0	389	449	clean	bench-ok 40000 items, 7504688 bytes, same true
+startup	runtime	5	50 launches	316	215	316	215	0	0	291	341	clean	bench-ok 1
+run_true	runtime	5	1 run, 200 programs	249	256	32	212	220	44	226	266	clean	bench-ok 200 runs
+interp_loop	runtime	5	1 run	385	381	385	381	0	0	345	425	clean	bench-ok 3000003 total, 150235 bytes, 997 keys, 3600000 sum
