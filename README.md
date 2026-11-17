@@ -351,7 +351,10 @@ are run by hand, by no tier: `zig build script-bench` (Shale's hot paths)
 and `zig build shale-scale` (the largest site each site example fits).
 `shale bench/baseline.shale` is the whole program's baseline, the runtime
 on an agent's workloads and the build's time, one TSV a run
-([bench/README.md](bench/README.md)).
+([bench/README.md](bench/README.md)). `shale tools/differ.shale old=<path>
+new=<path>` judges another build of Shale against today's, from the
+outside, on every input the checks hold it to
+([tools/differ/README.md](tools/differ/README.md)).
 
 ## Docs
 

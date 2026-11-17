@@ -27,11 +27,11 @@ the next run with no list to keep:
 - **lessons:** web/lessons.js. Input N is every cell of lessons 1 to N, run
   in order in one folder, since a lesson starts from the files the earlier
   ones made.
-- **stops:** `stops/`, one script for each stop class and budget. Once
+- **stops:** `tools/differ/stops/`, one script for each stop class and budget. Once
   docs/SURFACE.txt lands, a generator writes one script for each of its
-  stop templates under the `build:` mount (`differ/surface/`), and those are
+  stop templates under the `build:` mount (differ/surface), and those are
   collected the same way.
-- **cli:** `cli/`, the command line's own paths. A `-- differ-argv:` line
+- **cli:** `tools/differ/cli/`, the command line's own paths. A `-- differ-argv:` line
   gives the words after the binary (`{script}` is the file's own path), a
   `-- differ-stdin:` line one line of stdin, and `-- differ-stdin-self: 1`
   the file itself on stdin.
@@ -54,7 +54,9 @@ The harness compares each step's ending, its stdout and its stderr (the
 `── used:` line is part of stderr), and every file the run left, by kind,
 mode and bytes. Only the digits of a `── time:` line are let go.
 If the two `old` runs differ, the input is **nondeterministic**: it is
-reported as a finding of the harness and never judged.
+reported as a finding of the harness and never judged. An input that fails
+runs under `old` a third time before the failure counts, since two runs can
+agree by chance.
 
 The report goes to the console and to a TSV in the `build:` mount
 (`differ/reports/<time>.tsv`), with one row for each input. The console
@@ -70,3 +72,16 @@ exactly when the oracle's output holds the literal. To check a plant, build
 a copy of Shale with one message changed, run it as `new`, and predict the
 original text. The report counts the inputs that failed as predicted, the
 ones predicted that passed, and the ones that failed without a prediction.
+
+## What the oracle does not repeat
+
+Two causes make inputs nondeterministic under today's Zig Shale alone, so
+the harness cannot judge those inputs:
+
+- **`fresh_dir`'s random names** (`mktemp`'s `XXXXXX`), which five cookbook
+  self-tests print or leave on disk: remove_lane, retire_checkout,
+  rewrite_method_calls, survey_repos and zig/check_const_unchanged.
+- **The `── time:` line beyond its digits.** It appears only past a second
+  spent in programs, and it names the slowest three in the order of their
+  times. A run near a second, or with two programs close in time, differs
+  from one run to the next (roc/check_foreign_code, rewrite_method_calls).

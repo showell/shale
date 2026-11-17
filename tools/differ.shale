@@ -44,7 +44,9 @@
 -- copied at this checkout's state. The binary itself is copied to one path
 -- (build:differ/bin/shale) for each phase, so its own path never differs.
 -- An input whose two oracle runs differ is nondeterministic: it is reported
--- as such, a finding of the harness, and never judged.
+-- as such, a finding of the harness, and never judged. An input that fails
+-- runs under the oracle a third time first, and is nondeterministic if that
+-- run differs.
 --
 -- **The comparison:** each step's exit, stdout and stderr (the `── used:`
 -- line among it), and every file the run left, by its kind, mode and bytes.
@@ -657,6 +659,10 @@ for phase in phases do
   print("── " .. phase.side .. ": " .. t .. " ms in the binary's runs")
 end
 
+-- A failure is confirmed by a third run of the oracle before it counts: two
+-- runs that agree by chance (a race with a 10 ms deadline) are not yet a
+-- deterministic oracle.
+install(old, cfg)
 local rows = {}
 local counts = {pass = 0, fail = 0, nondet = 0, skipped = 0}
 local by_area = {}
@@ -667,7 +673,7 @@ local pred = {hit = 0, missed = 0, extra = 0}
 local extra_ids = {}
 local missed_ids = {}
 for inp in inputs do
-  local row = {id = inp.id, source = inp.source, origin = inp.origin, verdict = "", area = "", what = "", where = "", old = "", new = ""}
+  local row = {id = inp.id, source = inp.source, origin = inp.origin, verdict = "", arena = "", area = "", what = "", where = "", old = "", new = ""}
   if inp.skip ~= "" then
     row.verdict = "skipped"
     row.what = inp.skip
@@ -675,10 +681,29 @@ for inp in inputs do
   else
     local text = read(inp.text_path)
     local ao = arena_observer(inp, text)
-    if ao.stop then arena.stop = arena.stop + 1 end
-    if ao.reads then arena.reads = arena.reads + 1 end
+    if ao.stop then
+      arena.stop = arena.stop + 1
+      row.arena = "stop"
+    end
+    if ao.reads then
+      arena.reads = arena.reads + 1
+      row.arena = row.arena .. " reads"
+    end
+    row.arena = trim(row.arena)
     if ao.stop or ao.reads then arena.either = arena.either + 1 end
     local twice = differ_sides(inp, "old_a", "old_b")
+    local d = nil
+    if twice == nil then
+      d = differ_sides(inp, "old_a", "new")
+      if d ~= nil then
+        launch(cfg, inp, "old_c")
+        local third = differ_sides(inp, "old_a", "old_c")
+        if third ~= nil then
+          twice = third
+          twice.what = twice.what .. " (on a third run)"
+        end
+      end
+    end
     if twice ~= nil then
       row.verdict = "nondet"
       row.what = twice.what
@@ -687,7 +712,6 @@ for inp in inputs do
       row.new = clip(twice.b)
       push(nondet, inp.id .. " " .. inp.origin .. ": " .. twice.what .. " " .. twice.where .. ": `" .. clip(twice.a) .. "` then `" .. clip(twice.b) .. "`")
     else
-      local d = differ_sides(inp, "old_a", "new")
       if d == nil then
         row.verdict = "pass"
       else
@@ -720,7 +744,7 @@ for inp in inputs do
 end
 
 -- The TSV: a row an input.
-const COLUMNS = {"id", "source", "origin", "verdict", "area", "what", "where", "old", "new"}
+const COLUMNS = {"id", "source", "origin", "verdict", "arena", "area", "what", "where", "old", "new"}
 local stamp = substitute(substitute(date(now()), ":", ""), "-", "")
 local tsv = "build:differ/reports/" .. stamp .. ".tsv"
 local body = {"# differ: old " .. old .. ", new " .. new, join(COLUMNS, "\t")}
