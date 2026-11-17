@@ -68,7 +68,11 @@ function job_run_finish(t, phase, started)
 end
 
 -- Which of `running` ({at, started}) has ended, waiting until one has:
--- its place in the list.
+-- its place in the list. A yield after each look collects what it made,
+-- and the looks come a quarter second apart, since a yield copies what the
+-- run still reaches: at 20 ms with no yield, compiles slowed by
+-- `nice -n 19` ran the pool out of its 256 MiB arena in 40 s, and with a
+-- yield, out of its 5,000,000 steps in 50 s.
 function first_ended(running)
   while true do
     local k = 0
@@ -76,7 +80,8 @@ function first_ended(running)
       k = k + 1
       if not job_alive(r.started.job) then return k end
     end
-    sleep(20)
+    sleep(250)
+    yield()
   end
   return 0
 end
