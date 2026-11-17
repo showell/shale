@@ -1,6 +1,5 @@
-// regex.c: the regex compiler, matcher and pattern cache declared in regex.h,
-// a port of src/script/regex.zig. A program includes it once, after its own
-// headers.
+// regex.c: the regex compiler, matcher and pattern cache declared in regex.h.
+// A program includes it once, after its own headers.
 //
 // A pattern is read into a tree of alternatives (each a sequence of nodes),
 // then emitted by Thompson's construction, each split preferring its first
@@ -89,7 +88,7 @@ static uint8_t regex_set_lowest(const RegexSet *s) {
     return 0;
 }
 
-// ── ASCII, as Zig's std.ascii reads it ───────────────────────────────────
+// ── ASCII ────────────────────────────────────────────────────────────────
 
 static bool regex_is_digit(uint8_t c) {
     return c >= '0' && c <= '9';
@@ -369,7 +368,7 @@ static STATUS_MUST_USE Status regex_class(RegexReader *r, RegexNode *out) {
 static const Str REGEX_COUNT_FORM = S("a count is `{n}`, `{n,}` or `{n,m}`, each a number of digits: `\\{` is the byte");
 
 // The digits at the reader as a number, `*got` false when there are none. A
-// number past size_t is refused with the count's form, as Zig's parseInt is.
+// number past size_t is refused with the count's form.
 static STATUS_MUST_USE Status regex_number(RegexReader *r, size_t at, size_t *out, bool *got) {
     size_t from = r->at;
     while (r->at < r->p.len && regex_is_digit(str_byte(r->p, r->at))) r->at++;
@@ -385,7 +384,8 @@ static STATUS_MUST_USE Status regex_number(RegexReader *r, size_t at, size_t *ou
     return OK;
 }
 
-// The count at `{`: `{n}`, `{n,}` (`*has_most` false) or `{n,m}`, read past its `}`.
+// The count at `{`: `{n}`, `{n,}` (`*has_most` false) or `{n,m}`, read past
+// its `}`.
 static STATUS_MUST_USE Status regex_count_after(RegexReader *r, size_t *least, size_t *most, bool *has_most) {
     size_t at = r->at;
     r->at++;
@@ -549,7 +549,8 @@ static bool regex_nullable_alt(RegexAlt a) {
 
 // ── The emitter ──────────────────────────────────────────────────────────
 
-// A loop's turn, instructions `from` to `to`: the ones loop `id`'s bit tells apart.
+// A loop's turn, instructions `from` to `to`: the ones loop `id`'s bit tells
+// apart.
 typedef struct {
     uint8_t id;
     uint16_t from;
@@ -573,7 +574,14 @@ typedef struct {
 // not NULL, takes its place. It takes the fields rather than a RegexInst a
 // function made: no function returns one by value (regex.h, RegexInst).
 static STATUS_MUST_USE Status regex_emit(RegexEmitter *e, RegexOp op, uint8_t c, uint16_t x, uint16_t y, uint16_t *pc) {
-    // DRAGON: the step budget. A search costs up to its states a position, and a count writes its part out (`((a{100}){100}){100}` would be a million instructions), so this cap is what bounds a program, and with it a search's cost before it runs; a place past 65535 would also wrap the uint16_t pcs. Every instruction comes through here.
+    // DRAGON: the step budget. A search costs up to its states a position,
+    // and a count writes its part out (`((a{100}){100}){100}` would be a
+    // million instructions), so an unbounded program would make a search's
+    // cost unbounded before it runs; a place past 65535 would also wrap the
+    // uint16_t pcs.
+    // REMEDY: this check refuses a program past REGEX_INSTS_MOST (8192), and
+    // every instruction comes through here: regex_emit is the only push to
+    // `insts`.
     if (e->insts.len >= REGEX_INSTS_MOST) return regex_refuse(e->refused, 0, S("the pattern, its counts written out, is more than 8192 instructions: count less (`{n,m}`), or write `+` or `*`"));
     RegexInst i = {(uint8_t)op, c, x, y};
     TRY(RegexInstVec_push(&e->insts, i));
@@ -646,9 +654,15 @@ static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, const RegexNode *
     if ((n->quant == REGEX_STAR || n->quant == REGEX_PLUS) && regex_nullable(n, REGEX_ONE)) {
         // A loop whose turn can take nothing: its threads carry a bit, "this
         // turn took something", so a new turn begun where an earlier one
-        // stood is not lost to that one's visit. A turn that took nothing ends
-        // the loop (`again`); a `+`'s first such turn goes on past it (`first`).
-        // DRAGON: the step budget. Each such loop doubles the states of every instruction inside it, so a search's cost per position grows as 2 to the loops nested; the two caps (16 loops, 4 deep, the second in regex_compile) bound it at 16 times the instructions.
+        // stood is not lost to that one's visit. A turn that took nothing
+        // ends the loop (`again`); a `+`'s first such turn goes on past it
+        // (`first`).
+        // DRAGON: the step budget. Each such loop doubles the states of
+        // every instruction inside it, so a search's cost per position grows
+        // as 2 to the loops nested.
+        // REMEDY: two caps bound it at 16 states an instruction: this check
+        // refuses a 17th loop (REGEX_EMPTY_LOOPS_MOST), and regex_states
+        // refuses an instruction inside more than four (REGEX_NEST_MOST).
         if (e->loops == REGEX_EMPTY_LOOPS_MOST) return regex_refuse(e->refused, 0, S("more than 16 loops whose turn can match nothing (`(a*)*`, `(a|)+`): write some so a turn takes a byte"));
         uint8_t id = e->loops;
         e->loops++;
@@ -824,14 +838,25 @@ static STATUS_MUST_USE Status regex_compile_in(Arena *a, Arena *tree, Str patter
 }
 
 // Compiles `pattern` into `a`. STOP with `refused->refused` set when the
-// pattern is refused (where and why, Zig's text), and otherwise when an arena
+// pattern is refused (where and why), and otherwise when an arena
 // refused, `a->hit` set. What a failed compile took of `a` stays until its
 // owner frees it.
 static STATUS_MUST_USE Status regex_compile(Arena *a, Str pattern, RegexOptions options, RegexProgram *out, RegexRefusal *refused) {
     refused->refused = false;
-    // DRAGON: the C stack. The reader, regex_nullable and the emitter each recurse once a `(`, with no depth budget of their own, so a pattern of thousands of `(` would overflow the stack. This cap, checked before a byte is read, bounds them at 256 levels of a few hundred bytes each.
+    // DRAGON: the C stack. The reader, regex_nullable and the emitter each
+    // recurse once a `(`, with no depth budget of their own, so a pattern of
+    // thousands of `(` would overflow the stack.
+    // REMEDY: this cap on the pattern's length (REGEX_PATTERN_MOST, 256
+    // bytes), checked before a byte is read, bounds each recursion at 256
+    // levels.
     if (pattern.len > REGEX_PATTERN_MOST) return regex_refuse(refused, REGEX_PATTERN_MOST, S("a pattern of more than 256 bytes"));
-    // DRAGON: the arena budget. The tree is a second arena, given back before this returns, and its limit is what `a` had left, so a compile holds at most twice that at its peak, never more than the budget's owner gave. A pattern of 256 bytes bounds the tree to a few hundred KiB before the emitter's 8192 instructions refuse it.
+    // DRAGON: the arena budget. The tree is a second arena beside `a`, so a
+    // compile could hold more than the budget's owner gave if the tree had
+    // a limit of its own.
+    // REMEDY: the tree's limit is what `a` had left (`a->limit - a->held`),
+    // and arena_deinit gives the tree back before this returns, so a
+    // compile holds at most twice what was left, at its peak, and nothing
+    // after.
     Arena tree = arena_make(arena_sat_sub(a->limit, a->held));
     Status s = regex_compile_in(a, &tree, pattern, options, out, refused);
     if (s != OK && !refused->refused) a->hit = true;
@@ -887,7 +912,8 @@ static RegexThread regex_start_thread(size_t pos) {
     return t;
 }
 
-// The state a thread is in: its instruction and the bits of the loops around it.
+// The state a thread is in: its instruction and the bits of the loops around
+// it.
 static uint32_t regex_state_of(const RegexProgram *p, uint16_t pc, uint16_t flags) {
     RegexEncl en = at(p->encl, pc);
     RegexIds ids = {en.ids, en.n};
@@ -915,7 +941,14 @@ static void regex_add(const RegexProgram *p, RegexScratch *sc, RegexList *list, 
         for (;;) {
             *work += 1;
             uint32_t st = regex_state_of(p, t.pc, t.flags);
-            // DRAGON: the step budget. This stamp is what keeps a search linear: a state is followed at most once a position, so an empty loop (`(a*)*`) cannot spin and alternatives cannot multiply. It also bounds the lists and the stack: a list gets at most one thread a state, and the stack at most one a split's state, so neither outgrows the `states` (and one) it was made with; `at` traps if that ever fails.
+            // DRAGON: the step budget. Without a bound on what a position
+            // follows, an empty loop (`(a*)*`) would spin and alternatives
+            // would multiply, and the lists and the stack would outgrow the
+            // `states` (and one) they were made with.
+            // REMEDY: this stamp follows a state at most once a position, so
+            // a list gets at most one thread a state and the stack at most
+            // one a split's state; `at` traps if a list or the stack ever
+            // overflows.
             if (at(list->stamp, st) == list->now) break;
             at(list->stamp, st) = list->now;
             RegexInst i = at(p->insts, t.pc);
@@ -1019,7 +1052,8 @@ static RegexSearched regex_search_within(const RegexProgram *p, RegexScratch *sc
     int only = skips && regex_set_count(&p->first) == 1 ? regex_set_lowest(&p->first) : -1;
     for (size_t pos = from;; pos++) {
         // No thread alive and none matched: a start can live only at a byte
-        // that can begin a match, so the bytes before the next one are passed over.
+        // that can begin a match, so the bytes before the next one are
+        // passed over.
         if (skips && !matched && clist->len == 0) {
             size_t next = regex_next_first(&p->first, only, s, pos);
             skipped += (next == SIZE_MAX ? s.len : next) - pos;
@@ -1045,7 +1079,8 @@ static RegexSearched regex_search_within(const RegexProgram *p, RegexScratch *sc
             }
             if (pos == s.len) continue;
             uint8_t b = str_byte(s, pos);
-            // `regex_add` leaves only consuming instructions and `match` on a list.
+            // `regex_add` leaves only consuming instructions and `match` on a
+            // list.
             bool ok = i.op == REGEX_OP_BYTE ? b == i.c : i.op == REGEX_OP_ANY ? b != '\n' : regex_set_has(&at(p->sets, i.x), b);
             if (ok) {
                 RegexThread next = t;
@@ -1135,7 +1170,7 @@ static STATUS_MUST_USE Status regex_cached_fill(RegexCached *got, Str pattern, R
 // its own of at most `limit` bytes, evicting the least recently used entry
 // when all eight are taken, and gives it in `*out`. STOP with
 // `refused->refused` set when the pattern is refused, and otherwise when
-// `limit` was too small (Zig's machine budget); either way the cache is as
+// `limit` was too small (the machine budget); either way the cache is as
 // it was.
 static STATUS_MUST_USE Status regex_cache_put(RegexCache *c, Str pattern, RegexOptions options, size_t limit, RegexRefusal *refused, RegexCached **out) {
     RegexCached fresh;
@@ -1155,7 +1190,13 @@ static STATUS_MUST_USE Status regex_cache_put(RegexCache *c, Str pattern, RegexO
         if (!e->present) break;
     }
     RegexCached *dest = &at(es, slot);
-    // DRAGON: use after free. The evicted entry's arena goes back to the system here, so a RegexCached pointer, a program or a match's text taken from it before this put dangles. A caller holds an entry only between its get or put and the next put.
+    // DRAGON: use after free. The evicted entry's arena goes back to the
+    // system here, so a RegexCached pointer, a program or a match's text
+    // taken from it before this put dangles.
+    // REMEDY: nothing enforces it; by convention a caller holds an entry
+    // only between its get or put and the next put, and each regex builtin
+    // (builtin_program's callers, in builtins_text.c and host_text.c) takes
+    // one pattern and is done with it before it returns.
     if (dest->present) arena_deinit(&dest->arena);
     fresh.present = true;
     fresh.used = c->clock;

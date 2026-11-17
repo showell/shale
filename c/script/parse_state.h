@@ -1,12 +1,11 @@
-// parse_state.h: the parser's state and the pieces every production uses,
-// as Zig Shale's src/script/parse.zig's `Parser` holds them: the preludes
-// and libraries a parse holds, the frame of names, the working lists; a stop
-// and its message, the next token, the nesting budget, and a name's lookup
-// and declaration. Every stop's class, place and text is Zig's.
+// parse_state.h: the parser's state and the pieces every production uses:
+// the preludes and libraries a parse holds, the frame of names, the working
+// lists; a stop and its message, the next token, the nesting budget, and a
+// name's lookup and declaration.
 //
 // Everything the parse makes, the tree and its own working lists alike, comes
 // from one arena: the machine's. A STOP with `stopped` false is the arena's
-// refusal, which the caller reads as Zig's `error.OutOfMemory`.
+// refusal, which the caller reads as running out of machine memory.
 
 #ifndef SHALE_PARSE_STATE_H
 #define SHALE_PARSE_STATE_H
@@ -38,7 +37,7 @@ typedef struct {
 
 SLICE_TYPE(ParseExtras, ParseExtra);
 
-// The host's reader of a `use`d library, Zig's `parse.Loader`: on OK, `*got`
+// The host's reader of a `use`d library: on OK, `*got`
 // says whether `*out` holds the source; when it doesn't, `*why` says why.
 // STOP only when the arena refuses.
 typedef struct {
@@ -63,7 +62,8 @@ VEC_DEFINE(ParseStrVec, Str)
 VEC_DEFINE(ParseOwnerVec, size_t)
 MAP_DEFINE(ParseFunctionNames, uint32_t)
 
-// One function's names: a stack of locals, each in the block it was declared in.
+// One function's names: a stack of locals, each in the block it was declared
+// in.
 typedef struct {
     ParseLocalVec locals;
     uint16_t depth;
@@ -219,7 +219,7 @@ static inline STATUS_MUST_USE Status parse_set_stop(Parser *p, Pos pos, StopClas
     return STOP;
 }
 
-// Zig's `failAt`: a syntax error right after a long string is most likely a
+// A syntax error right after a long string is most likely a
 // closer inside its text that ended it early, so the stop names that closer
 // and the level that would hold it.
 static inline STATUS_MUST_USE Status parse_fail(Parser *p, Pos pos, StopClass cls, Str message) {
@@ -245,8 +245,8 @@ static inline STATUS_MUST_USE Status parse_fail(Parser *p, Pos pos, StopClass cl
     return parse_set_stop(p, pos, cls, message);
 }
 
-// Zig's `failf`: a stop whose message is made, the arena's refusal an
-// OutOfMemory rather than a fallback.
+// A stop whose message is made, the arena's refusal a STOP with `stopped`
+// false rather than a fallback message.
 static inline STATUS_MUST_USE Status parse_fail_msg(Parser *p, Pos pos, StopClass cls, const Msg *m) {
     if (m->s != OK) return STOP;
     return parse_fail(p, pos, cls, buf_view(&m->b));
@@ -273,8 +273,8 @@ static inline STATUS_MUST_USE Status parse_fail_parts(Parser *p, Pos pos, StopCl
 // A stop whose message is `n` pieces joined.
 #define parse_fail_cat(p, pos, cls, n, ...) parse_fail_parts((p), (pos), (cls), (StrPieces){{__VA_ARGS__}}, (n))
 
-// `n` in decimal, in the arena; "" when refused, which the message then
-// carries as Zig's would carry nothing.
+// `n` in decimal, in the arena; "" when refused, and the message then
+// carries nothing in its place.
 static inline Str parse_num(Parser *p, uint64_t n, bool *refused) {
     Buf b = buf_make(p->arena);
     if (buf_u64(&b, n) != OK) {
@@ -295,8 +295,8 @@ static inline Pos parse_pos(uint32_t line, uint32_t column) {
 }
 
 // A token as a message names it: words for the end, a string and a name or
-// number shown, any other token quoted. Each made one falls back, as Zig's
-// `describe` does, when the arena refuses.
+// number shown, any other token quoted. Each made one falls back to its
+// plain words when the arena refuses.
 static inline Str parse_describe(Parser *p, Token t) {
     switch (t.tag) {
     case TAG_EOF: return S("the end of the script");
@@ -362,15 +362,15 @@ static inline STATUS_MUST_USE Status parse_expect(Parser *p, Tag tag, Str what, 
     return parse_advance(p);
 }
 
-// Charges one level of the nesting budget. Every recursive production calls
-// it, which is what bounds the parser's stack.
-// DRAGON: the C stack. A source nested deeper than the budget would recurse
-// the parser off its stack and crash the process. Every recursive production
-// (block, statement, binary, unary's operator, suffixed, table) enters here,
-// and the budget (200 unset) bounds the depth; loading a prelude starts its
-// count again, but a prelude's own nesting is fixed and small.
+// Charges one level of the nesting budget.
+// DRAGON: the C stack. A source nested without bound would recurse the
+// parser off its stack and crash the process.
+// REMEDY: every recursive production (block, statement, binary, unary's
+// operator, suffixed, table) enters here, and the budget (200 unset; no
+// command line or header sets it) bounds the depth. Loading a prelude starts
+// its count again, and a prelude's own nesting is fixed and small.
 // A refusal counts no level, so a production that fails to enter has nothing
-// to leave: every other way out of one calls `parse_leave`, as Zig's `defer`.
+// to leave: every other way out of one calls `parse_leave`.
 static inline STATUS_MUST_USE Status parse_enter(Parser *p) {
     p->nesting++;
     if (p->nesting > p->max_nesting) {

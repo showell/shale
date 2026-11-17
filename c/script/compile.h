@@ -1,8 +1,7 @@
-// compile.h: compiles a script's functions into one array of ops for vm.h, a
-// stack machine over the walker's semantics: Zig Shale's
-// src/script/compile.zig, op for op.
+// compile.h: compiles a script's functions into one array of ops for vm.c, a
+// stack machine over a tree-walker's semantics.
 //
-// Steps are charged exactly as Zig's tree-walker charges them, a step as it
+// Steps are charged exactly as a tree-walker would charge them, a step as it
 // enters each node, before the node's own work, with the depth budget checked
 // there against how deep the walk is. The compiler records those enters in
 // the walker's order, each with its node's place and its static depth in its
@@ -76,7 +75,8 @@ typedef enum {
     OP_PRINT,
     // A call to builtin `a` with more arguments than any takes.
     OP_TOO_MANY,
-    // `yield()`: what the run still reaches, copied into a fresh arena; pushes nil.
+    // `yield()`: what the run still reaches, copied into a fresh arena;
+    // pushes nil.
     OP_COLLECT,
     // The call-depth check before a function's arguments.
     OP_CALL_PREP,
@@ -674,7 +674,7 @@ static inline STATUS_MUST_USE Status compile_function(Compiler *c, const Functio
 }
 
 // Compiles `program` into `a`. STOP only when the arena refuses, which the
-// caller reads as the machine budget, as Zig does.
+// caller reads as the machine budget.
 static inline STATUS_MUST_USE Status compile_program(Arena *a, const Program *program, uint32_t most_args, uint32_t depth_most, Code *out) {
     Compiler c;
     memset(&c, 0, sizeof c);

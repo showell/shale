@@ -1,14 +1,14 @@
 // regex.h: the linear-time regular expressions behind `re_find`, `re_match`,
-// `re_replace`, `re_find_all` and the host's `re_lines`: Zig Shale's
-// src/script/regex.zig, the same subset, answers, refusals and counts.
+// `re_replace`, `re_find_all` and the host's `re_lines`.
 //
 // A pattern compiles to a Pike VM program. A search advances every thread a
 // byte at a time in order of preference and follows each state at most once a
 // position, so it finds the match a backtracker would find first, in at most
 // (bytes + 1) times the program's states, whatever the pattern. The counts a
 // search gives (`positions`, `skipped`, `work`) are what the builtins charge
-// steps by, so they are Zig's exactly. Shale has its own engine so that every
-// search is linear in its input: PCRE backtracks, and RE2 is C++.
+// steps by, so a change to them changes every regex builtin's cost. Shale has
+// its own engine so that every search is linear in its input: PCRE
+// backtracks, and RE2 is C++.
 //
 // The functions are in regex.c, which a program includes after this header:
 // the C is one translation unit, every function `static`.
@@ -64,8 +64,8 @@ typedef enum {
     REGEX_OP_MATCH,
 } RegexOp;
 
-// Six bytes, as Zig's: `op` is a RegexOp held in a uint8_t, Zig's `enum(u8)`.
-// With a 4-byte enum `op` it would be 12, a size TCC 0.9.27 miscompiles when
+// Six bytes: `op` is a RegexOp held in a uint8_t. With a 4-byte enum `op`
+// it would be 12, a size TCC 0.9.27 miscompiles when
 // a function returns it straight into a call (style.md, "Declarations").
 // `regex_emit` takes the fields.
 typedef struct {
@@ -75,7 +75,7 @@ typedef struct {
     uint16_t y;
 } RegexInst;
 
-_Static_assert(sizeof(RegexInst) == 6, "an instruction is Zig's six bytes");
+_Static_assert(sizeof(RegexInst) == 6, "an instruction is six bytes");
 
 // 256 bits, one a byte.
 typedef struct {
@@ -117,7 +117,7 @@ typedef struct {
     bool nocase;
 } RegexOptions;
 
-// Why a pattern was refused: `refused` set, the byte offset, and Zig's text.
+// Why a pattern was refused: `refused` set, the byte offset, and the text.
 typedef struct {
     bool refused;
     size_t at;
@@ -187,7 +187,7 @@ typedef struct {
 typedef struct {
     bool present;
     // The entry's own arena: its program, its scratch and its text, all given
-    // back at once when it is evicted, as Zig's machine heap gives them back.
+    // back at once when it is evicted.
     Arena arena;
     Str text;
     bool nocase;

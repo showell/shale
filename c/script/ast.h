@@ -1,17 +1,17 @@
-// ast.h: the tree a script parses to, Zig Shale's src/script/ast.zig. Every
-// node has its line and column, every name is already resolved to a slot in
-// its function's frame, and every call names a builtin or a function by index.
-// All of it lives in the machine's arena.
+// ast.h: the tree a script parses to. Every node has its line and column,
+// every name is already resolved to a slot in its function's frame, and every
+// call names a builtin or a function by index. All of it lives in the
+// machine's arena.
 //
-// The layouts are the C's own: arena byte counts are outside the frozen
-// surface, so nothing here mirrors Zig's sizes.
+// Arena byte counts are outside the frozen surface, so the layouts here are
+// free to change.
 
 #ifndef SHALE_AST_H
 #define SHALE_AST_H
 
 #include "../foundation/err.h"
 
-// The builtins, in ast.zig's order; `ast_builtin_names` spells each.
+// The builtins; `ast_builtin_names` spells each, in this order.
 typedef enum {
     BUILTIN_LS,
     BUILTIN_STAT,
@@ -120,7 +120,7 @@ static inline BuiltinNames ast_builtin_names(void) {
     return n;
 }
 
-// The builtin named `name`, as Zig's `std.meta.stringToEnum`; false when none is.
+// The builtin named `name`; false when none is.
 static inline bool ast_builtin_named(Str name, Builtin *out) {
     BuiltinNames n = ast_builtin_names();
     for (size_t i = 0; i < n.len; i++) {

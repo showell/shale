@@ -1,9 +1,8 @@
-// parse_expr.h: expressions, as Zig Shale's src/script/parse.zig's
-// `binary`, `unary`, `suffixed`, `primary`, `call` and `table` do:
-// precedence climbing; a call resolved where it stands (the script's
-// function, a prelude's, a builtin, or Lua's library refused by name) and
-// held to its parameters; and a table literal that is a list or a map, never
-// both. Each level of the nesting budget is left on every way out.
+// parse_expr.h: expressions, by precedence climbing; a call resolved where
+// it stands (the script's function, a prelude's, a builtin, or Lua's library
+// refused by name) and held to its parameters; and a table literal that is a
+// list or a map, never both. Each level of the nesting budget is left on
+// every way out.
 
 #ifndef SHALE_PARSE_EXPR_H
 #define SHALE_PARSE_EXPR_H
@@ -384,12 +383,13 @@ static inline STATUS_MUST_USE Status parse_call(Parser *p, Str name, Pos pos, Ex
     }
     size_t from = p->exprs.len;
     Status s = parse_call_args(p, pos, &call, shown, params, optional, from, out);
-    // The arguments' stack, put back on every way out, as Zig's `defer`.
+    // The arguments' stack, put back on every way out.
     p->exprs.len = from;
     return s;
 }
 
-// One entry of a table literal: a key's (`name =` or `["key"] =`) and its value.
+// One entry of a table literal: a key's (`name =` or `["key"] =`) and its
+// value.
 static inline STATUS_MUST_USE Status parse_table_entry(Parser *p, size_t items_from, size_t entries_from) {
     Pos here = parse_here(p);
     bool keyed = false;
@@ -465,7 +465,7 @@ static inline STATUS_MUST_USE Status parse_table_body(Parser *p, Pos pos, size_t
 }
 
 // A table literal, one level of the nesting budget; the level and both
-// stacks are put back on every way out, as Zig's `defer`s.
+// stacks are put back on every way out.
 static inline STATUS_MUST_USE Status parse_table(Parser *p, Pos pos, Expr **out) {
     TRY(parse_enter(p));
     size_t items_from = p->exprs.len;
