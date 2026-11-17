@@ -187,6 +187,10 @@ and its self-test plants a break of each one.
 - A message a stop prints is Zig Shale's text, byte for byte. Where Zig
   formats a message and falls back to a plain one when memory runs out, the
   C does the same.
+- **Held:** no `run_fail(` has a `{` or `}` in its literal. Zig's format
+  escapes a brace (`{{`), and a refused arena shows that raw format, so the
+  stop goes through `run_failf` or `path_fail` with the format as its
+  fallback (`docs/C-SEAMS.md`).
 
 ## Tests
 
