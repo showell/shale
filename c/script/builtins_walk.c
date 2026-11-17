@@ -21,7 +21,7 @@ VEC_DEFINE(WalkLevels, WalkLevel)
 // what to pass over (`skip`), where an earlier part ended (`after`), and the
 // reads to leave in the budget (`keep_reads`).
 typedef struct {
-    bool has_depth;
+    // WALK_ANY_DEPTH when not given.
     uint64_t depth;
     bool has_like;
     Str like;
@@ -34,6 +34,9 @@ typedef struct {
     bool has_keep_reads;
     uint64_t keep_reads;
 } WalkOptions;
+
+// A `depth` that holds no walk back: a depth given is at most INT64_MAX.
+#define WALK_ANY_DEPTH UINT64_MAX
 
 // The most reads one entry of a walk takes: its stat, and its listing if it
 // is a folder walked into.
@@ -72,6 +75,7 @@ static uint64_t walk_sat_add(uint64_t a, uint64_t b) {
 
 static STATUS_MUST_USE Status walk_options(Run *r, Pos pos, const Value *v, WalkOptions *o) {
     memset(o, 0, sizeof *o);
+    o->depth = WALK_ANY_DEPTH;
     Table *m = NULL;
     TRY(builtin_map_arg(r, pos, BUILTIN_WALK, v, &m));
     for (size_t i = 0; i < ValueMap_len(&m->map); i++) {
@@ -81,7 +85,6 @@ static STATUS_MUST_USE Status walk_options(Run *r, Pos pos, const Value *v, Walk
             int64_t d = 0;
             TRY(builtin_int_arg(r, pos, BUILTIN_WALK, &x, S("its depth"), &d));
             if (d < 1) return run_failf(r, pos, CLASS_ARGUMENT, "`walk`: a depth of {d}: 1 is the folder's own entries", S("`walk`: a depth of "), run_num(r, d), S(": 1 is the folder's own entries"));
-            o->has_depth = true;
             o->depth = (uint64_t)d;
         } else if (str_eq(k, S("like"))) {
             TRY(builtin_string_arg(r, pos, BUILTIN_WALK, &x, S("its `like`"), &o->like));
@@ -164,7 +167,7 @@ static STATUS_MUST_USE Status walk_resume(Run *r, Pos pos, const StorePath *p, c
         }
         top->at = i + 1;
         StoreEntry en = at(top->entries, i);
-        if (en.kind != STORE_KIND_DIRECTORY || (o->has_depth && top->depth >= o->depth)) return OK;
+        if (en.kind != STORE_KIND_DIRECTORY || top->depth >= o->depth) return OK;
         WalkLevel next;
         memset(&next, 0, sizeof next);
         TRY(walk_under(r, pos, top->rel, en.name, &next.rel));
@@ -214,6 +217,7 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
     TRY(builtin_path(r, pos, BUILTIN_WALK, &at(args, 0), true, &p));
     WalkOptions o;
     memset(&o, 0, sizeof o);
+    o.depth = WALK_ANY_DEPTH;
     if (args.len > 1) TRY(walk_options(r, pos, &at(args, 1), &o));
     Str after = o.has_after ? o.after : S("");
     Table *list = NULL;
@@ -286,7 +290,7 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
         TRY(walk_under(r, pos, top_rel, en.name, &rel));
         last = rel;
         TRY(run_charge(r, pos, rel.len));
-        bool into = en.kind == STORE_KIND_DIRECTORY && (!o.has_depth || depth < o.depth);
+        bool into = en.kind == STORE_KIND_DIRECTORY && depth < o.depth;
         Str full = S("");
         if (en.kind != STORE_KIND_OTHER || into) TRY(walk_full(r, pos, top_full, en.name, &full));
         bool keep = !o.has_kind || o.kind == en.kind;
