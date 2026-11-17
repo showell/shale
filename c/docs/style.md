@@ -108,9 +108,10 @@ and its self-test plants a break of each one.
 
 - **Held:** nothing outside `arena.h` calls `malloc`, `free`, `calloc` or
   `realloc`.
-- Every byte comes from an `Arena`, whose limit is a budget. The arena keeps
-  Zig's accounting exactly, so a C run stops on the arena budget where the
-  Zig run does.
+- Every byte comes from an `Arena`, whose limit is a budget. The bytes held
+  need not match Zig's (`docs/C-SEAMS.md`, "Fidelity"), but a run that stops
+  on the arena budget under the Zig stops on it under the C, with Zig's
+  message.
 - A container takes its arena when it is made (`buf_make(a)`,
   `I64s_make(a)`) and keeps it.
 
