@@ -34,12 +34,12 @@ enum { PROCS_LINEAGE_MOST = 64 };
 
 VEC_DEFINE(ProcsPids, int32_t)
 
-// Room for a /proc file's one read: a stat line, as Zig's 1024-byte buffer,
-// or a status file, as its 4096.
+// Room for a stat line's one read, as Zig's 1024-byte buffer.
 typedef struct {
     char bytes[1024];
 } ProcsStatRoom;
 
+// Room for a status file's one read, as Zig's 4096-byte buffer.
 typedef struct {
     char bytes[4096];
 } ProcsStatusRoom;
@@ -424,6 +424,13 @@ static STATUS_MUST_USE Status procs_stop_target(Run *r, Pos pos, const Value *v,
     if (!ValueMap_get(&m->map, S("start"), &s)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`proc_stop`: the entry has no `start`: hand it one of `procs()`, which names a process by its pid and its start"));
     if (s.tag != VALUE_STRING) return host_fail_plain(r, pos, CLASS_TYPE, S("`proc_stop`: the entry's `start` is not a string"));
     *start = s.as.string;
+    // DRAGON: the process boundary. A TERM to this `shale` or to a process
+    // above it (the shell, the agent's tool call) kills the command that ran
+    // the script, as `pkill -f` matching its own shell does.
+    // REMEDY: refused here for any entry handed, whatever its start, before
+    // a pidfd is opened; `procs` leaves the same lineage out, so no filter
+    // of its list names one. test_host_procs plants a lineage that starts
+    // above this process.
     ProcsLineage l;
     procs_lineage(&l);
     if (*pid <= 1 || procs_in_lineage(&l, *pid)) return host_fail(r, pos, CLASS_ARGUMENT, S("`proc_stop`: pid {d} is this run or one above it, which a script never stops"), MSG_ARGS(MSG_FROM_HOST(run_num(r, *pid))));
