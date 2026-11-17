@@ -77,7 +77,20 @@ Zig size and no Zig probe of them.
   message (Zig's format text, its fallback when the message cannot be
   made), the function and the trail. `run_budget_stop` is
   `interp.Run.budgetStop`, and every refused allocation is `run_oom`, the
-  arena budget, as Zig reads every `OutOfMemory`.
+  arena budget, as Zig reads every `OutOfMemory`. Zig's `Run.fail` is
+  `allocPrint(fmt, args) catch fmt` even with no arguments, so where the
+  format escapes a brace (`{{`) the raw format is what a refused arena
+  shows. A stop whose Zig format has an escape goes through `run_failf` (or
+  the host's `path_fail`) with that format as its fallback, never
+  `run_fail` with the finished text; test_vm.c holds every such site to the
+  raw text under an arena that refuses everything.
+- **The C has no background run.** Zig's process.zig and script.zig run a
+  script as `.background` (`read_only`), stepped in slices while others
+  write: its walk then skips an entry that vanished mid-walk rather than
+  stopping (builtins_walk.zig:40, :238), and `admit` refuses every change,
+  "a background run only reads" (builtins_change.zig:430). The C's CLI
+  runs every script as an atomic run, so it ports neither; a C embedder that
+  wants a background run must port both.
 - **`attempt` is a frame marked with its answer**, as in src/script/vm.zig: a stop
   that is not a budget's unwinds to the innermost marked frame, cuts the
   call trail back to its depth, and fills `{ok = false, error, class, ...}`.

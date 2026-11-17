@@ -78,7 +78,7 @@ static STATUS_MUST_USE Status change_edits_arg(Run *r, Pos pos, ConstValues args
                              S("`edit` of two arguments takes a list of edits, `{{old = ..., new = ...}, ...}`, not "), value_type_name(l), S(": or `edit(p, old, new)`"));
         }
         Table *t = l->as.table;
-        if (t->kind == TABLE_MAP) return run_fail(&r->ctx, pos, CLASS_TYPE, S("`edit`'s second argument is a list of edits, `{{old = ..., new = ...}, ...}`, not a map"));
+        if (t->kind == TABLE_MAP) return run_failf(r, pos, CLASS_TYPE, "`edit`'s second argument is a list of edits, `{{{{old = ..., new = ...}}, ...}}`, not a map", S("`edit`'s second argument is a list of edits, `{{old = ..., new = ...}, ...}`, not a map"));
         if (t->kind == TABLE_EMPTY || t->list.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`edit` of no edits: the list is empty"));
         if (t->list.len > CHANGE_EDITS_MOST) {
             return run_failf(r, pos, CLASS_ARGUMENT, "`edit` takes at most {d} edits a call, given {d}: call it again for the rest", S("`edit` takes at most "), run_unum(r, CHANGE_EDITS_MOST), S(" edits a call, given "),
@@ -120,7 +120,7 @@ static STATUS_MUST_USE Status change_edits_arg(Run *r, Pos pos, ConstValues args
         *out = all;
         return OK;
     }
-    if (args.len < 3) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`edit` takes `(p, old, new[, opts])` or `(p, {edits})`"));
+    if (args.len < 3) return run_failf(r, pos, CLASS_ARGUMENT, "`edit` takes `(p, old, new[, opts])` or `(p, {{edits}})`", S("`edit` takes `(p, old, new[, opts])` or `(p, {edits})`"));
     Edit e = {S(""), S(""), false, false};
     TRY(builtin_string_arg(r, pos, b, &at(args, 1), S("what it replaces"), &e.old));
     TRY(builtin_string_arg(r, pos, b, &at(args, 2), S("what it writes"), &e.new_text));

@@ -48,10 +48,10 @@ static STATUS_MUST_USE Status host_zig_lines_opt(Run *r, Pos pos, Table *m, Host
         Str key = ValueMap_key_at(&m->map, k);
         Value x = ValueMap_value_at(&m->map, k);
         if (!str_eq(key, S("lines"))) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_rename` takes `lines`, `container` and `via`, not `{s}`", S("`zig_rename` takes `lines`, `container` and `via`, not `"), key, S("`"));
-        if (x.tag != VALUE_TABLE) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`zig_rename`'s `lines` is `{first, last}`"));
+        if (x.tag != VALUE_TABLE) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_rename`'s `lines` is `{{first, last}}`", S("`zig_rename`'s `lines` is `{first, last}`"));
         Table *l = x.as.table;
         bool pair = l->kind == TABLE_LIST && l->list.len == 2 && at(l->list, 0).tag == VALUE_INT && at(l->list, 1).tag == VALUE_INT;
-        if (!pair) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`zig_rename`'s `lines` is `{first, last}`"));
+        if (!pair) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_rename`'s `lines` is `{{first, last}}`", S("`zig_rename`'s `lines` is `{first, last}`"));
         int64_t first = at(l->list, 0).as.integer;
         int64_t last = at(l->list, 1).as.integer;
         if (first < 1 || last < first) {
@@ -122,7 +122,17 @@ VEC_DEFINE(HostZigRenames, HostZigRename)
 VEC_DEFINE(HostZigSizes, size_t)
 
 static STATUS_MUST_USE Status host_zig_names_type(Run *r, Pos pos) {
-    return run_fail(&r->ctx, pos, CLASS_TYPE, S("`zig_rename`'s names are `{from, to}`"));
+    return run_failf(r, pos, CLASS_TYPE, "`zig_rename`'s names are `{{from, to}}`", S("`zig_rename`'s names are `{from, to}`"));
+}
+
+// `zig_renames`' two stops on its map of names, apart so a test reaches them
+// past the path, which the values' arena must give.
+static STATUS_MUST_USE Status host_zig_renames_list(Run *r, Pos pos) {
+    return run_failf(r, pos, CLASS_TYPE, "`zig_renames` takes a map of names, `{{a = \"x.a\"}}`, not a list", S("`zig_renames` takes a map of names, `{a = \"x.a\"}`, not a list"));
+}
+
+static STATUS_MUST_USE Status host_zig_renames_none(Run *r, Pos pos) {
+    return run_failf(r, pos, CLASS_ARGUMENT, "`zig_renames` of no names: give `{{a = \"x.a\", ...}}`", S("`zig_renames` of no names: give `{a = \"x.a\", ...}`"));
 }
 
 // `host("zig_rename", path, {from, to}, opts)`: reads, plans through zig-ast
@@ -142,14 +152,14 @@ static STATUS_MUST_USE Status host_zig_rename_in(Paths *h, Arena *sa, Run *r, Po
     if (ValueMap_get(&names->map, S("many"), &many)) {
         if (many.tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`zig_renames` takes a map of names, `{{a = \"x.a\"}}`, not {s}", S("`zig_renames` takes a map of names, `{a = \"x.a\"}`, not "), value_type_name(&many));
         Table *m = many.as.table;
-        if (m->kind == TABLE_LIST) return run_fail(&r->ctx, pos, CLASS_TYPE, S("`zig_renames` takes a map of names, `{a = \"x.a\"}`, not a list"));
+        if (m->kind == TABLE_LIST) return host_zig_renames_list(r, pos);
         for (size_t k = 0; k < ValueMap_len(&m->map); k++) {
             Value v = ValueMap_value_at(&m->map, k);
             HostZigRename one = {ValueMap_key_at(&m->map, k), {0}};
             TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &v, S("a name's `to`"), &one.to));
             if (HostZigRenames_push(&renames, one) != OK) return run_values_oom(r, pos);
         }
-        if (renames.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`zig_renames` of no names: give `{a = \"x.a\", ...}`"));
+        if (renames.len == 0) return host_zig_renames_none(r, pos);
     } else {
         Value from;
         Value to;
@@ -516,11 +526,11 @@ typedef enum {
 } HostZigReport;
 
 static STATUS_MUST_USE Status host_zig_names_list_type(Run *r, Pos pos) {
-    return run_fail(&r->ctx, pos, CLASS_TYPE, S("`zig_move`'s names are a list of names, or `{kind = ..., name = ...}`"));
+    return run_failf(r, pos, CLASS_TYPE, "`zig_move`'s names are a list of names, or `{{kind = ..., name = ...}}`", S("`zig_move`'s names are a list of names, or `{kind = ..., name = ...}`"));
 }
 
 static STATUS_MUST_USE Status host_zig_name_type(Run *r, Pos pos) {
-    return run_fail(&r->ctx, pos, CLASS_TYPE, S("`zig_move`: a name is a string, or `{kind = ..., name = ...}`"));
+    return run_failf(r, pos, CLASS_TYPE, "`zig_move`: a name is a string, or `{{kind = ..., name = ...}}`", S("`zig_move`: a name is a string, or `{kind = ..., name = ...}`"));
 }
 
 // `zig_move`'s names, Zig's loop over `names.list.items`.

@@ -402,11 +402,11 @@ static STATUS_MUST_USE Status builtin_sort_keys(Run *r, Pos pos, const Value *ke
             at(room, i) = sk;
             continue;
         }
-        if (k->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`sort`'s key {d} is {s}: a key is a name or {key = name, desc = true}", S("`sort`'s key "), nth, S(" is "), value_type_name(k), S(": a key is a name or {key = name, desc = true}"));
+        if (k->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`sort`'s key {d} is {s}: a key is a name or {{key = name, desc = true}}", S("`sort`'s key "), nth, S(" is "), value_type_name(k), S(": a key is a name or {key = name, desc = true}"));
         Table *km = k->as.table;
-        if (km->kind != TABLE_MAP) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d} is a list: a key is a name or {key = name, desc = true}", S("`sort`'s key "), nth, S(" is a list: a key is a name or {key = name, desc = true}"));
+        if (km->kind != TABLE_MAP) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d} is a list: a key is a name or {{key = name, desc = true}}", S("`sort`'s key "), nth, S(" is a list: a key is a name or {key = name, desc = true}"));
         Value name;
-        if (!ValueMap_get(&km->map, S("key"), &name)) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d} has no `key`: {key = name, desc = true}", S("`sort`'s key "), nth, S(" has no `key`: {key = name, desc = true}"));
+        if (!ValueMap_get(&km->map, S("key"), &name)) return run_failf(r, pos, CLASS_ARGUMENT, "`sort`'s key {d} has no `key`: {{key = name, desc = true}}", S("`sort`'s key "), nth, S(" has no `key`: {key = name, desc = true}"));
         if (name.tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`sort`'s key {d}: its `key` is a name, not {s}", S("`sort`'s key "), nth, S(": its `key` is a name, not "), value_type_name(&name));
         bool own = desc;
         for (size_t e = 0; e < ValueMap_len(&km->map); e++) {

@@ -219,6 +219,103 @@ TEST(the_depth_budget_stops_a_deep_expression) {
     ran_free(&x);
 }
 
+// A table of `kind` holding `v` (under `key` for a map), made in the run's
+// values arena while it still gives, for a builtin called directly.
+static Value vm_table_of(Ran *x, TableKind kind, Str key, Value v) {
+    Table *t = NULL;
+    Pos at_ = {1, 1};
+    if (run_new_table(&x->r, at_, &t) != OK) abort();
+    t->kind = kind;
+    if (kind == TABLE_MAP && ValueMap_put(&t->map, key, v) != OK) abort();
+    if (kind == TABLE_LIST && ValueVec_push(&t->list, v) != OK) abort();
+    Value out;
+    value_table(&out, t);
+    return out;
+}
+
+static Value vm_str(const char *lit) { // cstr: a test's literal
+    Value v;
+    value_string(&v, ran_cs(lit));
+    return v;
+}
+
+static Value vm_int(int64_t i) {
+    Value v;
+    value_int(&v, i);
+    return v;
+}
+
+// Each stop whose Zig format escapes a brace (`{{`), every one in src/, with
+// the values' arena refusing everything when the stop's message is made: the
+// message is Zig's format text, raw, as `Run.fail`'s `allocPrint(...) catch
+// fmt` gives it. The C's cooked text has one brace there, so a stop that
+// gave its finished literal would differ from Zig here alone. The builtins
+// are called directly, their arguments made first, since a script under a
+// tiny arena stops on its arguments before it reaches the stop. The host's
+// path_fail sites (`run`, `job_start`, `job_wait`) take Zig's format itself
+// and fall back to it, so they cannot drift and are not repeated here.
+TEST(a_stop_whose_zig_format_escapes_a_brace_falls_back_to_that_format_raw) {
+    static Ran x;
+    ran_source(&x, S(""), ran_budgets());
+    EXPECT_EQ(x.ran, OK);
+    Value edit_map[2] = {vm_str("p"), vm_table_of(&x, TABLE_MAP, S("a"), vm_int(1))};
+    Value edit_str[2] = {vm_str("p"), vm_str("x")};
+    Value edit_one[1] = {vm_str("p")};
+    Value sort_int = vm_table_of(&x, TABLE_LIST, S(""), vm_int(1));
+    Value sort_list = vm_table_of(&x, TABLE_LIST, S(""), vm_table_of(&x, TABLE_LIST, S(""), vm_int(1)));
+    Value sort_nokey = vm_table_of(&x, TABLE_LIST, S(""), vm_table_of(&x, TABLE_MAP, S("desc"), vm_int(1)));
+    Value subst[3] = {vm_str("abc"), vm_str("x"), vm_str("y")};
+    Value lines_int = vm_table_of(&x, TABLE_MAP, S("lines"), vm_int(5));
+    Value lines_one = vm_table_of(&x, TABLE_MAP, S("lines"), vm_table_of(&x, TABLE_LIST, S(""), vm_int(1)));
+    Arena refuses = arena_make(0);
+    x.r.ctx.values = &refuses;
+    Run *r = &x.r;
+    Pos pos = {1, 1};
+    EditList edits = {NULL, 0};
+    SortKey keys[BUILTIN_SORT_KEYS_MOST];
+    size_t n_keys = 0;
+    Value out;
+    value_nil(&out);
+    ConstValues a_map = {edit_map, 2};
+    EXPECT_EQ(change_edits_arg(r, pos, a_map, &edits), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`edit`'s second argument is a list of edits, `{{{{old = ..., new = ...}}, ...}}`, not a map"));
+    ConstValues a_str = {edit_str, 2};
+    EXPECT_EQ(change_edits_arg(r, pos, a_str, &edits), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`edit` of two arguments takes a list of edits, `{{{{old = ..., new = ...}}, ...}}`, not {s}: or `edit(p, old, new)`"));
+    ConstValues a_one = {edit_one, 1};
+    EXPECT_EQ(change_edits_arg(r, pos, a_one, &edits), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`edit` takes `(p, old, new[, opts])` or `(p, {{edits}})`"));
+    EXPECT_EQ(builtin_sort_keys(r, pos, &sort_int, false, keys, &n_keys), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`sort`'s key {d} is {s}: a key is a name or {{key = name, desc = true}}"));
+    EXPECT_EQ(builtin_sort_keys(r, pos, &sort_list, false, keys, &n_keys), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`sort`'s key {d} is a list: a key is a name or {{key = name, desc = true}}"));
+    EXPECT_EQ(builtin_sort_keys(r, pos, &sort_nokey, false, keys, &n_keys), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`sort`'s key {d} has no `key`: {{key = name, desc = true}}"));
+    ConstValues a_subst = {subst, 3};
+    EXPECT_EQ(bi_substitute(r, pos, a_subst, &out), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`substitute`: \"{s}\" is not in the text, so nothing was replaced; `{{missing_ok = true}}` if a miss is expected"));
+    HostZigRenameOpts o;
+    memset(&o, 0, sizeof o);
+    EXPECT_EQ(host_zig_lines_opt(r, pos, lines_int.as.table, &o), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`zig_rename`'s `lines` is `{{first, last}}`"));
+    EXPECT_EQ(host_zig_lines_opt(r, pos, lines_one.as.table, &o), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`zig_rename`'s `lines` is `{{first, last}}`"));
+    EXPECT_EQ(host_zig_names_type(r, pos), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`zig_rename`'s names are `{{from, to}}`"));
+    EXPECT_EQ(host_zig_names_list_type(r, pos), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`zig_move`'s names are a list of names, or `{{kind = ..., name = ...}}`"));
+    EXPECT_EQ(host_zig_name_type(r, pos), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`zig_move`: a name is a string, or `{{kind = ..., name = ...}}`"));
+    EXPECT_EQ(host_zig_renames_list(r, pos), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`zig_renames` takes a map of names, `{{a = \"x.a\"}}`, not a list"));
+    EXPECT_EQ(host_zig_renames_none(r, pos), STOP);
+    EXPECT_STR(r->ctx.stop.message, S("`zig_renames` of no names: give `{{a = \"x.a\", ...}}`"));
+    EXPECT(refuses.hit);
+    EXPECT_EQ(refuses.held, 0);
+    x.r.ctx.values = &x.values;
+    ran_free(&x);
+}
+
 TEST_PART(vm, TEST_CASE(arithmetic_and_print_take_zigs_steps), TEST_CASE(the_step_budget_stops_one_past_it),
           TEST_CASE(the_call_depth_budget_names_every_call), TEST_CASE(attempt_makes_a_stop_a_value_and_the_run_goes_on),
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
@@ -226,4 +323,4 @@ TEST_PART(vm, TEST_CASE(arithmetic_and_print_take_zigs_steps), TEST_CASE(the_ste
           TEST_CASE(division_floors_and_an_overflow_stops), TEST_CASE(an_index_past_the_append_names_the_one_that_appends),
           TEST_CASE(maps_and_list_loops_take_zigs_steps), TEST_CASE(with_no_host_host_stops_naming_the_call_and_attempt_catches_it),
           TEST_CASE(values_name_their_types_and_truth), TEST_CASE(integer_text_and_checked_arithmetic),
-          TEST_CASE(the_depth_budget_stops_a_deep_expression));
+          TEST_CASE(the_depth_budget_stops_a_deep_expression), TEST_CASE(a_stop_whose_zig_format_escapes_a_brace_falls_back_to_that_format_raw));

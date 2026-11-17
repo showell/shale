@@ -456,7 +456,7 @@ static STATUS_MUST_USE Status bi_substitute(Run *r, Pos pos, ConstValues args, V
             value_string(out, s);
             return OK;
         }
-        return run_failf(r, pos, CLASS_ARGUMENT, "`substitute`: \"{s}\" is not in the text, so nothing was replaced; `{missing_ok = true}` if a miss is expected", S("`substitute`: \""), str_sub(old, 0, old.len < 40 ? old.len : 40), S("\" is not in the text, so nothing was replaced; `{missing_ok = true}` if a miss is expected"));
+        return run_failf(r, pos, CLASS_ARGUMENT, "`substitute`: \"{s}\" is not in the text, so nothing was replaced; `{{missing_ok = true}}` if a miss is expected", S("`substitute`: \""), str_sub(old, 0, old.len < 40 ? old.len : 40), S("\" is not in the text, so nothing was replaced; `{missing_ok = true}` if a miss is expected"));
     }
     if (new_text.len > 0 && n > SIZE_MAX / new_text.len) return run_budget_stop(&r->ctx, pos, BUDGET_ARENA);
     size_t total = s.len - n * old.len + n * new_text.len;
