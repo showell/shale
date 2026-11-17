@@ -135,10 +135,14 @@ const Answer = struct {
     run: *Run,
     pos: ast.Pos,
     who: []const u8,
+    /// The fields of the line `next` gave last; the next call reuses them.
+    into: [16][]const u8 = undefined,
+    /// Each word kept in the run's arena once a call (a token's tag).
+    kept: std.StringHashMapUnmanaged([]const u8) = .empty,
 
     /// The next line's fields: a `bad` line, or one that does not read, stops.
     fn next(an: *Answer) Error!?[]const []const u8 {
-        const l = an.lines.next(an.sa) catch |e| switch (e) {
+        const l = an.lines.next(an.sa, &an.into) catch |e| switch (e) {
             error.OutOfMemory => return an.run.oom(an.pos),
             else => return an.run.fail(an.pos, .host, "`{s}`: zig-ast's answer does not read ({t})", .{ an.who, e }),
         } orelse return null;
@@ -155,6 +159,17 @@ const Answer = struct {
     fn field(an: *Answer, l: []const []const u8, i: usize) Error![]const u8 {
         if (i >= l.len) return an.wrong();
         return l[i];
+    }
+
+    /// `s` in the run's arena, copied once a call however often it comes.
+    fn word(an: *Answer, s: []const u8) Error![]const u8 {
+        const got = an.kept.getOrPut(an.sa, s) catch return an.run.oom(an.pos);
+        if (!got.found_existing) {
+            const k = try keep(an.run, an.pos, s);
+            got.key_ptr.* = k;
+            got.value_ptr.* = k;
+        }
+        return got.value_ptr.*;
     }
 
     fn wrong(an: *Answer) Error {
@@ -417,11 +432,11 @@ pub fn decls(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Va
             if (l.len != 12) return an.wrong();
             const m = try run.newTable(pos);
             m.kind = .map;
-            try put(run, pos, m, "kind", .{ .string = try keep(run, pos, l[1]) });
+            try put(run, pos, m, "kind", .{ .string = try an.word(l[1]) });
             try put(run, pos, m, "name", .{ .string = try keep(run, pos, l[2]) });
-            try put(run, pos, m, "name_form", .{ .string = try keep(run, pos, l[3]) });
-            try put(run, pos, m, "visibility", .{ .string = try keep(run, pos, l[4]) });
-            try put(run, pos, m, "linkage", .{ .string = try keep(run, pos, l[5]) });
+            try put(run, pos, m, "name_form", .{ .string = try an.word(l[3]) });
+            try put(run, pos, m, "visibility", .{ .string = try an.word(l[4]) });
+            try put(run, pos, m, "linkage", .{ .string = try an.word(l[5]) });
             inline for (.{ "first", "last", "start", "stop" }, 6..) |k, i| try put(run, pos, m, k, .{ .int = @intCast(try an.int(l, i)) });
             const above_first = try an.int(l, 10);
             if (above_first > 0) {
@@ -506,19 +521,29 @@ pub fn tokens(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Error!V
     var an = try ask(h, sa, run, pos, "zig_tokens", req.out.written());
     const list = try run.newTable(pos);
     list.kind = .list;
+    // Each tag's name, by its number, as the answer names it.
+    var tag_names: [256]?[]const u8 = @splat(null);
     while (try an.next()) |l| {
         if (is(l, "work")) {
             try run.charge(pos, try an.int(l, 1));
-        } else if (is(l, "t")) {
-            const start = try an.int(l, 2);
-            const end = try an.int(l, 3);
-            if (end < start or end > src.len) return an.wrong();
-            const m = try run.newTable(pos);
-            m.kind = .map;
-            try put(run, pos, m, "tag", .{ .string = try keep(run, pos, try an.field(l, 1)) });
-            try put(run, pos, m, "text", .{ .string = try keep(run, pos, src[start..end]) });
-            try put(run, pos, m, "line", .{ .int = @intCast(try an.int(l, 4)) });
-            list.list.append(run.alloc, .{ .table = m }) catch return run.oom(pos);
+        } else if (is(l, "tag")) {
+            const i = try an.int(l, 1);
+            if (i >= tag_names.len) return an.wrong();
+            tag_names[i] = try keep(run, pos, try an.field(l, 2));
+        } else if (is(l, "tb")) {
+            const n = try an.int(l, 1);
+            const block = an.lines.block(n * wire.token_bytes) catch return an.wrong();
+            list.list.ensureUnusedCapacity(run.alloc, n) catch return run.oom(pos);
+            for (0..n) |i| {
+                const tk = wire.readToken(block, i);
+                if (tk.end < tk.start or tk.end > src.len) return an.wrong();
+                const m = try run.newTable(pos);
+                m.kind = .map;
+                try put(run, pos, m, "tag", .{ .string = tag_names[tk.tag] orelse return an.wrong() });
+                try put(run, pos, m, "text", .{ .string = try keep(run, pos, src[tk.start..tk.end]) });
+                try put(run, pos, m, "line", .{ .int = tk.line });
+                list.list.appendAssumeCapacity(.{ .table = m });
+            }
         } else if (is(l, "no_tag")) {
             return noTag(run, pos, "zig_tokens", "std.zig.Token.Tag: `identifier`, `keyword_fn`, `string_literal`, ...", only.?);
         } else if (is(l, "invalid")) {

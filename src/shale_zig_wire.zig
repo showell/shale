@@ -77,6 +77,26 @@ pub fn source(w: *std.Io.Writer, bytes: []const u8) std.Io.Writer.Error!void {
     try w.writeByte('\n');
 }
 
+/// **A TOKEN, FIXED WIDTH**, for `zig_tokens`' answer: a line a token cost
+/// the host more than the tokenizing, so its tokens come as a block,
+/// `tb<TAB><n>` and n records, each its tag's number (named first by a
+/// `tag <number> <name>` line), its start, its end and its line, little-endian.
+pub const Token = struct { tag: u8, start: u32, end: u32, line: u32 };
+pub const token_bytes = 13;
+
+pub fn writeToken(w: *std.Io.Writer, t: Token) std.Io.Writer.Error!void {
+    try w.writeByte(t.tag);
+    try w.writeInt(u32, t.start, .little);
+    try w.writeInt(u32, t.end, .little);
+    try w.writeInt(u32, t.line, .little);
+}
+
+/// The `i`th record of a `tb` block.
+pub fn readToken(block: []const u8, i: usize) Token {
+    const r = block[i * token_bytes ..][0..token_bytes];
+    return .{ .tag = r[0], .start = std.mem.readInt(u32, r[1..5], .little), .end = std.mem.readInt(u32, r[5..9], .little), .line = std.mem.readInt(u32, r[9..13], .little) };
+}
+
 /// A field's text, its escapes undone.
 pub fn unescape(a: std.mem.Allocator, s: []const u8) error{ OutOfMemory, BadEscape }![]const u8 {
     if (std.mem.indexOfScalar(u8, s, '\\') == null) return s;
@@ -106,16 +126,21 @@ pub const Lines = struct {
     body: []const u8,
     at: usize = 0,
 
-    /// The next line's fields, or null at the end of the body.
-    pub fn next(l: *Lines, a: std.mem.Allocator) error{ OutOfMemory, BadEscape, BadFrame }!?[]const []const u8 {
+    /// The next line's fields, in `into`, or null at the end of the body. A
+    /// field is allocated only when it holds an escape, so a line costs no
+    /// allocation of its own: an answer is a line a token.
+    pub fn next(l: *Lines, a: std.mem.Allocator, into: [][]const u8) error{ OutOfMemory, BadEscape, BadFrame }!?[]const []const u8 {
         if (l.at >= l.body.len) return null;
         const end = std.mem.indexOfScalarPos(u8, l.body, l.at, '\n') orelse return error.BadFrame;
         const text = l.body[l.at..end];
         l.at = end + 1;
-        var fields: std.ArrayList([]const u8) = .empty;
+        var n: usize = 0;
         var it = std.mem.splitScalar(u8, text, '\t');
-        while (it.next()) |f| try fields.append(a, try unescape(a, f));
-        return fields.items;
+        while (it.next()) |f| : (n += 1) {
+            if (n == into.len) return error.BadFrame;
+            into[n] = try unescape(a, f);
+        }
+        return into[0..n];
     }
 
     /// The bytes of the `src` block whose line gave `n`, and the newline after.
@@ -143,14 +168,18 @@ test "zig wire: a line's fields escape tabs, newlines, CRs and backslashes, and 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var l: Lines = .{ .body = body };
-    const first = (try l.next(arena.allocator())).?;
+    var into: [4][]const u8 = undefined;
+    const first = (try l.next(arena.allocator(), &into)).?;
     try std.testing.expectEqual(@as(usize, 3), first.len);
     try std.testing.expectEqual(@as(usize, 3), try int(first[1]));
     try std.testing.expectEqualStrings("a\tb\nc\r\\d", first[2]);
-    const src = (try l.next(arena.allocator())).?;
+    const src = (try l.next(arena.allocator(), &into)).?;
     try std.testing.expectEqualStrings("x\ty\n", try l.block(try int(src[1])));
-    try std.testing.expectEqualStrings("end", (try l.next(arena.allocator())).?[0]);
-    try std.testing.expect(try l.next(arena.allocator()) == null);
+    try std.testing.expectEqualStrings("end", (try l.next(arena.allocator(), &into)).?[0]);
+    try std.testing.expect(try l.next(arena.allocator(), &into) == null);
+    // A line of more fields than `into` holds is no line of the wire's.
+    var short: Lines = .{ .body = "a\tb\tc\n" };
+    try std.testing.expectError(error.BadFrame, short.next(arena.allocator(), into[0..2]));
     try std.testing.expectError(error.BadEscape, unescape(arena.allocator(), "a\\x"));
     try std.testing.expectError(error.BadFrame, l.block(1));
 }

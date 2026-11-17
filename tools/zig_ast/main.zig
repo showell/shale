@@ -24,7 +24,8 @@
 //! `unattributed <line>`, `declaration <line> <name>`, `refused <why>`, and
 //! `stop <message>` for a refusal said whole); then the values:
 //!
-//!   tokens: `t <tag> <start> <end> <line>` a token.
+//!   tokens: `tag <number> <name>` for each tag kept, then `tb <n>` and the
+//!     n tokens as fixed-width records (src/shale_zig_wire.zig's `Token`).
 //!   decls: `d <kind> <name> <name_form> <visibility> <linkage> <first>
 //!     <last> <start> <stop> <above_first> <above_last>` (0 0 when there is
 //!     no comment above), then its `u <name>` uses and `r <name>` reaches.
@@ -61,9 +62,11 @@ pub fn main(init: std.process.Init) !void {
     var out = std.Io.File.stdout().writerStreaming(io, &out_buf);
     try out.interface.print("{s}{s}\n", .{ wire.header, @import("builtin").zig_version_string });
     try out.interface.flush();
+    // One arena for the run, its memory kept from one request to the next.
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
     while (true) {
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer arena.deinit();
+        _ = arena.reset(.retain_capacity);
         const a = arena.allocator();
         const len_line = (in.interface.takeDelimiter('\n') catch |e| switch (e) {
             error.ReadFailed => return in.err.?,
@@ -92,14 +95,15 @@ pub const ServeError = error{ OutOfMemory, WriteFailed, BadEscape, BadFrame, Bad
 /// Answers one request's `body` on `w`.
 pub fn serve(a: std.mem.Allocator, w: *std.Io.Writer, body: []const u8) ServeError!void {
     var lines: wire.Lines = .{ .body = body };
-    const cmd = (try lines.next(a)) orelse return error.BadRequest;
-    if (cmd.len != 1) return error.BadRequest;
+    var first: [1][]const u8 = undefined;
+    const cmd = (lines.next(a, &first) catch return error.BadRequest) orelse return error.BadRequest;
     var opts: std.ArrayList([]const []const u8) = .empty;
     var sources: std.ArrayList([:0]const u8) = .empty;
-    while (try lines.next(a)) |l| {
+    var into: [8][]const u8 = undefined;
+    while (try lines.next(a, &into)) |l| {
         if (l.len == 2 and std.mem.eql(u8, l[0], "src")) {
             try sources.append(a, try a.dupeSentinel(u8, try lines.block(try wire.int(l[1])), 0));
-        } else try opts.append(a, l);
+        } else try opts.append(a, try a.dupe([]const u8, l));
     }
     const name = cmd[0];
     const one = sources.items.len == 1;
@@ -131,11 +135,26 @@ fn tokens(a: std.mem.Allocator, w: *std.Io.Writer, src: [:0]const u8, opts: []co
         .invalid => |n| return wire.line(w, .{ "invalid", n }),
     };
     try wire.line(w, .{ "work", toks.len });
-    const starts = try za.lineStarts(a, src);
+    // Each tag kept named once, then the tokens as one block.
+    var named: std.EnumSet(za.Tag) = .empty;
+    var kept: usize = 0;
     for (toks) |tk| {
         if (only) |o| if (tk.tag != o) continue;
-        try wire.line(w, .{ "t", @tagName(tk.tag), tk.start, tk.end, za.lineOf(starts, tk.start) });
+        kept += 1;
+        if (named.contains(tk.tag)) continue;
+        named.insert(tk.tag);
+        try wire.line(w, .{ "tag", @backingInt(tk.tag), @tagName(tk.tag) });
     }
+    try w.print("tb\t{d}\n", .{kept});
+    var line: usize = 1;
+    var at: usize = 0;
+    for (toks) |tk| {
+        line += std.mem.count(u8, src[at..tk.start], "\n");
+        at = tk.start;
+        if (only) |o| if (tk.tag != o) continue;
+        try wire.writeToken(w, .{ .tag = @backingInt(tk.tag), .start = @intCast(tk.start), .end = @intCast(tk.end), .line = @intCast(line) });
+    }
+    try w.writeByte('\n');
 }
 
 fn sortNames(names: [][]const u8) void {
