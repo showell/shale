@@ -63,27 +63,24 @@ static Str fixture_path(Arena *a) {
 VEC_DEFINE(ArgList, Str);
 
 // A spec running the fixture with `verb` and up to two arguments ("" none).
-static SpawnSpec fixture_spec(Arena *a, ArgList *argv, const char *verb, const char *x, const char *y) { // cstr: literals
+static void fixture_spec(SpawnSpec *s, Arena *a, ArgList *argv, const char *verb, const char *x, const char *y) { // cstr: literals
     *argv = ArgList_make(a);
     if (ArgList_push(argv, fixture_path(a)) != OK) abort();
     if (ArgList_push(argv, (Str){verb, strlen(verb)}) != OK) abort();
     if (strlen(x) > 0 && ArgList_push(argv, (Str){x, strlen(x)}) != OK) abort();
     if (strlen(y) > 0 && ArgList_push(argv, (Str){y, strlen(y)}) != OK) abort();
-    SpawnSpec s = spawn_spec_default();
-    s.argv.ptr = argv->ptr;
-    s.argv.len = argv->len;
+    spawn_spec_default(s);
+    s->argv.ptr = argv->ptr;
+    s->argv.len = argv->len;
     static const Str env_all[1] = {S("PATH=/usr/bin:/bin")};
-    s.env.ptr = env_all;
-    s.env.len = 1;
-    s.timeout_ms = 10000;
-    return s;
+    s->env.ptr = env_all;
+    s->env.len = 1;
+    s->timeout_ms = 10000;
 }
 
-static Collect collect_make(Arena *a) {
-    Collect c;
-    memset(&c, 0, sizeof c);
-    c.out = buf_make(a);
-    return c;
+static void collect_make(Collect *c, Arena *a) {
+    memset(c, 0, sizeof *c);
+    c->out = buf_make(a);
 }
 
 // Whether `pid` is gone, or a zombie no one has reaped yet: either way it
@@ -120,10 +117,12 @@ static long grandchild_pid(Str out) {
 TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     SpawnOutcome o;
     static const Str env_all[2] = {S("SHALE_FIXTURE=present"), S("PATH=/usr/bin:/bin")};
-    SpawnSpec s = fixture_spec(&a, &argv, "lines", "3", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "lines", "3", "");
     s.env.ptr = env_all;
     s.env.len = 2;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
@@ -133,46 +132,46 @@ TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
     EXPECT(!o.has_signal);
     EXPECT_STR(buf_view(&c.out), S("line 1\nline 2\nline 3\n"));
     buf_clear(&c.out);
-    s = fixture_spec(&a, &argv, "exit", "7", "");
+    fixture_spec(&s, &a, &argv, "exit", "7", "");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.code, 7);
     EXPECT_STR(buf_view(&c.out), S(""));
-    s = fixture_spec(&a, &argv, "cat", "", "");
+    fixture_spec(&s, &a, &argv, "cat", "", "");
     s.has_stdin = true;
     s.stdin_bytes = S("fed\nin\n");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S("fed\nin\n"));
     buf_clear(&c.out);
     // stdin unset is /dev/null: `cat` ends at once.
-    s = fixture_spec(&a, &argv, "cat", "", "");
+    fixture_spec(&s, &a, &argv, "cat", "", "");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.code, 0);
     EXPECT_STR(buf_view(&c.out), S(""));
     // An empty stdin is closed before the loop.
-    s = fixture_spec(&a, &argv, "cat", "", "");
+    fixture_spec(&s, &a, &argv, "cat", "", "");
     s.has_stdin = true;
     s.stdin_bytes = S("");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S(""));
-    s = fixture_spec(&a, &argv, "env", "SHALE_FIXTURE", "");
+    fixture_spec(&s, &a, &argv, "env", "SHALE_FIXTURE", "");
     s.env.ptr = env_all;
     s.env.len = 2;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S("present\n"));
     buf_clear(&c.out);
     // The environment is the whole of it: nothing of the test's own leaks in.
-    s = fixture_spec(&a, &argv, "env", "HOME", "");
+    fixture_spec(&s, &a, &argv, "env", "HOME", "");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S("(unset)\n"));
     buf_clear(&c.out);
-    s = fixture_spec(&a, &argv, "pwd", "", "");
+    fixture_spec(&s, &a, &argv, "pwd", "", "");
     s.has_cwd = true;
     s.cwd = S("/");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S("/\n"));
     buf_clear(&c.out);
     // stderr is the same stream.
-    s = fixture_spec(&a, &argv, "stderr", "on two", "");
+    fixture_spec(&s, &a, &argv, "stderr", "on two", "");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S("on two\n"));
     arena_deinit(&a);
@@ -181,9 +180,11 @@ TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
 TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) {
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     SpawnOutcome o;
-    SpawnSpec s = fixture_spec(&a, &argv, "sleep", "20000", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "sleep", "20000", "");
     s.timeout_ms = 200;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_TIMEOUT);
@@ -192,7 +193,7 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
     EXPECT(!o.has_code);
     EXPECT(o.ms >= 200 && o.ms < 5000);
     // The attack: a child that ignores TERM is KILLed at the grace's end.
-    s = fixture_spec(&a, &argv, "ignore-term", "20000", "");
+    fixture_spec(&s, &a, &argv, "ignore-term", "20000", "");
     s.timeout_ms = 300;
     s.grace_ms = 300;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
@@ -201,7 +202,7 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
     EXPECT_EQ(o.signal, SIGKILL);
     EXPECT(o.ms >= 600 && o.ms < 5000);
     EXPECT_STR(buf_view(&c.out), S("ignoring\n"));
-    s = fixture_spec(&a, &argv, "kill-self", "", "");
+    fixture_spec(&s, &a, &argv, "kill-self", "", "");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_SIGNAL);
     EXPECT(o.has_signal);
@@ -218,7 +219,7 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
     static const Str folder[1] = {S("/tmp")};
     s.argv.ptr = folder;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_NOT_RUNNABLE);
-    s = fixture_spec(&a, &argv, "pwd", "", "");
+    fixture_spec(&s, &a, &argv, "pwd", "", "");
     s.has_cwd = true;
     s.cwd = S("/no/such/folder");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_NO_CWD);
@@ -233,7 +234,7 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
     EXPECT(buf_str(&path_env, str_sub(full, 0, slash - 1)) == OK);
     Str env_one[1] = {buf_view(&path_env)};
     Str by_name[3] = {str_sub(full, slash, full.len), S("lines"), S("1")};
-    s = spawn_spec_default();
+    spawn_spec_default(&s);
     s.argv.ptr = by_name;
     s.argv.len = 3;
     s.env.ptr = env_one;
@@ -247,19 +248,21 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
 TEST(cpu_ms_counts_what_a_program_burns_a_child_waited_for_included_and_none_it_sleeps) {
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     SpawnOutcome o;
-    SpawnSpec s = fixture_spec(&a, &argv, "burn", "300", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "burn", "300", "");
     s.timeout_ms = 30000;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.code, 0);
     EXPECT(o.cpu_ms >= 290);
-    s = fixture_spec(&a, &argv, "burn-child", "300", "");
+    fixture_spec(&s, &a, &argv, "burn-child", "300", "");
     s.timeout_ms = 30000;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.code, 0);
     EXPECT(o.cpu_ms >= 290);
-    s = fixture_spec(&a, &argv, "sleep", "300", "");
+    fixture_spec(&s, &a, &argv, "sleep", "300", "");
     s.timeout_ms = 30000;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT(o.ms >= 300);
@@ -270,9 +273,11 @@ TEST(cpu_ms_counts_what_a_program_burns_a_child_waited_for_included_and_none_it_
 TEST(much_output_past_the_pipes_buffer_all_of_it_read) {
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     SpawnOutcome o;
-    SpawnSpec s = fixture_spec(&a, &argv, "spill", "1000000", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "spill", "1000000", "");
     s.timeout_ms = 30000;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.code, 0);
@@ -289,10 +294,12 @@ static bool term_blocked(void) {
 TEST(a_term_to_shale_while_a_program_runs_ends_its_group_and_says_so_and_the_mask_is_put_back) {
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     c.raise_signal = SIGTERM;
     SpawnOutcome o;
-    SpawnSpec s = fixture_spec(&a, &argv, "ignore-term", "20000", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "ignore-term", "20000", "");
     s.timeout_ms = 30000;
     s.grace_ms = 300;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
@@ -308,10 +315,12 @@ TEST(a_term_to_shale_while_a_program_runs_ends_its_group_and_says_so_and_the_mas
 TEST(a_sink_that_stops_ends_the_programs_group_and_reaps_it_before_the_stop_is_said) {
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     c.refuse = true;
     SpawnOutcome o;
-    SpawnSpec s = fixture_spec(&a, &argv, "pid-sleep", "20000", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "pid-sleep", "20000", "");
     s.timeout_ms = 30000;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_SINK_STOPPED);
     EXPECT(c.pid > 0);
@@ -331,9 +340,11 @@ TEST(a_sink_that_stops_ends_the_programs_group_and_reaps_it_before_the_stop_is_s
 TEST(attack_a_grandchild_that_ignores_term_ends_with_the_group_at_the_deadline) {
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     SpawnOutcome o;
-    SpawnSpec s = fixture_spec(&a, &argv, "grandchild-stay", "20000", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "grandchild-stay", "20000", "");
     s.timeout_ms = 300;
     s.grace_ms = 300;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
@@ -355,9 +366,11 @@ TEST(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_never_holds_run
     // grandchild outlives the run: the test ends it itself.
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     SpawnOutcome o;
-    SpawnSpec s = fixture_spec(&a, &argv, "grandchild-exit", "3000", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "grandchild-exit", "3000", "");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_EXIT);
     EXPECT_EQ(o.code, 0);
@@ -374,46 +387,55 @@ TEST(attack_the_deadline_and_the_grace_to_the_millisecond) {
     // The loop's decision at each edge, pure: TERM at the deadline and not a
     // millisecond before, KILL at the grace's end and not before, and the
     // poll's wait never past the nearest edge.
-    SpawnStep before = spawn_step(false, false, 0, false, 1000, 2000, 0, 999);
+    SpawnStep before;
+    spawn_step(false, false, 0, false, 1000, 2000, 0, 999, &before);
     EXPECT(!before.term);
     EXPECT(!before.kill);
     EXPECT_EQ(before.wait_ms, 1);
-    SpawnStep on = spawn_step(false, false, 0, false, 1000, 2000, 0, 1000);
+    SpawnStep on;
+    spawn_step(false, false, 0, false, 1000, 2000, 0, 1000, &on);
     EXPECT(on.term);
     EXPECT(!on.kill);
     EXPECT_EQ(on.wait_ms, 1000);
-    SpawnStep grace_before = spawn_step(false, true, 1000, false, 1000, 2000, 0, 2999);
+    SpawnStep grace_before;
+    spawn_step(false, true, 1000, false, 1000, 2000, 0, 2999, &grace_before);
     EXPECT(!grace_before.term);
     EXPECT(!grace_before.kill);
     EXPECT_EQ(grace_before.wait_ms, 1);
-    SpawnStep grace_on = spawn_step(false, true, 1000, false, 1000, 2000, 0, 3000);
+    SpawnStep grace_on;
+    spawn_step(false, true, 1000, false, 1000, 2000, 0, 3000, &grace_on);
     EXPECT(!grace_on.term);
     EXPECT(grace_on.kill);
     EXPECT_EQ(grace_on.wait_ms, 1000);
     // A grace of 0 KILLs in the same turn as the TERM.
-    SpawnStep no_grace = spawn_step(false, false, 0, false, 1000, 0, 0, 1000);
+    SpawnStep no_grace;
+    spawn_step(false, false, 0, false, 1000, 0, 0, 1000, &no_grace);
     EXPECT(no_grace.term);
     EXPECT(no_grace.kill);
     // Once exited, only the drain bounds the wait; nothing is signalled.
-    SpawnStep drain = spawn_step(true, false, 0, false, 1000, 2000, 5150, 5000);
+    SpawnStep drain;
+    spawn_step(true, false, 0, false, 1000, 2000, 5150, 5000, &drain);
     EXPECT(!drain.term);
     EXPECT(!drain.kill);
     EXPECT_EQ(drain.wait_ms, 150);
-    SpawnStep far = spawn_step(false, false, 0, false, 90000, 2000, 0, 0);
+    SpawnStep far;
+    spawn_step(false, false, 0, false, 90000, 2000, 0, 0, &far);
     EXPECT_EQ(far.wait_ms, 1000);
     // Live: a deadline of 0 is already past at the first turn.
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     SpawnOutcome o;
-    SpawnSpec s = fixture_spec(&a, &argv, "sleep", "20000", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "sleep", "20000", "");
     s.timeout_ms = 0;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_TIMEOUT);
     EXPECT_EQ(o.signal, SIGTERM);
     EXPECT(o.ms < 1000);
     // A program that ends well inside its deadline exits, never times out.
-    s = fixture_spec(&a, &argv, "exit", "0", "");
+    fixture_spec(&s, &a, &argv, "exit", "0", "");
     s.timeout_ms = 5000;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_EXIT);
@@ -430,10 +452,12 @@ TEST(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds) {
     // arena: every line is counted and the arena never holds the output.
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    SpawnSpec s = fixture_spec(&a, &argv, "spill-lines", "200000", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "spill-lines", "200000", "");
     s.timeout_ms = 60000;
     Arena held = arena_make(1 << 20);
-    KeepOptions ko = keep_options_default();
+    KeepOptions ko;
+    keep_options_default(&ko);
     ko.head = 2;
     ko.tail = 3;
     ko.width = 10;
@@ -460,7 +484,7 @@ TEST(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds) {
     Keep k2;
     EXPECT(keep_init(&k2, &held2, ko) == OK);
     SpawnSink sink2 = {&k2, keep_write};
-    s = fixture_spec(&a, &argv, "spill", "2000000", "");
+    fixture_spec(&s, &a, &argv, "spill", "2000000", "");
     s.timeout_ms = 60000;
     EXPECT_EQ(spawn_run(&a, &s, sink2, &o), SPAWN_OK);
     Kept one;
@@ -482,9 +506,11 @@ TEST(attack_a_term_or_hup_the_program_sends_its_parent_mid_run_ends_its_group) {
     for (size_t i = 0; i < sigs.len; i++) {
         Arena a = arena_make(1 << 24);
         ArgList argv;
-        Collect c = collect_make(&a);
+        Collect c;
+        collect_make(&c, &a);
         SpawnOutcome o;
-        SpawnSpec s = fixture_spec(&a, &argv, "signal-parent", at(sigs, i), "20000");
+        SpawnSpec s;
+        fixture_spec(&s, &a, &argv, "signal-parent", at(sigs, i), "20000");
         s.timeout_ms = 30000;
         s.grace_ms = 300;
         EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
@@ -504,11 +530,13 @@ TEST(attack_a_program_that_never_reads_its_stdin_leaves_shale_standing) {
     spawn_quiet_sigpipe();
     Arena a = arena_make(1 << 24);
     ArgList argv;
-    Collect c = collect_make(&a);
+    Collect c;
+    collect_make(&c, &a);
     SpawnOutcome o;
     static char mb[1 << 20];
     memset(mb, 'y', sizeof mb);
-    SpawnSpec s = fixture_spec(&a, &argv, "exit", "3", "");
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "exit", "3", "");
     s.has_stdin = true;
     s.stdin_bytes = (Str){mb, sizeof mb};
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
@@ -543,7 +571,8 @@ TEST(the_paths_tried_are_zigs) {
     EXPECT_STR(((Str){at(p, 2), strlen(at(p, 2))}), S("/bin/x"));
     // The arena refused: an answer of OUT_OF_MEMORY, nothing forked.
     Arena tiny = arena_make(8);
-    SpawnSpec s = spawn_spec_default();
+    SpawnSpec s;
+    spawn_spec_default(&s);
     static const Str argv_all[1] = {S("x")};
     s.argv.ptr = argv_all;
     s.argv.len = 1;

@@ -13,17 +13,15 @@ static bool parse_copy(Str s, JobRecord *r) {
     return job_record_parse(text, r);
 }
 
-static JobRecord record_of(Str argv) {
-    JobRecord r;
-    memset(&r, 0, sizeof r);
-    r.pid = 42;
-    r.pgid = 42;
-    r.start = S("123");
-    r.started = 9;
-    r.argv = argv;
-    r.reaper = 1;
-    r.reaper_start = S("5");
-    return r;
+static void record_of(JobRecord *r, Str argv) {
+    memset(r, 0, sizeof *r);
+    r->pid = 42;
+    r->pgid = 42;
+    r->start = S("123");
+    r->started = 9;
+    r->argv = argv;
+    r->reaper = 1;
+    r->reaper_start = S("5");
 }
 
 TEST(a_record_reads_back_as_it_was_written_and_a_broken_one_is_none) {
@@ -69,7 +67,9 @@ TEST(an_argv_with_a_newline_or_a_backslash_reads_back_and_none_overrides_a_key) 
     Argvs argvs = {argvs_all, 3};
     for (size_t i = 0; i < argvs.len; i++) {
         Str text;
-        EXPECT(job_record_format(buf, record_of(at(argvs, i)), &text));
+        JobRecord w;
+        record_of(&w, at(argvs, i));
+        EXPECT(job_record_format(buf, w, &text));
         Bytes mine = {buf_bytes, text.len};
         JobRecord r;
         EXPECT(job_record_parse(mine, &r));
@@ -86,13 +86,16 @@ TEST(an_argv_with_a_newline_or_a_backslash_reads_back_and_none_overrides_a_key) 
     char long_bytes[64];
     memset(long_bytes, 120, sizeof long_bytes);
     Str text;
-    EXPECT(!job_record_format(small, record_of((Str){long_bytes, sizeof long_bytes}), &text));
+    JobRecord big;
+    record_of(&big, (Str){long_bytes, sizeof long_bytes});
+    EXPECT(!job_record_format(small, big, &text));
 }
 
 TEST(the_escaped_text_is_zigs) {
     char buf_bytes[512];
     Bytes buf = {buf_bytes, sizeof buf_bytes};
-    JobRecord w = record_of(S("a\\nb \\ c\nd"));
+    JobRecord w;
+    record_of(&w, S("a\\nb \\ c\nd"));
     w.has_signal = true;
     w.signal = 9;
     Str text;

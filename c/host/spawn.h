@@ -72,13 +72,11 @@ typedef struct {
     uint64_t drain_ms;
 } SpawnSpec;
 
-static inline SpawnSpec spawn_spec_default(void) {
-    SpawnSpec s;
-    memset(&s, 0, sizeof s);
-    s.stdout_fd = -1;
-    s.grace_ms = 2000;
-    s.drain_ms = 200;
-    return s;
+static inline void spawn_spec_default(SpawnSpec *s) {
+    memset(s, 0, sizeof *s);
+    s->stdout_fd = -1;
+    s->grace_ms = 2000;
+    s->drain_ms = 200;
 }
 
 // How a program ended.
@@ -332,7 +330,7 @@ typedef struct {
     uint64_t wait_ms;
 } SpawnStep;
 
-static inline SpawnStep spawn_step(bool exited, bool has_termed, uint64_t termed_at, bool killed, uint64_t deadline, uint64_t grace_ms, uint64_t drain_until, uint64_t now) {
+static inline void spawn_step(bool exited, bool has_termed, uint64_t termed_at, bool killed, uint64_t deadline, uint64_t grace_ms, uint64_t drain_until, uint64_t now, SpawnStep *out) {
     SpawnStep s = {false, false, 1000};
     if (!exited && !has_termed && now >= deadline) {
         s.term = true;
@@ -348,14 +346,15 @@ static inline SpawnStep spawn_step(bool exited, bool has_termed, uint64_t termed
     if (!exited && has_termed && !killed && spawn_sat_sub(termed_at + grace_ms, now) < w) w = spawn_sat_sub(termed_at + grace_ms, now);
     if (exited && spawn_sat_sub(drain_until, now) < w) w = spawn_sat_sub(drain_until, now);
     s.wait_ms = w;
-    return s;
+    *out = s;
 }
 
 // One turn of the poll loop: the deadline's and the grace's signals, a poll,
 // then what it found. STOP when the sink does.
 static inline STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, Bytes buf, SpawnSink sink) {
     uint64_t now = spawn_mono_ms();
-    SpawnStep step = spawn_step(l->exited, l->has_termed, l->termed_at, l->killed, l->deadline, spec->grace_ms, l->drain_until, now);
+    SpawnStep step;
+    spawn_step(l->exited, l->has_termed, l->termed_at, l->killed, l->deadline, spec->grace_ms, l->drain_until, now, &step);
     // DRAGON: the process boundary. `kill(-pid)` signals the whole group, so `pid` must be the leader's and still unreaped: a reaped leader's id can be given to a new process and group, and -1 would signal every process there is. `exited` is set only after wait4 reaps it, and every kill here is behind `!exited`; `pid` is fork's, never 0 or 1.
     if (step.term) {
         l->has_why = true;
@@ -528,16 +527,14 @@ typedef struct {
 SLICE_TYPE(SpawnPipe, int);
 SLICE_TYPE(SpawnPipes, SpawnPipe);
 
-static inline SpawnFds spawn_fds_make(void) {
-    SpawnFds f;
-    memset(&f, 0, sizeof f);
-    SpawnPipe all[3] = {{f.out_room, 2}, {f.err_room, 2}, {f.in_room, 2}};
+static inline void spawn_fds_make(SpawnFds *f) {
+    memset(f, 0, sizeof *f);
+    SpawnPipe all[3] = {{f->out_room, 2}, {f->err_room, 2}, {f->in_room, 2}};
     SpawnPipes pipes = {all, 3};
     for (size_t p = 0; p < pipes.len; p++) {
         for (size_t i = 0; i < 2; i++) at(at(pipes, p), i) = -1;
     }
-    f.sig_fd = -1;
-    return f;
+    f->sig_fd = -1;
 }
 
 static inline void spawn_fds_release(SpawnFds *f) {
@@ -602,7 +599,8 @@ static inline SpawnResult spawn_run(Arena *a, const SpawnSpec *spec, SpawnSink s
         if (cwd == NULL) return SPAWN_OUT_OF_MEMORY;
     }
 
-    SpawnFds f = spawn_fds_make();
+    SpawnFds f;
+    spawn_fds_make(&f);
     SpawnResult result = spawn_started(spec, sink, &f, cwd, paths, argv, envp, outcome);
     spawn_fds_release(&f);
     return result;

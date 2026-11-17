@@ -40,13 +40,15 @@ int main(int argc, char **argv) {
     Buf env = buf_make(&a);
     if (buf_lit(&env, "PATH=") != OK || buf_str(&env, (Str){path != NULL ? path : "", path != NULL ? strlen(path) : 0}) != OK) return 3;
     Str env_all[1] = {buf_view(&env)};
-    SpawnSpec s = spawn_spec_default();
+    SpawnSpec s;
+    spawn_spec_default(&s);
     s.argv.ptr = prog;
     s.argv.len = n;
     s.env.ptr = env_all;
     s.env.len = 1;
     s.timeout_ms = (uint64_t)strtoull(arg_of(argv, (size_t)argc, 1).ptr, NULL, 10);
-    KeepOptions ko = keep_options_default();
+    KeepOptions ko;
+    keep_options_default(&ko);
     ko.tail = (size_t)strtoull(arg_of(argv, (size_t)argc, 2).ptr, NULL, 10);
     Keep k;
     if (keep_init(&k, &held, ko) != OK) return 3;

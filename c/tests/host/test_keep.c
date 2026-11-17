@@ -26,14 +26,12 @@ static uint64_t splitmix_next(uint64_t *s) {
     return z ^ (z >> 31);
 }
 
-static Prng prng_init(uint64_t seed) {
+static void prng_init(Prng *p, uint64_t seed) {
     uint64_t g = seed;
-    Prng p;
-    p.s0 = splitmix_next(&g);
-    p.s1 = splitmix_next(&g);
-    p.s2 = splitmix_next(&g);
-    p.s3 = splitmix_next(&g);
-    return p;
+    p->s0 = splitmix_next(&g);
+    p->s1 = splitmix_next(&g);
+    p->s2 = splitmix_next(&g);
+    p->s3 = splitmix_next(&g);
 }
 
 static uint64_t prng_next(Prng *p) {
@@ -104,7 +102,8 @@ static uint64_t prng_at_most(Prng *p, uint64_t n) {
 
 TEST(prng_is_zigs) {
     // Zig's own test of Xoshiro256 seeded with 0, its first three draws.
-    Prng p = prng_init(0);
+    Prng p;
+    prng_init(&p, 0);
     EXPECT_EQ(prng_next(&p), 0x53175d61490b23dfULL);
     EXPECT_EQ(prng_next(&p), 0x61da6f3dc380d507ULL);
     EXPECT_EQ(prng_next(&p), 0x5c0fdf91ec9a7bfcULL);
@@ -255,7 +254,8 @@ static uint64_t count_newlines(Str s) {
 }
 
 TEST(head_and_tail_and_the_filter_against_the_oracle_on_zigs_random_outputs) {
-    Prng p = prng_init(233);
+    Prng p;
+    prng_init(&p, 233);
     static const Str pieces_all[11] = {S("ok"), S("error"), S("FAIL"), S("x"), S("\n"), S("\n"), S("\n"), S("\r\n"), S("\x00"), S(" "), S("warn")};
     SLICE_TYPE(Pieces, const Str);
     Pieces pieces = {pieces_all, 11};
@@ -269,7 +269,8 @@ TEST(head_and_tail_and_the_filter_against_the_oracle_on_zigs_random_outputs) {
         if (prng_less_than_u8(&p, 8) == 0) {
             for (int i = 0; i < 300; i++) EXPECT(buf_byte(&out, 'L') == OK);
         }
-        KeepOptions o = keep_options_default();
+        KeepOptions o;
+        keep_options_default(&o);
         o.head = prng_at_most(&p, 4);
         o.tail = prng_at_most(&p, 4);
         o.width = 1 + prng_at_most(&p, 12);
@@ -303,7 +304,8 @@ TEST(head_and_tail_and_the_filter_against_the_oracle_on_zigs_random_outputs) {
 TEST(zigs_first_round_exactly) {
     // Round 0 as Zig's test drew it: head 0, tail 0, width 3, before 1, re `x$`.
     Arena a = arena_make(1 << 20);
-    KeepOptions o = keep_options_default();
+    KeepOptions o;
+    keep_options_default(&o);
     o.width = 3;
     o.before = 1;
     o.re = pattern_of(2);
@@ -319,7 +321,8 @@ TEST(zigs_first_round_exactly) {
 
 TEST(the_edges) {
     Arena a = arena_make(1 << 24);
-    KeepOptions o = keep_options_default();
+    KeepOptions o;
+    keep_options_default(&o);
     o.head = 2;
     o.tail = 2;
     Kept empty;
@@ -343,7 +346,8 @@ TEST(the_edges) {
     memset(zs, 'z', sizeof zs);
     EXPECT(buf_str(&huge, (Str){zs, sizeof zs}) == OK);
     EXPECT(buf_lit(&huge, " tail\nok\n") == OK);
-    KeepOptions ho = keep_options_default();
+    KeepOptions ho;
+    keep_options_default(&ho);
     ho.head = 5;
     ho.width = 8;
     ho.re = pattern_of(4);
@@ -354,7 +358,8 @@ TEST(the_edges) {
     EXPECT_EQ(h.total, 2);
     // With a width past KEEP_LINE_MOST, the line is held to its first
     // KEEP_LINE_MOST bytes and still marked cut, as Zig's `line_over` says.
-    KeepOptions wide = keep_options_default();
+    KeepOptions wide;
+    keep_options_default(&wide);
     wide.head = 1;
     wide.width = 100000;
     Kept w;
@@ -363,7 +368,8 @@ TEST(the_edges) {
     EXPECT_STR(str_sub(w.out, KEEP_LINE_MOST, w.out.len), S("\xe2\x80\xa6\n"));
     EXPECT_EQ(w.total, 1);
     // head 0 and tail 0: nothing kept, the counts still counted.
-    KeepOptions no = keep_options_default();
+    KeepOptions no;
+    keep_options_default(&no);
     no.re = pattern_of(4);
     Kept none;
     EXPECT(kept_of(&a, S("a\nerror\nb\n"), no, 2, &none));
@@ -379,7 +385,8 @@ TEST(an_arena_refused_anywhere_stops_and_never_answers_wrong) {
     // so here every limit from 0 up is tried, each refusing wherever the keep
     // reaches it. A refusal is a STOP with `hit` set, never another answer.
     Str out = S("a\nb\nc\nerror one\nd\ne\nf\ng\nerror two\nh\n");
-    KeepOptions o = keep_options_default();
+    KeepOptions o;
+    keep_options_default(&o);
     o.re = pattern_of(4);
     o.before = 3;
     o.after = 1;
@@ -408,7 +415,8 @@ TEST(memory_stays_bounded_over_a_flood_of_lines) {
     // A million lines through a tail of 3: the slots are written over, never
     // taken anew, so the arena holds a few chunks, not the output.
     Arena a = arena_make(1 << 20);
-    KeepOptions o = keep_options_default();
+    KeepOptions o;
+    keep_options_default(&o);
     o.tail = 3;
     o.head = 1;
     Keep k;

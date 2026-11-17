@@ -36,7 +36,8 @@ typedef struct {
 } KeepPattern;
 
 // What to keep of the output. Zig's `Options`, its defaults those of
-// `keep_options_default`.
+// `keep_options_default`. Structs past 8 bytes go through out-pointers
+// (c/docs/style.md, for TCC).
 typedef struct {
     // Keep only lines that match, plus context.
     KeepPattern re;
@@ -54,11 +55,9 @@ typedef struct {
     size_t width;
 } KeepOptions;
 
-static inline KeepOptions keep_options_default(void) {
-    KeepOptions o;
-    memset(&o, 0, sizeof o);
-    o.width = 200;
-    return o;
+static inline void keep_options_default(KeepOptions *o) {
+    memset(o, 0, sizeof *o);
+    o->width = 200;
 }
 
 // What was kept, and the counts.
