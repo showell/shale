@@ -207,6 +207,13 @@ function compile_argv(build, src, include, bin, extra?, mode?)
   return argv
 end
 
+-- The argv that compiles the C `shale`, c/shale.c, under `build` to `bin`:
+-- the command's block builds it so, and c/build/binary.shale, which
+-- bench/baseline.shale times, builds it the same way.
+function command_argv(build, bin)
+  return compile_argv(build, "c/shale.c", FOUNDATION, bin, {"-I" .. OUT .. "/gen", "-Ic"})
+end
+
 -- Compiles `src` under `build` (`compile_argv`). A compile that fails stops
 -- the run, naming it.
 function compile_to(t, phase, build, src, include, bin, extra?, mode?)

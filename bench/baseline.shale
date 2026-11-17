@@ -7,9 +7,12 @@
 --   cd <shale> && shale bench/baseline.shale              # a dry run: "not clean"
 --   cd <shale> && shale bench/baseline.shale clean=1      # refused unless the box is quiet
 --
--- The arguments, each with today's Zig Shale as its default, so another
--- implementation is measured with these alone (values with spaces go on
--- stdin, after `--args-stdin`):
+-- The arguments (values with spaces go on stdin, after `--args-stdin`). The
+-- build's take their defaults from `impl`, so another implementation is
+-- measured with these alone:
+--   impl             c (the default): C Shale, built by c/build.shale; zig:
+--                    the Zig Shale, built by `zig build`, until it is
+--                    deleted (IMPLS, below, has each one's defaults);
 --   clean            1: refuse to run unless the box is quiet; 0 (the
 --                    default): run anyway, every result stamped "not clean";
 --   reps             each runtime workload's repetitions (5);
@@ -18,10 +21,11 @@
 --                    is the release build's own, so part=runtime needs one;
 --   src              the source under test, a git checkout (repos:shale),
 --                    built from a clone of its HEAD, never in place;
---   siblings         checkouts cloned beside it, comma-separated
---                    (repos:zig-webbox, which build.zig.zon names by path);
+--   siblings         checkouts cloned beside it, comma-separated (the Zig's
+--                    repos:zig-webbox, which build.zig.zon names by path);
 --   zig              the compiler that {zig} names; "" is Shale's pin,
---                    tools:zig-<src's zig-version>/zig;
+--                    tools:zig-<src's zig-version>/zig, when a command
+--                    names {zig};
 --   build_release, build_debug, build_test
 --                    the build commands, one argv split at spaces, with
 --                    {zig}, {src}, {cache}, {global} and {prefix} filled in:
@@ -32,7 +36,8 @@
 --   built            the release build's binary, under {prefix} (bin/shale);
 --   touch            the core file an incremental build changes, by one
 --                    comment line appended and then taken back;
---   compiler_version the command that names the compiler ({zig} version).
+--   compiler_version the commands that name the compilers, comma-separated,
+--                    the first line of each kept.
 --
 -- A workload's time is a fresh process's, the binary under test running its
 -- script, from `run`'s `ms` and `cpu_ms` (CPU counts the children waited
@@ -395,6 +400,29 @@ function runtime_workloads()
   }
 end
 
+-- Each implementation's build arguments, its defaults under `impl=`. C has
+-- no build cache, so its cold and incremental builds are the same compile,
+-- and its {cache} and {global} go unused; its test build is the fast tier,
+-- which runs every C test, where the Zig's `quick` only compiles them.
+const IMPLS = {
+  c = {
+    build_release = "shale c/build.shale binary=release to={prefix}/bin/shale",
+    build_debug = "shale c/build.shale binary=tcc to={prefix}/bin/shale",
+    build_test = "shale c/build.shale",
+    touch = "c/script/vm.c",
+    compiler_version = "gcc --version,tcc -v",
+    siblings = "",
+  },
+  zig = {
+    build_release = "{zig} build --cache-dir {cache} --prefix {prefix}",
+    build_debug = "{zig} build script --cache-dir {cache} --prefix {prefix} -- -e print(1)",
+    build_test = "{zig} build quick --cache-dir {cache} --prefix {prefix}",
+    touch = "src/script/interp.zig",
+    compiler_version = "{zig} version",
+    siblings = "repos:zig-webbox",
+  },
+}
+
 const COLUMNS = {"workload", "kind", "reps", "per", "wall_ms", "cpu_ms", "shale_wall_ms", "shale_cpu_ms", "child_wall_ms", "child_cpu_ms", "wall_min_ms", "wall_max_ms", "clean", "check"}
 
 -- ── the run ──
@@ -405,22 +433,30 @@ local part = arg("part", "all")
 if part ~= "all" and part ~= "runtime" and part ~= "build" then fail("baseline: part=" .. part .. ": all, runtime or build") end
 local reps = arg("reps", 5)
 if reps < 1 then fail("baseline: reps=" .. reps .. ": at least 1") end
+local impl = arg("impl", "c")
+if not has_key(IMPLS, impl) then fail("baseline: impl=" .. impl .. ": c or zig") end
+local defaults = IMPLS[impl]
 local src = arg("src", "repos:shale")
 local zig_arg = arg("zig", "")
 local cfg = {
   reps = reps,
   src = src,
-  touch = arg("touch", "src/script/interp.zig"),
+  touch = arg("touch", defaults.touch),
   env = {SHALE_MOUNTS = "", SHALE_PRELUDE = ""},
 }
 local shale_arg = arg("shale", "")
 local built = arg("built", "bin/shale")
 local builds = {
-  {mode = "release", cmd = arg("build_release", "{zig} build --cache-dir {cache} --prefix {prefix}")},
-  {mode = "debug", cmd = arg("build_debug", "{zig} build script --cache-dir {cache} --prefix {prefix} -- -e print(1)")},
-  {mode = "test", cmd = arg("build_test", "{zig} build quick --cache-dir {cache} --prefix {prefix}")},
+  {mode = "release", cmd = arg("build_release", defaults.build_release)},
+  {mode = "debug", cmd = arg("build_debug", defaults.build_debug)},
+  {mode = "test", cmd = arg("build_test", defaults.build_test)},
 }
-local version_cmd = arg("compiler_version", "{zig} version")
+local version_cmd = arg("compiler_version", defaults.compiler_version)
+local siblings = arg("siblings", defaults.siblings)
+local names_zig = contains(version_cmd, "{zig}")
+for b in builds do
+  if contains(b.cmd, "{zig}") then names_zig = true end
+end
 if part == "runtime" and shale_arg == "" then fail("baseline: part=runtime measures a binary already built: name it, shale=<path>") end
 
 -- The box first: a clean run on a busy box is refused before anything runs.
@@ -438,14 +474,19 @@ end
 cfg.commit = said({"git", "-C", real(src), "rev-parse", "--short", "HEAD"})
 local dirty = "no"
 if not git_is_clean(src) then dirty = "yes" end
-if zig_arg == "" and exists(src .. "/zig-version") then zig_arg = "tools:zig-" .. trim(read(src .. "/zig-version")) .. "/zig" end
+if names_zig and zig_arg == "" and exists(src .. "/zig-version") then zig_arg = "tools:zig-" .. trim(read(src .. "/zig-version")) .. "/zig" end
 cfg.zig = zig_arg
 local vfill = {}
 if contains(version_cmd, "{zig}") then
   if zig_arg == "" then fail("baseline: the compiler's version names {zig}, and there is no zig=") end
   vfill.zig = real(zig_arg)
 end
-local compiler = said(command(version_cmd, vfill), {want = "bench: the compiler under test"})
+-- Each compiler's first line, so the `# compiler` line stays one line.
+local versions = {}
+for v in split(version_cmd, ",") do
+  push(versions, lines(said(command(trim(v), vfill), {want = "bench: the compiler under test"}))[1])
+end
+local compiler = join(versions, "; ")
 
 local sizes = make_inputs()
 cfg.env = {SHALE_MOUNTS = real(INPUTS .. "/mounts"), SHALE_PRELUDE = ""}
@@ -457,7 +498,7 @@ if part ~= "runtime" then
   local srcdir = "build:bench/src/" .. cfg.commit
   cfg.src_clone = srcdir .. "/" .. last_name(src)
   clone_at(src, git_rev(src), cfg.src_clone)
-  for s in split(arg("siblings", "repos:zig-webbox"), ",") do
+  for s in split(siblings, ",") do
     if trim(s) ~= "" then clone_at(trim(s), git_rev(trim(s)), srcdir .. "/" .. last_name(trim(s))) end
   end
   for b in builds do
@@ -486,12 +527,13 @@ local flag = "notclean"
 if stamp == "clean" then flag = "clean" end
 -- The file names what was measured as well as when, so a run of another
 -- binary at the same commit never overwrites this one: `label=`, or else
--- the binary under test's folder and name (`zig-out-shale`, `release-shale`),
--- and the part. A file already there stops the run.
+-- the implementation built (`built-c`, `built-zig`) or the binary under
+-- test's folder and name (`zig-out-shale`, `release-shale`), and the part. A
+-- file already there stops the run.
 local label = arg("label", "")
 if label == "" then
   if shale_arg == "" then
-    label = "built"
+    label = "built-" .. impl
   else
     local parts = split(cfg.bin_path, "/")
     label = last_name(cfg.bin_path)
@@ -512,6 +554,7 @@ local head = {
   "# cpu\t" .. box.cpu,
   "# cores\t" .. box.cores,
   "# kernel\t" .. box.kernel,
+  "# implementation\t" .. impl,
   "# compiler\t" .. compiler,
   "# source\t" .. src .. " at " .. cfg.commit .. ", dirty " .. dirty,
   "# binary under test\t" .. cfg.bin_path,

@@ -27,7 +27,7 @@ const PARSE_PLANTS = {
 function build_commands(t)
   local specs = {}
   for b in t.builds do
-    local argv = compile_argv(b, "c/shale.c", FOUNDATION, OUT .. "/" .. b .. "/shale", {"-I" .. OUT .. "/gen", "-Ic"})
+    local argv = command_argv(b, OUT .. "/" .. b .. "/shale")
     push(specs, {name = "command-" .. b, argv = argv, opts = {timeout_ms = 120000}})
   end
   local answers = compile_jobs(t, "command builds", specs)

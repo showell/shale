@@ -60,6 +60,9 @@
 -- It reads each compiler's version first. A compiler that is missing fails the
 -- run, loud, after everything it can run has run.
 --
+-- `binary=release|tcc to=<OS path>` builds the C `shale` alone, no tier
+-- (c/build/binary.shale): what bench/baseline.shale times.
+--
 -- Run from the repository's root: shale c/build.shale [full=1]
 -- budget: programs=100 arena_bytes=268435456
 
@@ -155,6 +158,16 @@ function run_block(b, args, mounts, quiet)
   local failed = get(r, "code", -1) ~= 0
   if trim(r.out) ~= "" and (failed or not quiet) then print(trim(r.out)) end
   if failed then fail("the " .. b .. " block (c/build/" .. b .. ".shale " .. join(args, " ") .. ") failed: its output is above") end
+  return nil
+end
+
+-- `binary=release` or `binary=tcc` builds the C `shale` alone, installed at
+-- `to` (an OS path), and runs no tier: bench/baseline.shale's release and
+-- debug builds (c/build/binary.shale).
+local binary = arg("binary", "")
+if binary ~= "" then
+  if binary == "tcc" and tcc == nil then fail("binary=tcc: tcc is not installed (`sudo apt install tcc`)") end
+  run_block("binary", {"build=" .. binary, "to=" .. arg("to", "")}, mounts, false)
   return nil
 end
 

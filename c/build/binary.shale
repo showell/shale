@@ -1,0 +1,25 @@
+-- c/build/binary.shale: the C `shale` alone, built under one build and
+-- installed at an OS path, with no test or check: what bench/baseline.shale
+-- times as C Shale's release and debug builds. c/build.shale runs it, given
+-- `binary=`, with the `build` mount that `use` below reads.
+--
+-- `build` is `release` (GCC -O2) or `tcc`; `to` is the OS path the binary is
+-- copied to, its folders made. The preludes are written first, as the
+-- command's block writes them, and the compile is that block's own argv
+-- (lib.shale's `command_argv`), so the binary is the one the build makes.
+-- budget: programs=20
+
+use("build:lib.shale")
+
+local build = arg("build", "release")
+if build ~= "release" and build ~= "tcc" then fail("build=" .. build .. ": release or tcc") end
+local to = arg("to", "")
+if to == "" then fail("to=: the OS path the binary is copied to") end
+not_option("c/build/binary.shale", "to", to)
+local t = block_start(false, build)
+must(run_in(t, "binary preludes", {"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5}))
+local bin = OUT .. "/" .. build .. "/shale"
+local c = run_in(t, "binary " .. build, command_argv(build, bin), {timeout_ms = 300000, tail = 40})
+if c.code ~= 0 then fail("`" .. build .. "` could not compile c/shale.c:\n" .. c.out) end
+must(run_in(t, "binary install", {"install", "-D", "-m", "755", real(bin), to}, {timeout_ms = 10000, tail = 5}))
+print("binary " .. build .. ": c/shale.c built to " .. bin .. ", installed at " .. to)
