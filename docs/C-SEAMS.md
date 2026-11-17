@@ -166,10 +166,12 @@ The parsers Shale reads code with are programs, not part of the C:
 - **`roc-ast` and `go-ast`** already are: a recipe's `roc_tree` and
   `go_tree` run the tool under `run` and hand its `--flat` output to the
   host's reader (`src/shale_host_flat_tree.zig`), which the C ports as is.
-- **`zig-ast`** is being extracted now (the `zig-ast` lane): `zig_rename`,
-  `zig_decls`, `zig_move`, `zig_imports` and `zig_tokens` move out of the
-  host into a program over Zig's own parser, so the C needs no Zig parser. The C
-  takes whatever interface that lane lands. SURFACE.txt freezes those
-  builtins' messages today; when the extraction changes them, the surface
-  is regenerated in that change, and the C follows the new surface.
+- **`zig-ast`** (tools/zig_ast) holds `zig_rename`, `zig_decls`,
+  `zig_move`, `zig_imports` and `zig_tokens`, over Zig's own parser, so the
+  C needs no Zig parser. The host starts one `zig-ast --serve` process a
+  run, at its first Zig call, and speaks to it in framed requests and
+  answers. **The C's host speaks the same wire to the same `zig-ast`
+  program**; the protocol's one home is `src/shale_zig_wire.zig`, and the C
+  follows it, never a copy of it here. The builtins' messages are
+  SURFACE.txt's, as every builtin's are.
 - `shale_tokens` stays the host's, since it is Shale's own lexer.

@@ -1208,7 +1208,7 @@
 
 ### Steps and costs
   Every builtin's charge (a step a byte or item, a step for 16 bytes of bulk work, a sort's bound before it runs, a search's stops and compares) is the count `budget()` and `── used:` show, so it is observable; it is held by src/script/charge_test.zig, not by a table here
-  The arena's byte counts (`budget().arena_bytes`, where `budget arena` stops) are value.Budgeted's accounting: docs/C-SEAMS.md, "Fidelity"
+  EXCEPTION: the arena's byte counts (`budget().arena_bytes`'s value, the exact step where `budget arena` stops) are outside the frozen surface (Steve, 2026-11-17); an arena stop's class and message are inside it: docs/C-SEAMS.md, "Fidelity"
 
 ### The CLI
   Exit codes: 0 the script finished, 1 it stopped (a check's stop too), 2 the run could not begin: the command line, the script's file, stdin, the mounts, a prelude, a `-- budget:` line, SHALE_NOW (script_runner.zig main's `return 2`s)
