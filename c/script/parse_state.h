@@ -73,9 +73,9 @@ typedef struct {
 
 enum {
     // The most libraries one script may `use`.
-    PARSE_LIBRARIES_MOST = 16,
+    PARSE_LIBRARIES_MAX = 16,
     // The most preludes and libraries one parse holds.
-    PARSE_EXTRAS_MOST = 16 + PARSE_LIBRARIES_MOST,
+    PARSE_EXTRAS_MAX = 16 + PARSE_LIBRARIES_MAX,
 };
 
 // A loaded slot's value until its function is parsed. A macro of the slot's

@@ -26,7 +26,7 @@ static inline STATUS_MUST_USE Status parse_program(Parser *p, Str core, Preludes
     p->loader = loader;
     TRY(parse_index(p->arena, core, parse_next_function, &p->core_index));
     TRY(parse_slots(p->arena, p->core_index.len, &p->core_loaded));
-    p->extra_cap = preludes.len + PARSE_LIBRARIES_MOST;
+    p->extra_cap = preludes.len + PARSE_LIBRARIES_MAX;
     ParseExtra *extras = ARENA_ARRAY(p->arena, ParseExtra, p->extra_cap);
     if (extras == NULL) return STOP;
     p->extra.ptr = extras;

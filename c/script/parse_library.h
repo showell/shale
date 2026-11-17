@@ -13,7 +13,7 @@
 // A parser of prelude or library `k`'s source alone, to check it and be thrown
 // away: its own loaded slots, so the check leaves the real parse's alone.
 static inline STATUS_MUST_USE Status parse_throwaway(Parser *p, size_t k, Parser *q) {
-    if (p->extra.len > PARSE_EXTRAS_MOST) return parse_fail(p, parse_pos(1, 1), CLASS_ARGUMENT, S("more than 16 preludes"));
+    if (p->extra.len > PARSE_EXTRAS_MAX) return parse_fail(p, parse_pos(1, 1), CLASS_ARGUMENT, S("more than 16 preludes"));
     parse_init(q, p->arena, at(p->extra, k - 1).prelude.source, p->max_nesting);
     q->in_prelude = k;
     q->core = p->core;
@@ -306,7 +306,7 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
     }
     if (p->extra.len == p->extra_cap) {
         bool refused = false;
-        Str most = parse_num(p, PARSE_LIBRARIES_MOST, &refused);
+        Str most = parse_num(p, PARSE_LIBRARIES_MAX, &refused);
         if (refused) return STOP;
         return parse_fail_cat(p, pos, CLASS_ARGUMENT, 4, S("`use(\""), path, S("\")`: more than "), most, S(" libraries"));
     }
