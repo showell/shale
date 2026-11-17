@@ -454,6 +454,7 @@ typedef struct {
 // The report for a check that stopped: the stop's line (a parse's stop is at
 // the top level, so it has no function and no trail), then what it used.
 static inline STATUS_MUST_USE Status cli_write_stop(Buf *w, Str name, const Stop *s, Used u, const Budgets *b) {
+    stop_check_budget(s);
     TRY(stop_report(w, name, s, u.steps));
     TRY(buf_lit(w, "── used: "));
     TRY(buf_u64(w, u.steps));

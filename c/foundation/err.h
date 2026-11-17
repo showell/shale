@@ -285,11 +285,20 @@ static inline STATUS_MUST_USE Status run_oom(RunCtx *r, Pos pos) {
     return run_refused_stop(r, pos, BUDGET_ARENA);
 }
 
+// A stop's class and budget agree: a budget's stop names its budget, and no
+// other stop names one. One that doesn't is a bug in the C, which ends the
+// process rather than print `budget: ...` with no budget, or a type stop
+// with one.
+static inline void stop_check_budget(const Stop *s) {
+    if ((s->cls == CLASS_BUDGET) != (s->budget != BUDGET_NONE)) c_bug("err: a stop's class and its budget disagree");
+}
+
 // The top level's check of a run's answer before anything reports it: a STOP
-// with no stop recorded (a refusal that skipped run_oom) is a bug in the C,
-// so the process ends.
+// with no stop recorded (a refusal that skipped run_oom), or one whose class
+// and budget disagree, is a bug in the C, so the process ends.
 static inline STATUS_MUST_USE Status run_ended(const RunCtx *r, Status s) {
     if (s == STOP && !r->stopped) c_bug("err: a run stopped with no stop recorded (a refusal that skipped run_oom)");
+    if (s == STOP) stop_check_budget(&r->stop);
     return s;
 }
 

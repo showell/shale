@@ -288,6 +288,27 @@ TEST(a_refusal_read_over_a_recorded_stop_ends_the_process) {
     arena_deinit(&machine);
 }
 
+TEST(a_stop_whose_class_and_budget_disagree_ends_the_process) {
+    Arena values = arena_make(1 << 20);
+    Arena machine = arena_make(1 << 20);
+    RunCtx r = run_ctx_make(&values, &machine, budgets_default());
+    Pos at = {2, 3};
+    EXPECT(run_budget_stop(&r, at, BUDGET_STEPS) == STOP);
+    EXPECT(run_ended(&r, STOP) == STOP);
+    // A budget's class with no budget, and a budget on another class.
+    r.stop.budget = BUDGET_NONE;
+    EXPECT_DIES(EXPECT(run_ended(&r, STOP) == STOP));
+    EXPECT(run_fail(&r, at, CLASS_TYPE, S("not an integer")) == STOP);
+    EXPECT(run_ended(&r, STOP) == STOP);
+    r.stop.budget = BUDGET_READS;
+    EXPECT_DIES(EXPECT(run_ended(&r, STOP) == STOP));
+    EXPECT_DIES(stop_check_budget(&r.stop));
+    r.stop.budget = BUDGET_NONE;
+    stop_check_budget(&r.stop);
+    arena_deinit(&values);
+    arena_deinit(&machine);
+}
+
 TEST_MAIN(
     TEST_CASE(every_class_has_its_name_and_the_count_traps),
     TEST_CASE(every_budget_has_its_name_and_the_count_traps),
@@ -304,5 +325,6 @@ TEST_MAIN(
     TEST_CASE(a_report_the_arena_refuses_says_so),
     TEST_CASE(a_stop_with_no_stop_recorded_ends_the_process),
     TEST_CASE(a_stop_read_as_a_refusal_no_arena_made_ends_the_process),
-    TEST_CASE(a_refusal_read_over_a_recorded_stop_ends_the_process)
+    TEST_CASE(a_refusal_read_over_a_recorded_stop_ends_the_process),
+    TEST_CASE(a_stop_whose_class_and_budget_disagree_ends_the_process)
 )
