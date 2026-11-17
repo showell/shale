@@ -50,8 +50,13 @@ Read these first. They are what a bug would break:
 One marker, the same everywhere, so `grep` finds every one:
 
 ```c
-// DRAGON: <the guarantee at stake>. <what would go wrong>. <what keeps it safe>.
+// DRAGON: <the guarantee at stake>. <what would go wrong>.
+// REMEDY: <what keeps it safe>.
 ```
+
+The `REMEDY:` line is the marker's second half, on a line of its own in the
+same comment (c/docs/style.md, "Comments", which the discipline check
+holds).
 
 A dragon's marker sits on the smallest block it covers, not on a whole
 file. The auditor should be able to read every `DRAGON:` line in the

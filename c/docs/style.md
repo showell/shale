@@ -95,6 +95,25 @@ and its self-test plants a break of each one.
 
 - **Held:** comments are `//`. A comment inside a macro is `/* */`, on a line
   that ends with `\`.
+- A comment is its consecutive whole comment lines: a blank line or a line
+  of code ends it.
+- **Held by folder:** a `//` comment line wraps at 80 columns. A comment
+  after code on its line is not judged, since the code sets that line's
+  width, and neither is a macro's `/* */` line, padded out to its `\`.
+- **Held by folder:** every `DRAGON:` is answered in its own comment, before
+  the next `DRAGON:`, by a line that starts `REMEDY:`, saying what keeps the
+  guarantee:
+
+  ```c
+  // DRAGON: <the guarantee at stake>. <what would go wrong>.
+  // REMEDY: <what keeps it safe>.
+  ```
+
+- **Held by folder:** no comment cites a Zig file's line (`vm.zig:123`).
+- The rules held by folder are reported everywhere: the discipline check
+  prints every finding, and fails on them only in the folders its `HELD`
+  list names (`c/foundation`, `c/script`, `c/host`, `c/tests`, or
+  `c/shale.c`). A folder joins `HELD` once its comments are clean.
 - A function's comment says what it gives and when it refuses. It sits
   above the function.
 - A file's comment says what the piece is, and which Zig it matches.

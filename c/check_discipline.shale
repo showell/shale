@@ -37,6 +37,28 @@
 --               C's code is held to it, and c/tests/canaries/, the
 --               compiler's canaries, which hold that shape on purpose, is
 --               not.
+--
+-- The comment rules judge a comment: consecutive lines that are whole `//`
+-- comment lines, or whole `/* */` lines inside a macro, one kind at a time;
+-- a blank line or a line of code ends it.
+--   comment wrap:  no `//` comment line runs past 80 columns (a UTF-8
+--               character one column). A comment after code on its line is
+--               not judged, since the code sets that line's width, and
+--               neither is a macro's `/* */` line, padded out to its `\`;
+--   dragon remedy: every `DRAGON:` is followed, in its own comment and
+--               before the next `DRAGON:`, by a line that starts
+--               `REMEDY:`; a `REMEDY:` mid-line answers nothing. A
+--               `DRAGON:` in backticks names the marker and is none;
+--   zig cite:   no comment cites a Zig file's line (`vm.zig:123`), after
+--               code or not; a string's text is not a comment's.
+-- **The comment rules are held folder by folder.** The check reports every
+-- comment finding, each file's under a line with its count, then a line a
+-- folder with its count by rule, and fails on them only in the folders HELD
+-- names (`c/foundation`, `c/script`, `c/host`, `c/tests`, or `c/shale.c`).
+-- A folder goes into HELD once its comments are clean; a HELD entry that
+-- holds no C file stops the check. Every other rule fails wherever it
+-- breaks.
+--
 -- Strings, character literals and comments are not code, so a word in one
 -- never counts. A file is judged by its own name (arena.h, slice.h), so the
 -- plants below are judged as any file is.
@@ -56,7 +78,8 @@
 -- `self_test=1` writes one plant of each rule, and lines that must pass
 -- beside them, to c/out/discipline/ (plant.h and outside.h judged as any
 -- file outside the foundation, inside.h as one in it, returns.c through the
--- probe), and fails unless exactly the plants are caught.
+-- probe, comments.c for the comment rules), and fails unless exactly the
+-- plants are caught.
 --
 -- Run from the repository's root: shale c/check_discipline.shale
 -- budget: steps=100000000
@@ -77,6 +100,15 @@ const LEN_FIELD = [=[^\s*size_t\s+len\s*;]=]
 -- every parenthesized and braced group is emptied.
 const TWO_DECLS = [=[^\s*(static\s+)?(const\s+)?(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)\s+\**\s*\w+\s*(\[\w*\])?\s*(=[^,;]*)?,]=]
 const DECL_INIT = [=[^\s*(static\s+)?(const\s+)?(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)\s+\**\s*\w+\s*(\[\w*\])?\s*=]=]
+-- A UTF-8 continuation byte, which starts no column.
+const UTF8_CONT = "[\x80-\xbf]"
+-- A Zig file's line cited: `vm.zig:123`, `src/script/vm.zig:1`.
+const ZIG_CITE = [=[[\w/.-]*\w\.zig:\d+]=]
+-- The comment rules, reported everywhere and held only in HELD's folders.
+const COMMENT_RULES = {"comment wrap", "dragon remedy", "zig cite"}
+-- The folders (or c/shale.c) whose comment findings fail the check. A sweep
+-- adds its folder here once the folder is clean.
+const HELD = {}
 const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE_TYPE(", "VEC_DEFINE(", "MAP_DEFINE(", "TEST(", "TEST_MAIN(", "TEST_PART(", "TEST_PARTS_MAIN(", "_Static_assert(", "int main(", "}", ")"}
 
 -- The line's code: its strings and character literals emptied, its comments cut.
@@ -157,6 +189,38 @@ function slice_args_bad(args)
   return re_find(args, [=[\w\s*\(]=]) ~= nil
 end
 
+-- How many columns `raw` takes: its bytes, a UTF-8 continuation byte
+-- counting none, so a banner's `─` is one column, not three.
+function columns(raw)
+  return #re_replace(raw, UTF8_CONT, "")
+end
+
+-- The break of a `DRAGON:` at line `n` that its comment answers with no
+-- `REMEDY:` line, `mid` saying whether one came mid-line instead.
+function dragon_unanswered(p, n, mid)
+  local why = "a `DRAGON:` with no `REMEDY:` line after it in its comment"
+  if mid then why = "a `DRAGON:` whose `REMEDY:` is mid-line: it starts a line of its own" end
+  return {path = p, line = n, rule = "dragon remedy", text = why}
+end
+
+-- The Zig `file.zig:N` the comment on `raw` cites, or nil: the whole line
+-- when `whole` says it is a comment line, else what follows its code's `//`
+-- (or `/*`), its strings emptied first, so a message's text never counts.
+function zig_cited(raw, whole)
+  local text = raw
+  if not whole then
+    local s = raw
+    if find(s, "\"") ~= nil then s = re_replace(s, [=["(\\.|[^"\\])*"]=], [=[""]=]) end
+    local at = find(s, "//")
+    if at == nil then at = find(s, "/*") end
+    if at == nil then return nil end
+    text = sub(s, at)
+  end
+  local m = re_find(text, ZIG_CITE)
+  if m == nil then return nil end
+  return m.text
+end
+
 -- Each break of the rules in the file at `p`, as {path, line, rule, text}.
 -- `in_foundation` says whether it is judged as a foundation header.
 function check_file(p, in_foundation)
@@ -177,6 +241,12 @@ function check_file(p, in_foundation)
     end
   end
   local n = 0
+  -- The comment the line before was in: its kind ("//", "/*" or "" for
+  -- none), and the line of its `DRAGON:` still waiting for a `REMEDY:` line
+  -- (0 for none), with whether a `REMEDY:` came mid-line instead.
+  local unit_kind = ""
+  local dragon = 0
+  local remedy_mid = false
   for raw in all do
     n = n + 1
     local code = code_of(raw)
@@ -240,7 +310,49 @@ function check_file(p, in_foundation)
     if header and find(raw, "{") ~= nil and re_find(raw, [=[^[A-Za-z_].*\w\s*\(.*\)\s*\{]=]) ~= nil and not starts_with(raw, "static inline ") and not starts_with(raw, "#") then
       push(found, {path = p, line = n, rule = "inline", text = raw})
     end
+    -- The comment rules. A line whose code is empty (or a macro's `\`
+    -- alone) may be a whole comment line, of one kind or the other.
+    local kind = ""
+    if trimmed == "" or trimmed == "\\" then
+      local t = trim_start(raw)
+      if starts_with(t, "//") then
+        kind = "//"
+      elseif starts_with(t, "/*") then
+        kind = "/*"
+      end
+      if kind ~= "" then
+        if kind == "//" and #raw > 80 then
+          local width = columns(raw)
+          if width > 80 then push(found, {path = p, line = n, rule = "comment wrap", text = width .. " columns"}) end
+        end
+        if kind ~= unit_kind and dragon ~= 0 then
+          push(found, dragon_unanswered(p, dragon, remedy_mid))
+          dragon = 0
+        end
+        local body = trim_start(sub(t, 3))
+        if starts_with(body, "REMEDY:") then
+          dragon = 0
+        else
+          if find(body, "DRAGON:") ~= nil and find(body, "`DRAGON:`") == nil then
+            if dragon ~= 0 then push(found, dragon_unanswered(p, dragon, remedy_mid)) end
+            dragon = n
+            remedy_mid = false
+          end
+          if dragon ~= 0 and find(body, "REMEDY:") ~= nil then remedy_mid = true end
+        end
+      end
+    end
+    if kind == "" and dragon ~= 0 then
+      push(found, dragon_unanswered(p, dragon, remedy_mid))
+      dragon = 0
+    end
+    unit_kind = kind
+    if find(raw, ".zig:") ~= nil then
+      local cited = zig_cited(raw, kind ~= "")
+      if cited ~= nil then push(found, {path = p, line = n, rule = "zig cite", text = "cites `" .. cited .. "`"}) end
+    end
   end
+  if dragon ~= 0 then push(found, dragon_unanswered(p, dragon, remedy_mid)) end
   return found
 end
 
@@ -263,6 +375,73 @@ function check_files(files)
     yield()
   end
   return found
+end
+
+-- ── The comment rules' report ──────────────────────────────────────────
+
+-- The folder HELD names a file by: `c/<folder>` for a file below one, the
+-- file itself for one directly in c/ (c/shale.c).
+function folder_of(p)
+  local parts = split(p, "/")
+  if #parts > 2 then return parts[1] .. "/" .. parts[2] end
+  return p
+end
+
+-- HELD as a set, each entry one of the folders `files` are in, or the check
+-- stops: a misspelt entry would hold nothing.
+function held_folders(files)
+  local folders = {}
+  for p in files do folders[folder_of(p)] = true end
+  for h in HELD do
+    if not has_key(folders, h) then fail("HELD in c/check_discipline.shale names `" .. h .. "`, which holds no C file: a folder is `c/<folder>`, or `c/shale.c`") end
+  end
+  return set_of(HELD)
+end
+
+-- `l`'s items joined with ", ", or "no folder" for none.
+function join_or_none(l)
+  if #l == 0 then return "no folder" end
+  return join(l, ", ")
+end
+
+-- The comment findings outside HELD, each file's under a line with its
+-- count, then a line for each folder of `files` not held, with its count
+-- by rule (0 too), so the tail of the output sizes each folder's sweep.
+function report_comments(reported, files, held_set)
+  local by_file = {}
+  local file_order = {}
+  for f in reported do
+    if not has_key(by_file, f.path) then push(file_order, f.path) end
+    push_at(by_file, f.path, f)
+  end
+  local by_folder = {}
+  for p in file_order do
+    print("── " .. p .. ": " .. #by_file[p] .. " comment findings")
+    for f in by_file[p] do
+      print(f.path .. ":" .. f.line .. ": " .. f.rule .. ": " .. f.text)
+      local key = folder_of(f.path)
+      if not has_key(by_folder, key) then by_folder[key] = {} end
+      incr(by_folder[key], f.rule)
+    end
+  end
+  local folder_set = {}
+  for p in files do
+    if not has_key(held_set, folder_of(p)) then folder_set[folder_of(p)] = true end
+  end
+  local folders = keys(folder_set)
+  sort(folders)
+  for key in folders do
+    if not has_key(by_folder, key) then by_folder[key] = {} end
+    local parts = {}
+    local total = 0
+    for rule in COMMENT_RULES do
+      local k = get(by_folder[key], rule, 0)
+      total = total + k
+      push(parts, rule .. " " .. k)
+    end
+    print("comments, reported (not held): " .. key .. ": " .. total .. " (" .. join(parts, ", ") .. ")")
+  end
+  return nil
 end
 
 -- ── Return sizes, through a probe ──────────────────────────────────────
@@ -539,10 +718,89 @@ end
 function plants_hold(p, in_foundation, want)
   local got = {}
   for f in check_file(p, in_foundation) do push(got, f.line .. " " .. f.rule) end
+  -- A `DRAGON:`'s break is found where its comment ends, after the lines
+  -- between, so the two are compared in one order.
+  sort(got)
+  sort(want)
   if join(got, ", ") ~= join(want, ", ") then
     fail("the discipline check's self-test caught " .. join(got, ", ") .. " in " .. p .. "; it should catch exactly " .. join(want, ", "))
   end
   return #want
+end
+
+-- The comment rules' plants, written to `p`: each line with the rules it
+-- breaks (none for a near miss that must pass). Gives how many plants.
+function comment_plants_hold(p)
+  local plants = {
+    {t = "// comments.c: the comment rules' plants, and the near misses beside them.", r = {}},
+    -- The wrap: 81 columns breaks it; 80 passes, in ASCII or in `─`s of
+    -- three bytes each; a message, a trailing comment and a macro's
+    -- `/* */` are not judged.
+    {t = "    // " .. rep("x", 74), r = {"comment wrap"}},
+    {t = "    // " .. rep("x", 73), r = {}},
+    {t = "// " .. rep("─", 77), r = {}},
+    {t = "static const Str LONG = S(\"" .. rep("y", 80) .. "\");", r = {}},
+    {t = "static int long_enough_to_pass_eighty_columns(void) { return 0; } // a trailing comment", r = {}},
+    {t = "#define M(x) \\", r = {}},
+    {t = "    /* " .. rep("z", 80) .. " */ \\", r = {}},
+    {t = "    (x)", r = {}},
+    -- A `DRAGON:` wants a `REMEDY:` line after it in its own comment.
+    {t = "// DRAGON: a plant that nothing answers.", r = {"dragon remedy"}},
+    {t = "static int a1;", r = {}},
+    {t = "// DRAGON: a plant whose answer is mid-line. REMEDY: here.", r = {"dragon remedy"}},
+    {t = "static int a2;", r = {}},
+    {t = "// DRAGON: a plant answered in the next comment.", r = {"dragon remedy"}},
+    {t = "", r = {}},
+    {t = "// REMEDY: too late, since the blank line ended the comment.", r = {}},
+    {t = "static int a3;", r = {}},
+    {t = "// DRAGON: the first of two, which the one remedy can't answer.", r = {"dragon remedy"}},
+    {t = "// DRAGON: the second of two.", r = {}},
+    {t = "// REMEDY: the second's alone.", r = {}},
+    {t = "static int a4;", r = {}},
+    {t = "    // DRAGON: answered, as a near miss.", r = {}},
+    {t = "    // It runs on a line or two.", r = {}},
+    {t = "    // REMEDY: on a line of its own, in the same comment.", r = {}},
+    {t = "static int a5;", r = {}},
+    {t = "#define N(x) \\", r = {}},
+    {t = "    /* DRAGON: a macro's, answered. */ \\", r = {}},
+    {t = "    /* REMEDY: on a line of its own. */ \\", r = {}},
+    {t = "    (x)", r = {}},
+    {t = "#define P(x) \\", r = {}},
+    {t = "    /* DRAGON: a macro's, unanswered. */ \\", r = {"dragon remedy"}},
+    {t = "    (x)", r = {}},
+    {t = "// The DRAGONs above, and a `DRAGON:` in backticks, mark nothing.", r = {}},
+    {t = "static const Str MARK = S(\"DRAGON: in a string\");", r = {}},
+    -- A Zig citation breaks the last rule in a comment, never in a string.
+    {t = "// A comment citing vm.zig:123 breaks it.", r = {"zig cite"}},
+    {t = "static int a6; // so does src/script/vm.zig:9 in a trailing one", r = {"zig cite"}},
+    {t = "    /* as does a macro's lex.zig:40 */ \\", r = {"zig cite"}},
+    {t = "// Naming vm.zig alone, or vm.zig: with no line, passes.", r = {}},
+    {t = "static const Str CITE = S(\"a // b vm.zig:5\");", r = {}},
+  }
+  local text = {}
+  local want = {}
+  local n = 0
+  for plant in plants do
+    n = n + 1
+    push(text, plant.t)
+    for rule in plant.r do push(want, n .. " " .. rule) end
+  end
+  create(p, join(text, "\n") .. "\n")
+  local held = plants_hold(p, false, want)
+  -- The texts that tell a sweep what to fix.
+  local said = {}
+  for f in check_file(p, false) do said[f.line .. " " .. f.rule] = f.text end
+  local want_said = {
+    {k = "2 comment wrap", text = "81 columns"},
+    {k = "10 dragon remedy", text = "a `DRAGON:` with no `REMEDY:` line after it in its comment"},
+    {k = "12 dragon remedy", text = "a `DRAGON:` whose `REMEDY:` is mid-line: it starts a line of its own"},
+    {k = "35 zig cite", text = "cites `vm.zig:123`"},
+    {k = "36 zig cite", text = "cites `src/script/vm.zig:9`"},
+  }
+  for w in want_said do
+    if said[w.k] ~= w.text then fail("the discipline check's self-test said `" .. said[w.k] .. "` for " .. w.k .. " in " .. p .. "; it should say `" .. w.text .. "`") end
+  end
+  return held
 end
 
 function self_test()
@@ -600,7 +858,7 @@ static STATUS_MUST_USE Status checked(void) { return OK; }
   end
   local caught = #want_returns
   local p = dir .. "/plant.h"
-  create(p, [=[// The discipline check's plants: lines 3 to 17 break a rule or two each, the rest pass.
+  create(p, [=[// The discipline check's plants: lines 3 to 17 break a rule or two each.
 #include "slice.h"
 static inline void *grab(size_t n) { return malloc(n); }
 static inline char first(Str s) { return s.ptr[0]; }
@@ -643,7 +901,7 @@ TEST_MAIN(
     "11 brace", "11 top level", "12 brace", "13 tab", "13 top level", "14 comment", "15 top level", "16 top level", "16 inline", "17 one per line", "17 wrapped"}
   caught = caught + plants_hold(p, false, want)
   local outside = dir .. "/outside.h"
-  create(outside, [=[// outside.h: the discipline check's plants for the bounds and Status rules; lines 4 to 10 break one each, the rest pass.
+  create(outside, [=[// outside.h: the bounds and Status rules' plants: lines 4 to 10 break one each.
 #ifndef SHALE_OUTSIDE_H
 #define SHALE_OUTSIDE_H
 static inline uint32_t first_slot(MapCore *m) { return m->index[0]; }
@@ -663,15 +921,17 @@ static inline char declared(void) { char cs[4] = {0}; Bytes all = {cs, 4}; retur
 ]=])
   caught = caught + plants_hold(outside, false, {"4 raw index", "5 raw index", "6 mem arithmetic", "7 slice args", "8 slice args", "9 slice args", "10 must use"})
   local inside = dir .. "/inside.h"
-  create(inside, [=[// inside.h: the mem arithmetic rule as the foundation is held to it: line 4 breaks it, line 6 passes by its DRAGON.
+  create(inside, [=[// inside.h: the foundation's mem arithmetic: line 4 breaks it, line 7 passes.
 #ifndef SHALE_INSIDE_H
 #define SHALE_INSIDE_H
 static inline void shift(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
-// DRAGON: bounds. A plant: the marker that lets a foundation call do its own arithmetic.
+// DRAGON: bounds. A plant, the marker a foundation call's arithmetic needs.
+// REMEDY: the self-test writes it, and nothing calls it.
 static inline void marked(uint64_t *xs, size_t n) { memmove(xs, xs + 1, n); }
 #endif
 ]=])
   caught = caught + plants_hold(inside, true, {"4 mem arithmetic"})
+  caught = caught + comment_plants_hold(dir .. "/comments.c")
   remove_tree(dir)
   print("PASS self-test: " .. caught .. " plants caught, every other line passed")
 end
@@ -681,11 +941,19 @@ if arg("self_test", 0) == 1 then
 else
   local files = c_files("c")
   probe_modules_hold(files)
+  local held_set = held_folders(files)
   local sized = check_returns(files)
   yield()
-  local found = check_files(files)
-  for f in sized.found do push(found, f) end
+  local all_found = check_files(files)
+  for f in sized.found do push(all_found, f) end
+  local comment_set = set_of(COMMENT_RULES)
+  local found = {}
+  local reported = {}
+  for f in all_found do
+    if has_key(comment_set, f.rule) and not has_key(held_set, folder_of(f.path)) then push(reported, f) else push(found, f) end
+  end
+  report_comments(reported, files, held_set)
   for f in found do print(f.path .. ":" .. f.line .. ": " .. f.rule .. ": " .. f.text) end
   if #found > 0 then fail(#found .. " breaks of the C's discipline in " .. #files .. " files") end
-  print("PASS discipline: " .. #files .. " files; " .. sized.functions .. " functions' returns sized, " .. sized.types .. " types, none of 9 to 15 bytes")
+  print("PASS discipline: " .. #files .. " files; " .. sized.functions .. " functions' returns sized, " .. sized.types .. " types, none of 9 to 15 bytes; the comment rules held in " .. join_or_none(HELD) .. ", " .. #reported .. " findings reported outside them")
 end
