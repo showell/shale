@@ -391,9 +391,12 @@ static inline STATUS_MUST_USE Status parse_expect(Parser *p, Tag tag, Str what, 
 // (block, statement, binary, unary's operator, suffixed, table) enters here,
 // and the budget (200 unset) bounds the depth; loading a prelude starts its
 // count again, but a prelude's own nesting is fixed and small.
+// A refusal counts no level, so a production that fails to enter has nothing
+// to leave: every other way out of one calls `parse_leave`, as Zig's `defer`.
 static inline STATUS_MUST_USE Status parse_enter(Parser *p) {
     p->nesting++;
     if (p->nesting > p->max_nesting) {
+        p->nesting--;
         Status s = parse_set_stop(p, parse_here(p), CLASS_BUDGET, S("the source nests deeper than the nesting budget"));
         p->stop.budget = BUDGET_NESTING;
         return s;
@@ -651,9 +654,9 @@ static inline STATUS_MUST_USE Status parse_take_exprs(Parser *p, size_t from, Ex
     return OK;
 }
 
-static inline STATUS_MUST_USE Status parse_if_statement(Parser *p, Pos pos, Stmt *out) {
+// An `if`'s arms, pushed on the arms' stack from `from` on.
+static inline STATUS_MUST_USE Status parse_if_arms(Parser *p, Pos pos, size_t from, Stmt *out) {
     TRY(parse_advance(p));
-    size_t from = p->arms.len;
     Token t = {0};
     Expr *cond = NULL;
     TRY(parse_expr(p, &cond));
@@ -687,21 +690,32 @@ static inline STATUS_MUST_USE Status parse_if_statement(Parser *p, Pos pos, Stmt
     TRY(parse_dup(p, p->arms.ptr, from, p->arms.len - from, sizeof(Arm), _Alignof(Arm), &items));
     Arms arms = {items, p->arms.len - from};
     s.as.if_.arms = arms;
-    p->arms.len = from;
     *out = s;
     return OK;
 }
 
-// A loop's body, with its name declared in a scope of its own.
+// An `if`, its arms' stack put back on every way out.
+static inline STATUS_MUST_USE Status parse_if_statement(Parser *p, Pos pos, Stmt *out) {
+    size_t from = p->arms.len;
+    Status s = parse_if_arms(p, pos, from, out);
+    p->arms.len = from;
+    return s;
+}
+
+// A loop's body, with its name declared in a scope of its own, which is put
+// back on every way out.
 static inline STATUS_MUST_USE Status parse_loop_body(Parser *p, Token name_tok, uint16_t *slot, Stmts *body) {
     p->frame.depth++;
     size_t mark = p->frame.locals.len;
-    TRY(parse_declare(p, name_tok.text, parse_pos(name_tok.line, name_tok.column), slot));
-    p->frame.loops++;
-    TRY(parse_block(p, body));
-    p->frame.loops--;
+    Status s = parse_declare(p, name_tok.text, parse_pos(name_tok.line, name_tok.column), slot);
+    if (s == OK) {
+        p->frame.loops++;
+        s = parse_block(p, body);
+        p->frame.loops--;
+    }
     p->frame.locals.len = mark;
     p->frame.depth--;
+    TRY(s);
     Token t = {0};
     return parse_expect(p, TAG_KW_END, S("`end` to close the `for`"), &t);
 }
@@ -795,8 +809,9 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
         TRY(parse_expr(p, &s.as.while_.cond));
         TRY(parse_expect(p, TAG_KW_DO, S("`do` after the `while` condition"), &t));
         p->frame.loops++;
-        TRY(parse_block(p, &s.as.while_.body));
+        Status body = parse_block(p, &s.as.while_.body);
         p->frame.loops--;
+        TRY(body);
         TRY(parse_expect(p, TAG_KW_END, S("`end` to close the `while`"), &t));
         *out = s;
         return OK;
@@ -877,17 +892,13 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
 
 static inline STATUS_MUST_USE Status parse_statement(Parser *p, Stmt *out) {
     TRY(parse_enter(p));
-    TRY(parse_statement_body(p, out));
+    Status s = parse_statement_body(p, out);
     parse_leave(p);
-    return OK;
+    return s;
 }
 
-// Statements up to the end of a block, in a scope of their own.
-static inline STATUS_MUST_USE Status parse_block(Parser *p, Stmts *out) {
-    TRY(parse_enter(p));
-    p->frame.depth++;
-    size_t mark = p->frame.locals.len;
-    size_t from = p->stmts.len;
+// The statements of a block from the stack's `from` on, to its end.
+static inline STATUS_MUST_USE Status parse_block_body(Parser *p, size_t from, Stmts *out) {
     while (!parse_block_ends(p->tok.tag)) {
         if (p->tok.tag == TAG_SEMICOLON) {
             TRY(parse_advance(p));
@@ -902,11 +913,23 @@ static inline STATUS_MUST_USE Status parse_block(Parser *p, Stmts *out) {
             break;
         }
     }
-    TRY(parse_take_stmts(p, from, out));
+    return parse_take_stmts(p, from, out);
+}
+
+// Statements up to the end of a block, in a scope of their own. Its scope,
+// its statements' stack and its level are put back on every way out, as
+// Zig's `defer`s do.
+static inline STATUS_MUST_USE Status parse_block(Parser *p, Stmts *out) {
+    TRY(parse_enter(p));
+    p->frame.depth++;
+    size_t mark = p->frame.locals.len;
+    size_t from = p->stmts.len;
+    Status s = parse_block_body(p, from, out);
+    p->stmts.len = from;
     p->frame.locals.len = mark;
     p->frame.depth--;
     parse_leave(p);
-    return OK;
+    return s;
 }
 
 // ── functions and the preludes they load ──
@@ -992,6 +1015,22 @@ static inline STATUS_MUST_USE Status parse_params(Parser *p, uint16_t *params, u
     return parse_expect(p, TAG_RPAREN, S("`)` after the parameters"), &t);
 }
 
+// Function `index`'s parameters and body, in the frame made for it.
+static inline STATUS_MUST_USE Status parse_function_body(Parser *p, uint32_t index) {
+    uint16_t params = 0;
+    uint16_t optional = 0;
+    TRY(parse_params(p, &params, &optional));
+    at(p->functions, index).params = params;
+    at(p->functions, index).optional = optional;
+    Stmts body = {0};
+    TRY(parse_block(p, &body));
+    Token t = {0};
+    TRY(parse_expect(p, TAG_KW_END, S("`end` to close the function"), &t));
+    at(p->functions, index).frame = p->frame.slots;
+    at(p->functions, index).body = body;
+    return OK;
+}
+
 static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
     TRY(parse_advance(p));
     Token name_tok = {0};
@@ -1058,21 +1097,12 @@ static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
     memset(&p->frame, 0, sizeof p->frame);
     p->frame.locals = LocalVec_make(p->arena);
     p->in_function = true;
-    uint16_t params = 0;
-    uint16_t optional = 0;
-    TRY(parse_params(p, &params, &optional));
-    at(p->functions, index).params = params;
-    at(p->functions, index).optional = optional;
-    Stmts body = {0};
-    TRY(parse_block(p, &body));
-    Token t = {0};
-    TRY(parse_expect(p, TAG_KW_END, S("`end` to close the function"), &t));
-    at(p->functions, index).frame = p->frame.slots;
-    at(p->functions, index).body = body;
+    Status s = parse_function_body(p, index);
+    // The caller's frame, put back on every way out, as Zig's `defer`.
     p->frame = saved;
     p->in_function = saved_in_function;
     p->script_frame = saved_script_frame;
-    return OK;
+    return s;
 }
 
 // Parses function `i` of prelude `k` at its first call, from its own line, as
@@ -1093,15 +1123,16 @@ static inline STATUS_MUST_USE Status parse_load_prelude(Parser *p, size_t k, siz
     p->has_ahead = false;
     p->in_prelude = k;
     p->nesting = 0;
-    TRY(parse_advance(p));
-    TRY(parse_function(p, parse_here(p)));
+    Status s = parse_advance(p);
+    if (s == OK) s = parse_function(p, parse_here(p));
+    // The script's place, put back on every way out, as Zig's `defer`.
     p->lexer = saved_lexer;
     p->tok = saved_tok;
     p->has_ahead = saved_has_ahead;
     p->ahead = saved_ahead;
     p->in_prelude = saved_in_prelude;
     p->nesting = saved_nesting;
-    return OK;
+    return s;
 }
 
 // ── expressions ──
@@ -1137,10 +1168,11 @@ static inline bool parse_binop(Tag tag, Level *out) {
 
 static inline STATUS_MUST_USE Status parse_unary(Parser *p, Expr **out);
 
+static inline STATUS_MUST_USE Status parse_binary(Parser *p, uint8_t min, Expr **out);
+
 // Precedence climbing: operators of at least `min` bind here; `..` binds to
 // the right, every other to the left.
-static inline STATUS_MUST_USE Status parse_binary(Parser *p, uint8_t min, Expr **out) {
-    TRY(parse_enter(p));
+static inline STATUS_MUST_USE Status parse_binary_body(Parser *p, uint8_t min, Expr **out) {
     Expr *left = NULL;
     TRY(parse_unary(p, &left));
     Level lv = {0};
@@ -1165,14 +1197,56 @@ static inline STATUS_MUST_USE Status parse_binary(Parser *p, uint8_t min, Expr *
         left = e;
     }
     *out = left;
-    parse_leave(p);
     return OK;
+}
+
+// A binary expression, one level of the nesting budget, left on every way
+// out.
+static inline STATUS_MUST_USE Status parse_binary(Parser *p, uint8_t min, Expr **out) {
+    TRY(parse_enter(p));
+    Status s = parse_binary_body(p, min, out);
+    parse_leave(p);
+    return s;
 }
 
 static inline STATUS_MUST_USE Status parse_expr(Parser *p, Expr **out) {
     return parse_binary(p, 0, out);
 }
 
+// A unary operator's operand, from the operator on, folding a minus into
+// its literal.
+static inline STATUS_MUST_USE Status parse_unary_operand(Parser *p, Pos pos, UnOp op, Expr **out) {
+    TRY(parse_advance(p));
+    // The magnitude of the smallest integer is no int64, so only a minus right
+    // before it makes it one.
+    if (op == UNOP_NEG && p->tok.tag == TAG_INT && p->tok.min_magnitude) {
+        TRY(parse_advance(p));
+        Expr *e = parse_new_expr(p, pos, EXPR_INT);
+        if (e == NULL) return STOP;
+        e->as.integer = INT64_MIN;
+        *out = e;
+        return OK;
+    }
+    Expr *operand = NULL;
+    TRY(parse_unary(p, &operand));
+    // A minus folds into its literal, unless that overflows
+    // (`-(-9223372036854775808)`), which is left to fail at run time.
+    if (op == UNOP_NEG && operand->kind == EXPR_INT && operand->as.integer != INT64_MIN) {
+        operand->as.integer = -operand->as.integer;
+        operand->pos = pos;
+        *out = operand;
+        return OK;
+    }
+    Expr *e = parse_new_expr(p, pos, EXPR_UNARY);
+    if (e == NULL) return STOP;
+    e->as.unary.op = op;
+    e->as.unary.operand = operand;
+    *out = e;
+    return OK;
+}
+
+// A unary operator charges a level of the nesting budget, left on every way
+// out; anything else is a suffixed expression.
 static inline STATUS_MUST_USE Status parse_unary(Parser *p, Expr **out) {
     Pos pos = parse_here(p);
     UnOp op;
@@ -1186,36 +1260,9 @@ static inline STATUS_MUST_USE Status parse_unary(Parser *p, Expr **out) {
         return parse_suffixed(p, out);
     }
     TRY(parse_enter(p));
-    TRY(parse_advance(p));
-    // The magnitude of the smallest integer is no int64, so only a minus right
-    // before it makes it one.
-    if (op == UNOP_NEG && p->tok.tag == TAG_INT && p->tok.min_magnitude) {
-        TRY(parse_advance(p));
-        Expr *e = parse_new_expr(p, pos, EXPR_INT);
-        if (e == NULL) return STOP;
-        e->as.integer = INT64_MIN;
-        *out = e;
-        parse_leave(p);
-        return OK;
-    }
-    Expr *operand = NULL;
-    TRY(parse_unary(p, &operand));
-    // A minus folds into its literal, unless that overflows
-    // (`-(-9223372036854775808)`), which is left to fail at run time.
-    if (op == UNOP_NEG && operand->kind == EXPR_INT && operand->as.integer != INT64_MIN) {
-        operand->as.integer = -operand->as.integer;
-        operand->pos = pos;
-        *out = operand;
-        parse_leave(p);
-        return OK;
-    }
-    Expr *e = parse_new_expr(p, pos, EXPR_UNARY);
-    if (e == NULL) return STOP;
-    e->as.unary.op = op;
-    e->as.unary.operand = operand;
-    *out = e;
+    Status s = parse_unary_operand(p, pos, op, out);
     parse_leave(p);
-    return OK;
+    return s;
 }
 
 static inline STATUS_MUST_USE Status parse_call(Parser *p, Str name, Pos pos, Expr **out);
@@ -1288,8 +1335,8 @@ static inline STATUS_MUST_USE Status parse_primary(Parser *p, Expr **out) {
     return OK;
 }
 
-static inline STATUS_MUST_USE Status parse_suffixed(Parser *p, Expr **out) {
-    TRY(parse_enter(p));
+// A primary expression and the `.k` and `[k]` after it.
+static inline STATUS_MUST_USE Status parse_suffixed_body(Parser *p, Expr **out) {
     Expr *e = NULL;
     TRY(parse_primary(p, &e));
     for (;;) {
@@ -1326,8 +1373,16 @@ static inline STATUS_MUST_USE Status parse_suffixed(Parser *p, Expr **out) {
         }
     }
     *out = e;
-    parse_leave(p);
     return OK;
+}
+
+// A suffixed expression, one level of the nesting budget, left on every way
+// out.
+static inline STATUS_MUST_USE Status parse_suffixed(Parser *p, Expr **out) {
+    TRY(parse_enter(p));
+    Status s = parse_suffixed_body(p, out);
+    parse_leave(p);
+    return s;
 }
 
 // `attempt(f, ...)`'s function, by name, and the `,` or `)` after it.
@@ -1382,18 +1437,10 @@ static inline STATUS_MUST_USE Status parse_call_target(Parser *p, Str name, Pos 
     return parse_advance(p);
 }
 
-static inline STATUS_MUST_USE Status parse_call(Parser *p, Str name, Pos pos, Expr **out) {
-    CallExpr call;
-    memset(&call, 0, sizeof call);
-    int32_t params = -1;
-    uint16_t optional = 0;
-    Str shown = name;
-    if (str_eq(name, S("attempt"))) {
-        TRY(parse_attempt_target(p, &call, &shown, &params, &optional));
-    } else {
-        TRY(parse_call_target(p, name, pos, &call, &params, &optional));
-    }
-    size_t from = p->exprs.len;
+// A call's arguments, pushed on the expressions' stack from `from` on, held
+// to its function's parameters (`params` -1 for a builtin's, held where it
+// runs).
+static inline STATUS_MUST_USE Status parse_call_args(Parser *p, Pos pos, CallExpr *call, Str shown, int32_t params, uint16_t optional, size_t from, Expr **out) {
     if (p->tok.tag != TAG_RPAREN) {
         for (;;) {
             Expr *arg = NULL;
@@ -1406,7 +1453,7 @@ static inline STATUS_MUST_USE Status parse_call(Parser *p, Str name, Pos pos, Ex
     Token close = {0};
     TRY(parse_expect(p, TAG_RPAREN, S("`)` to close the call"), &close));
     size_t given = p->exprs.len - from;
-    if (call.target == TARGET_BUILTIN && call.builtin == BUILTIN_ARG) {
+    if (call->target == TARGET_BUILTIN && call->builtin == BUILTIN_ARG) {
         Expr *first = given > 0 ? at(p->exprs, from) : NULL;
         if (first != NULL && first->kind == EXPR_STRING) {
             bool seen = false;
@@ -1441,12 +1488,30 @@ static inline STATUS_MUST_USE Status parse_call(Parser *p, Str name, Pos pos, Ex
             TRY(ExprVec_push(&p->exprs, nil));
         }
     }
-    TRY(parse_take_exprs(p, from, &call.args));
+    TRY(parse_take_exprs(p, from, &call->args));
     Expr *e = parse_new_expr(p, pos, EXPR_CALL);
     if (e == NULL) return STOP;
-    e->as.call = call;
+    e->as.call = *call;
     *out = e;
     return OK;
+}
+
+static inline STATUS_MUST_USE Status parse_call(Parser *p, Str name, Pos pos, Expr **out) {
+    CallExpr call;
+    memset(&call, 0, sizeof call);
+    int32_t params = -1;
+    uint16_t optional = 0;
+    Str shown = name;
+    if (str_eq(name, S("attempt"))) {
+        TRY(parse_attempt_target(p, &call, &shown, &params, &optional));
+    } else {
+        TRY(parse_call_target(p, name, pos, &call, &params, &optional));
+    }
+    size_t from = p->exprs.len;
+    Status s = parse_call_args(p, pos, &call, shown, params, optional, from, out);
+    // The arguments' stack, put back on every way out, as Zig's `defer`.
+    p->exprs.len = from;
+    return s;
 }
 
 // One entry of a table literal: a key's (`name =` or `["key"] =`) and its value.
@@ -1491,11 +1556,10 @@ static inline STATUS_MUST_USE Status parse_table_entry(Parser *p, size_t items_f
     return ExprVec_push(&p->exprs, value);
 }
 
-static inline STATUS_MUST_USE Status parse_table(Parser *p, Pos pos, Expr **out) {
-    TRY(parse_enter(p));
+// A table literal's entries, from its `{` on, pushed on the stacks from
+// `items_from` and `entries_from` on.
+static inline STATUS_MUST_USE Status parse_table_body(Parser *p, Pos pos, size_t items_from, size_t entries_from, Expr **out) {
     TRY(parse_advance(p));
-    size_t items_from = p->exprs.len;
-    size_t entries_from = p->entries.len;
     while (p->tok.tag != TAG_RBRACE) {
         TRY(parse_table_entry(p, items_from, entries_from));
         if (p->tok.tag != TAG_COMMA && p->tok.tag != TAG_SEMICOLON) break;
@@ -1521,10 +1585,21 @@ static inline STATUS_MUST_USE Status parse_table(Parser *p, Pos pos, Expr **out)
         e = parse_new_expr(p, pos, EXPR_EMPTY_TABLE);
         if (e == NULL) return STOP;
     }
-    p->exprs.len = items_from;
     *out = e;
-    parse_leave(p);
     return OK;
+}
+
+// A table literal, one level of the nesting budget; the level and both
+// stacks are put back on every way out, as Zig's `defer`s.
+static inline STATUS_MUST_USE Status parse_table(Parser *p, Pos pos, Expr **out) {
+    TRY(parse_enter(p));
+    size_t items_from = p->exprs.len;
+    size_t entries_from = p->entries.len;
+    Status s = parse_table_body(p, pos, items_from, entries_from, out);
+    p->exprs.len = items_from;
+    p->entries.len = entries_from;
+    parse_leave(p);
+    return s;
 }
 
 // ── checking a prelude or a library ──
@@ -1795,15 +1870,18 @@ static inline STATUS_MUST_USE Status parse_library_consts(Parser *p, size_t k, P
         p->has_ahead = false;
         p->in_prelude = k;
         // `const`, its name, `=`, then the value's first token.
-        for (int t = 0; t < 4; t++) TRY(parse_advance(p));
+        Status read = OK;
+        for (int t = 0; t < 4 && read == OK; t++) read = parse_advance(p);
         Stmt s;
         parse_stmt_init(&s, pos, STMT_CONSTANT);
-        TRY(parse_expr(p, &s.as.constant.value));
+        if (read == OK) read = parse_expr(p, &s.as.constant.value);
+        // The script's place, put back on every way out.
         p->in_prelude = PARSE_SCRIPT;
         p->lexer = saved_lexer;
         p->tok = saved_tok;
         p->has_ahead = saved_has_ahead;
         p->ahead = saved_ahead;
+        TRY(read);
         TRY(parse_declare(p, c.name, pos, &s.as.constant.slot));
         at(p->frame.locals, p->frame.locals.len - 1).constant = true;
         if (p->consts.len == UINT16_MAX) return parse_fail(p, pos, CLASS_SYNTAX, S("too many constants"));
@@ -1870,10 +1948,13 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
     at(p->extra, k - 1) = x;
     TRY(parse_check_library(p, k, pos));
     size_t from = p->stmts.len;
-    TRY(parse_library_consts(p, k, pos));
     Stmt s;
     parse_stmt_init(&s, pos, STMT_DO);
-    TRY(parse_take_stmts(p, from, &s.as.do_));
+    Status bound = parse_library_consts(p, k, pos);
+    if (bound == OK) bound = parse_take_stmts(p, from, &s.as.do_);
+    // The statements' stack, put back on every way out, as Zig's `defer`.
+    p->stmts.len = from;
+    TRY(bound);
     *out = s;
     return OK;
 }

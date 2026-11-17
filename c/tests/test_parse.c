@@ -339,6 +339,68 @@ TEST(statements_hold_their_own_rules) {
     arena_deinit(&r.arena);
 }
 
+// The parse must have stopped with its state as it was before the script's
+// first token: what Zig's `defer`s put back on every way out.
+static void expect_state_restored(Parsed *r, Str source) {
+    EXPECT(r->status == STOP);
+    EXPECT(r->p.stopped);
+    EXPECT_EQ(r->p.nesting, 0);
+    EXPECT_EQ(r->p.frame.depth, 0);
+    EXPECT_EQ(r->p.frame.loops, 0);
+    EXPECT_EQ(r->p.frame.locals.len, 0);
+    EXPECT(!r->p.in_function);
+    EXPECT(r->p.script_frame == NULL);
+    EXPECT(r->p.in_prelude == PARSE_SCRIPT);
+    EXPECT(r->p.lexer.src.ptr == source.ptr);
+    EXPECT_EQ(r->p.stmts.len, 0);
+    EXPECT_EQ(r->p.exprs.len, 0);
+    EXPECT_EQ(r->p.arms.len, 0);
+    EXPECT_EQ(r->p.entries.len, 0);
+}
+
+TEST(a_stop_partway_leaves_the_parsers_state_as_it_was) {
+    Parsed r;
+    // Deep in a function's loop, `if`, call and table: every level put back.
+    Str deep = S("local a = 1\nfunction f(x)\n  while x do\n    for i = 1, 3 do\n      if x then\n        print(1, {2, {k = nope}})\n      end\n    end\n  end\nend\n");
+    parse_plain(&r, deep);
+    expect_stop(&r, 6, 27, CLASS_NAME, S("no local `nope` here: a function sees only its own parameters and locals, and the script's `const`s declared above it (Shale's builtins and preludes: `shale --help`)"));
+    expect_state_restored(&r, deep);
+    arena_deinit(&r.arena);
+    // A stop inside a prelude function loaded at its first call puts back
+    // the script's lexer and token.
+    Str calls = S("local s = \"a\"\nprint(broken(s))\n");
+    r.arena = arena_make(1 << 24);
+    parse_init(&r.p, &r.arena, calls, 200);
+    Preludes none = {NULL, 0};
+    Loader no_loader = {NULL, NULL};
+    r.status = parse_program(&r.p, S("function broken(s)\n  return s + @\nend\n"), none, no_loader, &r.prog);
+    expect_stop(&r, 2, 14, CLASS_SYNTAX, S("a character no token starts with, `@`"));
+    expect_state_restored(&r, calls);
+    EXPECT_EQ(r.p.tok.line, 2);
+    arena_deinit(&r.arena);
+    // The nesting budget's own refusal counts no level it did not enter.
+    Arena a = arena_make(1 << 20);
+    Buf b = buf_make(&a);
+    EXPECT(buf_lit(&b, "if true then\n  print(") == OK);
+    for (int i = 0; i < 300; i++) EXPECT(buf_byte(&b, '(') == OK);
+    EXPECT(buf_lit(&b, "1") == OK);
+    Str nested = buf_view(&b);
+    parse_plain(&r, nested);
+    EXPECT_EQ(r.p.stop.budget, BUDGET_NESTING);
+    expect_state_restored(&r, nested);
+    arena_deinit(&r.arena);
+    arena_deinit(&a);
+    // A parse that does not stop ends where it began too.
+    Str fine = S("local a = {1, {k = 2}}\nfor i = 1, 2 do if a then print(twice(\"x\")) end end\n");
+    parse_plain(&r, fine);
+    EXPECT(r.status == OK);
+    EXPECT_EQ(r.p.nesting, 0);
+    EXPECT_EQ(r.p.frame.depth, 0);
+    EXPECT(r.p.lexer.src.ptr == fine.ptr);
+    EXPECT_EQ(r.p.exprs.len, 0);
+    arena_deinit(&r.arena);
+}
+
 TEST(the_command_line_and_the_header_budgets_are_read_as_zig_reads_them) {
     Arena a = arena_make(1 << 20);
     Buf why = buf_make(&a);
@@ -386,4 +448,5 @@ TEST_MAIN(TEST_CASE(a_script_parses_to_its_tree_each_name_a_slot),
           TEST_CASE(a_later_prelude_is_checked_whole_before_the_script),
           TEST_CASE(a_use_binds_its_consts_on_its_line_and_its_functions_load_at_their_call),
           TEST_CASE(statements_hold_their_own_rules),
+          TEST_CASE(a_stop_partway_leaves_the_parsers_state_as_it_was),
           TEST_CASE(the_command_line_and_the_header_budgets_are_read_as_zig_reads_them))
