@@ -96,6 +96,8 @@ const PLANTS = {
    old = "if (only_env != NULL && !test_named(only, c->name)) continue;", new = "(void)test_named;"},
   {name = "TEST_ONLY lets a name no test has through", file = "test.h", caught_by = "harness",
    old = "if (only_env != NULL && !test_all_named(cases, only, &missing)) {", new = "if (0 && !test_all_named(cases, only, &missing)) {"},
+  {name = "EXPECT_EQ_I prints a negative side unsigned", file = "test.h", caught_by = "harness",
+   old = [==["  %s is %lld, %s is %lld\n"]==], new = [==["  %s is %llu, %s is %llu\n"]==]},
 }
 
 -- `at_unchecked` with no reason, an empty one or one that is no literal
@@ -156,6 +158,45 @@ function check_must_use(t)
   return refused
 end
 
+-- Each name table sized by its names, not its enum (`names[]`), with a
+-- `_Static_assert` on its count: one name left out must not compile, where a
+-- table sized by its enum would zero-fill the gap and read as "". Each case
+-- drops its table's last name in a copy of c/foundation and c/script and
+-- compiles cli.h, which includes every table.
+const NAME_TABLES = {
+  {dir = "foundation", file = "err.h", old = "S_ITEM(\"host\"),\n    };", new = "\n    };", says = "a name for every class"},
+  {dir = "foundation", file = "err.h", old = "S_ITEM(\"cpu\"),\n    };", new = "\n    };", says = "a name for every budget"},
+  {dir = "script", file = "ast.h", old = "S_ITEM(\"print\"),\n    };", new = "\n    };", says = "a name for every builtin"},
+  {dir = "script", file = "cli.h", old = "S_ITEM(\"programs\"),\n    };", new = "\n    };", says = "a name for every settable budget"},
+}
+
+-- Each of NAME_TABLES compiled and refused, by its own assert. Gives how
+-- many were refused.
+function check_name_tables(t)
+  local dir = OUT .. "/name_tables"
+  if exists(dir) then remove_tree(dir) end
+  for d in {"foundation", "script"} do copy("c/" .. d, dir .. "/" .. d) end
+  mkdir(dir .. "/tests")
+  local src = dir .. "/tests/tables.c"
+  create(src, "#include \"../script/cli.h\"\n")
+  local refused = 0
+  for c in NAME_TABLES do
+    local file = dir .. "/" .. c.dir .. "/" .. c.file
+    local whole = read(file)
+    replace(file, replaced_once(whole, c.old, c.new, c.says))
+    local argv = gcc_flags("release", dir .. "/foundation")
+    push(argv, "-fsyntax-only")
+    push(argv, src)
+    local r = run_in(t, "refusals", argv, {timeout_ms = 30000, tail = 10})
+    replace(file, whole)
+    if r.code == 0 then fail(c.file .. " with `" .. c.old .. "` made `" .. c.new .. "` compiled: a name left out must be refused") end
+    if find(r.out, c.says) == nil then fail(c.file .. " with a name left out was refused for another reason:\n" .. r.out) end
+    refused = refused + 1
+  end
+  remove_tree(dir)
+  return refused
+end
+
 -- Every test file under each of `t.builds` (`test_file`); then, in the
 -- full tier, the harness fixture, the compiler's refusals and the plants.
 function foundation_block(t)
@@ -171,9 +212,10 @@ function foundation_block(t)
   if not harness_holds(t, "asan", harness) then
     fail("the harness fixture did not print exactly what harness_cases says: its .expected whole, and each TEST_ONLY run")
   end
-  print("harness: the fixture's 6 failures, each named with its line, and its count; TEST_ONLY's " .. (#harness_cases() - 1) .. " runs")
+  print("harness: the fixture's 7 failures, each named with its line, and its count; TEST_ONLY's " .. (#harness_cases() - 1) .. " runs")
   print("reasons: " .. check_reasons(t) .. " unchecked indexes without a literal reason refused by the compiler")
   print("must use: " .. check_must_use(t) .. " dropped Status answers refused by GCC under -Werror")
+  print("name tables: " .. check_name_tables(t) .. " tables with a name left out refused by their count's assert")
 
   run_plants(t, "plants", PLANTS)
   return nil
