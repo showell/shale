@@ -24,6 +24,12 @@
 --
 -- Every check runs in exactly one tier, and the full tier runs both.
 --
+-- **The pool.** In the full tier the GCC compiles of every block in POOLED
+-- run before any test, two at a time, the longest first: each such block
+-- runs once with `stage=plan` to say its compiles, c/build/pool.shale runs
+-- them all, and the block then runs with `stage=prebuilt` on what the pool
+-- built (c/build/lib.shale, "The pool").
+--
 -- **The blocks.** Each part of the C has a block, a script of its own in
 -- c/build/ (BLOCKS below, run in order), and this script runs each in turn:
 -- one script would pass the 64 KiB a Shale script may be. A block's script
@@ -59,6 +65,10 @@
 
 const OUT = "c/out"
 const BLOCKS = {"foundation", "discipline", "regex", "command", "vm", "host", "store", "builtins", "host_builtins", "host_text", "host_zig"}
+-- The blocks whose GCC compiles the full tier's pool builds (c/build/pool.shale
+-- and lib.shale's "The pool"): each runs first with `stage=plan`, then with
+-- `stage=prebuilt`. A block left out compiles its own.
+const POOLED = {"foundation", "command", "host", "store", "builtins", "host_builtins", "host_text", "host_zig"}
 
 -- The first line a compiler says of its version, or nil when it is missing.
 function version_of(argv)
@@ -81,7 +91,10 @@ function report_phases(full)
   local rows = {}
   local ms = 0
   local cpu = 0
-  for b in BLOCKS do
+  local order = {}
+  if full then push(order, "pool") end
+  for b in BLOCKS do push(order, b) end
+  for b in order do
     local p = json_read(read(OUT .. "/phases/" .. b .. ".json"))
     for name in p.order do
       local ph = p.phases[name]
@@ -94,7 +107,10 @@ function report_phases(full)
   end
   push(rows, {phase = "all", programs = "", wall = seconds(ms), cpu = seconds(cpu)})
   print(table(rows, {"phase", "programs", "wall", "cpu"}))
-  if full then print("* its runs overlap: its wall is the clock's, and its CPU every program's, two at a time as jobs (c/build/job.shale) or in the foreground; host vs zig's probes alone are left out") end
+  if full then
+    print("* its runs overlap: its wall is the clock's, and its CPU every program's, two at a time as jobs (c/build/job.shale) or in the foreground; host vs zig's probes alone are left out")
+    print("gcc compiles: every pooled block's compiles, run before any test; each one's CPU, and its count, is in its block's phase")
+  end
   return nil
 end
 
@@ -124,15 +140,36 @@ local mount_line = "build = " .. real("c/build") .. " ro\n"
 local tools = attempt(real, "tools:.")
 if tools.ok then mount_line = mount_line .. "tools = " .. tools.value .. " ro tools\n" end
 if exists(mounts) then replace(mounts, mount_line) else create(mounts, mount_line) end
-if exists(OUT .. "/phases") then remove_tree(OUT .. "/phases") end
+-- Each run's phases, plans and compiles are its own: a binary a block takes
+-- from the pool was built in this run.
+for d in {"phases", "plan", "jobs", "plants"} do
+  if exists(OUT .. "/" .. d) then remove_tree(OUT .. "/" .. d) end
+end
+
+-- The block `b` run (c/build/<b>.shale) with `args`; its output printed
+-- unless `quiet` and it passed.
+function run_block(b, args, mounts, quiet)
+  local argv = {"shale", "c/build/" .. b .. ".shale"}
+  for a in args do push(argv, a) end
+  local r = run(argv, {timeout_ms = 900000, tail = 2000, env = {SHALE_MOUNTS = real(mounts)}, not_re = "^── (budgets from the script's header|time: )"})
+  local failed = get(r, "code", -1) ~= 0
+  if trim(r.out) ~= "" and (failed or not quiet) then print(trim(r.out)) end
+  if failed then fail("the " .. b .. " block (c/build/" .. b .. ".shale " .. join(args, " ") .. ") failed: its output is above") end
+  return nil
+end
 
 local said_full = "0"
 if full then said_full = "1" end
+local block_args = {"full=" .. said_full, "builds=" .. said_builds}
+if full then
+  -- The pool: each pooled block's plan, then every compile of them at once.
+  for b in POOLED do run_block(b, {"full=1", "builds=" .. said_builds, "stage=plan"}, mounts, true) end
+  run_block("pool", {"blocks=" .. join(POOLED, ",")}, mounts, false)
+end
 for b in BLOCKS do
-  local r = run({"shale", "c/build/" .. b .. ".shale", "full=" .. said_full, "builds=" .. said_builds},
-    {timeout_ms = 900000, tail = 2000, env = {SHALE_MOUNTS = real(mounts)}, not_re = "^── (budgets from the script's header|time: )"})
-  if trim(r.out) ~= "" then print(trim(r.out)) end
-  if get(r, "code", -1) ~= 0 then fail("the " .. b .. " block (c/build/" .. b .. ".shale) failed: its output is above") end
+  local args = block_args
+  if full and has_item(POOLED, b) then args = {"full=1", "builds=" .. said_builds, "stage=prebuilt"} end
+  run_block(b, args, mounts, false)
 end
 
 report_phases(full)

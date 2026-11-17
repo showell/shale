@@ -1,0 +1,39 @@
+-- c/build/pool.shale: the full tier's compiles, every block's at once, two
+-- at a time. c/build.shale runs it after each block of its POOLED list has
+-- written its plan (c/out/plan/<block>.json, `stage=plan`) and before any
+-- block runs a test; lib.shale's "The pool" says why.
+--
+-- The longest compile starts first, as the last run's CPU times say
+-- (c/out/compile_cpu.json; a compile with none starts before every one that
+-- has one), so the two slots end together rather than one compile running
+-- alone at the end. A compile that fails is left for its block to say, by
+-- name and with its output, when its `stage=prebuilt` run takes its answer.
+-- budget: programs=200 arena_bytes=268435456
+
+use("build:lib.shale")
+
+const HISTORY = "c/out/compile_cpu.json"
+
+local t = block_start(true, "none")
+local specs = {}
+for b in split(arg("blocks", ""), ",") do
+  for s in json_read(read(OUT .. "/plan/" .. b .. ".json")) do push(specs, s) end
+end
+local last = {}
+if exists(HISTORY) then last = json_read(read(HISTORY)) end
+-- A compile the history lacks counts as the longest: it may be.
+for s in specs do s.last_cpu_ms = get(last, s.name, 1000000000) end
+sort(specs, "last_cpu_ms", "desc")
+local answers = run_jobs(t, "gcc compiles", OUT .. "/jobs", specs)
+local i = 0
+local failed = 0
+for a in answers do
+  i = i + 1
+  if get(a, "code", -1) == 0 then last[specs[i].name] = a.cpu_ms else failed = failed + 1 end
+end
+if exists(HISTORY) then replace(HISTORY, json_write(last)) else create(HISTORY, json_write(last)) end
+-- Each compile's CPU is charged to its block's phase when that block takes
+-- its answer, so this phase holds the pool's wall time alone.
+t.phases["gcc compiles"].cpu_ms = 0
+block_end(t, "pool")
+print("pool: " .. #specs .. " compiles, two at a time, " .. failed .. " failed (each said by its block)")

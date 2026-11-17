@@ -21,14 +21,15 @@ const PARSE_PLANTS = {
 
 -- The C `shale` under each of `t.builds`, at c/out/<build>/shale (under
 -- `release`, the one -O2 link, the binary the differ judges), compiled two
--- at a time (`run_jobs`).
+-- at a time (`compile_jobs`).
 function build_commands(t)
   local specs = {}
   for b in t.builds do
     local argv = compile_argv(b, "c/shale.c", FOUNDATION, OUT .. "/" .. b .. "/shale", {"-I" .. OUT .. "/gen", "-Ic"})
     push(specs, {name = "command-" .. b, argv = argv, opts = {timeout_ms = 120000}})
   end
-  local answers = run_jobs(t, "command builds", OUT .. "/jobs", specs)
+  local answers = compile_jobs(t, "command builds", specs)
+  if answers == nil then return nil end
   local i = 0
   for a in answers do
     i = i + 1
@@ -60,6 +61,7 @@ end
 function command_block(t)
   print(trim(must(run_in(t, "command preludes", {"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5})).out))
   build_commands(t)
+  if t.stage == "plan" then return nil end
   for b in t.builds do
     check_command(t, b)
     print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops")
@@ -72,6 +74,6 @@ end
 
 -- ── The run ─────────────────────────────────────────────────────────────
 
-local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
 command_block(t)
 block_end(t, "command")

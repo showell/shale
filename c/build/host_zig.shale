@@ -174,6 +174,7 @@ function host_zig_block(t)
     for src in tests do total = total + test_file(t, "host_zig " .. b, b, src) end
     print("host_zig " .. said_of_build(b, #tests, total))
   end
+  if t.stage == "plan" then return run_plants(t, "host_zig plants", HOST_ZIG_PLANTS) end
   local n = host_zig_vs_zig(t)
   print("host_zig: " .. n .. " scripts run as Zig runs them, under " .. #t.builds .. " build(s)")
   if not t.full then return nil end
@@ -184,6 +185,6 @@ end
 
 -- ── The run ─────────────────────────────────────────────────────────────
 
-local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
 host_zig_block(t)
 block_end(t, "host_zig")

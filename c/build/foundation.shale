@@ -202,6 +202,7 @@ end
 function foundation_block(t)
   for b in t.builds do print(said_of_build(b, #t.tests, test_files(t, b, b, t.tests))) end
   if not t.full then return nil end
+  if t.stage == "plan" then return run_plants(t, "plants", PLANTS) end
 
   local harness = OUT .. "/asan/harness_fails"
   compile_to(t, "asan", "asan", "c/tests/fixtures/harness_fails.c", FOUNDATION, harness)
@@ -219,7 +220,7 @@ end
 
 -- ── The run ─────────────────────────────────────────────────────────────
 
-local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
 t.tests = {}
 for p in glob("c/tests/test_*.c") do push(t.tests, p) end
 sort(t.tests)

@@ -107,6 +107,54 @@ function run_jobs(t, phase, dir, specs)
   return answers
 end
 
+-- ── The pool: every block's compiles, two at a time ─────────────────────
+-- In the full tier, c/build.shale runs each block of its POOLED list twice.
+-- First with `stage=plan`: the block runs no program but its cheap setup,
+-- and each compile it would start is recorded in `t.planned` and written to
+-- c/out/plan/<block>.json. c/build/pool.shale then runs every plan's
+-- compiles as jobs, two at a time, the longest first, before any test runs,
+-- so neither core idles while one block's lone compile runs. Then each
+-- block runs with `stage=prebuilt`: a compile is the answer the pool wrote,
+-- held to the argv the plan gave (a binary built from other flags is never
+-- run), its CPU charged to the block's phase. A block run alone, and every
+-- block in the fast tier, has `stage = "all"` and compiles its own.
+
+-- The answer the pool wrote for `s` ({name, argv}), its CPU charged to
+-- `phase`. A compile no plan named, or one whose argv the plan gave
+-- otherwise, stops the run: the binary there is not this run's.
+function prebuilt_answer(t, phase, s)
+  local spec = OUT .. "/jobs/" .. s.name .. ".json"
+  if not exists(spec) or not exists(spec .. ".answer") then
+    fail("the pool built no `" .. s.name .. "`: a block's `stage=prebuilt` run compiled what its `stage=plan` run did not plan")
+  end
+  if json_write(json_read(read(spec)).argv) ~= json_write(s.argv) then
+    fail("the pool built `" .. s.name .. "` from another argv than this run's:\n" .. join(s.argv, " "))
+  end
+  local a = json_read(read(spec .. ".answer"))
+  charge(t, phase, 1, 0, a.cpu_ms)
+  return a
+end
+
+-- Each of `specs` ({name, argv, opts}, as `run_jobs` takes them) compiled
+-- as `t.stage` says: recorded for the pool in a plan (giving nil, so the
+-- caller runs nothing after it), taken from the pool's answers when
+-- prebuilt, or run two at a time here (`run_jobs`). Gives the answers in
+-- `specs`' order.
+function compile_jobs(t, phase, specs)
+  if t.stage == "plan" then
+    for s in specs do push(t.planned, s) end
+    return nil
+  end
+  if t.stage == "prebuilt" then
+    local answers = {}
+    for s in specs do push(answers, prebuilt_answer(t, phase, s)) end
+    return answers
+  end
+  -- One compile alone has nothing to overlap, so it runs in the foreground.
+  if #specs == 1 then return {run_in(t, phase, specs[1].argv, {timeout_ms = specs[1].opts.timeout_ms, whole = 60000})} end
+  return run_jobs(t, phase, OUT .. "/jobs", specs)
+end
+
 -- The flags of a GCC build, `include` the foundation's folder.
 function gcc_flags(build, include)
   local f = {"gcc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-I" .. include}
@@ -257,6 +305,7 @@ end
 -- compiler. Gives how many tests ran.
 function test_files(t, phase, build, srcs, extra?)
   local total = 0
+  if build == "tcc" and t.stage == "plan" then return 0 end
   if build == "tcc" then
     for src in srcs do total = total + tcc_test(t, phase, src, extra) end
     return total
@@ -275,7 +324,8 @@ function test_files(t, phase, build, srcs, extra?)
     push(specs, {name = build .. "-" .. name, argv = argv, opts = {timeout_ms = 120000}})
     push(bins, bin)
   end
-  local answers = run_jobs(t, phase, OUT .. "/jobs", specs)
+  local answers = compile_jobs(t, phase, specs)
+  if answers == nil then return 0 end
   local i = 0
   for a in answers do
     i = i + 1
@@ -371,16 +421,18 @@ const PLANT_DIRS = {"foundation", "script", "host"}
 -- unity build about ten times faster than GCC at -O0 with the sanitizers,
 -- and a plant whose aimed test fails by its own EXPECT is caught the same
 -- under either. A fault only a sanitizer sees (a read past an end, an
--- overflow) names asan.
+-- overflow) names asan. In the full tier an asan plant's copy is made and
+-- its compile planned in the block's `stage=plan` run, so the pool builds
+-- it beside the other compiles; the `stage=prebuilt` run takes that copy
+-- and that binary (`plant_job_name`, `compile_jobs`).
 function start_plant(t, phase, p, k, extra?)
-  local dir = OUT .. "/plants/" .. k
-  if exists(dir) then remove_tree(dir) end
-  mkdir(dir .. "/tests")
-  for d in PLANT_DIRS do
-    if exists("c/" .. d) then copy("c/" .. d, dir .. "/" .. d) end
+  local dir = plant_dir(phase, k)
+  local pooled = get(p, "build", "tcc") == "asan" and p.caught_by ~= "harness" and t.stage ~= "all"
+  if pooled and t.stage == "prebuilt" then
+    if not exists(dir) then fail("plant `" .. p.name .. "`: its `stage=plan` run made no copy at " .. dir) end
+  else
+    plant_copy(dir, p)
   end
-  local file = dir .. "/" .. get(p, "dir", "foundation") .. "/" .. p.file
-  replace(file, replaced_once(read(file), p.old, p.new, p.name))
   if p.caught_by == "harness" then
     local bin = dir .. "/bin/harness_fails"
     compile_to(t, phase, "asan", "c/tests/fixtures/harness_fails.c", dir .. "/foundation", bin)
@@ -388,6 +440,41 @@ function start_plant(t, phase, p, k, extra?)
     remove_tree(dir)
     return {line = "  caught: " .. p.name .. " (" .. p.file .. "), by the harness fixture"}
   end
+  local src = dir .. "/tests/" .. p.caught_by .. ".c"
+  local bin = dir .. "/bin/" .. basename(p.caught_by)
+  if pooled then
+    local argv = compile_argv("asan", src, dir .. "/foundation", bin, extra)
+    local answers = compile_jobs(t, phase, {{name = plant_job_name(phase, k), argv = argv, opts = {timeout_ms = 120000}}})
+    if answers == nil then return nil end
+    if get(answers[1], "code", -1) ~= 0 then fail("`asan` could not compile " .. src .. ":\n" .. answers[1].out) end
+  else
+    compile_to(t, phase, get(p, "build", "tcc"), src, dir .. "/foundation", bin, extra)
+  end
+  local job = job_run_start(dir, "run", {bin}, {timeout_ms = 60000, env = {TEST_ONLY = p.aim}, want = WANT})
+  return {job = job, dir = dir, p = p, phase = phase}
+end
+
+-- The folder of the `k`th plant of `phase`: every block's plants have
+-- their own, since a plan makes its asan plants' copies before any runs.
+function plant_dir(phase, k)
+  return OUT .. "/plants/" .. re_replace(phase, "\\W", "_") .. "-" .. k
+end
+
+function plant_job_name(phase, k)
+  return "plant-" .. re_replace(phase, "\\W", "_") .. "-" .. k
+end
+
+-- The copy of the C at `dir` that plant `p` is made in, as `start_plant`
+-- says: PLANT_DIRS, `p.file` with its fault, and the test file it names.
+function plant_copy(dir, p)
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir .. "/tests")
+  for d in PLANT_DIRS do
+    if exists("c/" .. d) then copy("c/" .. d, dir .. "/" .. d) end
+  end
+  local file = dir .. "/" .. get(p, "dir", "foundation") .. "/" .. p.file
+  replace(file, replaced_once(read(file), p.old, p.new, p.name))
+  if p.caught_by == "harness" then return nil end
   if not has_key(p, "aim") then fail("plant `" .. p.name .. "` names no `aim`, the tests of " .. p.caught_by .. " that catch it") end
   local src = dir .. "/tests/" .. p.caught_by .. ".c"
   if find(p.caught_by, "/") ~= nil then
@@ -397,10 +484,7 @@ function start_plant(t, phase, p, k, extra?)
   end
   -- The run fixture test_vm.c and store/test_builtins.c include.
   copy("c/tests/ran.c", dir .. "/tests/ran.c")
-  local bin = dir .. "/bin/" .. basename(p.caught_by)
-  compile_to(t, phase, get(p, "build", "tcc"), src, dir .. "/foundation", bin, extra)
-  local job = job_run_start(dir, "run", {bin}, {timeout_ms = 60000, env = {TEST_ONLY = p.aim}, want = WANT})
-  return {job = job, dir = dir, p = p, phase = phase}
+  return nil
 end
 
 -- A started plant's run waited for and judged: its aimed tests must fail.
@@ -434,8 +518,17 @@ end
 
 -- Each of `plants` under `phase`, with `extra` flags if given, two at a time:
 -- each plant's tests run while the next one compiles. Prints how many were
--- caught, then each one's line, in order.
+-- caught, then each one's line, in order. In a block's `stage=plan` run it
+-- makes the asan plants' copies and plans their compiles, and runs nothing.
 function run_plants(t, phase, plants, extra?)
+  if t.stage == "plan" then
+    local k = 0
+    for p in plants do
+      k = k + 1
+      if get(p, "build", "tcc") == "asan" and p.caught_by ~= "harness" then start_plant(t, phase, p, k, extra) end
+    end
+    return nil
+  end
   local t0 = clock_ms()
   local said = {}
   local pending = nil
@@ -465,16 +558,28 @@ end
 -- ── A block's run ──────────────────────────────────────────────────────
 
 -- The run `t` a block's checks take: `full` the tier, `builds` the builds'
--- names as c/build.shale passes them (`tcc,release,asan`, or `none`).
-function block_start(full, builds)
+-- names as c/build.shale passes them (`tcc,release,asan`, or `none`), and
+-- `stage` the pool's (`all` unless given; see "The pool" above).
+function block_start(full, builds, stage?)
   local list = {}
   if builds ~= "none" then list = split(builds, ",") end
-  return {full = full, builds = list, phases = {}, phase_order = {}}
+  local s = stage
+  if s == nil then s = "all" end
+  if not has_item({"all", "plan", "prebuilt"}, s) then fail("stage=" .. s .. ": a block's stage is all, plan or prebuilt") end
+  return {full = full, builds = list, stage = s, planned = {}, phases = {}, phase_order = {}}
 end
 
 -- The block's phases written to c/out/phases/<name>.json, for c/build.shale's
--- table of every block's phases.
+-- table of every block's phases; in a plan, its compiles to
+-- c/out/plan/<name>.json, for c/build/pool.shale.
 function block_end(t, name)
+  if t.stage == "plan" then
+    mkdir(OUT .. "/plan")
+    local plan = OUT .. "/plan/" .. name .. ".json"
+    if exists(plan) then remove(plan) end
+    create(plan, json_write(t.planned))
+    return nil
+  end
   mkdir(OUT .. "/phases")
   local file = OUT .. "/phases/" .. name .. ".json"
   local text = json_write({order = t.phase_order, phases = t.phases})

@@ -49,8 +49,14 @@ where the real bugs show up.
 A plant builds under TCC unless only a sanitizer sees its fault: a
 plant's aimed test fails by its own `EXPECT` under either compiler, and
 TCC compiles a unity build about ten times faster than GCC with the
-sanitizers. The GCC compiles run two at a time, one per core
-(`c/build/lib.shale`'s `run_jobs`). The tier's checks of wall time hold
+sanitizers. The GCC compiles run two at a time, one per core, and in the
+full tier they run in one pool before any test does (`c/build/pool.shale`):
+each block first plans its compiles, its asan plants' among them, then the
+pool runs every block's at once, the longest first by the last run's CPU,
+and then each block runs its tests on the binaries the pool built, each
+held to the argv its plan gave. So no block's lone compile (the store
+builtins' -O2 build, its asan build) runs with the other core idle. The
+tier's checks of wall time hold
 under `nice` and a busy box: a program that burns CPU is held to its
 CPU time, and only programs that wait are held to their wall time.
 

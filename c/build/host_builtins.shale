@@ -66,6 +66,6 @@ end
 
 -- ── The run ─────────────────────────────────────────────────────────────
 
-local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
 host_builtins_block(t)
 block_end(t, "host_builtins")

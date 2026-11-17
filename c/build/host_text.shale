@@ -112,6 +112,7 @@ function host_text_block(t)
     local total = test_file(t, "host text " .. b, b, HOST_TEXT_TEST)
     print("host text " .. said_of_build(b, 1, total))
   end
+  if t.stage == "plan" then return run_plants(t, "host text plants", HOST_TEXT_PLANTS) end
   host_text_scripts(t)
   print("host text: " .. #HOST_TEXT_SCRIPTS .. " scripts run as Zig runs them, under " .. #t.builds .. " build(s)")
   if not t.full then return nil end
@@ -122,6 +123,6 @@ end
 
 -- ── The run ─────────────────────────────────────────────────────────────
 
-local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
 host_text_block(t)
 block_end(t, "host_text")

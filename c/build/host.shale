@@ -101,13 +101,15 @@ function host_define(build)
 end
 
 -- A fixture or probe of c/tests/host compiled with GCC's release flags to
--- `bin`.
-function host_compile(t, phase, src, bin)
+-- `bin`, as the job `name` (`compile_jobs`, so in the full tier the pool
+-- builds it).
+function host_compile(t, phase, name, src, bin)
   mkdir(dirname(bin))
   local argv = gcc_flags("release", FOUNDATION)
   for a in {host_define("release"), src, "-o", bin} do push(argv, a) end
-  local c = run_in(t, phase, argv, {timeout_ms = 120000, tail = 40})
-  if c.code ~= 0 then fail("could not compile " .. src .. ":\n" .. c.out) end
+  local answers = compile_jobs(t, phase, {{name = name, argv = argv, opts = {timeout_ms = 120000}}})
+  if answers == nil then return nil end
+  if get(answers[1], "code", -1) ~= 0 then fail("could not compile " .. src .. ":\n" .. answers[1].out) end
   return nil
 end
 
@@ -174,7 +176,6 @@ function host_vs_zig(t)
   local t0 = clock_ms()
   local fixture = HOST_OUT .. "/release/spawn_fixture"
   local probe = HOST_OUT .. "/release/spawn_probe"
-  host_compile(t, "host vs zig", HOST_PROBE, probe)
   local said = {}
   local k = 0
   for c in HOST_VS_ZIG do
@@ -234,13 +235,16 @@ function host_block(t)
   local tests = {}
   for p in glob("c/tests/host/test_*.c") do push(tests, p) end
   sort(tests)
+  -- The probe host_vs_zig runs, compiled here so the pool builds it too.
+  if t.full then host_compile(t, "host vs zig", "host-probe", HOST_PROBE, HOST_OUT .. "/release/spawn_probe") end
   for b in t.builds do
     local phase = "host " .. b
-    host_compile(t, phase, HOST_FIXTURE, HOST_OUT .. "/" .. b .. "/spawn_fixture")
+    host_compile(t, phase, "host-fixture-" .. b, HOST_FIXTURE, HOST_OUT .. "/" .. b .. "/spawn_fixture")
     print("host " .. said_of_build(b, #tests, test_files(t, phase, b, tests, {host_define(b)})))
   end
   if not t.full then return nil end
   run_plants(t, "host plants", HOST_PLANTS, {host_define("asan")})
+  if t.stage == "plan" then return nil end
   local vs = host_vs_zig(t)
   print("host vs zig: " .. #vs .. " of " .. #HOST_VS_ZIG .. " programs answered the same")
   for l in vs do print(l) end
@@ -250,6 +254,6 @@ end
 
 -- ── The run ─────────────────────────────────────────────────────────────
 
-local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
 host_block(t)
 block_end(t, "host")
