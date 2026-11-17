@@ -15,8 +15,14 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 
-#include "../../host/keep.c"
+#include "buf.h"
+
+// spawn.c is here for what jobs.c takes of it (its argv helpers and
+// SpawnStrs); `run`'s own functions in it are spawn's tests', unused here.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 #include "../../host/spawn.c"
+#pragma GCC diagnostic pop
 #include "../../host/job_record.c"
 #include "../../host/jobs.c"
 
