@@ -1,0 +1,4 @@
+-- differ-argv: {script} --args-stdin n=3
+-- differ-stdin: doc=It's "quoted" | $HOME \ as is
+print(arg("doc", ""))
+print(arg("n", ""))

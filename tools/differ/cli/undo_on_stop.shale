@@ -1,0 +1,5 @@
+-- differ-argv: --undo-on-stop {script}
+create("kept.txt", "made, then taken back\n")
+mkdir("made")
+create("made/inner.txt", "in\n")
+fail("stopped on purpose")

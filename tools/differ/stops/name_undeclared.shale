@@ -1,0 +1,2 @@
+-- A name never declared: name.
+print(nope + 1)

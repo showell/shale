@@ -1,0 +1,2 @@
+-- `must` of a program that exits 1: fail.
+must(run({"false"}, {timeout_ms = 5000, tail = 5}))

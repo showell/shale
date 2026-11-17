@@ -1,0 +1,2 @@
+-- A builtin given too many arguments: argument.
+print(sub("abc", 1, 2, 3))

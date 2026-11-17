@@ -1,0 +1,2 @@
+-- differ-argv: cookbook:look.shale find=differ_never_there in=.
+-- A recipe named through a mount.

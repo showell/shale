@@ -1,0 +1,4 @@
+create("a.txt", "one\ntwo\nthree\n")
+edit("a.txt", "two", "TWO")
+edit("a.txt", {{old = "one", new = "ONE"}, {old = "three", new = "3"}})
+print(read("a.txt"))

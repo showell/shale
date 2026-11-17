@@ -1,0 +1,3 @@
+-- The script's own stop: fail.
+print("before")
+fail("stopped on purpose")

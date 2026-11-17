@@ -1,0 +1,2 @@
+-- differ-argv: nomount:x.shale
+-- A script named through a mount that is not there.

@@ -1,0 +1,2 @@
+-- now() is SHALE_NOW, pinned by the harness.
+print(now(), date(now()))

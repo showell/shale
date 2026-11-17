@@ -1,0 +1,2 @@
+-- `run` with no timeout: argument.
+print(run({"true"}, {tail = 1}).code)

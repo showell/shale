@@ -1,0 +1,3 @@
+-- differ-argv: {script} n=7 flag=true
+-- An integer default reads the value as one; a boolean too.
+print(arg("n", 1) + 1, arg("flag", false))

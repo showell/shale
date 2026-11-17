@@ -1,0 +1,3 @@
+-- Past 64 bits: arithmetic.
+local big = 9223372036854775807
+print(big + 1)

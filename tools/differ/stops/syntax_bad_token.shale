@@ -1,0 +1,2 @@
+-- A stray symbol: syntax.
+local x = 1 @ 2

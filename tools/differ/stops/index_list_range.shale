@@ -1,0 +1,3 @@
+-- A list index past its end: index.
+local l = {1, 2}
+print(l[3])

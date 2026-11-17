@@ -1,0 +1,3 @@
+-- A block never closed: syntax.
+if true then
+  print(1)

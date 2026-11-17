@@ -1,0 +1,2 @@
+-- A file that is not there: store.
+print(read("no/such/file.txt"))

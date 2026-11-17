@@ -1,0 +1,2 @@
+-- differ-argv: -e print(40+2)
+-- A one-liner on the command line.

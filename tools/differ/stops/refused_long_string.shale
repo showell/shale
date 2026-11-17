@@ -1,0 +1,3 @@
+-- Lua's long string: refused.
+local s = [[text]]
+print(s)

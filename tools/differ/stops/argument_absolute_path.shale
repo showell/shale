@@ -1,0 +1,2 @@
+-- An absolute path: argument, naming the mount to write.
+print(read("/etc/hostname"))

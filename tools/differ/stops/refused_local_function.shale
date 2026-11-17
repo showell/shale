@@ -1,0 +1,2 @@
+-- `local function`: refused.
+local function f() return 1 end
