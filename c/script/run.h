@@ -343,26 +343,82 @@ static inline STATUS_MUST_USE Status run_unary(Run *r, Pos pos, UnOp op, const V
     return OK;
 }
 
-// `a + b`, `a - b` and `a * b` on int64_t: false on overflow.
+// `a + b`, `a - b` and `a * b` on int64_t: false on overflow, `*out` then
+// untouched. GCC's checked builtins are a flag test after the operation;
+// TCC has none, so it takes the portable comparisons, and a division for
+// `*`.
+#if defined(__GNUC__) && !defined(__TINYC__)
+#define RUN_INT_BUILTINS 1
+#else
+#define RUN_INT_BUILTINS 0
+#endif
+
 static inline bool int_add(int64_t a, int64_t b, int64_t *out) {
+#if RUN_INT_BUILTINS
+    int64_t sum = 0;
+    if (__builtin_add_overflow(a, b, &sum)) return false;
+    *out = sum;
+#else
     if ((b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b)) return false;
     *out = a + b;
+#endif
     return true;
 }
 
 static inline bool int_sub(int64_t a, int64_t b, int64_t *out) {
+#if RUN_INT_BUILTINS
+    int64_t diff = 0;
+    if (__builtin_sub_overflow(a, b, &diff)) return false;
+    *out = diff;
+#else
     if ((b < 0 && a > INT64_MAX + b) || (b > 0 && a < INT64_MIN + b)) return false;
     *out = a - b;
+#endif
     return true;
 }
 
 static inline bool int_mul(int64_t a, int64_t b, int64_t *out) {
+#if RUN_INT_BUILTINS
+    int64_t product = 0;
+    if (__builtin_mul_overflow(a, b, &product)) return false;
+    *out = product;
+#else
     if (a > 0) {
         if (b > 0 ? a > INT64_MAX / b : b < INT64_MIN / a) return false;
     } else if (a < 0) {
         if (b > 0 ? a < INT64_MIN / b : b < INT64_MAX / a) return false;
     }
     *out = a * b;
+#endif
+    return true;
+}
+
+// `a op b` for an integer operator (`+`, `-`, `*`, `//`, `%`): false when it
+// overflows or divides by zero, for run_arith to say which.
+static inline RUN_HOT bool run_int_arith(BinOp op, int64_t a, int64_t b, int64_t *out) {
+    int64_t got = 0;
+    switch (op) {
+    case BINOP_ADD: return int_add(a, b, out);
+    case BINOP_SUB: return int_sub(a, b, out);
+    case BINOP_MUL: return int_mul(a, b, out);
+    case BINOP_IDIV:
+        if (b == 0 || (a == INT64_MIN && b == -1)) return false;
+        // `//` floors: the quotient rounded toward minus infinity.
+        got = a / b;
+        if (a % b != 0 && ((a < 0) != (b < 0))) got--;
+        break;
+    default:
+        if (b == 0) return false;
+        if (b == -1) {
+            got = 0;
+            break;
+        }
+        // `%` takes the divisor's sign, as the floor of `//` leaves it.
+        got = a % b;
+        if (got != 0 && ((got < 0) != (b < 0))) got += b;
+        break;
+    }
+    *out = got;
     return true;
 }
 
@@ -376,35 +432,15 @@ static inline STATUS_MUST_USE Status run_arith(Run *r, Pos pos, BinOp op, const 
     int64_t a = l->as.integer;
     int64_t b = rv->as.integer;
     int64_t got = 0;
-    bool ok = true;
-    switch (op) {
-    case BINOP_ADD: ok = int_add(a, b, &got); break;
-    case BINOP_SUB: ok = int_sub(a, b, &got); break;
-    case BINOP_MUL: ok = int_mul(a, b, &got); break;
-    case BINOP_IDIV:
-        if (b == 0) return run_fail(&r->ctx, pos, CLASS_ARITHMETIC, S("integer division by zero"));
-        if (a == INT64_MIN && b == -1) {
-            ok = false;
-            break;
-        }
-        // `//` floors: the quotient rounded toward minus infinity.
-        got = a / b;
-        if (a % b != 0 && ((a < 0) != (b < 0))) got--;
-        break;
-    default:
-        if (b == 0) return run_fail(&r->ctx, pos, CLASS_ARITHMETIC, S("`%` by zero"));
-        if (b == -1) {
-            got = 0;
-            break;
-        }
-        // `%` takes the divisor's sign, as the floor of `//` leaves it.
-        got = a % b;
-        if (got != 0 && ((got < 0) != (b < 0))) got += b;
-        break;
+    if (run_int_arith(op, a, b, &got)) {
+        value_int(out, got);
+        return OK;
     }
-    if (!ok) return run_failf(r, pos, CLASS_ARITHMETIC, "{d} {s} {d} overflows 64 bits", run_num(r, a), S(" "), run_op_text(op), S(" "), run_num(r, b), S(" overflows 64 bits"));
-    value_int(out, got);
-    return OK;
+    // Only `//` and `%` fail on a zero right: `+`, `-` and `*` of 0 never
+    // overflow.
+    if (b == 0 && op == BINOP_IDIV) return run_fail(&r->ctx, pos, CLASS_ARITHMETIC, S("integer division by zero"));
+    if (b == 0) return run_fail(&r->ctx, pos, CLASS_ARITHMETIC, S("`%` by zero"));
+    return run_failf(r, pos, CLASS_ARITHMETIC, "{d} {s} {d} overflows 64 bits", run_num(r, a), S(" "), run_op_text(op), S(" "), run_num(r, b), S(" overflows 64 bits"));
 }
 
 // The byte order of two strings, a prefix first: -1, 0 or 1.

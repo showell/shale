@@ -530,7 +530,31 @@ static Str vm_for_what(uint32_t a) {
     return S("a `for`'s step");
 }
 
-static STATUS_MUST_USE Status vm_binary(Machine *m, const VmOp *op) {
+// An operator on two integers, its answer in `*out`: false when it has
+// none here (an overflow, a zero divisor, a `== nil`), for vm_binary to
+// give it or its stop.
+static inline RUN_HOT bool vm_binary_int(BinOp bop, int64_t a, int64_t b, Value *out) {
+    int64_t got = 0;
+    switch (bop) {
+    case BINOP_ADD:
+    case BINOP_SUB:
+    case BINOP_MUL:
+    case BINOP_IDIV:
+    case BINOP_MOD:
+        if (!run_int_arith(bop, a, b, &got)) return false;
+        value_int(out, got);
+        return true;
+    case BINOP_EQ: value_bool(out, a == b); return true;
+    case BINOP_NE: value_bool(out, a != b); return true;
+    case BINOP_LT: value_bool(out, a < b); return true;
+    case BINOP_LE: value_bool(out, a <= b); return true;
+    case BINOP_GT: value_bool(out, a > b); return true;
+    case BINOP_GE: value_bool(out, a >= b); return true;
+    default: return false;
+    }
+}
+
+static RUN_COLD STATUS_MUST_USE Status vm_binary(Machine *m, const VmOp *op) {
     Run *r = m->r;
     Value rv = vm_pop(m);
     Value lv = vm_pop(m);
@@ -765,7 +789,21 @@ static STATUS_MUST_USE Status vm_run(Machine *m) {
                 s = run_set_index(r, op->pos, &obj, &key, &v);
                 break;
             }
-            case OP_BINARY: s = vm_binary(m, op); break;
+            case OP_BINARY: {
+                size_t n = m->operands.len;
+                Value *lv = &at(m->operands, n - 2);
+                const Value *rv = &at(m->operands, n - 1);
+                if (lv->tag == VALUE_INT && rv->tag == VALUE_INT) {
+                    Value got;
+                    if (vm_binary_int((BinOp)op->a, lv->as.integer, rv->as.integer, &got)) {
+                        *lv = got;
+                        m->operands.len = n - 1;
+                        break;
+                    }
+                }
+                s = vm_binary(m, op);
+                break;
+            }
             case OP_JUMP: pc = op->a; break;
             case OP_JUMP_FALSE: {
                 Value v = vm_pop(m);
