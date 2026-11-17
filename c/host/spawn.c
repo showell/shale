@@ -1,4 +1,4 @@
-// spawn.h: runs one program to its end or its deadline, the raw spawn and
+// spawn.c: runs one program to its end or its deadline, the raw spawn and
 // poll loop under `run`; the port of Zig Shale's src/shale_spawn.zig.
 //
 // It forks by hand, since `posix_spawn` has no hook for a death signal. The
@@ -23,11 +23,8 @@
 // Zig's runtime sets, so a write to a closed stdin is an error, not a death,
 // and a program still starts with SIGPIPE's default.
 
-#ifndef SHALE_SPAWN_H
-#define SHALE_SPAWN_H
-
 #ifndef _GNU_SOURCE
-#error "spawn.h needs _GNU_SOURCE defined before the first include: pipe2, wait4, signalfd and syscall"
+#error "spawn.c needs _GNU_SOURCE defined before the first include: pipe2, wait4, signalfd and syscall"
 #endif
 
 #include <errno.h>
@@ -72,7 +69,7 @@ typedef struct {
     uint64_t drain_ms;
 } SpawnSpec;
 
-static inline void spawn_spec_default(SpawnSpec *s) {
+static void spawn_spec_default(SpawnSpec *s) {
     memset(s, 0, sizeof *s);
     s->stdout_fd = -1;
     s->grace_ms = 2000;
@@ -138,7 +135,7 @@ SLICE_TYPE(SpawnPollFds, SpawnPollFd);
 // A NUL-ended string for the kernel, and a list of them ended by NULL.
 SLICE_TYPE(SpawnCStrs, char *);
 
-static inline void spawn_noop_handler(int sig) {
+static void spawn_noop_handler(int sig) {
     (void)sig;
 }
 
@@ -146,7 +143,7 @@ static inline void spawn_noop_handler(int sig) {
 // nothing, so a write to a pipe whose reader is gone fails with EPIPE, and an
 // exec resets it to the default for the program. Ignoring it instead would
 // pass SIG_IGN on to every program.
-static inline void spawn_quiet_sigpipe(void) {
+static void spawn_quiet_sigpipe(void) {
     struct sigaction act;
     memset(&act, 0, sizeof act);
     act.sa_handler = spawn_noop_handler;
@@ -156,23 +153,23 @@ static inline void spawn_quiet_sigpipe(void) {
 
 // Milliseconds on the monotonic clock, which a deadline is measured on
 // because the wall clock can jump. Zig's `monoMs`.
-static inline uint64_t spawn_mono_ms(void) {
+static uint64_t spawn_mono_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
 }
 
-static inline uint64_t spawn_sat_sub(uint64_t a, uint64_t b) {
+static uint64_t spawn_sat_sub(uint64_t a, uint64_t b) {
     return a > b ? a - b : 0;
 }
 
-static inline uint64_t spawn_usage_ms(const struct rusage *u) {
+static uint64_t spawn_usage_ms(const struct rusage *u) {
     int64_t us = ((int64_t)u->ru_utime.tv_sec + (int64_t)u->ru_stime.tv_sec) * 1000000 + (int64_t)u->ru_utime.tv_usec + (int64_t)u->ru_stime.tv_usec;
     return (uint64_t)(us / 1000);
 }
 
 // `s` with a NUL after it, in the arena; NULL when refused.
-static inline char *spawn_cstr(Arena *a, Str s) {
+static char *spawn_cstr(Arena *a, Str s) {
     // DRAGON: size overflow. `s.len + 1` would wrap to 0 for a length of SIZE_MAX, and the copy would run past a zero-byte allocation. Refused here first.
     if (s.len >= SIZE_MAX - 1) return arena_refuse(a);
     char *p = ARENA_ARRAY(a, char, s.len + 1);
@@ -185,7 +182,7 @@ static inline char *spawn_cstr(Arena *a, Str s) {
 
 // `items` as a NULL-ended list of NUL-ended strings, for execve; NULL when
 // refused.
-static inline char **spawn_cstr_list(Arena *a, SpawnStrs items) {
+static char **spawn_cstr_list(Arena *a, SpawnStrs items) {
     char **list = ARENA_ARRAY(a, char *, items.len + 1);
     if (list == NULL) return NULL;
     SpawnCStrs out = {list, items.len + 1};
@@ -201,7 +198,7 @@ static inline char **spawn_cstr_list(Arena *a, SpawnStrs items) {
 // has a `/`, else argv[0] in each folder of the environment's PATH (its last
 // `PATH=`, as Zig's loop takes it), or of a default PATH; an empty folder is
 // argv[0] itself. False when the arena refuses.
-static inline bool spawn_candidates(Arena *a, Str argv0, SpawnStrs env, SpawnCStrs *paths) {
+static bool spawn_candidates(Arena *a, Str argv0, SpawnStrs env, SpawnCStrs *paths) {
     Str path = S("/usr/local/bin:/usr/bin:/bin");
     if (memchr(argv0.ptr, '/', argv0.len) != NULL) {
         path = S("");
@@ -242,18 +239,18 @@ static inline bool spawn_candidates(Arena *a, Str argv0, SpawnStrs env, SpawnCSt
     return true;
 }
 
-static inline void spawn_close(int *fd) {
+static void spawn_close(int *fd) {
     if (*fd >= 0) close(*fd);
     *fd = -1;
 }
 
-static inline void spawn_nonblocking(int fd) {
+static void spawn_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
 // The child's failure: `code` on the error pipe, then exit 127.
-static inline void spawn_child_fail(int err_w, uint32_t code) {
+static void spawn_child_fail(int err_w, uint32_t code) {
     ssize_t w = write(err_w, &code, sizeof code);
     (void)w;
     _exit(127);
@@ -262,7 +259,7 @@ static inline void spawn_child_fail(int err_w, uint32_t code) {
 // The child between fork and exec. It never returns: it execs, or writes an
 // errno to `err_w` and exits 127 (a `chdir`'s as 1000 plus its errno).
 // DRAGON: the process boundary. Between fork and exec the child holds a copy of the parent's memory and locks, so a malloc, a stdio call or anything not async-signal-safe can deadlock or corrupt it. It makes only raw system calls on memory built before the fork (the paths, argv and envp), and leaves by exec or _exit, never by return.
-static inline void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
+static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
     // DRAGON: the process boundary. The death signal ends the child when `shale` dies, so a program never outlives it; but `shale` may die before the prctl, and then the child's parent is already init and no signal will come. The getppid check closes that race: a child whose parent changed exits at once.
     prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
     if (getppid() != parent) _exit(127);
@@ -286,8 +283,8 @@ static inline void spawn_child(pid_t parent, const char *cwd, int stdin_r, int s
 
 // Passes what the pipe holds to the sink until a read would block, into
 // `buf`. Closes the pipe at its end. STOP when the sink does.
-// DRAGON: memory. The program's output is unbounded and arrives at the program's pace; each read is at most `buf`'s 64 KiB and goes straight to the sink, which holds what it keeps under its own bound (keep.h's slots, `whole`'s cap), so nothing here grows with the output.
-static inline STATUS_MUST_USE Status spawn_read_available(int *fd, Bytes buf, SpawnSink sink) {
+// DRAGON: memory. The program's output is unbounded and arrives at the program's pace; each read is at most `buf`'s 64 KiB and goes straight to the sink, which holds what it keeps under its own bound (keep.c's slots, `whole`'s cap), so nothing here grows with the output.
+static STATUS_MUST_USE Status spawn_read_available(int *fd, Bytes buf, SpawnSink sink) {
     while (1) {
         ssize_t r = read(*fd, buf.ptr, buf.len);
         if (r < 0 && errno == EAGAIN) return OK;
@@ -330,7 +327,7 @@ typedef struct {
     uint64_t wait_ms;
 } SpawnStep;
 
-static inline void spawn_step(bool exited, bool has_termed, uint64_t termed_at, bool killed, uint64_t deadline, uint64_t grace_ms, uint64_t drain_until, uint64_t now, SpawnStep *out) {
+static void spawn_step(bool exited, bool has_termed, uint64_t termed_at, bool killed, uint64_t deadline, uint64_t grace_ms, uint64_t drain_until, uint64_t now, SpawnStep *out) {
     SpawnStep s = {false, false, 1000};
     if (!exited && !has_termed && now >= deadline) {
         s.term = true;
@@ -351,7 +348,7 @@ static inline void spawn_step(bool exited, bool has_termed, uint64_t termed_at, 
 
 // One turn of the poll loop: the deadline's and the grace's signals, a poll,
 // then what it found. STOP when the sink does.
-static inline STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, Bytes buf, SpawnSink sink) {
+static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, Bytes buf, SpawnSink sink) {
     uint64_t now = spawn_mono_ms();
     SpawnStep step;
     spawn_step(l->exited, l->has_termed, l->termed_at, l->killed, l->deadline, spec->grace_ms, l->drain_until, now, &step);
@@ -430,7 +427,7 @@ static inline STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *s
 
 // The parent's half once the child is forked: the exec's verdict, the pidfd,
 // then the loop to the leader's exit and the drain's end.
-static inline SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid, uint64_t start, int *out_r, int err_r, int *in_w, int sig_fd, SpawnOutcome *outcome) {
+static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid, uint64_t start, int *out_r, int err_r, int *in_w, int sig_fd, SpawnOutcome *outcome) {
     // A word on the error pipe means the exec failed.
     uint32_t why = 0;
     ssize_t n = read(err_r, &why, sizeof why);
@@ -527,7 +524,7 @@ typedef struct {
 SLICE_TYPE(SpawnPipe, int);
 SLICE_TYPE(SpawnPipes, SpawnPipe);
 
-static inline void spawn_fds_make(SpawnFds *f) {
+static void spawn_fds_make(SpawnFds *f) {
     memset(f, 0, sizeof *f);
     SpawnPipe all[3] = {{f->out_room, 2}, {f->err_room, 2}, {f->in_room, 2}};
     SpawnPipes pipes = {all, 3};
@@ -537,7 +534,7 @@ static inline void spawn_fds_make(SpawnFds *f) {
     f->sig_fd = -1;
 }
 
-static inline void spawn_fds_release(SpawnFds *f) {
+static void spawn_fds_release(SpawnFds *f) {
     spawn_close(&f->sig_fd);
     // DRAGON: the process boundary. Put back on every way out, or `shale` would stay deaf to TERM and HUP after a run; a TERM that arrived after the loop's last poll is delivered here, as in Zig.
     if (f->masked) sigprocmask(SIG_SETMASK, &f->old_mask, NULL);
@@ -551,7 +548,7 @@ static inline void spawn_fds_release(SpawnFds *f) {
 
 // Opens the pipes and the signalfd into `f`, forks, and runs the parent's
 // half. What it opened stays in `f` for its caller to release.
-static inline SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds *f, const char *cwd, SpawnCStrs paths, char **argv, char **envp, SpawnOutcome *outcome) { // cstr: NUL-ended for the kernel
+static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds *f, const char *cwd, SpawnCStrs paths, char **argv, char **envp, SpawnOutcome *outcome) { // cstr: NUL-ended for the kernel
     SpawnPipe out_pipe = {f->out_room, 2};
     SpawnPipe err_pipe = {f->err_room, 2};
     SpawnPipe in_pipe = {f->in_room, 2};
@@ -586,7 +583,7 @@ static inline SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, S
 // Runs a program to its end or its deadline, passing its output (stdout and
 // stderr as one stream) to `sink` as it comes, and fills `*outcome`. What it
 // builds for the child (argv, envp, the paths) is in `a`.
-static inline SpawnResult spawn_run(Arena *a, const SpawnSpec *spec, SpawnSink sink, SpawnOutcome *outcome) {
+static SpawnResult spawn_run(Arena *a, const SpawnSpec *spec, SpawnSink sink, SpawnOutcome *outcome) {
     char **argv = spawn_cstr_list(a, spec->argv);
     if (argv == NULL) return SPAWN_OUT_OF_MEMORY;
     char **envp = spawn_cstr_list(a, spec->env);
@@ -605,5 +602,3 @@ static inline SpawnResult spawn_run(Arena *a, const SpawnSpec *spec, SpawnSink s
     spawn_fds_release(&f);
     return result;
 }
-
-#endif

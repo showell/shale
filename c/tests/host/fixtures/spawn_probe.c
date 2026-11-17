@@ -1,5 +1,5 @@
 // The C's half of the comparison with Zig's `run`: runs a program through
-// spawn.h and keep.h as `run` would with `timeout_ms` and `tail`, and prints
+// spawn.c and keep.c as `run` would with `timeout_ms` and `tail`, and prints
 // the fields of `run`'s answer, then its `out`:
 //
 //     spawn_probe TIMEOUT_MS TAIL PROGRAM [ARG]...
@@ -12,8 +12,8 @@
 // The environment is PATH alone. c/build.shale runs it beside its own `run`
 // of the same program.
 #define _GNU_SOURCE
-#include "keep.h"
-#include "spawn.h"
+#include "../../../host/keep.c"
+#include "../../../host/spawn.c"
 
 static STATUS_MUST_USE Status probe_write(void *ctx, Str bytes) {
     return keep_feed(ctx, bytes);

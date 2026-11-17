@@ -3,8 +3,7 @@
 // they are Zig's 3000 outputs, options and cuts, and their answers fold to the
 // fingerprint Zig's test prints of the same rounds.
 #include "test.h"
-
-#include "keep.h"
+#include "../../host/keep.c"
 
 // Zig's `std.Random.DefaultPrng`: Xoshiro256++ seeded by SplitMix64.
 typedef struct {

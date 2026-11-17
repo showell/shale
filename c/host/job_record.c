@@ -1,11 +1,8 @@
-// job_record.h: a job's record, `<log>.job`, the port of Zig Shale's
+// job_record.c: a job's record, `<log>.job`, the port of Zig Shale's
 // src/shale_job_record.zig: `key=value` lines a job's reaper writes and every
 // later `shale` reads to find the job again. Plain text and no system call,
 // so it is the part of jobs a port keeps; the processes it names are the
 // jobs' own. Its text is Zig's byte for byte, and so is what it refuses.
-
-#ifndef SHALE_JOB_RECORD_H
-#define SHALE_JOB_RECORD_H
 
 #include "slice.h"
 
@@ -41,7 +38,7 @@ typedef struct {
 // the jobs' 8 KiB record holds the other keys.
 enum { JOB_RECORD_ARGV_MOST = 7168 };
 
-static inline bool job_record_done(JobRecord r) {
+static bool job_record_done(JobRecord r) {
     return r.has_exit || r.has_signal;
 }
 
@@ -51,7 +48,7 @@ static inline bool job_record_done(JobRecord r) {
 // past the range, which is Zig's `Overflow`: `-0` is 0 even for an unsigned
 // type, and `-1` is refused there. The magnitude only grows digit by digit,
 // so a check of the end is a check of every step Zig makes.
-static inline bool job_record_int(Str s, int64_t min, int64_t max, int64_t *out) {
+static bool job_record_int(Str s, int64_t min, int64_t max, int64_t *out) {
     if (s.len == 0) return false;
     bool neg = false;
     size_t from = 0;
@@ -85,7 +82,7 @@ static inline bool job_record_int(Str s, int64_t min, int64_t max, int64_t *out)
 
 // `argv` as `job_record_format` escapes it, unescaped in place: `\n` a
 // newline, `\\` a backslash. False on any other escape or a lone `\` last.
-static inline bool job_record_unescape(Bytes v, Str *out) {
+static bool job_record_unescape(Bytes v, Str *out) {
     size_t o = 0;
     for (size_t i = 0; i < v.len; i++) {
         char c = at(v, i);
@@ -115,7 +112,7 @@ static inline bool job_record_unescape(Bytes v, Str *out) {
 // `key=value`, a number Zig would not read, or an `argv` escaped wrongly. A
 // missing `start` read as "" would make `job_alive` say false of a job that
 // runs. `argv` is unescaped in place, so `text` is changed.
-static inline bool job_record_parse(Bytes text, JobRecord *r) {
+static bool job_record_parse(Bytes text, JobRecord *r) {
     static const Str keys[10] = {
         S("pid"), S("pgid"), S("start"), S("started"), S("argv"),
         S("reaper"), S("reaper_start"), S("exit"), S("signal"), S("ended"),
@@ -203,7 +200,7 @@ typedef struct {
     bool over;
 } JobRecordOut;
 
-static inline void job_record_put(JobRecordOut *w, Str s) {
+static void job_record_put(JobRecordOut *w, Str s) {
     if (w->over || s.len > w->room.len - w->len) {
         w->over = true;
         return;
@@ -214,7 +211,7 @@ static inline void job_record_put(JobRecordOut *w, Str s) {
 }
 
 // `n` in decimal, as Zig's `{d}` prints it.
-static inline void job_record_put_int(JobRecordOut *w, int64_t n) {
+static void job_record_put_int(JobRecordOut *w, int64_t n) {
     char digits[21];
     Bytes d = {digits, sizeof digits};
     size_t k = d.len;
@@ -234,7 +231,7 @@ static inline void job_record_put_int(JobRecordOut *w, int64_t n) {
 
 // The record's text in `buf`, `argv` escaped, into `*out`; false if it does
 // not fit, never a record cut short.
-static inline bool job_record_format(Bytes buf, JobRecord r, Str *out) {
+static bool job_record_format(Bytes buf, JobRecord r, Str *out) {
     JobRecordOut w = {buf, 0, false};
     job_record_put(&w, S("pid="));
     job_record_put_int(&w, r.pid);
@@ -280,5 +277,3 @@ static inline bool job_record_format(Bytes buf, JobRecord r, Str *out) {
     out->len = w.len;
     return true;
 }
-
-#endif

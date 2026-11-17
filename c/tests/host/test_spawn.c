@@ -12,8 +12,8 @@
 
 #include <fcntl.h>
 
-#include "keep.h"
-#include "spawn.h"
+#include "../../host/keep.c"
+#include "../../host/spawn.c"
 
 #ifndef SPAWN_FIXTURE
 #error "SPAWN_FIXTURE names the fixture's path, relative to the root: -DSPAWN_FIXTURE='\"c/out/...\"'"

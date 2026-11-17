@@ -2,7 +2,7 @@
 // and answers, and the record's text held to Zig's byte for byte.
 #include "test.h"
 
-#include "job_record.h"
+#include "../../host/job_record.c"
 
 // `job_record_parse` of a literal, through a copy it may unescape in place.
 static bool parse_copy(Str s, JobRecord *r) {

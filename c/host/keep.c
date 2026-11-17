@@ -1,4 +1,4 @@
-// keep.h: what `run` keeps of a program's output, the port of Zig Shale's
+// keep.c: what `run` keeps of a program's output, the port of Zig Shale's
 // src/shale_keep.zig. Pure: bytes stream in, and each line is filtered, then
 // kept from both ends. `not_re` removes the lines it matches from the stream;
 // of the rest, `re` keeps those that match, and `before` and `after` keep
@@ -14,9 +14,6 @@
 // `(head + tail + before + 1)` slots of at most twice `width` plus the cut
 // mark, and one line of at most `KEEP_LINE_MOST`, whatever the program
 // prints.
-
-#ifndef SHALE_KEEP_H
-#define SHALE_KEEP_H
 
 #include "buf.h"
 
@@ -55,7 +52,7 @@ typedef struct {
     size_t width;
 } KeepOptions;
 
-static inline void keep_options_default(KeepOptions *o) {
+static void keep_options_default(KeepOptions *o) {
     memset(o, 0, sizeof *o);
     o->width = 200;
 }
@@ -117,7 +114,7 @@ typedef struct {
 
 // A keep over `a`; STOP when the arena refuses the rings (a `tail` or
 // `before` too big for it), which the caller reads as the arena budget.
-static inline STATUS_MUST_USE Status keep_init(Keep *k, Arena *a, KeepOptions o) {
+static STATUS_MUST_USE Status keep_init(Keep *k, Arena *a, KeepOptions o) {
     memset(k, 0, sizeof *k);
     k->arena = a;
     k->o = o;
@@ -137,14 +134,14 @@ static inline STATUS_MUST_USE Status keep_init(Keep *k, Arena *a, KeepOptions o)
     return OK;
 }
 
-static inline bool keep_pattern_matches(KeepPattern p, Str line, uint64_t *work) {
+static bool keep_pattern_matches(KeepPattern p, Str line, uint64_t *work) {
     return p.matches(p.ctx, line, work);
 }
 
 // Room for `need` bytes in `s`, its bytes not kept. A slot grows to twice
 // what it had, so a slot that is written over and over takes at most about
 // twice its largest line in all.
-static inline STATUS_MUST_USE Status keep_slot_room(Arena *a, KeepSlot *s, size_t need) {
+static STATUS_MUST_USE Status keep_slot_room(Arena *a, KeepSlot *s, size_t need) {
     if (s->cap >= need) return OK;
     // DRAGON: use after free. A big buffer freed here goes back to the system, so it must be held by this slot alone; every move between the head, the rings and the scratch swaps slots whole (keep_pass), never copies a pointer, so no other slot holds it. A copied slot would be written through after its free.
     size_t want = s->cap > SIZE_MAX / 2 ? SIZE_MAX : 2 * s->cap;
@@ -162,7 +159,7 @@ static inline STATUS_MUST_USE Status keep_slot_room(Arena *a, KeepSlot *s, size_
 
 // `l` cut into the scratch slot: cut to `width` and marked if longer or
 // `over`. Zig's `cut`.
-static inline STATUS_MUST_USE Status keep_cut(Keep *k, Str l, bool over) {
+static STATUS_MUST_USE Status keep_cut(Keep *k, Str l, bool over) {
     bool whole = l.len <= k->o.width && !over;
     size_t n = l.len < k->o.width ? l.len : k->o.width;
     Str mark = S(KEEP_CUT_MARK);
@@ -182,7 +179,7 @@ static inline STATUS_MUST_USE Status keep_cut(Keep *k, Str l, bool over) {
 // head while it has room, else into the tail's ring, dropping the oldest.
 // `*from` is left holding the buffer the line displaced, or none, so no
 // buffer is ever in two places. Zig's `pass`.
-static inline STATUS_MUST_USE Status keep_pass(Keep *k, KeepSlot *from) {
+static STATUS_MUST_USE Status keep_pass(Keep *k, KeepSlot *from) {
     k->passed++;
     if (k->head.len < k->o.head) {
         TRY(KeepHead_push(&k->head, *from));
@@ -210,7 +207,7 @@ static inline STATUS_MUST_USE Status keep_pass(Keep *k, KeepSlot *from) {
 
 // Ends the line being read: counts it, filters it, and passes what the
 // filter keeps. Zig's `endLine`.
-static inline STATUS_MUST_USE Status keep_end_line_inner(Keep *k) {
+static STATUS_MUST_USE Status keep_end_line_inner(Keep *k) {
     k->total++;
     Str l = buf_view(&k->line);
     if (k->o.not_re.matches != NULL && keep_pattern_matches(k->o.not_re, l, &k->work)) return OK;
@@ -252,7 +249,7 @@ static inline STATUS_MUST_USE Status keep_end_line_inner(Keep *k) {
 
 // The line is cleared on every way out, a refusal's among them, as Zig's
 // `defer` does.
-static inline STATUS_MUST_USE Status keep_end_line(Keep *k) {
+static STATUS_MUST_USE Status keep_end_line(Keep *k) {
     Status s = keep_end_line_inner(k);
     buf_clear(&k->line);
     k->line_over = false;
@@ -261,7 +258,7 @@ static inline STATUS_MUST_USE Status keep_end_line(Keep *k) {
 
 // Takes the program's next bytes, any number. Zig's `feed`.
 // DRAGON: memory. The bytes are a program's, unbounded, and a line may never end; the line being read is held to KEEP_LINE_MOST (`room`), the rest of it only counted as `line_over`, so one endless line holds 64 KiB, not the output. test_keep's flood and test_spawn's 2 MB line hold it.
-static inline STATUS_MUST_USE Status keep_feed(Keep *k, Str bytes) {
+static STATUS_MUST_USE Status keep_feed(Keep *k, Str bytes) {
     Str rest = bytes;
     while (rest.len > 0) {
         const char *nl = memchr(rest.ptr, '\n', rest.len);
@@ -279,14 +276,14 @@ static inline STATUS_MUST_USE Status keep_feed(Keep *k, Str bytes) {
     return OK;
 }
 
-static inline STATUS_MUST_USE Status keep_line_out(Buf *out, KeepSlot s) {
+static STATUS_MUST_USE Status keep_line_out(Buf *out, KeepSlot s) {
     TRY(buf_str(out, (Str){s.ptr, s.len}));
     return buf_byte(out, '\n');
 }
 
 // Ends the output, taking a last line that had no newline, and fills `*kept`.
 // Zig's `finish`.
-static inline STATUS_MUST_USE Status keep_finish(Keep *k, Kept *kept) {
+static STATUS_MUST_USE Status keep_finish(Keep *k, Kept *kept) {
     if (k->line.len > 0 || k->line_over) TRY(keep_end_line(k));
     Buf out = buf_make(k->arena);
     KeepHeadItems head = KeepHead_items(&k->head);
@@ -305,5 +302,3 @@ static inline STATUS_MUST_USE Status keep_finish(Keep *k, Kept *kept) {
     kept->work = k->work;
     return OK;
 }
-
-#endif
