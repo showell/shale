@@ -566,7 +566,7 @@ end
 function types_by_region(ctx, root)
   local got = nil
   if ctx.types_from ~= "" then
-    got = roc_types_from_file(ctx.types_from, root, ctx.roc)
+    got = roc_types_from_file(ctx.types_from, root, ctx.roc, ctx.only)
   else
     ctx.programs_used = ctx.programs_used + 1
     got = roc_types(root, ctx.roc)
@@ -857,7 +857,12 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
   if not use_types and find(root, ",") ~= nil then fail("rewrite_method_calls: root=" .. root .. ": several roots need the types, which say which root reaches a file; give one root, or run with the types") end
   local roots = root == "" and {} or roc_types_root_apps("rewrite_method_calls", root)
   if types_from ~= "" and #roots ~= 1 then fail("rewrite_method_calls: types_from= holds one root's types, and root= names " .. #roots) end
-  local ctx = {programs_used = 0, type_kind_counts = {}, types_by_root = {}, roc = roc, types_from = types_from, rounds = 0, confirms = 0, confirmed = {}}
+  -- A root's types read from a file are parsed for the glob's files alone.
+  local only = {}
+  if types_from ~= "" then
+    for p in paths do only[real(p)] = true end
+  end
+  local ctx = {programs_used = 0, type_kind_counts = {}, types_by_root = {}, roc = roc, types_from = types_from, only = only, rounds = 0, confirms = 0, confirmed = {}}
   if trees == nil then
     trees = parse_trees(paths)
     ctx.programs_used = 1

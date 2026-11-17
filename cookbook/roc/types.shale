@@ -125,15 +125,54 @@ function roc_types(root, roc)
   return parse_roc_types_output(run({real(exe), real(root)}, {timeout_ms = 300000, whole = 64000000}), root, roc)
 end
 
+-- roc-types' output `text` with the records of some modules alone: those
+-- whose path is in the set `opts.only`, or starts with `opts.under`. The
+-- first line, the lines before the first module and every module's `== `
+-- line are kept, so the modules reached stay whole. Gives `{text, paths}`,
+-- `paths` every module's path in order. It finds the module lines by text,
+-- not line by line, so it costs a few steps a module.
+function roc_types_keeping(text, opts)
+  local only = nil
+  local under = nil
+  if has_key(opts, "only") then only = opts.only end
+  if has_key(opts, "under") then under = opts.under end
+  local nl = find(text, "\n")
+  if nl == nil then return {text = text, paths = {}} end
+  local at = find(text, "\n== ")
+  local out = {sub(text, 1, at == nil and #text or at)}
+  local paths = {}
+  while at ~= nil do
+    local line_end = find(text, "\n", at + 1)
+    if line_end == nil then line_end = #text + 1 end
+    local path = sub(text, at + 4, line_end - 1)
+    local next = find(text, "\n== ", line_end)
+    push(paths, path)
+    push(out, "== " .. path .. "\n")
+    local keep = (only ~= nil and has_key(only, path)) or (under ~= nil and starts_with(path, under))
+    if keep and line_end <= #text then
+      local body = sub(text, line_end + 1, next == nil and #text or next)
+      if body ~= "" and not ends_with(body, "\n") then body = body .. "\n" end
+      push(out, body)
+    end
+    at = next
+  end
+  return {text = join(out, ""), paths = paths}
+end
+
 -- `roc_types`' record for `root`, read from `path`, a file in roc-types'
 -- format that a run of roc-types on `root` wrote and exited 0 (a gate that
 -- typed the app keeps it), so no program runs. Its first line is held to
 -- `roc`'s pin as roc-types' own is. A module may have no records: a keeper
 -- of the file may leave out the types of modules it has no use for, and
 -- keep their `== ` lines, so the modules reached stay whole.
-function roc_types_from_file(path, root, roc)
+-- `only`, a set of real paths, keeps those modules' records alone
+-- (`roc_types_keeping`), so a reader of a few files of a large app parses
+-- only theirs.
+function roc_types_from_file(path, root, roc, only?)
   if not exists(path) then fail("`roc_types`: no " .. path .. ", the types of " .. root .. " to read") end
-  return parse_roc_types_output({out = read(path), ended = "exit", code = 0}, root, roc)
+  local text = read(path)
+  if only ~= nil then text = roc_types_keeping(text, {only = only}).text end
+  return parse_roc_types_output({out = text, ended = "exit", code = 0}, root, roc)
 end
 
 -- The app paths in a recipe's `root=` argument, which may list several,
