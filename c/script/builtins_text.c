@@ -681,7 +681,7 @@ static STATUS_MUST_USE Status builtin_program(Run *r, Pos pos, Str who, Str patt
         *out = got;
         return OK;
     }
-    if (pattern.len > REGEX_PATTERN_MOST) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}`'s pattern is {d} bytes, and one may be at most {d}", S("`"), who, S("`'s pattern is "), run_unum(r, pattern.len), S(" bytes, and one may be at most 256"));
+    if (pattern.len > REGEX_PATTERN_MAX) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}`'s pattern is {d} bytes, and one may be at most {d}", S("`"), who, S("`'s pattern is "), run_unum(r, pattern.len), S(" bytes, and one may be at most 256"));
     TRY(run_charge(r, pos, pattern.len + 1 + (options.nocase ? pattern.len : 0)));
     RegexRefusal refused;
     memset(&refused, 0, sizeof refused);
@@ -769,7 +769,7 @@ static STATUS_MUST_USE Status builtin_match_value(Run *r, Pos pos, const RegexCa
         Table *gs = NULL;
         TRY(builtin_new_list(r, pos, &gs));
         SLICE_TYPE(Groups, const RegexGroup);
-        Groups all = {f->groups, REGEX_GROUPS_MOST};
+        Groups all = {f->groups, REGEX_GROUPS_MAX};
         for (size_t k = 0; k < n; k++) TRY(builtin_push_str(r, pos, gs, builtin_group_text(s, &at(all, k))));
         Value gv;
         value_table(&gv, gs);
@@ -875,9 +875,9 @@ static STATUS_MUST_USE Status bi_re_replace(Run *r, Pos pos, ConstValues args, V
     TRY(builtin_program(r, pos, S("re_replace"), pattern, o, &c));
     size_t groups = c->program.groups;
     // How often each group is named, and the bytes the names take.
-    size_t uses_buf[REGEX_GROUPS_MOST] = {0};
+    size_t uses_buf[REGEX_GROUPS_MAX] = {0};
     SLICE_TYPE(Uses, size_t);
-    Uses uses = {uses_buf, REGEX_GROUPS_MOST};
+    Uses uses = {uses_buf, REGEX_GROUPS_MAX};
     size_t named = 0;
     for (size_t k = 0; k + 1 < with.len; k++) {
         uint8_t d = str_byte(with, k + 1);
@@ -904,7 +904,7 @@ static STATUS_MUST_USE Status bi_re_replace(Run *r, Pos pos, ConstValues args, V
         if (!found) break;
         replaced = true;
         SLICE_TYPE(Groups, const RegexGroup);
-        Groups gs = {f.groups, REGEX_GROUPS_MOST};
+        Groups gs = {f.groups, REGEX_GROUPS_MAX};
         // A step a byte this match adds, charged before it is written.
         uint64_t grown = 0;
         for (size_t g = 0; g < groups; g++) {

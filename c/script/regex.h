@@ -21,22 +21,22 @@
 
 enum {
     // The longest pattern; a longer one is refused before it is read.
-    REGEX_PATTERN_MOST = 256,
+    REGEX_PATTERN_MAX = 256,
     // The most capture groups: `\1` to `\9` in a replacement.
-    REGEX_GROUPS_MOST = 9,
+    REGEX_GROUPS_MAX = 9,
     // The largest count a `{n,m}` may give.
-    REGEX_COUNT_MOST = 100,
+    REGEX_COUNT_MAX = 100,
     // The most instructions a program may have, its counts written out, so a
     // place fits a uint16_t.
-    REGEX_INSTS_MOST = 8192,
+    REGEX_INSTS_MAX = 8192,
     // Loops whose turn can take nothing: at most 16 a pattern, nested at most
     // 4 deep, so a position holds at most 16 states an instruction.
-    REGEX_EMPTY_LOOPS_MOST = 16,
-    REGEX_NEST_MOST = 4,
+    REGEX_EMPTY_LOOPS_MAX = 16,
+    REGEX_NEST_MAX = 4,
     // A thread's captures: the match's start, then each group's start and end.
-    REGEX_CAPS = 1 + 2 * REGEX_GROUPS_MOST,
+    REGEX_CAPS = 1 + 2 * REGEX_GROUPS_MAX,
     // The compiled patterns a run keeps, the least recently used evicted.
-    REGEX_CACHE_MOST = 8,
+    REGEX_CACHE_MAX = 8,
 };
 
 typedef enum {
@@ -85,7 +85,7 @@ typedef struct {
 // The loops whose turn can take nothing around one instruction, by number.
 typedef struct {
     uint8_t n;
-    uint8_t ids[REGEX_NEST_MOST];
+    uint8_t ids[REGEX_NEST_MAX];
 } RegexEncl;
 
 SLICE_TYPE(RegexInsts, RegexInst);
@@ -165,7 +165,7 @@ typedef struct {
     size_t start;
     size_t end;
     // Group 1 first; those past the program's `groups` are unmatched.
-    RegexGroup groups[REGEX_GROUPS_MOST];
+    RegexGroup groups[REGEX_GROUPS_MAX];
 } RegexFound;
 
 typedef struct {
@@ -204,7 +204,7 @@ typedef struct {
 SLICE_TYPE(RegexEntries, RegexCached);
 
 typedef struct {
-    RegexCached entries[REGEX_CACHE_MOST];
+    RegexCached entries[REGEX_CACHE_MAX];
     uint64_t clock;
 } RegexCache;
 

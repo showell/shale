@@ -400,7 +400,7 @@ static STATUS_MUST_USE Status regex_count_after(RegexReader *r, size_t *least, s
     if (regex_peek(r, 0) != '}') return regex_refuse(r->refused, at, REGEX_COUNT_FORM);
     r->at++;
     if (*has_most && *most < *least) return regex_refuse(r->refused, at, S("a count whose most is below its least (`{5,2}`): write it `{2,5}`"));
-    if (*least > REGEX_COUNT_MOST || (*has_most && *most > REGEX_COUNT_MOST)) return regex_refuse(r->refused, at, S("a count past 100 (`{n,m}`): write `+` or `*` for a part that may come any number of times"));
+    if (*least > REGEX_COUNT_MAX || (*has_most && *most > REGEX_COUNT_MAX)) return regex_refuse(r->refused, at, S("a count past 100 (`{n,m}`): write `+` or `*` for a part that may come any number of times"));
     return OK;
 }
 
@@ -414,7 +414,7 @@ static STATUS_MUST_USE Status regex_group(RegexReader *r, RegexNode *out) {
         if (regex_peek(r, 2) != ':') return regex_refuse(r->refused, at, S("`(?` is not in this subset but for `(?:...)`, a group that does not capture: no lookaround, no named groups"));
         r->at += 3;
     } else {
-        if (r->groups == REGEX_GROUPS_MOST) return regex_refuse(r->refused, at, S("a tenth capture group: nine is the most (`\\9` is the last), so write this one `(?:...)` if it need not capture"));
+        if (r->groups == REGEX_GROUPS_MAX) return regex_refuse(r->refused, at, S("a tenth capture group: nine is the most (`\\9` is the last), so write this one `(?:...)` if it need not capture"));
         r->groups++;
         index = r->groups;
         r->at++;
@@ -578,10 +578,10 @@ static STATUS_MUST_USE Status regex_emit(RegexEmitter *e, RegexOp op, uint8_t c,
     // instructions), so an unbounded program would make a search's cost
     // unbounded before it runs; a place past 65535 would also wrap the uint16_t
     // pcs.
-    // REMEDY: this check refuses a program past REGEX_INSTS_MOST (8192), and
+    // REMEDY: this check refuses a program past REGEX_INSTS_MAX (8192), and
     // every instruction comes through here: regex_emit is the only push to
     // `insts`.
-    if (e->insts.len >= REGEX_INSTS_MOST) return regex_refuse(e->refused, 0, S("the pattern, its counts written out, is more than 8192 instructions: count less (`{n,m}`), or write `+` or `*`"));
+    if (e->insts.len >= REGEX_INSTS_MAX) return regex_refuse(e->refused, 0, S("the pattern, its counts written out, is more than 8192 instructions: count less (`{n,m}`), or write `+` or `*`"));
     RegexInst i = {(uint8_t)op, c, x, y};
     TRY(RegexInstVec_push(&e->insts, i));
     if (pc != NULL) *pc = (uint16_t)(e->insts.len - 1);
@@ -597,8 +597,8 @@ static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, const RegexNode *
 // A split before each alternative but the last, the leftmost preferred, each
 // ending in a jump past the rest.
 static STATUS_MUST_USE Status regex_emit_alt(RegexEmitter *e, RegexAlt a) {
-    uint16_t ends_buf[REGEX_PATTERN_MOST + 1];
-    RegexPcs ends = {ends_buf, REGEX_PATTERN_MOST + 1};
+    uint16_t ends_buf[REGEX_PATTERN_MAX + 1];
+    RegexPcs ends = {ends_buf, REGEX_PATTERN_MAX + 1};
     size_t n_ends = 0;
     for (size_t k = 0; k < a.len; k++) {
         RegexSeq s = at(a, k);
@@ -659,9 +659,9 @@ static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, const RegexNode *
         // instruction inside it, so a search's cost per position grows as 2 to
         // the loops nested.
         // REMEDY: two caps bound it at 16 states an instruction: this check
-        // refuses a 17th loop (REGEX_EMPTY_LOOPS_MOST), and regex_states
-        // refuses an instruction inside more than four (REGEX_NEST_MOST).
-        if (e->loops == REGEX_EMPTY_LOOPS_MOST) return regex_refuse(e->refused, 0, S("more than 16 loops whose turn can match nothing (`(a*)*`, `(a|)+`): write some so a turn takes a byte"));
+        // refuses a 17th loop (REGEX_EMPTY_LOOPS_MAX), and regex_states
+        // refuses an instruction inside more than four (REGEX_NEST_MAX).
+        if (e->loops == REGEX_EMPTY_LOOPS_MAX) return regex_refuse(e->refused, 0, S("more than 16 loops whose turn can match nothing (`(a*)*`, `(a|)+`): write some so a turn takes a byte"));
         uint8_t id = e->loops;
         e->loops++;
         bool has_first = n->quant == REGEX_PLUS;
@@ -794,8 +794,8 @@ static STATUS_MUST_USE Status regex_states(Arena *a, RegexRefusal *refused, Rege
             RegexEncl *en = &at(encl, pc);
             RegexIds ids = {en->ids, en->n};
             if (ids.len > 0 && mem_find_byte(ids.ptr, rg.id, ids.len) != NULL) continue;
-            if (en->n == REGEX_NEST_MOST) return regex_refuse(refused, 0, S("loops whose turn can match nothing (`(a*)*`), nested more than four deep"));
-            RegexIds room = {en->ids, REGEX_NEST_MOST};
+            if (en->n == REGEX_NEST_MAX) return regex_refuse(refused, 0, S("loops whose turn can match nothing (`(a*)*`), nested more than four deep"));
+            RegexIds room = {en->ids, REGEX_NEST_MAX};
             at(room, en->n) = rg.id;
             en->n++;
         }
@@ -845,9 +845,9 @@ static STATUS_MUST_USE Status regex_compile(Arena *a, Str pattern, RegexOptions 
     // DRAGON: the C stack. The reader, regex_nullable and the emitter each
     // recurse once a `(`, with no depth budget of their own, so a pattern of
     // thousands of `(` would overflow the stack.
-    // REMEDY: this cap on the pattern's length (REGEX_PATTERN_MOST, 256 bytes),
+    // REMEDY: this cap on the pattern's length (REGEX_PATTERN_MAX, 256 bytes),
     // checked before a byte is read, bounds each recursion at 256 levels.
-    if (pattern.len > REGEX_PATTERN_MOST) return regex_refuse(refused, REGEX_PATTERN_MOST, S("a pattern of more than 256 bytes"));
+    if (pattern.len > REGEX_PATTERN_MAX) return regex_refuse(refused, REGEX_PATTERN_MAX, S("a pattern of more than 256 bytes"));
     // DRAGON: the arena budget. The tree is a second arena beside `a`, so a
     // compile could hold more than the budget's owner gave if the tree had a
     // limit of its own.
@@ -1025,7 +1025,7 @@ static RegexFound regex_found(RegexThread *t, size_t end) {
     RegexFound f;
     f.start = at(caps, 0);
     f.end = end;
-    RegexGroups groups = {f.groups, REGEX_GROUPS_MOST};
+    RegexGroups groups = {f.groups, REGEX_GROUPS_MAX};
     for (size_t k = 0; k < groups.len; k++) {
         size_t a = at(caps, 1 + 2 * k);
         size_t b = at(caps, 2 + 2 * k);
@@ -1125,19 +1125,19 @@ static inline RegexSearched regex_search_within(const RegexProgram *p, RegexScra
     return r;
 }
 
-static inline RegexSearched regex_search_from(const RegexProgram *p, RegexScratch *sc, Str s, size_t from, uint64_t positions_most) {
-    RegexMost most = {positions_most, UINT64_MAX};
+static inline RegexSearched regex_search_from(const RegexProgram *p, RegexScratch *sc, Str s, size_t from, uint64_t positions_max) {
+    RegexMost most = {positions_max, UINT64_MAX};
     return regex_search_within(p, sc, s, from, most);
 }
 
-static inline RegexSearched regex_search(const RegexProgram *p, RegexScratch *sc, Str s, uint64_t positions_most) {
-    return regex_search_from(p, sc, s, 0, positions_most);
+static inline RegexSearched regex_search(const RegexProgram *p, RegexScratch *sc, Str s, uint64_t positions_max) {
+    return regex_search_from(p, sc, s, 0, positions_max);
 }
 
 // ── The cache ────────────────────────────────────────────────────────────
 
 static RegexEntries regex_entries(RegexCache *c) {
-    RegexEntries e = {c->entries, REGEX_CACHE_MOST};
+    RegexEntries e = {c->entries, REGEX_CACHE_MAX};
     return e;
 }
 

@@ -52,7 +52,7 @@ static RegexRefusal refusal(Str pattern) {
 
 // The group `k` (from 1) of a match.
 static RegexGroup group_of(RegexSearched r, size_t k) {
-    RegexGroups gs = {r.match.groups, REGEX_GROUPS_MOST};
+    RegexGroups gs = {r.match.groups, REGEX_GROUPS_MAX};
     return at(gs, k - 1);
 }
 
@@ -199,15 +199,15 @@ TEST(a_class_holds_a_shorthand_an_escaped_byte_and_a_range_whose_end_is_escaped)
 }
 
 TEST(a_pattern_of_more_than_256_bytes_is_refused_at_its_257th_byte_unread) {
-    char buf[REGEX_PATTERN_MOST + 1];
+    char buf[REGEX_PATTERN_MAX + 1];
     memset(buf, 'a', sizeof buf);
     Str whole = {buf, sizeof buf};
     RegexRefusal r = refusal(whole);
-    EXPECT_EQ(r.at, REGEX_PATTERN_MOST);
+    EXPECT_EQ(r.at, REGEX_PATTERN_MAX);
     EXPECT_STR(r.message, S("a pattern of more than 256 bytes"));
-    RegexSearched f = found(str_sub(whole, 0, REGEX_PATTERN_MOST), whole);
+    RegexSearched f = found(str_sub(whole, 0, REGEX_PATTERN_MAX), whole);
     EXPECT(f.found);
-    EXPECT_EQ(f.match.end, REGEX_PATTERN_MOST);
+    EXPECT_EQ(f.match.end, REGEX_PATTERN_MAX);
 }
 
 // Whether the cache holds `pattern`, without marking it used.
@@ -335,7 +335,7 @@ TEST(a_search_that_skips_finds_what_one_examining_every_position_finds_from_ever
                     if (got.found) {
                         EXPECT_EQ(want.match.start, got.match.start);
                         EXPECT_EQ(want.match.end, got.match.end);
-                        for (size_t g = 1; g <= REGEX_GROUPS_MOST; g++) {
+                        for (size_t g = 1; g <= REGEX_GROUPS_MAX; g++) {
                             EXPECT_EQ(group_of(want, g).matched, group_of(got, g).matched);
                             EXPECT_EQ(group_of(want, g).start, group_of(got, g).start);
                             EXPECT_EQ(group_of(want, g).end, group_of(got, g).end);
@@ -527,7 +527,7 @@ TEST(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it
     Bytes room = {buf, sizeof buf};
     RegexRefusal refused;
     RegexCached *got;
-    for (size_t k = 0; k < REGEX_CACHE_MOST + 1; k++) {
+    for (size_t k = 0; k < REGEX_CACHE_MAX + 1; k++) {
         at(room, 0) = 'p';
         at(room, 1) = (char)('a' + k);
         Str p = {buf, 2};
@@ -537,13 +537,13 @@ TEST(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it
         EXPECT(regex_cache_put(&c, p, opts(false), TEST_REGEX_LIMIT, &refused, &got) == OK);
         EXPECT(got->text.ptr != buf);
         EXPECT_STR(got->text, p);
-        if (k == REGEX_CACHE_MOST - 1) {
+        if (k == REGEX_CACHE_MAX - 1) {
             // `pa` used again, so `pb` is the least recently used.
             EXPECT(regex_cache_get(&c, S("pa"), opts(false)) != NULL);
         }
-        if (k + 1 < REGEX_CACHE_MOST) EXPECT_EQ(cache_count(&c), k + 1);
+        if (k + 1 < REGEX_CACHE_MAX) EXPECT_EQ(cache_count(&c), k + 1);
     }
-    EXPECT_EQ(cache_count(&c), REGEX_CACHE_MOST);
+    EXPECT_EQ(cache_count(&c), REGEX_CACHE_MAX);
     EXPECT(cache_holds(&c, S("pa")));
     EXPECT(!cache_holds(&c, S("pb")));
     EXPECT(cache_holds(&c, S("pi")));
@@ -555,7 +555,7 @@ TEST(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it
     EXPECT(regex_cache_put(&c, S("a**"), opts(false), TEST_REGEX_LIMIT, &refused, &got) == STOP);
     EXPECT(refused.refused);
     EXPECT_EQ(regex_cache_held(&c), held);
-    EXPECT_EQ(cache_count(&c), REGEX_CACHE_MOST);
+    EXPECT_EQ(cache_count(&c), REGEX_CACHE_MAX);
     // A thousand patterns through the cache hold what eight of the largest do.
     size_t largest = 0;
     for (size_t k = 0; k < 1000; k++) {
@@ -568,9 +568,9 @@ TEST(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it
         Str p = {digits, 4};
         EXPECT(regex_cache_put(&c, p, opts(false), TEST_REGEX_LIMIT, &refused, &got) == OK);
         if (got->arena.held > largest) largest = got->arena.held;
-        EXPECT(regex_cache_held(&c) <= REGEX_CACHE_MOST * largest);
+        EXPECT(regex_cache_held(&c) <= REGEX_CACHE_MAX * largest);
     }
-    EXPECT_EQ(cache_count(&c), REGEX_CACHE_MOST);
+    EXPECT_EQ(cache_count(&c), REGEX_CACHE_MAX);
     regex_cache_deinit(&c);
     EXPECT_EQ(cache_count(&c), 0);
 }
@@ -598,7 +598,7 @@ TEST(each_group_captures_its_own_part) {
     EXPECT(!group_of(r, 3).matched);
     r = found(S("(w)(o)(r)(d)( )(W)(o)(r)(d)"), S("a word Word"));
     EXPECT(r.found);
-    for (size_t g = 1; g <= REGEX_GROUPS_MOST; g++) {
+    for (size_t g = 1; g <= REGEX_GROUPS_MAX; g++) {
         EXPECT(group_of(r, g).matched);
         EXPECT_EQ(group_of(r, g).start, 1 + g);
         EXPECT_EQ(group_of(r, g).end, 2 + g);
