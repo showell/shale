@@ -112,7 +112,7 @@ function check_help(t, build, zig)
   local mode = "Debug"
   if build == "release" then
     mode = "ReleaseSafe"
-    local zv = run_in(t, "command help", {zig, "--version"}, {timeout_ms = 10000, whole = 1000})
+    local zv = run_in(t, "command help", {"shale", "--version"}, {timeout_ms = 10000, whole = 1000})
     if zv.out ~= v.out then fail("`release`'s shale --version said " .. v.out .. ", and Zig's " .. zv.out) end
   end
   if v.code ~= 0 or v.out ~= "shale " .. mode .. "\n" then fail("`" .. build .. "`'s shale --version said " .. v.out .. ", not shale " .. mode) end
