@@ -19,7 +19,7 @@ SLICE_TYPE(BuiltinSpecs, const BuiltinSpec);
 
 // Every builtin's arity, in ast.h's order, and its function where it is ported.
 static BuiltinSpecs builtin_specs(void) {
-    static const BuiltinSpec specs[BUILTIN_COUNT_OF] = {
+    static const BuiltinSpec specs[] = {
         {1, 1, bi_ls},             // ls
         {1, 1, bi_stat},           // stat
         {1, 1, bi_exists},         // exists
@@ -98,6 +98,9 @@ static BuiltinSpecs builtin_specs(void) {
         {0, 0, bi_yield},          // yield
         {0, 255, NULL},            // print, the VM's own op
     };
+    // Sized by its specs: sized by the enum, a spec left out would be
+    // zero-filled, a builtin of no arguments and no function.
+    _Static_assert(sizeof specs / sizeof *specs == BUILTIN_COUNT_OF, "a spec for every builtin");
     BuiltinSpecs all = {specs, BUILTIN_COUNT_OF};
     return all;
 }

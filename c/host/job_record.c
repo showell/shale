@@ -113,16 +113,19 @@ static bool job_record_unescape(Bytes v, Str *out) {
 // missing `start` read as "" would make `job_alive` say false of a job that
 // runs. `argv` is unescaped in place, so `text` is changed.
 static bool job_record_parse(Bytes text, JobRecord *r) {
-    static const Str keys[10] = {
-        S("pid"), S("pgid"), S("start"), S("started"), S("argv"),
-        S("reaper"), S("reaper_start"), S("exit"), S("signal"), S("ended"),
+    static const Str keys[] = {
+        S_ITEM("pid"), S_ITEM("pgid"), S_ITEM("start"), S_ITEM("started"), S_ITEM("argv"),
+        S_ITEM("reaper"), S_ITEM("reaper_start"), S_ITEM("exit"), S_ITEM("signal"), S_ITEM("ended"),
     };
+    enum { JOB_RECORD_KEYS = 10, REQUIRED = 7 };
+    // Sized by its keys: the cases below are their places, so a key left
+    // out must not compile.
+    _Static_assert(sizeof keys / sizeof *keys == JOB_RECORD_KEYS, "a key for every field of a record");
     SLICE_TYPE(Keys, const Str);
-    Keys all = {keys, 10};
-    enum { REQUIRED = 7 };
-    bool seen_bits[10] = {false};
+    Keys all = {keys, JOB_RECORD_KEYS};
+    bool seen_bits[JOB_RECORD_KEYS] = {false};
     SLICE_TYPE(Seen, bool);
-    Seen seen = {seen_bits, 10};
+    Seen seen = {seen_bits, JOB_RECORD_KEYS};
     memset(r, 0, sizeof *r);
     size_t line_at = 0;
     while (line_at <= text.len) {
