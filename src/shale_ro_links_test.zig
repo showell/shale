@@ -270,6 +270,41 @@ test "stdout_secret: a file made there while the program ran, a folder that refu
     try onceStop(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:hidden\"})", .store, "`run`'s `stdout_secret` k:hidden cannot be looked at: AccessDenied");
 }
 
+/// One run outside the gate, which must stop with `class` and say exactly
+/// `says`, so a folder in the message cannot hide behind a substring.
+fn onceSaid(t: *T, src: []const u8, class: script_class, says: []const u8) !void {
+    var r = t.runOnce(src, .atomic);
+    defer r.deinit();
+    const s = r.stop orelse return error.TestUnexpectedResult;
+    errdefer std.debug.print("{s}: {s}: {s}\n", .{ src, @tagName(s.class), s.message });
+    try testing.expectEqual(class, s.class);
+    try testing.expectEqualStrings(says, s.message);
+}
+
+test "secrets mounts: a folder missing or shut is said by the mount's name alone, through `secrets` and `stdout_secret`; an ordinary mount's stop names its folder" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    const io = t.threaded.io();
+    const a = t.arena.allocator();
+    try t.tmp.dir.createDirPath(io, "shut/keys");
+    try t.tmp.dir.createDirPath(io, "shut/plain");
+    var why: []const u8 = "";
+    t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/no-keys secrets\np = {s}/no-plain\nks = {s}/shut/keys secrets\nps = {s}/shut/plain\n", .{ t.root, t.root, t.root, t.root }), "/home/x", &why);
+    const missing = "the mount `k` is a secrets mount whose folder is missing";
+    try onceSaid(&t, "run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:tok\"}})", .store, missing);
+    try onceSaid(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:tok\"})", .store, missing);
+    try onceSaid(&t, "read(\"p:x\")", .store, try std.fmt.allocPrint(a, "the mount `p` is {s}/no-plain, which is not a folder there", .{t.root}));
+    // A folder that is there but cannot be opened: its parent shut.
+    const shut = try std.fmt.allocPrintSentinel(a, "{s}/shut", .{t.root}, 0);
+    try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(shut, 0o000));
+    defer _ = std.os.linux.chmod(shut, 0o700);
+    const shut_said = "the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied";
+    try onceSaid(&t, "run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"ks:tok\"}})", .store, shut_said);
+    try onceSaid(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"ks:tok\"})", .store, shut_said);
+    try onceSaid(&t, "read(\"ps:x\")", .store, try std.fmt.allocPrint(a, "the mount `ps` is {s}/shut/plain, which cannot be opened: AccessDenied", .{t.root}));
+}
+
 const script_class = @import("shale").script.diag.Class;
 
 test "the store follows no link: to a file, to a folder, in the middle of a path, in a mount, out of the root: refused for reads, changes, exists, stat and listings" {
