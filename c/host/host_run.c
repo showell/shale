@@ -53,6 +53,22 @@ typedef struct {
 
 VEC_DEFINE(HostRecords, Str)
 
+// A job this run started, as the host keeps it past the run's values: which
+// job it is (its leader's pid and start time, so a later job on the same log
+// is another), where its record is, and how a stop names it. Zig's
+// `Started`.
+typedef struct {
+    Str record_os;
+    Str log;
+    Str argv;
+    int32_t pid;
+    int32_t pgid;
+    Str start;
+    bool keep;
+} HostStarted;
+
+VEC_DEFINE(HostStartedJobs, HostStarted)
+
 // The Linux host the CLI hands the core: Zig's `Host`. Its arena is
 // `paths.arena`, which outlives the run's values.
 typedef struct {
@@ -62,12 +78,19 @@ typedef struct {
     HostTime time;
     // One line each, a program run or a log written: `--verbose`'s `── ran`.
     HostRecords records;
+    // The program a job runs under (`shale --reap`); none means no jobs.
+    bool has_reaper;
+    Str reaper;
+    // The jobs this run started, for a stop to end (`host_jobs_stop_with_run`).
+    HostStartedJobs started;
 } Host;
 
 static void host_make(Host *h, SpawnStrs env) {
     h->env = env;
     memset(&h->time, 0, sizeof h->time);
     h->records = HostRecords_make(h->paths.arena);
+    h->has_reaper = false;
+    h->started = HostStartedJobs_make(h->paths.arena);
 }
 
 // ── the time line ──

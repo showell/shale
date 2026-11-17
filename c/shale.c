@@ -3,9 +3,9 @@
 // does, parses and compiles the script with them, and either stops there
 // (`--check`) or runs it on the VM (script/vm.c), printing what it printed
 // on stdout and the same report on stderr, with the same exit code. A host
-// call the C does not run yet is refused as not ported, and so are `--help`,
-// `--version` and `--reap`. This file holds the system calls; what it
-// decides is in script/.
+// call the C does not run yet is refused as not ported, and so are `--help`
+// and `--version`. `--reap` is a job's reaper (host/jobs.c). This file holds
+// the system calls; what it decides is in script/.
 
 // `realpath`, `openat` and `memmem` are GNU's.
 #define _GNU_SOURCE
@@ -33,7 +33,10 @@
 #include "host/undo.c"
 #include "host/spawn.c"
 #include "host/keep.c"
+#include "host/job_record.c"
+#include "host/jobs.c"
 #include "host/host_run.c"
+#include "host/host_jobs.c"
 #include "host/host_call.c"
 #include "preludes.h"
 
@@ -555,6 +558,12 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     SpawnStrs env = {NULL, 0};
     if (base_env(&host_arena, &env) != OK) return not_ported(o, S("an environment past the arena"));
     host_make(&lh, env);
+    // The jobs' reaper is this program, `shale --reap`.
+    char exe[PATH_MAX];
+    ssize_t exe_len = readlink("/proc/self/exe", exe, sizeof exe);
+    if (exe_len > 0 && (size_t)exe_len < sizeof exe) {
+        lh.has_reaper = arena_dup(&host_arena, (Str){exe, (size_t)exe_len}, &lh.reaper);
+    }
     PathHook hook;
     paths_hook(&lh.paths, &hook);
     RunStore rs;
@@ -575,6 +584,9 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     Names records = {lh.records.ptr, lh.records.len};
     if (cli_write_report(&o->err, name, preludes, c->verbose, effects, records, ran == OK ? NULL : &r.ctx.stop, used, &b) != OK) return not_ported(o, S("a report past the arena"));
     if (host_time_worth_saying(&lh.time, c->verbose) && host_time_write(&o->err, &lh.time) != OK) return not_ported(o, S("a report past the arena"));
+    // A stopped run ends the jobs it started (but `keep_on_stop`'s), before
+    // any undo, so no job of its writes past the files put back.
+    if (ran != OK && host_jobs_stop_with_run(&lh, &o->err) != OK) return not_ported(o, S("a report past the arena"));
     // `--undo-on-stop`: a stopped run puts back what it changed.
     if (c->undo_on_stop && ran != OK) {
         bool all = false;
@@ -668,7 +680,13 @@ static int run_main(Out *o, int argc, char **argv) {
     SLICE_TYPE(Words, Str);
     Words all = {words, raw.len};
     for (size_t i = 0; i < raw.len; i++) at(all, i) = from_c(at(raw, i));
-    if (all.len > 1 && str_eq(at(all, 1), S("--reap"))) return not_ported(o, S("`shale --reap`, a job's reaper,"));
+    // `shale --reap ...` is a job's reaper, detached by `job_start`; its
+    // environment is the job's.
+    if (all.len > 1 && str_eq(at(all, 1), S("--reap"))) {
+        SpawnStrs env = {NULL, 0};
+        if (base_env(a, &env) != OK) return 2;
+        return jobs_reap_main(a, argv + 2, (size_t)argc - 2, env);
+    }
     if (all.len == 2 && (str_eq(at(all, 1), S("--help")) || str_eq(at(all, 1), S("-h")))) return not_ported(o, S("`shale --help`"));
     if (all.len == 2 && str_eq(at(all, 1), S("--version"))) return not_ported(o, S("`shale --version`"));
     const char *env_root = getenv("SHALE_ROOT"); // cstr: the environment's

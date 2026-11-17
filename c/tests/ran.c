@@ -24,7 +24,10 @@
 #include "../host/undo.c"
 #include "../host/spawn.c"
 #include "../host/keep.c"
+#include "../host/job_record.c"
+#include "../host/jobs.c"
 #include "../host/host_run.c"
+#include "../host/host_jobs.c"
 #include "../host/host_call.c"
 
 // How a run is made: its mounts file's text, `--verbose` (a diff in full)

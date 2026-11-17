@@ -4,7 +4,7 @@
 // any) and `edits_write` (`edits_all`'s write). Every other call is refused
 // as not ported yet; `run`, the jobs and the rest are their own lanes.
 //
-// Include paths.c, builtins_change.c and host_run.c first.
+// Include paths.c, builtins_change.c, host_run.c and host_jobs.c first.
 
 // The `RunHost.call` of the Linux host, `ctx` its Host.
 static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out) {
@@ -12,6 +12,7 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
     Paths *h = &lh->paths;
     if (str_eq(name, S("run"))) return host_run_program(lh, r, pos, args, out);
     if (str_eq(name, S("sleep"))) return host_sleep(lh, r, pos, args, out);
+    if (str_starts_with(name, S("job_"))) return host_jobs_call(lh, r, pos, name, args, out);
     if (str_eq(name, S("real"))) {
         if (args.len != 1) return run_failf(r, pos, CLASS_ARGUMENT, "`real` takes one path, given {d}", S("`real` takes one path, given "), run_unum(r, args.len));
         Str given = {0};
