@@ -41,8 +41,8 @@ static STATUS_MUST_USE Status fake_load(void *ctx, Arena *into, Str path, Str *w
 static void parse_with(Parsed *r, Str source, Preludes extra, FakeLibrary *lib) {
     r->arena = arena_make(1 << 24);
     parse_init(&r->p, &r->arena, source, 200);
-    Loader none = {NULL, NULL};
-    Loader loader = {lib, fake_load};
+    ParseLoader none = {NULL, NULL};
+    ParseLoader loader = {lib, fake_load};
     r->status = parse_program(&r->p, core(), extra, lib != NULL ? loader : none, &r->prog);
 }
 
@@ -372,7 +372,7 @@ TEST(a_stop_partway_leaves_the_parsers_state_as_it_was) {
     r.arena = arena_make(1 << 24);
     parse_init(&r.p, &r.arena, calls, 200);
     Preludes none = {NULL, 0};
-    Loader no_loader = {NULL, NULL};
+    ParseLoader no_loader = {NULL, NULL};
     r.status = parse_program(&r.p, S("function broken(s)\n  return s + @\nend\n"), none, no_loader, &r.prog);
     expect_stop(&r, 2, 14, CLASS_SYNTAX, S("a character no token starts with, `@`"));
     expect_state_restored(&r, calls);

@@ -151,7 +151,7 @@ static void ran_run(Ran *x, Str src, Budgets b) {
     x->output = arena_make(b.output_bytes + ARENA_BIG);
     Parser p;
     parse_init(&p, &x->tree, src, b.nesting);
-    Loader none = {NULL, NULL};
+    ParseLoader none = {NULL, NULL};
     Preludes no_preludes = {NULL, 0};
     x->parsed = parse_program(&p, S(""), no_preludes, none, &x->prog) == OK;
     if (!x->parsed) return;

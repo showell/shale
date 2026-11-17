@@ -43,9 +43,9 @@ SLICE_TYPE(Preludes, const Prelude);
 typedef struct {
     uint32_t use_line;
     PreludeFunctions consts;
-} Library;
+} ParseLibrary;
 
-SLICE_TYPE(LoadedSlots, uint32_t);
+SLICE_TYPE(ParseLoadedSlots, uint32_t);
 
 // A later prelude as a parse holds it: its functions, and the index in
 // `functions` of each one loaded (PARSE_UNLOADED until its first call). A
@@ -53,12 +53,12 @@ SLICE_TYPE(LoadedSlots, uint32_t);
 typedef struct {
     Prelude prelude;
     PreludeFunctions index;
-    LoadedSlots loaded;
+    ParseLoadedSlots loaded;
     bool is_library;
-    Library library;
-} Extra;
+    ParseLibrary library;
+} ParseExtra;
 
-SLICE_TYPE(Extras, Extra);
+SLICE_TYPE(ParseExtras, ParseExtra);
 
 // The host's reader of a `use`d library, Zig's `parse.Loader`: on OK, `*got`
 // says whether `*out` holds the source; when it doesn't, `*why` says why.
@@ -66,32 +66,32 @@ SLICE_TYPE(Extras, Extra);
 typedef struct {
     void *ctx;
     STATUS_MUST_USE Status (*load)(void *ctx, Arena *into, Str path, Str *why, Str *out, bool *got);
-} Loader;
+} ParseLoader;
 
 typedef struct {
     Str name;
     uint16_t slot;
     uint16_t depth;
     bool constant;
-} Local;
+} ParseLocal;
 
-VEC_DEFINE(LocalVec, Local)
-VEC_DEFINE(StmtVec, Stmt)
-VEC_DEFINE(ExprVec, Expr *)
-VEC_DEFINE(ArmVec, Arm)
-VEC_DEFINE(EntryVec, MapEntry)
-VEC_DEFINE(FunctionVec, Function)
-VEC_DEFINE(StrVec, Str)
-VEC_DEFINE(OwnerVec, size_t)
-MAP_DEFINE(FunctionNames, uint32_t)
+VEC_DEFINE(ParseLocalVec, ParseLocal)
+VEC_DEFINE(ParseStmtVec, Stmt)
+VEC_DEFINE(ParseExprVec, Expr *)
+VEC_DEFINE(ParseArmVec, Arm)
+VEC_DEFINE(ParseEntryVec, MapEntry)
+VEC_DEFINE(ParseFunctionVec, Function)
+VEC_DEFINE(ParseStrVec, Str)
+VEC_DEFINE(ParseOwnerVec, size_t)
+MAP_DEFINE(ParseFunctionNames, uint32_t)
 
 // One function's names: a stack of locals, each in the block it was declared in.
 typedef struct {
-    LocalVec locals;
+    ParseLocalVec locals;
     uint16_t depth;
     uint16_t slots;
     uint16_t loops;
-} Frame;
+} ParseFrame;
 
 enum {
     // The most libraries one script may `use`.
@@ -124,31 +124,31 @@ typedef struct {
     LongString after_long_string;
     uint32_t max_nesting;
     uint32_t nesting;
-    Frame frame;
+    ParseFrame frame;
     // Whether the frame is a function's, not the script's own top level.
     bool in_function;
     // The script's own frame while one of its functions is parsed, so a stop
     // can tell a script `local` the function can't see from a name that is
     // nowhere, and name the fix.
-    const Frame *script_frame;
+    const ParseFrame *script_frame;
     // The lists under construction, one stack per kind, shared by every
     // level: a list is the stack above its mark.
-    StmtVec stmts;
-    ExprVec exprs;
-    ArmVec arms;
-    EntryVec entries;
-    StrVec args_read;
+    ParseStmtVec stmts;
+    ParseExprVec exprs;
+    ParseArmVec arms;
+    ParseEntryVec entries;
+    ParseStrVec args_read;
     bool args_by_value;
-    FunctionVec functions;
+    ParseFunctionVec functions;
     // The script's own functions, by name.
-    FunctionNames function_names;
+    ParseFunctionNames function_names;
     // The core prelude's source and its functions, and each one's index in
     // `functions` once loaded.
     Str core;
     PreludeFunctions core_index;
-    LoadedSlots core_loaded;
+    ParseLoadedSlots core_loaded;
     // The preludes after the core's, then the libraries `use`d, in order.
-    Extras extra;
+    ParseExtras extra;
     size_t extra_cap;
     // Which prelude is being parsed (0 for the core's, then `extra`'s), or
     // PARSE_SCRIPT. A prelude calls only its own functions, earlier preludes'
@@ -156,10 +156,10 @@ typedef struct {
     size_t in_prelude;
     // The top-level `const`s declared so far, and who declared each:
     // PARSE_SCRIPT, or a library's place among the preludes.
-    StrVec consts;
-    OwnerVec const_owner;
+    ParseStrVec consts;
+    ParseOwnerVec const_owner;
     // Reads the library a `use` names; `load` is NULL where none is loaded.
-    Loader loader;
+    ParseLoader loader;
 } Parser;
 
 // Lua's library tables and functions a writer reaches for, each with what to
@@ -167,12 +167,12 @@ typedef struct {
 typedef struct {
     Str name;
     Str why;
-} LuaName;
+} ParseLuaName;
 
-SLICE_TYPE(LuaNames, const LuaName);
+SLICE_TYPE(ParseLuaNames, const ParseLuaName);
 
 static inline Str parse_lua_name(Str name) {
-    static const LuaName table[] = {
+    static const ParseLuaName table[] = {
         {S("string"), S("the standard library is not in this language: call the builtin, `upper(s)`, not `string.upper(s)`")},
         {S("table"), S("the standard library is not in this language: call the builtin, `push(l, x)`, not `table.insert(l, x)`")},
         {S("math"), S("the standard library is not in this language")},
@@ -198,7 +198,7 @@ static inline Str parse_lua_name(Str name) {
         {S("rawget"), S("metatables are not in this language")},
         {S("rawset"), S("metatables are not in this language")},
     };
-    LuaNames t = {table, sizeof table / sizeof(LuaName)};
+    ParseLuaNames t = {table, sizeof table / sizeof(ParseLuaName)};
     for (size_t i = 0; i < t.len; i++) {
         if (str_eq(at(t, i).name, name)) return at(t, i).why;
     }
@@ -437,7 +437,7 @@ static inline STATUS_MUST_USE Status parse_dup(Parser *p, const void *items, siz
 // The slot of the innermost local `name`, or -1.
 static inline int32_t parse_lookup(const Parser *p, Str name) {
     for (size_t i = p->frame.locals.len; i > 0; i--) {
-        Local l = at(p->frame.locals, i - 1);
+        ParseLocal l = at(p->frame.locals, i - 1);
         if (str_eq(l.name, name)) return l.slot;
     }
     return -1;
@@ -448,15 +448,15 @@ static inline int32_t parse_lookup(const Parser *p, Str name) {
 // only functions are called.
 static inline STATUS_MUST_USE Status parse_declare(Parser *p, Str name, Pos pos, uint16_t *slot) {
     for (size_t i = p->frame.locals.len; i > 0; i--) {
-        Local l = at(p->frame.locals, i - 1);
+        ParseLocal l = at(p->frame.locals, i - 1);
         if (l.depth < p->frame.depth) break;
         if (str_eq(l.name, name)) return parse_fail_cat(p, pos, CLASS_NAME, 3, S("`"), name, S("` is already a local in this block"));
     }
     if (p->frame.slots == UINT16_MAX) return parse_fail(p, pos, CLASS_SYNTAX, S("too many locals in one function"));
     *slot = p->frame.slots;
     p->frame.slots++;
-    Local l = {name, *slot, p->frame.depth, false};
-    return LocalVec_push(&p->frame.locals, l);
+    ParseLocal l = {name, *slot, p->frame.depth, false};
+    return ParseLocalVec_push(&p->frame.locals, l);
 }
 
 // A top-level `const` by name, among those declared so far, or -1.
@@ -480,7 +480,7 @@ static inline bool parse_is_const(const Parser *p, uint16_t slot) {
     return false;
 }
 
-static inline bool parse_frame_has(const Frame *f, Str name) {
+static inline bool parse_frame_has(const ParseFrame *f, Str name) {
     for (size_t i = 0; i < f->locals.len; i++) {
         if (str_eq(at(f->locals, i).name, name)) return true;
     }
@@ -573,10 +573,10 @@ static inline bool parse_next_const(Str src, size_t *at_, uint32_t *line, Prelud
     return false;
 }
 
-typedef bool (*NextEntry)(Str src, size_t *at_, uint32_t *line, PreludeFunction *out);
+typedef bool (*ParseNextEntry)(Str src, size_t *at_, uint32_t *line, PreludeFunction *out);
 
 // Every function (or `const`) a source holds by its lines.
-static inline STATUS_MUST_USE Status parse_index(Arena *a, Str src, NextEntry next, PreludeFunctions *out) {
+static inline STATUS_MUST_USE Status parse_index(Arena *a, Str src, ParseNextEntry next, PreludeFunctions *out) {
     PreludeFunctionVec v = PreludeFunctionVec_make(a);
     size_t at_ = 0;
     uint32_t line = 1;
@@ -602,10 +602,10 @@ static inline int32_t parse_index_before(PreludeFunctions index, size_t n, Str n
     return -1;
 }
 
-static inline STATUS_MUST_USE Status parse_slots(Arena *a, size_t n, LoadedSlots *out) {
+static inline STATUS_MUST_USE Status parse_slots(Arena *a, size_t n, ParseLoadedSlots *out) {
     uint32_t *slots = ARENA_ARRAY(a, uint32_t, n);
     if (slots == NULL) return STOP;
-    LoadedSlots s = {slots, n};
+    ParseLoadedSlots s = {slots, n};
     for (size_t i = 0; i < n; i++) at(s, i) = PARSE_UNLOADED;
     *out = s;
     return OK;
@@ -664,7 +664,7 @@ static inline STATUS_MUST_USE Status parse_if_arms(Parser *p, Pos pos, size_t fr
     Arm first = {0};
     first.cond = cond;
     TRY(parse_block(p, &first.body));
-    TRY(ArmVec_push(&p->arms, first));
+    TRY(ParseArmVec_push(&p->arms, first));
     Stmt s;
     parse_stmt_init(&s, pos, STMT_IF);
     for (;;) {
@@ -674,7 +674,7 @@ static inline STATUS_MUST_USE Status parse_if_arms(Parser *p, Pos pos, size_t fr
             TRY(parse_expr(p, &arm.cond));
             TRY(parse_expect(p, TAG_KW_THEN, S("`then` after the `elseif` condition"), &t));
             TRY(parse_block(p, &arm.body));
-            TRY(ArmVec_push(&p->arms, arm));
+            TRY(ParseArmVec_push(&p->arms, arm));
         } else if (p->tok.tag == TAG_KW_ELSE) {
             TRY(parse_advance(p));
             s.as.if_.has_otherwise = true;
@@ -795,8 +795,8 @@ static inline STATUS_MUST_USE Status parse_statement_body(Parser *p, Stmt *out) 
         at(p->frame.locals, p->frame.locals.len - 1).constant = true;
         if (p->consts.len == UINT16_MAX) return parse_fail(p, pos, CLASS_SYNTAX, S("too many constants"));
         s.as.constant.index = (uint16_t)p->consts.len;
-        TRY(StrVec_push(&p->consts, t.text));
-        TRY(OwnerVec_push(&p->const_owner, p->in_prelude));
+        TRY(ParseStrVec_push(&p->consts, t.text));
+        TRY(ParseOwnerVec_push(&p->const_owner, p->in_prelude));
         *out = s;
         return OK;
     }
@@ -906,7 +906,7 @@ static inline STATUS_MUST_USE Status parse_block_body(Parser *p, size_t from, St
         }
         Stmt s;
         TRY(parse_statement(p, &s));
-        TRY(StmtVec_push(&p->stmts, s));
+        TRY(ParseStmtVec_push(&p->stmts, s));
         if (s.kind == STMT_RETURN) {
             while (p->tok.tag == TAG_SEMICOLON) TRY(parse_advance(p));
             if (!parse_block_ends(p->tok.tag)) return parse_fail(p, parse_here(p), CLASS_SYNTAX, S("`return` must be the last statement of its block"));
@@ -937,9 +937,9 @@ static inline STATUS_MUST_USE Status parse_block(Parser *p, Stmts *out) {
 static inline STATUS_MUST_USE Status parse_load_prelude(Parser *p, size_t k, size_t i);
 
 // The library that brought `name`, among those `use`d above, or NULL.
-static inline const Extra *parse_library_having(const Parser *p, Str name) {
+static inline const ParseExtra *parse_library_having(const Parser *p, Str name) {
     for (size_t k = 0; k < p->extra.len; k++) {
-        const Extra *x = &at(p->extra, k);
+        const ParseExtra *x = &at(p->extra, k);
         if (!x->is_library) continue;
         if (parse_index_at(x->index, name) >= 0 || parse_index_at(x->library.consts, name) >= 0) return x;
     }
@@ -951,7 +951,7 @@ static inline const Extra *parse_library_having(const Parser *p, Str name) {
 // call. `*found` is false when there is none.
 static inline STATUS_MUST_USE Status parse_function_named(Parser *p, Str name, uint32_t *index, bool *found) {
     *found = false;
-    if (p->in_prelude == PARSE_SCRIPT && FunctionNames_get(&p->function_names, name, index)) {
+    if (p->in_prelude == PARSE_SCRIPT && ParseFunctionNames_get(&p->function_names, name, index)) {
         *found = true;
         return OK;
     }
@@ -1044,7 +1044,7 @@ static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
     // A name a library brought is the script's from its `use` on, and is not
     // declared again, whichever comes first.
     if (p->in_prelude == PARSE_SCRIPT) {
-        const Extra *x = parse_library_having(p, name);
+        const ParseExtra *x = parse_library_having(p, name);
         if (x != NULL) {
             bool refused = false;
             Str line = parse_num(p, at(x->index, parse_index_sure(x->index, name)).line, &refused);
@@ -1057,7 +1057,7 @@ static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
     // A prelude function's name is allowed too: from this line on the script's
     // calls by it are to this function.
     uint32_t seen = 0;
-    if (p->in_prelude == PARSE_SCRIPT && FunctionNames_get(&p->function_names, name, &seen))
+    if (p->in_prelude == PARSE_SCRIPT && ParseFunctionNames_get(&p->function_names, name, &seen))
         return parse_fail_cat(p, pos, CLASS_NAME, 3, S("a function `"), name, S("` is already declared"));
     uint32_t index = (uint32_t)p->functions.len;
     // An error inside a prelude function must say so: its line is the
@@ -1074,11 +1074,11 @@ static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
         if (p->in_prelude == 0) {
             at(p->core_loaded, parse_index_sure(p->core_index, name)) = index;
         } else {
-            Extra *x = &at(p->extra, p->in_prelude - 1);
+            ParseExtra *x = &at(p->extra, p->in_prelude - 1);
             at(x->loaded, parse_index_sure(x->index, name)) = index;
         }
     } else {
-        TRY(FunctionNames_put(&p->function_names, name, index));
+        TRY(ParseFunctionNames_put(&p->function_names, name, index));
     }
     // Reserved now, so it may call itself; known before the body, so the body
     // may call it.
@@ -1086,16 +1086,16 @@ static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
     memset(&f, 0, sizeof f);
     f.name = shown;
     f.pos = pos;
-    TRY(FunctionVec_push(&p->functions, f));
+    TRY(ParseFunctionVec_push(&p->functions, f));
 
-    Frame saved = p->frame;
+    ParseFrame saved = p->frame;
     bool saved_in_function = p->in_function;
-    const Frame *saved_script_frame = p->script_frame;
+    const ParseFrame *saved_script_frame = p->script_frame;
     // A prelude's function, loaded at its first call, may be parsed in the
     // middle of the script's: only the script's own top level counts.
     if (!saved_in_function && p->in_prelude == PARSE_SCRIPT) p->script_frame = &saved;
     memset(&p->frame, 0, sizeof p->frame);
-    p->frame.locals = LocalVec_make(p->arena);
+    p->frame.locals = ParseLocalVec_make(p->arena);
     p->in_function = true;
     Status s = parse_function_body(p, index);
     // The caller's frame, put back on every way out, as Zig's `defer`.
@@ -1141,10 +1141,10 @@ typedef struct {
     BinOp op;
     uint8_t prec;
     bool right;
-} Level;
+} ParseLevel;
 
-static inline bool parse_binop(Tag tag, Level *out) {
-    Level l = {BINOP_ADD, 0, false};
+static inline bool parse_binop(Tag tag, ParseLevel *out) {
+    ParseLevel l = {BINOP_ADD, 0, false};
     switch (tag) {
     case TAG_KW_OR: l.op = BINOP_OR; l.prec = 1; break;
     case TAG_KW_AND: l.op = BINOP_AND; l.prec = 2; break;
@@ -1175,7 +1175,7 @@ static inline STATUS_MUST_USE Status parse_binary(Parser *p, uint8_t min, Expr *
 static inline STATUS_MUST_USE Status parse_binary_body(Parser *p, uint8_t min, Expr **out) {
     Expr *left = NULL;
     TRY(parse_unary(p, &left));
-    Level lv = {0};
+    ParseLevel lv = {0};
     while (parse_binop(p->tok.tag, &lv)) {
         if (lv.prec < min) break;
         Pos pos = parse_here(p);
@@ -1445,7 +1445,7 @@ static inline STATUS_MUST_USE Status parse_call_args(Parser *p, Pos pos, CallExp
         for (;;) {
             Expr *arg = NULL;
             TRY(parse_expr(p, &arg));
-            TRY(ExprVec_push(&p->exprs, arg));
+            TRY(ParseExprVec_push(&p->exprs, arg));
             if (p->tok.tag != TAG_COMMA) break;
             TRY(parse_advance(p));
         }
@@ -1460,7 +1460,7 @@ static inline STATUS_MUST_USE Status parse_call_args(Parser *p, Pos pos, CallExp
             for (size_t k = 0; k < p->args_read.len; k++) {
                 if (str_eq(at(p->args_read, k), first->as.string)) seen = true;
             }
-            if (!seen) TRY(StrVec_push(&p->args_read, first->as.string));
+            if (!seen) TRY(ParseStrVec_push(&p->args_read, first->as.string));
         } else {
             p->args_by_value = true;
         }
@@ -1485,7 +1485,7 @@ static inline STATUS_MUST_USE Status parse_call_args(Parser *p, Pos pos, CallExp
         for (size_t k = given; k < n; k++) {
             Expr *nil = parse_new_expr(p, pos, EXPR_NIL);
             if (nil == NULL) return STOP;
-            TRY(ExprVec_push(&p->exprs, nil));
+            TRY(ParseExprVec_push(&p->exprs, nil));
         }
     }
     TRY(parse_take_exprs(p, from, &call->args));
@@ -1549,11 +1549,11 @@ static inline STATUS_MUST_USE Status parse_table_entry(Parser *p, size_t items_f
         }
         if (value->kind == EXPR_NIL) return parse_fail(p, here, CLASS_TYPE, S("a map cannot hold nil"));
         MapEntry en = {key, value, here};
-        return EntryVec_push(&p->entries, en);
+        return ParseEntryVec_push(&p->entries, en);
     }
     if (entries > 0) return parse_fail(p, here, CLASS_TYPE, S("a table literal mixes positional and keyed entries: a list or a map, not both"));
     if (value->kind == EXPR_NIL) return parse_fail(p, here, CLASS_TYPE, S("a list cannot hold nil"));
-    return ExprVec_push(&p->exprs, value);
+    return ParseExprVec_push(&p->exprs, value);
 }
 
 // A table literal's entries, from its `{` on, pushed on the stacks from
@@ -1610,16 +1610,16 @@ static inline void parse_init(Parser *p, Arena *a, Str source, uint32_t max_nest
     p->arena = a;
     lexer_init(&p->lexer, a, source);
     p->max_nesting = max_nesting;
-    p->frame.locals = LocalVec_make(a);
-    p->stmts = StmtVec_make(a);
-    p->exprs = ExprVec_make(a);
-    p->arms = ArmVec_make(a);
-    p->entries = EntryVec_make(a);
-    p->args_read = StrVec_make(a);
-    p->functions = FunctionVec_make(a);
-    p->function_names = FunctionNames_make(a);
-    p->consts = StrVec_make(a);
-    p->const_owner = OwnerVec_make(a);
+    p->frame.locals = ParseLocalVec_make(a);
+    p->stmts = ParseStmtVec_make(a);
+    p->exprs = ParseExprVec_make(a);
+    p->arms = ParseArmVec_make(a);
+    p->entries = ParseEntryVec_make(a);
+    p->args_read = ParseStrVec_make(a);
+    p->functions = ParseFunctionVec_make(a);
+    p->function_names = ParseFunctionNames_make(a);
+    p->consts = ParseStrVec_make(a);
+    p->const_owner = ParseOwnerVec_make(a);
     p->in_prelude = PARSE_SCRIPT;
 }
 
@@ -1632,9 +1632,9 @@ static inline STATUS_MUST_USE Status parse_throwaway(Parser *p, size_t k, Parser
     q->core = p->core;
     q->core_index = p->core_index;
     TRY(parse_slots(p->arena, p->core_index.len, &q->core_loaded));
-    Extra *own = ARENA_ARRAY(p->arena, Extra, p->extra.len);
+    ParseExtra *own = ARENA_ARRAY(p->arena, ParseExtra, p->extra.len);
     if (own == NULL) return STOP;
-    Extras extras = {own, p->extra.len};
+    ParseExtras extras = {own, p->extra.len};
     for (size_t e = 0; e < p->extra.len; e++) {
         at(extras, e) = at(p->extra, e);
         TRY(parse_slots(p->arena, at(p->extra, e).loaded.len, &at(extras, e).loaded));
@@ -1659,7 +1659,7 @@ static inline STATUS_MUST_USE Status parse_only_functions(Parser *q, Str name) {
 // Zig skips a list of fixed preludes it has already found sound in this
 // process; such a list passes every time, so checking it again says the same.
 static inline STATUS_MUST_USE Status parse_check_prelude(Parser *p, size_t k) {
-    const Extra *x = &at(p->extra, k - 1);
+    const ParseExtra *x = &at(p->extra, k - 1);
     for (size_t i = 0; i < x->index.len; i++) {
         PreludeFunction f = at(x->index, i);
         Pos pos = parse_pos(f.line, 1);
@@ -1717,7 +1717,7 @@ static inline bool parse_literal(const Expr *e) {
 
 // A library's source from its start: functions and `const`s to its end.
 static inline STATUS_MUST_USE Status parse_library_source(Parser *q, size_t k) {
-    const Extra *x = &at(q->extra, k - 1);
+    const ParseExtra *x = &at(q->extra, k - 1);
     size_t functions = 0;
     size_t consts = 0;
     TRY(parse_advance(q));
@@ -1739,8 +1739,8 @@ static inline STATUS_MUST_USE Status parse_library_source(Parser *q, size_t k) {
         Expr *value = NULL;
         TRY(parse_expr(q, &value));
         if (!parse_literal(value)) return parse_fail_cat(q, pos, CLASS_REFUSED, 3, S("a library's `const "), name.text, S("` is a literal (a string, a number, a boolean, or a list or map of them): a library runs nothing and reads no launch value where it is used"));
-        TRY(StrVec_push(&q->consts, name.text));
-        TRY(OwnerVec_push(&q->const_owner, k));
+        TRY(ParseStrVec_push(&q->consts, name.text));
+        TRY(ParseOwnerVec_push(&q->const_owner, k));
         consts++;
     }
     // The index found each by the start of its line; a long string's line
@@ -1788,7 +1788,7 @@ static inline STATUS_MUST_USE Status parse_library_name_was(Parser *p, Str path,
     Msg m;
     msg_init(&m, p->arena);
     for (size_t k = 0; k < p->extra.len; k++) {
-        const Extra *e = &at(p->extra, k);
+        const ParseExtra *e = &at(p->extra, k);
         if (parse_index_at(e->index, name) < 0 && !(e->is_library && parse_index_at(e->library.consts, name) >= 0)) continue;
         msg_str(&m, e->prelude.name);
         msg_str(&m, S("'s"));
@@ -1801,7 +1801,7 @@ static inline STATUS_MUST_USE Status parse_library_name_was(Parser *p, Str path,
         return OK;
     }
     uint32_t fi = 0;
-    if (FunctionNames_get(&p->function_names, name, &fi)) {
+    if (ParseFunctionNames_get(&p->function_names, name, &fi)) {
         msg_str(&m, S("the script's function at line "));
         msg_u64(&m, at(p->functions, fi).pos.line);
         if (m.s != OK) return STOP;
@@ -1857,7 +1857,7 @@ static inline bool parse_use_path_ok(Str path) {
 // Binds each of library `k`'s `const`s on the `use`'s line: its literal parsed
 // from the library, its name the script's from here on.
 static inline STATUS_MUST_USE Status parse_library_consts(Parser *p, size_t k, Pos pos) {
-    const Extra *x = &at(p->extra, k - 1);
+    const ParseExtra *x = &at(p->extra, k - 1);
     for (size_t i = 0; i < x->library.consts.len; i++) {
         PreludeFunction c = at(x->library.consts, i);
         Lexer saved_lexer = p->lexer;
@@ -1886,14 +1886,14 @@ static inline STATUS_MUST_USE Status parse_library_consts(Parser *p, size_t k, P
         at(p->frame.locals, p->frame.locals.len - 1).constant = true;
         if (p->consts.len == UINT16_MAX) return parse_fail(p, pos, CLASS_SYNTAX, S("too many constants"));
         s.as.constant.index = (uint16_t)p->consts.len;
-        TRY(StrVec_push(&p->consts, c.name));
-        TRY(OwnerVec_push(&p->const_owner, k));
-        TRY(StmtVec_push(&p->stmts, s));
+        TRY(ParseStrVec_push(&p->consts, c.name));
+        TRY(ParseOwnerVec_push(&p->const_owner, k));
+        TRY(ParseStmtVec_push(&p->stmts, s));
     }
     return OK;
 }
 
-// `use("mount:path.shale")`: reads the library through the host's Loader,
+// `use("mount:path.shale")`: reads the library through the host's `ParseLoader`,
 // checks it, and adds it after the preludes, so its functions load at their
 // first call as a prelude's do. Its `const`s are bound here.
 static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stmt *out) {
@@ -1909,7 +1909,7 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
     if (!parse_use_path_ok(path))
         return parse_fail_cat(p, pos, CLASS_ARGUMENT, 3, S("`use(\""), path, S("\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), never by an absolute path or the root's: a script runs from other repositories' roots"));
     for (size_t k = 0; k < p->extra.len; k++) {
-        const Extra *x = &at(p->extra, k);
+        const ParseExtra *x = &at(p->extra, k);
         if (!x->is_library || !str_eq(x->prelude.name, path)) continue;
         bool refused = false;
         Str line = parse_num(p, x->library.use_line, &refused);
@@ -1934,7 +1934,7 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
     TRY(parse_index(p->arena, source, parse_next_function, &functions));
     TRY(parse_index(p->arena, source, parse_next_const, &consts));
     TRY(parse_library_names(p, pos, path, functions, consts));
-    Extra x = {0};
+    ParseExtra x = {0};
     memset(&x, 0, sizeof x);
     x.prelude.name = path;
     x.prelude.source = source;
@@ -1964,24 +1964,24 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
 // The whole source, parsed, after the core prelude (`core`) and the
 // preludes after it, each checked first. On STOP, `p->stopped` says the parse
 // stopped and `p->stop` where and why; otherwise the arena refused.
-static inline STATUS_MUST_USE Status parse_program(Parser *p, Str core, Preludes preludes, Loader loader, Program *out) {
+static inline STATUS_MUST_USE Status parse_program(Parser *p, Str core, Preludes preludes, ParseLoader loader, Program *out) {
     p->core = core;
     p->loader = loader;
     TRY(parse_index(p->arena, core, parse_next_function, &p->core_index));
     TRY(parse_slots(p->arena, p->core_index.len, &p->core_loaded));
     p->extra_cap = preludes.len + PARSE_LIBRARIES_MOST;
-    Extra *extras = ARENA_ARRAY(p->arena, Extra, p->extra_cap);
+    ParseExtra *extras = ARENA_ARRAY(p->arena, ParseExtra, p->extra_cap);
     if (extras == NULL) return STOP;
     p->extra.ptr = extras;
     p->extra.len = 0;
     for (size_t i = 0; i < preludes.len; i++) {
-        Extra x = {0};
+        ParseExtra x = {0};
         memset(&x, 0, sizeof x);
         x.prelude = at(preludes, i);
         TRY(parse_index(p->arena, x.prelude.source, parse_next_function, &x.index));
         TRY(parse_slots(p->arena, x.index.len, &x.loaded));
         p->extra.len++;
-        Extras room = {extras, p->extra_cap};
+        ParseExtras room = {extras, p->extra_cap};
         at(room, p->extra.len - 1) = x;
         TRY(parse_check_prelude(p, p->extra.len));
     }

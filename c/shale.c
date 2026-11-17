@@ -487,7 +487,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     Parser p;
     parse_init(&p, &tree, source, b.nesting);
     LibraryReader reader = {a, mounts, mounts_from, b, none};
-    Loader loader = {&reader, load_library};
+    ParseLoader loader = {&reader, load_library};
     Program prog = {0};
     Status s = parse_program(&p, preludes_core(), preludes, loader, &prog);
     Stop stop = {0};
