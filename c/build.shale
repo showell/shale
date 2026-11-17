@@ -936,6 +936,113 @@ function host_block(t)
 end
 -- ── end of the host's block ─────────────────────────────────────────────
 
+-- ── c/host's store, paths and undo journal: their own block ──────────────
+-- c/tests/store/test_store.c (the store) and test_paths.c (the mounts, the
+-- path hook, the secrets rule, the journal), each under every build of
+-- `t.builds`, held to its `TEST(` count and to STORE_TESTS. The Zig test
+-- files they port are held to STORE_ZIG_TESTS, so a Zig test added there is
+-- one the C has yet to port. In the full tier: the faults below planted in
+-- a copy of c/, c/tests/store copied whole beside it (its fixture.c reaches
+-- the copy's c/host), each caught by the test file it names under asan.
+
+const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 22}
+const STORE_ZIG_TESTS = {["src/shale_abs_path_test.zig"] = 3, ["src/shale_undo_test.zig"] = 4, ["src/shale_ro_links_test.zig"] = 8}
+const STORE_PLANTS = {
+  {name = "a folder that begins with a mount's name is in it", file = "mounts.c", caught_by = "test_paths",
+   old = "return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');", new = "return str_starts_with(abs, dir);"},
+  {name = "a link in a path is followed", file = "paths.c", caught_by = "test_paths",
+   old = "if (S_ISLNK(st.st_mode)) {", new = "if (0 && S_ISLNK(st.st_mode)) {"},
+  {name = "a secrets mount's own name is let through", file = "paths.c", caught_by = "test_paths",
+   old = "    if (m->secrets) {\n        return path_fail(", new = "    if (0 && m->secrets) {\n        return path_fail("},
+  {name = "the root's way into a secrets folder is let through", file = "paths.c", caught_by = "test_paths",
+   old = "        if (mounts_in_folder(abs, dir)) {\n            return path_fail(r, pos, CLASS_REFUSED, S(\"\\\"{s}\\\" is in the mount", new = "        if (0 && mounts_in_folder(abs, dir)) {\n            return path_fail(r, pos, CLASS_REFUSED, S(\"\\\"{s}\\\" is in the mount"},
+  {name = "a `..` in a root path is let through to the name check", file = "path_run.c", caught_by = "test_paths",
+   old = "        if (str_eq(part, S(\"..\"))) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"`{s}`: ", new = "        if (0) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"`{s}`: "},
+  {name = "an absolute path gets the empty part's stop", file = "path_run.c", caught_by = "test_paths",
+   old = "if (str_byte(rel, 0) == '/') return path_absolute_stop(r, pos, who, rel);", new = "(void)path_absolute_stop;"},
+  {name = "a `..` in a mount's path is let through to the name check", file = "paths.c", caught_by = "test_paths",
+   old = "        if (str_eq(part, S(\"..\"))) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"\\\"{s}\\\" climbs out of its mount", new = "        if (0) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"\\\"{s}\\\" climbs out of its mount"},
+  {name = "a read-only mount is read-only only by its name", file = "paths.c", caught_by = "test_paths",
+   old = "if (named || (under && !paths_under_writable_within(h, r, pos, abs, dir))) {", new = "if (named || (0 && under && !paths_under_writable_within(h, r, pos, abs, dir))) {"},
+  {name = "a path is journaled at each change", file = "paths.c", caught_by = "test_paths",
+   old = "if (str_eq(at(h->journal, k).abs, abs)) return OK;", new = "(void)k;"},
+  {name = "the journal takes a file past its room", file = "paths.c", caught_by = "test_paths",
+   old = "if ((uint64_t)st.st_size > room) {", new = "if (0 && (uint64_t)st.st_size > room) {"},
+  {name = "the one check lets a host text name a secrets folder", file = "path_run.c", caught_by = "test_paths",
+   old = "            if (names) {", new = "            if (0 && names) {"},
+  {name = "an argument's link to a secrets folder is not followed", file = "paths.c", caught_by = "test_paths",
+   old = "            if (mounts_in_folder(rp, dir)) {", new = "            if (0 && mounts_in_folder(rp, dir)) {"},
+  {name = "an absolute path in a secrets folder names the mount above it", file = "paths.c", caught_by = "test_paths",
+   old = "if (m->secrets && mounts_in_folder(abs, mounts_trim_slash(m->dir))) return OK;", new = "(void)m;"},
+  {name = "Wyhash's first secret is off by one", file = "store.c", caught_by = "test_store",
+   old = "0xa0761d6478bd642full", new = "0xa0761d6478bd642eull"},
+  {name = "case tells two names apart", file = "store.c", caught_by = "test_store",
+   old = "if (p >= 'A' && p <= 'Z') p = (uint8_t)(p + 32);", new = "(void)0;"},
+  {name = "a NUL inside a path reaches the kernel", file = "store.c", caught_by = "test_store",
+   old = "if (s.len > 0 && memchr(s.ptr, 0, s.len) != NULL) return STORE_BAD_PATH_NAME;", new = "(void)0;"},
+  {name = "the metal host's depth is one deeper", file = "store.c", caught_by = "test_store",
+   old = "if (depth > STORE_MAX_DEPTH) return STORE_PATH_TOO_DEEP;", new = "if (depth > STORE_MAX_DEPTH + 1) return STORE_PATH_TOO_DEEP;"},
+  {name = "a refused rename leaves its sibling", file = "store.c", caught_by = "test_store",
+   old = "if (e != STORE_OK && from != NULL) unlink(from);", new = "(void)from;"},
+}
+
+-- One store plant, the `k`th, in its own copy of c/ with c/tests/store
+-- beside it, caught by its test file under asan. Gives the line to report.
+function store_run_plant(t, p, k)
+  local dir = OUT .. "/store_plants/" .. k
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir .. "/tests")
+  for d in PLANT_DIRS do
+    if exists("c/" .. d) then copy("c/" .. d, dir .. "/" .. d) end
+  end
+  copy("c/tests/store", dir .. "/tests/store")
+  local file = dir .. "/host/" .. p.file
+  replace(file, replaced_once(read(file), p.old, p.new, p.name))
+  local r = compile_and_run(t, "store plants", "asan", dir .. "/tests/store/" .. p.caught_by .. ".c", dir .. "/foundation", dir .. "/bin/" .. p.caught_by)
+  if r.code == 0 then fail("store plant `" .. p.name .. "` was not caught: " .. p.caught_by .. " passed with it in " .. p.file) end
+  remove_tree(dir)
+  return "  caught: " .. p.name .. " (" .. p.file .. "), by " .. p.caught_by .. ": " .. caught_how(r.out)
+end
+
+function store_block(t)
+  local tests = {}
+  for src in keys(STORE_TESTS) do push(tests, src) end
+  sort(tests)
+  for src in tests do
+    if test_count(src) ~= STORE_TESTS[src] then fail(src .. " has " .. test_count(src) .. " TEST(s), and STORE_TESTS says " .. STORE_TESTS[src]) end
+  end
+  for z in keys(STORE_ZIG_TESTS) do
+    local n = zig_test_count(z)
+    if n ~= STORE_ZIG_TESTS[z] then fail(z .. " has " .. n .. " tests, and STORE_ZIG_TESTS says " .. STORE_ZIG_TESTS[z] .. ": port the new one to c/tests/store") end
+  end
+  for b in t.builds do
+    local phase = "store " .. b
+    local total = 0
+    for src in tests do
+      local r = nil
+      if b == "tcc" then
+        r = run_in(t, phase, {"tcc", "-std=c11", "-Wall", "-Werror", "-I" .. FOUNDATION, "-run", src}, {timeout_ms = 60000, tail = 40, want = HOST_WANT})
+        if not has_key(r, "code") then r = {code = -1, out = r.out .. "\n(" .. r.ended .. ")"} end
+      else
+        r = compile_and_run(t, phase, b, src, FOUNDATION, OUT .. "/store/" .. b .. "/" .. sub(basename(src), 1, #basename(src) - 2))
+      end
+      total = total + held_to_count(b, src, r)
+    end
+    print("store " .. b .. ": " .. total .. " tests in " .. #tests .. " files passed")
+  end
+  if not t.full then return nil end
+  local said = {}
+  local k = 0
+  for p in STORE_PLANTS do
+    k = k + 1
+    push(said, store_run_plant(t, p, k))
+  end
+  print("store plants: " .. #said .. " of " .. #STORE_PLANTS .. " caught")
+  for l in said do print(l) end
+  return nil
+end
+-- ── end of the store's block ─────────────────────────────────────────────
+
 -- ── The phases' times ───────────────────────────────────────────────────
 
 function seconds(ms)
@@ -985,6 +1092,7 @@ regex_block(t)
 command_block(t)
 vm_block(t)
 host_block(t)
+store_block(t)
 
 report_phases(t)
 if tcc == nil then
