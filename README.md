@@ -349,6 +349,9 @@ file. Each repo's gate runs it for its own docs (`-- only=<repo>`).
 sets how many sources the script fuzzer runs. Two more steps measure and
 are run by hand, by no tier: `zig build script-bench` (Shale's hot paths)
 and `zig build shale-scale` (the largest site each site example fits).
+`shale bench/baseline.shale` is the whole program's baseline, the runtime
+on an agent's workloads and the build's time, one TSV a run
+([bench/README.md](bench/README.md)).
 
 ## Docs
 

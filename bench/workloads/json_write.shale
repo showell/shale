@@ -1,0 +1,8 @@
+-- A bench workload (bench/baseline.shale): json_read.shale's parse, then
+-- the document written back to text twice. Its time less json_read's,
+-- halved, is one `json_write`.
+-- budget: read_bytes=2000000000 steps=100000000 arena_bytes=1500000000
+local doc = json_read(read("doc.json"))
+local a = json_write(doc)
+local b = json_write(doc)
+print("bench-ok " .. #doc.items .. " items, " .. #a .. " bytes, same " .. tostring(a == b))

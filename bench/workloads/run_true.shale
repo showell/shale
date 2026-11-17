@@ -1,0 +1,13 @@
+-- A bench workload (bench/baseline.shale): `true` run 200 times, so its
+-- time less the programs' is `run`'s own overhead. The last line is what
+-- the programs took, as `run` measured them.
+-- budget: programs=1000
+local ms = 0
+local cpu = 0
+for i = 1, 200 do
+  local r = must(run({"true"}, {timeout_ms = 10000, whole = 100}))
+  ms = ms + r.ms
+  cpu = cpu + r.cpu_ms
+end
+print("bench-ok 200 runs")
+print("bench-child " .. ms .. " " .. cpu)

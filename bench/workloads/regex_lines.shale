@@ -1,0 +1,8 @@
+-- A bench workload (bench/baseline.shale): `re_lines` over one large file,
+-- build:bench/inputs/big.txt (Shale's Zig sources, repeated past 16 MB),
+-- once for a pattern with hits and once for one with none.
+-- budget: read_bytes=2000000000 steps=100000000 arena_bytes=1500000000
+local text = read("big.txt")
+local hits = re_lines(text, "\\bfn [a-zA-Z_]+\\(")
+local none = re_lines(text, "zq[0-9]+qz")
+print("bench-ok " .. #text .. " bytes, " .. #hits .. " lines, " .. #none .. " none")

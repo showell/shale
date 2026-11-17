@@ -1,0 +1,32 @@
+# Shale's baseline (bench/baseline.shale): medians of each workload's repetitions, in ms
+# date	2026-11-17T13:07:24Z
+# clean	not clean
+# refused for	the 1-minute load is 0.69, over 0.30; heavy processes: chrome x19
+# load before	0.69 1.31 1.34
+# load after	2.39 2.46 2.63
+# heavy processes	chrome x19
+# idle shale reapers	1
+# cpu	DO-Premium-Intel
+# cores	2
+# kernel	6.8.0-138-generic
+# compiler	0.17.1+patched.3
+# source	repos:shale at 0e25229, dirty no
+# binary under test	build:bench/out/0e25229/release/prefix/bin/shale
+# inputs	build:bench/inputs: big.txt 17179440 bytes, doc.json 7504688 bytes
+workload	kind	reps	per	wall_ms	cpu_ms	shale_wall_ms	shale_cpu_ms	child_wall_ms	child_cpu_ms	wall_min_ms	wall_max_ms	clean	check
+build_release_cold	build	1	1 build	627393	444465					627393	627393	not clean	{zig} build --cache-dir {cache} --prefix {prefix}
+build_release_incremental	build	1	1 build	286532	193429					286532	286532	not clean	{zig} build --cache-dir {cache} --prefix {prefix}
+build_debug_cold	build	1	1 build	289829	247858					289829	289829	not clean	{zig} build script --cache-dir {cache} --prefix {prefix} -- -e print(1)
+build_debug_incremental	build	1	1 build	6807	5532					6807	6807	not clean	{zig} build script --cache-dir {cache} --prefix {prefix} -- -e print(1)
+build_test_cold	build	1	1 build	272854	261590					272854	272854	not clean	{zig} build quick --cache-dir {cache} --prefix {prefix}
+build_test_incremental	build	1	1 build	22192	22148					22192	22192	not clean	{zig} build quick --cache-dir {cache} --prefix {prefix}
+grep_literal	runtime	5	1 run	224	211	224	211	0	0	196	247	not clean	bench-ok 3266 files, 3705 hits
+grep_regex	runtime	5	1 run	448	407	448	407	0	0	414	532	not clean	bench-ok 3266 files, 6988 hits
+hunt_names	runtime	5	1 run	2400	2346	1773	1825	609	584	2232	2605	not clean	hunt_names (Roc): 435 files; state_effect 0, question 2, vague 0, name_type 0, negative 0, noun_effect 3, command_tense 0, mixed_tense 0, container 29, preposition_split 3, short_name 9, worker_name 2, stacked_preposition 0, taken_word 0, bare_participle 38, phrase_name 19, singular_list 259, world_verb 7, where_name 0
+edit_files	runtime	5	1 run	178	171	178	171	0	0	170	197	not clean	bench-ok 493 files, 8501 replaced
+regex_lines	runtime	5	1 run	114	112	114	112	0	0	111	124	not clean	bench-ok 17179440 bytes, 10730 lines, 0 none
+json_read	runtime	5	1 run	177	174	177	174	0	0	175	208	not clean	bench-ok 40000 items, 40000 last
+json_write	runtime	5	1 run	351	330	351	330	0	0	324	485	not clean	bench-ok 40000 items, 7504688 bytes, same true
+startup	runtime	5	50 launches	302	181	302	181	0	0	268	381	not clean	bench-ok 1
+run_true	runtime	5	1 run, 200 programs	185	166	22	166	164	0	163	197	not clean	bench-ok 200 runs
+interp_loop	runtime	5	1 run	359	342	359	342	0	0	338	373	not clean	bench-ok 3000003 total, 150235 bytes, 997 keys, 3600000 sum

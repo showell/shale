@@ -1,0 +1,522 @@
+-- Shale's speed, measured where it matters, so a rewrite can be judged
+-- against today's: the runtime on the workloads an agent's day is made of
+-- (bench/workloads/), and the build, cold and incremental, debug, release
+-- and the tests'. One TSV a run, under bench/baselines/, and a summary.
+-- bench/README.md says how to take the real baseline on a quiet box.
+--
+--   cd <shale> && shale bench/baseline.shale              # a dry run: "not clean"
+--   cd <shale> && shale bench/baseline.shale clean=1      # refused unless the box is quiet
+--
+-- The arguments, each with today's Zig Shale as its default, so another
+-- implementation is measured with these alone (values with spaces go on
+-- stdin, after `--args-stdin`):
+--   clean            1: refuse to run unless the box is quiet; 0 (the
+--                    default): run anyway, every result stamped "not clean";
+--   reps             each runtime workload's repetitions (5);
+--   part             all (the default), runtime or build;
+--   shale            the binary under test, a Shale path; "" (the default)
+--                    is the release build's own, so part=runtime needs one;
+--   src              the source under test, a git checkout (repos:shale),
+--                    built from a clone of its HEAD, never in place;
+--   siblings         checkouts cloned beside it, comma-separated
+--                    (repos:zig-webbox, which build.zig.zon names by path);
+--   zig              the compiler that {zig} names; "" is Shale's pin,
+--                    tools:zig-<src's zig-version>/zig;
+--   build_release, build_debug, build_test
+--                    the build commands, one argv split at spaces, with
+--                    {zig}, {src}, {cache}, {global} and {prefix} filled in:
+--                    {cache} and {global} are a cache folder of the build's
+--                    own, empty for a cold build, and {global} is also the
+--                    build's ZIG_GLOBAL_CACHE_DIR (Zig 0.17's `zig build`
+--                    has no flag for it);
+--   built            the release build's binary, under {prefix} (bin/shale);
+--   touch            the core file an incremental build changes, by one
+--                    comment line appended and then taken back;
+--   compiler_version the command that names the compiler ({zig} version).
+--
+-- A workload's time is a fresh process's, the binary under test running its
+-- script, from `run`'s `ms` and `cpu_ms` (CPU counts the children waited
+-- for). Each prints a `bench-ok` line that must be the same in every
+-- repetition and must equal what today's Zig Shale printed on the pinned
+-- inputs (EXPECT, below), so a workload that fails or answers wrong stops
+-- the run, and no TSV is written.
+--
+-- budget: programs=3000 steps=900000000 reads=300000 read_bytes=4000000000 arena_bytes=1500000000 changes=200000 change_bytes=4000000000 output_bytes=1000000
+
+-- The inputs, pinned so two runs months apart read the same bytes: each
+-- repo cloned at its revision under build:bench/inputs/repos.
+const PINS = {
+  {name = "shale", rev = "0e252294a8663dd517f568b21f1ed53ee7527569"},
+  {name = "roc-apps", rev = "ee2565dbddd45727feb1a451abebbee140ab69c2"},
+  {name = "angry-gopher", rev = "8484202308fa62a8308c31845d45ce2953c50a9b"},
+  {name = "zig-webbox", rev = "e90cc25b95c871fe2a9aba27970981c05dc2ee70"},
+  {name = "roc-chat", rev = "60b0c6b8e71ceb696e50c6955d837f3e206c021d"},
+  {name = "zig-metal-unikernel", rev = "6c04c6c05161f563cd694e9cbdc43790acaae01b"},
+  {name = "metal-vmm", rev = "5fa6796294a3f15b588615a16f7a2b3be7e67936"},
+}
+
+-- What each workload's `bench-ok` line says on the pinned inputs, as
+-- today's Zig Shale says it: the answer another build must give too.
+const EXPECT = {
+  grep_literal = "bench-ok 3266 files, 3705 hits",
+  grep_regex = "bench-ok 3266 files, 6988 hits",
+  hunt_names = "hunt_names (Roc): 435 files; state_effect 0, question 2, vague 0, name_type 0, negative 0, noun_effect 3, command_tense 0, mixed_tense 0, container 29, preposition_split 3, short_name 9, worker_name 2, stacked_preposition 0, taken_word 0, bare_participle 38, phrase_name 19, singular_list 259, world_verb 7, where_name 0",
+  edit_files = "bench-ok 493 files, 8501 replaced",
+  regex_lines = "bench-ok 17179440 bytes, 10730 lines, 0 none",
+  json_read = "bench-ok 40000 items, 40000 last",
+  json_write = "bench-ok 40000 items, 7504688 bytes, same true",
+  startup = "bench-ok 1",
+  run_true = "bench-ok 200 runs",
+  interp_loop = "bench-ok 3000003 total, 150235 bytes, 997 keys, 3600000 sum",
+}
+
+-- A process that makes a timing run noisy: a compiler, a runtime, a browser,
+-- another agent or another Shale.
+const HEAVY = {"zig", "roc", "roc-ast", "roc-types", "go-ast", "node", "shale", "cc", "cc1", "gcc", "clang", "ld", "ld.lld", "go", "rustc", "cargo", "chrome", "claude", "make"}
+
+-- The 1-minute load above which the box is not quiet, in hundredths.
+const QUIET_LOAD = 30
+
+const INPUTS = "build:bench/inputs"
+const BIG_TXT_BYTES = 16777216
+const JSON_ITEMS = 40000
+
+-- The middle of a list that is not empty, the lower of the two for an even
+-- count.
+function middle(list)
+  local s = sort(list)
+  return s[(#s + 1) // 2]
+end
+
+function smallest(list)
+  return sort(list)[1]
+end
+
+function largest(list)
+  local s = sort(list)
+  return s[#s]
+end
+
+-- A program's output, trimmed, which must exit 0.
+function said(argv, opts?)
+  local o = {timeout_ms = 60000}
+  if opts ~= nil then
+    for k in keys(opts) do o[k] = opts[k] end
+  end
+  if not has_key(o, "head") then o.whole = 100000 end
+  return trim(must(run(argv, o)).out)
+end
+
+-- `1.73` as 173.
+function hundredths(s)
+  local p = split(s, ".")
+  local whole = tonumber(p[1]) * 100
+  if #p == 1 then return whole end
+  local frac = sub(p[2] .. "00", 1, 2)
+  return whole + tonumber(frac)
+end
+
+-- **THE CLEAN-BOX CHECK**: the load, the heavy processes and what the box
+-- is, as `# key<TAB>value` lines, and the reasons it is not quiet.
+function box_state()
+  local up = said({"uptime"})
+  local m = re_find(up, "load average: ([0-9.]+), ([0-9.]+), ([0-9.]+)")
+  if m == nil then fail("baseline: no load average in `uptime`: " .. up) end
+  local load1 = hundredths(m.groups[1])
+  local by_name = {}
+  local reapers = 0
+  for p in procs() do
+    if has_item(HEAVY, p.name) then
+      if p.name == "shale" and contains(p.args, "--reap") then
+        reapers = reapers + 1
+      else
+        incr(by_name, p.name)
+      end
+    end
+  end
+  local busy = {}
+  for k in sort(keys(by_name)) do push(busy, k .. " x" .. by_name[k]) end
+  local reasons = {}
+  if load1 > QUIET_LOAD then push(reasons, "the 1-minute load is " .. m.groups[1] .. ", over 0." .. QUIET_LOAD) end
+  if #busy > 0 then push(reasons, "heavy processes: " .. join(busy, ", ")) end
+  local model = said({"lscpu"}, {head = 200, re = "^Model name:"})
+  return {
+    load = m.groups[1] .. " " .. m.groups[2] .. " " .. m.groups[3],
+    load1 = load1,
+    busy = join(busy, ", "),
+    reapers = reapers,
+    reasons = reasons,
+    cpu = trim(sub(model, #"Model name:" + 1)),
+    cores = said({"nproc"}),
+    kernel = said({"uname", "-r"}),
+  }
+end
+
+-- A command line's argv, its placeholders filled in.
+function command(cmd, fill)
+  local argv = {}
+  for w in words(cmd) do
+    local v = w
+    for k in keys(fill) do
+      if contains(v, "{" .. k .. "}") then v = substitute(v, "{" .. k .. "}", fill[k]) end
+    end
+    push(argv, v)
+  end
+  return argv
+end
+
+-- The last part of a path, a mount's included: `repos:zig-webbox` is
+-- `zig-webbox`.
+function last_name(p)
+  local parts = split(substitute(p, ":", "/"), "/")
+  return parts[#parts]
+end
+
+function git_rev(repo)
+  return said({"git", "-C", real(repo), "rev-parse", "HEAD"})
+end
+
+-- `from` cloned at `rev` to `to`, or `to` kept when it is that clone,
+-- untouched; anything else there is cloned again.
+function clone_at(from, rev, to)
+  if exists(to) then
+    if git_rev(to) == rev and git_is_clean(to) then return "kept" end
+    remove_tree(to)
+  end
+  mkdir(dirname(to))
+  said({"git", "clone", "--quiet", "--no-checkout", real(from), real(dirname(to)) .. "/" .. last_name(to)}, {timeout_ms = 600000})
+  said({"git", "-C", real(to), "checkout", "--quiet", "--detach", rev}, {timeout_ms = 600000})
+  return "cloned"
+end
+
+function replace_or_create(p, text)
+  if exists(p) then
+    replace(p, text)
+  else
+    create(p, text)
+  end
+end
+
+-- **THE INPUTS**, made once and kept: the pinned repos, the mounts the
+-- workloads run with, one large text file and one JSON document.
+function make_inputs()
+  for p in PINS do clone_at("repos:" .. p.name, p.rev, INPUTS .. "/repos/" .. p.name) end
+  local mounts = "cookbook = " .. real(INPUTS .. "/repos/shale/cookbook") .. " ro\n" .. "tools = " .. real("tools:") .. " ro tools\n"
+  local mp = INPUTS .. "/mounts"
+  if not exists(mp) or read(mp) ~= mounts then replace_or_create(mp, mounts) end
+  local big = INPUTS .. "/big.txt"
+  if not exists(big) then
+    local srcs = sort(glob(INPUTS .. "/repos/shale/src/**/*.zig"))
+    local parts = {}
+    local n = 0
+    while n < BIG_TXT_BYTES do
+      for p in srcs do
+        local t = read(p)
+        push(parts, t)
+        n = n + #t
+      end
+    end
+    create(big, join(parts, ""))
+  end
+  local doc = INPUTS .. "/doc.json"
+  if not exists(doc) then
+    local items = {}
+    for i = 1, JSON_ITEMS do
+      push(items, {
+        id = i,
+        name = "item-" .. i,
+        path = "src/dir" .. (i % 97) .. "/file" .. i .. ".zig",
+        tags = {"t" .. (i % 7), "t" .. (i % 11), "t" .. (i % 13)},
+        lines = (i * 37) % 5000,
+        owner = {name = "user" .. (i % 13), active = i % 2 == 0, note = "a \"quoted\" note\twith a tab, " .. i},
+      })
+    end
+    create(doc, json_write({version = 1, items = items}))
+  end
+  return {big = stat(big).size, doc = stat(doc).size}
+end
+
+-- The line of a workload's output that says what it found, which must be
+-- there: `bench-ok ...`, or a recipe's own summary (`ok` its start).
+function ok_line(w, out)
+  local start = get(w, "ok", "bench-ok")
+  for l in lines(out) do
+    if starts_with(l, start) then return l end
+  end
+  fail("baseline: " .. w.name .. " printed no line starting `" .. start .. "`; its last lines:\n" .. out)
+end
+
+-- One launch of the binary under test on a workload: its `run` answer,
+-- stopped on anything but exit 0.
+function launch(cfg, w)
+  local argv = {cfg.bin}
+  if get(w, "verbose", false) then push(argv, "--verbose") end
+  push(argv, real(get(w, "script", "bench/workloads/" .. w.name .. ".shale")))
+  local r = run(argv, {cwd = w.cwd, timeout_ms = 900000, tail = 40, width = 10000, env = cfg.env, want = "bench: the shale under test, by its path"})
+  if r.ended ~= "exit" or r.code ~= 0 then
+    fail("baseline: workload " .. w.name .. " ended " .. r.ended .. " " .. get(r, "code", "") .. ", so no time is recorded; its last lines:\n" .. r.out)
+  end
+  return r
+end
+
+-- The edits' scratch copy, fresh: Shale's src and cookbook at its pin.
+function fresh_edit_copy()
+  local d = "build:bench/scratch/edits"
+  if exists(d) then remove_tree(d) end
+  mkdir(d)
+  copy(INPUTS .. "/repos/shale/src", d .. "/src")
+  copy(INPUTS .. "/repos/shale/cookbook", d .. "/cookbook")
+end
+
+-- What the programs a `--verbose` run ran took, from its `── ran ──`
+-- lines: `run ... -> exit 0 (1161 ms)`.
+function ran_ms(out)
+  local ms = 0
+  for l in lines(out) do
+    local m = re_find(l, "^run .* \\(([0-9]+) ms\\)$")
+    if m ~= nil then ms = ms + tonumber(m.group) end
+  end
+  return ms
+end
+
+-- roc-ast alone over hunt_names's files, as the hunt runs it, so the
+-- hunt's own CPU is its whole less this.
+function roc_ast_alone(cwd)
+  local reals = {}
+  for p in sort(glob(cwd .. "/**/*.roc")) do push(reals, real(p)) end
+  local r = must(run({real("tools:roc-ast/bin/roc-ast"), "--flat"}, {stdin = join(reals, "\n"), timeout_ms = 300000, tail = 1}))
+  return r
+end
+
+-- **ONE RUNTIME WORKLOAD**, `reps` times: a row of medians.
+function time_runtime(cfg, w)
+  local walls = {}
+  local cpus = {}
+  local cwalls = {}
+  local ccpus = {}
+  local own_walls = {}
+  local own_cpus = {}
+  local check = ""
+  for rep = 1, cfg.reps do
+    if get(w, "setup", "") == "edits" then fresh_edit_copy() end
+    local ms = 0
+    local cpu = 0
+    local cms = 0
+    local ccpu = 0
+    for i = 1, w.launches do
+      local r = launch(cfg, w)
+      local got = ok_line(w, r.out)
+      if check == "" then check = got end
+      if got ~= check then fail("baseline: " .. w.name .. " said `" .. got .. "`, and before that `" .. check .. "`") end
+      ms = ms + r.ms
+      cpu = cpu + r.cpu_ms
+      if w.child == "script" then
+        local m = re_find(r.out, "bench-child ([0-9]+) ([0-9]+)")
+        if m == nil then fail("baseline: " .. w.name .. " printed no bench-child line") end
+        cms = cms + tonumber(m.groups[1])
+        ccpu = ccpu + tonumber(m.groups[2])
+      elseif w.child == "roc-ast" then
+        cms = cms + ran_ms(r.out)
+        if cms == 0 then fail("baseline: " .. w.name .. "'s --verbose output named no program it ran") end
+        ccpu = ccpu + roc_ast_alone(w.cwd).cpu_ms
+      end
+    end
+    push(walls, ms)
+    push(cpus, cpu)
+    push(cwalls, cms)
+    push(ccpus, ccpu)
+    push(own_walls, ms - cms)
+    push(own_cpus, cpu - ccpu)
+  end
+  local want = get(EXPECT, w.name, "")
+  if want ~= "" and check ~= want then
+    fail("baseline: " .. w.name .. " said `" .. check .. "`, and today's Zig Shale says `" .. want .. "` on these inputs")
+  end
+  return {
+    workload = w.name, kind = "runtime", reps = cfg.reps, per = w.per,
+    wall_ms = middle(walls), cpu_ms = middle(cpus),
+    shale_wall_ms = middle(own_walls), shale_cpu_ms = middle(own_cpus),
+    child_wall_ms = middle(cwalls), child_cpu_ms = middle(ccpus),
+    wall_min_ms = smallest(walls), wall_max_ms = largest(walls), check = check,
+  }
+end
+
+-- **ONE BUILD**, cold then incremental, each its own row: the cold one in an
+-- empty cache of its own, the incremental one in the same cache after the
+-- core file gains a comment line, taken back after.
+function time_build(cfg, mode, cmd)
+  local base = "build:bench/out/" .. cfg.commit .. "/" .. mode
+  local cache = base .. "/cache"
+  if exists(cache) then remove_tree(cache) end
+  mkdir(cache .. "/local")
+  mkdir(cache .. "/global")
+  mkdir(base .. "/prefix")
+  local fill = {src = real(cfg.src_clone), cache = real(cache .. "/local"), global = real(cache .. "/global"), prefix = real(base .. "/prefix")}
+  if contains(cmd, "{zig}") then fill.zig = real(cfg.zig) end
+  local argv = command(cmd, fill)
+  local rows = {}
+  for phase in {"cold", "incremental"} do
+    local touched = cfg.src_clone .. "/" .. cfg.touch
+    local before = read(touched)
+    if phase == "incremental" then append(touched, "\n// bench: one change, for an incremental build\n") end
+    local r = run(argv, {cwd = cfg.src_clone, timeout_ms = 3600000, tail = 30, env = {ZIG_GLOBAL_CACHE_DIR = fill.global}, want = "bench: the build under test"})
+    if phase == "incremental" then replace(touched, before) end
+    if r.ended ~= "exit" or r.code ~= 0 then
+      fail("baseline: the " .. mode .. " build (" .. phase .. ") ended " .. r.ended .. " " .. get(r, "code", "") .. ", so no time is recorded: " .. join(argv, " ") .. "\n" .. r.out)
+    end
+    print("build " .. mode .. " " .. phase .. ": " .. r.ms .. " ms, " .. r.cpu_ms .. " ms CPU")
+    push(rows, {
+      workload = "build_" .. mode .. "_" .. phase, kind = "build", reps = 1, per = "1 build",
+      wall_ms = r.ms, cpu_ms = r.cpu_ms, shale_wall_ms = "", shale_cpu_ms = "",
+      child_wall_ms = "", child_cpu_ms = "", wall_min_ms = r.ms, wall_max_ms = r.ms, check = cmd,
+    })
+  end
+  remove_tree(cache)
+  return rows
+end
+
+-- The runtime workloads: each one's script, where it runs, what one sample
+-- of it is, and whose time is not Shale's.
+function runtime_workloads()
+  local repos = INPUTS .. "/repos"
+  return {
+    {name = "grep_literal", cwd = repos, per = "1 run", launches = 1, child = "none"},
+    {name = "grep_regex", cwd = repos, per = "1 run", launches = 1, child = "none"},
+    -- The recipe itself, at the pin: its summary line is its answer.
+    {name = "hunt_names", cwd = repos .. "/roc-apps", per = "1 run", launches = 1, child = "roc-ast", verbose = true,
+      script = repos .. "/shale/cookbook/roc/hunt_names.shale", ok = "hunt_names (Roc):"},
+    {name = "edit_files", cwd = "build:bench/scratch/edits", per = "1 run", launches = 1, child = "none", setup = "edits"},
+    {name = "regex_lines", cwd = INPUTS, per = "1 run", launches = 1, child = "none"},
+    {name = "json_read", cwd = INPUTS, per = "1 run", launches = 1, child = "none"},
+    {name = "json_write", cwd = INPUTS, per = "1 run", launches = 1, child = "none"},
+    {name = "startup", cwd = INPUTS, per = "50 launches", launches = 50, child = "none"},
+    {name = "run_true", cwd = INPUTS, per = "1 run, 200 programs", launches = 1, child = "script"},
+    {name = "interp_loop", cwd = INPUTS, per = "1 run", launches = 1, child = "none"},
+  }
+end
+
+const COLUMNS = {"workload", "kind", "reps", "per", "wall_ms", "cpu_ms", "shale_wall_ms", "shale_cpu_ms", "child_wall_ms", "child_cpu_ms", "wall_min_ms", "wall_max_ms", "clean", "check"}
+
+-- ── the run ──
+
+local clean = arg("clean", 0)
+if clean ~= 0 and clean ~= 1 then fail("baseline: clean=" .. clean .. ": 0 or 1") end
+local part = arg("part", "all")
+if part ~= "all" and part ~= "runtime" and part ~= "build" then fail("baseline: part=" .. part .. ": all, runtime or build") end
+local reps = arg("reps", 5)
+if reps < 1 then fail("baseline: reps=" .. reps .. ": at least 1") end
+local src = arg("src", "repos:shale")
+local zig_arg = arg("zig", "")
+local cfg = {
+  reps = reps,
+  src = src,
+  touch = arg("touch", "src/script/interp.zig"),
+  env = {SHALE_MOUNTS = "", SHALE_PRELUDE = ""},
+}
+local shale_arg = arg("shale", "")
+local built = arg("built", "bin/shale")
+local builds = {
+  {mode = "release", cmd = arg("build_release", "{zig} build --cache-dir {cache} --prefix {prefix}")},
+  {mode = "debug", cmd = arg("build_debug", "{zig} build script --cache-dir {cache} --prefix {prefix} -- -e print(1)")},
+  {mode = "test", cmd = arg("build_test", "{zig} build quick --cache-dir {cache} --prefix {prefix}")},
+}
+local version_cmd = arg("compiler_version", "{zig} version")
+if part == "runtime" and shale_arg == "" then fail("baseline: part=runtime measures a binary already built: name it, shale=<path>") end
+
+-- The box first: a clean run on a busy box is refused before anything runs.
+local box = box_state()
+local stamp = "not clean"
+if #box.reasons > 0 then
+  print("── the box is not quiet: " .. join(box.reasons, "; "))
+  if clean == 1 then fail("baseline: clean=1 refused: " .. join(box.reasons, "; ") .. " (bench/README.md: taking the real baseline)") end
+elseif clean == 1 then
+  stamp = "clean"
+else
+  print("── the box is quiet, but clean=0: every result is stamped \"not clean\"")
+end
+
+cfg.commit = said({"git", "-C", real(src), "rev-parse", "--short", "HEAD"})
+local dirty = "no"
+if not git_is_clean(src) then dirty = "yes" end
+if zig_arg == "" and exists(src .. "/zig-version") then zig_arg = "tools:zig-" .. trim(read(src .. "/zig-version")) .. "/zig" end
+cfg.zig = zig_arg
+local vfill = {}
+if contains(version_cmd, "{zig}") then
+  if zig_arg == "" then fail("baseline: the compiler's version names {zig}, and there is no zig=") end
+  vfill.zig = real(zig_arg)
+end
+local compiler = said(command(version_cmd, vfill), {want = "bench: the compiler under test"})
+
+local sizes = make_inputs()
+cfg.env = {SHALE_MOUNTS = real(INPUTS .. "/mounts"), SHALE_PRELUDE = ""}
+
+local rows = {}
+if part ~= "runtime" then
+  -- The source, cloned at its HEAD with its siblings beside it, so the
+  -- build reads only committed code and the checkout is never touched.
+  local srcdir = "build:bench/src/" .. cfg.commit
+  cfg.src_clone = srcdir .. "/" .. last_name(src)
+  clone_at(src, git_rev(src), cfg.src_clone)
+  for s in split(arg("siblings", "repos:zig-webbox"), ",") do
+    if trim(s) ~= "" then clone_at(trim(s), git_rev(trim(s)), srcdir .. "/" .. last_name(trim(s))) end
+  end
+  for b in builds do
+    for row in time_build(cfg, b.mode, b.cmd) do push(rows, row) end
+  end
+end
+
+if shale_arg == "" then
+  cfg.bin_path = "build:bench/out/" .. cfg.commit .. "/release/prefix/" .. built
+else
+  cfg.bin_path = shale_arg
+end
+if part ~= "build" then
+  if not exists(cfg.bin_path) then fail("baseline: no binary under test at " .. cfg.bin_path) end
+  cfg.bin = real(cfg.bin_path)
+  for w in runtime_workloads() do
+    local row = time_runtime(cfg, w)
+    print(w.name .. ": " .. row.wall_ms .. " ms, " .. row.cpu_ms .. " ms CPU (" .. row.check .. ")")
+    push(rows, row)
+  end
+end
+
+local after = box_state()
+local day = sub(date(now()), 1, 10)
+local flag = "notclean"
+if stamp == "clean" then flag = "clean" end
+local out_path = "bench/baselines/" .. day .. "-" .. cfg.commit .. "-" .. flag .. ".tsv"
+local head = {
+  "# Shale's baseline (bench/baseline.shale): medians of each workload's repetitions, in ms",
+  "# date\t" .. date(now()),
+  "# clean\t" .. stamp,
+  "# refused for\t" .. (#box.reasons == 0 and "nothing" or join(box.reasons, "; ")),
+  "# load before\t" .. box.load,
+  "# load after\t" .. after.load,
+  "# heavy processes\t" .. (box.busy == "" and "none" or box.busy),
+  "# idle shale reapers\t" .. box.reapers,
+  "# cpu\t" .. box.cpu,
+  "# cores\t" .. box.cores,
+  "# kernel\t" .. box.kernel,
+  "# compiler\t" .. compiler,
+  "# source\t" .. src .. " at " .. cfg.commit .. ", dirty " .. dirty,
+  "# binary under test\t" .. cfg.bin_path,
+  "# inputs\t" .. INPUTS .. ": big.txt " .. sizes.big .. " bytes, doc.json " .. sizes.doc .. " bytes",
+  join(COLUMNS, "\t"),
+}
+local body = {}
+for row in rows do
+  local f = {}
+  for c in COLUMNS do
+    if c == "clean" then push(f, stamp) else push(f, tostring(row[c])) end
+  end
+  push(body, join(f, "\t"))
+end
+replace_or_create(out_path, join(head, "\n") .. "\n" .. join(body, "\n") .. "\n")
+
+print("")
+print("── " .. out_path .. " (" .. stamp .. "; load " .. box.load .. " before, " .. after.load .. " after)")
+local summary = {}
+for row in rows do
+  push(summary, {workload = row.workload, per = row.per, wall_ms = row.wall_ms, cpu_ms = row.cpu_ms, shale_cpu_ms = row.shale_cpu_ms, child_cpu_ms = row.child_cpu_ms})
+end
+print(table(summary, {"workload", "per", "wall_ms", "cpu_ms", "shale_cpu_ms", "child_cpu_ms"}))

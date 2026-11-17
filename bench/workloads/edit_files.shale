@@ -1,0 +1,13 @@
+-- A bench workload (bench/baseline.shale): every file of a scratch copy of
+-- Shale's src and cookbook that holds the word `the` has it renamed, in one
+-- `edits_all`, so the files are read, checked and written together. It
+-- runs in a fresh copy each time (build:bench/scratch/edits).
+-- budget: reads=100000 changes=100000 change_bytes=500000000 read_bytes=2000000000 steps=900000000 arena_bytes=1500000000 output_bytes=4000000
+local list = {}
+for e in walk_all(".", {kind = "file"}) do
+  if re_find(read(e.path), "\\bthe\\b") ~= nil then
+    push(list, {e.path, {{old = "the", new = "thy", all = true, word = true}}})
+  end
+end
+local n = edits_all(list)
+print("bench-ok " .. #list .. " files, " .. n .. " replaced")

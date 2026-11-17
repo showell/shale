@@ -1,0 +1,3 @@
+-- A bench workload (bench/baseline.shale): nothing, so its time is the
+-- launch, the reading of the prelude and the mounts, and the exit.
+print("bench-ok 1")

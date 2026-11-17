@@ -1,0 +1,16 @@
+-- A bench workload (bench/baseline.shale): the interpreter alone, with no
+-- I/O: a loop of arithmetic, string building and a map's reads and writes.
+-- budget: steps=200000000 arena_bytes=1500000000
+local m = {}
+local parts = {}
+local total = 0
+for i = 1, 600000 do
+  local k = "k" .. (i % 997)
+  m[k] = get(m, k, 0) + i % 13
+  total = total + (i * 7) % 11
+  if i % 50 == 0 then push(parts, k .. ":" .. total) end
+end
+local s = join(parts, ",")
+local sum = 0
+for k in keys(m) do sum = sum + m[k] end
+print("bench-ok " .. total .. " total, " .. #s .. " bytes, " .. #keys(m) .. " keys, " .. sum .. " sum")

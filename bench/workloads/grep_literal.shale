@@ -1,0 +1,13 @@
+-- A bench workload (bench/baseline.shale): a literal searched for across
+-- the pinned snapshot of seven repos, a few thousand files, as an agent's
+-- `grep -rn` is. It runs in build:bench/inputs/repos.
+-- budget: reads=200000 read_bytes=2000000000 steps=400000000 arena_bytes=1500000000
+const REPOS = {"shale", "roc-apps", "angry-gopher", "zig-webbox", "roc-chat", "zig-metal-unikernel", "metal-vmm"}
+local files = 0
+local hits = 0
+for d in REPOS do
+  local g = grep_tree(d, "error", {most = 10000000})
+  files = files + g.files
+  hits = hits + #g.hits
+end
+print("bench-ok " .. files .. " files, " .. hits .. " hits")
