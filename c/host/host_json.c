@@ -15,7 +15,7 @@
 // say more.
 enum {
     JSON_DEPTH_DEFAULT = 64,
-    JSON_DEPTH_MOST = 512,
+    JSON_DEPTH_MAX = 512,
 };
 
 // A text being read.
@@ -429,7 +429,7 @@ static STATUS_MUST_USE Status json_array(JsonReader *jr, Value *out) {
 // One value, `null` given back as nil for the caller to place. A step is
 // charged for each.
 // DRAGON: the process's stack. Each array or object nests a call of this.
-// REMEDY: `json_enter` refuses past `depth`, at most JSON_DEPTH_MOST (512),
+// REMEDY: `json_enter` refuses past `depth`, at most JSON_DEPTH_MAX (512),
 // before the call that would nest; a frame here is a few hundred bytes.
 static STATUS_MUST_USE Status json_value(JsonReader *jr, Value *out) {
     json_skip_space(jr);
@@ -482,7 +482,7 @@ static STATUS_MUST_USE Status json_read_options(Run *r, Pos pos, const Value *op
             if (x.tag != VALUE_INT) return run_failf(r, pos, CLASS_TYPE, "`json_read`'s `{s}` is an integer, not {s}", S("`json_read`'s `"), key, S("` is an integer, not "), value_type_name(&x));
             int64_t n = x.as.integer;
             if (str_eq(key, S("depth"))) {
-                if (n < 1 || n > JSON_DEPTH_MOST) return run_failf(r, pos, CLASS_ARGUMENT, "`json_read`'s `depth` is 1 to {d}, not {d}", S("`json_read`'s `depth` is 1 to 512, not "), run_num(r, n));
+                if (n < 1 || n > JSON_DEPTH_MAX) return run_failf(r, pos, CLASS_ARGUMENT, "`json_read`'s `depth` is 1 to {d}, not {d}", S("`json_read`'s `depth` is 1 to 512, not "), run_num(r, n));
                 jr->depth_left = (size_t)n;
             } else {
                 if (n < 0 || (uint64_t)n > cap) {
@@ -557,7 +557,7 @@ static STATUS_MUST_USE Status json_emit_string(Run *r, Pos pos, Buf *b, Str s) {
 // `v` as compact JSON onto `b`, a step a value.
 // DRAGON: the process's stack. Each table nests a call of this, and a table
 // can hold itself.
-// REMEDY: `depth_left` starts at JSON_DEPTH_MOST, one less a level, and a
+// REMEDY: `depth_left` starts at JSON_DEPTH_MAX, one less a level, and a
 // table reached with none left is refused before it nests another call.
 static STATUS_MUST_USE Status json_emit(Run *r, Pos pos, Buf *b, const Value *v, size_t depth_left) {
     TRY(run_charge(r, pos, 1));
@@ -603,7 +603,7 @@ static STATUS_MUST_USE Status json_emit(Run *r, Pos pos, Buf *b, const Value *v,
 static STATUS_MUST_USE Status host_json_write(Run *r, Pos pos, ConstValues args, Value *out) {
     if (args.len != 1) return run_failf(r, pos, CLASS_ARGUMENT, "`json_write` takes one value, given {d}", S("`json_write` takes one value, given "), run_unum(r, args.len));
     Buf b = buf_make(r->ctx.values);
-    TRY(json_emit(r, pos, &b, &at(args, 0), JSON_DEPTH_MOST));
+    TRY(json_emit(r, pos, &b, &at(args, 0), JSON_DEPTH_MAX));
     TRY(builtin_charge_bytes(r, pos, b.len));
     value_string(out, buf_view(&b));
     return OK;
