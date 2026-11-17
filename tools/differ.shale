@@ -2,8 +2,9 @@
 -- under two binaries and compared from the outside, so a new Shale (the C
 -- rewrite) is judged against today's Zig Shale, the oracle. The language is
 -- frozen byte for byte, so anything that differs is a failure, but for the
--- `── time:` line, which is let go whole, and the arena's numbers, which are
--- outside the frozen surface (docs/C-SEAMS.md, "Fidelity").
+-- `── time:` line, which is let go whole, `fresh_dir`'s random names, which
+-- are masked (`fresh_mask`), and the arena's numbers, which are outside the
+-- frozen surface (docs/C-SEAMS.md, "Fidelity").
 --
 --   cd <shale> && shale tools/differ.shale old=<path> new=<path>
 --
@@ -489,6 +490,82 @@ function side_dir(id, side)
   return KEEP .. "/" .. id .. "/" .. side
 end
 
+-- ── `fresh_dir`'s names ──
+--
+-- The Linux prelude's `fresh_dir(parent, prefix)` names a folder
+-- `<prefix>.XXXXXX`, mktemp's six random characters from [A-Za-z0-9]
+-- (src/shale_prelude_linux.shale). Before comparing, each such name is
+-- masked as `<prefix>.<fresh N>`, N counting the names in the order they
+-- first appear in one side's run (each step's stdout and stderr, then the
+-- files' paths and bytes), so two folders stay two and the same folder is
+-- the same placeholder throughout. Only the prefixes the input's own source
+-- passes `fresh_dir` as string literals are masked.
+
+-- The prefixes `text` passes `fresh_dir` as string literals.
+function fresh_prefixes(text)
+  local out = {}
+  if not contains(text, "fresh_dir(") then return out end
+  for m in re_find_all(text, "fresh_dir\\([^,()]*,\\s*\"([A-Za-z0-9_][A-Za-z0-9_-]*)\"\\)") do
+    if not has_item(out, m.group) then push(out, m.group) end
+  end
+  return out
+end
+
+function fresh_map(prefixes)
+  return {prefixes = prefixes, names = {}, order = {}, n = 0}
+end
+
+-- `s` with every `fresh_dir` name of `fm`'s prefixes masked, a new name
+-- numbered as it is met.
+function fresh_mask(s, fm)
+  if #fm.prefixes == 0 then return s end
+  for p in fm.prefixes do
+    for m in re_find_all(s, "\\b" .. p .. "\\.[A-Za-z0-9]{6}\\b") do
+      if not has_key(fm.names, m.text) then
+        fm.n = fm.n + 1
+        fm.names[m.text] = p .. ".<fresh " .. fm.n .. ">"
+        push(fm.order, m.text)
+      end
+    end
+  end
+  local out = s
+  for name in fm.order do out = substitute(out, name, fm.names[name], {missing_ok = true}) end
+  return out
+end
+
+-- A side's manifest with its `fresh_dir` names masked, sorted again by the
+-- masked line (a random name sorts anywhere among its neighbours): each
+-- entry `{masked, path, kind}`, `path` the file's own.
+function masked_manifest(d, fm)
+  local out = {}
+  for l in lines(read(d .. "/manifest")) do
+    local f = split(l, "\t")
+    push(out, {masked = fresh_mask(l, fm), path = f[1], kind = get(f, 2, "")})
+  end
+  sort(out, "masked")
+  return out
+end
+
+-- The files of two trees whose paths hold `fresh_dir` names, compared file
+-- by file with the names masked: the masked manifests matched, so the n-th
+-- file of one is the n-th of the other.
+function differ_fresh_files(dx, dy, ex, ey, fx, fy)
+  for i = 1, #ex do
+    if ex[i].kind == "f" then
+      local d = first_diff(fresh_mask(read(dx .. "/tree/" .. ex[i].path), fx), fresh_mask(read(dy .. "/tree/" .. ey[i].path), fy), EXACT)
+      if d ~= nil then return {what = "file " .. fresh_mask(ex[i].path, fx), where = "line " .. d.line, a = d.a, b = d.b} end
+    end
+  end
+  return nil
+end
+
+-- The masked lines of a masked manifest, as one text.
+function manifest_text(entries)
+  local l = {}
+  for e in entries do push(l, e.masked) end
+  return join(l, "\n") .. "\n"
+end
+
 -- How two sides of one input differ, or nil: the first difference, in the
 -- order a step's ending, stdout, stderr, then the files. `judge` is
 -- `normal_lines`'s.
@@ -497,12 +574,15 @@ function differ_sides(inp, x, y, judge)
   local dy = side_dir(inp.id, y)
   local mx = lines(read(dx .. "/meta"))
   local my = lines(read(dy .. "/meta"))
+  local prefixes = fresh_prefixes(read(inp.text_path))
+  local fx = fresh_map(prefixes)
+  local fy = fresh_map(prefixes)
   for k = 1, #inp.steps do
     local s = ""
     if #inp.steps > 1 then s = " (step " .. k .. ")" end
     if mx[k] ~= my[k] then return {what = "exit" .. s, where = "", a = mx[k], b = my[k]} end
     for stream in {"out", "err"} do
-      local d = first_diff(read(dx .. "/" .. k .. "." .. stream), read(dy .. "/" .. k .. "." .. stream), judge)
+      local d = first_diff(fresh_mask(read(dx .. "/" .. k .. "." .. stream), fx), fresh_mask(read(dy .. "/" .. k .. "." .. stream), fy), judge)
       if d ~= nil then
         local what = "std" .. stream
         if starts_with(d.a, "── used:") or starts_with(d.b, "── used:") then what = "used" end
@@ -512,9 +592,12 @@ function differ_sides(inp, x, y, judge)
   end
   local left = #inp.steps + 1
   if mx[left] ~= my[left] then return {what = "left running", where = "", a = mx[left], b = my[left]} end
-  local man = first_diff(read(dx .. "/manifest"), read(dy .. "/manifest"), EXACT)
+  local ex = masked_manifest(dx, fx)
+  local ey = masked_manifest(dy, fy)
+  local man = first_diff(manifest_text(ex), manifest_text(ey), EXACT)
   if man ~= nil then return {what = "files", where = "entry " .. man.line, a = man.a, b = man.b} end
   if #grep(dx .. "/manifest", "\tf\t") == 0 then return nil end
+  if fx.n > 0 or fy.n > 0 then return differ_fresh_files(dx, dy, ex, ey, fx, fy) end
   local r = run({"diff", "-rq", "--no-dereference", real(dx) .. "/tree", real(dy) .. "/tree"}, {timeout_ms = 120000, head = 3})
   if r.code == 0 then return nil end
   local first = lines(r.out)[1]

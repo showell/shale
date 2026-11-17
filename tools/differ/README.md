@@ -84,15 +84,20 @@ a copy of Shale with one message changed, run it as `new`, and predict the
 original text. The report counts the inputs that failed as predicted, the
 ones predicted that passed, and the ones that failed without a prediction.
 
-## What the oracle does not repeat
+## What the oracle does not repeat, and how it is judged anyway
 
-One cause makes inputs nondeterministic under today's Zig Shale alone, so
-the harness cannot judge those inputs:
+Two things today's Zig Shale does not repeat from one run to the next, and
+how the harness lets each go, so the inputs they touch are still judged:
 
-- **`fresh_dir`'s random names** (`mktemp`'s `XXXXXX`), which five cookbook
-  self-tests print or leave on disk: remove_lane, retire_checkout,
-  rewrite_method_calls, survey_repos and zig/check_const_unchanged.
-The `── time:` line was a third (roc/check_foreign_code,
-rewrite_method_calls), until the harness let it go whole: it appears only
-past a second spent in programs and names the slowest three in the order of
-their times.
+- **`fresh_dir`'s random names.** The Linux prelude names its folder
+  `<prefix>.XXXXXX`, mktemp's six characters from `[A-Za-z0-9]`. For the
+  prefixes an input's source passes `fresh_dir` as string literals, each
+  such name is masked as `<prefix>.<fresh N>` in stdout, stderr, the files'
+  paths and their bytes, N counting the names in the order one run first
+  shows them, so two folders stay two. Five cookbook self-tests were
+  unjudged for it: remove_lane, retire_checkout, rewrite_method_calls,
+  survey_repos and zig/check_const_unchanged.
+- **The `── time:` line.** It appears only past a second spent in programs
+  and names the slowest three in the order of their times, so it is let go
+  whole (roc/check_foreign_code and rewrite_method_calls were unjudged for
+  it on some runs).
