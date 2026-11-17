@@ -532,7 +532,8 @@ static Str vm_for_what(uint32_t a) {
 
 // An operator on two integers, its answer in `*out`: false when it has
 // none here (an overflow, a zero divisor, a `== nil`), for vm_binary to
-// give it or its stop.
+// give it or its stop, `*out` then untouched. `out` may be where `a` was:
+// both are read first.
 static inline RUN_HOT bool vm_binary_int(BinOp bop, int64_t a, int64_t b, Value *out) {
     int64_t got = 0;
     switch (bop) {
@@ -793,13 +794,12 @@ static STATUS_MUST_USE Status vm_run(Machine *m) {
                 size_t n = m->operands.len;
                 Value *lv = &at(m->operands, n - 2);
                 const Value *rv = &at(m->operands, n - 1);
-                if (lv->tag == VALUE_INT && rv->tag == VALUE_INT) {
-                    Value got;
-                    if (vm_binary_int((BinOp)op->a, lv->as.integer, rv->as.integer, &got)) {
-                        *lv = got;
-                        m->operands.len = n - 1;
-                        break;
-                    }
+                // The answer is written over the left operand, field by field:
+                // a Value made on the stack and copied whole costs a stalled
+                // load, its 16-byte read of two smaller writes.
+                if (lv->tag == VALUE_INT && rv->tag == VALUE_INT && vm_binary_int((BinOp)op->a, lv->as.integer, rv->as.integer, lv)) {
+                    m->operands.len = n - 1;
+                    break;
                 }
                 s = vm_binary(m, op);
                 break;
