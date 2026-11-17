@@ -432,7 +432,7 @@ typedef struct {
     Run *r;
     Pos pos;
     Str who;
-    Str room[ZIG_WIRE_FIELDS_MOST];
+    Str room[ZIG_WIRE_FIELDS_MAX];
     // The line `host_zig_next` gave last.
     ZigWireFields l;
 } HostZigAnswer;
@@ -470,7 +470,7 @@ static STATUS_MUST_USE Status host_zig_ask(Paths *h, Arena *sa, Run *r, Pos pos,
 // The next line's fields into `an->l`, `*got` false at the answer's end: a
 // `bad` line, or one that does not read, stops.
 static STATUS_MUST_USE Status host_zig_next(HostZigAnswer *an, bool *got) {
-    ZigWireFields into = {an->room, ZIG_WIRE_FIELDS_MOST};
+    ZigWireFields into = {an->room, ZIG_WIRE_FIELDS_MAX};
     size_t n = 0;
     ZigWireRead rd = zig_wire_next(&an->lines, an->sa, into, &n);
     *got = false;

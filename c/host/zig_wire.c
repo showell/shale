@@ -14,7 +14,7 @@
 enum { ZIG_WIRE_TOKEN_BYTES = 13 };
 
 // The most fields one line of an answer holds: the host's `into`.
-enum { ZIG_WIRE_FIELDS_MOST = 16 };
+enum { ZIG_WIRE_FIELDS_MAX = 16 };
 
 SLICE_TYPE(ZigWireKeywords, const Str);
 
