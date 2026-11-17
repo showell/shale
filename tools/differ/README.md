@@ -46,7 +46,7 @@ the next run with no list to keep:
   that the other inputs miss: edit's diffs and refusals, the reads at a
   file's edges, walk's options and its resume, edits_write's batches,
   symbolic links, the call-bytes cap, budget sweeps, mounts and a planted
-  secrets mount. Each runs after `fixture/setup.shale`, which builds the
+  secrets mount. Each runs after `tools/differ/store/fixture/setup.shale`, which builds the
   small tree the probes read.
 
 **A hand-written input** (stops, cli, store) is one input for each of its

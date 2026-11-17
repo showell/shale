@@ -6,6 +6,15 @@ the box it is built for, agents use it in place of bash, Python, `sed`,
 `awk` and `grep`: a script is written as a heredoc, run, and its output
 read.
 
+**Two implementations of one frozen language.** Shale was written in Zig,
+and on 2026-11-17 it was rewritten in C (`c/`), matching the Zig byte for
+byte on every input the differential harness judges
+([tools/differ/README.md](tools/differ/README.md)). **C Shale is the
+`shale` for all our day-to-day Linux work** on the box. **Zig Shale is
+still the one on bare metal:** angry-gopher's unikernel compiles the Zig
+sources here (`src/`), and the Zig binary also serves as the differ's
+oracle until the tests are ported.
+
 ## Why use it instead of bash or Python
 
 Every script runs inside guard rails that a shell does not have:
@@ -34,7 +43,16 @@ Every script runs inside guard rails that a shell does not have:
 
 ## Install
 
-Linux on x86-64 and the patched Zig that `zig-version` names (`0.17.1+patched.3`,
+**C Shale** (Linux on x86-64, GCC and TCC) is built and installed by
+`shale c/install.shale` from a clean checkout: it builds the release
+binary, runs the fast tier and a smoke test, copies it to
+`~/tools/shale/bin/shale` and points `~/.local/bin/shale` at it (a
+`localbin = ~/.local/bin` mount line is needed;
+[c/docs/building.md](c/docs/building.md) has the whole ladder). C Shale's
+build scripts are themselves Shale, so a first install needs a `shale` to
+run them: build the Zig one below, then install the C.
+
+**Zig Shale** needs Linux on x86-64 and the patched Zig that `zig-version` names (`0.17.1+patched.3`,
 from [patched-zig-compiler](https://github.com/showell/patched-zig-compiler),
 whose PATCHES.md says how to install it). Shale's own builds and CI use that
 one; a project that builds Shale as a dependency may still be on 0.17.0,
@@ -47,7 +65,8 @@ it:
     cd shale && zig build   # zig-out/bin: shale, shale-gate, shale-sign, always ReleaseSafe
 
 Put `zig-out/bin` on your PATH, or link `zig-out/bin/shale` into a folder
-that is.
+that is. The gate (`shale-gate`) and the signer (`shale-sign`) are Zig
+programs, built by this step either way.
 
 ## Run a script
 
@@ -159,14 +178,14 @@ own project, and for working on Shale itself.
 
 ## Where it runs
 
-- **On the box:** the `shale` CLI is every top-level shell call an agent
-  makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
+- **On the box:** the `shale` CLI, C Shale since 2026-11-17, is every
+  top-level shell call an agent makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
   with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`:
   zig-ast (`tools/zig_ast`), a program of its own that the host asks, so
   the host imports no `std.zig` parser. `zig build` builds it beside
   `shale`; `shale tools/zig_ast/install.shale` installs it where the host
   looks, `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
-- **On a live site:** a signed script, run by the site itself
+- **On a live site:** a signed script, run by the site itself on Zig Shale
   (`script_route`, `zig build shale-sign`):
   [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com), on
   Linux and on
@@ -397,5 +416,23 @@ outside, on every input the checks hold it to
 | | |
 |---|---|
 | Source | its history before this repo is zig-webbox's (`git -C ../zig-webbox log -- src/script`) |
-| Runs | on the box, as every agent's shell; in angry-gopher on Linux and metal, through its build |
-| Tests | the modules' unit tests; the request-edge harness for its number parses runs in angry-gopher |
+| Runs | C Shale on the box, as every agent's shell (since 2026-11-17); Zig Shale in angry-gopher on Linux and metal, through its build |
+| Tests | the Zig modules' unit tests and C's own (`shale c/build.shale`); the differ holds the C to the Zig on 1,166 inputs; the request-edge harness for its number parses runs in angry-gopher |
+
+## Lineage
+
+Shale began on 2026-10-13 inside zig-webbox, the Zig web stack behind
+lynrummy.com, as a small Lua-like language for one narrow job: letting a
+signed script change a live site's data through its store, confined to
+the store's root and held to budgets, on Linux and on a bare-metal
+unikernel alike. A Linux runner came the same day, and the box's agents
+started using it to read and change their own files. Within days it had
+grown `run`, jobs, git, mounts and the Zig tools, and it moved into a repo
+of its own on 2026-10-18. Soon after, it became the only shell on the box:
+a hook refuses every other command, so the language grew from what agents
+actually reached for (`docs/SHALE-WANTS.md` is that ledger). By November
+its design had settled enough to freeze, and on 2026-11-17 it was
+rewritten in C in about a day, against the Zig as its oracle, for faster
+builds and a substrate that needs no LLVM. The bare-metal site still runs
+the Zig, the implementation it was born in; every other `shale` on the box
+is C.
