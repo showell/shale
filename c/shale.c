@@ -37,6 +37,8 @@
 #include "host/jobs.c"
 #include "host/host_run.c"
 #include "host/host_jobs.c"
+#include "host/host_json.c"
+#include "host/host_text.c"
 #include "host/host_call.c"
 #include "preludes.h"
 

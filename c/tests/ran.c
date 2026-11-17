@@ -28,6 +28,8 @@
 #include "../host/jobs.c"
 #include "../host/host_run.c"
 #include "../host/host_jobs.c"
+#include "../host/host_json.c"
+#include "../host/host_text.c"
 #include "../host/host_call.c"
 
 // How a run is made: its mounts file's text, `--verbose` (a diff in full)

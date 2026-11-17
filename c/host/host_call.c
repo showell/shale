@@ -1,10 +1,13 @@
 // host_call.c: the Linux host's `host(name, ...)` calls, the part of Zig
 // Shale's src/shale_host_linux.zig `call` the C runs: `real` (a Shale path's
 // OS path), `may_change` (the hook asked of a path before `edits_all` writes
-// any) and `edits_write` (`edits_all`'s write). Every other call is refused
-// as not ported yet; `run`, the jobs and the rest are their own lanes.
+// any), `edits_write` (`edits_all`'s write), and `re_lines`, `shale_tokens`
+// (host_text.c), `json_read` and `json_write` (host_json.c). Every other call
+// is refused as not ported yet; `run`, the jobs and the rest are their own
+// lanes.
 //
 // Include paths.c, builtins_change.c, host_run.c and host_jobs.c first.
+// Include paths.c, builtins_change.c, host_json.c and host_text.c first.
 
 // The `RunHost.call` of the Linux host, `ctx` its Host.
 static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out) {
@@ -22,6 +25,10 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
         value_string(out, os);
         return OK;
     }
+    if (str_eq(name, S("re_lines"))) return host_re_lines(r, pos, args, out);
+    if (str_eq(name, S("shale_tokens"))) return host_shale_tokens(r, pos, args, out);
+    if (str_eq(name, S("json_read"))) return host_json_read(r, pos, args, out);
+    if (str_eq(name, S("json_write"))) return host_json_write(r, pos, args, out);
     if (str_eq(name, S("edits_write"))) {
         if (args.len != 1) return run_failf(r, pos, CLASS_ARGUMENT, "`edits_write` takes one list, given {d}", S("`edits_write` takes one list, given "), run_unum(r, args.len));
         return change_edits_write(r, pos, &at(args, 0), out);
