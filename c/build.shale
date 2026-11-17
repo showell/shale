@@ -58,7 +58,7 @@
 -- budget: programs=100 arena_bytes=268435456
 
 const OUT = "c/out"
-const BLOCKS = {"foundation", "discipline", "regex", "command", "vm", "host", "store", "builtins"}
+const BLOCKS = {"foundation", "discipline", "regex", "command", "vm", "host", "store", "builtins", "host_builtins"}
 
 -- The first line a compiler says of its version, or nil when it is missing.
 function version_of(argv)

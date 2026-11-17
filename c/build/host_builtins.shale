@@ -1,0 +1,108 @@
+-- c/build/host_builtins.shale: the host builtins' block, c/host's `run`,
+-- `sleep` and jobs in the C VM's host (host_run.c, jobs.c, host_jobs.c).
+-- c/build.shale runs it, with the `build` mount that `use` below reads; see
+-- that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- ── The host builtins: their own block ──────────────────────────────────
+-- c/tests/host_builtins/test_host_run.c under every build of `t.builds`,
+-- held to its `TEST(` count and to HOST_BUILTINS_TESTS. It runs sources as
+-- the C `shale` does (c/tests/ran.c), and its job test runs c/out/tcc/shale
+-- as the reaper, which the command's block built. In the full tier: the
+-- faults below planted in a copy of c/, ran.c and c/tests/host_builtins
+-- copied beside it, each caught by its `aim` tests under asan.
+
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 10}
+const HOST_BUILTINS_PLANTS = {
+  {name = "a secret's start at a read's end is passed on raw", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",
+   old = "if (rest.len < v.len && host_starts_with(v, rest)) wait = true;", new = "if (0 && rest.len < v.len && host_starts_with(v, rest)) wait = true;"},
+  {name = "a secret inside another is not widened over", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",
+   old = "if (j + o.len > end) end = j + o.len;", new = "(void)end;"},
+  {name = "a want lets `grep` run", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "run_refuses_what_zig_refuses_with_zigs_words",
+   old = "    HostRefusedGroups never = {HOST_NEVER, sizeof HOST_NEVER / sizeof *HOST_NEVER};\n    for", new = "    HostRefusedGroups never = {HOST_NEVER, sizeof HOST_NEVER / sizeof *HOST_NEVER};\n    if (has_want) return OK;\n    for"},
+  {name = "a version suffix is kept on argv[0]", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "run_refuses_what_zig_refuses_with_zigs_words",
+   old = "        b = str_sub(b, 0, dot - 1);", new = "        break;"},
+  {name = "the output is charged a step a byte", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "run_charges_its_output_a_step_per_16_bytes",
+   old = "    TRY(builtin_charge_bytes(r, pos, sink_out.bytes));", new = "    TRY(run_charge(r, pos, sink_out.bytes));"},
+  {name = "a stream past the cap is taken for the values' arena", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended",
+   old = "    case SPAWN_SINK_STOPPED: return sa->hit ? host_stream_over(r, pos, most) : run_values_oom(r, pos);", new = "    case SPAWN_SINK_STOPPED: return run_values_oom(r, pos);"},
+  {name = "a cpu budget's stop leaves out how the program ended", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended",
+   old = "    bool failed = o->ended != SPAWN_EXIT || o->code != 0;", new = "    bool failed = false;"},
+  {name = "the time line's share is of the programs alone", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv",
+   old = "    uint64_t whole = t->run_ms + t->wait_ms + t->sleep_ms;", new = "    uint64_t whole = t->run_ms;"},
+  {name = "a stopped run passes by the jobs it started", file = "host_jobs.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest",
+   old = "        if (!host_started_running(a, j)) continue;", new = "        if (1 || !host_started_running(a, j)) continue;"},
+  {name = "a job's exit code is not read from its record", file = "host_jobs.c", dir = "host", caught_by = "host_builtins/test_host_run",
+   aim = "a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest",
+   old = "    return host_jobs_result(r, pos, S(\"exited\"), rec->has_exit, rec->exit, rec->has_signal, rec->signal, out);", new = "    return host_jobs_result(r, pos, S(\"exited\"), false, 0, rec->has_signal, rec->signal, out);"},
+}
+
+-- One plant, the `k`th, as `start_plant` makes one, but with ran.c and
+-- c/tests/host_builtins copied beside the copy of c/, so the test reaches
+-- the copy's c/host. `finish_plant` judges it.
+function host_builtins_start_plant(t, p, k)
+  local dir = OUT .. "/plants/host-builtins-" .. k
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir .. "/tests")
+  for d in PLANT_DIRS do
+    if exists("c/" .. d) then copy("c/" .. d, dir .. "/" .. d) end
+  end
+  copy("c/tests/ran.c", dir .. "/tests/ran.c")
+  copy("c/tests/host_builtins", dir .. "/tests/host_builtins")
+  local file = dir .. "/" .. p.dir .. "/" .. p.file
+  replace(file, replaced_once(read(file), p.old, p.new, p.name))
+  local bin = dir .. "/bin/" .. basename(p.caught_by)
+  compile_to(t, "host builtins plants", "asan", dir .. "/tests/" .. p.caught_by .. ".c", dir .. "/foundation", bin)
+  local log = dir .. "/run.log"
+  local job = job_start({real(bin)}, {log = log, env = {TEST_ONLY = p.aim}, want = WANT})
+  return {job = job, log = log, dir = dir, p = p}
+end
+
+function host_builtins_block(t)
+  local tests = {}
+  for src in keys(HOST_BUILTINS_TESTS) do push(tests, src) end
+  sort(tests)
+  for src in tests do
+    if test_count(src) ~= HOST_BUILTINS_TESTS[src] then fail(src .. " has " .. test_count(src) .. " TEST(s), and HOST_BUILTINS_TESTS says " .. HOST_BUILTINS_TESTS[src]) end
+  end
+  for b in t.builds do
+    local total = 0
+    for src in tests do total = total + test_file(t, "host builtins " .. b, b, src) end
+    print("host builtins " .. said_of_build(b, #tests, total))
+  end
+  if not t.full then return nil end
+  -- Two at a time, as `run_plants` runs them.
+  local t0 = clock_ms()
+  local said = {}
+  local pending = nil
+  local k = 0
+  for p in HOST_BUILTINS_PLANTS do
+    k = k + 1
+    local started = host_builtins_start_plant(t, p, k)
+    if pending ~= nil then push(said, finish_plant(pending)) end
+    pending = started
+  end
+  if pending ~= nil then push(said, finish_plant(pending)) end
+  phase_wall(t, "host builtins plants", clock_ms() - t0)
+  print("host builtins plants: " .. #said .. " of " .. #HOST_BUILTINS_PLANTS .. " caught")
+  for l in said do print(l) end
+  return nil
+end
+-- ── end of the host builtins' block ─────────────────────────────────────
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+host_builtins_block(t)
+block_end(t, "host_builtins")
