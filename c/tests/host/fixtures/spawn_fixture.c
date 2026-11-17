@@ -62,22 +62,24 @@ static void ignore_term(void) {
 static void grandchild(long ms, bool deaf, bool escape) {
     // The child says it has left the group by closing its end, so this
     // exits only after: the group's TERM at this exit never finds it there.
-    int ready[2];
-    if (pipe(ready) != 0) _exit(3);
+    SLICE_TYPE(Fds, int);
+    int room[2];
+    Fds ready = {room, 2};
+    if (pipe(ready.ptr) != 0) _exit(3);
     pid_t pid = fork();
     if (pid == 0) {
-        close(ready[0]);
+        close(at(ready, 0));
         if (escape) setsid();
-        close(ready[1]);
+        close(at(ready, 1));
         if (deaf) ignore_term();
         sleep_ms(ms);
         _exit(0);
     }
-    close(ready[1]);
+    close(at(ready, 1));
     char byte;
-    ssize_t r = read(ready[0], &byte, 1);
+    ssize_t r = read(at(ready, 0), &byte, 1);
     (void)r;
-    close(ready[0]);
+    close(at(ready, 0));
     printf("grandchild %d\n", (int)pid);
     fflush(stdout);
 }
