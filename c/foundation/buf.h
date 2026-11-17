@@ -52,7 +52,11 @@ static inline STATUS_MUST_USE Status buf_str(Buf *b, Str s) {
     if (inside) s = str_sub(((Str){b->ptr, b->len}), offset, offset + s.len);
     Bytes room = {b->ptr, b->cap};
     Bytes dest = SLICE_SUB(Bytes, room, b->len, b->len + s.len);
-    memcpy(dest.ptr, s.ptr, s.len);
+    // memmove, not memcpy: once a caller's path is inlined, GCC at -O2 cannot
+    // prove a fresh buffer apart from the text and warns (-Wrestrict); the
+    // two never overlap, the rebase above sees to it, and the cost is the
+    // same.
+    memmove(dest.ptr, s.ptr, s.len);
     b->len += s.len;
     return OK;
 }
