@@ -562,7 +562,8 @@ static bool host_started_running(Arena *a, const HostStarted *s) {
 // those started with `keep_on_stop`, and says so in a line naming each:
 // Zig's `stopWithRun`. A job already stopped or waited to its end is passed
 // by, and only a job this run started is ever signalled.
-static STATUS_MUST_USE Status host_jobs_stop_with_run(Host *h, Buf *w) {
+// `inline`: a test unit that ends no run has no use of it.
+static inline STATUS_MUST_USE Status host_jobs_stop_with_run(Host *h, Buf *w) {
     Arena *a = h->paths.arena;
     Buf stopped = buf_make(a);
     Buf kept = buf_make(a);

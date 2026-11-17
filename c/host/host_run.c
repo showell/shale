@@ -130,7 +130,8 @@ static void host_time_ran(HostTime *t, Arena *a, Str argv, uint64_t ms) {
 }
 
 // Said after the report when it passes a second, or always with `--verbose`.
-static bool host_time_worth_saying(const HostTime *t, bool verbose) {
+// `inline`, as host_time_write: only the CLI's report uses the two.
+static inline bool host_time_worth_saying(const HostTime *t, bool verbose) {
     return (verbose && (t->runs > 0 || t->waits > 0 || t->sleep_ms > 0)) || t->run_ms + t->wait_ms + t->sleep_ms >= 1000;
 }
 
@@ -144,7 +145,7 @@ static STATUS_MUST_USE Status host_seconds(Buf *w, uint64_t ms) {
 // `── time: 2 programs, 1.4 s in all; the slowest 1.2 s (85%): zig build
 // test; ...; 1 job wait, 40.0 s; slept 0.3 s`, a share being of the whole
 // line, waits and sleeps included.
-static STATUS_MUST_USE Status host_time_write(Buf *w, const HostTime *t) {
+static inline STATUS_MUST_USE Status host_time_write(Buf *w, const HostTime *t) {
     TRY(buf_lit(w, "── time: "));
     TRY(buf_u64(w, t->runs));
     TRY(buf_lit(w, " program"));

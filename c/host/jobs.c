@@ -326,7 +326,8 @@ static Str jobs_arg(char **argv, size_t argc, size_t i) {
 // environment the job's: starts the job, writes its record, waits for it and
 // writes how it ended. The exit code says only whether it could: Zig's
 // `reapMain`. `args` are the words after `--reap`.
-static int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env) {
+// `inline`: only the CLI is a reaper.
+static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env) {
     if (n < 6 || !str_eq(jobs_arg(args, n, 4), S("--"))) return 2;
     Str record_s = jobs_arg(args, n, 0);
     Buf tb = buf_make(a);

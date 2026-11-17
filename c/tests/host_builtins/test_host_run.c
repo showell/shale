@@ -109,6 +109,8 @@ TEST(a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended) {
     EXPECT(m.len > end.len && str_eq(str_sub(m, m.len - end.len, m.len), end));
     // The program ran to its end and was recorded before the stop.
     EXPECT_EQ(x.lh.records.len, 1);
+    Str report = ran_report_of(&x, &x.host, false);
+    EXPECT(str_starts_with(report, S("── stopped at stdin:1:1: budget cpu: `run`: stage `busy` took ")));
     ran_free(&x);
 }
 

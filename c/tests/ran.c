@@ -111,6 +111,8 @@ static inline bool ran_file(Ran *x, const char *rel, Str *out) { // cstr: a test
 // the CLI loads them.
 static void ran_init(Ran *x, RanOpts o) {
     memset(x, 0, sizeof *x);
+    // A program that leaves its stdin unread must not end the test.
+    spawn_quiet_sigpipe();
     x->host = arena_make((size_t)256 << 20);
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof cwd) == NULL) abort();
