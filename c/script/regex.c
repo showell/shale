@@ -522,13 +522,14 @@ static STATUS_MUST_USE Status regex_seq(RegexReader *r, bool in_group, RegexSeq 
 // Whether `n` can match without taking a byte.
 static bool regex_nullable_alt(RegexAlt a);
 
-static bool regex_nullable(RegexNode n) {
-    if (n.quant == REGEX_STAR || n.quant == REGEX_OPT) return true;
-    switch (n.kind) {
+// `quant` is the node's, or REGEX_ONE to ask of the part it repeats.
+static bool regex_nullable(const RegexNode *n, RegexQuant quant) {
+    if (quant == REGEX_STAR || quant == REGEX_OPT) return true;
+    switch (n->kind) {
     case REGEX_NODE_BYTE:
     case REGEX_NODE_ANY:
     case REGEX_NODE_SET: return false;
-    case REGEX_NODE_GROUP: return regex_nullable_alt(n.inner);
+    case REGEX_NODE_GROUP: return regex_nullable_alt(n->inner);
     default: return true;
     }
 }
@@ -538,7 +539,7 @@ static bool regex_nullable_alt(RegexAlt a) {
         RegexSeq s = at(a, k);
         bool all = true;
         for (size_t j = 0; j < s.len; j++) {
-            if (!regex_nullable(at(s, j))) {
+            if (!regex_nullable(&at(s, j), at(s, j).quant)) {
                 all = false;
                 break;
             }
@@ -587,7 +588,7 @@ static uint16_t regex_here(const RegexEmitter *e) {
     return (uint16_t)e->insts.len;
 }
 
-static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, RegexNode n);
+static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, const RegexNode *n);
 
 // A split before each alternative but the last, the leftmost preferred, each
 // ending in a jump past the rest.
@@ -598,13 +599,13 @@ static STATUS_MUST_USE Status regex_emit_alt(RegexEmitter *e, RegexAlt a) {
     for (size_t k = 0; k < a.len; k++) {
         RegexSeq s = at(a, k);
         if (k + 1 == a.len) {
-            for (size_t j = 0; j < s.len; j++) TRY(regex_emit_node(e, at(s, j)));
+            for (size_t j = 0; j < s.len; j++) TRY(regex_emit_node(e, &at(s, j)));
             break;
         }
         uint16_t split;
         TRY(regex_emit(e, regex_inst(REGEX_OP_SPLIT, 0, 0, 0), &split));
         at(e->insts, split).x = (uint16_t)(split + 1);
-        for (size_t j = 0; j < s.len; j++) TRY(regex_emit_node(e, at(s, j)));
+        for (size_t j = 0; j < s.len; j++) TRY(regex_emit_node(e, &at(s, j)));
         TRY(regex_emit(e, regex_inst(REGEX_OP_JMP, 0, 0, 0), &at(ends, n_ends)));
         n_ends++;
         at(e->insts, split).y = regex_here(e);
@@ -613,27 +614,30 @@ static STATUS_MUST_USE Status regex_emit_alt(RegexEmitter *e, RegexAlt a) {
     return OK;
 }
 
-static STATUS_MUST_USE Status regex_emit_atom(RegexEmitter *e, RegexNode n) {
-    switch (n.kind) {
-    case REGEX_NODE_BYTE: return regex_emit(e, regex_inst(REGEX_OP_BYTE, n.c, 0, 0), NULL);
+static STATUS_MUST_USE Status regex_emit_atom(RegexEmitter *e, const RegexNode *n) {
+    switch (n->kind) {
+    case REGEX_NODE_BYTE: return regex_emit(e, regex_inst(REGEX_OP_BYTE, n->c, 0, 0), NULL);
     case REGEX_NODE_ANY: return regex_emit(e, regex_inst(REGEX_OP_ANY, 0, 0, 0), NULL);
-    case REGEX_NODE_SET: return regex_emit(e, regex_inst(REGEX_OP_SET, 0, n.set, 0), NULL);
+    case REGEX_NODE_SET: return regex_emit(e, regex_inst(REGEX_OP_SET, 0, n->set, 0), NULL);
     case REGEX_NODE_START: return regex_emit(e, regex_inst(REGEX_OP_START, 0, 0, 0), NULL);
     case REGEX_NODE_END: return regex_emit(e, regex_inst(REGEX_OP_END, 0, 0, 0), NULL);
     case REGEX_NODE_BOUNDARY: return regex_emit(e, regex_inst(REGEX_OP_BOUNDARY, 0, 0, 0), NULL);
     case REGEX_NODE_NOT_BOUNDARY: return regex_emit(e, regex_inst(REGEX_OP_BOUNDARY, 1, 0, 0), NULL);
     case REGEX_NODE_GROUP: break;
     }
-    if (n.index == 0) return regex_emit_alt(e, n.inner);
-    uint16_t k = (uint16_t)(n.index - 1);
+    if (n->index == 0) return regex_emit_alt(e, n->inner);
+    // An unsigned, not a uint16_t: TCC 0.9.27 loses a uint16_t local made
+    // from this cast (it gave 0 for group 2, and its end's save went to
+    // group 1's slot).
+    unsigned k = n->index - 1u;
     TRY(regex_emit(e, regex_inst(REGEX_OP_SAVE, 0, (uint16_t)(2 * k), 0), NULL));
-    TRY(regex_emit_alt(e, n.inner));
+    TRY(regex_emit_alt(e, n->inner));
     return regex_emit(e, regex_inst(REGEX_OP_SAVE, 0, (uint16_t)(2 * k + 1), 0), NULL);
 }
 
 // One turn of loop `id`: `turn`, the atom, and its end (`again` or `first`),
 // recorded as a range. Gives the end's place.
-static STATUS_MUST_USE Status regex_turn_of(RegexEmitter *e, RegexNode n, uint8_t id, RegexOp end_op, uint16_t *end) {
+static STATUS_MUST_USE Status regex_turn_of(RegexEmitter *e, const RegexNode *n, uint8_t id, RegexOp end_op, uint16_t *end) {
     uint16_t from;
     TRY(regex_emit(e, regex_inst(REGEX_OP_TURN, 0, id, 0), &from));
     TRY(regex_emit_atom(e, n));
@@ -644,10 +648,8 @@ static STATUS_MUST_USE Status regex_turn_of(RegexEmitter *e, RegexNode n, uint8_
 
 // Thompson's construction; each split prefers its first way, so every
 // repetition is greedy.
-static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, RegexNode n) {
-    RegexNode once = n;
-    once.quant = REGEX_ONE;
-    if ((n.quant == REGEX_STAR || n.quant == REGEX_PLUS) && regex_nullable(once)) {
+static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, const RegexNode *n) {
+    if ((n->quant == REGEX_STAR || n->quant == REGEX_PLUS) && regex_nullable(n, REGEX_ONE)) {
         // A loop whose turn can take nothing: its threads carry a bit, "this
         // turn took something", so a new turn begun where an earlier one
         // stood is not lost to that one's visit. A turn that took nothing ends
@@ -656,7 +658,7 @@ static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, RegexNode n) {
         if (e->loops == REGEX_EMPTY_LOOPS_MOST) return regex_refuse(e->refused, 0, S("more than 16 loops whose turn can match nothing (`(a*)*`, `(a|)+`): write some so a turn takes a byte"));
         uint8_t id = e->loops;
         e->loops++;
-        bool has_first = n.quant == REGEX_PLUS;
+        bool has_first = n->quant == REGEX_PLUS;
         uint16_t first = 0;
         if (has_first) TRY(regex_turn_of(e, n, id, REGEX_OP_FIRST, &first));
         uint16_t loop;
@@ -669,7 +671,7 @@ static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, RegexNode n) {
         if (has_first) at(e->insts, first).y = regex_here(e);
         return OK;
     }
-    switch (n.quant) {
+    switch (n->quant) {
     case REGEX_ONE: return regex_emit_atom(e, n);
     case REGEX_STAR: {
         uint16_t loop;

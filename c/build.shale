@@ -302,6 +302,65 @@ for l in said do print(l) end
 print(trim(must(run({"shale", "c/check_discipline.shale"}, {timeout_ms = 60000, tail = 20})).out))
 print(trim(must(run({"shale", "c/check_discipline.shale", "self_test=1"}, {timeout_ms = 60000, tail = 20})).out))
 
+-- ── c/script/regex: its own block ──────────────────────────────────────
+-- test_regex.c runs above with every test file. Here: its count held to
+-- REGEX_TESTS, regex_test.zig's to REGEX_ZIG_TESTS (a Zig test added is one
+-- the C has yet to port), and the faults below planted in a copy of
+-- c/script, each caught by test_regex.c under asan.
+
+const REGEX_TESTS = 16
+const REGEX_ZIG_TESTS = 10
+const REGEX_PLANTS = {
+  {name = "a split follows its less preferred way first",
+   old = "second.pc = i.y;\n                at(sc->stack, top) = second;\n                top++;\n                t.pc = i.x;",
+   new = "second.pc = i.x;\n                at(sc->stack, top) = second;\n                top++;\n                t.pc = i.y;"},
+  {name = "the first bytes leave out a class's", old = "regex_set_union(&got, &at(sets, i.x));", new = "(void)sets;"},
+  {name = "the skip passes the byte a match begins at", old = "if (regex_set_has(first, str_byte(rest, i))) return from + i;", new = "if (regex_set_has(first, str_byte(rest, i))) return from + i + 1;"},
+  {name = "a state forgets its loops' bits", old = "return at(p->base, pc) + k;", new = "return at(p->base, pc) + 0 * k;"},
+  {name = "a count's optional copies are one short", old = "for (size_t k = least; k < most; k++) TRY(RegexNodeVec_push(&list, rest));", new = "for (size_t k = least + 1; k < most; k++) TRY(RegexNodeVec_push(&list, rest));"},
+}
+
+-- The `test "` lines of a Zig test file.
+function zig_test_count(src)
+  local n = 0
+  for l in lines(read(src)) do
+    if starts_with(l, "test \"") then n = n + 1 end
+  end
+  return n
+end
+
+-- Each regex plant in its own copy of c/script, test_regex.c beside it so its
+-- `../script/regex.c` is the copy's. Gives the lines to report.
+function run_regex_plants(plants)
+  local said = {}
+  local k = 0
+  for p in plants do
+    k = k + 1
+    local dir = OUT .. "/regex_plants/" .. k
+    if exists(dir) then remove_tree(dir) end
+    mkdir(dir .. "/tests")
+    copy("c/script", dir .. "/script")
+    copy("c/tests/test_regex.c", dir .. "/tests/test_regex.c")
+    local file = dir .. "/script/regex.c"
+    replace(file, replaced_once(read(file), p.old, p.new, p.name))
+    local r = build_and_run("asan", dir .. "/tests/test_regex.c", FOUNDATION, dir .. "/bin")
+    if r.code == 0 then fail("regex plant `" .. p.name .. "` was not caught: test_regex passed with it in c/script/regex.c") end
+    push(said, "  caught: " .. p.name .. " (regex.c), by test_regex: " .. caught_how(r.out))
+    remove_tree(dir)
+  end
+  return said
+end
+
+local regex_tests = test_count("c/tests/test_regex.c")
+if regex_tests ~= REGEX_TESTS then fail("c/tests/test_regex.c has " .. regex_tests .. " TEST(s), and REGEX_TESTS says " .. REGEX_TESTS) end
+local regex_zig = zig_test_count("src/script/regex_test.zig")
+if regex_zig ~= REGEX_ZIG_TESTS then fail("src/script/regex_test.zig has " .. regex_zig .. " tests, and REGEX_ZIG_TESTS says " .. REGEX_ZIG_TESTS .. ": port the new one to c/tests/test_regex.c") end
+print("regex: " .. regex_tests .. " C tests, " .. regex_zig .. " of them regex_test.zig's")
+local regex_said = run_regex_plants(REGEX_PLANTS)
+print("regex plants: " .. #regex_said .. " of " .. #REGEX_PLANTS .. " caught")
+for l in regex_said do print(l) end
+-- ── end of c/script/regex's block ──────────────────────────────────────
+
 if tcc == nil then
   fail("tcc is not installed, so the inner loop did not run: `sudo apt install tcc` (Ubuntu noble's tcc 0.9.27+git20200814)")
 end

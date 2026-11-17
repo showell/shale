@@ -537,6 +537,70 @@ TEST(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it
     EXPECT_EQ(cache_count(&c), 0);
 }
 
+// Each group's capture is its own, numbered by its `(`; one the match did not
+// pass through is unmatched. The answers are Zig Shale's re_find's.
+TEST(each_group_captures_its_own_part) {
+    RegexSearched r = found(S("\\[([^\\]]*)\\]\\(([^)]*)\\)"), S("(b## Head[link](to.md)"));
+    EXPECT(r.found);
+    EXPECT_EQ(r.match.start, 9);
+    EXPECT_EQ(r.match.end, 22);
+    EXPECT_EQ(group_of(r, 1).start, 10);
+    EXPECT_EQ(group_of(r, 1).end, 14);
+    EXPECT_EQ(group_of(r, 2).start, 16);
+    EXPECT_EQ(group_of(r, 2).end, 21);
+    EXPECT(!group_of(r, 3).matched);
+    r = found(S("(a)(b)?(c)?"), S("abb bab b"));
+    EXPECT(r.found);
+    EXPECT_EQ(r.match.end, 2);
+    EXPECT(group_of(r, 1).matched);
+    EXPECT_EQ(group_of(r, 1).end, 1);
+    EXPECT(group_of(r, 2).matched);
+    EXPECT_EQ(group_of(r, 2).start, 1);
+    EXPECT_EQ(group_of(r, 2).end, 2);
+    EXPECT(!group_of(r, 3).matched);
+    r = found(S("(w)(o)(r)(d)( )(W)(o)(r)(d)"), S("a word Word"));
+    EXPECT(r.found);
+    for (size_t g = 1; g <= REGEX_GROUPS_MOST; g++) {
+        EXPECT(group_of(r, g).matched);
+        EXPECT_EQ(group_of(r, g).start, 1 + g);
+        EXPECT_EQ(group_of(r, g).end, 2 + g);
+    }
+}
+
+// A loop whose turn can take nothing ends at a turn that took nothing, as a
+// backtracker's does, so `(\w*(|.))*` takes the whole line, a byte at a time
+// where `\w*` takes none. The answers are Zig Shale's re_find's.
+TEST(an_empty_turn_ends_its_loop_as_a_backtrackers_does) {
+    Compiled c;
+    compiled_make(&c, S("(\\w*(|.))*"), opts(false));
+    Str s = S("see [the docs](a.md) and [x](y)");
+    RegexSearched r = regex_search(&c.p, &c.sc, s, s.len + 1);
+    EXPECT(r.found);
+    EXPECT_EQ(r.match.start, 0);
+    EXPECT_EQ(r.match.end, 31);
+    EXPECT(group_of(r, 1).matched);
+    EXPECT_EQ(group_of(r, 1).start, 30);
+    EXPECT_EQ(group_of(r, 1).end, 31);
+    EXPECT(group_of(r, 2).matched);
+    EXPECT_EQ(group_of(r, 2).start, 30);
+    EXPECT_EQ(group_of(r, 2).end, 31);
+    s = S("aab abc cd ab");
+    r = regex_search(&c.p, &c.sc, s, s.len + 1);
+    EXPECT(r.found);
+    EXPECT_EQ(r.match.end, 13);
+    EXPECT_EQ(group_of(r, 1).start, 11);
+    EXPECT_EQ(group_of(r, 1).end, 13);
+    EXPECT_EQ(group_of(r, 2).start, group_of(r, 2).end);
+    s = S("123 abc 45");
+    r = regex_search_from(&c.p, &c.sc, s, 4, s.len + 1);
+    EXPECT(r.found);
+    EXPECT_EQ(r.match.start, 4);
+    EXPECT_EQ(r.match.end, 10);
+    EXPECT_EQ(group_of(r, 1).start, 8);
+    EXPECT_EQ(group_of(r, 1).end, 10);
+    arena_deinit(&c.arena);
+}
+
 // The guarantee the DRAGONs in regex_add and regex_emit name: whatever the
 // pattern, a search examines each position once and follows at most four
 // times the program's states there, so its cost is bounded before it runs.
@@ -573,5 +637,7 @@ TEST_MAIN(
     TEST_CASE(every_refusal_of_the_reader_says_zigs_text_at_zigs_byte),
     TEST_CASE(nocase_folds_bytes_and_classes_before_negation),
     TEST_CASE(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it_evicts),
+    TEST_CASE(each_group_captures_its_own_part),
+    TEST_CASE(an_empty_turn_ends_its_loop_as_a_backtrackers_does),
     TEST_CASE(a_hostile_search_stays_linear)
 )
