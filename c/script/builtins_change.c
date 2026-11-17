@@ -20,7 +20,7 @@ SLICE_TYPE(EditList, Edit);
 
 // The most edits one call of the list form takes; each is a pass over the
 // file.
-enum { CHANGE_EDITS_MOST = 64 };
+enum { CHANGE_EDITS_MAX = 64 };
 
 // A region the edits changed: `was[o0..o1]` became `now[c0..c1]`. Outside
 // every span the two texts are the same bytes; the spans are sorted and
@@ -80,8 +80,8 @@ static STATUS_MUST_USE Status change_edits_arg(Run *r, Pos pos, ConstValues args
         Table *t = l->as.table;
         if (t->kind == TABLE_MAP) return run_failf(r, pos, CLASS_TYPE, "`edit`'s second argument is a list of edits, `{{{{old = ..., new = ...}}, ...}}`, not a map", S("`edit`'s second argument is a list of edits, `{{old = ..., new = ...}, ...}`, not a map"));
         if (t->kind == TABLE_EMPTY || t->list.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`edit` of no edits: the list is empty"));
-        if (t->list.len > CHANGE_EDITS_MOST) {
-            return run_failf(r, pos, CLASS_ARGUMENT, "`edit` takes at most {d} edits a call, given {d}: call it again for the rest", S("`edit` takes at most "), run_unum(r, CHANGE_EDITS_MOST), S(" edits a call, given "),
+        if (t->list.len > CHANGE_EDITS_MAX) {
+            return run_failf(r, pos, CLASS_ARGUMENT, "`edit` takes at most {d} edits a call, given {d}: call it again for the rest", S("`edit` takes at most "), run_unum(r, CHANGE_EDITS_MAX), S(" edits a call, given "),
                              run_unum(r, t->list.len), S(": call it again for the rest"));
         }
         Edit *edits = ARENA_ARRAY(r->ctx.values, Edit, t->list.len);
