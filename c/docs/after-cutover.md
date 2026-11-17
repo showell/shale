@@ -50,3 +50,47 @@ them on 2026-11-17.
    a race or an order that differs between runs would make Shale lie. It
    belongs inside a builtin with a deterministic merge, never in the
    language.
+
+## To follow up: coding standards declared in Roc
+
+Steve wants to follow up on this idea (2026-11-17). It needs no change
+to Shale's language, so it needn't wait for the cut-over.
+
+A style rule lives today in several places that nothing ties together:
+
+- the style guide's prose (roc-apps' `docs/roc-style.md`);
+- a recipe's arguments, such as `tokens=6` or `min=4`;
+- the plants that test the recipe;
+- waivers like `skip=`, scattered wherever an agent put them.
+
+The idea is to declare each rule once, as typed Roc data, in a small
+`standards` package in roc-apps. Each rule carries:
+
+- the guide's one sentence for it;
+- its scope: all Roc, one tree, or one book;
+- its check: a named recipe with its settings, a book's own setting, or
+  `ByReader` where no script can see it;
+- its exceptions, as an opaque type that refuses an empty reason;
+- the code that first broke it.
+
+A rule's id is a closed tag union, so the compiler makes every rule
+documented and checked. A Roc program prints the standards as data, and
+Shale's hunts read their settings, scopes and exceptions from it. The
+policy lives in Roc and the mechanism stays in the recipes and their
+plants. The strictness can be set per rule and per tree (held at zero,
+against a baseline, or report only), which is how the quality gate's
+debt gets paid down. The books' standards fit the same types: the word
+limit per chapter, the negatives lint and the index terms.
+
+The first steps are:
+
+1. an inventory of every threshold, default and waiver across the Roc
+   recipes, roc-apps' `tools/quality.shale`, the style guide and the
+   books;
+2. the package for the quality gate's rules alone, with the gate's
+   counts unchanged;
+3. the books' standards, as the second user.
+
+One question waits for Steve: whether the style guide's rule table is
+generated from the standards, or stays hand-written and is gated against
+them.
