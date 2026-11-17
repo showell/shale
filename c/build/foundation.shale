@@ -75,7 +75,7 @@ const PLANTS = {
    old = "size_t extra = minimum / 2 + init;", new = "size_t extra = init;"},
   {name = "a move copies bytes, not items",
    aim = "items_survive_every_move_between_two_growing_vecs", file = "vec.h", caught_by = "test_vec",
-   old = "if (len > 0) memmove(fresh, *ptr, len * elem);", new = "if (len > 0) memmove(fresh, *ptr, len);"},
+   old = "if (len > 0 && *cap > 0) memmove(fresh, *ptr, len * elem);", new = "if (len > 0 && *cap > 0) memmove(fresh, *ptr, len);"},
   {name = "setting a key again is dropped",
    aim = "setting_a_key_again_keeps_its_place", file = "map.h", caught_by = "test_map",
    old = "            at(vals, e) = v;                                                                 \\\n            return OK;", new = "            (void)vals;                                                                      \\\n            return OK;"},
