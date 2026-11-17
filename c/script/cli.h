@@ -134,22 +134,31 @@ static inline uint64_t cli_most_of(size_t k) {
     return 0;
 }
 
+// `n` as a size_t, SIZE_MAX past it: a plain cast wraps on a 32-bit size_t
+// (the wasm build), where Zig's `cast ... orelse maxInt` saturates. A round
+// trip, not `n > SIZE_MAX`, which is always false on x86-64 and GCC's
+// -Wtype-limits would say so.
+static inline size_t cli_size_saturated(uint64_t n) {
+    return (uint64_t)(size_t)n == n ? (size_t)n : SIZE_MAX;
+}
+
 // Sets budget `k` to `n`, saturating at the field's type as Zig's `cast ...
 // orelse maxInt` does.
 static inline void cli_set_budget(Budgets *b, size_t k, uint64_t n) {
     uint32_t n32 = n > UINT32_MAX ? UINT32_MAX : (uint32_t)n;
+    size_t nz = cli_size_saturated(n);
     switch ((Settable)k) {
     case SET_STEPS: b->steps = n; break;
     case SET_READS: b->reads = n; break;
     case SET_READ_BYTES: b->read_bytes = n; break;
-    case SET_OUTPUT_BYTES: b->output_bytes = (size_t)n; break;
+    case SET_OUTPUT_BYTES: b->output_bytes = nz; break;
     case SET_CHANGES: b->changes = n; break;
     case SET_CHANGE_BYTES: b->change_bytes = n; break;
-    case SET_ARENA_BYTES: b->arena_bytes = (size_t)n; break;
+    case SET_ARENA_BYTES: b->arena_bytes = nz; break;
     case SET_CALL_BYTES: b->call_bytes = n; break;
     case SET_CALL_ENTRIES: b->call_entries = n; break;
-    case SET_KEPT_BYTES: b->kept_bytes = (size_t)n; break;
-    case SET_MACHINE_BYTES: b->machine_bytes = (size_t)n; break;
+    case SET_KEPT_BYTES: b->kept_bytes = nz; break;
+    case SET_MACHINE_BYTES: b->machine_bytes = nz; break;
     case SET_CALL_DEPTH: b->call_depth = n32; break;
     case SET_PROGRAMS: b->programs = n32; break;
     case SET_COUNT: break;
