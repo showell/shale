@@ -40,8 +40,13 @@
 --    link inside the folder itself does not count. Repoint or remove the
 --    link. A place that is not there here (no such mount) is SKIPPED, said.
 -- 5. **A tracked file of a sibling checkout that names it by a path**:
---    `../<name>` (and so `../../<name>`, `../../../<name>`), `repos:<dir>`,
---    `showell_repos/<dir>` (and so `~/showell_repos/<dir>`). A `.zon` path
+--    `../<name>` (and so `../../<name>`, `../../../<name>`), or its own path
+--    as this run resolves it: its OS path, `~/` or `$HOME/` and its path
+--    below the home folder, and `m:<path>` for each mount whose folder holds
+--    it (`shale --help` lists the mounts in force). From `~/build/lanes`, a
+--    lane `x` is `build:lanes/x` and `~/build/lanes/x`, never `repos:x` or
+--    `~/showell_repos/x`, which are another checkout of the same name.
+--    A `.zon` path
 --    dependency is one of these (`.path = "../<name>"`) and is said as one.
 --    A `../` chain is left out only on evidence that it means another
 --    folder: taken from the file's own folder, it lands on a path that is
@@ -63,7 +68,9 @@
 --
 -- `self_test=1` plants fake repos made by git in a scratch root, one for
 -- each reason, and shows each blocks for its own reason alone; a clean one
--- and a worktree with its branch pushed come out CLEAR, a sibling named
+-- and a worktree with its branch pushed come out CLEAR, a lane in a lanes
+-- root is blocked by a note on its own path (each form) and never by one on
+-- the same-named main checkout's, a sibling named
 -- with a longer name (`clean-page` beside `clean`), a file name
 -- (`../clean.md`), a `../` chain into the sibling's own `clean/` and an
 -- untracked file do not block, and a missing memory folder and link place
@@ -158,17 +165,62 @@ function chain_names(text, at, tail_len, target_os, place)
   return not (a.ok and a.value)
 end
 
--- Whether a line names the checkout by a path: one of the forms, the name
--- standing alone after it and not part of a file name. `place` is where a
--- `../` chain is taken from (`chain_names`), nil for a text with none.
-function names_by_path(text, dir, name, target_os, place)
-  local forms = {{lead = "../", tail = name}, {lead = "repos:", tail = dir}, {lead = "showell_repos/", tail = dir}}
+-- The mounts in force, `{name, os}` each, as `shale --help` lists them
+-- for this run's environment (a `secrets` mount's folder is not shown, so
+-- it is not among them).
+function run_mounts()
+  local r = run({"shale", "--help"}, {timeout_ms = 30000, whole = 200000, want = "nonzero: said by the caller"})
+  if r.code ~= 0 or not contains(r.out, "The mounts") then fail("retire_checkout: `shale --help` exited " .. r.code .. " without its list of mounts, so no mount path can be checked: " .. short(r.out)) end
+  local mounts = {}
+  for l in lines(r.out) do
+    local m = re_find(l, "^  ([A-Za-z0-9_-]+):  (/[^ ]+)")
+    if m ~= nil then push(mounts, {name = m.groups[1], os = m.groups[2]}) end
+  end
+  return mounts
+end
+
+-- The home folder, from the environment; "" when it has none.
+function home_dir()
+  local r = run({"printenv", "HOME"}, {timeout_ms = 10000, whole = 10000, want = "nonzero: no HOME, said as none"})
+  if r.code ~= 0 then return "" end
+  return trim(r.out)
+end
+
+-- The forms that name the folder at `target_os` by a path, `{lead, tail}`
+-- each, `tail` its name: `../<name>` (a sibling's; `chain_names` judges
+-- it), and the folder's own path as the run resolves it: its OS path,
+-- `~/` and `$HOME/` with the path below `home`, and `m:<path>` for each
+-- mount whose folder holds it. A bare name never counts, so a checkout of
+-- the same name elsewhere (`~/showell_repos/x` beside a lane `~/build/lanes/x`)
+-- is never this one.
+function path_forms(target_os, name, mounts, home)
+  local lead_of = sub(target_os, 1, #target_os - #name)
+  local forms = {{lead = "../", tail = name}, {lead = lead_of, tail = name}}
+  if home ~= "" and starts_with(target_os, home .. "/") then
+    local below = sub(lead_of, #home + 2, #lead_of)
+    push(forms, {lead = "~/" .. below, tail = name})
+    push(forms, {lead = "$HOME/" .. below, tail = name})
+  end
+  for m in mounts do
+    if starts_with(target_os, m.os .. "/") then push(forms, {lead = m.name .. ":" .. sub(lead_of, #m.os + 2, #lead_of), tail = name}) end
+  end
+  return forms
+end
+
+-- Whether a line names the checkout by a path: one of `forms`, not inside
+-- a longer word, the name standing alone after it and not part of a file
+-- name. `place` is where a `../` chain is taken from (`chain_names`), nil
+-- for a text with none.
+function names_by_path(text, forms, target_os, place)
   for f in forms do
     local whole = f.lead .. f.tail
     local at = find(text, whole)
     while at ~= nil do
       local tail_at = at + #f.lead
-      if stands_alone(text, tail_at, #f.tail) and not in_file_name(text, tail_at, #f.tail) then
+      local before = ""
+      if at > 1 then before = sub(text, at - 1, at - 1) end
+      local starts_alone = f.lead == "../" or not (before == "-" or is_namey(before))
+      if starts_alone and stands_alone(text, tail_at, #f.tail) and not in_file_name(text, tail_at, #f.tail) then
         if f.lead ~= "../" or chain_names(text, at, #f.tail, target_os, place) then return true end
       end
       at = find(text, whole, at + 1)
@@ -325,7 +377,12 @@ function check_links(v, os, places, depth)
 end
 
 -- 5: each sibling checkout's tracked files that name the folder by a path.
-function check_names(v, root, os, dir, name)
+function check_names(v, root, os, forms)
+  local greps = {"grep", "-n", "-I", "--null", "-F"}
+  for f in forms do
+    push(greps, "-e")
+    push(greps, f.lead .. f.tail)
+  end
   local checked = 0
   local named = 0
   for e in walk_all(root, {depth = 1, kind = "directory", skip = ".*"}) do
@@ -333,14 +390,14 @@ function check_names(v, root, os, dir, name)
       local sib_os = real(e.path)
       if sib_os ~= os then
         checked = checked + 1
-        local r = git(sib_os, {"grep", "-n", "-I", "--null", "-F", "-e", "../" .. name, "-e", "repos:" .. dir, "-e", "showell_repos/" .. dir})
+        local r = git(sib_os, greps)
         if r.code ~= 0 and r.code ~= 1 then fail("retire_checkout: git grep in " .. sib_os .. " exited " .. r.code .. ": " .. trim(r.out)) end
         for l in lines(r.out) do
           local parts = split(l, "\0")
           if #parts >= 3 then
             local text = join(drop(parts, 2), " ")
             local place = {file_dir = sib_os .. "/" .. dirname(parts[1]), repo_os = sib_os, repo = e.path}
-            if names_by_path(text, dir, name, os, place) then
+            if names_by_path(text, forms, os, place) then
               local what = ""
               if ends_with(parts[1], ".zon") and contains(text, ".path") then what = " (a .zon path dependency)" end
               add_reason(v, "named", basename(e.path) .. "/" .. parts[1] .. ":" .. parts[2] .. what .. ": " .. short(text))
@@ -357,7 +414,7 @@ function check_names(v, root, os, dir, name)
 end
 
 -- 6: the memory files that name the folder by a path.
-function check_memory(v, memory, dir, name)
+function check_memory(v, memory, name, forms)
   local a = attempt(there, memory)
   if not a.ok or not a.value then
     local why = "not there"
@@ -369,7 +426,7 @@ function check_memory(v, memory, dir, name)
   local found = grep_tree(memory, name, {})
   local named = 0
   for h in found.hits do
-    if names_by_path(h.text, dir, name, "", nil) then
+    if names_by_path(h.text, forms, "", nil) then
       add_reason(v, "memory", h.path .. ":" .. h.line .. ": " .. short(h.text))
       named = named + 1
     end
@@ -379,7 +436,9 @@ function check_memory(v, memory, dir, name)
 end
 
 -- The verdict on one folder: {dir, os, reasons, checks, skipped, notes},
--- each reason {kind, text}. `cfg` is {root, places, memory, depth}.
+-- each reason {kind, text}. `cfg` is {root, places, memory, depth, mounts,
+-- home}, `mounts` and `home` what a path that names it is read against
+-- (`path_forms`).
 function judge(dir_arg, cfg)
   local dir = dir_arg
   while ends_with(dir, "/") do dir = sub(dir, 1, #dir - 1) end
@@ -404,8 +463,9 @@ function judge(dir_arg, cfg)
     add_reason(v, "not-git", "it is not a git checkout, so nothing in it is in any history")
   end
   check_links(v, os, cfg.places, cfg.depth)
-  check_names(v, cfg.root, os, dir, name)
-  check_memory(v, cfg.memory, dir, name)
+  local forms = path_forms(os, name, cfg.mounts, cfg.home)
+  check_names(v, cfg.root, os, forms)
+  check_memory(v, cfg.memory, name, forms)
   return v
 end
 
@@ -448,11 +508,11 @@ const USER_LIST = [=[.{
 const USER_SCRIPT = [=[## scripts/run.roc -- --repo ../rooted  (run from the repo's top)
 ]=]
 
-const USER_DOCS = [=[The spelled checkout lives at `~/showell_repos/spelled`.
+const USER_DOCS = [=[The spelled checkout lives at `~/repos/spelled`.
 The script reaches it as `real("repos:spelled")`.
 ]=]
 
-const MEMORY_NOTE = [=[The checkout at `~/showell_repos/remembered` is load-bearing.
+const MEMORY_NOTE = [=[The checkout at `~/repos/remembered` is load-bearing.
 So is `repos:clean-page`, a longer name.
 ]=]
 
@@ -563,11 +623,22 @@ function self_test()
   create(R .. "/user/notes.txt", "see ../clean, untracked\n")
   -- 6: a memory note.
   create(T .. "/memory/note.md", MEMORY_NOTE)
+  -- A main checkout `twin` and a lane `twin` beside it in a lanes root,
+  -- and a memory folder with notes on each one's path.
+  for d in {"lanes", "memory-main", "memory-lane"} do mkdir(T .. "/" .. d) end
+  os["twin"] = plant(T, "twin", "repos")
+  give_origin(T, os["twin"], "twin")
+  give_origin(T, plant(T, "twin", "lanes"), "twin-lane")
+  create(T .. "/memory-main/note.md", "The main checkout is `~/repos/twin`.\nScripts reach it as `repos:twin`.\n")
+  create(T .. "/memory-lane/note.md", "The lane is `~/lanes/twin`.\nIts tests: `$HOME/lanes/twin/src`.\nAs a mount: `build:lanes/twin`.\nIn full: " .. real(T) .. "/lanes/twin.\n")
   -- Not git at all.
   mkdir(R .. "/plain")
   create(R .. "/plain/notes.txt", "loose\n")
 
-  local cfg = {root = R, places = {R, T .. "/links"}, memory = T .. "/memory", depth = LINK_DEPTH}
+  -- The run's mounts and home, as the plants see them: home is T, `repos:`
+  -- the root, `build:` T.
+  local mounts = {{name = "repos", os = Ros}, {name = "build", os = real(T)}}
+  local cfg = {root = R, places = {R, T .. "/links"}, memory = T .. "/memory", depth = LINK_DEPTH, mounts = mounts, home = real(T)}
   local cases = {
     {dir = "dirty", kinds = "uncommitted", says = "1 modified, 0 untracked: README.md"},
     {dir = "untracked", kinds = "uncommitted", says = "0 modified, 1 untracked: notes.txt"},
@@ -600,7 +671,7 @@ function self_test()
   expect("wt-pushed's note", contains(wt.notes[1], "worktree remove"), true)
 
   -- A memory folder and a link place that are not there: SKIPPED, said.
-  local bare_cfg = {root = R, places = {R, T .. "/no-links"}, memory = T .. "/no-memory", depth = LINK_DEPTH}
+  local bare_cfg = {root = R, places = {R, T .. "/no-links"}, memory = T .. "/no-memory", depth = LINK_DEPTH, mounts = mounts, home = real(T)}
   local v = judge("clean", bare_cfg)
   expect("clean without memory: its reasons", kinds_of(v), "")
   expect("clean without memory: skipped", join(v.skipped, ","), "links under " .. T .. "/no-links,memory")
@@ -608,6 +679,31 @@ function self_test()
   push(rows, {case = "clean, no memory", reasons = 0, verdict = verdict_line(v)})
   local blocked = judge("remembered", bare_cfg)
   expect("remembered without memory: its reasons", kinds_of(blocked), "")
+
+  -- A lane of the same name as a main checkout, in a lanes root: a note on
+  -- the main checkout's path never blocks it, and one on its own does, by
+  -- each of its forms. The main checkout's own note blocks the main.
+  local lanes_cfg = {root = T .. "/lanes", places = {T .. "/lanes"}, memory = T .. "/memory-main", depth = LINK_DEPTH, mounts = mounts, home = real(T)}
+  local lane = judge("twin", lanes_cfg)
+  expect("the lane twin, with a note on the main twin: its reasons", kinds_of(lane), "")
+  push(rows, {case = "lanes/twin, main's note", reasons = 0, verdict = verdict_line(lane)})
+  lanes_cfg.memory = T .. "/memory-lane"
+  lane = judge("twin", lanes_cfg)
+  expect("the lane twin, with a note on its own path: its reasons", kinds_of(lane), "memory")
+  expect("the lane twin, with a note on its own path: one a form", #lane.reasons, 4)
+  push(rows, {case = "lanes/twin, its note", reasons = #lane.reasons, verdict = verdict_line(lane)})
+  local main_cfg = {root = R, places = {R}, memory = T .. "/memory-main", depth = LINK_DEPTH, mounts = mounts, home = real(T)}
+  local main_twin = judge("twin", main_cfg)
+  expect("the main twin, with its note: its reasons", kinds_of(main_twin), "memory")
+  expect("the main twin, with its note: one a form", #main_twin.reasons, 2)
+  push(rows, {case = "repos/twin, its note", reasons = #main_twin.reasons, verdict = verdict_line(main_twin)})
+  expect("lanes/twin still there", exists(T .. "/lanes/twin"), true)
+  -- The mounts in force are read from `shale --help`: this run's scratch.
+  local scratch_os = ""
+  for m in run_mounts() do
+    if m.name == "scratch" then scratch_os = m.os end
+  end
+  expect("the mounts in force: scratch's folder", scratch_os, real("scratch:"))
 
   -- Nothing was deleted.
   for c in cases do expect(c.dir .. " still there", exists(R .. "/" .. c.dir), true) end
@@ -622,7 +718,7 @@ end
 if SELF_TEST == 1 then
   self_test()
 else
-  local cfg = {root = ".", places = {".", "build:", "tools:"}, memory = "memory:", depth = LINK_DEPTH}
+  local cfg = {root = ".", places = {".", "build:", "tools:"}, memory = "memory:", depth = LINK_DEPTH, mounts = run_mounts(), home = home_dir()}
   local v = judge(DIR, cfg)
   print_verdict(v)
   if #v.reasons > 0 then fail("retire_checkout: BLOCKED: " .. v.dir .. ", " .. plural(#v.reasons, "reason", "reasons") .. " above") end
