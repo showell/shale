@@ -1,5 +1,5 @@
 // spawn.c: runs one program to its end or its deadline, the raw spawn and
-// poll loop under `run`; the port of Zig Shale's src/shale_spawn.zig.
+// poll loop under `run`.
 //
 // It forks by hand, since `posix_spawn` has no hook for a death signal. The
 // child sets a death signal (and checks its parent is still the one that
@@ -21,9 +21,9 @@
 //
 // The including file defines _GNU_SOURCE before its first include, for
 // pipe2, wait4, signalfd and syscall. The process must not ignore SIGPIPE,
-// and must not die of it either: `spawn_quiet_sigpipe` sets the handler
-// Zig's runtime sets, so a write to a closed stdin is an error, not a death,
-// and a program still starts with SIGPIPE's default.
+// and must not die of it either: `spawn_quiet_sigpipe` sets a handler that
+// does nothing, so a write to a closed stdin is an error, not a death, and a
+// program still starts with SIGPIPE's default.
 
 #ifndef _GNU_SOURCE
 #error "spawn.c needs _GNU_SOURCE defined before the first include: pipe2, wait4, signalfd and syscall"
@@ -46,8 +46,7 @@
 
 SLICE_TYPE(SpawnStrs, const Str);
 
-// A program to run and how. Zig's `Spec`; `spawn_spec_default` gives its
-// defaults.
+// A program to run and how; `spawn_spec_default` gives its defaults.
 typedef struct {
     // argv[0] is found along PATH unless it has a `/`; then it is a path,
     // relative to `cwd`.
@@ -113,7 +112,7 @@ typedef struct {
     uint64_t cpu_ms;
 } SpawnOutcome;
 
-// What `spawn_run` gives: Zig's error set, and its OK.
+// What `spawn_run` gives: OK, or why the program did not run to its end.
 typedef enum {
     SPAWN_OK,
     // The arena refused the argv, the environment or the paths.
@@ -147,10 +146,9 @@ static void spawn_noop_handler(int sig) {
     (void)sig;
 }
 
-// SIGPIPE as Zig's runtime leaves it (std.Io.Threaded): a handler that does
-// nothing, so a write to a pipe whose reader is gone fails with EPIPE, and an
-// exec resets it to the default for the program. Ignoring it instead would
-// pass SIG_IGN on to every program.
+// SIGPIPE given a handler that does nothing, so a write to a pipe whose
+// reader is gone fails with EPIPE, and an exec resets it to the default for
+// the program. Ignoring it instead would pass SIG_IGN on to every program.
 static void spawn_quiet_sigpipe(void) {
     struct sigaction act;
     memset(&act, 0, sizeof act);
@@ -160,7 +158,7 @@ static void spawn_quiet_sigpipe(void) {
 }
 
 // Milliseconds on the monotonic clock, which a deadline is measured on
-// because the wall clock can jump. Zig's `monoMs`.
+// because the wall clock can jump.
 static uint64_t spawn_mono_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -178,7 +176,10 @@ static uint64_t spawn_usage_ms(const struct rusage *u) {
 
 // `s` with a NUL after it, in the arena; NULL when refused.
 static char *spawn_cstr(Arena *a, Str s) {
-    // DRAGON: size overflow. `s.len + 1` would wrap to 0 for a length of SIZE_MAX, and the copy would run past a zero-byte allocation. Refused here first.
+    // DRAGON: size overflow. `s.len + 1` would wrap to 0 for a length of
+    // SIZE_MAX, and the copy would run past a zero-byte allocation.
+    // REMEDY: a length of SIZE_MAX - 1 or more is refused through the arena
+    // before the sum is taken.
     if (s.len >= SIZE_MAX - 1) return arena_refuse(a);
     char *p = ARENA_ARRAY(a, char, s.len + 1);
     if (p == NULL) return NULL;
@@ -204,7 +205,7 @@ static char **spawn_cstr_list(Arena *a, SpawnStrs items) {
 
 // The paths `execve` tries, in order, into `*paths`: argv[0] itself if it
 // has a `/`, else argv[0] in each folder of the environment's PATH (its last
-// `PATH=`, as Zig's loop takes it), or of a default PATH; an empty folder is
+// `PATH=`), or of a default PATH; an empty folder is
 // argv[0] itself. False when the arena refuses.
 static bool spawn_candidates(Arena *a, Str argv0, SpawnStrs env, SpawnCStrs *paths) {
     Str path = S("/usr/local/bin:/usr/bin:/bin");
@@ -266,12 +267,26 @@ static void spawn_child_fail(int err_w, uint32_t code) {
 
 // The child between fork and exec. It never returns: it execs, or writes an
 // errno to `err_w` and exits 127 (a `chdir`'s as 1000 plus its errno).
-// DRAGON: the process boundary. Between fork and exec the child holds a copy of the parent's memory and locks, so a malloc, a stdio call or anything not async-signal-safe can deadlock or corrupt it. It makes only raw system calls on memory built before the fork (the paths, argv and envp), and leaves by exec or _exit, never by return.
+// DRAGON: the process boundary. Between fork and exec the child holds a copy
+// of the parent's memory and locks, so a malloc, a stdio call or anything not
+// async-signal-safe can deadlock or corrupt it.
+// REMEDY: it makes only raw system calls (and `sigemptyset`) on memory built
+// before the fork (the paths, argv and envp), and leaves by exec or _exit,
+// never by return.
 static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, bool has_file_most, uint64_t file_most, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
-    // DRAGON: the process boundary. The death signal ends the child when `shale` dies, so a program never outlives it; but `shale` may die before the prctl, and then the child's parent is already init and no signal will come. The getppid check closes that race: a child whose parent changed exits at once.
+    // DRAGON: the process boundary. The death signal ends the child when
+    // `shale` dies, so a program never outlives it; but `shale` may die
+    // before the prctl, and then the child's parent is already another
+    // process and no signal will come.
+    // REMEDY: the getppid check closes that race: a child whose parent
+    // changed exits at once.
     prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
     if (getppid() != parent) _exit(127);
-    // DRAGON: the process boundary. Its own group is what lets a TERM and a KILL reach every process the program starts (`kill(-pid)`). The parent signals the group only after the error pipe has closed, which is after this call, so it never signals before the group exists.
+    // DRAGON: the process boundary. Its own group is what lets a TERM and a
+    // KILL reach every process the program starts (`kill(-pid)`); a signal
+    // sent before the group exists would miss it.
+    // REMEDY: the parent signals the group only after reading the error
+    // pipe, which closes at the exec, after this call.
     setpgid(0, 0);
     sigset_t none;
     sigemptyset(&none);
@@ -301,7 +316,11 @@ static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_f
 
 // Passes what the pipe holds to the sink until a read would block, into
 // `buf`. Closes the pipe at its end. STOP when the sink does.
-// DRAGON: memory. The program's output is unbounded and arrives at the program's pace; each read is at most `buf`'s 64 KiB and goes straight to the sink, which holds what it keeps under its own bound (keep.c's slots, `whole`'s cap), so nothing here grows with the output.
+// DRAGON: memory. The program's output is unbounded and arrives at the
+// program's pace, so a reader that held it would grow without bound.
+// REMEDY: each read is at most `buf`'s 64 KiB and goes straight to the
+// sink, which holds what it keeps under its own bound (keep.c's slots,
+// `whole`'s cap), so nothing here grows with the output.
 static STATUS_MUST_USE Status spawn_read_available(int *fd, Bytes buf, SpawnSink sink) {
     while (1) {
         ssize_t r = read(*fd, buf.ptr, buf.len);
@@ -457,7 +476,12 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
     if (out_at != SIZE_MAX && at(fds, out_at).revents != 0) TRY(spawn_read_available(&l->out_r, buf, sink));
     if (in_at != SIZE_MAX && at(fds, in_at).revents != 0) {
         size_t n = l->stdin_left.len < 64 * 1024 ? l->stdin_left.len : 64 * 1024;
-        // DRAGON: the process boundary. A program that exits or closes its stdin before reading it all makes this write raise SIGPIPE, whose default kills `shale` mid-run, its program's group left running. The CLI calls spawn_quiet_sigpipe first, so the write fails with EPIPE and the rest of stdin is dropped.
+        // DRAGON: the process boundary. A program that exits or closes its
+        // stdin before reading it all makes this write raise SIGPIPE, whose
+        // default kills `shale` mid-run, its program's group left running.
+        // REMEDY: every caller (c/shale.c, the tests' ran.c and fixtures)
+        // calls spawn_quiet_sigpipe first, so the write fails with EPIPE and
+        // the rest of stdin is dropped.
         ssize_t w = write(l->in_w, l->stdin_left.ptr, n);
         if (w >= 0) {
             l->stdin_left = str_sub(l->stdin_left, (size_t)w, l->stdin_left.len);
@@ -509,7 +533,11 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
         if (why >= 1000) return SPAWN_NO_CWD;
         return why == ENOENT ? SPAWN_NOT_FOUND : SPAWN_NOT_RUNNABLE;
     }
-    // DRAGON: the process boundary. The loop sees the exit only through the pidfd, so a child without one would be waited for by nothing; when the kernel refuses it, the child's group is killed and the child reaped before the refusal is said, so no program runs untracked.
+    // DRAGON: the process boundary. The loop sees the exit only through the
+    // pidfd, so a child without one would be waited for by nothing.
+    // REMEDY: when the kernel refuses the pidfd, the child's group is killed
+    // and the child reaped before the refusal is said, so no program runs
+    // untracked.
     int pid_fd = (int)syscall(SYS_pidfd_open, pid, 0);
     if (pid_fd < 0) {
         kill(-pid, SIGKILL);
@@ -615,7 +643,11 @@ static void spawn_fds_make(SpawnFds *f) {
 
 static void spawn_fds_release(SpawnFds *f) {
     spawn_close(&f->sig_fd);
-    // DRAGON: the process boundary. Put back on every way out, or `shale` would stay deaf to TERM and HUP after a run; a TERM that arrived after the loop's last poll is delivered here, as in Zig.
+    // DRAGON: the process boundary. A mask left blocked would keep `shale`
+    // deaf to TERM and HUP after a run.
+    // REMEDY: spawn_run calls this on every way out of spawn_started, and it
+    // puts the old mask back; a TERM that arrived after the loop's last look
+    // is delivered here, with its default action.
     if (f->masked) sigprocmask(SIG_SETMASK, &f->old_mask, NULL);
     f->masked = false;
     SpawnPipe all[3] = {{f->out_room, 2}, {f->err_room, 2}, {f->in_room, 2}};
@@ -637,7 +669,12 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
 
     // While a program runs, TERM and HUP to `shale` go to the loop instead
     // of the default action; the child unblocks them before exec.
-    // DRAGON: the process boundary. A TERM or HUP that reaches `shale` while it is blocked is held for the signalfd, so the loop can end the program's group before `shale` goes. The mask is blocked before the fork, so no signal can land between the fork and the first poll; the child unblocks it before exec, or every program would start deaf to TERM.
+    // DRAGON: the process boundary. A TERM or HUP that lands between the
+    // fork and the first poll would kill `shale` and leave the program's
+    // group running; a child that kept the mask would start deaf to TERM.
+    // REMEDY: the mask is blocked before the fork, so such a signal is held
+    // for the signalfd and the loop ends the group first; the child sets an
+    // empty mask before exec.
     sigset_t stop_set;
     sigemptyset(&stop_set);
     sigaddset(&stop_set, SIGTERM);

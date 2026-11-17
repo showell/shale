@@ -1,10 +1,10 @@
-// zig_ast.c: the run's zig-ast and its answers, the part of Zig Shale's
-// src/shale_host_zig.zig that every Zig call shares: the one `zig-ast
-// --serve` process a run starts at its first Zig call (`Proc`, `procOf`),
-// a request sent and its answer read in order (`ask`, `Answer`), a stop for
-// a zig-ast gone wrong (`ended`), and an answer's edits made into a file's
-// new text (`applyEdits`) and written as `edit`'s are (`rewrite`). The calls
-// themselves are host_zig.c.
+// zig_ast.c: the run's zig-ast and its answers, what every Zig call shares:
+// the one `zig-ast --serve` process a run starts at its first Zig call
+// (`host_zig_proc_of`), a request sent and its answer read in order
+// (`host_zig_ask`), a stop for a zig-ast gone wrong (`host_zig_ended`), and
+// an answer's edits made into a file's new text (`host_zig_apply`) and
+// written as `edit`'s are (`host_zig_rewrite`). The calls themselves are
+// host_zig.c.
 //
 // It is `tools:zig-ast/bin/zig-ast`, or the program `SHALE_ZIG_AST` names,
 // and it ends with the run (`host_zig_stop`), so a recipe that reads a
@@ -39,7 +39,7 @@ static Str host_zig_from_c(const char *s) { // cstr: the system's own
 enum { HOST_ZIG_EXIT_WAIT_MS = 2000, HOST_ZIG_STDERR_WAIT_MS = 2000 };
 
 // How long one request may wait on zig-ast (its header, a write, an
-// answer's bytes) before the call stops: Zig's `answer_ms_default`. A test
+// answer's bytes) before the call stops. A test
 // sets a shorter one.
 static uint64_t host_zig_answer_ms = 60000;
 
@@ -69,7 +69,8 @@ typedef struct {
     bool late;
 } HostZigProc;
 
-// One a process: a run is one a process, and `host_zig_stop` ends it.
+// The run's one zig-ast, a static since a `shale` process runs one run;
+// `host_zig_stop` ends it.
 static HostZigProc host_zig_proc;
 
 static void host_zig_close(int *fd) {
@@ -82,7 +83,7 @@ static void host_zig_quiet(int sig) {
 }
 
 // Ends the run's zig-ast, if one started: its stdin shut, so it exits, and
-// it is reaped. Zig's `Proc.stop`.
+// it is reaped.
 // DRAGON: the process boundary. A zig-ast left running would outlive the run
 // and hold its pipes.
 // REMEDY: the CLI calls this as soon as the VM returns, stopped or not,
@@ -114,9 +115,10 @@ static void host_zig_stop(void) {
 // The child between fork and exec: never returns.
 // DRAGON: the process boundary. Between fork and exec the child holds a copy
 // of the parent's memory and locks, so anything not async-signal-safe can
-// deadlock it. REMEDY: it makes raw system calls alone, on paths and argv
-// built before the fork, and leaves by exec or _exit; an exec that fails
-// writes its errno on the close-on-exec pipe for the parent to read.
+// deadlock it.
+// REMEDY: it makes raw system calls alone, on paths and argv built before
+// the fork, and leaves by exec or _exit; an exec that fails writes its errno
+// on the close-on-exec pipe for the parent to read.
 static void host_zig_child(pid_t parent, int in_r, int out_w, int err_w, int why_w, HostZigCStrs paths, char **argv) { // cstr: NUL-ended for the kernel
     // DRAGON: the process boundary. zig-ast must not outlive `shale`.
     // REMEDY: a death signal, with the getppid check for a parent that died
@@ -293,8 +295,8 @@ static bool host_zig_write_all(HostZigProc *p, Str s) {
     return true;
 }
 
-// Stops the run for a zig-ast that went wrong, with what it said on stderr,
-// Zig's `ended`: what the waits drained, or else one read within
+// Stops the run for a zig-ast that went wrong, with what it said on stderr:
+// what the waits drained, or else one read within
 // HOST_ZIG_STDERR_WAIT_MS, its spaces and newlines trimmed. One past the
 // deadline says so in place of `why`.
 static STATUS_MUST_USE Status host_zig_ended(Run *r, Pos pos, Str who, Str why) {
@@ -314,7 +316,7 @@ static STATUS_MUST_USE Status host_zig_ended(Run *r, Pos pos, Str who, Str why) 
     return run_failf(r, pos, CLASS_HOST, "`{s}`: zig-ast {s}{s}{s}", S("`"), who, S("`: zig-ast "), why, said.len > 0 ? S(": ") : S(""), said);
 }
 
-// The run's zig-ast, started if it is not yet, Zig's `procOf`. A start
+// The run's zig-ast, started if it is not yet. A start
 // counts against the `programs` budget, as any program does.
 static STATUS_MUST_USE Status host_zig_proc_of(Paths *h, Run *r, Pos pos, Str who) {
     HostZigProc *p = &host_zig_proc;
@@ -416,7 +418,7 @@ static STATUS_MUST_USE Status host_zig_proc_of(Paths *h, Run *r, Pos pos, Str wh
     return OK;
 }
 
-// An answer's lines, read in order: Zig's `Answer`.
+// An answer's lines, read in order.
 typedef struct {
     ZigWireLines lines;
     Arena *sa;
@@ -432,7 +434,7 @@ static STATUS_MUST_USE Status host_zig_wrong(HostZigAnswer *an) {
     return run_failf(an->r, an->pos, CLASS_HOST, "`{s}`: zig-ast's answer has a line this host does not know", S("`"), an->who, S("`: zig-ast's answer has a line this host does not know"));
 }
 
-// Sends a request, `body`, and takes the answer, Zig's `ask`.
+// Sends a request, `body`, and takes the answer.
 static STATUS_MUST_USE Status host_zig_ask(Paths *h, Arena *sa, Run *r, Pos pos, Str who, Str body, HostZigAnswer *an) {
     TRY(host_zig_proc_of(h, r, pos, who));
     HostZigProc *p = &host_zig_proc;
@@ -502,7 +504,8 @@ static STATUS_MUST_USE Status host_zig_keep(Run *r, Pos pos, Str s, Str *out) {
     return OK;
 }
 
-// A `work` line's steps charged.
+// zig-ast's count of its own work, charged as the run's steps, so a call
+// costs what zig-ast spent on it.
 static STATUS_MUST_USE Status host_zig_work(HostZigAnswer *an) {
     size_t n = 0;
     TRY(host_zig_int(an, 1, &n));

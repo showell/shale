@@ -1,10 +1,9 @@
-// host_call.c: the Linux host's `host(name, ...)` calls, Zig Shale's
-// src/shale_host_linux.zig `call`: `run` and `sleep` (host_run.c), the jobs
-// (host_jobs.c), `real`, the Zig tools (host_zig.c), `re_lines` and
-// `shale_tokens` (host_text.c), `roc_tree` and `go_tree` (flat_tree.c),
-// `json_read` and `json_write` (host_json.c), and `may_change` and
-// `edits_write`, which `edits_all` calls, and `procs` and `proc_stop`
-// (host_procs.c).
+// host_call.c: the Linux host's `host(name, ...)` calls, each sent to its
+// file: `run` and `sleep` (host_run.c), the jobs (host_jobs.c), `real`, the
+// Zig tools (host_zig.c), `re_lines` and `shale_tokens` (host_text.c),
+// `roc_tree` and `go_tree` (flat_tree.c), `json_read` and `json_write`
+// (host_json.c), and `may_change` and `edits_write`, which `edits_all`
+// calls, and `procs` and `proc_stop` (host_procs.c).
 //
 // Include paths.c, builtins_change.c, host_run.c, host_jobs.c, host_procs.c,
 // host_json.c, host_text.c, flat_tree.c and host_zig.c first.

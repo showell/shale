@@ -67,12 +67,10 @@ static STATUS_MUST_USE Status zig_wire_field(Buf *w, Str s) {
     return OK;
 }
 
-// The tab before a line's next field.
 static STATUS_MUST_USE Status zig_wire_tab(Buf *w) {
     return buf_byte(w, '\t');
 }
 
-// A line's end.
 static STATUS_MUST_USE Status zig_wire_end(Buf *w) {
     return buf_byte(w, '\n');
 }

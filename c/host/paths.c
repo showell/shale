@@ -1,11 +1,12 @@
-// paths.c: the Linux host's hook on paths, the port of src/shale_host_linux.zig's
-// `resolve`, `absoluteHint`, `mayChange`, `noteBefore`, `secretPath`,
-// `secretTarget` and `refuseSecretArgs`. It holds the mounts (`runs:x` is the
-// mount `runs`'s folder joined with `x`, held to the root's rules), the walk
-// of each part with `lstat` (the store follows no symbolic link), the
-// read-only mounts, the secrets rule (no read, listing, `stat` or `real` of a
-// secrets mount's files by any spelling, no program handed its folder) and
-// the journal `--undo-on-stop` keeps (undo.c puts it back).
+// paths.c: the Linux host's hook on paths: resolving a path, the
+// absolute path's hint, the check before a change and its journal, and the
+// secrets rule's checks of a path, a link's target and a program's
+// arguments. It holds the mounts (`runs:x` is the mount `runs`'s folder
+// joined with `x`, held to the root's rules), the walk of each part with
+// `lstat` (the store follows no symbolic link), the read-only mounts, the
+// secrets rule (no read, listing, `stat` or `real` of a secrets mount's
+// files by any spelling, no program handed its folder) and the journal
+// `--undo-on-stop` keeps (undo.c puts it back).
 //
 // Include store.c, path_run.c and mounts.c first.
 
@@ -93,7 +94,7 @@ static bool paths_resolve_posix(Arena *a, Str base, Str p, Str *out) {
 }
 
 // `p` absolute: as it is when it is, else against the working folder,
-// resolved, so `.` is the folder itself. Zig's `absolute`.
+// resolved, so `.` is the folder itself.
 static STATUS_MUST_USE Status paths_absolute(Paths *h, PathRun *r, Pos pos, Str p, Str *out) {
     if (p.len > 0 && str_byte(p, 0) == '/') {
         *out = p;
@@ -103,7 +104,7 @@ static STATUS_MUST_USE Status paths_absolute(Paths *h, PathRun *r, Pos pos, Str 
     return OK;
 }
 
-// The run's own root, absolute. Zig's `rootOf`.
+// The run's own root, absolute.
 static STATUS_MUST_USE Status paths_root_of(Paths *h, PathRun *r, Pos pos, Str *out) {
     return paths_absolute(h, r, pos, mounts_trim_slash(r->root), out);
 }
@@ -117,7 +118,7 @@ static STATUS_MUST_USE Status paths_cat(PathRun *r, Pos pos, Str a, Str b, Str c
 }
 
 // A mount's folder as this run sees it: one inside the CLI's root is taken
-// against the run's own root. Zig's `runDirOf`.
+// against the run's own root.
 static STATUS_MUST_USE Status paths_run_dir_of(Paths *h, PathRun *r, Pos pos, const Mount *m, Str *out) {
     if (!mounts_in_folder(m->dir, h->root_abs)) {
         *out = m->dir;
@@ -205,7 +206,7 @@ static STATUS_MUST_USE Status paths_refuse_secrets_under(Paths *h, PathRun *r, P
 }
 
 // The mount `path` names before its `:` at `colon`, into `*out`; a stop
-// naming the mounts there are when it is none. Zig's `mountOf`.
+// naming the mounts there are when it is none.
 static STATUS_MUST_USE Status paths_mount_of(Paths *h, PathRun *r, Pos pos, Str path, size_t colon, const Mount **out) {
     Str name = str_sub(path, 0, colon);
     for (size_t k = 0; k < h->mounts.len; k++) {
@@ -229,7 +230,6 @@ static STATUS_MUST_USE Status paths_mount_of(Paths *h, PathRun *r, Pos pos, Str 
 // Stops the run if any part of `rest` below `base` is a symbolic link,
 // each part `lstat`ed and charged a step; a missing part ends the walk.
 // The stop names the path as the script wrote it, `shown_prefix` first.
-// Zig's `refuseLinks`.
 // DRAGON: the store's boundaries. A link anywhere below the root or a
 // mount's folder would let a path that passes every check land outside them
 // (`dir/up -> ../../etc`). A link made between this walk and the store's call
@@ -263,7 +263,7 @@ static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, 
 }
 
 // `path` (the mount `m`'s, its `:` at `colon`) as an OS path, the rest held
-// to the root's rules and walked for links. Zig's `mountPath`.
+// to the root's rules and walked for links.
 static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, Str path, size_t colon, const Mount *m, Str *out) {
     Str rest = str_sub(path, colon + 1, path.len);
     if (str_eq(rest, S("."))) rest = S("");
@@ -376,7 +376,7 @@ static STATUS_MUST_USE Status paths_resolve(void *ctx, PathRun *r, Pos pos, Str 
 // tie to the root. A path in a secrets mount's folder gets none, so the
 // stop names neither that mount nor where its folder is; neither does one
 // whose rest is no script's path. The folders are the CLI's (`root_abs`, a
-// mount's `dir`), as the script's author sees them. Zig's `absoluteHint`.
+// mount's `dir`), as the script's author sees them.
 static STATUS_MUST_USE Status paths_absolute_hint(void *ctx, PathRun *r, Pos pos, Str abs_given, bool *has, AbsoluteHint *out) {
     Paths *h = ctx;
     *has = false;
@@ -491,7 +491,7 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
 // The `PathHook.may_change`: refuses a change through a read-only mount,
 // by its name or by a root path into its folder (a writable mount inside it
 // decides for its own folder), then journals the path under
-// `--undo-on-stop`. Zig's `mayChange`.
+// `--undo-on-stop`.
 // DRAGON: the store's boundaries. A builtin that skipped this would write
 // through a read-only mount.
 // REMEDY: every change builtin asks it before it writes (builtins_change's
@@ -579,7 +579,7 @@ typedef enum {
 // Whether `arg`, as a program may take it (whole, or after an option's
 // `=`), reaches `dir`: inside it by its text, resolved against the
 // program's `cwd`, or through a link; or holding it, a folder above it.
-// Each spelling tried is charged a step. Zig's `namesFolder`.
+// Each spelling tried is charged a step.
 static STATUS_MUST_USE Status paths_names_folder(PathRun *r, Pos pos, Str arg, Str cwd, Str dir, PathsNames *out) {
     *out = PATHS_NAMES_NONE;
     if (dir.len == 0 || memmem(arg.ptr, arg.len, dir.ptr, dir.len) != NULL) {

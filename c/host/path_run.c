@@ -1,9 +1,8 @@
-// path_run.c: a script's path as the core takes it, the port of Zig
-// Shale's `builtins_store.pathArg` and `absoluteStop` (src/script/
-// builtins_store.zig) and of the hook a host hangs on every path,
-// `interp.PathHook`. Also where the stops built from a path, and the host's,
-// are made (`path_fail`, which checks their host-made arguments against the
-// secrets rule), and the store's failure in words (`path_store_failed`).
+// path_run.c: a script's path as the core takes it, and the hook a host
+// hangs on every path (`PathHook`). Also where the stops built from a path,
+// and the host's, are made (`path_fail`, which checks their host-made
+// arguments against the secrets rule), and the store's failure in words
+// (`path_store_failed`).
 //
 // A path is the root's unless the hook resolves it (a mount's, on Linux):
 // every part a name FAT holds, so `.`, `..`, empty parts and a leading `/`
@@ -44,9 +43,9 @@ typedef struct {
 // step charge, the data root, and the host's hook (NULL on metal).
 typedef struct PathRun {
     RunCtx *ctx;
-    // The data root as the run was given it, Zig's `run.root`.
+    // The data root as the run was given it.
     Str root;
-    // The run's step charge, Zig's `Run.charge`: STOP past the budget.
+    // The run's step charge: STOP past the budget.
     Status (*charge)(void *vm, RunCtx *ctx, Pos pos, uint64_t n);
     void *vm;
     const PathHook *hook;
@@ -195,7 +194,7 @@ static Str path_store_words(StoreErr e) {
     }
 }
 
-// What to do about it, when there is something: Zig's `storeHint`.
+// What to do about it, when there is something.
 static Str path_store_hint(StoreErr e) {
     switch (e) {
     case STORE_FILE_NOT_FOUND: return S(": `exists(p)` asks first");
@@ -240,7 +239,6 @@ typedef struct {
 
 // The stop for an absolute path, the one home of its words: where the hook
 // knows the folder that holds it, the stop says how to write it there.
-// Zig's `absoluteStop`.
 static STATUS_MUST_USE Status path_absolute_stop(PathRun *r, Pos pos, Str who, Str abs) {
     if (r->hook == NULL || r->hook->absolute_hint == NULL) {
         return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: paths are relative to the data root"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs)));

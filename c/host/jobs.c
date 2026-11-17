@@ -1,5 +1,5 @@
-// jobs.c: long jobs, programs that outlive the `shale` that started them;
-// the port of Zig Shale's src/shale_jobs.zig.
+// jobs.c: long jobs, programs that outlive the `shale` that started them,
+// each under a reaper of its own.
 //
 // `jobs_launch` double-forks a reaper out of the caller's process tree, so
 // stopping the `shale` that waits on a job never kills the job. The first
@@ -16,7 +16,7 @@
 // The reaper's end of `jobs_launch`'s started pipe.
 enum { JOBS_STARTED_FD = 3 };
 
-// Room for a process's /proc stat line, as Zig's 1024-byte buffer.
+// Room for a process's /proc stat line, read once.
 typedef struct {
     char bytes[1024];
 } JobsStat;
@@ -79,6 +79,11 @@ static bool jobs_signal_group(int32_t pgid, int sig) {
     return kill(-pgid, sig) == 0;
 }
 
+// How long what a job's leader left in its group has, after the TERM at the
+// leader's exit, before it is KILLed (`jobs_stop`'s and `run`'s grace), and
+// how often the group is asked whether it is empty, as spawn.c asks.
+enum { JOBS_GROUP_GRACE_MS = 2000, JOBS_GROUP_TICK_MS = 10 };
+
 // Whether a job is alive: its leader, while it is there, by the record's
 // start time; once it is gone, its group, if a process of it lives on. The
 // leader is asked first: it makes its group (`setsid`) only once it runs.
@@ -119,7 +124,7 @@ static bool jobs_stop(const JobRecord *r, uint64_t grace_ms) {
     jobs_signal_group(r->pgid, SIGKILL);
     jobs_signal_leader(r, SIGKILL);
     // The reaper reaps the leader; a little wait for it and the group to go.
-    for (uint64_t waited = 0; waited < 2000 && jobs_alive(r); waited += 20) jobs_sleep_ms(20);
+    for (uint64_t waited = 0; waited < JOBS_GROUP_GRACE_MS && jobs_alive(r); waited += 20) jobs_sleep_ms(20);
     return true;
 }
 
@@ -181,7 +186,7 @@ static STATUS_MUST_USE Status jobs_find(Arena *a, Str argv0, SpawnStrs env, Str 
     }
 }
 
-// What `jobs_launch` gives: Zig's LaunchError and its OK.
+// What `jobs_launch` gives: launched, or why not.
 typedef enum {
     JOBS_LAUNCHED,
     JOBS_OUT_OF_MEMORY,
@@ -318,12 +323,15 @@ static JobsLaunched jobs_launch(Arena *a, Str reaper, Str record, Str log, Str c
     }
     close(at(pipe_ends, 0));
     // The reaper wrote its byte or exited; either way the record is final.
-    // DRAGON: the record is the text a file in the log's folder holds, and
-    // what it says (`pid`, `pgid`, `start`) decides what `jobs_stop` and
-    // `jobs_alive` send `kill`.
-    // REMEDY: job_record.c reads only a record whose pgid is its pid, so a
-    // record names a group whose leader it names, and jobs_signal_group
-    // refuses a pgid below 2 whatever the text says.
+    // DRAGON: the process boundary. A record is whatever text the file in
+    // the log's folder holds, here and wherever a later call finds the job
+    // again (host_jobs_find), and what it says (`pid`, `pgid`, `start`)
+    // decides what `jobs_stop` and `jobs_alive` send `kill`.
+    // REMEDY: job_record.c reads only a record whose pgid is its pid, and
+    // jobs_signal_group refuses a pgid below 2, so no record reaches kill(-1)
+    // or this process's own group. What is left: a forged record can name
+    // any process or process group of the user's, which is no more than a
+    // script can already do with `run({"kill", ...})`.
     Bytes text = {NULL, 0};
     if (!jobs_read_small(a, zrecord, &text)) return JOBS_NO_RECORD;
     if (!job_record_parse(text, out)) return JOBS_NO_RECORD;
@@ -360,11 +368,6 @@ static bool jobs_write_record(const char *record, const char *tmp, JobRecord r) 
     }
     return true;
 }
-
-// How long what a job's leader left in its group has, after the TERM at the
-// leader's exit, before it is KILLed (`jobs_stop`'s and `run`'s grace), and
-// how often the group is asked whether it is empty, as spawn.c asks.
-enum { JOBS_GROUP_GRACE_MS = 2000, JOBS_GROUP_TICK_MS = 10 };
 
 // Whether no process is left in the group `pgid`. Asked only once its
 // leader is reaped: until then the leader's zombie is a member.
@@ -405,9 +408,8 @@ static Str jobs_arg(char **argv, size_t argc, size_t i) {
 // The reaper, `shale --reap <record> <log> <cwd> <program> -- argv...`, its
 // environment the job's: starts the job, writes its record, waits for it,
 // ends its group and writes how it ended, so a job's end is written only once
-// its group is empty. The exit code says only whether it could: Zig's
-// `reapMain`. `args` are the words after `--reap`.
-// `inline`: only the CLI is a reaper.
+// its group is empty. The exit code says only whether it could. `args` are
+// the words after `--reap`.
 static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env) {
     if (n < 6 || !str_eq(jobs_arg(args, n, 4), S("--"))) return 2;
     Str record_s = jobs_arg(args, n, 0);

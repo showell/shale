@@ -275,7 +275,7 @@ static STATUS_MUST_USE Status refuse_links(LibraryReader *r, Str dir, Str rest, 
     return OK;
 }
 
-// Zig's `-|`: what is left of a budget, never wrapping below zero once a
+// What is left of a budget, never wrapping below zero once a
 // charge has stopped one past it.
 static uint64_t sat_sub(uint64_t a, uint64_t b) {
     return a > b ? a - b : 0;
@@ -435,7 +435,7 @@ static void machine_stop(Stop *stop) {
 
 // The environment a program inherits, `K=V` each, in `environ`'s order,
 // without `ZIG_PROGRESS`, or a `zig build` that `run` runs would write its
-// progress to the pipe of the build that ran `shale`: Zig's `baseEnv`.
+// progress to the pipe of the build that ran `shale`.
 static STATUS_MUST_USE Status base_env(Arena *a, SpawnStrs *out) {
     extern char **environ;
     size_t n = 0;

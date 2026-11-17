@@ -19,6 +19,9 @@ and its self-test plants a break of each one.
 - **The C builds as one translation unit** (Steve, 2026-11-17). A `.c`
   file's functions are all `static`, and a program or test `#include`s the
   `.c` files it needs, as `test_regex.c` includes `../script/regex.c`.
+- A `.c` file's function that some unit including it never calls (the
+  CLI's report, the reaper, a run's stop, which a test unit may not use) is
+  `static inline`, so GCC's unused-function warning passes it by there.
 - A test file is `c/tests/test_<header>.c`. It includes `test.h` first.
 - **Held:** a header's first line is `// <its name>: ` and then what it is.
 - **Held:** a header's guard is `SHALE_<NAME>_H`, and its last line is
@@ -116,7 +119,7 @@ and its self-test plants a break of each one.
   `c/shale.c`). A folder joins `HELD` once its comments are clean.
 - A function's comment says what it gives and when it refuses. It sits
   above the function.
-- A file's comment says what the piece is, and which Zig it matches.
+- A file's comment says what the piece is.
 
 ## Strings and indexing
 

@@ -1,8 +1,7 @@
-// job_record.c: a job's record, `<log>.job`, the port of Zig Shale's
-// src/shale_job_record.zig: `key=value` lines a job's reaper writes and every
-// later `shale` reads to find the job again. Plain text and no system call,
-// so it is the part of jobs a port keeps; the processes it names are the
-// jobs' own. Its text is Zig's byte for byte, and so is what it refuses.
+// job_record.c: a job's record, `<log>.job`: `key=value` lines a job's
+// reaper writes and every later `shale` reads to find the job again. It is
+// plain text and makes no system call; the processes a record names are
+// jobs.c's to signal.
 
 #include "slice.h"
 

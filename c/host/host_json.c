@@ -1,6 +1,5 @@
 // host_json.c: the Linux host's JSON, `host("json_read", s, opts?)` and
-// `host("json_write", v)`, the port of Zig Shale's src/shale_host_json.zig.
-// Every message, charge and refusal is Zig's, byte for byte.
+// `host("json_write", v)`.
 //
 // Shale's values are not JSON's, and where they differ the reader says so:
 // an object is a map and an array a list, `{}` and `[]` both the empty
@@ -19,7 +18,7 @@ enum {
     JSON_DEPTH_MOST = 512,
 };
 
-// A text being read: Zig's `Reader`.
+// A text being read.
 typedef struct {
     Run *r;
     Pos pos;
@@ -98,7 +97,7 @@ static bool json_is_digit(uint8_t c) {
     return c >= '0' && c <= '9';
 }
 
-// Zig's `utf8ValidateSlice`: every sequence whole, none overlong, no
+// Whether `s` is UTF-8: every sequence whole, none overlong, no
 // surrogate half, nothing past U+10FFFF.
 static bool json_utf8_valid(Str s) {
     size_t i = 0;
@@ -557,8 +556,9 @@ static STATUS_MUST_USE Status json_emit_string(Run *r, Pos pos, Buf *b, Str s) {
 
 // `v` as compact JSON onto `b`, a step a value.
 // DRAGON: the process's stack. Each table nests a call of this, and a table
-// can hold itself. REMEDY: `depth_left` starts at JSON_DEPTH_MOST and a table
-// past it is refused before the call that would nest.
+// can hold itself.
+// REMEDY: `depth_left` starts at JSON_DEPTH_MOST, one less a level, and a
+// table reached with none left is refused before it nests another call.
 static STATUS_MUST_USE Status json_emit(Run *r, Pos pos, Buf *b, const Value *v, size_t depth_left) {
     TRY(run_charge(r, pos, 1));
     Status w = OK;

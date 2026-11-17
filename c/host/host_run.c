@@ -1,9 +1,8 @@
-// host_run.c: the Linux host's `run`, the port of Zig Shale's
-// src/shale_host_run.zig, and what it shares with the jobs from
-// src/shale_host_linux.zig: the host itself (`Host`: its paths, the
-// environment a program inherits, the records `--verbose` lists and where
-// the run's time went), the refusals (`refuse`), the option readers, the
-// scrubber of secrets (`Scrub`) and the output's sinks (`Out`).
+// host_run.c: the Linux host's `run`, and what it shares with the jobs: the
+// host itself (`Host`: its paths, the environment a program inherits, the
+// records `--verbose` lists and where the run's time went), the refusals
+// (`host_refuse`), the option readers, the scrubber of secrets
+// (`HostScrub`) and the output's sinks (`HostOut`).
 //
 // A program's output streams through the scrubber, then to the log, and to
 // the keep (keep.c) or `whole`'s buffer, all in an arena of the stream's own
@@ -39,7 +38,7 @@ typedef struct {
 
 SLICE_TYPE(HostSlows, HostSlow);
 
-// Where a run's time went, for the line after its report: Zig's `Time`.
+// Where a run's time went, for the line after its report.
 typedef struct {
     uint32_t runs;
     uint64_t run_ms;
@@ -55,8 +54,7 @@ VEC_DEFINE(HostRecords, Str)
 
 // A job this run started, as the host keeps it past the run's values: which
 // job it is (its leader's pid and start time, so a later job on the same log
-// is another), where its record is, and how a stop names it. Zig's
-// `Started`.
+// is another), where its record is, and how a stop names it.
 typedef struct {
     Str record_os;
     Str log;
@@ -69,7 +67,7 @@ typedef struct {
 
 VEC_DEFINE(HostStartedJobs, HostStarted)
 
-// The Linux host the CLI hands the core: Zig's `Host`. Its arena is
+// The Linux host the CLI hands the core. Its arena is
 // `paths.arena`, which outlives the run's values.
 typedef struct {
     Paths paths;
@@ -111,9 +109,9 @@ static bool host_keep_ends(Arena *a, Str argv, Str *out) {
     return true;
 }
 
-// Counts one program's `ms`, keeping its argv if it is among the slowest:
-// Zig's `Time.ran`. An argv the arena refuses is left out of the top, as
-// Zig's `catch return` leaves it.
+// Counts one program's `ms`, keeping its argv if it is among the slowest.
+// An argv the arena refuses is left out of the top, and the count still
+// holds it.
 static void host_time_ran(HostTime *t, Arena *a, Str argv, uint64_t ms) {
     t->runs++;
     t->run_ms += ms;
@@ -130,7 +128,6 @@ static void host_time_ran(HostTime *t, Arena *a, Str argv, uint64_t ms) {
 }
 
 // Said after the report when it passes a second, or always with `--verbose`.
-// `inline`, as host_time_write: only the CLI's report uses the two.
 static inline bool host_time_worth_saying(const HostTime *t, bool verbose) {
     return (verbose && (t->runs > 0 || t->waits > 0 || t->sleep_ms > 0)) || t->run_ms + t->wait_ms + t->sleep_ms >= 1000;
 }
@@ -179,7 +176,7 @@ static inline STATUS_MUST_USE Status host_time_write(Buf *w, const HostTime *t) 
 }
 
 // One line for `--verbose`'s `── ran`, in the host's arena. A line the arena
-// refuses is left out, as Zig's `record` leaves it.
+// refuses is left out, and the run goes on.
 static void host_record(Host *h, Str line) {
     Str kept = S("");
     if (!arena_dup(h->paths.arena, line, &kept)) return;
@@ -188,13 +185,14 @@ static void host_record(Host *h, Str line) {
 
 // ── stops ──
 
-// A stop of the host's, its message Zig's format `fmt` of `args`.
+// A stop of the host's, its message the format `fmt` of `args`.
 static STATUS_MUST_USE Status host_fail(Run *r, Pos pos, StopClass cls, Str fmt, MsgArgs args) {
     return path_fail(&builtin_store_of(r)->path, pos, cls, fmt, args);
 }
 
-// A budget's stop with Zig's message, as `overBudget` and `streamOver` set
-// `run.stop` themselves: class `budget`, the budget named.
+// A budget's stop with the message `m` holds, for `host_over_budget` and
+// `host_stream_over`, which build their own: class `budget`, the budget
+// named.
 static STATUS_MUST_USE Status host_budget_fail(Run *r, Pos pos, BudgetKind b, Buf *m, Status built, Str fallback) {
     Status s = run_fail_built(&r->ctx, pos, CLASS_BUDGET, m, built, fallback);
     r->ctx.stop.budget = b;
@@ -235,7 +233,7 @@ static STATUS_MUST_USE Status host_bool_opt(Run *r, Pos pos, Str k, const Value 
     return OK;
 }
 
-// `run`'s options, as the script gives them: Zig's `Opts`. An option given
+// `run`'s options, as the script gives them. An option given
 // is `has_` set; a table option's table is NULL when not given.
 typedef struct {
     bool has_timeout;
@@ -275,7 +273,7 @@ typedef struct {
     Str stage;
 } RunOpts;
 
-// The options read and held to Zig's rules: Zig's `readOpts`.
+// The options read, each held to its rules.
 static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, RunOpts *o) {
     memset(o, 0, sizeof *o);
     o->width = 200;
@@ -378,14 +376,14 @@ typedef struct {
 
 SLICE_TYPE(HostRefusedGroups, const HostRefusedGroup);
 
-// Programs `run` refuses without a `want`: Zig's `refused`.
+// Programs `run` refuses without a `want`.
 static const HostRefusedGroup HOST_REFUSED[] = {
     {"bash sh dash zsh busybox python python3 perl node ", "a shell or an interpreter: Shale is the script"},
     {"head tail awk gawk cut sort uniq wc cat tr ", "a text tool: Shale's builtins and run's own filter and keep do this"},
     {"env xargs timeout nice nohup setsid stdbuf time ", "a wrapper that runs another program: run that program, with run's own options"},
 };
 
-// Programs `run` refuses even with a `want`: Zig's `never`.
+// Programs `run` refuses even with a `want`.
 static const HostRefusedGroup HOST_NEVER[] = {
     {"sed gsed ", "`edit(p, old, new)` changes a file and stops the run when `old` isn't there; `re_replace(s, pattern, new)` then `replace(p, s)` for a pattern; `lines(read(p))`, or `shale cookbook:look.shale at=f:N-M`, for a file's lines"},
     {"grep egrep fgrep ", "`grep_tree(place, needle, {regex, nocase, ext, like, context})` searches a tree; `grep(p, lit)`, `re_lines(read(p), pattern)` or `grep_all(p, lit)` one file; `report_run(argv, {grep = {...}})` or `run`'s `re` a program's output"},
@@ -405,7 +403,7 @@ static bool host_group_has(const HostRefusedGroup *g, Str name) {
     return false;
 }
 
-// Zig's `std.fs.path.basename`: the last part, trailing `/`s dropped.
+// `p`'s last part, trailing `/`s dropped.
 static Str host_basename(Str p) {
     size_t end = p.len;
     while (end > 0 && str_byte(p, end - 1) == '/') end--;
@@ -415,7 +413,7 @@ static Str host_basename(Str p) {
 }
 
 // argv[0]'s basename with each `.digits` suffix dropped (`python3.12` is
-// `python3`): Zig's `baseName`.
+// `python3`).
 static Str host_base_name(Str argv0) {
     Str b = host_basename(argv0);
     while (1) {
@@ -449,8 +447,8 @@ static STATUS_MUST_USE Status host_discard(void *ctx, Str bytes) {
     return OK;
 }
 
-// Whether git tracks the program at `path`, relative to `cwd`: Zig's
-// `tracked`. A git that cannot start is "no".
+// Whether git tracks the program at `path`, relative to `cwd`. A git that
+// cannot start is "no".
 static STATUS_MUST_USE Status host_tracked(Host *h, Run *r, Pos pos, Str path, Str cwd, bool *out) {
     Str argv_all[5] = {S("git"), S("ls-files"), S("--error-unmatch"), S("--"), path};
     SpawnSpec spec;
@@ -471,8 +469,7 @@ static STATUS_MUST_USE Status host_tracked(Host *h, Run *r, Pos pos, Str path, S
 
 // Refuses a program in HOST_NEVER whatever the want; then, without one, a
 // program in HOST_REFUSED and a program by a path git does not track, unless
-// it is under a ` tools` mount. Used by `run` and `job_start`: Zig's
-// `refuse`.
+// it is under a ` tools` mount. Used by `run` and `job_start`.
 static STATUS_MUST_USE Status host_refuse(Host *h, Run *r, Pos pos, Str who, Str argv0, Str cwd, bool has_want) {
     Str base = host_base_name(argv0);
     Str bare = base;
@@ -510,7 +507,6 @@ typedef struct {
 SLICE_TYPE(HostSecrets, const HostSecret);
 
 // Where scrubbed output goes: the whole log, and the keep or `whole`.
-// Zig's `Out`.
 typedef struct {
     int log_fd;
     bool log_failed;
@@ -547,7 +543,7 @@ static STATUS_MUST_USE Status host_out_write(HostOut *o, Str bytes) {
 }
 
 // Replaces each secret's bytes with `<secret K>` before the log, the keep
-// and `whole`: Zig's `Scrub`. A possible secret split across reads is held
+// and `whole`. A possible secret split across reads is held
 // back in `carry` until it can be decided.
 // DRAGON: the secrets rule. A secret's bytes that reach `next` unscrubbed
 // are in the script's hands, its log and its report.
@@ -644,7 +640,6 @@ enum { HOST_NOT_REGULAR = -1 };
 
 // Opens `c`, which must be a regular file, for writing (made if missing,
 // truncated) or reading: 0 with `*fd` set, HOST_NOT_REGULAR, or the errno.
-// Zig's `openRegular`.
 // DRAGON: the run's deadline and the store's boundaries. A FIFO or a device
 // at the path would hold the open, and `shale` with it, until a reader or a
 // writer came; a link planted at the last part would be followed.
@@ -673,7 +668,7 @@ static int host_open_regular(const char *c, bool write, int *fd) { // cstr: NUL-
 
 // ── `stdout_secret`'s file ──
 
-// Zig's `std.os.linux.E` tag of an errno, as `@tagName` gives it.
+// An errno's name as the messages spell it.
 static Str host_errno_tag(int e) {
     switch (e) {
     case 0: return S("SUCCESS");
@@ -701,7 +696,6 @@ static Str host_errno_tag(int e) {
 
 // The file a program's stdout goes to while it runs: a temporary file beside
 // the secret, mode 0600, renamed over it by `host_secret_store`, or removed.
-// Zig's `SecretFile`.
 typedef struct {
     // The script's path, `keys:NAME`, for messages.
     Str shown;
@@ -745,8 +739,8 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     if (store_cstr(r->ctx.values, buf_view(&t), &tmp) != STORE_OK) return run_values_oom(r, pos);
     int fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(host_errno_tag(errno))));
-    // 0600 whatever the umask; its answer is not read, as in Zig's
-    // `createPrivate`.
+    // 0600 whatever the umask. Its answer is not read: the open's own mode
+    // already holds the file to 0600 or less.
     int chmodded = fchmod(fd, 0600);
     (void)chmodded;
     out->shown = shown;
@@ -759,7 +753,7 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
 
 // Stops the run when the program printed past HOST_SECRET_MOST, however it
 // ended: one held to the cap by RLIMIT_FSIZE ends by SIGXFSZ (or its write
-// fails) with one byte past it written. Zig's `refuseOver`.
+// fails) with one byte past it written.
 static STATUS_MUST_USE Status host_secret_refuse_over(Run *r, Pos pos, HostSecretFile *s, Str program) {
     off_t end = lseek(s->fd, 0, SEEK_END);
     if (end < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown), MSG_FROM_SCRIPT(program), MSG_FROM_HOST(host_errno_tag(errno))));
@@ -827,7 +821,7 @@ static STATUS_MUST_USE Status host_stream_over(Run *r, Pos pos, uint64_t most) {
 }
 
 // A budget's stop in place of `run`'s answer, saying how a program that also
-// failed ended, and its output's end: Zig's `overBudget`.
+// failed ended, and its output's end.
 static STATUS_MUST_USE Status host_over_budget(Run *r, Pos pos, Str stage, uint64_t most, const SpawnOutcome *o, Str out) {
     Buf m = buf_make(r->ctx.values);
     Status s = buf_lit(&m, "`run`: stage `");
@@ -1055,7 +1049,7 @@ static STATUS_MUST_USE Status host_refuse_nul_map(Run *r, Pos pos, Str who, Str 
 }
 
 // Refuses a NUL byte in a program's argument, in an `env` name or value, or
-// in a `secrets` name: Zig's `refuseNul`. `run` and `job_start` call it
+// in a `secrets` name. `run` and `job_start` call it
 // before any other guard.
 // DRAGON: the secrets rule. A Shale string may hold a NUL, and the kernel
 // ends an argument at it: `"keys\0x"` passes the secrets folder's guard whole
@@ -1074,7 +1068,7 @@ static STATUS_MUST_USE Status host_refuse_nul(Run *r, Pos pos, Str who, SpawnStr
 
 // A path the host itself writes for the script (`run`'s log, a job's log and
 // record, `suffix` added to the script's path first), as an OS path, once
-// `may_change` let it change: Zig's `changeOsPath`.
+// `may_change` let it change.
 // DRAGON: the store's boundaries and the undo journal. A file the host opens
 // for writing outside `change_may` would write through a read-only mount and
 // past `--undo-on-stop`'s journal.
@@ -1095,7 +1089,8 @@ static STATUS_MUST_USE Status host_change_os_path(Host *h, Run *r, Pos pos, Str 
 }
 
 // Runs the program, streams its output through the scrubber to the log and
-// the keep, and gives the answer: Zig's `runProgram` after its options.
+// the keep, and gives the answer, once `host_run_program` has read the
+// options.
 static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnStrs argv, const RunOpts *o, HostRunHeld *held, Value *out) {
     Arena *a = r->ctx.values;
     RunStore *rs = builtin_store_of(r);
@@ -1310,7 +1305,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     return OK;
 }
 
-// `host("run", argv, opts)`: Zig's `runProgram`.
+// `host("run", argv, opts)`.
 static STATUS_MUST_USE Status host_run_program(Host *h, Run *r, Pos pos, ConstValues args, Value *out) {
     if (args.len != 2) {
         return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes argv and its options, `run({{\"zig\", \"build\"}}, {{timeout_ms = ..., tail = 20}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));

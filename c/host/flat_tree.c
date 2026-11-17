@@ -1,13 +1,12 @@
-// flat_tree.c: the Linux host's reading of a tree tool's `--flat` output, a
-// port of Zig Shale's src/shale_host_flat_tree.zig. The Linux prelude's
-// `roc_tree(paths)` and `go_tree(paths)` run roc-ast or go-ast and hand what
-// it wrote to `host("roc_tree", out, ending)` or `host("go_tree", out,
-// ending)`; the two tools write one format, so one reader takes both. The
-// format's home is the Zig file's header: a `<tool> flat 1 <version>` line,
-// then `== <path>` a file, and one fact a line, tab-separated, `n` a node
-// (`parent`, `kind` and its span) and `a` an attribute (its node, `name` and
-// `value`), with `\\`, `\t`, `\n` and `\r` escaped. Every message and charge
-// is Zig's, byte for byte.
+// flat_tree.c: the Linux host's reading of a tree tool's `--flat` output.
+// The Linux prelude's `roc_tree(paths)` and `go_tree(paths)` run roc-ast or
+// go-ast and hand what it wrote to `host("roc_tree", out, ending)` or
+// `host("go_tree", out, ending)`; the two tools write one format, so one
+// reader takes both. The format's home is roc-ast's header
+// (tools/roc_ast/main.zig): a `<tool> flat 1 <version>` line, then `==
+// <path>` a file, and one fact a line, tab-separated, `n` a node (`parent`,
+// `kind` and its span) and `a` an attribute (its node, `name` and `value`),
+// with `\\`, `\t`, `\n` and `\r` escaped.
 //
 // Include run.h and builtins.c first.
 
@@ -17,7 +16,7 @@ typedef enum {
     FLAT_GO,
 } FlatTool;
 
-// How the tool's run ended, Zig's `Ending`. A run that exited 0 (`whole`)
+// How the tool's run ended. A run that exited 0 (`whole`)
 // holds only whole lines, so a line that does not read is refused. One that
 // stopped another way (`cut`) may end mid-line with its message after it, so
 // such a line ends the trees and is given back as `said`.
@@ -101,7 +100,7 @@ static Names flat_reserved(void) {
     return n;
 }
 
-// Zig's `std.fmt.parseInt(usize, s, 10)`: an optional `+` or `-`, then
+// A number as the flat format writes it: an optional `+` or `-`, then
 // decimal digits with `_` allowed between them, within 64 bits. A `-` is
 // read before zeros alone, since any other digit makes the number negative.
 static bool flat_num(Str s, size_t *out) {
@@ -170,7 +169,7 @@ static STATUS_MUST_USE Status flat_unescape(Arena *a, Str s, Str *out, bool *bad
     return OK;
 }
 
-// Zig's `addAttr`: an attribute on node `node` (1-based) of `file`, `-` in its
+// Adds an attribute on node `node` (1-based) of `file`, `-` in its
 // name read as `_`, never a node field's name, never twice on one node;
 // `*why` says which rule it breaks, or stays empty.
 static STATUS_MUST_USE Status flat_add_attr(Arena *a, FlatFile *file, size_t node, Str name, Str value, Str *why) {
@@ -200,7 +199,7 @@ static STATUS_MUST_USE Status flat_add_attr(Arena *a, FlatFile *file, size_t nod
 
 SLICE_TYPE(FlatFields, Str);
 
-// Zig's `treeLine`: one node or attribute line, added to the last file.
+// One node or attribute line, added to the last file.
 // `*why` says why it does not read, or stays empty.
 static STATUS_MUST_USE Status flat_tree_line(Arena *a, FlatFiles *files, Str raw, bool node_line, Str *why) {
     if (files->len == 0) {
@@ -318,7 +317,7 @@ static STATUS_MUST_USE Status flat_header_why(Arena *a, FlatTool tool, bool anot
     return OK;
 }
 
-// Zig's `parseFlat`: each `== path` and its nodes, and the first line past
+// Each `== path` and its nodes, and the first line past
 // the trees, if any, into `a`; strings point into `text` or `a`. STOP only
 // when `a` refuses.
 static STATUS_MUST_USE Status flat_parse(Arena *a, Str text, FlatTool tool, FlatEnding ending, FlatDump *out) {
@@ -399,9 +398,10 @@ static STATUS_MUST_USE Status flat_put_text(Run *r, Pos pos, Table *t, Str key, 
 
 // A size the reader counted, as a Shale integer.
 // DRAGON: the integers. A span's number may be up to 2^64 - 1, past what an
-// integer holds; Zig's `@intCast` panics there.
-// REMEDY: the cast keeps the bits, so the value is wrong but nothing
-// overruns; no tool writes a line or column near 2^63.
+// integer holds.
+// REMEDY: none in the code: a number of 2^63 or more reaches the script as
+// a negative integer (the cast keeps the bits). Nothing overruns, and no
+// tool writes a line or column near it.
 static int64_t flat_int(size_t n) {
     return (int64_t)n;
 }
@@ -479,7 +479,7 @@ static STATUS_MUST_USE Status flat_dump_value(Run *r, Pos pos, const FlatDump *d
     return OK;
 }
 
-// Zig's format texts, the fallback when a message cannot be made.
+// The format texts, the fallback when a message cannot be made.
 static Str flat_fallback(FlatTool tool, size_t which) {
     static const Str roc[] = {
         S_ITEM("`roc_tree`'s reading takes roc-ast's output and how its run ended, given {d} arguments"),
@@ -509,17 +509,17 @@ enum {
 };
 
 // What is read, once the arguments are checked: the text parsed in a scratch
-// arena of its own, as Zig's is in an `ArenaAllocator` over the host's
-// allocator, so the reading's own lists are no charge on the arena budget;
-// only the values made from them are.
+// arena of its own, so the reading's own lists are no charge on the arena
+// budget; only the values made from them are.
 static STATUS_MUST_USE Status flat_read(Run *r, Pos pos, Str text, FlatTool tool, FlatEnding ending, Value *out) {
     FlatNames n;
     flat_names(tool, &n);
     // DRAGON: the arena budget. The reading's own lists are outside it, so a
     // tool's output holds a few times its bytes in memory no budget counts.
-    // REMEDY: the prelude's `whole` keep (64 MB) bounds the text, and this
-    // arena's limit, the host's 1 GiB as c/shale.c sizes it, bounds the
-    // rest; its refusal is the arena budget, as Zig's `run.oom` is.
+    // REMEDY: the text is a script's string, under the arena budget (the
+    // prelude's `whole` keep, 64 MB, for a tool's output), and this arena's
+    // own limit, 1 GiB, bounds the rest; its refusal is the arena budget's
+    // stop (`run_values_oom`).
     Arena scratch = arena_make((size_t)1 << 30);
     FlatDump d;
     Status s = flat_parse(&scratch, text, tool, ending, &d);

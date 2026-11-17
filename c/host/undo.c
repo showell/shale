@@ -1,5 +1,4 @@
-// undo.c: `--undo-on-stop`'s putting back, the port of Zig Shale's
-// `undoChanges` (src/shale_host_linux.zig). paths.c journals each path
+// undo.c: `--undo-on-stop`'s putting back. paths.c journals each path
 // before its first change (`paths_note_before`); this puts back a stopped
 // run's changes, newest first: a file's bytes and mode restored, a path
 // that was not there deleted (a folder with what is in it). A folder the

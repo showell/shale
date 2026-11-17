@@ -1,9 +1,9 @@
-// store.c: the store, every file a script reads or changes, the port of
-// zig-webbox's src/store.zig as Shale uses it on Linux. FAT's rules hold on
-// every host: a name FAT holds (`store_fat_name`), case that does not tell
-// two names apart (a missing name is looked for in another case, and a new
-// one keeps the case it was given), and, under the host's two bases, the
-// bare-metal host's limits on a path's length and depth.
+// store.c: the store, every file a script reads or changes, on Linux,
+// held to the bare-metal store's rules. FAT's rules hold on every host: a
+// name FAT holds (`store_fat_name`), case that does not tell two names apart
+// (a missing name is looked for in another case, and a new one keeps the
+// case it was given), and, under the host's two bases, the bare-metal host's
+// limits on a path's length and depth.
 //
 // Its calls are the ones Shale's builtins make: stat, stat-or-null, has,
 // list, read-at, replace (never torn), append, make-dir, remove and
@@ -144,7 +144,7 @@ static bool store_last_part(Str p, size_t *from, size_t *to) {
     return true;
 }
 
-// Zig's `basenamePosix`: the last part, "" when there is none.
+// `p`'s last part, "" when there is none.
 static Str store_basename(Str p) {
     size_t from = 0;
     size_t to = 0;
@@ -220,7 +220,7 @@ typedef struct {
 // Refuses a path the bare-metal host could not hold, measured as it would
 // spell it: an empty part (`//` or a trailing `/`) is BadName, past
 // STORE_MAX_PATH bytes PathTooLong, past STORE_MAX_DEPTH parts PathTooDeep.
-// A path under neither base is not measured. Zig's `withinLimits`.
+// A path under neither base is not measured.
 static StoreErr store_within_limits(const LinuxStore *s, Str path) {
     for (int k = 0; k < 2; k++) {
         bool has = k == 0 ? s->has_data_base : s->has_auth_base;
@@ -267,7 +267,7 @@ static bool store_eq_nocase(Str x, Str y) {
 
 // The name in `dir` that is `name` apart from case, in the order the disk
 // gives them, into `*found`; `*has` false when there is none or `dir` is
-// not a folder. Zig's `sibling`.
+// not a folder.
 static StoreErr store_sibling(Arena *a, Str dir, Str name, bool *has, Str *found) {
     *has = false;
     const char *c = NULL;
@@ -303,7 +303,7 @@ static StoreErr store_sibling(Arena *a, Str dir, Str name, bool *has, Str *found
 
 // `path` as it is on disk: the first part not found, and every one after
 // it, is looked for in another case; a part found in no case is kept as
-// given. Zig's `resolve`.
+// given.
 static StoreErr store_resolve(Arena *a, Str path, Str *out) {
     if (store_exists(a, path)) {
         *out = path;
@@ -353,7 +353,7 @@ static StoreErr store_retry(Arena *a, Str path, bool *has, Str *out) {
 }
 
 // `path` resolved for a call that may create its last part, which must be
-// a name FAT holds. Zig's `forWrite`.
+// a name FAT holds.
 static StoreErr store_for_write(const LinuxStore *s, Arena *a, Str path, Str *out) {
     if (!store_fat_name(store_basename(path))) return STORE_BAD_NAME;
     StoreErr e = store_within_limits(s, path);
@@ -362,7 +362,7 @@ static StoreErr store_for_write(const LinuxStore *s, Arena *a, Str path, Str *ou
 }
 
 // `path` resolved for a call that makes folders: every part past what is
-// there must be a name FAT holds. Zig's `forMakeDir`.
+// there must be a name FAT holds.
 static StoreErr store_for_make_dir(const LinuxStore *s, Arena *a, Str path, Str *out) {
     StoreErr e = store_within_limits(s, path);
     if (e != STORE_OK) return e;
@@ -477,7 +477,7 @@ static StoreErr store_os_delete_file(Arena *a, Str path) {
 }
 
 // Removes `path` and everything under it, following no link (a link is
-// removed, never entered); nothing there is done. Zig's `deleteTree`.
+// removed, never entered); nothing there is done.
 static StoreErr store_os_delete_tree(Arena *a, Str path) {
     StoreErr e = store_os_delete_file(a, path);
     if (e == STORE_OK || e == STORE_FILE_NOT_FOUND) return STORE_OK;
@@ -521,7 +521,7 @@ static StoreErr store_os_delete_tree(Arena *a, Str path) {
 }
 
 // Makes the folder `path` and every folder above it that is missing; a
-// file in the way is NotDir. Zig's `createDirPath`.
+// file in the way is NotDir.
 static StoreErr store_os_make_path(Arena *a, Str path) {
     const char *c = NULL;
     StoreErr e = store_cstr(a, path, &c);
@@ -629,7 +629,7 @@ static uint64_t store_wyhash(uint64_t seed, Str in) {
 // The temporary name `replace` writes beside `name`: `~`, eight lowercase
 // hex digits of the low half of a Wyhash of the name in lowercase (its
 // first STORE_MAX_NAME bytes), then `.tmp`. Thirteen bytes whatever the
-// name, and one per name in any case. Zig's `siblingName`.
+// name, and one per name in any case.
 static bool store_sibling_name(Arena *a, Str name, Str *out) {
     char lower[STORE_MAX_NAME];
     Bytes low = {lower, sizeof lower};

@@ -1,9 +1,8 @@
-// host_jobs.c: the host's job calls, the port of Zig Shale's
-// src/shale_host_jobs.zig: `job_start`, and `job_alive`, `job_stop` and
-// `job_wait`, which find a job by the map `job_start` gave or by its record's
-// Shale path (`"runs:x/gates.log.job"`), so a later `shale` carries on where
-// an earlier one started; and `host_jobs_stop_with_run`, which ends the jobs
-// a stopped run started. The processes are jobs.c's.
+// host_jobs.c: the host's job calls: `job_start`, and `job_alive`,
+// `job_stop` and `job_wait`, which find a job by the map `job_start` gave or
+// by its record's Shale path (`"runs:x/gates.log.job"`), so a later `shale`
+// carries on where an earlier one started; and `host_jobs_stop_with_run`,
+// which ends the jobs a stopped run started. The processes are jobs.c's.
 //
 // Include host_run.c and jobs.c first.
 
@@ -18,9 +17,9 @@ static STATUS_MUST_USE Status host_jobs_charge_read(Run *r, Pos pos, uint64_t n)
     return OK;
 }
 
-// A file of at most 64 KiB read whole into the values' arena, as Zig's
-// `readFileAlloc(.limited(64 * 1024))`: `*why` is Zig's error name when it
-// cannot be (`FileNotFound`, `StreamTooLong` past the limit), "" when read.
+// A file of at most 64 KiB read whole into the values' arena: `*why` is the
+// error's name when it cannot be (`FileNotFound`, `StreamTooLong` past the
+// limit), "" when read.
 static STATUS_MUST_USE Status host_jobs_read(Run *r, Pos pos, Str os, Bytes *out, Str *why) {
     *why = S("");
     const char *c = NULL;
@@ -48,7 +47,7 @@ typedef struct {
 } HostJobFound;
 
 // Finds a job by the map `job_start` gave or its record's Shale path, and
-// reads its record: Zig's `find`.
+// reads its record.
 static STATUS_MUST_USE Status host_jobs_find(Host *h, Run *r, Pos pos, const Value *v, Str name, HostJobFound *out) {
     Str shown = S("");
     if (v->tag == VALUE_STRING) {
@@ -70,12 +69,9 @@ static STATUS_MUST_USE Status host_jobs_find(Host *h, Run *r, Pos pos, const Val
     if (str_eq(why, S("FileNotFound"))) return host_fail(r, pos, CLASS_STORE, S("`{s}`: no job's record at {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
     if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`{s}`: its record {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(why)));
     TRY(host_jobs_charge_read(r, pos, text.len));
-    // DRAGON: the record is whatever text the file at the script's path
-    // holds, and what it says (`pid`, `pgid`, `start`) decides what
-    // `job_stop` and `job_alive` send `kill`.
-    // REMEDY: job_record.c reads only a record whose pgid is its pid, so a
-    // record names a group whose leader it names, and jobs_signal_group
-    // refuses a pgid below 2 whatever the text says.
+    // The record is the script's text, and decides what `job_stop` signals:
+    // the DRAGON at jobs_launch's read (jobs.c) says what a forged one can
+    // reach.
     if (!job_record_parse(text, &out->record)) return host_fail(r, pos, CLASS_STORE, S("`{s}`: {s} is not a job's record"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
     out->shown = shown;
     out->log = str_sub(shown, 0, shown.len - 4);
@@ -94,7 +90,7 @@ static STATUS_MUST_USE Status host_jobs_result(Run *r, Pos pos, Str ended, bool 
     return OK;
 }
 
-// `job_start(argv, opts)`: starts argv under the reaper, Zig's `start`. The
+// `job_start(argv, opts)`: starts argv under the reaper. The
 // options are `log` (required), `cwd`, `env`, `want` and `keep_on_stop`;
 // there is no `secrets`, since nothing scrubs a detached job's log. It counts
 // against the run's cap on programs.
@@ -199,7 +195,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
         for (size_t k = 0; k < x.len; k++) argv_bytes += (str_byte(x, k) == '\n' || str_byte(x, k) == '\\') ? 2 : 1;
     }
     if (argv_bytes > JOB_RECORD_ARGV_MOST) {
-        return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start`: its argv is {d} bytes in its record, and a record holds {d}"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, argv_bytes)), MSG_FROM_HOST(S("7168"))));
+        return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start`: its argv is {d} bytes in its record, and a record holds {d}"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, argv_bytes)), MSG_FROM_HOST(run_unum(r, JOB_RECORD_ARGV_MOST))));
     }
     if (!h->has_reaper) return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: this host has no reaper to start a job under"));
 
@@ -287,7 +283,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     if (ls == OK) host_record(h, buf_view(&line));
     // Kept by the host, past the run's values, for a stop to end. A job the
     // host cannot keep would be one a stop leaves running unsaid, so it is
-    // a stop now, the job ended first.
+    // a stop at once, the job ended first.
     // DRAGON: the process boundary. A job the run started and the host lost
     // would outlive a stopped run, against the rule that a stop ends its
     // jobs.
@@ -311,7 +307,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     kept.pgid = rec.pgid;
     kept.keep = keep_on_stop;
     if (!fits || HostStartedJobs_push(&h->started, kept) != OK) {
-        jobs_stop(&rec, 2000);
+        jobs_stop(&rec, JOBS_GROUP_GRACE_MS);
         return run_values_oom(r, pos);
     }
     Table *t = NULL;
@@ -327,8 +323,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     return OK;
 }
 
-// A log searched as it grows, never reading again what it already read:
-// Zig's `Scan`.
+// A log searched as it grows, never reading again what it already read.
 typedef struct {
     // How far the log was searched.
     uint64_t done;
@@ -432,7 +427,7 @@ static STATUS_MUST_USE Status host_wait_seen_ended(Host *h, Run *r, Pos pos, Hos
     return host_jobs_result(r, pos, S("exited"), rec->has_exit, rec->exit, rec->has_signal, rec->signal, out);
 }
 
-// The wait itself, its scratch arena the caller's: Zig's `wait`.
+// The wait itself, its scratch arena the caller's.
 static STATUS_MUST_USE Status host_wait_loop(Host *h, Run *r, Pos pos, ConstValues args, const HostWaitOpts *o, Arena *sa, Value *out) {
     uint64_t began = spawn_mono_ms();
     HostScan scan;
@@ -505,7 +500,7 @@ static STATUS_MUST_USE Status host_job_wait(Host *h, Run *r, Pos pos, ConstValue
 }
 
 // `job_alive`, `job_stop` and `job_wait`; `job_start` above. A wait's time
-// is counted however it ends, as Zig's `defer` counts it.
+// is counted however it ends, a refusal's among them.
 static STATUS_MUST_USE Status host_jobs_call(Host *h, Run *r, Pos pos, Str name, ConstValues args, Value *out) {
     if (str_eq(name, S("job_start"))) return host_job_start(h, r, pos, args, out);
     if (str_eq(name, S("job_alive"))) {
@@ -521,7 +516,7 @@ static STATUS_MUST_USE Status host_jobs_call(Host *h, Run *r, Pos pos, Str name,
         HostJobFound j;
         TRY(host_jobs_find(h, r, pos, &at(args, 0), name, &j));
         TRY(run_charge(r, pos, 1));
-        bool was = jobs_stop(&j.record, 2000);
+        bool was = jobs_stop(&j.record, JOBS_GROUP_GRACE_MS);
         if (was) {
             Buf b = buf_make(r->ctx.values);
             if (buf_lit(&b, "job ") == OK && buf_str(&b, j.shown) == OK && buf_lit(&b, " stopped") == OK) host_record(h, buf_view(&b));
@@ -557,10 +552,9 @@ static bool host_started_running(Arena *a, const HostStarted *s) {
 }
 
 // A run that stopped ends the jobs it started, each as `job_stop` does, but
-// those started with `keep_on_stop`, and says so in a line naming each:
-// Zig's `stopWithRun`. A job already stopped or waited to its end is passed
-// by, and only a job this run started is ever signalled.
-// `inline`: a test unit that ends no run has no use of it.
+// those started with `keep_on_stop`, and says so in a line naming each. A
+// job already stopped or waited to its end is passed by, and only a job this
+// run started is ever signalled.
 static inline STATUS_MUST_USE Status host_jobs_stop_with_run(Host *h, Buf *w) {
     Arena *a = h->paths.arena;
     Buf stopped = buf_make(a);
@@ -586,7 +580,7 @@ static inline STATUS_MUST_USE Status host_jobs_stop_with_run(Host *h, Buf *w) {
         ident.pid = j->pid;
         ident.pgid = j->pgid;
         ident.start = j->start;
-        jobs_stop(&ident, 2000);
+        jobs_stop(&ident, JOBS_GROUP_GRACE_MS);
         if (jobs_alive(&ident)) TRY(buf_lit(into, " still alive after KILL"));
         n_stopped++;
     }

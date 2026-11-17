@@ -1,9 +1,8 @@
 // host_zig.c: the host's Zig tools, `zig_rename`, `zig_decls`, `zig_tokens`,
-// `zig_move` and `zig_imports`, the port of Zig Shale's
-// src/shale_host_zig.zig's builtins. It holds no Zig grammar: it checks a
+// `zig_move` and `zig_imports`. It holds no Zig grammar: it checks a
 // call's arguments, reads the files through the store, asks the run's
 // zig-ast (zig_ast.c), and acts on the answer in order: its charges, its
-// stops (each message said here, in Zig's words), the values it gives the
+// stops (each message said here), the values it gives the
 // script, and the edits, written as `edit`'s are, so each change is diffed
 // and logged. zig-ast writes no file.
 //
@@ -42,7 +41,7 @@ static bool host_zig_dotted(Str s) {
 }
 
 // `zig_rename`'s `lines`, from a map of the options but `container` and
-// `via`: Zig's `linesOpt`.
+// `via`.
 static STATUS_MUST_USE Status host_zig_lines_opt(Run *r, Pos pos, Table *m, HostZigRenameOpts *o) {
     for (size_t k = 0; k < ValueMap_len(&m->map); k++) {
         Str key = ValueMap_key_at(&m->map, k);
@@ -112,7 +111,6 @@ static STATUS_MUST_USE Status host_zig_rename_opts(Run *r, Pos pos, const Value 
     return host_zig_lines_opt(r, pos, only_lines, o);
 }
 
-// One name renamed.
 typedef struct {
     Str from;
     Str to;

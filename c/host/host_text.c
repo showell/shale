@@ -1,9 +1,7 @@
-// host_text.c: the Linux host's two calls over text, ports of Zig Shale's
-// src/shale_host_regex.zig (`host("re_lines", s, pattern, opts?)`, the lines
-// a regular expression matches, searched by the regex builtins' own engine,
-// cache and charges) and src/shale_host_tokens.zig (`host("shale_tokens",
-// path, opts?)`, a Shale file's tokens by the lexer the language runs on).
-// Every message and charge is Zig's, byte for byte.
+// host_text.c: the Linux host's two calls over text: `host("re_lines", s,
+// pattern, opts?)`, the lines a regular expression matches, searched by the
+// regex builtins' own engine, cache and charges; and `host("shale_tokens",
+// path, opts?)`, a Shale file's tokens by the lexer the language runs on.
 //
 // Include run.h, builtins.c, builtins_text.c and builtins_store.c first.
 
@@ -16,7 +14,7 @@ static STATUS_MUST_USE Status re_lines_text(Run *r, Pos pos, const Value *v, Str
 }
 
 // `re_lines`' options: every name checked first, then `nocase`, then
-// `invert`, as the prelude's did.
+// `invert`, so a stop names the first wrong one in that order.
 static STATUS_MUST_USE Status re_lines_options(Run *r, Pos pos, const Value *opts, RegexOptions *o, bool *invert) {
     if (opts->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`re_lines` takes its options as a map, not {s}", S("`re_lines` takes its options as a map, not "), value_type_name(opts));
     Table *m = opts->as.table;

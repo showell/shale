@@ -1,8 +1,7 @@
-// mounts.c: the mounts file, the port of Zig Shale's src/shale_host_setup.zig
-// (`parseMounts`, `loadMounts`, `trimSlash`, `inFolder`). A mount is a named
-// folder outside the root, reached as `name:path`; the file says one a line,
-// `name = /abs/path` or `name = ~/path`, then any of ` ro`, ` tools` and
-// ` secrets`. A mistake names its line, in Zig's words.
+// mounts.c: the mounts file, read into the mounts a run knows. A mount is a
+// named folder outside the root, reached as `name:path`; the file says one a
+// line, `name = /abs/path` or `name = ~/path`, then any of ` ro`, ` tools`
+// and ` secrets`. A mistake names its line.
 //
 // Include store.c first (its error names and its file read).
 
@@ -51,8 +50,8 @@ static bool mounts_in_folder(Str abs, Str dir) {
     return str_starts_with(abs, dir) && (abs.len == dir.len || str_byte(abs, dir.len) == '/');
 }
 
-// Zig's `spellsSecretFolder`: whether `text` holds a secrets mount's folder,
-// as the mounts file names it, anywhere in it. A stop for a mount whose
+// Whether `text` holds a secrets mount's folder, as the mounts file names
+// it, anywhere in it. A stop for a mount whose
 // folder is missing prints the folder only when it does not.
 static bool mounts_spell_secret_folder(MountsItems ms, Str text) {
     for (size_t k = 0; k < ms.len; k++) {
@@ -87,8 +86,8 @@ static Str mounts_trim(Str s, bool cr) {
     return str_sub(s, from, to);
 }
 
-// The next word of `s` from `*from`, split on spaces and tabs (Zig's
-// `tokenizeAny`); false when none is left.
+// The next word of `s` from `*from`, split on spaces and tabs; false
+// when none is left.
 static bool mounts_next_word(Str s, size_t *from, Str *word) {
     size_t i = *from;
     while (i < s.len && mounts_space(str_byte(s, i), false)) i++;
@@ -106,7 +105,7 @@ typedef enum {
     MOUNTS_OUT_OF_MEMORY,
 } MountsResult;
 
-// `*why`, Zig's `line {d}: ...` text of `fmt`, made in `a`; MOUNTS_MALFORMED,
+// `*why`, the `line {d}: ...` text of `fmt`, made in `a`; MOUNTS_MALFORMED,
 // or MOUNTS_OUT_OF_MEMORY when the arena refuses it.
 static MountsResult mounts_malformed(Arena *a, Str *why, size_t n, Str fmt, MsgArgs args) {
     MsgNum num;
@@ -119,11 +118,12 @@ static MountsResult mounts_malformed(Arena *a, Str *why, size_t n, Str fmt, MsgA
 // Parses a mounts file's `text` into `*out`, `~/` taken from `home`: one
 // `name = value` a line, `#` comments and blank lines skipped. On
 // MOUNTS_MALFORMED, `*why` names the line and what is wrong with it, and the
-// mount once its name is known to be one, as Zig's `parseMounts` does.
+// mount once its name is known to be one.
 // DRAGON: the secrets rule. A message that quoted the line, its path or a
 // word after the path could show a secrets mount's folder, and none of it
-// passes `run_fail`'s check, since no run has started. Every message here
-// names a line number, a keyword or a checked name alone.
+// passes `run_fail`'s check, since no run has started.
+// REMEDY: every message here names a line number, a keyword or a checked
+// name alone.
 static MountsResult mounts_parse(Arena *a, Str text, Str home, Mounts *out, Str *why) {
     *out = Mounts_make(a);
     // The two messages that name no mount take no arguments.

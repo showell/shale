@@ -1,6 +1,5 @@
-// host_procs.c: the host's process calls, `procs` and `proc_stop`, the port
-// of Zig Shale's src/shale_host_procs.zig and the /proc and pidfd calls of
-// src/shale_os_linux.zig it makes. A script finds a process it means by what
+// host_procs.c: the host's process calls, `procs` and `proc_stop`, and the
+// /proc and pidfd calls they make. A script finds a process it means by what
 // `procs` gives (its `args`, its `name`) and stops that one, never one a
 // pattern also matches.
 //
@@ -45,7 +44,7 @@ typedef struct {
 } ProcsStatusRoom;
 
 // One process as /proc/<pid>/stat has it; `start` and `name` point into its
-// ProcsStatRoom. Zig's `ProcStat`.
+// ProcsStatRoom.
 typedef struct {
     int32_t ppid;
     // The start time in the kernel's ticks, raw: field 22.
@@ -55,7 +54,7 @@ typedef struct {
 } ProcsStat;
 
 // This process and those above it, to pid 1's child: the ones no script may
-// stop. Zig's `lineage`.
+// stop.
 typedef struct {
     int32_t pids[PROCS_LINEAGE_MOST];
     size_t len;
@@ -102,7 +101,7 @@ static bool procs_parse_int(Str s, int64_t *out) {
 
 // The process `pid` as its stat line has it, read into `room`; false for one
 // not there. The fields are counted after the last `)`, since a program's
-// name may hold one. Zig's `procStat`.
+// name may hold one.
 static bool procs_stat(ProcsStatRoom *room, int32_t pid, ProcsStat *out) {
     Bytes b = {room->bytes, sizeof room->bytes};
     Str text = S("");
@@ -152,7 +151,7 @@ static bool procs_stat(ProcsStatRoom *room, int32_t pid, ProcsStat *out) {
     return false;
 }
 
-// The real uid in /proc/<pid>/status, or false. Zig's `procUid`.
+// The real uid in /proc/<pid>/status, or false.
 static bool procs_uid(int32_t pid, int64_t *out) {
     ProcsStatusRoom room;
     Bytes b = {room.bytes, sizeof room.bytes};
@@ -178,7 +177,7 @@ static bool procs_uid(int32_t pid, int64_t *out) {
 
 // The whole of /proc/<pid>/cmdline up to PROCS_ARGS_MOST bytes, its NULs
 // spaces, into the values' arena; `*gone` for a process gone (it cannot be
-// opened or read), `*cut` when there was more. Zig's `procCmdline`.
+// opened or read), `*cut` when there was more.
 static STATUS_MUST_USE Status procs_cmdline(Run *r, Pos pos, int32_t pid, Str *out, bool *gone, bool *cut) {
     *gone = false;
     *cut = false;
@@ -228,7 +227,7 @@ static STATUS_MUST_USE Status procs_cmdline(Run *r, Pos pos, int32_t pid, Str *o
     return OK;
 }
 
-// This process and every one above it, to pid 1's child. Zig's `lineage`.
+// This process and every one above it, to pid 1's child.
 static void procs_lineage(ProcsLineage *l) {
     l->len = 0;
     SLICE_TYPE(ProcsLineagePids, int32_t);
@@ -261,7 +260,7 @@ static int procs_pid_order(const void *a, const void *b) {
 
 // Every pid /proc lists, into `out`. `*why` is "" when listed, else what the
 // stop says: /proc cannot be read (opened), or cannot be listed (its listing
-// failed part way). Zig's `procPids`.
+// failed part way).
 static STATUS_MUST_USE Status procs_pids(Run *r, Pos pos, ProcsPids *out, Str *why) {
     *why = S("");
     DIR *d = opendir("/proc");
@@ -318,7 +317,7 @@ static STATUS_MUST_USE Status procs_entry(Run *r, Pos pos, int32_t pid, const Pr
 // `procs()`: every process but this one and those above it, in pid order.
 // `args` is its command line joined by spaces (with `args_cut = true` past
 // PROCS_ARGS_MOST), `start` its start time in the kernel's ticks (what
-// `proc_stop` checks it by). Zig's `list`.
+// `proc_stop` checks it by).
 static STATUS_MUST_USE Status procs_list(Run *r, Pos pos, Value *out) {
     ProcsLineage mine;
     procs_lineage(&mine);
@@ -379,7 +378,7 @@ static Str procs_errno_tag(int e) {
     }
 }
 
-// Whether `pid` is still the process that started at `start`. Zig's `same`.
+// Whether `pid` is still the process that started at `start`.
 static bool procs_same(int32_t pid, Str start) {
     ProcsStatRoom buf;
     ProcsStat s;
@@ -397,7 +396,7 @@ static bool procs_pidfd_ends(int fd, int ms) {
 
 // `sig` (named `sig_name`) to the process `fd` names: `*sent` false when it
 // has gone already; any refusal (EPERM, for one the run may not signal)
-// stops the run. Zig's `signal`.
+// stops the run.
 static STATUS_MUST_USE Status procs_signal(Run *r, Pos pos, int fd, int32_t pid, int sig, Str sig_name, bool *sent) {
     *sent = false;
     if (syscall(SYS_pidfd_send_signal, fd, sig, NULL, 0) == 0) {
@@ -460,7 +459,7 @@ static STATUS_MUST_USE Status procs_stop_through(Host *h, Run *r, Pos pos, int f
 // and is left alone (false). **A signal refused is a stop** (the box's
 // review): a process the run may not signal stops the run, named, never a
 // success with the process still there; nor is one still there 2 seconds
-// after KILL. Zig's `stop`.
+// after KILL.
 static STATUS_MUST_USE Status procs_stop(Host *h, Run *r, Pos pos, const Value *v, Value *out) {
     int32_t pid = 0;
     Str start = S("");
