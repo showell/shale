@@ -17,8 +17,8 @@
 //     spill-lines N          N lines of 99 'x's
 //     burn MS                spins until it has used MS of CPU
 //     burn-child MS          a child burns MS; this waits for it
-//     grandchild-exit MS     "grandchild N" from a child that sleeps MS
-//                            holding the output; this exits 0 at once
+//     grandchild-exit MS     "grandchild N", the pid of a child that sleeps
+//                            MS holding the output; this exits 0 at once
 //     grandchild-stay MS     the same grandchild, both ignoring TERM; this
 //                            sleeps MS too
 //     signal-parent SIG MS   SIG (15 or 1) to its parent, TERM ignored, then
@@ -54,15 +54,18 @@ static void ignore_term(void) {
     signal(SIGTERM, SIG_IGN);
 }
 
-// A grandchild that says its pid, then sleeps `ms` holding the output.
+// A grandchild that sleeps `ms` holding the output. This process says its
+// pid, from the fork, so the line is there even when the group's TERM at
+// this one's exit ends the grandchild before it would have run a line.
 static void grandchild(long ms, bool deaf) {
     pid_t pid = fork();
-    if (pid != 0) return;
-    if (deaf) ignore_term();
-    printf("grandchild %d\n", (int)getpid());
+    if (pid == 0) {
+        if (deaf) ignore_term();
+        sleep_ms(ms);
+        _exit(0);
+    }
+    printf("grandchild %d\n", (int)pid);
     fflush(stdout);
-    sleep_ms(ms);
-    _exit(0);
 }
 
 static bool is(Str a, const char *b) { // cstr: a literal verb

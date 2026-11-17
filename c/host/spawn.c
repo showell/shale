@@ -12,10 +12,12 @@
 // The parent polls the output, the stdin it is still writing, a pidfd for
 // the exit and a signalfd for TERM and HUP. On the deadline, or a TERM or HUP
 // to `shale` itself, the whole group gets TERM, a grace period, then KILL.
+// When the leader exits, what it left running in its group gets the same
+// TERM, grace and KILL before `run` returns, so no program outlives its `run`
+// (a long-lived one belongs under `job_start`). A TERM or HUP to `shale`
+// while that group ends, or while the output drains, still stops the run.
 // After the leader exits, output is read for at most `drain_ms` more, so a
-// grandchild holding the pipe open never holds `run`. A grandchild of a
-// leader that exits on its own is not ended, as in Zig: the group is
-// signalled only while the leader runs.
+// process that left the group and holds the pipe open never holds `run`.
 //
 // The including file defines _GNU_SOURCE before its first include, for
 // pipe2, wait4, signalfd and syscall. The process must not ignore SIGPIPE,
@@ -304,13 +306,20 @@ typedef struct {
     int in_w;
     int pid_fd;
     int sig_fd;
+    // The leader is reaped.
     bool exited;
+    // The leader's group is empty, asked each turn once it is reaped.
+    bool group_gone;
+    // The leader is reaped and its group is empty, or was left a grace after
+    // its KILL (a process stuck in the kernel), so `run` still returns.
+    bool group_done;
     int raw;
     struct rusage usage;
     Str stdin_left;
     bool has_termed;
     uint64_t termed_at;
     bool killed;
+    uint64_t killed_at;
     bool has_why;
     SpawnEnded why;
     uint64_t drain_until;
@@ -318,32 +327,55 @@ typedef struct {
 } SpawnLoop;
 
 // What the loop does at `now`, before it polls: TERM the group at the
-// deadline, KILL it at the grace's end. Gives how long the poll may wait:
-// the nearest of the deadline, the grace's end and the drain's, at most a
-// second. Pure, so its edges are tested to the millisecond.
+// deadline, KILL it at the grace's end, while the leader runs or once it has
+// exited leaving its group not done. Gives how long the poll may wait: the
+// nearest of the deadline, the grace's end and the drain's, at most a
+// second, and 10 ms while the group outlives its leader, to ask again
+// whether it is gone. Pure, so its edges are tested to the millisecond.
 typedef struct {
     bool term;
     bool kill;
     uint64_t wait_ms;
 } SpawnStep;
 
-static void spawn_step(bool exited, bool has_termed, uint64_t termed_at, bool killed, uint64_t deadline, uint64_t grace_ms, uint64_t drain_until, uint64_t now, SpawnStep *out) {
+static void spawn_step(bool exited, bool group_done, bool has_termed, uint64_t termed_at, bool killed, uint64_t deadline, uint64_t grace_ms, uint64_t drain_until, uint64_t now, SpawnStep *out) {
     SpawnStep s = {false, false, 1000};
     if (!exited && !has_termed && now >= deadline) {
         s.term = true;
         has_termed = true;
         termed_at = now;
     }
-    if (!exited && !killed && has_termed && now >= termed_at + grace_ms) {
+    if (!killed && !group_done && has_termed && now >= termed_at + grace_ms) {
         s.kill = true;
         killed = true;
     }
     uint64_t w = s.wait_ms;
     if (!exited && !has_termed && spawn_sat_sub(deadline, now) < w) w = spawn_sat_sub(deadline, now);
-    if (!exited && has_termed && !killed && spawn_sat_sub(termed_at + grace_ms, now) < w) w = spawn_sat_sub(termed_at + grace_ms, now);
-    if (exited && spawn_sat_sub(drain_until, now) < w) w = spawn_sat_sub(drain_until, now);
+    if (has_termed && !killed && !group_done && spawn_sat_sub(termed_at + grace_ms, now) < w) w = spawn_sat_sub(termed_at + grace_ms, now);
+    if (exited && now < drain_until && drain_until - now < w) w = drain_until - now;
+    if (exited && !group_done && w > 10) w = 10;
     s.wait_ms = w;
     *out = s;
+}
+
+// Whether no process is left in the group `pgid`. Asked only once its
+// leader is reaped: until then the leader's zombie is a member.
+static bool spawn_group_gone(pid_t pgid) {
+    return kill(-pgid, 0) != 0 && errno == ESRCH;
+}
+
+// Whether the signalfd held a TERM or HUP, taking it.
+static bool spawn_take_signal(int sig_fd) {
+    struct signalfd_siginfo info;
+    return read(sig_fd, &info, sizeof info) == (ssize_t)sizeof info;
+}
+
+// The group's state at `now`, before a turn: once the leader is reaped,
+// whether its group is gone, and whether it is done (gone, or left a grace
+// after its KILL).
+static void spawn_settle(SpawnLoop *l, uint64_t grace_ms, uint64_t now) {
+    if (l->exited && !l->group_gone) l->group_gone = spawn_group_gone(l->pid);
+    l->group_done = l->exited && (l->group_gone || (l->killed && now >= l->killed_at + grace_ms));
 }
 
 // One turn of the poll loop: the deadline's and the grace's signals, a poll,
@@ -351,8 +383,16 @@ static void spawn_step(bool exited, bool has_termed, uint64_t termed_at, bool ki
 static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, Bytes buf, SpawnSink sink) {
     uint64_t now = spawn_mono_ms();
     SpawnStep step;
-    spawn_step(l->exited, l->has_termed, l->termed_at, l->killed, l->deadline, spec->grace_ms, l->drain_until, now, &step);
-    // DRAGON: the process boundary. `kill(-pid)` signals the whole group, so `pid` must be the leader's and still unreaped: a reaped leader's id can be given to a new process and group, and -1 would signal every process there is. `exited` is set only after wait4 reaps it, and every kill here is behind `!exited`; `pid` is fork's, never 0 or 1.
+    spawn_step(l->exited, l->group_done, l->has_termed, l->termed_at, l->killed, l->deadline, spec->grace_ms, l->drain_until, now, &step);
+    // DRAGON: the process boundary. `kill(-pid)` signals the whole group, so
+    // `pid` must still be the group's id. Once no process holds it, the
+    // kernel may give it to a new process and group, which would be
+    // signalled; and -pid of 0 or 1 would signal this group or every process.
+    // REMEDY: before the reap, the leader's zombie holds the id, so the TERM
+    // at its exit and every signal while it runs are safe. After the reap, a
+    // KILL goes only to a group `spawn_settle` found not gone this turn,
+    // whose members hold the id; a group that empties in that moment is the
+    // one window left. `pid` is fork's, never 0 or 1.
     if (step.term) {
         l->has_why = true;
         l->why = SPAWN_TIMEOUT;
@@ -363,6 +403,7 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
     if (step.kill) {
         kill(-l->pid, SIGKILL);
         l->killed = true;
+        l->killed_at = now;
     }
     SpawnPollFd fds_room[4];
     SpawnPollFds fds = {fds_room, 4};
@@ -400,8 +441,17 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
         if (l->stdin_left.len == 0) spawn_close(&l->in_w);
     }
     if (pid_at != SIZE_MAX && at(fds, pid_at).revents != 0) {
+        // The leader has exited and is a zombie until wait4 reaps it, so its
+        // pid is still the group's id: what it left running in the group
+        // gets TERM now, the grace and the KILL after.
+        if (!l->has_termed) {
+            kill(-l->pid, SIGTERM);
+            l->has_termed = true;
+            l->termed_at = spawn_mono_ms();
+        }
         if (wait4(l->pid, &l->raw, WNOHANG, &l->usage) == l->pid) {
             l->exited = true;
+            l->group_gone = spawn_group_gone(l->pid);
             // All the leader wrote is in the pipe now, though this poll may
             // have looked before it was. Read it before the drain starts, so
             // the drain bounds only what outlives the leader.
@@ -410,13 +460,15 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
             spawn_close(&l->in_w);
         }
     }
-    if (at(fds, sig_at).revents != 0) {
-        struct signalfd_siginfo info;
-        ssize_t r = read(l->sig_fd, &info, sizeof info);
-        (void)r;
-        if (!l->exited && !l->has_termed) {
+    if (at(fds, sig_at).revents != 0 && spawn_take_signal(l->sig_fd)) {
+        // Read while the program runs, while its group ends or while its
+        // output drains, the signal stops the run all the same; only a
+        // timeout already said keeps its word.
+        if (!l->has_why) {
             l->has_why = true;
             l->why = SPAWN_INTERRUPTED;
+        }
+        if (!l->exited && !l->has_termed) {
             kill(-l->pid, SIGTERM);
             l->has_termed = true;
             l->termed_at = spawn_mono_ms();
@@ -463,15 +515,25 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     SpawnResult result = SPAWN_OK;
     while (1) {
         uint64_t now = spawn_mono_ms();
-        if (l.exited && (l.out_r < 0 || now >= l.drain_until)) break;
+        spawn_settle(&l, spec->grace_ms, now);
+        if (l.group_done) {
+            // A signal that came since the last poll is taken here, not left
+            // to kill `shale` without a word when the mask is put back.
+            if (spawn_take_signal(l.sig_fd) && !l.has_why) {
+                l.has_why = true;
+                l.why = SPAWN_INTERRUPTED;
+            }
+            if (l.exited && (l.out_r < 0 || now >= l.drain_until)) break;
+        }
         if (spawn_turn(&l, spec, buf, sink) != OK) {
             // A sink that stops (the keep at the host's cap) returns before
             // the program ends; without this the program would run on, then
-            // linger as a zombie.
+            // linger as a zombie, or what it left in its group would.
             if (!l.exited) {
                 kill(-pid, SIGKILL);
                 wait4(pid, &l.raw, 0, NULL);
             }
+            if (l.exited && !l.group_gone) kill(-pid, SIGKILL);
             result = SPAWN_SINK_STOPPED;
             break;
         }

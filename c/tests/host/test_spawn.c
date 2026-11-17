@@ -1,8 +1,9 @@
 // spawn's tests: src/shale_spawn.zig's, on the same fixture verbs with the
 // same expectations, then the attacks on the process boundary that the Zig
 // guards against: a child that ignores TERM, a grandchild that must end with
-// the group, a deadline met to the millisecond, output past any keep, and a
-// TERM or HUP sent to the parent while a program runs.
+// the group, at the deadline or when its leader exits, a deadline met to the
+// millisecond, output past any keep, and a TERM or HUP sent to the parent
+// while a program runs or after it has exited, while its output drains.
 //
 // The fixture is c/tests/host/fixtures/spawn_fixture.c, built by c/build.shale
 // at the path SPAWN_FIXTURE names, relative to the repository's root, where
@@ -25,6 +26,9 @@ typedef struct {
     // When set, the first write sends this signal to this process (Zig's
     // `Interrupting`): a TERM to `shale` from outside.
     int raise_signal;
+    // When set, the first write sleeps this long before it signals: long
+    // enough that the program, which exits at once, has exited by then.
+    long raise_after_ms;
     bool raised;
     // When set, every write refuses, as the keep does at the host's cap,
     // noting the program's pid from `pid-sleep`'s line first.
@@ -36,6 +40,8 @@ static STATUS_MUST_USE Status collect_write(void *ctx, Str bytes) {
     Collect *c = ctx;
     if (c->raise_signal != 0 && !c->raised) {
         c->raised = true;
+        struct timespec ts = {c->raise_after_ms / 1000, (c->raise_after_ms % 1000) * 1000000L};
+        if (c->raise_after_ms > 0) nanosleep(&ts, NULL);
         raise(c->raise_signal);
     }
     if (c->refuse) {
@@ -359,11 +365,11 @@ TEST(attack_a_grandchild_that_ignores_term_ends_with_the_group_at_the_deadline) 
     arena_deinit(&a);
 }
 
-TEST(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_never_holds_run) {
-    // The leader exits 0 at once; its grandchild holds the output open for 3
-    // seconds. `run` returns after the drain, not when the pipe closes. As in
-    // Zig, the group is signalled only while the leader runs, so the
-    // grandchild outlives the run: the test ends it itself.
+TEST(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_is_ended_before_run_returns) {
+    // The leader exits 0 at once; its grandchild would hold the output open
+    // for 3 seconds. As in Zig, the leader's exit sends its group TERM, so
+    // the grandchild is gone, reaped and all, by the time `run` returns, and
+    // `run` waits neither the 3 seconds nor the grace.
     Arena a = arena_make(1 << 24);
     ArgList argv;
     Collect c;
@@ -377,9 +383,43 @@ TEST(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_never_holds_run
     EXPECT(o.ms < 1500);
     long g = grandchild_pid(buf_view(&c.out));
     EXPECT(g > 0);
-    bool alive = !ended_within(g, 0);
-    kill((pid_t)g, SIGKILL);
-    EXPECT(alive);
+    char path[64];
+    snprintf(path, sizeof path, "/proc/%ld/stat", g);
+    int fd = open(path, O_RDONLY);
+    if (fd >= 0) {
+        close(fd);
+        kill((pid_t)g, SIGKILL);
+    }
+    EXPECT(fd < 0);
+    arena_deinit(&a);
+}
+
+TEST(attack_a_term_to_shale_after_its_program_exits_while_the_output_drains_still_stops_the_run) {
+    // The leader exits 0 at once; the sink, at the first output, waits until
+    // it has, then sends this process a TERM. The loop reads it once the
+    // leader is reaped, as its group ends or its output drains: never dropped.
+    Arena a = arena_make(1 << 24);
+    ArgList argv;
+    Collect c;
+    collect_make(&c, &a);
+    c.raise_signal = SIGTERM;
+    c.raise_after_ms = 300;
+    SpawnOutcome o;
+    SpawnSpec s;
+    fixture_spec(&s, &a, &argv, "grandchild-exit", "3000", "");
+    EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
+    EXPECT(c.raised);
+    EXPECT_EQ(o.ended, SPAWN_INTERRUPTED);
+    // The leader's own exit is kept beside the word.
+    EXPECT(o.has_code);
+    EXPECT_EQ(o.code, 0);
+    EXPECT(o.ms < 5000);
+    long g = grandchild_pid(buf_view(&c.out));
+    EXPECT(g > 0);
+    bool gone = ended_within(g, 0);
+    if (!gone) kill((pid_t)g, SIGKILL);
+    EXPECT(gone);
+    EXPECT(!term_blocked());
     arena_deinit(&a);
 }
 
@@ -388,38 +428,62 @@ TEST(attack_the_deadline_and_the_grace_to_the_millisecond) {
     // millisecond before, KILL at the grace's end and not before, and the
     // poll's wait never past the nearest edge.
     SpawnStep before;
-    spawn_step(false, false, 0, false, 1000, 2000, 0, 999, &before);
+    spawn_step(false, false, false, 0, false, 1000, 2000, 0, 999, &before);
     EXPECT(!before.term);
     EXPECT(!before.kill);
     EXPECT_EQ(before.wait_ms, 1);
     SpawnStep on;
-    spawn_step(false, false, 0, false, 1000, 2000, 0, 1000, &on);
+    spawn_step(false, false, false, 0, false, 1000, 2000, 0, 1000, &on);
     EXPECT(on.term);
     EXPECT(!on.kill);
     EXPECT_EQ(on.wait_ms, 1000);
     SpawnStep grace_before;
-    spawn_step(false, true, 1000, false, 1000, 2000, 0, 2999, &grace_before);
+    spawn_step(false, false, true, 1000, false, 1000, 2000, 0, 2999, &grace_before);
     EXPECT(!grace_before.term);
     EXPECT(!grace_before.kill);
     EXPECT_EQ(grace_before.wait_ms, 1);
     SpawnStep grace_on;
-    spawn_step(false, true, 1000, false, 1000, 2000, 0, 3000, &grace_on);
+    spawn_step(false, false, true, 1000, false, 1000, 2000, 0, 3000, &grace_on);
     EXPECT(!grace_on.term);
     EXPECT(grace_on.kill);
     EXPECT_EQ(grace_on.wait_ms, 1000);
     // A grace of 0 KILLs in the same turn as the TERM.
     SpawnStep no_grace;
-    spawn_step(false, false, 0, false, 1000, 0, 0, 1000, &no_grace);
+    spawn_step(false, false, false, 0, false, 1000, 0, 0, 1000, &no_grace);
     EXPECT(no_grace.term);
     EXPECT(no_grace.kill);
-    // Once exited, only the drain bounds the wait; nothing is signalled.
+    // Once exited with its group done, only the drain bounds the wait;
+    // nothing is signalled, though the TERM at the exit (3000) is a grace
+    // old.
     SpawnStep drain;
-    spawn_step(true, false, 0, false, 1000, 2000, 5150, 5000, &drain);
+    spawn_step(true, true, true, 3000, false, 1000, 2000, 5150, 5000, &drain);
     EXPECT(!drain.term);
     EXPECT(!drain.kill);
     EXPECT_EQ(drain.wait_ms, 150);
+    // Exited, its group TERMed at the exit (3000) and not gone, the drain
+    // over (3200): no KILL before the grace's end, and the wait never 0, at
+    // most 10 ms to ask again; at the grace's end, the KILL.
+    SpawnStep group_before;
+    spawn_step(true, false, true, 3000, false, 1000, 2000, 3200, 4999, &group_before);
+    EXPECT(!group_before.term);
+    EXPECT(!group_before.kill);
+    EXPECT_EQ(group_before.wait_ms, 1);
+    SpawnStep group_wait;
+    spawn_step(true, false, true, 3000, false, 1000, 2000, 3200, 4000, &group_wait);
+    EXPECT(!group_wait.kill);
+    EXPECT_EQ(group_wait.wait_ms, 10);
+    SpawnStep group_on;
+    spawn_step(true, false, true, 3000, false, 1000, 2000, 3200, 5000, &group_on);
+    EXPECT(!group_on.term);
+    EXPECT(group_on.kill);
+    EXPECT_EQ(group_on.wait_ms, 10);
+    // KILLed, and the drain not over: 10 ms, not the drain's 1300.
+    SpawnStep group_killed;
+    spawn_step(true, false, true, 3000, true, 1000, 2000, 7300, 6000, &group_killed);
+    EXPECT(!group_killed.kill);
+    EXPECT_EQ(group_killed.wait_ms, 10);
     SpawnStep far;
-    spawn_step(false, false, 0, false, 90000, 2000, 0, 0, &far);
+    spawn_step(false, false, false, 0, false, 90000, 2000, 0, 0, &far);
     EXPECT_EQ(far.wait_ms, 1000);
     // Live: a deadline of 0 is already past at the first turn.
     Arena a = arena_make(1 << 24);
@@ -591,7 +655,8 @@ TEST_MAIN(TEST_CASE(output_exit_code_stdin_cwd_and_the_environment_as_given),
           TEST_CASE(a_term_to_shale_while_a_program_runs_ends_its_group_and_says_so_and_the_mask_is_put_back),
           TEST_CASE(a_sink_that_stops_ends_the_programs_group_and_reaps_it_before_the_stop_is_said),
           TEST_CASE(attack_a_grandchild_that_ignores_term_ends_with_the_group_at_the_deadline),
-          TEST_CASE(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_never_holds_run),
+          TEST_CASE(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_is_ended_before_run_returns),
+          TEST_CASE(attack_a_term_to_shale_after_its_program_exits_while_the_output_drains_still_stops_the_run),
           TEST_CASE(attack_the_deadline_and_the_grace_to_the_millisecond),
           TEST_CASE(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds),
           TEST_CASE(attack_a_term_or_hup_the_program_sends_its_parent_mid_run_ends_its_group),
