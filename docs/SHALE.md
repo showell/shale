@@ -1099,7 +1099,7 @@ default, the machine's included.
 |---|---|---|---|
 | steps | each statement, expression and loop iteration, and every byte or item a builtin touches | 5,000,000 | 2,000,000 |
 | arena | **the memory the run holds, all of it.** (The tree a source parses to and the machine's own memory are beside it, under the machine budget.) Every value lives in the run's own arena, which takes chunks from the host only up to this budget (its headers included), so the budget is a hard bound on the memory a script can take, whatever it does. An allocation of 64 KiB or more has a chunk of its own, given back when it is freed, so a list grown to megabytes holds only its live buffer. An allocation that fails, a store call's included, stops the run here | 16 MiB | 8 MiB |
-| call depth | | 64 | 64 |
+| call depth | the script's function calls the run is inside of at once, for a recursion over a deep tree. **`--budget call_depth=N` or a `-- budget:` line raises it**; `depth`, below, no command line sets | 64 | 64 |
 | depth | expressions and statements the walk is inside of at once, across every call (see below) | 2,000 | 2,000 |
 | output | at most `out.len` | 256 KiB | 256 KiB |
 | reads | `ls`, `stat`, `exists`, `is_dir`, `read` and each scan count one; `walk` one a folder and one an entry's stat | 10,000 | 500 |
@@ -1221,7 +1221,7 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
 - `--budget NAME=N` sets one budget: `steps`, `reads`, `read_bytes`,
   `output_bytes`, `changes`, `change_bytes`, `arena_bytes`, `call_bytes`,
   `call_entries`, `kept_bytes` (at most 256 MiB), `machine_bytes` (at
-  most 1 GiB) or `programs`. **The runner's own defaults:**
+  most 1 GiB), `call_depth` or `programs`. **The runner's own defaults:**
   output 64 KiB, `call_bytes` 64 MiB, 1,000 programs a run; the rest the
   core's.
 - **A script says its own budgets** in a line among the comments that
