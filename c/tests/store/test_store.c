@@ -15,13 +15,10 @@ static Str rep(char c, size_t n, char *room) { // cstr: a buffer of at least n b
 TEST(names_fat_holds_and_names_it_refuses) {
     char x96[96];
     char x97[97];
-    const char *ok[] = {"a", "plan.md", "Plan-2.reactions.jsonl", "0f3a.png", "_session_secret", "a b"};
-    SLICE_TYPE(Lits, const char *const);
-    Lits oks = {ok, 6};
+    Lits oks = LITS("a", "plan.md", "Plan-2.reactions.jsonl", "0f3a.png", "_session_secret", "a b");
     for (size_t i = 0; i < oks.len; i++) EXPECT(store_fat_name(sx_cs(at(oks, i))));
     EXPECT(store_fat_name(rep('x', 96, x96)));
-    const char *bad[] = {"", ".", "..", "what?", "a:b", "a/b", "a\\b", "trailing.", "trailing ", "caf\xc3\xa9", "tab\t"};
-    Lits bads = {bad, 11};
+    Lits bads = LITS("", ".", "..", "what?", "a:b", "a/b", "a\\b", "trailing.", "trailing ", "caf\xc3\xa9", "tab\t");
     for (size_t i = 0; i < bads.len; i++) EXPECT(!store_fat_name(sx_cs(at(bads, i))));
     EXPECT(!store_fat_name(rep('x', 97, x97)));
 }
@@ -195,9 +192,7 @@ TEST(nothing_there_is_null_and_something_there_that_will_not_read_is_an_error) {
     Arena *a = &f.values;
     sx_put(&f, "a-file", "x");
     sx_mkdir(&f, "a-directory");
-    const char *absent[] = {"not-here", "a-file/under-a-file"};
-    SLICE_TYPE(Lits, const char *const);
-    Lits ab = {absent, 2};
+    Lits ab = LITS("not-here", "a-file/under-a-file");
     for (size_t i = 0; i < ab.len; i++) {
         bool found = true;
         StoreStat st;
@@ -311,7 +306,7 @@ TEST(wyhash_its_test_vectors) {
         {6, 0xc39cab13b115aad3ull, "12345678901234567890123456789012345678901234567890123456789012345678901234567890"},
     };
     SLICE_TYPE(Vectors, const Vector);
-    Vectors all = {vs, 7};
+    Vectors all = {vs, sizeof vs / sizeof *vs};
     for (size_t i = 0; i < all.len; i++) EXPECT_EQ(store_wyhash(at(all, i).seed, sx_cs(at(all, i).input)), at(all, i).expected);
 }
 

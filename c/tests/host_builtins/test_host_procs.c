@@ -222,9 +222,9 @@ TEST(proc_stop_stops_the_process_by_pid_and_start_and_a_stale_start_is_left_alon
 }
 
 TEST(proc_stop_refuses_this_process_those_above_it_and_pid_1_whatever_it_is_handed) {
-    int pids[5] = {(int)getpid(), (int)getppid(), 1, 0, -5};
+    int pids[] = {(int)getpid(), (int)getppid(), 1, 0, -5};
     SLICE_TYPE(ProcsPidList, int);
-    ProcsPidList all = {pids, 5};
+    ProcsPidList all = {pids, sizeof pids / sizeof *pids};
     for (size_t i = 0; i < all.len; i++) {
         static Ran x;
         RanOpts o = {NULL, false, false};

@@ -92,9 +92,9 @@ TEST(a_thousand_keys_keep_their_order_through_every_growth) {
 TEST(a_removal_keeps_the_others_order_and_finds_them_after) {
     Arena a = arena_make(1 << 20);
     IntMap m = IntMap_make(&a);
-    Str names[5] = {S("e"), S("d"), S("c"), S("b"), S("a")};
-    MapKeys all = {names, 5};
-    for (int64_t i = 0; i < 5; i++) EXPECT(IntMap_put(&m, at(all, (size_t)i), i) == OK);
+    Str names[] = {S_ITEM("e"), S_ITEM("d"), S_ITEM("c"), S_ITEM("b"), S_ITEM("a")};
+    MapKeys all = {names, sizeof names / sizeof *names};
+    for (size_t i = 0; i < all.len; i++) EXPECT(IntMap_put(&m, at(all, i), (int64_t)i) == OK);
     EXPECT(IntMap_remove(&m, S("c")));
     EXPECT(!IntMap_remove(&m, S("c")));
     EXPECT(!IntMap_remove(&m, S("zz")));

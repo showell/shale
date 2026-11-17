@@ -65,9 +65,9 @@ TEST(a_record_reads_back_as_it_was_written_and_a_broken_one_is_none) {
 TEST(an_argv_with_a_newline_or_a_backslash_reads_back_and_none_overrides_a_key) {
     char buf_bytes[512];
     Bytes buf = {buf_bytes, sizeof buf_bytes};
-    static const Str argvs_all[3] = {S("git commit -m one\ntwo"), S("x\npid=7\nexit=3"), S("a\\nb \\ c")};
+    static const Str argvs_all[] = {S_ITEM("git commit -m one\ntwo"), S_ITEM("x\npid=7\nexit=3"), S_ITEM("a\\nb \\ c")};
     SLICE_TYPE(Argvs, const Str);
-    Argvs argvs = {argvs_all, 3};
+    Argvs argvs = {argvs_all, sizeof argvs_all / sizeof *argvs_all};
     for (size_t i = 0; i < argvs.len; i++) {
         Str text;
         JobRecord w;

@@ -589,9 +589,7 @@ TEST(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds) {
 TEST(attack_a_term_or_hup_the_program_sends_its_parent_mid_run_ends_its_group) {
     // The program itself signals `shale` (its parent), then ignores TERM: the
     // loop takes the signal, TERMs the group, and KILLs it at the grace.
-    static const char *sigs_all[2] = {"15", "1"}; // cstr: literals
-    SLICE_TYPE(Sigs, const char *);
-    Sigs sigs = {sigs_all, 2};
+    Lits sigs = LITS("15", "1");
     for (size_t i = 0; i < sigs.len; i++) {
         Arena a = arena_make(1 << 24);
         ArgList argv;

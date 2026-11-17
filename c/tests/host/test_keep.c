@@ -255,9 +255,9 @@ static uint64_t count_newlines(Str s) {
 TEST(head_and_tail_and_the_filter_against_the_oracle_on_3000_random_outputs) {
     Prng p;
     prng_init(&p, 233);
-    static const Str pieces_all[11] = {S("ok"), S("error"), S("FAIL"), S("x"), S("\n"), S("\n"), S("\n"), S("\r\n"), S("\x00"), S(" "), S("warn")};
+    static const Str pieces_all[] = {S_ITEM("ok"), S_ITEM("error"), S_ITEM("FAIL"), S_ITEM("x"), S_ITEM("\n"), S_ITEM("\n"), S_ITEM("\n"), S_ITEM("\r\n"), S_ITEM("\x00"), S_ITEM(" "), S_ITEM("warn")};
     SLICE_TYPE(Pieces, const Str);
-    Pieces pieces = {pieces_all, 11};
+    Pieces pieces = {pieces_all, sizeof pieces_all / sizeof *pieces_all};
     // The patterns' order: none, `error|FAIL`, `^ok`, `x$`, `warn`.
     uint64_t fp = 0xcbf29ce484222325ULL;
     for (int round = 0; round < 3000; round++) {

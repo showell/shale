@@ -55,6 +55,18 @@ static inline TestState *test_state(void) {
     return &state;
 }
 
+// A table of literal strings a test loops over, counted by the compiler:
+// `Lits paths = LITS("a", "b/c");` is a Lits of 2, so a case added to the
+// list runs with no count to keep in step. The count sizes the loop over
+// the cases only. A count the test asserts (how many a call found, how
+// many lines it wrote) stays a literal number: one computed from the table
+// agrees with any table, so it would hold whatever the code did.
+SLICE_TYPE(Lits, const char *const); // cstr: a test's literals
+
+#define LITS(...)                                                                          \
+    ((Lits){(const char *const[]){__VA_ARGS__},                                            \
+            sizeof((const char *const[]){__VA_ARGS__}) / sizeof(const char *)})
+
 #define TEST(name) static void test_##name(void)
 #define TEST_CASE(name) {S(#name), test_##name}
 

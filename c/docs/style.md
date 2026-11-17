@@ -216,6 +216,13 @@ and its self-test plants a break of each one.
   store test says why. A Ran's context is `&x.r.ctx`, the path fixture's
   `&f.ctx`. `EXPECT((expr) == OK)` stays for a call that has no context,
   as a buffer's append has none.
+- A table of cases is counted by the compiler, never by hand: a list of
+  literal strings is `Lits xs = LITS("a", "b");` (test.h), and a table of
+  structs is `{cases, sizeof cases / sizeof *cases}` over an unsized
+  array (`S_ITEM` for a `Str`'s, as above). The count sizes the loop over
+  the cases alone. **A count the test asserts stays a literal number**
+  (`EXPECT_EQ(ms.len, 5)`): one computed from the table agrees with any
+  table, so it would hold whatever the code did.
 - `TEST_ONLY=a,b` runs only the cases it names; a name no case has fails
   the run.
 - Each piece has planted faults in `c/build.shale`, and its full tier

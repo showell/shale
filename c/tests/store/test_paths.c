@@ -35,7 +35,7 @@ TEST(every_way_out_of_the_root_is_refused_before_the_store_is_asked) {
         {"read", "", false}, {"read", "a\\b", false}, {"read", "chat/a.md:x", false},
     };
     SLICE_TYPE(Escapes, const Escape);
-    Escapes all = {escapes, 17};
+    Escapes all = {escapes, sizeof escapes / sizeof *escapes};
     for (size_t i = 0; i < all.len; i++) {
         fx_again(&f);
         StorePath p;
@@ -142,7 +142,7 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
         {"bad name = /x\n", "line 1: the name before `=` is not a mount's name: letters, digits, `_` and `-`"},
     };
     SLICE_TYPE(Bads, const Bad);
-    Bads bads = {bad, 4};
+    Bads bads = {bad, sizeof bad / sizeof *bad};
     for (size_t i = 0; i < bads.len; i++) {
         Mounts out;
         EXPECT_EQ(mounts_parse(&f.host, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
@@ -192,10 +192,11 @@ TEST(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing
     EXPECT_EQ(at(ms, 0).access, MOUNT_READ_ONLY);
     EXPECT_EQ(at(ms, 1).access, MOUNT_READ_WRITE);
     EXPECT_STR(at(ms, 0).dir, S("/x"));
-    static const bool tools[5] = {false, false, true, true, true};
+    static const bool tools[] = {false, false, true, true, true};
     SLICE_TYPE(Bools, const bool);
-    Bools t = {tools, 5};
-    for (size_t i = 0; i < 5; i++) EXPECT_EQ(at(ms, i).tools, at(t, i));
+    Bools t = {tools, sizeof tools / sizeof *tools};
+    EXPECT_EQ(ms.len, 5);
+    for (size_t i = 0; i < t.len; i++) EXPECT_EQ(at(ms, i).tools, at(t, i));
     EXPECT_EQ(at(ms, 3).access, MOUNT_READ_ONLY);
     EXPECT_EQ(at(ms, 4).access, MOUNT_READ_WRITE);
     Mounts sec;
@@ -214,7 +215,7 @@ TEST(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing
         {"a = /x ro ro\n", "line 1: `ro` twice after `a`'s path"},
     };
     SLICE_TYPE(Bads, const Bad);
-    Bads bads = {bad, 5};
+    Bads bads = {bad, sizeof bad / sizeof *bad};
     for (size_t i = 0; i < bads.len; i++) {
         Mounts out;
         EXPECT_EQ(mounts_parse(&a, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
@@ -251,7 +252,7 @@ TEST(secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never
         {"runs = /r\n\nwork = work/.planted-keys\n", "line 3: `work`'s value is relative: an absolute path, or one from `~/`"},
     };
     SLICE_TYPE(Bads, const Bad);
-    Bads bads = {bad, 10};
+    Bads bads = {bad, sizeof bad / sizeof *bad};
     for (size_t i = 0; i < bads.len; i++) {
         Mounts out;
         EXPECT_EQ(mounts_parse(&a, sx_cs(at(bads, i).text), S("/home/x"), &out, &why), MOUNTS_MALFORMED);
@@ -270,9 +271,7 @@ TEST(an_absolute_path_s_stop_the_deepest_mount_or_the_root_that_holds_it_and_how
     sx_mkdir(&f.base, "scr/tasks");
     // Each order of the nested mounts, so neither the first nor the last to
     // match wins by its place in the file.
-    const char *orders[2] = {"side = R-side\nouter = R/scr\ndeep = R/scr/deep\n", "deep = R/scr/deep\nouter = R/scr\nside = R-side\n"};
-    SLICE_TYPE(Lits, const char *const);
-    Lits os = {orders, 2};
+    Lits os = LITS("side = R-side\nouter = R/scr\ndeep = R/scr/deep\n", "deep = R/scr/deep\nouter = R/scr\nside = R-side\n");
     typedef struct {
         const char *who;
         const char *path;
@@ -299,7 +298,7 @@ TEST(an_absolute_path_s_stop_the_deepest_mount_or_the_root_that_holds_it_and_how
         {"read", "R/scr/../x", "`read`: \"R/scr/../x\" " PLAIN},
     };
     SLICE_TYPE(Cases, const Case);
-    Cases cs = {cases, 11};
+    Cases cs = {cases, sizeof cases / sizeof *cases};
     for (size_t o = 0; o < os.len; o++) {
         fx_mounts(&f, at(os, o));
         for (size_t i = 0; i < cs.len; i++) {
@@ -342,12 +341,9 @@ TEST(an_absolute_path_s_stop_a_path_in_a_secrets_mount_s_folder_names_neither_th
     sx_mkdir(&f.base, "scr/keys");
     sx_put(&f.base, "scr/keys/tok", "s3cret\n");
     fx_mounts(&f, "outer = R/scr\nvault = R/scr/keys secrets\n");
-    const char *srcs[2] = {"R/scr/keys/tok", "R/scr/keys"};
-    const char *whos[2] = {"read", "exists"};
-    SLICE_TYPE(Lits, const char *const);
-    Lits ss = {srcs, 2};
-    Lits ws = {whos, 2};
-    for (size_t i = 0; i < 2; i++) {
+    Lits ss = LITS("R/scr/keys/tok", "R/scr/keys");
+    Lits ws = LITS("read", "exists");
+    for (size_t i = 0; i < ss.len; i++) {
         Status s = fx_look(&f, at(ws, i), fx_r(&f, at(ss, i)));
         EXPECT(fx_stopped(&f, s, CLASS_ARGUMENT, S(PLAIN)));
         Str m = f.ctx.stop.message;
@@ -374,9 +370,7 @@ TEST(ro_mounts_every_change_through_one_is_refused_before_anything_is_written_a_
     EXPECT_OK_IN(&f.ctx, fx_look(&f, "exists", S("ro:sub")));
     EXPECT_OK_IN(&f.ctx, fx_look(&f, "ls", S("ro:")));
     // Every change's path, through the mount and by the root into its folder.
-    const char *paths[] = {"ro:a.zig", "ro:new.zig", "ro:d", "ro:sub", "frozen/a.zig", "frozen/sub/x"};
-    SLICE_TYPE(Lits, const char *const);
-    Lits ps = {paths, 6};
+    Lits ps = LITS("ro:a.zig", "ro:new.zig", "ro:d", "ro:sub", "frozen/a.zig", "frozen/sub/x");
     for (size_t i = 0; i < ps.len; i++) {
         EXPECT(fx_stopped(&f, fx_change(&f, "replace", sx_cs(at(ps, i)), S("x")), CLASS_REFUSED, S("mount `ro` is read-only")));
         Str text = S("");
@@ -465,7 +459,7 @@ TEST(the_store_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mount_ou
         {"read", "m:up", "is a symbolic link"}, {"read", "ro:up", "is a symbolic link"}, {"read", "outside", "outside is a symbolic link"},
     };
     SLICE_TYPE(Cases, const Case);
-    Cases cs = {cases, 8};
+    Cases cs = {cases, sizeof cases / sizeof *cases};
     for (size_t i = 0; i < cs.len; i++) EXPECT(fx_stopped(&f, fx_look(&f, at(cs, i).who, sx_cs(at(cs, i).path)), CLASS_REFUSED, sx_cs(at(cs, i).says)));
     EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("link_file"), S("x")), CLASS_REFUSED, S("is a symbolic link")));
     // Its exact words, a mount's path spelled as the script wrote it.
@@ -514,7 +508,7 @@ TEST(secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_t
         {"read", "alias/tok", "alias is a symbolic link"},
     };
     SLICE_TYPE(Cases, const Case);
-    Cases ls = {looks, 8};
+    Cases ls = {looks, sizeof looks / sizeof *looks};
     for (size_t i = 0; i < ls.len; i++) {
         EXPECT(fx_stopped(&f, fx_look(&f, at(ls, i).who, sx_cs(at(ls, i).path)), CLASS_REFUSED, sx_cs(at(ls, i).says)));
         EXPECT(!fx_names_keys(&f));
@@ -551,7 +545,7 @@ TEST(secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_t
         {"run", S("up"), "`run`'s argument 4 holds the mount `k`'s folder"},
     };
     SLICE_TYPE(ArgCases, ArgCase);
-    ArgCases as = {args, 9};
+    ArgCases as = {args, sizeof args / sizeof *args};
     PathsStrs none = {NULL, 0};
     for (size_t i = 0; i < as.len; i++) {
         const Str argv_items[4] = {S("shale-fixture"), S("lines"), S("1"), at(as, i).arg};
@@ -616,7 +610,7 @@ TEST(stdout_secret_only_directly_in_a_secrets_mount_never_in_a_folder_of_it_neve
         {"k:ln", CLASS_REFUSED, "is a symbolic link"},
     };
     SLICE_TYPE(Cases, const Case);
-    Cases cs = {cases, 8};
+    Cases cs = {cases, sizeof cases / sizeof *cases};
     Str target = S("");
     for (size_t i = 0; i < cs.len; i++) {
         fx_again(&f);
@@ -649,9 +643,7 @@ TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_p
     EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fx_pos(), S("keys/tok"), &names));
     EXPECT(!names);
     // The folder itself, wherever it stands in a message.
-    const char *naming[] = {"R/keys", "R/keys/tok", "R/keys.", "`R/keys`", "R/keys: shut", "R/keys2 or R/keys/t", "R/keys.bak and R/keys"};
-    SLICE_TYPE(Lits, const char *const);
-    Lits namings = {naming, 7};
+    Lits namings = LITS("R/keys", "R/keys/tok", "R/keys.", "`R/keys`", "R/keys: shut", "R/keys2 or R/keys/t", "R/keys.bak and R/keys");
     for (size_t k = 0; k < namings.len; k++) {
         names = false;
         EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, at(namings, k)), &names));
@@ -659,8 +651,7 @@ TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_p
     }
     // A sibling whose name only begins with the folder's is not it, so its
     // stop is a message, never the end of the process.
-    const char *sibling[] = {"R/keysx", "R/keys2/f.txt/x", "R/keys-old", "R/keys_1", "R/keys.bak/tok"};
-    Lits siblings = {sibling, 5};
+    Lits siblings = LITS("R/keysx", "R/keys2/f.txt/x", "R/keys-old", "R/keys_1", "R/keys.bak/tok");
     for (size_t k = 0; k < siblings.len; k++) {
         names = true;
         EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, at(siblings, k)), &names));
