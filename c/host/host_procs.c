@@ -28,17 +28,17 @@ enum { PROCS_MOST = 4096 };
 // `args_cut = true`, so a filter knows it saw only the start.
 enum { PROCS_ARGS_MOST = 1 << 20 };
 
-// The most processes `procs_lineage` walks up, as Zig's `[64]i32`.
+// The most processes `procs_lineage` walks up.
 enum { PROCS_LINEAGE_MOST = 64 };
 
 VEC_DEFINE(ProcsPids, int32_t)
 
-// Room for a stat line's one read, as Zig's 1024-byte buffer.
+// Room for a stat line's one read.
 typedef struct {
     char bytes[1024];
 } ProcsStatRoom;
 
-// Room for a status file's one read, as Zig's 4096-byte buffer.
+// Room for a status file's one read.
 typedef struct {
     char bytes[4096];
 } ProcsStatusRoom;

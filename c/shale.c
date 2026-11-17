@@ -1,12 +1,11 @@
-// shale.c: the C `shale` command, Zig Shale's src/script_runner.zig: it reads
-// the command line, the mounts, the script and the preludes as the Zig runner
-// does, parses and compiles the script with them, and either stops there
-// (`--check`) or runs it on the VM (script/vm.c), printing what it printed
-// on stdout and the same report on stderr, with the same exit code. A host
-// call the C does not run yet is refused as not ported. `--help` and
-// `--version` print what Zig's do, and `--reap` is a job's reaper
-// (host/jobs.c). This file holds the system calls; what it decides is in
-// script/.
+// shale.c: the C `shale` command: it reads the command line, the mounts,
+// the script and the preludes, parses and compiles the script with them,
+// and either stops there (`--check`) or runs it on the VM (script/vm.c),
+// printing what it printed on stdout and its report on stderr, with its exit
+// code. A host call the C does not run yet is refused as not ported.
+// `--help` and `--version` print the usage and the build's mode, and
+// `--reap` is a job's reaper (host/jobs.c). This file holds the system
+// calls; what it decides is in script/.
 
 // `realpath`, `openat` and `memmem` are GNU's.
 #define _GNU_SOURCE
@@ -49,7 +48,7 @@
 #include "preludes.h"
 
 enum {
-    // Exit codes, as the Zig runner's: finished, stopped, could not begin.
+    // Exit codes: finished, stopped, could not begin.
     EXIT_FINISHED = 0,
     EXIT_STOPPED = 1,
     EXIT_REFUSED = 2,
@@ -69,8 +68,8 @@ typedef struct {
     Buf err;
 } Out;
 
-// Zig's name for a failed open or read, as its messages print `@errorName`.
-static Str zig_error_name(int e) {
+// The name of a failed open or read, as the messages print it.
+static Str error_name(int e) {
     switch (e) {
     case ENOENT: return S("FileNotFound");
     case EISDIR: return S("IsDir");
@@ -86,7 +85,7 @@ static Str zig_error_name(int e) {
 // `s` as a NUL-ended copy, for a system call.
 static const char *c_string(Arena *a, Str s) { // cstr: the system's own
     if (s.len == SIZE_MAX) return NULL;
-    // A NUL would cut the path short; Zig asserts there is none.
+    // A NUL would cut the path short, so a path holding one is refused.
     if (s.len > 0 && memchr(s.ptr, 0, s.len) != NULL) return NULL;
     char *p = arena_alloc(a, s.len + 1, 1);
     if (p == NULL) return NULL;
@@ -101,8 +100,8 @@ static Str from_c(const char *s) { // cstr: the system's own
     return r;
 }
 
-// Reads all of `fd` into the arena, at most `limit` bytes: Zig's
-// `.limited(limit)`, whose refusal of more is StreamTooLong.
+// Reads all of `fd` into the arena, at most `limit` bytes; more is refused
+// as StreamTooLong.
 static STATUS_MUST_USE Status read_all(Arena *a, int fd, size_t limit, Str *out, Str *err) {
     Buf b = buf_make(a);
     char chunk[16384];
@@ -110,7 +109,7 @@ static STATUS_MUST_USE Status read_all(Arena *a, int fd, size_t limit, Str *out,
         ssize_t n = read(fd, chunk, sizeof chunk);
         if (n < 0) {
             if (errno == EINTR) continue;
-            *err = zig_error_name(errno);
+            *err = error_name(errno);
             return STOP;
         }
         if (n == 0) break;
@@ -136,7 +135,7 @@ static STATUS_MUST_USE Status read_path(Arena *a, Str path, size_t limit, Str *o
     }
     int fd = open(p, O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
-        *err = zig_error_name(errno);
+        *err = error_name(errno);
         return STOP;
     }
     Status s = read_all(a, fd, limit, out, err);
@@ -183,7 +182,7 @@ static int flush_and_exit(Out *o, int code) {
     return code;
 }
 
-// A command line the Zig runner refuses: `shale: <why>`, then the usage.
+// A command line refused: `shale: <why>`, then the usage.
 static int refuse_command(Out *o, Str why, bool usage) {
     say(o, S("shale: "));
     say(o, why);
@@ -210,8 +209,8 @@ typedef struct {
     Used used;
 } LibraryReader;
 
-// The stop a reader's failure becomes: `why`, the message Zig's run would
-// have stopped with, which its loader takes and clears.
+// The stop a reader's failure becomes: `why`, the message the run stops
+// with, which its loader takes and clears.
 static STATUS_MUST_USE Status reader_why_parts(Str *why, bool *got, Arena *a, StrPieces parts, size_t n) {
     StrParts all = {parts.piece, n};
     *got = false;
@@ -223,8 +222,8 @@ static STATUS_MUST_USE Status reader_why_parts(Str *why, bool *got, Arena *a, St
 
 #define reader_why(why, got, n, a, ...) reader_why_parts((why), (got), (a), (StrPieces){{__VA_ARGS__}}, (n))
 
-// A charge past the step budget: Zig's `charge` leaves the count one past it,
-// and the budget's stop says how many steps it had.
+// A charge past the step budget: the count is left one past it, and the
+// budget's stop says how many steps it had.
 static STATUS_MUST_USE Status steps_ran_out(LibraryReader *r, Str *why) {
     r->used.steps = r->budgets.steps + 1;
     Buf b = buf_make(r->arena);
@@ -235,14 +234,13 @@ static STATUS_MUST_USE Status steps_ran_out(LibraryReader *r, Str *why) {
     return OK;
 }
 
-// Zig's `refuseLinks` (src/shale_host_linux.zig): whether any part of `rest`
-// below the mount's folder `dir` is a symbolic link, each part checked with
-// `lstat` and charged a step, a missing part ending the walk. On a link,
-// `*why` names it as Zig's stop does.
+// Whether any part of `rest` below the mount's folder `dir` is a symbolic
+// link, each part checked with `lstat` and charged a step, a missing part
+// ending the walk. On a link, `*why` names it.
 // DRAGON: the store's boundary. The store follows no link below a mount's
 // folder, so a link there could lead a library's read out of it.
 // REMEDY: this walk refuses one before the read; a link made between the
-// walk and the open is a race the Zig shares.
+// walk and the open is a race left open.
 static STATUS_MUST_USE Status refuse_links(LibraryReader *r, Str dir, Str rest, Str prefix, Str *why, bool *refused) {
     *refused = false;
     if (rest.len == 0) return OK;
@@ -281,9 +279,9 @@ static uint64_t sat_sub(uint64_t a, uint64_t b) {
     return a > b ? a - b : 0;
 }
 
-// Zig's `loadLibrary` (src/script/process.zig) over the Linux host's mounts:
-// the path resolved as `pathArg` resolves a mount's, the file read and charged
-// as a `read` of it is.
+// A library loaded over the Linux host's mounts: the path resolved as a
+// script's path to a mount is, the file read and charged as a `read` of it
+// is.
 static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str *why, Str *out, bool *got) {
     LibraryReader *r = ctx;
     Arena *a = r->arena;
@@ -337,8 +335,8 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     // DRAGON: the secrets rule. A secrets mount's folder may sit inside another
     // mount's, and a library read through the outer one would put a token's
     // bytes in a parse's messages (a name, a number).
-    // REMEDY: as Zig's `refuseSecretsUnder`, every path in such a folder is
-    // refused here.
+    // REMEDY: every path in such a folder is refused here, as paths.c refuses
+    // a script's.
     for (size_t k = 0; k < r->mounts.len; k++) {
         const Mount *sm = &at(r->mounts, k);
         if (sm->secrets && mounts_in_folder(full, sm->dir)) return reader_why(why, got, 5, a, S("\""), path, S("\" is in the mount `"), sm->name, S("`, which holds secrets"));
@@ -354,7 +352,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     if (full_c == NULL) return STOP;
     if (stat(full_c, &st) != 0) {
         if (errno == ENOENT) return reader_why(why, got, 3, a, S("`read(\""), path, S("\")`: not found (FileNotFound): `exists(p)` asks first"));
-        return reader_why(why, got, 5, a, S("`read(\""), path, S("\")`: the store failed ("), zig_error_name(errno), S(")"));
+        return reader_why(why, got, 5, a, S("`read(\""), path, S("\")`: the store failed ("), error_name(errno), S(")"));
     }
     if (!S_ISREG(st.st_mode)) return reader_why(why, got, 3, a, S("`read(\""), path, S("\")`: a folder, not a file (IsDir): `is_dir(p)` asks first"));
     uint64_t size = (uint64_t)st.st_size;
@@ -422,7 +420,7 @@ static void write_stdout(Str out) {
     }
 }
 
-// The machine budget's stop, the one Zig's Process.ready gives an OutOfMemory.
+// The machine budget's stop.
 static void machine_stop(Stop *stop) {
     memset(stop, 0, sizeof *stop);
     stop->line = 1;
@@ -457,7 +455,7 @@ static STATUS_MUST_USE Status base_env(Arena *a, SpawnStrs *out) {
 
 // The script parsed and compiled with its preludes, then either reported as
 // checked (`--check`) or run on the VM, its output on stdout and its report
-// on stderr: Zig's `Process.startWith`, `script.runWith` and `printReport`.
+// on stderr.
 // Where a run's paths are: the root in one spelling (its real path, "" for
 // `/`), the same made absolute, and the working folder a relative root is
 // against.
@@ -510,7 +508,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         stopped = true;
     }
     if (stopped) {
-        // Zig's report of a run says its effects first, with `--verbose`.
+        // A run's report says its effects first, with `--verbose`.
         if (c->verbose && !c->check) say(o, S("── effects (0) ──\n"));
         if (cli_write_stop(&o->err, name, &stop, reader.used, &b) != OK) return not_ported(o, S("a report past the arena"));
         int code_out = flush_and_exit(o, EXIT_STOPPED);
@@ -535,8 +533,8 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     r.now = now;
     r.out = buf_make(&output);
     r.out_cap = b.output_bytes;
-    // The whole output budget at once, as Zig's runner allocates it, so the
-    // buffer never grows past its arena.
+    // The whole output budget at once, so the buffer never grows past its
+    // arena.
     r.out.ptr = arena_alloc(&output, r.out_cap, 1);
     r.out.cap = r.out_cap;
     if (r.out.ptr == NULL) return not_ported(o, S("an output budget past the system's memory"));
@@ -548,7 +546,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     r.stack = ValueVec_make(&machine);
     r.patterns = regex_cache_make();
     // The store, measured under the root (and `<root>/../auth`) as the
-    // bare-metal host would hold it, as Zig's runner sets webbox's bases.
+    // bare-metal host would hold it.
     LinuxStore linux_store;
     memset(&linux_store, 0, sizeof linux_store);
     linux_store.has_data_base = true;
@@ -631,8 +629,8 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
 
 // ── `--help` and `--version` ──
 
-// Zig's `std.fs.path.dirname` of a path as /proc/self/exe spells one (absolute,
-// no `//`): the path without its last part, `/` for a part at the root, and
+// The folder of a path as /proc/self/exe spells one (absolute, no `//`): the
+// path without its last part, `/` for a part at the root, and
 // false for `/` itself.
 static bool help_dirname(Str p, Str *out) {
     size_t end = p.len;
@@ -662,7 +660,7 @@ static bool help_checkout(Arena *a, Str *out) {
     return arena_dup(a, up, out);
 }
 
-// `shale --help`: Zig's `help`, the usage, where the docs are and the mounts
+// `shale --help`: the usage, where the docs are and the mounts
 // in force, on stdout, each mount with its folder but a `secrets` mount's. A
 // mounts file that does not read is said on stderr after the rest, exit 2.
 static int help_main(Out *o) {
@@ -699,7 +697,7 @@ static int help_main(Out *o) {
         // DRAGON: the secrets rule. Agents run `--help` to learn the language,
         // and its output lands in their transcripts, so a secrets mount's
         // folder printed here would name where the tokens are.
-        // REMEDY: a secrets mount is said by its name alone, as Zig's is.
+        // REMEDY: a secrets mount is said by its name alone.
         if (m->secrets) {
             built = built && buf_lit(&w, ":  secrets, for `run`'s `secrets` only (its folder is not shown)\n") == OK;
             continue;
@@ -714,7 +712,7 @@ static int help_main(Out *o) {
     return flush_and_exit(o, EXIT_FINISHED);
 }
 
-// `shale --version`: the mode this `shale` was built in, as Zig's says it.
+// `shale --version`: the mode this `shale` was built in.
 static int version_main(Out *o) {
     Buf w = buf_make(o->arena);
     if (buf_lit(&w, "shale ") != OK || buf_str(&w, cli_build_mode()) != OK || buf_byte(&w, '\n') != OK) return not_ported(o, S("a version past the arena"));
@@ -722,7 +720,7 @@ static int version_main(Out *o) {
     return flush_and_exit(o, EXIT_FINISHED);
 }
 
-// The preludes after the core's, as Zig's `loadPreludes`: the Linux and git
+// The preludes after the core's: the Linux and git
 // preludes, the repo's `.shale/prelude.shale` if present, and the user's.
 static int load_preludes(Out *o, Str root_abs, Prelude *out, size_t *n) {
     Arena *a = o->arena;
@@ -882,7 +880,7 @@ static int run_main(Out *o, int argc, char **argv) {
     buf_clear(&why);
     if (cli_header_budgets(source, &c, &why) != OK) return refuse_command(o, buf_view(&why), false);
     if (cli_write_header_budgets(&o->err, &c) != OK) return not_ported(o, S("a report past the arena"));
-    // Said before the run starts, as Zig's runner flushes it.
+    // Said before the run starts, so it leads the run's own output.
     flush_err(o);
     // The root in one spelling, its real path, as the mounts' folders are.
     Str given_root = c.root;
