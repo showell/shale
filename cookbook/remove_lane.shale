@@ -30,10 +30,14 @@
 -- 4. **Delete the lane's local branch** (a worktree's, in its main
 --    checkout) when it is merged: its tip an ancestor of origin's default
 --    branch (`git merge-base --is-ancestor`, as `prune_merged_branches.shale`
---    judges), never by its name. A branch not merged is kept, said with its
---    count of commits the default lacks; `retire_checkout` has already said
---    each of them is on a remote. The default branch itself is never
---    deleted, nor a detached HEAD's commit, which has no branch.
+--    judges), or each of its commits past it a patch the default already
+--    has (`git cherry`, by patch-id), as a lane rebased onto the default
+--    and fast-forwarded leaves it; never by its name. A branch with a
+--    commit whose patch the default lacks, or with a merge commit past it
+--    (no patch to compare), is kept, said with its count of such commits;
+--    `retire_checkout` has already said each of them is on a remote. The
+--    default branch itself is never deleted, nor a detached HEAD's commit,
+--    which has no branch.
 -- 5. **Delete its remote branch** (`git push origin --delete`) when one is
 --    left on origin and is merged, by the same rule; else it is kept, said.
 --
@@ -46,8 +50,12 @@
 -- `retire_checkout` checks the plants and nothing of the box. A lane with an
 -- unpushed commit is refused and left whole, its branch too; a merged lane
 -- is removed with its branch here and on origin; a lane pushed and not
--- merged is removed and its branch kept on both sides; a merged clone is
--- deleted with its remote branch.
+-- merged is removed and its branch kept on both sides; a lane rebased onto
+-- main (its commits picked there under new hashes) is removed with its
+-- branch on both sides; a lane with one of its two commits picked is
+-- removed and its branch kept; a merged clone is deleted with its remote
+-- branch. The child run is given its root as `SHALE_ROOT`, so the self-test
+-- passes under the differ too (tools/differ.shale sets its own).
 --
 -- budget: steps=200000000 reads=100000 programs=400
 
@@ -80,26 +88,50 @@ function default_branch(dir_os)
   return sub(said, #"origin/" + 1, #said)
 end
 
--- Whether `ref` is merged into origin's `main`: {merged, why}.
+function commits(n)
+  if n == 1 then return "1 commit" end
+  return n .. " commits"
+end
+
+-- Whether `ref` is merged into origin's `main`: {merged, why}. Merged is
+-- its tip an ancestor of origin/main, or every commit past it a patch
+-- origin/main already has (`git cherry`, by patch-id): a lane rebased onto
+-- the default branch and fast-forwarded there leaves its old branch with
+-- the same patches under other hashes. A merge commit past it has no patch
+-- `git cherry` can judge, so it keeps the branch.
 function merged_into(dir_os, ref, main)
-  if git(dir_os, {"merge-base", "--is-ancestor", ref, "origin/" .. main}).code == 0 then return {merged = true, why = "merged into origin/" .. main} end
-  local n = parse_int(trim(git_ok(dir_os, {"rev-list", "--count", ref, "--not", "origin/" .. main}).out))
-  local commits = n .. " commits"
-  if n == 1 then commits = "1 commit" end
-  return {merged = false, why = commits .. " not in origin/" .. main}
+  local upstream = "origin/" .. main
+  if git(dir_os, {"merge-base", "--is-ancestor", ref, upstream}).code == 0 then return {merged = true, why = "merged into " .. upstream} end
+  local n = parse_int(trim(git_ok(dir_os, {"rev-list", "--count", ref, "--not", upstream}).out))
+  local merges = parse_int(trim(git_ok(dir_os, {"rev-list", "--count", "--merges", ref, "--not", upstream}).out))
+  if merges > 0 then return {merged = false, why = commits(n) .. " not in " .. upstream .. ", " .. merges .. " of them a merge, which has no patch to compare"} end
+  local missing = 0
+  for l in lines(git_ok(dir_os, {"cherry", upstream, ref}).out) do
+    if starts_with(l, "+ ") then missing = missing + 1 end
+  end
+  if missing == 0 then return {merged = true, why = "rebased into " .. upstream .. ", each of its " .. commits(n) .. " there by its patch"} end
+  if missing == n then return {merged = false, why = commits(n) .. " not in " .. upstream} end
+  return {merged = false, why = commits(missing) .. " of " .. n .. " not in " .. upstream .. ", the rest there by their patches"}
 end
 
 -- `retire_checkout.shale dir=<dir>` as a child run from the root, with
 -- `env` its environment's additions; its output printed. Stops unless the
 -- verdict is a plain CLEAR.
 function require_clear(root, dir, env)
-  local r = run({"shale", real("cookbook:retire_checkout.shale"), "dir=" .. dir}, {cwd = root, env = env, timeout_ms = 300000, whole = 4000000, want = "nonzero: BLOCKED, said by the caller"})
+  -- The child's root is named, never left to its folder: a `SHALE_ROOT`
+  -- in this run's environment (the differ sets one) would outrank `cwd`.
+  local child_env = {SHALE_ROOT = real(root)}
+  for k in keys(env) do child_env[k] = env[k] end
+  local r = run({"shale", real("cookbook:retire_checkout.shale"), "dir=" .. dir}, {cwd = root, env = child_env, timeout_ms = 300000, whole = 4000000, want = "nonzero: BLOCKED, said by the caller"})
   local verdict = ""
+  local stop = ""
   for l in lines(r.out) do
+    if starts_with(l, "── stopped at ") then stop = l end
     if not starts_with(l, "──") then print(l) end
     if starts_with(l, "CLEAR: ") or starts_with(l, "BLOCKED: ") then verdict = l end
   end
-  if r.code ~= 0 or starts_with(verdict, "BLOCKED: ") then fail("remove_lane: " .. dir .. " is BLOCKED (the reasons above); nothing removed") end
+  if starts_with(verdict, "BLOCKED: ") then fail("remove_lane: " .. dir .. " is BLOCKED (the reasons above); nothing removed") end
+  if r.code ~= 0 then fail("remove_lane: retire_checkout gave no verdict on " .. dir .. ", it exited " .. r.code .. " (`" .. stop .. "`); nothing removed") end
   if verdict ~= "CLEAR: " .. dir .. " can be deleted" then fail("remove_lane: " .. dir .. " is not plainly CLEAR (`" .. verdict .. "`): a check that didn't run is not a check passed; nothing removed") end
   return nil
 end
@@ -225,6 +257,22 @@ function self_test()
   git_ok(M, {"worktree", "add", "-q", "-b", "pushed", Los .. "/pushed"})
   commit_file(Los .. "/pushed", "c.txt", "pushed")
   git_ok(Los .. "/pushed", {"push", "-q", "-u", "origin", "pushed"})
+  -- A lane pushed, then rebased onto main: both its commits picked there.
+  git_ok(M, {"worktree", "add", "-q", "-b", "rebased", Los .. "/rebased"})
+  commit_file(Los .. "/rebased", "e.txt", "rebased, first")
+  commit_file(Los .. "/rebased", "f.txt", "rebased, second")
+  git_ok(Los .. "/rebased", {"push", "-q", "-u", "origin", "rebased"})
+  -- A lane pushed, one of its two commits picked onto main.
+  git_ok(M, {"worktree", "add", "-q", "-b", "partly", Los .. "/partly"})
+  commit_file(Los .. "/partly", "g.txt", "partly, picked")
+  commit_file(Los .. "/partly", "h.txt", "partly, not picked")
+  git_ok(Los .. "/partly", {"push", "-q", "-u", "origin", "partly"})
+  -- main moves on first, so each commit picked onto it gets a new hash
+  -- (picked onto its own parent within the second, it would keep its own).
+  commit_file(M, "x.txt", "main moves on")
+  git_ok(M, {"cherry-pick", "rebased~1", "rebased", "partly~1"})
+  git_ok(M, {"push", "-q", "origin", "main"})
+  expect("rebased: its tip not an ancestor of main", git(M, {"merge-base", "--is-ancestor", "rebased", "main"}).code == 0, false)
   -- A clone on a branch pushed and merged.
   must(run({"git", "clone", "-q", Tos .. "/origin.git", Los .. "/clone"}, {timeout_ms = 30000, whole = 10000}))
   git_ok(Los .. "/clone", {"checkout", "-q", "-b", "cloned"})
@@ -252,13 +300,27 @@ function self_test()
   expect("pushed: the outcome says why kept", contains(pushed, "kept local pushed: 1 commit not in origin/main"), true)
   print(pushed)
 
+  local rebased = remove_lane({root = L, dir = "rebased", env = env})
+  expect("rebased: gone", exists(L .. "/rebased"), false)
+  expect("rebased: its local branch gone", branch_there(M, "refs/heads/rebased"), false)
+  expect("rebased: its branch on origin gone", git(Tos .. "/origin.git", {"rev-parse", "-q", "--verify", "refs/heads/rebased"}).code == 0, false)
+  expect("rebased: the outcome says by patch", contains(rebased, "deleted remote rebased: rebased into origin/main, each of its 2 commits there by its patch"), true)
+  print(rebased)
+
+  local partly = remove_lane({root = L, dir = "partly", env = env})
+  expect("partly: gone", exists(L .. "/partly"), false)
+  expect("partly: its local branch kept", branch_there(M, "refs/heads/partly"), true)
+  expect("partly: its branch on origin kept", git(Tos .. "/origin.git", {"rev-parse", "-q", "--verify", "refs/heads/partly"}).code == 0, true)
+  expect("partly: the outcome says why kept", contains(partly, "kept remote partly: 1 commit of 2 not in origin/main, the rest there by their patches"), true)
+  print(partly)
+
   local clone = remove_lane({root = L, dir = "clone", env = env})
   expect("clone: gone", exists(L .. "/clone"), false)
   expect("clone: its branch on origin gone", git(Tos .. "/origin.git", {"rev-parse", "-q", "--verify", "refs/heads/cloned"}).code == 0, false)
   print(clone)
 
   remove_tree(T)
-  print("remove_lane self_test: PASS (an unpushed lane refused and left whole; a merged lane removed with its branch here and on origin; a pushed, unmerged lane removed and its branch kept; a merged clone deleted with its remote branch)")
+  print("remove_lane self_test: PASS (an unpushed lane refused and left whole; a merged lane removed with its branch here and on origin; a pushed, unmerged lane removed and its branch kept; a rebased lane removed with its branch on both sides; a partly picked lane's branch kept; a merged clone deleted with its remote branch)")
   return nil
 end
 
