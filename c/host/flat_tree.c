@@ -335,7 +335,7 @@ static STATUS_MUST_USE Status flat_parse(Arena *a, Str text, FlatTool tool, Flat
     Str rest = text;
     bool more = true;
     while (more) {
-        // Zig's `splitScalar` on `\n`: the text after a last `\n` is a line too.
+        // Zig's `splitScalar` on `\n`: what follows the last `\n` is a line.
         const char *nl = rest.len == 0 ? NULL : memchr(rest.ptr, '\n', rest.len);
         size_t end = nl == NULL ? rest.len : (size_t)(nl - rest.ptr);
         Str raw = str_sub(rest, 0, end);
@@ -515,8 +515,11 @@ enum {
 static STATUS_MUST_USE Status flat_read(Run *r, Pos pos, Str text, FlatTool tool, FlatEnding ending, Value *out) {
     FlatNames n;
     flat_names(tool, &n);
-    // The host's own size for a scratch arena, as c/shale.c gives its host;
-    // a refusal there is the arena budget, as Zig's `run.oom` is.
+    // DRAGON: the arena budget. The reading's own lists are outside it, so a
+    // tool's output holds a few times its bytes in memory no budget counts.
+    // REMEDY: the prelude's `whole` keep (64 MB) bounds the text, and this
+    // arena's limit, the host's 1 GiB as c/shale.c sizes it, bounds the
+    // rest; its refusal is the arena budget, as Zig's `run.oom` is.
     Arena scratch = arena_make((size_t)1 << 30);
     FlatDump d;
     Status s = flat_parse(&scratch, text, tool, ending, &d);

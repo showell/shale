@@ -61,9 +61,9 @@ const HOST_TREE_PLANTS = {
   {name = "a file's nodes are not charged", file = "flat_tree.c", dir = "host", caught_by = "text/test_flat_tree",
    aim = "flat_tree_stops_one_past_the_step_budget_at_a_files_nodes",
    old = "        TRY(run_charge(r, pos, f->nodes.len));\n", new = ""},
-  {name = "the ending is checked after the text", file = "flat_tree.c", dir = "host", caught_by = "text/test_flat_tree",
+  {name = "the ending's word is checked only once the text is one", file = "flat_tree.c", dir = "host", caught_by = "text/test_flat_tree",
    aim = "flat_tree_refuses_its_arguments_in_zigs_order",
-   old = "    const Value *t = &at(args, 0);\n    if (t->tag != VALUE_STRING) {", new = "    const Value *t = &at(args, 0);\n    if (t->tag != VALUE_STRING || ending == FLAT_CUT) {"},
+   old = [=[} else if (!str_eq(e->as.string, S("whole"))) {]=], new = [=[} else if (!str_eq(e->as.string, S("whole")) && at(args, 0).tag == VALUE_STRING) {]=]},
 }
 
 -- One script's run by `argv` in a folder of its own, `<script>-<who>`, which
