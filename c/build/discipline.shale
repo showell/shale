@@ -7,10 +7,46 @@ use("build:lib.shale")
 
 -- ── The discipline block ────────────────────────────────────────────────
 
--- c/check_discipline.shale over the C, then its own self-test, in both tiers.
+const CANARY = "c/tests/fixtures/tcc_struct_return.c"
+
+-- What the canary prints when a compiler gets both shapes right.
+const CANARY_RIGHT = "returned straight into a call: 0 of 5 wrong; kept in a local first: 0 of 5 wrong"
+
+-- The canary under tcc, in both tiers: TCC 0.9.27 must still get a 12-byte
+-- return passed straight into a call wrong, and the same return kept in a
+-- local right. The day it gets both right, the rule the discipline check
+-- holds (style.md, "Declarations") can be retired, and this says so.
+function canary_tcc(t)
+  local argv = tcc_flags(FOUNDATION)
+  push(argv, "-run")
+  push(argv, CANARY)
+  local r = must(run_in(t, "discipline", argv, {timeout_ms = 30000, tail = 5}))
+  local said = trim(r.out)
+  if said == CANARY_RIGHT then
+    fail("the canary " .. CANARY .. " found TCC right: a 12-byte struct returned straight into a call now arrives as made, so the 9-to-15-byte rule in c/docs/style.md (\"Declarations\") and its check in c/check_discipline.shale can be retired, with this canary")
+  end
+  if re_find(said, "^returned straight into a call: [1-5] of 5 wrong; kept in a local first: 0 of 5 wrong$") == nil then
+    fail("the canary " .. CANARY .. " under tcc said what it shouldn't: the straight shape wrong and the local one right is TCC 0.9.27's bug, and it said:\n" .. said)
+  end
+  return "canary tcc: " .. said .. ", TCC 0.9.27's bug, still there"
+end
+
+-- The canary under GCC, in the full tier: both shapes right.
+function canary_gcc(t)
+  local bin = OUT .. "/canary/tcc_struct_return"
+  compile_to(t, "discipline", "release", CANARY, FOUNDATION, bin)
+  local r = run_binary(t, "discipline", bin)
+  if r.code ~= 0 or trim(r.out) ~= CANARY_RIGHT then fail("the canary " .. CANARY .. " under GCC exited " .. r.code .. " and said:\n" .. r.out) end
+  return "canary gcc: " .. CANARY_RIGHT
+end
+
+-- c/check_discipline.shale over the C, then its own self-test, in both
+-- tiers; then the canary, under tcc in both and GCC in the full.
 function discipline_block(t)
   print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale"}, {timeout_ms = 60000, tail = 20})).out))
   print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale", "self_test=1"}, {timeout_ms = 60000, tail = 20})).out))
+  print(canary_tcc(t))
+  if t.full then print(canary_gcc(t)) end
   return nil
 end
 

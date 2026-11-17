@@ -12,10 +12,11 @@ edit sweeps.
   optimization, about ten times faster than GCC does at `-O0`. `tcc -run`
   compiles and runs a file in one step. It is the inner loop and never
   builds what we ship. The box's TCC is Ubuntu's 0.9.27 snapshot, and it
-  has bugs: it miscompiles a struct returned by value unless the struct is
-  one or two 8-byte words, and it passes structs through `...` wrongly
-  (`style.md` steers around both). The differential harness, run under
-  TCC, is the guard.
+  has bugs: it miscompiles a struct of 9 to 15 bytes returned straight into
+  another call as its argument, and it passes structs through `...` wrongly
+  (`style.md` steers around both). The discipline check holds the first,
+  with a canary that fails when TCC gets it right; the differential
+  harness, run under TCC, is the guard for the rest.
 - **GCC** builds everything else: the sanitizer builds, the warnings build
   and every binary we run. It needs no LLVM.
 - **Clang** builds only the browser playground, later, since GCC and TCC

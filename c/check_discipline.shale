@@ -30,15 +30,32 @@
 --               so a reader splits a file into its items;
 --   inline:     a function in a header is `static inline`;
 --   header:     a header's first line is `// <its name>: `, its guard
---               `SHALE_<NAME>_H`, and its last line `#endif`.
+--               `SHALE_<NAME>_H`, and its last line `#endif`;
+--   return size: no function returns a struct of 9 to 15 bytes by value,
+--               which TCC 0.9.27 miscompiles when the return goes straight
+--               into a call as its argument (style.md, "Declarations"); a
+--               line with `// struct return: <why>` is let through, as the
+--               canary's is.
 -- Strings, character literals and comments are not code, so a word in one
 -- never counts. A file is judged by its own name (arena.h, slice.h), so the
 -- plants below are judged as any file is.
 --
+-- The return size is the one rule a line can't show, since a type's size is
+-- the compiler's to say. Every function starts at column 0 with `static`, so
+-- the lines that do are every function there is; a `VEC_DEFINE` or
+-- `MAP_DEFINE` line adds the functions it makes (`_make`, `_pop`,
+-- `_value_at`). Their return types go into a probe, c/out/returns/probe.c,
+-- that includes every module (PROBE_MODULES) and copies in the typedefs of
+-- the files it can't include (c/shale.c, which has a `main`, and the tests,
+-- each a unit of its own), each file's names given a prefix of its own; TCC
+-- runs it, and it prints each type's size. A pointer, an enum or a scalar
+-- is at most 8 bytes, so the probe decides those too. It costs about a
+-- tenth of a second.
+--
 -- `self_test=1` writes one plant of each rule, and lines that must pass
 -- beside them, to c/out/discipline/ (plant.h and outside.h judged as any
--- file outside the foundation, inside.h as one in it), and fails unless
--- exactly the plants are caught.
+-- file outside the foundation, inside.h as one in it, returns.c through the
+-- probe), and fails unless exactly the plants are caught.
 --
 -- Run from the repository's root: shale c/check_discipline.shale
 -- budget: steps=100000000
@@ -244,6 +261,248 @@ function check_files(files)
   return found
 end
 
+-- ── Return sizes, through a probe ──────────────────────────────────────
+
+-- The modules the probe includes, in an order that compiles as one unit
+-- (c/shale.c's, then the host's pieces it doesn't run). A module missing
+-- from it stops the check, so a new one can't go unjudged.
+const PROBE_MODULES = {
+  "c/foundation/test.h", "c/script/run.h", "c/host/store.c", "c/host/path_run.c", "c/script/regex.c",
+  "c/script/builtins.c", "c/script/builtins_text.c", "c/script/builtins_store.c", "c/script/builtins_walk.c",
+  "c/script/builtins_change.c", "c/script/vm.c", "c/host/mounts.c", "c/host/paths.c", "c/host/undo.c",
+  "c/host/host_call.c", "c/host/keep.c", "c/host/spawn.c", "c/host/job_record.c",
+}
+const PROBE_DIR = "c/out/returns"
+const RETURN_WHY = "TCC 0.9.27 miscompiles a struct of 9 to 15 bytes returned straight into a call (c/docs/style.md, Declarations)"
+
+-- A column-0 `static` line's function, as {type, name}, or nil when the line
+-- declares no function (a variable, `void`, a function pointer).
+function returned_by(raw)
+  local s = code_of(raw)
+  s = re_replace(s, [=[^static\s+(inline\s+)?(STATUS_MUST_USE\s+)?]=], "")
+  local open = find(s, "(")
+  if open == nil then return nil end
+  local eq = find(s, "=")
+  if eq ~= nil and eq < open then return nil end
+  local m = re_find(trim(sub(s, 1, open - 1)), [=[^(.*[\s*])([A-Za-z_]\w*)$]=])
+  if m == nil then return nil end
+  local ty = trim(m.groups[1])
+  if ty == "void" or ty == "" then return nil end
+  return {type = ty, name = m.groups[2]}
+end
+
+-- Every function the files return a value from, as {type, fn, path, line}:
+-- each column-0 `static` function, and the functions each `VEC_DEFINE` and
+-- `MAP_DEFINE` line makes. A line marked `// struct return: ` is left out.
+function returns_of(files)
+  local found = {}
+  for p in files do
+    local n = 0
+    for raw in lines(read(p)) do
+      n = n + 1
+      if find(raw, "// struct return: ") == nil then
+        if starts_with(raw, "static ") then
+          local f = returned_by(raw)
+          if f ~= nil then push(found, {type = f.type, fn = f.name, path = p, line = n}) end
+        elseif starts_with(raw, "VEC_DEFINE(") or starts_with(raw, "MAP_DEFINE(") then
+          local m = re_find(raw, [=[^(VEC|MAP)_DEFINE\(\s*(\w+)\s*,\s*([^)]*\S)\s*\)]=])
+          if m == nil then fail(p .. ":" .. n .. ": a `_DEFINE(` line this check can't read: " .. raw) end
+          local name = m.groups[2]
+          push(found, {type = name, fn = name .. "_make", path = p, line = n})
+          if m.groups[1] == "VEC" then
+            push(found, {type = m.groups[3], fn = name .. "_pop", path = p, line = n})
+            push(found, {type = name .. "Items", fn = name .. "_items", path = p, line = n})
+          else
+            push(found, {type = m.groups[3], fn = name .. "_value_at", path = p, line = n})
+          end
+        end
+      end
+    end
+  end
+  return found
+end
+
+-- The column-0 items of the file at `p` that define a type named in `wanted`
+-- (a set), as {name, text}: a `typedef` to its closing `} Name;`, or a
+-- `_DEFINE(` line. The probe copies them from a file it can't include.
+function typedefs_in(p, wanted)
+  local items = {}
+  local all = lines(read(p))
+  local i = 1
+  while i <= #all do
+    local raw = all[i]
+    if starts_with(raw, "typedef ") then
+      local first = i
+      if not ends_with(trim(code_of(raw)), ";") then
+        i = i + 1
+        while i <= #all and not starts_with(all[i], "}") do i = i + 1 end
+        if i > #all then fail(p .. ":" .. first .. ": a `typedef` with no `}` at column 0 to close it") end
+      end
+      local m = re_find(code_of(all[i]), [=[(\w+)\s*;\s*$]=])
+      if m ~= nil and has_key(wanted, m.group) then
+        push(items, {name = m.group, text = join(slice(all, first, i), "\n")})
+      end
+    elseif starts_with(raw, "VEC_DEFINE(") or starts_with(raw, "MAP_DEFINE(") or starts_with(raw, "SLICE_TYPE(") then
+      local m = re_find(raw, [=[^\w+\(\s*(\w+)]=])
+      if m ~= nil and has_key(wanted, m.group) then push(items, {name = m.group, text = raw}) end
+    end
+    i = i + 1
+  end
+  return items
+end
+
+-- `text` with each name `names` maps made what it maps it to, whole words
+-- alone.
+function renamed(text, names)
+  local s = text
+  for k in keys(names) do
+    if find(s, k) ~= nil then s = re_replace(s, "\\b" .. k .. "\\b", names[k]) end
+  end
+  return s
+end
+
+-- The outside files `p` includes, directly or through another of them, in
+-- the order the probe must copy their typedefs: each after what it includes.
+-- `seen` and `order` gather across calls.
+function includes_first(p, outside_set, seen, order)
+  if has_key(seen, p) then return nil end
+  seen[p] = true
+  for g in grep(p, "#include \"") do
+    local m = re_find(g.text, [=[^#include "([^"]+)"]=])
+    if m ~= nil then
+      local q = path_normal(dirname(p) .. "/" .. m.group)
+      if has_key(outside_set, q) then includes_first(q, outside_set, seen, order) end
+    end
+  end
+  push(order, p)
+  return nil
+end
+
+-- How the probe copies the typedefs of the files it can't include. Each
+-- test is its own translation unit, so two may define one name two ways:
+-- the `k`th file's names are made `probe<k>_<name>` in the probe, and each
+-- file's map (`names[p]`) covers its own names and those of the outside
+-- files it includes. Gives {items, names}: the copied items, renamed, in an
+-- order that compiles, and the maps.
+function outside_plan(outside, wanted)
+  local outside_set = set_of(outside)
+  local seen = {}
+  local order = {}
+  for p in outside do includes_first(p, outside_set, seen, order) end
+  local names = {}
+  local items = {}
+  local k = 0
+  for p in order do
+    k = k + 1
+    local own = typedefs_in(p, wanted)
+    local map = {}
+    -- What the files it includes define, then its own, which win.
+    local reach = {}
+    local reach_order = {}
+    includes_first(p, outside_set, reach, reach_order)
+    for q in reach_order do
+      if q ~= p then
+        for n in keys(names[q]) do map[n] = names[q][n] end
+      end
+    end
+    for item in own do
+      map[item.name] = "probe" .. k .. "_" .. item.name
+      if not starts_with(item.text, "typedef ") and not starts_with(item.text, "SLICE_TYPE(") then
+        map[item.name .. "Items"] = "probe" .. k .. "_" .. item.name .. "Items"
+      end
+    end
+    names[p] = map
+    for item in own do push(items, "// from " .. p .. "\n" .. renamed(item.text, map)) end
+  end
+  return {items = items, names = names}
+end
+
+-- The probe's source: every module, the copied items, and a `main` printing
+-- `<k> <size>` for each of `types`.
+function probe_source(types, items)
+  local up = ""
+  for k in split(PROBE_DIR, "/") do up = up .. "../" end
+  local src = {"// probe.c: written by c/check_discipline.shale, the size of each type a function returns.", "#define _GNU_SOURCE", "#include <stdio.h>"}
+  for m in PROBE_MODULES do push(src, "#include \"" .. up .. m .. "\"") end
+  for item in items do push(src, item) end
+  push(src, "int main(void) {")
+  local k = 0
+  for ty in types do
+    k = k + 1
+    push(src, "    printf(\"%d %zu\\n\", " .. k .. ", sizeof(" .. ty .. "));")
+  end
+  push(src, "    return 0;")
+  push(src, "}")
+  return join(src, "\n") .. "\n"
+end
+
+-- Whether the probe reaches the file at `p` through its includes: a piece of
+-- c/foundation, c/script or c/host. The rest (c/shale.c, the tests, a plant)
+-- have their typedefs copied in.
+function probe_reaches(p)
+  return starts_with(p, "c/foundation/") or starts_with(p, "c/script/") or starts_with(p, "c/host/")
+end
+
+-- Each function of `files` that returns a struct of 9 to 15 bytes, as a
+-- break {path, line, rule, text}, in `found`, beside how many functions and
+-- types were sized.
+function check_returns(files)
+  local rets = returns_of(files)
+  local wanted = {}
+  for r in rets do
+    for w in re_find_all(r.type, [=[[A-Za-z_]\w*]=]) do wanted[w.text] = true end
+  end
+  local outside = {}
+  for p in files do
+    if not probe_reaches(p) then push(outside, p) end
+  end
+  local plan = outside_plan(outside, wanted)
+  -- Each return's type as the probe spells it, its file's names renamed.
+  local types = {}
+  local index = {}
+  for r in rets do
+    r.sized = r.type
+    if has_key(plan.names, r.path) then r.sized = renamed(r.type, plan.names[r.path]) end
+    if not has_key(index, r.sized) then
+      push(types, r.sized)
+      index[r.sized] = #types
+    end
+  end
+  if exists(PROBE_DIR) then remove_tree(PROBE_DIR) end
+  mkdir(PROBE_DIR)
+  local probe = PROBE_DIR .. "/probe.c"
+  create(probe, probe_source(types, plan.items))
+  local r = run({"tcc", "-Ic/foundation", "-run", probe}, {timeout_ms = 30000, tail = 1000})
+  if get(r, "code", -1) ~= 0 then fail("the return-size probe " .. probe .. " did not compile and run under tcc:\n" .. r.out) end
+  local size = {}
+  for l in lines(r.out) do
+    local m = re_find(l, "^(\\d+) (\\d+)$")
+    if m ~= nil then size[m.groups[1]] = parse_int(m.groups[2]) end
+  end
+  local found = {}
+  for f in rets do
+    local k = "" .. index[f.sized]
+    if not has_key(size, k) then fail("the return-size probe printed no size for `" .. f.type .. "`:\n" .. r.out) end
+    local n = size[k]
+    if n >= 9 and n <= 15 then
+      push(found, {path = f.path, line = f.line, rule = "return size", text = "`" .. f.fn .. "` returns `" .. f.type .. "`, " .. n .. " bytes: " .. RETURN_WHY})
+    end
+  end
+  remove_tree(PROBE_DIR)
+  return {found = found, functions = #rets, types = #types}
+end
+
+-- The C files the probe must include: each module under c/script and
+-- c/host, each of them in PROBE_MODULES, or the check stops.
+function probe_modules_hold(files)
+  local module_set = set_of(PROBE_MODULES)
+  for p in files do
+    local module = ends_with(p, ".c") and (starts_with(p, "c/script/") or starts_with(p, "c/host/"))
+    if module and not has_key(module_set, p) then fail(p .. " is a module the return-size probe doesn't include: add it to PROBE_MODULES in c/check_discipline.shale") end
+  end
+  return nil
+end
+
 -- The plants in `p` caught, judged as a foundation header or not: exactly
 -- `want`, each "line rule", or the run fails. Gives how many.
 function plants_hold(p, in_foundation, want)
@@ -259,6 +518,57 @@ function self_test()
   local dir = "c/out/discipline"
   if exists(dir) then remove_tree(dir) end
   mkdir(dir)
+  -- The return sizes first, as the check runs them, while the arena is fresh.
+  local rp = dir .. "/returns.c"
+  create(rp, [=[// returns.c: the return-size rule's plants: lines 23 to 26 break it, the rest pass.
+typedef struct {
+    uint32_t a;
+    uint32_t b;
+} Eight;
+typedef struct {
+    uint8_t b[9];
+} Nine;
+typedef struct {
+    uint32_t a;
+    uint32_t b;
+    uint32_t c;
+} Twelve;
+typedef struct {
+    uint8_t b[15];
+} Fifteen;
+typedef struct {
+    uint64_t a;
+    uint64_t b;
+} Sixteen;
+typedef enum { RET_A, RET_B } RetKind;
+SLICE_TYPE(Twelves, Twelve);
+static Nine nine(void) { Nine n = {{0}}; return n; }
+static Twelve twelve(void) { Twelve t = {1, 2, 3}; return t; }
+static inline Fifteen fifteen(void) { Fifteen f = {{0}}; return f; }
+VEC_DEFINE(TwelveVec, Twelve)
+static Eight eight(void) { Eight e = {1, 2}; return e; }
+static inline Sixteen sixteen(void) { Sixteen s = {1, 2}; return s; }
+static Twelves twelves(Twelve *t) { Twelves s = {t, 1}; return s; }
+static RetKind kind(void) { return RET_B; }
+static uint32_t word(void) { return 1; }
+static Twelve *twelve_at(Twelve *t) { return t; }
+static const Str NOT_A_FUNCTION = S("(");
+static void nothing(void) {}
+static STATUS_MUST_USE Status checked(void) { return OK; }
+static Twelve marked(void) { Twelve t = {0, 0, 0}; return t; } // struct return: a plant its marker lets through
+]=])
+  local got = {}
+  for f in check_returns({rp}).found do push(got, f.line .. " " .. f.text) end
+  local want_returns = {
+    "23 `nine` returns `Nine`, 9 bytes: " .. RETURN_WHY,
+    "24 `twelve` returns `Twelve`, 12 bytes: " .. RETURN_WHY,
+    "25 `fifteen` returns `Fifteen`, 15 bytes: " .. RETURN_WHY,
+    "26 `TwelveVec_pop` returns `Twelve`, 12 bytes: " .. RETURN_WHY,
+  }
+  if join(got, "\n") ~= join(want_returns, "\n") then
+    fail("the discipline check's self-test caught, in " .. rp .. ":\n" .. join(got, "\n") .. "\nit should catch exactly:\n" .. join(want_returns, "\n"))
+  end
+  local caught = #want_returns
   local p = dir .. "/plant.h"
   create(p, [=[// The discipline check's plants: lines 3 to 17 break a rule or two each, the rest pass.
 #include "slice.h"
@@ -301,7 +611,7 @@ TEST_MAIN(
 ]=])
   local want = {"1 header", "1 header", "38 header", "3 alloc", "4 raw index", "5 raw index", "6 cstr", "7 cstr", "8 one per line", "9 one per line",
     "11 brace", "11 top level", "12 brace", "13 tab", "13 top level", "14 comment", "15 top level", "16 top level", "16 inline", "17 one per line", "17 wrapped"}
-  local caught = plants_hold(p, false, want)
+  caught = caught + plants_hold(p, false, want)
   local outside = dir .. "/outside.h"
   create(outside, [=[// outside.h: the discipline check's plants for the bounds and Status rules; lines 4 to 10 break one each, the rest pass.
 #ifndef SHALE_OUTSIDE_H
@@ -340,8 +650,13 @@ if arg("self_test", 0) == 1 then
   self_test()
 else
   local files = c_files("c")
+  probe_modules_hold(files)
+  -- The sizes first, while the arena is fresh: the line rules' reading of
+  -- every file fills most of it.
+  local sized = check_returns(files)
   local found = check_files(files)
+  for f in sized.found do push(found, f) end
   for f in found do print(f.path .. ":" .. f.line .. ": " .. f.rule .. ": " .. f.text) end
   if #found > 0 then fail(#found .. " breaks of the C's discipline in " .. #files .. " files") end
-  print("PASS discipline: " .. #files .. " files")
+  print("PASS discipline: " .. #files .. " files; " .. sized.functions .. " functions' returns sized, " .. sized.types .. " types, none of 9 to 15 bytes")
 end

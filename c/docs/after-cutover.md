@@ -51,6 +51,12 @@ them on 2026-11-17.
    belongs inside a builtin with a deterministic merge, never in the
    language.
 
+## Idioms to take up
+
+- `RegexCache` (6,856 bytes) and `Arena` are made by value
+  (`regex_cache_make`, `arena_make`); an out-pointer initializer,
+  `regex_cache_init(&c)`, is the more ordinary C.
+
 ## To follow up: coding standards declared in Roc
 
 Steve wants to follow up on this idea (2026-11-17). It needs no change

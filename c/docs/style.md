@@ -36,7 +36,8 @@ and its self-test plants a break of each one.
   - `SLICE_TYPE(`, `VEC_DEFINE(`, `MAP_DEFINE(`, `TEST(`, `TEST_MAIN(` or
     `_Static_assert(`;
   - `int main(`, a program's own: the one `.c` file that is a command
-    (`c/shale.c`), and a test's fixture (`c/tests/host/fixtures/`).
+    (`c/shale.c`), and a test's fixture (`c/tests/fixtures/`,
+    `c/tests/host/fixtures/`).
 - Everything inside an item is indented, so the next line at column 0 starts
   the next item.
 - **Held:** a function in a header is `static inline`.
@@ -60,10 +61,16 @@ and its self-test plants a break of each one.
   initializer may open on its line with `{` and close on a later one.
 - A struct's fields are one to a line, each with a comment where its name
   doesn't say enough.
-- A struct returned by value is one 8-byte word or two of them, such as a
-  pointer and a length (`Str`). Anything else goes through an out-pointer.
-  TCC 0.9.27 miscompiles other shapes: a 12-byte return clobbered a local of
-  its caller. The differ, run under TCC, stays the guard.
+- **Held:** a struct returned by value is at most 8 bytes, exactly 16 (two
+  words, like `Str`), or more than 16; never 9 to 15. TCC 0.9.27 miscompiles
+  a return of 9 to 15 bytes that goes straight into another call as its
+  argument, `f(g())`, though the same return kept in a local first is right.
+  It is known upstream ([tinycc-devel, July
+  2023](https://lists.libreplanet.org/archive/html/tinycc-devel/2023-07/msg00027.html))
+  and fixed on TinyCC's mob branch after 0.9.27; the discipline check sizes
+  every return through a probe, and `c/tests/fixtures/tcc_struct_return.c`
+  is the canary that says when the rule can go. A line with `// struct
+  return: <why>` is let through.
 
 ## Names
 
