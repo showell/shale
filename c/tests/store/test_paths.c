@@ -789,7 +789,7 @@ TEST(undo_a_change_past_the_journal_s_room_a_file_it_cannot_read_a_path_neither_
     f.paths.undo = true;
     sx_put(&f.base, "a.txt", "one\n");
     // The room left is less than a.txt.
-    f.paths.journal_bytes = PATHS_JOURNAL_MOST - 2;
+    f.paths.journal_bytes = PATHS_JOURNAL_MAX - 2;
     EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("a.txt"), S("x")), CLASS_REFUSED, S("--undo-on-stop keeps at most 67108864 bytes of what a run changes, and ")));
     EXPECT(fx_said(&f, fx_change(&f, "replace", S("a.txt"), S("x")), CLASS_REFUSED, SAYS("--undo-on-stop keeps at most 67108864 bytes of what a run changes, and R/a.txt would pass it")));
     f.paths.journal_bytes = 0;

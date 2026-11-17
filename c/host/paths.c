@@ -31,7 +31,7 @@ VEC_DEFINE(Priors, Prior)
 
 // The most bytes `--undo-on-stop` journals: a change past it stops the run,
 // so nothing is changed that could not be put back.
-enum { PATHS_JOURNAL_MOST = 64 << 20 };
+enum { PATHS_JOURNAL_MAX = 64 << 20 };
 
 // The Linux host's paths, as Zig's `Host` holds them.
 typedef struct {
@@ -479,10 +479,10 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
     if (e == STORE_OK && S_ISDIR(st.st_mode)) {
         p.was = PRIOR_DIR;
     } else if (e == STORE_OK && S_ISREG(st.st_mode)) {
-        size_t room = PATHS_JOURNAL_MOST - h->journal_bytes;
+        size_t room = PATHS_JOURNAL_MAX - h->journal_bytes;
         if ((uint64_t)st.st_size > room) {
             MsgNum most;
-            return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it"), MSG_ARGS(MSG_FROM_HOST(msg_num(&most, PATHS_JOURNAL_MOST)), MSG_FROM_HOST(abs)));
+            return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it"), MSG_ARGS(MSG_FROM_HOST(msg_num(&most, PATHS_JOURNAL_MAX)), MSG_FROM_HOST(abs)));
         }
         Str bytes = S("");
         StoreErr re = store_os_read_file(h->arena, abs, room + 1, &bytes);
