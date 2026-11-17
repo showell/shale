@@ -152,7 +152,7 @@ today, the C gives as three vtables of function pointers, each returning
   as `run` does; the C's reaper, `jobs_reap_main` in c/host/jobs.c, does the
   same),
   `procs` and `proc_stop` (the /proc files, a pidfd,
-  start times against a reused pid), `real`, `sleep`, `re_lines`, JSON, the
+  start times against a reused pid; the C's c/host/host_procs.c), `real`, `sleep`, `re_lines`, JSON, the
   tree readers and `edits_write`. Its time line, its records and the jobs a
   stopped run ends are the host's, written by the CLI after the report.
 - **The preludes stay Shale.** The Linux and git preludes are source the C

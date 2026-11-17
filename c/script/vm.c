@@ -11,13 +11,13 @@
 typedef struct {
     uint8_t at_least;
     uint8_t at_most;
-    // NULL for `print`, the VM's own op.
+    // NULL for `print`, the VM's own op, which never reaches builtins_call.
     BuiltinImpl impl;
 } BuiltinSpec;
 
 SLICE_TYPE(BuiltinSpecs, const BuiltinSpec);
 
-// Every builtin's arity, in ast.h's order, and its function where it is ported.
+// Every builtin's arity, in ast.h's order, and its function.
 static BuiltinSpecs builtin_specs(void) {
     static const BuiltinSpec specs[] = {
         {1, 1, bi_ls},             // ls
@@ -124,7 +124,10 @@ static STATUS_MUST_USE Status builtins_call(Run *r, Pos pos, Builtin b, ConstVal
         if (s->at_least == s->at_most) return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes {d} argument{s}, given {d}", S("`"), name, S("` takes "), run_unum(r, s->at_least), S(" argument"), plural, S(", given "), run_unum(r, args.len));
         return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes {d} to {d} arguments, given {d}", S("`"), name, S("` takes "), run_unum(r, s->at_least), S(" to "), run_unum(r, s->at_most), S(" arguments, given "), run_unum(r, args.len));
     }
-    if (s->impl == NULL) return builtin_not_ported(r, pos, builtin_name(b));
+    if (s->impl == NULL) {
+        fprintf(stderr, "vm: a call of `print`, the VM's own op, reached the builtins' table\n");
+        abort();
+    }
     return s->impl(r, pos, args, out);
 }
 
@@ -459,13 +462,12 @@ static STATUS_MUST_USE Status vm_leave(Machine *m, const Value *v, bool *more) {
 }
 
 // Unwinds the current stop to the innermost `attempt` frame, unless it is a
-// budget's (or the C's own refusal of what it does not run yet). `*caught`
-// says whether the run goes on.
+// budget's. `*caught` says whether the run goes on.
 static STATUS_MUST_USE Status vm_caught(Machine *m, bool *caught) {
     Run *r = m->r;
     *caught = false;
     Stop s = r->ctx.stop;
-    if (s.cls == CLASS_BUDGET || r->unported) return OK;
+    if (s.cls == CLASS_BUDGET) return OK;
     size_t i = m->frames.len;
     while (i > 1) {
         i--;

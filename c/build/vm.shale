@@ -23,7 +23,7 @@ const VM_SCRIPTS = {
 const VM_PLANTS = {
   {name = "an attempt catches a budget",
    aim = "a_budget_is_never_caught", dir = "script", file = "vm.c", caught_by = "test_vm",
-   old = "if (s.cls == CLASS_BUDGET || r->unported) return OK;", new = "if (r->unported) return OK;"},
+   old = "if (s.cls == CLASS_BUDGET) return OK;", new = "if (0) return OK;"},
   {name = "an attempt leaves its call in the trail",
    aim = "attempt_makes_a_stop_a_value_and_the_run_goes_on", dir = "script", file = "vm.c", caught_by = "test_vm",
    old = "        r->ctx.calls.len = i - 1;", new = "        (void)0;"},

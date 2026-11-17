@@ -577,15 +577,9 @@ static STATUS_MUST_USE Status bi_fail(Run *r, Pos pos, ConstValues args, Value *
     return run_fail(&r->ctx, pos, CLASS_FAIL, msg);
 }
 
-// What the C does not run yet, refused loudly: a stop no `attempt` catches,
-// naming the builtin or the host's call it reached.
-static STATUS_MUST_USE Status builtin_not_ported(Run *r, Pos pos, Str what) {
-    r->unported = true;
-    return run_failf(r, pos, CLASS_HOST, "{s} is not ported to the C yet", S("`"), what, S("` is not ported to the C yet"));
-}
-
 // The host's call `name` with the rest of the arguments, Zig's `hostCall`:
-// its name is what the stops in its checks give, until it returns.
+// its name is what the stops in its checks give, until it returns. Where
+// there is no host (metal), a stop of class `host` naming the call.
 static STATUS_MUST_USE Status bi_host(Run *r, Pos pos, ConstValues args, Value *out) {
     Str name = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &at(args, 0), S("its call's name"), &name));
@@ -598,12 +592,7 @@ static STATUS_MUST_USE Status bi_host(Run *r, Pos pos, ConstValues args, Value *
         r->host_call = outer;
         return s;
     }
-    Msg m;
-    msg_init(&m, r->ctx.values);
-    msg_str(&m, S("host(\""));
-    msg_str(&m, name);
-    msg_str(&m, S("\")"));
-    return builtin_not_ported(r, pos, m.s == OK ? buf_view(&m.b) : S("host"));
+    return run_failf(r, pos, CLASS_HOST, "`{s}`: not on this host", S("`"), name, S("`: not on this host"));
 }
 
 static STATUS_MUST_USE Status bi_arg(Run *r, Pos pos, ConstValues args, Value *out) {

@@ -28,6 +28,7 @@
 #include "../host/jobs.c"
 #include "../host/host_run.c"
 #include "../host/host_jobs.c"
+#include "../host/host_procs.c"
 #include "../host/host_json.c"
 #include "../host/host_text.c"
 #include "../host/flat_tree.c"
@@ -36,12 +37,13 @@
 #include "../host/host_zig.c"
 #include "../host/host_call.c"
 
-// How a run is made: its mounts file's text, `--verbose` (a diff in full)
-// and `--undo-on-stop`.
+// How a run is made: its mounts file's text, `--verbose` (a diff in full),
+// `--undo-on-stop`, and whether it has no host (metal's run).
 typedef struct {
     const char *mounts; // cstr: a test's literal
     bool verbose;
     bool undo;
+    bool no_host;
 } RanOpts;
 
 // One source's run: its arenas, its folder, its parse and code, its store
@@ -66,6 +68,8 @@ typedef struct {
     Status ran;
     // What `--undo-on-stop` said, after a stop.
     Str undone;
+    // A run with no host's calls, as metal's.
+    bool no_host;
 } Ran;
 
 static Str ran_cs(const char *lit) { // cstr: a test's literal
@@ -137,6 +141,7 @@ static void ran_init(Ran *x, RanOpts o) {
     store_linux(&x->linux_store, &x->store.store);
     paths_make(&x->lh.paths, &x->host, x->root, x->dir, Mounts_items(&loaded.mounts), loaded.from);
     x->lh.paths.undo = o.undo;
+    x->no_host = o.no_host;
     SpawnStrs env = {NULL, 0};
     host_make(&x->lh, env);
     paths_hook(&x->lh.paths, &x->hook);
@@ -174,7 +179,8 @@ static void ran_run(Ran *x, Str src, Budgets b) {
     x->store.effects = Effects_make(&x->values);
     r->store = &x->store;
     RunHost host = {&x->lh, host_call};
-    r->host = host;
+    RunHost metal = {NULL, NULL};
+    r->host = x->no_host ? metal : host;
     x->ran = run_ended(&r->ctx, vm_main(r, &x->code));
     if (x->ran != OK && x->lh.paths.undo) {
         Buf w = buf_make(&x->host);

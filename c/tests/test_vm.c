@@ -143,15 +143,24 @@ TEST(maps_and_list_loops_take_zigs_steps) {
     ran_free(&x);
 }
 
-TEST(a_builtin_not_ported_is_refused_and_never_caught) {
+// Zig's host_test.zig, "seam: with no host": `host` stops with class
+// `host`, naming the call, and `attempt` catches it like any other stop.
+TEST(with_no_host_host_stops_naming_the_call_and_attempt_catches_it) {
     static Ran x;
-    ran_source(&x, S("function h() return host(\"procs\") end\nprint(attempt(h).ok)\n"), ran_budgets());
+    RanOpts metal = {NULL, false, false, true};
+    ran_init(&x, metal);
+    ran_run(&x, S("local x = host(\"run\", {\"zig\", \"build\"}, {})\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
-    EXPECT(x.r.unported);
     EXPECT_EQ(x.r.ctx.stop.cls, CLASS_HOST);
-    EXPECT_STR(x.r.ctx.stop.message, S("`host(\"procs\")` is not ported to the C yet"));
+    EXPECT_STR(x.r.ctx.stop.message, S("`run`: not on this host"));
     EXPECT_EQ(x.r.out.len, 0);
     ran_free(&x);
+    static Ran y;
+    ran_init(&y, metal);
+    ran_run(&y, S("function f() return host(\"real\", \"runs:x\") end local r = attempt(f) print(r.ok, r.class)\n"), ran_budgets());
+    EXPECT_EQ(y.ran, OK);
+    EXPECT_STR(buf_view(&y.r.out), S("false\thost\n"));
+    ran_free(&y);
 }
 
 TEST(values_name_their_types_and_truth) {
@@ -213,6 +222,6 @@ TEST_PART(vm, TEST_CASE(arithmetic_and_print_take_zigs_steps), TEST_CASE(the_ste
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
           TEST_CASE(yield_keeps_what_is_reached_and_charges_the_copy), TEST_CASE(the_output_budget_writes_what_fits),
           TEST_CASE(division_floors_and_an_overflow_stops), TEST_CASE(an_index_past_the_append_names_the_one_that_appends),
-          TEST_CASE(maps_and_list_loops_take_zigs_steps), TEST_CASE(a_builtin_not_ported_is_refused_and_never_caught),
+          TEST_CASE(maps_and_list_loops_take_zigs_steps), TEST_CASE(with_no_host_host_stops_naming_the_call_and_attempt_catches_it),
           TEST_CASE(values_name_their_types_and_truth), TEST_CASE(integer_text_and_checked_arithmetic),
           TEST_CASE(the_depth_budget_stops_a_deep_expression));

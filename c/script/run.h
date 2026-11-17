@@ -69,9 +69,6 @@ typedef struct Run {
     size_t tail_cap;
     // The patterns `re_find` and its kin compiled.
     RegexCache patterns;
-    // Set when the run reached what the C does not run yet: a stop no
-    // `attempt` catches.
-    bool unported;
     RunStore *store;
     RunHost host;
     // The host call running (`host("real", ...)`'s `real`), "" outside one:

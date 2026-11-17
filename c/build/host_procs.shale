@@ -1,0 +1,59 @@
+-- c/build/host_procs.shale: the process calls' block, c/host's `procs` and
+-- `proc_stop` in the C VM's host (host_procs.c).
+-- c/build.shale runs it, with the `build` mount that `use` below reads; see
+-- that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- ── The process calls: their own block ──────────────────────────────────
+-- c/tests/host_builtins/test_host_procs.c, held here to HOST_PROCS_TESTS:
+-- a part of c/tests/ran_tests.c, which the ran block runs under every build
+-- and holds to its `TEST(` count. Its `attack_` test waits out a TERM's
+-- grace, so the fast tier leaves it out (SLOW_TESTS, lib.shale). In the
+-- full tier: the faults below planted in a copy of c/ (`run_plants`), each
+-- caught by its `aim` tests, under TCC. No plant signals anything but the
+-- test's own children: a fault that would let `proc_stop` take this
+-- process or its parent is planted where only the listing sees it.
+
+const HOST_PROCS_TESTS = {["c/tests/host_builtins/test_host_procs.c"] = 7}
+const HOST_PROCS_PLANTS = {
+  {name = "a stale start is taken for the process", file = "host_procs.c", dir = "host", caught_by = "host_builtins/test_host_procs",
+   aim = "proc_stop_stops_the_process_by_pid_and_start_and_a_stale_start_is_left_alone",
+   old = "    if (!procs_same(pid, start)) return OK;", new = "    if (0 && !procs_same(pid, start)) return OK;"},
+  {name = "the listing keeps this run and those above it", file = "host_procs.c", dir = "host", caught_by = "host_builtins/test_host_procs",
+   aim = "procs_lists_a_process_whole_in_pid_order_and_never_this_one_or_one_above_it",
+   old = "        if (procs_in_lineage(&mine, pid)) continue;", new = "        if (0 && procs_in_lineage(&mine, pid)) continue;"},
+  {name = "the lineage starts above this process", file = "host_procs.c", dir = "host", caught_by = "host_builtins/test_host_procs",
+   aim = "procs_lists_a_process_whole_in_pid_order_and_never_this_one_or_one_above_it",
+   old = "    int32_t pid = (int32_t)getpid();", new = "    int32_t pid = (int32_t)getppid();"},
+  {name = "a refused signal is taken for a process gone", file = "host_procs.c", dir = "host", caught_by = "host_builtins/test_host_procs",
+   aim = "a_process_the_run_may_not_signal_stops_proc_stop_named_never_a_success",
+   old = "    if (e == ESRCH) return OK;\n    return host_fail(r, pos, CLASS_HOST, S(\"`proc_stop`: pid {d} refused", new = "    if (e == ESRCH || e == EPERM) return OK;\n    return host_fail(r, pos, CLASS_HOST, S(\"`proc_stop`: pid {d} refused"},
+  {name = "a process that outlives TERM never gets KILL", file = "host_procs.c", dir = "host", caught_by = "host_builtins/test_host_procs",
+   aim = "attack_a_process_that_ignores_term_gets_kill_after_two_seconds",
+   old = "        TRY(procs_signal(r, pos, fd, pid, SIGKILL, S(\"KILL\"), &sent));\n", new = ""},
+  {name = "a command line is one read", file = "host_procs.c", dir = "host", caught_by = "host_builtins/test_host_procs",
+   aim = "a_command_line_past_one_read_is_read_whole_and_one_past_args_most_says_it_was_cut",
+   old = "        if (over) {\n            *cut = true;\n            break;\n        }", new = "        if (over) *cut = true;\n        break;"},
+}
+
+function host_procs_block(t)
+  local tests = {}
+  for src in keys(HOST_PROCS_TESTS) do push(tests, src) end
+  sort(tests)
+  for src in tests do
+    if test_count(src) ~= HOST_PROCS_TESTS[src] then fail(src .. " has " .. test_count(src) .. " TEST(s), and HOST_PROCS_TESTS says " .. HOST_PROCS_TESTS[src]) end
+  end
+  print("host procs: " .. #tests .. " file(s) of C tests, run in c/tests/ran_tests.c")
+  if not t.full then return nil end
+  run_plants(t, "host procs plants", HOST_PROCS_PLANTS)
+  return nil
+end
+-- ── end of the process calls' block ─────────────────────────────────────
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
+host_procs_block(t)
+block_end(t, "host_procs")

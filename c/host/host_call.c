@@ -3,11 +3,11 @@
 // (host_jobs.c), `real`, the Zig tools (host_zig.c), `re_lines` and
 // `shale_tokens` (host_text.c), `roc_tree` and `go_tree` (flat_tree.c),
 // `json_read` and `json_write` (host_json.c), and `may_change` and
-// `edits_write`, which `edits_all` calls. `procs` and `proc_stop` are refused
-// as not ported yet.
+// `edits_write`, which `edits_all` calls, and `procs` and `proc_stop`
+// (host_procs.c).
 //
-// Include paths.c, builtins_change.c, host_run.c, host_jobs.c, host_json.c,
-// host_text.c, flat_tree.c and host_zig.c first.
+// Include paths.c, builtins_change.c, host_run.c, host_jobs.c, host_procs.c,
+// host_json.c, host_text.c, flat_tree.c and host_zig.c first.
 
 // The `RunHost.call` of the Linux host, `ctx` its Host.
 static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out) {
@@ -43,17 +43,11 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
         value_bool(out, true);
         return OK;
     }
+    bool procs = false;
+    Status ps = host_procs_call(lh, r, pos, name, args, out, &procs);
+    if (procs) return ps;
     bool zig = false;
     Status zs = host_zig_call(h, r, pos, name, args, out, &zig);
     if (zig) return zs;
-    // Zig's host has these and the C does not run them yet; any other name
-    // is none of Zig's host's either.
-    bool zigs = str_eq(name, S("procs")) || str_eq(name, S("proc_stop"));
-    if (!zigs) return run_failf(r, pos, CLASS_HOST, "`{s}`: not on this host", S("`"), name, S("`: not on this host"));
-    Msg m;
-    msg_init(&m, r->ctx.values);
-    msg_str(&m, S("host(\""));
-    msg_str(&m, name);
-    msg_str(&m, S("\")"));
-    return builtin_not_ported(r, pos, m.s == OK ? buf_view(&m.b) : S("host"));
+    return run_failf(r, pos, CLASS_HOST, "`{s}`: not on this host", S("`"), name, S("`: not on this host"));
 }

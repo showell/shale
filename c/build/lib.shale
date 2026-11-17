@@ -247,6 +247,8 @@ const SLOW_TESTS = {
   }},
   -- Its attacks wait for a job's group to end, to the grace and past it.
   {file = "c/tests/host/test_jobs.c", waits = {}},
+  -- Its attack waits out a TERM's grace before the KILL.
+  {file = "c/tests/host_builtins/test_host_procs.c", waits = {}},
 }
 
 -- ── Binaries of several parts ───────────────────────────────────────────
