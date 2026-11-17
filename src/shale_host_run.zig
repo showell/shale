@@ -138,9 +138,12 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
         return run.budgetStop(pos, .programs);
     }
 
+    try hl.refuseNul(run, pos, "run", argv, o.env, o.secrets);
     const cwd = if (o.cwd) |c| try hl.osPath(h, run, pos, c, true) else try hl.rootOf(h, run, pos);
-    try hl.refuse(h, run, pos, "run", argv[0], cwd, o.want);
+    // The secrets guard first: `refuse` hands argv[0] to git, which must
+    // never be shown a secret's path.
     try hl.refuseSecretArgs(h, run, pos, "run", argv, cwd, o.env);
+    try hl.refuse(h, run, pos, "run", argv[0], cwd, o.want);
 
     // The inherited environment, overridden by `env` and `secrets`.
     var env: std.ArrayList([]const u8) = .empty;
@@ -168,8 +171,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
             .string => |s| s,
             else => "",
         };
-        const bytes = std.Io.Dir.cwd().readFileAlloc(run.io, path, a, .limited(64 * 1024)) catch |e|
-            return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, @errorName(e) });
+        const bytes = try readSecret(run, pos, k, shown, path);
         const v = std.mem.trim(u8, bytes, " \t\r\n");
         if (v.len == 0) return run.fail(pos, .argument, "`run`: the secret `{s}`'s file {s} is empty", .{ k, shown });
         env.append(a, std.fmt.allocPrint(a, "{s}={s}", .{ k, v }) catch return run.oom(pos)) catch return run.oom(pos);
@@ -209,13 +211,21 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     var log_writer: std.Io.File.Writer = undefined;
     var log_shown: []const u8 = "";
     if (o.log) |l| {
-        const path = try hl.osPath(h, run, pos, l, false);
+        // The log is a change the host makes for the script, so it asks
+        // `may_change` as `replace` would: a read-only mount refuses it, and
+        // `--undo-on-stop` puts back what the truncate took.
+        const path = try hl.changeOsPath(h, run, pos, l, "");
         log_shown = switch (l) {
             .string => |s| s,
             else => "",
         };
-        const f = std.Io.Dir.cwd().createFile(run.io, path, .{ .truncate = true }) catch |e|
-            return run.fail(pos, .store, "`run`: its log {s} cannot be written: {s}", .{ log_shown, @errorName(e) });
+        const path_z = run.alloc.dupeSentinel(u8, path, 0) catch return run.oom(pos);
+        const fd = switch (os_linux.openRegular(path_z, true)) {
+            .fd => |fd| fd,
+            .not_regular => return run.fail(pos, .refused, "`run`: its log {s} is there and is not a file", .{log_shown}),
+            .failed => |e| return run.fail(pos, .store, "`run`: its log {s} cannot be written: {s}", .{ log_shown, os_linux.errName(e) }),
+        };
+        const f: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = false } };
         log_file = f;
         log_writer = f.writer(run.io, &log_buf);
         out.log = &log_writer;
@@ -253,7 +263,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     var sink: hl.Sink = .{ .host = h, .scrub = &scrub };
 
     run.host_runs += 1;
-    const outcome = h.spawn_fn(h.spawn_ctx, h.alloc, .{ .argv = argv, .cwd = cwd, .env = env.items, .stdin = stdin, .stdout_fd = if (secret) |s| s.fd else null, .timeout_ms = o.timeout_ms.? }, &sink) catch |e| switch (e) {
+    const outcome = h.spawn_fn(h.spawn_ctx, h.alloc, .{ .argv = argv, .cwd = cwd, .env = env.items, .stdin = stdin, .stdout_fd = if (secret) |s| s.fd else null, .file_most = if (secret != null) secret_most + 1 else null, .timeout_ms = o.timeout_ms.? }, &sink) catch |e| switch (e) {
         error.OutOfMemory => return if (capped.hit) streamOver(run, pos, capped.most) else run.oom(pos),
         error.NotFound => return run.fail(pos, .host, "`run`: `{s}` is not found{s}", .{ argv[0], if (std.mem.indexOfScalar(u8, argv[0], '/') == null) " along PATH" else "" }),
         error.NotRunnable => return run.fail(pos, .host, "`run`: `{s}` is there but cannot be run (its permissions, or not a program)", .{argv[0]}),
@@ -270,7 +280,11 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
     h.time.ran(h.alloc, joined, outcome.ms);
     // Stored only on exit 0, so a failed program leaves nothing half made.
     var secret_bytes: ?u64 = null;
+    // A program held to the cap by RLIMIT_FSIZE ends by SIGXFSZ (or fails its
+    // write) with one byte past it written: the same stop as one that exits
+    // 0 past it, however it ended.
     if (secret) |*s| {
+        try s.refuseOver(run, pos, argv[0]);
         if (outcome.ended == .exit and outcome.code == 0) secret_bytes = try s.store(run, pos, argv[0], o.secret_replace);
     }
     const secret_said: []const u8 = if (secret) |s| (if (secret_bytes) |n| std.fmt.allocPrint(a, ", stdout to {s} ({d} bytes)", .{ s.shown, n }) catch "" else std.fmt.allocPrint(a, ", stdout to {s} (not written)", .{s.shown}) catch "") else "";
@@ -344,6 +358,37 @@ fn overBudget(run: *Run, pos: ast.Pos, stage: []const u8, most: u64, o: spawn.Ou
     return error.Stop;
 }
 
+/// The bytes of the secret `k`'s file at `path` (`shown` as the script named
+/// it), at most `secret_most`. A FIFO, a device or a link there is refused
+/// rather than waited on or followed (`openRegular`).
+/// DRAGON: the secrets rule. `path` is a secret's file and what is read a
+/// secret; neither may reach a message.
+/// REMEDY: the stops name the script's own `shown`, and the bytes go back to
+/// the environment and the scrubber alone.
+fn readSecret(run: *Run, pos: ast.Pos, k: []const u8, shown: []const u8, path: []const u8) Error![]const u8 {
+    const a = run.alloc;
+    const path_z = a.dupeSentinel(u8, path, 0) catch return run.oom(pos);
+    const fd = switch (os_linux.openRegular(path_z, false)) {
+        .fd => |fd| fd,
+        .not_regular => return run.fail(pos, .refused, "`run`: the secret `{s}`'s file {s} is there and is not a file", .{ k, shown }),
+        .failed => |e| return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, os_linux.errName(e) }),
+    };
+    defer os_linux.close(fd);
+    const buf = a.alloc(u8, secret_most + 1) catch return run.oom(pos);
+    var len: usize = 0;
+    while (len < buf.len) {
+        switch (os_linux.readSome(fd, buf[len..])) {
+            .got => |n| {
+                if (n == 0) break;
+                len += n;
+            },
+            .failed => |e| return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, os_linux.errName(e) }),
+        }
+    }
+    if (len > secret_most) return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, "StreamTooLong" });
+    return buf[0..len];
+}
+
 /// `stdout_secret`'s file while the program runs: a temporary file beside
 /// the secret, mode 0600, renamed over it by `store`, or removed.
 const SecretFile = struct {
@@ -373,13 +418,21 @@ const SecretFile = struct {
         return .{ .shown = shown, .path = a.dupeSentinel(u8, path, 0) catch return run.oom(pos), .tmp = tmp, .fd = fd };
     }
 
+    /// Stops the run when the program printed past `secret_most`.
+    fn refuseOver(s: *SecretFile, run: *Run, pos: ast.Pos, program: []const u8) Error!void {
+        var size: u64 = 0;
+        const measured = os_linux.fileSize(s.fd, &size);
+        if (measured != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}", .{ s.shown, program, @tagName(measured) });
+        if (size > secret_most) return run.fail(pos, .argument, "`run`: `{s}` printed {d} bytes, past the {d} `secrets` reads: nothing is stored in {s}", .{ program, size, secret_most, s.shown });
+    }
+
     /// Renames what the program printed over the secret; its bytes.
     fn store(s: *SecretFile, run: *Run, pos: ast.Pos, program: []const u8, replace: bool) Error!u64 {
         var size: u64 = 0;
         const measured = os_linux.fileSize(s.fd, &size);
         if (measured != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}", .{ s.shown, program, @tagName(measured) });
+        // Past `secret_most` was refused before (`refuseOver`).
         if (size == 0) return run.fail(pos, .argument, "`run`: `{s}` exited 0 and printed nothing: nothing is stored in {s}", .{ program, s.shown });
-        if (size > secret_most) return run.fail(pos, .argument, "`run`: `{s}` printed {d} bytes, past the {d} `secrets` reads: nothing is stored in {s}", .{ program, size, secret_most, s.shown });
         if (os_linux.sync(s.fd) != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be synced: nothing is stored", .{s.shown});
         os_linux.close(s.fd);
         s.fd = -1;

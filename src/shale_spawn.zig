@@ -38,6 +38,11 @@ pub const Spec = struct {
     /// An open file stdout goes to instead of the pipe (`run`'s
     /// `stdout_secret`); stderr stays on the pipe. `null` for the pipe.
     stdout_fd: ?i32 = null,
+    /// The most bytes the program may write to any file (RLIMIT_FSIZE, set
+    /// in the child before exec), so `stdout_fd`'s file cannot grow without
+    /// bound while it runs: past it the kernel ends the program with
+    /// SIGXFSZ, or its write fails. `null` for no limit.
+    file_most: ?u64 = null,
     /// When the program's group gets TERM.
     timeout_ms: u64,
     /// The time between TERM and KILL.
@@ -138,7 +143,7 @@ fn setNonblocking(fd: i32) void {
 /// The child between fork and exec. Uses raw system calls only and allocates
 /// nothing; on failure, writes the errno to `err_w` and exits 127. A `chdir`
 /// failure is written as 1000 plus its errno.
-fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, stdout_fd: ?i32, out_w: i32, err_w: i32, paths: []const [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) noreturn { // coverage: not run, the forked child's: linecov lets a child go before it runs a line
+fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, stdout_fd: ?i32, file_most: ?u64, out_w: i32, err_w: i32, paths: []const [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) noreturn { // coverage: not run, the forked child's: linecov lets a child go before it runs a line
     _ = linux.prctl(@backingInt(linux.PR.SET_PDEATHSIG), @backingInt(linux.SIG.KILL), 0, 0, 0);
     if (linux.getppid() != parent) linux.exit_group(127);
     _ = linux.setpgid(0, 0);
@@ -148,6 +153,16 @@ fn child(parent: linux.pid_t, spec_cwd: ?[*:0]const u8, stdin_r: i32, stdout_fd:
     _ = linux.dup2(in_fd, 0);
     _ = linux.dup2(stdout_fd orelse out_w, 1);
     _ = linux.dup2(out_w, 2);
+    // DRAGON: the budgets. `stdout_secret`'s file is the program's stdout,
+    // which no pipe bounds, so it could fill the disk before the cap is
+    // checked at exit.
+    // REMEDY: the hard and soft RLIMIT_FSIZE, one raw prlimit64 (async-signal
+    // safe, nothing allocated), so the kernel holds it to `file_most` bytes;
+    // a failure exits 127 before exec, never running the program unbounded.
+    if (file_most) |most| {
+        const lim: linux.rlimit = .{ .cur = most, .max = most };
+        if (linux.errno(linux.setrlimit(.FSIZE, &lim)) != .SUCCESS) fail(err_w, @backingInt(linux.E.PERM));
+    }
     if (spec_cwd) |c| {
         const rc = linux.chdir(c);
         if (linux.errno(rc) != .SUCCESS) fail(err_w, 1000 + @as(u32, @backingInt(linux.errno(rc))));
@@ -212,7 +227,7 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     const fork_rc = linux.fork();
     if (linux.errno(fork_rc) != .SUCCESS) return error.Spawn;
     const pid: linux.pid_t = @intCast(fork_rc);
-    if (pid == 0) child(parent, cwd, in_pipe[0], spec.stdout_fd, out_pipe[1], err_pipe[1], paths, argv, envp);
+    if (pid == 0) child(parent, cwd, in_pipe[0], spec.stdout_fd, spec.file_most, out_pipe[1], err_pipe[1], paths, argv, envp);
 
     // A word on the error pipe means the exec failed.
     closeFd(&out_pipe[1]);

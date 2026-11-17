@@ -267,6 +267,14 @@ test "jobs: the mistakes a job's call can make, each named" {
     try t.expectStop("job_alive(\"none.log.job\")", .atomic, .store, "`job_alive`: no job's record at none.log.job");
     try t.expectStop("job_wait(\"none.log.job\", {})", .atomic, .argument, "`job_wait` needs `timeout_ms`");
     try t.expectStop("job_wait(\"none.log.job\", {timeout_ms = 10, file = \"a\"})", .atomic, .argument, "`file` without `contains`");
+    // A file it cannot read is named as the script named it, never by its
+    // OS path (a mount's folder).
+    const io = t.threaded.io();
+    try t.tmp.dir.createDirPath(io, "shut");
+    const shut = try std.fmt.allocPrintSentinel(t.arena.allocator(), "{s}/shut", .{t.root}, 0);
+    try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(shut, 0o000));
+    defer _ = std.os.linux.chmod(shut, 0o700);
+    try onceStop(&t, "local j = job_start({\"shale-fixture\", \"exit\", \"0\"}, {log = \"w.log\"}) job_wait(j, {timeout_ms = 10000, file = \"shut/x.log\", contains = \"x\"})", .store, "`job_wait`: shut/x.log cannot be read: AccessDenied");
 }
 
 test "jobs: a job stopped just after its start is gone when job_stop returns, its leader too, even one that ignores TERM before it made its group" {

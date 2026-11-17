@@ -35,6 +35,8 @@
 //!                                    one: its header, then each request
 //!                                    answered by its command: `decls` a
 //!                                    line no host knows, `tokens` a `bad`,
+//!                                    `move` 200,000 bytes on stderr then a
+//!                                    `bad`, `rename` no answer (it hangs),
 //!                                    `imports` an end, with words on stderr
 
 const std = @import("std");
@@ -67,7 +69,20 @@ pub fn main(init: std.process.Init) !u8 {
         var r = std.Io.File.stdin().readerStreaming(io, &in_buf);
         while (try r.interface.takeDelimiter('\n')) |len| {
             const body = try r.interface.readAllocAll(init.arena.allocator(), try std.fmt.parseInt(usize, len, 10));
-            const answer = if (std.mem.startsWith(u8, body, "decls\n")) "bogus\t1\n" else if (std.mem.startsWith(u8, body, "tokens\n")) "bad\tBadRequest\n" else {
+            if (std.mem.startsWith(u8, body, "rename\n")) {
+                // Hung: never answers, so only the host's deadline ends it.
+                try io.sleep(.fromMilliseconds(30_000), .awake);
+                return 4;
+            }
+            if (std.mem.startsWith(u8, body, "move\n")) {
+                // Far past a pipe's 64 KiB on stderr before the answer: a
+                // host that does not drain stderr never gets the answer.
+                var eb: [4096]u8 = undefined;
+                var ew = std.Io.File.stderr().writer(io, &eb);
+                for (0..200_000) |_| try ew.interface.writeByte('x');
+                try ew.interface.flush();
+            }
+            const answer = if (std.mem.startsWith(u8, body, "decls\n")) "bogus\t1\n" else if (std.mem.startsWith(u8, body, "tokens\n")) "bad\tBadRequest\n" else if (std.mem.startsWith(u8, body, "move\n")) "bad\tDrained\n" else {
                 var eb: [256]u8 = undefined;
                 var ew = std.Io.File.stderr().writer(io, &eb);
                 try ew.interface.writeAll("fixture: no answer to this\n");

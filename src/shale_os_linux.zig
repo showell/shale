@@ -172,6 +172,89 @@ pub fn close(fd: i32) void {
     _ = linux.close(fd);
 }
 
+// ── A file the host opens for a script
+
+/// What `openRegular` gives: the file, a path that is not a regular file (a
+/// FIFO, a device, a folder), or the kernel's refusal.
+pub const Opened = union(enum) { fd: i32, not_regular, failed: Errno };
+
+/// Opens `path`, which must be a regular file: for writing (made if missing,
+/// truncated) or for reading.
+/// DRAGON: the store's boundaries and the run's deadline. A FIFO or a
+/// device at the path would hold the open (and `shale` with it) until a
+/// writer or reader came, and a link planted at the last part would be
+/// followed out of the root.
+/// REMEDY: `O_NONBLOCK` so the open returns at once (a FIFO with no reader is
+/// `ENXIO`), `O_NOFOLLOW` so a link is refused (`ELOOP`), then `fstat` must
+/// say a regular file before `O_NONBLOCK` is cleared and the fd handed back.
+pub fn openRegular(path: [*:0]const u8, write: bool) Opened {
+    const flags: linux.O = if (write)
+        .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true, .NOFOLLOW = true, .NONBLOCK = true }
+    else
+        .{ .ACCMODE = .RDONLY, .CLOEXEC = true, .NOFOLLOW = true, .NONBLOCK = true };
+    const rc = linux.open(path, flags, 0o666);
+    switch (linux.errno(rc)) {
+        .SUCCESS => {},
+        .NXIO => return .not_regular,
+        else => |e| return .{ .failed = e },
+    }
+    const fd: i32 = @intCast(rc);
+    var st: linux.Statx = undefined;
+    const sr = linux.statx(fd, "", linux.AT.EMPTY_PATH, .{ .TYPE = true }, &st);
+    if (linux.errno(sr) != .SUCCESS or !linux.S.ISREG(st.mode)) {
+        close(fd);
+        return if (linux.errno(sr) != .SUCCESS) .{ .failed = linux.errno(sr) } else .not_regular;
+    }
+    const fl = linux.fcntl(fd, linux.F.GETFL, 0);
+    _ = linux.fcntl(fd, linux.F.SETFL, fl & ~@as(usize, 1 << 11));
+    return .{ .fd = fd };
+}
+
+/// What `readSome` gives: the bytes read (0 at the end), or the refusal.
+pub const Read = union(enum) { got: usize, failed: Errno };
+
+/// One read of `fd` into `buf`, retried on EINTR.
+pub fn readSome(fd: i32, buf: []u8) Read {
+    while (true) {
+        const rc = linux.read(fd, buf.ptr, buf.len);
+        switch (linux.errno(rc)) {
+            .SUCCESS => return .{ .got = rc },
+            .INTR => continue,
+            else => |e| return .{ .failed = e },
+        }
+    }
+}
+
+/// An errno by the name `std.Io` gives its error, as a message names it:
+/// the C's `store_err_name(store_err_of(e))`, one table for both.
+pub fn errName(e: Errno) []const u8 {
+    for (err_names) |n| if (n[0] == e) return n[1];
+    return "Unexpected";
+}
+
+const err_names = [_]struct { Errno, []const u8 }{
+    .{ .NOENT, "FileNotFound" },
+    .{ .NOTDIR, "NotDir" },
+    .{ .ISDIR, "IsDir" },
+    .{ .EXIST, "PathAlreadyExists" },
+    .{ .NOTEMPTY, "DirNotEmpty" },
+    .{ .ACCES, "AccessDenied" },
+    .{ .PERM, "PermissionDenied" },
+    .{ .NOSPC, "NoSpaceLeft" },
+    .{ .LOOP, "SymLinkLoop" },
+    .{ .NAMETOOLONG, "NameTooLong" },
+    .{ .ROFS, "ReadOnlyFileSystem" },
+    .{ .BUSY, "FileBusy" },
+    .{ .TXTBSY, "FileBusy" },
+    .{ .IO, "InputOutput" },
+    .{ .NOMEM, "SystemResources" },
+    .{ .MFILE, "ProcessFdQuotaExceeded" },
+    .{ .NFILE, "SystemFdQuotaExceeded" },
+    .{ .DQUOT, "DiskQuota" },
+    .{ .FBIG, "FileTooBig" },
+    .{ .XDEV, "CrossDevice" },
+};
+
 // ── `stdout_secret`'s file
 
 /// Makes a new file at `path` for writing into `fd`, mode 0600 whatever the

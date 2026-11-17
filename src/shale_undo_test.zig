@@ -34,18 +34,21 @@ test "undo: each path is journaled once, before its first change, as a file's by
     defer t.deinit();
     const io = t.threaded.io();
     try t.put("a.txt", "one\n");
+    try t.put("old.log", "was\n");
     try t.tmp.dir.createDirPath(io, "d");
+    // `run`'s log is a change too: the truncate is journaled first.
     try onceStop(&t,
         \\edit("a.txt", "one", "two")
         \\edit("a.txt", "two", "three")
         \\create("new.txt", "made\n")
         \\mkdir("d/inner")
         \\remove_tree("d")
+        \\run({"shale-fixture", "lines", "2"}, {timeout_ms = 10000, tail = 1, log = "old.log"})
         \\fail("stopped on purpose")
     , .fail, "stopped on purpose");
     // a.txt once though changed twice; the rest each once.
     const j = t.host.journal.items;
-    try testing.expect(j.len >= 4);
+    try testing.expect(j.len >= 5);
     var file: usize = 0;
     var absent: usize = 0;
     var dir: usize = 0;
@@ -53,24 +56,27 @@ test "undo: each path is journaled once, before its first change, as a file's by
         for (j[k + 1 ..]) |q| try testing.expect(!std.mem.eql(u8, p.abs, q.abs));
         switch (p.was) {
             .file => |f| {
-                try testing.expect(std.mem.endsWith(u8, p.abs, "/a.txt"));
-                try testing.expectEqualStrings("one\n", f.bytes);
+                const log = std.mem.endsWith(u8, p.abs, "/old.log");
+                try testing.expect(log or std.mem.endsWith(u8, p.abs, "/a.txt"));
+                try testing.expectEqualStrings(if (log) "was\n" else "one\n", f.bytes);
                 file += 1;
             },
             .absent => absent += 1,
             .dir => dir += 1,
         }
     }
-    try testing.expectEqual(@as(usize, 1), file);
+    try testing.expectEqual(@as(usize, 2), file);
     try testing.expect(absent >= 2);
     try testing.expect(dir >= 1);
-    try testing.expectEqual(@as(usize, 4), t.host.journal_bytes);
+    try testing.expectEqual(@as(usize, 8), t.host.journal_bytes);
+    try testing.expectEqualStrings("line 1\nline 2\n", try t.file("old.log"));
     var w: std.Io.Writer.Allocating = .init(testing.allocator);
     defer w.deinit();
     // The folder was removed whole, which undo cannot put back: said, false.
     try testing.expect(!try host_linux.undoChanges(&t.host, io, &w.writer));
     try testing.expect(std.mem.indexOf(u8, w.written(), ": a folder removed whole, and its files with it\n") != null);
     try testing.expectEqualStrings("one\n", try t.file("a.txt"));
+    try testing.expectEqualStrings("was\n", try t.file("old.log"));
     try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(io, "new.txt", .{}));
 }
 

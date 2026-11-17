@@ -87,9 +87,11 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (run.host_runs >= run.budgets.programs) {
         return run.budgetStop(pos, .programs);
     }
+    try hl.refuseNul(run, pos, "job_start", argv, env_t, null);
     const cwd = if (cwd_v) |c| try hl.osPath(h, run, pos, c, true) else try hl.rootOf(h, run, pos);
-    try hl.refuse(h, run, pos, "job_start", argv[0], cwd, want);
+    // The secrets guard before `refuse`, which hands argv[0] to git.
     try hl.refuseSecretArgs(h, run, pos, "job_start", argv, cwd, env_t);
+    try hl.refuse(h, run, pos, "job_start", argv[0], cwd, want);
     // Its record holds the argv, escaped: one too long is said here, not
     // as a record the reaper could not write.
     var argv_bytes: usize = argv.len -| 1;
@@ -113,8 +115,10 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     };
     const program = (jobs.find(a, argv[0], env.items, cwd) catch return run.oom(pos)) orelse
         return run.fail(pos, .host, "`job_start`: `{s}` is not found{s}", .{ argv[0], if (std.mem.indexOfScalar(u8, argv[0], '/') == null) " along PATH" else "" });
-    const log_os = try hl.osPath(h, run, pos, log_v, false);
-    const record_os = std.fmt.allocPrint(a, "{s}.job", .{log_os}) catch return run.oom(pos);
+    // The reaper truncates the log and writes the record: changes the host
+    // makes for the script, so each asks `may_change` first.
+    const log_os = try hl.changeOsPath(h, run, pos, log_v, "");
+    const record_os = try hl.changeOsPath(h, run, pos, log_v, ".job");
     // The reaper writes the log and the record there; it does not make room.
     if (std.fs.path.dirname(log_os)) |dir| std.Io.Dir.cwd().access(run.io, dir, .{}) catch
         return run.fail(pos, .store, "`job_start`: {s}'s directory is not there: the log and its record go in it", .{log_shown});
@@ -302,7 +306,7 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         const j = try find(h, run, pos, args[0], "job_wait");
         if (contains) |c| {
             const os = try hl.osPath(h, run, pos, file orelse j.log, false);
-            if (try scan.look(scratch.allocator(), run, pos, os, c, j.record)) return result(run, pos, "found", null, null);
+            if (try scan.look(scratch.allocator(), run, pos, os, shownOf(file orelse j.log), c, j.record)) return result(run, pos, "found", null, null);
         }
         if (j.record.done()) return seenEnded(h, run, pos, &scan, scratch.allocator(), file orelse j.log, contains, j.record);
         const gone = !jobs.alive(j.record);
@@ -326,9 +330,18 @@ fn wait(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
 fn seenEnded(h: *Host, run: *Run, pos: ast.Pos, scan: *Scan, sa: std.mem.Allocator, log: Value, contains: ?[]const u8, r: job_record.Record) Error!Value {
     if (contains) |c| {
         const os = try hl.osPath(h, run, pos, log, false);
-        if (try scan.look(sa, run, pos, os, c, r)) return result(run, pos, "found", null, null);
+        if (try scan.look(sa, run, pos, os, shownOf(log), c, r)) return result(run, pos, "found", null, null);
     }
     return result(run, pos, "exited", r.exit, r.signal);
+}
+
+/// The script's own path for a file `job_wait` reads, for its messages: the
+/// OS path is the mount's folder, which a message never names.
+fn shownOf(v: Value) []const u8 {
+    return switch (v) {
+        .string => |s| s,
+        else => "",
+    };
 }
 
 /// A log searched as it grows, never reading again what it already read.
@@ -356,9 +369,9 @@ pub const Scan = struct {
     /// Whether `c` is in what the log at `os` holds now. A missing log (not yet
     /// made, or gone between the stat and the read) is `false`; any other
     /// failure stops the run rather than reading as "not yet".
-    fn look(s: *Scan, sa: std.mem.Allocator, run: *Run, pos: ast.Pos, os: []const u8, c: []const u8, r: job_record.Record) Error!bool {
+    fn look(s: *Scan, sa: std.mem.Allocator, run: *Run, pos: ast.Pos, os: []const u8, shown: []const u8, c: []const u8, r: job_record.Record) Error!bool {
         const store = webbox.store;
-        const st = (store.statOrNull(run.io, sa, os) catch |e| return run.fail(pos, .store, "`job_wait`: {s} cannot be read: {s}", .{ os, @errorName(e) })) orelse return false;
+        const st = (store.statOrNull(run.io, sa, os) catch |e| return run.fail(pos, .store, "`job_wait`: {s} cannot be read: {s}", .{ shown, @errorName(e) })) orelse return false;
         if (s.buf.len == 0) s.buf = sa.alloc(u8, piece + c.len) catch return run.oom(pos);
         var at = s.from(st.size, .{ .pid = r.pid, .started = r.started }, c.len);
         while (at < st.size) {
@@ -367,7 +380,7 @@ pub const Scan = struct {
                     s.done = 0;
                     return false;
                 },
-                else => return run.fail(pos, .store, "`job_wait`: {s} cannot be read: {s}", .{ os, @errorName(e) }),
+                else => return run.fail(pos, .store, "`job_wait`: {s} cannot be read: {s}", .{ shown, @errorName(e) }),
             };
             try chargeRead(run, pos, n);
             if (std.mem.indexOf(u8, s.buf[0..n], c) != null) return true;

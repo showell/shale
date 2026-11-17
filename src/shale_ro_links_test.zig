@@ -42,6 +42,11 @@ test "ro mounts: every change builtin through one is refused before anything is 
         "replace(\"frozen/a.zig\", \"x\")",
         // A set with one file that may not change writes none.
         "edits_all({{\"mine.zig\", {{old = \"const z\", new = \"const q\"}}}, {\"ro:a.zig\", {{old = \"const x\", new = \"const w\"}}}})",
+        // A log the host writes for the script is a change too: `run`'s,
+        // and a job's log and its record beside it.
+        "run({\"shale-fixture\", \"lines\", \"1\"}, {timeout_ms = 10000, tail = 1, log = \"ro:a.zig\"})",
+        "job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"ro:a.zig\"})",
+        "job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"frozen/a.zig\"})",
     }) |src| {
         try t.expectStop(src, .atomic, .refused, "mount `ro` is read-only");
         try testing.expectEqualStrings("const x = 1;\n\nconst y = x;\n", try t.file("frozen/a.zig"));
@@ -187,7 +192,30 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
         .{ "run({\"shale-fixture\", \"lines\", \"1\", real(\"\")}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 holds the mount `k`'s folder" },
         // A link to a folder that holds it.
         .{ "run({\"shale-fixture\", \"lines\", \"1\", \"up\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 holds the mount `k`'s folder" },
+        // A NUL, where the kernel would end the argument: `keys\0x` passes
+        // the folder guard whole, and the program would be handed `keys`.
+        .{ "run({\"shale-fixture\", \"lines\", \"1\", \"keys\\0x\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 4 holds a NUL byte" },
+        .{ "run({\"shale-fixture\", \"env\", \"F\"}, {timeout_ms = 10000, tail = 5, env = {F = \"keys\\0x\"}})", "`run`'s `env` F holds a NUL byte" },
+        .{ "run({\"shale-fixture\", \"env\", \"F\"}, {timeout_ms = 10000, tail = 5, env = {[\"F\\0G\"] = \"x\"}})", "`run`'s `env` has a name that holds a NUL byte" },
+        .{ "run({\"shale-fixture\", \"env\", \"F\"}, {timeout_ms = 10000, tail = 5, secrets = {[\"T\\0K\"] = \"k:tok\"}})", "`run`'s `secrets` has a name that holds a NUL byte" },
+        .{ "job_start({\"shale-fixture\", \"lines\", \"1\", \"keys\\0x\"}, {log = \"j.log\"})", "`job_start`'s argument 4 holds a NUL byte" },
+        .{ "job_start({\"shale-fixture\", \"env\", \"F\"}, {log = \"j.log\", env = {F = \"keys\\0x\"}})", "`job_start`'s `env` F holds a NUL byte" },
+        // A program by a secret's path is the secrets guard's, before git is
+        // asked whether it tracks the path.
+        .{ "run({\"keys/tok\"}, {timeout_ms = 10000, tail = 5})", "`run`'s argument 1 names the mount `k`'s folder" },
+        .{ "job_start({\"keys/tok\"}, {log = \"j.log\"})", "`job_start`'s argument 1 names the mount `k`'s folder" },
     }) |c| try t.expectStop(c[0], .atomic, .refused, c[1]);
+    // A secret's file past what `secrets` reads is refused, as a read past it.
+    const huge = try a.alloc(u8, 64 * 1024 + 1);
+    @memset(huge, 'x');
+    try t.put("keys/huge", huge);
+    try t.expectStop("run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:huge\"}})", .atomic, .store, "`run`: the secret `X`'s file k:huge cannot be read: StreamTooLong");
+    // A secret's file that is a FIFO is refused, not waited on. One run, not
+    // the gate's: the gate copies the root, and a copy would wait on it.
+    const secret_pipe = try std.fmt.allocPrintSentinel(a, "{s}/keys/pipe", .{t.root}, 0);
+    try testing.expectEqual(@as(usize, 0), std.os.linux.mknodat(std.os.linux.AT.FDCWD, secret_pipe, std.os.linux.S.IFIFO | 0o600, 0));
+    try onceStop(&t, "run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:pipe\"}})", .refused, "`run`: the secret `X`'s file k:pipe is there and is not a file");
+    try testing.expectEqual(@as(usize, 0), std.os.linux.unlink(secret_pipe));
     // An `env` value that is no string names no folder; the guard passes it
     // by, and `run`'s own reading of `env` refuses it.
     try t.expectStop("run({\"shale-fixture\", \"env\", \"F\"}, {timeout_ms = 10000, tail = 5, env = {F = 1}})", .atomic, .type, "");
@@ -236,6 +264,10 @@ test "secrets mounts: run's stdout_secret stores stdout in one, 0600, never seen
     // program that prints nothing.
     try t.expectOutput("local r = run({\"shale-fixture\", \"both\", \"tok-c\", \"3\"}, {timeout_ms = 10000, stdout_secret = \"k:c\"}) print(r.code, r.secret_written, r.secret_bytes, r.out)", "3\tfalse\t0\ton stderr\n\n");
     try t.expectStop("run({\"shale-fixture\", \"exit\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:c\"})", .atomic, .argument, "printed nothing: nothing is stored in k:c");
+    // A program that prints past the cap is held to one byte past it while
+    // it runs (RLIMIT_FSIZE), so 10 MB never reach the disk; the stop is
+    // the cap's, however the program ended.
+    try t.expectStop("run({\"shale-fixture\", \"spill\", \"10000000\"}, {timeout_ms = 10000, stdout_secret = \"k:big\"})", .atomic, .argument, "`run`: `shale-fixture` printed 65537 bytes, past the 65536 `secrets` reads: nothing is stored in k:big");
     var names: std.ArrayList([]const u8) = .empty;
     var d = try t.tmp.dir.openDir(io, "keys", .{ .iterate = true });
     defer d.close(io);
@@ -386,4 +418,11 @@ test "the store follows no link: to a file, to a folder, in the middle of a path
     try testing.expectEqualStrings("real", try t.file("real.txt"));
     // What is no link reads as ever, a listing names the links it holds.
     try t.expectOutput("print(read(\"real.txt\"), read(\"m:inner.txt\"), #ls(\"\"))", "real\tinner\t6\n");
+    // `run`'s log at a FIFO is refused, not waited on: an open for writing
+    // would wait there for a reader.
+    // One run, not the gate's, whose copy of the root would wait on it.
+    const log_pipe = try std.fmt.allocPrintSentinel(a, "{s}/pipe", .{t.root}, 0);
+    try testing.expectEqual(@as(usize, 0), std.os.linux.mknodat(std.os.linux.AT.FDCWD, log_pipe, std.os.linux.S.IFIFO | 0o600, 0));
+    try onceStop(&t, "run({\"shale-fixture\", \"lines\", \"1\"}, {timeout_ms = 10000, tail = 1, log = \"pipe\"})", .refused, "`run`: its log pipe is there and is not a file");
+    try testing.expectEqual(@as(usize, 0), std.os.linux.unlink(log_pipe));
 }

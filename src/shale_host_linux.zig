@@ -174,6 +174,8 @@ pub const Host = struct {
     zig_ast: ?*@import("shale_host_zig.zig").Proc = null,
     /// The zig-ast program, when not the `tools` mount's (a test's own build).
     zig_ast_exe: ?[]const u8 = null,
+    /// How long one request may wait on zig-ast before the call stops.
+    zig_ast_answer_ms: u64 = @import("shale_host_zig.zig").answer_ms_default,
 
     pub fn deinit(h: *Host) void {
         if (h.zig_ast) |p| {
@@ -318,6 +320,26 @@ fn spellsSecretFolder(h: *const Host, text: []const u8) bool {
 fn anySecrets(h: *const Host) bool {
     for (h.mounts) |m| if (m.secrets) return true;
     return false;
+}
+
+/// Refuses a NUL byte in a program's argument, in an `env` name or value, or
+/// in a `secrets` name. A Shale string may hold one, and the kernel ends an
+/// argument at it: `"../keys\0x"` passes every guard whole and reaches the
+/// program as `../keys`. So this runs before any other guard, and the guards
+/// after it test exactly what the program is handed. Used by `run` and
+/// `job_start`.
+pub fn refuseNul(run: *Run, pos: ast.Pos, who: []const u8, argv: []const []const u8, env: ?*script.value.Table, secrets: ?*script.value.Table) Error!void {
+    for (argv, 1..) |arg, i| if (std.mem.indexOfScalar(u8, arg, 0) != null)
+        return run.fail(pos, .refused, "`{s}`'s argument {d} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw", .{ who, i });
+    for ([_]?*script.value.Table{ env, secrets }, [_][]const u8{ "env", "secrets" }) |t_or, opt| if (t_or) |t| for (t.map.keys(), t.map.values()) |k, x| {
+        if (std.mem.indexOfScalar(u8, k, 0) != null)
+            return run.fail(pos, .refused, "`{s}`'s `{s}` has a name that holds a NUL byte, where the kernel would end it", .{ who, opt });
+        switch (x) {
+            .string => |v| if (std.mem.eql(u8, opt, "env") and std.mem.indexOfScalar(u8, v, 0) != null)
+                return run.fail(pos, .refused, "`{s}`'s `env` {s} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw", .{ who, k }),
+            else => {},
+        }
+    };
 }
 
 /// Refuses a program's argument that names a `secrets` mount's folder: a
@@ -575,6 +597,21 @@ fn absolute(h: *Host, run: *Run, pos: ast.Pos, p: []const u8) Error![]const u8 {
 /// A Shale path's OS path, through the mounts or the root, made absolute.
 pub fn osPath(h: *Host, run: *Run, pos: ast.Pos, v: Value, allow_root: bool) Error![]const u8 {
     const p = try script.builtins_store.pathArg(run, pos, .host, v, allow_root);
+    return absolute(h, run, pos, setup.trimSlash(p.full()));
+}
+
+/// A path the host itself writes (`run`'s `log`, a job's log and record), as
+/// an OS path, once `may_change` has let it change: a read-only mount
+/// refuses it, and `--undo-on-stop` journals what was there, as for every
+/// change a builtin makes. `suffix` is added to the script's path first
+/// (`.job` for a job's record).
+pub fn changeOsPath(h: *Host, run: *Run, pos: ast.Pos, v: Value, suffix: []const u8) Error![]const u8 {
+    const given = if (suffix.len == 0) v else switch (v) {
+        .string => |s| Value{ .string = std.fmt.allocPrint(run.alloc, "{s}{s}", .{ s, suffix }) catch return run.oom(pos) },
+        else => v,
+    };
+    const p = try script.builtins_store.pathArg(run, pos, .host, given, false);
+    try script.builtins_change.mayChange(run, pos, p);
     return absolute(h, run, pos, setup.trimSlash(p.full()));
 }
 

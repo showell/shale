@@ -26,6 +26,7 @@ const wire = @import("shale_zig_wire.zig");
 pub const Span = script.builtins_change.Span;
 
 const hl = @import("shale_host_linux.zig");
+const os_linux = @import("shale_os_linux.zig");
 
 /// Per-call memory: the source, the request and the answer live in an arena
 /// over the host's allocator, capped by what is left of the run's arena
@@ -60,18 +61,149 @@ const Scope = union(enum) { container: []const u8, via: []const []const u8 };
 
 // ── zig-ast, the process ──
 
-/// The zig-ast process a run talks to: its pipes, and a reader over its
-/// answers.
+/// How long one request may wait on zig-ast (its header, a write, an
+/// answer's bytes) before the call stops, unless the host sets another.
+pub const answer_ms_default = 60_000;
+
+/// How long `stop` waits for zig-ast to exit once its stdin is shut, and how
+/// long a stop's message waits for what it said on stderr.
+const exit_wait_ms = 2000;
+
+/// The zig-ast process a run talks to: its pipes, and its answers read ahead.
+/// DRAGON: the run's deadline. zig-ast is a program of its own, and a hung
+/// one, or one that fills its stderr pipe and blocks there, would hold the
+/// run forever: Zig's readers wait without bound.
+/// REMEDY: every wait polls with the request's deadline (`answer_ms`), and
+/// drains stderr into `said` while it waits; past the deadline zig-ast is
+/// killed and the call stops, saying so.
 pub const Proc = struct {
     child: std.process.Child,
     io: std.Io,
     buf: [64 * 1024]u8 = undefined,
-    reader: std.Io.File.Reader = undefined,
+    from: usize = 0,
+    to: usize = 0,
+    /// The first bytes zig-ast wrote on stderr, for a stop's message; the
+    /// rest is read and dropped, so its stderr never fills.
+    said: [1024]u8 = undefined,
+    said_len: usize = 0,
+    /// Whether stderr has ended.
+    err_done: bool = false,
+    /// When the request being served must be done, on the monotonic clock.
+    deadline: u64 = 0,
+    /// Set when a wait passed the deadline and zig-ast was killed.
+    late: bool = false,
 
-    /// Ends zig-ast: its stdin closed, it exits, and it is waited for.
+    fn fd(f: ?std.Io.File) i32 {
+        return if (f) |x| x.handle else -1;
+    }
+
+    /// Takes what stderr holds now into `said`, dropping what does not fit.
+    fn drainErr(p: *Proc) void {
+        var scrap: [4096]u8 = undefined;
+        const room = if (p.said_len < p.said.len) p.said[p.said_len..] else scrap[0..];
+        switch (os_linux.readSome(fd(p.child.stderr), room)) {
+            .got => |n| if (n == 0) {
+                p.err_done = true;
+            } else if (p.said_len < p.said.len) {
+                p.said_len += n;
+            },
+            .failed => p.err_done = true,
+        }
+    }
+
+    /// Waits until `target` is ready for `events`, draining stderr the while;
+    /// false once the deadline passes, zig-ast killed then.
+    fn wait(p: *Proc, target: i32, events: i16) bool {
+        while (true) {
+            const now = os_linux.monoMs();
+            if (now >= p.deadline) {
+                if (p.child.id) |pid| _ = std.os.linux.kill(pid, .KILL);
+                p.late = true;
+                return false;
+            }
+            var fds = [2]std.os.linux.pollfd{
+                .{ .fd = target, .events = events, .revents = 0 },
+                .{ .fd = if (p.err_done) -1 else fd(p.child.stderr), .events = std.os.linux.POLL.IN, .revents = 0 },
+            };
+            const rc = std.os.linux.poll(&fds, 2, @intCast(@min(p.deadline - now, std.math.maxInt(i32))));
+            if (std.os.linux.errno(rc) != .SUCCESS) continue;
+            if (fds[1].revents != 0) p.drainErr();
+            if (fds[0].revents != 0) return true;
+        }
+    }
+
+    /// Fills the read-ahead from stdout: false at its end, on an error, or
+    /// past the deadline.
+    fn fill(p: *Proc) bool {
+        if (!p.wait(fd(p.child.stdout), std.os.linux.POLL.IN)) return false;
+        switch (os_linux.readSome(fd(p.child.stdout), &p.buf)) {
+            .got => |n| {
+                if (n == 0) return false;
+                p.from = 0;
+                p.to = n;
+                return true;
+            },
+            .failed => return false,
+        }
+    }
+
+    /// One line of stdout, its newline taken off; the rest at the stream's
+    /// end. Null for an end with nothing, an error, or a line past `buf`.
+    fn takeLine(p: *Proc, a: std.mem.Allocator) ?[]const u8 {
+        var line: std.ArrayList(u8) = .empty;
+        while (true) {
+            if (p.from == p.to and !p.fill()) return if (line.items.len > 0) line.items else null;
+            const c = p.buf[p.from];
+            p.from += 1;
+            if (c == '\n') return line.items;
+            if (line.items.len + 1 >= p.buf.len) return null;
+            line.append(a, c) catch return null;
+        }
+    }
+
+    /// `n` bytes of stdout; null when it ends first or `a` refuses them.
+    fn take(p: *Proc, a: std.mem.Allocator, n: usize) ?[]u8 {
+        const out = a.alloc(u8, n) catch return null;
+        var got: usize = 0;
+        while (got < n) {
+            if (p.from == p.to and !p.fill()) return null;
+            const k = @min(p.to - p.from, n - got);
+            @memcpy(out[got..][0..k], p.buf[p.from..][0..k]);
+            got += k;
+            p.from += k;
+        }
+        return out;
+    }
+
+    /// Writes `bytes` to stdin; false when zig-ast has gone or the deadline
+    /// passes.
+    fn writeAll(p: *Proc, bytes: []const u8) bool {
+        const in = fd(p.child.stdin);
+        var done: usize = 0;
+        while (done < bytes.len) {
+            if (!p.wait(in, std.os.linux.POLL.OUT)) return false;
+            const rc = std.os.linux.write(in, bytes[done..].ptr, bytes.len - done);
+            switch (std.os.linux.errno(rc)) {
+                .SUCCESS => done += rc,
+                .AGAIN, .INTR => {},
+                else => return false,
+            }
+        }
+        return true;
+    }
+
+    /// Ends zig-ast: its stdin closed, so it exits, and it is waited for; one
+    /// that has not exited within `exit_wait_ms` gets KILL first.
     pub fn stop(p: *Proc) void {
         if (p.child.stdin) |f| f.close(p.io);
         p.child.stdin = null;
+        if (p.child.id) |pid| {
+            var pfd: i32 = -1;
+            if (os_linux.pidfdOpen(pid, &pfd) == .SUCCESS) {
+                if (!os_linux.pidfdEnds(pfd, exit_wait_ms)) _ = std.os.linux.kill(pid, .KILL);
+                os_linux.close(pfd);
+            }
+        }
         _ = p.child.wait(p.io) catch {};
     }
 };
@@ -96,35 +228,44 @@ fn procOf(h: *hl.Host, run: *Run, pos: ast.Pos, who: []const u8) Error!*Proc {
         h.alloc.destroy(p);
         return run.fail(pos, .host, "`{s}`: zig-ast ({s}) did not start: {t}", .{ who, exe, e });
     };
-    p.* = .{ .child = child, .io = run.io };
-    p.reader = p.child.stdout.?.readerStreaming(run.io, &p.buf);
+    p.* = .{ .child = child, .io = run.io, .deadline = os_linux.monoMs() + h.zig_ast_answer_ms };
     h.zig_ast = p;
-    const said = p.reader.interface.takeDelimiter('\n') catch null;
-    if (said == null or !std.mem.startsWith(u8, said.?, wire.header)) return ended(p, run, pos, who, "gave no `" ++ wire.header ++ "<zig version>` line first");
+    // Writes that would block wait in `Proc.wait` instead, under the deadline.
+    const in = Proc.fd(p.child.stdin);
+    const fl = std.os.linux.fcntl(in, std.os.linux.F.GETFL, 0);
+    _ = std.os.linux.fcntl(in, std.os.linux.F.SETFL, fl | (1 << 11));
+    var header_buf: [1024]u8 = undefined;
+    var header_fba = std.heap.FixedBufferAllocator.init(&header_buf);
+    const said = p.takeLine(header_fba.allocator());
+    if (said == null or !std.mem.startsWith(u8, said.?, wire.header)) return ended(h, p, run, pos, who, "gave no `" ++ wire.header ++ "<zig version>` line first");
     return p;
 }
 
-/// Stops the run for a zig-ast that went wrong, with what it said on stderr.
-fn ended(p: *Proc, run: *Run, pos: ast.Pos, who: []const u8, why: []const u8) Error {
-    var buf: [1024]u8 = undefined;
-    var said: []const u8 = "";
-    if (p.child.stderr) |f| {
-        const n = f.readStreaming(p.io, &.{&buf}) catch 0;
-        said = std.mem.trim(u8, buf[0..n], " \n");
+/// Stops the run for a zig-ast that went wrong, with what it said on stderr:
+/// what the waits drained, or else what it says within `exit_wait_ms`. One
+/// past the deadline says so in place of `why`.
+fn ended(h: *hl.Host, p: *Proc, run: *Run, pos: ast.Pos, who: []const u8, why: []const u8) Error {
+    if (p.said_len == 0 and !p.err_done) {
+        var fds = [1]std.os.linux.pollfd{.{ .fd = Proc.fd(p.child.stderr), .events = std.os.linux.POLL.IN, .revents = 0 }};
+        if (fds[0].fd >= 0 and std.os.linux.poll(&fds, 1, exit_wait_ms) == 1) p.drainErr();
     }
-    return run.fail(pos, .host, "`{s}`: zig-ast {s}{s}{s}", .{ who, why, if (said.len > 0) ": " else "", said });
+    const said = std.mem.trim(u8, p.said[0..p.said_len], " \n");
+    const late = std.fmt.allocPrint(run.alloc, "did not answer within {d} ms", .{h.zig_ast_answer_ms}) catch why;
+    return run.fail(pos, .host, "`{s}`: zig-ast {s}{s}{s}", .{ who, if (p.late) late else why, if (said.len > 0) ": " else "", said });
 }
 
 /// Sends a request, gives the answer's lines.
 fn ask(h: *hl.Host, sa: std.mem.Allocator, run: *Run, pos: ast.Pos, who: []const u8, body: []const u8) Error!Answer {
     const p = try procOf(h, run, pos, who);
+    p.deadline = os_linux.monoMs() + h.zig_ast_answer_ms;
+    // A stop says what zig-ast wrote while it served this request.
+    p.said_len = 0;
+    p.late = false;
     const head = std.fmt.allocPrint(sa, "{d}\n", .{body.len}) catch return run.oom(pos);
-    const in = p.child.stdin.?;
-    in.writeStreamingAll(p.io, head) catch return ended(p, run, pos, who, "stopped taking requests");
-    in.writeStreamingAll(p.io, body) catch return ended(p, run, pos, who, "stopped taking requests");
-    const len = (p.reader.interface.takeDelimiter('\n') catch null) orelse return ended(p, run, pos, who, "ended before it answered");
-    const n = wire.int(len) catch return ended(p, run, pos, who, "answered with no length");
-    const got = p.reader.interface.readAllocAll(sa, n) catch return ended(p, run, pos, who, "ended in the middle of its answer");
+    if (!p.writeAll(head) or !p.writeAll(body)) return ended(h, p, run, pos, who, "stopped taking requests");
+    const len = p.takeLine(sa) orelse return ended(h, p, run, pos, who, "ended before it answered");
+    const n = wire.int(len) catch return ended(h, p, run, pos, who, "answered with no length");
+    const got = p.take(sa, n) orelse return ended(h, p, run, pos, who, "ended in the middle of its answer");
     return .{ .lines = .{ .body = got }, .sa = sa, .run = run, .pos = pos, .who = who };
 }
 

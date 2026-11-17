@@ -821,8 +821,11 @@ the first two can give a quiet wrong answer, an empty list:
   which points at `shale --help`'s list of mounts.
   A mount line ending in ` ro` is read-only: every change through it
   (`edit`, `replace`, `create`, `append`, `remove`, `mkdir`,
-  `remove_tree`, `edits_all`, `edit_between`, `zig_rename`, `zig_move`) stops, `refused:
-  ... mount `x` is read-only`, before anything is written; reads work. A
+  `remove_tree`, `edits_all`, `edit_between`, `zig_rename`, `zig_move`,
+  and `run`'s `log` and `job_start`'s log and record) stops, `refused:
+  ... mount `x` is read-only`, before anything is written; reads work.
+  Those logs are changes to `--undo-on-stop` too: a stopped run puts back
+  what a log's truncate took, and removes a log it made. A
   writable mount inside a read-only one decides for its own folder
   (`memory:` inside `projects:`), and through the read-only one's name
   that folder stays read-only. A `run` with its `cwd` there runs: Shale
@@ -848,7 +851,10 @@ the first two can give a quiet wrong answer, an empty list:
   passing through a variable. The file is directly in a `secrets` mount
   (no folder in it, no `..`, no link), made 0600 beside it and renamed
   into place only on exit 0: a failed program leaves nothing, and one that
-  prints nothing, or past 64 KiB, stops the run with nothing stored. A
+  prints nothing, or past 64 KiB, stops the run with nothing stored. The
+  kernel holds the file to one byte past 64 KiB while the program runs
+  (`RLIMIT_FSIZE`, for every file it writes), so a runaway never fills the
+  disk. A
   file already there is refused before the program runs, unless
   `secret_replace = true`. `stdout_secret` takes no keep, filter or log
   (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`,
@@ -857,7 +863,9 @@ the first two can give a quiet wrong answer, an empty list:
   `secret_bytes`. A link to the file from elsewhere (an old
   `~/.token`) is not the mount's and is not guarded. **What this guard
   is:** it stops Shale's own reads, and a program handed an obvious path
-  to a secret, or to a folder that holds one; **a program is not
+  to a secret, or to a folder that holds one (an argument, an `env` value
+  or a name holding a NUL byte is refused first, since the kernel would cut
+  it there); **a program is not
   sandboxed.** One that builds a path itself, takes it after a prefix
   (`-Tkeys/tok`, `@keys/tok`) or follows a link it made, can reach a
   secret. Keep a secrets mount out of the folders a script hands to

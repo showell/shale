@@ -610,7 +610,7 @@
   type       `json_read`'s `{s}` is an integer, not {s}
   type       `json_read`'s options are a map, not a list
   type       `json_read`'s options are a map, not {s}
-### shale_host_linux (43)
+### shale_host_linux (46)
   argument   \"{s}\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)
   argument   \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses
   argument   \"{s}\" is absolute inside its mount: a mount's paths are relative to it
@@ -635,7 +635,10 @@
   refused    `{s}` of `{s}`, even with a want: {s}
   refused    `{s}` of `{s}`: a program by path that git does not track (a script just written?); {want = \"tag: why\"} to run it anyway
   refused    `{s}` of `{s}`: {s}; {want = \"tag: why\"} to run it anyway
+  refused    `{s}`'s `env` {s} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw
   refused    `{s}`'s `env` {s} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`
+  refused    `{s}`'s `{s}` has a name that holds a NUL byte, where the kernel would end it
+  refused    `{s}`'s argument {d} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw
   refused    `{s}`'s argument {d} holds the mount `{s}`'s folder, which holds secrets: name a folder beside it
   refused    `{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`
   refused    {s}: mount `{s}` is read-only
@@ -677,7 +680,7 @@
   type       `re_lines` takes its options as a map, given a list
   type       `re_lines` takes its options as a map, not {s}
   type       `re_lines`: {s} must be a string, not {s}
-### shale_host_run (40)
+### shale_host_run (42)
   argument   `run` needs `timeout_ms`: how long the program may take is the script's to say
   argument   `run` needs a keep: `head`, `tail` (or both), or `whole = N`: what to keep of the output is the script's to say
   argument   `run` of an empty argv: name the program
@@ -702,6 +705,8 @@
   refused    `run`'s `stdout_secret` {s} is there already: `secret_replace = true` to replace it
   refused    `run`'s `stdout_secret` {s} is there and is not a file
   refused    `run`'s `stdout_secret` {s} was made while `{s}` ran: nothing is stored; `secret_replace = true` to replace it
+  refused    `run`: its log {s} is there and is not a file
+  refused    `run`: the secret `{s}`'s file {s} is there and is not a file
   store      `run`'s `stdout_secret` {s} cannot be looked at: {s}
   store      `run`'s `stdout_secret` {s} cannot be synced: nothing is stored
   store      `run`'s `stdout_secret` {s} cannot be written: {s}
@@ -894,6 +899,7 @@
   shale_host_run     refused    `run`'s `stdout_secret` {s} is there already: `secret_replace = true` to replace it
   shale_host_run     refused    `run`'s `stdout_secret` {s} is there and is not a file
   shale_host_run     refused    `run`'s `stdout_secret` {s} was made while `{s}` ran: nothing is stored; `secret_replace = true` to replace it
+  shale_host_run     refused    `run`: the secret `{s}`'s file {s} is there and is not a file
   shale_host_run     store      `run`'s `stdout_secret` {s} cannot be looked at: {s}
   shale_host_run     store      `run`'s `stdout_secret` {s} cannot be synced: nothing is stored
   shale_host_run     store      `run`'s `stdout_secret` {s} cannot be written: {s}
@@ -1243,4 +1249,4 @@
 
 ## The counts
   builtins 77, host calls 22, prelude functions 93
-  stop texts 597, refusal texts 66, budgets 16 (15 a stop names), flags 11
+  stop texts 602, refusal texts 66, budgets 16 (15 a stop names), flags 11

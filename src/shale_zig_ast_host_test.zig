@@ -95,4 +95,26 @@ test "zig-ast gone wrong: one that does not start, one whose first line is not z
         defer r.deinit();
         try testing.expectEqualStrings("`zig_imports`: zig-ast ended before it answered: fixture: no answer to this", r.stop.?.message);
     }
+    {
+        var t: T = undefined;
+        try init(&t);
+        defer t.deinit();
+        t.host.zig_ast_exe = try abs(&t, options.fixture);
+        t.host.zig_ast_answer_ms = 2000;
+        // 200,000 bytes on stderr before its answer: drained while the host
+        // waits, so the answer comes in time.
+        try t.expectStop("zig_move(\"a.zig\", \"b.zig\", {\"a\"})", .atomic, .host, "`zig_move`: zig-ast refused the request: Drained");
+    }
+    {
+        var t: T = undefined;
+        try init(&t);
+        defer t.deinit();
+        t.host.zig_ast_exe = try abs(&t, options.fixture);
+        t.host.zig_ast_answer_ms = 2000;
+        // One that never answers is killed at the deadline, and said.
+        var r = t.runOnce("zig_rename(\"a.zig\", \"a\", \"b\")", .atomic);
+        defer r.deinit();
+        try testing.expectEqualStrings("`zig_rename`: zig-ast did not answer within 2000 ms", r.stop.?.message);
+        try testing.expectEqualStrings("const a = 1;\n", try t.file("a.zig"));
+    }
 }
