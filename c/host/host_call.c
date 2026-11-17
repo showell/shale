@@ -5,9 +5,13 @@
 // (host_text.c), `json_read` and `json_write` (host_json.c). Every other call
 // is refused as not ported yet; `run`, the jobs and the rest are their own
 // lanes.
+// any), `edits_write` (`edits_all`'s write), and the Zig tools through
+// host_zig.c. Every other call is refused as not ported yet; `run`, the jobs
+// and the rest are their own lanes.
 //
 // Include paths.c, builtins_change.c, host_run.c and host_jobs.c first.
 // Include paths.c, builtins_change.c, host_json.c and host_text.c first.
+// Include paths.c, builtins_change.c and host_zig.c first.
 
 // The `RunHost.call` of the Linux host, `ctx` its Host.
 static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out) {
@@ -41,6 +45,9 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
         value_bool(out, true);
         return OK;
     }
+    bool zig = false;
+    Status zs = host_zig_call(h, r, pos, name, args, out, &zig);
+    if (zig) return zs;
     Msg m;
     msg_init(&m, r->ctx.values);
     msg_str(&m, S("host(\""));

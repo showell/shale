@@ -1,0 +1,189 @@
+-- c/build/host_zig.shale: the host's Zig tools' block, c/host/zig_wire.c
+-- and c/host/host_zig.c (`zig_rename`, `zig_decls`, `zig_move`,
+-- `zig_tokens`, `zig_imports`). c/build.shale runs it, with the `build`
+-- mount that `use` below reads and the outer run's `tools` mount; see that
+-- file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- ── The Zig tools: c/host/zig_wire.c and c/host/host_zig.c ─────────────
+-- In both tiers: c/tests/zig/test_zig_wire.c under each of `t.builds`, held
+-- to its `TEST(` count and HOST_ZIG_TESTS; then HOST_ZIG_SCRIPTS run by the
+-- installed Zig `shale` and by each build's C `shale` (the command's block
+-- built them), both speaking to the `tools` mount's zig-ast, every byte of
+-- their output and their exit held equal. In the full tier: the faults
+-- below planted in a copy of c/host, each caught by its `aim` tests.
+
+const HOST_ZIG_TESTS = {["c/tests/zig/test_zig_wire.c"] = 5}
+
+const HOST_ZIG_PLANTS = {
+  {name = "a tab is sent as itself", aim = "a_lines_fields_escape_tabs_newlines_crs_and_backslashes_and_read_back_as_written", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+   old = [=[        } else if (c == '\t') {
+            TRY(buf_lit(w, "\\t"));]=], new = [=[        } else if (c == '\t') {
+            TRY(buf_byte(w, c));]=]},
+  {name = "an identifier may start with a digit", aim = "an_identifier_is_zigs_a_letter_or_underscore_then_word_bytes_and_no_keyword", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+   old = "if (!letter && !(digit && i > 0)) return false;", new = "if (!letter && !digit) return false;"},
+  {name = "a keyword is an identifier", aim = "an_identifier_is_zigs_a_letter_or_underscore_then_word_bytes_and_no_keyword", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+   old = "if (str_eq(at(keywords, k), s)) return false;", new = "if (0 && str_eq(at(keywords, k), s)) return false;"},
+  {name = "a count may start with `_`", aim = "a_count_is_read_as_zigs_parse_int_reads_it", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+   old = "if (at(digits, 0) == '_' || at(digits, digits.len - 1) == '_') return false;", new = "if (at(digits, digits.len - 1) == '_') return false;"},
+  {name = "a count past 64 bits wraps", aim = "a_count_is_read_as_zigs_parse_int_reads_it", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+   old = "if (n > (UINT64_MAX - d) / 10) return false;", new = "(void)0;"},
+  {name = "a token's numbers are read big-endian", aim = "a_token_record_is_its_tag_start_end_and_line_little_endian", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+   old = "for (size_t k = 4; k > 0; k--) v = v << 8 | (uint8_t)at(s, from + k - 1);", new = "for (size_t k = 0; k < 4; k++) v = v << 8 | (uint8_t)at(s, from + k);"},
+  {name = "an escape the wire has not is read as its byte", aim = "a_line_of_more_fields_than_there_is_room_for_a_line_with_no_newline_and_a_bad_escape_are_refused", dir = "host", file = "zig_wire.c", caught_by = "zig/test_zig_wire",
+   old = [=[            } else {
+                return ZIG_WIRE_BAD_ESCAPE;
+            }]=], new = [=[            } else {
+                c = e;
+            }]=]},
+}
+
+-- The tree every script starts in, as a.zig, beside helper.zig.
+const HOST_ZIG_TREE = [=[const std = @import("std");
+const helper = @import("helper.zig");
+const gone = @import("gone.zig");
+
+/// The count.
+pub const count: usize = 3;
+
+// A plain comment above.
+fn add(a: usize, b: usize) usize {
+    return a + b + count;
+}
+
+pub fn twice(x: usize) usize {
+    return add(x, x);
+}
+
+const Table = struct {
+    slots: usize,
+    fn grow(self: *Table) void {
+        self.slots += count;
+    }
+};
+
+test "adds" {
+    try std.testing.expect(twice(1) == 5);
+}
+]=]
+
+-- The scripts, each run by the Zig `shale` and by each build's C one in a
+-- fresh copy of HOST_ZIG_TREE: what it prints, its report and its exit held
+-- to Zig's. `env` adds to the run's environment; `mounts` is a mounts file
+-- of its own in place of the one with `tools`.
+const HOST_ZIG_SCRIPTS = {
+  {name = "decls", src = [=[for d in zig_decls("a.zig") do print(d.kind, d.name, d.name_form, d.visibility, d.first, d.last, d.start, d.stop, join(d.uses, ","), has_key(d, "comment_above")) end
+for d in zig_decls("a.zig", {container = "Table"}) do print(d.kind, d.name, join(d.uses, ","), join(d.reaches, ",")) end
+]=]},
+  {name = "tokens", src = [=[local t = zig_tokens("a.zig")
+print(#t, t[1].tag, t[1].text, t[1].line, t[#t].tag)
+for x in zig_tokens("a.zig", {tag = "identifier"}) do print(x.text, x.line) end
+print(attempt(zig_tokens, "a.zig", {tag = "nope"}).error)
+]=]},
+  {name = "imports", src = [=[for i in zig_imports("a.zig") do print(i.kind, i.target, i.name, i.line, i.file) end
+]=]},
+  {name = "rename", src = [=[local r = zig_rename("a.zig", "count", "total")
+print(r.renamed, r.left_in_comments)
+print(read("a.zig"))
+local m = zig_renames("a.zig", {total = "x.total", add = "plus"})
+print(attempt(zig_rename, "a.zig", "1bad", "x").error)
+print(attempt(zig_rename, "a.zig", "slots", "rooms", {container = "Nope"}).error)
+local c = zig_rename("a.zig", "slots", "rooms", {container = "Table"})
+print(c.renamed)
+print(read("a.zig"))
+]=]},
+  {name = "move", src = [=[local r = zig_move("a.zig", "b.zig", {"twice"})
+print(r.moved, #r.needs_pub, #r.needs_import, #r.uses_left)
+for x in r.needs_pub do print("pub", x.name, x.line) end
+for x in r.needs_import do print("imp", x.name, x.target, x.line) end
+print(read("a.zig"))
+print(read("b.zig"))
+]=]},
+  {name = "move_from_as", argv = {"--verbose"}, src = [=[local r = zig_move("a.zig", "b.zig", {{kind = "fn", name = "twice"}}, {from_as = "a"})
+print(r.moved, r.qualified, join(r.made_pub, ","))
+print(read("b.zig"))
+]=]},
+  {name = "stops", src = [=[create("bad.zig", "fn (\n")
+print(attempt(zig_decls, "bad.zig").error)
+print(attempt(zig_imports, "bad.zig").error)
+print(attempt(zig_decls, "nothere.zig").error)
+print(attempt(zig_move, "a.zig", "a.zig", {"add"}).error)
+print(attempt(zig_move, "a.zig", "b.zig", {"nope"}).error)
+print(attempt(zig_rename, "a.zig", "count", "x.y").error)
+print(attempt(zig_rename, "a.zig", "count", "y", {lines = {3, 1}}).error)
+zig_decls("bad.zig")
+]=]},
+  {name = "no_program", env = {SHALE_ZIG_AST = "/nonexistent/zig-ast"}, src = "print(attempt(zig_decls, \"a.zig\").error)\n"},
+  {name = "not_serving", env = {SHALE_ZIG_AST = "/bin/true"}, src = "print(attempt(zig_decls, \"a.zig\").error)\n"},
+  {name = "no_tools", mounts = "", src = "zig_imports(\"a.zig\")\n"},
+}
+
+-- Each of HOST_ZIG_SCRIPTS under the Zig `shale` and each build's C one, in
+-- fresh copies of the tree under c/out/host_zig. Gives how many ran.
+function host_zig_vs_zig(t)
+  if not exists("tools:zig-ast/bin/zig-ast") then fail("host_zig: no tools:zig-ast/bin/zig-ast, which the Zig tools' scripts speak to: `shale tools/zig_ast/install.shale`") end
+  local base = OUT .. "/host_zig"
+  if exists(base) then remove_tree(base) end
+  mkdir(base)
+  create(base .. "/mounts", "tools = " .. real("tools:.") .. " ro tools\n")
+  local sides = {"zig"}
+  for b in t.builds do push(sides, b) end
+  local n = 0
+  for s in HOST_ZIG_SCRIPTS do
+    local zig = nil
+    for side in sides do
+      local dir = base .. "/" .. s.name .. "-" .. side
+      mkdir(dir)
+      create(dir .. "/a.zig", HOST_ZIG_TREE)
+      create(dir .. "/helper.zig", "pub const x = 1;\n")
+      create(dir .. "/s.shale", s.src)
+      local env = {SHALE_PRELUDE = "", SHALE_NOW = "1700000000", SHALE_MOUNTS = real(base .. "/mounts")}
+      for k in keys(get(s, "env", {})) do env[k] = s.env[k] end
+      if has_key(s, "mounts") then
+        create(dir .. "/mounts", s.mounts)
+        env.SHALE_MOUNTS = real(dir .. "/mounts")
+      end
+      local argv = {"shale"}
+      if side ~= "zig" then argv = {real(OUT .. "/" .. side .. "/shale")} end
+      for w in get(s, "argv", {}) do push(argv, w) end
+      push(argv, "s.shale")
+      local r = run_in(t, "host_zig vs zig", argv, {timeout_ms = 30000, whole = 200000, env = env, cwd = dir, want = WANT})
+      local got = {code = get(r, "code", -1), out = r.out}
+      if side == "zig" then
+        zig = got
+      elseif got.code ~= zig.code or got.out ~= zig.out then
+        fail("`" .. side .. "`'s shale ran host_zig's " .. s.name .. " unlike Zig's:\n--- zig (" .. zig.code .. ")\n" .. zig.out .. "\n--- c (" .. got.code .. ")\n" .. got.out)
+      end
+    end
+    n = n + 1
+  end
+  return n
+end
+
+function host_zig_block(t)
+  local tests = {}
+  for src in keys(HOST_ZIG_TESTS) do push(tests, src) end
+  sort(tests)
+  for src in tests do
+    if test_count(src) ~= HOST_ZIG_TESTS[src] then fail(src .. " has " .. test_count(src) .. " TEST(s), and HOST_ZIG_TESTS says " .. HOST_ZIG_TESTS[src]) end
+  end
+  for b in t.builds do
+    local total = 0
+    for src in tests do total = total + test_file(t, "host_zig " .. b, b, src) end
+    print("host_zig " .. said_of_build(b, #tests, total))
+  end
+  local n = host_zig_vs_zig(t)
+  print("host_zig: " .. n .. " scripts run as Zig runs them, under " .. #t.builds .. " build(s)")
+  if not t.full then return nil end
+  run_plants(t, "host_zig plants", HOST_ZIG_PLANTS)
+  return nil
+end
+-- ── end of the Zig tools' block ────────────────────────────────────────
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+host_zig_block(t)
+block_end(t, "host_zig")

@@ -30,6 +30,8 @@
 #include "../host/host_jobs.c"
 #include "../host/host_json.c"
 #include "../host/host_text.c"
+#include "../host/zig_wire.c"
+#include "../host/host_zig.c"
 #include "../host/host_call.c"
 
 // How a run is made: its mounts file's text, `--verbose` (a diff in full)

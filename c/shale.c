@@ -39,6 +39,8 @@
 #include "host/host_jobs.c"
 #include "host/host_json.c"
 #include "host/host_text.c"
+#include "host/zig_wire.c"
+#include "host/host_zig.c"
 #include "host/host_call.c"
 #include "preludes.h"
 
@@ -607,6 +609,8 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         say(o, buf_view(&undone));
     }
     int exit_code = flush_and_exit(o, ran == OK ? EXIT_FINISHED : EXIT_STOPPED);
+    // The run's zig-ast, if a Zig call started one, ends with the run.
+    host_zig_stop();
     arena_deinit(&host_arena);
     regex_cache_deinit(&r.patterns);
     arena_deinit(&output);
