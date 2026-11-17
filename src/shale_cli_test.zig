@@ -460,3 +460,24 @@ test "cli: --check parses and compiles a script with its preludes and runs nothi
     // Nothing ran: the good script's replace made no file.
     try testing.expectError(error.FileNotFound, tmp.dir.statFile(io, "made.txt", .{}));
 }
+
+test "cli: a TERM to shale after its program exits, while what the program left running ends, stops the run with the usual words" {
+    var threaded = std.Io.Threaded.init(testing.allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    const a = testing.allocator;
+    const fixture = @import("shale_test_options").fixture;
+    // The fixture's child outlives it, ignores TERM, and once the fixture has
+    // exited sends shale a TERM: read in the drain, never dropped.
+    const src = try std.fmt.allocPrint(a, "run({{\"{s}\", \"grandchild-signal\"}}, {{timeout_ms = 30000, tail = 5, want = \"test: the fixture\"}}) print(\"went on\")", .{fixture});
+    defer a.free(src);
+    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "-e", src } });
+    defer a.free(r.stdout);
+    defer a.free(r.stderr);
+    errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
+    try testing.expectEqual(@as(u8, 1), r.term.exited);
+    try testing.expectEqualStrings("", r.stdout);
+    const said = try std.fmt.allocPrint(a, "`run`: shale was told to stop (TERM or HUP) while `{s}` ran; it was ended", .{fixture});
+    defer a.free(said);
+    try testing.expect(std.mem.indexOf(u8, r.stderr, said) != null);
+}

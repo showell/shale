@@ -12,9 +12,13 @@
 //!
 //! The parent polls the output, the stdin it is still writing, a pidfd for the
 //! exit and a signalfd for TERM and HUP. On the deadline, or a TERM or HUP to
-//! `shale` itself, the whole group gets TERM, a grace period, then KILL. After
+//! `shale` itself, the whole group gets TERM, a grace period, then KILL. When
+//! the leader exits, what it left running in its group gets the same TERM,
+//! grace and KILL before `run` returns, so no program outlives its `run` (a
+//! long-lived one belongs under `job_start`). A TERM or HUP to `shale` while
+//! that group ends, or while the output drains, still stops the run. After
 //! the leader exits, output is read for at most `drain_ms` more, so a
-//! grandchild holding the pipe open never holds `run`.
+//! process that left the group and holds the pipe open never holds `run`.
 
 const std = @import("std");
 const linux = std.os.linux;
@@ -239,6 +243,8 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     if (in_pipe[1] >= 0) setNonblocking(in_pipe[1]);
 
     var exited = false;
+    // Whether the leader's group is empty, asked each turn once it is reaped.
+    var group_gone = false;
     var raw: i32 = 0; // wait4 fills an i32; `W` reads it as a u32
     var usage: linux.rusage = undefined;
     // A sink failure (the keep at the host's cap) returns before the program
@@ -246,32 +252,53 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     errdefer if (!exited) {
         _ = linux.kill(-pid, .KILL);
         _ = linux.wait4(pid, &raw, 0, null);
+    } else if (!group_gone) {
+        _ = linux.kill(-pid, .KILL);
     };
     var stdin_left: []const u8 = spec.stdin orelse "";
     if (spec.stdin != null and stdin_left.len == 0) closeFd(&in_pipe[1]);
     var buf: [64 * 1024]u8 = undefined;
     var termed_at: ?u64 = null;
     var killed = false;
+    var killed_at: u64 = 0;
     var why_ended: ?Ended = null;
     var drain_until: u64 = 0;
     const deadline = start + spec.timeout_ms;
     while (true) {
         const now = monoMs();
-        if (exited and (out_pipe[0] < 0 or now >= drain_until)) break;
+        if (exited and !group_gone) group_gone = groupGone(pid);
+        // A group that outlives its KILL by a grace (a process stuck in the
+        // kernel) is left, so `run` still returns.
+        const group_done = group_gone or (killed and now >= killed_at + spec.grace_ms);
+        if (exited and group_done and (out_pipe[0] < 0 or now >= drain_until)) {
+            // A signal that came since the last poll is taken here, not left
+            // to kill `shale` without a word when the mask is put back.
+            if (takeSignal(sig_fd) and why_ended == null) why_ended = .interrupted;
+            break;
+        }
         if (!exited and termed_at == null and now >= deadline) {
             why_ended = .timeout;
             _ = linux.kill(-pid, .TERM);
             termed_at = now;
         }
-        if (!exited and !killed and termed_at != null and now >= termed_at.? + spec.grace_ms) {
+        // DRAGON: once the leader is reaped, its pid stays the group's id
+        // only while a member is left. `groupGone` was asked this turn, so
+        // the KILL goes to a group that had a member a moment ago; one that
+        // empties in between frees the id, and a new process given it
+        // within that moment would be signalled.
+        if (!killed and !group_done and termed_at != null and now >= termed_at.? + spec.grace_ms) {
             _ = linux.kill(-pid, .KILL);
             killed = true;
+            killed_at = now;
         }
-        // Wake for the nearest of the deadline, the grace's end and the drain's.
+        // Wake for the nearest of the deadline, the grace's end and the
+        // drain's; while the group outlives its leader, every 10 ms to ask
+        // again whether it is gone.
         var wait_ms: u64 = 1000;
         if (!exited and termed_at == null) wait_ms = @min(wait_ms, deadline -| now);
-        if (!exited and termed_at != null and !killed) wait_ms = @min(wait_ms, (termed_at.? + spec.grace_ms) -| now);
+        if (termed_at != null and !killed) wait_ms = @min(wait_ms, (termed_at.? + spec.grace_ms) -| now);
         if (exited) wait_ms = @min(wait_ms, drain_until -| now);
+        if (exited and !group_done) wait_ms = @min(wait_ms, 10);
 
         var fds: [4]linux.pollfd = undefined;
         var nfds: usize = 0;
@@ -307,8 +334,16 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
             if (stdin_left.len == 0) closeFd(&in_pipe[1]);
         };
         if (pid_at) |i| if (fds[i].revents != 0) {
+            // The leader has exited and is a zombie until wait4 reaps it, so
+            // its pid is still the group's id: what it left running in the
+            // group gets TERM now, the grace and the KILL above after.
+            if (termed_at == null) {
+                _ = linux.kill(-pid, .TERM);
+                termed_at = monoMs();
+            }
             if (linux.wait4(pid, &raw, linux.W.NOHANG, &usage) == pid) {
                 exited = true;
+                group_gone = groupGone(pid);
                 // All the leader wrote is in the pipe now, though this poll
                 // may have looked before it was. Read it before the drain
                 // starts, so the drain bounds only what outlives the leader.
@@ -317,11 +352,12 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
                 closeFd(&in_pipe[1]);
             }
         };
-        if (fds[sig_at].revents != 0) {
-            var info: linux.signalfd_siginfo = undefined;
-            _ = linux.read(sig_fd, std.mem.asBytes(&info).ptr, @sizeOf(linux.signalfd_siginfo));
+        if (fds[sig_at].revents != 0 and takeSignal(sig_fd)) {
+            // Read while the program runs, while its group ends or while its
+            // output drains, the signal stops the run all the same; only a
+            // timeout already said keeps its word.
+            if (why_ended == null) why_ended = .interrupted;
             if (!exited and termed_at == null) {
-                why_ended = .interrupted;
                 _ = linux.kill(-pid, .TERM);
                 termed_at = monoMs();
             }
@@ -333,6 +369,20 @@ pub fn run(alloc: std.mem.Allocator, spec: Spec, sink: anytype) (Error || SinkEr
     if (why_ended) |w| return .{ .ended = w, .ms = ms, .cpu_ms = cpu_ms, .signal = if (linux.W.IFSIGNALED(status)) @backingInt(linux.W.TERMSIG(status)) else null, .code = if (linux.W.IFEXITED(status)) linux.W.EXITSTATUS(status) else null };
     if (linux.W.IFEXITED(status)) return .{ .ended = .exit, .code = linux.W.EXITSTATUS(status), .ms = ms, .cpu_ms = cpu_ms };
     return .{ .ended = .signal, .signal = @backingInt(linux.W.TERMSIG(status)), .ms = ms, .cpu_ms = cpu_ms };
+}
+
+/// Whether the signalfd held a TERM or HUP, taking it.
+fn takeSignal(sig_fd: i32) bool {
+    var info: linux.signalfd_siginfo = undefined;
+    const n = linux.read(sig_fd, std.mem.asBytes(&info).ptr, @sizeOf(linux.signalfd_siginfo));
+    return linux.errno(n) == .SUCCESS and n == @sizeOf(linux.signalfd_siginfo);
+}
+
+/// Whether no process is left in the group `pgid`. Asked only once its
+/// leader is reaped: until then the leader's zombie is a member.
+fn groupGone(pgid: linux.pid_t) bool {
+    const rc = linux.syscall2(.kill, @as(usize, @bitCast(@as(isize, -pgid))), 0);
+    return linux.errno(rc) == .SRCH;
 }
 
 /// Passes what the pipe holds to the sink until a read would block. Closes
@@ -517,4 +567,79 @@ test "spawn: a sink that fails ends the program's group and reaps it before the 
         std.debug.print("the program is still there: {s}\n", .{st[0..n]});
         return error.TestUnexpectedResult;
     }
+}
+
+/// The pid in a `grandchild N` line of `out`.
+fn grandchildPid(out: []const u8) !linux.pid_t {
+    const at = std.mem.indexOf(u8, out, "grandchild ") orelse return error.TestUnexpectedResult;
+    const rest = out[at + "grandchild ".len ..];
+    const end = std.mem.indexOfScalar(u8, rest, '\n') orelse rest.len;
+    return std.fmt.parseInt(linux.pid_t, rest[0..end], 10);
+}
+
+/// Whether `pid` is gone, its zombie reaped too. A process still there is
+/// KILLed, so a failing test leaves nothing behind.
+fn goneOrKill(pid: linux.pid_t) bool {
+    var path: [64]u8 = undefined;
+    const stat = std.mem.printSentinel(&path, "/proc/{d}/stat", .{pid}, 0) catch unreachable;
+    const fd = linux.open(stat, .{ .ACCMODE = .RDONLY }, 0);
+    if (linux.errno(fd) != .SUCCESS) return true;
+    _ = linux.close(@intCast(fd));
+    _ = linux.kill(pid, .KILL);
+    return false;
+}
+
+test "spawn: what the program leaves running in its group is ended before `run` returns, by TERM, or by KILL at the grace" {
+    var c: Collect = .{};
+    defer c.out.deinit(testing.allocator);
+    const env = [_][]const u8{"PATH=/usr/bin:/bin"};
+    // The leader exits 0 at once; its child would sleep 20 s holding the
+    // output. TERM ends it, so `run` waits neither the 20 s nor the grace.
+    var o = try spawn(&.{ "grandchild-exit", "20000" }, .{ .argv = &.{}, .env = &env, .timeout_ms = 10_000 }, &c);
+    try testing.expectEqual(Ended.exit, o.ended);
+    try testing.expectEqual(@as(?u8, 0), o.code);
+    try testing.expect(o.ms < 1_500);
+    try testing.expect(goneOrKill(try grandchildPid(c.out.items)));
+    c.out.clearRetainingCapacity();
+    // A child that ignores TERM is KILLed at the grace's end, still before
+    // `run` returns; what it printed after its leader exited is kept.
+    o = try spawn(&.{ "grandchild-late", "20000" }, .{ .argv = &.{}, .env = &env, .timeout_ms = 10_000, .grace_ms = 300 }, &c);
+    try testing.expectEqual(Ended.exit, o.ended);
+    try testing.expectEqual(@as(?u8, 0), o.code);
+    try testing.expect(o.ms >= 300 and o.ms < 5_000);
+    try testing.expect(std.mem.endsWith(u8, c.out.items, "late\n"));
+    try testing.expect(goneOrKill(try grandchildPid(c.out.items)));
+}
+
+/// A sink that sends this thread a TERM when the output says "late", which
+/// the fixture's grandchild prints only once its leader has exited: a TERM
+/// to `shale` while the leader's group ends and its output drains.
+const InterruptingLate = struct {
+    out: std.ArrayList(u8) = .empty,
+    sent: bool = false,
+    pub const Error = error{OutOfMemory};
+    fn write(i: *InterruptingLate, bytes: []const u8) InterruptingLate.Error!void {
+        try i.out.appendSlice(testing.allocator, bytes);
+        if (!i.sent and std.mem.indexOf(u8, i.out.items, "late\n") != null) {
+            _ = linux.tgkill(linux.getpid(), linux.gettid(), .TERM);
+            i.sent = true;
+        }
+    }
+};
+
+test "spawn: a TERM to shale after the program exits, while its group ends and its output drains, still stops the run" {
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var i: InterruptingLate = .{};
+    defer i.out.deinit(testing.allocator);
+    const env = [_][]const u8{"PATH=/usr/bin:/bin"};
+    const o = try run(testing.allocator, .{ .argv = &.{ fixturePath(&buf), "grandchild-late", "20000" }, .env = &env, .timeout_ms = 30_000, .grace_ms = 300 }, &i);
+    try testing.expect(i.sent);
+    try testing.expectEqual(Ended.interrupted, o.ended);
+    // The leader's own exit is kept beside the word.
+    try testing.expectEqual(@as(?u8, 0), o.code);
+    try testing.expect(o.ms < 5_000);
+    try testing.expect(goneOrKill(try grandchildPid(i.out.items)));
+    var now: linux.sigset_t = undefined;
+    _ = linux.sigprocmask(linux.SIG.BLOCK, null, &now);
+    try testing.expect(!linux.sigismember(&now, .TERM));
 }

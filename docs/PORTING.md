@@ -46,7 +46,8 @@ the files above name none:
   because `std.process.spawn` has no hook before exec. The child sets
   `prctl`'s death signal and takes a process group of its own; the parent
   polls the output, a pidfd for the exit (`pidfd_open`) and a signalfd for a
-  TERM or HUP sent to `shale` itself.
+  TERM or HUP sent to `shale` itself, and ends what the program left
+  running in its group before `run` returns.
 - `src/shale_jobs.zig` runs jobs. It double-forks a reaper out of the
   caller's tree (`setsid`, `fork`, `execve` of `shale --reap`), signals a
   job's process group, and names a process by its start time from

@@ -200,6 +200,9 @@ has none of it):
   ...: the builtins do it), a wrapper (`env`, `timeout`, `xargs`, ...: run
   the program itself), and a program by a path git does not track, unless
   it is under a ` tools` mount (a toolchain's install).
+  A program runs in a process group of its own, and when it exits, what it
+  left running there gets TERM, 2 seconds, then KILL before `run` returns:
+  a server meant to outlive the call is a job (`job_start`, below).
   `must(r)` gives `r` if it exited 0; otherwise it prints its output and
   fails, naming the program and how it ended. `real(p)` gives a path's OS
   path, for an argv.

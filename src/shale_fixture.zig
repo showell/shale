@@ -19,6 +19,15 @@
 //!                                    SIZE at a time, 1 ms apart
 //!     shale-fixture burn MS          spins until it has used MS of CPU
 //!     shale-fixture burn-child MS    a child burns MS; this waits for it
+//!     shale-fixture grandchild-exit MS   "grandchild N", a child's pid,
+//!                                    which sleeps MS holding the output;
+//!                                    this exits 0 at once
+//!     shale-fixture grandchild-late MS   the same, but the child ignores
+//!                                    TERM and prints "late" once this has
+//!                                    exited, then sleeps MS
+//!     shale-fixture grandchild-signal    "grandchild N"; the child ignores
+//!                                    TERM and, once this has exited, sends
+//!                                    TERM to this one's parent, then exits
 //!     shale-fixture --serve          a zig-ast gone wrong, as the host starts
 //!                                    one: its header, then each request
 //!                                    answered by its command: `decls` a
@@ -133,6 +142,44 @@ pub fn main(init: std.process.Init) !u8 {
         }
         var status: i32 = 0;
         _ = linux.wait4(pid, &status, 0, null);
+    } else if (std.mem.eql(u8, verb, "grandchild-exit") or std.mem.eql(u8, verb, "grandchild-late") or std.mem.eql(u8, verb, "grandchild-signal")) {
+        const linux = std.os.linux;
+        const signal = std.mem.eql(u8, verb, "grandchild-signal");
+        const ms = if (signal) 0 else try std.fmt.parseInt(isize, arg, 10);
+        const late = !std.mem.eql(u8, verb, "grandchild-exit");
+        const leader = linux.getpid();
+        const above = linux.getppid();
+        // The child closes its end once it ignores TERM, so this exits only
+        // after: a TERM to the group at this exit never finds it listening.
+        var ready: [2]i32 = undefined;
+        if (linux.errno(linux.pipe2(&ready, .{})) != .SUCCESS) return 3;
+        const pid: linux.pid_t = @intCast(linux.fork());
+        if (pid == 0) {
+            // Raw calls only: the child shares the parent's buffered writer.
+            _ = linux.close(ready[0]);
+            if (late) {
+                const ignore: linux.Sigaction = .{ .handler = .{ .handler = linux.SIG.IGN }, .mask = linux.sigemptyset(), .flags = 0 };
+                _ = linux.sigaction(.TERM, &ignore, null);
+            }
+            _ = linux.close(ready[1]);
+            if (late) {
+                // Its parent's exit re-parents it.
+                const tick: linux.timespec = .{ .sec = 0, .nsec = 1_000_000 };
+                while (linux.getppid() == leader) _ = linux.nanosleep(&tick, null);
+                if (signal) {
+                    _ = linux.kill(above, .TERM);
+                    linux.exit_group(0);
+                }
+                _ = linux.write(1, "late\n", 5);
+            }
+            const span: linux.timespec = .{ .sec = @divTrunc(ms, 1000), .nsec = @rem(ms, 1000) * 1_000_000 };
+            _ = linux.nanosleep(&span, null);
+            linux.exit_group(0);
+        }
+        _ = linux.close(ready[1]);
+        var byte: [1]u8 = undefined;
+        _ = linux.read(ready[0], &byte, 1);
+        try w.print("grandchild {d}\n", .{pid});
     } else if (std.mem.eql(u8, verb, "spill")) {
         const n = try std.fmt.parseInt(usize, arg, 10);
         for (0..n) |_| try w.writeByte('x');
