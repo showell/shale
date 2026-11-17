@@ -56,8 +56,10 @@ Zig size and no Zig probe of them.
 - **The arena keeps Zig's shape anyway.** arena.h is `value.Budgeted`: its
   16-byte chunk header, `chunk_least`, `big`, doubling, and only the last
   allocation growing in place, so a budget means about what it means today.
-  The C adds `Budgeted.heap()`'s twin, an allocator whose free gives the
-  bytes back, for the machine's regex cache and a long call's arguments.
+  Steve confirmed (2026-11-17) that `machine_bytes` is outside the surface
+  in the same way, so `Budgeted.heap()`'s twin, an allocator whose free
+  gives the bytes back, is a nicety for the regex cache and a long call's
+  arguments, not a fidelity requirement.
 - **The differ judges these runs by class.** `tools/differ.shale` finds the
   inputs that observe arena bytes mechanically (an arena stop, or a read of
   `arena_bytes`), compares their stop's class and message but not those

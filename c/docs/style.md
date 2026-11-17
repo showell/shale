@@ -16,6 +16,9 @@ and its self-test plants a break of each one.
 - A header includes the headers below it, and nothing includes one above it.
   The order is slice, arena, status, vec, buf, map, err. `test.h` needs
   only slice.
+- **The C builds as one translation unit** (Steve, 2026-11-17). A `.c`
+  file's functions are all `static`, and a program or test `#include`s the
+  `.c` files it needs, as `test_regex.c` includes `../script/regex.c`.
 - A test file is `c/tests/test_<header>.c`. It includes `test.h` first.
 - **Held:** a header's first line is `// <its name>: ` and then what it is.
 - **Held:** a header's guard is `SHALE_<NAME>_H`, and its last line is
