@@ -93,11 +93,16 @@ function check_stdout_failed(t, build)
   return #cases
 end
 
--- The OS path of the installed Zig `shale`, the oracle, its links resolved:
--- `--help` names the checkout its binary runs from.
+-- The OS path of the `shale` the help is held to, its links resolved:
+-- `--help` names the checkout its binary runs from. It is this checkout's
+-- Zig build, `zig-out/bin/shale`, when there is one: built from this tree's
+-- src/, so a change to the usage text in both is held here before either is
+-- installed. A checkout with no Zig build (a fresh lane's fast tier) holds
+-- it to the installed `shale`, the last build installed, and says so.
 function zig_shale_path(t)
+  if exists("zig-out/bin/shale") then return {path = real("zig-out/bin/shale"), what = "this checkout's Zig"} end
   local which = must(run_in(t, "command help", {"which", "shale"}, {timeout_ms = 5000, tail = 1}))
-  return trim(must(run_in(t, "command help", {"readlink", "-f", trim(which.out)}, {timeout_ms = 5000, tail = 1})).out)
+  return {path = trim(must(run_in(t, "command help", {"readlink", "-f", trim(which.out)}, {timeout_ms = 5000, tail = 1})).out), what = "the installed shale"}
 end
 
 -- `argv` run by the binary at OS path `bin`, copied first to `place`
@@ -159,9 +164,9 @@ function command_block(t)
   local zig = zig_shale_path(t)
   for b in t.builds do
     check_command(t, b)
-    local helps = check_help(t, b, zig)
+    local helps = check_help(t, b, zig.path)
     local failed = check_stdout_failed(t, b)
-    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops; " .. helps .. " --help runs and --version as Zig's; " .. failed .. " runs whose stdout refuses its writes exit 1 and say so")
+    print("command " .. b .. ": c/out/" .. b .. "/shale built; its --check holds a script that parses and one that stops; " .. helps .. " --help runs and --version as " .. zig.what .. "'s; " .. failed .. " runs whose stdout refuses its writes exit 1 and say so")
   end
   if not t.full then return nil end
   run_plants(t, "parse plants", PARSE_PLANTS)
