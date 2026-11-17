@@ -35,7 +35,7 @@ typedef struct {
 
 // The most bytes a job's argv may take in its record, escaped: the rest of
 // the jobs' 8 KiB record holds the other keys.
-enum { JOB_RECORD_ARGV_MOST = 7168 };
+enum { JOB_RECORD_ARGV_MAX = 7168 };
 
 static bool job_record_done(JobRecord r) {
     return r.has_exit || r.has_signal;
