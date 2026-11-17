@@ -36,8 +36,8 @@ and its self-test plants a break of each one.
   - `SLICE_TYPE(`, `VEC_DEFINE(`, `MAP_DEFINE(`, `TEST(`, `TEST_MAIN(` or
     `_Static_assert(`;
   - `int main(`, a program's own: the one `.c` file that is a command
-    (`c/shale.c`), and a test's fixture (`c/tests/fixtures/`,
-    `c/tests/host/fixtures/`).
+    (`c/shale.c`), a test's fixture (`c/tests/fixtures/`,
+    `c/tests/host/fixtures/`) and a compiler's canary (`c/tests/canaries/`).
 - Everything inside an item is indented, so the next line at column 0 starts
   the next item.
 - **Held:** a function in a header is `static inline`.
@@ -68,9 +68,9 @@ and its self-test plants a break of each one.
   It is known upstream ([tinycc-devel, July
   2023](https://lists.libreplanet.org/archive/html/tinycc-devel/2023-07/msg00027.html))
   and fixed on TinyCC's mob branch after 0.9.27; the discipline check sizes
-  every return through a probe, and `c/tests/fixtures/tcc_struct_return.c`
-  is the canary that says when the rule can go. A line with `// struct
-  return: <why>` is let through.
+  every return through a probe, and `c/tests/canaries/tcc_struct_return.c`,
+  which alone holds the shape, is the canary that says when the rule can
+  go.
 
 ## Names
 

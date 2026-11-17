@@ -7,7 +7,7 @@ use("build:lib.shale")
 
 -- ── The discipline block ────────────────────────────────────────────────
 
-const CANARY = "c/tests/fixtures/tcc_struct_return.c"
+const CANARY = "c/tests/canaries/tcc_struct_return.c"
 
 -- What the canary prints when a compiler gets both shapes right.
 const CANARY_RIGHT = "returned straight into a call: 0 of 5 wrong; kept in a local first: 0 of 5 wrong"

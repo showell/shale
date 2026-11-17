@@ -33,9 +33,10 @@
 --               `SHALE_<NAME>_H`, and its last line `#endif`;
 --   return size: no function returns a struct of 9 to 15 bytes by value,
 --               which TCC 0.9.27 miscompiles when the return goes straight
---               into a call as its argument (style.md, "Declarations"); a
---               line with `// struct return: <why>` is let through, as the
---               canary's is.
+--               into a call as its argument (style.md, "Declarations"); the
+--               C's code is held to it, and c/tests/canaries/, the
+--               compiler's canaries, which hold that shape on purpose, is
+--               not.
 -- Strings, character literals and comments are not code, so a word in one
 -- never counts. A file is judged by its own name (arena.h, slice.h), so the
 -- plants below are judged as any file is.
@@ -273,9 +274,14 @@ const PROBE_MODULES = {
   "c/foundation/test.h", "c/script/run.h", "c/host/store.c", "c/host/path_run.c", "c/script/regex.c",
   "c/script/builtins.c", "c/script/builtins_text.c", "c/script/builtins_store.c", "c/script/builtins_walk.c",
   "c/script/builtins_change.c", "c/script/vm.c", "c/host/mounts.c", "c/host/paths.c", "c/host/undo.c",
-  "c/host/host_call.c", "c/host/keep.c", "c/host/spawn.c", "c/host/job_record.c",
+  "c/host/spawn.c", "c/host/keep.c", "c/host/job_record.c", "c/host/jobs.c", "c/host/host_run.c",
+  "c/host/host_jobs.c", "c/host/host_json.c", "c/host/host_text.c", "c/host/zig_wire.c", "c/host/zig_ast.c",
+  "c/host/host_zig.c", "c/host/host_call.c",
 }
 const PROBE_DIR = "c/out/returns"
+-- The compiler's canaries: each holds a shape a rule forbids, to see the
+-- compiler still get it wrong, so the return sizes don't judge them.
+const CANARIES = "c/tests/canaries/"
 const RETURN_WHY = "TCC 0.9.27 miscompiles a struct of 9 to 15 bytes returned straight into a call (c/docs/style.md, Declarations)"
 
 -- A column-0 `static` line's function, as {type, name}, or nil when the line
@@ -296,28 +302,26 @@ end
 
 -- Every function the files return a value from, as {type, fn, path, line}:
 -- each column-0 `static` function, and the functions each `VEC_DEFINE` and
--- `MAP_DEFINE` line makes. A line marked `// struct return: ` is left out.
+-- `MAP_DEFINE` line makes.
 function returns_of(files)
   local found = {}
   for p in files do
     local n = 0
     for raw in lines(read(p)) do
       n = n + 1
-      if find(raw, "// struct return: ") == nil then
-        if starts_with(raw, "static ") then
-          local f = returned_by(raw)
-          if f ~= nil then push(found, {type = f.type, fn = f.name, path = p, line = n}) end
-        elseif starts_with(raw, "VEC_DEFINE(") or starts_with(raw, "MAP_DEFINE(") then
-          local m = re_find(raw, [=[^(VEC|MAP)_DEFINE\(\s*(\w+)\s*,\s*([^)]*\S)\s*\)]=])
-          if m == nil then fail(p .. ":" .. n .. ": a `_DEFINE(` line this check can't read: " .. raw) end
-          local name = m.groups[2]
-          push(found, {type = name, fn = name .. "_make", path = p, line = n})
-          if m.groups[1] == "VEC" then
-            push(found, {type = m.groups[3], fn = name .. "_pop", path = p, line = n})
-            push(found, {type = name .. "Items", fn = name .. "_items", path = p, line = n})
-          else
-            push(found, {type = m.groups[3], fn = name .. "_value_at", path = p, line = n})
-          end
+      if starts_with(raw, "static ") then
+        local f = returned_by(raw)
+        if f ~= nil then push(found, {type = f.type, fn = f.name, path = p, line = n}) end
+      elseif starts_with(raw, "VEC_DEFINE(") or starts_with(raw, "MAP_DEFINE(") then
+        local m = re_find(raw, [=[^(VEC|MAP)_DEFINE\(\s*(\w+)\s*,\s*([^)]*\S)\s*\)]=])
+        if m == nil then fail(p .. ":" .. n .. ": a `_DEFINE(` line this check can't read: " .. raw) end
+        local name = m.groups[2]
+        push(found, {type = name, fn = name .. "_make", path = p, line = n})
+        if m.groups[1] == "VEC" then
+          push(found, {type = m.groups[3], fn = name .. "_pop", path = p, line = n})
+          push(found, {type = name .. "Items", fn = name .. "_items", path = p, line = n})
+        else
+          push(found, {type = m.groups[3], fn = name .. "_value_at", path = p, line = n})
         end
       end
     end
@@ -462,6 +466,11 @@ end
 -- break {path, line, rule, text}, in `found`, beside how many functions and
 -- types were sized.
 function check_returns(files)
+  local judged = {}
+  for p in files do
+    if not starts_with(p, CANARIES) then push(judged, p) end
+  end
+  files = judged
   local rets = returns_of(files)
   local wanted = {}
   for r in rets do
@@ -570,7 +579,6 @@ static Twelve *twelve_at(Twelve *t) { return t; }
 static const Str NOT_A_FUNCTION = S("(");
 static void nothing(void) {}
 static STATUS_MUST_USE Status checked(void) { return OK; }
-static Twelve marked(void) { Twelve t = {0, 0, 0}; return t; } // struct return: a plant its marker lets through
 ]=])
   local got = {}
   for f in check_returns({rp}).found do push(got, f.line .. " " .. f.text) end

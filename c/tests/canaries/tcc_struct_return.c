@@ -1,7 +1,7 @@
 // tcc_struct_return.c: a canary for TCC 0.9.27's miscompile of a struct of 9
 // to 15 bytes returned straight into another call as its argument, `f(g())`.
 // c/docs/style.md ("Declarations") steers around it, and
-// c/check_discipline.shale holds the rule. The bug is known upstream, in
+// c/check_discipline.shale holds the rule everywhere but here. The bug is known upstream, in
 // tinycc-devel's thread "A double-to-float conversion bug" of July 2023
 // (https://lists.libreplanet.org/archive/html/tinycc-devel/2023-07/msg00027.html),
 // and grischka fixed it on TinyCC's mob branch on 2023-07-31, after 0.9.27.
@@ -41,7 +41,7 @@ static void inst_taken(void *e, Inst12 i, void *z) {
     seen_count++;
 }
 
-static Inst12 inst_made(uint16_t x) { // struct return: the canary's shape, on purpose
+static Inst12 inst_made(uint16_t x) {
     Inst12 i = {INST_SAVE, 0, x, 0};
     return i;
 }

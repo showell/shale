@@ -122,6 +122,10 @@ typedef struct {
 typedef struct {
     Pos pos;
     uint32_t depth;
+    // Makes it 16 bytes, not 12: TCC 0.9.27 miscompiles a 9-to-15-byte
+    // struct returned straight into a call, as `VmEnterVec_pop` returns one
+    // (style.md, "Declarations").
+    uint32_t pad;
 } VmEnter;
 
 typedef struct {
@@ -136,10 +140,7 @@ typedef struct {
 } CodeFunc;
 
 VEC_DEFINE(VmOpVec, VmOp)
-// VmEnter is 12 bytes, so VmEnterVec_pop is a return that TCC 0.9.27
-// miscompiles when it goes straight into a call (style.md, "Declarations").
-// Nothing pops an enter; code that does keeps the answer in a local first.
-VEC_DEFINE(VmEnterVec, VmEnter) // struct return: VmEnterVec_pop is never called
+VEC_DEFINE(VmEnterVec, VmEnter)
 VEC_DEFINE(IntVec, int64_t)
 VEC_DEFINE(PosVec, Pos)
 VEC_DEFINE(U32Vec, uint32_t)

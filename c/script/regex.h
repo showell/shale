@@ -65,10 +65,9 @@ typedef enum {
 } RegexOp;
 
 // Six bytes, as Zig's: `op` is a RegexOp held in a uint8_t, Zig's `enum(u8)`.
-// No function returns one by value: TCC 0.9.27 miscompiles a struct returned
-// so unless it is one or two 8-byte words (a 12-byte one, with a 4-byte enum
-// `op`, clobbered a uint16_t local of its caller), so `regex_emit` takes the
-// fields.
+// With a 4-byte enum `op` it would be 12, a size TCC 0.9.27 miscompiles when
+// a function returns it straight into a call (style.md, "Declarations").
+// `regex_emit` takes the fields.
 typedef struct {
     uint8_t op;
     uint8_t c;
