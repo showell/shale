@@ -1,7 +1,6 @@
-// prelude_index.h: a prelude's and a library's index by their lines, as Zig
-// Shale's src/script/parse.zig keeps it (`PreludeFunction`, `nextFunction`,
-// `indexAt`, `prelude_index`): where each `function name(` and each `const
-// NAME` begins, found from the start of its line without a parse, so that a
+// prelude_index.h: a prelude's and a library's index by their lines: where
+// each `function name(` and each `const NAME` begins, found from the start
+// of its line without a parse, so that a
 // function is parsed only at its first call. It parses nothing, and parse.h
 // includes it first.
 
@@ -33,8 +32,8 @@ SLICE_TYPE(Preludes, const Prelude);
 
 // ── the preludes' indexes ──
 
-// The next line from `*at` on that begins `function name(`, as Zig's
-// `nextFunction`; false at the end.
+// The next line from `*at` on that begins `function name(`; false at the
+// end.
 static inline bool parse_next_function(Str src, size_t *at_, uint32_t *line, PreludeFunction *out) {
     while (*at_ < src.len) {
         size_t start = *at_;

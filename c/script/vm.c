@@ -1,10 +1,9 @@
-// vm.c: runs a script's compiled ops (compile.h) on a run (run.h), Zig
-// Shale's src/script/vm.zig: the operand stack, the frames and a loop that
-// never recurses. An `attempt` is a frame marked with its answer: a stop that
-// is not a budget's unwinds to the innermost such frame, and the answer says
-// what it was. Here too are the builtins' table (Zig's builtins.zig `specs`)
-// and the copy a `yield` makes (collect.zig). A program includes it after
-// builtins.c and builtins_text.c.
+// vm.c: runs a script's compiled ops (compile.h) on a run (run.h): the
+// operand stack, the frames and a loop that never recurses. An `attempt` is
+// a frame marked with its answer: a stop that is not a budget's unwinds to
+// the innermost such frame, and the answer says what it was. Here too are
+// the builtins' table and the copy a `yield` makes. A program includes it
+// after builtins.c and builtins_text.c.
 
 // ── the builtins' table ──
 
@@ -218,9 +217,8 @@ static STATUS_MUST_USE Status copier_drain(Copier *c) {
     while (c->todo.len > 0) {
         Table *t = ValueVec_pop(&c->todo).as.table;
         Table *old = ValueVec_pop(&c->todo).as.table;
-        // A list keeps exactly its capacity, as Zig's
-        // `ensureTotalCapacityPrecise`:
-        // a list literal half built when an item's call yielded has reserved
+        // A list keeps exactly its capacity: a list literal half built when
+        // an item's call yielded has reserved
         // room for the rest, and the growth rule's half again would grow a
         // kept list at every yield.
         if (old->list.cap > 0) {
@@ -800,8 +798,8 @@ static STATUS_MUST_USE Status vm_run(Machine *m) {
     }
 }
 
-// The script's top level run whole, as Zig's `vm.main` and `Task.init` start
-// it: the consts first, then the main frame at the stack's foot.
+// The script's top level run whole: the consts first, then the main frame
+// at the stack's foot.
 static STATUS_MUST_USE Status vm_main(Run *r, const Code *code) {
     Pos at_main = r->program->main.pos;
     r->consts_len = r->program->const_names.len;

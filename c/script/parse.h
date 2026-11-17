@@ -1,16 +1,15 @@
-// parse.h: parses tokens into a `Program`, resolving names as it goes, as Zig
-// Shale's src/script/parse.zig does. Lua's constructs this language does not
-// take are refused by name, and the depth is held to the nesting budget so
-// that no source can run the parser off its stack. The preludes after the
-// core's (the Linux and git preludes, a repo's, a user's) and the libraries a
-// `use` names are indexed by their lines and each function parsed at its
-// first call. Every stop's class, place and text is Zig's.
+// parse.h: parses tokens into a `Program`, resolving names as it goes.
+// Lua's constructs this language does not take are refused by name, and the
+// depth is held to the nesting budget so that no source can run the parser
+// off its stack. The preludes after the core's (the Linux and git preludes,
+// a repo's, a user's) and the libraries a `use` names are indexed by their
+// lines and each function parsed at its first call.
 //
 // It is the parser's one header to include. Its pieces, in the order each
 // includes the one before: prelude_index.h (the preludes' indexes),
 // parse_state.h (the parser and its primitives), parse_stmt.h (statements
 // and functions), parse_expr.h (expressions) and parse_library.h (the
-// preludes' checks and `use`). Here is `parse_program`, Zig's `parse`.
+// preludes' checks and `use`). Here is `parse_program`.
 
 #ifndef SHALE_PARSE_H
 #define SHALE_PARSE_H

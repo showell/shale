@@ -1,5 +1,5 @@
-// builtins_walk.c: the store's `walk`, Zig Shale's
-// src/script/builtins_walk.zig: every entry under a folder, depth first, each
+// builtins_walk.c: the store's `walk`: every entry under a folder, depth
+// first, each
 // folder's names sorted and a folder before what it holds, a part at a time,
 // each part resumed after the path the last one ended at. The walk keeps its
 // own stack of folders, so a tree's depth is the store's to choose, never the
@@ -18,7 +18,7 @@ typedef struct {
 
 VEC_DEFINE(WalkLevels, WalkLevel)
 
-// What `walk`'s second argument asks, Zig's `WalkOptions`: how deep, which
+// What `walk`'s second argument asks: how deep, which
 // entries (`like`, `kind`), what to pass over (`skip`), where an earlier part
 // ended (`after`), and the reads to leave in the budget (`keep_reads`).
 typedef struct {
@@ -66,7 +66,7 @@ static uint64_t walk_reads_left(const Run *r) {
     return run_sat_sub(r->ctx.budgets.reads, r->reads);
 }
 
-// `a + b`, at most UINT64_MAX: Zig's `+|`.
+// `a + b`, at most UINT64_MAX.
 static uint64_t walk_sat_add(uint64_t a, uint64_t b) {
     return a > UINT64_MAX - b ? UINT64_MAX : a + b;
 }
@@ -133,7 +133,7 @@ static STATUS_MUST_USE Status walk_more(Run *r, Pos pos, Str path, Value *out) {
     return OK;
 }
 
-// Puts the walk back where `after` left it, Zig's `walkResume`: each folder
+// Puts the walk back where `after` left it: each folder
 // on `after`'s path listed again and set at the first name past `after`'s
 // part, so a walk in parts takes each entry once whatever came or went in
 // between. "" or the walk's own path is the start.

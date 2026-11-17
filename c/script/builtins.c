@@ -1,9 +1,7 @@
 // builtins.c: the builtins that need no host, but text's and regular
-// expressions' (builtins_text.c): the argument helpers every builtin shares
-// (Zig's src/script/builtins.zig), lists and maps (builtins_lists.zig),
-// numbers (builtins_numbers.zig), time and the run (builtins_time.zig) and
-// formatting (builtins_format.zig). Each charges steps where Zig's does, and
-// every message is Zig's text.
+// expressions' (builtins_text.c): the argument helpers every builtin shares,
+// lists and maps, numbers, time and the run, and formatting. Each one's step
+// charges and messages are part of the frozen surface (docs/SURFACE.txt).
 //
 // A program includes it after run.h; vm.c holds the table that calls them.
 
@@ -13,7 +11,7 @@ static Str builtin_name(Builtin b) {
     return at(ast_builtin_names(), (size_t)b);
 }
 
-// The name a stop gives builtin `b`, Zig's `nameOf`: the host call running
+// The name a stop gives builtin `b`: the host call running
 // where `b` is `host`, so a check the host's code meets names what the
 // script called.
 static Str builtin_who(const Run *r, Builtin b) {
@@ -133,7 +131,7 @@ static STATUS_MUST_USE Status bi_reverse(Run *r, Pos pos, ConstValues args, Valu
 
 enum { BUILTIN_SAME_DEPTH_MOST = 200 };
 
-// Whether two values are the same all the way down: Zig's `sameAt`.
+// Whether two values are the same all the way down.
 static STATUS_MUST_USE Status builtin_same_at(Run *r, Pos pos, const Value *a, const Value *b, size_t depth, bool *out) {
     if (depth == BUILTIN_SAME_DEPTH_MOST) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`same`: tables nested more than 200 deep (does one hold itself?)"));
     TRY(run_charge(r, pos, 1));
@@ -283,8 +281,7 @@ static STATUS_MUST_USE Status bi_count(Run *r, Pos pos, ConstValues args, Value 
 
 // ── sorting ──
 
-// The most a sort of `n` items, `bytes` of them in all, can cost: Zig's
-// `sortBound`.
+// The most a sort of `n` items, `bytes` of them in all, can cost.
 static uint64_t builtin_sort_bound(size_t n, uint64_t bytes) {
     if (n < 2) return 1;
     uint64_t lg = 0;
@@ -425,7 +422,7 @@ static STATUS_MUST_USE Status builtin_sort_keys(Run *r, Pos pos, const Value *ke
 }
 
 // A list of maps sorted in place by its keys, stably: rows equal in every key
-// keep their order, also when descending. Zig's `sortByKeys`.
+// keep their order, also when descending.
 static STATUS_MUST_USE Status builtin_sort_by_keys(Run *r, Pos pos, Table *t, const Value *keys_arg, bool desc) {
     SortKey keys_buf[BUILTIN_SORT_KEYS_MOST];
     size_t n_keys = 0;
@@ -577,7 +574,7 @@ static STATUS_MUST_USE Status bi_fail(Run *r, Pos pos, ConstValues args, Value *
     return run_fail(&r->ctx, pos, CLASS_FAIL, msg);
 }
 
-// The host's call `name` with the rest of the arguments, Zig's `hostCall`:
+// The host's call `name` with the rest of the arguments:
 // its name is what the stops in its checks give, until it returns. Where
 // there is no host (metal), a stop of class `host` naming the call.
 static STATUS_MUST_USE Status bi_host(Run *r, Pos pos, ConstValues args, Value *out) {
@@ -771,7 +768,7 @@ static bool builtin_digits_at(Str s, size_t from, size_t n, int64_t *out) {
 }
 
 // The seconds since the epoch of an RFC 3339 time, or of a date alone (its
-// midnight UTC): Zig's `parseTime`.
+// midnight UTC).
 static bool builtin_parse_time(Str s, int64_t *out) {
     int64_t y = 0;
     int64_t m = 0;
@@ -856,7 +853,8 @@ static STATUS_MUST_USE Status bi_human(Run *r, Pos pos, ConstValues args, Value 
     size_t u = 1;
     while (u + 1 < units.len && mag >= ((uint64_t)1 << (10 * (u + 1)))) u++;
     uint64_t unit = (uint64_t)1 << (10 * u);
-    // Zig's `(mag * 10 + unit / 2) / unit` in 128 bits, split so 64 hold it.
+    // `(mag * 10 + unit / 2) / unit`, the tenths rounded half up, split so
+    // 64 bits hold it.
     uint64_t tenths = mag / unit * 10 + (mag % unit * 10 + unit / 2) / unit;
     // 1023.95 KiB rounds to 1024.0; carry to 1.0 MiB.
     if (tenths >= 10240 && u + 1 < units.len) {

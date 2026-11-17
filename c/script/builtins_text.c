@@ -1,13 +1,12 @@
-// builtins_text.c: the text builtins (Zig's src/script/builtins_text.zig):
-// splitting and joining, searching, slicing and replacing, `like` and
-// `match_path` globs, and reading integers; and the regular-expression
-// builtins over regex.c (builtins_regex.zig). Every search is for plain text
-// but the `re_` ones', and each charges a step per byte it examines, where
-// Zig's does. A program includes it after builtins.c.
+// builtins_text.c: the text builtins: splitting and joining, searching,
+// slicing and replacing, `like` and `match_path` globs, and reading
+// integers; and the regular-expression builtins over regex.c. Every search
+// is for plain text but the `re_` ones'. A program includes it after
+// builtins.c.
 
 // ── searching ──
 
-// Searches for a needle, charging the work as it is done: Zig's `Finder`. The
+// Searches for a needle, charging the work as it is done. The
 // caller charges the haystack, a step per 16 bytes, for the fast pass over the
 // needle's first byte. Each place that pass stops costs a step more, and the
 // bytes compared there a step per 16, each batch of compares charged when it
@@ -228,7 +227,8 @@ static STATUS_MUST_USE Status bi_find(Run *r, Pos pos, ConstValues args, Value *
     return OK;
 }
 
-// Zig's `utf8ByteSequenceLength`: 0 for a byte no sequence starts with.
+// The length of the UTF-8 sequence that starts with `c`: 0 for a byte no
+// sequence starts with.
 static size_t builtin_utf8_length(uint8_t c) {
     if (c < 0x80) return 1;
     if ((c & 0xE0) == 0xC0) return 2;
@@ -237,7 +237,7 @@ static size_t builtin_utf8_length(uint8_t c) {
     return 0;
 }
 
-// Zig's `utf8Decode` of a sequence of its length: whether it is valid, not
+// Whether a sequence of its length is valid UTF-8: not
 // overlong, no surrogate half and at most U+10FFFF.
 static bool builtin_utf8_valid(Str seq) {
     uint32_t v = str_byte(seq, 0);
@@ -643,7 +643,8 @@ static STATUS_MUST_USE Status bi_match_path(Run *r, Pos pos, ConstValues args, V
     if (!builtin_split_parts(subject, ps, &np)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`match_path`: a path of more than 64 parts"));
     if (!builtin_split_parts(pattern, qs, &nq)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`match_path`: a pattern of more than 64 parts"));
     TRY(run_charge(r, pos, subject.len + pattern.len));
-    // `can[j]`: whether the pattern's first parts so far match the path's first j.
+    // `can[j]`: whether the pattern's first parts so far match the path's
+    // first j.
     bool can_buf[BUILTIN_PATH_PARTS_MOST + 1];
     bool next_buf[BUILTIN_PATH_PARTS_MOST + 1];
     Reach can = {can_buf, BUILTIN_PATH_PARTS_MOST + 1};
@@ -673,7 +674,8 @@ static STATUS_MUST_USE Status bi_match_path(Run *r, Pos pos, ConstValues args, V
 // ── regular expressions ──
 
 // The pattern's compiled program from the run's cache, compiled and cached if
-// absent, at a step a byte (and a byte more to fold case). `who` names the call.
+// absent, at a step a byte (and a byte more to fold case). `who` names the
+// call.
 static STATUS_MUST_USE Status builtin_program(Run *r, Pos pos, Str who, Str pattern, RegexOptions options, RegexCached **out) {
     RegexCached *got = regex_cache_get(&r->patterns, pattern, options);
     if (got != NULL) {
@@ -701,7 +703,8 @@ static STATUS_MUST_USE Status builtin_flag_option(Run *r, Pos pos, Str who, Str 
     return run_failf(r, pos, CLASS_TYPE, "`{s}`: its `{s}` must be true or false, not {s}", S("`"), who, S("`: its `"), name, S("` must be true or false, not "), value_type_name(x));
 }
 
-// The options map a call may end with: `{nocase = true}`, and `re_find`'s `from`.
+// The options map a call may end with: `{nocase = true}`, and `re_find`'s
+// `from`.
 static STATUS_MUST_USE Status builtin_regex_options(Run *r, Pos pos, Builtin b, ConstValues args, RegexOptions *o) {
     o->nocase = false;
     size_t k = b == BUILTIN_RE_REPLACE ? 3 : 2;
@@ -713,7 +716,8 @@ static STATUS_MUST_USE Status builtin_regex_options(Run *r, Pos pos, Builtin b, 
         Value x = ValueMap_value_at(&m->map, i);
         if (b == BUILTIN_RE_FIND && str_eq(key, S("from"))) continue;
         if (!str_eq(key, S("nocase"))) {
-            // `re_find_all` was the prelude's, whose `opts_only` said it so.
+            // `re_find_all`'s stop has `opts_only`'s class (a fail) and
+            // wording, unlike the other regex builtins'.
             if (b == BUILTIN_RE_FIND_ALL) return run_failf(r, pos, CLASS_FAIL, "`re_find_all` takes `nocase`, not `{s}`", S("`re_find_all` takes `nocase`, not `"), key, S("`"));
             return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes `{s}`, not `{s}`", S("`"), builtin_name(b), b == BUILTIN_RE_FIND ? S("` takes `nocase` or `from`, not `") : S("` takes `nocase`, not `"), key, S("`"));
         }

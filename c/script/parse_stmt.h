@@ -1,8 +1,6 @@
-// parse_stmt.h: statements and blocks, and the functions they declare, as
-// Zig Shale's src/script/parse.zig's `block`, `statement`, `ifStatement`,
-// `forStatement`, `function` and `loadPrelude` do: a prelude's function is
-// parsed at its first call, from its own line. Each production puts the
-// parser's state back on every way out, as Zig's `defer`s do. Its calls into
+// parse_stmt.h: statements and blocks, and the functions they declare: a
+// prelude's function is parsed at its first call, from its own line. Each
+// production puts the parser's state back on every way out. Its calls into
 // expressions and `use` are declared here and defined in parse_expr.h and
 // parse_library.h, which parse.h includes after it.
 
@@ -311,8 +309,7 @@ static inline STATUS_MUST_USE Status parse_block_body(Parser *p, size_t from, St
 }
 
 // Statements up to the end of a block, in a scope of their own. Its scope,
-// its statements' stack and its level are put back on every way out, as
-// Zig's `defer`s do.
+// its statements' stack and its level are put back on every way out.
 static inline STATUS_MUST_USE Status parse_block(Parser *p, Stmts *out) {
     TRY(parse_enter(p));
     p->frame.depth++;
@@ -372,7 +369,7 @@ static inline STATUS_MUST_USE Status parse_function_named(Parser *p, Str name, u
 }
 
 // A function index the parse's own index says is there; a miss is a bug in
-// the C (Zig's `.?` on null).
+// the C, and aborts.
 static inline size_t parse_index_sure(PreludeFunctions index, Str name) {
     int32_t i = parse_index_at(index, name);
     if (i < 0) {
@@ -492,7 +489,7 @@ static inline STATUS_MUST_USE Status parse_function(Parser *p, Pos pos) {
     p->frame.locals = ParseLocalVec_make(p->arena);
     p->in_function = true;
     Status s = parse_function_body(p, index);
-    // The caller's frame, put back on every way out, as Zig's `defer`.
+    // The caller's frame, put back on every way out.
     p->frame = saved;
     p->in_function = saved_in_function;
     p->script_frame = saved_script_frame;
@@ -519,7 +516,7 @@ static inline STATUS_MUST_USE Status parse_load_prelude(Parser *p, size_t k, siz
     p->nesting = 0;
     Status s = parse_advance(p);
     if (s == OK) s = parse_function(p, parse_here(p));
-    // The script's place, put back on every way out, as Zig's `defer`.
+    // The script's place, put back on every way out.
     p->lexer = saved_lexer;
     p->tok = saved_tok;
     p->has_ahead = saved_has_ahead;

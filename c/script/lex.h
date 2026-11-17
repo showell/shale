@@ -1,7 +1,6 @@
 // lex.h: turns source into Lua's tokens, and refuses by name each of Lua's
 // that this language does not take: a long string without a level, floats,
-// `/`, `:`, `...`, bitwise operators, `goto`, `repeat`. It is Zig Shale's
-// src/script/lex.zig, and every message is its text, byte for byte.
+// `/`, `:`, `...`, bitwise operators, `goto`, `repeat`.
 
 #ifndef SHALE_LEX_H
 #define SHALE_LEX_H
@@ -105,7 +104,7 @@ typedef struct {
     // Where a string's bytes and a message are made.
     Arena *arena;
     LexError err;
-    // The arena refused: the caller reads it as Zig's `error.OutOfMemory`.
+    // The arena refused: the caller reads it as running out of memory.
     bool oom;
 } Lexer;
 
@@ -171,7 +170,7 @@ static inline bool lex_is_digit(uint8_t c) {
     return c >= '0' && c <= '9';
 }
 
-// Zig's `std.ascii.isPrint`: a space through `~`.
+// Whether `c` prints: a space through `~`.
 static inline bool lex_is_print(uint8_t c) {
     return c >= 0x20 && c <= 0x7e;
 }
@@ -226,7 +225,7 @@ static inline bool lex_at_comment(const Lexer *lx) {
 }
 
 // A bracket, `level` `=`s, then the bracket again: `]==]` or `[==[`, as much
-// as fits in `cap` bytes, as Zig's `closerText` and `openerText` cut it.
+// as fits in `cap` bytes.
 static inline STATUS_MUST_USE Status lex_brackets(Buf *b, char bracket, uint32_t level, size_t cap) {
     size_t n = level < cap - 2 ? level : cap - 2;
     TRY(buf_byte(b, bracket));
@@ -234,7 +233,7 @@ static inline STATUS_MUST_USE Status lex_brackets(Buf *b, char bracket, uint32_t
     return buf_byte(b, bracket);
 }
 
-// A long string's closer at `level`, cut to Zig's buffer of `cap` bytes.
+// A long string's closer at `level`, cut to `cap` bytes.
 static inline STATUS_MUST_USE Status lex_closer_text(Buf *b, uint32_t level, size_t cap) {
     return lex_brackets(b, ']', level, cap);
 }
@@ -360,8 +359,8 @@ static inline STATUS_MUST_USE Status lex_number(Lexer *lx, uint32_t line, uint32
         out->value = (int64_t)v;
         return OK;
     }
-    // Zig's `parseInt` fails on the smallest integer's magnitude; only its
-    // exact spelling, with no leading zero, is taken as it.
+    // The smallest integer's magnitude is past INT64_MAX; only its exact
+    // spelling, with no leading zero, is taken, for a `-` to negate.
     if (str_eq(text, S("9223372036854775808"))) {
         out->value = INT64_MIN;
         out->min_magnitude = true;
@@ -424,7 +423,7 @@ static inline STATUS_MUST_USE Status lex_string(Lexer *lx, uint32_t line, uint32
 }
 
 // A byte no token starts with, as the message shows it: quoted when it prints,
-// as `\xHH` when not. Zig's `shown` falls back to "" when memory runs out.
+// as `\xHH` when not.
 static inline STATUS_MUST_USE Status lex_fail_stray(Lexer *lx, uint32_t line, uint32_t column, uint8_t c) {
     static const char hex[] = "0123456789ABCDEF";
     Str digits = {hex, 16};

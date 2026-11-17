@@ -1,4 +1,4 @@
-// value.h: a script's values, Zig Shale's src/script/value.zig: nil, booleans,
+// value.h: a script's values: nil, booleans,
 // 64-bit integers, byte strings, and tables, each a list or a map once it has
 // an entry. A string is never changed once made. A table is shared by
 // reference, so it has no identity beyond its pointer. Everything a value
@@ -84,7 +84,7 @@ static inline bool value_truthy(const Value *v) {
     return true;
 }
 
-// The value's type as a message names it: Zig's `typeName`.
+// The value's type as a message names it.
 static inline Str value_type_name(const Value *v) {
     switch (v->tag) {
     case VALUE_NIL: return S("nil");

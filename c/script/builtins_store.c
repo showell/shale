@@ -1,16 +1,15 @@
-// builtins_store.c: the store's builtins that look and read, Zig Shale's
-// src/script/builtins_store.zig (`ls`, `stat`, `exists`, `is_dir` and what
-// every store builtin shares: a path confined, a store failure's stop, a read
-// counted) and builtins_read.zig (a file whole or in parts, its lines, the
-// lines holding a literal, and scans that count or find without holding the
-// file). Every path goes through path_run.c's `path_arg`, every read is
-// counted against the read budgets where Zig counts it, and every message is
-// Zig's. The walk is builtins_walk.c, the changes builtins_change.c.
+// builtins_store.c: the store's builtins that look and read: `ls`, `stat`,
+// `exists`, `is_dir` and what every store builtin shares (a path confined, a
+// store failure's stop, a read counted), and the reads (a file whole or in
+// parts, its lines, the lines holding a literal, and scans that count or
+// find without holding the file). Every path goes through path_run.c's
+// `path_arg`, and every read is counted against the read budgets. The walk
+// is builtins_walk.c, the changes builtins_change.c.
 //
 // A program includes store.c and path_run.c, then this after builtins.c and
 // builtins_text.c.
 
-// One change the script attempted, in order, Zig's `interp.Effect`: the
+// One change the script attempted, in order: the
 // builtin's name, the script's path, and "ok" or the store's error.
 typedef struct {
     Str op;
@@ -80,26 +79,25 @@ static RunStore *builtin_store_of(Run *r) {
     return r->store;
 }
 
-// The run's step charge as path_run.c takes it, Zig's `Run.charge`.
+// The run's step charge as path_run.c takes it.
 static STATUS_MUST_USE Status builtin_path_charge(void *vm, RunCtx *ctx, Pos pos, uint64_t n) {
     (void)ctx;
     return run_charge(vm, pos, n);
 }
 
-// `v`, the path builtin `b` was given, confined: Zig's `pathArg`, its string
-// checked first.
+// `v`, the path builtin `b` was given, confined, its string checked first.
 static STATUS_MUST_USE Status builtin_path(Run *r, Pos pos, Builtin b, const Value *v, bool allow_root, StorePath *out) {
     Str given = {0};
     TRY(builtin_string_arg(r, pos, b, v, S("its path"), &given));
     return path_arg(&builtin_store_of(r)->path, pos, builtin_who(r, b), given, allow_root, out);
 }
 
-// Zig's `storeFailed`: the stop for builtin `b`'s store call on `rel`.
+// The stop for builtin `b`'s store call on `rel`.
 static STATUS_MUST_USE Status builtin_store_failed(Run *r, Pos pos, Builtin b, Str rel, StoreErr e) {
     return path_store_failed(&builtin_store_of(r)->path, pos, builtin_who(r, b), rel, e);
 }
 
-// Zig's `countRead`: one store read, against the reads budget.
+// One store read, against the reads budget.
 static STATUS_MUST_USE Status builtin_count_read(Run *r, Pos pos) {
     if (r->reads >= r->ctx.budgets.reads) return run_budget_stop(&r->ctx, pos, BUDGET_READS);
     r->reads++;
@@ -120,7 +118,7 @@ static STATUS_MUST_USE Status builtin_stat_or_null(Run *r, Pos pos, Builtin b, c
     return OK;
 }
 
-// Whether `a` sorts before `b` by their bytes, Zig's `std.mem.lessThan`.
+// Whether `a` sorts before `b` by their bytes, a prefix first.
 static bool builtin_bytes_less(Str a, Str b) {
     size_t n = a.len < b.len ? a.len : b.len;
     int c = n > 0 ? memcmp(a.ptr, b.ptr, n) : 0;
@@ -134,9 +132,9 @@ static int builtin_entry_order(const void *x, const void *y) {
     return builtin_bytes_less(b->name, a->name) ? 1 : 0;
 }
 
-// A folder's entries sorted by name, Zig's `sortedEntries`, charged as `ls`
-// is: a step an entry and the sort's bound. The caller counts the read. A
-// folder's names are distinct, so any sort gives Zig's order.
+// A folder's entries sorted by name, charged as `ls` is: a step an entry and
+// the sort's bound. The caller counts the read. A folder's names are
+// distinct, so qsort, which is not stable, gives the one order there is.
 static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b, Str full, Str rel, StoreEntries *out) {
     RunStore *rs = builtin_store_of(r);
     StoreErr e = rs->store.list(rs->store.ctx, r->ctx.values, full, out);
@@ -215,7 +213,7 @@ static STATUS_MUST_USE Status bi_is_dir(Run *r, Pos pos, ConstValues args, Value
 
 // ── reading files ──
 
-// The size of the file at `p`, Zig's `fileSize`: a stop when it is missing
+// The size of the file at `p`: a stop when it is missing
 // or not a file. One store call, counted as part of the read.
 static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t *size) {
     bool found = false;
@@ -228,7 +226,7 @@ static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, cons
 }
 
 // `n` bytes from `offset` (to the end when `!has_n`) of a file whose size is
-// known, Zig's `readSized`: "" at or past the end; at most the call-bytes cap
+// known: "" at or past the end; at most the call-bytes cap
 // and what the read-bytes budget has left; the bytes read charged a step per
 // 16.
 static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t offset, bool has_n, uint64_t n, Str *out) {
@@ -340,7 +338,7 @@ static uint64_t builtin_min_u64(uint64_t a, uint64_t b) {
 
 // `read_lines(p[, offset[, n]])`: whole lines from the byte `offset`, at
 // least `n` bytes (64 KiB unset) and on to the end of the line it stops in,
-// as `{lines, next, done}`. Zig's `readLines`.
+// as `{lines, next, done}`.
 static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_READ_LINES;
     StorePath p;
@@ -433,7 +431,7 @@ static uint64_t builtin_newlines(Str s) {
 
 // `grep(p, s)`: the lines of the file holding the literal `s`, as
 // `{line, text}`, each line once. The file is read whole, at most the
-// call-bytes cap. Zig's `grepFile`.
+// call-bytes cap.
 static STATUS_MUST_USE Status bi_grep(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_GREP;
     StorePath p;
@@ -485,7 +483,7 @@ static STATUS_MUST_USE Status bi_grep(Run *r, Pos pos, ConstValues args, Value *
 
 // `line_at(p, offset)`: the whole line holding byte `offset`, without its
 // newline, or nil at or past the end; read backward and forward a piece at a
-// time, the line at most the call-bytes cap. Zig's `lineAt`.
+// time, the line at most the call-bytes cap.
 static STATUS_MUST_USE Status bi_line_at(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_LINE_AT;
     StorePath p;
@@ -554,7 +552,7 @@ typedef struct {
     bool to_end;
 } Scanned;
 
-// The range a scan's last arguments ask, Zig's `rangeArgs`.
+// The range a scan's last arguments ask.
 static STATUS_MUST_USE Status builtin_range_args(Run *r, Pos pos, Builtin b, ConstValues args, size_t from, ScanRange *out) {
     memset(out, 0, sizeof *out);
     if (args.len <= from) return OK;
@@ -568,8 +566,8 @@ static STATUS_MUST_USE Status builtin_range_args(Run *r, Pos pos, Builtin b, Con
 
 // Reads the file BUILTIN_SCAN_CHUNK bytes at a time into one reused buffer,
 // counting `needle`'s non-overlapping matches that start in `range`, or
-// stopping at the first (`first_only`), across the chunks' edges. Zig's
-// `scan`: one store read a call, every byte counted against the read budget
+// stopping at the first (`first_only`), across the chunks' edges: one store
+// read a call, every byte counted against the read budget
 // and charged.
 static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const StorePath *p, Str needle, bool first_only, ScanRange range, Scanned *res) {
     TRY(builtin_count_read(r, pos));
