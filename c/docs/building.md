@@ -60,6 +60,24 @@ tier's checks of wall time hold
 under `nice` and a busy box: a program that burns CPU is held to its
 CPU time, and only programs that wait are held to their wall time.
 
+**The test files that run sources share one binary.** c/tests/ran.c
+includes every module of c/script and c/host, so a test file that includes
+it is a compile of the whole interpreter, about 23 s of CPU at -O2 and 11 s
+under ASan on this box. test_vm.c, store/test_builtins.c,
+host_builtins/test_host_run.c and text/test_host_text.c are parts of one
+binary instead, c/tests/ran_tests.c (`TEST_PART` and `TEST_PARTS_MAIN`,
+test.h): each build compiles the interpreter once for all four, not once a
+file, which took about 90 s of CPU out of the full tier. The binary prints
+each part's count in a line of its own, as the file alone did, and
+c/build/ran.shale holds each line to that part's `TEST(` lines
+(`said_by`, lib.shale), holds every part to exactly one binary of
+`TEST_BINARIES`, and in the full tier runs `TEST_ONLY` across parts on the
+ASan binary. A part's plants stay in its own block and name the part as
+`caught_by`; `plant_copy` builds the part's binary and holds the aim to the
+part's own tests. A new test file that includes ran.c is a part too: end it
+with `TEST_PART`, include it from ran_tests.c and add it to
+`TEST_PARTS_MAIN`.
+
 When the full tier passes 90 seconds, stop and propose ways to cut it,
 ranked by what they'd save, before adding more to it.
 

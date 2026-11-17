@@ -172,6 +172,10 @@ and its self-test plants a break of each one.
   every case. A case that's left out is an unused static function, so GCC
   refuses it.
 - `c/build.shale` holds each file's printed count to its `TEST(` lines.
+- A test file that includes `c/tests/ran.c`, the whole interpreter, is a
+  part of `c/tests/ran_tests.c` instead of a binary of its own: it ends
+  with `TEST_PART(name, ...)`, and the binary prints each part's count in a
+  line of its own (`c/docs/building.md`).
 - A test asserts every side: what changed, what didn't, and what was
   refused.
 - `TEST_ONLY=a,b` runs only the cases it names; a name no case has fails
