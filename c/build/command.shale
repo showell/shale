@@ -80,7 +80,8 @@ end
 -- The C `shale` under `build`: its `--help` and `-h` held to Zig's, byte for
 -- byte, from a checkout that holds the docs and from a folder that does not,
 -- over mounts of every kind (a secrets mount's folder never shown) and over a
--- mounts file that does not read; and its `--version` to its build's mode.
+-- mounts file that is missing (a parse error's words are mounts.c's tests'
+-- to hold); and its `--version` to its build's mode.
 function check_help(t, build, zig)
   local dir = OUT .. "/command/help"
   if exists(dir) then remove_tree(dir) end
@@ -89,7 +90,6 @@ function check_help(t, build, zig)
   local d = real(dir)
   create(dir .. "/all.mounts", "plain = " .. d .. "/plain\nlib = " .. d .. "/lib/ ro\ntc = " .. d .. "/tc ro tools\nkeys = " .. d .. "/fake-keys-7q2x secrets\n")
   create(dir .. "/none.mounts", "")
-  create(dir .. "/bad.mounts", "plain = relative/path\n")
   local c_bin = real(OUT .. "/" .. build .. "/shale")
   local cases = {
     {place = "/in", mounts = "all", argv = {"--help"}},
