@@ -399,16 +399,21 @@ static ConstValues vm_args(Machine *m, size_t n) {
     return top;
 }
 
-// The walker's enters before an op's work: a step each, the steps budget and
-// then the depth budget checked at each node; all at once when the run fits.
-static STATUS_MUST_USE Status vm_enters(Machine *m, const VmOp *op) {
+// A function the compiler keeps out of the loop that calls it: an op's cold
+// work (a call, a print, a builtin), whose locals and saved registers would
+// otherwise weigh on every op. TCC takes no such attribute, and needs none.
+#if defined(__GNUC__) && !defined(__TINYC__)
+#define VM_COLD __attribute__((noinline))
+#else
+#define VM_COLD
+#endif
+
+// The enters one at a time, when the run may not fit them all: each node's
+// step, then its depth, checked in the walker's order.
+static VM_COLD STATUS_MUST_USE Status vm_enters_each(Machine *m, const VmOp *op) {
     Run *r = m->r;
     uint32_t walk = m->walk;
     const Budgets *b = &r->ctx.budgets;
-    if (op->enters <= run_sat_sub(b->steps, r->steps) && (uint64_t)walk + op->deepest < b->depth) {
-        r->steps += op->enters;
-        return OK;
-    }
     for (uint32_t k = op->enter; k < op->enter + op->enters; k++) {
         const VmEnter *e = &at(m->code->enters, k);
         r->steps++;
@@ -416,6 +421,18 @@ static STATUS_MUST_USE Status vm_enters(Machine *m, const VmOp *op) {
         if ((uint64_t)walk + e->depth >= b->depth) return run_budget_stop(&r->ctx, e->pos, BUDGET_DEPTH);
     }
     return OK;
+}
+
+// The walker's enters before an op's work: a step each, the steps budget and
+// then the depth budget checked at each node; all at once when the run fits.
+static inline STATUS_MUST_USE Status vm_enters(Machine *m, const VmOp *op) {
+    Run *r = m->r;
+    const Budgets *b = &r->ctx.budgets;
+    if (op->enters <= run_sat_sub(b->steps, r->steps) && (uint64_t)m->walk + op->deepest < b->depth) {
+        r->steps += op->enters;
+        return OK;
+    }
+    return vm_enters_each(m, op);
 }
 
 // A frame for `func`, its `argc` arguments taken off the operand stack. Its
@@ -550,7 +567,7 @@ static STATUS_MUST_USE Status vm_binary(Machine *m, const VmOp *op) {
     return vm_push(m, op->pos, &out);
 }
 
-static STATUS_MUST_USE Status vm_print(Machine *m, const VmOp *op) {
+static VM_COLD STATUS_MUST_USE Status vm_print(Machine *m, const VmOp *op) {
     Run *r = m->r;
     ConstValues vals = vm_args(m, op->a);
     Positions places = {m->code->positions.ptr, m->code->positions.len};
@@ -567,64 +584,13 @@ static STATUS_MUST_USE Status vm_print(Machine *m, const VmOp *op) {
     return vm_push_nil(m, op->pos);
 }
 
-// Runs one op; `*done` set when the top level ended.
-static STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *done) {
+// Runs one of the ops vm_run leaves to it, those whose work is rare or heavy
+// (a table made, a call, a builtin, a print); `*done` set when the top level
+// ended. It reads and sets `m->pc`, which vm_run keeps in step around it.
+static VM_COLD STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *done) {
     Run *r = m->r;
     const Code *code = m->code;
     switch (op->tag) {
-    case OP_NOP: return OK;
-    case OP_PUSH_NIL: return vm_push_nil(m, op->pos);
-    case OP_PUSH_BOOL: {
-        Value v;
-        value_bool(&v, op->a != 0);
-        return vm_push(m, op->pos, &v);
-    }
-    case OP_PUSH_INT: {
-        Value v;
-        value_int(&v, at(code->ints, op->a));
-        return vm_push(m, op->pos, &v);
-    }
-    case OP_PUSH_STRING: {
-        Value v;
-        value_string(&v, at(code->strings, op->a));
-        return vm_push(m, op->pos, &v);
-    }
-    case OP_PUSH_LOCAL: {
-        Value v = *vm_slot(m, op->a);
-        return vm_push(m, op->pos, &v);
-    }
-    case OP_PUSH_CONST: {
-        // Set before it is read: the parser shows a const only below its line.
-        Values consts = {r->consts, r->consts_len};
-        Value v = at(consts, op->a);
-        return vm_push(m, op->pos, &v);
-    }
-    case OP_POP:
-        (void)vm_pop(m);
-        return OK;
-    case OP_STORE_LOCAL:
-        *vm_slot(m, op->a) = vm_pop(m);
-        return OK;
-    case OP_STORE_CONST: {
-        Value v = vm_pop(m);
-        *vm_slot(m, op->a) = v;
-        Values consts = {r->consts, r->consts_len};
-        at(consts, op->b) = v;
-        return OK;
-    }
-    case OP_INDEX_GET: {
-        Value key = vm_pop(m);
-        Value obj = vm_pop(m);
-        Value v;
-        TRY(run_get_index(r, op->pos, &obj, &key, &v));
-        return vm_push(m, op->pos, &v);
-    }
-    case OP_INDEX_SET: {
-        Value key = vm_pop(m);
-        Value obj = vm_pop(m);
-        Value v = vm_pop(m);
-        return run_set_index(r, op->pos, &obj, &key, &v);
-    }
     case OP_NEW_TABLE:
     case OP_LIST_BEGIN:
     case OP_MAP_BEGIN: {
@@ -658,7 +624,6 @@ static STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *done) {
         TRY(run_unary(r, op->pos, (UnOp)op->a, &v, &out));
         return vm_push(m, op->pos, &out);
     }
-    case OP_BINARY: return vm_binary(m, op);
     case OP_CONCAT: {
         ConstValues parts = vm_args(m, op->a);
         Positions all = {code->positions.ptr, code->positions.len};
@@ -667,24 +632,6 @@ static STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *done) {
         TRY(run_join_chain(r, op->pos, parts, places, &v));
         m->operands.len -= op->a;
         return vm_push(m, op->pos, &v);
-    }
-    case OP_JUMP:
-        m->pc = op->a;
-        return OK;
-    case OP_JUMP_FALSE: {
-        Value v = vm_pop(m);
-        if (!value_truthy(&v)) m->pc = op->a;
-        return OK;
-    }
-    case OP_AND_JUMP:
-    case OP_OR_JUMP: {
-        bool truthy = value_truthy(vm_top(m));
-        if (truthy == (op->tag == OP_OR_JUMP)) {
-            m->pc = op->a;
-        } else {
-            (void)vm_pop(m);
-        }
-        return OK;
     }
     case OP_BUILTIN: {
         ConstValues args = vm_args(m, op->b);
@@ -730,31 +677,6 @@ static STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *done) {
         value_int(vm_slot(m, op->a + 2), step);
         return OK;
     }
-    case OP_FOR_NUM_ITER: {
-        int64_t i = vm_slot(m, op->a)->as.integer;
-        int64_t to = vm_slot(m, op->a + 1)->as.integer;
-        int64_t step = vm_slot(m, op->a + 2)->as.integer;
-        if (!(step > 0 ? i <= to : i >= to)) {
-            m->pc = op->b;
-            return OK;
-        }
-        TRY(run_charge(r, op->pos, 1));
-        value_int(vm_slot(m, op->c), i);
-        return OK;
-    }
-    case OP_FOR_NUM_NEXT: {
-        int64_t i = vm_slot(m, op->a)->as.integer;
-        int64_t step = vm_slot(m, op->a + 2)->as.integer;
-        int64_t next = 0;
-        // A step that would overflow ends the loop.
-        if (int_add(i, step, &next)) {
-            value_int(vm_slot(m, op->a), next);
-            m->pc = op->b;
-        } else {
-            m->pc = op->c;
-        }
-        return OK;
-    }
     case OP_FOR_LIST_INIT: {
         Value l = vm_pop(m);
         Table *t = NULL;
@@ -770,39 +692,159 @@ static STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *done) {
         value_int(vm_slot(m, op->a + 2), 0);
         return OK;
     }
-    case OP_FOR_LIST_ITER: {
-        int64_t i = vm_slot(m, op->a + 2)->as.integer;
-        Table *t = vm_slot(m, op->a)->as.table;
-        // A list `pop` shortened ends the loop at its new end.
-        if (i >= vm_slot(m, op->a + 1)->as.integer || (uint64_t)i >= t->list.len) {
-            m->pc = op->b;
-            return OK;
-        }
-        TRY(run_charge(r, op->pos, 1));
-        *vm_slot(m, op->c) = at(t->list, (size_t)i);
-        value_int(vm_slot(m, op->a + 2), i + 1);
-        return OK;
+    default: break;
     }
-    }
-    return OK;
+    fprintf(stderr, "vm: op %d, one vm_run's loop runs itself, reached vm_op\n", (int)op->tag);
+    abort();
+    return STOP;
 }
 
-// Runs ops until the top level ends or a stop no `attempt` catches.
+// Runs ops until the top level ends or a stop no `attempt` catches. The ops
+// every loop runs (the pushes, the loads and stores, the operators, the
+// jumps, a `for`'s turn, an index) are done here, with the pc in a local;
+// the rest go to vm_op, with `m->pc` set from it before and read back after,
+// as a stop's unwinding reads and sets it too.
 static STATUS_MUST_USE Status vm_run(Machine *m) {
+    Run *r = m->r;
+    const Code *code = m->code;
+    uint32_t pc = m->pc;
     for (;;) {
-        const VmOp *op = &at(m->code->ops, m->pc);
-        m->pc++;
-        bool done = false;
-        Status s = op->enters != 0 ? vm_enters(m, op) : OK;
-        if (s == OK) s = vm_op(m, op, &done);
+        const VmOp *op = &at(code->ops, pc);
+        pc++;
+        Status s = OK;
+        if (op->enters != 0) s = vm_enters(m, op);
         if (s == OK) {
-            if (done) return OK;
-            continue;
+            switch (op->tag) {
+            case OP_NOP: break;
+            case OP_PUSH_NIL: s = vm_push_nil(m, op->pos); break;
+            case OP_PUSH_BOOL: {
+                Value v;
+                value_bool(&v, op->a != 0);
+                s = vm_push(m, op->pos, &v);
+                break;
+            }
+            case OP_PUSH_INT: {
+                Value v;
+                value_int(&v, at(code->ints, op->a));
+                s = vm_push(m, op->pos, &v);
+                break;
+            }
+            case OP_PUSH_STRING: {
+                Value v;
+                value_string(&v, at(code->strings, op->a));
+                s = vm_push(m, op->pos, &v);
+                break;
+            }
+            case OP_PUSH_LOCAL: {
+                Value v = *vm_slot(m, op->a);
+                s = vm_push(m, op->pos, &v);
+                break;
+            }
+            case OP_PUSH_CONST: {
+                // Set before it is read: the parser shows a const only below
+                // its line.
+                Values consts = {r->consts, r->consts_len};
+                Value v = at(consts, op->a);
+                s = vm_push(m, op->pos, &v);
+                break;
+            }
+            case OP_POP: (void)vm_pop(m); break;
+            case OP_STORE_LOCAL: *vm_slot(m, op->a) = vm_pop(m); break;
+            case OP_STORE_CONST: {
+                Value v = vm_pop(m);
+                *vm_slot(m, op->a) = v;
+                Values consts = {r->consts, r->consts_len};
+                at(consts, op->b) = v;
+                break;
+            }
+            case OP_INDEX_GET: {
+                Value key = vm_pop(m);
+                Value obj = vm_pop(m);
+                Value v;
+                s = run_get_index(r, op->pos, &obj, &key, &v);
+                if (s == OK) s = vm_push(m, op->pos, &v);
+                break;
+            }
+            case OP_INDEX_SET: {
+                Value key = vm_pop(m);
+                Value obj = vm_pop(m);
+                Value v = vm_pop(m);
+                s = run_set_index(r, op->pos, &obj, &key, &v);
+                break;
+            }
+            case OP_BINARY: s = vm_binary(m, op); break;
+            case OP_JUMP: pc = op->a; break;
+            case OP_JUMP_FALSE: {
+                Value v = vm_pop(m);
+                if (!value_truthy(&v)) pc = op->a;
+                break;
+            }
+            case OP_AND_JUMP:
+            case OP_OR_JUMP: {
+                bool truthy = value_truthy(vm_top(m));
+                if (truthy == (op->tag == OP_OR_JUMP)) {
+                    pc = op->a;
+                } else {
+                    (void)vm_pop(m);
+                }
+                break;
+            }
+            case OP_FOR_NUM_ITER: {
+                int64_t i = vm_slot(m, op->a)->as.integer;
+                int64_t to = vm_slot(m, op->a + 1)->as.integer;
+                int64_t step = vm_slot(m, op->a + 2)->as.integer;
+                if (!(step > 0 ? i <= to : i >= to)) {
+                    pc = op->b;
+                    break;
+                }
+                s = run_charge(r, op->pos, 1);
+                if (s == OK) value_int(vm_slot(m, op->c), i);
+                break;
+            }
+            case OP_FOR_NUM_NEXT: {
+                int64_t i = vm_slot(m, op->a)->as.integer;
+                int64_t step = vm_slot(m, op->a + 2)->as.integer;
+                int64_t next = 0;
+                // A step that would overflow ends the loop.
+                if (int_add(i, step, &next)) {
+                    value_int(vm_slot(m, op->a), next);
+                    pc = op->b;
+                } else {
+                    pc = op->c;
+                }
+                break;
+            }
+            case OP_FOR_LIST_ITER: {
+                int64_t i = vm_slot(m, op->a + 2)->as.integer;
+                Table *t = vm_slot(m, op->a)->as.table;
+                // A list `pop` shortened ends the loop at its new end.
+                if (i >= vm_slot(m, op->a + 1)->as.integer || (uint64_t)i >= t->list.len) {
+                    pc = op->b;
+                    break;
+                }
+                s = run_charge(r, op->pos, 1);
+                if (s != OK) break;
+                *vm_slot(m, op->c) = at(t->list, (size_t)i);
+                value_int(vm_slot(m, op->a + 2), i + 1);
+                break;
+            }
+            default: {
+                bool done = false;
+                m->pc = pc;
+                s = vm_op(m, op, &done);
+                pc = m->pc;
+                if (s == OK && done) return OK;
+                break;
+            }
+            }
         }
-        if (!m->r->ctx.stopped) TRY(run_values_oom(m->r, op->pos));
+        if (s == OK) continue;
+        m->pc = pc;
+        if (!r->ctx.stopped) TRY(run_values_oom(r, op->pos));
         bool caught = false;
         TRY(vm_caught(m, &caught));
         if (!caught) return STOP;
+        pc = m->pc;
     }
 }
 
