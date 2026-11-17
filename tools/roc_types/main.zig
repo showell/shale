@@ -165,7 +165,11 @@ fn dumpModule(gpa: std.mem.Allocator, out: *std.Io.Writer, path: []const u8, env
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
-    const gpa = init.gpa;
+    // Roc's own allocator, the one `roc check` runs on in a release build,
+    // not `init.gpa`: in ReleaseSafe that is the safe allocator, whose
+    // checks, mappings and fills took about 40% of a run's samples (perf,
+    // 2026-11-17), so a run took near three times `roc check --jobs=1`.
+    const gpa = base.defaultGpa();
     const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
     if (args.len != 2) {
