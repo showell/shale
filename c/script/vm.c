@@ -355,24 +355,33 @@ typedef struct {
     uint32_t walk;
 } Machine;
 
-static VmFrame *vm_frame(Machine *m) {
+static inline VmFrame *vm_frame(Machine *m) {
     return &at(m->frames, m->frames.len - 1);
 }
 
-static Value *vm_slot(Machine *m, uint32_t s) {
+static inline Value *vm_slot(Machine *m, uint32_t s) {
     return &at(m->r->stack, m->r->base + s);
 }
 
-static Value *vm_top(Machine *m) {
+static inline Value *vm_top(Machine *m) {
     return &at(m->operands, m->operands.len - 1);
 }
 
-static Value vm_pop(Machine *m) {
+static inline Value vm_pop(Machine *m) {
     return ValueVec_pop(&m->operands);
 }
 
-static STATUS_MUST_USE Status vm_push(Machine *m, Pos pos, const Value *v) {
-    if (ValueVec_push(&m->operands, *v) != OK) return run_machine_oom(m->r, pos);
+// `v` pushed onto the operands, which never grow here: a frame reserves its
+// function's deepest operand stack, `operands + 1`, when it is entered
+// (vm_enter_frame, vm_main), and the compiler's count bounds every push of
+// its body. The `at` of the spare room is the one compare, and a push past
+// the reserve traps as a bug in the C. Its Status is always OK, kept so a
+// caller's `return vm_push(...)` reads as every op's answer does.
+static inline STATUS_MUST_USE Status vm_push(Machine *m, Pos pos, const Value *v) {
+    (void)pos;
+    Values room = {m->operands.ptr, m->operands.cap};
+    at(room, m->operands.len) = *v;
+    m->operands.len++;
     return OK;
 }
 
