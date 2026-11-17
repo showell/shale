@@ -51,7 +51,9 @@
 -- run differs.
 --
 -- **The comparison:** each step's exit, stdout and stderr (the `── used:`
--- line among it), and every file the run left, by its kind, mode and bytes.
+-- line among it), and every file the run left, by its kind, mode and bytes,
+-- but for a git index, which is compared by what it stages (`is_git_index`):
+-- git writes its stat cache, nanosecond times and inodes, in each run anew.
 -- The `── time:` line is let go whole (Steve, 2026-11-17): its numbers,
 -- whether it is there at all, and where it falls, since a second of wall time
 -- in programs decides whether it is printed. Nothing else is, but for an
@@ -546,14 +548,70 @@ function masked_manifest(d, fm)
   return out
 end
 
+-- ── git's index ──
+--
+-- git writes a repository's index (`.git/index`, and a linked worktree's
+-- `.git/worktrees/<name>/index`) with a stat cache of each tracked file: its
+-- ctime and mtime to the nanosecond, its device and inode, a size git zeroes
+-- when the file is racily clean, and a checksum of the whole. None of that is
+-- the script's, so two runs of one script never leave the same bytes there.
+-- Such a file is compared by what it stages, `git ls-files --stage`: each
+-- path's mode, object and stage. Every other file under `.git` is compared by
+-- its bytes, the objects and refs among them, so a difference in a repo's
+-- tracked content still shows: in the work tree's files, in the objects, or
+-- in what the index stages.
+
+function is_git_index(path)
+  return re_find(path, "(?:^|/)\\.git/(?:worktrees/[^/]+/)?index$") ~= nil
+end
+
+-- What the index at `p` stages, or nil when git cannot read it (a file
+-- named `index` that is not one), which is then compared by its bytes.
+function git_index_view(p)
+  local r = run({"git", "--git-dir", real(dirname(p)), "ls-files", "--stage"}, {timeout_ms = 60000, whole = 16000000, width = 8192})
+  if r.ended ~= "exit" or r.code ~= 0 then return nil end
+  return r.out
+end
+
+-- How one file the two trees both hold differs, or nil: `px` and `py` its
+-- paths in each, `fx` and `fy` the sides' `fresh_dir` maps (nil: no names to
+-- mask).
+function differ_file(dx, dy, px, py, fx, fy)
+  local a = dx .. "/tree/" .. px
+  local b = dy .. "/tree/" .. py
+  local label = px
+  if fx ~= nil then label = fresh_mask(px, fx) end
+  local ta = nil
+  local tb = nil
+  local how = ""
+  if is_git_index(px) then
+    ta = git_index_view(a)
+    tb = git_index_view(b)
+    how = " (what it stages)"
+  end
+  if ta == nil or tb == nil then
+    ta = read(a)
+    tb = read(b)
+    how = ""
+  end
+  if fx ~= nil then
+    ta = fresh_mask(ta, fx)
+    tb = fresh_mask(tb, fy)
+  end
+  local d = first_diff(ta, tb, EXACT)
+  if d ~= nil then return {what = "file " .. label .. how, where = "line " .. d.line, a = d.a, b = d.b} end
+  if fx == nil and how == "" and ta ~= tb then return {what = "file " .. label, where = "", a = "(bytes)", b = "(bytes)"} end
+  return nil
+end
+
 -- The files of two trees whose paths hold `fresh_dir` names, compared file
 -- by file with the names masked: the masked manifests matched, so the n-th
 -- file of one is the n-th of the other.
 function differ_fresh_files(dx, dy, ex, ey, fx, fy)
   for i = 1, #ex do
     if ex[i].kind == "f" then
-      local d = first_diff(fresh_mask(read(dx .. "/tree/" .. ex[i].path), fx), fresh_mask(read(dy .. "/tree/" .. ey[i].path), fy), EXACT)
-      if d ~= nil then return {what = "file " .. fresh_mask(ex[i].path, fx), where = "line " .. d.line, a = d.a, b = d.b} end
+      local d = differ_file(dx, dy, ex[i].path, ey[i].path, fx, fy)
+      if d ~= nil then return d end
     end
   end
   return nil
@@ -598,15 +656,20 @@ function differ_sides(inp, x, y, judge)
   if man ~= nil then return {what = "files", where = "entry " .. man.line, a = man.a, b = man.b} end
   if #grep(dx .. "/manifest", "\tf\t") == 0 then return nil end
   if fx.n > 0 or fy.n > 0 then return differ_fresh_files(dx, dy, ex, ey, fx, fy) end
-  local r = run({"diff", "-rq", "--no-dereference", real(dx) .. "/tree", real(dy) .. "/tree"}, {timeout_ms = 120000, head = 3})
+  -- Each file whose bytes differ is judged in turn, since a git index whose
+  -- bytes differ may stage the same.
+  local r = run({"diff", "-rq", "--no-dereference", real(dx) .. "/tree", real(dy) .. "/tree"}, {timeout_ms = 120000, whole = 16000000, width = 8192})
   if r.code == 0 then return nil end
-  local first = lines(r.out)[1]
-  local m = re_find(first, "^Files (.*) and (.*) differ$")
-  if m == nil then return {what = "files", where = "", a = first, b = ""} end
-  local rel = sub(m.groups[1], #real(dx) + #"/tree/" + 1)
-  local d = first_diff(read(dx .. "/tree/" .. rel), read(dy .. "/tree/" .. rel), EXACT)
-  if d == nil then return {what = "file " .. rel, where = "", a = "(bytes)", b = "(bytes)"} end
-  return {what = "file " .. rel, where = "line " .. d.line, a = d.a, b = d.b}
+  for l in lines(r.out) do
+    if l ~= "" then
+      local m = re_find(l, "^Files (.*) and (.*) differ$")
+      if m == nil then return {what = "files", where = "", a = l, b = ""} end
+      local rel = sub(m.groups[1], #real(dx) + #"/tree/" + 1)
+      local d = differ_file(dx, dy, rel, rel, nil, nil)
+      if d ~= nil then return d end
+    end
+  end
+  return nil
 end
 
 -- The builtin families, most specific first: the area a stdout difference

@@ -52,7 +52,7 @@ copied to one path for each phase, so a message that names it is the same.
 
 The harness compares each step's ending, its stdout and its stderr (the
 `── used:` line is part of stderr), and every file the run left, by kind,
-mode and bytes. The `── time:` line is let go whole: its numbers, whether
+mode and bytes (a git index by what it stages, below). The `── time:` line is let go whole: its numbers, whether
 it is printed, and the order it names programs in (Steve, 2026-11-17).
 
 **Arena bytes are outside the frozen surface** (docs/C-SEAMS.md,
@@ -86,7 +86,7 @@ ones predicted that passed, and the ones that failed without a prediction.
 
 ## What the oracle does not repeat, and how it is judged anyway
 
-Two things today's Zig Shale does not repeat from one run to the next, and
+Three things the oracle's runs do not repeat from one run to the next, and
 how the harness lets each go, so the inputs they touch are still judged:
 
 - **`fresh_dir`'s random names.** The Linux prelude names its folder
@@ -101,3 +101,14 @@ how the harness lets each go, so the inputs they touch are still judged:
   and names the slowest three in the order of their times, so it is let go
   whole (roc/check_foreign_code and rewrite_method_calls were unjudged for
   it on some runs).
+- **A git index's stat cache.** git writes `<repo>/.git/index` (and a linked
+  worktree's `<repo>/.git/worktrees/<name>/index`) with each tracked file's ctime
+  and mtime to the nanosecond, its device and inode, and a checksum of the
+  whole, so its bytes differ from run to run. Such a file is compared by
+  what it stages, `git ls-files --stage`: each path's mode, object and
+  stage. Every other file under `.git` is still compared by its bytes, the
+  objects and refs among them. remove_lane and zig/check_const_unchanged
+  were unjudged for it. `shale tools/differ/plants/git_index.shale
+  shale=<path>` is the plant: an index written again with the same entries
+  passes, and one staging another blob, the work tree left alone, fails on
+  the index.

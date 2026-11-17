@@ -1,0 +1,81 @@
+-- The differ's plant for a git index (tools/differ.shale, "git's index"):
+-- an index is judged by what it stages, never by its bytes, so a stat cache
+-- that differs passes and a staged blob that differs fails.
+--
+--   cd <shale> && shale tools/differ/plants/git_index.shale shale=<path>
+--
+-- `shale` is a Shale path to a `shale` binary, the oracle and the binary
+-- under test both. The plant runs the differ on cookbook/zig/check_const_unchanged's
+-- self-test, whose repo stages one file, x.zig, keeping its trees; then it
+-- changes the kept `new` side twice and judges again (`reuse=1`):
+--   1. the index written again from what it stages, its stat cache empty:
+--      its bytes differ from the oracle's, and what it stages does not, so
+--      the input passes;
+--   2. the index made to stage another blob for x.zig, the work tree left
+--      alone: the input fails, on the index, by what it stages.
+
+local bin = arg("shale", "")
+if bin == "" then fail("git_index plant: name the binary, shale=<path> (a Shale path)") end
+const INPUT = "check_const_unchanged"
+
+function differ(bin, more)
+  local argv = {"shale", "tools/differ.shale", "old=" .. bin, "new=" .. bin, "only=" .. INPUT}
+  for a in more do push(argv, a) end
+  return run(argv, {timeout_ms = 120000, tail = 40})
+end
+
+function git(dir, args)
+  local argv = {"git", "--git-dir", real(dir .. "/.git"), "--work-tree", real(dir)}
+  for a in args do push(argv, a) end
+  return must(run(argv, {timeout_ms = 60000, whole = 1000000})).out
+end
+
+-- The one folder the kept side's run made under its scratch mount.
+function repo_of(id, side)
+  local names = ls("build:differ/keep/" .. id .. "/" .. side .. "/tree/scratch")
+  if #names ~= 1 then fail("git_index plant: " .. side .. " left " .. #names .. " folders in scratch, not one") end
+  return "build:differ/keep/" .. id .. "/" .. side .. "/tree/scratch/" .. names[1]
+end
+
+function verdict(r)
+  for l in lines(r.out) do
+    if starts_with(l, "── 1 inputs: ") then return l end
+  end
+  return "(no verdict: " .. trim(r.out) .. ")"
+end
+
+local wrong = {}
+function check(wrong, held, what)
+  print((held and "ok    " or "FAIL  ") .. what)
+  if not held then push(wrong, what) end
+  return nil
+end
+
+local first = differ(bin, {"keep=1"})
+check(wrong, first.code == 0 and contains(first.out, "── 1 inputs: 1 pass,"), "as the self-test left it: passes (" .. verdict(first) .. ")")
+local ids = ls("build:differ/keep")
+if #ids ~= 1 then fail("git_index plant: " .. #ids .. " inputs kept, not one") end
+local id = ids[1]
+local old_repo = repo_of(id, "old_a")
+local new_repo = repo_of(id, "new")
+if not exists(new_repo .. "/x.zig") then fail("git_index plant: the self-test's repo holds no x.zig") end
+
+-- 1. The stat cache alone: the index written again from what it stages,
+-- which leaves every entry's stat cache empty.
+local stages = git(new_repo, {"ls-files", "--stage"})
+remove(new_repo .. "/.git/index")
+must(run({"git", "--git-dir", real(new_repo .. "/.git"), "update-index", "--index-info"}, {timeout_ms = 60000, tail = 20, stdin = stages}))
+check(wrong, read(old_repo .. "/.git/index") ~= read(new_repo .. "/.git/index"), "the index written again: its bytes differ")
+local stat_only = differ(bin, {"reuse=1"})
+check(wrong, stat_only.code == 0 and contains(stat_only.out, "── 1 inputs: 1 pass,"), "the index written again: passes (" .. verdict(stat_only) .. ")")
+
+-- 2. Another blob staged. The blob is hashed, not written, so no object is
+-- added and only the index differs.
+local blob = trim(must(run({"git", "hash-object", "--stdin"}, {timeout_ms = 10000, tail = 2, stdin = "planted\n"})).out)
+git(new_repo, {"update-index", "--cacheinfo", "100644," .. blob .. ",x.zig"})
+local staged = differ(bin, {"reuse=1"})
+check(wrong, staged.code ~= 0 and contains(staged.out, "── 1 inputs: 0 pass, 1 fail,"), "another blob staged: fails (" .. verdict(staged) .. ")")
+check(wrong, contains(staged.out, "/.git/index (what it stages)") and contains(staged.out, blob), "another blob staged: on the index, by what it stages, naming the blob")
+
+if #wrong > 0 then fail("git_index plant: " .. #wrong .. " wrong") end
+print("git_index plant: PASS (a stat cache that differs passes; a staged blob that differs fails, on the index)")
