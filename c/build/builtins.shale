@@ -9,10 +9,11 @@ use("build:lib.shale")
 
 -- ── The store builtins ─────────────────────────────────────────────────
 -- c/tests/store/test_builtins.c, each source run as the C `shale --verbose`
--- runs it (c/tests/ran.c) and held to Zig's output, report and files, under
--- every build of `t.builds`, held to its `TEST(` count and to
+-- runs it (c/tests/ran.c) and held to Zig's output, report and files: a
+-- part of c/tests/ran_tests.c, which the ran block runs under every build
+-- and holds to its `TEST(` count. Here its count is held to
 -- BUILTINS_TESTS. In the full tier: the faults below planted in a copy of
--- c/, each caught by its `aim` tests under asan.
+-- c/, each caught by its `aim` tests.
 
 const BUILTINS_TEST_FILE = "c/tests/store/test_builtins.c"
 const BUILTINS_TESTS = 14
@@ -52,10 +53,7 @@ const BUILTINS_PLANTS = {
 function builtins_block(t)
   local n = test_count(BUILTINS_TEST_FILE)
   if n ~= BUILTINS_TESTS then fail(BUILTINS_TEST_FILE .. " has " .. n .. " TEST(s), and BUILTINS_TESTS says " .. BUILTINS_TESTS) end
-  for b in t.builds do
-    local total = test_file(t, "builtins " .. b, b, BUILTINS_TEST_FILE)
-    print("builtins " .. said_of_build(b, 1, total))
-  end
+  if t.stage ~= "plan" then print("builtins: " .. n .. " C tests, run in c/tests/ran_tests.c") end
   if not t.full then return nil end
   run_plants(t, "builtins plants", BUILTINS_PLANTS)
   return nil

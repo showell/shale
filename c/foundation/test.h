@@ -10,6 +10,11 @@
 // refuses, and `c/build.shale` holds each file's printed count to its `TEST`s.
 // `TEST_ONLY=a,b` in the environment runs only the cases it names (a plant's
 // aimed tests, a tier's part of a file), each name one a case has.
+//
+// Test files that share a costly include (c/tests/ran.c, the interpreter)
+// are parts of one binary instead: each ends with `TEST_PART`, the binary
+// includes them all and ends with `TEST_PARTS_MAIN`, and it prints each
+// part's count in its own line, as that file alone would.
 
 #ifndef SHALE_TEST_H
 #define SHALE_TEST_H
@@ -170,16 +175,32 @@ static inline bool test_named(Str only, Str name) {
     return false;
 }
 
-// Whether every comma-separated name in `only` names a case; the first that
-// doesn't goes in `missing`.
-static inline bool test_all_named(TestCases cases, Str only, Str *missing) {
+// A test file's cases and its name: what a binary runs and counts as one
+// file. A file of its own is one part (`TEST_MAIN`); a binary of several
+// files, each a `TEST_PART`, runs each in turn (`TEST_PARTS_MAIN`), so the
+// interpreter they share is compiled once for all of them.
+// `cases` is a function, its array static inside it, so a part names no
+// array of its own beside its `TestPart`.
+typedef struct {
+    TestCases (*cases)(void);
+    Str file;
+} TestPart;
+
+SLICE_TYPE(TestParts, const TestPart *);
+
+// Whether every comma-separated name in `only` names a case of one of the
+// parts; the first that doesn't goes in `missing`.
+static inline bool test_all_named(TestParts parts, Str only, Str *missing) {
     size_t from = 0;
     for (size_t i = 0; i <= only.len; i++) {
         if (i < only.len && str_byte(only, i) != ',') continue;
         Str name = str_sub(only, from, i);
         bool found = false;
-        for (size_t k = 0; k < cases.len; k++) {
-            if (str_eq(at(cases, k).name, name)) found = true;
+        for (size_t p = 0; p < parts.len; p++) {
+            TestCases cases = at(parts, p)->cases();
+            for (size_t k = 0; k < cases.len; k++) {
+                if (str_eq(at(cases, k).name, name)) found = true;
+            }
         }
         if (!found) {
             *missing = name;
@@ -190,50 +211,99 @@ static inline bool test_all_named(TestCases cases, Str only, Str *missing) {
     return true;
 }
 
-// Runs the cases, or with `TEST_ONLY` set, only those it names (`a,b`), so a
-// planted fault runs only the tests aimed at it. A name in it that names no
-// case fails the run, so an aim that went stale can't pass by running
-// nothing. The count printed is of the cases that ran.
-static inline int test_run(TestCases cases, Str file) {
+// Runs one case, a failure counted. The setjmp is alone in this function,
+// so no local of its caller lives across it (GCC's -Wclobbered at -O2).
+static inline void test_run_case(const TestCase *c) {
     TestState *t = test_state();
+    t->current = c->name;
+    if (setjmp(t->back) == 0) {
+        c->fn();
+    } else {
+        test_state()->failed++;
+    }
+}
+
+// Runs one part's cases, or with `TEST_ONLY` set only those it names, and
+// says the part's count in a line of its own. A part none of whose cases
+// `TEST_ONLY` names runs nothing and says nothing. Gives how many ran, and
+// sets `failed` when one failed.
+static inline size_t test_run_part(const TestPart *part, const char *only_env, Str only, bool *failed) { // cstr: getenv's
+    TestState *t = test_state();
+    TestCases cases = part->cases();
+    Str file = part->file;
+    t->failed = 0;
+    size_t ran = 0;
+    for (size_t k = 0; k < cases.len; k++) {
+        const TestCase *c = &at(cases, k);
+        if (only_env != NULL && !test_named(only, c->name)) continue;
+        test_run_case(c);
+        ran++;
+    }
+    if (ran == 0) return 0;
+    if (t->failed > 0) {
+        fprintf(stderr, "%.*s: %zu of %zu tests failed\n", (int)file.len, file.ptr, t->failed, (size_t)ran);
+        *failed = true;
+    } else {
+        printf("%.*s: %zu tests passed\n", (int)file.len, file.ptr, (size_t)ran);
+    }
+    // The next part's tests fork: a child that exits through stdio would
+    // print this line again.
+    fflush(stdout);
+    return ran;
+}
+
+// Runs every part's cases in order, or with `TEST_ONLY` set, only those it
+// names (`a,b`), so a planted fault runs only the tests aimed at it. A name
+// in it that names no case of any part fails the run, so an aim that went
+// stale can't pass by running nothing. Each part's count printed is of its
+// cases that ran; `file` is the binary's, for the run's own failures.
+static inline int test_run(TestParts parts, Str file) {
     const char *only_env = getenv("TEST_ONLY");
     Str only = {"", 0};
     if (only_env != NULL) only = (Str){only_env, strlen(only_env)};
     Str missing = {"", 0};
-    if (only_env != NULL && !test_all_named(cases, only, &missing)) {
+    if (only_env != NULL && !test_all_named(parts, only, &missing)) {
         fprintf(stderr, "%.*s: no test named `%.*s`\n", (int)file.len, file.ptr, (int)missing.len, missing.ptr);
         return 1;
     }
-    // `ran` and `k` are volatile: they change between setjmp and a longjmp
-    // back to it.
-    volatile size_t ran = 0;
-    for (volatile size_t k = 0; k < cases.len; k++) {
-        const TestCase *c = &at(cases, k);
-        if (only_env != NULL && !test_named(only, c->name)) continue;
-        t->current = c->name;
-        if (setjmp(t->back) == 0) {
-            c->fn();
-        } else {
-            t->failed++;
-        }
-        ran++;
-    }
+    size_t ran = 0;
+    bool failed = false;
+    for (size_t p = 0; p < parts.len; p++) ran += test_run_part(at(parts, p), only_env, only, &failed);
     if (ran == 0) {
         fprintf(stderr, "%.*s: no tests\n", (int)file.len, file.ptr);
         return 1;
     }
-    if (t->failed > 0) {
-        fprintf(stderr, "%.*s: %zu of %zu tests failed\n", (int)file.len, file.ptr, t->failed, (size_t)ran);
-        return 1;
-    }
-    printf("%.*s: %zu tests passed\n", (int)file.len, file.ptr, (size_t)ran);
-    return 0;
+    return failed ? 1 : 0;
 }
 
-#define TEST_MAIN(...)                                                              \
-    int main(void) {                                                                \
+// A test file that is a part of a binary of several: it ends with
+// `TEST_PART(name, TEST_CASE(a), ...)` where a file of its own ends with
+// `TEST_MAIN`, and has no `main`.
+#define TEST_PART(name, ...)                                                        \
+    static TestCases test_part_cases_##name(void) {                                 \
         static const TestCase cases[] = {__VA_ARGS__};                              \
         TestCases all = {cases, sizeof cases / sizeof(TestCase)};                   \
+        return all;                                                                 \
+    }                                                                               \
+    static const TestPart test_part_##name = {test_part_cases_##name, S_ITEM(__FILE__)}
+
+#define TEST_PART_OF(name) &test_part_##name
+
+// A file of its own: one part, the file.
+#define TEST_MAIN(...)                                                              \
+    TEST_PART(main_file, __VA_ARGS__);                                              \
+    int main(void) {                                                                \
+        static const TestPart *parts[] = {&test_part_main_file};                    \
+        TestParts all = {parts, 1};                                                 \
+        return test_run(all, S(__FILE__));                                          \
+    }
+
+// The binary of several parts: `TEST_PARTS_MAIN(TEST_PART_OF(a), ...)`, after
+// it includes each part's file.
+#define TEST_PARTS_MAIN(...)                                                        \
+    int main(void) {                                                                \
+        static const TestPart *parts[] = {__VA_ARGS__};                             \
+        TestParts all = {parts, sizeof parts / sizeof(const TestPart *)};           \
         return test_run(all, S(__FILE__));                                          \
     }
 

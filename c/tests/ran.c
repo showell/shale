@@ -2,10 +2,10 @@
 // preludes, over a fresh folder of its own (c/out/ran-tmp/t.XXXXXX): its
 // `root`, the Linux store measured under it, the path hook over the mounts a
 // test gives (each `D` in their text the folder), the Linux host's calls and
-// `--undo-on-stop`'s putting back. What test_vm.c and
-// store/test_builtins.c share.
+// `--undo-on-stop`'s putting back. What the parts of ran_tests.c share.
 //
-// A test file defines _GNU_SOURCE, includes test.h, then this.
+// ran_tests.c defines _GNU_SOURCE, includes test.h, then this, then its
+// parts.
 
 #include <sys/stat.h>
 
@@ -96,14 +96,13 @@ static void ran_write(Ran *x, const char *rel, Str text) { // cstr: a test's lit
     if (store_os_write_file(&x->host, p, text, 0644) != STORE_OK) abort();
 }
 
-// `inline` here and in ran_file: a test file that writes no file before its
-// run, test_vm.c, has no use of either.
-static inline void ran_put(Ran *x, const char *rel, const char *text) { // cstr: test literals
+// Writes `text` at the folder's `rel`.
+static void ran_put(Ran *x, const char *rel, const char *text) { // cstr: test literals
     ran_write(x, rel, ran_cs(text));
 }
 
 // What the folder's `rel` holds, or false when it cannot be read.
-static inline bool ran_file(Ran *x, const char *rel, Str *out) { // cstr: a test's literal
+static bool ran_file(Ran *x, const char *rel, Str *out) { // cstr: a test's literal
     return store_os_read_file(&x->host, ran_at(x, rel), (size_t)1 << 20, out) == STORE_OK;
 }
 
@@ -208,4 +207,23 @@ static Str ran_report_of(Ran *x, Arena *a, bool verbose) {
     Budgets b = x->r.ctx.budgets;
     if (cli_write_report(&w, S("stdin"), none, verbose, effects, records, x->ran == OK ? NULL : &x->r.ctx.stop, u, &b) != OK) return S("(the report ran out of arena)");
     return buf_view(&w);
+}
+
+// A source run on a fresh root with no mounts.
+static void ran_source(Ran *x, Str src, Budgets b) {
+    RanOpts none = {NULL, false, false};
+    ran_init(x, none);
+    ran_run(x, src, b);
+}
+
+// The CLI's budgets but for the output, 64 KiB as `shale` unset has it.
+static Budgets ran_budgets(void) {
+    Budgets b = budgets_default();
+    b.output_bytes = 64 * 1024;
+    return b;
+}
+
+// The report a run's stop prints, as the C `shale` writes it.
+static Str ran_report(Ran *x, Arena *a) {
+    return ran_report_of(x, a, false);
 }

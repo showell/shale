@@ -6,12 +6,13 @@
 use("build:lib.shale")
 
 -- ── The VM: c/script's values, compiler, VM and core builtins ──────────
--- test_vm.c runs in the foundation's block with every test file. Here, in
--- both tiers: its count held to VM_TESTS, then each command binary the
+-- test_vm.c is a part of c/tests/ran_tests.c, which the ran block runs
+-- under every build. Here, in both tiers: its count held to VM_TESTS, then
+-- each command binary the
 -- command's block built runs scripts that use only what the C runs, its
 -- output, report and exit held to the installed Zig `shale`'s on the same
 -- script, the oracle. In the full tier: the faults below planted in a copy
--- of c/script, each caught by test_vm.c under asan.
+-- of c/script, each caught by test_vm.c.
 
 const VM_TESTS = 15
 const VM_SCRIPTS = {

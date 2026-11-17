@@ -77,7 +77,7 @@ const LEN_FIELD = [=[^\s*size_t\s+len\s*;]=]
 -- every parenthesized and braced group is emptied.
 const TWO_DECLS = [=[^\s*(static\s+)?(const\s+)?(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)\s+\**\s*\w+\s*(\[\w*\])?\s*(=[^,;]*)?,]=]
 const DECL_INIT = [=[^\s*(static\s+)?(const\s+)?(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)\s+\**\s*\w+\s*(\[\w*\])?\s*=]=]
-const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE_TYPE(", "VEC_DEFINE(", "MAP_DEFINE(", "TEST(", "TEST_MAIN(", "_Static_assert(", "int main(", "}", ")"}
+const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE_TYPE(", "VEC_DEFINE(", "MAP_DEFINE(", "TEST(", "TEST_MAIN(", "TEST_PART(", "TEST_PARTS_MAIN(", "_Static_assert(", "int main(", "}", ")"}
 
 -- The line's code: its strings and character literals emptied, its comments cut.
 function code_of(line)
@@ -369,17 +369,24 @@ function renamed(text, names)
 end
 
 -- Each of the `outside` files' own `#include`s of another of them, as a map
--- of lists.
+-- of lists. A file a unit includes also sees what that unit included before
+-- it, so a part of a test binary (c/tests/ran_tests.c's) reaches ran.c's
+-- types through the binary.
 function include_edges(outside)
   local outside_set = set_of(outside)
   local edges = {}
+  for p in outside do edges[p] = {} end
   for p in outside do
-    edges[p] = {}
+    local before = {}
     for g in grep(p, "#include \"") do
       local m = re_find(g.text, [=[^#include "([^"]+)"]=])
       if m ~= nil then
         local q = path_normal(dirname(p) .. "/" .. m.group)
-        if has_key(outside_set, q) then push(edges[p], q) end
+        if has_key(outside_set, q) then
+          push(edges[p], q)
+          for b in before do push(edges[q], b) end
+          push(before, q)
+        end
       end
     end
   end

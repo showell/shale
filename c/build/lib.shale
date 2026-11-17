@@ -173,7 +173,7 @@ end
 -- A program at `bin` run, as {code, out}, `env` added to its environment if
 -- given; a run past its timeout has no code, so it is a failure, said as one.
 function run_binary(t, phase, bin, env?)
-  local o = {timeout_ms = 60000, whole = 200000, want = WANT}
+  local o = {timeout_ms = 180000, whole = 200000, want = WANT}
   if env ~= nil then o.env = env end
   local r = run_in(t, phase, {bin}, o)
   if not has_key(r, "code") then return {code = -1, out = r.out .. "\n(" .. r.ended .. ")"} end
@@ -235,15 +235,6 @@ function test_count(src)
   return #case_names(src)
 end
 
--- A test file's run held to its count: it exited 0 and said exactly that
--- its `n` tests passed. Gives the count.
-function held_to(build, src, r, n)
-  if r.code ~= 0 then fail("`" .. build .. "`: " .. src .. " exited " .. r.code .. ":\n" .. r.out) end
-  local said = src .. ": " .. n .. " tests passed"
-  if trim(r.out) ~= said then fail("`" .. build .. "`: " .. src .. " should run " .. n .. " TEST(s), and its run said:\n" .. r.out) end
-  return n
-end
-
 -- The tests that wait out real time (deadlines, a TERM's grace, a CPU
 -- burn), most of a second each: in a file here, every `attack_` test and
 -- each one `waits` names. The fast tier runs the file's other tests alone,
@@ -255,6 +246,79 @@ const SLOW_TESTS = {
     "a_term_to_shale_while_a_program_runs_ends_its_group_and_says_so_and_the_mask_is_put_back",
   }},
 }
+
+-- ── Binaries of several parts ───────────────────────────────────────────
+-- A test file that ends with `TEST_PART(` is a part (test.h): it has no
+-- `main`, and runs in the binary of TEST_BINARIES that includes it, which
+-- ends with `TEST_PARTS_MAIN(` and prints each part's count in a line of
+-- its own (c/build/ran.shale runs them). Its plants still name the part
+-- as `caught_by`: `plant_copy` builds the part's binary.
+
+const TEST_BINARIES = {"c/tests/ran_tests.c"}
+
+-- Whether the test file `src` is a part of a binary of several.
+function is_test_part(src)
+  for l in lines(read(src)) do
+    if starts_with(l, "TEST_PART(") then return true end
+  end
+  return false
+end
+
+-- The parts of the binary `src`, in its order: each `#include` of a
+-- `test_*.c`, under `src`'s folder. A file with no `TEST_PARTS_MAIN(` has
+-- none.
+function test_parts(src)
+  local text = read(src)
+  local parts = {}
+  local is_binary = false
+  for l in lines(text) do
+    if starts_with(l, "TEST_PARTS_MAIN(") then is_binary = true end
+    local m = re_find(l, "^#include \"([\\w/]+\\.c)\"")
+    if m ~= nil and starts_with(basename(m.group), "test_") then push(parts, path_normal(dirname(src) .. "/" .. m.group)) end
+  end
+  if not is_binary then return {} end
+  return parts
+end
+
+-- The binary of TEST_BINARIES that `part` is a part of, or nil.
+function binary_of(part)
+  for b in TEST_BINARIES do
+    if has_item(test_parts(b), part) then return b end
+  end
+  return nil
+end
+
+-- What a test file's run must print, `{text, n}`: for a file of its own,
+-- `<src>: <n> tests passed`; for a binary, that line for each part. With
+-- `quick`, each file's quick cases alone run (`quick_cases`), and a part
+-- none of whose cases run says nothing.
+function said_by(src, quick?)
+  local files = test_parts(src)
+  if #files == 0 then files = {src} end
+  local said = {}
+  local n = 0
+  for f in files do
+    local names = case_names(f)
+    if quick ~= nil and quick then names = quick_cases(f, names) end
+    if #names > 0 then push(said, f .. ": " .. #names .. " tests passed") end
+    n = n + #names
+  end
+  return {text = join(said, "\n"), n = n}
+end
+
+-- A test file's run held to its count: it exited 0 and said exactly what
+-- `said` (`said_by`) says. Gives the count.
+function held_to(build, src, r, said)
+  if r.code ~= 0 then fail("`" .. build .. "`: " .. src .. " exited " .. r.code .. ":\n" .. r.out) end
+  if trim(r.out) ~= said.text then fail("`" .. build .. "`: " .. src .. " should run " .. said.n .. " TEST(s), saying\n" .. said.text .. "\nand its run said:\n" .. r.out) end
+  return said.n
+end
+
+-- A part run as a file of its own stops the run: it has no `main`.
+function not_a_part(src)
+  if is_test_part(src) then fail(src .. " is a part (`TEST_PART(`): it runs in " .. (binary_of(src) or "no binary of TEST_BINARIES") .. ", not alone") end
+  return nil
+end
 
 -- The names of `src`'s tests the fast tier runs: all of them, but for a file
 -- of SLOW_TESTS its tests that don't wait. A `waits` name that names no test
@@ -278,23 +342,31 @@ end
 -- One test file under tcc, run and held to its count (in the fast tier, a
 -- SLOW_TESTS file's quick tests alone). Gives how many tests ran.
 function tcc_test(t, phase, src, extra?)
-  local all = case_names(src)
+  not_a_part(src)
   local argv = tcc_flags(FOUNDATION)
   if extra ~= nil then
     for f in extra do push(argv, f) end
   end
   push(argv, "-run")
   push(argv, src)
-  local o = {timeout_ms = 60000, tail = 40, want = WANT}
-  local n = #all
+  local o = {timeout_ms = 180000, tail = 40, want = WANT}
+  local said = said_by(src)
   if not t.full then
-    local quick = quick_cases(src, all)
-    if #quick < #all then o.env = {TEST_ONLY = join(quick, ",")} end
-    n = #quick
+    local quick = said_by(src, true)
+    if quick.n < said.n then
+      local names = {}
+      local files = test_parts(src)
+      if #files == 0 then files = {src} end
+      for f in files do
+        for c in quick_cases(f, case_names(f)) do push(names, c) end
+      end
+      o.env = {TEST_ONLY = join(names, ",")}
+    end
+    said = quick
   end
   local r = run_in(t, phase, argv, o)
   if not has_key(r, "code") then r = {code = -1, out = r.out .. "\n(" .. r.ended .. ")"} end
-  return held_to("tcc", src, r, n)
+  return held_to("tcc", src, r, said)
 end
 
 -- The test files `srcs` through `build`: under tcc each run and held to its
@@ -313,6 +385,7 @@ function test_files(t, phase, build, srcs, extra?)
   local specs = {}
   local bins = {}
   for src in srcs do
+    not_a_part(src)
     local name = sub(basename(src), 1, #basename(src) - 2)
     local bin = OUT .. "/" .. build .. "/" .. name
     local argv = nil
@@ -335,7 +408,7 @@ function test_files(t, phase, build, srcs, extra?)
   i = 0
   for src in srcs do
     i = i + 1
-    total = total + held_to(build, src, run_binary(t, phase, bins[i]), #case_names(src))
+    total = total + held_to(build, src, run_binary(t, phase, bins[i]), said_by(src))
   end
   return total
 end
@@ -440,8 +513,8 @@ function start_plant(t, phase, p, k, extra?)
     remove_tree(dir)
     return {line = "  caught: " .. p.name .. " (" .. p.file .. "), by the harness fixture"}
   end
-  local src = dir .. "/tests/" .. p.caught_by .. ".c"
-  local bin = dir .. "/bin/" .. basename(p.caught_by)
+  local src = dir .. "/tests/" .. plant_test_file(p)
+  local bin = dir .. "/bin/" .. sub(basename(src), 1, #basename(src) - 2)
   if pooled then
     local argv = compile_argv("asan", src, dir .. "/foundation", bin, extra)
     local answers = compile_jobs(t, phase, {{name = plant_job_name(phase, k), argv = argv, opts = {timeout_ms = 120000}}})
@@ -476,15 +549,36 @@ function plant_copy(dir, p)
   replace(file, replaced_once(read(file), p.old, p.new, p.name))
   if p.caught_by == "harness" then return nil end
   if not has_key(p, "aim") then fail("plant `" .. p.name .. "` names no `aim`, the tests of " .. p.caught_by .. " that catch it") end
-  local src = dir .. "/tests/" .. p.caught_by .. ".c"
-  if find(p.caught_by, "/") ~= nil then
-    copy("c/tests/" .. dirname(p.caught_by), dir .. "/tests/" .. dirname(p.caught_by))
-  else
-    copy("c/tests/" .. p.caught_by .. ".c", src)
+  -- In a binary of several parts, TEST_ONLY takes any part's case: the aim
+  -- is held to the part's own here.
+  local part = "c/tests/" .. p.caught_by .. ".c"
+  local names = case_names(part)
+  for a in split(p.aim, ",") do
+    if not has_item(names, a) then fail("plant `" .. p.name .. "`'s aim names `" .. a .. "`, a test " .. p.caught_by .. " doesn't have") end
   end
-  -- The run fixture test_vm.c and store/test_builtins.c include.
+  local files = {"c/tests/" .. plant_test_file(p)}
+  for f in test_parts(files[1]) do push(files, f) end
+  for f in files do
+    local rel = sub(f, #"c/tests/" + 1)
+    if find(rel, "/") ~= nil then
+      local d = dirname(rel)
+      if not exists(dir .. "/tests/" .. d) then copy("c/tests/" .. d, dir .. "/tests/" .. d) end
+    else
+      copy(f, dir .. "/tests/" .. rel)
+    end
+  end
+  -- The run fixture the parts of ran_tests.c share.
   copy("c/tests/ran.c", dir .. "/tests/ran.c")
   return nil
+end
+
+-- The test file plant `p` builds, under c/tests: its `caught_by`'s, or for
+-- a part, its binary's.
+function plant_test_file(p)
+  local part = "c/tests/" .. p.caught_by .. ".c"
+  local b = binary_of(part)
+  if b == nil then b = part end
+  return sub(b, #"c/tests/" + 1)
 end
 
 -- A started plant's run waited for and judged: its aimed tests must fail.

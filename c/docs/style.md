@@ -33,8 +33,8 @@ and its self-test plants a break of each one.
   - a `//` comment or a `#` line;
   - `static inline`, or `static` in a `.c` file;
   - `typedef` or `enum`;
-  - `SLICE_TYPE(`, `VEC_DEFINE(`, `MAP_DEFINE(`, `TEST(`, `TEST_MAIN(` or
-    `_Static_assert(`;
+  - `SLICE_TYPE(`, `VEC_DEFINE(`, `MAP_DEFINE(`, `TEST(`, `TEST_MAIN(`,
+    `TEST_PART(`, `TEST_PARTS_MAIN(` or `_Static_assert(`;
   - `int main(`, a program's own: the one `.c` file that is a command
     (`c/shale.c`), a test's fixture (`c/tests/fixtures/`,
     `c/tests/host/fixtures/`) and a compiler's canary (`c/tests/canaries/`).

@@ -1,0 +1,92 @@
+-- c/build/ran.shale: the block of the test binaries of several parts,
+-- c/tests/ran_tests.c above all: the test files that run sources through
+-- c/tests/ran.c, the whole interpreter, built as one binary.
+-- c/build.shale runs it, with the `build` mount that `use` below reads; see
+-- that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- ── The binaries of several parts ───────────────────────────────────────
+-- ran.c includes every module of c/script and c/host, so a test file that
+-- includes it is a compile of the whole interpreter. test_vm.c,
+-- store/test_builtins.c, host_builtins/test_host_run.c and
+-- text/test_host_text.c are parts (`TEST_PART`, test.h) of ran_tests.c
+-- instead, which compiles them once a build rather than once a file. In
+-- both tiers: each binary of TEST_BINARIES under each of `t.builds`, each
+-- part's line held to its own `TEST(` count (`said_by`), and every file
+-- that is a part held to being a part of exactly one binary, so none goes
+-- unrun. Each part's block holds its count to its own constant and plants
+-- its faults (`caught_by` names the part, `plant_copy` builds its binary).
+-- In the full tier: TEST_ONLY across parts, on the asan binary.
+
+-- Every file under c/tests that is a part, as `is_test_part` reads it.
+function all_parts()
+  local parts = {}
+  for p in glob("c/tests/**/*.c") do
+    if is_test_part(p) then push(parts, p) end
+  end
+  sort(parts)
+  return parts
+end
+
+-- Each part a part of one binary of TEST_BINARIES, and each binary's parts
+-- parts: a part no binary includes would never run, and one two include
+-- would run twice.
+function check_parts()
+  local owner = {}
+  for b in TEST_BINARIES do
+    for p in test_parts(b) do
+      if not is_test_part(p) then fail(b .. " includes " .. p .. " as a part, and it ends with no `TEST_PART(`") end
+      if has_key(owner, p) then fail(p .. " is a part of " .. owner[p] .. " and of " .. b) end
+      owner[p] = b
+    end
+  end
+  for p in all_parts() do
+    if not has_key(owner, p) then fail(p .. " ends with `TEST_PART(`, and no binary of TEST_BINARIES (c/build/lib.shale) includes it, so it would never run") end
+  end
+  return nil
+end
+
+-- TEST_ONLY across a binary's parts, at `bin`: a case of its first part and
+-- one of its last run alone, each part's line saying 1, and the parts
+-- between saying nothing; and a name no part has refused, naming the
+-- binary.
+function only_holds(t, phase, src, bin)
+  local parts = test_parts(src)
+  local first = case_names(parts[1])[1]
+  local last_part = parts[#parts]
+  local last = case_names(last_part)[1]
+  local r = run_binary(t, phase, bin, {TEST_ONLY = first .. "," .. last})
+  local said = parts[1] .. ": 1 tests passed\n" .. last_part .. ": 1 tests passed"
+  if r.code ~= 0 or trim(r.out) ~= said then fail(src .. " with TEST_ONLY=" .. first .. "," .. last .. " should say\n" .. said .. "\nand said:\n" .. r.out) end
+  local n = run_binary(t, phase, bin, {TEST_ONLY = first .. ",no_such_test"})
+  local refused = src .. ": no test named `no_such_test`"
+  if n.code ~= 1 or trim(n.out) ~= refused then fail(src .. " with TEST_ONLY naming no test should say\n" .. refused .. "\nand said:\n" .. n.out) end
+  return nil
+end
+
+function ran_block(t)
+  check_parts()
+  for b in t.builds do
+    local total = test_files(t, "ran " .. b, b, TEST_BINARIES)
+    if t.stage ~= "plan" then
+      local files = 0
+      for src in TEST_BINARIES do files = files + #test_parts(src) end
+      print("ran " .. said_of_build(b, files, total))
+    end
+  end
+  if not t.full or t.stage == "plan" then return nil end
+  for src in TEST_BINARIES do
+    only_holds(t, "ran asan", src, OUT .. "/asan/" .. sub(basename(src), 1, #basename(src) - 2))
+  end
+  print("ran: TEST_ONLY across " .. #TEST_BINARIES .. " binary's parts runs the cases it names, each part's line its own, and refuses a name no part has")
+  return nil
+end
+-- ── end of the block of the binaries of several parts ───────────────────
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
+ran_block(t)
+block_end(t, "ran")

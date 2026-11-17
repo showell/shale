@@ -4,24 +4,9 @@
 // Every message is the one Zig's `shale` gives the same call
 // (c/out/cmp.shale held the two side by side).
 
-#define _GNU_SOURCE
+// A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
+// includes test.h and ran.c before it.
 
-#include "test.h"
-
-#include "../ran.c"
-
-// A source run on a fresh root with no mounts.
-static void ran_source(Ran *x, Str src, Budgets b) {
-    RanOpts none = {NULL, false, false};
-    ran_init(x, none);
-    ran_run(x, src, b);
-}
-
-static Budgets cli_budgets(void) {
-    Budgets b = budgets_default();
-    b.output_bytes = 64 * 1024;
-    return b;
-}
 
 static Str host_text_of(Ran *x) {
     return buf_view(&x->r.out);
@@ -31,7 +16,7 @@ TEST(run_keeps_the_head_and_tail_and_answers_every_field) {
     static Ran x;
     ran_source(&x, S("local r = host(\"run\", {\"seq\", \"1\", \"20\"}, {timeout_ms = 5000, head = 2, tail = 2})\n"
                      "print(r.code, r.ended, r.total_lines, r.matched_lines, r.kept_lines, #r.argv, r.argv[3])\nprint(r.out)\n"),
-               cli_budgets());
+               ran_budgets());
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(host_text_of(&x), S("0\texit\t20\t20\t4\t3\t20\n1\n2\n… 16 lines left out …\n19\n20\n\n"));
     // 51 bytes of output: what is read, and a record of the program.
@@ -46,8 +31,8 @@ TEST(run_keeps_the_head_and_tail_and_answers_every_field) {
 TEST(run_charges_its_output_a_step_per_16_bytes) {
     static Ran a;
     static Ran b;
-    ran_source(&a, S("host(\"run\", {\"printf\", \"\"}, {timeout_ms = 5000, whole = 100})\n"), cli_budgets());
-    ran_source(&b, S("host(\"run\", {\"printf\", \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}, {timeout_ms = 5000, whole = 100})\n"), cli_budgets());
+    ran_source(&a, S("host(\"run\", {\"printf\", \"\"}, {timeout_ms = 5000, whole = 100})\n"), ran_budgets());
+    ran_source(&b, S("host(\"run\", {\"printf\", \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}, {timeout_ms = 5000, whole = 100})\n"), ran_budgets());
     EXPECT_EQ(a.ran, OK);
     EXPECT_EQ(b.ran, OK);
     // 33 bytes are three steps' worth; the argvs are the same length.
@@ -69,7 +54,7 @@ TEST(run_refuses_what_zig_refuses_with_zigs_words) {
                      "print(attempt(f, {\"echo\"}, {timeout_ms = 1}).error)\n"
                      "print(attempt(f, {\"echo\"}, {timeout_ms = 1, whole = 1, tail = 1}).error)\n"
                      "print(attempt(f, {\"no-such-program-x\"}, {timeout_ms = 1000, tail = 1}).error)\n"),
-               cli_budgets());
+               ran_budgets());
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(host_text_of(&x), S("`run` of `bash`: a shell or an interpreter: Shale is the script; {want = \"tag: why\"} to run it anyway\n"
                                    "refused\n"
@@ -87,7 +72,7 @@ TEST(run_refuses_what_zig_refuses_with_zigs_words) {
 
 TEST(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended) {
     static Ran x;
-    Budgets b = cli_budgets();
+    Budgets b = ran_budgets();
     b.arena_bytes = 4u << 20;
     ran_source(&x, S("host(\"run\", {\"seq\", \"1\", \"2000000\"}, {timeout_ms = 20000, whole = 100000000})\n"), b);
     EXPECT_EQ(x.ran, STOP);
@@ -100,7 +85,7 @@ TEST(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended) {
 
 TEST(a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended) {
     static Ran x;
-    ran_source(&x, S("host(\"run\", {\"sh\", \"-c\", \"i=0; while [ $i -lt 30000 ]; do i=$((i+1)); done; echo out; exit 2\"}, {timeout_ms = 20000, tail = 5, cpu_budget_ms = 0, stage = \"busy\", want = \"t: sh\"})\n"), cli_budgets());
+    ran_source(&x, S("host(\"run\", {\"sh\", \"-c\", \"i=0; while [ $i -lt 30000 ]; do i=$((i+1)); done; echo out; exit 2\"}, {timeout_ms = 20000, tail = 5, cpu_budget_ms = 0, stage = \"busy\", want = \"t: sh\"})\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT_EQ(x.r.ctx.stop.budget, BUDGET_CPU);
     Str m = x.r.ctx.stop.message;
@@ -166,7 +151,7 @@ TEST(the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv) {
 
 TEST(sleep_takes_0_to_600000_ms_and_counts_its_time) {
     static Ran x;
-    ran_source(&x, S("function f(n) return host(\"sleep\", n) end\nprint(attempt(f, -1).error)\nprint(attempt(f, 600001).error)\nprint(attempt(f, \"1\").error)\nhost(\"sleep\", 20)\n"), cli_budgets());
+    ran_source(&x, S("function f(n) return host(\"sleep\", n) end\nprint(attempt(f, -1).error)\nprint(attempt(f, 600001).error)\nprint(attempt(f, \"1\").error)\nhost(\"sleep\", 20)\n"), ran_budgets());
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(host_text_of(&x), S("`sleep` takes 0 to 600000 ms, not -1\n`sleep` takes 0 to 600000 ms, not 600001\n`sleep`'s ms must be an integer, not a string\n"));
     EXPECT_EQ(x.lh.time.sleep_ms, 20);
@@ -186,7 +171,7 @@ TEST(a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest) {
     ran_run(&x, S("local j = host(\"job_start\", {\"sh\", \"-c\", \"echo hello; exit 4\"}, {log = \"j.log\", want = \"t: sh\"})\n"
                   "local w = host(\"job_wait\", j, {timeout_ms = 10000})\nprint(j.record, w.ended, w.code)\n"
                   "local k = host(\"job_start\", {\"sleep\", \"30\"}, {log = \"k.log\"})\nprint(host(\"job_alive\", k))\nfail(\"stop\")\n"),
-           cli_budgets());
+           ran_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT_STR(host_text_of(&x), S("j.log.job\texited\t4\ntrue\n"));
     Str log = S("");
@@ -212,7 +197,7 @@ TEST(job_calls_refuse_what_zig_refuses) {
                      "print(attempt(s, {\"echo\"}, {log = \"x.log\"}).error)\n"
                      "print(attempt(w, \"nope\", {timeout_ms = 1}).error)\nprint(attempt(w, \"nope.job\", {timeout_ms = 1}).error)\n"
                      "print(attempt(w, \"a.job\", {timeout_ms = 1, contains = \"\"}).error)\n"),
-               cli_budgets());
+               ran_budgets());
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(host_text_of(&x), S("`job_start` needs a `log`: a job's output goes there, and its record beside it\n"
                                    "`job_start`: no `secrets` on a job: a detached job's log has nobody to scrub it\n"
@@ -225,9 +210,9 @@ TEST(job_calls_refuse_what_zig_refuses) {
     ran_free(&x);
 }
 
-TEST_MAIN(TEST_CASE(run_keeps_the_head_and_tail_and_answers_every_field), TEST_CASE(run_charges_its_output_a_step_per_16_bytes),
+TEST_PART(host_run, TEST_CASE(run_keeps_the_head_and_tail_and_answers_every_field), TEST_CASE(run_charges_its_output_a_step_per_16_bytes),
           TEST_CASE(run_refuses_what_zig_refuses_with_zigs_words), TEST_CASE(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended),
           TEST_CASE(a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended),
           TEST_CASE(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap),
           TEST_CASE(the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv), TEST_CASE(sleep_takes_0_to_600000_ms_and_counts_its_time),
-          TEST_CASE(a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest), TEST_CASE(job_calls_refuse_what_zig_refuses))
+          TEST_CASE(a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest), TEST_CASE(job_calls_refuse_what_zig_refuses));

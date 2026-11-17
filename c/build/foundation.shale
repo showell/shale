@@ -93,9 +93,9 @@ const PLANTS = {
   {name = "a failure loses its line", file = "test.h", caught_by = "harness",
    old = "(int)t->current.len, t->current.ptr, file, line,", new = "(int)t->current.len, t->current.ptr, file, line * 0,"},
   {name = "TEST_ONLY runs every test", file = "test.h", caught_by = "harness",
-   old = "if (only_env != NULL && !test_named(only, c->name)) continue;", new = "(void)test_named;"},
+   old = "if (only_env != NULL && !test_named(only, c->name)) continue;", new = "if (0 && only_env != NULL && !test_named(only, c->name)) continue;"},
   {name = "TEST_ONLY lets a name no test has through", file = "test.h", caught_by = "harness",
-   old = "if (only_env != NULL && !test_all_named(cases, only, &missing)) {", new = "if (0 && !test_all_named(cases, only, &missing)) {"},
+   old = "if (only_env != NULL && !test_all_named(parts, only, &missing)) {", new = "if (0 && !test_all_named(parts, only, &missing)) {"},
   {name = "EXPECT_EQ_I prints a negative side unsigned", file = "test.h", caught_by = "harness",
    old = [==["  %s is %lld, %s is %lld\n"]==], new = [==["  %s is %llu, %s is %llu\n"]==]},
 }
@@ -222,7 +222,10 @@ end
 
 local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
 t.tests = {}
-for p in glob("c/tests/test_*.c") do push(t.tests, p) end
+-- A part (`TEST_PART(`, lib.shale) runs in its binary, in the ran block.
+for p in glob("c/tests/test_*.c") do
+  if not is_test_part(p) then push(t.tests, p) end
+end
 sort(t.tests)
 foundation_block(t)
 block_end(t, "foundation")

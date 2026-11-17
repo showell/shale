@@ -4,33 +4,13 @@
 // step count is the one Zig's `shale` gives the same source
 // (c/out/dev/zig_counts.shale printed them).
 
-#define _GNU_SOURCE
+// A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
+// includes test.h and ran.c before it.
 
-#include "test.h"
-
-#include "ran.c"
-
-// A source run on a fresh root with no mounts.
-static void ran_source(Ran *x, Str src, Budgets b) {
-    RanOpts none = {NULL, false, false};
-    ran_init(x, none);
-    ran_run(x, src, b);
-}
-
-static Budgets cli_budgets(void) {
-    Budgets b = budgets_default();
-    b.output_bytes = 64 * 1024;
-    return b;
-}
-
-// The report a run's stop prints, as the C `shale` writes it.
-static Str ran_report(Ran *x, Arena *a) {
-    return ran_report_of(x, a, false);
-}
 
 TEST(arithmetic_and_print_take_zigs_steps) {
     static Ran x;
-    ran_source(&x, S("local x = 1 + 2 * 3\nprint(x, \"a\" .. x)\n"), cli_budgets());
+    ran_source(&x, S("local x = 1 + 2 * 3\nprint(x, \"a\" .. x)\n"), ran_budgets());
     EXPECT(x.parsed);
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(buf_view(&x.r.out), S("7\ta7\n"));
@@ -41,7 +21,7 @@ TEST(arithmetic_and_print_take_zigs_steps) {
 
 TEST(the_step_budget_stops_one_past_it) {
     static Ran x;
-    Budgets b = cli_budgets();
+    Budgets b = ran_budgets();
     b.steps = 100;
     ran_source(&x, S("while true do end\n"), b);
     EXPECT_EQ(x.ran, STOP);
@@ -57,7 +37,7 @@ TEST(the_step_budget_stops_one_past_it) {
 
 TEST(the_call_depth_budget_names_every_call) {
     static Ran x;
-    ran_source(&x, S("function f(n) return f(n + 1) end\nf(1)\n"), cli_budgets());
+    ran_source(&x, S("function f(n) return f(n + 1) end\nf(1)\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT_EQ(x.r.steps, 321);
     EXPECT_EQ(x.r.ctx.stop.budget, BUDGET_CALL_DEPTH);
@@ -72,7 +52,7 @@ TEST(the_call_depth_budget_names_every_call) {
 
 TEST(attempt_makes_a_stop_a_value_and_the_run_goes_on) {
     static Ran x;
-    ran_source(&x, S("function g() fail(\"no\") end\nlocal r = attempt(g)\nprint(r.ok, r.error, r.class, r.line, #r.trail)\n"), cli_budgets());
+    ran_source(&x, S("function g() fail(\"no\") end\nlocal r = attempt(g)\nprint(r.ok, r.error, r.class, r.line, #r.trail)\n"), ran_budgets());
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(buf_view(&x.r.out), S("false\tno\tfail\t1\t1\n"));
     // The attempt's frame is gone: no call is left in progress.
@@ -83,7 +63,7 @@ TEST(attempt_makes_a_stop_a_value_and_the_run_goes_on) {
 
 TEST(a_budget_is_never_caught) {
     static Ran x;
-    Budgets b = cli_budgets();
+    Budgets b = ran_budgets();
     b.steps = 50;
     ran_source(&x, S("function spin() while true do end end\nlocal r = attempt(spin)\nprint(\"after\")\n"), b);
     EXPECT_EQ(x.ran, STOP);
@@ -95,7 +75,7 @@ TEST(a_budget_is_never_caught) {
 
 TEST(a_chain_grows_its_string_in_place) {
     static Ran x;
-    ran_source(&x, S("local s = \"\"\nfor i = 1, 100 do s = s .. \"ab\" end\nprint(#s)\n"), cli_budgets());
+    ran_source(&x, S("local s = \"\"\nfor i = 1, 100 do s = s .. \"ab\" end\nprint(#s)\n"), ran_budgets());
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(buf_view(&x.r.out), S("200\n"));
     EXPECT_EQ(x.r.steps, 911);
@@ -108,7 +88,7 @@ TEST(a_chain_grows_its_string_in_place) {
 
 TEST(yield_keeps_what_is_reached_and_charges_the_copy) {
     static Ran x;
-    ran_source(&x, S("local keep = {1, {a = \"xy\"}}\nlocal drop = {}\nfor i = 1, 10 do push(drop, i) end\nyield()\nprint(keep[2].a, #drop)\n"), cli_budgets());
+    ran_source(&x, S("local keep = {1, {a = \"xy\"}}\nlocal drop = {}\nfor i = 1, 10 do push(drop, i) end\nyield()\nprint(keep[2].a, #drop)\n"), ran_budgets());
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(buf_view(&x.r.out), S("xy\t10\n"));
     EXPECT_EQ(x.r.steps, 99);
@@ -120,7 +100,7 @@ TEST(yield_keeps_what_is_reached_and_charges_the_copy) {
 
 TEST(the_output_budget_writes_what_fits) {
     static Ran x;
-    Budgets b = cli_budgets();
+    Budgets b = ran_budgets();
     b.output_bytes = 5;
     ran_source(&x, S("print(\"abcdefgh\")\n"), b);
     EXPECT_EQ(x.ran, STOP);
@@ -134,7 +114,7 @@ TEST(division_floors_and_an_overflow_stops) {
     static Ran x;
     static Arena a;
     a = arena_make(1 << 20);
-    ran_source(&x, S("print(7 // -2, -7 % 3, 7 % -3)\nprint(9223372036854775807 + 1)\n"), cli_budgets());
+    ran_source(&x, S("print(7 // -2, -7 % 3, 7 % -3)\nprint(9223372036854775807 + 1)\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT_STR(buf_view(&x.r.out), S("-4\t2\t-2\n"));
     EXPECT_STR(ran_report(&x, &a), S("── stopped at stdin:2:27: arithmetic: 9223372036854775807 + 1 overflows 64 bits (24 steps)\n── used: 24 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 8 of 65536 output bytes\n"));
@@ -144,7 +124,7 @@ TEST(division_floors_and_an_overflow_stops) {
 
 TEST(an_index_past_the_append_names_the_one_that_appends) {
     static Ran x;
-    ran_source(&x, S("local l = {1}\nl[3] = 2\n"), cli_budgets());
+    ran_source(&x, S("local l = {1}\nl[3] = 2\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT_EQ(x.r.steps, 7);
     EXPECT_EQ(x.r.ctx.stop.cls, CLASS_INDEX);
@@ -156,7 +136,7 @@ TEST(an_index_past_the_append_names_the_one_that_appends) {
 
 TEST(maps_and_list_loops_take_zigs_steps) {
     static Ran x;
-    ran_source(&x, S("local m = {}\nm.k = 1\nprint(get(m, \"k\"), has_key(m, \"z\"), count(m))\nfor x in {5, 6} do print(x) end\n"), cli_budgets());
+    ran_source(&x, S("local m = {}\nm.k = 1\nprint(get(m, \"k\"), has_key(m, \"z\"), count(m))\nfor x in {5, 6} do print(x) end\n"), ran_budgets());
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(buf_view(&x.r.out), S("1\tfalse\t1\n5\n6\n"));
     EXPECT_EQ(x.r.steps, 47);
@@ -165,7 +145,7 @@ TEST(maps_and_list_loops_take_zigs_steps) {
 
 TEST(a_builtin_not_ported_is_refused_and_never_caught) {
     static Ran x;
-    ran_source(&x, S("function h() return host(\"procs\") end\nprint(attempt(h).ok)\n"), cli_budgets());
+    ran_source(&x, S("function h() return host(\"procs\") end\nprint(attempt(h).ok)\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT(x.r.unported);
     EXPECT_EQ(x.r.ctx.stop.cls, CLASS_HOST);
@@ -218,7 +198,7 @@ TEST(integer_text_and_checked_arithmetic) {
 
 TEST(the_depth_budget_stops_a_deep_expression) {
     static Ran x;
-    Budgets b = cli_budgets();
+    Budgets b = ran_budgets();
     b.depth = 10;
     ran_source(&x, S("print(abs(abs(abs(abs(abs(abs(abs(abs(abs(abs(abs(abs(1)))))))))))))\n"), b);
     EXPECT_EQ(x.ran, STOP);
@@ -228,11 +208,11 @@ TEST(the_depth_budget_stops_a_deep_expression) {
     ran_free(&x);
 }
 
-TEST_MAIN(TEST_CASE(arithmetic_and_print_take_zigs_steps), TEST_CASE(the_step_budget_stops_one_past_it),
+TEST_PART(vm, TEST_CASE(arithmetic_and_print_take_zigs_steps), TEST_CASE(the_step_budget_stops_one_past_it),
           TEST_CASE(the_call_depth_budget_names_every_call), TEST_CASE(attempt_makes_a_stop_a_value_and_the_run_goes_on),
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
           TEST_CASE(yield_keeps_what_is_reached_and_charges_the_copy), TEST_CASE(the_output_budget_writes_what_fits),
           TEST_CASE(division_floors_and_an_overflow_stops), TEST_CASE(an_index_past_the_append_names_the_one_that_appends),
           TEST_CASE(maps_and_list_loops_take_zigs_steps), TEST_CASE(a_builtin_not_ported_is_refused_and_never_caught),
           TEST_CASE(values_name_their_types_and_truth), TEST_CASE(integer_text_and_checked_arithmetic),
-          TEST_CASE(the_depth_budget_stops_a_deep_expression))
+          TEST_CASE(the_depth_budget_stops_a_deep_expression));

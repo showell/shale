@@ -6,11 +6,8 @@
 // left is the one Zig's `shale --verbose` gives the same source on the same
 // tree: the sources and answers below are its runs', copied whole.
 
-#define _GNU_SOURCE
-
-#include "test.h"
-
-#include "../ran.c"
+// A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
+// includes test.h and ran.c before it.
 
 static const char *const SRC_CHANGE_BUDGETS = "-- budget: changes=3 change_bytes=10\nreplace(\"a.txt\", \"12345\")\nreplace(\"b.txt\", \"123456\")\n";
 static const char *const OUT_CHANGE_BUDGETS = "";
@@ -249,10 +246,10 @@ TEST(undo_on_stop_puts_back_a_file_changed_and_deletes_one_made) {
     ran_free(&x);
 }
 
-TEST_MAIN(TEST_CASE(ls_stat_exists_and_is_dir_look_without_changing_and_name_a_missing_path), TEST_CASE(the_reads_whole_in_parts_by_lines_and_scans_across_a_chunks_edge),
+TEST_PART(builtins, TEST_CASE(ls_stat_exists_and_is_dir_look_without_changing_and_name_a_missing_path), TEST_CASE(the_reads_whole_in_parts_by_lines_and_scans_across_a_chunks_edge),
           TEST_CASE(the_read_budgets_stop_a_read_before_its_bytes_are_taken), TEST_CASE(walk_sorts_filters_skips_resumes_and_names_its_mistakes),
           TEST_CASE(walk_in_parts_ends_each_with_more_and_keep_reads_reads_nothing), TEST_CASE(every_change_is_logged_with_its_outcome_a_failed_one_too),
           TEST_CASE(the_change_bytes_budget_stops_a_change_before_it_is_written), TEST_CASE(the_changes_budget_stops_the_change_past_it),
           TEST_CASE(edit_prints_its_diff_holds_word_and_all_and_says_where_old_parts), TEST_CASE(edit_says_a_diff_as_one_line_without_verbose),
           TEST_CASE(edits_write_writes_every_file_or_none_and_refuses_one_named_twice), TEST_CASE(a_yield_keeps_the_effects_log),
-          TEST_CASE(attack_a_change_through_a_read_only_mount_is_refused_before_it_is_written), TEST_CASE(undo_on_stop_puts_back_a_file_changed_and_deletes_one_made))
+          TEST_CASE(attack_a_change_through_a_read_only_mount_is_refused_before_it_is_written), TEST_CASE(undo_on_stop_puts_back_a_file_changed_and_deletes_one_made));

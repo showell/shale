@@ -4,29 +4,9 @@
 // with no preludes. Every output, stop and step count is the one Zig's
 // `shale --verbose` gives the same source.
 
-#define _GNU_SOURCE
+// A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
+// includes test.h and ran.c before it.
 
-#include "test.h"
-
-#include "../ran.c"
-
-// A source run on a fresh root with no mounts.
-static void ran_source(Ran *x, Str src, Budgets b) {
-    RanOpts none = {NULL, false, false};
-    ran_init(x, none);
-    ran_run(x, src, b);
-}
-
-static Budgets cli_budgets(void) {
-    Budgets b = budgets_default();
-    b.output_bytes = 64 * 1024;
-    return b;
-}
-
-// The report a run's stop prints, as the C `shale` writes it.
-static Str ran_report(Ran *x, Arena *a) {
-    return ran_report_of(x, a, false);
-}
 
 static void text_expect_stop(Ran *x, StopClass cls, uint32_t line, uint64_t steps, Str message) {
     EXPECT_EQ(x->ran, STOP);
@@ -41,14 +21,14 @@ static void text_run_with(Ran *x, const char *src, const char *name, const char 
     RanOpts none = {NULL, false, false};
     ran_init(x, none);
     ran_put(x, name, text);
-    ran_run(x, ran_cs(src), cli_budgets());
+    ran_run(x, ran_cs(src), ran_budgets());
 }
 
 TEST(json_read_reads_each_kind_and_json_write_writes_it_back) {
     static Ran x;
     ran_source(&x, S("local v = host(\"json_read\", \"{\\\"a\\\": [1, -2, 3.5e2, true], \\\"b\\\": null, \\\"s\\\": \\\"\\\\u00e9\\\\n\\\"}\")\n"
                      "print(host(\"json_write\", v), v.a[3])\n"),
-               cli_budgets());
+               ran_budgets());
     EXPECT_EQ(x.ran, OK);
     // A fraction stays its text, a null member is left out, an escape is
     // decoded to UTF-8 and written back as a byte.
@@ -60,7 +40,7 @@ TEST(json_read_reads_each_kind_and_json_write_writes_it_back) {
 
 TEST(json_read_refuses_a_malformed_text_naming_its_byte_line_and_column) {
     static Ran x;
-    ran_source(&x, S("host(\"json_read\", \"[1,\\n 2,\\n x]\")\n"), cli_budgets());
+    ran_source(&x, S("host(\"json_read\", \"[1,\\n 2,\\n x]\")\n"), ran_budgets());
     text_expect_stop(&x, CLASS_ARGUMENT, 1, 18, S("`json_read`: a value was expected, not a byte (0x78) at byte 9 (line 3, column 2)"));
     EXPECT_EQ(x.r.out.len, 0);
     EXPECT_STR(ran_report(&x, &x.host), S("── stopped at stdin:1:1: argument: `json_read`: a value was expected, not a byte (0x78) at byte 9 (line 3, column 2) (18 steps)\n"
@@ -70,7 +50,7 @@ TEST(json_read_refuses_a_malformed_text_naming_its_byte_line_and_column) {
 
 TEST(json_read_stands_a_value_in_for_null_and_stops_past_its_depth) {
     static Ran x;
-    ran_source(&x, S("print(host(\"json_write\", host(\"json_read\", \"[null, [1]]\", {null = 0, depth = 2})))\nhost(\"json_read\", \"[[[1]]]\", {depth = 2})\n"), cli_budgets());
+    ran_source(&x, S("print(host(\"json_write\", host(\"json_read\", \"[null, [1]]\", {null = 0, depth = 2})))\nhost(\"json_read\", \"[[[1]]]\", {depth = 2})\n"), ran_budgets());
     EXPECT_STR(buf_view(&x.r.out), S("[0,[1]]\n"));
     text_expect_stop(&x, CLASS_ARGUMENT, 2, 80, S("`json_read`: the text nests past its depth budget at byte 2 (line 1, column 3)"));
     ran_free(&x);
@@ -78,7 +58,7 @@ TEST(json_read_stands_a_value_in_for_null_and_stops_past_its_depth) {
 
 TEST(json_write_refuses_a_table_that_holds_itself) {
     static Ran x;
-    ran_source(&x, S("local t = {}\nt.self = t\nhost(\"json_write\", t)\n"), cli_budgets());
+    ran_source(&x, S("local t = {}\nt.self = t\nhost(\"json_write\", t)\n"), ran_budgets());
     text_expect_stop(&x, CLASS_ARGUMENT, 3, 537, S("`json_write`: the value nests past 512 deep (or holds itself)"));
     EXPECT_EQ(x.r.out.len, 0);
     ran_free(&x);
@@ -86,7 +66,7 @@ TEST(json_write_refuses_a_table_that_holds_itself) {
 
 TEST(re_lines_keeps_the_matching_lines_and_charges_each_search) {
     static Ran x;
-    ran_source(&x, S("for m in host(\"re_lines\", \"alpha\\nbeta\\n\\ngamma beta\", \"beta\") do print(m.line, m.text) end\nprint(#host(\"re_lines\", \"a\\nb\", \"a\", {invert = true}))\n"), cli_budgets());
+    ran_source(&x, S("for m in host(\"re_lines\", \"alpha\\nbeta\\n\\ngamma beta\", \"beta\") do print(m.line, m.text) end\nprint(#host(\"re_lines\", \"a\\nb\", \"a\", {invert = true}))\n"), ran_budgets());
     EXPECT_EQ(x.ran, OK);
     EXPECT_STR(buf_view(&x.r.out), S("2\tbeta\n4\tgamma beta\n1\n"));
     EXPECT_EQ(x.r.steps, 169);
@@ -95,7 +75,7 @@ TEST(re_lines_keeps_the_matching_lines_and_charges_each_search) {
 
 TEST(re_lines_stops_one_past_the_step_budget) {
     static Ran x;
-    Budgets b = cli_budgets();
+    Budgets b = ran_budgets();
     b.steps = 60;
     ran_source(&x, S("for m in host(\"re_lines\", \"alpha\\nbeta\\n\\ngamma beta\", \"beta\") do print(m.line, m.text) end\n"), b);
     EXPECT_EQ(x.ran, STOP);
@@ -107,7 +87,7 @@ TEST(re_lines_stops_one_past_the_step_budget) {
 
 TEST(re_lines_refuses_an_unknown_option_before_any_other) {
     static Ran x;
-    ran_source(&x, S("host(\"re_lines\", \"a\", \"a\", {invert = true, foo = 1})\n"), cli_budgets());
+    ran_source(&x, S("host(\"re_lines\", \"a\", \"a\", {invert = true, foo = 1})\n"), ran_budgets());
     text_expect_stop(&x, CLASS_FAIL, 1, 25, S("`re_lines` takes `invert` and `nocase`, not `foo`"));
     ran_free(&x);
 }
@@ -134,8 +114,8 @@ TEST(shale_tokens_stops_on_a_file_that_does_not_lex_naming_the_lexers_line) {
     ran_free(&x);
 }
 
-TEST_MAIN(TEST_CASE(json_read_reads_each_kind_and_json_write_writes_it_back), TEST_CASE(json_read_refuses_a_malformed_text_naming_its_byte_line_and_column),
+TEST_PART(host_text, TEST_CASE(json_read_reads_each_kind_and_json_write_writes_it_back), TEST_CASE(json_read_refuses_a_malformed_text_naming_its_byte_line_and_column),
           TEST_CASE(json_read_stands_a_value_in_for_null_and_stops_past_its_depth), TEST_CASE(json_write_refuses_a_table_that_holds_itself),
           TEST_CASE(re_lines_keeps_the_matching_lines_and_charges_each_search), TEST_CASE(re_lines_stops_one_past_the_step_budget),
           TEST_CASE(re_lines_refuses_an_unknown_option_before_any_other), TEST_CASE(shale_tokens_gives_each_token_comments_among_them_with_its_span),
-          TEST_CASE(shale_tokens_stops_on_a_file_that_does_not_lex_naming_the_lexers_line))
+          TEST_CASE(shale_tokens_stops_on_a_file_that_does_not_lex_naming_the_lexers_line));

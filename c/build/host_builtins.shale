@@ -7,10 +7,11 @@
 use("build:lib.shale")
 
 -- ── The host builtins: their own block ──────────────────────────────────
--- c/tests/host_builtins/test_host_run.c under every build of `t.builds`,
--- held to its `TEST(` count and to HOST_BUILTINS_TESTS. It runs sources as
--- the C `shale` does (c/tests/ran.c), and its job test runs c/out/tcc/shale
--- as the reaper, which the command's block built. In the full tier: the
+-- c/tests/host_builtins/test_host_run.c, held here to HOST_BUILTINS_TESTS:
+-- a part of c/tests/ran_tests.c, which the ran block runs under every build
+-- and holds to its `TEST(` count. It runs sources as the C `shale` does
+-- (c/tests/ran.c), and its job test runs c/out/tcc/shale as the reaper,
+-- which the command's block built. In the full tier: the
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
@@ -55,9 +56,7 @@ function host_builtins_block(t)
   for src in tests do
     if test_count(src) ~= HOST_BUILTINS_TESTS[src] then fail(src .. " has " .. test_count(src) .. " TEST(s), and HOST_BUILTINS_TESTS says " .. HOST_BUILTINS_TESTS[src]) end
   end
-  for b in t.builds do
-    print("host builtins " .. said_of_build(b, #tests, test_files(t, "host builtins " .. b, b, tests)))
-  end
+  print("host builtins: " .. #tests .. " file(s) of C tests, run in c/tests/ran_tests.c")
   if not t.full then return nil end
   run_plants(t, "host builtins plants", HOST_BUILTINS_PLANTS)
   return nil
