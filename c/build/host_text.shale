@@ -1,0 +1,160 @@
+-- c/build/host_text.shale: the block of the host's text calls,
+-- c/host/host_json.c and c/host/host_text.c.
+-- c/build.shale runs it, with the `build` mount that `use` below reads; see
+-- that file for the tiers and the blocks.
+-- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
+
+use("build:lib.shale")
+
+-- ── The host's text calls: json_read, json_write, re_lines, shale_tokens ─
+-- In both tiers: c/tests/text/test_host_text.c under each of `t.builds`,
+-- held to its `TEST(` count and to HOST_TEXT_TESTS, then each command binary
+-- the command's block built runs HOST_TEXT_SCRIPTS through the Linux prelude,
+-- its output, report and exit held to the installed Zig `shale`'s, the
+-- oracle. In the full tier: the faults below planted in a copy of c/, with
+-- c/tests/ran.c and c/tests/text beside it, each caught by its `aim` tests
+-- under asan.
+
+const HOST_TEXT_TEST = "c/tests/text/test_host_text.c"
+const HOST_TEXT_TESTS = 9
+
+-- Each script's every stop is Zig's, so a message, a charge or an order the
+-- tests do not pin is judged here.
+const HOST_TEXT_SCRIPTS = {
+  {name = "json", source = [==[
+local v = json_read("{\"a\": [1, -2, 3.5e2, true, \"x\\u00e9\\ud83d\\ude00\"], \"b\": null, \"c\": {}}")
+print(json_write(v), json_write(json_read("[1,null]", {null = 0})), json_write({k = "q\"\\\t\r\x01"}))
+for s in {"", "[1,", "{\"a\":1,}", "tru", "01", "1e", "\"\\x\"", "\"\\u12\"", "\"\\ud800\"", "\"\\udc00\"", "9223372036854775808", "[null]", "{\"a\":1,\"a\":2}", "1 2", "\"\x01\"", "\"\xff\"", "\"\\u+0e9\"", "\"\\u-001\""} do
+  local r = attempt(json_read, s)
+  print(r.ok, get(r, "error", ""))
+end
+for o in {{depth = 0}, {size = 3}, {depth = "x"}, {zz = 1}} do print(attempt(json_read, "[1,2]", o).error) end
+print(attempt(json_read, 5).error, attempt(json_write, "\xff").error)
+]==]},
+  {name = "re_lines", source = [==[
+local s = "alpha\nbeta\n\ngamma beta\nlast"
+for m in re_lines(s, "beta") do print(m.line, m.text) end
+for m in re_lines(s, "^$", {invert = true, nocase = true}) do print(m.line, m.text) end
+print(#re_lines("", "x"), attempt(re_lines, s, "(").error, attempt(re_lines, s, "a", {foo = 1}).error)
+print(attempt(re_lines, s, "a", {nocase = 1}).error, attempt(re_lines, s, "a", {1}).error, attempt(re_lines, 1, "a").error)
+]==]},
+  {name = "shale_tokens", source = [==[
+create("t.shale", "local x = 1 -- one\nprint(\"hi\\n\", [=[raw]=])\n")
+create("bad.shale", "local y = 3.5\n")
+for t in shale_tokens("t.shale") do print(t.tag, t.text, t.line, t.start, t.stop) end
+print(#shale_tokens("t.shale", {tag = "comment"}), attempt(shale_tokens, "t.shale", {tag = "eof"}).error)
+print(attempt(shale_tokens, "t.shale", {tag = "zz"}).error, attempt(shale_tokens, "t.shale", {}).error)
+print(attempt(shale_tokens, "bad.shale").error, attempt(shale_tokens, "nope.shale").error)
+]==]},
+}
+
+const HOST_TEXT_PLANTS = {
+  {name = "a newline counts as a column", file = "host_json.c", dir = "host", caught_by = "text/test_host_text",
+   aim = "json_read_refuses_a_malformed_text_naming_its_byte_line_and_column",
+   old = "        if (at(jr->s, k) == '\\n') {", new = "        if (0) {"},
+  {name = "an array's null is refused with a value to stand in", file = "host_json.c", dir = "host", caught_by = "text/test_host_text",
+   aim = "json_read_stands_a_value_in_for_null_and_stops_past_its_depth",
+   old = "if (!jr->has_null) return json_fail_lit(", new = "if (1) return json_fail_lit("},
+  {name = "a table that holds itself is written without end", file = "host_json.c", dir = "host", caught_by = "text/test_host_text",
+   aim = "json_write_refuses_a_table_that_holds_itself",
+   old = "if (depth_left == 0) return run_fail(", new = "if (depth_left == 0 && 0) return run_fail("},
+  {name = "a line is searched for nothing", file = "host_text.c", dir = "host", caught_by = "text/test_host_text",
+   aim = "re_lines_keeps_the_matching_lines_and_charges_each_search,re_lines_stops_one_past_the_step_budget",
+   old = "        n++;\n        TRY(run_charge(r, pos, 1));", new = "        n++;"},
+  {name = "an unknown option is an argument's stop", file = "host_text.c", dir = "host", caught_by = "text/test_host_text",
+   aim = "re_lines_refuses_an_unknown_option_before_any_other",
+   old = "return run_failf(r, pos, CLASS_FAIL, \"`re_lines` takes", new = "return run_failf(r, pos, CLASS_ARGUMENT, \"`re_lines` takes"},
+  {name = "a token the tag leaves out is not charged", file = "host_text.c", dir = "host", caught_by = "text/test_host_text",
+   aim = "shale_tokens_gives_each_token_comments_among_them_with_its_span",
+   old = "        TRY(run_charge(r, pos, 1));\n        if (has_only && tok.tag != only) continue;", new = "        if (has_only && tok.tag != only) continue;\n        TRY(run_charge(r, pos, 1));"},
+  {name = "the lexer's message is left out", file = "host_text.c", dir = "host", caught_by = "text/test_host_text",
+   aim = "shale_tokens_stops_on_a_file_that_does_not_lex_naming_the_lexers_line",
+   old = "run_unum(r, lx.err.line), S(\": \"), lx.err.message);", new = "run_unum(r, lx.err.line), S(\": \"), S(\"\"));"},
+}
+
+-- One plant, the `k`th, as `start_plant` makes one, but with c/tests/ran.c
+-- and c/tests/text beside the copy of c/, so the test reaches the copy's
+-- c/host. `finish_plant` judges it.
+function host_text_start_plant(t, p, k)
+  local dir = OUT .. "/plants/host-text-" .. k
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir .. "/tests")
+  for d in PLANT_DIRS do
+    if exists("c/" .. d) then copy("c/" .. d, dir .. "/" .. d) end
+  end
+  copy("c/tests/ran.c", dir .. "/tests/ran.c")
+  copy("c/tests/text", dir .. "/tests/text")
+  local file = dir .. "/" .. p.dir .. "/" .. p.file
+  replace(file, replaced_once(read(file), p.old, p.new, p.name))
+  local bin = dir .. "/bin/" .. basename(p.caught_by)
+  compile_to(t, "host text plants", "asan", dir .. "/tests/" .. p.caught_by .. ".c", dir .. "/foundation", bin)
+  local log = dir .. "/run.log"
+  local job = job_start({real(bin)}, {log = log, env = {TEST_ONLY = p.aim}, want = WANT})
+  return {job = job, log = log, dir = dir, p = p}
+end
+
+-- One script's run by `argv` in a folder of its own, `<script>-<who>`, which
+-- holds a copy of the script: a script that writes files leaves each run
+-- its own.
+function host_text_run(t, dir, name, who, argv, env)
+  local work = dir .. "/" .. name .. "-" .. who
+  if exists(work) then remove_tree(work) end
+  mkdir(work)
+  copy(dir .. "/" .. name .. ".shale", work .. "/" .. name .. ".shale")
+  return run_in(t, "host text", argv, {timeout_ms = 20000, whole = 200000, env = env, cwd = work, want = WANT})
+end
+
+-- Each script of HOST_TEXT_SCRIPTS under Zig's `shale` and each build's.
+function host_text_scripts(t)
+  local dir = OUT .. "/host_text"
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir)
+  create(dir .. "/mounts", "")
+  local env = {SHALE_PRELUDE = "", SHALE_MOUNTS = real(dir .. "/mounts"), SHALE_NOW = "1700000000"}
+  for s in HOST_TEXT_SCRIPTS do
+    local file = s.name .. ".shale"
+    create(dir .. "/" .. file, s.source)
+    local z = host_text_run(t, dir, s.name, "zig", {"shale", file}, env)
+    for b in t.builds do
+      local c = host_text_run(t, dir, s.name, b, {real(OUT .. "/" .. b .. "/shale"), file}, env)
+      if get(c, "code", -1) ~= z.code or c.out ~= z.out then
+        fail("`" .. b .. "`'s shale ran " .. s.name .. ".shale unlike Zig's:\n--- zig (" .. z.code .. ")\n" .. z.out .. "\n--- c (" .. get(c, "code", -1) .. ")\n" .. c.out)
+      end
+    end
+  end
+  return nil
+end
+
+function host_text_block(t)
+  local n = test_count(HOST_TEXT_TEST)
+  if n ~= HOST_TEXT_TESTS then fail(HOST_TEXT_TEST .. " has " .. n .. " TEST(s), and HOST_TEXT_TESTS says " .. HOST_TEXT_TESTS) end
+  for b in t.builds do
+    local total = test_file(t, "host text " .. b, b, HOST_TEXT_TEST)
+    print("host text " .. said_of_build(b, 1, total))
+  end
+  host_text_scripts(t)
+  print("host text: " .. #HOST_TEXT_SCRIPTS .. " scripts run as Zig runs them, under " .. #t.builds .. " build(s)")
+  if not t.full then return nil end
+  local t0 = clock_ms()
+  local said = {}
+  local pending = nil
+  local k = 0
+  for p in HOST_TEXT_PLANTS do
+    k = k + 1
+    local started = host_text_start_plant(t, p, k)
+    if pending ~= nil then push(said, finish_plant(pending)) end
+    pending = started
+  end
+  if pending ~= nil then push(said, finish_plant(pending)) end
+  phase_wall(t, "host text plants", clock_ms() - t0)
+  print("host text plants: " .. #said .. " of " .. #HOST_TEXT_PLANTS .. " caught")
+  for l in said do print(l) end
+  return nil
+end
+-- ── end of the host text block ──────────────────────────────────────────
+
+-- ── The run ─────────────────────────────────────────────────────────────
+
+local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
+host_text_block(t)
+block_end(t, "host_text")
