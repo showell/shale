@@ -98,8 +98,12 @@ enum {
     PARSE_LIBRARIES_MOST = 16,
     // The most preludes and libraries one parse holds.
     PARSE_EXTRAS_MOST = 16 + PARSE_LIBRARIES_MOST,
-    PARSE_UNLOADED = UINT32_MAX,
 };
+
+// A loaded slot's value until its function is parsed. A macro of the slot's
+// own type, not an enum: an enum's constants are `int`, and UINT32_MAX is
+// past its range.
+#define PARSE_UNLOADED ((uint32_t)UINT32_MAX)
 
 // `in_prelude` and a const's owner for the script itself; the core prelude is
 // 0 and `extra`'s are 1 on.
