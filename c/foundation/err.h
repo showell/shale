@@ -1,12 +1,11 @@
 // err.h: how a run stops. A function that can stop returns a `Status`
 // (status.h); when it is STOP, the run's context says where and why: the
 // stop's place, its class (`type`, `index`, `budget` with which budget), its
-// message, the function it stopped in and the calls that led there, as Zig
-// Shale's `diag.Stop` holds them (src/script/diag.zig).
+// message, the function it stopped in and the calls that led there.
 //
-// The names and the texts are Zig Shale's, byte for byte: the class and budget
-// names are its enums' tag names, `run_budget_stop`'s messages are
-// `interp.Run.budgetStop`'s, and `stop_report` writes `script.report`'s lines.
+// The names and the texts are Zig Shale's, byte for byte, since the differ
+// holds the C's output to it: the class and budget names, the budget stops'
+// messages and the report's lines.
 
 #ifndef SHALE_ERR_H
 #define SHALE_ERR_H
@@ -77,8 +76,8 @@ static inline Str budget_name(BudgetKind b) {
     return at(n, (size_t)b);
 }
 
-// Every limit on a run, with Zig Shale's defaults (`interp.Budgets`). The CLI
-// sets some apart (output 64 KiB, call bytes 64 MiB); those are the CLI's.
+// Every limit on a run, with its default. The CLI sets some apart (output
+// 64 KiB, call bytes 64 MiB); those are the CLI's.
 typedef struct {
     uint64_t steps;
     size_t arena_bytes;
@@ -180,7 +179,14 @@ static inline RunCtx run_ctx_make(Arena *values, Arena *machine, Budgets budgets
 // Stops the run at `pos`, with `message` (which the caller keeps alive: a
 // literal, or made in the values' arena).
 static inline STATUS_MUST_USE Status run_fail(RunCtx *r, Pos pos, StopClass cls, Str message) {
-    // DRAGON: use after free. The trail is a view of the live call vec, not a copy, and the message lives in the caller's arena. A push after the stop can move the calls, a pop or `attempt`'s cut changes what the trail says, and a reset of either arena frees what the stop points at. Nothing in the C runs between a stop and its report; whatever comes to (`attempt`, yield) must copy what it keeps.
+    // DRAGON: use after free. The trail is a view of the live call vec, not
+    // a copy, and the message lives in the caller's arena. A push after the
+    // stop can move the calls, a pop or `attempt`'s cut changes what the
+    // trail says, and a freed arena takes what the stop points at with it.
+    // REMEDY: no call is pushed or popped between an uncaught stop and its
+    // report, a run frees neither arena before it, and `attempt` makes its
+    // answer from the whole trail before it cuts the calls (vm.c's
+    // vm_caught).
     Calls trail = {r->calls.ptr, r->calls.len};
     Stop s = {pos.line, pos.column, cls, BUDGET_NONE, message, r->function, trail};
     r->stop = s;
@@ -189,13 +195,13 @@ static inline STATUS_MUST_USE Status run_fail(RunCtx *r, Pos pos, StopClass cls,
 }
 
 // Stops the run with the message `b` built, or `fallback` when building it was
-// refused: Zig's `allocPrint(...) catch fallback`.
+// refused.
 static inline STATUS_MUST_USE Status run_fail_built(RunCtx *r, Pos pos, StopClass cls, const Buf *b, Status built, Str fallback) {
     return run_fail(r, pos, cls, built == OK ? buf_view(b) : fallback);
 }
 
 // The message of a budget's stop, made in the values' arena where it quotes a
-// number, as `interp.Run.budgetStop` makes it.
+// number.
 static inline Str run_budget_message(RunCtx *r, BudgetKind k) {
     Buf b = buf_make(r->values);
     Status s = OK;
@@ -248,16 +254,21 @@ static inline Str run_budget_message(RunCtx *r, BudgetKind k) {
     return S("");
 }
 
-// Stops the run at `pos` on budget `k`, with Zig's message for it.
+// Stops the run at `pos` on budget `k`, with its message.
 static inline STATUS_MUST_USE Status run_budget_stop(RunCtx *r, Pos pos, BudgetKind k) {
     Status s = run_fail(r, pos, CLASS_BUDGET, run_budget_message(r, k));
     r->stop.budget = k;
     return s;
 }
 
-// An allocation the arena refused, read as the arena budget, as Zig reads
-// every `OutOfMemory` of a run.
-// DRAGON: the arena budget. A container's STOP records no stop, so one passed up by TRY past this point ends the run with `stopped` false and a zeroed Stop that names no budget. Each caller of a container calls this at its boundary, and run_ended aborts on a STOP that skipped it.
+// An allocation the arena refused, read as the arena budget: every
+// out-of-memory of a run is.
+// DRAGON: the arena budget. A container's STOP records no stop, so one
+// passed up by TRY past this point ends the run with `stopped` false and a
+// zeroed Stop that names no budget.
+// REMEDY: each caller of a container calls this at its boundary, and
+// run_ended, which c/shale.c and the tests' runner pass every run through,
+// aborts on a STOP that skipped it; test_err catches its plant.
 static inline STATUS_MUST_USE Status run_oom(RunCtx *r, Pos pos) {
     return run_budget_stop(r, pos, BUDGET_ARENA);
 }
@@ -273,7 +284,8 @@ static inline STATUS_MUST_USE Status run_ended(const RunCtx *r, Status s) {
     return s;
 }
 
-// The place a stop names: "the prelude" for a line in the prelude, else the script's name.
+// The place a stop names: "the prelude" for a line in the prelude, else the
+// script's name.
 static inline Str stop_place(Str function, Str name) {
     return str_starts_with(function, S("the prelude's ")) ? S("the prelude") : name;
 }
@@ -292,7 +304,7 @@ static inline STATUS_MUST_USE Status stop_write_where(Buf *w, Str place, uint32_
     return OK;
 }
 
-// A stopped run's report, as `script.report` writes it after the effects:
+// A stopped run's report, written after the effects:
 // `── stopped at name:line:column (in `f`): class budget: message (N steps)`,
 // then a `   called from ...` line for each call, innermost first.
 static inline STATUS_MUST_USE Status stop_report(Buf *w, Str name, const Stop *s, uint64_t steps) {

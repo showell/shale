@@ -1,13 +1,12 @@
 // map.h: the one map Shale needs, from `Str` keys, in an arena. It keeps its
-// keys in the order they were first set, as Zig Shale's maps do
-// (`std.StringArrayHashMapUnmanaged`): `keys(m)` lists them in that order,
+// keys in the order they were first set: `keys(m)` lists them in that order,
 // and so does every walk of a map, so the order is part of the language.
 //
 // The entries sit in insertion order in parallel arrays (keys, hashes,
 // values); an open-addressing index of `uint32_t` points into them, 0 for an
-// empty slot and an entry's place plus one otherwise, probed linearly and kept
-// at most three quarters full. A removal keeps the order (Zig's
-// `orderedRemove`) and rebuilds the index, so there are no tombstones.
+// empty slot and an entry's place plus one otherwise, probed linearly and
+// kept at most three quarters full. A removal keeps the order and rebuilds
+// the index, so there are no tombstones.
 //
 // A key is held as given, not copied: it must live as long as the map, which
 // a key in the same arena does.
@@ -40,7 +39,13 @@ static inline uint64_t map_hash(Str key) {
 // leaves every array whole and `len` as it was.
 typedef struct {
     Arena *arena;
-    // DRAGON: use after free. A key is held by its pointer, not copied, so a key made in a buffer that later grows, or in an arena span later reset, dangles, and each lookup that probes its slot reads freed memory. A key in an arena that outlives the map, never reset under it, is safe.
+    // DRAGON: use after free. A key is held by its pointer, not copied, so a
+    // key made in a buffer that later grows, or in an arena span later
+    // reset, dangles, and each lookup that probes its slot reads freed
+    // memory.
+    // REMEDY: a caller gives keys that live as long as the map, as a key in
+    // the map's own arena does, since a run never resets an arena. Nothing
+    // checks it.
     Str *keys;
     size_t keys_cap;
     uint64_t *hashes;
@@ -94,7 +99,8 @@ static inline void map_core_rebuild(MapCore *m) {
     }
 }
 
-// A fresh index of `index_cap` slots, a power of two with room for every entry.
+// A fresh index of `index_cap` slots, a power of two with room for every
+// entry.
 static inline STATUS_MUST_USE Status map_core_reindex(MapCore *m, size_t index_cap) {
     uint32_t *fresh = ARENA_ARRAY(m->arena, uint32_t, index_cap);
     if (fresh == NULL) return STOP;
@@ -108,7 +114,11 @@ static inline STATUS_MUST_USE Status map_core_reindex(MapCore *m, size_t index_c
 // Room for one more entry: the keys and the hashes, and the index kept a
 // quarter free.
 static inline STATUS_MUST_USE Status map_core_reserve_one(MapCore *m) {
-    // DRAGON: bounds. The index holds an entry's place plus one in 32 bits, so past UINT32_MAX - 1 entries the cast in `_put` and map_core_rebuild would wrap and a slot would point at the wrong entry. This check refuses the put first. No test reaches it: the arena budget stops a map long before.
+    // DRAGON: bounds. The index holds an entry's place plus one in 32 bits,
+    // so past UINT32_MAX - 1 entries the cast in `_put` and map_core_rebuild
+    // would wrap and a slot would point at the wrong entry.
+    // REMEDY: this check refuses the put first. No test reaches it: the
+    // arena budget stops a map long before.
     if (m->len >= UINT32_MAX - 1) {
         m->arena->hit = true;
         return STOP;
@@ -194,7 +204,8 @@ static inline void map_core_remove_at(MapCore *m, size_t e) {
                                                                                              \
     /* The value's place, or NULL when `key` is not there. */                                \
     /* DRAGON: use after free. The place is in the values, which the next put may move, */   \
-    /* freeing a big buffer to the system. Use it before the next put or remove. */          \
+    /* freeing a big buffer to the system. */                                                \
+    /* REMEDY: a caller uses it before its next put or remove, which nothing checks. */      \
     static inline V *Name##_ptr(Name *m, Str key) {                                          \
         size_t e = map_core_find(&m->core, key);                                             \
         if (e == SIZE_MAX) return NULL;                                                      \

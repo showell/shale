@@ -1,14 +1,13 @@
-// vec.h: a typed dynamic array in an arena, where Zig Shale's
-// `std.ArrayList(T)` goes. It grows by Zig's rule but for one number, so the
-// bytes it holds can differ from Zig's, which docs/C-SEAMS.md ("Fidelity")
-// allows:
+// vec.h: a typed dynamic array in an arena. It grows by Zig Shale's rule but
+// for one number, so the bytes it holds can differ from Zig's, which
+// docs/C-SEAMS.md ("Fidelity") allows:
 //
-//   - the new capacity for a need of `n` items is `n + n/2 + max(1, 64 / sizeof(T))`
-//     (Zig's `growCapacity`, which uses `std.atomic.cache_line`, 128 on
-//     x86-64, where this has 64);
+//   - the new capacity for a need of `n` items is
+//     `n + n/2 + max(1, 64 / sizeof(T))`, with a 64-byte cache line where
+//     Zig's x86-64 build has 128;
 //   - it first tries to grow in place (`arena_resize`, which only the arena's
-//     last allocation can), and otherwise takes a new buffer, copies the items
-//     and frees the old one (`ensureTotalCapacityPrecise`).
+//     last allocation can), and otherwise takes a new buffer, copies the
+//     items and frees the old one.
 //
 // `VEC_DEFINE(Name, T)` makes `Name`, a struct of `ptr`, `len`, `cap` and
 // `arena`, indexed with `at(v, i)` like any slice, and its functions:
@@ -20,8 +19,8 @@
 #include "arena.h"
 #include "status.h"
 
-// Zig's `growCapacity(minimum)`, with a 64-byte line, for items of `elem`
-// bytes, saturating.
+// The capacity to grow to for a need of `minimum` items of `elem` bytes,
+// saturating: half again, plus a 64-byte line of items.
 static inline size_t vec_grow_capacity(size_t minimum, size_t elem) {
     size_t init = 64 / elem;
     if (init < 1) init = 1;
@@ -35,7 +34,11 @@ static inline size_t vec_grow_capacity(size_t minimum, size_t elem) {
 static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len, size_t need, size_t elem, size_t align) {
     if (*cap >= need) return OK;
     size_t new_cap = vec_grow_capacity(need, elem);
-    // DRAGON: size overflow. `new_cap * elem` would wrap to a small buffer for a huge capacity: I64s_reserve(SIZE_MAX / 4) would get 160 bytes for 3 * 2^61 items and say OK. This division refuses it first. test_vec catches its plant.
+    // DRAGON: size overflow. `new_cap * elem` can wrap to a small buffer for
+    // a huge capacity: on a vec of one item, I64s_reserve(SIZE_MAX / 4)
+    // would ask for 64 bytes for 3 * 2^61 + 8 items and say OK.
+    // REMEDY: this division refuses such a capacity before the multiply, and
+    // test_vec catches its plant.
     if (new_cap > SIZE_MAX / elem) {
         a->hit = true;
         return STOP;
@@ -50,7 +53,13 @@ static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *
     // memmove, not memcpy: GCC at -O2 cannot prove the two buffers apart and
     // warns (-Wrestrict); they never overlap, and the cost is the same.
     if (len > 0 && *cap > 0) memmove(fresh, *ptr, len * elem);
-    // DRAGON: use after free. The old buffer is freed here, back to the system when it is big, so a pointer into the items taken before a growth (`&at(v, i)`, an Items slice, a map's `_ptr`, a buf_view) dangles after it. Nothing tracks such pointers. A caller drops them before its next push.
+    // DRAGON: use after free. The old buffer is freed here, back to the
+    // system when it is big, so a pointer into the items taken before a
+    // growth (`&at(v, i)`, an Items slice, a map's `_ptr`, a buf_view)
+    // dangles after it.
+    // REMEDY: none here, since nothing tracks such pointers: a caller drops
+    // them before its next push, and the full tier's ASan fails a test that
+    // reads a freed big buffer.
     if (*cap > 0) arena_free(a, *ptr, *cap * elem);
     *ptr = fresh;
     *cap = new_cap;
@@ -75,6 +84,8 @@ static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *
     static inline STATUS_MUST_USE Status Name##_reserve(Name *v, size_t more) {              \
         /* DRAGON: size overflow. `v->len + more` would wrap below `cap` and report room */  \
         /* the vec doesn't have, so the push after it writes past the buffer. */             \
+        /* REMEDY: this check refuses such a `more` before the sum, and test_vec */          \
+        /* catches its plant. */                                                             \
         if (more > SIZE_MAX - v->len) {                                                      \
             v->arena->hit = true;                                                            \
             return STOP;                                                                     \

@@ -5,8 +5,8 @@
 // has proved its own bounds may opt out with `at_unchecked(s, i, "why")`,
 // whose reason is a string literal the compiler requires.
 //
-// This is the only file allowed a raw `ptr[...]` index; `c/check_discipline.shale`
-// holds the rest of the C to it.
+// This is the only file allowed a raw `ptr[...]` index;
+// `c/check_discipline.shale` holds the rest of the C to it.
 
 #ifndef SHALE_SLICE_H
 #define SHALE_SLICE_H
@@ -32,7 +32,8 @@ typedef struct {
 // `S`'s form, with "index too large".
 #define S_ITEM(lit) {"" lit "", sizeof(lit) - 1}
 
-// A typed slice: `SLICE_TYPE(Ints, int64_t);` names a struct of `ptr` and `len`.
+// A typed slice: `SLICE_TYPE(Ints, int64_t);` names a struct of `ptr` and
+// `len`.
 #define SLICE_TYPE(Name, T) \
     typedef struct {        \
         T *ptr;             \
@@ -47,7 +48,11 @@ SLICE_TYPE(Bytes, char);
 // The slot is per translation unit, which is all a test needs.
 typedef void (*BoundsTrap)(const char *file, int line, uint64_t i, size_t len); // cstr: __FILE__
 
-// DRAGON: bounds. A trap that returns still ends in abort, but one that longjmps resumes the program after a bad index, as if it had been in bounds. Only test.h sets one, in a death test's child, and it calls `_exit`.
+// DRAGON: bounds. A trap that returns still ends in abort, but one that
+// longjmps resumes the program after a bad index, as if it had been in
+// bounds.
+// REMEDY: only test.h sets a trap, in a death test's child, and its trap
+// calls `_exit`.
 static inline BoundsTrap *slice_trap_slot(void) {
     static BoundsTrap trap;
     return &trap;
@@ -70,12 +75,20 @@ static inline size_t slice_check(uint64_t i, size_t len, const char *file, int l
 }
 
 // The element at `i`, an lvalue. `s` is evaluated twice, `i` once.
-// DRAGON: bounds. This is every index's check, and a negative index becomes a huge one and traps. A trap ends the process, not the run, so a script's index is checked first by its caller, as the `index` stop; at() is the backstop.
+// DRAGON: bounds. This is every index's check, and a trap ends the process,
+// not the run, so a script's bad index must never reach it.
+// REMEDY: a negative index becomes a huge one and traps, never reading past
+// the end; a script's index is checked first by its caller, as the `index`
+// stop, and at() is the backstop.
 #define at(s, i) ((s).ptr[slice_check((i), (s).len, __FILE__, __LINE__)])
 
 // The element at `i` with no check. `reason` must be a non-empty string
 // literal saying why the index is in bounds; it costs nothing at run time.
-// DRAGON: bounds. No check at all. The reason is a comment the compiler insists on, and nothing holds it true, so every use is a raw index to read by hand. The C has none.
+// DRAGON: bounds. No check at all. The reason is a comment the compiler
+// insists on, and nothing holds it true.
+// REMEDY: a search for `at_unchecked(` lists every use, each with its reason,
+// and each is read by hand as a raw index. The uses are few: loops bounded
+// by `len`, and one walk to the MSG_END that ends every list it walks.
 #define at_unchecked(s, i, reason) \
     ((s).ptr[((void)sizeof(char[sizeof("" reason "") > 1 ? 1 : -1]), (i))])
 
