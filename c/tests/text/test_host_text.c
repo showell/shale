@@ -45,6 +45,8 @@ TEST(json_read_refuses_a_malformed_text_naming_its_byte_line_and_column) {
     ran_source(&x, S("host(\"json_read\", \"[1,\\n 2,\\n x]\")\n"), cli_budgets());
     text_expect_stop(&x, CLASS_ARGUMENT, 1, 18, S("`json_read`: a value was expected, not a byte (0x78) at byte 9 (line 3, column 2)"));
     EXPECT_EQ(x.r.out.len, 0);
+    EXPECT_STR(ran_report(&x, &x.host), S("── stopped at stdin:1:1: argument: `json_read`: a value was expected, not a byte (0x78) at byte 9 (line 3, column 2) (18 steps)\n"
+                                          "── used: 18 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes\n"));
     ran_free(&x);
 }
 
