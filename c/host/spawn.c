@@ -51,23 +51,20 @@ typedef struct {
     // argv[0] is found along PATH unless it has a `/`; then it is a path,
     // relative to `cwd`.
     SpawnStrs argv;
-    // The OS folder it starts in, when `has_cwd`; else `shale`'s own.
-    bool has_cwd;
+    // The OS folder it starts in; empty for `shale`'s own.
     Str cwd;
     // The whole environment, as `K=V` strings.
     SpawnStrs env;
-    // The bytes for stdin, when `has_stdin`; else /dev/null.
-    bool has_stdin;
-    Str stdin_bytes;
+    // The bytes for stdin, or NULL for /dev/null.
+    const Str *stdin_bytes;
     // An open file stdout goes to instead of the pipe (`run`'s
     // `stdout_secret`); stderr stays on the pipe. -1 for the pipe.
     int stdout_fd;
-    // When `has_file_most`, the most bytes the program may write to any file
-    // (RLIMIT_FSIZE, set in the child before exec), so `stdout_fd`'s file
-    // cannot grow without bound while it runs: past it the kernel ends the
-    // program with SIGXFSZ, or its write fails.
-    bool has_file_most;
-    uint64_t file_most;
+    // The most bytes the program may write to any file (RLIMIT_FSIZE, set in
+    // the child before exec), so `stdout_fd`'s file cannot grow without bound
+    // while it runs: past it the kernel ends the program with SIGXFSZ, or its
+    // write fails. SPAWN_UNLIMITED for no limit.
+    uint64_t file_max;
     // When the program's group gets TERM.
     uint64_t timeout_ms;
     // The time between TERM and KILL.
@@ -76,9 +73,14 @@ typedef struct {
     uint64_t drain_ms;
 } SpawnSpec;
 
+// A `file_max` that sets no limit.
+#define SPAWN_UNLIMITED UINT64_MAX
+
 static void spawn_spec_default(SpawnSpec *s) {
     memset(s, 0, sizeof *s);
+    s->stdin_bytes = NULL;
     s->stdout_fd = -1;
+    s->file_max = SPAWN_UNLIMITED;
     s->grace_ms = 2000;
     s->drain_ms = 200;
 }
@@ -95,14 +97,15 @@ typedef enum {
     SPAWN_INTERRUPTED,
 } SpawnEnded;
 
+// An outcome's `code` when the program did not exit.
+enum { SPAWN_NO_CODE = -1 };
+
 // How a program ended, and how long it ran.
 typedef struct {
     SpawnEnded ended;
-    // The exit code, if it exited.
-    bool has_code;
-    uint8_t code;
-    // The signal that ended it, if one did.
-    bool has_signal;
+    // The exit code, or SPAWN_NO_CODE when it did not exit.
+    int code;
+    // The signal that ended it, or 0 when none did (no signal is numbered 0).
     uint32_t signal;
     // Milliseconds the run took, the drain included.
     uint64_t ms;
@@ -242,7 +245,7 @@ static void spawn_child_fail(int err_w, uint32_t code) {
 // REMEDY: it makes only raw system calls (and `sigemptyset`) on memory built
 // before the fork (the paths, argv and envp), and leaves by exec or _exit,
 // never by return.
-static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, bool has_file_most, uint64_t file_most, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
+static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, uint64_t file_max, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
     // DRAGON: the process boundary. The death signal ends the child when
     // `shale` dies, so a program never outlives it; but `shale` may die
     // before the prctl, and then the child's parent is already another
@@ -268,10 +271,10 @@ static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_f
     // which no pipe bounds, so it could fill the disk before the cap is
     // checked at exit.
     // REMEDY: the hard and soft RLIMIT_FSIZE, one raw prlimit64 (async-signal
-    // safe, nothing allocated), so the kernel holds it to `file_most` bytes;
+    // safe, nothing allocated), so the kernel holds it to `file_max` bytes;
     // a failure exits 127 before exec, never running the program unbounded.
-    if (has_file_most) {
-        struct rlimit lim = {(rlim_t)file_most, (rlim_t)file_most};
+    if (file_max != SPAWN_UNLIMITED) {
+        struct rlimit lim = {(rlim_t)file_max, (rlim_t)file_max};
         if (syscall(SYS_prlimit64, 0, RLIMIT_FSIZE, &lim, NULL) != 0) spawn_child_fail(err_w, EPERM);
     }
     if (cwd != NULL && chdir(cwd) != 0) spawn_child_fail(err_w, 1000 + (uint32_t)errno);
@@ -528,9 +531,9 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     l.in_w = *in_w;
     l.pid_fd = pid_fd;
     l.sig_fd = sig_fd;
-    l.stdin_left = spec->has_stdin ? spec->stdin_bytes : S("");
+    l.stdin_left = spec->stdin_bytes != NULL ? *spec->stdin_bytes : S("");
     l.deadline = start + spec->timeout_ms;
-    if (spec->has_stdin && l.stdin_left.len == 0) spawn_close(&l.in_w);
+    if (spec->stdin_bytes != NULL && l.stdin_left.len == 0) spawn_close(&l.in_w);
     char buf_room[64 * 1024];
     Bytes buf = {buf_room, sizeof buf_room};
     SpawnResult result = SPAWN_OK;
@@ -564,26 +567,19 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     uint64_t ms = spawn_mono_ms() - start;
     uint64_t cpu_ms = spawn_usage_ms(&l.usage);
     memset(outcome, 0, sizeof *outcome);
+    outcome->code = SPAWN_NO_CODE;
     outcome->ms = ms;
     outcome->cpu_ms = cpu_ms;
     int status = l.raw;
     if (l.has_why) {
         outcome->ended = l.why;
-        if (WIFSIGNALED(status)) {
-            outcome->has_signal = true;
-            outcome->signal = (uint32_t)WTERMSIG(status);
-        }
-        if (WIFEXITED(status)) {
-            outcome->has_code = true;
-            outcome->code = (uint8_t)WEXITSTATUS(status);
-        }
+        if (WIFSIGNALED(status)) outcome->signal = (uint32_t)WTERMSIG(status);
+        if (WIFEXITED(status)) outcome->code = WEXITSTATUS(status);
     } else if (WIFEXITED(status)) {
         outcome->ended = SPAWN_EXIT;
-        outcome->has_code = true;
-        outcome->code = (uint8_t)WEXITSTATUS(status);
+        outcome->code = WEXITSTATUS(status);
     } else {
         outcome->ended = SPAWN_SIGNAL;
-        outcome->has_signal = true;
         outcome->signal = (uint32_t)WTERMSIG(status);
     }
     return SPAWN_OK;
@@ -637,7 +633,7 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
     SpawnPipe in_pipe = {f->in_room, 2};
     if (pipe2(out_pipe.ptr, O_CLOEXEC) != 0) return SPAWN_REFUSED;
     if (pipe2(err_pipe.ptr, O_CLOEXEC) != 0) return SPAWN_REFUSED;
-    if (spec->has_stdin && pipe2(in_pipe.ptr, O_CLOEXEC) != 0) return SPAWN_REFUSED;
+    if (spec->stdin_bytes != NULL && pipe2(in_pipe.ptr, O_CLOEXEC) != 0) return SPAWN_REFUSED;
 
     // While a program runs, TERM and HUP to `shale` go to the loop instead
     // of the default action; the child unblocks them before exec.
@@ -660,7 +656,7 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
     pid_t parent = getpid();
     pid_t pid = fork();
     if (pid < 0) return SPAWN_REFUSED;
-    if (pid == 0) spawn_child(parent, cwd, at(in_pipe, 0), spec->stdout_fd, spec->has_file_most, spec->file_most, at(out_pipe, 1), at(err_pipe, 1), paths, argv, envp);
+    if (pid == 0) spawn_child(parent, cwd, at(in_pipe, 0), spec->stdout_fd, spec->file_max, at(out_pipe, 1), at(err_pipe, 1), paths, argv, envp);
 
     spawn_close(&at(out_pipe, 1));
     spawn_close(&at(err_pipe, 1));
@@ -679,7 +675,7 @@ static SpawnResult spawn_run(Arena *a, const SpawnSpec *spec, SpawnSink sink, Sp
     SpawnCStrs paths = {NULL, 0};
     if (!spawn_candidates(a, at(spec->argv, 0), spec->env, &paths)) return SPAWN_OUT_OF_MEMORY;
     char *cwd = NULL;
-    if (spec->has_cwd) {
+    if (spec->cwd.len > 0) {
         cwd = spawn_cstr(a, spec->cwd);
         if (cwd == NULL) return SPAWN_OUT_OF_MEMORY;
     }

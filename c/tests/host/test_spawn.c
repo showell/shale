@@ -134,9 +134,8 @@ TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
     s.env.len = 2;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_EXIT);
-    EXPECT(o.has_code);
     EXPECT_EQ(o.code, 0);
-    EXPECT(!o.has_signal);
+    EXPECT_EQ(o.signal, 0);
     EXPECT_STR(buf_view(&c.out), S("line 1\nline 2\nline 3\n"));
     buf_clear(&c.out);
     fixture_spec(&s, &a, &argv, "exit", "7", "");
@@ -144,8 +143,8 @@ TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
     EXPECT_EQ(o.code, 7);
     EXPECT_STR(buf_view(&c.out), S(""));
     fixture_spec(&s, &a, &argv, "cat", "", "");
-    s.has_stdin = true;
-    s.stdin_bytes = S("fed\nin\n");
+    Str fed = S("fed\nin\n");
+    s.stdin_bytes = &fed;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S("fed\nin\n"));
     buf_clear(&c.out);
@@ -156,8 +155,8 @@ TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
     EXPECT_STR(buf_view(&c.out), S(""));
     // An empty stdin is closed before the loop.
     fixture_spec(&s, &a, &argv, "cat", "", "");
-    s.has_stdin = true;
-    s.stdin_bytes = S("");
+    Str none = S("");
+    s.stdin_bytes = &none;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S(""));
     fixture_spec(&s, &a, &argv, "env", "SHALE_FIXTURE", "");
@@ -172,7 +171,6 @@ TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
     EXPECT_STR(buf_view(&c.out), S("(unset)\n"));
     buf_clear(&c.out);
     fixture_spec(&s, &a, &argv, "pwd", "", "");
-    s.has_cwd = true;
     s.cwd = S("/");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S("/\n"));
@@ -195,9 +193,8 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
     s.timeout_ms = 200;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_TIMEOUT);
-    EXPECT(o.has_signal);
     EXPECT_EQ(o.signal, SIGTERM);
-    EXPECT(!o.has_code);
+    EXPECT_EQ(o.code, SPAWN_NO_CODE);
     EXPECT(o.ms >= 200 && o.ms < 5000);
     // The attack: a child that ignores TERM is KILLed at the grace's end.
     fixture_spec(&s, &a, &argv, "ignore-term", "20000", "");
@@ -205,16 +202,14 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
     s.grace_ms = 300;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_TIMEOUT);
-    EXPECT(o.has_signal);
     EXPECT_EQ(o.signal, SIGKILL);
     EXPECT(o.ms >= 600 && o.ms < 5000);
     EXPECT_STR(buf_view(&c.out), S("ignoring\n"));
     fixture_spec(&s, &a, &argv, "kill-self", "", "");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_SIGNAL);
-    EXPECT(o.has_signal);
     EXPECT_EQ(o.signal, SIGKILL);
-    EXPECT(!o.has_code);
+    EXPECT_EQ(o.code, SPAWN_NO_CODE);
     static const Str missing[1] = {S("shale-no-such-program")};
     s.argv.ptr = missing;
     s.argv.len = 1;
@@ -227,7 +222,6 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
     s.argv.ptr = folder;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_NOT_RUNNABLE);
     fixture_spec(&s, &a, &argv, "pwd", "", "");
-    s.has_cwd = true;
     s.cwd = S("/no/such/folder");
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_NO_CWD);
     // Found along PATH: a program with no `/` in its name, past a folder
@@ -436,7 +430,6 @@ TEST(attack_a_term_to_shale_after_its_program_exits_while_the_output_drains_stil
     EXPECT(c.raised);
     EXPECT_EQ(o.ended, SPAWN_INTERRUPTED);
     // The leader's own exit is kept beside the word.
-    EXPECT(o.has_code);
     EXPECT_EQ(o.code, 0);
     EXPECT(o.ms < 5000);
     long g = grandchild_pid(buf_view(&c.out));
@@ -624,8 +617,8 @@ TEST(attack_a_program_that_never_reads_its_stdin_leaves_shale_standing) {
     memset(mb, 'y', sizeof mb);
     SpawnSpec s;
     fixture_spec(&s, &a, &argv, "exit", "3", "");
-    s.has_stdin = true;
-    s.stdin_bytes = (Str){mb, sizeof mb};
+    Str fed = {mb, sizeof mb};
+    s.stdin_bytes = &fed;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_EQ(o.ended, SPAWN_EXIT);
     EXPECT_EQ(o.code, 3);

@@ -461,7 +461,6 @@ static STATUS_MUST_USE Status host_tracked(Host *h, Run *r, Pos pos, Str path, S
     spawn_spec_default(&spec);
     spec.argv.ptr = argv_all;
     spec.argv.len = 5;
-    spec.has_cwd = true;
     spec.cwd = cwd;
     spec.env = h->env;
     spec.timeout_ms = 10000;
@@ -848,8 +847,8 @@ static STATUS_MUST_USE Status host_over_budget(Run *r, Pos pos, Str stage, uint6
     if (s == OK && failed) {
         s = buf_lit(&m, "; it also ended ");
         if (s == OK) s = buf_str(&m, host_ended_word(o->ended));
-        if (s == OK && o->has_code) s = buf_byte(&m, ' ');
-        if (s == OK && o->has_code) s = buf_u64(&m, o->code);
+        if (s == OK && o->code != SPAWN_NO_CODE) s = buf_byte(&m, ' ');
+        if (s == OK && o->code != SPAWN_NO_CODE) s = buf_u64(&m, (uint64_t)o->code);
         if (s == OK) s = buf_lit(&m, ", its output's end:\n");
         if (s == OK) s = buf_str(&m, str_sub(out, out.len > HOST_BUDGET_STOP_OUTPUT ? out.len - HOST_BUDGET_STOP_OUTPUT : 0, out.len));
     }
@@ -1011,7 +1010,7 @@ static STATUS_MUST_USE Status host_run_answer(Run *r, Pos pos, SpawnStrs argv, c
     Value lv;
     value_table(&lv, list);
     TRY(run_map_put(r, pos, t, S("argv"), &lv));
-    if (o->has_code && o->ended == SPAWN_EXIT) TRY(run_map_put_int(r, pos, t, S("code"), o->code));
+    if (o->code != SPAWN_NO_CODE && o->ended == SPAWN_EXIT) TRY(run_map_put_int(r, pos, t, S("code"), o->code));
     TRY(run_map_put_str(r, pos, t, S("ended"), o->ended == SPAWN_INTERRUPTED ? S("signal") : host_ended_word(o->ended)));
     TRY(run_map_put_int(r, pos, t, S("ms"), (int64_t)o->ms));
     TRY(run_map_put_int(r, pos, t, S("cpu_ms"), (int64_t)o->cpu_ms));
@@ -1031,8 +1030,8 @@ static void host_run_record(Host *h, Run *r, Str joined, Str shown_env, const Ru
     if (s == OK && host_given(&o->want)) s = buf_byte(&b, ')');
     if (s == OK) s = buf_lit(&b, " -> ");
     if (s == OK) s = buf_str(&b, host_ended_word(out->ended));
-    if (s == OK && out->has_code) s = buf_byte(&b, ' ');
-    if (s == OK && out->has_code) s = buf_u64(&b, out->code);
+    if (s == OK && out->code != SPAWN_NO_CODE) s = buf_byte(&b, ' ');
+    if (s == OK && out->code != SPAWN_NO_CODE) s = buf_u64(&b, (uint64_t)out->code);
     if (s == OK) s = buf_lit(&b, " (");
     if (s == OK) s = buf_u64(&b, out->ms);
     if (s == OK) s = buf_lit(&b, " ms)");
@@ -1220,11 +1219,9 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     SpawnSpec spec;
     spawn_spec_default(&spec);
     spec.argv = argv;
-    spec.has_cwd = true;
     spec.cwd = cwd;
     spec.env = env;
-    spec.has_stdin = has_stdin;
-    spec.stdin_bytes = stdin_bytes;
+    spec.stdin_bytes = has_stdin ? &stdin_bytes : NULL;
     spec.stdout_fd = held->has_secret ? held->secret.fd : -1;
     // DRAGON: the budgets. The secret's file is the program's stdout, which
     // no pipe bounds: it could fill the disk before the cap is checked at
@@ -1232,8 +1229,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     // REMEDY: RLIMIT_FSIZE at the cap plus one, set in the child before exec
     // (spawn.c), so the kernel stops the file one byte past the cap and
     // `host_secret_refuse_over` sees it; test_run_guards prints 10 MB at it.
-    spec.has_file_most = held->has_secret;
-    spec.file_most = HOST_SECRET_MOST + 1;
+    if (held->has_secret) spec.file_max = HOST_SECRET_MOST + 1;
     spec.timeout_ms = o->timeout_ms;
     SpawnOutcome outcome;
     memset(&outcome, 0, sizeof outcome);
