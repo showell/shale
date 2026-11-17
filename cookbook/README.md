@@ -30,7 +30,8 @@ steps left for the writer.
   `retire_checkout.shale` on the lane and stops on anything less than a
   plain CLEAR; then it removes the worktree (or deletes a standalone
   clone's folder) and deletes the lane's branch, here and on origin, where
-  it is merged into origin's default branch. Never a bare `git worktree
+  it is merged into origin's default branch (its tip there, or each of its
+  patches, as a rebased lane's are). Never a bare `git worktree
   remove`. `cd ~/build/lanes && shale cookbook:remove_lane.shale dir=<lane>`
 
 ## For any project
@@ -85,7 +86,8 @@ steps left for the writer.
 - `retire_checkout.shale`: says whether a checkout can be deleted, and
   deletes nothing: BLOCKED for uncommitted work, stashes, unpushed branches,
   worktrees, a symbolic link into it, a sibling's tracked file or a memory
-  note that names it by a path; else CLEAR. `cd ~/showell_repos && shale cookbook:retire_checkout.shale dir=roc`
+  note that names it by its own path (as the mounts resolve it, never its
+  bare name); else CLEAR. `cd ~/showell_repos && shale cookbook:retire_checkout.shale dir=roc`
   (A lane is removed by `remove_lane.shale`, which runs this first.)
 - `run.shale`: runs a command line and prints how each program ended, its
   time and the lines that matter. `shale cookbook:run.shale --args-stdin` (cmd, grep)
