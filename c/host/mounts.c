@@ -68,7 +68,7 @@ static Str mounts_trim(Str s, bool cr) {
     return str_sub(s, from, to);
 }
 
-// The next word of `s` from `*at`, split on spaces and tabs (Zig's
+// The next word of `s` from `*from`, split on spaces and tabs (Zig's
 // `tokenizeAny`); false when none is left.
 static bool mounts_next_word(Str s, size_t *from, Str *word) {
     size_t i = *from;
