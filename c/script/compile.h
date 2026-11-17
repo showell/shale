@@ -174,7 +174,7 @@ VEC_DEFINE(CompileLoopVec, CompileLoop)
 
 typedef struct {
     Arena *arena;
-    // The most arguments a builtin takes (BUILTINS_MOST_ARGS).
+    // The most arguments a builtin takes (BUILTINS_ARGS_MAX).
     uint32_t most_args;
     // The depth budget. A node at this static depth or past it stops any run
     // that reaches it, so it compiles to its enter and nothing under it. This

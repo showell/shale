@@ -160,7 +160,7 @@ static void ran_run(Ran *x, Str src, Budgets b) {
     Preludes no_preludes = {NULL, 0};
     x->parsed = parse_program(&p, S(""), no_preludes, none, &x->prog) == OK;
     if (!x->parsed) return;
-    x->parsed = compile_program(&x->tree, &x->prog, BUILTINS_MOST_ARGS, b.depth, &x->code) == OK;
+    x->parsed = compile_program(&x->tree, &x->prog, BUILTINS_ARGS_MAX, b.depth, &x->code) == OK;
     if (!x->parsed) return;
     Run *r = &x->r;
     r->ctx = run_ctx_make(&x->values, &x->machine, b);

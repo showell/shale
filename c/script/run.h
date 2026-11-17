@@ -14,7 +14,7 @@
 #include "value.h"
 
 // The most arguments any builtin but `print` takes.
-enum { BUILTINS_MOST_ARGS = 4 };
+enum { BUILTINS_ARGS_MAX = 4 };
 
 SLICE_TYPE(ConstValues, const Value);
 

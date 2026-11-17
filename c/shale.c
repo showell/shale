@@ -542,7 +542,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     } else if (cli_unread_arg(&tree, &prog, args, args_len, &stop, &stopped) != OK) {
         machine_stop(&stop);
         stopped = true;
-    } else if (!stopped && compile_program(&tree, &prog, BUILTINS_MOST_ARGS, b.depth, &code) != OK) {
+    } else if (!stopped && compile_program(&tree, &prog, BUILTINS_ARGS_MAX, b.depth, &code) != OK) {
         machine_stop(&stop);
         stopped = true;
     }
