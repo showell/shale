@@ -30,8 +30,11 @@ static STATUS_MUST_USE Status fake_load(void *ctx, Arena *into, Str path, Str *w
     FakeLibrary *f = ctx;
     f->loads++;
     *got = str_eq(path, f->path);
-    if (*got) *out = f->source;
-    else *why = S("not found");
+    if (*got) {
+        *out = f->source;
+    } else {
+        *why = S("not found");
+    }
     return OK;
 }
 

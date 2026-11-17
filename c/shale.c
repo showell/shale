@@ -206,6 +206,12 @@ static bool has_link_below(Arena *a, Str dir, Str rest) {
     return false;
 }
 
+// Zig's `-|`: what is left of a budget, never wrapping below zero once a
+// charge has stopped one past it.
+static uint64_t sat_sub(uint64_t a, uint64_t b) {
+    return a > b ? a - b : 0;
+}
+
 // Zig's `loadLibrary` (src/script/process.zig) over the Linux host's mounts:
 // the path resolved as `pathArg` resolves a mount's, the file read and charged
 // as a `read` of it is.
@@ -214,7 +220,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     Arena *a = r->arena;
     *got = false;
     // `pathArg` charges a step a byte of the path.
-    if (path.len > r->budgets.steps - r->used.steps) {
+    if (path.len > sat_sub(r->budgets.steps, r->used.steps)) {
         r->used.steps = r->budgets.steps + 1;
         *why = S("the step budget ran out");
         return OK;
@@ -272,7 +278,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
         *why = S("the library is larger than the source budget");
         return OK;
     }
-    if (size > r->budgets.read_bytes - r->used.read_bytes) {
+    if (size > sat_sub(r->budgets.read_bytes, r->used.read_bytes)) {
         *why = S("the store-read budget (bytes) ran out");
         return OK;
     }
@@ -285,7 +291,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     r->used.read_bytes += text.len;
     // `chargeBytes`: a step for every 16 bytes read, rounded up.
     uint64_t charge = (text.len + 15) / 16;
-    if (charge > r->budgets.steps - r->used.steps) {
+    if (charge > sat_sub(r->budgets.steps, r->used.steps)) {
         r->used.steps = r->budgets.steps + 1;
         *why = S("the step budget ran out");
         return OK;
