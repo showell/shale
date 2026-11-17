@@ -1,9 +1,8 @@
-// builtins_walk.c: the store's `walk`: every entry under a folder, depth
-// first, each
-// folder's names sorted and a folder before what it holds, a part at a time,
-// each part resumed after the path the last one ended at. The walk keeps its
-// own stack of folders, so a tree's depth is the store's to choose, never the
-// C stack's.
+// builtins_walk.c: the store's `walk`: every entry under a folder, depth first,
+// each folder's names sorted and a folder before what it holds, a part at a
+// time, each part resumed after the path the last one ended at. The walk keeps
+// its own stack of folders, so a tree's depth is the store's to choose, never
+// the C stack's.
 //
 // A program includes it after builtins_store.c.
 
@@ -18,9 +17,9 @@ typedef struct {
 
 VEC_DEFINE(WalkLevels, WalkLevel)
 
-// What `walk`'s second argument asks: how deep, which
-// entries (`like`, `kind`), what to pass over (`skip`), where an earlier part
-// ended (`after`), and the reads to leave in the budget (`keep_reads`).
+// What `walk`'s second argument asks: how deep, which entries (`like`, `kind`),
+// what to pass over (`skip`), where an earlier part ended (`after`), and the
+// reads to leave in the budget (`keep_reads`).
 typedef struct {
     bool has_depth;
     uint64_t depth;
@@ -133,10 +132,10 @@ static STATUS_MUST_USE Status walk_more(Run *r, Pos pos, Str path, Value *out) {
     return OK;
 }
 
-// Puts the walk back where `after` left it: each folder
-// on `after`'s path listed again and set at the first name past `after`'s
-// part, so a walk in parts takes each entry once whatever came or went in
-// between. "" or the walk's own path is the start.
+// Puts the walk back where `after` left it: each folder on `after`'s path
+// listed again and set at the first name past `after`'s part, so a walk in
+// parts takes each entry once whatever came or went in between. "" or the
+// walk's own path is the start.
 static STATUS_MUST_USE Status walk_resume(Run *r, Pos pos, const StorePath *p, const WalkOptions *o, WalkLevels *levels) {
     Str after = o->after;
     Str rel = p->rel;

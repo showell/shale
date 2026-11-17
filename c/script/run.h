@@ -1,8 +1,8 @@
-// run.h: a run's state and the semantics every op and builtin shares, Zig
-// Shale's `interp.Run` (src/script/interp.zig) as the VM uses it: the steps
+// run.h: a run's state and the semantics every op and builtin shares: the steps
 // and the budgets, the output, the stack of frames' slots, indexing,
-// arithmetic, comparison, `..` chains and `attempt`'s answers. Every message
-// is Zig's, byte for byte, and every charge is made where Zig makes it.
+// arithmetic, comparison, `..` chains and `attempt`'s answers. Its messages
+// are in the frozen surface (docs/SURFACE.txt), and a script sees its step
+// charges through the budgets, so neither changes freely.
 
 #ifndef SHALE_RUN_H
 #define SHALE_RUN_H
@@ -13,7 +13,7 @@
 #include "compile.h"
 #include "value.h"
 
-// The most arguments any builtin but `print` takes: Zig's `most_args`.
+// The most arguments any builtin but `print` takes.
 enum { BUILTINS_MOST_ARGS = 4 };
 
 SLICE_TYPE(ConstValues, const Value);
@@ -24,9 +24,8 @@ typedef struct Run Run;
 // builtins_store.c defines it; NULL for a run with no store.
 typedef struct RunStore RunStore;
 
-// The core's one way out to its host, Zig's `interp.Host`: `host(name, ...)`
-// calls `call` with the name and the rest of its arguments. NULL `call` is
-// no host.
+// The core's one way out to its host: `host(name, ...)` calls `call` with the
+// name and the rest of its arguments. NULL `call` is no host.
 typedef struct {
     void *ctx;
     Status (*call)(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out);
@@ -78,7 +77,7 @@ typedef struct Run {
 
 // ── stops ──
 
-// The text of a 64-bit integer, as Zig's `{d}` writes it.
+// The text of a 64-bit integer in decimal.
 typedef struct {
     char bytes[24];
 } IntText;
@@ -114,9 +113,9 @@ static inline Str run_unum(Run *r, uint64_t n) {
     return buf_view(&b);
 }
 
-// Zig's `fail`: a stop whose message is `parts` joined, or `fallback` (Zig's
-// format text) when the arena refuses it. The pieces a literal leaves out are
-// empty, so all 16 are joined and no count can drop one.
+// A stop whose message is `parts` joined, or `fallback` (the format text) when
+// the arena refuses it. The pieces a literal leaves out are empty, so all 16
+// are joined and no count can drop one.
 static inline STATUS_MUST_USE Status run_fail_parts(Run *r, Pos pos, StopClass cls, Str fallback, StrPieces parts) {
     StrParts all = {parts.piece, sizeof parts.piece / sizeof(Str)};
     Msg m;
@@ -329,7 +328,7 @@ static inline STATUS_MUST_USE Status run_unary(Run *r, Pos pos, UnOp op, const V
     return OK;
 }
 
-// Zig's `std.math.add`, `sub` and `mul` on i64: false on overflow.
+// `a + b`, `a - b` and `a * b` on int64_t: false on overflow.
 static inline bool int_add(int64_t a, int64_t b, int64_t *out) {
     if ((b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b)) return false;
     *out = a + b;
@@ -373,7 +372,7 @@ static inline STATUS_MUST_USE Status run_arith(Run *r, Pos pos, BinOp op, const 
             ok = false;
             break;
         }
-        // Zig's `divFloor`: the quotient rounded toward minus infinity.
+        // `//` floors: the quotient rounded toward minus infinity.
         got = a / b;
         if (a % b != 0 && ((a < 0) != (b < 0))) got--;
         break;
@@ -383,7 +382,7 @@ static inline STATUS_MUST_USE Status run_arith(Run *r, Pos pos, BinOp op, const 
             got = 0;
             break;
         }
-        // Zig's `@mod`: the remainder takes the divisor's sign.
+        // `%` takes the divisor's sign, as the floor of `//` leaves it.
         got = a % b;
         if (got != 0 && ((got < 0) != (b < 0))) got += b;
         break;
@@ -393,7 +392,7 @@ static inline STATUS_MUST_USE Status run_arith(Run *r, Pos pos, BinOp op, const 
     return OK;
 }
 
-// Zig's `std.mem.order` of two strings: -1, 0 or 1.
+// The byte order of two strings, a prefix first: -1, 0 or 1.
 static inline int str_order(Str a, Str b) {
     size_t n = a.len < b.len ? a.len : b.len;
     int c = n == 0 ? 0 : memcmp(a.ptr, b.ptr, n);

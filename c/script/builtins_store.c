@@ -1,16 +1,16 @@
 // builtins_store.c: the store's builtins that look and read: `ls`, `stat`,
 // `exists`, `is_dir` and what every store builtin shares (a path confined, a
 // store failure's stop, a read counted), and the reads (a file whole or in
-// parts, its lines, the lines holding a literal, and scans that count or
-// find without holding the file). Every path goes through path_run.c's
-// `path_arg`, and every read is counted against the read budgets. The walk
-// is builtins_walk.c, the changes builtins_change.c.
+// parts, its lines, the lines holding a literal, and scans that count or find
+// without holding the file). Every path goes through path_run.c's `path_arg`,
+// and every read is counted against the read budgets. The walk is
+// builtins_walk.c, the changes builtins_change.c.
 //
 // A program includes store.c and path_run.c, then this after builtins.c and
 // builtins_text.c.
 
-// One change the script attempted, in order: the
-// builtin's name, the script's path, and "ok" or the store's error.
+// One change the script attempted, in order: the builtin's name, the script's
+// path, and "ok" or the store's error.
 typedef struct {
     Str op;
     Str path;
@@ -133,8 +133,8 @@ static int builtin_entry_order(const void *x, const void *y) {
 }
 
 // A folder's entries sorted by name, charged as `ls` is: a step an entry and
-// the sort's bound. The caller counts the read. A folder's names are
-// distinct, so qsort, which is not stable, gives the one order there is.
+// the sort's bound. The caller counts the read. A folder's names are distinct,
+// so qsort, which is not stable, gives the one order there is.
 static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b, Str full, Str rel, StoreEntries *out) {
     RunStore *rs = builtin_store_of(r);
     StoreErr e = rs->store.list(rs->store.ctx, r->ctx.values, full, out);
@@ -213,8 +213,8 @@ static STATUS_MUST_USE Status bi_is_dir(Run *r, Pos pos, ConstValues args, Value
 
 // ── reading files ──
 
-// The size of the file at `p`: a stop when it is missing
-// or not a file. One store call, counted as part of the read.
+// The size of the file at `p`: a stop when it is missing or not a file. One
+// store call, counted as part of the read.
 static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t *size) {
     bool found = false;
     StoreStat st;
@@ -226,9 +226,8 @@ static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, cons
 }
 
 // `n` bytes from `offset` (to the end when `!has_n`) of a file whose size is
-// known: "" at or past the end; at most the call-bytes cap
-// and what the read-bytes budget has left; the bytes read charged a step per
-// 16.
+// known: "" at or past the end; at most the call-bytes cap and what the
+// read-bytes budget has left; the bytes read charged a step per 16.
 static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t offset, bool has_n, uint64_t n, Str *out) {
     *out = S("");
     if (offset >= size) return OK;
@@ -336,9 +335,9 @@ static uint64_t builtin_min_u64(uint64_t a, uint64_t b) {
     return a < b ? a : b;
 }
 
-// `read_lines(p[, offset[, n]])`: whole lines from the byte `offset`, at
-// least `n` bytes (64 KiB unset) and on to the end of the line it stops in,
-// as `{lines, next, done}`.
+// `read_lines(p[, offset[, n]])`: whole lines from the byte `offset`, at least
+// `n` bytes (64 KiB unset) and on to the end of the line it stops in, as
+// `{lines, next, done}`.
 static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_READ_LINES;
     StorePath p;
@@ -567,8 +566,7 @@ static STATUS_MUST_USE Status builtin_range_args(Run *r, Pos pos, Builtin b, Con
 // Reads the file BUILTIN_SCAN_CHUNK bytes at a time into one reused buffer,
 // counting `needle`'s non-overlapping matches that start in `range`, or
 // stopping at the first (`first_only`), across the chunks' edges: one store
-// read a call, every byte counted against the read budget
-// and charged.
+// read a call, every byte counted against the read budget and charged.
 static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const StorePath *p, Str needle, bool first_only, ScanRange range, Scanned *res) {
     TRY(builtin_count_read(r, pos));
     uint64_t file_size = 0;

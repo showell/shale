@@ -1,6 +1,6 @@
-// lex.h: turns source into Lua's tokens, and refuses by name each of Lua's
-// that this language does not take: a long string without a level, floats,
-// `/`, `:`, `...`, bitwise operators, `goto`, `repeat`.
+// lex.h: turns source into Lua's tokens, and refuses by name each of Lua's that
+// this language does not take: a long string without a level, floats, `/`, `:`,
+// `...`, bitwise operators, `goto`, `repeat`.
 
 #ifndef SHALE_LEX_H
 #define SHALE_LEX_H
@@ -224,8 +224,8 @@ static inline bool lex_at_comment(const Lexer *lx) {
     return lex_peek_at(lx, 0) == '-' && lex_peek_at(lx, 1) == '-';
 }
 
-// A bracket, `level` `=`s, then the bracket again: `]==]` or `[==[`, as much
-// as fits in `cap` bytes.
+// A bracket, `level` `=`s, then the bracket again: `]==]` or `[==[`, as much as
+// fits in `cap` bytes.
 static inline STATUS_MUST_USE Status lex_brackets(Buf *b, char bracket, uint32_t level, size_t cap) {
     size_t n = level < cap - 2 ? level : cap - 2;
     TRY(buf_byte(b, bracket));

@@ -1,8 +1,7 @@
-// cli.h: the `shale` command line as Zig Shale's src/script/cli.zig reads it,
-// and the pieces of the Linux runner (src/script_runner.zig) that need no
-// system call: the usage, the refusals and their words, a script's
-// `-- budget:` line, the mounts file (src/shale_host_setup.zig) and the
-// report a stopped check prints. Every text is Zig's, byte for byte.
+// cli.h: the `shale` command line, and the pieces of the Linux runner that need
+// no system call: the usage, the refusals and their words, a script's
+// `-- budget:` line, the mounts file and the report a stopped check prints.
+// Every text here is in the frozen surface (docs/SURFACE.txt).
 
 #ifndef SHALE_CLI_H
 #define SHALE_CLI_H
@@ -27,9 +26,10 @@ static inline Str cli_usage(void) {
              "  --version         the mode this `shale` was built in (alone)\n");
 }
 
-// The build's mode as Zig's `-Doptimize=` spells it, which `shale --version`
-// says: an optimized build is `ReleaseSafe`, since `at` checks every index in
-// every build, and any other (TCC's, the sanitizers' -O0) is `Debug`.
+// The build's mode, which `shale --version` says in the names Zig's
+// `-Doptimize=` gives them, so both builds of Shale say it alike: an optimized
+// build is `ReleaseSafe`, since `at` checks every index in every build, and any
+// other (TCC's, the sanitizers' -O0) is `Debug`.
 static inline Str cli_build_mode(void) {
 #ifdef __OPTIMIZE__
     return S("ReleaseSafe");
@@ -38,8 +38,8 @@ static inline Str cli_build_mode(void) {
 #endif
 }
 
-// The budgets a command line may set, in Zig's `settable` order, which is also
-// the order the header's line prints them in.
+// The budgets a command line may set, in the order the header's line prints
+// them in.
 typedef enum {
     SET_STEPS,
     SET_READS,
@@ -79,7 +79,7 @@ typedef struct {
 SLICE_TYPE(ArgSlots, Arg);
 
 enum {
-    // Zig's `args_buf` and `stdin_args_buf`: 64 values each.
+    // The most values the command line takes, and `--args-stdin` as many.
     CLI_ARGS_MOST = 64,
 };
 
@@ -110,8 +110,8 @@ static inline void cli_defaults(Budgets *b) {
     b->call_bytes = 64 * 1024 * 1024;
 }
 
-// Zig's `builtins.parseInteger`: an optional `-`, then decimal digits, within
-// 64 bits.
+// An integer as a budget's value spells one: an optional `-`, then decimal
+// digits, within 64 bits.
 static inline bool cli_parse_integer(Str s, int64_t *out) {
     size_t from = s.len > 0 && str_byte(s, 0) == '-' ? 1 : 0;
     if (from == s.len) return false;
@@ -147,16 +147,15 @@ static inline uint64_t cli_most_of(size_t k) {
     return 0;
 }
 
-// `n` as a size_t, SIZE_MAX past it: a plain cast wraps on a 32-bit size_t
-// (the wasm build), where Zig's `cast ... orelse maxInt` saturates. A round
-// trip, not `n > SIZE_MAX`, which is always false on x86-64 and GCC's
-// -Wtype-limits would say so.
+// `n` as a size_t, SIZE_MAX past it: a plain cast would wrap on a 32-bit size_t
+// (the wasm build), where a budget must saturate. A round trip, not
+// `n > SIZE_MAX`, which is always false on x86-64 and GCC's -Wtype-limits would
+// say so.
 static inline size_t cli_size_saturated(uint64_t n) {
     return (uint64_t)(size_t)n == n ? (size_t)n : SIZE_MAX;
 }
 
-// Sets budget `k` to `n`, saturating at the field's type as Zig's `cast ...
-// orelse maxInt` does.
+// Sets budget `k` to `n`, saturating at the field's type.
 static inline void cli_set_budget(Budgets *b, size_t k, uint64_t n) {
     uint32_t n32 = n > UINT32_MAX ? UINT32_MAX : (uint32_t)n;
     size_t nz = cli_size_saturated(n);
@@ -252,8 +251,8 @@ static inline STATUS_MUST_USE Status cli_budget_word(Command *c, Str who, Str v,
     return OK;
 }
 
-// Zig's `cli.parse`: `argv` without the program's name. STOP with the
-// refusal's words in `why`.
+// Parses `argv` without the program's name. STOP with the refusal's words in
+// `why`.
 static inline STATUS_MUST_USE Status cli_parse(Str *argv, size_t argc, bool has_env_root, Str env_root, Command *c, Buf *why) {
     memset(c, 0, sizeof *c);
     c->root = has_env_root ? env_root : S(".");
@@ -325,8 +324,8 @@ static inline Str cli_trim_start(Str s) {
     return str_sub(s, a, s.len);
 }
 
-// The next part of `*rest` up to `sep` (the rest when there is none), as
-// Zig's `splitScalar`; false once the last part has been given.
+// The next part of `*rest` up to `sep` (the rest when there is none); false
+// once the last part has been given.
 static inline bool cli_split(Str *rest, bool *done, char sep, Str *part) {
     if (*done) return false;
     size_t i = cli_index_of(*rest, sep);
@@ -340,8 +339,8 @@ static inline bool cli_split(Str *rest, bool *done, char sep, Str *part) {
     return true;
 }
 
-// Zig's `argLines`: `--args-stdin`'s values, one `NAME=VALUE` a line, after
-// the command line's, into `more` (which holds up to CLI_ARGS_MOST).
+// `--args-stdin`'s values, one `NAME=VALUE` a line, after the command line's,
+// into `more` (which holds up to CLI_ARGS_MOST).
 static inline STATUS_MUST_USE Status cli_arg_lines(Str text, const Command *c, Arg *more, size_t *more_len, Buf *why) {
     ArgSlots out = {more, CLI_ARGS_MOST};
     size_t n = c->args_len;
@@ -377,9 +376,9 @@ static inline STATUS_MUST_USE Status cli_arg_lines(Str text, const Command *c, A
     return OK;
 }
 
-// Zig's `headerBudgets`: a line `-- budget: NAME=N ...` among the comments
-// opening a script sets those budgets where the command line has not; one
-// after the script's first line of code is refused, as it would never be read.
+// A line `-- budget: NAME=N ...` among the comments opening a script sets those
+// budgets where the command line has not; one after the script's first line of
+// code is refused, as it would never be read.
 static inline STATUS_MUST_USE Status cli_header_budgets(Str source, Command *c, Buf *why) {
     Str rest = source;
     bool done = false;
@@ -421,7 +420,7 @@ static inline STATUS_MUST_USE Status cli_header_budgets(Str source, Command *c, 
     return OK;
 }
 
-// Zig's `printHeaderBudgets`: one line naming what the header set, or nothing.
+// One line naming what the header's budgets set, or nothing.
 static inline STATUS_MUST_USE Status cli_write_header_budgets(Buf *w, const Command *c) {
     bool first = true;
     Flags from = {(bool *)c->from_header, SET_COUNT};
@@ -450,9 +449,8 @@ typedef struct {
     uint64_t read_bytes;
 } Used;
 
-// Zig's `printReport` for a check that stopped: the stop's line (a parse's
-// stop is at the top level, so it has no function and no trail), then what
-// it used.
+// The report for a check that stopped: the stop's line (a parse's stop is at
+// the top level, so it has no function and no trail), then what it used.
 static inline STATUS_MUST_USE Status cli_write_stop(Buf *w, Str name, const Stop *s, Used u, const Budgets *b) {
     TRY(stop_report(w, name, s, u.steps));
     TRY(buf_lit(w, "── used: "));
@@ -472,9 +470,9 @@ static inline STATUS_MUST_USE Status cli_write_stop(Buf *w, Str name, const Stop
     return buf_lit(w, " output bytes\n");
 }
 
-// The source a stop's `function` is in, as Zig's `placeOf` names it: the
-// core's prelude, a later prelude or a `use`d library (whose functions are
-// shown as `<its name>'s f`), or the script, `name`.
+// The source a stop's `function` is in: the core's prelude, a later prelude or
+// a `use`d library (whose functions are shown as `<its name>'s f`), or the
+// script, `name`.
 static inline Str cli_place_of(Str function, Str name, Preludes preludes) {
     if (str_starts_with(function, S("the prelude's "))) return S("the prelude");
     for (size_t k = 0; k < preludes.len; k++) {
@@ -499,10 +497,10 @@ typedef struct {
     uint64_t output;
 } RunUsed;
 
-// Zig's `printReport` for a run: with `verbose`, its effects, each line
+// The report for a run: with `verbose`, its effects, each line
 // `op path: outcome`; a stop's line and its calls, innermost first, each named
-// by its source; `── finished` when verbose; and the `── used:` line when
-// verbose, stopped, or past half of a budget.
+// by its source; `── finished` when verbose; and the `── used:` line
+// when verbose, stopped, or past half of a budget.
 static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes preludes, bool verbose, Names effects, Names records, const Stop *s, RunUsed u, const Budgets *b) {
     if (verbose) {
         TRY(buf_lit(w, "── effects ("));
@@ -545,7 +543,7 @@ static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes
         TRY(buf_u64(w, u.steps));
         TRY(buf_lit(w, " steps)\n"));
     }
-    // Zig's `pastHalf`: twice what was used past the budget, in 64 bits.
+    // Past half a budget: twice what was used is past it, in 64 bits.
     bool past_half = u.steps * 2 > b->steps || u.reads * 2 > b->reads || u.read_bytes * 2 > b->read_bytes || u.output * 2 > b->output_bytes;
     if (!(verbose || s != NULL || past_half)) return OK;
     TRY(buf_lit(w, "── used: "));
@@ -567,9 +565,9 @@ static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes
     return buf_lit(w, " output bytes\n");
 }
 
-// Zig's `unreadArgStop`: the first value given that no `arg("NAME")` of the
-// program reads, as a stop at 1:1 naming what it reads. `*found` is false
-// when each is read, or the program names one by a value.
+// The first value given that no `arg("NAME")` of the program reads, as a stop
+// at 1:1 naming what it reads. `*found` is false when each is read, or the
+// program names one by a value.
 static inline STATUS_MUST_USE Status cli_unread_arg(Arena *a, const Program *prog, const Arg *args, size_t n, Stop *out, bool *found) {
     *found = false;
     if (prog->args_by_value) return OK;
@@ -613,10 +611,11 @@ static inline STATUS_MUST_USE Status cli_unread_arg(Arena *a, const Program *pro
     return OK;
 }
 
-// The longest name FAT holds on the bare-metal host: zig-webbox's `max_name`.
+// The longest name FAT holds on the bare-metal host, which must agree with
+// zig-webbox's store (`max_name`).
 enum { CLI_NAME_MOST = 96 };
 
-// Zig's `store.fatName`: a part of a path FAT can hold.
+// Whether `name` is a part of a path FAT can hold.
 static inline bool cli_fat_name(Str name) {
     if (name.len == 0 || name.len > CLI_NAME_MOST) return false;
     if (str_eq(name, S(".")) || str_eq(name, S(".."))) return false;

@@ -1,7 +1,7 @@
-// ast.h: the tree a script parses to. Every node has its line and column,
-// every name is already resolved to a slot in its function's frame, and every
-// call names a builtin or a function by index. All of it lives in the
-// machine's arena.
+// ast.h: the tree a script parses to. Every node has its line and column, every
+// name is already resolved to a slot in its function's frame, and every call
+// names a builtin or a function by index. All of it lives in the machine's
+// arena.
 //
 // Arena byte counts are outside the frozen surface, so the layouts here are
 // free to change.

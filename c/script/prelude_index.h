@@ -1,8 +1,7 @@
-// prelude_index.h: a prelude's and a library's index by their lines: where
-// each `function name(` and each `const NAME` begins, found from the start
-// of its line without a parse, so that a
-// function is parsed only at its first call. It parses nothing, and parse.h
-// includes it first.
+// prelude_index.h: a prelude's and a library's index by their lines: where each
+// `function name(` and each `const NAME` begins, found from the start of its
+// line without a parse, so that a function is parsed only at its first call. It
+// parses nothing, and parse.h includes it first.
 
 #ifndef SHALE_PRELUDE_INDEX_H
 #define SHALE_PRELUDE_INDEX_H
@@ -32,8 +31,7 @@ SLICE_TYPE(Preludes, const Prelude);
 
 // ── the preludes' indexes ──
 
-// The next line from `*at` on that begins `function name(`; false at the
-// end.
+// The next line from `*at` on that begins `function name(`; false at the end.
 static inline bool parse_next_function(Str src, size_t *at_, uint32_t *line, PreludeFunction *out) {
     while (*at_ < src.len) {
         size_t start = *at_;

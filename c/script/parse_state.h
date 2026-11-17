@@ -1,7 +1,7 @@
-// parse_state.h: the parser's state and the pieces every production uses:
-// the preludes and libraries a parse holds, the frame of names, the working
-// lists; a stop and its message, the next token, the nesting budget, and a
-// name's lookup and declaration.
+// parse_state.h: the parser's state and the pieces every production uses: the
+// preludes and libraries a parse holds, the frame of names, the working lists;
+// a stop and its message, the next token, the nesting budget, and a name's
+// lookup and declaration.
 //
 // Everything the parse makes, the tree and its own working lists alike, comes
 // from one arena: the machine's. A STOP with `stopped` false is the arena's
@@ -37,9 +37,9 @@ typedef struct {
 
 SLICE_TYPE(ParseExtras, ParseExtra);
 
-// The host's reader of a `use`d library: on OK, `*got`
-// says whether `*out` holds the source; when it doesn't, `*why` says why.
-// STOP only when the arena refuses.
+// The host's reader of a `use`d library: on OK, `*got` says whether `*out`
+// holds the source; when it doesn't, `*why` says why. STOP only when the arena
+// refuses.
 typedef struct {
     void *ctx;
     STATUS_MUST_USE Status (*load)(void *ctx, Arena *into, Str path, Str *why, Str *out, bool *got);
@@ -219,9 +219,9 @@ static inline STATUS_MUST_USE Status parse_set_stop(Parser *p, Pos pos, StopClas
     return STOP;
 }
 
-// A syntax error right after a long string is most likely a
-// closer inside its text that ended it early, so the stop names that closer
-// and the level that would hold it.
+// A syntax error right after a long string is most likely a closer inside its
+// text that ended it early, so the stop names that closer and the level that
+// would hold it.
 static inline STATUS_MUST_USE Status parse_fail(Parser *p, Pos pos, StopClass cls, Str message) {
     if (cls == CLASS_SYNTAX && p->after_long && pos.line == p->tok.line && pos.column == p->tok.column) {
         Msg m;
@@ -245,8 +245,8 @@ static inline STATUS_MUST_USE Status parse_fail(Parser *p, Pos pos, StopClass cl
     return parse_set_stop(p, pos, cls, message);
 }
 
-// A stop whose message is made, the arena's refusal a STOP with `stopped`
-// false rather than a fallback message.
+// A stop whose message is made, the arena's refusal a STOP with `stopped` false
+// rather than a fallback message.
 static inline STATUS_MUST_USE Status parse_fail_msg(Parser *p, Pos pos, StopClass cls, const Msg *m) {
     if (m->s != OK) return STOP;
     return parse_fail(p, pos, cls, buf_view(&m->b));
@@ -273,8 +273,8 @@ static inline STATUS_MUST_USE Status parse_fail_parts(Parser *p, Pos pos, StopCl
 // A stop whose message is `n` pieces joined.
 #define parse_fail_cat(p, pos, cls, n, ...) parse_fail_parts((p), (pos), (cls), (StrPieces){{__VA_ARGS__}}, (n))
 
-// `n` in decimal, in the arena; "" when refused, and the message then
-// carries nothing in its place.
+// `n` in decimal, in the arena; "" when refused, and the message then carries
+// nothing in its place.
 static inline Str parse_num(Parser *p, uint64_t n, bool *refused) {
     Buf b = buf_make(p->arena);
     if (buf_u64(&b, n) != OK) {
@@ -295,8 +295,8 @@ static inline Pos parse_pos(uint32_t line, uint32_t column) {
 }
 
 // A token as a message names it: words for the end, a string and a name or
-// number shown, any other token quoted. Each made one falls back to its
-// plain words when the arena refuses.
+// number shown, any other token quoted. Each made one falls back to its plain
+// words when the arena refuses.
 static inline Str parse_describe(Parser *p, Token t) {
     switch (t.tag) {
     case TAG_EOF: return S("the end of the script");
@@ -362,15 +362,15 @@ static inline STATUS_MUST_USE Status parse_expect(Parser *p, Tag tag, Str what, 
     return parse_advance(p);
 }
 
-// Charges one level of the nesting budget.
-// DRAGON: the C stack. A source nested without bound would recurse the
-// parser off its stack and crash the process.
+// Charges one level of the nesting budget. A refusal counts no level, so a
+// production that fails to enter has nothing to leave: every other way out of
+// one calls `parse_leave`.
+// DRAGON: the C stack. A source nested without bound would recurse the parser
+// off its stack and crash the process.
 // REMEDY: every recursive production (block, statement, binary, unary's
-// operator, suffixed, table) enters here, and the budget (200 unset; no
-// command line or header sets it) bounds the depth. Loading a prelude starts
-// its count again, and a prelude's own nesting is fixed and small.
-// A refusal counts no level, so a production that fails to enter has nothing
-// to leave: every other way out of one calls `parse_leave`.
+// operator, suffixed, table) enters here, and the budget (200 unset; no command
+// line or header sets it) bounds the depth. Loading a prelude starts its count
+// again, and a prelude's own nesting is fixed and small.
 static inline STATUS_MUST_USE Status parse_enter(Parser *p) {
     p->nesting++;
     if (p->nesting > p->max_nesting) {

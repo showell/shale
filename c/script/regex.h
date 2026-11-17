@@ -7,8 +7,8 @@
 // (bytes + 1) times the program's states, whatever the pattern. The counts a
 // search gives (`positions`, `skipped`, `work`) are what the builtins charge
 // steps by, so a change to them changes every regex builtin's cost. Shale has
-// its own engine so that every search is linear in its input: PCRE
-// backtracks, and RE2 is C++.
+// its own engine so that every search is linear in its input: PCRE backtracks,
+// and RE2 is C++.
 //
 // The functions are in regex.c, which a program includes after this header:
 // the C is one translation unit, every function `static`.
@@ -64,10 +64,10 @@ typedef enum {
     REGEX_OP_MATCH,
 } RegexOp;
 
-// Six bytes: `op` is a RegexOp held in a uint8_t. With a 4-byte enum `op`
-// it would be 12, a size TCC 0.9.27 miscompiles when
-// a function returns it straight into a call (style.md, "Declarations").
-// `regex_emit` takes the fields.
+// Six bytes: `op` is a RegexOp held in a uint8_t. With a 4-byte enum `op` it
+// would be 12, a size TCC 0.9.27 miscompiles when a function returns it
+// straight into a call (style.md, "Declarations"). `regex_emit` takes the
+// fields.
 typedef struct {
     uint8_t op;
     uint8_t c;

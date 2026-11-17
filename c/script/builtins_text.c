@@ -1,16 +1,15 @@
-// builtins_text.c: the text builtins: splitting and joining, searching,
-// slicing and replacing, `like` and `match_path` globs, and reading
-// integers; and the regular-expression builtins over regex.c. Every search
-// is for plain text but the `re_` ones'. A program includes it after
-// builtins.c.
+// builtins_text.c: the text builtins: splitting and joining, searching, slicing
+// and replacing, `like` and `match_path` globs, and reading integers; and the
+// regular-expression builtins over regex.c. Every search is for plain text but
+// the `re_` ones'. A program includes it after builtins.c.
 
 // ── searching ──
 
-// Searches for a needle, charging the work as it is done. The
-// caller charges the haystack, a step per 16 bytes, for the fast pass over the
-// needle's first byte. Each place that pass stops costs a step more, and the
-// bytes compared there a step per 16, each batch of compares charged when it
-// is done so a budget stops a long near-match within a batch.
+// Searches for a needle, charging the work as it is done. The caller charges
+// the haystack, a step per 16 bytes, for the fast pass over the needle's first
+// byte. Each place that pass stops costs a step more, and the bytes compared
+// there a step per 16, each batch of compares charged when it is done so a
+// budget stops a long near-match within a batch.
 typedef struct {
     Run *r;
     Pos pos;
@@ -237,8 +236,8 @@ static size_t builtin_utf8_length(uint8_t c) {
     return 0;
 }
 
-// Whether a sequence of its length is valid UTF-8: not
-// overlong, no surrogate half and at most U+10FFFF.
+// Whether a sequence of its length is valid UTF-8: not overlong, no surrogate
+// half and at most U+10FFFF.
 static bool builtin_utf8_valid(Str seq) {
     uint32_t v = str_byte(seq, 0);
     if (seq.len == 1) return true;
@@ -643,8 +642,8 @@ static STATUS_MUST_USE Status bi_match_path(Run *r, Pos pos, ConstValues args, V
     if (!builtin_split_parts(subject, ps, &np)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`match_path`: a path of more than 64 parts"));
     if (!builtin_split_parts(pattern, qs, &nq)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`match_path`: a pattern of more than 64 parts"));
     TRY(run_charge(r, pos, subject.len + pattern.len));
-    // `can[j]`: whether the pattern's first parts so far match the path's
-    // first j.
+    // `can[j]`: whether the pattern's first parts so far match the path's first
+    // j.
     bool can_buf[BUILTIN_PATH_PARTS_MOST + 1];
     bool next_buf[BUILTIN_PATH_PARTS_MOST + 1];
     Reach can = {can_buf, BUILTIN_PATH_PARTS_MOST + 1};

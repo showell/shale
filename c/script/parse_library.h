@@ -1,7 +1,7 @@
-// parse_library.h: a later prelude checked before the script, and a library
-// a `use` names, read through the host's `ParseLoader`, checked and bound.
-// Each check parses in a parser of its own, thrown away after, so the real
-// parse's loaded slots are left alone.
+// parse_library.h: a later prelude checked before the script, and a library a
+// `use` names, read through the host's `ParseLoader`, checked and bound. Each
+// check parses in a parser of its own, thrown away after, so the real parse's
+// loaded slots are left alone.
 
 #ifndef SHALE_PARSE_LIBRARY_H
 #define SHALE_PARSE_LIBRARY_H
@@ -42,9 +42,9 @@ static inline STATUS_MUST_USE Status parse_only_functions(Parser *q, Str name) {
 
 // Checks prelude `k` before the script: it takes no name an earlier prelude
 // has, none twice, and holds only functions that parse, in a parse of its own
-// thrown away after. A failure is a stop naming the prelude, at its line.
-// A fixed prelude is checked on every parse: one found sound once passes
-// every time, so checking it again says the same and costs only time.
+// thrown away after. A failure is a stop naming the prelude, at its line. A
+// fixed prelude is checked on every parse: one found sound once passes every
+// time, so checking it again says the same and costs only time.
 static inline STATUS_MUST_USE Status parse_check_prelude(Parser *p, size_t k) {
     const ParseExtra *x = &at(p->extra, k - 1);
     for (size_t i = 0; i < x->index.len; i++) {
@@ -79,8 +79,8 @@ static inline STATUS_MUST_USE Status parse_check_prelude(Parser *p, size_t k) {
     return parse_fail_cat(p, parse_pos(s.line, s.column), s.cls, 3, name, S(": "), message);
 }
 
-// Whether `e` is a literal: a string, a number, a boolean, or a list or map
-// of them.
+// Whether `e` is a literal: a string, a number, a boolean, or a list or map of
+// them.
 static inline bool parse_literal(const Expr *e) {
     switch (e->kind) {
     case EXPR_BOOLEAN:

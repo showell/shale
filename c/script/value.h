@@ -1,9 +1,8 @@
-// value.h: a script's values: nil, booleans,
-// 64-bit integers, byte strings, and tables, each a list or a map once it has
-// an entry. A string is never changed once made. A table is shared by
-// reference, so it has no identity beyond its pointer. Everything a value
-// points at lives in the run's values arena, but a string literal, which
-// points into the source.
+// value.h: a script's values: nil, booleans, 64-bit integers, byte strings, and
+// tables, each a list or a map once it has an entry. A string is never changed
+// once made. A table is shared by reference, so it has no identity beyond its
+// pointer. Everything a value points at lives in the run's values arena, but a
+// string literal, which points into the source.
 //
 // A Value is 24 bytes, past the 16 a function may return (c/docs/style.md),
 // so every function that gives one fills an out-pointer.

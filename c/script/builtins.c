@@ -1,7 +1,8 @@
 // builtins.c: the builtins that need no host, but text's and regular
 // expressions' (builtins_text.c): the argument helpers every builtin shares,
-// lists and maps, numbers, time and the run, and formatting. Each one's step
-// charges and messages are part of the frozen surface (docs/SURFACE.txt).
+// lists and maps, numbers, time and the run, and formatting. Their messages
+// are in the frozen surface (docs/SURFACE.txt), and a script sees their step
+// charges through the budgets, so neither changes freely.
 //
 // A program includes it after run.h; vm.c holds the table that calls them.
 
@@ -11,9 +12,8 @@ static Str builtin_name(Builtin b) {
     return at(ast_builtin_names(), (size_t)b);
 }
 
-// The name a stop gives builtin `b`: the host call running
-// where `b` is `host`, so a check the host's code meets names what the
-// script called.
+// The name a stop gives builtin `b`: the host call running where `b` is `host`,
+// so a check the host's code meets names what the script called.
 static Str builtin_who(const Run *r, Builtin b) {
     if (b == BUILTIN_HOST && r->host_call.len > 0) return r->host_call;
     return builtin_name(b);
@@ -574,9 +574,9 @@ static STATUS_MUST_USE Status bi_fail(Run *r, Pos pos, ConstValues args, Value *
     return run_fail(&r->ctx, pos, CLASS_FAIL, msg);
 }
 
-// The host's call `name` with the rest of the arguments:
-// its name is what the stops in its checks give, until it returns. Where
-// there is no host (metal), a stop of class `host` naming the call.
+// The host's call `name` with the rest of the arguments: its name is what the
+// stops in its checks give, until it returns. Where there is no host (metal), a
+// stop of class `host` naming the call.
 static STATUS_MUST_USE Status bi_host(Run *r, Pos pos, ConstValues args, Value *out) {
     Str name = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &at(args, 0), S("its call's name"), &name));
@@ -853,8 +853,8 @@ static STATUS_MUST_USE Status bi_human(Run *r, Pos pos, ConstValues args, Value 
     size_t u = 1;
     while (u + 1 < units.len && mag >= ((uint64_t)1 << (10 * (u + 1)))) u++;
     uint64_t unit = (uint64_t)1 << (10 * u);
-    // `(mag * 10 + unit / 2) / unit`, the tenths rounded half up, split so
-    // 64 bits hold it.
+    // `(mag * 10 + unit / 2) / unit`, the tenths rounded half up, split so 64
+    // bits hold it.
     uint64_t tenths = mag / unit * 10 + (mag % unit * 10 + unit / 2) / unit;
     // 1023.95 KiB rounds to 1024.0; carry to 1.0 MiB.
     if (tenths >= 10240 && u + 1 < units.len) {

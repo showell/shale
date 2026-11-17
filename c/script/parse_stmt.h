@@ -308,8 +308,8 @@ static inline STATUS_MUST_USE Status parse_block_body(Parser *p, size_t from, St
     return parse_take_stmts(p, from, out);
 }
 
-// Statements up to the end of a block, in a scope of their own. Its scope,
-// its statements' stack and its level are put back on every way out.
+// Statements up to the end of a block, in a scope of their own. Its scope, its
+// statements' stack and its level are put back on every way out.
 static inline STATUS_MUST_USE Status parse_block(Parser *p, Stmts *out) {
     TRY(parse_enter(p));
     p->frame.depth++;
@@ -368,8 +368,8 @@ static inline STATUS_MUST_USE Status parse_function_named(Parser *p, Str name, u
     return OK;
 }
 
-// A function index the parse's own index says is there; a miss is a bug in
-// the C, and aborts.
+// A function index the parse's own index says is there; a miss is a bug in the
+// C, and aborts.
 static inline size_t parse_index_sure(PreludeFunctions index, Str name) {
     int32_t i = parse_index_at(index, name);
     if (i < 0) {

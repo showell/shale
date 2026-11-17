@@ -1,8 +1,8 @@
-// parse_expr.h: expressions, by precedence climbing; a call resolved where
-// it stands (the script's function, a prelude's, a builtin, or Lua's library
+// parse_expr.h: expressions, by precedence climbing; a call resolved where it
+// stands (the script's function, a prelude's, a builtin, or Lua's library
 // refused by name) and held to its parameters; and a table literal that is a
-// list or a map, never both. Each level of the nesting budget is left on
-// every way out.
+// list or a map, never both. Each level of the nesting budget is left on every
+// way out.
 
 #ifndef SHALE_PARSE_EXPR_H
 #define SHALE_PARSE_EXPR_H
@@ -464,8 +464,8 @@ static inline STATUS_MUST_USE Status parse_table_body(Parser *p, Pos pos, size_t
     return OK;
 }
 
-// A table literal, one level of the nesting budget; the level and both
-// stacks are put back on every way out.
+// A table literal, one level of the nesting budget; the level and both stacks
+// are put back on every way out.
 static inline STATUS_MUST_USE Status parse_table(Parser *p, Pos pos, Expr **out) {
     TRY(parse_enter(p));
     size_t items_from = p->exprs.len;

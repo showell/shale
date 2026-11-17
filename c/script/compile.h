@@ -3,8 +3,8 @@
 //
 // Steps are charged exactly as a tree-walker would charge them, a step as it
 // enters each node, before the node's own work, with the depth budget checked
-// there against how deep the walk is. The compiler records those enters in
-// the walker's order, each with its node's place and its static depth in its
+// there against how deep the walk is. The compiler records those enters in the
+// walker's order, each with its node's place and its static depth in its
 // function (`VmEnter`), and hangs the run of enters that precedes an op's work
 // on that op (`VmOp.enter`, `VmOp.enters`). The VM runs them first. A label (a
 // jump's target) first flushes the enters pending before it onto a `nop`, so a
@@ -75,8 +75,8 @@ typedef enum {
     OP_PRINT,
     // A call to builtin `a` with more arguments than any takes.
     OP_TOO_MANY,
-    // `yield()`: what the run still reaches, copied into a fresh arena;
-    // pushes nil.
+    // `yield()`: what the run still reaches, copied into a fresh arena; pushes
+    // nil.
     OP_COLLECT,
     // The call-depth check before a function's arguments.
     OP_CALL_PREP,

@@ -1,9 +1,9 @@
-// builtins_change.c: the store's builtins that change it, Zig Shale's
-// src/script/builtins_change.zig: a file written, appended to or removed, a
-// folder made or removed, and `edit`, which replaces a literal and prints the
-// diff; and `edits_write`, the Linux host's write of several files' edits as
-// one. Every change asks the host's hook first, is counted against the
-// change budgets, and is logged with its outcome, whatever it is.
+// builtins_change.c: the store's builtins that change it: a file written,
+// appended to or removed, a folder made or removed, and `edit`, which replaces
+// a literal and prints the diff; and `edits_write`, the Linux host's write of
+// several files' edits as one. Every change asks the host's hook first, is
+// counted against the change budgets, and is logged with its outcome, whatever
+// it is.
 //
 // A program includes it after builtins_store.c.
 
@@ -38,7 +38,7 @@ VEC_DEFINE(Spans, Span)
 // Where an edit's `old` is in the text, in order.
 VEC_DEFINE(Places, size_t)
 
-// One file's edits worked out and not yet written, Zig's `Plan`.
+// One file's edits worked out and not yet written.
 typedef struct {
     StorePath p;
     Str was;
@@ -67,8 +67,8 @@ static STATUS_MUST_USE Status change_bool_option(Run *r, Pos pos, Str k, const V
     return run_failf(r, pos, CLASS_TYPE, "`edit`: its `{s}` must be true or false, not {s}", S("`edit`: its `"), k, S("` must be true or false, not "), value_type_name(x));
 }
 
-// `edit`'s arguments, Zig's `editsArg`: `(p, old, new[, {all, word}])` is one
-// edit, `(p, {{old = ..., new = ...[, all][, word]}, ...})` the list.
+// `edit`'s arguments: `(p, old, new[, {all, word}])` is one edit,
+// `(p, {{old = ..., new = ...[, all][, word]}, ...})` the list.
 static STATUS_MUST_USE Status change_edits_arg(Run *r, Pos pos, ConstValues args, EditList *out) {
     Builtin b = BUILTIN_EDIT;
     if (args.len == 2) {
@@ -149,15 +149,14 @@ static STATUS_MUST_USE Status change_edits_arg(Run *r, Pos pos, ConstValues args
     return OK;
 }
 
-// A signed difference of two sizes, as Zig's i64 arithmetic of them.
+// A signed difference of two sizes, in 64 bits.
 static int64_t change_diff(size_t a, size_t b) {
     return (int64_t)a - (int64_t)b;
 }
 
-// Records `now[i..i + len]` replaced by `n` bytes, Zig's `replaced`: the spans
-// it meets or touches merge into one covering the old text they and the bytes
-// between them stood for, and the spans after it shift by the change in
-// length.
+// Records `now[i..i + len]` replaced by `n` bytes: the spans it meets or
+// touches merge into one covering the old text they and the bytes between them
+// stood for, and the spans after it shift by the change in length.
 static STATUS_MUST_USE Status change_replaced(Run *r, Pos pos, Spans *spans, size_t i, size_t len, size_t n) {
     size_t end = i + len;
     size_t first = 0;
@@ -219,10 +218,10 @@ static Str change_trim(Str s) {
     return str_sub(s, from, to);
 }
 
-// For `edit`'s stop, where an `old` not in the file parts from it, Zig's
-// `missHint`: the first nonblank line of `old` the file lacks, and the file's
-// line holding that line's longest tail of 8 bytes or more; or that every
-// line is there, but not together.
+// For `edit`'s stop, where an `old` not in the file parts from it: the first
+// nonblank line of `old` the file lacks, and the file's line holding that
+// line's longest tail of 8 bytes or more; or that every line is there, but not
+// together.
 static STATUS_MUST_USE Status change_miss_hint(Run *r, Pos pos, Str file, Str old, Str *out) {
     size_t from = 0;
     while (from <= old.len) {
@@ -258,8 +257,8 @@ static STATUS_MUST_USE Status change_miss_hint(Run *r, Pos pos, Str file, Str ol
     return OK;
 }
 
-// Reads `p` and applies `edits` to it in sequence, as `edit` does, charging
-// the searches; writes nothing. Zig's `planEdits`.
+// Reads `p` and applies `edits` to it in sequence, as `edit` does, charging the
+// searches; writes nothing.
 static STATUS_MUST_USE Status change_plan(Run *r, Pos pos, const StorePath *p, EditList edits, Plan *out) {
     Builtin b = BUILTIN_EDIT;
     TRY(builtin_count_read(r, pos));
@@ -350,10 +349,10 @@ static STATUS_MUST_USE Status change_write_lines(Run *r, Pos pos, Str mark, Str 
     return OK;
 }
 
-// Prints a unified diff of `was` becoming `now`, Zig's `writeDiff`: `--- a/p`,
-// `+++ b/p`, then a hunk for each run of lines the spans touch, numbered as
-// in the files. In summary the walk and its charges are the same, and the
-// output is one line: `edit p: N hunks, -O +N lines`.
+// Prints a unified diff of `was` becoming `now`: `--- a/p`, `+++ b/p`, then a
+// hunk for each run of lines the spans touch, numbered as in the files. In
+// summary the walk and its charges are the same, and the output is one line:
+// `edit p: N hunks, -O +N lines`.
 static STATUS_MUST_USE Status change_write_diff(Run *r, Pos pos, Str rel, Str was, Str now, SpansItems spans) {
     bool summary = builtin_store_of(r)->diffs_summary;
     uint64_t hunks = 0;
@@ -418,8 +417,8 @@ static STATUS_MUST_USE Status change_write_diff(Run *r, Pos pos, Str rel, Str wa
     return run_write(r, pos, buf_view(&h));
 }
 
-// Asks the host whether `p` may change, Zig's `mayChange`: every change asks
-// before anything is written.
+// Asks the host whether `p` may change: every change asks before anything is
+// written.
 // DRAGON: the store's boundaries. A change that skipped this would write
 // through a read-only mount, and past `--undo-on-stop`'s journal.
 // REMEDY: `change_admit` calls it for every change, `edit`'s and
@@ -432,10 +431,10 @@ static STATUS_MUST_USE Status change_may(Run *r, Pos pos, const StorePath *p) {
     return h->may_change(h->ctx, &rs->path, pos, p->rel, p->full);
 }
 
-// Everything a change asks before it is made, Zig's `admit`: the host lets
-// `p` change and the change budgets hold it; then it is counted, its bytes
-// charged and its log entry reserved, so a change made is never one the log
-// could not hold. A stop here changes nothing.
+// Everything a change asks before it is made: the host lets `p` change and the
+// change budgets hold it; then it is counted, its bytes charged and its log
+// entry reserved, so a change made is never one the log could not hold. A stop
+// here changes nothing.
 static STATUS_MUST_USE Status change_admit(Run *r, Pos pos, const StorePath *p, Str data) {
     r->tried_change = true;
     TRY(change_may(r, pos, p));
@@ -448,9 +447,9 @@ static STATUS_MUST_USE Status change_admit(Run *r, Pos pos, const StorePath *p, 
     return OK;
 }
 
-// Makes a change `change_admit` let through and logs it with its outcome,
-// Zig's `make`; a failed one also stops the run. The store takes removing a
-// missing path as done, and a script's removal of one is a stop, logged.
+// Makes a change `change_admit` let through and logs it with its outcome; a
+// failed one also stops the run. The store takes removing a missing path as
+// done, and a script's removal of one is a stop, logged.
 static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind c, const StorePath *p, Str data) {
     RunStore *rs = builtin_store_of(r);
     Arena *a = r->ctx.values;
@@ -531,12 +530,12 @@ static STATUS_MUST_USE Status bi_edit(Run *r, Pos pos, ConstValues args, Value *
     return OK;
 }
 
-// `edit` over several files as one, Zig's `editsWrite` (the Linux host's
-// `edits_write`, under the prelude's `edits_all`): `list` is
-// `{{p, {edits}}, ...}`. Every file is planned, every diff printed and every
-// change admitted before any is written, so a stop of any kind leaves every
-// file as it was; only the store failing a write after the first can part
-// them, and the effects say which were made. A file named twice is refused.
+// `edit` over several files as one (the Linux host's `edits_write`, under the
+// prelude's `edits_all`): `list` is `{{p, {edits}}, ...}`. Every file is
+// planned, every diff printed and every change admitted before any is written,
+// so a stop of any kind leaves every file as it was; only the store failing a
+// write after the first can part them, and the effects say which were made. A
+// file named twice is refused.
 static STATUS_MUST_USE Status change_edits_write(Run *r, Pos pos, const Value *list, Value *out) {
     Builtin b = BUILTIN_EDIT;
     Table *t = NULL;
