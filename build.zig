@@ -242,17 +242,6 @@ pub fn build(b: *std.Build) void {
     web_smoke.addFileInput(b.path("web/learn.html"));
     b.step("web-test", "the browser build's module under Node (web/smoke_test.mjs)").dependOn(&web_smoke.step);
 
-    // The signer (src/shale_sign.zig): the key pair, made once, and a script
-    // signed for a target.
-    //   zig build shale-sign -- keygen [target] | pubkey [target] | sign <file.shale> <target> [minutes]
-    //     | background <file.shale> <target> [minutes] | kill <target> [minutes]
-    const signer_imports: []const std.Build.Module.Import = &.{.{ .name = "shale", .module = shale }};
-    const signer = program(b, "shale-sign", "src/shale_sign.zig", target, optimize, signer_imports);
-    const run_signer = b.addRunArtifact(signer);
-    run_signer.addPassthruArgs();
-    b.step("shale-sign", "the Shale signer: zig build shale-sign -- keygen | pubkey | sign <file.shale> <target> | background <file.shale> <target> | kill <target> (src/shale_sign.zig)").dependOn(&run_signer.step);
-    const signer_test = b.addTest(.{ .root_module = signer.root_module });
-
     // shale-gate (tools/shale_gate.zig): the PreToolUse hook's classifier,
     // passing a `shale` launch or the escape and refusing the rest. Built
     // here; the hook is installed by hand.
@@ -273,7 +262,6 @@ pub fn build(b: *std.Build) void {
         b.getInstallStep().dependOn(&b.addFail("what `zig build` installs is always ReleaseSafe; -Doptimize= is for `zig build test` and `zig build script`").step);
     } else {
         b.installArtifact(installed_runner);
-        b.installArtifact(program(b, "shale-sign", "src/shale_sign.zig", target, installed_optimize, signer_imports));
         b.installArtifact(program(b, "shale-gate", "tools/shale_gate.zig", target, installed_optimize, &.{}));
         b.getInstallStep().dependOn(&zig_ast_install.step);
     }
@@ -289,11 +277,10 @@ pub fn build(b: *std.Build) void {
     // fetch Roc and its packages beside them; they are Roc's to format, not
     // ours.
     const fmt_check = b.addFmt(.{ .paths = &.{ b.path("src"), b.path("tools"), b.path("build.zig") }, .exclude_paths = &.{ b.path("tools/roc_ast/zig-pkg"), b.path("tools/roc_ast/.zig-cache"), b.path("tools/roc_types/zig-pkg"), b.path("tools/roc_types/.zig-cache") }, .check = true });
-    const quick = b.step("quick", "The cheap checks, in seconds: the format, every test binary compiled, and shale-gate's and the signer's tests (no unit test runs: `test` runs them after these pass)");
+    const quick = b.step("quick", "The cheap checks, in seconds: the format, every test binary compiled, and shale-gate's tests (no unit test runs: `test` runs them after these pass)");
     quick.dependOn(&fmt_check.step);
-    for ([_]*std.Build.Step.Compile{ gate_test, signer_test, wasm, runner }) |c| c.step.dependOn(&fmt_check.step);
+    for ([_]*std.Build.Step.Compile{ gate_test, wasm, runner }) |c| c.step.dependOn(&fmt_check.step);
     quick.dependOn(&b.addRunArtifact(gate_test).step);
-    quick.dependOn(&b.addRunArtifact(signer_test).step);
     web_smoke.step.dependOn(quick);
     test_step.dependOn(quick);
     test_step.dependOn(&web_smoke.step);

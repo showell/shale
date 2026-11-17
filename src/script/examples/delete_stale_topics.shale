@@ -3,8 +3,8 @@
 -- (angry-gopher's chat_retire.zig removes the same). Every one is checked
 -- first, before anything is removed: it is there, and still untouched for
 -- 30 days. One that fails either stops the run with nothing removed; so does
--- a run with too few changes left for them all. Atomic (`shale-sign sign`):
--- a background run changes nothing.
+-- a run with too few changes left for them all. Atomic (a signed script's
+-- `mode` unset): a background run changes nothing.
 --
 --   topics=chat/1_5/sessions/2026-06-03,chat/channels/x/sessions/old
 --

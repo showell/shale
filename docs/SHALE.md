@@ -1371,7 +1371,7 @@ three:
 What each function takes and gives is in SHALE-AGENTS.md; the tests are
 `src/shale_*_test.zig` and the host's own.
 
-## On the live site: `script_route` and the signer
+## On the live site: `script_route`
 
 `shale.script_route` (`src/script_route.zig`) is the reusable half of an
 application's `POST /admin/script`, which angry-gopher mounts. Every
@@ -1408,20 +1408,10 @@ clock's seconds with it. A missing sequence file is refused, never read as
 nest, by their spellings. Symlinks inside the data root are not checked
 (metal has none).
 
-```sh
-zig build shale-sign -- keygen [target] | pubkey [target]
-zig build shale-sign -- sign <file.shale> <target> [minutes]
-zig build shale-sign -- background <file.shale> <target> [minutes]
-zig build shale-sign -- kill <target> [minutes]
-```
-
-`src/shale_sign.zig` makes the key pair once (the private key goes at
-`~/.shale_signing_key`, or a target's own `~/.shale_signing_key.<target>`
-when there is one, mode 600, never printed) and signs a script with the
-next sequence number: it writes `<file.shale>.<sequence>.req`, the signed
-body, and prints the curl line that sends it. `background` signs a
-`mode=background` run; `kill` signs the `mode=kill` that ends one. The steps for the site are in
-zig-metal-unikernel's DEPLOY.md, "Shale scripts: looking inside a droplet".
+**The signer is gone** (2026-11-17): Shale's `shale-sign`, which made the
+key pair and signed a script, was a relic of bare metal. The route stays
+only while angry-gopher's `admin_script.zig` and its tests import it, and
+goes with them.
 
 ## The installed suite: scripts on a schedule
 

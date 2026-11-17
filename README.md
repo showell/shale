@@ -62,11 +62,12 @@ it:
 
     git clone https://github.com/showell/shale
     git clone https://github.com/showell/zig-webbox
-    cd shale && zig build   # zig-out/bin: shale, shale-gate, shale-sign, always ReleaseSafe
+    cd shale && zig build   # zig-out/bin: shale, shale-gate, always ReleaseSafe
 
 Put `zig-out/bin` on your PATH, or link `zig-out/bin/shale` into a folder
-that is. The gate (`shale-gate`) and the signer (`shale-sign`) are Zig
-programs, built by this step either way.
+that is. The hook runs the C gate (`c/shale_gate.c`), which `shale
+c/install.shale` installs; the Zig gate this step builds is the one it is
+held to until the Zig goes.
 
 ## Run a script
 
@@ -186,7 +187,7 @@ own project, and for working on Shale itself.
   `shale`; `shale tools/zig_ast/install.shale` installs it where the host
   looks, `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
 - **On a live site:** a signed script, run by the site itself on Zig Shale
-  (`script_route`, `zig build shale-sign`):
+  (`script_route`; Shale's signer, `shale-sign`, was removed on 2026-11-17):
   [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com), on
   Linux and on
   [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel). It
@@ -331,7 +332,7 @@ no `host` there, so `run`, git and jobs are not in it.
     zig build doc-check     # every repo's docs: each cited path and name is there
     zig build script-coverage   # the lines no unit test runs, per key module: about 2 min
 
-**`test`** runs the two modules' tests, the signer's and the gate's, and
+**`test`** runs the two modules' tests and the gate's, and
 `web-test`: the browser build under Node (`web/smoke_test.mjs`), its
 sample's scripts and every lesson's cell, each held to the output it pins;
 and `cookbook-test`: every cookbook recipe that reads `arg("self_test")`,
