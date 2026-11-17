@@ -95,12 +95,6 @@ const PRELUDE_TESTS = {"src/script/prelude_test.zig", "src/shale_prelude_linux_t
 -- The docs whose shale blocks the tests run.
 const DOCS = {"docs/SHALE.md", "docs/SHALE-AGENTS.md"}
 
--- An input that holds one of these is not run: each reaches past the box's
--- own folders (a process not its own, the network, a job kept past the
--- run's end). Each is
--- listed in the report as skipped, with its reason.
-const SKIP_IF = {"proc_stop(", "http(", "http_get(", "keep_on_stop"}
-
 -- Where every run's files go: `base=` gives another folder, so two runs at
 -- once (two lanes) never share a work folder, a binary or a report.
 const DIFFER = arg("base", "build:differ")
@@ -185,14 +179,6 @@ end
 
 -- ── collecting the inputs ──
 
--- What an input source holds that makes it skipped, or "".
-function skip_reason(text)
-  for s in SKIP_IF do
-    if contains(text, s) then return "holds `" .. s .. "`" end
-  end
-  return ""
-end
-
 -- One input added to `c`, its source written as a file of its own; a source
 -- already collected is counted on the first, not run twice.
 function add_input(c, source, origin, text, argv_tail)
@@ -209,7 +195,7 @@ function add_input(c, source, origin, text, argv_tail)
   if argv_tail ~= nil then
     for a in argv_tail do push(argv, a) end
   end
-  push(c.inputs, {id = id, source = source, origin = origin, text_path = file, steps = {{argv = argv, stdin = ""}}, skip = skip_reason(text)})
+  push(c.inputs, {id = id, source = source, origin = origin, text_path = file, steps = {{argv = argv, stdin = ""}}})
   return id
 end
 
@@ -283,7 +269,7 @@ function collect_cookbook(c)
       c.n = c.n + 1
       local id = "i" .. sub("0000" .. c.n, -4)
       local rel = sub(p, #"cookbook/" + 1)
-      push(c.inputs, {id = id, source = "cookbook", origin = p, text_path = p, steps = {{argv = {"cookbook:" .. rel, "self_test=1"}, stdin = ""}}, skip = skip_reason(text)})
+      push(c.inputs, {id = id, source = "cookbook", origin = p, text_path = p, steps = {{argv = {"cookbook:" .. rel, "self_test=1"}, stdin = ""}}})
     end
   end
 end
@@ -333,7 +319,7 @@ function collect_lessons(c)
     local all = join(texts, "\n")
     local file = INPUTS .. "/" .. id .. ".shale"
     create(file, all)
-    push(c.inputs, {id = id, source = "lessons", origin = "web/lessons.js: lessons 1-" .. n, text_path = file, steps = steps, skip = skip_reason(all)})
+    push(c.inputs, {id = id, source = "lessons", origin = "web/lessons.js: lessons 1-" .. n, text_path = file, steps = steps})
   end
 end
 
@@ -442,7 +428,7 @@ function collect_dir(c, dir, source)
       c.n = c.n + 1
       n = n + 1
       local id = "i" .. sub("0000" .. c.n, -4)
-      push(c.inputs, {id = id, source = source, origin = p .. one.label, text_path = p, steps = one.steps, skip = skip_reason(text)})
+      push(c.inputs, {id = id, source = source, origin = p .. one.label, text_path = p, steps = one.steps})
     end
   end
   return n
@@ -929,7 +915,7 @@ print(table(src_rows, {"source", "inputs"}))
 print("── " .. surface_status())
 if list_only == 1 then
   local l = {}
-  for inp in inputs do push(l, join({inp.id, inp.source, inp.origin, #inp.steps .. " step(s)", inp.skip}, "\t")) end
+  for inp in inputs do push(l, join({inp.id, inp.source, inp.origin, #inp.steps .. " step(s)"}, "\t")) end
   replace_or_create(DIFFER .. "/inputs.tsv", join(l, "\n") .. "\n")
   print("── the list: " .. DIFFER .. "/inputs.tsv")
   return
@@ -983,11 +969,9 @@ for phase in phases do
   install(phase.bin, cfg)
   local t = 0
   for inp in inputs do
-    if inp.skip == "" then
-      local ms = launch(cfg, inp, phase.side)
-      t = t + ms
-      per_ms[inp.id .. " " .. phase.side] = ms
-    end
+    local ms = launch(cfg, inp, phase.side)
+    t = t + ms
+    per_ms[inp.id .. " " .. phase.side] = ms
     yield()
   end
   phase_ms[phase.side] = t
@@ -999,89 +983,82 @@ end
 -- deterministic oracle.
 install(old, cfg)
 local rows = {}
-local counts = {pass = 0, fail = 0, nondet = 0, skipped = 0}
+local counts = {pass = 0, fail = 0, nondet = 0}
 local by_area = {}
 local nondet = {}
-local skipped = {}
 local arena = {stop = 0, kept = 0, reads = 0, either = 0, stop_ids = {}, kept_ids = {}, read_ids = {}}
 local pred = {hit = 0, missed = 0, extra = 0}
 local extra_ids = {}
 local missed_ids = {}
 for inp in inputs do
   local row = {id = inp.id, source = inp.source, origin = inp.origin, verdict = "", arena = "", area = "", what = "", where = "", old = "", new = ""}
-  if inp.skip ~= "" then
-    row.verdict = "skipped"
-    row.what = inp.skip
-    push(skipped, inp.id .. " " .. inp.origin .. ": " .. inp.skip)
-  else
-    local text = read(inp.text_path)
-    local ao = layout_observer(inp, text)
-    if ao.stop then
-      arena.stop = arena.stop + 1
-      row.arena = "stop"
-      push(arena.stop_ids, inp.id .. " " .. inp.origin)
-    end
-    if ao.kept ~= "" then
-      arena.kept = arena.kept + 1
-      row.arena = row.arena .. " " .. ao.kept
-      push(arena.kept_ids, ao.kept .. " stop: " .. inp.id .. " " .. inp.origin)
-    end
-    if ao.reads then
-      arena.reads = arena.reads + 1
-      row.arena = row.arena .. " reads"
-      push(arena.read_ids, inp.id .. " " .. inp.origin)
-    end
-    row.arena = trim(row.arena)
-    local by_class = ao.stop or ao.kept ~= "" or ao.reads
-    if by_class then arena.either = arena.either + 1 end
-    local judge = {class = by_class, digits = ao.reads}
-    local twice = differ_sides(inp, "old_a", "old_b", judge)
-    local d = nil
-    if twice == nil then
-      d = differ_sides(inp, "old_a", "new", judge)
-      if d ~= nil then
-        launch(cfg, inp, "old_c")
-        local third = differ_sides(inp, "old_a", "old_c", judge)
-        if third ~= nil then
-          twice = third
-          twice.what = twice.what .. " (on a third run)"
-        end
-      end
-    end
-    if twice ~= nil then
-      row.verdict = "nondet"
-      row.what = twice.what
-      row.where = twice.where
-      row.old = clip(twice.a)
-      row.new = clip(twice.b)
-      push(nondet, inp.id .. " " .. inp.origin .. ": " .. twice.what .. " " .. twice.where .. ": `" .. clip(twice.a) .. "` then `" .. clip(twice.b) .. "`")
-    else
-      if d == nil then
-        row.verdict = "pass"
-      else
-        row.verdict = "fail"
-        row.area = area_of(inp, d, text)
-        row.what = d.what
-        row.where = d.where
-        row.old = clip(d.a)
-        row.new = clip(d.b)
-        push_at(by_area, row.area, row)
-      end
-      if predict ~= "" then
-        local p = oracle_holds(inp, predict)
-        if p and d ~= nil then pred.hit = pred.hit + 1 end
-        if p and d == nil then
-          pred.missed = pred.missed + 1
-          push(missed_ids, inp.id .. " " .. inp.origin)
-        end
-        if not p and d ~= nil then
-          pred.extra = pred.extra + 1
-          push(extra_ids, inp.id .. " " .. inp.origin)
-        end
-      end
-    end
-    if keep_all == 0 and reuse == 0 and row.verdict == "pass" then remove_tree(KEEP .. "/" .. inp.id) end
+  local text = read(inp.text_path)
+  local ao = layout_observer(inp, text)
+  if ao.stop then
+    arena.stop = arena.stop + 1
+    row.arena = "stop"
+    push(arena.stop_ids, inp.id .. " " .. inp.origin)
   end
+  if ao.kept ~= "" then
+    arena.kept = arena.kept + 1
+    row.arena = row.arena .. " " .. ao.kept
+    push(arena.kept_ids, ao.kept .. " stop: " .. inp.id .. " " .. inp.origin)
+  end
+  if ao.reads then
+    arena.reads = arena.reads + 1
+    row.arena = row.arena .. " reads"
+    push(arena.read_ids, inp.id .. " " .. inp.origin)
+  end
+  row.arena = trim(row.arena)
+  local by_class = ao.stop or ao.kept ~= "" or ao.reads
+  if by_class then arena.either = arena.either + 1 end
+  local judge = {class = by_class, digits = ao.reads}
+  local twice = differ_sides(inp, "old_a", "old_b", judge)
+  local d = nil
+  if twice == nil then
+    d = differ_sides(inp, "old_a", "new", judge)
+    if d ~= nil then
+      launch(cfg, inp, "old_c")
+      local third = differ_sides(inp, "old_a", "old_c", judge)
+      if third ~= nil then
+        twice = third
+        twice.what = twice.what .. " (on a third run)"
+      end
+    end
+  end
+  if twice ~= nil then
+    row.verdict = "nondet"
+    row.what = twice.what
+    row.where = twice.where
+    row.old = clip(twice.a)
+    row.new = clip(twice.b)
+    push(nondet, inp.id .. " " .. inp.origin .. ": " .. twice.what .. " " .. twice.where .. ": `" .. clip(twice.a) .. "` then `" .. clip(twice.b) .. "`")
+  else
+    if d == nil then
+      row.verdict = "pass"
+    else
+      row.verdict = "fail"
+      row.area = area_of(inp, d, text)
+      row.what = d.what
+      row.where = d.where
+      row.old = clip(d.a)
+      row.new = clip(d.b)
+      push_at(by_area, row.area, row)
+    end
+    if predict ~= "" then
+      local p = oracle_holds(inp, predict)
+      if p and d ~= nil then pred.hit = pred.hit + 1 end
+      if p and d == nil then
+        pred.missed = pred.missed + 1
+        push(missed_ids, inp.id .. " " .. inp.origin)
+      end
+      if not p and d ~= nil then
+        pred.extra = pred.extra + 1
+        push(extra_ids, inp.id .. " " .. inp.origin)
+      end
+    end
+  end
+  if keep_all == 0 and reuse == 0 and row.verdict == "pass" then remove_tree(KEEP .. "/" .. inp.id) end
   counts[row.verdict] = counts[row.verdict] + 1
   push(rows, row)
   yield()
@@ -1118,11 +1095,6 @@ if #nondet > 0 then
   print("── nondeterministic under the oracle alone (a finding of the harness; not judged): " .. #nondet)
   for l in nondet do print("  " .. l) end
 end
-if #skipped > 0 then
-  print("")
-  print("── skipped, each for what it reaches: " .. #skipped)
-  for l in skipped do print("  " .. l) end
-end
 if predict ~= "" then
   print("")
   print("── predicted by `" .. predict .. "` in the oracle's output: " .. pred.hit .. " failed as predicted, " .. pred.missed .. " predicted and passed, " .. pred.extra .. " failed unpredicted")
@@ -1136,5 +1108,5 @@ for l in arena.kept_ids do print("  " .. l) end
 for l in arena.read_ids do print("  reads arena_bytes: " .. l) end
 print("── wall: " .. (clock() - started) .. " s in all; in the binaries' runs, old " .. phase_ms.old_a .. " + " .. phase_ms.old_b .. " ms, new " .. phase_ms.new .. " ms")
 print("── " .. tsv)
-print("── " .. #inputs .. " inputs: " .. counts.pass .. " pass, " .. counts.fail .. " fail, " .. counts.nondet .. " nondeterministic, " .. counts.skipped .. " skipped")
+print("── " .. #inputs .. " inputs: " .. counts.pass .. " pass, " .. counts.fail .. " fail, " .. counts.nondet .. " nondeterministic")
 if counts.fail > 0 then fail("differ: " .. counts.fail .. " inputs differ from the oracle") end

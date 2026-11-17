@@ -67,10 +67,12 @@ the argv's words, `[--budget reads=3]`. Two more lines serve any of them:
   a real one: `store/store.mounts`'s secrets mount is a folder the fixture
   plants.
 
-An input that holds `proc_stop(`, `http(`, `http_get(` or `keep_on_stop` is
-skipped and listed with its reason. Each one reaches past the box's own
-folders: another process, the network, or a job that outlives the run. A
-source that two tests share runs once.
+Every input is run and judged; none is skipped. The ones that reach past
+the box's own folders stop before they do or touch only their own: `http`
+and `http_get` inputs are refused before curl runs, a `proc_stop` input
+stops only its own job or is refused a process of root's, and the
+`keep_on_stop` input is a type error. A source that two tests share runs
+once.
 
 ## A run
 
