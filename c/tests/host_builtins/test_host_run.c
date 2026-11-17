@@ -108,7 +108,7 @@ TEST(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap) 
     memset(&out, 0, sizeof out);
     out.log_fd = -1;
     out.whole = &whole;
-    out.whole_most = 1000;
+    out.whole_max = 1000;
     HostScrub s = {secrets, buf_make(&a), buf_make(&a), &out};
     EXPECT_EQ(host_scrub_write(&s, S("xa")), OK);
     // `a` may begin `abc`: held back.

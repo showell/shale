@@ -14,19 +14,19 @@
 #include <sys/stat.h>
 
 // The most a `sleep` waits in one call: ten minutes.
-enum { HOST_SLEEP_MOST_MS = 600000 };
+enum { HOST_SLEEP_MAX_MS = 600000 };
 
 // With `stdout_secret`, `out` is stderr's last lines, this many.
 enum { HOST_SECRET_ERR_TAIL = 20 };
 
 // The most bytes `stdout_secret` stores, and `secrets` reads of a file.
-enum { HOST_SECRET_MOST = 64 * 1024 };
+enum { HOST_SECRET_MAX = 64 * 1024 };
 
 // What a failed program's output keeps in a budget's stop, from its end.
 enum { HOST_BUDGET_STOP_OUTPUT = 2000 };
 
 // The most of an argv the time line keeps, so three programs fit one line.
-enum { HOST_ARGV_MOST = 80 };
+enum { HOST_ARGV_MAX = 80 };
 
 #define HOST_ELIDED "\xe2\x80\xa6"
 
@@ -93,12 +93,12 @@ static void host_make(Host *h, SpawnStrs env) {
 
 // ── the time line ──
 
-// An argv past HOST_ARGV_MOST bytes keeps both its ends around an ellipsis,
-// HOST_ARGV_MOST bytes in all, neither cut inside a UTF-8 sequence: the
+// An argv past HOST_ARGV_MAX bytes keeps both its ends around an ellipsis,
+// HOST_ARGV_MAX bytes in all, neither cut inside a UTF-8 sequence: the
 // start names the program, the end the arguments that tell runs apart.
 static bool host_keep_ends(Arena *a, Str argv, Str *out) {
-    if (argv.len <= HOST_ARGV_MOST) return arena_dup(a, argv, out);
-    size_t room = HOST_ARGV_MOST - (sizeof HOST_ELIDED - 1);
+    if (argv.len <= HOST_ARGV_MAX) return arena_dup(a, argv, out);
+    size_t room = HOST_ARGV_MAX - (sizeof HOST_ELIDED - 1);
     size_t head = room / 2;
     while (head > 0 && (str_byte(argv, head) & 0xC0) == 0x80) head--;
     size_t tail = argv.len - (room - room / 2);
@@ -517,7 +517,7 @@ typedef struct {
     bool log_failed;
     Keep *keeper;
     Buf *whole;
-    uint64_t whole_most;
+    uint64_t whole_max;
     bool whole_over;
     uint64_t bytes;
 } HostOut;
@@ -538,7 +538,7 @@ static STATUS_MUST_USE Status host_out_write(HostOut *o, Str bytes) {
     }
     if (o->keeper != NULL) TRY(keep_feed(o->keeper, bytes));
     if (o->whole != NULL) {
-        if (o->whole->len + bytes.len > o->whole_most) {
+        if (o->whole->len + bytes.len > o->whole_max) {
             o->whole_over = true;
         } else {
             TRY(buf_str(o->whole, bytes));
@@ -759,14 +759,14 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     return OK;
 }
 
-// Stops the run when the program printed past HOST_SECRET_MOST, however it
+// Stops the run when the program printed past HOST_SECRET_MAX, however it
 // ended: one held to the cap by RLIMIT_FSIZE ends by SIGXFSZ (or its write
 // fails) with one byte past it written.
 static STATUS_MUST_USE Status host_secret_refuse_over(Run *r, Pos pos, HostSecretFile *s, Str program) {
     off_t end = lseek(s->fd, 0, SEEK_END);
     if (end < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown), MSG_FROM_SCRIPT(program), MSG_FROM_HOST(host_errno_tag(errno))));
     uint64_t size = (uint64_t)end;
-    if (size > HOST_SECRET_MOST) {
+    if (size > HOST_SECRET_MAX) {
         return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: `{s}` printed {d} bytes, past the {d} `secrets` reads: nothing is stored in {s}"), MSG_ARGS(MSG_FROM_SCRIPT(program), MSG_FROM_HOST(run_unum(r, size)), MSG_FROM_HOST(S("65536")), MSG_FROM_SCRIPT(s->shown)));
     }
     return OK;
@@ -930,12 +930,12 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
         char *bytes = NULL;
         size_t len = 0;
         if (err == 0) {
-            bytes = arena_alloc(a, HOST_SECRET_MOST + 1, 1);
+            bytes = arena_alloc(a, HOST_SECRET_MAX + 1, 1);
             if (bytes == NULL) {
                 close(fd);
                 return run_values_oom(r, pos);
             }
-            Bytes into = {bytes, HOST_SECRET_MOST + 1};
+            Bytes into = {bytes, HOST_SECRET_MAX + 1};
             while (len < into.len) {
                 ssize_t got = read(fd, &at(into, len), into.len - len);
                 if (got < 0 && errno == EINTR) continue;
@@ -950,7 +950,7 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
         }
         Str why = S("");
         if (err != 0) why = store_err_name(store_err_of(err));
-        if (err == 0 && len > HOST_SECRET_MOST) why = S("StreamTooLong");
+        if (err == 0 && len > HOST_SECRET_MAX) why = S("StreamTooLong");
         if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`run`: the secret `{s}`'s file {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path), MSG_FROM_HOST(why)));
         Str v = {bytes, len};
         while (v.len > 0 && mem_find_byte(" \t\r\n", str_byte(v, 0), 4) != NULL) v = str_sub(v, 1, v.len);
@@ -1181,7 +1181,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     HostPatterns pats = {patterns, 2};
     if (o->whole != HOST_UNSET) {
         sink_out.whole = &whole_buf;
-        sink_out.whole_most = o->whole;
+        sink_out.whole_max = o->whole;
     } else {
         KeepOptions ko;
         keep_options_default(&ko);
@@ -1229,7 +1229,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     // REMEDY: RLIMIT_FSIZE at the cap plus one, set in the child before exec
     // (spawn.c), so the kernel stops the file one byte past the cap and
     // `host_secret_refuse_over` sees it; test_run_guards prints 10 MB at it.
-    if (held->has_secret) spec.file_max = HOST_SECRET_MOST + 1;
+    if (held->has_secret) spec.file_max = HOST_SECRET_MAX + 1;
     spec.timeout_ms = o->timeout_ms;
     SpawnOutcome outcome;
     memset(&outcome, 0, sizeof outcome);
@@ -1357,7 +1357,7 @@ static STATUS_MUST_USE Status host_sleep(Host *h, Run *r, Pos pos, ConstValues a
     const Value *v = &at(args, 0);
     if (v->tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`sleep`'s ms must be an integer, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(v))));
     int64_t ms = v->as.integer;
-    if (ms < 0 || ms > HOST_SLEEP_MOST_MS) return host_fail(r, pos, CLASS_ARGUMENT, S("`sleep` takes 0 to {d} ms, not {d}"), MSG_ARGS(MSG_FROM_HOST(S("600000")), MSG_FROM_HOST(run_num(r, ms))));
+    if (ms < 0 || ms > HOST_SLEEP_MAX_MS) return host_fail(r, pos, CLASS_ARGUMENT, S("`sleep` takes 0 to {d} ms, not {d}"), MSG_ARGS(MSG_FROM_HOST(S("600000")), MSG_FROM_HOST(run_num(r, ms))));
     TRY(run_charge(r, pos, 1));
     struct timespec ts = {(time_t)(ms / 1000), (long)(ms % 1000) * 1000000L};
     while (nanosleep(&ts, &ts) != 0 && errno == EINTR) {
