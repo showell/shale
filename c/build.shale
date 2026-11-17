@@ -233,6 +233,8 @@ end
 -- says `ok` with its last line, or FAIL with its last 30; a failure is named
 -- by recipe once all have run. The goldens freeze no recipe: a recipe and
 -- its self-test change together.
+const PATH_FRONT = [=[d="$1"; shift; PATH="$d:$PATH"; export PATH; exec "$@"]=]
+
 function cookbook_self_tests(bin)
   local dir = OUT .. "/cookbook-test"
   if exists(dir) then remove_tree(dir) end
@@ -255,9 +257,16 @@ function cookbook_self_tests(bin)
   local bad = {}
   local ms = 0
   local cpu = 0
-  local env = {SHALE_MOUNTS = real(dir .. "/mounts"), PATH = real(dirname(bin)) .. ":/usr/local/bin:/usr/bin:/bin"}
+  local env = {SHALE_MOUNTS = real(dir .. "/mounts")}
+  -- A script cannot read PATH, so `sh` puts the binary's folder before the
+  -- inherited one, as build.zig's step does: a recipe still finds `zig`.
+  local front = {"sh", "-c", PATH_FRONT, "cookbook-test", real(dirname(bin)), real(bin)}
   for r in recipes do
-    local got = run({real(bin), r, "self_test=1"}, {timeout_ms = 600000, tail = 30, env = env, want = "c-tests: the binary under test runs the cookbook's self-tests"})
+    local argv = {}
+    for a in front do push(argv, a) end
+    push(argv, r)
+    push(argv, "self_test=1")
+    local got = run(argv, {timeout_ms = 600000, tail = 30, env = env, want = "c-tests: the binary under test, first on the inherited PATH, runs the cookbook's self-tests"})
     ms = ms + got.ms
     cpu = cpu + get(got, "cpu_ms", 0)
     local out = trim(got.out)
