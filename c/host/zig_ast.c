@@ -96,16 +96,17 @@ static void host_zig_stop(void) {
     if (!p->started) return;
     host_zig_close(&p->in_w);
     int status = 0;
-    pid_t got = 0;
+    struct rusage usage;
+    bool reaped = false;
     for (int waited = 0; waited < HOST_ZIG_EXIT_WAIT_MS; waited += 10) {
-        got = waitpid(p->pid, &status, WNOHANG);
-        if (got != 0) break;
+        reaped = spawn_reaped_now(p->pid, &status, &usage);
+        if (reaped) break;
         struct timespec ten = {0, 10 * 1000 * 1000};
         nanosleep(&ten, NULL);
     }
-    if (got == 0) {
+    if (!reaped) {
         kill(-p->pid, SIGKILL);
-        waitpid(p->pid, &status, 0);
+        spawn_reap(p->pid, &status, NULL);
     }
     host_zig_close(&p->out_r);
     host_zig_close(&p->err_r);
@@ -217,7 +218,12 @@ static bool host_zig_wait(HostZigProc *p, int fd, short events) {
         SpawnPollFds fds = {fds_room, 2};
         at(fds, 0) = (SpawnPollFd){fd, events, 0};
         at(fds, 1) = (SpawnPollFd){p->err_r, POLLIN, 0};
-        if (poll(fds.ptr, 2, left > INT32_MAX ? INT32_MAX : (int)left) < 0) continue;
+        if (poll(fds.ptr, 2, left > INT32_MAX ? INT32_MAX : (int)left) < 0) {
+            // Two open descriptors of the run's own: a poll that fails but
+            // for a signal is a bug in the C, and would spin to the deadline.
+            if (errno == EINTR) continue;
+            c_bug("zig_ast: a poll of zig-ast's own pipes failed");
+        }
         if (at(fds, 1).revents != 0) host_zig_drain_err(p);
         if (at(fds, 0).revents != 0) return true;
     }
@@ -388,7 +394,8 @@ static STATUS_MUST_USE Status host_zig_proc_of(Paths *h, Run *r, Pos pos, Str wh
         ssize_t n = read(at(why_s, 0), &why, sizeof why);
         if (n == (ssize_t)sizeof why) {
             e = why;
-            waitpid(pid, NULL, 0);
+            int status = 0;
+            spawn_reap(pid, &status, NULL);
         }
     }
     host_zig_close(&at(why_s, 0));

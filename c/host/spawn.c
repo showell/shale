@@ -441,6 +441,10 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
     size_t sig_at = nfds++;
     int prc = poll(fds.ptr, (nfds_t)nfds, (int)(step.wait_ms < 60000 ? step.wait_ms : 60000));
     if (prc < 0 && errno == EINTR) return OK;
+    // The descriptors are the run's own, open, and at most four: a poll that
+    // fails otherwise is a bug in the C, and the loop would spin past the
+    // program's deadline on it.
+    if (prc < 0) c_bug("spawn: a poll of a program's own pipes and pidfd failed");
 
     if (out_at != SIZE_MAX && at(fds, out_at).revents != 0) TRY(spawn_read_available(&l->out_r, buf, sink));
     if (in_at != SIZE_MAX && at(fds, in_at).revents != 0) {
@@ -468,7 +472,7 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
             l->has_termed = true;
             l->termed_at = spawn_mono_ms();
         }
-        if (wait4(l->pid, &l->raw, WNOHANG, &l->usage) == l->pid) {
+        if (spawn_reaped_now(l->pid, &l->raw, &l->usage)) {
             l->exited = true;
             l->group_gone = spawn_group_gone(l->pid);
             // All the leader wrote is in the pipe now, though this poll may
@@ -498,7 +502,7 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     ssize_t n = read(err_r, &why, sizeof why);
     if (n == (ssize_t)sizeof why) {
         int status = 0;
-        wait4(pid, &status, 0, NULL);
+        spawn_reap(pid, &status, NULL);
         if (why >= 1000) return SPAWN_NO_CWD;
         return why == ENOENT ? SPAWN_NOT_FOUND : SPAWN_NOT_RUNNABLE;
     }
@@ -511,7 +515,7 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     if (pid_fd < 0) {
         kill(-pid, SIGKILL);
         int status = 0;
-        wait4(pid, &status, 0, NULL);
+        spawn_reap(pid, &status, NULL);
         return SPAWN_REFUSED;
     }
     spawn_nonblocking(*out_r);
@@ -545,7 +549,7 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
             // linger as a zombie, or what it left in its group would.
             if (!l.exited) {
                 kill(-pid, SIGKILL);
-                wait4(pid, &l.raw, 0, NULL);
+                spawn_reap(pid, &l.raw, NULL);
             }
             if (l.exited && !l.group_gone) kill(-pid, SIGKILL);
             result = SPAWN_SINK_STOPPED;

@@ -325,8 +325,7 @@ static JobsLaunched jobs_launch(Arena *a, Str reaper, Str record, Str log, Str c
     }
     close(at(pipe_ends, 1));
     int status = 0;
-    while (waitpid(first, &status, 0) < 0 && errno == EINTR) {
-    }
+    spawn_reap(first, &status, NULL);
     char byte = 0;
     while (read(at(pipe_ends, 0), &byte, 1) < 0 && errno == EINTR) {
     }
@@ -496,7 +495,7 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
         kill(-r.pgid, SIGKILL);
         kill(pid, SIGKILL);
         int st = 0;
-        waitpid(pid, &st, 0);
+        spawn_reap(pid, &st, NULL);
         return 2;
     }
     ssize_t w = write(JOBS_STARTED_FD, "s", 1);
@@ -505,13 +504,19 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
     // The leader's exit is seen first and left unreaped (WNOWAIT): its
     // zombie keeps its pid the group's id, so the TERM to what it left
     // running in its group can reach no stranger.
+    // DRAGON: the job's end. A wait that failed on the reaper's own child
+    // would leave `raw` 0, and the record would say the job exited 0.
+    // REMEDY: a wait broken by a signal is asked again; any other failure
+    // aborts the reaper (c_bug), so no end is written and `job_wait` says
+    // `lost`, never a false `exited 0`.
     siginfo_t info;
-    while (waitid(P_PID, (id_t)pid, &info, WEXITED | WNOWAIT) < 0 && errno == EINTR) {
+    for (;;) {
+        if (waitid(P_PID, (id_t)pid, &info, WEXITED | WNOWAIT) == 0) break;
+        if (errno != EINTR) c_bug("jobs: the reaper's wait for its job's leader failed");
     }
     jobs_signal_group(r.pgid, SIGTERM);
     int raw = 0;
-    while (waitpid(pid, &raw, 0) < 0 && errno == EINTR) {
-    }
+    spawn_reap(pid, &raw, NULL);
     if (WIFEXITED(raw)) {
         r.has_exit = true;
         r.exit = (uint8_t)WEXITSTATUS(raw);

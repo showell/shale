@@ -673,6 +673,23 @@ TEST(the_paths_tried_follow_the_last_PATH) {
     arena_deinit(&a);
 }
 
+TEST(a_wait_that_fails_on_a_child_of_shale_s_own_ends_the_process) {
+    // A pid that is no child of this process: the wait fails with ECHILD,
+    // which no child of shale's own may, and the run would read a status of
+    // 0 it never had.
+    int raw = 0;
+    struct rusage usage;
+    EXPECT_DIES(spawn_reap(1, &raw, NULL));
+    EXPECT_DIES((void)spawn_reaped_now(1, &raw, &usage));
+    // A child that ends is reaped, its status read.
+    pid_t pid = fork();
+    if (pid == 0) _exit(7);
+    EXPECT(pid > 0);
+    spawn_reap(pid, &raw, NULL);
+    EXPECT(WIFEXITED(raw));
+    EXPECT_EQ(WEXITSTATUS(raw), 7);
+}
+
 TEST_MAIN(TEST_CASE(output_exit_code_stdin_cwd_and_the_environment_as_given),
           TEST_CASE(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer),
           TEST_CASE(cpu_ms_counts_what_a_program_burns_a_child_waited_for_included_and_none_it_sleeps),
@@ -687,4 +704,5 @@ TEST_MAIN(TEST_CASE(output_exit_code_stdin_cwd_and_the_environment_as_given),
           TEST_CASE(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds),
           TEST_CASE(attack_a_term_or_hup_the_program_sends_its_parent_mid_run_ends_its_group),
           TEST_CASE(attack_a_program_that_never_reads_its_stdin_leaves_shale_standing),
-          TEST_CASE(the_paths_tried_follow_the_last_PATH))
+          TEST_CASE(the_paths_tried_follow_the_last_PATH),
+          TEST_CASE(a_wait_that_fails_on_a_child_of_shale_s_own_ends_the_process))

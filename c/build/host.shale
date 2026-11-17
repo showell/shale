@@ -77,7 +77,7 @@ const HOST_PLANTS = {
    old = "if (l.exited && (l.out_r < 0 || now >= l.drain_until)) break;", new = "(void)now; if (l.exited && l.out_r < 0) break;"},
   {name = "a sink's stop leaves the program running",
    aim = "a_sink_that_stops_ends_the_programs_group_and_reaps_it_before_the_stop_is_said", dir = "host", file = "spawn.c", caught_by = "host/test_spawn",
-   old = "            if (!l.exited) {\n                kill(-pid, SIGKILL);\n                wait4(pid, &l.raw, 0, NULL);\n            }", new = "            (void)0;"},
+   old = "            if (!l.exited) {\n                kill(-pid, SIGKILL);\n                spawn_reap(pid, &l.raw, NULL);\n            }", new = "            (void)0;"},
   {name = "a TERM to shale is taken for a timeout",
    aim = "a_term_to_shale_while_a_program_runs_ends_its_group_and_says_so_and_the_mask_is_put_back,attack_a_term_or_hup_the_program_sends_its_parent_mid_run_ends_its_group", dir = "host", file = "spawn.c", caught_by = "host/test_spawn",
    old = "        l->why = SPAWN_INTERRUPTED;", new = "        l->why = SPAWN_TIMEOUT;"},
