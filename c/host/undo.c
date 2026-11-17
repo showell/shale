@@ -1,0 +1,48 @@
+// undo.c: `--undo-on-stop`'s putting back, the port of Zig Shale's
+// `undoChanges` (src/shale_host_linux.zig). paths.c journals each path
+// before its first change (`paths_note_before`); this puts back a stopped
+// run's changes, newest first: a file's bytes and mode restored, a path
+// that was not there deleted (a folder with what is in it). A folder the
+// run removed whole and a program's changes cannot be put back; each such
+// path is reported, and the answer says not all was.
+//
+// Include paths.c first.
+
+// Puts back what `h`'s journal holds, writing a line to `w` for each path it
+// could not put back and one for the whole, into `*all` whether everything
+// was. STOP only when `w`'s arena refuses a line.
+// DRAGON: the undo journal. What runs here runs after a stop, on absolute paths the journal took before the run changed them, so it deletes and writes outside any check: a journal entry made from anything but paths_note_before's path would delete or overwrite whatever it names. Only paths_note_before pushes onto the journal, after may_change has confined the path. test_undo plants a file, a folder and nothing there.
+static STATUS_MUST_USE Status undo_changes(Paths *h, Buf *w, bool *all) {
+    Arena *a = h->arena;
+    *all = true;
+    for (size_t k = h->journal.len; k > 0; k--) {
+        const Prior *p = &at(h->journal, k - 1);
+        if (p->was == PRIOR_ABSENT) {
+            StoreErr e = store_os_delete_file(a, p->abs);
+            if (e == STORE_IS_DIR) {
+                StoreErr de = store_os_delete_tree(a, p->abs);
+                if (de != STORE_OK) {
+                    TRY(msg_format(w, S("── not put back: {s}: the folder the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(store_err_name(de)))));
+                    *all = false;
+                }
+            } else if (e != STORE_OK && e != STORE_FILE_NOT_FOUND) {
+                TRY(msg_format(w, S("── not put back: {s}: what the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(store_err_name(e)))));
+                *all = false;
+            }
+        } else if (p->was == PRIOR_FILE) {
+            StoreErr e = store_os_write_file(a, p->abs, p->bytes, p->mode);
+            if (e != STORE_OK) {
+                TRY(msg_format(w, S("── not put back: {s} ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(store_err_name(e)))));
+                *all = false;
+            }
+        } else {
+            struct stat st;
+            if (store_os_stat(a, p->abs, false, &st) != STORE_OK) {
+                TRY(msg_format(w, S("── not put back: {s}: a folder removed whole, and its files with it\n"), MSG_ARGS(MSG_FROM_HOST(p->abs))));
+                *all = false;
+            }
+        }
+    }
+    MsgNum n;
+    return msg_format(w, S("── undone: {d} path(s) the run changed put back{s}\n"), MSG_ARGS(MSG_FROM_HOST(msg_num(&n, h->journal.len)), MSG_FROM_HOST(*all ? S("") : S(", but not all (above)"))));
+}
