@@ -115,6 +115,15 @@ test "zig_decls: a parse error stops, naming its line, with no list" {
     try t.expectStop("zig_decls(\"bad.zig\")", .atomic, .argument, "line 2");
 }
 
+test "zig_decls: options that are not a map, or a `container` that is not a name, stop as a type before anything is read" {
+    var t: T = undefined;
+    try init(&t);
+    defer t.deinit();
+    try t.expectStop("zig_decls(\"gone.zig\", {container = 3})", .atomic, .type, "`zig_decls`' `container` is a name, not ");
+    try t.expectStop("zig_decls(\"gone.zig\", {1})", .atomic, .type, "`zig_decls`' options are a map, not a list");
+    try t.expectStop("zig_decls(\"gone.zig\", 3)", .atomic, .type, "`zig_decls`' options are a map, not ");
+}
+
 test "zig_decls: a step a token and a node, more for a file four times the size" {
     var t: T = undefined;
     try init(&t);
