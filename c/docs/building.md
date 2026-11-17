@@ -38,12 +38,20 @@ merge, and defer it while you're about 90% sure it has nothing new to say.
 | The discipline check and the C `shale --check` smoke test | TCC, Shale | fast | the style rules hold; the command still works |
 | Every test under the sanitizers | GCC `-O0`, ASan and UBSan | full | use after free, overruns, leaks, undefined behavior |
 | The code at `-O2 -Werror`, run nowhere | GCC | full | the warnings only the optimizer finds (`-Wrestrict`, some `-Warray-bounds`) |
-| Every planted fault | TCC or GCC, as the plant says | full | each test proven able to fail |
+| Every planted fault | TCC, or GCC's ASan where the plant names `build = "asan"` | full | each test proven able to fail |
 | `c/shale.c` at `-O2` | GCC | full | the binary the differential harness judges against Zig Shale |
 
 No test runs at `-O2` during the port (Steve, 2026-11-17): the
 optimizer's value then is its warnings, and the sanitizers at `-O0` are
 where the real bugs show up.
+
+A plant builds under TCC unless only a sanitizer sees its fault: a
+plant's aimed test fails by its own `EXPECT` under either compiler, and
+TCC compiles a unity build about ten times faster than GCC with the
+sanitizers. The GCC compiles run two at a time, one per core
+(`c/build/lib.shale`'s `run_jobs`). The tier's checks of wall time hold
+under `nice` and a busy box: a program that burns CPU is held to its
+CPU time, and only programs that wait are held to their wall time.
 
 When the full tier passes 90 seconds, stop and propose ways to cut it,
 ranked by what they'd save, before adding more to it.
