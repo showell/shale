@@ -1,0 +1,1 @@
+local l = {"x", "y"} print(get(l, 2, "-"), get(l, 3, "-"), get(l, 0, "-"), get(l, 1))

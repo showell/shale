@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:21: budget output: the output budget ran out (80976 steps)
+── used: 80976 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 65536 of 65536 output bytes

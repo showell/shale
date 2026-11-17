@@ -1,0 +1,2 @@
+-- An integer past 64 bits: syntax.
+local n = 99999999999999999999

@@ -1,0 +1,3 @@
+mkdir("shale-check")
+replace("shale-check/note.txt", "written at " .. date(now()) .. "\n")
+print(read("shale-check/note.txt"))

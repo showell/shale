@@ -1,0 +1,1 @@
+function f(a, b) local c = a .. b return c end print(f("x", 1), f("y", 2))

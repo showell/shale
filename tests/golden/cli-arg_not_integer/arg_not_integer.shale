@@ -1,0 +1,3 @@
+-- differ-argv: {script} n=seven
+-- An integer default and a value that is not one.
+print(arg("n", 1))

@@ -1,0 +1,1 @@
+print(exists("top.txt"), exists("chat/a.md"))

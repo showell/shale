@@ -1,0 +1,4 @@
+-- differ-argv:
+-- differ-stdin-self: 1
+-- With no file and no -e, the script is stdin.
+print("from stdin", #"abc")

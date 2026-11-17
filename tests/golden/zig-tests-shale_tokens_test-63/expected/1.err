@@ -1,0 +1,3 @@
+── stopped at the Linux prelude:515:10 (in `the Linux prelude's shale_tokens`): argument: `shale_tokens`: no token tag `eof`: the end of a file is no token here (29 steps)
+   called from {base}/case/script.shale:1:1
+── used: 29 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

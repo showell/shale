@@ -1,0 +1,5 @@
+-- budget: arena_bytes=1000000
+-- A string doubled past a small arena: budget arena.
+local s = "x"
+for i = 1, 40 do s = s .. s end
+print(#s)

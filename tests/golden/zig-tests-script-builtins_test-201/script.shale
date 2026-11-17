@@ -1,0 +1,1 @@
+print(starts_with("hello", "he"), ends_with("hello", "lo"), contains("hello", "ll"), contains("hello", "x"))

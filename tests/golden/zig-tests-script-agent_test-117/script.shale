@@ -1,0 +1,1 @@
+print(join(glob("**/*.zig", {hidden = true}), " "), #glob("**/*.zig", {hidden = false}))

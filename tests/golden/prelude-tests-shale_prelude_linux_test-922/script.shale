@@ -1,0 +1,6 @@
+local m = re_find("200 x", "^([0-9]+) (.*)$")
+print(#m.groups, m.groups[1], m.groups[2], json_write(m.groups))
+print(json_write(m))
+print(json_write(re_find("ac", "(a)(b)?(c)").groups))
+print(json_write(re_find_all("x=1, yy=22", "(\\w+)=(\\d+)")))
+print(json_write(re_find("abc", "b")))

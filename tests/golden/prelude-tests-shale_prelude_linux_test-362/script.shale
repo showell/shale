@@ -1,0 +1,1 @@
+print(join(tail_lines("big.txt", 2), "|"), #tail_lines("big.txt", 5000), tail_lines("big.txt", 5000)[1])

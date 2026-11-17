@@ -1,0 +1,1 @@
+local m = {} push_at(m, "x", 1) push_at(m, "x", 2) push_at(m, "y", 3) print(join(m.x, ","), join(m.y, ","), count(m))

@@ -1,0 +1,2 @@
+── stopped at {base}/case/syntax_string_unclosed.shale:2:11: syntax: a string runs past the end of its line: write \n (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

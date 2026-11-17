@@ -1,0 +1,1 @@
+local r = zig_rename("c.zig", "marked", "isSigned", {via = {"harness.UidSite"}}) print(r.renamed, join(r.left, ","))

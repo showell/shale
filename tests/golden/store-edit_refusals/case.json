@@ -1,0 +1,1 @@
+{"id":"store-edit_refusals","source":"store","origin":"tools/differ/store/edit_refusals.shale","files":["setup.shale","edit_refusals.shale"],"steps":[{"argv":["{case}/setup.shale"],"stdin":"","mounts":[]},{"argv":["{case}/edit_refusals.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

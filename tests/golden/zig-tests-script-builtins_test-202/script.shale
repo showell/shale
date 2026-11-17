@@ -1,0 +1,1 @@
+print(find("hello", "l"), find("hello", "z"), find("a.b", "."))

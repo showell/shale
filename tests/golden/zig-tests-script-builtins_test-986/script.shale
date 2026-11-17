@@ -1,0 +1,1 @@
+print(re_replace("a", "a", "\\1"))

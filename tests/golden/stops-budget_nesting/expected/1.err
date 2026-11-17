@@ -1,0 +1,2 @@
+── stopped at {base}/case/budget_nesting.shale:2:105: budget nesting: the source nests deeper than the nesting budget (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

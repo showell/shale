@@ -1,0 +1,1 @@
+print(join(head_lines("ten.txt", 3), ","), join(tail_lines("ten.txt", 3), ","), #head_lines("ten.txt", 99), #tail_lines("ten.txt", 99))

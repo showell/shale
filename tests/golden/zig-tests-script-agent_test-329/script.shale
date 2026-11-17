@@ -1,0 +1,1 @@
+local a = ls("") local b = ls("src") local c = read("README.md")

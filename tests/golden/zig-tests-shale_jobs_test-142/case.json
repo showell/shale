@@ -1,0 +1,1 @@
+{"id":"zig-tests-shale_jobs_test-142","source":"zig-tests","origin":"src/shale_jobs_test.zig:142","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

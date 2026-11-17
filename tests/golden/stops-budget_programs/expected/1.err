@@ -1,0 +1,4 @@
+── budgets from the script's header: programs=2
+── stopped at the Linux prelude:11:10 (in `the Linux prelude's run`): budget programs: 2 programs a run, the `programs` budget: raise it with `--budget programs=N` or the script's `-- budget: programs=N` line (96 steps)
+   called from {base}/case/budget_programs.shale:3:17
+── used: 96 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

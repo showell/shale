@@ -1,0 +1,4 @@
+── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git diff --no-ext-diff HEAD -- a.txt` exited 1: error: Could not access 'HEAD' (803 steps)
+   called from the git prelude:152:10 (in `the git prelude's git_diff`)
+   called from {base}/case/script.shale:1:16
+── used: 803 of 5000000 steps, 0 of 10000 reads, 31 of 67108864 read bytes, 0 of 65536 output bytes

@@ -1,0 +1,1 @@
+print(#shale_tokens("empty.shale"), #shale_tokens("space.shale"))

@@ -1,0 +1,1 @@
+print(git_head(".") == git_head(""))

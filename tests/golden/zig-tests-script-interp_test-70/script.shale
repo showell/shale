@@ -1,0 +1,1 @@
+local n = 0 while true do n = n + 1 if n == 3 then break end end print(n)

@@ -1,0 +1,1 @@
+for e in walk("chat") do print(e.path) end

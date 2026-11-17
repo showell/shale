@@ -1,0 +1,1 @@
+print(git_is_clean(""), read("a.txt"))

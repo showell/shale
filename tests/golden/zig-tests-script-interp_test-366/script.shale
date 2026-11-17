@@ -1,0 +1,1 @@
+local table = {} table.insert = 1 print(table.insert)

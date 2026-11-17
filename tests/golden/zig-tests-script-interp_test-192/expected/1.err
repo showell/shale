@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:28: budget arena: the arena budget ran out (# steps)
+── used: # of # steps, # of # reads, # of # read bytes, # of # output bytes

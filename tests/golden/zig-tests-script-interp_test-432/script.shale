@@ -1,0 +1,1 @@
+local a = "x" for i = 1, 100000 do local t = a .. a .. a .. a .. a .. a .. a .. a .. a .. a .. a end

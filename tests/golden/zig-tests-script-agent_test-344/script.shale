@@ -1,0 +1,4 @@
+print(between("// DEPARTS (bounded): four", "DEPARTS (", ")"))
+print(between("props.always(@src(), x, \"tcp: a b\", .{})", "\"", "\""))
+print(between("a=1;b=2", "b=", ""), between("abc", "", "b"), between("abc", "x", "c"), between("abc", "a", "x"))
+print(between("((x))", "(", ")"))

@@ -1,0 +1,1 @@
+print(#words("  the quick\tbrown\n\nfox  "), join(words("a b"), ","), #words(""), #words(" \n"))

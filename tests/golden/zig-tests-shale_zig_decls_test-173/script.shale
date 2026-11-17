@@ -1,0 +1,1 @@
+for d in zig_decls("g.zig") do print(d.name, join(d.uses, ",")) end

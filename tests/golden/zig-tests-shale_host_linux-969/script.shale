@@ -1,0 +1,1 @@
+host("run", {"no-such-program-here"}, {timeout_ms = 1000, tail = 1})

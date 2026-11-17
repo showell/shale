@@ -1,0 +1,1 @@
+local lines = 3 print(#lines("a\nb"))

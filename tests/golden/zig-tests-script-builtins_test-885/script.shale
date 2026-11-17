@@ -1,0 +1,1 @@
+local r = read_lines("log.txt", 8, 100) print(join(r.lines, ","), r.next, r.done)

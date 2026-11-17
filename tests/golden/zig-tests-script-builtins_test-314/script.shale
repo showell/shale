@@ -1,0 +1,1 @@
+local l = {1, 2, 3} reverse(l) print(join(l, ",")) local e = {} reverse(e) sort(e, "k") print(#e)

@@ -1,0 +1,1 @@
+local j = job_start({"shale-fixture", "lines", "300000", "a line of the log"}, {log = "big.log"}) local w = job_wait(j, {timeout_ms = 10000, contains = "log 300000"}) print(w.ended, get(w, "code", "-"), get(w, "signal", "-"))

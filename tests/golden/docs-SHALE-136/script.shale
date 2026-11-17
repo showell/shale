@@ -1,0 +1,6 @@
+function size_of(path) return tonumber(words(read(path))[1]) end
+replace("chat/1_2/sessions/torn.count", "x y\n")
+for e in walk("chat", {like = "*.count"}) do
+  local r = attempt(size_of, e.path)
+  if r.ok then print(e.path, r.value) else print(e.path, "unreadable:", r.class) end
+end

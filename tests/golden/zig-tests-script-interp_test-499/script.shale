@@ -1,0 +1,1 @@
+function f() return ("a" .. "b") .. nil end local r = attempt(f) print(r.column)

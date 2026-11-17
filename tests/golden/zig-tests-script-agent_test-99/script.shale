@@ -1,0 +1,4 @@
+print(match_path("src/tcp.zig", "src/*.zig"), match_path("src/sub/deep.zig", "src/*.zig"))
+print(match_path("src/sub/deep.zig", "src/**/*.zig"), match_path("src/tcp.zig", "src/**/*.zig"))
+print(match_path("src/tcp_arrives.zig", "src/tcp*.zig"), match_path("a/b/c", "**"), match_path("a", "a/**"))
+print(match_path("src/x.zig", "src/?.zig"), match_path("src/xy.zig", "src/?.zig"), match_path("src", "src/**/*.zig"))

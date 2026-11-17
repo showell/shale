@@ -1,0 +1,1 @@
+local w = walk("", {depth = 1}) print(10 - budget().reads)

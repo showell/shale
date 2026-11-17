@@ -1,0 +1,1 @@
+doc=It's "quoted" | $HOME \ as is

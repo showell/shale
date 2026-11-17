@@ -1,0 +1,1 @@
+http_get("file:///etc/passwd")

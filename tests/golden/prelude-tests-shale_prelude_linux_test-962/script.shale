@@ -1,0 +1,1 @@
+local l = {} push(l, l) json_write(l)

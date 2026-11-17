@@ -1,0 +1,1 @@
+{"id":"stops-host_no_program","source":"stops","origin":"tools/differ/stops/host_no_program.shale","files":["host_no_program.shale"],"steps":[{"argv":["{case}/host_no_program.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

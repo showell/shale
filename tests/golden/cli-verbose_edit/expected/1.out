@@ -1,0 +1,9 @@
+--- a/a.txt
++++ b/a.txt
+@@ -2,1 +2,1 @@
+-two
++TWO
+one
+TWO
+three
+

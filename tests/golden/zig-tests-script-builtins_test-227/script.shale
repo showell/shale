@@ -1,0 +1,1 @@
+local l = {3, 1, 2} sort(l) print(join(l, ",")) local s = {"b", "a", "c"} sort(s) print(join(s, ","))

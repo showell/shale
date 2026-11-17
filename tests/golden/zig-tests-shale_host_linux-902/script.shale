@@ -1,0 +1,3 @@
+local r = host("run", {"shale-fixture", "lines", "30"}, {timeout_ms = 10000, head = 2, tail = 2})
+print(r.ended, r.code, r.total_lines, r.matched_lines, r.kept_lines)
+print(r.out)

@@ -1,0 +1,17 @@
+-- The host's edits_write: each refused batch writes nothing (a file twice,
+-- a malformed entry, an edit that misses), then one batch writes three
+-- files, under a changes budget of 5.
+-- budget: changes=5
+-- differ-before: fixture/setup.shale
+function ew(l) return host("edits_write", l) end
+create("f1", "aaa\n")
+create("f2", "bbb\n")
+create("f3", "ccc")
+print(attempt(ew, {{"f1", {{old = "aaa", new = "A"}}}, {"f1", {{old = "A", new = "B"}}}}).error)
+print(attempt(ew, {{"f1", {{old = "aaa", new = "A"}}}, {"f2"}}).error)
+print(attempt(ew, {{"f1", {{old = "aaa", new = "A"}}}, {"f2", {{old = "zzz", new = "B"}}}}).error)
+print(attempt(ew, {{"f1", {{old = "aaa", new = "A"}}}, {"f2", {}}}).error)
+print(attempt(ew, {{"f1", {old = "aaa", new = "A"}}}).error)
+print(attempt(ew, {old = 1}).error)
+print(ew({}))
+print(host("edits_write", {{"f1", {{old = "aaa", new = "A"}}}, {"f2", {{old = "bbb", new = "B"}}}, {"f3", {{old = "c", new = "C", all = true}}}}))

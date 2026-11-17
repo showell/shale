@@ -1,0 +1,1 @@
+print(host("run", {"anything"}, {timeout_ms = 10, re = "a$", head = 1, tail = 1}).out)

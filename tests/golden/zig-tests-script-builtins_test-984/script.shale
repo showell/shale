@@ -1,0 +1,1 @@
+print(re_replace("Fail fail", "fail", "ok", {nocase = true}), re_replace("Fail fail", "fail", "ok"))

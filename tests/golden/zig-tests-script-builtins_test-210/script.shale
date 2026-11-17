@@ -1,0 +1,1 @@
+print(sub("hello", 2, 4), sub("hello", -3), sub("hello", 2), sub("hello", 0), sub("hello", 4, 2), sub("hello", -100, 100))

@@ -1,0 +1,1 @@
+print(read(path("chat", "a.md")), #ls(path("", "chat")))

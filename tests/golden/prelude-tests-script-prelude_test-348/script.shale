@@ -1,0 +1,3 @@
+const got = 9
+function f(o) local more = 1 return #glob("*.txt") + more + got end
+print(f(0))

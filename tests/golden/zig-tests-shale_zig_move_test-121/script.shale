@@ -1,0 +1,1 @@
+local r = zig_move("from.zig", "to.zig", {"w"}, {comment = "doc_and_plain", after = "one"}) print(r.moved)

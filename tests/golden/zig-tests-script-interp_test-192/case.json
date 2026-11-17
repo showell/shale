@@ -1,0 +1,1 @@
+{"id":"zig-tests-script-interp_test-192","source":"zig-tests","origin":"src/script/interp_test.zig:192","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":true,"digits":false},"arena":"stop"}

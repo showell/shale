@@ -1,0 +1,10 @@
+ok {"lines":["short"],"next":6,"done":false}
+ok {"lines":["a much longer line than the others here"],"next":46,"done":false}
+ok {"lines":["yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"],"next":97,"done":false}
+ok a much longer line than the others here
+ok yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+ok nil
+ok 7
+ok 97
+ok 5
+ok 1

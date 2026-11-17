@@ -1,0 +1,23 @@
+-- The store probes' fixture: every probe in tools/differ/store names this
+-- script in its `-- differ-before:` line, so it runs first in the probe's
+-- fresh work folder, under the harness's own mounts. It makes the small tree
+-- the probes read (a file with no last newline, a CRLF file, an empty file,
+-- nested folders and an empty one) in the root, and in the scratch folder
+-- the folders store.mounts names: `ro`, read-only in the probe's run, and
+-- `keys`, a planted secrets folder that holds no real secret.
+create("a.txt", "one\ntwo")
+create("crlf.txt", "a\r\nb\r\n")
+create("empty.txt", "")
+mkdir("d/y")
+create("d/w", "w")
+create("d/x", "x\n")
+create("d/y/z", "z")
+mkdir("e")
+mkdir("scratch:d/y")
+create("scratch:d/w", "w")
+create("scratch:d/x", "x\n")
+create("scratch:d/y/z", "z")
+mkdir("scratch:ro")
+create("scratch:ro/f", "fff\n")
+mkdir("scratch:keys")
+create("scratch:keys/token", "planted-not-a-secret\n")

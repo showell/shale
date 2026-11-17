@@ -1,0 +1,1 @@
+print(find_in("seam.txt", "ab", 0, 700), find_in("seam.txt", "ab", 700, 700), count_in("seam.txt", "ab", 0, 700), count_in("seam.txt", "ab", 700, 700), count_lines("seam.txt", 0, 700), count_lines("seam.txt", 700, 700), find_in("seam.txt", "ab", 5000, 10))

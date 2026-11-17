@@ -1,0 +1,4 @@
+-- Two dashes start a comment, to the end of the line.
+print("Hello, Shale")
+print("two and two make " .. 2 + 2)
+print("print joins several values with tabs:", 42, true)

@@ -1,0 +1,1 @@
+zig_rename("a.zig", "x", "y", {line = 1})

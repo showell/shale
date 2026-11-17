@@ -1,0 +1,1 @@
+print(#lines("a\nb\nc\n"), #lines("a\nb\nc"), #lines(""), #lines("\n"), join(lines("x\n\ny\n"), "|"))

@@ -1,0 +1,1 @@
+local l = {} print(pop(l))

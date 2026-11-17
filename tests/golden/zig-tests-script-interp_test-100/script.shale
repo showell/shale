@@ -1,0 +1,15 @@
+function scan(t)
+  return {messages = 1}
+end
+function topics(rows)
+  for name in {"a.md", "b.md"} do
+    if true then
+      local sid = 1
+      local text = "hello"
+      local s = scan(text)
+      print(s.messages)
+    end
+  end
+end
+local rows = {}
+topics(rows)

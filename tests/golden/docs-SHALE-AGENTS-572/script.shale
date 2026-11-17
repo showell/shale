@@ -1,0 +1,7 @@
+local rows = {}
+for p in glob("**/*.zig") do
+  local n = count_lines(p)
+  if n > arg("over", 1000) then push(rows, {lines = n, path = p}) end
+end
+sort(rows, "lines", "desc")
+print(table(rows, {"lines", "path"}))

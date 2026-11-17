@@ -1,0 +1,8 @@
+local rows = {}
+local total = 0
+for e in walk_all("", {kind = "file"}) do
+  push(rows, {file = e.path, bytes = e.size})
+  total = total + e.size
+end
+print(table(rows, {"file", "bytes"}))
+print(#rows .. " files, " .. total .. " bytes")

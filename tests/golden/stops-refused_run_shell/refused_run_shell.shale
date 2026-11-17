@@ -1,0 +1,2 @@
+-- `run` of a shell without a want: refused.
+run({"bash", "-c", "true"}, {timeout_ms = 5000, tail = 5})

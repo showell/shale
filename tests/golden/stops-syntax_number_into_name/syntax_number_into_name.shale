@@ -1,0 +1,2 @@
+-- A number that runs into a name: syntax.
+local n = 12ab

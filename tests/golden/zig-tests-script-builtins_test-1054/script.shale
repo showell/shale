@@ -1,0 +1,1 @@
+local m = re_find("a1b22", "\\d+", {from = 3}) print(m.at, m.text)

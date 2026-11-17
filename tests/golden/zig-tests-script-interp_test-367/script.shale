@@ -1,0 +1,1 @@
+function pairs(m) return keys(m) end

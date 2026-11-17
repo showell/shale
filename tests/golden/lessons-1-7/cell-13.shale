@@ -1,0 +1,6 @@
+remove("posts/hello.md")
+mkdir("drafts")
+replace("drafts/owls.md", "title: Owls at dusk\ndate: 2026-10-20\ntags: birds\n---\nNot done yet.\n")
+for name in ls("") do
+  print(name)
+end

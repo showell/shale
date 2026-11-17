@@ -1,0 +1,1 @@
+print(join(tail_lines("open.txt", 2), ","), #tail_lines("empty.txt", 2), #head_lines("empty.txt", 2), #tail_lines("ten.txt", 0))

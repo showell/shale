@@ -1,0 +1,1 @@
+zig_rename("n.zig", "absent", "y")

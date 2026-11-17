@@ -1,0 +1,4 @@
+root	d	775	-	
+root/shale-check	d	775	-	
+root/shale-check/note.txt	f	664	32		sha256 f45138fd204bef5e53510fd44abfbe2ede09fa93d34e7c6e95536d7ce1f6ed8b
+scratch	d	775	-	

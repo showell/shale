@@ -1,0 +1,1 @@
+print(same(1, 1), same("a", "a"), same(1, "1"), same(nil, nil), same(true, false))

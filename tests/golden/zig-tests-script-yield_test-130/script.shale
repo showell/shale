@@ -1,0 +1,6 @@
+local s = ""
+for i = 1, 300 do
+  s = s .. "x"
+  if i % 7 == 0 then yield() end
+end
+print(#s, sub(s, 1, 3))

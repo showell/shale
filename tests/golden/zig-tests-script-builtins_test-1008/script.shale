@@ -1,0 +1,1 @@
+print(re_find("abcdefghij", "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)"))

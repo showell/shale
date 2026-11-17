@@ -1,0 +1,1 @@
+print(re_find("abab", "(ab)*").group, re_find("a", "(a?)*").group)

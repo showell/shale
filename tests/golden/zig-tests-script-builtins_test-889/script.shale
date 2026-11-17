@@ -1,0 +1,1 @@
+local r = read_lines("log.txt", 0, 0)

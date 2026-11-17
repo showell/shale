@@ -1,0 +1,1 @@
+print(exists("top.txt")) print(budget().reads) read("top.txt") print(budget().read_bytes)

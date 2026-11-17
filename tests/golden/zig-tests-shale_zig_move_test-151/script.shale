@@ -1,0 +1,1 @@
+for i = 1, 999 do replace("spent.txt", "x") end zig_move("from.zig", "to.zig", {"b"})

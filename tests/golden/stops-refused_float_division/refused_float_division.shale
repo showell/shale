@@ -1,0 +1,2 @@
+-- `/` divides into a float: refused.
+print(7 / 2)

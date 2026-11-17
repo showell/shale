@@ -1,0 +1,1 @@
+report_run({"shale-fixture", "exit", "3"})

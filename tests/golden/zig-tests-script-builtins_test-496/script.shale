@@ -1,0 +1,1 @@
+print(count_lines("empty"), count_in("empty", "x"), find_in("empty", "x"), count_lines("top.txt"))

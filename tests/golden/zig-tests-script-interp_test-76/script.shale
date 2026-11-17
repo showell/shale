@@ -1,0 +1,1 @@
+local x = 1 if x == 2 then print("a") elseif x == 1 then print("b") else print("c") end

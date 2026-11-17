@@ -1,0 +1,1 @@
+local l = {} for i = 1, 25 do push(l, 7) yield() end print(#l)

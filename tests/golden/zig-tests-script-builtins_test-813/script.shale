@@ -1,0 +1,1 @@
+for e in walk("chat", {after = "chat/deep"}) do print(e.path) end

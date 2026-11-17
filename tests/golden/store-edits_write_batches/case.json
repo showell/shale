@@ -1,0 +1,1 @@
+{"id":"store-edits_write_batches","source":"store","origin":"tools/differ/store/edits_write_batches.shale","files":["setup.shale","edits_write_batches.shale"],"steps":[{"argv":["{case}/setup.shale"],"stdin":"","mounts":[]},{"argv":["{case}/edits_write_batches.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

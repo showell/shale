@@ -1,0 +1,2 @@
+── stopped at {base}/case/syntax_optional_first.shale:2:16: syntax: `b` is required after an optional parameter: the optional ones (`a?`) come last (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

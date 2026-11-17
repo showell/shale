@@ -1,0 +1,1 @@
+for e in walk("", {depth = 1}) do print(e.path, e.kind, e.size) end

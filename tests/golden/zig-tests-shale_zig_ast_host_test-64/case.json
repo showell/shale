@@ -1,0 +1,1 @@
+{"id":"zig-tests-shale_zig_ast_host_test-64","source":"zig-tests","origin":"src/shale_zig_ast_host_test.zig:64","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,14 @@
+local tags = {}
+for name in ls("posts") do
+  local m = re_find(read("posts/" .. name), [=[tags: ([^\n]*)]=])
+  for t in split(m.group, ", ") do
+    tags[t] = get(tags, t, 0) + 1
+  end
+end
+
+local page = "# Tags\n\n"
+for t in sort(keys(tags)) do
+  page = page .. "- " .. t .. " (" .. tags[t] .. ")\n"
+end
+replace("tags.md", page)
+print(page)

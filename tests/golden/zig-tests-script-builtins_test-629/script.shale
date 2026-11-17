@@ -1,0 +1,1 @@
+print(count_in("as.txt", rep("a", 1000)), find(rep("ab", 5), "bab"))

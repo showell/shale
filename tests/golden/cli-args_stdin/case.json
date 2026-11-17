@@ -1,0 +1,1 @@
+{"id":"cli-args_stdin","source":"cli","origin":"tools/differ/cli/args_stdin.shale","files":["args_stdin.shale","stdin-1.txt"],"steps":[{"argv":["{case}/args_stdin.shale","--args-stdin","n=3"],"stdin":"stdin-1.txt","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

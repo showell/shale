@@ -1,0 +1,1 @@
+local m = {a = 1} print(get(m, "a", 0), get(m, "b", 0), get({}, "x", "none"))

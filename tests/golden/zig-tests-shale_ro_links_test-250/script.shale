@@ -1,0 +1,1 @@
+local r = run({"shale-fixture", "cat"}, {timeout_ms = 10000, stdin = "tok-7f3a9c\n", stdout_secret = "k:new"}) r.ms = 0 r.cpu_ms = 0 print(r.code, r.secret_written, r.secret_bytes, r.out, contains(json_write(r), "7f3a9c"))

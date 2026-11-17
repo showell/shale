@@ -1,0 +1,1 @@
+local r = grep_tree("src", "hit", {nocase = true, ext = {"md"}}) print(r.files, r.hits[1].path, r.hits[1].line, r.hits[1].text)

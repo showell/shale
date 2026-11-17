@@ -1,0 +1,2 @@
+── stopped at {base}/case/refused_hex.shale:2:7: refused: hexadecimal literals are not in this language: write the number in decimal (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

@@ -1,0 +1,1 @@
+function deep(n) return deep(n + 1) end local r = attempt(deep, 1)

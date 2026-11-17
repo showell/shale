@@ -1,0 +1,44 @@
+-- walk's options (depth, kind, like, skip, after, keep_reads) over the root
+-- and a mount's folder, and the refusals of its arguments.
+-- differ-before: fixture/setup.shale
+function paths(l)
+  local s = ""
+  for e in l do s = s .. e.path .. "(" .. e.kind .. "," .. e.size .. ") " end
+  return s
+end
+function w2(p, o) return walk(p, o) end
+function w1(p) return walk(p) end
+print(paths(walk("")))
+print(paths(walk(".")))
+print(paths(walk("d")))
+print(paths(walk("", {depth = 1})))
+print(paths(walk("", {kind = "file", like = "*.txt"})))
+print(paths(walk("", {skip = "d"})))
+print(paths(walk("", {skip = "*", like = "zz"})))
+print(paths(walk("", {after = "d/y"})))
+print(paths(walk("", {after = "d/y/z"})))
+print(paths(walk("", {after = "empty.txt"})))
+print(paths(walk("", {after = "zzz"})))
+print(paths(walk("", {after = "d/"})))
+print(paths(walk("", {after = "d/q/r/s"})))
+print(paths(walk("", {after = "a.txt/x"})))
+print(paths(walk("d", {after = "d/w"})))
+print(paths(walk("d", {after = "d"})))
+print(paths(walk("", {after = "d", depth = 1})))
+print(paths(walk("", {keep_reads = 9990})))
+print(paths(walk("", {keep_reads = 9985, after = "d/y"})))
+print(paths(walk("", {keep_reads = 0})))
+print(attempt(w2, "d", {after = "dd/x"}).error)
+print(attempt(w2, "d", {after = "e"}).error)
+print(attempt(w2, "", {depth = 0}).error)
+print(attempt(w2, "", {kind = "link"}).error)
+print(attempt(w2, "", {nope = 1}).error)
+print(attempt(w2, "", {keep_reads = -1}).error)
+print(attempt(w2, "", {depth = "x"}).error)
+print(attempt(w2, "", {1, 2}).error)
+print(attempt(w1, "a.txt").error)
+print(attempt(w1, "nope").error)
+local base = "scratch:d"
+print(paths(walk(base)))
+print(paths(walk(base, {after = base .. "/y"})))
+print(budget().reads)

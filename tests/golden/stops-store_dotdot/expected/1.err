@@ -1,0 +1,2 @@
+── stopped at {base}/case/store_dotdot.shale:2:7: argument: `read`: "../x" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts) (8 steps)
+── used: 8 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

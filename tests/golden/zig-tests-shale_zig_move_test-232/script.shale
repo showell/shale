@@ -1,0 +1,1 @@
+print(zig_rename("k.zig", "X", "m.X").renamed)

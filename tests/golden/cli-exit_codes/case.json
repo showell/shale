@@ -1,0 +1,1 @@
+{"id":"cli-exit_codes","source":"cli","origin":"tools/differ/cli/exit_codes.shale","files":["exit_codes.shale"],"steps":[{"argv":["{case}/exit_codes.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

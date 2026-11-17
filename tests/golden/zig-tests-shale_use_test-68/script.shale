@@ -1,0 +1,2 @@
+function greet(x) return x end
+use("m:lib.shale")

@@ -1,0 +1,1 @@
+print(host("run", {"shale-fixture", "lines", "2"}, {timeout_ms = 10000, tail = 1, log = "runs:two.log"}).kept_lines)

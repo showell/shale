@@ -1,0 +1,4 @@
+-- differ-argv: --verbose {script}
+create("a.txt", "one\ntwo\nthree\n")
+edit("a.txt", "two", "TWO")
+print(read("a.txt"))

@@ -1,0 +1,1 @@
+local p = walk_upto("", {}, 1) print(#p.entries, p.done, p.more == "")

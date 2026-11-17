@@ -1,0 +1,1 @@
+print(count_all("top.txt", "o"), find_next("top.txt", "p", 3))

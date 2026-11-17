@@ -1,0 +1,1 @@
+local m = {} m.x = 1 m.y = 2 print(count(m), has_key(m, "x"), has_key(m, "z"), join(keys(m), ","))

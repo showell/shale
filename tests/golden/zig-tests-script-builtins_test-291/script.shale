@@ -1,0 +1,1 @@
+local a = budget().arena_bytes local s = rep("x", 100000) local b = budget().arena_bytes print(a <= 16777216, a - b >= 100000)

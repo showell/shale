@@ -1,0 +1,1 @@
+for m in grep("src/tcp_arrives.zig", "DEPARTS") do print(m.line, m.text) end print(#grep("src/tcp.zig", "nothing"))

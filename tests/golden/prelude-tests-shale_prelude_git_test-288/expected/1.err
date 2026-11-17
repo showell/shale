@@ -1,0 +1,5 @@
+── stopped at the Linux prelude:26:62 (in `the Linux prelude's not_option`): fail: `git_log`'s `range` is "-p": a value that starts with `-` would be one of the program's options (559 steps)
+   called from the git prelude:39:10 (in `the git prelude's git_value`)
+   called from the git prelude:120:47 (in `the git prelude's git_log`)
+   called from {base}/case/script.shale:1:1
+── used: 559 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

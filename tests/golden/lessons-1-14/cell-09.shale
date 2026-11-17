@@ -1,0 +1,6 @@
+local titles = {"Hello, world", "Tide pools", "A walk in the fog"}
+push(titles, "Field notes on crows")
+for i = 1, #titles do
+  print(i, titles[i])
+end
+print(join(titles, " / "))

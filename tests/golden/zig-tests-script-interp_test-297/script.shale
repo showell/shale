@@ -1,0 +1,6 @@
+local s = ""
+for i = 1, 100 do s = s .. i .. "," end
+local head = sub(s, 1, 6)
+local t = s
+s = s .. "END"
+print(head, #t, #s, sub(s, -4), sub(t, -4))

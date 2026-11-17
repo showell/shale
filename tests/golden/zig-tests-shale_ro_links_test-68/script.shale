@@ -1,0 +1,1 @@
+replace("open:b.txt", "b") print(read("all:open/b.txt"))

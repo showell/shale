@@ -1,0 +1,1 @@
+zig_move("f.zig", "f.zig", {"foo"})

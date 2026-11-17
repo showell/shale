@@ -1,0 +1,3 @@
+-- budget: programs=2
+-- More programs than the budget: budget programs.
+for i = 1, 5 do run({"true"}, {timeout_ms = 5000, tail = 1}) end

@@ -1,0 +1,1 @@
+local l = {} for i = 1, 300 do push(l, i) end local s = 0 for a in l do for b in l do s = s + 1 end end print(s)

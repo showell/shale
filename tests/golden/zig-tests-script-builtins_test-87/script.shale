@@ -1,0 +1,1 @@
+print(is_name("a.md"), is_name("x-y_z 2.zig"), is_name(rep("a", 96)))

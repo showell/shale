@@ -1,0 +1,1 @@
+local j = job_start({"shale-fixture", "ignore-term", "20000"}, {log = "slow.log"}) print(j.record == "slow.log.job")

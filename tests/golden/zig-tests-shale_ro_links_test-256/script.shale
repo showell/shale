@@ -1,0 +1,1 @@
+local r = run({"shale-fixture", "both", "tok-b", "0"}, {timeout_ms = 10000, stdout_secret = "k:b"}) print(r.out, r.secret_bytes)

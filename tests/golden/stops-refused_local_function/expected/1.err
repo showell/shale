@@ -1,0 +1,2 @@
+── stopped at {base}/case/refused_local_function.shale:2:1: refused: `local function` is not in this language: functions are declared at the top level with `function name(...)` (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

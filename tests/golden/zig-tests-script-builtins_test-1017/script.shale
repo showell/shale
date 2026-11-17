@@ -1,0 +1,1 @@
+print(re_find("b", "(a|)*b").text, join(re_find("aa", "(a|)+").groups, "|"))

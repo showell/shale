@@ -1,0 +1,6 @@
+local m = re_find("src/tcp.zig:412: DEPARTS (bounded) the window", "DEPARTS \\((\\w+)\\)")
+if m ~= nil then print(m.at, m.text, m.group) end
+print(re_match("  pub fn deadline(", "^\\s*pub fn"), re_match("x", "\\d"))
+local r = re_find("see tcp.zig:40 and gone.zig:1", "(\\w+\\.zig):\\d+")
+print(r.group, parse_int(sub(r.text, #r.group + 2)))
+print(re_find("error: test 4 FAILED", "\\b(fail|error|panic)", {nocase = true}).group)

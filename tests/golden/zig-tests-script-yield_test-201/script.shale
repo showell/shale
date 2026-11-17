@@ -1,0 +1,1 @@
+local m = {} for i = 1, 25 do m["k" .. i] = i yield() end print(#keys(m))

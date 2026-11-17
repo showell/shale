@@ -1,0 +1,1 @@
+for m in re_find_all("ac abc", "(a)(b)?(c)") do print(m.at, m.text, m.group, "[" .. join(m.groups, "|") .. "]") end

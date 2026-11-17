@@ -1,0 +1,1 @@
+local l = git_log("", {n = 1}) print(#l, l[1].subject, l[1].author, l[1].date, l[1].hash == git_head(""))

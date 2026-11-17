@@ -1,0 +1,2 @@
+── stopped at {base}/case/store_use_missing.shale:2:1: store: `use("cookbook:no_such_library.shale")`: `read("cookbook:no_such_library.shale")`: not found (FileNotFound): `exists(p)` asks first (31 steps)
+── used: 31 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

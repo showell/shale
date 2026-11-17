@@ -1,0 +1,10 @@
+argument: `read_lines` brings at most 2 bytes in one call, and this asks 3: a smaller part, and `next` to go on
+argument: `read_lines` brings at most 2 bytes in one call, and this asks 3: a smaller part, and `next` to go on
+argument: `read_lines` brings at most 2 bytes in one call, and this asks 3: a smaller part, and `next` to go on
+argument: `line_at`: the line at offset 30 runs past 2 bytes, the most one call brings
+argument: `line_at`: the line at offset 60 runs past 2 bytes, the most one call brings
+ok nil
+argument: `count_in` scans at most 2 bytes in one call, and this would be 100: scan it in parts, `count_in(p, s, offset, n)`
+argument: `find_in` scans at most 2 bytes in one call, and this would be 100: scan it in parts, `find_in(p, s, offset, n)`
+argument: `count_lines` scans at most 2 bytes in one call, and this would be 100: scan it in parts, `count_lines(p, offset, n)`
+argument: `grep` reads a file whole, at most 2 bytes in one call, and lines is 100: `read_lines` and `contains` go through it a part at a time

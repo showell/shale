@@ -1,0 +1,1 @@
+{"id":"stops-refused_long_string","source":"stops","origin":"tools/differ/stops/refused_long_string.shale","files":["refused_long_string.shale"],"steps":[{"argv":["{case}/refused_long_string.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

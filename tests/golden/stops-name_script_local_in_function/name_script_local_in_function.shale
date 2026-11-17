@@ -1,0 +1,4 @@
+-- A script local read in a function: name, naming `const`.
+local limit = 3
+function f() return limit end
+print(f())

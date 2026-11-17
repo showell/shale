@@ -1,0 +1,1 @@
+print(#re_find_all("aaa", "^a"), #re_find_all("ab ab xab", "\\bab"), #re_find_all("Ab ab", "ab", {nocase = true}))

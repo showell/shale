@@ -1,0 +1,1 @@
+local r = report_run({"shale-fixture", "exit", "3"}, {keep_going = true}) print(r.ok, r.code, r.log == "")

@@ -1,0 +1,1 @@
+{"id":"cli-undo_on_stop","source":"cli","origin":"tools/differ/cli/undo_on_stop.shale","files":["undo_on_stop.shale"],"steps":[{"argv":["--undo-on-stop","{case}/undo_on_stop.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

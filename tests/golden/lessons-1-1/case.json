@@ -1,0 +1,1 @@
+{"id":"lessons-1-1","source":"lessons","origin":"web/lessons.js: lessons 1-1","files":["cell-01.shale","cell-02.shale"],"steps":[{"argv":["{case}/cell-01.shale"],"stdin":"","mounts":[]},{"argv":["{case}/cell-02.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

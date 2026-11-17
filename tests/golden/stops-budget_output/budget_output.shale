@@ -1,0 +1,2 @@
+-- Printing past 64 KiB: budget output.
+for i = 1, 100000 do print("a line of output that is long enough " .. i) end

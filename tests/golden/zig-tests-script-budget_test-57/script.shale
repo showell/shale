@@ -1,0 +1,10 @@
+-- budget: steps=900000000
+local pats = {}
+for k = 0, 24 do pats[#pats + 1] = "w" .. tostring(k) .. "[a-z]+" end
+local n = 0
+for line = 1, 745 do
+  for p in pats do
+    if re_find("some text w3abc here", p) ~= nil then n = n + 1 end
+  end
+end
+print(n)

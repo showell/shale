@@ -1,0 +1,2 @@
+-- A map literal with a key twice: index.
+local m = {a = 1, a = 2}

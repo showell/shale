@@ -1,0 +1,1 @@
+edit("src/tcp.zig", "const x = 2;\nfn send() void {}", "x")

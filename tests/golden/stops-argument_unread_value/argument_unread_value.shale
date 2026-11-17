@@ -1,0 +1,3 @@
+-- differ-argv: {script} cwd=src
+-- A value given that the script never reads: argument.
+print(arg("dir", "."))

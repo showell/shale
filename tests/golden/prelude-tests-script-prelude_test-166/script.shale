@@ -1,0 +1,1 @@
+print(room_for({reads = 5}), room_for({reads = 6}), room_for({}))

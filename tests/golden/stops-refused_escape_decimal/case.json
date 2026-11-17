@@ -1,0 +1,1 @@
+{"id":"stops-refused_escape_decimal","source":"stops","origin":"tools/differ/stops/refused_escape_decimal.shale","files":["refused_escape_decimal.shale"],"steps":[{"argv":["{case}/refused_escape_decimal.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

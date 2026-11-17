@@ -1,0 +1,1 @@
+host("run", {"x", "y"}, {timeout_ms = 10, tail = 1, cpu_budget_ms = 99})

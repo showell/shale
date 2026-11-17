@@ -1,0 +1,1 @@
+{"id":"zig-tests-script-agent_test-74","source":"zig-tests","origin":"src/script/agent_test.zig:74","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,1 @@
+print(re_replace("a1b22c333", "\\d+", "#"), re_replace("abc", "z", "y"))

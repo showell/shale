@@ -1,0 +1,4 @@
+print(edit("src/tcp.zig", {
+  {old = "const z = 1;", new = "const z = 10;"},
+  {old = "10;\n// DEPARTS", new = "10; // merged\n// DEPARTS"},
+}))

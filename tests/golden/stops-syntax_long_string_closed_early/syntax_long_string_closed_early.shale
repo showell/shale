@@ -1,0 +1,3 @@
+-- A long string closed early by a closer in its text: syntax, naming the level that holds it.
+local s = [=[a ]=] b]=]
+print(s)

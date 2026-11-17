@@ -1,0 +1,2 @@
+local GREETING = 1
+use("m:lib.shale")

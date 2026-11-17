@@ -1,0 +1,3 @@
+local remove = 1
+remove("chat/1_2/sessions/hello.md")
+-- stops: refused

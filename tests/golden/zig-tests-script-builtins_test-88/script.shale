@@ -1,0 +1,1 @@
+print(is_name(rep("a", 97)), is_name(""), is_name("."), is_name(".."), is_name("a/b"), is_name("a:b"), is_name("a."), is_name("a "), is_name("café"))

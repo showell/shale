@@ -1,0 +1,13 @@
+local j = job_start({"shale-fixture", "sleep", "20000"}, {log = "s.log"})
+local found = {}
+for i = 1, 50 do
+  for p in procs() do
+    if p.pid == j.pid and find(p.args, "sleep 20000") ~= nil then push(found, p) end
+  end
+  if #found > 0 then break end
+  sleep(20)
+end
+local stale = proc_stop({pid = found[1].pid, start = "1"})
+local ran = proc_stop(found[1])
+local w = job_wait(j, {timeout_ms = 10000})
+print(#found, stale, ran, w.ended == "exited")

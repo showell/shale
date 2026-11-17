@@ -1,0 +1,1 @@
+{"id":"zig-tests-script-builtins_cookbook_test-22","source":"zig-tests","origin":"src/script/builtins_cookbook_test.zig:22","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

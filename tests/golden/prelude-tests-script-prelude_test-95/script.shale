@@ -1,0 +1,1 @@
+print(count_all("missing.log", "x"))

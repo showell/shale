@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:1: argument: `run`'s `stage` names the program in a `cpu_budget_ms` stop, and needs one (31 steps)
+── used: 31 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

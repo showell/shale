@@ -1,0 +1,8 @@
+local s = ""
+for i = 1, 10 do s = s .. "ab" end
+local a = s
+local p = sub(s, 1, 4)
+s = s .. "XY"
+local c = a .. "zz"
+local d = p .. "!"
+print(sub(s, -4), sub(c, -4), d, #s)

@@ -1,0 +1,4 @@
+success	1	7	read	1.5e3	-12	true	false	aé😀
+
+{"result":"success","messages":[{"id":7,"flags":["read"],"r":"1.5e3","neg":-12}],"ok":true,"s":"aé😀\n"}
+[]	{"a":[],"b":[1,"x"]}	[1,0]

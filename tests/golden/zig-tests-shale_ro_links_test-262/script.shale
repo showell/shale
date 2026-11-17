@@ -1,0 +1,1 @@
+print(run({"shale-fixture", "both", "tok-o", "0"}, {timeout_ms = 10000, stdout_secret = "k:old", secret_replace = true}).secret_written)

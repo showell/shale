@@ -1,0 +1,1 @@
+print(tonumber("42") + 1, tonumber("-7"), tostring(5) .. "x")

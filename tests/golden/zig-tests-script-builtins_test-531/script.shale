@@ -1,0 +1,1 @@
+local w = walk("") print(20 - budget().reads)

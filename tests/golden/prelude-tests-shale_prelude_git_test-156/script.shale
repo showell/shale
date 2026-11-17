@@ -1,0 +1,1 @@
+git_worktree_add("", "old", {rev = "HEAD~1"}) print(read("old/a.txt"), git_head("old") == git_log("", {n = 1, ref = "HEAD~1"})[1].hash) git_worktree_remove("", "old", {})

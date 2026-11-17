@@ -1,0 +1,1 @@
+local a = fresh_dir("work", "run") local b = fresh_dir("work", "run") print(a ~= b, starts_with(a, "work/run."), exists(a), exists(b)) remove_tree(a) remove_tree(b) print(exists(a), #ls("work"))

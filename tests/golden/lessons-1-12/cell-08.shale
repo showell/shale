@@ -1,0 +1,5 @@
+local titles = {"Hello, world", "Tide pools", "A walk in the fog"}
+print(#titles .. " titles; the first is " .. titles[1])
+for t in titles do
+  print("- " .. t)
+end

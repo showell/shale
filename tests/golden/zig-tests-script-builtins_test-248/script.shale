@@ -1,0 +1,1 @@
+local s = "x" for i = 1, 20 do s = s .. s end print(contains(s, "y"))

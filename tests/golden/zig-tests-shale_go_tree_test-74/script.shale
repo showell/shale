@@ -1,0 +1,5 @@
+if not exists("dir.go") then mkdir("dir.go") end
+for f in go_tree({"ok.go", "bad.go", "ok.go", "dir.go", "gone.go", "ok.go"}) do
+  print(f.path .. " " .. #f.nodes .. " [" .. f.err .. "]")
+end
+print(#go_tree({}))

@@ -1,0 +1,2 @@
+── stopped at {base}/case/unread_arg.shale:1:1: argument: `nope=` is given, and the script reads no `arg("nope")`: it reads dir (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

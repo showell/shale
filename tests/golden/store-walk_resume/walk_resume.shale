@@ -1,0 +1,27 @@
+-- walk resumed from its `more` entry to the end under a small call_entries
+-- budget, then walked 50 times with `keep_reads`, which holds back reads
+-- until each walk gives only its `more` entry (the budget line below).
+-- budget: call_entries=3 reads=40
+-- differ-before: fixture/setup.shale
+function paths(l)
+  local s = ""
+  for e in l do s = s .. e.path .. "(" .. e.kind .. ") " end
+  return s
+end
+local after = ""
+local n = 0
+while n < 10 do
+  local part = walk("", {after = after, skip = "e*"})
+  print(paths(part))
+  local last = part[#part]
+  if #part == 0 or last.kind ~= "more" then break end
+  after = last.path
+  n = n + 1
+end
+print(budget().reads)
+local k = 0
+while k < 50 do
+  local part = walk("d", {keep_reads = 5})
+  print(budget().reads, paths(part))
+  k = k + 1
+end

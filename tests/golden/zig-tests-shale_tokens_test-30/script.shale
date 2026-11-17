@@ -1,0 +1,1 @@
+for k in shale_tokens("k.shale") do print(#k.text, k.stop - k.start) end

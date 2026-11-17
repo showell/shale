@@ -1,0 +1,1 @@
+print(job_alive("inside.log.job"), job_alive("after.log.job"), job_stop("inside.log.job"), job_stop("after.log.job"))

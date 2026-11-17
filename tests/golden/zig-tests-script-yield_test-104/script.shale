@@ -1,0 +1,21 @@
+const NAMES = {"ann", "bo"}
+function inner(x)
+  local mine = {x, x .. "!"}
+  yield()
+  return mine[2] .. tostring(yield()) .. mine[1]
+end
+function risky(n)
+  local t = {deep = {n}}
+  yield()
+  if n > 1 then return t.deep[1] + "a" end
+  return t.deep[1]
+end
+local s = ""
+for name in NAMES do
+  s = s .. inner(name) .. ";"
+  yield()
+end
+print(s)
+local a = attempt(risky, 1)
+local b = attempt(risky, 2)
+print(a.ok, a.value, b.ok, b.class)

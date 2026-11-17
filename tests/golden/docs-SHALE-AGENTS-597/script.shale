@@ -1,0 +1,6 @@
+for p in glob("src/**/*.zig") do
+  for m in grep(p, "props.always(") do
+    local r = re_find(m.text, [=[props\.always\([^"]*"((?:\\.|[^"\\])*)"]=])
+    if r ~= nil then print(p .. ":" .. m.line, r.group) end
+  end
+end

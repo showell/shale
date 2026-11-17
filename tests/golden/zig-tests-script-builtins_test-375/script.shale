@@ -1,0 +1,1 @@
+print(human(0), human(1023), human(1024), human(1536), human(5000), human(1048575), human(-2048), human(9223372036854775807))

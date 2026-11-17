@@ -1,0 +1,1 @@
+print(zig_decls("a.zig")[1].name)

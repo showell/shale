@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:7: argument: `re_replace`'s replacement has `\1`, and its pattern has no capture group (8 steps)
+── used: 8 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

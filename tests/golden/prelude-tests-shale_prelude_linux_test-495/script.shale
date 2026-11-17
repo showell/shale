@@ -1,0 +1,1 @@
+local r = grep_tree("src", "fn", {most = 1}) print(#r.hits, r.cut)

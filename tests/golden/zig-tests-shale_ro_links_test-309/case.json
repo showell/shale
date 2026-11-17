@@ -1,0 +1,1 @@
+{"id":"zig-tests-shale_ro_links_test-309","source":"zig-tests","origin":"src/shale_ro_links_test.zig:309","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

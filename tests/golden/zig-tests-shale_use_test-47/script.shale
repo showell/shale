@@ -1,0 +1,5 @@
+local x = 1
+use("m:lib.shale")
+print(greet("you"), GREETING, NAMES[2], x)
+function f() return GREETING end
+print(f())

@@ -1,0 +1,1 @@
+run({"shale-fixture", "env", "F"}, {timeout_ms = 10000, tail = 5, env = {F = 1}})

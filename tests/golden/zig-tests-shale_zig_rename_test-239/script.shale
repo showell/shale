@@ -1,0 +1,1 @@
+local r = zig_rename("c.zig", "ready", "indexOrBuild", {via = "search_index"}) print(r.renamed, join(r.left, ","))

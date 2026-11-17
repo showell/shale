@@ -1,0 +1,3 @@
+local words = 1250
+local posts = 3
+print(words / posts)

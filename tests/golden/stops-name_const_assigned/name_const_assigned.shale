@@ -1,0 +1,3 @@
+-- A `const` assigned: name.
+const K = 1
+K = 2

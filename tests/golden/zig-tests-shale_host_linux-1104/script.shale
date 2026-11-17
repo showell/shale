@@ -1,0 +1,1 @@
+local a = host("run", {"shale-fixture", "lines", "3"}, {timeout_ms = 10000, tail = 1}) host("run", {"shale-fixture", "cat"}, {timeout_ms = 10000, tail = 1, stdin = a})

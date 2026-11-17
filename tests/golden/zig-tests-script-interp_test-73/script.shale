@@ -1,0 +1,1 @@
+print(1) if true then return end print(2)

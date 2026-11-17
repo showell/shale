@@ -1,0 +1,1 @@
+re_lines("a", "a", {nocase = "yes"})

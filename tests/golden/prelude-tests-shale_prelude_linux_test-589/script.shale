@@ -1,0 +1,1 @@
+print(edits_all({{"a.txt", {{old = "one", new = "1"}, {old = "1 two", new = "12"}}}, {"b.txt", {{old = "e", new = "E", all = true}}}}))

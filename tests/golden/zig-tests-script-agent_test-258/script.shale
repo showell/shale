@@ -1,0 +1,1 @@
+local l = {} for i = 1, 65 do push(l, {old = "const x", new = "const x"}) end edit("src/tcp.zig", l)

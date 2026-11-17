@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:1: type: `sort` by a key takes a list of maps, and item 2 is an integer (12 steps)
+── used: 12 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

@@ -1,0 +1,1 @@
+{"id":"cli-budget_flag","source":"cli","origin":"tools/differ/cli/budget_flag.shale","files":["budget_flag.shale"],"steps":[{"argv":["--budget","steps=200","{case}/budget_flag.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

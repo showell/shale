@@ -1,0 +1,1 @@
+print(exists("kept.txt"), exists("never.txt"))

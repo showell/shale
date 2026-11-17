@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:7: argument: `seconds`: "1969-12-31T23:59:59Z" is outside 1970-01-01 to 9999-12-31, `date`'s range (24 steps)
+── used: 24 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

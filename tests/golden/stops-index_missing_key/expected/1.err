@@ -1,0 +1,2 @@
+── stopped at {base}/case/index_missing_key.shale:3:8: index: no key "b" in the map (`has_key` asks first) (10 steps)
+── used: 10 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

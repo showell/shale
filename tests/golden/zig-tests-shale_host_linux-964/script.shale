@@ -1,0 +1,1 @@
+host("run", {"shale-fixture"}, {timeout_ms = 10, whole = 10, tail = 1})

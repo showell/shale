@@ -1,0 +1,3 @@
+── stopped at the Linux prelude:34:10 (in `the Linux prelude's sleep`): argument: `sleep` takes 0 to 600000 ms, not 600001 (12 steps)
+   called from {base}/case/script.shale:1:1
+── used: 12 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

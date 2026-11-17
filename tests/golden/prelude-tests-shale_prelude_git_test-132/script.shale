@@ -1,0 +1,1 @@
+git_commit("wt", "on feat", {add = "all"}) git_merge_ff("", "feat") print(git_log("", {n = 1})[1].subject)

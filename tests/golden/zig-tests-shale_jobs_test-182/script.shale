@@ -1,0 +1,4 @@
+for i = 1, 3 do
+  local j = job_start({"shale-fixture", "exit", "0"}, {log = "again.log"})
+  print(job_wait(j, {timeout_ms = 10000}).ended)
+end

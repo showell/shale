@@ -1,0 +1,4 @@
+── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git diff --name-only --diff-filter=U -z` exited 129: warning: Not a git repository. Use --no-index to compare two paths outside a working tree (8744 steps)
+   called from the git prelude:331:18 (in `the git prelude's git_merge`)
+   called from {base}/case/script.shale:1:1
+── used: 8744 of 5000000 steps, 0 of 10000 reads, 7426 of 67108864 read bytes, 0 of 65536 output bytes

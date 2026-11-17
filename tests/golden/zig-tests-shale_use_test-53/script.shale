@@ -1,0 +1,2 @@
+use("m:lib.shale")
+print(how_many())

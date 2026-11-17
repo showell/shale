@@ -1,0 +1,1 @@
+git_restore("", {"a.txt"}, {from = "HEAD~1"}) print(read("a.txt"), git_status("")[1].code)

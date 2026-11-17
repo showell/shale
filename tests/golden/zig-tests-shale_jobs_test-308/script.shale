@@ -1,0 +1,1 @@
+job_start({"shale-fixture", "lines", "1", rep("x", 8000)}, {log = "long.log"})

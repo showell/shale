@@ -1,0 +1,1 @@
+print(find_next("big.log", "NEEDL", 1048577))

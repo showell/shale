@@ -1,0 +1,1 @@
+print(join(find_all("aaa", "aa"), ","), join(find_all("a.b.c", "."), ","), join(find_all("ab", "b"), ","))

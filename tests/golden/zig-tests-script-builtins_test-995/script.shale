@@ -1,0 +1,1 @@
+local m = re_find("key=value", "(\\w+)=(\\w+)") print(m.group, join(m.groups, "|"))

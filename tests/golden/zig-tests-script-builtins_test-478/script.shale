@@ -1,0 +1,1 @@
+print(count_in("solid.txt", "aaa"), count_in("solid.txt", "aa"), find_in("solid.txt", "aaaa"))

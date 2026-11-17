@@ -1,0 +1,33 @@
+{"lines":["one","two"],"next":7,"done":true}
+{"lines":["e"],"next":4,"done":false}
+{"lines":["two"],"next":7,"done":true}
+{"lines":[],"next":7,"done":true}
+{"lines":[],"next":7,"done":true}
+{"lines":["a\r","b\r"],"next":6,"done":true}
+{"lines":[],"next":0,"done":true}
+"one"
+"two"
+"two"
+nil
+"a\r"
+nil
+2	2	0	1	1	0
+2	4	6	nil	1
+[{"line":2,"text":"two"}]	[{"line":1,"text":"one"},{"line":2,"text":"two"}]	[{"line":1,"text":"one"}]	[{"line":1,"text":"a\r"},{"line":2,"text":"b\r"}]
+""	""	"e\ntwo"	"dflt"
+76000	2000	1999	65547	3
+"abcdefghijklmnopqrstuvwxyz0123456789-"
+1725	65550	false
+"`read`: offset -1 is before the file's start"
+"`read`: a count of -1 bytes"
+"`read_lines`: a part of 0 bytes: it brings at least 1"
+"`line_at`: offset -2 is before the file's start"
+"`count_in` of \"\" is an error: there is nothing to look for"
+"`count_in`: offset -1 is before the file's start"
+"`count_in`: a count of -5 bytes"
+"`read(\"d\")`: a folder, not a file (IsDir): `is_dir(p)` asks first"
+"`read(\"nope\")`: not found (FileNotFound): `exists(p)` asks first"
+"`read(\"a.txt/x\")`: not found (FileNotFound): `exists(p)` asks first"
+"`read_lines(\"d\")`: a folder, not a file (IsDir): `is_dir(p)` asks first"
+["w","x","y"]	["a.txt","big.txt","crlf.txt","d","e","empty.txt"]	true	false	false	false	true
+7	directory	true

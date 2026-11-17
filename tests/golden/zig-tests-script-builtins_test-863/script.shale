@@ -1,0 +1,1 @@
+print(parse_int(nil), parse_int(5), parse_int("99999999999999999999"))

@@ -1,0 +1,1 @@
+{"id":"stops-name_script_local_assigned_again","source":"stops","origin":"tools/differ/stops/name_script_local_assigned_again.shale","files":["name_script_local_assigned_again.shale"],"steps":[{"argv":["{case}/name_script_local_assigned_again.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

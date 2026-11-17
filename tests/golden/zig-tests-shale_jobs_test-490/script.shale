@@ -1,0 +1,1 @@
+local j = job_start({"shale-fixture", "grandchild-late", "20000"}, {log = "late.log"}) local w = job_wait(j, {timeout_ms = 10000}) print(w.ended, w.code, job_alive(j))

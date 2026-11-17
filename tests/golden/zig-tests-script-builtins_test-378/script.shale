@@ -1,0 +1,1 @@
+local rows = {{name = "chat", files = 12, bytes = "1.2 KiB"}, {name = "games", files = 3, bytes = "5 B"}} print(table(rows, {"name", "files", "bytes"}))

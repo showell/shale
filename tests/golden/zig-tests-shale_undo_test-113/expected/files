@@ -1,0 +1,4 @@
+root	d	775	-	
+root/locked	d	775	-	
+root/locked/x.txt	f	664	1		sha256 2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881
+scratch	d	775	-	

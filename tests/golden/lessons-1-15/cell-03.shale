@@ -1,0 +1,6 @@
+local posts = 3
+local words = 1250
+print("words a post:", words // posts)
+print("left over:", words % posts)
+posts = posts + 1
+print("posts now:", posts)

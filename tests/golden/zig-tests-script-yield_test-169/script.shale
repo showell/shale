@@ -1,0 +1,1 @@
+function f() yield() return 3 end print(#{f(), 2, 4})

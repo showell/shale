@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:1: host: `run`: `no-such-program-here` is not found along PATH (26 steps)
+── used: 26 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

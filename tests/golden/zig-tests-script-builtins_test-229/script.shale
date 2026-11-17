@@ -1,0 +1,1 @@
+local e = {} print(count(e), #keys(e)) sort(e)

@@ -1,0 +1,6 @@
+for name in ls("posts") do
+  local text = read("posts/" .. name)
+  if contains(text, "walks") and not contains(text, "fog") then
+    print(name .. " is a walk without fog")
+  end
+end

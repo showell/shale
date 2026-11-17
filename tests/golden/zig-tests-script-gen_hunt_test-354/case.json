@@ -1,0 +1,1 @@
+{"id":"zig-tests-script-gen_hunt_test-354","source":"zig-tests","origin":"src/script/gen_hunt_test.zig:354","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

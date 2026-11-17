@@ -1,0 +1,16 @@
+local by = {}
+local total = 0
+for p in glob("src/tcp*.zig") do
+  for m in grep(p, "DEPARTS (") do
+    local r = re_find(m.text, "DEPARTS \\((\\w+)\\)")
+    if r ~= nil then
+      by[r.group] = get(by, r.group, 0) + 1
+      total = total + 1
+    end
+  end
+end
+local rows = {}
+for k in keys(by) do push(rows, {reason = k, lines = by[k]}) end
+sort(rows, "reason")
+print(table(rows, {"reason", "lines"}))
+print("all", total)

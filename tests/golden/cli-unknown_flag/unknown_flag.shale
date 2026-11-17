@@ -1,0 +1,2 @@
+-- differ-argv: --frobnicate {script}
+print(1)

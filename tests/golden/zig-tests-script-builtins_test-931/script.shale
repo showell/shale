@@ -1,0 +1,1 @@
+local m = re_find("b", "(a)?b") print("[" .. m.group .. "]", has_key(re_find("b", "b"), "group"))

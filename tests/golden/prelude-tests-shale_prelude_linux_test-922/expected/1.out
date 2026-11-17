@@ -1,0 +1,5 @@
+2	200	x	["200","x"]
+{"at":1,"text":"200 x","groups":["200","x"],"group":"200"}
+["a","","c"]
+[{"at":1,"text":"x=1","groups":["x","1"],"group":"x"},{"at":6,"text":"yy=22","groups":["yy","22"],"group":"yy"}]
+{"at":2,"text":"b"}

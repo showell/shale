@@ -1,0 +1,1 @@
+print(re_find("a", "a", {nocase = 1}))

@@ -1,0 +1,7 @@
+local post = {title = "Tide pools", date = "2026-09-14"}
+print(post.title, post.date)
+post.words = 39
+for k in keys(post) do
+  print(k, post[k])
+end
+print(has_key(post, "tags"), get(post, "tags", "(no tags)"))

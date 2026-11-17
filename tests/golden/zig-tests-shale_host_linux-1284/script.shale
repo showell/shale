@@ -1,0 +1,1 @@
+print(host("run", {"x"}, {timeout_ms = 10, tail = 1}).cpu_ms)

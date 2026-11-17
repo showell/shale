@@ -1,0 +1,9 @@
+function slug(title)
+  local s = lower(title)
+  s = substitute(s, ",", "", {missing_ok = true})
+  s = substitute(s, " ", "-", {missing_ok = true})
+  return s
+end
+
+print(slug("A walk in the fog"))
+print(slug("Hello, world"))

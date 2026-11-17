@@ -1,0 +1,1 @@
+commit("", "signed\n\nCo-Authored-By: Test <t@x>", {add = "all"}) print(git_log("", {n = 1})[1].subject)

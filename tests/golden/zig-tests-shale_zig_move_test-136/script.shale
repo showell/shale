@@ -1,0 +1,1 @@
+local r = zig_move("g.zig", "f.zig", {"facts"}, {from_as = "gopher"}) print(r.moved, r.qualified, join(r.made_pub, ","))

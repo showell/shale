@@ -1,0 +1,14 @@
+function slug(title)
+  return substitute(substitute(lower(title), ",", "", {missing_ok = true}), " ", "-", {missing_ok = true})
+end
+
+function post(title, date, tags, body)
+  local text = "title: " .. title .. "\ndate: " .. date .. "\ntags: " .. tags .. "\n---\n" .. body .. "\n"
+  replace("posts/" .. slug(title) .. ".md", text)
+  print("wrote posts/" .. slug(title) .. ".md")
+end
+
+post("Hello, world", "2026-09-01", "meta", "Field notes from short outings, mostly on foot.")
+post("Tide pools", "2026-09-14", "coast, walks", "Anemones close when the water leaves. The pools at the north end hold the most, and the gulls know it. Go an hour before low tide and the rocks are still dry enough to stand on.")
+post("A walk in the fog", "2026-10-02", "walks, weather", "The fog came in at noon. By two the far side of the bay was gone, and the foghorn started. The sidewalks were wet without a drop of rain.")
+post("Field notes on crows", "2026-10-11", "birds", "Seven crows on the wire at dawn, the same seven as yesterday. One of them carries a bottle cap from roof to roof and never drops it. They leave together when the bus comes, and come back one at a time.")

@@ -1,0 +1,2 @@
+-- Lua's `goto`: refused.
+goto done

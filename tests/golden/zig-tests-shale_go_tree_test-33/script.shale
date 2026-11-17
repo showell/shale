@@ -1,0 +1,9 @@
+const got = go_tree({"a.go"})
+print(#got .. " " .. got[1].path .. " [" .. got[1].err .. "]")
+local i = 0
+for n in got[1].nodes do
+  i = i + 1
+  local parts = {i, n.kind, n.depth, n.parent, join(n.kids, ","), n.line .. "." .. n.col .. "-" .. n.end_line .. "." .. n.end_col}
+  for k in {"role", "name", "op", "lit", "value"} do if has_key(n, k) then push(parts, k .. "=" .. n[k]) end end
+  print(join(parts, " "))
+end

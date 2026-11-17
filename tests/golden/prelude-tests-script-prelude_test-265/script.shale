@@ -1,0 +1,1 @@
+print(path_normal("a/./b/../c"), path_normal("a//b/"), path_normal("m:x/../y"), "[" .. path_normal("a/..") .. "]", "[" .. path_normal("") .. "]")

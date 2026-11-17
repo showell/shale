@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:1: argument: `run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms and stage, not `color` (31 steps)
+── used: 31 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

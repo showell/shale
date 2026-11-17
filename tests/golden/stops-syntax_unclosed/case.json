@@ -1,0 +1,1 @@
+{"id":"stops-syntax_unclosed","source":"stops","origin":"tools/differ/stops/syntax_unclosed.shale","files":["syntax_unclosed.shale"],"steps":[{"argv":["{case}/syntax_unclosed.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

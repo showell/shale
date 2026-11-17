@@ -1,0 +1,1 @@
+print(re_find("level=WARN msg", "level=(INFO|WARN|ERROR)").group)

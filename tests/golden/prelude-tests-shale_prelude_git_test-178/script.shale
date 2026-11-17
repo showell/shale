@@ -1,0 +1,1 @@
+git_mv("", "Word.roc", "word.roc") local s = git_status("") local names = join(ls(""), ",") print(contains(names, "word.roc"), contains(names, "Word.roc"), s[1].code, s[1].path, s[1].from)

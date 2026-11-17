@@ -1,0 +1,1 @@
+zig_decls("gone.zig", {container = 3})

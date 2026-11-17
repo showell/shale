@@ -1,0 +1,1 @@
+print(read("chat", 0, 2))

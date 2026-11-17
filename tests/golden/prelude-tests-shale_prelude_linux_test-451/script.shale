@@ -1,0 +1,1 @@
+print(copy("site", "dev")) print(read("dev/index.html") == read("site/index.html"), read("dev/.hidden"), read("dev/sub/app.wasm") == read("site/sub/app.wasm"))

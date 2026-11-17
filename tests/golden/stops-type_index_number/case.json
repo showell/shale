@@ -1,0 +1,1 @@
+{"id":"stops-type_index_number","source":"stops","origin":"tools/differ/stops/type_index_number.shale","files":["type_index_number.shale"],"steps":[{"argv":["{case}/type_index_number.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

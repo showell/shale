@@ -1,0 +1,5 @@
+for name in ls("posts") do
+  for hit in grep("posts/" .. name, "fog") do
+    print(name .. ":" .. hit.line, hit.text)
+  end
+end

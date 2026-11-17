@@ -1,0 +1,1 @@
+function never() print("evaluated") end print(nil or "d", false or nil, 0 and "t", "" and 1, nil and never())

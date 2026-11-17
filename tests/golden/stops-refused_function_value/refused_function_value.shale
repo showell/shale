@@ -1,0 +1,2 @@
+-- A function as a value: refused.
+local f = function() return 1 end

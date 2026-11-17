@@ -1,0 +1,2 @@
+replace("posts/hello.md", "Hello, world!\n")
+print(read("posts/hello.md"))

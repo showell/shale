@@ -1,0 +1,1 @@
+print(job_alive("inside2.log.job"))

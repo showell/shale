@@ -1,0 +1,1 @@
+print(parse_int("42"), parse_int(" -7\r\n"), parse_int("log-x"), parse_int(""), parse_int("12a"))

@@ -1,0 +1,1 @@
+print(find("abc", ""), contains("abc", ""), find("", ""), contains("", ""))

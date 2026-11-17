@@ -1,0 +1,1 @@
+local hay = rep("a", 100000) local needle = rep("a", 10000) .. "b" local x = find(hay, needle)

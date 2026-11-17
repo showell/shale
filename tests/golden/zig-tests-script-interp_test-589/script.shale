@@ -1,0 +1,1 @@
+local x print(x == nil) x = 2 print(x)

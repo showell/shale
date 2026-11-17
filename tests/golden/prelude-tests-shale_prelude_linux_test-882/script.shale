@@ -1,0 +1,1 @@
+edit_between("b.md", "## Generated\n", nil, "fresh\n")

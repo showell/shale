@@ -1,0 +1,4 @@
+local old = [=[
+if (x[i]] == "a\n") {
+]=]
+print(#old, sub(old, 1, 9), contains(old, "\\n"))

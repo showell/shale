@@ -1,0 +1,3 @@
+local r = host("run", {"shale-fixture", "lines", "12", "Step"}, {timeout_ms = 10000, re = "step 1", not_re = "11", nocase = true, tail = 5})
+print(r.matched_lines, r.out)
+print(host("run", {"shale-fixture", "exit", "3"}, {timeout_ms = 10000, tail = 1}).code)

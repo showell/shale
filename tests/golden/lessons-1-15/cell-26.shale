@@ -1,0 +1,26 @@
+const BLOG = "Field Notes"
+
+function front(path)
+  local meta = {}
+  for line in lines(read(path)) do
+    if line == "---" then break end
+    local at = find(line, ": ")
+    meta[sub(line, 1, at - 1)] = sub(line, at + 2)
+  end
+  return meta
+end
+
+local posts = {}
+for name in ls("posts") do
+  local m = front("posts/" .. name)
+  m.file = "posts/" .. name
+  push(posts, m)
+end
+sort(posts, "date", "desc")
+
+local page = "# " .. BLOG .. "\n\n"
+for p in posts do
+  page = page .. "- " .. p.date .. ": [" .. p.title .. "](" .. p.file .. ")\n"
+end
+replace("index.md", page)
+print(page)

@@ -1,0 +1,82 @@
+-- One call of each store builtin, run whole and then under a budget at
+-- every reads and changes value its run passes and every 25 steps, so each
+-- run stops at another call: an input for each `-- differ-argv:` line.
+-- differ-before: fixture/setup.shale
+print(#walk(""))
+print(#grep("a.txt", "o"))
+print(#read_lines("crlf.txt").lines)
+print(line_at("a.txt", 5))
+print(count_lines("a.txt"), count_in("a.txt", "o"))
+create("g", "aaa\nbbb\nccc\n")
+print(edit("g", {{old = "bbb", new = "B\nB"}, {old = "a", new = "x", all = true}}))
+print(#ls("d"), stat("d/x").size, exists("d/y"), is_dir("d/y"))
+print(read_or("nope", "dflt"), read("a.txt", 2, 3))
+append("g", "more\n")
+mkdir("h/i")
+remove("g")
+remove_tree("h")
+print(host("edits_write", {{"a.txt", {{old = "one", new = "1"}}}}))
+
+-- The budgets: the run whole, then every reads and changes value up to
+-- the whole run's (27 reads, 7 changes), and every 25 steps of its 599,
+-- with 598 and 599 on either side of its end.
+-- differ-argv: {script}
+-- differ-argv: --budget reads=1 {script}
+-- differ-argv: --budget reads=2 {script}
+-- differ-argv: --budget reads=3 {script}
+-- differ-argv: --budget reads=4 {script}
+-- differ-argv: --budget reads=5 {script}
+-- differ-argv: --budget reads=6 {script}
+-- differ-argv: --budget reads=7 {script}
+-- differ-argv: --budget reads=8 {script}
+-- differ-argv: --budget reads=9 {script}
+-- differ-argv: --budget reads=10 {script}
+-- differ-argv: --budget reads=11 {script}
+-- differ-argv: --budget reads=12 {script}
+-- differ-argv: --budget reads=13 {script}
+-- differ-argv: --budget reads=14 {script}
+-- differ-argv: --budget reads=15 {script}
+-- differ-argv: --budget reads=16 {script}
+-- differ-argv: --budget reads=17 {script}
+-- differ-argv: --budget reads=18 {script}
+-- differ-argv: --budget reads=19 {script}
+-- differ-argv: --budget reads=20 {script}
+-- differ-argv: --budget reads=21 {script}
+-- differ-argv: --budget reads=22 {script}
+-- differ-argv: --budget reads=23 {script}
+-- differ-argv: --budget reads=24 {script}
+-- differ-argv: --budget reads=25 {script}
+-- differ-argv: --budget reads=26 {script}
+-- differ-argv: --budget reads=27 {script}
+-- differ-argv: --budget changes=1 {script}
+-- differ-argv: --budget changes=2 {script}
+-- differ-argv: --budget changes=3 {script}
+-- differ-argv: --budget changes=4 {script}
+-- differ-argv: --budget changes=5 {script}
+-- differ-argv: --budget changes=6 {script}
+-- differ-argv: --budget changes=7 {script}
+-- differ-argv: --budget steps=25 {script}
+-- differ-argv: --budget steps=50 {script}
+-- differ-argv: --budget steps=75 {script}
+-- differ-argv: --budget steps=100 {script}
+-- differ-argv: --budget steps=125 {script}
+-- differ-argv: --budget steps=150 {script}
+-- differ-argv: --budget steps=175 {script}
+-- differ-argv: --budget steps=200 {script}
+-- differ-argv: --budget steps=225 {script}
+-- differ-argv: --budget steps=250 {script}
+-- differ-argv: --budget steps=275 {script}
+-- differ-argv: --budget steps=300 {script}
+-- differ-argv: --budget steps=325 {script}
+-- differ-argv: --budget steps=350 {script}
+-- differ-argv: --budget steps=375 {script}
+-- differ-argv: --budget steps=400 {script}
+-- differ-argv: --budget steps=425 {script}
+-- differ-argv: --budget steps=450 {script}
+-- differ-argv: --budget steps=475 {script}
+-- differ-argv: --budget steps=500 {script}
+-- differ-argv: --budget steps=525 {script}
+-- differ-argv: --budget steps=550 {script}
+-- differ-argv: --budget steps=575 {script}
+-- differ-argv: --budget steps=598 {script}
+-- differ-argv: --budget steps=599 {script}

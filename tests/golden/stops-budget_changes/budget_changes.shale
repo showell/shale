@@ -1,0 +1,3 @@
+-- budget: changes=2
+-- More changes than the budget: budget changes.
+for i = 1, 5 do replace("f" .. i .. ".txt", "x") end

@@ -1,0 +1,5 @@
+── stopped at the Linux prelude:26:62 (in `the Linux prelude's not_option`): fail: `git_diff`'s `range` is "--output=y.txt": a value that starts with `-` would be one of the program's options (383 steps)
+   called from the git prelude:39:10 (in `the git prelude's git_value`)
+   called from the git prelude:146:47 (in `the git prelude's git_diff`)
+   called from {base}/case/script.shale:1:1
+── used: 383 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

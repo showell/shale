@@ -1,0 +1,1 @@
+{"id":"cli-dash_e","source":"cli","origin":"tools/differ/cli/dash_e.shale","files":[],"steps":[{"argv":["-e","print(40+2)"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

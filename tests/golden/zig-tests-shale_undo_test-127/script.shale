@@ -1,0 +1,1 @@
+replace("a.txt", "two\n") create("new.txt", "n")

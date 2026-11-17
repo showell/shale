@@ -1,0 +1,1 @@
+{"id":"prelude-tests-shale_prelude_git_test-150","source":"prelude-tests","origin":"src/shale_prelude_git_test.zig:150","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

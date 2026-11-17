@@ -1,0 +1,4 @@
+root	d	775	-	
+root/d	d	775	-	
+root/x.txt	f	664	2		sha256 8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4
+scratch	d	775	-	

@@ -1,0 +1,6 @@
+for name in ls("posts") do
+  local p = "posts/" .. name
+  if count_in(p, "walks") > 0 then
+    edit(p, "walks", "walking", {all = true, word = true})
+  end
+end

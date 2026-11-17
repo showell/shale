@@ -1,0 +1,1 @@
+{"id":"cli-budget_half","source":"cli","origin":"tools/differ/cli/budget_half.shale","files":["budget_half.shale"],"steps":[{"argv":["{case}/budget_half.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

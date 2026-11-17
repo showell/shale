@@ -1,0 +1,38 @@
+-- The line reads against the call-bytes cap, at each cap on either side of
+-- where a call's answer changes: an input for each `-- differ-argv:` line.
+-- differ-before: fixture/setup.shale
+function rl(p, o, n) return json_write(read_lines(p, o, n)) end
+function la(p, o) return line_at(p, o) end
+function ci(p, s, o, n) return count_in(p, s, o, n) end
+function fi(p, s, o) return find_in(p, s, o) end
+function cl(p) return count_lines(p) end
+function gr(p, s) return #grep(p, s) end
+function show(r)
+  if r.ok then return "ok " .. get(r, "value", "nil") end
+  return r.class .. ": " .. r.error
+end
+create("lines", "short\na much longer line than the others here\nx\n" .. "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\nend")
+print(show(attempt(rl, "lines", 0, 3)))
+print(show(attempt(rl, "lines", 6, 3)))
+print(show(attempt(rl, "lines", 52, 3)))
+print(show(attempt(la, "lines", 30)))
+print(show(attempt(la, "lines", 60)))
+print(show(attempt(la, "lines", 101)))
+print(show(attempt(ci, "lines", "e", 0, 100)))
+print(show(attempt(fi, "lines", "end", 0)))
+print(show(attempt(cl, "lines")))
+print(show(attempt(gr, "lines", "y")))
+
+-- The caps: the default, and each side of where an answer changes (a
+-- part asked of 3 bytes, a line of 6, 40, 48 and the whole file's 100).
+-- differ-argv: {script}
+-- differ-argv: --budget call_bytes=2 {script}
+-- differ-argv: --budget call_bytes=3 {script}
+-- differ-argv: --budget call_bytes=5 {script}
+-- differ-argv: --budget call_bytes=6 {script}
+-- differ-argv: --budget call_bytes=39 {script}
+-- differ-argv: --budget call_bytes=40 {script}
+-- differ-argv: --budget call_bytes=47 {script}
+-- differ-argv: --budget call_bytes=48 {script}
+-- differ-argv: --budget call_bytes=99 {script}
+-- differ-argv: --budget call_bytes=100 {script}

@@ -1,0 +1,2 @@
+── stopped at {base}/case/index_list_range.shale:3:8: index: index 3 is outside the list (length 2) (9 steps)
+── used: 9 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:26: name: no local `y`: declare it with `local y = ...` (there are no globals; Shale's builtins and preludes: `shale --help`) (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

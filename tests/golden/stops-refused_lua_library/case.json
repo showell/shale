@@ -1,0 +1,1 @@
+{"id":"stops-refused_lua_library","source":"stops","origin":"tools/differ/stops/refused_lua_library.shale","files":["refused_lua_library.shale"],"steps":[{"argv":["{case}/refused_lua_library.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

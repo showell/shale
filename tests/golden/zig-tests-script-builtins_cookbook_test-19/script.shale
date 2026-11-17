@@ -1,0 +1,1 @@
+local l = {5, 6, 7} local t = take(l, 2) print(#t, t[1], t[2], #l)

@@ -1,0 +1,1 @@
+opts_only({a = 1, b = 2}, {"a", "b", "c"}, "f") opts_only(nil, {"a"}, "f") opts_only({}, {}, "f") print("on")

@@ -1,0 +1,2 @@
+local r = host("run", {"shale-fixture", "sleep", "20000"}, {timeout_ms = 200, tail = 1})
+print(r.ended, has_key(r, "code"), r.ms < 5000)

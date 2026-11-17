@@ -1,0 +1,1 @@
+print(exists("chat/a.md"), exists("chat/nope"), exists(""), is_dir("chat"), is_dir("top.txt"), is_dir("none"))

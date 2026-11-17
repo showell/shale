@@ -1,0 +1,1 @@
+local c = {} print(incr(c, "a"), incr(c, "a"), incr(c, "b", 5), incr(c, "b", -5), c.a, c.b)

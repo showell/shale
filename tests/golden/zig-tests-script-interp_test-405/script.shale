@@ -1,0 +1,5 @@
+function boom(n) if n == 0 then return {}[1] end return boom(n - 1) end
+local r = attempt(boom, 5)
+local s = 0
+for i = 1, 3 do s = s + i end
+print(r.ok, r.class, r.in_function, s)

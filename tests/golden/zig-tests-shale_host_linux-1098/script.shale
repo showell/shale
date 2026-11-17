@@ -1,0 +1,4 @@
+local a = host("run", {"shale-fixture", "lines", "3"}, {timeout_ms = 10000, whole = 1000})
+local b = host("run", {"shale-fixture", "cat"}, {timeout_ms = 10000, whole = 1000, stdin = a})
+local c = host("run", {"shale-fixture", "cat"}, {timeout_ms = 10000, tail = 1, stdin = "typed\n"})
+print(b.out .. c.out, a.total_lines)

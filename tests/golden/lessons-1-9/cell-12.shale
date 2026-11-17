@@ -1,0 +1,4 @@
+for name in ls("posts") do
+  print(name)
+end
+print(exists("posts/hello.md"), exists("posts/goodbye.md"), is_dir("posts"))

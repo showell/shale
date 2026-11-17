@@ -1,0 +1,5 @@
+local l = {}
+for i = 1, 100000 do
+  push(l, "abcdefgh" .. i)
+  if i % 1000 == 0 then yield() end
+end

@@ -1,0 +1,1 @@
+must(run({"shale-fixture", "sleep", "5000"}, {timeout_ms = 100, tail = 5}))

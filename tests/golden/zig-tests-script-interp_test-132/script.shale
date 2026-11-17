@@ -1,0 +1,1 @@
+local l = {} l[1] = "a" l[#l + 1] = "b" l[1] = "c" print(l[1], l[2], #l)

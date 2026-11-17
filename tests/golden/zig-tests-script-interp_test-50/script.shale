@@ -1,0 +1,1 @@
+print(nil, true, false, "s", -5)

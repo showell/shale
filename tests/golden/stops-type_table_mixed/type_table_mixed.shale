@@ -1,0 +1,2 @@
+-- A table literal both list and map: type.
+local t = {1, a = 2}

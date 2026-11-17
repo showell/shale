@@ -1,0 +1,1 @@
+local j = job_start({"shale-fixture", "chunks", "4000000", "1000"}, {log = "slow.log"}) print(job_wait(j, {timeout_ms = 60000, contains = "never printed"}).ended)

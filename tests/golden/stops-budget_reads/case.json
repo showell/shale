@@ -1,0 +1,1 @@
+{"id":"stops-budget_reads","source":"stops","origin":"tools/differ/stops/budget_reads.shale","files":["budget_reads.shale"],"steps":[{"argv":["{case}/budget_reads.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

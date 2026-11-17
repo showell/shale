@@ -1,0 +1,7 @@
+-- An edits_write batch with one file through a read-only mount is refused
+-- before any of its files is written.
+-- differ-before: fixture/setup.shale
+-- differ-mounts: store.mounts
+if exists("w1") then remove("w1") end
+create("w1", "www\n")
+print(host("edits_write", {{"w1", {{old = "www", new = "W"}}}, {"q:f", {{old = "fff", new = "F"}}}}))

@@ -1,0 +1,1 @@
+local j = job_start({"shale-fixture", "lines", "1", "one\ntwo"}, {log = "nl.log"}) local w = job_wait(j, {timeout_ms = 10000}) print(w.ended, w.code)

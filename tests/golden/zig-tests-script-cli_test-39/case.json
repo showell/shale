@@ -1,0 +1,1 @@
+{"id":"zig-tests-script-cli_test-39","source":"zig-tests","origin":"src/script/cli_test.zig:39","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

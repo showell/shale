@@ -1,0 +1,1 @@
+print(join(newest(".", 99), ",") == join(newest("", 99), ","), #newest(".", 99) > 0)

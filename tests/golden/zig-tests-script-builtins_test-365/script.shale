@@ -1,0 +1,1 @@
+local ok = true for s = 0, 4000000000, 37777777 do if seconds(date(s)) ~= s then ok = false end end print(ok)

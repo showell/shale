@@ -1,0 +1,1 @@
+local m = {x = {1, 2}} push(m.x, 3) print(#m.x, m.x[3])

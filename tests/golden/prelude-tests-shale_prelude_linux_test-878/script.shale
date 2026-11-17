@@ -1,0 +1,1 @@
+print(edit_between("a.md", "<!-- begin -->\n", "<!-- end -->", "new\n"))

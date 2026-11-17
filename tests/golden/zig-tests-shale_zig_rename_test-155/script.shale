@@ -1,0 +1,1 @@
+zig_rename("bad.zig", "x", "y")

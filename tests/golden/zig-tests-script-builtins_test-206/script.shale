@@ -1,0 +1,1 @@
+print(find("hello", "l", 4), find("hello", "l", 5), find("hello", "h", 1), find("abc", "", 4), find("abc", "c", 4))

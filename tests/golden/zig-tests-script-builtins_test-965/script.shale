@@ -1,0 +1,1 @@
+print(re_match("A", "a"), re_match("A", "a", {nocase = true}), re_match("A", "a"))

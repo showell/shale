@@ -1,0 +1,2 @@
+── stopped at {base}/case/name_function_below.shale:2:7: name: no function `f` above this line: a function is called only after it is declared (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

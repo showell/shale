@@ -1,0 +1,1 @@
+{"id":"cli-arg_not_integer","source":"cli","origin":"tools/differ/cli/arg_not_integer.shale","files":["arg_not_integer.shale"],"steps":[{"argv":["{case}/arg_not_integer.shale","n=seven"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

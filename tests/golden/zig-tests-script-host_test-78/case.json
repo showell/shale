@@ -1,0 +1,1 @@
+{"id":"zig-tests-script-host_test-78","source":"zig-tests","origin":"src/script/host_test.zig:78","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

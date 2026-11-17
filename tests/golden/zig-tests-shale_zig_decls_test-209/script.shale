@@ -1,0 +1,1 @@
+local k = zig_tokens("k.zig")[1] print(k.tag, k.text, k.line)

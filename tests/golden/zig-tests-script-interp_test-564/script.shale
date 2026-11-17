@@ -1,0 +1,1 @@
+local m = re_find("ab", "b") local n = re_find("ab", "c") print(m == nil, m ~= nil, n == nil, n ~= nil)

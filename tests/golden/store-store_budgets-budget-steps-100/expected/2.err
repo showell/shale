@@ -1,0 +1,2 @@
+── stopped at {base}/case/store_budgets.shale:5:8: budget steps: the step budget (100 steps) ran out (101 steps)
+── used: 101 of 100 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

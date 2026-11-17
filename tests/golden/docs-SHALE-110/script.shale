@@ -1,0 +1,2 @@
+local sep = "\n\n-------------\n"
+print(count_in("chat/1_2/sessions/hello.md", sep) + 1)

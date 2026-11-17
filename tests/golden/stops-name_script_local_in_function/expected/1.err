@@ -1,0 +1,2 @@
+── stopped at {base}/case/name_script_local_in_function.shale:3:21: name: `limit` is a script `local` set once, and a function sees only its own parameters and locals and the `const`s above it: declare it `const limit = ...` where it is set (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

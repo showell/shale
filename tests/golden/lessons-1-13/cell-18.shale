@@ -1,0 +1,18 @@
+function front(path)
+  local meta = {}
+  for line in lines(read(path)) do
+    if line == "---" then
+      break
+    end
+    local at = find(line, ": ")
+    meta[sub(line, 1, at - 1)] = sub(line, at + 2)
+  end
+  return meta
+end
+
+local m = front("posts/tide-pools.md")
+print(m.title)
+print(m.date)
+for tag in split(m.tags, ", ") do
+  print("tag: " .. tag)
+end

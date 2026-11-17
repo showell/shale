@@ -1,0 +1,1 @@
+for e in walk("", {after = "chat/aa.md"}) do print(e.path) end

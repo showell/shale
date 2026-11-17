@@ -1,0 +1,12 @@
+local n = 0
+for p in glob("src/**/*.zig") do
+  if #grep(p, "pastDeadline") > 0 then
+    local r = zig_rename(p, "pastDeadline", "deadlinePassed")
+    n = n + r.renamed
+    if r.left_in_comments > 0 then print(p .. ": " .. r.left_in_comments .. " left in comments") end
+    -- What reaches it through a module is after a `.`: its own edit.
+    if #grep(p, "timeouts.pastDeadline") > 0 then edit(p, "timeouts.pastDeadline", "timeouts.deadlinePassed", {all = true}) end
+  end
+end
+print(n .. " renamed")
+-- (the CLI's summary of each diff; --verbose for the diffs)

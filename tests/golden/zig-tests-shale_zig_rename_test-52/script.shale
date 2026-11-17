@@ -1,0 +1,1 @@
+zig_move("a.zig", "b.zig", {"b"})

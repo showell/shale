@@ -1,0 +1,1 @@
+local got = {} for e in walk_all("", {kind = "file", skip = ".*"}) do push(got, e.path) end print(join(got, " "))

@@ -1,0 +1,1 @@
+re_lines("a", "a", {invert = 1, from = 2})

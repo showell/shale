@@ -1,0 +1,3 @@
+-- A program's code and how it ended, kept and printed.
+local r = run({"false"}, {timeout_ms = 5000, tail = 1})
+print(r.code, r.ended)

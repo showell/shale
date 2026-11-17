@@ -1,0 +1,1 @@
+print(dirname("a/b/c.md"), "[" .. dirname("top.txt") .. "]", dirname("m:a/b"), "[" .. dirname("") .. "]", dirname("a/"))

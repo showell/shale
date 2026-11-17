@@ -1,0 +1,5 @@
+replace("shale-check/off.txt", "abcdef")
+local o = find_in("shale-check/off.txt", "cd")
+print(o, read("shale-check/off.txt", o, 2))  -- an offset reads from there
+local s = read("shale-check/off.txt")
+print(find(s, "cd"), sub(s, o + 1, o + 2))   -- a position is one more

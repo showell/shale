@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:7: store: `read("nope.txt")`: not found (FileNotFound): `exists(p)` asks first (13 steps)
+── used: 13 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

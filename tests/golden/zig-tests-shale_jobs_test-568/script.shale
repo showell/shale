@@ -1,0 +1,1 @@
+local j = job_start({"shale-fixture", "sleep", "20000"}, {log = "fds.log"}) print(job_alive(j))

@@ -1,0 +1,13 @@
+function lines_with(path, s, part)
+  local n = 0
+  local at = 0
+  while true do
+    local r = read_lines(path, at, part)
+    for l in r.lines do
+      if contains(l, s) then n = n + 1 end
+    end
+    if r.done then return n end
+    at = r.next
+  end
+end
+print(lines_with("chat/channels/general/sessions/plans.md", "from:", 512))

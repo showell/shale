@@ -1,0 +1,1 @@
+print(edits_all({{"w.txt", {{old = "foo", new = "z", word = true, all = true}, {old = "z b z foox", new = "done"}}}}))

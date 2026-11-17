@@ -1,0 +1,9 @@
+local at = 0
+local found = 0
+while true do
+  local f = find_next("chat/channels/general/sessions/plans.md", "MSG_", at)
+  if f == nil then break end
+  found = found + 1
+  at = f + 1
+end
+print(found, count_all("chat/channels/general/sessions/plans.md", "MSG_"))

@@ -1,0 +1,1 @@
+print(has_item({"a", "b"}, "b"), has_item({"a"}, "c"), has_item({}, "a"), has_item({1, 2}, 2), has_item({1}, "1"))

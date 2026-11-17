@@ -1,0 +1,35 @@
+-1	-1
+edit u1: 1 hunk, -1 +2 lines
+1
+edit u2: 1 hunk, -2 +1 lines
+1
+edit u3: 1 hunk, -3 +1 lines
+1
+edit u4: 2 hunks, -2 +2 lines
+2
+edit u5: 1 hunk, -1 +1 lines
+1
+edit u6: 2 hunks, -5 +2 lines
+3
+edit u7: 2 hunks, -3 +2 lines
+2
+edit u8: 1 hunk, -1 +1 lines
+1
+`edit`: "the slow brown fox
+" is not in u9: its line "the slow brown fox" is not in it; its line 1 ends alike: "the quick brown fox"
+`edit`: its `all` must be true or false, not an integer
+`edit` takes at most 64 edits a call, given 65: call it again for the rest
+`edit`: edit 2 has no `old`
+`edit`: edit 2 has no `new`
+`edit`: its `all` must be true or false, not an integer
+`edit`: edit 2 takes `old`, `new`, `all` and `word`, not `z`
+`edit`: edit 2 must be a map, `{old = ..., new = ...}`, not a string
+`edit`: edit 2 must be a map, `{old = ..., new = ...}`, not an empty table
+`edit` of "" is an error: there is nothing to replace (edit 2 of 2; none is made)
+`edit`: an edit's `old` must be a string, not an integer
+`edit` of two arguments takes a list of edits, `{{old = ..., new = ...}, ...}`, not a string: or `edit(p, old, new)`
+`edit` of no edits: the list is empty
+`edit`: what it writes must be a string, not an integer
+`edit`: "o" is in u9 3 times: a longer `old` picks one, or `{all = true}` changes every one
+`edit("")` would act on the whole root: name a path of at least one part
+`edit("d")`: a folder, not a file (IsDir): `is_dir(p)` asks first

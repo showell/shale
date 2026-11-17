@@ -1,0 +1,1 @@
+local got = re_lines("x\n" .. rep("-", 9000) .. "[a](b)\ny", "\\[a\\]") print(#got, got[1].line, #got[1].text)

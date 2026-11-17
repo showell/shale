@@ -1,0 +1,1 @@
+function f() return arg("cwd", "") end print(arg("cmd", ""))

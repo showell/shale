@@ -1,0 +1,2 @@
+── stopped at {base}/case/syntax_unclosed.shale:4:1: syntax: expected `end` to close the `if`, found the end of the script (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

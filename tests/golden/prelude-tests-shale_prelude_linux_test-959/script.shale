@@ -1,0 +1,1 @@
+print(#json_read("[[[1]]]", {depth = 3}))

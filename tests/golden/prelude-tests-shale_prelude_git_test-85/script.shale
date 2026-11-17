@@ -1,0 +1,1 @@
+print(contains(git_diff("", {}), "+two"), contains(git_diff("", {stat = true}), "a.txt | 1 +"), git_diff("", {paths = {"d.txt"}}) == "")

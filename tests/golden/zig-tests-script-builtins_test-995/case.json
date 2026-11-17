@@ -1,0 +1,1 @@
+{"id":"zig-tests-script-builtins_test-995","source":"zig-tests","origin":"src/script/builtins_test.zig:995","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,1 @@
+print(join(re_find("abcabd", "(ab(c|d))*").groups, "|"))

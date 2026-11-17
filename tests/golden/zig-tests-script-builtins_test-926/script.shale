@@ -1,0 +1,1 @@
+local m = re_find("xaab aaab", "a+b") print(m.at, m.text)

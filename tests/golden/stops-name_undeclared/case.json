@@ -1,0 +1,1 @@
+{"id":"stops-name_undeclared","source":"stops","origin":"tools/differ/stops/name_undeclared.shale","files":["name_undeclared.shale"],"steps":[{"argv":["{case}/name_undeclared.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,1 @@
+local r = zig_move("end.zig", "q.zig", {"q"}) print(r.moved)

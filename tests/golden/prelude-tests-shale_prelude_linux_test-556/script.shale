@@ -1,0 +1,1 @@
+local a = fresh_dir(".", "top") print(starts_with(a, "top."), exists(a)) remove_tree(a)

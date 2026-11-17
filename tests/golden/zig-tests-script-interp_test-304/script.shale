@@ -1,0 +1,1 @@
+local s = "x" s = s .. s .. s print(s, #(s .. 1 .. 2))

@@ -1,0 +1,1 @@
+for m in re_find_all("x=1, yy=22", "(\\w+)=(\\d+)") do print(m.at, m.text, m.group, m.groups[2]) end

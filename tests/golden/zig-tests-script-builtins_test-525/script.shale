@@ -1,0 +1,1 @@
+for e in walk("", {kind = "directory", depth = 2}) do print(e.path) end

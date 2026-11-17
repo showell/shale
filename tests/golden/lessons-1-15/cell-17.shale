@@ -1,0 +1,7 @@
+local counts = {}
+for w in words("the fog and the crows and the tide") do
+  counts[w] = get(counts, w, 0) + 1
+end
+for w in keys(counts) do
+  print(w, counts[w])
+end

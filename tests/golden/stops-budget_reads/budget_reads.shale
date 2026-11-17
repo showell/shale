@@ -1,0 +1,4 @@
+-- budget: reads=3
+-- More reads than the budget: budget reads.
+replace("a.txt", "a")
+for i = 1, 10 do print(read("a.txt")) end

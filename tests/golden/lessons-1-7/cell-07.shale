@@ -1,0 +1,2 @@
+append("posts/hello.md", "This blog is written with Shale.\n")
+print(read("posts/hello.md"))

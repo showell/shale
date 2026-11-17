@@ -1,0 +1,1 @@
+print(substitute("abc", "", "y", {missing_ok = true}))

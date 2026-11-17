@@ -1,0 +1,1 @@
+function twice(s) return "mine" end print(twice("x"), thrice("x"))

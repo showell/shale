@@ -1,0 +1,3 @@
+── stopped at the Linux prelude:682:6 (in `the Linux prelude's create`): budget reads: the store-read budget (count) ran out (284 steps)
+   called from {base}/case/store_budgets.shale:10:1
+── used: 284 of 5000000 steps, 18 of 18 reads, 37 of 67108864 read bytes, 14 of 65536 output bytes

@@ -1,0 +1,33 @@
+a.txt(file,7) crlf.txt(file,6) d(directory,0) d/w(file,1) d/x(file,2) d/y(directory,0) d/y/z(file,1) e(directory,0) empty.txt(file,0) 
+a.txt(file,7) crlf.txt(file,6) d(directory,0) d/w(file,1) d/x(file,2) d/y(directory,0) d/y/z(file,1) e(directory,0) empty.txt(file,0) 
+d/w(file,1) d/x(file,2) d/y(directory,0) d/y/z(file,1) 
+a.txt(file,7) crlf.txt(file,6) d(directory,0) e(directory,0) empty.txt(file,0) 
+a.txt(file,7) crlf.txt(file,6) empty.txt(file,0) 
+a.txt(file,7) crlf.txt(file,6) e(directory,0) empty.txt(file,0) 
+
+d/y/z(file,1) e(directory,0) empty.txt(file,0) 
+e(directory,0) empty.txt(file,0) 
+
+
+d/w(file,1) d/x(file,2) d/y(directory,0) d/y/z(file,1) e(directory,0) empty.txt(file,0) 
+d/w(file,1) d/x(file,2) d/y(directory,0) d/y/z(file,1) e(directory,0) empty.txt(file,0) 
+crlf.txt(file,6) d(directory,0) d/w(file,1) d/x(file,2) d/y(directory,0) d/y/z(file,1) e(directory,0) empty.txt(file,0) 
+d/x(file,2) d/y(directory,0) d/y/z(file,1) 
+d/w(file,1) d/x(file,2) d/y(directory,0) d/y/z(file,1) 
+e(directory,0) empty.txt(file,0) 
+(more,0) 
+d/y(more,0) 
+a.txt(file,7) crlf.txt(file,6) d(directory,0) d/w(file,1) d/x(file,2) d/y(directory,0) d/y/z(file,1) e(directory,0) empty.txt(file,0) 
+`walk`: `after` is "dd/x", which is not under "d": it is a path an earlier walk of it returned
+`walk`: `after` is "e", which is not under "d": it is a path an earlier walk of it returned
+`walk`: a depth of 0: 1 is the folder's own entries
+`walk`: a kind of "link": "file", "directory" or "other"
+`walk` takes `depth`, `like`, `kind`, `skip`, `after` and `keep_reads`, not `nope`
+`walk`: `keep_reads` of -1: it is a count of reads
+`walk`: its depth must be an integer, not a string
+`walk` takes a map, given a list (`#l` is a list's length)
+`walk("a.txt")`: a part of the path is a file, not a folder (NotDir): `is_dir(p)` asks first
+`walk("nope")`: not found (FileNotFound): `exists(p)` asks first
+scratch:d/w(file,1) scratch:d/x(file,2) scratch:d/y(directory,0) scratch:d/y/z(file,1) 
+scratch:d/y/z(file,1) 
+9861

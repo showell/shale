@@ -1,0 +1,1 @@
+print(count_lines("big.txt")) print(budget().reads, budget().read_bytes)

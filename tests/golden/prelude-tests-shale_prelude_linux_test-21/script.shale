@@ -1,0 +1,1 @@
+print(sub(real(""), -1) ~= "/", sub(real("a/b.txt"), -8))

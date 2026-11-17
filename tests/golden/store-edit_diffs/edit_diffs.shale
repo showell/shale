@@ -1,0 +1,42 @@
+-- edit's diffs at their edges (a missing last newline, CRLF, a list whose
+-- later edits match the earlier ones' text, `all` with `word`) and the
+-- near-miss hints of an edit that does not match.
+-- differ-before: fixture/setup.shale
+function e2(p, l) return edit(p, l) end
+function e3(p, a, b) return edit(p, a, b) end
+-- edit's diff arithmetic over edge cases
+function fresh(p, s)
+  if exists(p) then remove(p) end
+  create(p, s)
+end
+fresh("t1", "one\ntwo")
+print(edit("t1", "two", "TWO"))
+fresh("t2", "a\r\nb\r\nc\r\n")
+print(edit("t2", "b\r\n", ""))
+fresh("t3", "aaa\nbbb\nccc\n")
+print(edit("t3", {{old = "bbb", new = "x\ny"}, {old = "y\nccc", new = "Q"}, {old = "Q\n", new = "Z"}}))
+fresh("t3b", "aaa\nbbb\nccc\n")
+print(edit("t3b", {{old = "bbb\n", new = ""}, {old = "aaa\nccc", new = "M"}}))
+fresh("t4", "x\n")
+print(edit("t4", "x\n", "x\ny\n"))
+fresh("t5", "ab ab abc _ab")
+print(edit("t5", "ab", "Z", {all = true, word = true}))
+fresh("t6", "1\n2\n3\n4\n5\n6\n7\n8\n")
+print(edit("t6", {{old = "2", new = "two"}, {old = "3\n", new = ""}, {old = "7", new = "s\ne\nv"}, {old = "1", new = ""}}))
+fresh("t7", "aaaa")
+print(edit("t7", "aa", "b", {all = true}))
+fresh("t8", "abc")
+print(edit("t8", {{old = "b", new = "XbX"}, {old = "XbX", new = "b"}}))
+fresh("t9", "\n\n\n")
+print(edit("t9", "\n", "", {all = true}))
+local r = attempt(e3, "t1", "zzz", "y")
+print(r.error)
+r = attempt(e2, "t6", {{old = "two", new = "2"}, {old = "  nothing here at all\nnope", new = "q"}})
+print(r.error)
+fresh("t10", "alpha beta gamma\nsecond line here\n")
+r = attempt(e3, "t10", "first\nsecond line HERE\n", "q")
+print(r.error)
+r = attempt(e3, "t10", "second line here\nalpha", "q")
+print(r.error)
+r = attempt(e2, "t10", {{old = "a", new = "b"}})
+print(r.error)

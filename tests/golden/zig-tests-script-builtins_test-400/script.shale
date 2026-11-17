@@ -1,0 +1,1 @@
+print(like("a.md", "*.md"), like("a.md", "*.txt"), like("abc", "a?c"), like("ac", "a?c"), like("", "*"), like("x", ""), like("aaa", "a*a*a"), like("ab", "a*b*"), like("a.md.bak", "*.md"), like("[x]", "[x]"))

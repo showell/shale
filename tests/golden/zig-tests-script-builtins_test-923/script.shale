@@ -1,0 +1,1 @@
+local m = re_find("abc", "") print(m.at, "[" .. m.text .. "]")

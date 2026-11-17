@@ -1,0 +1,1 @@
+local l = {1, 2} local t = take(l, 1) push(t, 9) print(#l, #t)

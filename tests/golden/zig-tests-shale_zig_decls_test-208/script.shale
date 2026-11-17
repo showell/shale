@@ -1,0 +1,1 @@
+for k in zig_tokens("k.zig", {tag = "identifier"}) do print(k.text, k.line) end

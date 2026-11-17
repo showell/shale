@@ -1,0 +1,1 @@
+for e in walk("") do print(e.path, e.size, e.kind) end

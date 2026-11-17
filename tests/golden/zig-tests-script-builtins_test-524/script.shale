@@ -1,0 +1,1 @@
+for e in walk("chat", {like = "*.md"}) do print(e.path) end

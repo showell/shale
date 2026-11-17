@@ -1,0 +1,1 @@
+{"id":"cli-arg_integer","source":"cli","origin":"tools/differ/cli/arg_integer.shale","files":["arg_integer.shale"],"steps":[{"argv":["{case}/arg_integer.shale","n=7","flag=true"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,1 @@
+local r = report_run({"shale-fixture", "lines", "4"}, {tail = 2, grep = {"line 2"}, log = "r.log"}) print(r.ok, r.code, r.log)

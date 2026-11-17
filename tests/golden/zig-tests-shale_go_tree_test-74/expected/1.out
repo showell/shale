@@ -1,0 +1,7 @@
+ok.go 0 [no such file]
+bad.go 0 [no such file]
+ok.go 0 [no such file]
+dir.go 0 [dir.go: is a directory]
+gone.go 0 [no such file]
+ok.go 0 [no such file]
+0

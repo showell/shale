@@ -1,0 +1,1 @@
+for k in shale_tokens("k.shale", {tag = "kw_end"}) do print(k.text, k.start) end

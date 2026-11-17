@@ -1,0 +1,2 @@
+print('single quotes work too')
+print("a line\nand another")

@@ -1,0 +1,1 @@
+for m in grep_all("big.txt", "HIT") do print(m.line, m.text) end

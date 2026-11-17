@@ -1,0 +1,1 @@
+{"id":"stops-name_function_below","source":"stops","origin":"tools/differ/stops/name_function_below.shale","files":["name_function_below.shale"],"steps":[{"argv":["{case}/name_function_below.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,1 @@
+print(shale_tokens("k.shale")[1].text == "\"a\\n\"", shale_tokens("k.shale")[2].text == "[=[\nb]=]")

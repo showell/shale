@@ -1,0 +1,1 @@
+print(line_at("log.txt", 0), line_at("log.txt", 5), line_at("log.txt", 7), line_at("log.txt", 3), line_at("log.txt", 17), line_at("log.txt", 18))

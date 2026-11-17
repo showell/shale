@@ -1,0 +1,2 @@
+-- differ-argv: --budget nope=5 {script}
+print(1)

@@ -1,0 +1,2 @@
+── stopped at {base}/case/arg_not_integer.shale:3:7: argument: `arg`: n=seven is not an integer, and its default is one (11 steps)
+── used: 11 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

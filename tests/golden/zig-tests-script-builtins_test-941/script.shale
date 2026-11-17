@@ -1,0 +1,8 @@
+local ok = 0
+for round = 1, 2 do
+  for i = 1, 12 do
+    local m = re_find("x" .. rep("a", 12) .. "y", rep("a", i) .. "y$")
+    if m.at == 14 - i and #m.text == i + 1 and re_match(rep("a", i), rep("a", i) .. "$") then ok = ok + 1 end
+  end
+end
+print(ok)

@@ -1,0 +1,1 @@
+print(#re_find_all("abc", "z"), #re_find_all("ab", ""), #re_find_all("", "x*"), has_key(re_find_all("a", "a")[1], "group"))

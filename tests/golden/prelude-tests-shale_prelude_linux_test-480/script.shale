@@ -1,0 +1,4 @@
+local r = grep_tree("src", "HIT")
+for h in r.hits do print(h.path .. ":" .. h.line .. ": " .. h.text) end
+print(r.files, r.cut)
+for p in r.passed do print(p.path, p.why) end

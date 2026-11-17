@@ -1,0 +1,1 @@
+{"id":"cli-mount_script","source":"cli","origin":"tools/differ/cli/mount_script.shale","files":[],"steps":[{"argv":["cookbook:look.shale","find=differ_never_there","in=."],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

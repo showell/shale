@@ -1,0 +1,4 @@
+── stopped at the Linux prelude:125:9 (in `the Linux prelude's curl_http`): fail: `http` takes body, headers, bearer and timeout_ms, not `data` (219 steps)
+   called from the Linux prelude:199:10 (in `the Linux prelude's http`)
+   called from {base}/case/script.shale:1:1
+── used: 219 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

@@ -1,0 +1,2 @@
+── stopped at {base}/case/arithmetic_divide_zero.shale:3:9: arithmetic: integer division by zero (7 steps)
+── used: 7 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

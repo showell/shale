@@ -1,0 +1,3 @@
+# the inputs the differ collects that are not frozen: origin, why
+src/shale_procs_test.zig:87	its stop's step count follows procs(), the box's process list, which moves between runs
+tools/differ/stops/budget_arena_creates.shale	how many files it creates before its arena stop follows the arena's layouts (outside the frozen surface), which differ between the Zig and the C at the padded path

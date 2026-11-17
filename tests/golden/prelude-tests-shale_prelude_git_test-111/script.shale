@@ -1,0 +1,1 @@
+git_commit("", "fourth", {add = {"e.txt"}}) print(join(git_ls_files(""), ","), git_status("")[1].path)

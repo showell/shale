@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:1: argument: `run` needs a keep: `head`, `tail` (or both), or `whole = N`: what to keep of the output is the script's to say (20 steps)
+── used: 20 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

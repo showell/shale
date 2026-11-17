@@ -1,0 +1,1 @@
+print(re_find("x]y", "[]]").at, re_find("x]y", "[^]x]").text, re_find("a]", "\\]").at)

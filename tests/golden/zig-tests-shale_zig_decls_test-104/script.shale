@@ -1,0 +1,3 @@
+for d in zig_decls("a.zig") do
+  if d.name == "b" or d.name == "write" or d.name == "x" then print(read("a.zig", d.start, d.stop - d.start)) end
+end

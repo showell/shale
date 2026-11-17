@@ -1,0 +1,1 @@
+print(strip_suffix("plans.md", ".md"), strip_suffix("plans.count", ".md"), strip_suffix(".md", ".md"), strip_suffix("a", ""))

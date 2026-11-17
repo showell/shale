@@ -1,0 +1,1 @@
+for e in walk("m:sub") do print(e.path, e.size) end

@@ -1,0 +1,1 @@
+print(re_find("abc", "c", {from = 4}), re_find("abc", "$", {from = 4}).at)

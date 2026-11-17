@@ -1,0 +1,1 @@
+report_run({"shale-fixture", "lines", "1"}, {shown = "one line", grep = {"zz"}, log = "r.log", append_log = true})

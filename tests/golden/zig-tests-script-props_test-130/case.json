@@ -1,0 +1,1 @@
+{"id":"zig-tests-script-props_test-130","source":"zig-tests","origin":"src/script/props_test.zig:130","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,1 @@
+zig_move("h.zig", "i.zig", {"y"}, {from_as = "gopher"})

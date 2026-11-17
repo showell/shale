@@ -1,0 +1,1 @@
+function f(t) if t == nil then return "none" end return #t end print(f(nil), f({1, 2}))

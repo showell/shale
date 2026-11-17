@@ -1,0 +1,7 @@
+edit("a.txt", "one", "two")
+edit("a.txt", "two", "three")
+create("new.txt", "made\n")
+mkdir("d/inner")
+remove_tree("d")
+run({"shale-fixture", "lines", "2"}, {timeout_ms = 10000, tail = 1, log = "old.log"})
+fail("stopped on purpose")

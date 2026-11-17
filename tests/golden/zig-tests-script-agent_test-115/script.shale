@@ -1,0 +1,1 @@
+print(join(glob("README.md"), " "), #glob("none/*.zig"), #glob("none.md"))

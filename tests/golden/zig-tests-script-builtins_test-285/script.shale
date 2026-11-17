@@ -1,0 +1,1 @@
+local b = budget() print(b.reads, b.read_bytes, b.changes, b.change_bytes)

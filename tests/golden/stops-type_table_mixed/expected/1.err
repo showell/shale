@@ -1,0 +1,2 @@
+── stopped at {base}/case/type_table_mixed.shale:2:15: type: a table literal mixes positional and keyed entries: a list or a map, not both (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

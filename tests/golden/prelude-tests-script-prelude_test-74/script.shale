@@ -1,0 +1,1 @@
+print(count_all("big.log", "NEEDL"), find_next("big.log", "NEEDL", 1048577), call_bytes())

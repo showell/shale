@@ -1,0 +1,1 @@
+local m = re_find_all("abc", "z") m.k = 1 print(m.k)

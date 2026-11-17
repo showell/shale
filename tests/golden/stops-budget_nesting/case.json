@@ -1,0 +1,1 @@
+{"id":"stops-budget_nesting","source":"stops","origin":"tools/differ/stops/budget_nesting.shale","files":["budget_nesting.shale"],"steps":[{"argv":["{case}/budget_nesting.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

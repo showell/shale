@@ -1,0 +1,1 @@
+local s = set_of({"a", "b", "a"}) print(count(s), has_key(s, "a"), has_key(s, "z"), count(set_of({})))

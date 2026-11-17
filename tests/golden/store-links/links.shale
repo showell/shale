@@ -1,0 +1,20 @@
+-- Symbolic links, which the store never follows, met by walk, ls, stat and
+-- exists.
+-- differ-before: fixture/setup.shale
+function paths(l)
+  local s = ""
+  for e in l do s = s .. e.path .. "(" .. e.kind .. "," .. e.size .. "," .. e.modified .. ") " end
+  return s
+end
+function st(p) return stat(p) end
+function ex(p) return exists(p) end
+function wk(p) return walk(p) end
+must(run({"ln", "-s", "d", "e/link"}, {timeout_ms = 5000, tail = 5}))
+must(run({"ln", "-s", "nowhere", "e/dangle"}, {timeout_ms = 5000, tail = 5}))
+print(paths(walk("e")))
+print(paths(walk("", {kind = "other"})))
+print(json_write(ls("e")))
+print(attempt(st, "e/link").error)
+print(attempt(ex, "e/dangle").error)
+print(attempt(wk, "e/link").error)
+print(is_dir("e"))

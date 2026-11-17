@@ -1,0 +1,1 @@
+local l = {1, 2, 3} for x in l do push(l, x) end print(#l)

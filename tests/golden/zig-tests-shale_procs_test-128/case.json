@@ -1,0 +1,1 @@
+{"id":"zig-tests-shale_procs_test-128","source":"zig-tests","origin":"src/shale_procs_test.zig:128","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

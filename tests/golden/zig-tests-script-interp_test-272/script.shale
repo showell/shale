@@ -1,0 +1,1 @@
+const SEEN = {} function mark(k) SEEN[k] = true end mark("a") print(count(SEEN))

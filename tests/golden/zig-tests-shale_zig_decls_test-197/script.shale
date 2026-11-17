@@ -1,0 +1,1 @@
+for d in zig_decls("c.zig", {container = "T"}) do print(d.kind, d.name, d.visibility, d.first, d.last, join(d.uses, ","), join(d.reaches, ",")) end

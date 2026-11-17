@@ -1,0 +1,1 @@
+local a = read_or("top.txt", "") local b = read_or("gone", "") print(10 - budget().reads)

@@ -1,0 +1,1 @@
+must(run({"shale-fixture", "exit", "3"}, {timeout_ms = 10000, tail = 5}))

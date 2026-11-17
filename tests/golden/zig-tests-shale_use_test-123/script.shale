@@ -1,0 +1,2 @@
+print(GREETING)
+use("m:lib.shale")

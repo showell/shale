@@ -1,0 +1,4 @@
+function check(n) if n > 2 then fail("too many: " .. n) end return n end
+local good = attempt(check, 1)
+local bad = attempt(check, 5)
+print(good.ok, good.value, bad.ok, bad.class, bad.error, bad.in_function)

@@ -1,0 +1,1 @@
+print(re_match("abc", "a", {from = 1}))

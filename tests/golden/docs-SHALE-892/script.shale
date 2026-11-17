@@ -1,0 +1,6 @@
+const START = ""
+local part = walk_upto("chat", {kind = "file", after = START}, 1)
+local bytes = 0
+for e in part.entries do bytes = bytes + e.size end
+print(#part.entries, bytes, part.done)
+if not part.done then print("resume after " .. part.more) end

@@ -1,0 +1,1 @@
+print(head_lines("none.txt", 2) == nil, tail_lines("none.txt", 2) == nil)

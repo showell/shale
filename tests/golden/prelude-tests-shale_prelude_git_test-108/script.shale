@@ -1,0 +1,1 @@
+git_commit("", "third\n\nits body", {add = "all"}) print(git_log("", {n = 1})[1].subject, git_is_clean(""))

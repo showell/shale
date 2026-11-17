@@ -1,0 +1,1 @@
+edit("top.txt", "top", "pot", {all = 1})

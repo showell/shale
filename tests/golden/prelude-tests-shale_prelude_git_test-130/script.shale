@@ -1,0 +1,1 @@
+git_worktree_add("", "wt", {branch = "feat", new = true}) print(read("wt/a.txt"))

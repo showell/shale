@@ -1,0 +1,1 @@
+print(bad_utf8(""), bad_utf8("abc"), bad_utf8("caf\xc3\xa9"), bad_utf8("\xe2\x82\xac"), bad_utf8("\xf0\x9f\x98\x80!"))

@@ -1,0 +1,12 @@
+-- budget: arena_bytes=2000000
+-- A job's record looked at 500 times under a small arena, as a pool polls
+-- its jobs: each look holds the record's length, so the run ends under Zig.
+-- The C once kept a 64 KiB buffer a look and stopped on the arena (2026-11-17,
+-- c/build/lib.shale's `first_ended`). The record names a pid no kernel gives
+-- (past pid_max's 2^22), so no process is touched and the job is gone.
+create("poll.log.job", "pid=2147483000\npgid=2147483000\nstart=1\nstarted=1\nargv=sleep 60\nreaper=2147483001\nreaper_start=1\n")
+local gone = 0
+for i = 1, 500 do
+  if not job_alive("poll.log.job") then gone = gone + 1 end
+end
+print(gone .. " looks, the job gone at each")

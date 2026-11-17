@@ -1,0 +1,5 @@
+print(edit("src/tcp.zig", {
+  {old = "const x = 1;", new = "const y = 1;"},
+  {old = "const y", new = "const z"},
+  {old = "fn send()", new = "fn send2()"},
+}))

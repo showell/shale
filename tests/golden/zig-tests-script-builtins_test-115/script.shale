@@ -1,0 +1,1 @@
+replace("kept.txt", "k") remove("no/such/file") replace("never.txt", "n")

@@ -1,0 +1,1 @@
+git_commit("", "third", {add = "tracked"}) git_commit("", "third, said again", {add = "tracked", amend = true}) local l = git_log("", {n = 2}) print(l[1].subject, l[2].subject, git_upstream("").ahead)

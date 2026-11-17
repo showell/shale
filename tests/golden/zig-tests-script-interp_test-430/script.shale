@@ -1,0 +1,1 @@
+function f(x) return x end local r = attempt(f 41)

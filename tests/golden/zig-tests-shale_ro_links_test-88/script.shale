@@ -1,0 +1,1 @@
+for e in walk("m:sub", {after = "m:sub/b.zig"}) do print(e.path) end

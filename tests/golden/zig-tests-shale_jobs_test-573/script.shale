@@ -1,0 +1,1 @@
+print(job_stop("fds.log.job"))

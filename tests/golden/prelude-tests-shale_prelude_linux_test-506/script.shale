@@ -1,0 +1,1 @@
+for h in grep_tree("big", "mark 1", {nocase = true}).hits do print(h.line, h.text) end

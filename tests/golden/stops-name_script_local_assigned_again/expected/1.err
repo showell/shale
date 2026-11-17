@@ -1,0 +1,2 @@
+── stopped at {base}/case/name_script_local_assigned_again.shale:4:21: name: `n` is a script `local` that is assigned again, and a function sees only its own parameters and locals: pass `n` in as a parameter (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

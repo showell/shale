@@ -1,0 +1,8 @@
+local j = job_start({"shale-fixture", "sleep", "20000"}, {log = "e.log"})
+for i = 1, 50 do
+  for p in procs() do
+    if p.pid == j.pid and find(p.args, "sleep 20000") ~= nil then print(p.pid .. " " .. p.start) end
+  end
+  sleep(20)
+  if exists("e.log.job") then break end
+end

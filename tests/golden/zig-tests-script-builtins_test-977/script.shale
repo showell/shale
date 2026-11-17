@@ -1,0 +1,1 @@
+print(re_replace("ab", "(a)", "[$1&%1]"))

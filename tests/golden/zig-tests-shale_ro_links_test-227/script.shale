@@ -1,0 +1,1 @@
+run({"shale-fixture", "env", "TOK"}, {timeout_ms = 10000, tail = 5, secrets = {TOK = "k:"}})

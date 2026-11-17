@@ -1,0 +1,1 @@
+git_worktree_remove("", "wt", {force = true}) git_branch_delete("", "feat", {}) print(exists("wt"))

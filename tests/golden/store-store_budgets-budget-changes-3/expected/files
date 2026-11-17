@@ -1,0 +1,21 @@
+root	d	775	-	
+root/a.txt	f	664	7		sha256 21066d108d5319ecb5a1fc4454f42ef22fc5f1c7df49c31d90294950e0ea8b2c
+root/crlf.txt	f	664	6		sha256 58055bdcc73787eb88c78d36f0b4939e9c5dc1c3ad17e25cc85a6833cf1a0cab
+root/d	d	775	-	
+root/d/w	f	664	1		sha256 50e721e49c013f00c62cf59f2163542a9d8df02464efeb615d31051b0fddc326
+root/d/x	f	664	2		sha256 73cb3858a687a8494ca3323053016282f3dad39d42cf62ca4e79dda2aac7d9ac
+root/d/y	d	775	-	
+root/d/y/z	f	664	1		sha256 594e519ae499312b29433b7dd8a97ff068defcba9755b6d5d00e84c524d67b06
+root/e	d	775	-	
+root/empty.txt	f	664	0		sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+root/g	f	664	17		sha256 bbfbd8461de2b86e63b5a7ef89b23de9a86b36f9eacb130314396658800245e4
+scratch	d	775	-	
+scratch/d	d	775	-	
+scratch/d/w	f	664	1		sha256 50e721e49c013f00c62cf59f2163542a9d8df02464efeb615d31051b0fddc326
+scratch/d/x	f	664	2		sha256 73cb3858a687a8494ca3323053016282f3dad39d42cf62ca4e79dda2aac7d9ac
+scratch/d/y	d	775	-	
+scratch/d/y/z	f	664	1		sha256 594e519ae499312b29433b7dd8a97ff068defcba9755b6d5d00e84c524d67b06
+scratch/keys	d	775	-	
+scratch/keys/token	f	664	21		sha256 1683d3752e9b1fe3814d9db086a131a8ae6f6ce76107816ff5909daff9ccaf1a
+scratch/ro	d	775	-	
+scratch/ro/f	f	664	4		sha256 d1d44afba88cabf44cccd8d9fde2daacba31e09e9b7e46526ba9c1e3b41c0a3b

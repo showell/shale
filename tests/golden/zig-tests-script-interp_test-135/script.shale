@@ -1,0 +1,1 @@
+local a = {1} local b = a push(b, 2) print(#a)

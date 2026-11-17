@@ -1,0 +1,2 @@
+const BLOG = "Field Notes"
+print("This blog is called " .. BLOG .. ", " .. #BLOG .. " letters long.")

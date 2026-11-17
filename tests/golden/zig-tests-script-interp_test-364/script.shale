@@ -1,0 +1,1 @@
+print(count({1, 2})) function count(t) return 99 end print(count({1}))

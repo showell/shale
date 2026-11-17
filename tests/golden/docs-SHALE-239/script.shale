@@ -1,0 +1,5 @@
+function parity(n, even)
+  if n == 0 then return even end
+  return parity(n - 1, not even)
+end
+print(parity(4, true), parity(3, true))

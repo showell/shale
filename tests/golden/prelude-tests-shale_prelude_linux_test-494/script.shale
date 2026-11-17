@@ -1,0 +1,1 @@
+local h = grep_tree("src/sub/c.zig", "HIT", {context = 1}).hits[1] print(h.before[1].line, h.before[1].text, h.line, h.after[1].line, h.after[1].text)

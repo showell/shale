@@ -1,0 +1,1 @@
+print(contains(git_diff("", {range = "HEAD", paths = {"a.txt"}}), "+two"))

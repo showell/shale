@@ -1,0 +1,1 @@
+print(re_replace("aaa", "^a", "b"), re_replace("abab", "b$", ""), re_replace("ab ab xab", "\\bab", "X"))

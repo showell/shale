@@ -1,0 +1,1 @@
+local s = rep("x", 160000) local l = {} for i = 1, 200 do push(l, s) end yield() print(#l, #l[200])

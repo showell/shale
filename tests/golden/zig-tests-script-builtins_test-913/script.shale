@@ -1,0 +1,1 @@
+print(line_at("long.txt", 0), line_at("long.txt", 303))

@@ -1,0 +1,2 @@
+-- A bitwise operator: refused.
+print(1 << 2)

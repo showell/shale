@@ -1,0 +1,1 @@
+local a = budget().steps local c = budget().steps print(a > c, a <= 5000000)

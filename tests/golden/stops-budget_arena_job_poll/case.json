@@ -1,0 +1,1 @@
+{"id":"stops-budget_arena_job_poll","source":"stops","origin":"tools/differ/stops/budget_arena_job_poll.shale","files":["budget_arena_job_poll.shale"],"steps":[{"argv":["{case}/budget_arena_job_poll.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

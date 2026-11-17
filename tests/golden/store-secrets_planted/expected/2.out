@@ -1,0 +1,8 @@
+"k:token": the mount `k` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files
+"k:token": the mount `k` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files
+"k:token": the mount `k` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files
+"k:": the mount `k` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files
+"scratch:keys/token" is in the mount `k`, which holds secrets
+"scratch:keys" is in the mount `k`, which holds secrets
+0	<secret PLANTED>
+

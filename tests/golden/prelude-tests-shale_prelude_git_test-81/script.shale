@@ -1,0 +1,1 @@
+local l = git_log("", {fields = {"subject"}}) print(#l, has_key(l[1], "hash"), l[1].subject)

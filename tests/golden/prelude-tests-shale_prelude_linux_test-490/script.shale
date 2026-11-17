@@ -1,0 +1,1 @@
+local r = grep_tree("src", "^fn (one|two)", {regex = true, ext = {"zig"}}) for h in r.hits do print(h.path, h.line) end

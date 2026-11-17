@@ -1,0 +1,10 @@
+local whole = read("t.txt")
+local ls = lines(whole)
+local line = 1
+local ok = true
+for at = 0, #whole - 1 do
+  if line_at("t.txt", at) ~= ls[line] then ok = false print("at " .. at) end
+  if sub(whole, at + 1, at + 1) == "\n" then line = line + 1 end
+end
+if line_at("t.txt", #whole) ~= nil then ok = false end
+if ok then print("ok") end

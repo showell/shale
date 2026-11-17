@@ -1,0 +1,4 @@
+if not exists("dir.roc") then mkdir("dir.roc") end
+for f in roc_tree({"ok.roc", "bad.roc", "ok.roc", "ok.roc", "dir.roc", "ok.roc", "gone.roc", "ok.roc"}) do
+  print(f.path .. " " .. #f.nodes .. " [" .. f.err .. "]")
+end

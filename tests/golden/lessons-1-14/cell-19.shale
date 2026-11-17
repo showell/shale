@@ -1,0 +1,3 @@
+for e in walk_all("", {kind = "file"}) do
+  print(e.path, e.size)
+end

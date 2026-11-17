@@ -1,0 +1,2 @@
+-- A decimal escape: refused.
+print("\65")

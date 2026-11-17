@@ -1,0 +1,1 @@
+local a = {} a.x = 1 a.y = 2 local b = {} b.y = 2 b.x = 1 print(same(a, b), same(a, {x = 1}), same({}, {}), same({x = 1}, {1}))

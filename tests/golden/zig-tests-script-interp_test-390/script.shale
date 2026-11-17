@@ -1,0 +1,6 @@
+function half(n) return tonumber(n) // 2 end
+local good = attempt(half, "10")
+local bad = attempt(half, "ten")
+print(good.ok, good.value, bad.ok, bad.class, bad.line, bad.in_function)
+function say(s) print(s) end
+print(has_key(attempt(say, "said"), "value"))

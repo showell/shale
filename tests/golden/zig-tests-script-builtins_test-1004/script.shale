@@ -1,0 +1,1 @@
+local m = re_find("replacement", "re(?:place)?(ment)?") print(m.text, join(m.groups, "|"))

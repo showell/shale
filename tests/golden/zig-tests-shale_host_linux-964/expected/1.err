@@ -1,0 +1,2 @@
+── stopped at {base}/case/script.shale:1:1: argument: `run`'s `whole` keeps everything, and takes no filter or keep (`re`, `not_re`, `nocase`, `before`, `after`, `head`, `tail`) (31 steps)
+── used: 31 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

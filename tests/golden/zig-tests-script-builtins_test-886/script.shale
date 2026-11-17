@@ -1,0 +1,1 @@
+local r = read_lines("log.txt", 18, 100) print(#r.lines, r.next, r.done)

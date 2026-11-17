@@ -1,0 +1,1 @@
+print(re_find("a warning, then an error", "error|warning").text, re_find("ab", "a|ab").text, re_find("xab", "^a|b").at)

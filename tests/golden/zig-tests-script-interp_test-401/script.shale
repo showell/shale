@@ -1,0 +1,1 @@
+function spin() while true do end end local r = attempt(spin)

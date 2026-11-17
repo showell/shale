@@ -1,0 +1,2 @@
+── stopped at {base}/case/syntax_after_use.shale:3:13: syntax: a character no token starts with, `@` (406 steps)
+── used: 406 of 5000000 steps, 1 of 10000 reads, 6154 of 67108864 read bytes, 0 of 65536 output bytes

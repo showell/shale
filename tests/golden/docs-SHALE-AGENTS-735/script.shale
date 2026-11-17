@@ -1,0 +1,15 @@
+for m in grep("docs/notes.md", ".zig:") do
+  for w in words(m.text) do
+    local r = re_find(w, "(\\w+\\.zig):(\\d+)")
+    if r ~= nil then
+      local name = r.groups[1]
+      local n = parse_int(r.groups[2])
+      local found = glob("**/" .. name)
+      if #found == 0 then
+        print(name .. ":" .. n, "no such file")
+      elseif count_lines(found[1]) < n then
+        print(name .. ":" .. n, found[1] .. " has " .. count_lines(found[1]) .. " lines")
+      end
+    end
+  end
+end

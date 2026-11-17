@@ -1,0 +1,1 @@
+{"id":"stops-store_use_missing","source":"stops","origin":"tools/differ/stops/store_use_missing.shale","files":["store_use_missing.shale"],"steps":[{"argv":["{case}/store_use_missing.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

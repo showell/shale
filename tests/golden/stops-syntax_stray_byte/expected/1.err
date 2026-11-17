@@ -1,0 +1,2 @@
+── stopped at {base}/case/syntax_stray_byte.shale:2:13: syntax: a character no token starts with, the byte \x01 (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

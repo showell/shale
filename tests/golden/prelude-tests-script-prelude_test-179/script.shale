@@ -1,0 +1,1 @@
+print(join(take(drop({"a", "b", "c", "d", "e"}, 1), 3), ","))

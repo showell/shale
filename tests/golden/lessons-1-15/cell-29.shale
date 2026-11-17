@@ -1,0 +1,16 @@
+function title_of(path)
+  local first = lines(read(path))[1]
+  if not starts_with(first, "title: ") then
+    fail(path .. " has no title line")
+  end
+  return sub(first, 8)
+end
+
+for p in {"posts/tide-pools.md", "index.md", "drafts/owls.md"} do
+  local r = attempt(title_of, p)
+  if r.ok then
+    print(p, r.value)
+  else
+    print(p, "skipped: " .. r.error)
+  end
+end

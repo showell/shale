@@ -1,0 +1,1 @@
+{"id":"stops-syntax_end_unopened","source":"stops","origin":"tools/differ/stops/syntax_end_unopened.shale","files":["syntax_end_unopened.shale"],"steps":[{"argv":["{case}/syntax_end_unopened.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,12 @@
+comment	1	--[=[ end
+if ]=]
+name	2	x
+comment	2	--[=x then
+name	3	y
+assign	3	=
+string	3	"-- no"
+comment	3	-- z
+name	4	w
+assign	4	=
+string	4	[==[ ]=] -- ]==]
+name	4	v

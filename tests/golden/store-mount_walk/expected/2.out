@@ -1,0 +1,8 @@
+t:a.txt(file) t:crlf.txt(file) t:d(directory) t:d/w(file) t:d/x(file) t:d/y(directory) t:d/y/z(file) t:e(directory) t:empty.txt(file) 
+t:a.txt(file) t:crlf.txt(file) t:d(directory) t:d/w(file) t:d/x(file) t:d/y(directory) t:d/y/z(file) t:e(directory) t:empty.txt(file) 
+t:d/y/z(file) t:e(directory) t:empty.txt(file) 
+t:d/w(file) t:d/x(file) t:d/y(directory) t:d/y/z(file) t:e(directory) t:empty.txt(file) 
+t:a.txt(file) t:crlf.txt(file) t:d(directory) t:d/w(file) t:d/x(file) t:d/y(directory) t:d/y/z(file) t:e(directory) t:empty.txt(file) 
+`walk`: `after` is "d", which is not under "t:": it is a path an earlier walk of it returned
+t:d/x(file) t:d/y(directory) t:d/y/z(file) 
+["a.txt","crlf.txt","d","e","empty.txt"]	directory	true	true

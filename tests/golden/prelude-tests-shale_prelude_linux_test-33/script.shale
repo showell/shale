@@ -1,0 +1,1 @@
+must(run({"shale-fixture", "kill-self"}, {timeout_ms = 10000, tail = 5}))

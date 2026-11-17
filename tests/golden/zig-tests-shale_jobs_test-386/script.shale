@@ -1,0 +1,1 @@
+print(job_alive("server.log.job"), job_alive("helper.log.job"), job_stop("server.log.job"))

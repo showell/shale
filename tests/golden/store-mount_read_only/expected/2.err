@@ -1,0 +1,2 @@
+── stopped at {base}/case/mount_read_only.shale:7:7: refused: q:f: mount `q` is read-only (149 steps)
+── used: 149 of 5000000 steps, 4 of 10000 reads, 8 of 67108864 read bytes, 59 of 65536 output bytes

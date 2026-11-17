@@ -1,0 +1,1 @@
+edits_all({{"a.txt", {{old = "one", new = "1"}}}, {"c.txt", {{old = "three", new = "3"}}}})

@@ -1,0 +1,1 @@
+print(read("chat/a.md") .. " " .. read("chat/b.md"))

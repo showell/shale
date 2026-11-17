@@ -1,0 +1,1 @@
+print(exists("top.txt"), exists("chat"), is_dir("d/e"))

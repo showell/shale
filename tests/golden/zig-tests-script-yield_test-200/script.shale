@@ -1,0 +1,1 @@
+local l = {} for i = 1, 25 do l[#l + 1] = 7 yield() end print(#l)

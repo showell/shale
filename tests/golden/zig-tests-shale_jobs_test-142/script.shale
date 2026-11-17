@@ -1,0 +1,1 @@
+local w = job_wait("lost.log.job", {timeout_ms = 5000}) print(w.ended, has_key(w, "code"), has_key(w, "signal"))

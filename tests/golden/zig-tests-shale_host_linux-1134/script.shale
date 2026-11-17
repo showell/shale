@@ -1,0 +1,1 @@
+local p = {} for e in walk("runs:.") do push(p, e.path) end print(join(p, ","))

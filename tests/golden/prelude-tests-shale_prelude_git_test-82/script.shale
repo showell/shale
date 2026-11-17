@@ -1,0 +1,1 @@
+print(git_show("", "HEAD:a.txt"))

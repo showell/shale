@@ -1,0 +1,1 @@
+local n = 0 for k in zig_tokens("k.zig") do n = n + 1 end print(n)

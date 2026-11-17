@@ -1,0 +1,2 @@
+── stopped at {base}/case/refused_function_value.shale:2:11: refused: functions are not values in this language: declare one at the top level with `function name(...)` (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

@@ -1,0 +1,2 @@
+local l = {"b", "c", "a"}
+print(join(sort(l), ","), join(l, ","), join(sort({3, 1, 2}, "desc"), ","), join(sort({"x", "y"}, "asc"), ","))

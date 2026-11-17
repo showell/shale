@@ -1,0 +1,1 @@
+for name in ls("") do print(name) end

@@ -1,0 +1,1 @@
+print(run({"shale-fixture", "env", "X"}, {timeout_ms = 10000, tail = 5, secrets = {X = "k:new"}}).out)

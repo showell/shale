@@ -1,0 +1,3 @@
+-- `create` over a file already there: store.
+create("a.txt", "one")
+create("a.txt", "two")

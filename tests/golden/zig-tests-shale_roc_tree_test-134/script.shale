@@ -1,0 +1,3 @@
+if not exists("dir.roc") then mkdir("dir.roc") end
+local trees = roc_tree({"big.roc", "big2.roc", "ok.roc", "dir.roc"})
+for f in trees do print(f.path .. " " .. #f.nodes .. " [" .. f.err .. "]") end

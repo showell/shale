@@ -1,0 +1,1 @@
+edits_all({{"x.txt", {{old = "keep", new = "kept"}}}, {"w.txt", {{old = "foo", new = "baz", word = true}}}})

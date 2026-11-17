@@ -1,0 +1,3 @@
+const got = roc_tree({"empty.roc"})
+for n in got[1].nodes do print(n.kind .. " " .. n.depth .. " " .. n.line .. "." .. n.col .. "-" .. n.end_line .. "." .. n.end_col) end
+print(#roc_tree({}))

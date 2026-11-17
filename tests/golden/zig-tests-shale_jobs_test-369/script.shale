@@ -1,0 +1,1 @@
+print(job_alive("spent.log.job"), job_alive("kept.log.job"), job_stop("kept.log.job"))

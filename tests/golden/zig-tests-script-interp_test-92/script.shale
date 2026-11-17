@@ -1,0 +1,1 @@
+function h(a, b?) return b end print(attempt(h, 1).ok)

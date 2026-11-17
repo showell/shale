@@ -1,0 +1,3 @@
+-- A loop that never ends: budget steps.
+local n = 0
+while true do n = n + 1 end

@@ -1,0 +1,1 @@
+local w = walk("") print(#w, w[#w].kind, w[#w].path)

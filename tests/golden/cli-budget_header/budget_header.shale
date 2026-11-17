@@ -1,0 +1,3 @@
+-- budget: steps=300 output_bytes=100
+-- The header's budgets, printed and held to.
+for i = 1, 50 do print("line " .. i) end

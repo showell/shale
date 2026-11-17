@@ -1,0 +1,1 @@
+print(read("ro:a.zig"), exists("ro:sub"), #ls("ro:"))

@@ -1,0 +1,3 @@
+-- A table joined to a string: type.
+local t = {}
+print("a" .. t)

@@ -1,0 +1,1 @@
+shale: a `-- budget:` line after the script's first line of code is never read: put it among the comments opening the script

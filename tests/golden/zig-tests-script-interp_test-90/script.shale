@@ -1,0 +1,1 @@
+function g(a?, b?) return tostring(a) .. tostring(b) end print(g(), g(1), g(1, 2))

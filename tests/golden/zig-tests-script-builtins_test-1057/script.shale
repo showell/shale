@@ -1,0 +1,1 @@
+print(re_find("aa", "^a", {from = 2}), re_find("xab ab", "\\bab", {from = 2}).at)

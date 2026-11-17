@@ -1,0 +1,1 @@
+print(join(re_find("ac", "(a)(b)?(c)").groups, "|"))

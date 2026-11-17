@@ -1,0 +1,4 @@
+local v = json_read("{\"result\": \"success\", \"messages\": [{\"id\": 7, \"flags\": [\"read\"], \"r\": 1.5e3, \"neg\": -12}], \"ok\": true, \"gone\": null, \"s\": \"a\\u00e9\\ud83d\\ude00\\n\"}")
+print(v.result, #v.messages, v.messages[1].id, v.messages[1].flags[1], v.messages[1].r, v.messages[1].neg, v.ok, has_key(v, "gone"), v.s)
+print(json_write(v))
+print(json_write(json_read("[]")), json_write({a = {}, b = {1, "x"}}), json_write(json_read("[1, null]", {null = 0})))

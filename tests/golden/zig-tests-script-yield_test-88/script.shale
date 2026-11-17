@@ -1,0 +1,7 @@
+function big() local l = {} for i = 1, 20000 do push(l, "item " .. i) end return l end
+local n = 0
+for x in big() do n = n + 1 end
+yield()
+for x in big() do if n > 0 then break end end
+yield()
+print(n)

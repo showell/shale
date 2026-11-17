@@ -1,0 +1,7 @@
+comment	1	-- a
+kw_local	2	local
+name	2	end_col
+assign	2	=
+int	2	12
+plus	2	+
+string	2	'x'

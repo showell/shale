@@ -1,0 +1,2 @@
+── stopped at {base}/case/name_attempt_missing.shale:2:15: name: `attempt` calls a function of the script declared above it, and there is no function `later` above this line (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

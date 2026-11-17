@@ -1,0 +1,1 @@
+git_merge("", "side", {timeout_ms = 300})

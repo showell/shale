@@ -1,0 +1,2 @@
+-- A library that is not there: store.
+use("cookbook:no_such_library.shale")

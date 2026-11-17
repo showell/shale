@@ -1,0 +1,1 @@
+print(re_match("FAILED", "fail", {nocase = true}), re_match("FAILED", "fail"), re_find("Ab", "[^a]", {nocase = true}).text)

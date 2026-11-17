@@ -1,0 +1,1 @@
+host("edits_write", {{"a.txt", {}, 3}})

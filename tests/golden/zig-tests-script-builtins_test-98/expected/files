@@ -1,0 +1,6 @@
+root	d	775	-	
+root/d	d	775	-	
+root/d/e	d	775	-	
+root/new	d	775	-	
+root/new/x.txt	f	664	6		sha256 25b6746d5172ed6352966a013d93ac846e1110d5a25e8f183b5931f4688842a1
+scratch	d	775	-	

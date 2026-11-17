@@ -1,0 +1,1 @@
+local was = job_stop("slow.log.job") print(was, job_alive("slow.log.job"), job_stop("slow.log.job"))

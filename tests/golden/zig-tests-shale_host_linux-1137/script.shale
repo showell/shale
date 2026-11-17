@@ -1,0 +1,1 @@
+print(sub(host("run", {"shale-fixture", "pwd"}, {timeout_ms = 10000, tail = 1, cwd = "runs:logs"}).out, -15))

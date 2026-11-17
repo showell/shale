@@ -1,0 +1,3 @@
+── budgets from the script's header: reads=3
+── stopped at {base}/case/budget_reads.shale:4:24: budget reads: the store-read budget (count) ran out (67 steps)
+── used: 67 of 5000000 steps, 3 of 3 reads, 3 of 67108864 read bytes, 6 of 65536 output bytes

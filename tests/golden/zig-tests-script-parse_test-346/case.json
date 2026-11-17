@@ -1,0 +1,1 @@
+{"id":"zig-tests-script-parse_test-346","source":"zig-tests","origin":"src/script/parse_test.zig:346","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,16 @@
+local long = ""
+for i = 1, 600 do long = long .. "0123456789" end
+local j = job_start({"shale-fixture", "sleep", "20000", long}, {log = "l.log"})
+local whole = false
+local cut = true
+for i = 1, 50 do
+  for p in procs() do
+    if p.pid == j.pid and find(p.args, "sleep 20000") ~= nil then
+      whole = #p.args == #"shale-fixture sleep 20000 " + #long
+      cut = get(p, "args_cut", false)
+    end
+  end
+  if whole then break end
+  sleep(20)
+end
+print(whole, cut, job_stop(j))

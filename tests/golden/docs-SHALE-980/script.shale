@@ -1,0 +1,4 @@
+local fields = words("2026-10-17 GET /x 200 log-x")
+print(parse_int(get(fields, 4, "")), parse_int(get(fields, 5, "")), get(fields, 9, "none"))
+local at = find_in("chat/channels/general/sessions/plans.md", "message 7,")
+print(line_at("chat/channels/general/sessions/plans.md", at))

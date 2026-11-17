@@ -1,0 +1,1 @@
+for i = 1, 64 do host("run", {"x"}, {timeout_ms = 10, tail = 1}) end print("ok", budget().programs)

@@ -1,0 +1,1 @@
+job_start({"no-such-program-anywhere"}, {log = "x.log"})

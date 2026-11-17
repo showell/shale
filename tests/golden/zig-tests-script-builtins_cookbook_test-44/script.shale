@@ -1,0 +1,1 @@
+print(read_or("top.txt", "none"), read_or("missing", "none"), read_or("chat/missing.count", nil))

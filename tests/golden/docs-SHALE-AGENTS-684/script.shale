@@ -1,0 +1,11 @@
+local n = edit("src/tcp.zig", {
+  {old = [=[
+fn check() void {
+    props.always(@src(), true, "tcp: what is sent was queued", .{});
+}]=], new = [=[
+fn check(queued: bool) void {
+    props.always(@src(), queued, "tcp: what is sent was queued", .{});
+}]=]},
+  {old = "// DEPARTS (simpler): no SACK.", new = "// DEPARTS (simpler): no SACK, no window scaling."},
+})
+print(n .. " edits")

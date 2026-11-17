@@ -1,0 +1,3 @@
+print(#walk_all("chat", {}))
+function walk_all(p, o) return {1} end
+print(#walk_all("chat", {}))

@@ -1,0 +1,4 @@
+local r = host("run", {"shale-fixture", "env", "MODE"}, {timeout_ms = 10000, tail = 1, env = {MODE = "pci"}})
+print(r.out)
+local s = host("run", {"shale-fixture", "env", "API_KEY"}, {timeout_ms = 10000, tail = 1, secrets = {API_KEY = "key.txt"}, log = "run.log"})
+print(s.out)

@@ -1,0 +1,2 @@
+── stopped at {base}/case/cell-04.shale:3:13: refused: `/` divides into a float, and this language has no floats: use `//` (integer division) (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

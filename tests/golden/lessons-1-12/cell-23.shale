@@ -1,0 +1,5 @@
+for name in ls("posts") do
+  local p = "posts/" .. name
+  local m = re_find(read(p), [=[date: (\d+-\d+)]=])
+  print(name, "'the' " .. count_in(p, "the") .. " times", "month " .. m.group)
+end

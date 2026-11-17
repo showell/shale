@@ -1,0 +1,1 @@
+{"id":"stops-fail_must","source":"stops","origin":"tools/differ/stops/fail_must.shale","files":["fail_must.shale"],"steps":[{"argv":["{case}/fail_must.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

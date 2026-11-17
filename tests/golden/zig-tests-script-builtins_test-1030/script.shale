@@ -1,0 +1,1 @@
+local a = {} push(a, a) local b = {} push(b, b) print(same(a, b))

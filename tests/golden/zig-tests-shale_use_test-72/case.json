@@ -1,0 +1,1 @@
+{"id":"zig-tests-shale_use_test-72","source":"zig-tests","origin":"src/shale_use_test.zig:72","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

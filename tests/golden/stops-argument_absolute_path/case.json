@@ -1,0 +1,1 @@
+{"id":"stops-argument_absolute_path","source":"stops","origin":"tools/differ/stops/argument_absolute_path.shale","files":["argument_absolute_path.shale"],"steps":[{"argv":["{case}/argument_absolute_path.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,1 @@
+run({"shale-fixture", "both", "tok", "0"}, {timeout_ms = 10000, stdout_secret = "k:hidden"})

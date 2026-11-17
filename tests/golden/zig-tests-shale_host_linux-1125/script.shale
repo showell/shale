@@ -1,0 +1,2 @@
+replace("runs:logs/a.txt", "via the mount")
+print(read("runs:logs/a.txt"), exists("runs:"), sub(host("real", "runs:logs"), -14), sub(host("real", ""), 1, 1))

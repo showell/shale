@@ -1,0 +1,10 @@
+`edits_write`: f1 is named twice: one list of its edits, which apply in sequence
+`edits_write`: item 2 must be `{p, {edits}}`, not a list
+`edit`: "zzz" is not in f2: its line "zzz" is not in it
+`edit` of no edits: the list is empty
+`edit`'s second argument is a list of edits, `{{old = ..., new = ...}, ...}`, not a map
+`edit` takes a list, given a map
+0
+edit f1: 1 hunk, -1 +1 lines
+edit f2: 1 hunk, -1 +1 lines
+edit f3: 1 hunk, -1 +1 lines

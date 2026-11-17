@@ -1,0 +1,1 @@
+local s = "" for i = 5, 1, -2 do s = s .. i end print(s)

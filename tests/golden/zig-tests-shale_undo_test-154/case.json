@@ -1,0 +1,1 @@
+{"id":"zig-tests-shale_undo_test-154","source":"zig-tests","origin":"src/shale_undo_test.zig:154","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

@@ -1,0 +1,1 @@
+git_push("", {remote = "origin", branch = "main"}) local u = git_upstream("") print(u.name, u.ahead, u.behind)

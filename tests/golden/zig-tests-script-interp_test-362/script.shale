@@ -1,0 +1,1 @@
+function count(t) return 99 end print(count({1}))

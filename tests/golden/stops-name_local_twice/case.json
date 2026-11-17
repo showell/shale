@@ -1,0 +1,1 @@
+{"id":"stops-name_local_twice","source":"stops","origin":"tools/differ/stops/name_local_twice.shale","files":["name_local_twice.shale"],"steps":[{"argv":["{case}/name_local_twice.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

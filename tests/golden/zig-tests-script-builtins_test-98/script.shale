@@ -1,0 +1,1 @@
+replace("new/x.txt", "one") append("new/x.txt", "two") mkdir("d/e") remove("top.txt") remove_tree("chat")

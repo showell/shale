@@ -1,0 +1,1 @@
+print(rep("ab", 3), #rep("x", 0), substitute("a.b.c", ".", "::"), substitute("aaa", "aa", "b"), substitute("abc", "z", "y", {missing_ok = true}))

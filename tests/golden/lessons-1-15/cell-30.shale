@@ -1,0 +1,8 @@
+local left = budget()
+print("steps left:", left.steps)
+print("changes left:", left.changes)
+
+local n = 0
+while true do
+  n = n + 1
+end

@@ -1,0 +1,3 @@
+-- A function given too many arguments: argument.
+function f(a) return a end
+print(f(1, 2))

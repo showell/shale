@@ -1,0 +1,8 @@
+local a = {n = 1}
+local b = a
+local l = {a, a}
+yield()
+a.n = 2
+print(b.n, l[1].n, l[2].n)
+l[1].n = 3
+print(a.n, l[2].n)

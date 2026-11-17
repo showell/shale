@@ -1,0 +1,1 @@
+local n = 0 for k = 1, 25 do for e in walk("many") do n = n + count_in(e.path, "y") end end print(n)

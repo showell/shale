@@ -1,0 +1,1 @@
+git_push("", {remote = "origin", branch = "main"}) git_fetch("", {all = true}) print(git_log("", {n = 1, ref = "origin/main"})[1].subject)

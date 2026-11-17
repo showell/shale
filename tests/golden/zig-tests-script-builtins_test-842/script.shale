@@ -1,0 +1,1 @@
+substitute("abc", "", "x")

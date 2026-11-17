@@ -1,0 +1,1 @@
+local r = zig_renames("m.zig", {served = "g.served", open_now = "g.open_now"}) print(r.renamed, r.left_in_comments)

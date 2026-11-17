@@ -1,0 +1,1 @@
+{"id":"stops-refused_run_shell","source":"stops","origin":"tools/differ/stops/refused_run_shell.shale","files":["refused_run_shell.shale"],"steps":[{"argv":["{case}/refused_run_shell.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

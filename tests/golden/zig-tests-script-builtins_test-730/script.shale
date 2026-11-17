@@ -1,0 +1,12 @@
+local size = stat("big.txt").size
+local lines = 0
+local abs = 0
+local first = nil
+local at = 0
+while at < size do
+  lines = lines + count_lines("big.txt", at, 700)
+  abs = abs + count_in("big.txt", "ab", at, 700)
+  if first == nil then first = find_in("big.txt", "b\na\nb", at, 700) end
+  at = at + 700
+end
+print(lines, abs, first)

@@ -1,0 +1,1 @@
+{"id":"zig-tests-shale_roc_tree_test-134","source":"zig-tests","origin":"src/shale_roc_tree_test.zig:134","files":["script.shale"],"steps":[{"argv":["{case}/script.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

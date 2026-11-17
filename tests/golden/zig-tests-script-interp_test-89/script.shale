@@ -1,0 +1,1 @@
+function f(a, b?) if b == nil then return a end return a + b end print(f(1), f(1, 2))

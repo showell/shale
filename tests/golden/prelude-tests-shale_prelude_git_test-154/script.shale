@@ -1,0 +1,1 @@
+git_tag("", "v1", {msg = "the first\n\nits body"}) git_tag("", "light", {rev = "HEAD~1"}) git_push("", {tag = "v1"}) local there = must(run({"git", "-C", real("remote.git"), "tag", "-n1"}, {timeout_ms = 10000, whole = 10000})).out print(contains(there, "v1"), contains(there, "the first"), contains(there, "light"))

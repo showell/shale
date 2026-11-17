@@ -1,0 +1,5 @@
+-- A script local assigned again, read in a function: name, naming a parameter.
+local n = 0
+n = n + 1
+function f() return n end
+print(f())

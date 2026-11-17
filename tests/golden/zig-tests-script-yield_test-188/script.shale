@@ -1,0 +1,2 @@
+-- yield here
+local s = "yield" print(s)

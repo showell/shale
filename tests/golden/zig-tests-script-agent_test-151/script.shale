@@ -1,0 +1,1 @@
+print(edit("src/sub/deep.zig", "send", "transmit", {all = true, word = true}))

@@ -1,0 +1,2 @@
+── stopped at {base}/case/syntax_long_string_closed_early.shale:2:20: name: no local `b`: declare it with `local b = ...` (there are no globals; Shale's builtins and preludes: `shale --help`) (0 steps)
+── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

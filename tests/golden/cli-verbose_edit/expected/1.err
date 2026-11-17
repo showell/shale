@@ -1,0 +1,5 @@
+── effects (2) ──
+replace a.txt: ok
+edit a.txt: ok
+── finished (148 steps)
+── used: 148 of 5000000 steps, 3 of 10000 reads, 28 of 67108864 read bytes, 65 of 65536 output bytes

@@ -1,0 +1,1 @@
+zig_move("f.zig", "g.zig", {{kind = "const", name = "foo"}}, {after = "h"})

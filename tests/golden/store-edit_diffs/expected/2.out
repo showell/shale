@@ -1,0 +1,29 @@
+edit t1: 1 hunk, -1 +1 lines
+1
+edit t2: 1 hunk, -2 +1 lines
+1
+edit t3: 1 hunk, -3 +2 lines
+3
+edit t3b: 1 hunk, -3 +1 lines
+2
+edit t4: 1 hunk, -1 +2 lines
+1
+edit t5: 1 hunk, -1 +1 lines
+2
+edit t6: 4 hunks, -5 +6 lines
+4
+edit t7: 1 hunk, -1 +1 lines
+2
+edit t8: 1 hunk, -1 +1 lines
+2
+edit t9: 1 hunk, -4 +1 lines
+3
+`edit`: "zzz" is not in t1: its line "zzz" is not in it
+`edit`: "  nothing here at all
+nope" is not in t6: its line "nothing here at all" is not in it (edit 2 of 2; none is made)
+`edit`: "first
+second line HERE
+" is not in t10: its line "first" is not in it
+`edit`: "second line here
+alpha" is not in t10: each of its lines is in it, but not together (the blank lines or the indentation between them differ)
+`edit`: "a" is in t10 5 times: a longer `old` picks one, or `{all = true}` changes every one

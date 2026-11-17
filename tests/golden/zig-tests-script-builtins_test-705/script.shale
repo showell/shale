@@ -1,0 +1,1 @@
+local n = 0 local at = 0 while true do local part = read("big.txt", at, 1000) if part == "" then break end n = n + #part at = at + #part end print(n)

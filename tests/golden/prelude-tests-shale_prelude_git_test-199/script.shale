@@ -1,0 +1,1 @@
+git_merge(".", "side") print(git_log("", {n = 1})[1].subject, exists("i.txt"))

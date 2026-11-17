@@ -1,0 +1,1 @@
+print(job_stop("victim.log.job"))

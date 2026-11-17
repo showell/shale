@@ -1,0 +1,1 @@
+local m = {x = {9}} push_at(m, "x", 1) print(join(m.x, ","))

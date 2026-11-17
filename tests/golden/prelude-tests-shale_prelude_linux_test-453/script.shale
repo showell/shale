@@ -1,0 +1,1 @@
+print(copy("site/index.html", "one.html"), read("one.html"))

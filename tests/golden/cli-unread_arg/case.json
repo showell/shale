@@ -1,0 +1,1 @@
+{"id":"cli-unread_arg","source":"cli","origin":"tools/differ/cli/unread_arg.shale","files":["unread_arg.shale"],"steps":[{"argv":["{case}/unread_arg.shale","nope=1"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

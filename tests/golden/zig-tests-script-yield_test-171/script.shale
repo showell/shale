@@ -1,0 +1,1 @@
+function f() yield() return "v" end local m = {a = f(), b = 2, c = f()} print(m.a .. m.c, m.b)
