@@ -74,7 +74,10 @@ pub const T = struct {
         const fixture_abs = if (std.fs.path.isAbsolute(fixture)) fixture else try std.fmt.allocPrint(a, "{s}/{s}", .{ here, fixture });
         t.path_env = try std.fmt.allocPrint(a, "PATH={s}:/usr/bin:/bin", .{std.fs.path.dirname(fixture_abs).?});
         const reaper = if (std.fs.path.isAbsolute(shale_exe)) shale_exe else try std.fmt.allocPrint(a, "{s}/{s}", .{ here, shale_exe });
-        t.host = .{ .alloc = testing.allocator, .root_abs = t.root, .cwd_abs = try a.dupe(u8, here), .env = try a.dupe([]const u8, &.{t.path_env}), .reaper = reaper };
+        // This tree's zig-ast, never the one installed under `tools`.
+        const zig_ast = @import("shale_test_options").zig_ast;
+        const zig_ast_abs = if (std.fs.path.isAbsolute(zig_ast)) zig_ast else try std.fmt.allocPrint(a, "{s}/{s}", .{ here, zig_ast });
+        t.host = .{ .alloc = testing.allocator, .root_abs = t.root, .cwd_abs = try a.dupe(u8, here), .env = try a.dupe([]const u8, &.{t.path_env}), .reaper = reaper, .zig_ast_exe = zig_ast_abs };
     }
 
     pub fn deinit(t: *T) void {

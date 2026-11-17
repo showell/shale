@@ -1,13 +1,12 @@
-//! Tests `zig_decls` over a historical webbox file
-//! (`git show 589837e^:src/linux_host.zig` in its checkout) and hand-written
-//! fixtures, and the pure reader (`shale_zig_ast.decls`) over this repo's
-//! src/**/*.zig and webbox's.
+//! Tests `zig_decls` and `zig_tokens` through the prelude and zig-ast, over a
+//! historical webbox file (`git show 589837e^:src/linux_host.zig` in its
+//! checkout) and hand-written fixtures. The pure reader's property over this
+//! repo's sources and webbox's is zig-ast's (tools/zig_ast/zig_ast_test.zig).
 
 const std = @import("std");
 const testing = std.testing;
 const T = @import("shale_test_host.zig").T;
 const host_linux = @import("shale_host_linux.zig");
-const zig_ast = @import("shale_zig_ast.zig");
 const webbox_root = @import("shale_test_options").webbox_root;
 
 fn init(t: *T) !void {
@@ -134,61 +133,6 @@ test "zig_decls: a step a token and a node, more for a file four times the size"
     // Five tokens and two nodes a line: 600 lines more are 4,200 more.
     if (steps[1] < steps[0] + 7 * 600) {
         std.debug.print("{d} steps at 200 lines, {d} at 800: less than a step a token and a node more\n", .{ steps[0], steps[1] });
-        return error.TestUnexpectedResult;
-    }
-}
-
-test "zig_decls over this repo's src/**/*.zig and webbox's: in file order, never overlapping, and between them only whitespace and comments" {
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    var threaded = std.Io.Threaded.init(testing.allocator, .{});
-    defer threaded.deinit();
-    const io = threaded.io();
-    var files: usize = 0;
-    var listed: usize = 0;
-    for ([_][]const u8{ "src", webbox_root ++ "/src" }) |root| {
-        var dir = try std.Io.Dir.cwd().openDir(io, root, .{ .iterate = true });
-        defer dir.close(io);
-        var walker = try dir.walk(a);
-        while (try walker.next(io)) |e| {
-            if (e.kind != .file or !std.mem.endsWith(u8, e.basename, ".zig")) continue;
-            const src = try dir.readFileAllocOptions(io, e.path, a, .limited(16 << 20), .of(u8), 0);
-            const got = switch (try zig_ast.decls(a, src)) {
-                .ok => |ok| ok.decls,
-                else => {
-                    std.debug.print("{s}/{s} does not parse\n", .{ root, e.path });
-                    return error.TestUnexpectedResult;
-                },
-            };
-            var at: usize = 0;
-            for (got) |d| {
-                if (d.start < at or d.stop <= d.start) {
-                    std.debug.print("{s}/{s}: `{s}` at {d}..{d} overlaps or is out of order (at {d})\n", .{ root, e.path, d.name, d.start, d.stop, at });
-                    return error.TestUnexpectedResult;
-                }
-                try onlyComments(a, e.path, src[at..d.start]);
-                at = d.stop;
-            }
-            try onlyComments(a, e.path, src[at..]);
-            files += 1;
-            listed += got.len;
-        }
-    }
-    try testing.expect(files > 80);
-    try testing.expect(listed > 2000);
-}
-
-/// Asserts a gap between declarations holds no token but a container doc
-/// comment (`//!`).
-fn onlyComments(a: std.mem.Allocator, path: []const u8, gap: []const u8) !void {
-    const z = try a.dupeSentinel(u8, gap, 0);
-    var tz = std.zig.Tokenizer.init(z);
-    while (true) {
-        const t = tz.next();
-        if (t.tag == .eof) return;
-        if (t.tag == .container_doc_comment) continue;
-        std.debug.print("src/{s}: a gap holds `{s}` ({s})\n", .{ path, z[t.loc.start..t.loc.end], @tagName(t.tag) });
         return error.TestUnexpectedResult;
     }
 }

@@ -75,8 +75,6 @@ const coverage_files = [_][]const u8{
     "src/shale_host_run.zig",
     "src/shale_host_linux.zig",
     "src/shale_host_zig.zig",
-    "src/shale_zig_ast.zig",
-    "src/shale_zig_move.zig",
     "src/shale_host_setup.zig",
     "src/script/cli.zig",
 };
@@ -140,6 +138,34 @@ pub fn build(b: *std.Build) void {
     const run_script = b.addRunArtifact(runner);
     run_script.addPassthruArgs();
     b.step("script", "run a Shale script: zig build script -- [--root DIR] [--verbose] [--budget NAME=N]... [<file.shale> | -e SOURCE] [name=value ...]").dependOn(&run_script.step);
+
+    // zig-ast (tools/zig_ast): Zig's own tokenizer and parser in a program of
+    // its own, which the host's Zig tools ask (src/shale_host_zig.zig), so
+    // no file of the host imports std.zig's parser. `zig build` installs it
+    // beside `shale`; `shale tools/zig_ast/install.shale` puts it where the
+    // host looks, `tools:zig-ast/bin/zig-ast`. The wire is one file both
+    // sides import (src/shale_zig_wire.zig); webbox's `zig_refs.zig` reads
+    // `zig_imports`' calls.
+    const zigAst = struct {
+        fn of(bb: *std.Build, t: std.Build.ResolvedTarget, mode: std.builtin.Optimize, refs: std.Build.LazyPath) *std.Build.Module {
+            return bb.createModule(.{
+                .root_source_file = bb.path("tools/zig_ast/main.zig"),
+                .target = t,
+                .optimize = mode,
+                .imports = &.{
+                    .{ .name = "zig_wire", .module = bb.createModule(.{ .root_source_file = bb.path("src/shale_zig_wire.zig") }) },
+                    .{ .name = "zig_refs", .module = bb.createModule(.{ .root_source_file = refs }) },
+                },
+            });
+        }
+    }.of;
+    const zig_refs_path = webbox_dep.path("src/zig_refs.zig");
+    const installed_zig_ast = b.addExecutable(.{ .name = "zig-ast", .root_module = zigAst(b, target, installed_optimize, zig_refs_path) });
+    // The tests' own: the mode they are built in, so a change to it compiles
+    // in seconds.
+    const zig_ast = b.addExecutable(.{ .name = "zig-ast", .root_module = zigAst(b, target, optimize, zig_refs_path) });
+    const zig_ast_install = b.addInstallArtifact(installed_zig_ast, .{});
+    b.step("zig-ast", "zig-ast alone (tools/zig_ast), ReleaseSafe, into the prefix's bin: what tools/zig_ast/install.shale runs").dependOn(&zig_ast_install.step);
 
     // Times Shale's hot paths (src/script_bench.zig). No gate runs it.
     const webbox_rs = b.dependency("webbox", .{ .target = target, .optimize = .safe });
@@ -249,6 +275,7 @@ pub fn build(b: *std.Build) void {
         b.installArtifact(installed_runner);
         b.installArtifact(program(b, "shale-sign", "src/shale_sign.zig", target, installed_optimize, signer_imports));
         b.installArtifact(program(b, "shale-gate", "tools/shale_gate.zig", target, installed_optimize, &.{}));
+        b.getInstallStep().dependOn(&zig_ast_install.step);
     }
 
     const test_step = b.step("test", "Run unit tests");
@@ -304,6 +331,8 @@ pub fn build(b: *std.Build) void {
     shale_options.addOptionPath("fixture", fixture.getEmittedBin());
     // The jobs' reaper is `shale` itself (`shale --reap`): its tests run it.
     shale_options.addOptionPath("shale", runner.getEmittedBin());
+    // The zig-ast the host's Zig tools ask in the tests: this tree's own.
+    shale_options.addOptionPath("zig_ast", zig_ast.getEmittedBin());
     // The mode the install's `shale` is really configured with, so a test
     // holds it without paying for that compile.
     shale_options.addOption([]const u8, "installed_mode", @tagName(installed_runner.root_module.optimize.?));
@@ -359,6 +388,18 @@ pub fn build(b: *std.Build) void {
             test_step.dependOn(&unit_run.step);
         }
     };
+    // zig-ast's own tests (tools/zig_ast): the planner, the mover and the
+    // reader over this repo's sources and webbox's, a process of their own.
+    {
+        const unit = b.addTest(.{ .root_module = zigAst(b, target, optimize, zig_refs_path), .filters = if (test_filter) |f| b.dupeStrings(&.{f}) else &.{}, .test_runner = timing });
+        unit.root_module.addImport("shale_test_options", shale_options.createModule());
+        unit.step.dependOn(&fmt_check.step);
+        quick.dependOn(&unit.step);
+        const unit_run = b.addRunArtifact(unit);
+        unit_run.has_side_effects = true;
+        unit_run.step.dependOn(quick);
+        test_step.dependOn(&unit_run.step);
+    }
     // `zig build script-coverage` reports the lines no unit test runs: the
     // coverage SDK's `linecov` over the two unit binaries,
     // every file of `coverage_files` measured in one run of each (not the
@@ -451,6 +492,7 @@ pub fn build(b: *std.Build) void {
         const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt(
             "bin=\"$(cd \"$(dirname \"$0\")\" && pwd)/$(basename \"$0\")\"; cd '{s}' || exit 1; " ++
                 "PATH=\"$(dirname \"$bin\"):$PATH\"; export PATH; " ++
+                "SHALE_ZIG_AST=\"$(cd \"$(dirname \"$1\")\" && pwd)/$(basename \"$1\")\"; export SHALE_ZIG_AST; " ++
                 "tmp=$(mktemp -d) || exit 1; trap 'rm -rf \"$tmp\"' EXIT; " ++
                 "tools=\"$HOME/tools\"; [ -d \"$tools\" ] || {{ tools=\"$tmp/tools\"; mkdir \"$tools\"; }}; " ++
                 "mkdir \"$tmp/scratch\" || exit 1; " ++
@@ -465,6 +507,8 @@ pub fn build(b: *std.Build) void {
             .{here},
         ) });
         run.addFileArg(runner.getEmittedBin());
+        // This tree's zig-ast, for the Zig recipes: `$1`, as SHALE_ZIG_AST.
+        run.addFileArg(zig_ast.getEmittedBin());
         run.has_side_effects = true;
         run.stdio = .inherit;
         run.step.dependOn(quick);

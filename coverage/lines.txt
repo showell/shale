@@ -31,8 +31,6 @@ src/shale_host_jobs.zig 18
 src/shale_host_run.zig 12
 src/shale_host_linux.zig 13
 src/shale_host_zig.zig 31
-src/shale_zig_ast.zig 4
-src/shale_zig_move.zig 2
 src/shale_host_setup.zig 4
 src/script/cli.zig 0
 src/shale_prelude_linux.shale 0

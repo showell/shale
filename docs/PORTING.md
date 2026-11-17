@@ -23,8 +23,12 @@ no system call:
   `src/shale_host_tokens.zig` and `src/shale_host_flat_tree.zig`: JSON,
   `re_lines`, `shale_tokens` and the reading of roc-ast's and go-ast's
   trees.
-- `src/shale_zig_ast.zig`, `src/shale_zig_move.zig` and
-  `src/shale_host_zig.zig`: the Zig tools, over `std.zig`.
+- `src/shale_host_zig.zig` and `src/shale_zig_wire.zig`: the Zig tools'
+  half in the host. They check a call's arguments, read its files, ask
+  zig-ast and act on its answer; they hold no Zig grammar. What reads Zig is
+  zig-ast (`tools/zig_ast`), a program over `std.zig` that the host starts
+  once a run, its own process (`std.process.spawn`, with pipes); a port
+  starts it its own way, or builds the program for its kernel.
 - `src/shale_host_setup.zig`: the mounts, the preludes and the environment
   a run's programs start from.
 

@@ -233,15 +233,27 @@ test "cookbook: check_syntax.shale gives each file one verdict by its kind, a go
     try testing.expect(std.mem.indexOf(u8, r.stderr, "syntax: FAIL") != null);
 }
 
+/// The test's environment, and SHALE_ZIG_AST naming this tree's zig-ast, so a
+/// `shale` a test runs reads Zig with it, never an installed one.
+fn withZigAst(a: std.mem.Allocator, io: std.Io) !std.process.Environ.Map {
+    var env = try testing.environ.createMap(a);
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const n = try std.Io.Dir.cwd().realPathFile(io, @import("shale_test_options").zig_ast, &buf);
+    try env.put("SHALE_ZIG_AST", buf[0..n]);
+    return env;
+}
+
 test "cookbook: check_seals.shale passes this tree's seals, and a plant that sets one outside its file fails by its line" {
     var threaded = std.Io.Threaded.init(testing.allocator, .{});
     defer threaded.deinit();
     const io = threaded.io();
     const a = testing.allocator;
     const shale_exe = @import("shale_test_options").shale;
+    var env = try withZigAst(a, io);
+    defer env.deinit();
     // This tree: a script's `Path` is made by `pathArg` alone (metal-vmm QUEUE 250).
     {
-        const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "cookbook/check_seals.shale", "dir=src", "seals=path_seal:src/script/builtins_store.zig,path_full:src/script/builtins_store.zig,path_rel:src/script/builtins_store.zig" } });
+        const r = try std.process.run(a, io, .{ .environ_map = &env, .argv = &.{ shale_exe, "cookbook/check_seals.shale", "dir=src", "seals=path_seal:src/script/builtins_store.zig,path_full:src/script/builtins_store.zig,path_rel:src/script/builtins_store.zig" } });
         defer a.free(r.stdout);
         defer a.free(r.stderr);
         errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });
@@ -261,7 +273,7 @@ test "cookbook: check_seals.shale passes this tree's seals, and a plant that set
     try tmp.dir.writeFile(io, .{ .sub_path = "http.zig", .data = "const h = .{ .name = \"location\", .value = \"/\" };\n" });
     const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
     defer a.free(root);
-    const r = try std.process.run(a, io, .{ .argv = &.{ shale_exe, "--root", root, "cookbook/check_seals.shale", "dir=.", "seals=id_seal:id.zig,text:id.zig", "headers=location:http.zig" } });
+    const r = try std.process.run(a, io, .{ .environ_map = &env, .argv = &.{ shale_exe, "--root", root, "cookbook/check_seals.shale", "dir=.", "seals=id_seal:id.zig,text:id.zig", "headers=location:http.zig" } });
     defer a.free(r.stdout);
     defer a.free(r.stderr);
     errdefer std.debug.print("{s}{s}\n", .{ r.stdout, r.stderr });

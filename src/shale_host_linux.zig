@@ -170,8 +170,17 @@ pub const Host = struct {
     journal_bytes: usize = 0,
     /// The jobs this run started, for a stop to end (`shale_host_jobs.stopWithRun`).
     jobs_started: std.ArrayList(@import("shale_host_jobs.zig").Started) = .empty,
+    /// The run's zig-ast, once a Zig call starts it (`shale_host_zig.Proc`).
+    zig_ast: ?*@import("shale_host_zig.zig").Proc = null,
+    /// The zig-ast program, when not the `tools` mount's (a test's own build).
+    zig_ast_exe: ?[]const u8 = null,
 
     pub fn deinit(h: *Host) void {
+        if (h.zig_ast) |p| {
+            p.stop();
+            h.alloc.destroy(p);
+            h.zig_ast = null;
+        }
         h.time.deinit(h.alloc);
         for (h.jobs_started.items) |j| j.free(h.alloc);
         h.jobs_started.deinit(h.alloc);
@@ -570,11 +579,11 @@ fn call(ctx: *anyopaque, run: *Run, pos: ast.Pos, name: []const u8, args: []cons
     }
     if (std.mem.startsWith(u8, name, "job_")) return @import("shale_host_jobs.zig").call(h, run, pos, name, args);
     if (std.mem.eql(u8, name, "procs") or std.mem.eql(u8, name, "proc_stop")) return @import("shale_host_procs.zig").call(h, run, pos, name, args);
-    if (std.mem.eql(u8, name, "zig_rename")) return @import("shale_host_zig.zig").rename(h.alloc, run, pos, args);
-    if (std.mem.eql(u8, name, "zig_decls")) return @import("shale_host_zig.zig").decls(h.alloc, run, pos, args);
-    if (std.mem.eql(u8, name, "zig_move")) return @import("shale_host_zig.zig").move(h.alloc, run, pos, args);
-    if (std.mem.eql(u8, name, "zig_imports")) return @import("shale_host_zig.zig").imports(h.alloc, run, pos, args);
-    if (std.mem.eql(u8, name, "zig_tokens")) return @import("shale_host_zig.zig").tokens(h.alloc, run, pos, args);
+    if (std.mem.eql(u8, name, "zig_rename")) return @import("shale_host_zig.zig").rename(h, run, pos, args);
+    if (std.mem.eql(u8, name, "zig_decls")) return @import("shale_host_zig.zig").decls(h, run, pos, args);
+    if (std.mem.eql(u8, name, "zig_move")) return @import("shale_host_zig.zig").move(h, run, pos, args);
+    if (std.mem.eql(u8, name, "zig_imports")) return @import("shale_host_zig.zig").imports(h, run, pos, args);
+    if (std.mem.eql(u8, name, "zig_tokens")) return @import("shale_host_zig.zig").tokens(h, run, pos, args);
     if (std.mem.eql(u8, name, "shale_tokens")) return @import("shale_host_tokens.zig").tokens(h.alloc, run, pos, args);
     if (std.mem.eql(u8, name, "roc_tree")) return @import("shale_host_flat_tree.zig").call(h.alloc, run, pos, args, .roc);
     if (std.mem.eql(u8, name, "go_tree")) return @import("shale_host_flat_tree.zig").call(h.alloc, run, pos, args, .go);

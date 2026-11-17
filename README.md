@@ -161,7 +161,11 @@ own project, and for working on Shale itself.
 
 - **On the box:** the `shale` CLI is every top-level shell call an agent
   makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
-  with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`.
+  with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`:
+  zig-ast (`tools/zig_ast`), a program of its own that the host asks, so
+  the host imports no `std.zig` parser. `zig build` builds it beside
+  `shale`; `shale tools/zig_ast/install.shale` installs it where the host
+  looks, `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
 - **On a live site:** a signed script, run by the site itself
   (`script_route`, `zig build shale-sign`):
   [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com), on
@@ -269,7 +273,7 @@ enters `node_modules`; `walk_all` with `skip` does not. The `zig/` and
 | module | root | what |
 |---|---|---|
 | `shale` | `src/shale.zig` | portable: what an application's code imports |
-| `shale_linux` | `src/shale_linux.zig` | the Linux host (`run`, jobs, mounts, the Zig tools), for a Linux `main` only |
+| `shale_linux` | `src/shale_linux.zig` | the Linux host (`run`, jobs, mounts, the Zig tools' calls to zig-ast), for a Linux `main` only |
 
 Both take webbox's `webbox` and `host_io` modules: this repo depends on
 zig-webbox by path (`../zig-webbox`), and an application takes `shale` from
@@ -316,7 +320,10 @@ name hunt needs roc-ast at `~/tools/roc-ast/bin/roc-ast`, the method
 rewrite roc-types at `~/tools/roc-types/bin/roc-types`, and the Go hunts
 go-ast at `~/tools/go-ast/bin/go-ast`; each fails, saying how to install
 it, without it. CI unpacks the Roc release assets there and builds go-ast
-with its Go. The
+with its Go. The Zig tools and the Zig recipes use the zig-ast this
+build makes (`SHALE_ZIG_AST`), never the installed one, so they need no
+install; zig-ast's own tests (`tools/zig_ast/zig_ast_test.zig`) are a test
+binary of their own. The
 Zig tools' tests read zig-webbox's checkout too: they replay splits from its
 history and walk its sources beside this repo's. **`consumers`** runs this
 repo's own docs check, metal-vmm's queue tool by this tree's `shale`, then

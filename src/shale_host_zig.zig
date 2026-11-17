@@ -1,12 +1,17 @@
-//! The host's Zig tools over std.zig's tokenizer and parser: `zig_rename`,
-//! `zig_decls`, `zig_tokens`, `zig_move` and `zig_imports`.
+//! The host's Zig tools: `zig_rename`, `zig_decls`, `zig_tokens`, `zig_move` and
+//! `zig_imports`, read by zig-ast (tools/zig_ast), Zig's own tokenizer and
+//! parser in a program of its own. This file holds no Zig grammar: it checks a
+//! call's arguments, reads the files through the store, sends them to zig-ast
+//! (`ask`), and acts on the answer, in order: its charges, its stops (each
+//! message said here), the values it gives the script, and the edits, written
+//! through core's `rewrite`, so each change is diffed and logged as `edit`'s.
+//! zig-ast writes no file.
 //!
-//! A rename turns every identifier token `from` into `to`, but never one right
-//! after `.` (a field, a member, an enum literal), never `@"from"`, and never in
-//! a string, character or comment. The analysis is tokens, not types; the
-//! compiler judges after. A qualified `to` (with a `.`) where `from` is declared
-//! stops the run with nothing written, since `pub const m.from` is not Zig.
-//! Planning is pure (`plan`); the write goes through core's `rewrite`.
+//! zig-ast runs once a run (`Proc`), started at the run's first Zig call and
+//! ended with the host, so a recipe that reads a hundred files pays one
+//! program, not a hundred. It is `tools:zig-ast/bin/zig-ast` (installed by
+//! `shale tools/zig_ast/install.shale`), or the program `SHALE_ZIG_AST` names,
+//! as this tree's own tests do.
 
 const std = @import("std");
 const webbox = @import("webbox");
@@ -16,32 +21,16 @@ const ast = script.ast;
 const Run = script.interp.Run;
 const Value = script.value.Value;
 const Error = script.interp.Error;
+const wire = @import("shale_zig_wire.zig");
 
 pub const Span = script.builtins_change.Span;
 
-/// Lines, 1-based, inclusive.
-pub const Lines = struct { first: usize, last: usize };
-
-/// A planned rename: the new text, the changed spans, the count renamed, the
-/// whole-word matches left in comments (plain and doc), and the tokens read.
-pub const Plan = struct { now: []const u8, spans: []const Span, renamed: usize, left_in_comments: usize, tokens: usize };
-
-/// A plan, or where planning stopped: `declaration` is a qualified `to` where
-/// `from` is declared; `invalid` is the line of a token the tokenizer refuses.
-pub const Outcome = union(enum) { done: Plan, declaration: struct { line: usize, name: []const u8 }, invalid: usize };
-
-/// One name and what it becomes.
-pub const Rename = struct { from: []const u8, to: []const u8 };
-
-const za = @import("shale_zig_ast.zig");
 const hl = @import("shale_host_linux.zig");
 
-/// Per-call memory for a parse: the NUL-terminated source, tokens, Ast and plan
-/// live in an arena over the host's allocator, capped by what is left of the
-/// run's arena budget (`Capped`), and freed when the call returns. Without it a
-/// script calling `zig_decls` over a hundred files holds every parse at once.
-/// Only what the script is given, and what a change hands core, goes in the
-/// run's arena.
+/// Per-call memory: the source, the request and the answer live in an arena
+/// over the host's allocator, capped by what is left of the run's arena
+/// budget (`Capped`), and freed when the call returns. Only what the script is
+/// given, and what a change hands core, goes in the run's arena.
 pub const Scratch = struct {
     capped: hl.Capped,
     arena: std.heap.ArenaAllocator,
@@ -62,256 +51,166 @@ pub fn keep(run: *Run, pos: ast.Pos, x: []const u8) Error![]const u8 {
     return run.alloc.dupe(u8, x) catch run.oom(pos);
 }
 
-/// Plans renaming `from` to `to` in `src`, within `lines` if given. Pure; reads
-/// identifiers through `za.identifiers`, as `zig_move` does.
-pub fn plan(a: std.mem.Allocator, src: [:0]const u8, from: []const u8, to: []const u8, lines: ?Lines) error{OutOfMemory}!Outcome {
-    return planMany(a, src, &.{.{ .from = from, .to = to }}, lines);
-}
+/// Lines, 1-based, inclusive.
+pub const Lines = struct { first: usize, last: usize };
 
-/// Plans several renames in one pass (`zig_renames`), each by `plan`'s rules.
-/// Returns `declaration` for the first declaration a qualified `to` cannot take.
-pub fn planMany(a: std.mem.Allocator, src: [:0]const u8, renames: []const Rename, lines: ?Lines) error{OutOfMemory}!Outcome {
-    const ts = switch (try za.tokens(a, src)) {
-        .ok => |ok| ok,
-        .invalid => |n| return .{ .invalid = n },
-    };
-    var to_of: std.StringHashMapUnmanaged([]const u8) = .empty;
-    for (renames) |r| try to_of.put(a, r.from, r.to);
-    const starts = try za.lineStarts(a, src);
-    // Count matches left in comments: plain ones sit in the gaps between
-    // tokens, doc comments are tokens. Each name gets its own line cursor.
-    var left: usize = 0;
-    for (renames) |r| {
-        var line: LineCursor = .{ .src = src };
-        var gap: usize = 0;
-        for (ts) |t| {
-            left += try wordsIn(&line, src[gap..t.start], gap, r.from, lines);
-            gap = t.end;
-            if (t.tag == .doc_comment or t.tag == .container_doc_comment) left += try wordsIn(&line, src[t.start..t.end], t.start, r.from, lines);
-        }
-        left += try wordsIn(&line, src[gap..], gap, r.from, lines);
-    }
-    var out: std.ArrayList(u8) = .empty;
-    var spans: std.ArrayList(Span) = .empty;
-    var copied: usize = 0;
-    var renamed: usize = 0;
-    for (try za.identifiers(a, ts)) |id| {
-        const name = src[id.start..id.end];
-        const to = to_of.get(name) orelse continue;
-        const qualified = std.mem.indexOfScalar(u8, to, '.') != null;
-        const n = za.lineOf(starts, id.start);
-        if (lines != null and (n < lines.?.first or n > lines.?.last)) continue;
-        if (id.role == .field) continue;
-        if (qualified and id.role == .declaration) return .{ .declaration = .{ .line = n, .name = name } };
-        try out.appendSlice(a, src[copied..id.start]);
-        const c0 = out.items.len;
-        try out.appendSlice(a, to);
-        try spans.append(a, .{ .o0 = id.start, .o1 = id.end, .c0 = c0, .c1 = out.items.len });
-        copied = id.end;
-        renamed += 1;
-    }
-    try out.appendSlice(a, src[copied..]);
-    return .{ .done = .{ .now = out.items, .spans = spans.items, .renamed = renamed, .left_in_comments = left, .tokens = ts.len } };
-}
+/// What a scoped rename reaches beyond a plain one's: a container's member,
+/// or `prefix.from` through the given prefixes.
+const Scope = union(enum) { container: []const u8, via: []const []const u8 };
 
-/// What a scoped rename reaches beyond `plan`'s: a container's member, or
-/// `prefix.from` through the given prefixes (`search_index`,
-/// `harness.UidSite`).
-pub const Scope = union(enum) { container: []const u8, via: []const []const u8 };
+// ── zig-ast, the process ──
 
-/// A scoped plan, or where it stopped: the container is not declared here,
-/// or twice; it declares no `from`; a `.from` at `unattributed`'s line could
-/// be the member and could be something else.
-pub const Scoped = union(enum) {
-    done: struct { plan: Plan, left: []const usize },
-    invalid: usize,
-    no_container: usize,
-    no_member,
-    unattributed: usize,
-};
+/// The zig-ast process a run talks to: its pipes, and a reader over its
+/// answers.
+pub const Proc = struct {
+    child: std.process.Child,
+    io: std.Io,
+    buf: [64 * 1024]u8 = undefined,
+    reader: std.Io.File.Reader = undefined,
 
-/// The whole-word `from`s in a file's comments, as `planMany` counts them.
-fn commentsLeft(src: [:0]const u8, ts: []const za.Tok, from: []const u8) !usize {
-    var left: usize = 0;
-    var line: LineCursor = .{ .src = src };
-    var gap: usize = 0;
-    for (ts) |t| {
-        left += try wordsIn(&line, src[gap..t.start], gap, from, null);
-        gap = t.end;
-        if (t.tag == .doc_comment or t.tag == .container_doc_comment) left += try wordsIn(&line, src[t.start..t.end], t.start, from, null);
-    }
-    return left + try wordsIn(&line, src[gap..], gap, from, null);
-}
-
-/// The plan of renaming the tokens at `at` (in order) to `to`.
-fn planAt(a: std.mem.Allocator, src: [:0]const u8, ts: []const za.Tok, at: []const usize, to: []const u8, from: []const u8) !Plan {
-    var out: std.ArrayList(u8) = .empty;
-    var spans: std.ArrayList(Span) = .empty;
-    var copied: usize = 0;
-    for (at) |k| {
-        const t = ts[k];
-        try out.appendSlice(a, src[copied..t.start]);
-        const c0 = out.items.len;
-        try out.appendSlice(a, to);
-        try spans.append(a, .{ .o0 = t.start, .o1 = t.end, .c0 = c0, .c1 = out.items.len });
-        copied = t.end;
-    }
-    try out.appendSlice(a, src[copied..]);
-    return .{ .now = out.items, .spans = spans.items, .renamed = at.len, .left_in_comments = try commentsLeft(src, ts, from), .tokens = ts.len };
-}
-
-fn isContainerKeyword(t: za.Tag) bool {
-    return t == .keyword_struct or t == .keyword_union or t == .keyword_enum or t == .keyword_opaque;
-}
-
-/// Plans renaming member `from` of the container `container` declares in
-/// this file (`const C = struct {...}`): its declaration, the bare uses
-/// inside the container, and `C.from`, `self.from`, `Self.from` and
-/// `@This().from` inside it. A `.from` through another container this file
-/// declares is that one's, left alone; an enum literal `.from` is left
-/// alone unless the container is an enum; any other `.from` stops the plan,
-/// naming its line, rather than be guessed at. Pure.
-pub fn planMember(a: std.mem.Allocator, src: [:0]const u8, from: []const u8, to: []const u8, container: []const u8) error{OutOfMemory}!Scoped {
-    const ts = switch (try za.tokens(a, src)) {
-        .ok => |ok| ok,
-        .invalid => |n| return .{ .invalid = n },
-    };
-    const starts = try za.lineStarts(a, src);
-    // The containers the file declares, and this one's braces.
-    var others: std.StringHashMapUnmanaged(void) = .empty;
-    var open: ?usize = null;
-    var close: usize = 0;
-    var is_enum = false;
-    var found: usize = 0;
-    var i: usize = 0;
-    while (i + 3 < ts.len) : (i += 1) {
-        if (ts[i].tag != .keyword_const or ts[i + 1].tag != .identifier or ts[i + 2].tag != .equal) continue;
-        var j = i + 3;
-        while (j < ts.len and (ts[j].tag == .keyword_extern or ts[j].tag == .keyword_packed)) j += 1;
-        if (j >= ts.len or !isContainerKeyword(ts[j].tag)) continue;
-        const name = src[ts[i + 1].start..ts[i + 1].end];
-        if (!std.mem.eql(u8, name, container)) {
-            try others.put(a, name, {});
-            continue;
-        }
-        found += 1;
-        if (found > 1) return .{ .no_container = 2 };
-        is_enum = ts[j].tag == .keyword_enum;
-        var b = j;
-        while (b < ts.len and ts[b].tag != .l_brace) b += 1;
-        var depth: usize = 0;
-        var e = b;
-        while (e < ts.len) : (e += 1) {
-            if (ts[e].tag == .l_brace) depth += 1;
-            if (ts[e].tag == .r_brace) {
-                depth -= 1;
-                if (depth == 0) break;
-            }
-        }
-        open = b;
-        close = e;
-    }
-    const o = open orelse return .{ .no_container = 0 };
-    var at: std.ArrayList(usize) = .empty;
-    var declared = false;
-    var depth: usize = 0;
-    for (ts, 0..) |t, k| {
-        if (t.tag == .l_brace) depth += 1;
-        if (t.tag == .r_brace) depth -|= 1;
-        if (t.tag != .identifier or !std.mem.eql(u8, src[t.start..t.end], from)) continue;
-        const inside = k > o and k < close;
-        const prev: ?za.Tag = if (k > 0) ts[k - 1].tag else null;
-        if (prev != .period) {
-            if (!inside) continue;
-            // A declaration directly in the container's braces.
-            if (prev == .keyword_fn or prev == .keyword_const or prev == .keyword_var or (k + 1 < ts.len and ts[k + 1].tag == .colon)) declared = true;
-            try at.append(a, k);
-            continue;
-        }
-        // `.from`: through what?
-        const r = if (k >= 2) ts[k - 2] else null;
-        const rname: []const u8 = if (r != null and r.?.tag == .identifier) src[r.?.start..r.?.end] else "";
-        if (std.mem.eql(u8, rname, container)) {
-            try at.append(a, k);
-        } else if (inside and (std.mem.eql(u8, rname, "self") or std.mem.eql(u8, rname, "Self"))) {
-            try at.append(a, k);
-        } else if (inside and r != null and r.?.tag == .r_paren and k >= 4 and ts[k - 3].tag == .l_paren and ts[k - 4].tag == .builtin and std.mem.eql(u8, src[ts[k - 4].start..ts[k - 4].end], "@This")) {
-            try at.append(a, k);
-        } else if (rname.len > 0 and others.contains(rname)) {
-            // Another container's member of the same name.
-        } else if (r == null or (r.?.tag != .identifier and r.?.tag != .r_paren and r.?.tag != .r_bracket and r.?.tag != .question_mark and r.?.tag != .period_asterisk)) {
-            // An enum literal: the container's only if it is an enum.
-            if (is_enum) return .{ .unattributed = za.lineOf(starts, t.start) };
-        } else return .{ .unattributed = za.lineOf(starts, t.start) };
-    }
-    if (!declared) return .no_member;
-    return .{ .done = .{ .plan = try planAt(a, src, ts, at.items, to, from), .left = &.{} } };
-}
-
-/// Plans renaming `from` where it follows one of `via`'s dotted prefixes
-/// (`search_index.from`, `harness.UidSite.from`), the prefix not itself
-/// after a `.`; every other `.from` is left, its line said. Pure.
-pub fn planVia(a: std.mem.Allocator, src: [:0]const u8, from: []const u8, to: []const u8, via: []const []const u8) error{OutOfMemory}!Scoped {
-    const ts = switch (try za.tokens(a, src)) {
-        .ok => |ok| ok,
-        .invalid => |n| return .{ .invalid = n },
-    };
-    const starts = try za.lineStarts(a, src);
-    var at: std.ArrayList(usize) = .empty;
-    var left: std.ArrayList(usize) = .empty;
-    for (ts, 0..) |t, k| {
-        if (t.tag != .identifier or !std.mem.eql(u8, src[t.start..t.end], from)) continue;
-        if (k == 0 or ts[k - 1].tag != .period) continue;
-        var hit = false;
-        for (via) |prefix| {
-            // `a.b` before `.from` is the tokens a, `.`, b, `.`, from.
-            const n = std.mem.count(u8, prefix, ".") + 1;
-            if (k < 2 * n) continue;
-            const first = k - 2 * n;
-            var parts = std.mem.splitScalar(u8, prefix, '.');
-            var ok = true;
-            var m: usize = 0;
-            while (parts.next()) |part| : (m += 1) {
-                const id = ts[first + 2 * m];
-                if (id.tag != .identifier or !std.mem.eql(u8, src[id.start..id.end], part) or ts[first + 2 * m + 1].tag != .period) ok = false;
-            }
-            if (ok and (first == 0 or ts[first - 1].tag != .period)) hit = true;
-        }
-        if (hit) try at.append(a, k) else try left.append(a, za.lineOf(starts, t.start));
-    }
-    return .{ .done = .{ .plan = try planAt(a, src, ts, at.items, to, from), .left = left.items } };
-}
-
-/// Lines counted forward, for offsets that only grow.
-const LineCursor = struct {
-    src: []const u8,
-    at: usize = 0,
-    line: usize = 1,
-
-    fn lineOf(c: *LineCursor, offset: usize) usize {
-        c.line += std.mem.count(u8, c.src[c.at..offset], "\n");
-        c.at = offset;
-        return c.line;
+    /// Ends zig-ast: its stdin closed, it exits, and it is waited for.
+    pub fn stop(p: *Proc) void {
+        if (p.child.stdin) |f| f.close(p.io);
+        p.child.stdin = null;
+        _ = p.child.wait(p.io) catch {};
     }
 };
 
-/// Counts whole-word `from`s in `text`, which is at `base` in the file, within
-/// `lines`.
-fn wordsIn(line: *LineCursor, text: []const u8, base: usize, from: []const u8, lines: ?Lines) !usize {
-    var n: usize = 0;
-    var i: usize = 0;
-    while (std.mem.indexOfPos(u8, text, i, from)) |k| {
-        i = k + 1;
-        const end = k + from.len;
-        if ((k > 0 and word(text[k - 1])) or (end < text.len and word(text[end]))) continue;
-        const l = line.lineOf(base + k);
-        if (lines == null or (l >= lines.?.first and l <= lines.?.last)) n += 1;
-    }
-    return n;
+/// The run's zig-ast, started if it is not yet. A start counts against the
+/// `programs` budget, as any program does.
+fn procOf(h: *hl.Host, run: *Run, pos: ast.Pos, who: []const u8) Error!*Proc {
+    if (h.zig_ast) |p| return p;
+    const exe = h.zig_ast_exe orelse exe: {
+        for (h.env) |kv| if (std.mem.startsWith(u8, kv, "SHALE_ZIG_AST=")) break :exe kv["SHALE_ZIG_AST=".len..];
+        for (h.mounts) |m| if (std.mem.eql(u8, m.name, "tools")) {
+            const path = std.fs.path.join(run.alloc, &.{ m.dir, "zig-ast/bin/zig-ast" }) catch return run.oom(pos);
+            std.Io.Dir.cwd().access(run.io, path, .{}) catch break;
+            break :exe path;
+        };
+        return run.fail(pos, .host, "`{s}`: no tools:zig-ast/bin/zig-ast, the program that reads Zig: Shale's `shale tools/zig_ast/install.shale` builds it", .{who});
+    };
+    if (run.host_runs >= run.budgets.programs) return run.budgetStop(pos, .programs);
+    run.host_runs += 1;
+    const p = h.alloc.create(Proc) catch return run.oom(pos);
+    const child = std.process.spawn(run.io, .{ .argv = &.{ exe, "--serve" }, .stdin = .pipe, .stdout = .pipe, .stderr = .pipe }) catch |e| {
+        h.alloc.destroy(p);
+        return run.fail(pos, .host, "`{s}`: zig-ast ({s}) did not start: {t}", .{ who, exe, e });
+    };
+    p.* = .{ .child = child, .io = run.io };
+    p.reader = p.child.stdout.?.readerStreaming(run.io, &p.buf);
+    h.zig_ast = p;
+    const said = p.reader.interface.takeDelimiter('\n') catch null;
+    if (said == null or !std.mem.startsWith(u8, said.?, wire.header)) return ended(p, run, pos, who, "its first line is not `" ++ wire.header ++ "<zig version>`");
+    return p;
 }
 
-fn word(c: u8) bool {
-    return std.ascii.isAlphanumeric(c) or c == '_';
+/// Stops the run for a zig-ast that went wrong, with what it said on stderr.
+fn ended(p: *Proc, run: *Run, pos: ast.Pos, who: []const u8, why: []const u8) Error {
+    var buf: [1024]u8 = undefined;
+    var said: []const u8 = "";
+    if (p.child.stderr) |f| {
+        const n = f.readStreaming(p.io, &.{&buf}) catch 0;
+        said = std.mem.trim(u8, buf[0..n], " \n");
+    }
+    return run.fail(pos, .host, "`{s}`: zig-ast {s}{s}{s}", .{ who, why, if (said.len > 0) ": " else "", said });
+}
+
+/// Sends a request, gives the answer's lines.
+fn ask(h: *hl.Host, sa: std.mem.Allocator, run: *Run, pos: ast.Pos, who: []const u8, body: []const u8) Error!Answer {
+    const p = try procOf(h, run, pos, who);
+    const head = std.fmt.allocPrint(sa, "{d}\n", .{body.len}) catch return run.oom(pos);
+    const in = p.child.stdin.?;
+    in.writeStreamingAll(p.io, head) catch return ended(p, run, pos, who, "stopped taking requests");
+    in.writeStreamingAll(p.io, body) catch return ended(p, run, pos, who, "stopped taking requests");
+    const len = (p.reader.interface.takeDelimiter('\n') catch null) orelse return ended(p, run, pos, who, "ended before it answered");
+    const n = wire.int(len) catch return ended(p, run, pos, who, "answered with no length");
+    const got = p.reader.interface.readAllocAll(sa, n) catch return ended(p, run, pos, who, "ended in the middle of its answer");
+    return .{ .lines = .{ .body = got }, .sa = sa, .run = run, .pos = pos, .who = who };
+}
+
+/// An answer's lines, read in order.
+const Answer = struct {
+    lines: wire.Lines,
+    sa: std.mem.Allocator,
+    run: *Run,
+    pos: ast.Pos,
+    who: []const u8,
+
+    /// The next line's fields: a `bad` line, or one that does not read, stops.
+    fn next(an: *Answer) Error!?[]const []const u8 {
+        const l = an.lines.next(an.sa) catch |e| switch (e) {
+            error.OutOfMemory => return an.run.oom(an.pos),
+            else => return an.run.fail(an.pos, .host, "`{s}`: zig-ast's answer does not read ({t})", .{ an.who, e }),
+        } orelse return null;
+        if (l.len == 0) return an.wrong();
+        if (std.mem.eql(u8, l[0], "bad")) return an.run.fail(an.pos, .host, "`{s}`: zig-ast refused the request: {s}", .{ an.who, if (l.len > 1) l[1] else "" });
+        return l;
+    }
+
+    fn int(an: *Answer, l: []const []const u8, i: usize) Error!usize {
+        if (i >= l.len) return an.wrong();
+        return wire.int(l[i]) catch an.wrong();
+    }
+
+    fn field(an: *Answer, l: []const []const u8, i: usize) Error![]const u8 {
+        if (i >= l.len) return an.wrong();
+        return l[i];
+    }
+
+    fn wrong(an: *Answer) Error {
+        return an.run.fail(an.pos, .host, "`{s}`: zig-ast's answer has a line this host does not know", .{an.who});
+    }
+};
+
+fn is(l: []const []const u8, word: []const u8) bool {
+    return std.mem.eql(u8, l[0], word);
+}
+
+/// A request's lines being written, in the scratch.
+const Request = struct {
+    out: std.Io.Writer.Allocating,
+    run: *Run,
+    pos: ast.Pos,
+
+    fn init(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, cmd: []const u8) Error!Request {
+        var r: Request = .{ .out = .init(sa), .run = run, .pos = pos };
+        try r.line(.{cmd});
+        return r;
+    }
+
+    fn line(r: *Request, fields: anytype) Error!void {
+        wire.line(&r.out.writer, fields) catch return r.run.oom(r.pos);
+    }
+
+    fn source(r: *Request, bytes: []const u8) Error!void {
+        wire.source(&r.out.writer, bytes) catch return r.run.oom(r.pos);
+    }
+};
+
+/// `was` with an answer's edits made, and the spans `rewrite` diffs by.
+const Edited = struct { now: []const u8, spans: []const Span };
+
+/// One edit of an answer: `was[o0..o1]` becomes `text`.
+const Edit = struct { o0: usize, o1: usize, text: []const u8 };
+
+fn applyEdits(sa: std.mem.Allocator, an: *Answer, was: []const u8, edits: []const Edit) Error!Edited {
+    var out: std.ArrayList(u8) = .empty;
+    var spans: std.ArrayList(Span) = .empty;
+    var copied: usize = 0;
+    for (edits) |e| {
+        if (e.o0 < copied or e.o1 < e.o0 or e.o1 > was.len) return an.wrong();
+        out.appendSlice(sa, was[copied..e.o0]) catch return an.run.oom(an.pos);
+        const c0 = out.items.len;
+        out.appendSlice(sa, e.text) catch return an.run.oom(an.pos);
+        spans.append(sa, .{ .o0 = e.o0, .o1 = e.o1, .c0 = c0, .c1 = out.items.len }) catch return an.run.oom(an.pos);
+        copied = e.o1;
+    }
+    out.appendSlice(sa, was[copied..]) catch return an.run.oom(an.pos);
+    return .{ .now = out.items, .spans = spans.items };
+}
+
+fn editOf(an: *Answer, l: []const []const u8) Error!Edit {
+    return .{ .o0 = try an.int(l, 1), .o1 = try an.int(l, 2), .text = try an.field(l, 3) };
 }
 
 /// Marks the run as trying a change and refuses it in a background run, before
@@ -321,10 +220,12 @@ fn changes(run: *Run, pos: ast.Pos, name: []const u8) Error!void {
     if (run.read_only) return run.fail(pos, .argument, "`{s}` changes the store, and a background run only reads: send it as an `atomic` run", .{name});
 }
 
-/// `host("zig_rename", path, {from, to}, opts)`: reads, plans and writes
-/// through core's `rewrite` if anything is renamed. Returns
+// ── the builtins ──
+
+/// `host("zig_rename", path, {from, to}, opts)`: reads, plans through zig-ast
+/// and writes through core's `rewrite` if anything is renamed. Returns
 /// `{renamed, left_in_comments}`. Charges the copy and a step per token.
-pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+pub fn rename(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     try changes(run, pos, "zig_rename");
     if (args.len != 3) return run.fail(pos, .argument, "`zig_rename` takes a path, `{{from, to}}` and options, given {d}", .{args.len});
     const hub = script.builtins_store;
@@ -335,6 +236,7 @@ pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
         else => return run.fail(pos, .type, "`zig_rename`'s names are `{{from, to}}`", .{}),
     };
     // `{from, to}` (zig_rename) or `{many = {a = "x.a", ...}}` (zig_renames).
+    const Rename = struct { from: []const u8, to: []const u8 };
     var renames: std.ArrayList(Rename) = .empty;
     if (names.map.get("many")) |many| {
         const m = switch (many) {
@@ -353,9 +255,9 @@ pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
         renames.append(run.alloc, .{ .from = from, .to = to }) catch return run.oom(pos);
     }
     for (renames.items) |r| {
-        if (!std.zig.isValidId(r.from)) return run.fail(pos, .argument, "`zig_rename`'s `from` (\"{s}\") is not a Zig identifier: one name, not a keyword", .{r.from});
+        if (!wire.isValidId(r.from)) return run.fail(pos, .argument, "`zig_rename`'s `from` (\"{s}\") is not a Zig identifier: one name, not a keyword", .{r.from});
         var parts = std.mem.splitScalar(u8, r.to, '.');
-        while (parts.next()) |part| if (!std.zig.isValidId(part))
+        while (parts.next()) |part| if (!wire.isValidId(part))
             return run.fail(pos, .argument, "`zig_rename`'s `to` (\"{s}\") is not a Zig identifier, or names joined by `.`", .{r.to});
     }
     const opts = try renameOpts(run, pos, args[2]);
@@ -366,50 +268,64 @@ pub fn rename(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const
     const was = (try rd.readSized(run, pos, .host, p, size, 0, null)).string;
     const a = run.alloc;
     var scratch: Scratch = undefined;
-    const sa = scratch.init(backing, run);
+    const sa = scratch.init(h.alloc, run);
     defer scratch.deinit();
-    const src = sa.dupeSentinel(u8, was, 0) catch return run.oom(pos);
-    try script.builtins.chargeBytes(run, pos, src.len);
-    var left: []const usize = &.{};
-    const got: Outcome = if (opts.scope) |scope| blk: {
-        const r = renames.items[0];
-        const s = switch (scope) {
-            .container => |c| planMember(sa, src, r.from, r.to, c),
-            .via => |v| planVia(sa, src, r.from, r.to, v),
-        } catch return run.oom(pos);
-        switch (s) {
-            .done => |d| {
-                left = d.left;
-                break :blk .{ .done = d.plan };
-            },
-            .invalid => |n| break :blk .{ .invalid = n },
-            .no_container => |n| return run.fail(pos, .argument, "`zig_rename`: {s} declares no container `{s}` (`const {s} = struct {{...}}`){s}; nothing written", .{ p.rel(), scope.container, scope.container, if (n == 2) ", or declares it twice" else "" }),
-            .no_member => return run.fail(pos, .argument, "`zig_rename`: {s}'s `{s}` declares no member `{s}`; nothing written", .{ p.rel(), scope.container, r.from }),
-            .unattributed => |n| return run.fail(pos, .argument, "`zig_rename`: {s}:{d} has a `.{s}` that may or may not be `{s}`'s member: rename that one yourself, or rename it apart first; nothing written", .{ p.rel(), n, r.from, scope.container }),
-        }
-    } else planMany(sa, src, renames.items, lines) catch return run.oom(pos);
-    const done = switch (got) {
-        .done => |d| d,
-        .declaration => |d| {
+    try script.builtins.chargeBytes(run, pos, was.len);
+    var req = try Request.init(sa, run, pos, "rename");
+    for (renames.items) |r| try req.line(.{ "name", r.from, r.to });
+    if (lines) |l| try req.line(.{ "lines", l.first, l.last });
+    if (opts.scope) |scope| switch (scope) {
+        .container => |c| try req.line(.{ "container", c }),
+        .via => |v| for (v) |prefix| try req.line(.{ "via", prefix }),
+    };
+    try req.source(was);
+    var an = try ask(h, sa, run, pos, "zig_rename", req.out.written());
+    var renamed: usize = 0;
+    var left_in_comments: usize = 0;
+    var edits: std.ArrayList(Edit) = .empty;
+    var left: std.ArrayList(usize) = .empty;
+    while (try an.next()) |l| {
+        if (is(l, "work")) {
+            try run.charge(pos, try an.int(l, 1));
+        } else if (is(l, "renamed")) {
+            renamed = try an.int(l, 1);
+        } else if (is(l, "left_in_comments")) {
+            left_in_comments = try an.int(l, 1);
+        } else if (is(l, "s")) {
+            edits.append(sa, try editOf(&an, l)) catch return run.oom(pos);
+        } else if (is(l, "left")) {
+            left.append(sa, try an.int(l, 1)) catch return run.oom(pos);
+        } else if (is(l, "no_container")) {
+            const scope = opts.scope.?;
+            return run.fail(pos, .argument, "`zig_rename`: {s} declares no container `{s}` (`const {s} = struct {{...}}`){s}; nothing written", .{ p.rel(), scope.container, scope.container, if (try an.int(l, 1) == 2) ", or declares it twice" else "" });
+        } else if (is(l, "no_member")) {
+            return run.fail(pos, .argument, "`zig_rename`: {s}'s `{s}` declares no member `{s}`; nothing written", .{ p.rel(), opts.scope.?.container, renames.items[0].from });
+        } else if (is(l, "unattributed")) {
+            return run.fail(pos, .argument, "`zig_rename`: {s}:{d} has a `.{s}` that may or may not be `{s}`'s member: rename that one yourself, or rename it apart first; nothing written", .{ p.rel(), try an.int(l, 1), renames.items[0].from, opts.scope.?.container });
+        } else if (is(l, "declaration")) {
+            const name = try an.field(l, 2);
             var to: []const u8 = "";
-            for (renames.items) |r| if (std.mem.eql(u8, r.from, d.name)) {
+            for (renames.items) |r| if (std.mem.eql(u8, r.from, name)) {
                 to = r.to;
             };
-            return run.fail(pos, .argument, "`zig_rename`: {s} declares `{s}` at line {d}, and `{s}` is qualified, which cannot be declared: rename the declaration itself, or leave it out with `lines`; nothing written", .{ p.rel(), d.name, d.line, to });
-        },
-        .invalid => |n| return run.fail(pos, .argument, "`zig_rename`: {s} does not tokenize as Zig at line {d}; nothing written", .{ p.rel(), n }),
-    };
-    try run.charge(pos, done.tokens);
-    if (done.renamed > 0) try script.builtins_change.rewrite(run, pos, p, was, try keep(run, pos, done.now), a.dupe(Span, done.spans) catch return run.oom(pos));
+            return run.fail(pos, .argument, "`zig_rename`: {s} declares `{s}` at line {d}, and `{s}` is qualified, which cannot be declared: rename the declaration itself, or leave it out with `lines`; nothing written", .{ p.rel(), name, try an.int(l, 1), to });
+        } else if (is(l, "invalid")) {
+            return run.fail(pos, .argument, "`zig_rename`: {s} does not tokenize as Zig at line {d}; nothing written", .{ p.rel(), try an.int(l, 1) });
+        } else return an.wrong();
+    }
+    if (renamed > 0) {
+        const done = try applyEdits(sa, &an, was, edits.items);
+        try script.builtins_change.rewrite(run, pos, p, was, try keep(run, pos, done.now), a.dupe(Span, done.spans) catch return run.oom(pos));
+    }
     const t = try run.newTable(pos);
     t.kind = .map;
-    t.map.put(a, "renamed", .{ .int = @intCast(done.renamed) }) catch return run.oom(pos);
-    t.map.put(a, "left_in_comments", .{ .int = @intCast(done.left_in_comments) }) catch return run.oom(pos);
+    t.map.put(a, "renamed", .{ .int = @intCast(renamed) }) catch return run.oom(pos);
+    t.map.put(a, "left_in_comments", .{ .int = @intCast(left_in_comments) }) catch return run.oom(pos);
     if (opts.scope != null and opts.scope.? == .via) {
-        const l = try run.newTable(pos);
-        l.kind = .list;
-        for (left) |n| l.list.append(a, .{ .int = @intCast(n) }) catch return run.oom(pos);
-        t.map.put(a, "left", .{ .table = l }) catch return run.oom(pos);
+        const lt = try run.newTable(pos);
+        lt.kind = .list;
+        for (left.items) |n| lt.list.append(a, .{ .int = @intCast(n) }) catch return run.oom(pos);
+        t.map.put(a, "left", .{ .table = lt }) catch return run.oom(pos);
     }
     return .{ .table = t };
 }
@@ -428,7 +344,7 @@ fn renameOpts(run: *Run, pos: ast.Pos, v: Value) Error!struct { lines: ?Lines, s
         if (std.mem.eql(u8, k, "container")) {
             if (scope != null) return run.fail(pos, .argument, "`zig_rename` takes `container` or `via`, not both", .{});
             const c = try script.builtins.stringArg(run, pos, .host, x, "`container`");
-            if (!std.zig.isValidId(c)) return run.fail(pos, .argument, "`zig_rename`'s `container` (\"{s}\") is not a Zig identifier", .{c});
+            if (!wire.isValidId(c)) return run.fail(pos, .argument, "`zig_rename`'s `container` (\"{s}\") is not a Zig identifier", .{c});
             scope = .{ .container = c };
         } else if (std.mem.eql(u8, k, "via")) {
             if (scope != null) return run.fail(pos, .argument, "`zig_rename` takes `container` or `via`, not both", .{});
@@ -441,7 +357,7 @@ fn renameOpts(run: *Run, pos: ast.Pos, v: Value) Error!struct { lines: ?Lines, s
             if (list.items.len == 0) return run.fail(pos, .argument, "`zig_rename`'s `via` is empty: give the prefixes the callers use", .{});
             for (list.items) |pre| {
                 var parts = std.mem.splitScalar(u8, pre, '.');
-                while (parts.next()) |part| if (!std.zig.isValidId(part)) return run.fail(pos, .argument, "`zig_rename`'s `via` prefix \"{s}\" is not names joined by `.`", .{pre});
+                while (parts.next()) |part| if (!wire.isValidId(part)) return run.fail(pos, .argument, "`zig_rename`'s `via` prefix \"{s}\" is not names joined by `.`", .{pre});
             }
             scope = .{ .via = list.items };
         } else only_lines.map.put(run.alloc, k, x) catch return run.oom(pos);
@@ -449,10 +365,21 @@ fn renameOpts(run: *Run, pos: ast.Pos, v: Value) Error!struct { lines: ?Lines, s
     return .{ .lines = try linesOpt(run, pos, .{ .table = only_lines }), .scope = scope };
 }
 
+/// Reads `p` into the scratch, charging the read and the copy.
+fn readSource(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, p: script.builtins_store.Path) Error![]const u8 {
+    const hub = script.builtins_store;
+    const rd = script.builtins_read;
+    try hub.countRead(run, pos);
+    const size = try rd.fileSize(run, pos, .host, p);
+    const src = try rd.readSizedIn(sa, run, pos, .host, p, size, 0, null);
+    try script.builtins.chargeBytes(run, pos, src.len);
+    return src;
+}
+
 /// `host("zig_decls", path)`: a Zig file's top-level declarations as maps, in
-/// file order, from `shale_zig_ast.zig`. Charges the read, the copy, and a step
-/// per token and per Ast node. A parse error stops the run at its first line.
-pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+/// file order, from zig-ast. Charges the read, the copy, and a step per token
+/// and per Ast node. A parse error stops the run at its first line.
+pub fn decls(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (args.len < 1 or args.len > 2) return run.fail(pos, .argument, "`zig_decls` takes a path and options, given {d} arguments", .{args.len});
     // `{container = name}` lists that container's members instead.
     var container: ?[]const u8 = null;
@@ -468,137 +395,80 @@ pub fn decls(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const 
         } else return run.fail(pos, .type, "`zig_decls`' options are a map, not a list", .{}),
         else => |v| return run.fail(pos, .type, "`zig_decls`' options are a map, not {s}", .{v.typeName()}),
     };
-    const hub = script.builtins_store;
-    const rd = script.builtins_read;
-    const p = try hub.pathArg(run, pos, .host, args[0], false);
-    try hub.countRead(run, pos);
-    const size = try rd.fileSize(run, pos, .host, p);
+    const p = try script.builtins_store.pathArg(run, pos, .host, args[0], false);
     const a = run.alloc;
     var scratch: Scratch = undefined;
-    const sa = scratch.init(backing, run);
+    const sa = scratch.init(h.alloc, run);
     defer scratch.deinit();
-    const was = try rd.readSizedIn(sa, run, pos, .host, p, size, 0, null);
-    const src = sa.dupeSentinel(u8, was, 0) catch return run.oom(pos);
-    try script.builtins.chargeBytes(run, pos, src.len);
-    const root = switch (za.decls(sa, src) catch return run.oom(pos)) {
-        .ok => |ok| ok,
-        .parse_error => |e| return run.fail(pos, .argument, "`zig_decls`: {s} does not parse as Zig: line {d} ({s})", .{ p.rel(), e.line, e.tag }),
-    };
-    try run.charge(pos, root.tokens + root.nodes);
-    const got = if (container) |name| switch (za.members(sa, src, name) catch return run.oom(pos)) {
-        .ok => |ok| ok,
-        .parse_error => unreachable, // the root parsed
-        .no_container => return run.fail(pos, .argument, "`zig_decls`: {s} has no container `{s}` (a top-level `const {s} = struct {{...}}`, or a union's, an enum's, an opaque's)", .{ p.rel(), name, name }),
-    } else root;
-    if (container != null) try run.charge(pos, got.tokens + got.nodes);
-    // Each declaration's `uses`: the top-level names in its span other than its
-    // own, distinct and sorted. Identifiers come from `za.identifiers`, so a
-    // field, a member after `.`, a comment and a string never count.
-    const toks = switch (za.tokens(sa, src) catch return run.oom(pos)) {
-        .ok => |ok| ok,
-        .invalid => |n| return run.fail(pos, .argument, "`zig_decls`: {s} does not tokenize as Zig at line {d}", .{ p.rel(), n }),
-    };
-    const ids = za.identifiers(sa, toks) catch return run.oom(pos);
-    try run.charge(pos, ids.len);
-    // A test's name and a field are never used by name. In a container, we
-    // drop the container itself, since every method names it.
-    var top: std.StringHashMapUnmanaged(void) = .empty;
-    for (root.decls) |d| if (d.name_form == .identifier and d.kind != .@"test" and d.kind != .field) {
-        top.put(sa, d.name, {}) catch return run.oom(pos);
-    };
-    var member: std.StringHashMapUnmanaged(void) = .empty;
-    if (container) |name| {
-        _ = top.remove(name);
-        for (got.decls) |d| if (d.name_form == .identifier and d.kind != .@"test") {
-            top.put(sa, d.name, {}) catch return run.oom(pos);
-            member.put(sa, d.name, {}) catch return run.oom(pos);
-        };
-    }
+    const src = try readSource(sa, run, pos, p);
+    var req = try Request.init(sa, run, pos, "decls");
+    if (container) |c| try req.line(.{ "container", c });
+    try req.source(src);
+    var an = try ask(h, sa, run, pos, "zig_decls", req.out.written());
     const list = try run.newTable(pos);
     list.kind = .list;
-    var k: usize = 0;
-    for (got.decls) |d| {
-        var seen: std.StringHashMapUnmanaged(void) = .empty;
-        var names: std.ArrayList([]const u8) = .empty;
-        while (k < ids.len and ids[k].start < d.start) k += 1;
-        var j = k;
-        while (j < ids.len and ids[j].start < d.stop) : (j += 1) {
-            const id = ids[j];
-            if (id.role != .use) continue;
-            const name = src[id.start..id.end];
-            if (std.mem.eql(u8, name, d.name) or !top.contains(name) or seen.contains(name)) continue;
-            seen.put(sa, name, {}) catch return run.oom(pos);
-            names.append(sa, name) catch return run.oom(pos);
-        }
-        std.mem.sort([]const u8, names.items, {}, struct {
-            fn lt(_: void, x: []const u8, y: []const u8) bool {
-                return std.mem.lessThan(u8, x, y);
+    // The declaration whose `u` and `r` lines come next.
+    var uses: ?*script.value.Table = null;
+    var reaches: ?*script.value.Table = null;
+    while (try an.next()) |l| {
+        if (is(l, "work")) {
+            try run.charge(pos, try an.int(l, 1));
+        } else if (is(l, "d")) {
+            if (l.len != 12) return an.wrong();
+            const m = try run.newTable(pos);
+            m.kind = .map;
+            try put(run, pos, m, "kind", .{ .string = try keep(run, pos, l[1]) });
+            try put(run, pos, m, "name", .{ .string = try keep(run, pos, l[2]) });
+            try put(run, pos, m, "name_form", .{ .string = try keep(run, pos, l[3]) });
+            try put(run, pos, m, "visibility", .{ .string = try keep(run, pos, l[4]) });
+            try put(run, pos, m, "linkage", .{ .string = try keep(run, pos, l[5]) });
+            inline for (.{ "first", "last", "start", "stop" }, 6..) |k, i| try put(run, pos, m, k, .{ .int = @intCast(try an.int(l, i)) });
+            const above_first = try an.int(l, 10);
+            if (above_first > 0) {
+                const cm = try run.newTable(pos);
+                cm.kind = .map;
+                try put(run, pos, cm, "first", .{ .int = @intCast(above_first) });
+                try put(run, pos, cm, "last", .{ .int = @intCast(try an.int(l, 11)) });
+                try put(run, pos, m, "comment_above", .{ .table = cm });
             }
-        }.lt);
-        const uses = try run.newTable(pos);
-        uses.kind = .list;
-        for (names.items) |n| uses.list.append(a, .{ .string = try keep(run, pos, n) }) catch return run.oom(pos);
-        // In a container, the members a method reaches as `self.x` (or any
-        // `v.x`), matched by name, not by type.
-        var reached: std.ArrayList([]const u8) = .empty;
-        if (container != null) {
-            var rseen: std.StringHashMapUnmanaged(void) = .empty;
-            for (toks, 0..) |tk, ti| {
-                if (tk.start < d.start or tk.start >= d.stop) continue;
-                if (tk.tag != .identifier or ti == 0 or toks[ti - 1].tag != .period) continue;
-                const name = src[tk.start..tk.end];
-                if (std.mem.eql(u8, name, d.name) or !member.contains(name) or rseen.contains(name)) continue;
-                rseen.put(sa, name, {}) catch return run.oom(pos);
-                reached.append(sa, name) catch return run.oom(pos);
+            const u = try run.newTable(pos);
+            u.kind = .list;
+            try put(run, pos, m, "uses", .{ .table = u });
+            uses = u;
+            if (container != null) {
+                const r = try run.newTable(pos);
+                r.kind = .list;
+                try put(run, pos, m, "reaches", .{ .table = r });
+                reaches = r;
             }
-            std.mem.sort([]const u8, reached.items, {}, struct {
-                fn lt(_: void, x: []const u8, y: []const u8) bool {
-                    return std.mem.lessThan(u8, x, y);
-                }
-            }.lt);
-        }
-        const reaches = try run.newTable(pos);
-        reaches.kind = .list;
-        for (reached.items) |n| reaches.list.append(a, .{ .string = try keep(run, pos, n) }) catch return run.oom(pos);
-        const m = try run.newTable(pos);
-        m.kind = .map;
-        try put(run, pos, m, "kind", .{ .string = @tagName(d.kind) });
-        try put(run, pos, m, "name", .{ .string = try keep(run, pos, d.name) });
-        try put(run, pos, m, "name_form", .{ .string = @tagName(d.name_form) });
-        try put(run, pos, m, "visibility", .{ .string = @tagName(d.visibility) });
-        try put(run, pos, m, "linkage", .{ .string = @tagName(d.linkage) });
-        try put(run, pos, m, "first", .{ .int = @intCast(d.first) });
-        try put(run, pos, m, "last", .{ .int = @intCast(d.last) });
-        try put(run, pos, m, "start", .{ .int = @intCast(d.start) });
-        try put(run, pos, m, "stop", .{ .int = @intCast(d.stop) });
-        if (d.comment_above) |c| {
-            const cm = try run.newTable(pos);
-            cm.kind = .map;
-            try put(run, pos, cm, "first", .{ .int = @intCast(c.first) });
-            try put(run, pos, cm, "last", .{ .int = @intCast(c.last) });
-            try put(run, pos, m, "comment_above", .{ .table = cm });
-        }
-        try put(run, pos, m, "uses", .{ .table = uses });
-        if (container != null) try put(run, pos, m, "reaches", .{ .table = reaches });
-        list.list.append(a, .{ .table = m }) catch return run.oom(pos);
+            list.list.append(a, .{ .table = m }) catch return run.oom(pos);
+        } else if (is(l, "u") or is(l, "r")) {
+            const into = (if (is(l, "u")) uses else reaches) orelse return an.wrong();
+            into.list.append(a, .{ .string = try keep(run, pos, try an.field(l, 1)) }) catch return run.oom(pos);
+        } else if (is(l, "parse_error")) {
+            return run.fail(pos, .argument, "`zig_decls`: {s} does not parse as Zig: line {d} ({s})", .{ p.rel(), try an.int(l, 1), try an.field(l, 2) });
+        } else if (is(l, "no_container")) {
+            const name = container.?;
+            return run.fail(pos, .argument, "`zig_decls`: {s} has no container `{s}` (a top-level `const {s} = struct {{...}}`, or a union's, an enum's, an opaque's)", .{ p.rel(), name, name });
+        } else if (is(l, "invalid")) {
+            return run.fail(pos, .argument, "`zig_decls`: {s} does not tokenize as Zig at line {d}", .{ p.rel(), try an.int(l, 1) });
+        } else return an.wrong();
     }
     return .{ .table = list };
 }
 
-/// The tag a token builtin's options keep, `{tag = name}`, a name in `Tag`, or
-/// null for every tag. `call` names the builtin in a refusal, and `tags` says
-/// what a tag's name looks like.
-pub fn tagOption(comptime Tag: type, run: *Run, pos: ast.Pos, comptime call: []const u8, comptime tags: []const u8, opts: Value) Error!?Tag {
-    var only: ?Tag = null;
+/// The text a token builtin's options keep, `{tag = name}`, or null for every
+/// tag. `call` names the builtin in a refusal.
+fn tagText(run: *Run, pos: ast.Pos, comptime call: []const u8, opts: Value) Error!?[]const u8 {
+    var only: ?[]const u8 = null;
     switch (opts) {
         .table => |t| if (t.kind == .map) {
             for (t.map.keys(), t.map.values()) |k, x| {
                 if (!std.mem.eql(u8, k, "tag")) return run.fail(pos, .argument, "`" ++ call ++ "` takes `tag`, not `{s}`", .{k});
-                const s = switch (x) {
+                only = switch (x) {
                     .string => |v| v,
                     else => return run.fail(pos, .type, "`" ++ call ++ "`' `tag` is a tag's name, not {s}", .{x.typeName()}),
                 };
-                only = std.meta.stringToEnum(Tag, s) orelse return run.fail(pos, .argument, "`" ++ call ++ "`: no token tag `{s}` (" ++ tags ++ ")", .{s});
             }
         } else return run.fail(pos, .type, "`" ++ call ++ "`' options are a map, not a list", .{}),
         else => |v| return run.fail(pos, .type, "`" ++ call ++ "`' options are a map, not {s}", .{v.typeName()}),
@@ -606,180 +476,89 @@ pub fn tagOption(comptime Tag: type, run: *Run, pos: ast.Pos, comptime call: []c
     return only;
 }
 
-/// `host("zig_tokens", path[, {tag}])`: the file's tokens from `za.tokens`, as
+/// The tag a token builtin's options keep, `{tag = name}`, a name in `Tag`, or
+/// null for every tag. `call` names the builtin in a refusal, and `tags` says
+/// what a tag's name looks like.
+pub fn tagOption(comptime Tag: type, run: *Run, pos: ast.Pos, comptime call: []const u8, comptime tags: []const u8, opts: Value) Error!?Tag {
+    const s = (try tagText(run, pos, call, opts)) orelse return null;
+    return std.meta.stringToEnum(Tag, s) orelse noTag(run, pos, call, tags, s);
+}
+
+fn noTag(run: *Run, pos: ast.Pos, comptime call: []const u8, comptime tags: []const u8, s: []const u8) Error {
+    return run.fail(pos, .argument, "`" ++ call ++ "`: no token tag `{s}` (" ++ tags ++ ")", .{s});
+}
+
+/// `host("zig_tokens", path[, {tag}])`: the file's tokens from zig-ast, as
 /// `{tag, text, line}`, where `tag` is a std.zig.Token.Tag name. A plain comment
 /// is not a token; a doc comment is. `{tag = "identifier"}` keeps one kind, so
 /// the script does not hold every token. Charges a step per token.
-pub fn tokens(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+pub fn tokens(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (args.len < 1 or args.len > 2) return run.fail(pos, .argument, "`zig_tokens` takes a path and options, given {d} arguments", .{args.len});
-    const only: ?za.Tag = if (args.len == 2) try tagOption(za.Tag, run, pos, "zig_tokens", "std.zig.Token.Tag: `identifier`, `keyword_fn`, `string_literal`, ...", args[1]) else null;
-    const hub = script.builtins_store;
-    const rd = script.builtins_read;
-    const p = try hub.pathArg(run, pos, .host, args[0], false);
-    try hub.countRead(run, pos);
-    const size = try rd.fileSize(run, pos, .host, p);
+    const only: ?[]const u8 = if (args.len == 2) try tagText(run, pos, "zig_tokens", args[1]) else null;
+    const p = try script.builtins_store.pathArg(run, pos, .host, args[0], false);
     var scratch: Scratch = undefined;
-    const sa = scratch.init(backing, run);
+    const sa = scratch.init(h.alloc, run);
     defer scratch.deinit();
-    const was = try rd.readSizedIn(sa, run, pos, .host, p, size, 0, null);
-    const src = sa.dupeSentinel(u8, was, 0) catch return run.oom(pos);
-    try script.builtins.chargeBytes(run, pos, src.len);
-    const toks = switch (za.tokens(sa, src) catch return run.oom(pos)) {
-        .ok => |ok| ok,
-        .invalid => |n| return run.fail(pos, .argument, "`zig_tokens`: {s} does not tokenize as Zig at line {d}", .{ p.rel(), n }),
-    };
-    try run.charge(pos, toks.len);
-    const starts = za.lineStarts(sa, src) catch return run.oom(pos);
+    const src = try readSource(sa, run, pos, p);
+    var req = try Request.init(sa, run, pos, "tokens");
+    if (only) |t| try req.line(.{ "tag", t });
+    try req.source(src);
+    var an = try ask(h, sa, run, pos, "zig_tokens", req.out.written());
     const list = try run.newTable(pos);
     list.kind = .list;
-    for (toks) |tk| {
-        if (only) |o| if (tk.tag != o) continue;
-        const m = try run.newTable(pos);
-        m.kind = .map;
-        try put(run, pos, m, "tag", .{ .string = @tagName(tk.tag) });
-        try put(run, pos, m, "text", .{ .string = try keep(run, pos, src[tk.start..tk.end]) });
-        try put(run, pos, m, "line", .{ .int = @intCast(za.lineOf(starts, tk.start)) });
-        list.list.append(run.alloc, .{ .table = m }) catch return run.oom(pos);
+    while (try an.next()) |l| {
+        if (is(l, "work")) {
+            try run.charge(pos, try an.int(l, 1));
+        } else if (is(l, "t")) {
+            const start = try an.int(l, 2);
+            const end = try an.int(l, 3);
+            if (end < start or end > src.len) return an.wrong();
+            const m = try run.newTable(pos);
+            m.kind = .map;
+            try put(run, pos, m, "tag", .{ .string = try keep(run, pos, try an.field(l, 1)) });
+            try put(run, pos, m, "text", .{ .string = try keep(run, pos, src[start..end]) });
+            try put(run, pos, m, "line", .{ .int = @intCast(try an.int(l, 4)) });
+            list.list.append(run.alloc, .{ .table = m }) catch return run.oom(pos);
+        } else if (is(l, "no_tag")) {
+            return noTag(run, pos, "zig_tokens", "std.zig.Token.Tag: `identifier`, `keyword_fn`, `string_literal`, ...", only.?);
+        } else if (is(l, "invalid")) {
+            return run.fail(pos, .argument, "`zig_tokens`: {s} does not tokenize as Zig at line {d}", .{ p.rel(), try an.int(l, 1) });
+        } else return an.wrong();
     }
     return .{ .table = list };
-}
-
-/// The extra rewrites of a move with `from_as`, each with its spans against the
-/// text before it: `done.to_now` to `to_qualified` to `to_imported`, and
-/// `done.from_now` to `from_pub`.
-const FromAs = struct {
-    to_qualified: []const u8,
-    qualified_spans: []const Span,
-    to_imported: []const u8,
-    import_spans: []const Span,
-    from_pub: []const u8,
-    pub_spans: []const Span,
-    qualified: usize,
-    made_pub: []const []const u8,
-};
-
-fn fromAs(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, done: anytype, fa: []const u8, from_base: []const u8) Error!FromAs {
-    const to_z = sa.dupeSentinel(u8, done.to_now, 0) catch return run.oom(pos);
-    const toks = switch (za.tokens(sa, to_z) catch return run.oom(pos)) {
-        .ok => |ok| ok,
-        .invalid => |n| return run.fail(pos, .argument, "`zig_move`: the moved code does not tokenize at line {d}", .{n}),
-    };
-    for (toks, 0..) |tk, i| if (tk.tag == .identifier and std.mem.eql(u8, to_z[tk.start..tk.end], fa) and (i == 0 or toks[i - 1].tag != .period))
-        return run.fail(pos, .argument, "`zig_move`: `{s}` is a name in the moved code already: `from_as` would shadow it; nothing written", .{fa});
-    // Qualify the moved code's uses of `from`'s names.
-    var renames: std.ArrayList(Rename) = .empty;
-    var wanted: std.StringHashMapUnmanaged(void) = .empty;
-    for (done.needs_from_from) |n| if (!wanted.contains(n.name)) {
-        wanted.put(sa, n.name, {}) catch return run.oom(pos);
-        renames.append(sa, .{ .from = n.name, .to = std.fmt.allocPrint(sa, "{s}.{s}", .{ fa, n.name }) catch return run.oom(pos) }) catch return run.oom(pos);
-    };
-    const q = switch (planMany(sa, to_z, renames.items, null) catch return run.oom(pos)) {
-        .done => |d| d,
-        .declaration => |d| return run.fail(pos, .argument, "`zig_move`: the moved code declares `{s}` (line {d}), which `from_as` would qualify; nothing written", .{ d.name, d.line }),
-        .invalid => |n| return run.fail(pos, .argument, "`zig_move`: the moved code does not tokenize at line {d}", .{n}),
-    };
-    try run.charge(pos, q.tokens);
-    // Insert the import after `to`'s last `@import`, or first if there is none.
-    const qz = sa.dupeSentinel(u8, q.now, 0) catch return run.oom(pos);
-    const line = std.fmt.allocPrint(sa, "const {s} = @import(\"{s}\");", .{ fa, from_base }) catch return run.oom(pos);
-    var at: usize = 0;
-    var text: []const u8 = undefined;
-    switch (za.decls(sa, qz) catch return run.oom(pos)) {
-        .ok => |ok| for (ok.decls) |d| if (std.mem.startsWith(u8, d.value, "@import(")) {
-            at = d.stop;
-        },
-        .parse_error => |e| return run.fail(pos, .argument, "`zig_move`: the moved code does not parse at line {d}", .{e.line}),
-    }
-    if (at == 0) {
-        text = std.fmt.allocPrint(sa, "{s}\n\n", .{line}) catch return run.oom(pos);
-    } else text = std.fmt.allocPrint(sa, "\n{s}", .{line}) catch return run.oom(pos);
-    const imported = std.mem.concat(sa, u8, &.{ q.now[0..at], text, q.now[at..] }) catch return run.oom(pos);
-    const import_spans = sa.alloc(Span, 1) catch return run.oom(pos);
-    import_spans[0] = .{ .o0 = at, .o1 = at, .c0 = at, .c1 = at + text.len };
-    // Make those names `pub` in `from`, inserting past any doc comment.
-    const fz = sa.dupeSentinel(u8, done.from_now, 0) catch return run.oom(pos);
-    var made: std.ArrayList([]const u8) = .empty;
-    var offsets: std.ArrayList(usize) = .empty;
-    switch (za.decls(sa, fz) catch return run.oom(pos)) {
-        .ok => |ok| for (ok.decls) |d| {
-            if (!wanted.contains(d.name) or d.visibility == .@"pub") continue;
-            if (d.kind != .@"const" and d.kind != .@"var" and d.kind != .@"fn") continue;
-            var k = d.start;
-            while (true) {
-                var s = k;
-                while (s < fz.len and (fz[s] == ' ' or fz[s] == '\t')) s += 1;
-                if (!std.mem.startsWith(u8, fz[s..], "///")) break;
-                k = (std.mem.indexOfScalarPos(u8, fz, s, '\n') orelse fz.len) + 1;
-            }
-            offsets.append(sa, k) catch return run.oom(pos);
-            made.append(sa, d.name) catch return run.oom(pos);
-        },
-        .parse_error => |e| return run.fail(pos, .argument, "`zig_move`: `from`, cut, does not parse at line {d}", .{e.line}),
-    }
-    var out: std.ArrayList(u8) = .empty;
-    var spans: std.ArrayList(Span) = .empty;
-    var copied: usize = 0;
-    for (offsets.items) |o| {
-        out.appendSlice(sa, fz[copied..o]) catch return run.oom(pos);
-        const c0 = out.items.len;
-        out.appendSlice(sa, "pub ") catch return run.oom(pos);
-        spans.append(sa, .{ .o0 = o, .o1 = o, .c0 = c0, .c1 = out.items.len }) catch return run.oom(pos);
-        copied = o;
-    }
-    out.appendSlice(sa, fz[copied..]) catch return run.oom(pos);
-    std.mem.sort([]const u8, made.items, {}, struct {
-        fn lt(_: void, x: []const u8, y: []const u8) bool {
-            return std.mem.lessThan(u8, x, y);
-        }
-    }.lt);
-    return .{ .to_qualified = q.now, .qualified_spans = q.spans, .to_imported = imported, .import_spans = import_spans, .from_pub = out.items, .pub_spans = spans.items, .qualified = q.renamed, .made_pub = made.items };
-}
-
-/// A Zig file as read (`was`, in the run's arena when it may be handed to core)
-/// and NUL-terminated for the parser (`src`, in the scratch).
-const Read = struct { was: []const u8, src: [:0]const u8 };
-/// Reads `p`, charging the read and the copy. Returns `null` for a missing file
-/// when `missing_ok`.
-fn readZig(sa: std.mem.Allocator, run: *Run, pos: ast.Pos, p: script.builtins_store.Path, missing_ok: bool, kept: bool) Error!?Read {
-    const hub = script.builtins_store;
-    try hub.countRead(run, pos);
-    if (missing_ok) {
-        const st = webbox.store.statOrNull(run.io, run.alloc, p.full()) catch |e| return hub.storeFailed(run, pos, .host, p.rel(), e);
-        if (st == null) return null;
-    }
-    const size = try script.builtins_read.fileSize(run, pos, .host, p);
-    const was = try script.builtins_read.readSizedIn(if (kept) run.alloc else sa, run, pos, .host, p, size, 0, null);
-    const src = sa.dupeSentinel(u8, was, 0) catch return run.oom(pos);
-    try script.builtins.chargeBytes(run, pos, src.len);
-    return .{ .was = was, .src = src };
 }
 
 pub fn put(run: *Run, pos: ast.Pos, t: *script.value.Table, k: []const u8, v: Value) Error!void {
     t.map.put(run.alloc, k, v) catch return run.oom(pos);
 }
 
-/// A list of `{name, line}` maps, or `{name, target, line}` if items have a target.
-fn nameLines(run: *Run, pos: ast.Pos, items: anytype) Error!Value {
+/// A name and its line, as a move reports it; `target` for an import.
+const NameLine = struct { name: []const u8, target: []const u8 = "", line: usize };
+
+/// A list of `{name, line}` maps, or `{name, target, line}` if `targets`.
+fn nameLines(run: *Run, pos: ast.Pos, items: []const NameLine, targets: bool) Error!Value {
     const list = try run.newTable(pos);
     list.kind = .list;
     for (items) |x| {
         const m = try run.newTable(pos);
         m.kind = .map;
         try put(run, pos, m, "name", .{ .string = try keep(run, pos, x.name) });
-        if (@hasField(@TypeOf(x), "target")) try put(run, pos, m, "target", .{ .string = try keep(run, pos, x.target) });
+        if (targets) try put(run, pos, m, "target", .{ .string = try keep(run, pos, x.target) });
         try put(run, pos, m, "line", .{ .int = @intCast(x.line) });
         list.list.append(run.alloc, .{ .table = m }) catch return run.oom(pos);
     }
     return .{ .table = list };
 }
 
+/// The kinds a declaration to move may name (tools/zig_ast's `Kind`).
+const kinds = [_][]const u8{ "fn", "const", "var", "test", "comptime", "field" };
+
 /// `host("zig_move", from, to, {names, opts})`: moves top-level declarations
-/// from one Zig file to another (`shale_zig_move.zig`) and reports what the
-/// move broke. A missing `to` is created. `to` is written before `from`, so a
-/// stop between them leaves the declarations in both, never in neither.
-/// Charges the reads, the copies, and a step per token and node of both files.
-pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
-    const zm = @import("shale_zig_move.zig");
+/// from one Zig file to another (zig-ast plans it) and reports what the move
+/// broke. A missing `to` is created. `to` is written before `from`, so a stop
+/// between them leaves the declarations in both, never in neither. Charges
+/// the reads, the copies, and a step per token and node of both files.
+pub fn move(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     try changes(run, pos, "zig_move");
     if (args.len != 3) return run.fail(pos, .argument, "`zig_move` takes `from`, `to` and `{{names, opts}}`, given {d}", .{args.len});
     const hub = script.builtins_store;
@@ -795,12 +574,13 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
         .table => |t| if (t.kind == .list) t else return run.fail(pos, .type, "`zig_move`'s names are a list of names, or `{{kind = ..., name = ...}}`", .{}),
         else => return run.fail(pos, .type, "`zig_move`'s names are a list of names, or `{{kind = ..., name = ...}}`", .{}),
     };
-    var wants: std.ArrayList(zm.Want) = .empty;
+    const Want = struct { name: []const u8, kind: ?[]const u8 = null };
+    var wants: std.ArrayList(Want) = .empty;
     for (names.list.items) |v| switch (v) {
         .string => |s| wants.append(a, .{ .name = s }) catch return run.oom(pos),
         .table => |t| {
             if (t.kind != .map) return run.fail(pos, .type, "`zig_move`: a name is a string, or `{{kind = ..., name = ...}}`", .{});
-            var w: zm.Want = .{ .name = "" };
+            var w: Want = .{ .name = "" };
             for (t.map.keys(), t.map.values()) |k, x| {
                 const s = switch (x) {
                     .string => |s| s,
@@ -809,7 +589,10 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
                 if (std.mem.eql(u8, k, "name")) {
                     w.name = s;
                 } else if (std.mem.eql(u8, k, "kind")) {
-                    w.kind = std.meta.stringToEnum(za.Kind, s) orelse return run.fail(pos, .argument, "`zig_move`: no kind `{s}`: fn, const, var, test, comptime or field", .{s});
+                    for (kinds) |kind| {
+                        if (std.mem.eql(u8, kind, s)) w.kind = kind;
+                    }
+                    if (w.kind == null) return run.fail(pos, .argument, "`zig_move`: no kind `{s}`: fn, const, var, test, comptime or field", .{s});
                 } else return run.fail(pos, .argument, "`zig_move`: a name takes `kind` and `name`, not `{s}`", .{k});
             }
             wants.append(a, w) catch return run.oom(pos);
@@ -817,7 +600,7 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
         else => return run.fail(pos, .type, "`zig_move`: a name is a string, or `{{kind = ..., name = ...}}`", .{}),
     };
     if (wants.items.len == 0) return run.fail(pos, .argument, "`zig_move`: no names: nothing to move", .{});
-    var mode: zm.CommentMode = .doc;
+    var mode: []const u8 = "doc";
     var after: ?[]const u8 = null;
     // `from_as` names the import through which the moved code reaches `from`.
     var from_as: ?[]const u8 = null;
@@ -829,116 +612,170 @@ pub fn move(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const V
                 else => return run.fail(pos, .type, "`zig_move`'s `{s}` is a string", .{k}),
             };
             if (std.mem.eql(u8, k, "comment")) {
-                mode = std.meta.stringToEnum(zm.CommentMode, s) orelse return run.fail(pos, .argument, "`zig_move`'s `comment` is \"doc\" or \"doc_and_plain\", not \"{s}\"", .{s});
+                if (!std.mem.eql(u8, s, "doc") and !std.mem.eql(u8, s, "doc_and_plain")) return run.fail(pos, .argument, "`zig_move`'s `comment` is \"doc\" or \"doc_and_plain\", not \"{s}\"", .{s});
+                mode = s;
             } else if (std.mem.eql(u8, k, "after")) {
                 after = s;
             } else if (std.mem.eql(u8, k, "from_as")) {
-                if (!std.zig.isValidId(s)) return run.fail(pos, .argument, "`zig_move`'s `from_as` (\"{s}\") is not a Zig identifier", .{s});
+                if (!wire.isValidId(s)) return run.fail(pos, .argument, "`zig_move`'s `from_as` (\"{s}\") is not a Zig identifier", .{s});
                 from_as = s;
             } else return run.fail(pos, .argument, "`zig_move` takes `comment`, `after` and `from_as`, not `{s}`", .{k});
         },
         else => |v| return run.fail(pos, .type, "`zig_move`'s options are a map, not {s}", .{v.typeName()}),
     }
     var scratch: Scratch = undefined;
-    const sa = scratch.init(backing, run);
+    const sa = scratch.init(h.alloc, run);
     defer scratch.deinit();
-    const from_read = (try readZig(sa, run, pos, p, false, true)).?;
-    const to_read: Read = (try readZig(sa, run, pos, q, true, true)) orelse .{ .was = "", .src = "" };
-    const from_src = from_read.was;
-    const to_src = to_read.was;
-    const done = switch (zm.move(sa, from_read.src, to_read.src, wants.items, mode, after) catch return run.oom(pos)) {
-        .done => |d| d,
-        .refused => |why| return run.fail(pos, .argument, "`zig_move` {s} to {s}: {s}", .{ p.rel(), q.rel(), try keep(run, pos, why) }),
-    };
-    try run.charge(pos, done.work);
-    // Check both files may change before writing either.
-    try script.builtins_change.mayChange(run, pos, q);
-    try script.builtins_change.mayChange(run, pos, p);
-    const spans = struct {
-        fn of(r: *Run, ps: ast.Pos, xs: []const zm.Span) Error![]const Span {
-            const out = r.alloc.alloc(Span, xs.len) catch return r.oom(ps);
-            for (xs, out) |x, *o| o.* = .{ .o0 = x.o0, .o1 = x.o1, .c0 = x.c0, .c1 = x.c1 };
-            return out;
-        }
-    }.of;
-    // `from_as` rewrites are planned before anything is written.
-    var reach: ?FromAs = null;
-    if (from_as) |fa| reach = try fromAs(sa, run, pos, done, fa, std.fs.path.basename(p.rel()));
-    const writes: u64 = if (reach != null) 5 else 2;
+    // Each file read into the run's arena, since `rewrite` is handed it.
+    const from_src = try readKept(run, pos, p, false) orelse unreachable;
+    const to_src = try readKept(run, pos, q, true) orelse "";
+    var req = try Request.init(sa, run, pos, "move");
+    for (wants.items) |w| if (w.kind) |k| try req.line(.{ "want", w.name, k }) else try req.line(.{ "want", w.name });
+    try req.line(.{ "comment", mode });
+    if (after) |name| try req.line(.{ "after", name });
+    if (from_as) |fa| try req.line(.{ "from_as", fa, std.fs.path.basename(p.rel()) });
+    try req.source(from_src);
+    try req.source(to_src);
+    var an = try ask(h, sa, run, pos, "zig_move", req.out.written());
+    const Group = enum { to, from, to_q, to_i, from_p };
+    var groups = std.EnumArray(Group, std.ArrayList(Edit)).initFill(.empty);
+    var group: ?Group = null;
+    var moved: usize = 0;
+    var qualified: usize = 0;
+    var made_pub: std.ArrayList([]const u8) = .empty;
+    const Report = enum { needs_pub, needs_import, needs_from_from, uses_left };
+    var reports = std.EnumArray(Report, std.ArrayList(NameLine)).initFill(.empty);
+    while (try an.next()) |l| {
+        if (is(l, "work")) {
+            try run.charge(pos, try an.int(l, 1));
+        } else if (is(l, "refused")) {
+            return run.fail(pos, .argument, "`zig_move` {s} to {s}: {s}", .{ p.rel(), q.rel(), try keep(run, pos, try an.field(l, 1)) });
+        } else if (is(l, "may_change")) {
+            // Check both files may change before writing either.
+            try script.builtins_change.mayChange(run, pos, q);
+            try script.builtins_change.mayChange(run, pos, p);
+        } else if (is(l, "stop")) {
+            return run.fail(pos, .argument, "{s}", .{try an.field(l, 1)});
+        } else if (is(l, "g")) {
+            group = std.meta.stringToEnum(Group, try an.field(l, 1)) orelse return an.wrong();
+        } else if (is(l, "s")) {
+            const g = group orelse return an.wrong();
+            groups.getPtr(g).append(sa, try editOf(&an, l)) catch return run.oom(pos);
+        } else if (is(l, "moved")) {
+            moved = try an.int(l, 1);
+        } else if (is(l, "qualified")) {
+            qualified = try an.int(l, 1);
+        } else if (is(l, "made_pub")) {
+            made_pub.append(sa, try an.field(l, 1)) catch return run.oom(pos);
+        } else if (std.meta.stringToEnum(Report, l[0])) |r| {
+            const targets = r == .needs_import;
+            const x: NameLine = .{ .name = try an.field(l, 1), .target = if (targets) try an.field(l, 2) else "", .line = try an.int(l, if (targets) 3 else 2) };
+            reports.getPtr(r).append(sa, x) catch return run.oom(pos);
+        } else return an.wrong();
+    }
+    const to_done = try applyEdits(sa, &an, to_src, groups.get(.to).items);
+    const from_done = try applyEdits(sa, &an, from_src, groups.get(.from).items);
+    // `from_as` rewrites, each against the text the one before it left.
+    const reach = from_as != null;
+    const to_q: Edited = if (reach) try applyEdits(sa, &an, to_done.now, groups.get(.to_q).items) else undefined;
+    const to_i: Edited = if (reach) try applyEdits(sa, &an, to_q.now, groups.get(.to_i).items) else undefined;
+    const from_p: Edited = if (reach) try applyEdits(sa, &an, from_done.now, groups.get(.from_p).items) else undefined;
+    const writes: u64 = if (reach) 5 else 2;
     // Check the budgets for every write up front, so a budget never stops a
     // move halfway.
-    var bytes: u64 = done.to_now.len + done.from_now.len;
-    if (reach) |r| bytes += r.to_qualified.len + r.to_imported.len + r.from_pub.len;
+    var bytes: u64 = to_done.now.len + from_done.now.len;
+    if (reach) bytes += to_q.now.len + to_i.now.len + from_p.now.len;
     if (run.changes + writes > run.budgets.changes) return run.budgetStop(pos, .changes);
     if (bytes > run.budgets.change_bytes -| run.change_bytes) return run.budgetStop(pos, .change_bytes);
-    const to_spans = try spans(run, pos, done.to_spans);
-    const from_spans = try spans(run, pos, done.from_spans);
-    try script.builtins_change.rewrite(run, pos, q, to_src, try keep(run, pos, done.to_now), to_spans);
+    const to_now = try keep(run, pos, to_done.now);
+    const from_now = try keep(run, pos, from_done.now);
+    try script.builtins_change.rewrite(run, pos, q, to_src, to_now, a.dupe(Span, to_done.spans) catch return run.oom(pos));
     // The store or the output budget can still stop the second write; the
     // message then says `to` already holds the copies.
-    script.builtins_change.rewrite(run, pos, p, from_src, try keep(run, pos, done.from_now), from_spans) catch |e| {
+    script.builtins_change.rewrite(run, pos, p, from_src, from_now, a.dupe(Span, from_done.spans) catch return run.oom(pos)) catch |e| {
         if (e == error.Stop) if (run.stop) |*s| {
             s.message = std.fmt.allocPrint(a, "{s}; `zig_move` wrote {s} first, so it holds the moved declarations, which {s} still has: take {s} back (`git checkout --`) before moving again", .{ s.message, q.rel(), p.rel(), q.rel() }) catch s.message;
         };
         return e;
     };
-    if (reach) |r| {
-        try script.builtins_change.rewrite(run, pos, q, try keep(run, pos, done.to_now), try keep(run, pos, r.to_qualified), a.dupe(Span, r.qualified_spans) catch return run.oom(pos));
-        try script.builtins_change.rewrite(run, pos, q, try keep(run, pos, r.to_qualified), try keep(run, pos, r.to_imported), a.dupe(Span, r.import_spans) catch return run.oom(pos));
-        try script.builtins_change.rewrite(run, pos, p, try keep(run, pos, done.from_now), try keep(run, pos, r.from_pub), a.dupe(Span, r.pub_spans) catch return run.oom(pos));
+    if (reach) {
+        const q_now = try keep(run, pos, to_q.now);
+        try script.builtins_change.rewrite(run, pos, q, to_now, q_now, a.dupe(Span, to_q.spans) catch return run.oom(pos));
+        try script.builtins_change.rewrite(run, pos, q, q_now, try keep(run, pos, to_i.now), a.dupe(Span, to_i.spans) catch return run.oom(pos));
+        try script.builtins_change.rewrite(run, pos, p, from_now, try keep(run, pos, from_p.now), a.dupe(Span, from_p.spans) catch return run.oom(pos));
     }
     const t = try run.newTable(pos);
     t.kind = .map;
-    try put(run, pos, t, "moved", .{ .int = @intCast(done.moved) });
-    if (reach) |r| {
-        try put(run, pos, t, "qualified", .{ .int = @intCast(r.qualified) });
+    try put(run, pos, t, "moved", .{ .int = @intCast(moved) });
+    if (reach) {
+        try put(run, pos, t, "qualified", .{ .int = @intCast(qualified) });
         const mp = try run.newTable(pos);
         mp.kind = .list;
-        for (r.made_pub) |n| mp.list.append(a, .{ .string = try keep(run, pos, n) }) catch return run.oom(pos);
+        for (made_pub.items) |n| mp.list.append(a, .{ .string = try keep(run, pos, n) }) catch return run.oom(pos);
         try put(run, pos, t, "made_pub", .{ .table = mp });
     }
-    try put(run, pos, t, "needs_pub", try nameLines(run, pos, done.needs_pub));
-    try put(run, pos, t, "needs_import", try nameLines(run, pos, done.needs_import));
-    try put(run, pos, t, "needs_from_from", try nameLines(run, pos, done.needs_from_from));
-    try put(run, pos, t, "uses_left", try nameLines(run, pos, done.uses_left));
+    try put(run, pos, t, "needs_pub", try nameLines(run, pos, reports.get(.needs_pub).items, false));
+    try put(run, pos, t, "needs_import", try nameLines(run, pos, reports.get(.needs_import).items, true));
+    try put(run, pos, t, "needs_from_from", try nameLines(run, pos, reports.get(.needs_from_from).items, false));
+    try put(run, pos, t, "uses_left", try nameLines(run, pos, reports.get(.uses_left).items, false));
     return .{ .table = t };
 }
 
+/// Reads `p` into the run's arena, charging the read and the copy. Gives null
+/// for a missing file when `missing_ok`.
+fn readKept(run: *Run, pos: ast.Pos, p: script.builtins_store.Path, missing_ok: bool) Error!?[]const u8 {
+    const hub = script.builtins_store;
+    try hub.countRead(run, pos);
+    if (missing_ok) {
+        const st = webbox.store.statOrNull(run.io, run.alloc, p.full()) catch |e| return hub.storeFailed(run, pos, .host, p.rel(), e);
+        if (st == null) return null;
+    }
+    const size = try script.builtins_read.fileSize(run, pos, .host, p);
+    const was = try script.builtins_read.readSizedIn(run.alloc, run, pos, .host, p, size, 0, null);
+    try script.builtins.chargeBytes(run, pos, was.len);
+    return was;
+}
+
 /// `host("zig_imports", path)`: a Zig file's `@import`s and `@embedFile`s in
-/// source order, from webbox's `zig_refs.zig`, as `{kind, target, name, line,
-/// file}`. `file` is `found` or `missing` beside the importer, or `module` for a
-/// target with no extension. Charges the read, the copy, a step per token and
-/// node, and a step per call for the file check.
-pub fn imports(backing: std.mem.Allocator, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
+/// source order, from webbox's `zig_refs.zig` in zig-ast, as `{kind, target,
+/// name, line, file}`. `file` is `found` or `missing` beside the importer, or
+/// `module` for a target with no extension. Charges the read, the copy, a step
+/// per token and node, and a step per call for the file check.
+pub fn imports(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     if (args.len != 1) return run.fail(pos, .argument, "`zig_imports` takes a path, given {d} arguments", .{args.len});
     const a = run.alloc;
     const p = try script.builtins_store.pathArg(run, pos, .host, args[0], false);
     var scratch: Scratch = undefined;
-    const sa = scratch.init(backing, run);
+    const sa = scratch.init(h.alloc, run);
     defer scratch.deinit();
-    const src = (try readZig(sa, run, pos, p, false, false)).?.src;
-    const got = switch (webbox.zig_refs.refs(sa, src) catch return run.oom(pos)) {
-        .ok => |ok| ok,
-        .parse_error => |line| return run.fail(pos, .argument, "`zig_imports`: {s} does not parse as Zig: line {d}", .{ p.rel(), line }),
-    };
-    try run.charge(pos, got.tokens + got.nodes + got.refs.len);
+    const src = try readSource(sa, run, pos, p);
+    var req = try Request.init(sa, run, pos, "imports");
+    try req.source(src);
+    var an = try ask(h, sa, run, pos, "zig_imports", req.out.written());
     const dir = std.fs.path.dirnamePosix(p.full()) orelse ".";
     const list = try run.newTable(pos);
     list.kind = .list;
-    for (got.refs) |r| {
-        const file: []const u8 = if (std.fs.path.extension(r.target).len == 0) "module" else file: {
-            const full = std.fs.path.resolvePosix(sa, &.{ dir, r.target }) catch return run.oom(pos);
-            const st = webbox.store.statOrNull(run.io, sa, full) catch |e| return script.builtins_store.storeFailed(run, pos, .host, r.target, e);
-            break :file if (st != null) "found" else "missing";
-        };
-        const m = try run.newTable(pos);
-        m.kind = .map;
-        try put(run, pos, m, "kind", .{ .string = @tagName(r.kind) });
-        try put(run, pos, m, "target", .{ .string = try keep(run, pos, r.target) });
-        try put(run, pos, m, "name", .{ .string = try keep(run, pos, r.name) });
-        try put(run, pos, m, "line", .{ .int = @intCast(r.line) });
-        try put(run, pos, m, "file", .{ .string = file });
-        list.list.append(a, .{ .table = m }) catch return run.oom(pos);
+    while (try an.next()) |l| {
+        if (is(l, "work")) {
+            try run.charge(pos, try an.int(l, 1));
+        } else if (is(l, "i")) {
+            const target = try an.field(l, 2);
+            const file: []const u8 = if (std.fs.path.extension(target).len == 0) "module" else file: {
+                const full = std.fs.path.resolvePosix(sa, &.{ dir, target }) catch return run.oom(pos);
+                const st = webbox.store.statOrNull(run.io, sa, full) catch |e| return script.builtins_store.storeFailed(run, pos, .host, try keep(run, pos, target), e);
+                break :file if (st != null) "found" else "missing";
+            };
+            const m = try run.newTable(pos);
+            m.kind = .map;
+            try put(run, pos, m, "kind", .{ .string = try keep(run, pos, try an.field(l, 1)) });
+            try put(run, pos, m, "target", .{ .string = try keep(run, pos, target) });
+            try put(run, pos, m, "name", .{ .string = try keep(run, pos, try an.field(l, 3)) });
+            try put(run, pos, m, "line", .{ .int = @intCast(try an.int(l, 4)) });
+            try put(run, pos, m, "file", .{ .string = file });
+            list.list.append(a, .{ .table = m }) catch return run.oom(pos);
+        } else if (is(l, "parse_error")) {
+            return run.fail(pos, .argument, "`zig_imports`: {s} does not parse as Zig: line {d}", .{ p.rel(), try an.int(l, 1) });
+        } else return an.wrong();
     }
     return .{ .table = list };
 }

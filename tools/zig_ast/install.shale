@@ -1,0 +1,21 @@
+-- Builds zig-ast and installs it where Shale's host looks for it, at
+-- ~/tools/zig-ast/bin/zig-ast under the `tools` mount. zig-ast is Zig's own
+-- tokenizer and parser (std.zig, and webbox's zig_refs.zig), built by Shale's
+-- build with the Zig `zig-version` pins (`zig build zig-ast`, ReleaseSafe), so
+-- the tree it reads is that Zig's. Run from Shale's checkout:
+--   shale tools/zig_ast/install.shale
+--
+-- Shale's own tests and cookbook-test never use this one: they run the
+-- zig-ast their build made, so CI needs no step for it.
+
+local zig = "tools:zig-" .. trim(read("zig-version")) .. "/zig"
+if not exists(zig) then fail("zig-ast: no " .. zig .. ", the Zig zig-version pins") end
+local built = run({real(zig), "build", "zig-ast", "--prefix", real("tools:zig-ast")}, {timeout_ms = 600000, tail = 20})
+print(built.out)
+if built.ended ~= "exit" or built.code ~= 0 then fail("zig-ast: the build " .. (built.ended == "exit" and ("exited " .. built.code) or built.ended) .. "; nothing installed (its last lines are above)") end
+local exe = "tools:zig-ast/bin/zig-ast"
+if not exists(exe) then fail("zig-ast: the build finished but left no ~/tools/zig-ast/bin/zig-ast") end
+-- With stdin empty it says its header and ends.
+local said = run({real(exe), "--serve"}, {timeout_ms = 10000, stdin = "", head = 1})
+if not starts_with(said.out, "zig-ast serve ") then fail("zig-ast: the installed binary's first line is not its header: " .. said.out) end
+print("zig-ast: installed at ~/tools/zig-ast/bin/zig-ast, " .. trim(said.out))

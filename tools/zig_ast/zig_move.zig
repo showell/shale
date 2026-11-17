@@ -5,7 +5,7 @@
 //! reached through an `@This()` alias are not reported; the compiler finds both.
 
 const std = @import("std");
-const za = @import("shale_zig_ast.zig");
+const za = @import("zig_ast.zig");
 
 /// `was[o0..o1]` became `now[c0..c1]`. Matches core's `Span` field for field.
 pub const Span = struct { o0: usize, o1: usize, c0: usize, c1: usize };

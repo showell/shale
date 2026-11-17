@@ -1,12 +1,11 @@
-//! Tests `zig_rename` through the gate, each of the essay's misses left
-//! untouched or refused, and the pure plan (`shale_host_zig.plan`) over the
-//! repo's own files, there and back.
+//! Tests `zig_rename` through the gate and zig-ast, each of the essay's misses
+//! left untouched or refused. The pure plan's tests, over the repo's own files
+//! there and back, are zig-ast's (tools/zig_ast/zig_ast_test.zig).
 
 const std = @import("std");
 const testing = std.testing;
 const T = @import("shale_test_host.zig").T;
 const host_linux = @import("shale_host_linux.zig");
-const zig = @import("shale_host_zig.zig");
 const Class = @import("shale").script.diag.Class;
 
 fn init(t: *T) !void {
@@ -192,49 +191,6 @@ test "zig_rename: a step a token, more for a file four times the size (a name no
     }
 }
 
-test "zig_rename's plan, over this repo's src/*.zig and webbox's: renaming a name to one not in the file and back gives the file it began with" {
-    const a = testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(a);
-    defer arena.deinit();
-    const ar = arena.allocator();
-    var threaded = std.Io.Threaded.init(a, .{});
-    defer threaded.deinit();
-    const io = threaded.io();
-    var files: usize = 0;
-    var renamed: usize = 0;
-    for ([_][]const u8{ "src", @import("shale_test_options").webbox_root ++ "/src" }) |root| {
-        var dir = try std.Io.Dir.cwd().openDir(io, root, .{ .iterate = true });
-        defer dir.close(io);
-        var it = dir.iterate();
-        while (try it.next(io)) |e| {
-            if (e.kind != .file or !std.mem.endsWith(u8, e.name, ".zig")) continue;
-            const src = try dir.readFileAllocOptions(io, e.name, ar, .limited(16 << 20), .of(u8), 0);
-            for ([_][]const u8{ "a", "std", "run", "pos", "self" }) |from| {
-                const away = "zz_renamed_away";
-                if (std.mem.indexOf(u8, src, away) != null) continue;
-                const there = switch (try zig.plan(ar, src, from, away, null)) {
-                    .done => |p| p,
-                    else => return error.TestUnexpectedResult,
-                };
-                const z = try ar.dupeSentinel(u8, there.now, 0);
-                const back = switch (try zig.plan(ar, z, away, from, null)) {
-                    .done => |p| p,
-                    else => return error.TestUnexpectedResult,
-                };
-                if (!std.mem.eql(u8, back.now, src)) {
-                    std.debug.print("{s}/{s}: `{s}` there and back is not the file\n", .{ root, e.name, from });
-                    return error.TestUnexpectedResult;
-                }
-                try testing.expectEqual(there.renamed, back.renamed);
-                renamed += there.renamed;
-            }
-            files += 1;
-        }
-    }
-    try testing.expect(files > 50);
-    try testing.expect(renamed > 1000);
-}
-
 const harness =
     \\pub const UidSite = struct {
     \\    const Self = @This();
@@ -258,29 +214,6 @@ const harness =
     \\
 ;
 
-test "zig_rename's container: a member's declaration, its bare uses inside, and `C.`, `self.`, `@This().` uses; another container's same name left alone" {
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const got = try zig.planMember(a, harness, "marked", "isSigned", "UidSite");
-    const d = got.done;
-    try testing.expectEqual(@as(usize, 6), d.plan.renamed);
-    try testing.expect(std.mem.indexOf(u8, d.plan.now, "pub fn isSigned(id: []const u8) bool {\n        return id.len > 0;") != null);
-    try testing.expect(std.mem.indexOf(u8, d.plan.now, "self.isSigned(id) and UidSite.isSigned(id) and isSigned(id) and @This().isSigned(id)") != null);
-    try testing.expect(std.mem.indexOf(u8, d.plan.now, "_ = UidSite.isSigned(\"a\");\n    _ = Other.marked(\"b\");\n    _ = .marked;") != null);
-    try testing.expect(std.mem.indexOf(u8, d.plan.now, "pub fn marked(id: []const u8) bool {\n        return id.len == 0;") != null);
-}
-
-test "zig_rename's container refuses what it cannot attribute, no such container, or no such member" {
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const loose = harness ++ "fn f(s: UidSite) bool {\n    return s.marked(\"x\");\n}\n";
-    try testing.expectEqual(@as(usize, 21), (try zig.planMember(a, loose, "marked", "isSigned", "UidSite")).unattributed);
-    try testing.expectEqual(@as(usize, 0), (try zig.planMember(a, harness, "marked", "isSigned", "Nowhere")).no_container);
-    try testing.expect((try zig.planMember(a, harness, "closeWindow", "x", "UidSite")) == .no_member);
-}
-
 const callers =
     \\const search_index = @import("search_index.zig");
     \\const harness = @import("router_harness.zig");
@@ -292,19 +225,6 @@ const callers =
     \\}
     \\
 ;
-
-test "zig_rename's via: `prefix.from` callers through the given prefixes alone, every other `.from` left and its line said" {
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const d = (try zig.planVia(a, callers, "ready", "indexOrBuild", &.{"search_index"})).done;
-    try testing.expectEqual(@as(usize, 1), d.plan.renamed);
-    try testing.expect(std.mem.indexOf(u8, d.plan.now, "_ = search_index.indexOrBuild(1);\n    _ = other.ready;\n    _ = x.search_index.ready;") != null);
-    try testing.expectEqualSlices(usize, &.{ 5, 6 }, d.left);
-    const m = (try zig.planVia(a, callers, "marked", "isSigned", &.{"harness.UidSite"})).done;
-    try testing.expectEqual(@as(usize, 1), m.plan.renamed);
-    try testing.expect(std.mem.indexOf(u8, m.plan.now, "harness.UidSite.isSigned(\"a\")") != null);
-}
 
 test "zig_rename's container and via through the host: the file rewritten, `left` for via alone, and each refusal named with nothing written" {
     var t: T = undefined;

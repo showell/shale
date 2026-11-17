@@ -22,9 +22,10 @@ pub const shale_jobs = @import("shale_jobs.zig");
 pub const shale_job_record = @import("shale_job_record.zig");
 /// The host's job calls, over `shale_jobs`.
 pub const shale_host_jobs = @import("shale_host_jobs.zig");
+/// The host's Zig tools, read by zig-ast (tools/zig_ast), a program of its own.
 pub const shale_host_zig = @import("shale_host_zig.zig");
-pub const shale_zig_ast = @import("shale_zig_ast.zig");
-pub const shale_zig_move = @import("shale_zig_move.zig");
+/// The wire between the host and zig-ast: plain bytes.
+pub const shale_zig_wire = @import("shale_zig_wire.zig");
 
 test {
     _ = shale_keep;
@@ -37,8 +38,7 @@ test {
     _ = shale_job_record;
     _ = shale_host_jobs;
     _ = shale_host_zig;
-    _ = shale_zig_ast;
-    _ = shale_zig_move;
+    _ = shale_zig_wire;
     _ = @import("shale_test_host.zig");
     _ = @import("shale_prelude_linux_test.zig");
     _ = @import("shale_prelude_git_test.zig");

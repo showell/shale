@@ -1309,7 +1309,8 @@ three:
     host keeps the jobs a run started, so a stopped run ends them
     (`stopWithRun`, called by the runner as `--undo-on-stop`'s undo is);
   - the Zig tools, `zig_rename`, `zig_decls`, `zig_move`, `zig_imports`
-    and `zig_tokens` (`src/shale_host_zig.zig`);
+    and `zig_tokens` (`src/shale_host_zig.zig`), which ask zig-ast
+    (`tools/zig_ast`), one process a run, over `src/shale_zig_wire.zig`;
   - `shale_tokens`, a Shale file's tokens by the lexer in
     `src/script/lex.zig` (`src/shale_host_tokens.zig`);
   - `may_change`, the path hook's question before a change (below).
