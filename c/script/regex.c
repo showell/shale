@@ -569,17 +569,16 @@ typedef struct {
     RegexRangeVec ranges;
 } RegexEmitter;
 
-static STATUS_MUST_USE Status regex_emit(RegexEmitter *e, RegexInst i, uint16_t *pc) {
+// The instruction `op` with its fields put at the program's end; `pc`, when
+// not NULL, takes its place. It takes the fields rather than a RegexInst a
+// function made: no function returns one by value (regex.h, RegexInst).
+static STATUS_MUST_USE Status regex_emit(RegexEmitter *e, RegexOp op, uint8_t c, uint16_t x, uint16_t y, uint16_t *pc) {
     // DRAGON: the step budget. A search costs up to its states a position, and a count writes its part out (`((a{100}){100}){100}` would be a million instructions), so this cap is what bounds a program, and with it a search's cost before it runs; a place past 65535 would also wrap the uint16_t pcs. Every instruction comes through here.
     if (e->insts.len >= REGEX_INSTS_MOST) return regex_refuse(e->refused, 0, S("the pattern, its counts written out, is more than 8192 instructions: count less (`{n,m}`), or write `+` or `*`"));
+    RegexInst i = {(uint8_t)op, c, x, y};
     TRY(RegexInstVec_push(&e->insts, i));
     if (pc != NULL) *pc = (uint16_t)(e->insts.len - 1);
     return OK;
-}
-
-static RegexInst regex_inst(RegexOp op, uint8_t c, uint16_t x, uint16_t y) {
-    RegexInst i = {(uint8_t)op, c, x, y};
-    return i;
 }
 
 static uint16_t regex_here(const RegexEmitter *e) {
@@ -601,10 +600,10 @@ static STATUS_MUST_USE Status regex_emit_alt(RegexEmitter *e, RegexAlt a) {
             break;
         }
         uint16_t split;
-        TRY(regex_emit(e, regex_inst(REGEX_OP_SPLIT, 0, 0, 0), &split));
+        TRY(regex_emit(e, REGEX_OP_SPLIT, 0, 0, 0, &split));
         at(e->insts, split).x = (uint16_t)(split + 1);
         for (size_t j = 0; j < s.len; j++) TRY(regex_emit_node(e, &at(s, j)));
-        TRY(regex_emit(e, regex_inst(REGEX_OP_JMP, 0, 0, 0), &at(ends, n_ends)));
+        TRY(regex_emit(e, REGEX_OP_JMP, 0, 0, 0, &at(ends, n_ends)));
         n_ends++;
         at(e->insts, split).y = regex_here(e);
     }
@@ -614,29 +613,29 @@ static STATUS_MUST_USE Status regex_emit_alt(RegexEmitter *e, RegexAlt a) {
 
 static STATUS_MUST_USE Status regex_emit_atom(RegexEmitter *e, const RegexNode *n) {
     switch (n->kind) {
-    case REGEX_NODE_BYTE: return regex_emit(e, regex_inst(REGEX_OP_BYTE, n->c, 0, 0), NULL);
-    case REGEX_NODE_ANY: return regex_emit(e, regex_inst(REGEX_OP_ANY, 0, 0, 0), NULL);
-    case REGEX_NODE_SET: return regex_emit(e, regex_inst(REGEX_OP_SET, 0, n->set, 0), NULL);
-    case REGEX_NODE_START: return regex_emit(e, regex_inst(REGEX_OP_START, 0, 0, 0), NULL);
-    case REGEX_NODE_END: return regex_emit(e, regex_inst(REGEX_OP_END, 0, 0, 0), NULL);
-    case REGEX_NODE_BOUNDARY: return regex_emit(e, regex_inst(REGEX_OP_BOUNDARY, 0, 0, 0), NULL);
-    case REGEX_NODE_NOT_BOUNDARY: return regex_emit(e, regex_inst(REGEX_OP_BOUNDARY, 1, 0, 0), NULL);
+    case REGEX_NODE_BYTE: return regex_emit(e, REGEX_OP_BYTE, n->c, 0, 0, NULL);
+    case REGEX_NODE_ANY: return regex_emit(e, REGEX_OP_ANY, 0, 0, 0, NULL);
+    case REGEX_NODE_SET: return regex_emit(e, REGEX_OP_SET, 0, n->set, 0, NULL);
+    case REGEX_NODE_START: return regex_emit(e, REGEX_OP_START, 0, 0, 0, NULL);
+    case REGEX_NODE_END: return regex_emit(e, REGEX_OP_END, 0, 0, 0, NULL);
+    case REGEX_NODE_BOUNDARY: return regex_emit(e, REGEX_OP_BOUNDARY, 0, 0, 0, NULL);
+    case REGEX_NODE_NOT_BOUNDARY: return regex_emit(e, REGEX_OP_BOUNDARY, 1, 0, 0, NULL);
     case REGEX_NODE_GROUP: break;
     }
     if (n->index == 0) return regex_emit_alt(e, n->inner);
     uint16_t k = (uint16_t)(n->index - 1);
-    TRY(regex_emit(e, regex_inst(REGEX_OP_SAVE, 0, (uint16_t)(2 * k), 0), NULL));
+    TRY(regex_emit(e, REGEX_OP_SAVE, 0, (uint16_t)(2 * k), 0, NULL));
     TRY(regex_emit_alt(e, n->inner));
-    return regex_emit(e, regex_inst(REGEX_OP_SAVE, 0, (uint16_t)(2 * k + 1), 0), NULL);
+    return regex_emit(e, REGEX_OP_SAVE, 0, (uint16_t)(2 * k + 1), 0, NULL);
 }
 
 // One turn of loop `id`: `turn`, the atom, and its end (`again` or `first`),
 // recorded as a range. Gives the end's place.
 static STATUS_MUST_USE Status regex_turn_of(RegexEmitter *e, const RegexNode *n, uint8_t id, RegexOp end_op, uint16_t *end) {
     uint16_t from;
-    TRY(regex_emit(e, regex_inst(REGEX_OP_TURN, 0, id, 0), &from));
+    TRY(regex_emit(e, REGEX_OP_TURN, 0, id, 0, &from));
     TRY(regex_emit_atom(e, n));
-    TRY(regex_emit(e, regex_inst(end_op, 0, id, 0), end));
+    TRY(regex_emit(e, end_op, 0, id, 0, end));
     RegexRange rg = {id, from, *end};
     return RegexRangeVec_push(&e->ranges, rg);
 }
@@ -657,10 +656,10 @@ static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, const RegexNode *
         uint16_t first = 0;
         if (has_first) TRY(regex_turn_of(e, n, id, REGEX_OP_FIRST, &first));
         uint16_t loop;
-        TRY(regex_emit(e, regex_inst(REGEX_OP_SPLIT, 0, 0, 0), &loop));
+        TRY(regex_emit(e, REGEX_OP_SPLIT, 0, 0, 0, &loop));
         uint16_t again;
         TRY(regex_turn_of(e, n, id, REGEX_OP_AGAIN, &again));
-        TRY(regex_emit(e, regex_inst(REGEX_OP_JMP, 0, loop, 0), NULL));
+        TRY(regex_emit(e, REGEX_OP_JMP, 0, loop, 0, NULL));
         at(e->insts, loop).x = (uint16_t)(loop + 1);
         at(e->insts, loop).y = regex_here(e);
         if (has_first) at(e->insts, first).y = regex_here(e);
@@ -670,9 +669,9 @@ static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, const RegexNode *
     case REGEX_ONE: return regex_emit_atom(e, n);
     case REGEX_STAR: {
         uint16_t loop;
-        TRY(regex_emit(e, regex_inst(REGEX_OP_SPLIT, 0, 0, 0), &loop));
+        TRY(regex_emit(e, REGEX_OP_SPLIT, 0, 0, 0, &loop));
         TRY(regex_emit_atom(e, n));
-        TRY(regex_emit(e, regex_inst(REGEX_OP_JMP, 0, loop, 0), NULL));
+        TRY(regex_emit(e, REGEX_OP_JMP, 0, loop, 0, NULL));
         at(e->insts, loop).x = (uint16_t)(loop + 1);
         at(e->insts, loop).y = regex_here(e);
         return OK;
@@ -681,14 +680,14 @@ static STATUS_MUST_USE Status regex_emit_node(RegexEmitter *e, const RegexNode *
         uint16_t top = regex_here(e);
         TRY(regex_emit_atom(e, n));
         uint16_t s;
-        TRY(regex_emit(e, regex_inst(REGEX_OP_SPLIT, 0, top, 0), &s));
+        TRY(regex_emit(e, REGEX_OP_SPLIT, 0, top, 0, &s));
         at(e->insts, s).y = (uint16_t)(s + 1);
         return OK;
     }
     case REGEX_OPT: break;
     }
     uint16_t s;
-    TRY(regex_emit(e, regex_inst(REGEX_OP_SPLIT, 0, 0, 0), &s));
+    TRY(regex_emit(e, REGEX_OP_SPLIT, 0, 0, 0, &s));
     TRY(regex_emit_atom(e, n));
     at(e->insts, s).x = (uint16_t)(s + 1);
     at(e->insts, s).y = regex_here(e);
@@ -809,7 +808,7 @@ static STATUS_MUST_USE Status regex_compile_in(Arena *a, Arena *tree, Str patter
     TRY(regex_alt(&r, false, &top));
     RegexEmitter e = {.insts = RegexInstVec_make(a), .refused = refused, .ranges = RegexRangeVec_make(tree)};
     TRY(regex_emit_alt(&e, top));
-    TRY(regex_emit(&e, regex_inst(REGEX_OP_MATCH, 0, 0, 0), NULL));
+    TRY(regex_emit(&e, REGEX_OP_MATCH, 0, 0, 0, NULL));
     RegexProgram p;
     memset(&p, 0, sizeof p);
     p.insts.ptr = e.insts.ptr;
