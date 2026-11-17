@@ -120,28 +120,26 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     if (ov->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s options are a map, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(ov))));
     Table *m = ov->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`job_start`'s options are a map, not a list"));
-    bool has_log = false;
+    // Each nil until given: a script's map never holds nil.
     Value log_v;
-    bool has_cwd = false;
+    value_nil(&log_v);
     Value cwd_v;
+    value_nil(&cwd_v);
+    Value want;
+    value_nil(&want);
     Table *env_t = NULL;
-    bool has_want = false;
-    Str want = S("");
     bool keep_on_stop = false;
     for (size_t i = 0; i < ValueMap_len(&m->map); i++) {
         Str k = ValueMap_key_at(&m->map, i);
         Value x = ValueMap_value_at(&m->map, i);
         if (str_eq(k, S("log"))) {
-            has_log = true;
             log_v = x;
         } else if (str_eq(k, S("cwd"))) {
-            has_cwd = true;
             cwd_v = x;
         } else if (str_eq(k, S("env"))) {
             TRY(host_map_opt(r, pos, k, &x, &env_t));
         } else if (str_eq(k, S("want"))) {
-            has_want = true;
-            TRY(host_str_opt(r, pos, k, &x, &want));
+            TRY(host_str_value_opt(r, pos, k, &x, &want));
         } else if (str_eq(k, S("keep_on_stop"))) {
             if (x.tag != VALUE_BOOL) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s `keep_on_stop` is a boolean, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(&x))));
             keep_on_stop = x.as.boolean;
@@ -151,7 +149,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
             return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes log, cwd, env, want and keep_on_stop, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
         }
     }
-    if (!has_log) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start` needs a `log`: a job's output goes there, and its record beside it"));
+    if (!host_given(&log_v)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start` needs a `log`: a job's output goes there, and its record beside it"));
     Str log_shown = S("");
     TRY(host_str_opt(r, pos, S("log"), &log_v, &log_shown));
     TRY(run_charge(r, pos, n));
@@ -159,7 +157,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     SpawnStrs argv_s = {argv.ptr, argv.len};
     TRY(host_refuse_nul(r, pos, S("job_start"), argv_s, env_t, NULL));
     Str cwd = S("");
-    if (has_cwd) {
+    if (host_given(&cwd_v)) {
         Str given = S("");
         TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &cwd_v, S("its path"), &given));
         TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), given, true, &cwd));
@@ -187,7 +185,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, S("job_start"), argv_c, cwd, env_keys, env_vals));
     // The secrets guard before `host_refuse`, which hands argv[0] to git
     // (the DRAGON at host_run.c's call).
-    TRY(host_refuse(h, r, pos, S("job_start"), at(argv, 0), cwd, has_want));
+    TRY(host_refuse(h, r, pos, S("job_start"), at(argv, 0), cwd, host_given(&want)));
     // Its record holds the argv, escaped: one too long is said here, not as
     // a record the reaper could not write.
     uint64_t argv_bytes = n - 1;
@@ -273,9 +271,9 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     Buf line = buf_make(a);
     Status ls = buf_lit(&line, "job ");
     if (ls == OK) ls = buf_str(&line, joined);
-    if (ls == OK && has_want) ls = buf_lit(&line, " (want: ");
-    if (ls == OK && has_want) ls = buf_str(&line, want);
-    if (ls == OK && has_want) ls = buf_byte(&line, ')');
+    if (ls == OK && host_given(&want)) ls = buf_lit(&line, " (want: ");
+    if (ls == OK && host_given(&want)) ls = buf_str(&line, want.as.string);
+    if (ls == OK && host_given(&want)) ls = buf_byte(&line, ')');
     if (ls == OK) ls = buf_lit(&line, " started (pid ");
     if (ls == OK) ls = buf_u64(&line, (uint64_t)rec.pid);
     if (ls == OK) ls = buf_lit(&line, "), log ");
@@ -405,25 +403,24 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
     return OK;
 }
 
-// `job_wait(job, opts)`'s options.
+// `job_wait(job, opts)`'s options: `file` and `contains` nil when not
+// given, `contains` a string that is not empty when given.
 typedef struct {
     uint64_t limit;
-    bool has_file;
     Value file;
-    bool has_contains;
-    Str contains;
+    Value contains;
 } HostWaitOpts;
 
 // A job seen ended: `found` when its log holds `contains` after all, else
 // `exited`. The record is written after the reap, so the log is whole now.
 static STATUS_MUST_USE Status host_wait_seen_ended(Host *h, Run *r, Pos pos, HostScan *scan, Arena *sa, const HostWaitOpts *o, Str log, const JobRecord *rec, Value *out) {
-    if (o->has_contains) {
+    if (host_given(&o->contains)) {
         Str given = log;
-        if (o->has_file) TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &o->file, S("its path"), &given));
+        if (host_given(&o->file)) TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &o->file, S("its path"), &given));
         Str os = S("");
         TRY(paths_os_path(&h->paths, &builtin_store_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, false, &os));
         bool found = false;
-        TRY(host_scan_look(scan, sa, r, pos, os, given, o->contains, rec, &found));
+        TRY(host_scan_look(scan, sa, r, pos, os, given, o->contains.as.string, rec, &found));
         if (found) return host_jobs_result(r, pos, S("found"), false, 0, false, 0, out);
     }
     return host_jobs_result(r, pos, S("exited"), rec->has_exit, rec->exit, rec->has_signal, rec->signal, out);
@@ -439,13 +436,13 @@ static STATUS_MUST_USE Status host_wait_loop(Host *h, Run *r, Pos pos, ConstValu
     while (1) {
         HostJobFound j;
         TRY(host_jobs_find(h, r, pos, &at(args, 0), S("job_wait"), &j));
-        if (o->has_contains) {
+        if (host_given(&o->contains)) {
             Str given = j.log;
-            if (o->has_file) TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &o->file, S("its path"), &given));
+            if (host_given(&o->file)) TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &o->file, S("its path"), &given));
             Str os = S("");
             TRY(paths_os_path(&h->paths, &builtin_store_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, false, &os));
             bool found = false;
-            TRY(host_scan_look(&scan, sa, r, pos, os, given, o->contains, &j.record, &found));
+            TRY(host_scan_look(&scan, sa, r, pos, os, given, o->contains.as.string, &j.record, &found));
             if (found) return host_jobs_result(r, pos, S("found"), false, 0, false, 0, out);
         }
         if (job_record_done(j.record)) return host_wait_seen_ended(h, r, pos, &scan, sa, o, j.log, &j.record, out);
@@ -472,27 +469,25 @@ static STATUS_MUST_USE Status host_job_wait(Host *h, Run *r, Pos pos, ConstValue
     Table *m = ov->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`job_wait`'s options are a map, not a list"));
     HostWaitOpts o;
-    memset(&o, 0, sizeof o);
-    bool has_limit = false;
+    o.limit = HOST_UNSET;
+    value_nil(&o.file);
+    value_nil(&o.contains);
     for (size_t i = 0; i < ValueMap_len(&m->map); i++) {
         Str k = ValueMap_key_at(&m->map, i);
         Value x = ValueMap_value_at(&m->map, i);
         if (str_eq(k, S("timeout_ms"))) {
-            has_limit = true;
             TRY(host_int_opt(r, pos, k, &x, &o.limit));
         } else if (str_eq(k, S("file"))) {
-            o.has_file = true;
             o.file = x;
         } else if (str_eq(k, S("contains"))) {
-            o.has_contains = true;
-            TRY(host_str_opt(r, pos, k, &x, &o.contains));
+            TRY(host_str_value_opt(r, pos, k, &x, &o.contains));
         } else {
             return host_fail(r, pos, CLASS_ARGUMENT, S("`job_wait` takes timeout_ms, file and contains, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
         }
     }
-    if (!has_limit) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_wait` needs `timeout_ms`, under the Bash call's own timeout"));
-    if (o.has_file && !o.has_contains) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_wait`: `file` without `contains`: what to wait for in it"));
-    if (o.has_contains && o.contains.len == 0) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_wait`'s `contains` is \"\": every file holds it"));
+    if (o.limit == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_wait` needs `timeout_ms`, under the Bash call's own timeout"));
+    if (host_given(&o.file) && !host_given(&o.contains)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_wait`: `file` without `contains`: what to wait for in it"));
+    if (host_given(&o.contains) && o.contains.as.string.len == 0) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_wait`'s `contains` is \"\": every file holds it"));
     // Each look reads only what the log gained, a piece at a time into one
     // buffer of the call's own, given back when the call ends.
     Arena scratch = arena_make((size_t)HOST_SCAN_PIECE * 4);
