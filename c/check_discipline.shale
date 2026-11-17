@@ -63,9 +63,10 @@ const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE
 
 -- The line's code: its strings and character literals emptied, its comments cut.
 function code_of(line)
-  local s = re_replace(line, [=["(\\.|[^"\\])*"]=], [=[""]=])
-  s = re_replace(s, [=['(\\.|[^'\\])*']=], "''")
-  s = re_replace(s, [=[/\*[^*]*\*/]=], "")
+  local s = line
+  if find(s, "\"") ~= nil then s = re_replace(s, [=["(\\.|[^"\\])*"]=], [=[""]=]) end
+  if find(s, "'") ~= nil then s = re_replace(s, [=['(\\.|[^'\\])*']=], "''") end
+  if find(s, "/*") ~= nil then s = re_replace(s, [=[/\*[^*]*\*/]=], "") end
   local cut = find(s, "//")
   if cut ~= nil then s = sub(s, 1, cut - 1) end
   return s
@@ -162,24 +163,33 @@ function check_file(p, in_foundation)
     n = n + 1
     local code = code_of(raw)
     local trimmed = trim(code)
-    if name ~= "arena.h" and re_find(code, ALLOC) ~= nil then
+    -- Each rule's patterns run only on a line holding a literal every match
+    -- of them holds (a `[` for an index, `mem` for a mem* call): the regexes
+    -- are most of the check's time, and the literal is a necessary condition,
+    -- so the answer is the same.
+    if name ~= "arena.h" and (find(code, "alloc") ~= nil or find(code, "free") ~= nil or find(code, "dup") ~= nil) and re_find(code, ALLOC) ~= nil then
       push(found, {path = p, line = n, rule = "alloc", text = raw})
     end
-    if name ~= "slice.h" and (re_find(re_replace(code, ARRAY_DECL, "\\1\\2"), INDEX) ~= nil or re_find(code, PTR_SUM) ~= nil) then
+    local indexed = find(code, "[") ~= nil and re_find(re_replace(code, ARRAY_DECL, "\\1\\2"), INDEX) ~= nil
+    if name ~= "slice.h" and (indexed or (find(code, "ptr") ~= nil and re_find(code, PTR_SUM) ~= nil)) then
       push(found, {path = p, line = n, rule = "raw index", text = raw})
     end
-    for args in calls_args(code, MEM_CALL) do
-      if re_find(re_replace(args, "->", "."), "[+-]") ~= nil and not (in_foundation and dragon_above(all, n)) then
-        push(found, {path = p, line = n, rule = "mem arithmetic", text = raw})
+    if find(code, "mem") ~= nil then
+      for args in calls_args(code, MEM_CALL) do
+        if re_find(re_replace(args, "->", "."), "[+-]") ~= nil and not (in_foundation and dragon_above(all, n)) then
+          push(found, {path = p, line = n, rule = "mem arithmetic", text = raw})
+        end
       end
     end
-    for args in calls_args(code, SLICE_CALL) do
-      if slice_args_bad(args) then push(found, {path = p, line = n, rule = "slice args", text = raw}) end
+    if find(code, "SLICE_SUB") ~= nil then
+      for args in calls_args(code, SLICE_CALL) do
+        if slice_args_bad(args) then push(found, {path = p, line = n, rule = "slice args", text = raw}) end
+      end
     end
-    if re_find(code, STATUS_FN) ~= nil then
+    if find(code, "Status") ~= nil and re_find(code, STATUS_FN) ~= nil then
       push(found, {path = p, line = n, rule = "must use", text = raw})
     end
-    if header and find(raw, "// cstr: ") == nil then
+    if header and find(code, "char") ~= nil and find(raw, "// cstr: ") == nil then
       local paired = false
       if re_find(code, CHAR_FIELD) ~= nil and re_find(code, "\\bptr\\s*;") ~= nil and n < #all then
         paired = re_find(all[n + 1], LEN_FIELD) ~= nil
@@ -188,10 +198,10 @@ function check_file(p, in_foundation)
         push(found, {path = p, line = n, rule = "cstr", text = raw})
       end
     end
-    if re_find(flattened(code), TWO_DECLS) ~= nil then
+    if find(code, ",") ~= nil and re_find(flattened(code), TWO_DECLS) ~= nil then
       push(found, {path = p, line = n, rule = "one per line", text = raw})
     end
-    if re_find(code, DECL_INIT) ~= nil then
+    if find(code, "=") ~= nil and re_find(code, DECL_INIT) ~= nil then
       local tail = trim(re_replace(code, "\\\\\\s*$", ""))
       if not ends_with(tail, ";") and not ends_with(tail, "{") then
         push(found, {path = p, line = n, rule = "wrapped", text = raw})
@@ -209,7 +219,7 @@ function check_file(p, in_foundation)
     if raw ~= "" and not starts_with(raw, " ") and not opens_top(raw) then
       push(found, {path = p, line = n, rule = "top level", text = raw})
     end
-    if header and re_find(raw, [=[^[A-Za-z_].*\w\s*\(.*\)\s*\{]=]) ~= nil and not starts_with(raw, "static inline ") and not starts_with(raw, "#") then
+    if header and find(raw, "{") ~= nil and re_find(raw, [=[^[A-Za-z_].*\w\s*\(.*\)\s*\{]=]) ~= nil and not starts_with(raw, "static inline ") and not starts_with(raw, "#") then
       push(found, {path = p, line = n, rule = "inline", text = raw})
     end
   end
