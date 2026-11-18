@@ -90,7 +90,7 @@ static int swap_file_open(SwapFile *s, Arena *a) {
 
 // Writes all of `bytes` to the temporary file: 0, or the errno. A write that
 // takes nothing is an error, never a loop.
-static int swap_file_write(SwapFile *s, Str bytes) {
+static inline int swap_file_write(SwapFile *s, Str bytes) {
     size_t done = 0;
     while (done < bytes.len) {
         ssize_t n = write(s->fd, &at(bytes, done), bytes.len - done);
