@@ -44,4 +44,8 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | no `range()`, so a counted loop is a hand-written `while` | open |
 | 2026-11-18 | a script can't read the arena's bytes in use: `budget().arena_bytes` counts whole chunks | open |
 | 2026-11-18 | bench/baseline.shale has no workload filter, and a not-clean run writes TSVs into the tracked tree | open |
+| 2026-11-18 | `c/build.shale binary=release to=` takes an OS path, so a Shale path (`to=scratch:x/y`) made a folder named `scratch:x` inside the checkout, which Shale's own paths then refuse to name or remove | open |
+| 2026-11-18 | a docs golden is named by its line, so a paragraph added to SHALE-AGENTS.md moves every case below it, each to be named in `refreeze=` (7 for one paragraph) | open |
+| 2026-11-18 | a prelude function can't tell a string from a list (no type test, and `==` on a list stops), so an argument that may be either is checked in the host | open |
+| 2026-11-18 | `read_lines` under a call-bytes cap of 64 KiB or less stops on any part that doesn't end at a newline: the part is the cap, so its line is "past the cap" at once | open |
 | 2026-11-18 | the full tier's per-block step budgets assume few plants re-run; a change to a core file re-runs all of a block's plants and goes over (the store block went to 100M) | open |
