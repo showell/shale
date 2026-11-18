@@ -42,7 +42,7 @@
 -- function as long as the twins but of another shape, four lines alike
 -- that a fifth's string breaks, a test's oracle copy unless `tests=1`).
 --
--- budget: steps=900000000 arena_bytes=3000000000 kept_bytes=268435456
+-- budget: steps=900000000 arena_bytes=1000000000 kept_bytes=268435456
 
 use("cookbook:c/items.shale")
 

@@ -42,7 +42,7 @@
 -- and holds the findings to the plants' list exactly: every check fires on
 -- its own plant and on no other, and a quiet plant on none.
 --
--- budget: steps=400000000 arena_bytes=2000000000 kept_bytes=268435456
+-- budget: steps=400000000 arena_bytes=1000000000 kept_bytes=268435456
 
 use("cookbook:c/items.shale")
 

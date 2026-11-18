@@ -45,7 +45,7 @@
 -- near miss (a comment, a string, a member, a prototype, recursion, a macro
 -- nobody uses, a same-named helper in another test file).
 --
--- budget: steps=400000000 arena_bytes=2000000000 kept_bytes=268435456
+-- budget: steps=400000000 arena_bytes=1000000000 kept_bytes=268435456
 
 use("cookbook:c/items.shale")
 

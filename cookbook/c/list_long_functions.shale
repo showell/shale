@@ -27,7 +27,7 @@
 -- default threshold, an `over=` that a function's comments and blank lines
 -- would pass but its code does not, and `tests=1`.
 --
--- budget: steps=200000000 arena_bytes=2000000000 kept_bytes=268435456
+-- budget: steps=200000000 arena_bytes=1000000000 kept_bytes=268435456
 
 use("cookbook:c/items.shale")
 
