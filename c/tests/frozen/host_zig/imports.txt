@@ -1,0 +1,4 @@
+exit 0
+import	std	std	1	module
+import	helper.zig	helper	2	found
+import	gone.zig	gone	3	missing

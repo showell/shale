@@ -8,19 +8,18 @@
 -- file's count (a Zig test added is one the C has yet to port), the program
 -- built under each of `t.builds` at c/out/<build>/shale-gate, and each
 -- binary run through tools/shale-gate.sh, the hook's wrapper, as Zig's
--- wrapper test runs it. In the full tier: the parity (c/build/
--- gate_parity.shale), the release and ASan binaries each against the Zig
--- gate built from tools/shale_gate.zig, over every case; and the faults
+-- wrapper test runs it, and then over the golden cases (c/build/
+-- gate_golden.shale), each held to every frozen answer (`refreeze=gate`
+-- writes them from the first build's gate). In the full tier: the faults
 -- below planted in a copy of c/gate, each caught by test_gate.c.
 
 use("build:lib.shale")
-use("build:gate_parity.shale")
+use("build:gate_golden.shale")
 
 -- tools/shale_gate_test.zig's tests: seven ported to test_gate.c, and its
 -- wrapper test, which `wrapper_holds` ports.
 const GATE_ZIG_TESTS = 8
 const GATE_PORTED = 7
-const ZIG_GATE = "c/out/zig-gate/shale-gate"
 const GATE_WANT = "c-gate: the build's own shale-gate, or the hook's wrapper over it"
 const GATE_PLANTS = {
   {name = "a `?` is a plain word's byte",
@@ -112,17 +111,21 @@ function wrapper_holds(t, build)
   return n + 3
 end
 
--- The Zig gate built for the parity, from tools/shale_gate.zig, Debug (a
--- second where ReleaseSafe takes most of a minute; the safety checks are
--- the same), at the lowest priority.
-function build_zig_gate(t)
-  mkdir(dirname(ZIG_GATE))
-  must(run_in(t, "gate zig", {"nice", "-n", "19", "zig", "build-exe", "tools/shale_gate.zig", "-ODebug", "-femit-bin=" .. ZIG_GATE, "--cache-dir", OUT .. "/zig-gate/cache"},
-    {timeout_ms = 300000, tail = 30, want = "c-gate: the Zig gate built for the parity, at the lowest priority"}))
-  return real(ZIG_GATE)
+-- The golden cases under `builds`, the first's answers written when
+-- `refreeze`, every later one held to what it wrote.
+function gate_golden(t, builds, refreeze)
+  local first = true
+  for b in builds do
+    local p = gate_golden_check(real(OUT .. "/" .. b .. "/shale-gate"), OUT .. "/gate/golden-" .. b, refreeze and first)
+    charge(t, "gate golden", p.cases, p.ms, p.cpu_ms)
+    if refreeze and first then print("refrozen: " .. GATE_CASES .. ", from `" .. b .. "`'s gate: " .. p.moved .. " of " .. p.cases .. " answers moved") end
+    print("gate golden " .. b .. ": " .. p.cases .. " cases answered as frozen (" .. p.passed .. " passed, " .. p.refused .. " refused, " .. p.logged .. " logged)")
+    first = false
+  end
+  return nil
 end
 
-function gate_block(t)
+function gate_block(t, refreeze)
   local zig_tests = zig_test_count("tools/shale_gate_test.zig")
   if zig_tests ~= GATE_ZIG_TESTS then fail("tools/shale_gate_test.zig has " .. zig_tests .. " tests, and GATE_ZIG_TESTS says " .. GATE_ZIG_TESTS .. ": port the new one to c/tests/test_gate.c") end
   local c_tests = test_count("c/tests/test_gate.c")
@@ -137,12 +140,8 @@ function gate_block(t)
     print("gate " .. b .. ": c/out/" .. b .. "/shale-gate built; " .. n .. " runs through tools/shale-gate.sh as Zig's wrapper test holds them")
   end
   print("gate: " .. c_tests .. " C tests, " .. GATE_PORTED .. " of them ports of tools/shale_gate_test.zig's " .. zig_tests .. " (its wrapper test is the runs above)")
+  gate_golden(t, t.builds, refreeze)
   if not t.full then return nil end
-  local zig = build_zig_gate(t)
-  for b in {"release", "asan"} do
-    local p = parity_check("tools/shale_gate_test.zig", zig, real(OUT .. "/" .. b .. "/shale-gate"), OUT .. "/gate/parity-" .. b)
-    print("gate parity " .. b .. ": " .. p.cases .. " cases answered as the Zig gate answers them (" .. p.passed .. " passed, " .. p.refused .. " refused, " .. p.logged .. " logged)")
-  end
   run_plants(t, "gate plants", GATE_PLANTS)
   return nil
 end
@@ -151,5 +150,5 @@ end
 -- ── The run ─────────────────────────────────────────────────────────────
 
 local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
-gate_block(t)
+gate_block(t, has_key(refreeze_of("gate", arg("refreeze", "")), "*"))
 block_end(t, "gate")

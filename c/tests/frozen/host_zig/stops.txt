@@ -1,0 +1,11 @@
+exit 1
+`zig_decls`: bad.zig does not parse as Zig: line 1 (expected_type_expr)
+`zig_imports`: bad.zig does not parse as Zig: line 1
+`zig_decls("nothere.zig")`: not found (FileNotFound): `exists(p)` asks first
+`zig_move`: `from` and `to` are one file
+`zig_move` a.zig to b.zig: `nope` is not a top-level declaration of `from`; nothing written
+`zig_rename`: a.zig declares `count` at line 6, and `x.y` is qualified, which cannot be declared: rename the declaration itself, or leave it out with `lines`; nothing written
+`zig_rename`'s `lines` (3, 1) is no range: 1 <= first <= last
+── stopped at the Linux prelude:485:30 (in `the Linux prelude's zig_decls`): argument: `zig_decls`: bad.zig does not parse as Zig: line 1 (expected_type_expr) (1069 steps)
+   called from s.shale:9:1
+── used: 1069 of 5000000 steps, 8 of 10000 reads, 941 of 67108864 read bytes, 572 of 65536 output bytes

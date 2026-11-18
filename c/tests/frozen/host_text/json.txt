@@ -1,0 +1,25 @@
+exit 0
+{"a":[1,-2,"3.5e2",true,"xé😀"],"c":[]}	[1,0]	{"k":"q\"\\\t\r\u0001"}
+false	`json_read`: a value was expected and the text ended at byte 0 (line 1, column 1)
+false	`json_read`: a value was expected and the text ended at byte 3 (line 1, column 4)
+false	`json_read`: a member's name, a string, was expected at byte 7 (line 1, column 8)
+false	`json_read`: `true` was expected at byte 0 (line 1, column 1)
+false	`json_read`: a number with a leading zero at byte 0 (line 1, column 1)
+false	`json_read`: a number needs a digit in its exponent at byte 0 (line 1, column 1)
+false	`json_read`: the escape `\x`, which JSON has not at byte 1 (line 1, column 2)
+false	`json_read`: `\u` needs four hex digits at byte 1 (line 1, column 2)
+false	`json_read`: a high surrogate with no low one after it at byte 1 (line 1, column 2)
+false	`json_read`: a low surrogate with no high one before it at byte 1 (line 1, column 2)
+false	`json_read`: the integer 9223372036854775808 is past 64 bits at byte 0 (line 1, column 1)
+false	`json_read`: a null in an array, which a Shale list cannot hold: `{null = v}` names a value to stand for it at byte 1 (line 1, column 2)
+false	`json_read`: the key "a" is in this object twice at byte 7 (line 1, column 8)
+false	`json_read`: more after the value: one text is one value at byte 2 (line 1, column 3)
+false	`json_read`: a control byte (0x01) inside a string, which JSON writes as an escape at byte 1 (line 1, column 2)
+false	`json_read`: a string that is not UTF-8 at byte 0 (line 1, column 1)
+true	
+false	`json_read`: `\u` needs four hex digits at byte 1 (line 1, column 2)
+`json_read`'s `depth` is 1 to 512, not 0
+`json_read`: the text is 5 bytes, past its size budget of 3
+`json_read`'s `depth` is an integer, not a string
+`json_read` takes `depth`, `size` and `null`, not `zz`
+`json_read` takes a text, not an integer	`json_write`: a string that is not UTF-8, which JSON cannot hold

@@ -11,15 +11,10 @@ use("build:lib.shale")
 -- `t.builds`, held to its `TEST(` count, the spawn fixture built for each
 -- first (with GCC's release flags: it is a program the tests run, not a
 -- test). In the full tier: each fault in HOST_PLANTS caught by the test file
--- it names, then spawn and the keep against this script's own `run`, Zig's,
--- on the same programs (`HOST_VS_ZIG`): every field the same, `cpu_ms`
--- within HOST_MS_SLACK, and `ms` within it too, but for a program that
--- burns CPU (HOST_VS_ZIG_CPU), whose `ms` is no less than its `cpu_ms`.
+-- it names.
 
 const HOST_OUT = "c/out/host"
 const HOST_FIXTURE = "c/tests/host/fixtures/spawn_fixture.c"
-const HOST_PROBE = "c/tests/host/fixtures/spawn_probe.c"
-const HOST_WANT = "c-tests: the host's own test fixture and probe, built under c/out/host"
 
 -- Each fault planted in a copy of c/host, as PLANTS are in the foundation.
 const HOST_PLANTS = {
@@ -98,29 +93,6 @@ const HOST_PLANTS = {
    old = "sigaction(SIGPIPE, &act, NULL);", new = "(void)act;"},
 }
 
--- `ms` and `cpu_ms` may differ from Zig's by this much, or a fifth of Zig's,
--- whichever is more: two runs of one program never take the same time.
-const HOST_MS_SLACK = 250
-
--- The programs run both ways: the fixture's verb and arguments, `run`'s
--- `timeout_ms` and `tail`. A `grandchild N` line's pid is masked.
-const HOST_VS_ZIG = {
-  {args = {"lines", "3"}, timeout_ms = 10000, tail = 5},
-  {args = {"exit", "7"}, timeout_ms = 10000, tail = 5},
-  {args = {"kill-self"}, timeout_ms = 10000, tail = 5},
-  {args = {"ignore-term", "20000"}, timeout_ms = 300, tail = 5},
-  {args = {"sleep", "20000"}, timeout_ms = 0, tail = 5},
-  {args = {"sleep", "300"}, timeout_ms = 10000, tail = 5},
-  {args = {"burn", "300"}, timeout_ms = 10000, tail = 5},
-  {args = {"burn-child", "300"}, timeout_ms = 10000, tail = 5},
-  {args = {"spill-lines", "200000"}, timeout_ms = 60000, tail = 3},
-  {args = {"spill", "2000000"}, timeout_ms = 60000, tail = 3},
-  {args = {"grandchild-exit", "1000"}, timeout_ms = 10000, tail = 5},
-  {args = {"grandchild-escape", "1000"}, timeout_ms = 10000, tail = 5},
-  {args = {"grandchild-stay", "20000"}, timeout_ms = 300, tail = 5},
-  {args = {"signal-parent", "15", "20000"}, timeout_ms = 30000, tail = 5},
-}
-
 -- The `-D` that tells spawn's tests where `build`'s fixture is. A program
 -- includes the c/host files it needs by their relative paths (one
 -- translation unit), so a plant's copy is found beside its test's copy.
@@ -141,130 +113,10 @@ function host_compile(t, phase, name, src, bin)
   return nil
 end
 
--- The fields of the probe's first line, as a map.
-function probe_fields(line)
-  local f = {}
-  for w in words(line) do
-    local eq = find(w, "=")
-    f[sub(w, 1, eq - 1)] = sub(w, eq + 1)
-  end
-  return f
-end
-
-function masked_pids(s)
-  return re_replace(s, "grandchild \\d+", "grandchild N")
-end
-
--- Whether two times agree within HOST_MS_SLACK or a fifth of Zig's.
-function near(c, z)
-  local d = c - z
-  if d < 0 then d = -d end
-  local slack = z // 5
-  if slack < HOST_MS_SLACK then slack = HOST_MS_SLACK end
-  return d <= slack
-end
-
--- The programs of HOST_VS_ZIG whose two runs never overlap: those that burn
--- CPU, where two at once on the box's two cores moved `ms` by up to 73 ms
--- (serial, 22), and the one that signals its parent (shale itself, under
--- Zig's `run`). The others only wait, so their two runs wait side by side.
-const HOST_VS_ZIG_ALONE = {"burn", "burn-child", "spill", "spill-lines", "signal-parent"}
-
--- The programs of HOST_VS_ZIG that burn CPU rather than wait, so their `ms`
--- is the scheduler's: under `nice -n 19` on a busy box, `burn 300` took 413
--- ms through the C and 847 through Zig, `cpu_ms` 300 on both (2026-11-17).
--- Their `cpu_ms` is held to Zig's within HOST_MS_SLACK as every program's
--- is, and their `ms` to being no less than their `cpu_ms`. The programs
--- that wait (a sleep, a deadline, a grace) set their own wall time, and
--- theirs is held to Zig's.
-const HOST_VS_ZIG_CPU = {"burn", "burn-child", "spill", "spill-lines"}
-
--- The probe's run of one program: as a job, started before Zig's `run` of
--- it, or after it for one of HOST_VS_ZIG_ALONE, then waited for. Gives
--- {code, out}.
-function probe_start(pargv, log)
-  if exists(log) then remove(log) end
-  if exists(log .. ".job") then remove(log .. ".job") end
-  return job_start(pargv, {log = log, want = HOST_WANT})
-end
-
-function probe_finish(job, log, what)
-  local w = job_wait(job, {timeout_ms = 120000})
-  if w.ended ~= "exited" then
-    job_stop(job)
-    fail("vs zig `" .. what .. "`: the probe ended " .. w.ended)
-  end
-  return {code = get(w, "code", -1), out = read(log)}
-end
-
--- Each of HOST_VS_ZIG run by this script's `run` (Zig's) and by the probe
--- (the C's spawn and keep), side by side where both only wait
--- (HOST_VS_ZIG_ALONE), every field compared. Gives the lines to report.
-function host_vs_zig(t)
-  local t0 = clock_ms()
-  local fixture = HOST_OUT .. "/release/spawn_fixture"
-  local probe = HOST_OUT .. "/release/spawn_probe"
-  local said = {}
-  local k = 0
-  for c in HOST_VS_ZIG do
-    k = k + 1
-    local argv = {real(fixture)}
-    for a in c.args do push(argv, a) end
-    local pargv = {real(probe), "" .. c.timeout_ms, "" .. c.tail}
-    for a in argv do push(pargv, a) end
-    local what = join(c.args, " ")
-    local log = HOST_OUT .. "/vs_zig_" .. k .. ".log"
-    local alone = has_item(HOST_VS_ZIG_ALONE, c.args[1])
-    local job = nil
-    if not alone then job = probe_start(pargv, log) end
-    local z = attempt(run_in, t, "host vs zig", argv, {timeout_ms = c.timeout_ms, tail = c.tail, want = HOST_WANT})
-    if alone then job = probe_start(pargv, log) end
-    local p = probe_finish(job, log, what)
-    if p.code ~= 0 then fail("vs zig `" .. what .. "`: the probe exited " .. p.code .. ":\n" .. p.out) end
-    local nl = find(p.out, "\n")
-    local f = probe_fields(sub(p.out, 1, nl - 1))
-    local c_out = masked_pids(sub(p.out, nl + 1))
-    if not z.ok then
-      -- Zig's `run` stops the script when shale itself is told to stop.
-      local said_z = "`run`: shale was told to stop (TERM or HUP) while `" .. argv[1] .. "` ran; it was ended"
-      if find(z.error, said_z) == nil then fail("vs zig `" .. what .. "`: Zig's run stopped otherwise: " .. z.error) end
-      if f.ended ~= "interrupted" then fail("vs zig `" .. what .. "`: Zig was interrupted, the C ended " .. f.ended) end
-      push(said, "  same: " .. what .. ": interrupted, Zig's stop said; the C " .. f.ms .. " ms")
-    else
-      local r = z.value
-      local z_code = "-"
-      if has_key(r, "code") then z_code = "" .. r.code end
-      local diffs = {}
-      if f.ended ~= r.ended then push(diffs, "ended " .. f.ended .. " vs " .. r.ended) end
-      if f.code ~= z_code then push(diffs, "code " .. f.code .. " vs " .. z_code) end
-      for k in {"total_lines", "matched_lines", "kept_lines"} do
-        if parse_int(f[k]) ~= r[k] then push(diffs, k .. " " .. f[k] .. " vs " .. r[k]) end
-      end
-      if c_out ~= masked_pids(r.out) then push(diffs, "out:\n" .. c_out .. "\nvs Zig's:\n" .. r.out) end
-      if has_item(HOST_VS_ZIG_CPU, c.args[1]) then
-        -- A program that burns CPU takes the wall time the scheduler gives
-        -- it, so `ms` is held to what holds under any load: no less than
-        -- `cpu_ms`, on each side.
-        if parse_int(f.ms) < parse_int(f.cpu_ms) then push(diffs, "the C's ms " .. f.ms .. " is under its cpu_ms " .. f.cpu_ms) end
-        if r.ms < r.cpu_ms then push(diffs, "Zig's ms " .. r.ms .. " is under its cpu_ms " .. r.cpu_ms) end
-      elseif not near(parse_int(f.ms), r.ms) then
-        push(diffs, "ms " .. f.ms .. " vs " .. r.ms)
-      end
-      if not near(parse_int(f.cpu_ms), r.cpu_ms) then push(diffs, "cpu_ms " .. f.cpu_ms .. " vs " .. r.cpu_ms) end
-      if #diffs > 0 then fail("vs zig `" .. what .. "`: " .. join(diffs, "; ")) end
-      push(said, "  same: " .. what .. ": " .. r.ended .. " " .. z_code .. ", " .. r.total_lines .. " lines; ms " .. f.ms .. " vs " .. r.ms .. ", cpu_ms " .. f.cpu_ms .. " vs " .. r.cpu_ms)
-    end
-  end
-  phase_wall(t, "host vs zig", clock_ms() - t0)
-  return said
-end
-
 function host_block(t)
   local tests = {}
   for p in glob("c/tests/host/test_*.c") do push(tests, p) end
   sort(tests)
-  -- The probe host_vs_zig runs, compiled here so the pool builds it too.
-  if t.full then host_compile(t, "host vs zig", "host-probe", HOST_PROBE, HOST_OUT .. "/release/spawn_probe") end
   for b in t.builds do
     local phase = "host " .. b
     host_compile(t, phase, "host-fixture-" .. b, HOST_FIXTURE, HOST_OUT .. "/" .. b .. "/spawn_fixture")
@@ -272,10 +124,6 @@ function host_block(t)
   end
   if not t.full then return nil end
   run_plants(t, "host plants", HOST_PLANTS, {host_define("asan")})
-  if t.stage == "plan" then return nil end
-  local vs = host_vs_zig(t)
-  print("host vs zig: " .. #vs .. " of " .. #HOST_VS_ZIG .. " programs answered the same")
-  for l in vs do print(l) end
   return nil
 end
 -- ── end of the host's block ─────────────────────────────────────────────

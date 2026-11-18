@@ -1,0 +1,2 @@
+exit 0
+`zig_decls`: zig-ast (/nonexistent/zig-ast) did not start: FileNotFound

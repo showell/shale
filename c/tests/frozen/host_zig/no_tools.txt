@@ -1,0 +1,4 @@
+exit 1
+── stopped at the Linux prelude:522:10 (in `the Linux prelude's zig_imports`): host: `zig_imports`: no tools:zig-ast/bin/zig-ast, the program that reads Zig: Shale's `shale tools/zig_ast/install.shale` builds it (82 steps)
+   called from s.shale:1:1
+── used: 82 of 5000000 steps, 1 of 10000 reads, 463 of 67108864 read bytes, 0 of 65536 output bytes

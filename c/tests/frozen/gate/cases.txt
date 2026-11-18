@@ -1,0 +1,2017 @@
+case zig test command 1
+home dir
+input 82
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale count.shale"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 2
+home dir
+input 109
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --verbose rename.shale from=old to=new"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 3
+home dir
+input 106
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --budget steps=99 --verbose x.shale"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 4
+home dir
+input 104
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"/home/x/shale/zig-out/bin/shale a.shale"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 5
+home dir
+input 96
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd ../roc-chat && shale a.shale"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 6
+home dir
+input 97
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'SHALE'\nprint(1)\nSHALE"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 7
+home dir
+input 144
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd /home/x && shale <<'END_IT'\nprint(\"a $b `c` ; | & < > ( ) * ?\")\nEND_IT  "}}
+code 0
+out 0
+
+log 0
+
+case zig test command 8
+home dir
+input 115
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale n=3 <<'SHALE'\nprint(arg(\"n\", 0))\nSHALE\n"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 9
+home dir
+input 158
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --undo-on-stop ~/s/split.shale --args-stdin <<'ARGS'\nnames=a|b c\ndoc=It's \"x\"\nARGS"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 10
+home dir
+input 71
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"ls -la"}}
+code 2
+out 447
+shale-gate: `ls` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 11
+home dir
+input 71
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"ls -la"}}
+code 2
+out 447
+shale-gate: `ls` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 12
+home dir
+input 84
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale -e 'print(1)'"}}
+code 2
+out 465
+shale-gate: `-e` is not an option the gate passes; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 13
+home dir
+input 88
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale; rm -rf x"}}
+code 2
+out 458
+shale-gate: `a.shale;` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 14
+home dir
+input 91
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale && echo done"}}
+code 2
+out 452
+shale-gate: `&&` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 15
+home dir
+input 76
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale $FILE"}}
+code 2
+out 455
+shale-gate: `$FILE` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 16
+home dir
+input 85
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale | head"}}
+code 2
+out 451
+shale-gate: `|` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 17
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale `x`"}}
+code 2
+out 453
+shale-gate: ``x`` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 18
+home dir
+input 91
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"SHALE_ROOT=x shale a.shale"}}
+code 2
+out 457
+shale-gate: `SHALE_ROOT=x` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 19
+home dir
+input 88
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"/usr/bin/shalex a.shale"}}
+code 2
+out 460
+shale-gate: `/usr/bin/shalex` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 20
+home dir
+input 79
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --budget"}}
+code 2
+out 453
+shale-gate: `--budget` takes `NAME=N`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 21
+home dir
+input 85
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --budget steps"}}
+code 2
+out 453
+shale-gate: `--budget` takes `NAME=N`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 22
+home dir
+input 90
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --root here a.shale"}}
+code 2
+out 469
+shale-gate: `--root` is not an option the gate passes; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 23
+home dir
+input 86
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --write a.shale"}}
+code 2
+out 470
+shale-gate: `--write` is not an option the gate passes; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 24
+home dir
+input 88
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd a b && shale x.shale"}}
+code 2
+out 447
+shale-gate: `cd` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 25
+home dir
+input 90
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd $HOME && shale x.shale"}}
+code 2
+out 460
+shale-gate: `cd $HOME` is not a plain folder; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 26
+home dir
+input 84
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale\nrm x"}}
+code 2
+out 464
+shale-gate: a launch is one line, or a heredoc's; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 27
+home dir
+input 65
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":""}}
+code 2
+out 438
+shale-gate: no `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 28
+home dir
+input 71
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"ls -la"}}
+code 2
+out 447
+shale-gate: `ls` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 29
+home dir
+input 77
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --help"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 30
+home dir
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --version"}}
+code 0
+out 0
+
+log 0
+
+case zig test command 31
+home dir
+input 95
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<SHALE\nprint(1)\nSHALE"}}
+code 2
+out 488
+shale-gate: `<<SHALE`: a heredoc is `<<'TAG'`, quoted, the TAG `[A-Z_]+`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 32
+home dir
+input 99
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<\"SHALE\"\nprint(1)\nSHALE"}}
+code 2
+out 490
+shale-gate: `<<"SHALE"`: a heredoc is `<<'TAG'`, quoted, the TAG `[A-Z_]+`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 33
+home dir
+input 97
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'shale'\nprint(1)\nshale"}}
+code 2
+out 490
+shale-gate: `<<'shale'`: a heredoc is `<<'TAG'`, quoted, the TAG `[A-Z_]+`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 34
+home dir
+input 92
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'SHALE'\nprint(1)\n"}}
+code 2
+out 464
+shale-gate: the heredoc has no last line `SHALE`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 35
+home dir
+input 114
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'SHALE'\nprint(1)\nSHALE\nrm -rf /\nSHALE"}}
+code 2
+out 497
+shale-gate: the heredoc meets `SHALE` twice: a line before its end would close it; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 36
+home dir
+input 107
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'SHALE'\nprint(1)\nSHALE\nrm -rf /"}}
+code 2
+out 464
+shale-gate: the heredoc has no last line `SHALE`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 37
+home dir
+input 105
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'SHALE' x.shale\nprint(1)\nSHALE"}}
+code 2
+out 459
+shale-gate: `<<'SHALE'` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 38
+home dir
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'SHALE'"}}
+code 2
+out 464
+shale-gate: the heredoc has no last line `SHALE`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 39
+home dir
+input 133
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: sed-in-place: one replacement in a big file\nsed -i s/a/b/ x"}}
+code 0
+out 0
+
+log 119
+	s	want	sed-in-place	one replacement in a big file	# want: sed-in-place: one replacement in a big file\nsed -i s/a/b/ x
+case zig test command 40
+home dir
+input 114
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# out-of-scope: qemu: a KVM gate\nsudo ./gates.sh"}}
+code 0
+out 0
+
+log 81
+	s	out-of-scope	qemu	a KVM gate	# out-of-scope: qemu: a KVM gate\nsudo ./gates.sh
+case zig test command 41
+home dir
+input 87
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: Bad_Tag: x\nls"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 42
+home dir
+input 81
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: tag:\nls"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 43
+home dir
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: tag\nls"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 44
+home dir
+input 85
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# wanted: tag: x\nls"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test command 45
+home dir
+input 84
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":" # want: tag: x\nls"}}
+code 2
+out 446
+shale-gate: `#` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test hook 1
+home dir
+input 91
+{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"shale x.shale","timeout":5}}
+code 0
+out 0
+
+log 0
+
+case zig test hook 2
+home dir
+input 78
+{"session_id":"s1","tool_name":"Monitor","tool_input":{"command":"tail -f x"}}
+code 2
+out 449
+shale-gate: `tail` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test hook 3
+home dir
+input 70
+{"session_id":"s1","tool_name":"Read","tool_input":{"file_path":"/x"}}
+code 0
+out 0
+
+log 0
+
+case zig test hook 4
+home dir
+input 108
+{"session_id":"s1","agent_id":"a-9","agent_type":"Explore","tool_name":"Bash","tool_input":{"command":"ls"}}
+code 2
+out 447
+shale-gate: `ls` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test hook 5
+home dir
+input 8
+not json
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case zig test hook 6
+home dir
+input 36
+{"tool_name":"Bash","tool_input":{}}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case zig test hook 7
+home dir
+input 78
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale"}}
+code 0
+out 0
+
+log 0
+
+case zig test hook 8
+home dir
+input 71
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"ls -la"}}
+code 2
+out 447
+shale-gate: `ls` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test hook 9
+home dir
+input 113
+{"session_id":"s7","tool_name":"Bash","tool_input":{"command":"# want: sed-in-place: one edit\nsed -i s/a/b/ x"}}
+code 0
+out 0
+
+log 78
+	s7	want	sed-in-place	one edit	# want: sed-in-place: one edit\nsed -i s/a/b/ x
+case zig test hook 10
+home dir
+input 87
+{"session_id":"s","agent_id":"a1","tool_name":"Bash","tool_input":{"command":"ls -la"}}
+code 2
+out 447
+shale-gate: `ls` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case zig test hook 11
+home dir
+input 94
+{"session_id":"s","agent_id":"a1","tool_name":"Bash","tool_input":{"command":"shale a.shale"}}
+code 0
+out 0
+
+log 0
+
+case zig test hook 12
+home dir
+input 8
+not json
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case zig test hook 13
+home dir
+input 78
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale"}}
+code 0
+out 0
+
+log 0
+
+case command 1
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a'b"}}
+code 2
+out 453
+shale-gate: `a'b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 2
+home dir
+input 75
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a\"b"}}
+code 2
+out 453
+shale-gate: `a"b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 3
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a$b"}}
+code 2
+out 453
+shale-gate: `a$b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 4
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a`b"}}
+code 2
+out 453
+shale-gate: `a`b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 5
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a;b"}}
+code 2
+out 453
+shale-gate: `a;b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 6
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a|b"}}
+code 2
+out 453
+shale-gate: `a|b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 7
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a&b"}}
+code 2
+out 453
+shale-gate: `a&b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 8
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a<b"}}
+code 2
+out 453
+shale-gate: `a<b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 9
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a>b"}}
+code 2
+out 453
+shale-gate: `a>b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 10
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a(b"}}
+code 2
+out 453
+shale-gate: `a(b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 11
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a)b"}}
+code 2
+out 453
+shale-gate: `a)b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 12
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a*b"}}
+code 2
+out 453
+shale-gate: `a*b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 13
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a?b"}}
+code 2
+out 453
+shale-gate: `a?b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 14
+home dir
+input 75
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a\\b"}}
+code 2
+out 453
+shale-gate: `a\b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 15
+home dir
+input 75
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a\tb"}}
+code 2
+out 453
+shale-gate: `a	b` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 16
+home dir
+input 75
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a\rb"}}
+code 2
+out 453
+shale-gate: `ab` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 17
+home dir
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale\r"}}
+code 2
+out 458
+shale-gate: `a.shale` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 18
+home dir
+input 73
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale\ta"}}
+code 2
+out 452
+shale-gate: `shale	a` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 19
+home dir
+input 84
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"  shale   a.shale  "}}
+code 0
+out 0
+
+log 0
+
+case command 20
+home dir
+input 78
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd x && shale"}}
+code 0
+out 0
+
+log 0
+
+case command 21
+home dir
+input 77
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd x &&shale"}}
+code 2
+out 447
+shale-gate: `cd` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 22
+home dir
+input 86
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd x && cd y && shale"}}
+code 2
+out 447
+shale-gate: `cd` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 23
+home dir
+input 76
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd && shale"}}
+code 2
+out 447
+shale-gate: `cd` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 24
+home dir
+input 73
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"/shale a"}}
+code 0
+out 0
+
+log 0
+
+case command 25
+home dir
+input 77
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"/a/b/shale a"}}
+code 0
+out 0
+
+log 0
+
+case command 26
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"/a/sh ale"}}
+code 2
+out 450
+shale-gate: `/a/sh` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 27
+home dir
+input 74
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"a/shale x"}}
+code 2
+out 452
+shale-gate: `a/shale` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 28
+home dir
+input 76
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"/a/b$/shale"}}
+code 2
+out 456
+shale-gate: `/a/b$/shale` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 29
+home dir
+input 83
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --budget a=b"}}
+code 0
+out 0
+
+log 0
+
+case command 30
+home dir
+input 81
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --budget ="}}
+code 0
+out 0
+
+log 0
+
+case command 31
+home dir
+input 84
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --budget a=b;"}}
+code 2
+out 453
+shale-gate: `--budget` takes `NAME=N`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 32
+home dir
+input 89
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --budget --verbose"}}
+code 2
+out 453
+shale-gate: `--budget` takes `NAME=N`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 33
+home dir
+input 72
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale -"}}
+code 2
+out 464
+shale-gate: `-` is not an option the gate passes; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 34
+home dir
+input 73
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale --"}}
+code 2
+out 465
+shale-gate: `--` is not an option the gate passes; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 35
+home dir
+input 73
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale -h"}}
+code 2
+out 465
+shale-gate: `-h` is not an option the gate passes; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 36
+home dir
+input 70
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"<<'A'"}}
+code 2
+out 438
+shale-gate: no `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 37
+home dir
+input 81
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd x && <<'A'\nA"}}
+code 2
+out 438
+shale-gate: no `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 38
+home dir
+input 81
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A'\nA\n"}}
+code 0
+out 0
+
+log 0
+
+case command 39
+home dir
+input 82
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A'\nA \n"}}
+code 0
+out 0
+
+log 0
+
+case command 40
+home dir
+input 83
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A'\nA\t\n"}}
+code 2
+out 460
+shale-gate: the heredoc has no last line `A`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 41
+home dir
+input 83
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A'\n A\nA"}}
+code 0
+out 0
+
+log 0
+
+case command 42
+home dir
+input 86
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A_B'\nx\nA_B"}}
+code 0
+out 0
+
+log 0
+
+case command 43
+home dir
+input 84
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A1'\nx\nA1"}}
+code 2
+out 487
+shale-gate: `<<'A1'`: a heredoc is `<<'TAG'`, quoted, the TAG `[A-Z_]+`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 44
+home dir
+input 79
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<''\n\n"}}
+code 2
+out 485
+shale-gate: `<<''`: a heredoc is `<<'TAG'`, quoted, the TAG `[A-Z_]+`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 45
+home dir
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A'b\nA"}}
+code 2
+out 487
+shale-gate: `<<'A'b`: a heredoc is `<<'TAG'`, quoted, the TAG `[A-Z_]+`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 46
+home dir
+input 83
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale x <<'A' y\nA"}}
+code 2
+out 455
+shale-gate: `<<'A'` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 47
+home dir
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A'\n\n"}}
+code 2
+out 460
+shale-gate: the heredoc has no last line `A`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 48
+home dir
+input 84
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A'\nA\nA\n"}}
+code 2
+out 493
+shale-gate: the heredoc meets `A` twice: a line before its end would close it; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 49
+home dir
+input 78
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A'\n"}}
+code 2
+out 460
+shale-gate: the heredoc has no last line `A`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 50
+home dir
+input 83
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A'\nA\n\n"}}
+code 2
+out 460
+shale-gate: the heredoc has no last line `A`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 51
+home dir
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'A' \nA"}}
+code 0
+out 0
+
+log 0
+
+case command 52
+home dir
+input 77
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: a: b"}}
+code 0
+out 0
+
+log 24
+	s	want	a	b	# want: a: b
+case command 53
+home dir
+input 83
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: a: b: c\nx"}}
+code 0
+out 0
+
+log 33
+	s	want	a	b: c	# want: a: b: c\nx
+case command 54
+home dir
+input 90
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# out-of-scope: a-1: t\ny"}}
+code 0
+out 0
+
+log 47
+	s	out-of-scope	a-1	t	# out-of-scope: a-1: t\ny
+case command 55
+home dir
+input 76
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"#want: a: b"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 56
+home dir
+input 76
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want:a: b"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 57
+home dir
+input 76
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: a:b"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 58
+home dir
+input 76
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: : b"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 59
+home dir
+input 85
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# out-of-scope: A: b"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 60
+home dir
+input 69
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"## x"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 61
+home dir
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: a: \t\r"}}
+code 2
+out 520
+shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 62
+home dir
+input 91
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: 0-9: x\\y\tz\n\t\\"}}
+code 0
+out 0
+
+log 46
+	s	want	0-9	x\\y\tz	# want: 0-9: x\\y\tz\n\t\\
+case command 63
+home dir
+input 84
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale\n\n\n"}}
+code 0
+out 0
+
+log 0
+
+case command 64
+home dir
+input 81
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale\nx"}}
+code 2
+out 464
+shale-gate: a launch is one line, or a heredoc's; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 65
+home dir
+input 65
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":""}}
+code 2
+out 438
+shale-gate: no `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 66
+home dir
+input 67
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"\n"}}
+code 2
+out 438
+shale-gate: no `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 67
+home dir
+input 72
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"\nshale"}}
+code 2
+out 438
+shale-gate: no `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 68
+home dir
+input 66
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":" "}}
+code 2
+out 438
+shale-gate: no `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case command 69
+home dir
+input 70
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale"}}
+code 0
+out 0
+
+log 0
+
+case command 70
+home dir
+input 71
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale "}}
+code 0
+out 0
+
+log 0
+
+case command 71
+home dir
+input 72
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale\n"}}
+code 0
+out 0
+
+log 0
+
+case hook 1
+home dir
+input 26
+ 	
+{"tool_name":"Read"} 
+
+code 0
+out 0
+
+log 0
+
+case hook 2
+home dir
+input 0
+
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 3
+home dir
+input 2
+[]
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 4
+home dir
+input 3
+"x"
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 5
+home dir
+input 2
+{}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 6
+home dir
+input 22
+{"tool_name":"Read"} x
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 7
+home dir
+input 22
+{"tool_name":"Read"}{}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 8
+home dir
+input 21
+{"tool_name":"Read",}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 9
+home dir
+input 29
+{"tool_name":"Read","a":[1,]}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 10
+home dir
+input 20
+{"tool_name" "Read"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 11
+home dir
+input 20
+{'tool_name':"Read"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 12
+home dir
+input 23
+ï»¿{"tool_name":"Read"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 13
+home dir
+input 39
+{"tool_name":"Read","tool_name":"Read"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 14
+home dir
+input 46
+{"tool_name":"Read","x":[{"a":1,"b":2,"a":3}]}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 15
+home dir
+input 43
+{"tool_name":"Read","x":{"a":1,"\u0061":2}}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 16
+home dir
+input 44
+{"tool_name":"Read","x":{"a":1},"y":{"a":1}}
+code 0
+out 0
+
+log 0
+
+case hook 17
+home dir
+input 88
+{"tool_name":"Read","n":[0,-0,1.5,-2e10,3E+2,4e-1,123456789012345678901234567890,1e999]}
+code 0
+out 0
+
+log 0
+
+case hook 18
+home dir
+input 27
+{"tool_name":"Read","n":01}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 19
+home dir
+input 27
+{"tool_name":"Read","n":1.}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 20
+home dir
+input 27
+{"tool_name":"Read","n":.5}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 21
+home dir
+input 27
+{"tool_name":"Read","n":+1}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 22
+home dir
+input 27
+{"tool_name":"Read","n":1e}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 23
+home dir
+input 26
+{"tool_name":"Read","n":-}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 24
+home dir
+input 42
+{"tool_name":"Read","l":[true,false,null]}
+code 0
+out 0
+
+log 0
+
+case hook 25
+home dir
+input 28
+{"tool_name":"Read","l":tru}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 26
+home dir
+input 29
+{"tool_name":"Read","l":True}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 27
+home dir
+input 88
+{"tool_name":"Bash","tool_input":{"command":"\u0041\/\"\\\b\f\n\r\t\u00e9\ud83d\ude00"}}
+code 2
+out 451
+shale-gate: `A/"\` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case hook 28
+home dir
+input 62
+{"tool_name":"Bash","tool_input":{"command":"shale a\u0000b"}}
+code 0
+out 0
+
+log 0
+
+case hook 29
+home dir
+input 70
+{"tool_name":"Bash","tool_input":{"command":"# want: n: a\u0000b\nx"}}
+code 0
+out 0
+
+log 30
+		want	n	a b	# want: n: a b\nx
+case hook 30
+home dir
+input 33
+{"tool_name":"Read","s":"\ud83d"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 31
+home dir
+input 33
+{"tool_name":"Read","s":"\ude00"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 32
+home dir
+input 39
+{"tool_name":"Read","s":"\ud83d\u0041"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 33
+home dir
+input 39
+{"tool_name":"Read","s":"\uD83D\uDE00"}
+code 0
+out 0
+
+log 0
+
+case hook 34
+home dir
+input 31
+{"tool_name":"Read","s":"\x41"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 35
+home dir
+input 33
+{"tool_name":"Read","s":"\u12g4"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 36
+home dir
+input 30
+{"tool_name":"Read","s":"a	b"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 37
+home dir
+input 41
+{"tool_name":"Read","s":"Ã©â‚¬ğŸ˜€ô¿¿"}
+code 0
+out 0
+
+log 0
+
+case hook 38
+home dir
+input 29
+{"tool_name":"Read","s":"À¯"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 39
+home dir
+input 30
+{"tool_name":"Read","s":"à€¯"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 40
+home dir
+input 30
+{"tool_name":"Read","s":"í €"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 41
+home dir
+input 31
+{"tool_name":"Read","s":"ô€€"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 42
+home dir
+input 31
+{"tool_name":"Read","s":"õ€€€"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 43
+home dir
+input 28
+{"tool_name":"Read","s":"Ã"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 44
+home dir
+input 28
+{"tool_name":"Read","s":"€"}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 45
+home dir
+input 28
+{"tool_name":"Read","s":"abc
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 46
+home dir
+input 26
+{"tool_name":"Read","ÿ":1}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 47
+home dir
+input 15
+{"tool_name":1}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 48
+home dir
+input 36
+{"tool_name":"Bash","tool_input":[]}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 49
+home dir
+input 47
+{"tool_name":"Bash","tool_input":{"command":1}}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 50
+home dir
+input 56
+{"tool_name":"Bash","tool_input":{"x":{"command":"ls"}}}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 51
+home dir
+input 56
+{"tool_name":"Bash","x":{"tool_input":{"command":"ls"}}}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case hook 52
+home dir
+input 35
+{"tool_name":"Edit","tool_input":7}
+code 0
+out 0
+
+log 0
+
+case hook 53
+home dir
+input 50
+{"tool_name":"bash","tool_input":{"command":"ls"}}
+code 0
+out 0
+
+log 0
+
+case hook 54
+home dir
+input 78
+{"session_id":7,"tool_name":"Bash","tool_input":{"command":"# want: s: t\nx"}}
+code 0
+out 0
+
+log 26
+		want	s	t	# want: s: t\nx
+case hook 55
+home dir
+input 89
+{"session_id":"a\tb\\c\nd","tool_name":"Bash","tool_input":{"command":"# want: s: t\nx"}}
+code 0
+out 0
+
+log 36
+	a\tb\\c\nd	want	s	t	# want: s: t\nx
+case hook 56
+home dir
+input 58
+{"tool_input":{"command":"shale a"},"tool_name":"Monitor"}
+code 0
+out 0
+
+log 0
+
+case hook 57
+home dir
+input 60
+{"tool_name":"Monitor","tool_input":{"command":"tail -f x"}}
+code 2
+out 449
+shale-gate: `tail` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case hook 58
+home dir
+input 70
+{"tool_name":"Bash","tool_input":{"command":"shale a","command":"ls"}}
+code 2
+out 97
+shale-gate: the hook's input is not the JSON it expects (tool_name, tool_input.command): refused
+
+log 0
+
+case a refusal of 1023 bytes
+home dir
+input 645
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale $wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"}}
+code 2
+out 1024
+shale-gate: `$wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case a refusal of 1024 bytes
+home dir
+input 646
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale $wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"}}
+code 2
+out 1025
+shale-gate: `$wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww` is not a plain word; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case a refusal of 1025 bytes
+home dir
+input 647
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale $wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"}}
+code 2
+out 435
+shale-gate: refused: only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case 64 words
+home dir
+input 196
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w"}}
+code 0
+out 0
+
+log 0
+
+case 65 words
+home dir
+input 198
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w"}}
+code 2
+out 442
+shale-gate: too many words; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case 4096 lines
+home dir
+input 12364
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'T'\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nT"}}
+code 0
+out 0
+
+log 0
+
+case 4096 lines and a newline
+home dir
+input 12366
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'T'\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nT\n"}}
+code 2
+out 461
+shale-gate: a heredoc of more than 4096 lines; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case 4097 lines
+home dir
+input 12367
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale <<'T'\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nx\nT"}}
+code 2
+out 461
+shale-gate: a heredoc of more than 4096 lines; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case an escape's text past 2048 bytes
+home dir
+input 4582
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: long: t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\\nx"}}
+code 0
+out 0
+
+log 3319
+	s	want	long	t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\	# want: long: t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\
+case a session of 4060 bytes then a tab
+home dir
+input 4147
+{"session_id":"ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r","tool_name":"Bash","tool_input":{"command":"# want: cut: x\ny"}}
+code 0
+out 0
+
+log 4075
+	ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r	want	cu
+case a session of 4061 bytes then a tab
+home dir
+input 4148
+{"session_id":"sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r","tool_name":"Bash","tool_input":{"command":"# want: cut: x\ny"}}
+code 0
+out 0
+
+log 4075
+	sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r	want	c
+case a session of 4062 bytes then a tab
+home dir
+input 4149
+{"session_id":"ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r","tool_name":"Bash","tool_input":{"command":"# want: cut: x\ny"}}
+code 0
+out 0
+
+log 4075
+	ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r	want	
+case a session of 4063 bytes then a tab
+home dir
+input 4150
+{"session_id":"sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r","tool_name":"Bash","tool_input":{"command":"# want: cut: x\ny"}}
+code 0
+out 0
+
+log 4075
+	sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r	want
+case a session of 4064 bytes then a tab
+home dir
+input 4151
+{"session_id":"ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r","tool_name":"Bash","tool_input":{"command":"# want: cut: x\ny"}}
+code 0
+out 0
+
+log 4075
+	ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\tq\\r	wan
+case an escape with no HOME
+home none
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: t: x\ny"}}
+code 2
+out 61
+shale-gate: no HOME, so the escape cannot be logged: refused
+
+log 0
+
+case a launch with no HOME
+home none
+input 78
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"shale a.shale"}}
+code 0
+out 0
+
+log 0
+
+case an escape whose log can't be written
+home file
+input 80
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: t: x\ny"}}
+code 2
+out 86
+shale-gate: the escape could not be logged to ~/.local/state/shale/wants.tsv: refused
+
+log 0
+
+case a refusal whose log can't be written
+home file
+input 67
+{"session_id":"s","tool_name":"Bash","tool_input":{"command":"ls"}}
+code 2
+out 447
+shale-gate: `ls` is not `shale`; only a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
+
+log 0
+
+case a megabyte of input
+home dir
+input made
+code 0
+out 0
+
+log 0
+
+case a megabyte of input and a byte
+home dir
+input made
+code 2
+out 56
+shale-gate: the hook's input could not be read: refused
+
+log 0
+
+case a nesting 100000 deep
+home dir
+input made
+code 0
+out 0
+
+log 0
+

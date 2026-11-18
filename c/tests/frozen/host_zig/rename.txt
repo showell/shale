@@ -1,0 +1,33 @@
+exit 1
+edit a.zig: 3 hunks, -3 +3 lines
+3	1
+const std = @import("std");
+const helper = @import("helper.zig");
+const gone = @import("gone.zig");
+
+/// The count.
+pub const total: usize = 3;
+
+// A plain comment above.
+fn add(a: usize, b: usize) usize {
+    return a + b + total;
+}
+
+pub fn twice(x: usize) usize {
+    return add(x, x);
+}
+
+const Table = struct {
+    slots: usize,
+    fn grow(self: *Table) void {
+        self.slots += total;
+    }
+};
+
+test "adds" {
+    try std.testing.expect(twice(1) == 5);
+}
+
+── stopped at the Linux prelude:476:10 (in `the Linux prelude's zig_renames`): argument: `zig_rename`: a.zig declares `total` at line 6, and `x.total` is qualified, which cannot be declared: rename the declaration itself, or leave it out with `lines`; nothing written (1532 steps)
+   called from s.shale:4:11
+── used: 1532 of 5000000 steps, 3 of 10000 reads, 1389 of 67108864 read bytes, 501 of 65536 output bytes

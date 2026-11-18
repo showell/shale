@@ -1,0 +1,6 @@
+exit 0
+a	6	X1
+1,2,3
+── effects (0) ──
+── finished (64 steps)
+── used: 64 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 13 of 65536 output bytes

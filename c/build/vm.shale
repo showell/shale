@@ -10,9 +10,9 @@ use("build:lib.shale")
 -- under every build. Here, in both tiers: its count held to VM_TESTS, then
 -- each command binary the
 -- command's block built runs scripts that use only what the C runs, its
--- output, report and exit held to the installed Zig `shale`'s on the same
--- script, the oracle. In the full tier: the faults below planted in a copy
--- of c/script, each caught by test_vm.c.
+-- output, report and exit held to the script's frozen output
+-- (c/tests/frozen/vm, lib.shale's "Frozen outputs"). In the full tier: the
+-- faults below planted in a copy of c/script, each caught by test_vm.c.
 
 const VM_TESTS = 19
 const VM_SCRIPTS = {
@@ -38,7 +38,7 @@ const VM_PLANTS = {
    old = "if (buf_str(&r->out, str_sub(bytes, 0, room)) != OK)", new = "if (buf_str(&r->out, str_sub(bytes, 0, 0)) != OK)"},
 }
 
-function vm_block(t)
+function vm_block(t, refreeze)
   local n = test_count("c/tests/test_vm.c")
   if n ~= VM_TESTS then fail("c/tests/test_vm.c has " .. n .. " TEST(s), and VM_TESTS says " .. VM_TESTS) end
   local dir = OUT .. "/vm"
@@ -49,21 +49,15 @@ function vm_block(t)
   for s in VM_SCRIPTS do
     local file = dir .. "/" .. s.name .. ".shale"
     create(file, s.source)
-    local zig_argv = {"shale"}
-    for w in s.argv do push(zig_argv, w) end
-    push(zig_argv, file)
-    local z = run_in(t, "vm", zig_argv, {timeout_ms = 20000, whole = 100000, env = env})
     for b in t.builds do
       local argv = {OUT .. "/" .. b .. "/shale"}
       for w in s.argv do push(argv, w) end
       push(argv, file)
       local c = run_in(t, "vm", argv, {timeout_ms = 20000, whole = 100000, env = env, want = WANT})
-      if get(c, "code", -1) ~= z.code or c.out ~= z.out then
-        fail("`" .. b .. "`'s shale ran " .. s.name .. ".shale unlike Zig's:\n--- zig (" .. z.code .. ")\n" .. z.out .. "\n--- c (" .. get(c, "code", -1) .. ")\n" .. c.out)
-      end
+      frozen_held(t, "vm", s.name, b, {code = get(c, "code", -1), out = c.out}, refreeze)
     end
   end
-  print("vm: " .. n .. " C tests; " .. #VM_SCRIPTS .. " scripts run as Zig runs them, under " .. #t.builds .. " build(s)")
+  print("vm: " .. n .. " C tests; " .. #VM_SCRIPTS .. " scripts held to their frozen output, under " .. #t.builds .. " build(s)")
   if not t.full then return nil end
   run_plants(t, "vm plants", VM_PLANTS)
   return nil
@@ -73,5 +67,5 @@ end
 -- ── The run ─────────────────────────────────────────────────────────────
 
 local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"))
-vm_block(t)
+vm_block(t, refreeze_of("vm", arg("refreeze", "")))
 block_end(t, "vm")

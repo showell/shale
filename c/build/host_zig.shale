@@ -9,11 +9,12 @@ use("build:lib.shale")
 
 -- ── The Zig tools: c/host/zig_wire.c, zig_ast.c and host_zig.c ─────────
 -- In both tiers: c/tests/zig/test_zig_wire.c under each of `t.builds`, held
--- to its `TEST(` count and HOST_ZIG_TESTS; then HOST_ZIG_SCRIPTS run by the
--- installed Zig `shale` and by each build's C `shale` (the command's block
--- built them), both speaking to the `tools` mount's zig-ast, every byte of
--- their output and their exit held equal. In the full tier: the faults
--- below planted in a copy of c/host, each caught by its `aim` tests.
+-- to its `TEST(` count and HOST_ZIG_TESTS; then HOST_ZIG_SCRIPTS run by
+-- each build's C `shale` (the command's block built them), speaking to the
+-- `tools` mount's zig-ast, every byte of their output and their exit held
+-- to their frozen output (c/tests/frozen/host_zig, lib.shale's "Frozen
+-- outputs"). In the full tier: the faults below planted in a copy of
+-- c/host, each caught by its `aim` tests.
 
 const HOST_ZIG_TESTS = {["c/tests/zig/test_zig_wire.c"] = 5}
 
@@ -69,10 +70,10 @@ test "adds" {
 }
 ]=]
 
--- The scripts, each run by the Zig `shale` and by each build's C one in a
--- fresh copy of HOST_ZIG_TREE: what it prints, its report and its exit held
--- to Zig's. `env` adds to the run's environment; `mounts` is a mounts file
--- of its own in place of the one with `tools`.
+-- The scripts, each run by each build's C `shale` in a fresh copy of
+-- HOST_ZIG_TREE: what it prints, its report and its exit held to its frozen
+-- output. `env` adds to the run's environment; `mounts` is a mounts file of
+-- its own in place of the one with `tools`.
 const HOST_ZIG_SCRIPTS = {
   {name = "decls", src = [=[for d in zig_decls("a.zig") do print(d.kind, d.name, d.name_form, d.visibility, d.first, d.last, d.start, d.stop, join(d.uses, ","), has_key(d, "comment_above")) end
 for d in zig_decls("a.zig", {container = "Table"}) do print(d.kind, d.name, join(d.uses, ","), join(d.reaches, ",")) end
@@ -120,20 +121,17 @@ zig_decls("bad.zig")
   {name = "no_tools", mounts = "", src = "zig_imports(\"a.zig\")\n"},
 }
 
--- Each of HOST_ZIG_SCRIPTS under the Zig `shale` and each build's C one, in
--- fresh copies of the tree under c/out/host_zig. Gives how many ran.
-function host_zig_vs_zig(t)
+-- Each of HOST_ZIG_SCRIPTS under each build's C `shale`, in fresh copies of
+-- the tree under c/out/host_zig. Gives how many ran.
+function host_zig_scripts(t, refreeze)
   if not exists("tools:zig-ast/bin/zig-ast") then fail("host_zig: no tools:zig-ast/bin/zig-ast, which the Zig tools' scripts speak to: `shale tools/zig_ast/install.shale`") end
   local base = OUT .. "/host_zig"
   if exists(base) then remove_tree(base) end
   mkdir(base)
   create(base .. "/mounts", "tools = " .. real("tools:.") .. " ro tools\n")
-  local sides = {"zig"}
-  for b in t.builds do push(sides, b) end
   local n = 0
   for s in HOST_ZIG_SCRIPTS do
-    local zig = nil
-    for side in sides do
+    for side in t.builds do
       local dir = base .. "/" .. s.name .. "-" .. side
       mkdir(dir)
       create(dir .. "/a.zig", HOST_ZIG_TREE)
@@ -145,24 +143,18 @@ function host_zig_vs_zig(t)
         create(dir .. "/mounts", s.mounts)
         env.SHALE_MOUNTS = real(dir .. "/mounts")
       end
-      local argv = {"shale"}
-      if side ~= "zig" then argv = {real(OUT .. "/" .. side .. "/shale")} end
+      local argv = {real(OUT .. "/" .. side .. "/shale")}
       for w in get(s, "argv", {}) do push(argv, w) end
       push(argv, "s.shale")
-      local r = run_in(t, "host_zig vs zig", argv, {timeout_ms = 30000, whole = 200000, env = env, cwd = dir, want = WANT})
-      local got = {code = get(r, "code", -1), out = r.out}
-      if side == "zig" then
-        zig = got
-      elseif got.code ~= zig.code or got.out ~= zig.out then
-        fail("`" .. side .. "`'s shale ran host_zig's " .. s.name .. " unlike Zig's:\n--- zig (" .. zig.code .. ")\n" .. zig.out .. "\n--- c (" .. got.code .. ")\n" .. got.out)
-      end
+      local r = run_in(t, "host_zig scripts", argv, {timeout_ms = 30000, whole = 200000, env = env, cwd = dir, want = WANT})
+      frozen_held(t, "host_zig", s.name, side, {code = get(r, "code", -1), out = r.out}, refreeze)
     end
     n = n + 1
   end
   return n
 end
 
-function host_zig_block(t)
+function host_zig_block(t, refreeze)
   local tests = {}
   for src in keys(HOST_ZIG_TESTS) do push(tests, src) end
   sort(tests)
@@ -175,8 +167,8 @@ function host_zig_block(t)
     print("host_zig " .. said_of_build(b, #tests, total))
   end
   if t.stage == "plan" then return run_plants(t, "host_zig plants", HOST_ZIG_PLANTS) end
-  local n = host_zig_vs_zig(t)
-  print("host_zig: " .. n .. " scripts run as Zig runs them, under " .. #t.builds .. " build(s)")
+  local n = host_zig_scripts(t, refreeze)
+  print("host_zig: " .. n .. " scripts held to their frozen output, under " .. #t.builds .. " build(s)")
   if not t.full then return nil end
   run_plants(t, "host_zig plants", HOST_ZIG_PLANTS)
   return nil
@@ -186,5 +178,5 @@ end
 -- ── The run ─────────────────────────────────────────────────────────────
 
 local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
-host_zig_block(t)
+host_zig_block(t, refreeze_of("host_zig", arg("refreeze", "")))
 block_end(t, "host_zig")

@@ -1,0 +1,146 @@
+-- c/build/gate_golden.shale: the gate's golden cases, a library the gate's
+-- block (c/build/gate.shale) uses: c/tests/frozen/gate/cases.txt holds
+-- every hook input with the answer the gate must give it, its exit code,
+-- what it said and the line it logged (the date aside), and each build's
+-- `shale-gate` is held to every one.
+--
+-- The cases are each refusal, the launch's and the escape's forms, the
+-- limits (64 words, 4096 lines, the 1024-byte refusal's edge, a log line's
+-- cut at 4095 bytes), std.json's grammar as the gate reads it, a HOME that
+-- is missing or can't be written, and the hook inputs Zig's gate test file
+-- named. They were frozen on 2026-11-18 from the Zig gate's answers, which
+-- the C gate gave too.
+--
+-- **The file** is one record a case, each field on a line of its own:
+-- `case <name>`, `home <dir|file|none>` (`dir`: a folder of the run's;
+-- `file`: a file, so the log can't be written; `none`: no HOME), `input <N>`
+-- then the input's N bytes and a newline (or `input made`, an input past 64
+-- KiB that GATE_MADE makes), `code <N>`, then `out <N>` and `log <N>`, each
+-- followed by its bytes and a newline. **A deliberate change refreezes
+-- them**: `shale c/build.shale refreeze=gate` writes every answer from the
+-- first build's gate, says how many moved, and its commit says why for
+-- each. A new case is a record added by hand with any answer, then the
+-- refreeze.
+
+const GATE_CASES = "c/tests/frozen/gate/cases.txt"
+const GATE_WANT_RUN = "c-gate: the build's own shale-gate over its golden cases"
+
+-- The inputs too big for the file, by name.
+function gate_made(name)
+  local read = "{\"tool_name\":\"Read\"}"
+  if name == "a megabyte of input" then return read .. rep(" ", 1048576 - #read) end
+  if name == "a megabyte of input and a byte" then return read .. rep(" ", 1048577 - #read) end
+  if name == "a nesting 100000 deep" then return "{\"tool_name\":\"Read\",\"x\":" .. rep("[", 100000) .. rep("]", 100000) .. "}" end
+  fail("gate golden: `" .. name .. "` is `input made`, and gate_made makes no such input")
+end
+
+-- The field `name` of the record at byte `at` of `s`: {value, at} with
+-- `at` past it. A sized field (`name N` then N bytes) gives its bytes.
+function gate_field(s, at, name, sized)
+  local nl = find(s, "\n", at)
+  if nl == nil then fail("gate golden: " .. GATE_CASES .. " ends inside a record, wanting `" .. name .. "`") end
+  local line = sub(s, at, nl - 1)
+  if not starts_with(line, name .. " ") then fail("gate golden: " .. GATE_CASES .. " has `" .. sub(line, 1, 60) .. "` where `" .. name .. " ...` goes") end
+  local v = sub(line, #name + 2)
+  if not sized or v == "made" then return {value = v, at = nl + 1, made = v == "made"} end
+  local n = parse_int(v)
+  local bytes = sub(s, nl + 1, nl + n)
+  if sub(s, nl + n + 1, nl + n + 1) ~= "\n" then fail("gate golden: " .. GATE_CASES .. "'s `" .. name .. " " .. n .. "` is not followed by its bytes and a newline") end
+  return {value = bytes, at = nl + n + 2, made = false}
+end
+
+-- Every case of the file, as {name, home, input, code, out, log}.
+function gate_cases()
+  local s = read(GATE_CASES)
+  local cases = {}
+  local at = 1
+  while at <= #s do
+    local name = gate_field(s, at, "case", false)
+    local home = gate_field(s, name.at, "home", false)
+    local input = gate_field(s, home.at, "input", true)
+    local code = gate_field(s, input.at, "code", false)
+    local out = gate_field(s, code.at, "out", true)
+    local log = gate_field(s, out.at, "log", true)
+    local c = {name = name.value, home = home.value, input = input.value, code = parse_int(code.value), out = out.value, log = log.value, made = input.made}
+    if c.made then c.input = gate_made(c.name) end
+    push(cases, c)
+    at = log.at
+  end
+  return cases
+end
+
+-- The file written again, with each case's answer `got[i]`.
+function gate_cases_write(cases, got)
+  local out = {}
+  local i = 0
+  for c in cases do
+    i = i + 1
+    local rec = "case " .. c.name .. "\nhome " .. c.home .. "\n"
+    if c.made then rec = rec .. "input made\n" else rec = rec .. "input " .. #c.input .. "\n" .. c.input .. "\n" end
+    local g = got[i]
+    rec = rec .. "code " .. g.code .. "\nout " .. #g.out .. "\n" .. g.out .. "\nlog " .. #g.log .. "\n" .. g.log .. "\n"
+    push(out, rec)
+  end
+  replace(GATE_CASES, join(out, ""))
+  return nil
+end
+
+-- What the gate at OS path `bin` answers to `c`, under the folder `dir` its
+-- HOME is made in: {code, out, log}, `log` what it appended to wants.tsv,
+-- each line's date held to its shape and taken off.
+function gate_answer(bin, dir, c)
+  local argv = {bin}
+  local env = {HOME = real(dir) .. "/home"}
+  if c.home == "none" then
+    argv = {"env", "-u", "HOME", bin}
+    env = {}
+  elseif c.home == "file" then
+    env = {HOME = real(dir) .. "/a-file"}
+  end
+  local log = dir .. "/home/.local/state/shale/wants.tsv"
+  local before = read_or(log, "")
+  local r = run(argv, {stdin = c.input, env = env, timeout_ms = 20000, whole = 100000, want = GATE_WANT_RUN})
+  local after = read_or(log, "")
+  local added = sub(after, #before + 1)
+  local shown = {}
+  for l in lines(added) do
+    if not re_match(l, "^\\d\\d\\d\\d-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ\\t") then fail("gate golden: " .. bin .. " logged a line whose date is not YYYY-MM-DDTHH:MM:SSZ, for " .. c.name .. ": " .. sub(l, 1, 80)) end
+    push(shown, sub(l, 21))
+  end
+  return {code = get(r, "code", -1), ended = r.ended, out = r.out, log = join(shown, "\n"), log_bytes = #added, ms = r.ms, cpu_ms = get(r, "cpu_ms", 0)}
+end
+
+-- The gate at OS path `bin` over every case, with a HOME of its own under
+-- `dir`. The first case whose answer is not the frozen one stops the run,
+-- showing both; with `refreeze`, every answer is written from this gate's
+-- instead. Gives how many cases were held, how many of them it passed,
+-- refused and logged, how many answers a refreeze moved, and the runs'
+-- wall and CPU time (`ms`, `cpu_ms`).
+function gate_golden_check(bin, dir, refreeze)
+  if exists(dir) then remove_tree(dir) end
+  mkdir(dir .. "/home")
+  create(dir .. "/a-file", "not a folder\n")
+  local cases = gate_cases()
+  local got = {}
+  local passed = 0
+  local refused = 0
+  local logged = 0
+  local moved = 0
+  local ms = 0
+  local cpu_ms = 0
+  for c in cases do
+    local g = gate_answer(bin, dir, c)
+    ms = ms + g.ms
+    cpu_ms = cpu_ms + g.cpu_ms
+    push(got, g)
+    if g.code ~= c.code or g.out ~= c.out or g.log ~= c.log then
+      if not refreeze then fail("gate golden: " .. c.name .. " answered unlike its frozen answer (" .. GATE_CASES .. "):\n--- input (" .. #c.input .. " bytes)\n" .. sub(c.input, 1, 600) .. "\n--- frozen (" .. c.code .. ")\n" .. c.out .. "log: " .. c.log .. "\n--- " .. bin .. " (" .. g.code .. ", " .. g.ended .. ")\n" .. g.out .. "log: " .. g.log) end
+      moved = moved + 1
+    end
+    if g.code == 0 then passed = passed + 1 else refused = refused + 1 end
+    if g.log_bytes > 0 then logged = logged + 1 end
+  end
+  if refreeze then gate_cases_write(cases, got) end
+  remove_tree(dir)
+  return {cases = #cases, passed = passed, refused = refused, logged = logged, moved = moved, ms = ms, cpu_ms = cpu_ms}
+end

@@ -1,0 +1,2 @@
+exit 0
+`zig_decls`: zig-ast gave no `zig-ast serve 1 <zig version>` line first

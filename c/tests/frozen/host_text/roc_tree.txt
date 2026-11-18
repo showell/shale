@@ -1,0 +1,32 @@
+exit 0
+a.roc	11	
+file	0	0	2	1	1	3	10	
+module	1	1	1	1	1	1	11	
+exposes	2	2	1	1	8	1	11	
+exposed-lower-ident	3	3	1	1	9	1	10	
+text	4	4	0	0	0	0	0	
+statements	1	1	1	0	0	0	0	
+s-decl	2	6	2	3	1	3	10	
+p-ident	3	7	0	3	1	3	2	x
+e-binop	3	7	2	3	5	3	10	
+e-int	4	9	0	3	5	3	6	1
+e-int	4	9	0	3	9	3	10	2
+bad.roc	0	bad.roc: 2 parse problem(s): a file that does not parse has no tree to hunt
+gone.roc	0	no such file
+empty.roc	3	
+file	0	0	2	1	1	1	1	
+type-mod	1	1	0	1	1	1	1	
+statements	1	1	0	0	0	0	0	
+a.roc	11	
+file	0	0	2	1	1	3	10	
+module	1	1	1	1	1	1	11	
+exposes	2	2	1	1	8	1	11	
+exposed-lower-ident	3	3	1	1	9	1	10	
+text	4	4	0	0	0	0	0	
+statements	1	1	1	0	0	0	0	
+s-decl	2	6	2	3	1	3	10	
+p-ident	3	7	0	3	1	3	2	x
+e-binop	3	7	2	3	5	3	10	
+e-int	4	9	0	3	5	3	6	1
+e-int	4	9	0	3	9	3	10	2
+0

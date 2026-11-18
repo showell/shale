@@ -1,0 +1,15 @@
+exit 0
+kw_local	local	1	0	5
+name	x	1	6	7
+assign	=	1	8	9
+int	1	1	10	11
+comment	-- one	1	12	18
+name	print	2	19	24
+lparen	(	2	24	25
+string	"hi\n"	2	25	31
+comma	,	2	31	32
+string	[=[raw]=]	2	33	42
+rparen	)	2	42	43
+1	`shale_tokens`: no token tag `eof`: the end of a file is no token here
+`shale_tokens`: no token tag `zz` (`name`, `int`, `string`, `comment`, `kw_end`, `plus`, ...)	`shale_tokens`' options are a map, not a list
+`shale_tokens`: bad.shale does not lex as Shale at line 1: float literals are not in this language: integers only	`shale_tokens("nope.shale")`: not found (FileNotFound): `exists(p)` asks first

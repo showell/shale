@@ -12,16 +12,17 @@ use("build:lib.shale")
 -- `t.builds` and holds to its `TEST(` count), then each command binary the
 -- command's block built runs HOST_TEXT_SCRIPTS and HOST_TEXT_TREE_SCRIPTS
 -- through the Linux prelude (the tree scripts with the real roc-ast and
--- go-ast under the `tools` mount), its output, report and exit held to the
--- installed Zig `shale`'s, the oracle. In the full tier: the faults below
+-- go-ast under the `tools` mount), its output, report and exit held to its
+-- frozen output (c/tests/frozen/host_text, lib.shale's "Frozen outputs").
+-- A script marked `finishes` must end without a stop. In the full tier: the faults below
 -- planted in a copy of c/, with c/tests/ran.c and c/tests/text beside it,
 -- each caught by its `aim` tests.
 
 const HOST_TEXT_TEST = "c/tests/text/test_host_text.c"
 const HOST_TEXT_TESTS = 16
 
--- Each script's every stop is Zig's, so a message, a charge or an order the
--- tests do not pin is judged here.
+-- Each script's every stop is frozen, so a message, a charge or an order
+-- the tests do not pin is judged here.
 const HOST_TEXT_SCRIPTS = {
   {name = "json", source = [==[
 local v = json_read("{\"a\": [1, -2, 3.5e2, true, \"x\\u00e9\\ud83d\\ude00\"], \"b\": null, \"c\": {}}")
@@ -134,9 +135,9 @@ function host_text_run(t, dir, name, who, argv, env)
   return run_in(t, "host text", argv, {timeout_ms = 20000, whole = 200000, env = env, cwd = work, want = WANT})
 end
 
--- Each script of `scripts` under Zig's `shale` and each build's, over the
--- mounts `mounts` says, in a folder of its own, `dir`.
-function host_text_scripts(t, dir, scripts, mounts)
+-- Each script of `scripts` under each build's `shale`, over the mounts
+-- `mounts` says, in a folder of its own, `dir`, held to its frozen output.
+function host_text_scripts(t, dir, scripts, mounts, refreeze)
   if exists(dir) then remove_tree(dir) end
   mkdir(dir)
   create(dir .. "/mounts", mounts)
@@ -144,13 +145,10 @@ function host_text_scripts(t, dir, scripts, mounts)
   for s in scripts do
     local file = s.name .. ".shale"
     create(dir .. "/" .. file, s.source)
-    local z = host_text_run(t, dir, s.name, "zig", {"shale", file}, env)
-    if get(s, "finishes", false) and z.code ~= 0 then fail("Zig's shale ran " .. file .. " to a stop, so it judges nothing:\n" .. z.out) end
     for b in t.builds do
       local c = host_text_run(t, dir, s.name, b, {real(OUT .. "/" .. b .. "/shale"), file}, env)
-      if get(c, "code", -1) ~= z.code or c.out ~= z.out then
-        fail("`" .. b .. "`'s shale ran " .. s.name .. ".shale unlike Zig's:\n--- zig (" .. z.code .. ")\n" .. z.out .. "\n--- c (" .. get(c, "code", -1) .. ")\n" .. c.out)
-      end
+      if get(s, "finishes", false) and get(c, "code", -1) ~= 0 then fail("`" .. b .. "`'s shale ran " .. file .. " to a stop, so it judges nothing:\n" .. c.out) end
+      frozen_held(t, "host_text", s.name, b, {code = get(c, "code", -1), out = c.out}, refreeze)
     end
   end
   return nil
@@ -164,14 +162,14 @@ function host_text_plants()
   return plants
 end
 
-function host_text_block(t)
+function host_text_block(t, refreeze)
   local n = test_count(HOST_TEXT_TEST)
   if n ~= HOST_TEXT_TESTS then fail(HOST_TEXT_TEST .. " has " .. n .. " TEST(s), and HOST_TEXT_TESTS says " .. HOST_TEXT_TESTS) end
-  host_text_scripts(t, OUT .. "/host_text", HOST_TEXT_SCRIPTS, "")
+  host_text_scripts(t, OUT .. "/host_text", HOST_TEXT_SCRIPTS, "", refreeze)
   local tools = attempt(real, "tools:.")
   if not tools.ok then fail("the host text block needs the `tools` mount, where roc-ast and go-ast are installed") end
-  host_text_scripts(t, OUT .. "/host_text_tree", HOST_TEXT_TREE_SCRIPTS, "tools = " .. tools.value .. " ro tools\n")
-  print("host text: " .. (#HOST_TEXT_SCRIPTS + #HOST_TEXT_TREE_SCRIPTS) .. " scripts run as Zig runs them, under " .. #t.builds .. " build(s)")
+  host_text_scripts(t, OUT .. "/host_text_tree", HOST_TEXT_TREE_SCRIPTS, "tools = " .. tools.value .. " ro tools\n", refreeze)
+  print("host text: " .. (#HOST_TEXT_SCRIPTS + #HOST_TEXT_TREE_SCRIPTS) .. " scripts held to their frozen output, under " .. #t.builds .. " build(s)")
   if not t.full then return nil end
   run_plants(t, "host text plants", host_text_plants())
   return nil
@@ -181,5 +179,5 @@ end
 -- ── The run ─────────────────────────────────────────────────────────────
 
 local t = block_start(arg("full", 0) == 1, arg("builds", "tcc"), arg("stage", "all"))
-host_text_block(t)
+host_text_block(t, refreeze_of("host_text", arg("refreeze", "")))
 block_end(t, "host_text")

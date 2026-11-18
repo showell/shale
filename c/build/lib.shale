@@ -784,6 +784,49 @@ function zig_test_count(src)
   return n
 end
 
+-- ── Frozen outputs ─────────────────────────────────────────────────────
+-- A block's script run by every build is held to the output frozen for it in
+-- c/tests/frozen/<block>/<name>.txt: a first line `exit <code>`, then what
+-- the run printed, its report among it, byte for byte, the checkout's real
+-- path written `{root}`. A deliberate change refreezes the scripts it names:
+-- `shale c/build.shale refreeze=<block>/<name>,...` (or `<block>`, every
+-- script of it) writes each from the first build's run, says so, and holds
+-- every other build to the new file; its commit says why.
+
+const FROZEN = "c/tests/frozen"
+
+-- The block's own names in `refreeze=` (`block/name` or `block`), as a map
+-- of the names to refreeze (`*` for all of them).
+function refreeze_of(block, said)
+  local out = {}
+  for w in split(said, ",") do
+    local x = trim(w)
+    if x == block then out["*"] = true end
+    if starts_with(x, block .. "/") then out[sub(x, #block + 2)] = true end
+  end
+  return out
+end
+
+-- `got` ({code, out}) of the script `name`, run by `who`, held to its frozen
+-- output, or frozen anew when `refreeze` (refreeze_of's) names it and no
+-- build has written it yet in this run.
+function frozen_held(t, block, name, who, got, refreeze)
+  local file = FROZEN .. "/" .. block .. "/" .. name .. ".txt"
+  local text = "exit " .. got.code .. "\n" .. substitute(got.out, real("."), "{root}", {missing_ok = true})
+  local key = block .. "/" .. name
+  if (has_key(refreeze, "*") or has_key(refreeze, name)) and not has_key(t.refrozen, key) then
+    t.refrozen[key] = true
+    mkdir(dirname(file))
+    if exists(file) then replace(file, text) else create(file, text) end
+    print("refrozen: " .. file .. ", from `" .. who .. "`'s run")
+    return nil
+  end
+  if not exists(file) then fail(block .. ": no " .. file .. " for its script " .. name .. ": freeze it (`shale c/build.shale refreeze=" .. key .. "`) and say why in the commit") end
+  local want = read(file)
+  if want ~= text then fail("`" .. who .. "`'s shale ran " .. block .. "'s " .. name .. " unlike its frozen output:\n--- frozen (" .. file .. ")\n" .. want .. "\n--- `" .. who .. "`\n" .. text) end
+  return nil
+end
+
 -- ── A block's run ──────────────────────────────────────────────────────
 
 -- The run `t` a block's checks take: `full` the tier, `builds` the builds'
@@ -795,7 +838,7 @@ function block_start(full, builds, stage?)
   local s = stage
   if s == nil then s = "all" end
   if not has_item({"all", "plan", "prebuilt"}, s) then fail("stage=" .. s .. ": a block's stage is all, plan or prebuilt") end
-  return {full = full, builds = list, stage = s, planned = {}, phases = {}, phase_order = {}, plants = {ran = 0, skipped = 0}}
+  return {full = full, builds = list, stage = s, planned = {}, phases = {}, phase_order = {}, plants = {ran = 0, skipped = 0}, refrozen = {}}
 end
 
 -- The block's phases written to c/out/phases/<name>.json, for c/build.shale's

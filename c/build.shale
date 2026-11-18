@@ -22,7 +22,7 @@
 -- (the unity build's translation units, so every module's code) is compiled
 -- with `-c`, never linked or run, since -Warray-bounds and -Wrestrict fire
 -- only with the optimizer on and `-fsyntax-only` skips them; c/shale.c alone
--- is linked at -O2, the binary the differ judges. `asan` is -O0 with
+-- is linked at -O2, the binary the golden tests judge. `asan` is -O0 with
 -- -fsanitize=address,undefined, and runs every test file.
 --
 -- Every check runs in exactly one tier, and the full tier runs both.
@@ -69,7 +69,12 @@
 -- `binary=release|tcc to=<OS path>` builds the C `shale` alone, no tier
 -- (c/build/binary.shale): what bench/baseline.shale times.
 --
--- Run from the repository's root: shale c/build.shale [full=1 [plants=all]]
+-- `refreeze=<block>/<name>,...` (or `<block>`) writes the named scripts'
+-- frozen outputs (c/tests/frozen, lib.shale's "Frozen outputs") from the
+-- first build's run, in a tier that runs as ever: a deliberate change's
+-- refreeze, whose commit says why.
+--
+-- Run from the repository's root: shale c/build.shale [full=1 [plants=all]] [refreeze=...]
 -- budget: programs=200 arena_bytes=268435456
 
 const OUT = "c/out"
@@ -131,7 +136,7 @@ function report_phases(full)
     print("plants: " .. ran .. " ran, " .. skipped .. " skipped as already proven (`plants=all` runs every one)")
   end
   if full then
-    print("* its runs overlap: its wall is the clock's, and its CPU every program's, two at a time as jobs (c/build/job.shale) or in the foreground; host vs zig's probes alone are left out")
+    print("* its runs overlap: its wall is the clock's, and its CPU every program's, two at a time as jobs (c/build/job.shale) or in the foreground")
     print("gcc compiles: every pooled block's compiles, run before any test; each one's CPU, and its count, is in its block's phase")
   end
   return nil
@@ -156,7 +161,7 @@ if #builds > 0 then said_builds = join(builds, ",") end
 
 -- The `build` mount, c/build: a block reads its library there. The outer
 -- run's `tools` mount goes with it, when there is one: the Zig tools' block
--- speaks to its zig-ast.
+-- speaks to its zig-ast, and the host text block to its roc-ast and go-ast.
 mkdir(OUT)
 local mounts = OUT .. "/build.mounts"
 local mount_line = "build = " .. real("c/build") .. " ro\n"
@@ -199,21 +204,36 @@ end
 local said_full = "0"
 if full then said_full = "1" end
 local block_args = {"full=" .. said_full, "builds=" .. said_builds}
+-- The blocks with frozen outputs, which alone take `refreeze=`.
+const FROZEN_BLOCKS = {"vm", "host_text", "host_zig", "gate"}
+local refreeze = arg("refreeze", "")
+for w in split(refreeze, ",") do
+  local b = split(trim(w), "/")[1]
+  if trim(w) ~= "" and not has_item(FROZEN_BLOCKS, b) then fail("refreeze=" .. refreeze .. ": `" .. trim(w) .. "` is no block with frozen outputs (" .. join(FROZEN_BLOCKS, ", ") .. ")") end
+end
+-- A block's own arguments, `refreeze=` to the blocks that take it.
+function args_of(b, args, refreeze)
+  if refreeze == "" or not has_item(FROZEN_BLOCKS, b) then return args end
+  local out = {}
+  for a in args do push(out, a) end
+  push(out, "refreeze=" .. refreeze)
+  return out
+end
 if full then
   -- The pool: each pooled block's plan, then every compile of them at once.
-  for b in POOLED do run_block(b, {"full=1", "builds=" .. said_builds, "stage=plan"}, mounts, true) end
+  for b in POOLED do run_block(b, args_of(b, {"full=1", "builds=" .. said_builds, "stage=plan"}, refreeze), mounts, true) end
   run_block("pool", {"blocks=" .. join(POOLED, ",")}, mounts, false)
 end
 for b in BLOCKS do
   local args = block_args
   if full and has_item(POOLED, b) then args = {"full=1", "builds=" .. said_builds, "stage=prebuilt"} end
-  run_block(b, args, mounts, false)
+  run_block(b, args_of(b, args, refreeze), mounts, false)
 end
 
--- The golden tests: every input the differ judges, frozen with the Zig
--- oracle's output (tests/golden.shale), held under the -O2 binary the
--- command block built. It runs with the box's own mounts, not the blocks'
--- `build` mount, and its time is a phase of its own.
+-- The golden tests (tests/golden.shale): every input the harness collects,
+-- frozen with its output, held under the -O2 binary the command block
+-- built. It runs with the box's own mounts, not the blocks' `build` mount,
+-- and its time is a phase of its own.
 if full then
   local g = run({"shale", "tests/golden.shale", "bin=" .. OUT .. "/release/shale"}, {timeout_ms = 900000, tail = 60, not_re = "^── (budgets from the script's header|time: )"})
   print(trim(g.out))

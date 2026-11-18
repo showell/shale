@@ -1,0 +1,31 @@
+exit 0
+edit b.zig: 1 hunk, -1 +4 lines
+edit a.zig: 1 hunk, -5 +1 lines
+1	0	0	1
+const std = @import("std");
+const helper = @import("helper.zig");
+const gone = @import("gone.zig");
+
+/// The count.
+pub const count: usize = 3;
+
+// A plain comment above.
+fn add(a: usize, b: usize) usize {
+    return a + b + count;
+}
+
+const Table = struct {
+    slots: usize,
+    fn grow(self: *Table) void {
+        self.slots += count;
+    }
+};
+
+test "adds" {
+    try std.testing.expect(twice(1) == 5);
+}
+
+pub fn twice(x: usize) usize {
+    return add(x, x);
+}
+
