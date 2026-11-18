@@ -258,7 +258,13 @@ and its self-test plants a break of each one.
   golden tests (`tests/golden.shale`); a change to one is a named refreeze
   (`refreeze=<ids>`), its commit saying why (Steve, 2026-11-18: no parity
   with the Zig). A message formatted with arguments falls back to its plain
-  format when memory runs out.
+  format when memory runs out, and the fallback reads the refusal
+  (`run_fail_built`), so no stale `RunCtx.refused` outlives the stop.
+- **No refusal is dropped.** A number for a message comes from the run's
+  ring (`run_num`, `run_unum`), which needs no arena; anything else a run
+  makes, a `--verbose` record or the time line's argv among them, answers a
+  refusal as the arena budget's stop. `c/build/arena_faults.shale` proves it
+  on demand (`c/docs/building.md`).
 - **Held:** no `run_fail(` has a `{` or `}` in its literal. Zig's format
   escapes a brace (`{{`), and a refused arena shows that raw format, so the
   stop goes through `run_failf` or `path_fail` with the format as its

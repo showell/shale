@@ -149,10 +149,10 @@ refusal travels (arena.h, err.h's `run_oom`, a new allocation site's error
 path). It takes about 4 minutes on this box (about 6,900 runs of the
 binary), and says one line a script. An unclean end is run again with
 SHALE_ARENA_FAULT_TRACE=1 and named by the function that asked for the
-refused allocation; the sites known to swallow a refusal (a number made for
-a message that may never be needed, a `--verbose` record dropped) are its
-`KNOWN_SWALLOWS`, counted rather than failed, each a finding queued for its
-home.
+refused allocation. No refusal may be swallowed: a finish is clean only when
+the hook says no refusal flag was left set, which leaves one way to finish
+after a refusal, a stop's message falling back to its format text (which
+reads the refusal) inside an `attempt` (the driver's `FALLBACK_CAUGHT`).
 
 When the full tier passes 150 seconds of wall time on an idle box, stop
 and propose ways to cut it, ranked by what they'd save, before adding more
