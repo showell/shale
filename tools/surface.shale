@@ -34,9 +34,9 @@ const NOT_SURFACE = {"shale_fixture.zig", "shale_test_host.zig", "script_bench.z
 
 -- The preludes, each with the name a stop gives it.
 const PRELUDES = {
-  {path = "src/script/prelude.shale", module = "the prelude"},
-  {path = "src/shale_prelude_linux.shale", module = "the Linux prelude"},
-  {path = "src/shale_prelude_git.shale", module = "the git prelude"},
+  {path = "c/preludes/core.shale", module = "the prelude"},
+  {path = "c/preludes/linux.shale", module = "the Linux prelude"},
+  {path = "c/preludes/git.shale", module = "the git prelude"},
 }
 
 -- ── Reading Zig a line at a time ──
@@ -517,10 +517,10 @@ end
 local out = {}
 local scans = {}
 local files = {}
-for p in glob("src/**/*.zig") do
+for p in glob("legacy_zig/src/**/*.zig") do
   if not ends_with(p, "_test.zig") and not has_item(NOT_SURFACE, basename(p)) then push(files, p) end
 end
-push(files, "tools/shale_gate.zig")
+push(files, "legacy_zig/tools/shale_gate.zig")
 for p in files do
   scans[basename(p)] = zig_scan(p)
   yield()
@@ -895,7 +895,7 @@ push(out, "  the words after a mount's path: " .. join(sort(keys(words)), " "))
 push(out, "")
 
 -- The gate.
-push(out, "## The gate (tools/shale_gate.zig): its forms, its refusals and its messages")
+push(out, "## The gate (legacy_zig/tools/shale_gate.zig): its forms, its refusals and its messages")
 local gate = scans["shale_gate.zig"]
 for l in gate.lines do
   local z = zig_line(l, 0)

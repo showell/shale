@@ -1,4 +1,5 @@
-# The coverage gate, `shale tools/coverage.shale`, on every push to master
+# Zig Shale's coverage gate (legacy_zig/, deprecated and frozen),
+# `shale tools/coverage.shale` there, on every push to master
 # and every pull request: `zig build script-coverage` (the coverage SDK's
 # linecov, under ptrace, over the unit binaries built Debug) read back and
 # held to coverage/lines.txt, each module's uncovered count exactly. Code
@@ -24,7 +25,7 @@ jobs:
   coverage:
     # The floor is the box's, so the runner is the box's Ubuntu: on 26.04,
     # curl unfolds a folded header itself, and the prelude's own unfolding
-    # (src/shale_prelude_linux.shale, `http`) never runs.
+    # (legacy_zig/src/shale_prelude_linux.shale, `http`) never runs.
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -49,7 +50,7 @@ jobs:
       # Debug by `zig build script` (seconds; the installed ReleaseSafe one
       # takes LLVM minutes), the checkout its root.
       - name: shale tools/coverage.shale
-        working-directory: shale
+        working-directory: shale/legacy_zig
         run: |
           zig version
           zig build script -- --root "$PWD" tools/coverage.shale

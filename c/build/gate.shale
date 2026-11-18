@@ -4,8 +4,7 @@
 -- budget: steps=80000000 programs=1000 arena_bytes=268435456 changes=20000 change_bytes=1073741824 call_bytes=67108864
 --
 -- test_gate.c runs in the foundation's block with every test file. Here, in
--- both tiers: its port of tools/shale_gate_test.zig's tests held to that
--- file's count (a Zig test added is one the C has yet to port), the program
+-- both tiers: its port of the Zig gate's tests held to their count, the program
 -- built under each of `t.builds` at c/out/<build>/shale-gate, and each
 -- binary run through tools/shale-gate.sh, the hook's wrapper, as Zig's
 -- wrapper test runs it, and then over the golden cases (c/build/
@@ -16,9 +15,9 @@
 use("build:lib.shale")
 use("build:gate_golden.shale")
 
--- tools/shale_gate_test.zig's tests: seven ported to test_gate.c, and its
--- wrapper test, which `wrapper_holds` ports.
-const GATE_ZIG_TESTS = 8
+-- The Zig gate's tests (legacy_zig/tools/shale_gate_test.zig, frozen):
+-- seven ported to test_gate.c, and its wrapper test, which `wrapper_holds`
+-- ports.
 const GATE_PORTED = 7
 const GATE_WANT = "c-gate: the build's own shale-gate, or the hook's wrapper over it"
 const GATE_PLANTS = {
@@ -129,8 +128,6 @@ function gate_golden(t, builds, refreeze)
 end
 
 function gate_block(t, refreeze)
-  local zig_tests = zig_test_count("tools/shale_gate_test.zig")
-  if zig_tests ~= GATE_ZIG_TESTS then fail("tools/shale_gate_test.zig has " .. zig_tests .. " tests, and GATE_ZIG_TESTS says " .. GATE_ZIG_TESTS .. ": port the new one to c/tests/test_gate.c") end
   local c_tests = test_count("c/tests/test_gate.c")
   if c_tests < GATE_PORTED then fail("c/tests/test_gate.c has " .. c_tests .. " tests, fewer than the " .. GATE_PORTED .. " it ports") end
   build_gates(t)
@@ -142,7 +139,7 @@ function gate_block(t, refreeze)
     local n = wrapper_holds(t, b)
     print("gate " .. b .. ": c/out/" .. b .. "/shale-gate built; " .. n .. " runs through tools/shale-gate.sh as Zig's wrapper test holds them")
   end
-  print("gate: " .. c_tests .. " C tests, " .. GATE_PORTED .. " of them ports of tools/shale_gate_test.zig's " .. zig_tests .. " (its wrapper test is the runs above)")
+  print("gate: " .. c_tests .. " C tests, " .. GATE_PORTED .. " of them ports of the Zig gate's 8 tests (its wrapper test is the runs above)")
   gate_golden(t, t.builds, refreeze)
   if not t.full then return nil end
   run_plants(t, "gate plants", GATE_PLANTS)

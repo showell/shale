@@ -1,7 +1,7 @@
-# What Shale's unit tests need beside the checkout, for test.yml and
-# coverage.yml alike: zig-webbox beside it (build.zig.zon's `webbox`, and
+# What Zig Shale's unit tests (legacy_zig/, deprecated and frozen) need
+# beside the checkout, for test.yml and coverage.yml alike: zig-webbox beside it (build.zig.zon's `webbox`, and
 # the Zig tools' tests replay its history), the patched Zig that
-# shale/zig-version pins, on PATH, and the parsers the roc_tree and go_tree
+# shale/legacy_zig/zig-version pins, on PATH, and the parsers the roc_tree and go_tree
 # tests run (~/tools/roc-ast, ~/tools/go-ast). The caller has checked out
 # shale at `shale`, with its whole history (the git prelude's tests read it).
 name: unit-deps
@@ -18,14 +18,14 @@ runs:
         # zig_move's tests replay zig-webbox commits by `git show`.
         fetch-depth: 0
 
-    # shale's zig-version names the pin when there is one; otherwise
+    # legacy_zig's zig-version names the pin when there is one; otherwise
     # patched-zig-compiler's own zig-version, its newest release.
     - name: Zig version
       id: zig
       shell: bash
       run: |
-        if [ -f shale/zig-version ]; then
-          pin=$(tr -d '[:space:]' < shale/zig-version)
+        if [ -f shale/legacy_zig/zig-version ]; then
+          pin=$(tr -d '[:space:]' < shale/legacy_zig/zig-version)
         else
           pin=$(curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/zig-version | tr -d '[:space:]')
         fi

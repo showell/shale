@@ -33,11 +33,12 @@ frozen by the next freeze with no list to keep:
 
 - **zig-tests and prelude-tests:** every Shale source a Zig test hands to a
   runner helper (`expectOutput`, `expectStop`, `once` and the others in
-  `RUNNERS`), as a string literal or a `\\` block. The three preludes' test
-  files give `prelude-tests`.
+  `RUNNERS`), as a string literal or a `\\` block, read from the frozen Zig
+  tree, legacy_zig/src/. The three preludes' test files give
+  `prelude-tests`. A case's origin is its path inside legacy_zig/.
 - **docs:** every `shale` and `shale-linux` block of docs/SHALE.md and
   docs/SHALE-AGENTS.md.
-- **lessons:** web/lessons.js. Input N is every cell of lessons 1 to N, run
+- **lessons:** legacy_zig/web/lessons.js. Input N is every cell of lessons 1 to N, run
   in order in one folder, since a lesson starts from the files the earlier
   ones made.
 - **stops:** `tests/inputs/stops/`, one script for each stop class and

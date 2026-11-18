@@ -1,0 +1,942 @@
+-- **THE LINUX PRELUDE** (metal-vmm QUEUE 233, chunk 2; the dogfood
+-- design's "Running a program", "Text" and "Edits that work"): what a
+-- script has on Linux beside the core's. `run` and `real` are the names a
+-- script types for the host's own calls; the rest are written in Shale,
+-- over the core's builtins, so their every read and step is charged as if
+-- the script had written them. Metal has none of this.
+
+-- A program, run under `opts` (the host checks them: `timeout_ms` and a
+-- keep are required).
+function run(argv, opts)
+  return host("run", argv, opts)
+end
+
+-- **INTERNAL to `not_option`**: whether `x` is a string, by a string
+-- builtin taking it (Shale has no `type`).
+function option_text(x)
+  return lower(x)
+end
+
+-- **A VALUE, NOT AN OPTION**: `v`, a launch line's or a caller's value
+-- (`who`'s `name`), for a place where a program reads options; refused
+-- when it starts with `-`, which the program would take as one (git
+-- grep's `-O` runs a command). `v` back. A recipe calls it where it
+-- reads the value; the git prelude's `git_value` is it too.
+function not_option(who, name, v)
+  if attempt(option_text, v).ok and starts_with(v, "-") then fail("`" .. who .. "`'s `" .. name .. "` is \"" .. v .. "\": a value that starts with `-` would be one of the program's options") end
+  return v
+end
+
+-- A wait of `ms` (0 to 600000) without a program, so it spends none of
+-- the `programs` budget: a run may sleep as often as its steps allow. `now()` stays the
+-- run's start.
+function sleep(ms)
+  return host("sleep", ms)
+end
+
+-- A Shale path's absolute OS path, for a program's argv.
+function real(path)
+  return host("real", path)
+end
+
+-- **A LONG JOB** (`job_start`): a program that outlives this run, its
+-- output in `opts.log` and its record in `<log>.job`, under a detached
+-- reaper. A later run finds it by that record's path. A run that stops
+-- (a failure, a budget) ends the jobs it started, but those with
+-- `keep_on_stop = true` (`shale_host_jobs.zig`'s `stopWithRun`).
+function job_start(argv, opts)
+  return host("job_start", argv, opts)
+end
+
+-- Whether a job (or the one whose record is at that path) still runs.
+function job_alive(job)
+  return host("job_alive", job)
+end
+
+-- A job stopped: TERM to its group, 2 seconds, then KILL; whether it ran.
+function job_stop(job)
+  return host("job_stop", job)
+end
+
+-- **THE PROCESSES, NEVER THIS ONE** (`src/shale_host_procs.zig`): each
+-- `{pid, ppid, uid, name, args, start}` (and `args_cut` past 1 MiB) but
+-- this run's and those above it, so a filter of `args` cannot match the
+-- shell that ran it, as `pkill -f` does.
+function procs()
+  return host("procs")
+end
+
+-- One entry of `procs()` stopped: TERM, 2 seconds, then KILL; whether it
+-- ran. Refused for this run and those above it; a pid since given to
+-- another process (its start differs) is left alone; a signal refused
+-- stops the run.
+function proc_stop(p)
+  return host("proc_stop", p)
+end
+
+-- Until a job ends, a file holds a string, or the time runs out:
+-- `{ended = "exited" | "found" | "timeout"[, code]}`.
+function job_wait(job, opts)
+  return host("job_wait", job, opts)
+end
+
+-- **THE `&&` OF A SHELL CHAIN**: `r` when its program exited 0; else its
+-- output printed, and a failure naming the program and how it ended.
+function must(r)
+  if r.ended == "exit" and r.code == 0 then return r end
+  local out = r.out
+  if ends_with(out, "\n") then out = sub(out, 1, #out - 1) end
+  if out ~= "" then print(out) end
+  local what = "`" .. join(r.argv, " ") .. "`"
+  if r.ended == "exit" then fail(what .. " exited " .. r.code) end
+  if r.ended == "timeout" then fail(what .. " timed out") end
+  fail(what .. " was ended by a signal")
+end
+
+-- `http` and `http_get`'s one request (below), `who` the name a slip is
+-- told by.
+function curl_http(who, method, url, opts?)
+  local ms = 30000
+  local o = {whole = 16777216}
+  local argv = {"curl", "-sS", "--proto", "=http,https", "-X", method, "-D", "-"}
+  -- A HEAD answer has no body: `--head` asks for one so, where `-X HEAD`
+  -- waits out the time for the body its headers announce.
+  if method == "HEAD" then argv = {"curl", "-sS", "--proto", "=http,https", "--head"} end
+  if opts ~= nil then
+    for k in keys(opts) do
+      if k == "timeout_ms" then
+        ms = opts.timeout_ms
+      elseif k == "headers" then
+        for h in opts.headers do
+          push(argv, "-H")
+          push(argv, h)
+        end
+      elseif k == "bearer" then
+        o.secrets = {SHALE_BEARER = opts.bearer}
+        push(argv, "--variable")
+        push(argv, "%SHALE_BEARER")
+        push(argv, "--expand-header")
+        push(argv, "Authorization: Bearer {{SHALE_BEARER}}")
+      elseif k == "body" and who == "http" then
+        o.stdin = opts.body
+        push(argv, "--data-binary")
+        push(argv, "@-")
+      elseif who == "http" then
+        fail("`http` takes body, headers, bearer and timeout_ms, not `" .. k .. "`")
+      else
+        fail("`" .. who .. "` takes headers, bearer and timeout_ms, not `" .. k .. "`")
+      end
+    end
+  end
+  if not starts_with(url, "http://") and not starts_with(url, "https://") then fail("`" .. who .. "`: " .. url .. " is not an http:// or https:// URL") end
+  push(argv, "--max-time")
+  push(argv, tostring((ms + 999) // 1000))
+  -- The status after the body, on a line of its own.
+  push(argv, "-w")
+  push(argv, "\n%{http_code}")
+  push(argv, url)
+  o.timeout_ms = ms + 5000
+  local r = run(argv, o)
+  -- The status is the last three bytes (`-w`'s `\n%{http_code}`), read from
+  -- the end, not by splitting a large body into lines.
+  local code = ""
+  if #r.out >= 4 and sub(r.out, -4, -4) == "\n" then code = sub(r.out, -3) end
+  if r.ended ~= "exit" then fail("`" .. who .. " " .. url .. "` did not finish (" .. r.ended .. ")") end
+  if r.code ~= 0 then
+    local why = trim(sub(r.out, 1, #r.out - #code))
+    fail("`" .. who .. " " .. url .. "`: " .. (why ~= "" and why or "curl exited " .. r.code))
+  end
+  -- The head (`-D -`), a blank line, then the body; a `100 Continue` head
+  -- before the answer's is passed over. Cut out of curl's output in place:
+  -- the body is copied once (a copy is charged by its bytes).
+  local at = 1
+  local cut = find(r.out, "\r\n\r\n")
+  while cut ~= nil and sub(r.out, at, at + 4) == "HTTP/" and contains(sub(r.out, at, cut), " 100 ") do
+    at = cut + 4
+    cut = find(r.out, "\r\n\r\n", at)
+  end
+  if cut == nil then fail("`" .. who .. " " .. url .. "`: curl gave no head") end
+  -- After the status line, each line a `Name: value`, or the one before
+  -- it continued (a folded header, begun by a space or a tab); anything
+  -- else is curl's head misread, said, not passed by.
+  local headers = {}
+  local prev = nil
+  local head = lines(sub(r.out, at, cut - 1))
+  for i = 2, #head do
+    local line = head[i]
+    local colon = find(line, ":")
+    if (starts_with(line, " ") or starts_with(line, "\t")) and prev ~= nil then
+      headers[prev] = headers[prev] .. " " .. trim(line)
+    elseif colon ~= nil then
+      local name = lower(sub(line, 1, colon - 1))
+      local value = trim(sub(line, colon + 1))
+      local had = get(headers, name, nil)
+      if had == nil then headers[name] = value else headers[name] = had .. "\n" .. value end
+      prev = name
+    else
+      fail("`" .. who .. " " .. url .. "`: a head line that is no header: " .. line) -- coverage: not run, curl refuses a head line with no colon itself ("Header without colon", the prelude's test)
+    end
+  end
+  return {status = tonumber(code), headers = headers, body = sub(r.out, cut + 4, #r.out - #code - 1), ms = r.ms}
+end
+
+-- **AN HTTP REQUEST, BY `curl`** (2026-10-25: a site's visitors, each kept
+-- by the cookie its first answer set, told apart by hand): `method` to
+-- `url`, and `{status, headers, body, ms}`, the status a number whatever it
+-- is (the caller judges it). Its options:
+-- - `body`: the request's body, a string, sent on curl's stdin (never in an
+--   argv);
+-- - `headers`: `"Name: value"` lines;
+-- - `bearer`: a Shale path whose file holds a token, sent as
+--   `Authorization: Bearer` and scrubbed from the output, never in an argv;
+-- - `timeout_ms` (default 30000): the whole request's.
+-- The answer's `headers` map each name, lowercased, to its value, several
+-- of one name (`set-cookie`) joined by "\n". A redirect is the answer, not
+-- followed. No answer at all (a name that does not resolve, a refused
+-- connection, the time out) stops, in curl's words. Linux only: metal has
+-- no `curl`.
+function http(method, url, opts?)
+  return curl_http("http", method, url, opts)
+end
+
+-- **AN HTTP GET, BY `curl`** (2026-10-23: a release's checks fetched
+-- `/version` and a page by hand): `http`'s answer to a GET. It takes
+-- `headers`, `bearer` and `timeout_ms`, as `http` does.
+function http_get(url, opts?)
+  return curl_http("http_get", "GET", url, opts)
+end
+
+-- The lines of `s` a regular expression matches (`{invert = true}`: the
+-- others; `{nocase = true}`: either case), each `{line, text}`, numbered
+-- from 1. The host searches them (`src/shale_host_regex.zig`), at what the
+-- searches cost and a step a line.
+function re_lines(s, pattern, opts?)
+  if opts == nil then return host("re_lines", s, pattern) end
+  return host("re_lines", s, pattern, opts)
+end
+
+-- The first `n` lines of a file, read a part at a time; nil when there is
+-- no file.
+function head_lines(p, n)
+  if n < 0 then fail("`head_lines`: " .. n .. " lines") end
+  if not exists(p) then return nil end
+  local got = {}
+  local at = 0
+  while #got < n do
+    local part = read_lines(p, at)
+    for l in part.lines do
+      if #got == n then break end
+      push(got, l)
+    end
+    if part.done then break end
+    at = part.next
+  end
+  return got
+end
+
+-- The last `n` lines of a file; nil when there is no file. It reads back
+-- from the end, a part twice the last each time, until `n` lines fit.
+function tail_lines(p, n)
+  if n < 0 then fail("`tail_lines`: " .. n .. " lines") end
+  if not exists(p) then return nil end
+  local size = stat(p).size
+  local part = 65536
+  while true do
+    local from = 0
+    if size > part then from = size - part end
+    -- A part begins at a line's start: the one after a newline at or
+    -- after the byte before it.
+    local at = 0
+    if from > 0 then
+      local nl = find_next(p, "\n", from - 1)
+      if nl == nil then at = size else at = nl + 1 end
+    end
+    local got = {}
+    while at < size do
+      local r = read_lines(p, at)
+      for l in r.lines do push(got, l) end
+      if #got > n then got = last(got, n) end
+      if r.done then break end
+      at = r.next
+    end
+    if #got >= n or from == 0 then return last(got, n) end
+    part = part * 2
+  end
+end
+
+-- A list's strings, each once, in the order first seen.
+function unique(list)
+  local seen = {}
+  local got = {}
+  for x in list do
+    if not has_key(seen, x) then
+      seen[x] = true
+      push(got, x)
+    end
+  end
+  return got
+end
+
+-- The lines of a file of any size holding a literal, `{line, text}`, a
+-- part at a time, numbered across the parts: `grep` past the call-bytes
+-- cap.
+function grep_all(p, lit)
+  if lit == "" then fail("`grep_all` of \"\": every line holds it") end
+  local got = {}
+  local n = 0
+  local at = 0
+  while true do
+    local r = read_lines(p, at)
+    for l in r.lines do
+      n = n + 1
+      if contains(l, lit) then push(got, {line = n, text = l}) end
+    end
+    if r.done then return got end
+    at = r.next
+  end
+end
+
+-- One file's hits for `grep_tree`, each `{line, text}`: `grep` for a
+-- literal (`grep_all` past 1 MiB, the smallest call-bytes cap), and for a
+-- pattern or either case the file a part at a time (`read_lines`' own
+-- part), its lines numbered across the parts.
+function grep_tree_file(p, size, needle, regex, nocase)
+  if not regex and not nocase then
+    if size > 1048576 then return grep_all(p, needle) end
+    return grep(p, needle)
+  end
+  local lowered = lower(needle)
+  local got = {}
+  local base = 0
+  local at = 0
+  while true do
+    local r = read_lines(p, at)
+    if regex then
+      for m in re_lines(join(r.lines, "\n"), needle, {nocase = nocase}) do push(got, {line = base + m.line, text = m.text}) end
+    else
+      local n = base
+      for l in r.lines do
+        n = n + 1
+        if contains(lower(l), lowered) then push(got, {line = n, text = l}) end
+      end
+    end
+    base = base + #r.lines
+    if r.done then return got end
+    at = r.next
+  end
+end
+
+-- Why `grep_tree` passes a walked entry by, or "" to search it, or nil when
+-- it isn't a file of the search at all (a folder, a build's own output, an
+-- extension or a name not asked for). `rest` is its path below the place
+-- searched; `name_like`, a glob its file name matches, or "" for any.
+function grep_tree_skip(e, rest, exts, name_like)
+  if e.kind == "directory" then return nil end
+  local named = true
+  for part in split(rest, "/") do
+    if part == "zig-out" or part == "zig-pkg" or part == "node_modules" then return nil end
+    if not is_name(part) then named = false end
+  end
+  if #exts > 0 then
+    local wanted = false
+    for x in exts do
+      if ends_with(e.path, "." .. x) then wanted = true end
+    end
+    if not wanted then return nil end
+  end
+  if name_like ~= "" and not like(basename(e.path), name_like) then return nil end
+  if e.kind ~= "file" then return "a symbolic link, never followed" end
+  if not named then return "a name the store can't hold" end
+  if e.size > 0 and contains(read(e.path, 0, 4096), "\0") then return "binary" end
+  return ""
+end
+
+-- **A SEARCH OVER A TREE** (2026-11-14: a quarter of a session's heredocs
+-- ran `grep -rn` through `run`): the lines holding `needle` in the files
+-- under `place` (a folder, `.` the root, a mount's path, or one file), in
+-- path order. A folder named with a leading `.` is not entered, and nothing
+-- under a build's own folders (`zig-out`, `zig-pkg`, `node_modules`) is
+-- searched. A symbolic link is never followed, and a binary file (a zero
+-- byte in its first 4 KiB) and a file the store can't name (`is_name`) are
+-- passed by, each in `passed`, so nothing is left out quietly. `opts`:
+-- `regex = true`, `needle` a pattern (`re_lines`'s) and not a literal;
+-- `nocase = true`, either case; `ext = {"zig", "md"}`, only files ending in
+-- one of these; `like = "*_test.zig"`, only files whose names match; `context = N`, each hit with `before` and `after`, the N
+-- lines on each side; `most = N`, at most N hits (10,000), `cut` saying the
+-- search stopped there. The answer is `{hits, files, passed, cut}`: each
+-- hit `{path, line, text}` (and its `needle`, for a list of needles, all found in one walk), the number of files searched, and each file
+-- passed by `{path, why}`.
+function grep_tree(place, needle, opts?)
+  -- `needle`, a string or a list of them, is the host's to check.
+  if opts == nil then opts = {} end
+  local regex = get(opts, "regex", false)
+  local nocase = get(opts, "nocase", false)
+  local exts = get(opts, "ext", {})
+  local name_like = get(opts, "like", "")
+  local context = get(opts, "context", 0)
+  local most = get(opts, "most", 10000)
+  local answer = {hits = {}, files = 0, passed = {}, cut = false}
+  local entries = {}
+  local prefix = place .. "/"
+  if ends_with(place, ":") then prefix = place end
+  if place == "." or place == "" then prefix = "" end
+  if prefix ~= "" and not is_dir(place) then
+    entries = {{path = place, kind = "file", size = stat(place).size}}
+    prefix = ""
+  else
+    -- The walk, which `entries` left empty asks for, is the host's.
+    entries = {}
+  end
+  -- The walk, each entry passed by or searched, and the answer are the
+  -- host's (c/host/host_grep_tree.c), in C, in one pass: each folder listed
+  -- and sorted once, each file judged and searched as the walk meets it, so
+  -- `most` ends the walk where it cuts. The hits, their order, `passed` and
+  -- `cut` are this prelude's loop's. A read is a folder listed or a file
+  -- read (its stat and its bytes, its head first so a binary costs no
+  -- more), a part a read past the call-bytes cap, and a stat each `skip`.
+  -- Passed by unlisted: a name starting with `.`, a build's folder, a
+  -- folder `skip` names, and a secrets mount's folder, never named. A run
+  -- is charged a step an entry, each listing's sort, a step per 16 bytes
+  -- read and each hit's text; the arena keeps the hits, not the tree.
+  --
+  -- `grep_tree_skip` and `grep_tree_file` above say, in script, what the
+  -- host decides for each entry.
+  --
+  -- `answer` is the shape of what the host gives: `{hits, files, passed,
+  -- cut}`, its keys in that order.
+  --
+  -- The options go as read here, and `opts` whole as `given`: the host
+  -- stops on a key it does not take, naming the ones it does, before it
+  -- walks; a value of the wrong type stops where this prelude's loop did.
+  return host("grep_tree", needle, {
+    given = opts,
+    place = place,
+    prefix = prefix,
+    entries = entries,
+    regex = regex,
+    nocase = nocase,
+    ext = exts,
+    like = name_like,
+    context = context,
+    most = most,
+  })
+end
+
+-- **A NAME BELOW A FOLDER**, spelled as every call takes it: in the root
+-- (`""`, `"."`) the name, in a mount's folder (`m:`, `m:.`) `m:name`,
+-- else `dir/name`.
+function path_under(dir, name)
+  if dir == "" or dir == "." then return name end
+  if ends_with(dir, ":") then return dir .. name end
+  if ends_with(dir, ":.") then return sub(dir, 1, #dir - 1) .. name end
+  return dir .. "/" .. name
+end
+
+-- **A FOLDER OF THIS RUN'S OWN** below `parent` (made when missing), its
+-- name `<prefix>.` and six random characters (`mktemp -d`), spelled as
+-- `path_under` spells it. Two runs at once never share one, as they would
+-- a fixed name each removes and rebuilds; the caller removes it when done.
+function fresh_dir(parent, prefix)
+  if prefix == "" or contains(prefix, "/") or starts_with(prefix, "-") then fail("`fresh_dir` prefix " .. prefix .. ": a name, no `/`, not starting with `-`") end
+  if not exists(parent) then mkdir(parent) end
+  local r = must(run({"mktemp", "-d", "-p", real(parent), prefix .. ".XXXXXX"}, {timeout_ms = 30000, whole = 4096}))
+  local parts = split(trim(r.out), "/")
+  local dir = path_under(parent, parts[#parts])
+  if not starts_with(parts[#parts], prefix .. ".") or not exists(dir) then fail("`fresh_dir`: `mktemp` gave " .. r.out .. ", not a folder in " .. parent) end
+  return dir
+end
+
+-- The names of the `n` entries of a folder that changed last, newest
+-- first (`ls -t | head`); names that changed at once, by name. The root is
+-- `""` or `"."`.
+function newest(p, n)
+  local rows = {}
+  for name in ls(p) do
+    push(rows, {name = name, modified = stat(path_under(p, name)).modified})
+  end
+  sort(rows, "modified", "desc")
+  local got = {}
+  for r in take(rows, n) do push(got, r.name) end
+  return got
+end
+
+-- **A RENAME THAT KNOWS ZIG** (metal-vmm QUEUE 234, 3): each identifier
+-- token `from` in a Zig file becomes `to`, never one after `.`, nor
+-- `@"from"`, nor in a string or a comment; `opts.lines = {first, last}`
+-- limits it. A qualified `to` where `from` is declared stops the run.
+-- `{renamed, left_in_comments}`.
+function zig_rename(path, from, to, opts?)
+  -- `host` takes three arguments past its name: `from` and `to` go as one.
+  return host("zig_rename", path, {from = from, to = to}, opts)
+end
+
+-- Many names at once, `zig_rename` over a map: `{a = "x.a", b = "x.b"}`,
+-- one pass, one write.
+function zig_renames(path, names, opts?)
+  return host("zig_rename", path, {many = names}, opts)
+end
+
+-- **A ZIG FILE'S TOP-LEVEL DECLARATIONS** (metal-vmm QUEUE 235, 1), from
+-- Zig's own parser, in file order: each `{kind, name, name_form,
+-- visibility, linkage, first, last, start, stop, uses[, comment_above]}`,
+-- `uses` the top-level names its span uses. `opts.container` names a
+-- container: its members instead, each with `reaches` too.
+function zig_decls(path, opts?)
+  if opts == nil then return host("zig_decls", path) end
+  return host("zig_decls", path, opts)
+end
+
+-- **TOP-LEVEL DECLARATIONS MOVED BETWEEN ZIG FILES** (metal-vmm QUEUE 235,
+-- 2): `names` (a name, or `{kind, name}`) cut from `from` and put in `to`
+-- (made if missing), at its end or `opts.after` a declaration;
+-- `opts.comment` is "doc" or "doc_and_plain". What the move broke:
+-- `{moved, needs_pub, needs_import, needs_from_from, uses_left}`.
+function zig_move(from, to, names, opts?)
+  -- `host` takes three arguments past its name.
+  -- A map holds no nil: `opts` only when given.
+  local packed = {names = names}
+  if opts ~= nil then packed.opts = opts end
+  return host("zig_move", from, to, packed)
+end
+
+-- A Zig file's tokens, from Zig's tokenizer: each `{tag, text, line}`;
+-- `opts.tag` (a std.zig.Token.Tag name) keeps one tag.
+function zig_tokens(path, opts?)
+  if opts == nil then return host("zig_tokens", path) end
+  return host("zig_tokens", path, opts)
+end
+
+-- A Shale file's tokens, from Shale's own lexer, comments among them: each
+-- `{tag, text, line, start, stop}`, with `read(path, start, stop - start)` the
+-- token and `text` its source bytes. `tag` is `name`, `int`, `string`,
+-- `comment`, a keyword's `kw_end`, or a symbol's `plus`; `opts.tag` keeps one.
+function shale_tokens(path, opts?)
+  if opts == nil then return host("shale_tokens", path) end
+  return host("shale_tokens", path, opts)
+end
+
+-- **A ZIG FILE'S `@import`s AND `@embedFile`s** (metal-vmm QUEUE 235, 3),
+-- from Zig's parser, in source order: each `{kind = "import" | "embed",
+-- target, name, line, file = "found" | "missing" | "module"}`.
+function zig_imports(path)
+  return host("zig_imports", path)
+end
+
+-- What `roc_tree` and `go_tree` share: `tool` is `roc` or `go`, whose
+-- `<tool>-ast` writes the one format the host's `<tool>_tree` reads.
+function flat_tool_trees(tool, paths)
+  local who = "`" .. tool .. "_tree`"
+  local prog = tool .. "-ast"
+  local exe = "tools:" .. prog .. "/bin/" .. prog
+  if not exists(exe) then if tool == "roc" then fail(who .. ": no " .. exe .. ": `shale install.shale` in a checkout of https://github.com/showell/roc-ast installs it") else fail(who .. ": no " .. exe .. ": Shale's `shale tools/" .. tool .. "_ast/install.shale` builds it") end end
+  local out = {}
+  local i = 1
+  while i <= #paths do
+    if not exists(paths[i]) then
+      push(out, {path = paths[i], nodes = {}, err = "no such file"})
+      i = i + 1
+    else
+      -- One run over the files up to the next missing one.
+      local base = i
+      local reals = {}
+      local j = i
+      while j <= #paths and exists(paths[j]) do
+        push(reals, real(paths[j]))
+        j = j + 1
+      end
+      local r = run({real(exe), "--flat"}, {timeout_ms = 300000, stdin = join(reals, "\n"), whole = 64000000})
+      local ending = "cut"
+      if r.ended == "exit" and r.code == 0 then ending = "whole" end
+      local got = host(tool .. "_tree", r.out, ending)
+      local kept = {}
+      for f in got.files do
+        if i >= j or f.path ~= reals[i - base + 1] then fail(who .. ": " .. prog .. "'s tree " .. (i - base + 1) .. " is " .. f.path .. "'s, not the path given there") end
+        push(kept, {path = paths[i], nodes = f.nodes, err = ""})
+        i = i + 1
+      end
+      if r.ended == "exit" and r.code == 0 then
+        if has_key(got, "said") then fail(who .. ": " .. prog .. " exited 0 and printed past its trees: " .. got.said) end
+        if i < j then fail(who .. ": " .. prog .. " exited 0 with " .. (j - i) .. " paths unread") end
+        for f in kept do push(out, f) end
+      else
+        local said = get(got, "said", prog .. " " .. r.ended)
+        if i < j and starts_with(said, reals[i - base + 1] .. ": ") then
+          -- A refusal: the tool flushed every tree before it, so they
+          -- are whole, and named the file after them.
+          for f in kept do push(out, f) end
+          push(out, {path = paths[i], nodes = {}, err = paths[i] .. sub(said, #reals[i - base + 1] + 1)})
+          i = i + 1
+        else
+          -- Any other stop leaves its output unflushed: the last tree may
+          -- be cut short and the culprit is unnamed, so the last tree's
+          -- file runs again alone, and its run says whose stop it was.
+          if #kept > 0 then
+            kept = take(kept, #kept - 1)
+            i = i - 1
+          end
+          for f in kept do push(out, f) end
+          -- Each file alone from there, until the one that stops it: what
+          -- was left unflushed is at most the tool's buffer of trees.
+          local found = false
+          while not found and i < j do
+            local one = run({real(exe), "--flat"}, {timeout_ms = 300000, stdin = real(paths[i]), whole = 64000000})
+            local alone_ending = "cut"
+            if one.ended == "exit" and one.code == 0 then alone_ending = "whole" end
+            local alone = host(tool .. "_tree", one.out, alone_ending)
+            if one.ended == "exit" and one.code == 0 and #alone.files == 1 and not has_key(alone, "said") then
+              push(out, {path = paths[i], nodes = alone.files[1].nodes, err = ""})
+            else
+              local why = get(alone, "said", prog .. " " .. one.ended)
+              if starts_with(why, reals[i - base + 1] .. ": ") then why = paths[i] .. sub(why, #reals[i - base + 1] + 1) end
+              push(out, {path = paths[i], nodes = {}, err = why})
+              found = true
+            end
+            i = i + 1
+          end
+          if not found then fail(who .. ": " .. prog .. " " .. r.ended .. " (" .. said .. "), and each file alone ran clean") end
+        end
+      end
+    end
+  end
+  return out
+end
+
+-- **ROC FILES' TREES, FROM ROC'S OWN PARSER**: each path run through
+-- roc-ast (`tools:roc-ast/bin/roc-ast --flat`, github.com/showell/roc-ast) and
+-- its lines read in the host: one `{path, nodes, err}` a path, in order. A node
+-- is `{kind, depth, parent, kids, line, col, end_line, end_col}` and the
+-- attributes Roc's tree gives it (`raw`, `name`, `method`, `op`, `type`,
+-- `field`, a positional string as `value`), `parent` and `kids` indices
+-- into `nodes`. A missing file's `err` is "no such file", and no program
+-- runs for it. roc-ast stops at a file it refuses: that file's `err` says
+-- why, its `nodes` empty, and the rest run again; `err` is "" for a file
+-- read.
+function roc_tree(paths)
+  return flat_tool_trees("roc", paths)
+end
+
+-- **GO FILES' TREES, FROM GO'S OWN PARSER**: `roc_tree`'s twin over go-ast
+-- (`tools:go-ast/bin/go-ast --flat`, Shale's tools/go_ast, the standard
+-- library's go/parser). A node's `kind` is go/ast's type name (`FuncDecl`,
+-- `CallExpr`), its attributes its scalars (`name`, `value`, `lit`, `op`,
+-- `tok`, `text`) and `role`, the field of its parent that holds it (`Fun`,
+-- `Args`, `Body`). tools/go_ast/main.go has the format.
+function go_tree(paths)
+  return flat_tool_trees("go", paths)
+end
+
+-- **JSON IN** (metal-vmm QUEUE 304): text `s` as Shale's values, an
+-- object a map and an array a list. Where Shale's values are not JSON's it
+-- says so: a number with a fraction or an exponent is its text, a string;
+-- an integer past 64 bits is refused; a member that is `null` is left out
+-- of its object and a `null` in an array refused, unless `{null = v}` names
+-- a value to stand for it; a key twice in one object is refused. A
+-- malformed text stops with what is wrong, its byte, line and column.
+-- `{depth = n}` bounds the nesting (64 unless given, at most 512) and
+-- `{size = n}` the text (the call bytes cap unless given smaller).
+function json_read(s, opts?)
+  if opts == nil then return host("json_read", s) end
+  return host("json_read", s, opts)
+end
+
+-- **JSON OUT**: `v` as compact JSON, a map's members in its keys' order, an
+-- empty table as `[]`. A string that is not UTF-8 is refused, as is a table
+-- nested past 512 (or holding itself).
+function json_write(v)
+  return host("json_write", v)
+end
+
+-- **INTERNAL to `edit_between`**: a marker as its failure shows it, its
+-- first 40 bytes on one line.
+function edit_marker_shown(s)
+  local one = substitute(s, "\n", "\\n", {missing_ok = true})
+  if #one > 40 then return sub(one, 1, 40) .. "..." end
+  return one
+end
+
+-- **THE TEXT BETWEEN TWO MARKERS REPLACED** (metal-vmm QUEUE 304): what
+-- lies after marker `from` and before marker `to` becomes `new`, both
+-- markers kept; `to` of nil replaces from `from` to the end of the file. No
+-- offsets to work out (`find` is 1-based, `sub` takes its end inclusive),
+-- and its diff is `edit`'s. Each marker must be there once, `from` in the
+-- file and `to` after it: one missing or found twice is a named failure,
+-- and nothing is written. The replacements made, 1.
+function edit_between(p, from, to, new)
+  local where = "`edit_between`: " .. p .. ": "
+  if from == "" or to == "" then fail(where .. "a marker is empty: nil for `to` replaces to the end of the file") end
+  local text = read(p)
+  local n = #split(text, from) - 1
+  if n == 0 then fail(where .. "`" .. edit_marker_shown(from) .. "` is not there; nothing written") end
+  if n > 1 then fail(where .. "`" .. edit_marker_shown(from) .. "` is there " .. n .. " times: a longer marker picks one; nothing written") end
+  local after = sub(text, find(text, from) + #from)
+  if to == nil then return edit(p, from .. after, from .. new) end
+  local m = #split(after, to) - 1
+  if m == 0 then fail(where .. "`" .. edit_marker_shown(to) .. "` is not after `" .. edit_marker_shown(from) .. "`; nothing written") end
+  if m > 1 then fail(where .. "`" .. edit_marker_shown(to) .. "` is after `" .. edit_marker_shown(from) .. "` " .. m .. " times: a longer marker picks one; nothing written") end
+  local inside = sub(after, 1, find(after, to) - 1)
+  return edit(p, from .. inside .. to, from .. new .. to)
+end
+
+-- A new file: refused if one is there already.
+function create(p, text)
+  if exists(p) then fail("`create`: " .. p .. " is there already: `edit` or `replace` it") end
+  replace(p, text)
+end
+
+-- **INTERNAL to `edits_all`** (as is `edit_words`): no script's to call,
+-- but its name is taken. Whether `c` (one byte, or "" at an end) is a
+-- word's, as `edit`'s `word` reads it: a letter, a digit or `_`.
+function edit_word_byte(c)
+  return c ~= "" and re_find(c, "^[A-Za-z0-9_]$") ~= nil
+end
+
+-- **INTERNAL to `edits_all`**: whether `x` is a list (`#` takes one, and
+-- refuses a map).
+function edit_list_len(x)
+  return #x
+end
+
+-- **INTERNAL to `edits_all`**: whether `x` is a map (`keys` takes one).
+function edit_keys(x)
+  return keys(x)
+end
+
+-- **INTERNAL to `edits_all`**: an edit's shape, as `edit` will hold it,
+-- refused before any file is written: a map of `old` and `new` (strings)
+-- and `all` and `word` (booleans), no other key.
+function edit_shape(p, j, e)
+  local where = "`edits_all`: " .. p .. "'s edit " .. j
+  if attempt(edit_list_len, e).ok or not attempt(edit_keys, e).ok then fail(where .. " is not a map, `{old = ..., new = ...}`; nothing written") end
+  for k in keys(e) do
+    if k ~= "old" and k ~= "new" and k ~= "all" and k ~= "word" then fail(where .. " takes `old`, `new`, `all` and `word`, not `" .. k .. "`; nothing written") end
+  end
+  for k in {"old", "new"} do
+    if not has_key(e, k) then fail(where .. " has no `" .. k .. "`; nothing written") end
+    if not attempt(option_text, e[k]).ok then fail(where .. "'s `" .. k .. "` is not a string; nothing written") end
+  end
+  for k in {"all", "word"} do
+    if has_key(e, k) and e[k] ~= true and e[k] ~= false then fail(where .. "'s `" .. k .. "` is not true or false; nothing written") end
+  end
+  return nil
+end
+
+-- **INTERNAL to `edits_all`**: `text` with each whole-word `old` replaced
+-- by `new`, as `edit`'s `{word = true, all = true}` does: `{text, n}`.
+function edit_words(text, old, new)
+  local out = {}
+  local rest = text
+  local before = ""
+  local n = 0
+  while true do
+    local at = find(rest, old)
+    if at == nil then break end
+    local prev = before
+    if at > 1 then prev = sub(rest, at - 1, at - 1) end
+    local next = sub(rest, at + #old, at + #old)
+    if not edit_word_byte(prev) and not edit_word_byte(next) then
+      push(out, sub(rest, 1, at - 1))
+      push(out, new)
+      n = n + 1
+      before = sub(old, #old, #old)
+      rest = sub(rest, at + #old)
+    else
+      -- On by one byte, as `edit` steps: a match overlapping this one
+      -- may still hold.
+      push(out, sub(rest, 1, at))
+      before = sub(rest, at, at)
+      rest = sub(rest, at + 1)
+    end
+  end
+  push(out, rest)
+  return {text = join(out, ""), n = n}
+end
+
+-- **EDITS TO SEVERAL FILES** (`{{p, {{old, new[, all][, word]}, ...}}, ...}`):
+-- every file's edits checked against it first, in sequence as `edit`'s
+-- list form applies them, and nothing written unless all hold. Then the
+-- host writes them as one: every file planned, every diff printed and
+-- every change admitted (the budgets' steps, changes and bytes) before
+-- the first is written, so a stop of any kind leaves every file as it
+-- was. Only the store failing a write after the first can part them, and
+-- that stops the run with its effects saying which were made. A `word`
+-- edit is checked as `edit` applies it, whole words only, so the edits
+-- after it are checked against its result. A file named twice is one
+-- write of both sets in order. The replacements made in all.
+function edits_all(list)
+  -- A file named twice, by any spelling (a mount's, the root's), is checked
+  -- against its earlier edits' result, as `edit` will meet it.
+  local checked = {}
+  -- One write a file, its sets of edits joined in order.
+  local writes = {}
+  local at = {}
+  for item in list do
+    if #item[2] > 64 then fail("`edits_all`: " .. item[1] .. " has " .. #item[2] .. " edits, and `edit` takes at most 64 a call; nothing written") end
+    local key = real(item[1])
+    local text = get(checked, key, nil)
+    if text == nil then text = read(item[1]) end
+    local j = 0
+    if #item[2] == 0 then fail("`edits_all`: " .. item[1] .. " has no edits; nothing written") end
+    for e in item[2] do
+      j = j + 1
+      edit_shape(item[1], j, e)
+      local where = "`edits_all`: " .. item[1] .. "'s edit " .. j .. ": "
+      local all = get(e, "all", false)
+      if e.old == "" then fail(where .. "`old` is empty; nothing written") end
+      if get(e, "word", false) then
+        local r = edit_words(text, e.old, e.new)
+        if r.n == 0 then fail(where .. "`old` is not there as a whole word; nothing written") end
+        if r.n > 1 and not all then fail(where .. "`old` is there " .. r.n .. " times as a whole word, and the edit does not say `all`; nothing written") end
+        text = r.text
+      else
+        local times = #split(text, e.old) - 1
+        if times == 0 then fail(where .. "`old` is not there; nothing written") end
+        if times > 1 and not all then fail(where .. "`old` is there " .. times .. " times, and the edit does not say `all`; nothing written") end
+        text = substitute(text, e.old, e.new)
+      end
+    end
+    if has_key(at, key) then
+      local joined = writes[at[key]][2]
+      for e in item[2] do push(joined, e) end
+      if #joined > 64 then fail("`edits_all`: " .. item[1] .. " has " .. #joined .. " edits in all, and `edit` takes at most 64 a call; nothing written") end
+    else
+      local own = {}
+      for e in item[2] do push(own, e) end
+      push(writes, {item[1], own})
+      at[key] = #writes
+    end
+    checked[key] = text
+  end
+  -- Each write is one change, its bytes the file as written.
+  local bytes = 0
+  for w in writes do bytes = bytes + #checked[real(w[1])] end
+  local left = budget()
+  if #writes > left.changes then fail("`edits_all`: " .. #writes .. " files to write, and the budget has " .. left.changes .. " change" .. (left.changes == 1 and "" or "s") .. " left; nothing written") end
+  if bytes > left.change_bytes then fail("`edits_all`: " .. bytes .. " bytes to write, and the budget has " .. left.change_bytes .. " left; nothing written") end
+  -- A file that may not change (a read-only mount's) stops it here,
+  -- before any is written.
+  for w in writes do host("may_change", w[1]) end
+  return host("edits_write", writes)
+end
+
+-- A line of a program's output as `report_run` prints it: its first 240
+-- bytes, and a cut one says so and how much is left (the log has it whole).
+function report_run_line(l)
+  if #l <= 240 then return l end
+  return sub(l, 1, 240) .. " … (" .. (#l - 240) .. " more bytes)"
+end
+
+-- How `report_run` names where the whole output went.
+function report_run_kept(path)
+  if path == "" then return "the whole output not kept (no .zig-cache here: `log=PATH` keeps it)" end
+  return "the whole output in " .. path
+end
+
+-- **A PROGRAM AND ITS VERDICT** (2026-11-14: 228 of a session's heredocs
+-- launched `cookbook:run.shale` as a child run for this): runs `argv` as
+-- `run` does and prints what it said that matters: each line holding one of
+-- `grep`'s literals (at most `most`, 60), its last `tail` lines (10; at
+-- least 30 for a failure), and `── exit N in T: <command>`. The whole
+-- output goes to `log`, by default `.zig-cache/run.log` under `cwd` where
+-- that folder is already (a Zig checkout, which ignores it), and else
+-- nowhere; `append_log = true` adds to it, after an `== <command>` line. A
+-- failure (an exit not 0, a timeout, a signal) prints where the output went
+-- and stops the run, naming the command, unless `keep_going = true`. The
+-- answer is `run`'s, with `ok` and `log` beside. `opts` takes `cwd`,
+-- `timeout_ms` (10 minutes), `want`, `shown` (how the command is named;
+-- its words), `grep` (a list), `tail`, `most`, `log`, `append_log` and
+-- `keep_going`. A program named through a mount (`zig:zig`) runs by its
+-- OS path.
+function report_run(argv, opts?)
+  if opts == nil then opts = {} end
+  if #argv == 0 then fail("`report_run`: an empty command") end
+  local cwd = get(opts, "cwd", ".")
+  local shown = get(opts, "shown", join(argv, " "))
+  local tail_n = get(opts, "tail", 10)
+  local most = get(opts, "most", 60)
+  local wanted = get(opts, "grep", {})
+  local log_path = get(opts, "log", "auto")
+  if log_path == "auto" then
+    log_path = ""
+    if is_dir(path_under(cwd, ".zig-cache")) then log_path = path_under(cwd, ".zig-cache/run.log") end
+  end
+  local program = {}
+  for w in argv do push(program, w) end
+  if contains(program[1], ":") then program[1] = real(program[1]) end
+  local run_opts = {cwd = cwd, timeout_ms = get(opts, "timeout_ms", 600000), whole = 16777216}
+  if has_key(opts, "want") then run_opts.want = opts.want end
+  local r = run(program, run_opts)
+  if log_path ~= "" then
+    local text = "== " .. shown .. "\n" .. r.out
+    if get(opts, "append_log", false) and exists(log_path) then append(log_path, text) else replace(log_path, text) end
+  end
+  -- A run ended by its time or a signal has no exit code: say how it ended.
+  local how = ""
+  if has_key(r, "code") then how = "exit " .. r.code else how = "ended: " .. tostring(r.ended) .. " (no exit code)" end
+  local failed = not has_key(r, "code") or r.code ~= 0
+  local out_lines = lines(r.out)
+  local held = 0
+  for l in out_lines do
+    for w in wanted do
+      if contains(l, w) then
+        held = held + 1
+        if held <= most then print("grep: " .. report_run_line(l)) end
+        break
+      end
+    end
+  end
+  if held > most then print("grep: ... " .. (held - most) .. " more (most=" .. most .. ")") end
+  if #wanted > 0 and held == 0 then print("grep: no line holds " .. join(wanted, ",")) end
+  -- A failure's own words are usually near its end: at least 30 of them.
+  local n = tail_n
+  if failed and n < 30 then n = 30 end
+  local from = #out_lines - n + 1
+  if from < 1 then from = 1 end
+  for i = from, #out_lines do print("   " .. report_run_line(out_lines[i])) end
+  local took = r.ms .. " ms"
+  if r.ms >= 1000 then took = (r.ms // 1000) .. "." .. (r.ms % 1000 // 100) .. " s" end
+  print("── " .. how .. " in " .. took .. ": " .. shown)
+  r.ok = not failed
+  r.log = log_path
+  if failed and not get(opts, "keep_going", false) then
+    print(report_run_kept(log_path))
+    fail("run: `" .. shown .. "` " .. how)
+  end
+  return r
+end
+
+-- **A COPY OF A FILE OR A TREE** (2026-11-15: a published folder copied into
+-- the dev channel went to `cp -r` through `run`): `from` copied to `to`, which
+-- must not exist yet, so a copy never overwrites. A folder is copied whole,
+-- hidden files and all, and a symbolic link anywhere in it stops the copy
+-- before anything is written, since the store follows none. Each file is one
+-- read and one change, so the run's read and change budgets bound it, and a
+-- file past the call-bytes cap stops it. The answer is how many files were
+-- copied.
+function copy(from, to)
+  if exists(to) then fail("`copy`: " .. to .. " is already there, and a copy never overwrites (`remove_tree` it first)") end
+  if not is_dir(from) then
+    replace(to, read(from))
+    return 1
+  end
+  local entries = walk_all(from, {})
+  for e in entries do
+    if e.kind ~= "file" and e.kind ~= "directory" then fail("`copy`: " .. e.path .. " is a symbolic link, which the store never follows; nothing was copied") end
+  end
+  local prefix = from .. "/"
+  if ends_with(from, ":") then prefix = from end
+  if from == "." or from == "" then prefix = "" end
+  mkdir(to)
+  local files = 0
+  for e in entries do
+    local rest = e.path
+    if prefix ~= "" then rest = sub(e.path, #prefix + 1) end
+    local target = path_under(to, rest)
+    if e.kind == "directory" then
+      mkdir(target)
+    else
+      replace(target, read(e.path))
+      files = files + 1
+    end
+  end
+  return files
+end

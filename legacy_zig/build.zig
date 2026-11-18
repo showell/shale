@@ -1,6 +1,8 @@
-//! Builds Shale: the modules an application imports (never by path), the
-//! `shale` CLI, and the tools and tests around them. `zig build test` runs
-//! the unit tests.
+//! **DEPRECATED AND FROZEN** (README.md): builds Zig Shale, the first
+//! implementation, which the C in ../c replaced on 2026-11-17: the modules an
+//! application imported (never by path), the `shale` CLI, and the tools and
+//! tests around them. `zig build test` runs the unit tests. It is kept as it
+//! was, its paths moved under legacy_zig/; it gets no fixes.
 
 const std = @import("std");
 
@@ -360,13 +362,13 @@ pub fn build(b: *std.Build) void {
     // The SDK is resolved only when Shale is the build at the top and the
     // sibling is there, so an application that builds Shale, or a checkout
     // without the SDK, never needs it; the step then says what it lacks.
-    const coverage_step = b.step("script-coverage", "the lines of each key module (build.zig's coverage_files) no unit test runs, by the coverage SDK's linecov (needs ../zig-coverage-sdk)");
-    const sdk_there = if (b.root.root_dir.handle.openDir(b.graph.io, b.pathJoin(&.{ b.root.subPathOrDot(), "..", "zig-coverage-sdk" }), .{})) |d| blk: {
+    const coverage_step = b.step("script-coverage", "the lines of each key module (build.zig's coverage_files) no unit test runs, by the coverage SDK's linecov (needs zig-coverage-sdk beside the checkout)");
+    const sdk_there = if (b.root.root_dir.handle.openDir(b.graph.io, b.pathJoin(&.{ b.root.subPathOrDot(), "..", "..", "zig-coverage-sdk" }), .{})) |d| blk: {
         d.close(b.graph.io);
         break :blk true;
     } else |_| false;
     if (!b.isRoot()) {} else if (!sdk_there) {
-        coverage_step.dependOn(&b.addFail("script-coverage: no ../zig-coverage-sdk beside this checkout").step);
+        coverage_step.dependOn(&b.addFail("script-coverage: no zig-coverage-sdk beside this checkout").step);
     } else if (b.lazyDependency("zig_coverage_sdk", .{})) |sdk| {
         const measure = b.addRunArtifact(sdk.artifact("linecov"));
         for (coverage_files) |f| {
@@ -386,7 +388,7 @@ pub fn build(b: *std.Build) void {
     // `script-coverage` resolves it; without it, `fuzz` says so and `test`
     // does not compile the hunt.
     if (!b.isRoot()) {} else if (!sdk_there) {
-        fuzz_step.dependOn(&b.addFail("fuzz: no ../zig-coverage-sdk beside this checkout").step);
+        fuzz_step.dependOn(&b.addFail("fuzz: no zig-coverage-sdk beside this checkout").step);
     } else if (b.lazyDependency("zig_coverage_sdk", .{})) |sdk| {
         const hunt = b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path("src/script/hunt.zig"),
@@ -409,7 +411,9 @@ pub fn build(b: *std.Build) void {
     // first, then the docs. Fails on any finding. Each repo's gate checks
     // its own (`only=<repo>`, through `zig build doc-check -- only=<repo>`
     // here), never another's.
-    const here = b.root.root_dir.path orelse ".";
+    // This tree is legacy_zig/ in Shale's checkout: the docs, the cookbook
+    // and the Shale tools these steps run are the checkout's, one up.
+    const here = b.pathJoin(&.{ b.root.root_dir.path orelse ".", ".." });
     const parent = b.pathJoin(&.{ here, ".." });
     const docCheck = struct {
         fn run(bb: *std.Build, bin: std.Build.LazyPath, dir: []const u8) *std.Build.Step.Run {

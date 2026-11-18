@@ -114,7 +114,7 @@
   zig_rename       shale_host_linux       container,lines,via
   zig_tokens       shale_host_linux       tag
 
-## the prelude's functions (17), src/script/prelude.shale: signature; options; the host calls it makes
+## the prelude's functions (17), c/preludes/core.shale: signature; options; the host calls it makes
   walk_all(path, opts?)  opts: -  host: -
   walk_upto(path, opts, keep)  opts: -  host: -
   room_for(need)  opts: -  host: -
@@ -133,7 +133,7 @@
   dirname(p)  opts: -  host: -
   path_normal(p)  opts: -  host: -
 
-## the Linux prelude's functions (51), src/shale_prelude_linux.shale: signature; options; the host calls it makes
+## the Linux prelude's functions (51), c/preludes/linux.shale: signature; options; the host calls it makes
   run(argv, opts)  opts: after,before,cpu_budget_ms,cwd,env,head,log,nocase,not_re,re,secret_replace,secrets,stage,stdin,stdout_secret,tail,timeout_ms,want,whole,width  host: run
   option_text(x)  opts: -  host: -
   not_option(who, name, v)  opts: -  host: -
@@ -186,7 +186,7 @@
   report_run(argv, opts?)  opts: -  host: -
   copy(from, to)  opts: -  host: copy_mode
 
-## the git prelude's functions (25), src/shale_prelude_git.shale: signature; options; the host calls it makes
+## the git prelude's functions (25), c/preludes/git.shale: signature; options; the host calls it makes
   git_text(x)  opts: -  host: -
   git_opts(name, opts, allowed)  opts: -  host: -
   git_value(call, name, v)  opts: -  host: -
@@ -1152,7 +1152,7 @@
   the file unless SHALE_MOUNTS: {s}/.config/shale/mounts
   the words after a mount's path: ro secrets tools
 
-## The gate (tools/shale_gate.zig): its forms, its refusals and its messages
+## The gate (legacy_zig/tools/shale_gate.zig): its forms, its refusals and its messages
   forms: a launch, `shale [--verbose] [--undo-on-stop] [FILE [--args-stdin]] [NAME=VALUE]... <<'TAG'` (after `cd DIR && ` if wanted; the script on stdin, the last line `TAG`), or the escape, a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>` (Shale's docs: README.md, then docs/SHALE-AGENTS.md, in the shale repo, ~/showell_repos/shale on this box; its docs and this box's mounts: `shale --help`)
   fn refuse(comptime fmt: []const u8, args: anytype) Verdict {
       return .{ .refused = std.fmt.bufPrint(&why_buf, "shale-gate: " ++ fmt ++ "only " ++ forms, args) catch "shale-gate: refused: only " ++ forms };

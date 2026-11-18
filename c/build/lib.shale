@@ -799,15 +799,6 @@ function run_plants(t, phase, plants, extra?)
   return nil
 end
 
--- The `test "` lines of a Zig test file.
-function zig_test_count(src)
-  local n = 0
-  for l in lines(read(src)) do
-    if starts_with(l, "test \"") then n = n + 1 end
-  end
-  return n
-end
-
 -- ── Frozen outputs ─────────────────────────────────────────────────────
 -- A block's script run by every build is held to the output frozen for it in
 -- c/tests/frozen/<block>/<name>.txt: a first line `exit <code>`, then what

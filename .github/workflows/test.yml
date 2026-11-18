@@ -1,4 +1,4 @@
-# `zig build test`, on demand only: dispatched by cookbook/build_on_github.shale
+# `zig build test` of Zig Shale (legacy_zig/, deprecated and frozen), on demand only: dispatched by cookbook/build_on_github.shale
 # (or `gh workflow run test.yml -f ref=<ref>`), never on a push or a PR.
 name: test
 
@@ -60,7 +60,7 @@ jobs:
           test -x ~/tools/roc-nightly-2026-11-03-34bd006/roc
 
       - name: zig build test
-        working-directory: shale
+        working-directory: shale/legacy_zig
         run: |
           zig version
           zig build test --summary failures

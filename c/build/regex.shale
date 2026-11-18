@@ -7,13 +7,10 @@ use("build:lib.shale")
 
 -- ── c/script/regex: its own block ──────────────────────────────────────
 -- test_regex.c runs in the foundation's block with every test file. Here,
--- in both tiers: its count held to REGEX_TESTS, regex_test.zig's to
--- REGEX_ZIG_TESTS (a Zig test added is one the C has yet to port). In the
--- full tier: the faults below planted in a copy of c/script, each caught by
+-- in both tiers: its count held to REGEX_TESTS. In the full tier: the faults below planted in a copy of c/script, each caught by
 -- test_regex.c under asan (`run_plants`).
 
 const REGEX_TESTS = 17
-const REGEX_ZIG_TESTS = 10
 const REGEX_PLANTS = {
   {name = "a split follows its less preferred way first",
    aim = "counted_repetition_is_the_part_written_out,sixteen_empty_loops_compile_and_a_seventeenth_is_refused_and_four_nested_but_not_five,compile_and_cache_put_leave_nothing_behind_when_the_arena_refuses,every_refusal_of_the_reader_says_its_text_at_its_byte,each_group_captures_its_own_part,an_empty_turn_ends_its_loop_as_a_backtrackers_does", dir = "script", file = "regex.c", caught_by = "test_regex",
@@ -36,9 +33,7 @@ const REGEX_PLANTS = {
 function regex_block(t)
   local regex_tests = test_count("c/tests/test_regex.c")
   if regex_tests ~= REGEX_TESTS then fail("c/tests/test_regex.c has " .. regex_tests .. " TEST(s), and REGEX_TESTS says " .. REGEX_TESTS) end
-  local regex_zig = zig_test_count("src/script/regex_test.zig")
-  if regex_zig ~= REGEX_ZIG_TESTS then fail("src/script/regex_test.zig has " .. regex_zig .. " tests, and REGEX_ZIG_TESTS says " .. REGEX_ZIG_TESTS .. ": port the new one to c/tests/test_regex.c") end
-  print("regex: " .. regex_tests .. " C tests, " .. regex_zig .. " of them regex_test.zig's")
+  print("regex: " .. regex_tests .. " C tests")
   if not t.full then return nil end
   run_plants(t, "regex plants", REGEX_PLANTS)
   return nil

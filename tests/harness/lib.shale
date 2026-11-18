@@ -12,7 +12,9 @@
 -- whole Shale source.
 const RUNNERS = {"expectOutput", "expectStop", "expectStopWith", "run", "runWith", "runOnce", "runAt", "once", "onceStop", "expectOnce", "expectFail", "expectOk", "lastLine", "runPreludes", "runByHeader", "reported", "parseOk", "parseStop", "parseCounted", "oomsBeforeStop", "expectSays", "output", "steps", "measure"}
 
--- The preludes' own test files: their inputs are `prelude-tests`.
+-- The preludes' own test files: their inputs are `prelude-tests`. A Zig
+-- test's origin is its path in legacy_zig/ (the frozen Zig tree), as its
+-- case was frozen before the tree moved there.
 const PRELUDE_TESTS = {"src/script/prelude_test.zig", "src/shale_prelude_linux_test.zig", "src/shale_prelude_git_test.zig"}
 
 -- The docs whose shale blocks the tests run.
@@ -153,10 +155,11 @@ function zig_sources(p)
 end
 
 function collect_zig(c)
-  for p in sort(glob("src/**/*.zig")) do
+  for p in sort(glob("legacy_zig/src/**/*.zig")) do
+    local origin = sub(p, #"legacy_zig/" + 1)
     local source = "zig-tests"
-    if has_item(PRELUDE_TESTS, p) then source = "prelude-tests" end
-    for s in zig_sources(p) do add_input(c, source, p .. ":" .. s.line, s.text, nil) end
+    if has_item(PRELUDE_TESTS, origin) then source = "prelude-tests" end
+    for s in zig_sources(p) do add_input(c, source, origin .. ":" .. s.line, s.text, nil) end
     yield()
   end
 end
@@ -219,11 +222,12 @@ function collect_cookbook(c)
   end
 end
 
--- web/lessons.js's cells, in order, each `{lesson, code}`: a cell's code is
--- a String.raw template, so its text is the bytes between the backticks.
+-- legacy_zig/web/lessons.js's cells, in order, each `{lesson, code}`: a
+-- cell's code is a String.raw template, so its text is the bytes between the
+-- backticks. Its cases' origins say `web/lessons.js`, its path in legacy_zig/.
 function lesson_cells()
-  local t = read("web/lessons.js")
-  if contains(t, "${") or contains(t, "\\`") then fail("golden: web/lessons.js holds `${` or an escaped backtick, which the harness does not read") end
+  local t = read("legacy_zig/web/lessons.js")
+  if contains(t, "${") or contains(t, "\\`") then fail("golden: legacy_zig/web/lessons.js holds `${` or an escaped backtick, which the harness does not read") end
   local cells = {}
   local lesson = 0
   local at = 1
@@ -517,7 +521,7 @@ end
 --
 -- The Linux prelude's `fresh_dir(parent, prefix)` names a folder
 -- `<prefix>.XXXXXX`, mktemp's six random characters from [A-Za-z0-9]
--- (src/shale_prelude_linux.shale). Before comparing, each such name is
+-- (c/preludes/linux.shale). Before comparing, each such name is
 -- masked as `<prefix>.<fresh N>`, N counting the names in the order they
 -- first appear in one side's run (each step's stdout and stderr, then the
 -- files' paths and bytes), so two folders stay two and the same folder is
