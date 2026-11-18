@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:11:10 (in `the Linux prelude's run`): refused: `run` of `bash`: a shell or an interpreter: Shale is the script; {want = "tag: why"} to run it anyway (34 steps)
    called from {base}/case/refused_run_shell.shale:2:1
 ── used: 34 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 34 in all; the most 23 (67%): script; 11 (32%): run, 1 call

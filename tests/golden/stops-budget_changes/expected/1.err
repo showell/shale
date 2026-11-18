@@ -1,3 +1,4 @@
 ── budgets from the script's header: changes=2
 ── stopped at {base}/case/budget_changes.shale:3:17: budget changes: the store-change budget (count) ran out (68 steps)
 ── used: 68 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 68 in all; the most 45 (66%): script; 23 (33%): replace, 3 calls

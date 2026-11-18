@@ -1,3 +1,4 @@
 ── stopped at the prelude:86:35 (in `the prelude's glob`): fail: `glob`: "./*.md" has a part (".") that is not a name (180 steps)
    called from {base}/case/script.shale:1:1
 ── used: 180 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 180 in all; the most 176 (97%): glob, 1 call; 4 (2%): script

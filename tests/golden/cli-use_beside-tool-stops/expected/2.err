@@ -1,0 +1,4 @@
+── stopped at tool/lib.shale:8:3 (in `tool/lib.shale's boom`): fail: boom (32 steps)
+   called from tool/stops.shale:2:1
+── used: 32 of 5000000 steps, 1 of 10000 reads, 108 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 32 in all; the most 28 (87%): script; 4 (12%): fail, 1 call

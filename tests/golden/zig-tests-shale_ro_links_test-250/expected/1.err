@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:11:10 (in `the Linux prelude's run`): argument: "k:new": `k:` is not a mount: the mounts are `cookbook`, `tools`, `scratch` ({base}/mounts) (47 steps)
    called from {base}/case/script.shale:1:11
 ── used: 47 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 47 in all; the most 37 (78%): script; 10 (21%): run, 1 call

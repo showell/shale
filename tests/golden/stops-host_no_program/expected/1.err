@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:11:10 (in `the Linux prelude's run`): host: `run`: `no-such-program-differ` is not found along PATH (32 steps)
    called from {base}/case/host_no_program.shale:2:7
 ── used: 32 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 32 in all; the most 23 (71%): script; 9 (28%): run, 1 call

@@ -1,2 +1,3 @@
 ── stopped at {base}/case/script.shale:1:7: argument: `re_find`'s pattern, at its byte 28: a tenth capture group: nine is the most (`\9` is the last), so write this one `(?:...)` if it need not capture (36 steps)
 ── used: 36 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 36 in all; the most 31 (86%): re_find, 1 call; 5 (13%): script

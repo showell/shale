@@ -1,2 +1,3 @@
 ── stopped at {base}/case/fail_own.shale:3:1: fail: stopped on purpose (31 steps)
 ── used: 31 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 7 of 65536 output bytes
+── steps: 31 in all; the most 18 (58%): fail, 1 call; 13 (41%): script

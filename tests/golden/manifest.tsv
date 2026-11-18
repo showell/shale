@@ -923,25 +923,25 @@ docs-SHALE-110	docs	docs/SHALE.md:110	1
 docs-SHALE-122	docs	docs/SHALE.md:122	1	
 docs-SHALE-136	docs	docs/SHALE.md:136	1	
 docs-SHALE-154	docs	docs/SHALE.md:154	1	
-docs-SHALE-230	docs	docs/SHALE.md:230	1	
-docs-SHALE-239	docs	docs/SHALE.md:239	1	
-docs-SHALE-270	docs	docs/SHALE.md:270	1	
-docs-SHALE-436	docs	docs/SHALE.md:436	1	
-docs-SHALE-720	docs	docs/SHALE.md:720	1	
-docs-SHALE-738	docs	docs/SHALE.md:738	1	
-docs-SHALE-892	docs	docs/SHALE.md:892	1	
-docs-SHALE-909	docs	docs/SHALE.md:909	1	
-docs-SHALE-932	docs	docs/SHALE.md:932	1	
-docs-SHALE-953	docs	docs/SHALE.md:953	1	
-docs-SHALE-980	docs	docs/SHALE.md:980	1	
-docs-SHALE-1550	docs	docs/SHALE.md:1550	1	
-docs-SHALE-AGENTS-566	docs	docs/SHALE-AGENTS.md:566	1	
-docs-SHALE-AGENTS-604	docs	docs/SHALE-AGENTS.md:604	1	
-docs-SHALE-AGENTS-629	docs	docs/SHALE-AGENTS.md:629	1	
-docs-SHALE-AGENTS-659	docs	docs/SHALE-AGENTS.md:659	1	
-docs-SHALE-AGENTS-700	docs	docs/SHALE-AGENTS.md:700	1	
-docs-SHALE-AGENTS-716	docs	docs/SHALE-AGENTS.md:716	1	
-docs-SHALE-AGENTS-767	docs	docs/SHALE-AGENTS.md:767	1	
+docs-SHALE-231	docs	docs/SHALE.md:231	1	
+docs-SHALE-240	docs	docs/SHALE.md:240	1	
+docs-SHALE-271	docs	docs/SHALE.md:271	1	
+docs-SHALE-437	docs	docs/SHALE.md:437	1	
+docs-SHALE-721	docs	docs/SHALE.md:721	1	
+docs-SHALE-739	docs	docs/SHALE.md:739	1	
+docs-SHALE-893	docs	docs/SHALE.md:893	1	
+docs-SHALE-910	docs	docs/SHALE.md:910	1	
+docs-SHALE-933	docs	docs/SHALE.md:933	1	
+docs-SHALE-954	docs	docs/SHALE.md:954	1	
+docs-SHALE-981	docs	docs/SHALE.md:981	1	
+docs-SHALE-1573	docs	docs/SHALE.md:1573	1	
+docs-SHALE-AGENTS-583	docs	docs/SHALE-AGENTS.md:583	1	
+docs-SHALE-AGENTS-621	docs	docs/SHALE-AGENTS.md:621	1	
+docs-SHALE-AGENTS-646	docs	docs/SHALE-AGENTS.md:646	1	
+docs-SHALE-AGENTS-676	docs	docs/SHALE-AGENTS.md:676	1	
+docs-SHALE-AGENTS-717	docs	docs/SHALE-AGENTS.md:717	1	
+docs-SHALE-AGENTS-733	docs	docs/SHALE-AGENTS.md:733	1	
+docs-SHALE-AGENTS-784	docs	docs/SHALE-AGENTS.md:784	1	
 lessons-1-1	lessons	web/lessons.js: lessons 1-1	2	
 lessons-1-2	lessons	web/lessons.js: lessons 1-2	5	
 lessons-1-3	lessons	web/lessons.js: lessons 1-3	7	
@@ -1046,6 +1046,13 @@ cli-script_on_stdin	cli	tests/inputs/cli/script_on_stdin.shale	1
 cli-undo_on_stop	cli	tests/inputs/cli/undo_on_stop.shale	1	
 cli-unknown_flag	cli	tests/inputs/cli/unknown_flag.shale	1	
 cli-unread_arg	cli	tests/inputs/cli/unread_arg.shale	1	
+cli-use_beside-tool-main	cli	tests/inputs/cli/use_beside.shale [tool/main.shale]	2	
+cli-use_beside-tool-up	cli	tests/inputs/cli/use_beside.shale [tool/up.shale]	2	
+cli-use_beside-tool-gone	cli	tests/inputs/cli/use_beside.shale [tool/gone.shale]	2	
+cli-use_beside-tool-stops	cli	tests/inputs/cli/use_beside.shale [tool/stops.shale]	2	
+cli-use_beside_lane-book-r	cli	tests/inputs/cli/use_beside_lane.shale [book:r.shale]	2	
+cli-use_beside_lane-scratch-lanes-x-r	cli	tests/inputs/cli/use_beside_lane.shale [scratch:lanes/x/r.shale]	2	
+cli-use_beside_stdin	cli	tests/inputs/cli/use_beside_stdin.shale	1	
 cli-verbose_edit	cli	tests/inputs/cli/verbose_edit.shale	1	
 cli-version	cli	tests/inputs/cli/version.shale	1	
 store-call_bytes	store	tests/inputs/store/call_bytes.shale []	2	

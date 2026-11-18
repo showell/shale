@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:440:77 (in `the Linux prelude's fresh_dir`): fail: `fresh_dir` prefix -x: a name, no `/`, not starting with `-` (144 steps)
    called from {base}/case/script.shale:1:1
 ── used: 144 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 144 in all; the most 140 (97%): fresh_dir, 1 call; 4 (2%): script

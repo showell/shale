@@ -1,0 +1,6 @@
+-- differ-argv:
+-- differ-stdin-self: 1
+-- A script on stdin has no file, so a `./` path has nothing to be beside:
+-- refused, saying to name the library through a mount.
+use("./lib.shale")
+print(hi())

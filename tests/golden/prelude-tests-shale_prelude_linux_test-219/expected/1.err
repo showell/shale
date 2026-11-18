@@ -2,3 +2,4 @@
    called from the Linux prelude:199:10 (in `the Linux prelude's http`)
    called from {base}/case/script.shale:1:1
 ── used: 219 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 219 in all; the most 209 (95%): http, 1 call; 10 (4%): script

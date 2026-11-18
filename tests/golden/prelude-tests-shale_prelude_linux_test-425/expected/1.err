@@ -2,3 +2,4 @@
    called from the Linux prelude:867:13 (in `the Linux prelude's report_run`)
    called from {base}/case/script.shale:1:1
 ── used: 193 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 193 in all; the most 182 (94%): report_run, 1 call; 11 (5%): script

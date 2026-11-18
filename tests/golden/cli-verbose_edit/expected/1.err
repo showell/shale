@@ -3,3 +3,4 @@ replace a.txt: ok
 edit a.txt: ok
 ── finished (148 steps)
 ── used: 148 of 5000000 steps, 3 of 10000 reads, 28 of 67108864 read bytes, 65 of 65536 output bytes
+── steps: 148 in all; the most 80 (54%): edit, 1 call; 33 (22%): create, 1 call; 28 (18%): script

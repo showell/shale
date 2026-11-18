@@ -1,3 +1,4 @@
 ── stopped at the prelude:56:12 (in `the prelude's room_for`): index: no key "readz" in the map (`has_key` asks first) (28 steps)
    called from {base}/case/script.shale:1:7
 ── used: 28 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 28 in all; the most 18 (64%): room_for, 1 call; 10 (35%): script

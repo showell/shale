@@ -1,3 +1,4 @@
 ── stopped at the git prelude:249:37 (in `the git prelude's git_push`): fail: `git_push` takes a `branch` or a `tag`, not both (214 steps)
    called from {base}/case/script.shale:1:1
 ── used: 214 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 214 in all; the most 199 (92%): git_push, 1 call; 15 (7%): script

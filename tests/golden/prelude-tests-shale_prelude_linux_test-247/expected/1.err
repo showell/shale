@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:215:10 (in `the Linux prelude's re_lines`): fail: `re_lines` takes `invert` and `nocase`, not `from` (35 steps)
    called from {base}/case/script.shale:1:1
 ── used: 35 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 35 in all; the most 18 (51%): re_lines, 1 call; 17 (48%): script

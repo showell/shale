@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:11:10 (in `the Linux prelude's run`): host: `run`: `shale-fixture` is not found along PATH (37 steps)
    called from {base}/case/script.shale:1:12
 ── used: 37 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 37 in all; the most 26 (70%): script; 11 (29%): run, 1 call

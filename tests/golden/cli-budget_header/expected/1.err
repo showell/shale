@@ -1,3 +1,4 @@
 ── budgets from the script's header: steps=300, output_bytes=100
 ── stopped at {base}/case/budget_header.shale:3:32: budget output: the output budget ran out (278 steps)
 ── used: 278 of 300 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 100 of 100 output bytes
+── steps: 278 in all; the most 278 (100%): script

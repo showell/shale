@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:53:10 (in `the Linux prelude's job_alive`): store: `job_alive`: no job's record at reused.log.job (32 steps)
    called from {base}/case/script.shale:1:7
 ── used: 32 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 32 in all; the most 28 (87%): job_alive, 1 call; 4 (12%): script

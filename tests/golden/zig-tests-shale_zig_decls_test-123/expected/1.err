@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:486:10 (in `the Linux prelude's zig_decls`): type: `zig_decls`' options are a map, not a list (23 steps)
    called from {base}/case/script.shale:1:1
 ── used: 23 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 23 in all; the most 18 (78%): zig_decls, 1 call; 5 (21%): script

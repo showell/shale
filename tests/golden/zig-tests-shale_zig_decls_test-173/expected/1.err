@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:485:30 (in `the Linux prelude's zig_decls`): store: `zig_decls("g.zig")`: not found (FileNotFound): `exists(p)` asks first (27 steps)
    called from {base}/case/script.shale:1:10
 ── used: 27 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 27 in all; the most 23 (85%): zig_decls, 1 call; 4 (14%): script

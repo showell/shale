@@ -1,0 +1,3 @@
+── stopped at {base}/case/script.shale:3:12: store: `find_in("chat/channels/general/sessions/plans.md")`: not found (FileNotFound): `exists(p)` asks first (111 steps)
+── used: 111 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 13 of 65536 output bytes
+── steps: 111 in all; the most 40 (36%): find_in, 1 call; 36 (32%): script; 27 (24%): words, 1 call

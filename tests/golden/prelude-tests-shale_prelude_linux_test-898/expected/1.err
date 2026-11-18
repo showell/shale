@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:666:34 (in `the Linux prelude's edit_between`): fail: `edit_between`: f.md: a marker is empty: nil for `to` replaces to the end of the file (213 steps)
    called from {base}/case/script.shale:1:1
 ── used: 213 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 213 in all; the most 207 (97%): edit_between, 1 call; 6 (2%): script

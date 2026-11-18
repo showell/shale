@@ -1,2 +1,3 @@
 ── stopped at {base}/case/store_budgets.shale:12:1: budget steps: the step budget (450 steps) ran out (451 steps)
 ── used: 451 of 450 steps, 24 of 10000 reads, 49 of 67108864 read bytes, 48 of 65536 output bytes
+── steps: 451 in all; the most 169 (37%): walk, 1 call; 103 (22%): script; 61 (13%): edit, 1 call

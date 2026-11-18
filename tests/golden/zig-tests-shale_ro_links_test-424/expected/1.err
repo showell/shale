@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:11:10 (in `the Linux prelude's run`): store: `run`: its log nodir/x.log cannot be written: FileNotFound (50 steps)
    called from {base}/case/script.shale:1:1
 ── used: 50 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 50 in all; the most 27 (54%): script; 23 (46%): run, 1 call

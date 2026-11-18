@@ -1,0 +1,1 @@
+{"id":"cli-use_beside_stdin","source":"cli","origin":"tests/inputs/cli/use_beside_stdin.shale","files":["stdin-1.txt"],"steps":[{"argv":[],"stdin":"stdin-1.txt","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

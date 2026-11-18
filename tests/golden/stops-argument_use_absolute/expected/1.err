@@ -1,2 +1,2 @@
-── stopped at {base}/case/argument_use_absolute.shale:2:1: argument: `use("/etc/lib.shale")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), never by an absolute path or the root's: a script runs from other repositories' roots (0 steps)
+── stopped at {base}/case/argument_use_absolute.shale:2:1: argument: `use("/etc/lib.shale")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), or beside the script's own file, `./name.shale`; never by an absolute path or the root's: a script runs from other repositories' roots (0 steps)
 ── used: 0 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

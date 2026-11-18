@@ -3,3 +3,4 @@
    called from the git prelude:334:47 (in `the git prelude's git_merge_ff`)
    called from {base}/case/script.shale:1:1
 ── used: 255 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 255 in all; the most 251 (98%): git_merge_ff, 1 call; 4 (1%): script

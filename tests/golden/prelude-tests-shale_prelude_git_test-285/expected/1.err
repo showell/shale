@@ -3,3 +3,4 @@
    called from the git prelude:146:47 (in `the git prelude's git_diff`)
    called from {base}/case/script.shale:1:1
 ── used: 383 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 383 in all; the most 373 (97%): git_diff, 1 call; 10 (2%): script

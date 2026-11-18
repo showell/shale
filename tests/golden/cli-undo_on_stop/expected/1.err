@@ -1,3 +1,4 @@
 ── stopped at {base}/case/undo_on_stop.shale:5:1: fail: stopped on purpose (126 steps)
 ── used: 126 of 5000000 steps, 2 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 126 in all; the most 89 (70%): create, 2 calls; 18 (14%): fail, 1 call; 14 (11%): script
 ── undone: 3 path(s) the run changed put back

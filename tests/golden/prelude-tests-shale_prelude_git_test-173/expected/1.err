@@ -1,3 +1,4 @@
 ── stopped at the git prelude:310:23 (in `the git prelude's git_restore`): fail: `git_restore` of no paths: name them (62 steps)
    called from {base}/case/script.shale:1:1
 ── used: 62 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 62 in all; the most 57 (91%): git_restore, 1 call; 5 (8%): script

@@ -1,0 +1,1 @@
+{"id":"cli-use_beside-tool-gone","source":"cli","origin":"tests/inputs/cli/use_beside.shale [tool/gone.shale]","files":["setup.shale"],"steps":[{"argv":["{case}/setup.shale"],"stdin":"","mounts":[]},{"argv":["tool/gone.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

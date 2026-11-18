@@ -1,3 +1,4 @@
 ── stopped at the prelude:246:31 (in `the prelude's path_normal`): fail: `path_normal`: "/etc" is absolute; a path is the root's, or a mount's (`m:path`) (175 steps)
    called from {base}/case/script.shale:1:7
 ── used: 175 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 175 in all; the most 171 (97%): path_normal, 1 call; 4 (2%): script

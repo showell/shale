@@ -1,0 +1,21 @@
+-- The fixture of use_beside.shale and use_beside_lane.shale: scripts that
+-- `use` a library beside their own file. In the root, tool/main.shale and
+-- its libraries, with tool/up.shale (a `..`), tool/gone.shale (a sibling
+-- that is not there) and tool/stops.shale (a stop inside the library, named
+-- by the path it was read by). In the scratch folder, a recipe and its
+-- library twice: master/, which use/lane.mounts mounts as `book`, and
+-- lanes/x/, a lane's copy whose library differs.
+mkdir("tool/sub")
+mkdir("scratch:master")
+mkdir("scratch:lanes/x")
+create("tool/lib.shale", "const WHO = \"the sibling\"\n\nfunction hi()\n  return \"hi from \" .. WHO\nend\n\nfunction boom()\n  fail(\"boom\")\nend\n")
+create("tool/sub/deep.shale", "function deep()\n  return \"and its folder below\"\nend\n")
+create("tool/main.shale", "use(\"./lib.shale\")\nuse(\"./sub/deep.shale\")\nprint(hi(), deep())\n")
+create("tool/up.shale", "use(\"../lib.shale\")\nprint(hi())\n")
+create("tool/gone.shale", "use(\"./nope.shale\")\n")
+create("tool/stops.shale", "use(\"./lib.shale\")\nboom()\n")
+local recipe = "use(\"./lib.shale\")\nprint(\"the recipe's library is \" .. WHERE)\n"
+create("scratch:master/r.shale", recipe)
+create("scratch:master/lib.shale", "const WHERE = \"master\"\n")
+create("scratch:lanes/x/r.shale", recipe)
+create("scratch:lanes/x/lib.shale", "const WHERE = \"lane\"\n")

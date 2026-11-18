@@ -64,3 +64,4 @@
    called from {base}/case/budget_call_depth.shale:2:25 (in `down`)
    called from {base}/case/budget_call_depth.shale:3:1
 ── used: 321 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 321 in all; the most 321 (100%): script

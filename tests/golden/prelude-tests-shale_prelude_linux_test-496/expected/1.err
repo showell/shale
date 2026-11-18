@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:370:24 (in `the Linux prelude's grep_tree`): fail: `grep_tree` of "": every line holds it (50 steps)
    called from {base}/case/script.shale:1:1
 ── used: 50 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 50 in all; the most 45 (90%): grep_tree, 1 call; 5 (10%): script

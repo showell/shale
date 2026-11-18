@@ -1,2 +1,0 @@
-── stopped at {base}/case/script.shale:1:11: store: `edit("src/tcp.zig")`: not found (FileNotFound): `exists(p)` asks first (34 steps)
-── used: 34 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

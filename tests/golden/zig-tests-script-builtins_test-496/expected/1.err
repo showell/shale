@@ -1,2 +1,3 @@
 ── stopped at {base}/case/script.shale:1:7: store: `count_lines("empty")`: not found (FileNotFound): `exists(p)` asks first (10 steps)
 ── used: 10 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 10 in all; the most 6 (60%): count_lines, 1 call; 4 (40%): script

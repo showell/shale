@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:515:10 (in `the Linux prelude's shale_tokens`): type: `shale_tokens`' options are a map, not an integer (25 steps)
    called from {base}/case/script.shale:1:1
 ── used: 25 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 25 in all; the most 21 (84%): shale_tokens, 1 call; 4 (16%): script

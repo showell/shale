@@ -1,0 +1,17 @@
+root	d	775	-	
+root/tool	d	775	-	
+root/tool/gone.shale	f	664	20		sha256 fed52a8a5170ec4e898c561563935628a8a900b2f3a8205c74918837aeda2f2c
+root/tool/lib.shale	f	664	108		sha256 b5a4effaa6d5dee92fb483d81b39f3c41235a8497163099e5abeea4c67eb3141
+root/tool/main.shale	f	664	63		sha256 2f465c701711797ef92c1465929e0bce8b81fdd7d205977402c2e33b3d06093b
+root/tool/stops.shale	f	664	26		sha256 2a4a70c5a067aacb9a7eeb9eba94e4084b70ddf8bf20b744c6cef7e2e283c78c
+root/tool/sub	d	775	-	
+root/tool/sub/deep.shale	f	664	52		sha256 18d4dc0d79c03678ea6f854fc4f8610d2c561543cf0cc8cfa05557789b23789b
+root/tool/up.shale	f	664	32		sha256 c358dbcab442764126c7e17eec7892a79ce599d4b698ebc3ea13fe7e4583020e
+scratch	d	775	-	
+scratch/lanes	d	775	-	
+scratch/lanes/x	d	775	-	
+scratch/lanes/x/lib.shale	f	664	21		sha256 05460c9975b27bdf91e9f4b6ae647467639e38bbebfa822ee98ac7d8ad108112
+scratch/lanes/x/r.shale	f	664	62		sha256 d331ade4770733df3c92b14e26b92399019112c0aeadb991e5b882a5c06557c9
+scratch/master	d	775	-	
+scratch/master/lib.shale	f	664	23		sha256 d10c0f57337e42fcd90a055a12e7d438a7d522f608adb01b9da0b1d3ff6c7dd9
+scratch/master/r.shale	f	664	62		sha256 d331ade4770733df3c92b14e26b92399019112c0aeadb991e5b882a5c06557c9

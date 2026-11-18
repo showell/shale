@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:683:3 (in `the Linux prelude's create`): budget steps: the step budget (300 steps) ran out (301 steps)
    called from {base}/case/store_budgets.shale:10:1
 ── used: 301 of 300 steps, 19 of 10000 reads, 37 of 67108864 read bytes, 14 of 65536 output bytes
+── steps: 301 in all; the most 169 (56%): walk, 1 call; 53 (17%): script; 22 (7%): create, 1 call

@@ -1,0 +1,1 @@
+{"id":"cli-use_beside-tool-stops","source":"cli","origin":"tests/inputs/cli/use_beside.shale [tool/stops.shale]","files":["setup.shale"],"steps":[{"argv":["{case}/setup.shale"],"stdin":"","mounts":[]},{"argv":["tool/stops.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

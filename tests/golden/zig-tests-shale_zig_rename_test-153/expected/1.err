@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:470:10 (in `the Linux prelude's zig_rename`): argument: `zig_rename`'s `lines` (2, 1) is no range: 1 <= first <= last (44 steps)
    called from {base}/case/script.shale:1:1
 ── used: 44 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 44 in all; the most 30 (68%): zig_rename, 1 call; 14 (31%): script

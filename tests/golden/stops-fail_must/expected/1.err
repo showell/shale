@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:91:29 (in `the Linux prelude's must`): fail: `false` exited 1 (156 steps)
    called from {base}/case/fail_must.shale:2:1
 ── used: 156 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 156 in all; the most 125 (80%): must, 1 call; 22 (14%): script; 9 (5%): run, 1 call

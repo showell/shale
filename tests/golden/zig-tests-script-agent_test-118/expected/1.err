@@ -1,3 +1,4 @@
 ── stopped at the prelude:70:29 (in `the prelude's glob`): fail: `glob` takes `hidden`, not `hiden` (105 steps)
    called from {base}/case/script.shale:1:1
 ── used: 105 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 105 in all; the most 95 (90%): glob, 1 call; 10 (9%): script

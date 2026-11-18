@@ -1,3 +1,4 @@
 ── stopped at the prelude:128:13 (in `the prelude's find_next`): store: `find_in("big.log")`: not found (FileNotFound): `exists(p)` asks first (22 steps)
    called from {base}/case/script.shale:1:7
 ── used: 22 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 22 in all; the most 16 (72%): find_next, 1 call; 6 (27%): script

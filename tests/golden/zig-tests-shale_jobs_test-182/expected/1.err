@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:48:10 (in `the Linux prelude's job_start`): host: `job_start`: `shale-fixture` is not found along PATH (32 steps)
    called from {base}/case/script.shale:2:13
 ── used: 32 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 32 in all; the most 17 (53%): job_start, 1 call; 15 (46%): script

@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:48:10 (in `the Linux prelude's job_start`): host: `job_start`: `no-such-program-anywhere` is not found along PATH (24 steps)
    called from {base}/case/script.shale:1:1
 ── used: 24 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 24 in all; the most 15 (62%): job_start, 1 call; 9 (37%): script

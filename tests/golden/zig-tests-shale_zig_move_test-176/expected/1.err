@@ -1,3 +1,4 @@
 ── stopped at the Linux prelude:499:10 (in `the Linux prelude's zig_move`): argument: `zig_move`: `from` and `to` are one file (45 steps)
    called from {base}/case/script.shale:1:1
 ── used: 45 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 45 in all; the most 38 (84%): zig_move, 1 call; 7 (15%): script

@@ -1,2 +1,3 @@
 ── stopped at {base}/case/script.shale:4:25: budget kept: what the run keeps at a `yield` is past the kept budget (1048576 bytes): raise it with `--budget kept_bytes=N` or the script's `-- budget: kept_bytes=N` line, up to 268435456 (# steps)
 ── used: # of # steps, # of # reads, # of # read bytes, # of # output bytes
+── steps: #.#M in all; the most #.#M (#%): script

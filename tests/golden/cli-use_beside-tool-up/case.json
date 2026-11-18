@@ -1,0 +1,1 @@
+{"id":"cli-use_beside-tool-up","source":"cli","origin":"tests/inputs/cli/use_beside.shale [tool/up.shale]","files":["setup.shale"],"steps":[{"argv":["{case}/setup.shale"],"stdin":"","mounts":[]},{"argv":["tool/up.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

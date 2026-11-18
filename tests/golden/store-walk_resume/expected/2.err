@@ -1,2 +1,3 @@
 ── budgets from the script's header: reads=40, call_entries=3
 ── used: 5807 of 5000000 steps, 35 of 40 reads, 0 of 67108864 read bytes, 766 of 65536 output bytes
+── steps: 5.8K in all; the most 5.1K (88%): script; 678 (11%): walk, 53 calls

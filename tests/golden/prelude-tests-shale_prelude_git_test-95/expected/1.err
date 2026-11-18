@@ -2,3 +2,4 @@
    called from the git prelude:108:3 (in `the git prelude's git_log`)
    called from {base}/case/script.shale:1:1
 ── used: 313 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 313 in all; the most 303 (96%): git_log, 1 call; 10 (3%): script
