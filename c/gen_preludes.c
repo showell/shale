@@ -42,7 +42,8 @@ static int gen_failed(const char *what, Str path) { // cstr: a literal naming th
 
 // The whole file at `path` appended to `out`.
 static STATUS_MUST_USE Status gen_read(Arena *a, Str path, Buf *out) {
-    const char *c = arena_cstr(a, path); // cstr: the kernel's
+    // A path from gen_sources, a fixed word of this file's.
+    const char *c = arena_cstr(a, os_str_own(path)); // cstr: the kernel's
     if (c == NULL) return STOP;
     FILE *f = fopen(c, "rb");
     if (f == NULL) return STOP;
