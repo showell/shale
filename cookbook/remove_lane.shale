@@ -55,7 +55,7 @@
 -- branch on both sides; a lane with one of its two commits picked is
 -- removed and its branch kept; a merged clone is deleted with its remote
 -- branch. The child run is given its root as `SHALE_ROOT`, so the self-test
--- passes under the differ too (tools/differ.shale sets its own).
+-- passes under a parent run that sets its own.
 --
 -- budget: steps=200000000 reads=100000 programs=400
 
@@ -119,7 +119,7 @@ end
 -- verdict is a plain CLEAR.
 function require_clear(root, dir, env)
   -- The child's root is named, never left to its folder: a `SHALE_ROOT`
-  -- in this run's environment (the differ sets one) would outrank `cwd`.
+  -- in this run's environment (a harness may set one) would outrank `cwd`.
   local child_env = {SHALE_ROOT = real(root)}
   for k in keys(env) do child_env[k] = env[k] end
   local r = run({"shale", real("cookbook:retire_checkout.shale"), "dir=" .. dir}, {cwd = root, env = child_env, timeout_ms = 300000, whole = 4000000, want = "nonzero: BLOCKED, said by the caller"})

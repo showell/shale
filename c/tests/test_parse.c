@@ -1,7 +1,8 @@
 // test_parse.c: the parser against Zig Shale's parser's rules: what a source
 // parses to, where each stop is and what it says, how the preludes load and
 // are checked, and what a `use` binds. The `shale --check` command's own
-// texts are judged by tools/differ.shale against Zig Shale.
+// texts are held by the command's block (c/build/command.shale) and the
+// golden tests.
 
 #include "test.h"
 
