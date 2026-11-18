@@ -1,5 +1,5 @@
-── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git log --format=%s%x1e --` exited 128: fatal: not a git repository (or any of the parent directories): .git (907 steps)
-   called from the git prelude:125:23 (in `the git prelude's git_log`)
+── stopped at the git prelude:72:29 (in `the git prelude's git_call`): fail: `git log --format=%s%x1e --` exited 128: fatal: not a git repository (or any of the parent directories): .git (932 steps)
+   called from the git prelude:126:23 (in `the git prelude's git_log`)
    called from {base}/case/script.shale:1:11
-── used: 907 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 0 of 65536 output bytes
-── steps: 907 in all; the most 895 (98%): git_log, 1 call; 12 (1%): script
+── used: 932 of 5000000 steps, 0 of 10000 reads, 69 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 932 in all; the most 920 (98%): git_log, 1 call; 12 (1%): script
