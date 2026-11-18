@@ -78,7 +78,7 @@
 --
 -- budget: steps=300000000 reads=300000 arena_bytes=600000000 programs=3000
 
-use("cookbook:folder_names.shale")
+use("./folder_names.shale")
 
 const DIR = arg("dir", "")
 const SELF_TEST = arg("self_test", 0)

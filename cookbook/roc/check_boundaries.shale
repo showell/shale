@@ -145,11 +145,11 @@ const MAX_WAYS = arg("ways", 2)
 const MAX_NODES = arg("nodes", 24)
 const DEAD_PLANTS = PLANTS .. "dead/"
 const CHECKS = {"single", "fixed", "entry", "constant", "bool_param", "dead", "unused_api", "same_branches"}
-use("cookbook:roc/headers.shale")
-use("cookbook:roc/house.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/pinned.shale")
-use("cookbook:roc/types.shale")
+use("./headers.shale")
+use("./house.shale")
+use("./parsed.shale")
+use("./pinned.shale")
+use("./types.shale")
 const TYPES_ARG = arg("types", "0")
 if TYPES_ARG ~= "0" and TYPES_ARG ~= "1" then fail("check_boundaries: types must be 0 (the default) or 1, not " .. TYPES_ARG) end
 const USE_TYPES = SELF_TEST or TYPES_ARG == "1"

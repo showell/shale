@@ -128,12 +128,12 @@ function chosen_files()
   end
   return kept
 end
-use("cookbook:roc/pinned.shale")
+use("./pinned.shale")
 use("cookbook:findings.shale")
-use("cookbook:roc/groups.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/headers.shale")
-use("cookbook:roc/house.shale")
+use("./groups.shale")
+use("./parsed.shale")
+use("./headers.shale")
+use("./house.shale")
 const TOKENS = arg("tokens", STACK_TOKENS)
 const MAX_PASSES = 12
 const STRING_TEXT = {["e-string-part"] = true, ["p-string-text"] = true}

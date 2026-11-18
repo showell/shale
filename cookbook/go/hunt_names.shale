@@ -42,7 +42,7 @@ const PLANTS = "cookbook:go/plants/hunt_names/"
 const GLOB = SELF_TEST and (PLANTS .. "*.go") or arg("glob", "**/*.go")
 const TESTS = arg("tests", 1) == 1
 const CHECKS = {"vague", "question", "negative", "name_type", "phrase_name"}
-use("cookbook:go/parsed.shale")
+use("./parsed.shale")
 use("cookbook:findings.shale")
 
 const VAGUE = go_word_table("vague.txt")

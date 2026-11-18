@@ -23,7 +23,7 @@
 --
 -- budget: steps=50000000
 
-use("cookbook:c/items.shale")
+use("./items.shale")
 
 const PLANTS = "cookbook/c/plants/map_file"
 

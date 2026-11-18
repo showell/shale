@@ -38,10 +38,10 @@
 const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
 const WORDS_FILE = arg("words", "")
-use("cookbook:roc/declared.shale")
+use("./declared.shale")
 use("cookbook:findings.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/gate_recipe.shale")
+use("./parsed.shale")
+use("./gate_recipe.shale")
 const CHECKS = {"retired_name", "retired_comment"}
 
 -- Which attribute holds the identifier in each kind of node that has one. A

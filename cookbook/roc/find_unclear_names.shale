@@ -52,12 +52,12 @@ const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
 const ABBREVIATIONS_FILE = arg("abbreviations", "cookbook:words/abbreviations.txt")
 const TERMS_FILE = arg("terms", "")
-use("cookbook:roc/declared.shale")
+use("./declared.shale")
 use("cookbook:findings.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/gate_recipe.shale")
-use("cookbook:roc/headers.shale")
-use("cookbook:roc/house.shale")
+use("./parsed.shale")
+use("./gate_recipe.shale")
+use("./headers.shale")
+use("./house.shale")
 const CHECKS = {"pure_mutator", "abbreviation", "module_doc"}
 const MUTATION_WORDS = {push = true, fill = true, set = true, append = true, add = true}
 const HISTORY_RE = "\\b(originally|used to|emitted|ported)\\b"

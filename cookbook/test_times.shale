@@ -5,7 +5,7 @@
 -- `timed_run` itself, over a real program and a real `build:` mount, is
 -- src/shale_cli_test.zig's.
 
-use("cookbook:times.shale")
+use("./times.shale")
 
 function ran(cpu_ms)
   return {ended = "exit", code = 0, cpu_ms = cpu_ms, ms = cpu_ms + 7}

@@ -29,8 +29,8 @@ const OUT = arg("out", "scratch:foreign")
 const ROLES = arg("roles", "")
 const TERMS = arg("terms", "")
 const ABBREVIATIONS = arg("abbreviations", "")
-use("cookbook:roc/gate_recipe.shale")
-use("cookbook:roc/house.shale")
+use("./gate_recipe.shale")
+use("./house.shale")
 
 const RECIPES = {"check_boundaries", "check_errors", "check_families", "hunt_names", "find_deep_calls", "find_extra_parens", "find_unclear_names", "check_stacking"}
 const READ_FIRST = {"dead", "same_branches", "number_fallback", "placeholder", "set_fallback", "twin_name", "family", "unused_api"}

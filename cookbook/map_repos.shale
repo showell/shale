@@ -22,7 +22,7 @@
 --
 -- budget: steps=200000000 reads=20000 arena_bytes=1000000000
 
-use("cookbook:folder_names.shale")
+use("./folder_names.shale")
 
 const IN = arg("in", ".")
 const DOT = arg("dot", 0)

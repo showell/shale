@@ -51,9 +51,9 @@
 -- budget: steps=4000000000 arena_bytes=3000000000 output_bytes=4000000 reads=100000
 
 const SELF_TEST = arg("self_test", "") == "1"
-use("cookbook:roc/declared.shale")
-use("cookbook:roc/member_uses.shale")
-use("cookbook:roc/module_family.shale")
+use("./declared.shale")
+use("./member_uses.shale")
+use("./module_family.shale")
 use("cookbook:findings.shale")
 
 -- The tags that build a shape or its paint: lib's Shapes.Shape and

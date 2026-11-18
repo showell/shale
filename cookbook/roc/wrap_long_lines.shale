@@ -46,8 +46,8 @@
 -- budget: steps=1000000000 arena_bytes=2000000000 output_bytes=4000000 changes=5000
 
 use("cookbook:findings.shale")
-use("cookbook:roc/pinned.shale")
-use("cookbook:roc/groups.shale")
+use("./pinned.shale")
+use("./groups.shale")
 const SELF_TEST = arg("self_test", "") == "1"
 const PLANTS = "cookbook:roc/plants/wrap_long_lines"
 const DIR = SELF_TEST and "scratch:wrap_long_lines" or arg("dir", "roc")

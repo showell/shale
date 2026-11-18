@@ -63,7 +63,7 @@
 --
 -- budget: steps=100000000 arena_bytes=400000000
 
-use("cookbook:folder_names.shale")
+use("./folder_names.shale")
 
 const ROOT = arg("root", ".")
 const CONTEXTS = arg("contexts", 0)

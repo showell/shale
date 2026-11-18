@@ -6,7 +6,7 @@
 -- It prints PASS, or each file's markers and FAIL. `self_test=1` tests the
 -- library on the canned conflicts below instead.
 
-use("cookbook:merge_conflicts.shale")
+use("./merge_conflicts.shale")
 
 const DIFF3 = [=[
 top

@@ -29,7 +29,7 @@
 -- test` (its `cookbook-test`) fails on any break. COOKBOOK_ENFORCED false
 -- would only count the cookbook's breaks, on the last line.
 
-use("cookbook:findings.shale")
+use("./findings.shale")
 
 const COOKBOOK_ENFORCED = true
 

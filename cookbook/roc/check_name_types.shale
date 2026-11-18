@@ -57,10 +57,10 @@
 const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
 const TABLE_FILE = arg("table", "")
-use("cookbook:roc/declared.shale")
+use("./declared.shale")
 use("cookbook:findings.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/gate_recipe.shale")
+use("./parsed.shale")
+use("./gate_recipe.shale")
 const CHECKS = {"name_type", "bare_beside_unit", "no_value"}
 const BARE_NUMBERS = {U8 = true, U16 = true, U32 = true, U64 = true, U128 = true, I8 = true, I16 = true, I32 = true, I64 = true, I128 = true, F32 = true, F64 = true, Dec = true}
 const NONE_WORDS = {no = true, none = true, unset = true}

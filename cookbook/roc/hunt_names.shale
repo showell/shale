@@ -285,12 +285,12 @@
 
 const SELF_TEST = arg("self_test", "") == "1"
 use("cookbook:findings.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/pinned.shale")
-use("cookbook:roc/types.shale")
-use("cookbook:roc/declared.shale")
-use("cookbook:roc/headers.shale")
-use("cookbook:roc/house.shale")
+use("./parsed.shale")
+use("./pinned.shale")
+use("./types.shale")
+use("./declared.shale")
+use("./headers.shale")
+use("./house.shale")
 const PLANTS = "cookbook:roc/plants/hunt_names/"
 const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const TYPES_ARG = arg("types", "0")

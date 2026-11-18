@@ -180,9 +180,9 @@ const WALK_BRIEF = {"units"}
 
 -- The builtin numbers a unit wrapper may be a nominal type over.
 const WALK_NUMBERS = {"F32", "F64", "Dec", "U8", "U16", "U32", "U64", "U128", "I8", "I16", "I32", "I64", "I128"}
-use("cookbook:roc/declared.shale")
-use("cookbook:roc/member_uses.shale")
-use("cookbook:roc/module_family.shale")
+use("./declared.shale")
+use("./member_uses.shale")
+use("./module_family.shale")
 
 -- The type names and type variables the type at node `at` mentions, pushed
 -- onto `into` as `{name, line}` and `{var, line}`. A tag's name is skipped and

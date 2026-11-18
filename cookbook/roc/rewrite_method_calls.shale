@@ -182,9 +182,9 @@ const COUNT_ONLY = TRIALS_ARG == "0"
 const TYPES_FROM = arg("types_from", "")
 if COUNT_ONLY and APPLY and not SELF_TEST then fail("rewrite_method_calls: trials=0 writes nothing, so not with apply=1") end
 if COUNT_ONLY and not USE_TYPES then fail("rewrite_method_calls: trials=0 counts by the types, so not with types=0") end
-use("cookbook:roc/pinned.shale")
+use("./pinned.shale")
 use("cookbook:findings.shale")
-use("cookbook:roc/types.shale")
+use("./types.shale")
 
 -- Each round leaves out the calls the compiler refused, and the next round
 -- may find more that their errors hid.

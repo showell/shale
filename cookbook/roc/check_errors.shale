@@ -73,9 +73,9 @@ const PLANTS = "cookbook:roc/plants/check_errors/"
 const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const CHECKS = {"error_alias", "optional_tag", "set_fallback", "placeholder", "number_fallback"}
 use("cookbook:findings.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/pinned.shale")
-use("cookbook:roc/types.shale")
+use("./parsed.shale")
+use("./pinned.shale")
+use("./types.shale")
 const TYPES_ARG = arg("types", "0")
 if TYPES_ARG ~= "0" and TYPES_ARG ~= "1" then fail("check_errors: types=" .. TYPES_ARG .. " must be 0 (the default) or 1") end
 -- The self-test checks its typed plants with the types, and the rest without.

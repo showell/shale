@@ -56,9 +56,9 @@ const GLOB = SELF_TEST and (PLANTS .. "/*.roc") or arg("glob", "**/*.roc")
 const WRITE = arg("write", "") == "1"
 const CHECKS = {"paren_if", "wrapped_body", "else_block", "lambda_if"}
 use("cookbook:findings.shale")
-use("cookbook:roc/house.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/pinned.shale")
+use("./house.shale")
+use("./parsed.shale")
+use("./pinned.shale")
 
 -- A one-item tuple is a pair of parentheses.
 function is_parens(node)

@@ -50,10 +50,10 @@
 const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
 const TABLE_FILE = arg("table", "")
-use("cookbook:roc/declared.shale")
+use("./declared.shale")
 use("cookbook:findings.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/gate_recipe.shale")
+use("./parsed.shale")
+use("./gate_recipe.shale")
 const CHECKS = {"bare_float", "unused_exception"}
 
 -- The table as `{lines, by_name, used}`: its lines in order, each `{name,

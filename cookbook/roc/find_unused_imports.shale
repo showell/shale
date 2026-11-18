@@ -42,8 +42,8 @@
 const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
 use("cookbook:findings.shale")
-use("cookbook:roc/parsed.shale")
-use("cookbook:roc/gate_recipe.shale")
+use("./parsed.shale")
+use("./gate_recipe.shale")
 const CHECKS = {"unused_import"}
 
 -- The first part of a dotted name: `Mod` of `Mod.Type.name`.

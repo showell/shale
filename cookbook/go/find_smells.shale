@@ -35,7 +35,7 @@ const LONG = SELF_TEST and 19 or arg("long", 80)
 const DEEP = SELF_TEST and 4 or arg("deep", 4)
 const PARAMS = SELF_TEST and 6 or arg("params", 6)
 const CHECKS = {"long_func", "deep_block", "many_params", "bool_param"}
-use("cookbook:go/parsed.shale")
+use("./parsed.shale")
 use("cookbook:findings.shale")
 
 const LEVELS = {IfStmt = true, ForStmt = true, RangeStmt = true, SwitchStmt = true, TypeSwitchStmt = true, SelectStmt = true}

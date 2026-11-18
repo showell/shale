@@ -37,7 +37,7 @@ const GLOB = SELF_TEST and (PLANTS .. "*.go") or arg("glob", "**/*.go")
 const TESTS = arg("tests", 1) == 1
 const LOOSE = arg("loose", "") == "1"
 const MIN = SELF_TEST and 3 or arg("min", 3)
-use("cookbook:go/parsed.shale")
+use("./parsed.shale")
 use("cookbook:findings.shale")
 
 const PASS_THROUGH = {SelectorExpr = true, IndexExpr = true, IndexListExpr = true, SliceExpr = true, StarExpr = true, UnaryExpr = true, BinaryExpr = true, ParenExpr = true, TypeAssertExpr = true}
