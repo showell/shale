@@ -513,19 +513,13 @@ enum {
 };
 
 // What is read, once the arguments are checked: the text parsed in a scratch
-// arena of its own, so the reading's own lists are no charge on the arena
-// budget; only the values made from them are.
+// arena of its own, capped by what the run's values arena has left (the
+// DRAGON at arena_init_within), and given back once the values are made.
 static STATUS_MUST_USE Status flat_read(Run *r, Pos pos, Str text, FlatTool tool, FlatEnding ending, Value *out) {
     FlatNames n;
     flat_names(tool, &n);
-    // DRAGON: the arena budget. The reading's own lists are outside it, so a
-    // tool's output holds a few times its bytes in memory no budget counts.
-    // REMEDY: the text is a script's string, under the arena budget (the
-    // prelude's `whole` keep, 64 MB, for a tool's output), and this arena's
-    // own limit, 1 GiB, bounds the rest; its refusal is the arena budget's
-    // stop (`run_values_oom`).
     Arena scratch;
-    arena_init(&scratch, (size_t)1 << 30, &r->ctx.refused);
+    arena_init_within(&scratch, r->ctx.values);
     FlatDump d;
     Status s = flat_parse(&scratch, text, tool, ending, &d);
     if (s != OK) {

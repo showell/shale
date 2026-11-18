@@ -848,14 +848,9 @@ static STATUS_MUST_USE Status regex_compile(Arena *a, Str pattern, RegexOptions 
     // REMEDY: this cap on the pattern's length (REGEX_PATTERN_MAX, 256 bytes),
     // checked before a byte is read, bounds each recursion at 256 levels.
     if (pattern.len > REGEX_PATTERN_MAX) return regex_refuse(refused, REGEX_PATTERN_MAX, S("a pattern of more than 256 bytes"));
-    // DRAGON: the arena budget. The tree is a second arena beside `a`, so a
-    // compile could hold more than the budget's owner gave if the tree had a
-    // limit of its own.
-    // REMEDY: the tree's limit is what `a` had left (`a->limit - a->held`), and
-    // arena_deinit gives the tree back before this returns, so a compile holds
-    // at most twice what was left, at its peak, and nothing after.
+    // The tree is a scratch arena beside `a` (the DRAGON at arena_init_within).
     Arena tree;
-    arena_init(&tree, arena_sat_sub(a->limit, a->held), a->refused);
+    arena_init_within(&tree, a);
     Status s = regex_compile_in(a, &tree, pattern, options, out, refused);
     if (s != OK && !refused->refused) arena_set_hit(a);
     arena_deinit(&tree);

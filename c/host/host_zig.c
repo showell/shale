@@ -946,9 +946,8 @@ typedef Status (*HostZigCall)(Paths *h, HostZigProc *z, Arena *sa, Run *r, Pos p
 // an arena capped by what the run's arena budget has left, as Zig's
 // `Scratch` is, and given back when the call returns.
 static STATUS_MUST_USE Status host_zig_with_scratch(HostZigCall f, Paths *h, HostZigProc *z, Run *r, Pos pos, ConstValues args, Value *out) {
-    Arena *values = r->ctx.values;
     Arena sa;
-    arena_init(&sa, run_sat_sub(values->limit, values->held), &r->ctx.refused);
+    arena_init_within(&sa, r->ctx.values);
     Status s = f(h, z, &sa, r, pos, args, out);
     arena_deinit(&sa);
     return s;

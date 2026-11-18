@@ -586,13 +586,8 @@ static STATUS_MUST_USE Status grep_tree_entry(Run *r, Pos pos, const GrepTreeAsk
     if (!wanted) return OK;
     if (!str_eq(e->kind, S("file"))) return grep_tree_pass(r, pos, ans, e->path, S("a symbolic link, never followed"));
     if (!named) return grep_tree_pass(r, pos, ans, e->path, S("a name the store can't hold"));
-    // DRAGON: the arena budget. A file's bytes in a scratch arena are bytes
-    // the run holds, which the values arena's limit does not see.
-    // REMEDY: the scratch arena's limit is what the values arena has left,
-    // and it refuses with the run's refusal, so a file too big for the run is
-    // the arena budget's stop, as it was in the values arena.
     Arena into;
-    arena_init(&into, run_sat_sub(r->ctx.values->limit, r->ctx.values->held), &r->ctx.refused);
+    arena_init_within(&into, r->ctx.values);
     Status s = grep_tree_file(r, pos, ask, e->path, &into, ans);
     arena_deinit(&into);
     return s;

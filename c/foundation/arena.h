@@ -297,6 +297,21 @@ static inline void arena_free(Arena *a, void *p, size_t len) {
     if (arena_is_last(a, p, len)) a->end -= len;
 }
 
+// Makes `*scratch` an empty arena for one step's own lists, beside `parent`:
+// its limit is what `parent` has left, and it refuses with `parent`'s
+// refusal, so a step too big for the run is the arena budget's stop.
+// arena_deinit it when the step ends.
+// DRAGON: the arena budget. A scratch arena's bytes are bytes the run holds,
+// which `parent`'s limit does not see, so a scratch arena of a limit of its
+// own would let a step hold more than the budget's owner gave.
+// REMEDY: every scratch arena of a run is made here, its limit what
+// `parent` had left, so a step holds at most twice that at its peak (when
+// `parent` grows while the scratch is alive), and nothing once it is
+// deinit.
+static inline void arena_init_within(Arena *scratch, const Arena *parent) {
+    arena_init(scratch, arena_sat_sub(parent->limit, parent->held), parent->refused);
+}
+
 // Every chunk back to the system; the arena is empty, its limit and its
 // refusal kept.
 static inline void arena_deinit(Arena *a) {
