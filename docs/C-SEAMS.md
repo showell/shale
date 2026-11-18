@@ -109,8 +109,8 @@ Zig size and no Zig probe of them.
 
 ## Before `attempt` and yield are ported
 
-The foundation's containers hand out pointers that a growth or a reset
-frees (each marked `DRAGON:` in c/foundation). Nothing in the C holds a
+The foundation's containers hand out pointers that a growth frees (the
+`DRAGON:` at arena.h's `arena_free`). Nothing in the C holds a
 caller to drop them in time, so these tests are written, under ASan, before
 `attempt` and yield are ported, and fail on a read of freed memory:
 

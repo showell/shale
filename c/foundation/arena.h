@@ -14,14 +14,11 @@
 //     to the system when it is freed, so a list grown to megabytes holds its
 //     live buffer, not every one it outgrew.
 //   - Only the last small allocation can grow, shrink or be freed, in place;
-//     any other free gives nothing back until a reset.
+//     any other free gives nothing back until the arena's deinit.
 //   - Past the limit an allocation is refused: it returns NULL and sets `hit`,
 //     and the refusal the arena was made with (`arena_init`'s `refused`, its
 //     run's `RunCtx.refused`). The caller makes that the budget stop
 //     (`run_oom`, err.h), "the arena budget ran out".
-//
-// A mark and a reset give back everything allocated since the mark, small
-// and big alike.
 
 #ifndef SHALE_ARENA_H
 #define SHALE_ARENA_H
@@ -39,18 +36,7 @@ _Static_assert(sizeof(ArenaChunk) == 16, "the chunk header is Zig's 16 bytes");
 enum {
     ARENA_CHUNK_MIN = 16 * 1024,
     ARENA_BIG = 64 * 1024,
-    ARENA_MARKS_MAX = 16,
 };
-
-// What a mark remembers: the arena's place when the mark was opened.
-typedef struct {
-    ArenaChunk *chunk;
-    size_t end;
-    ArenaChunk *bigs;
-    size_t used;
-} ArenaSaved;
-
-SLICE_TYPE(ArenaSavedSlice, ArenaSaved);
 
 typedef struct {
     // DRAGON: the arena budget. The fields are public, so a caller that
@@ -76,9 +62,6 @@ typedef struct {
     size_t end;
     // The big allocations' chunks, one each, newest first.
     ArenaChunk *bigs;
-    // The marks open, innermost last (`arena_mark`).
-    ArenaSaved marks[ARENA_MARKS_MAX];
-    size_t marks_len;
     // For tests: when `backing_faults`, the system refuses once
     // `backing_ok_left` more allocations have been made.
     bool backing_faults;
@@ -99,11 +82,6 @@ static inline void arena_set_hit(Arena *a) {
     a->hit = true;
     *a->refused = true;
 }
-
-// Which mark: a reset gives back what came after it.
-typedef struct {
-    size_t depth;
-} ArenaMark;
 
 // What a zero-length allocation returns: never NULL, never read. It is the
 // alignment as an address, so no compiler takes it for a small object a later
@@ -265,7 +243,7 @@ static inline bool arena_resize(Arena *a, void *p, size_t old_len, size_t new_le
 }
 
 // Gives back `p` of `len`: a big allocation's chunk goes to the system, the
-// last small allocation is unbumped, and any other is kept until a reset.
+// last small allocation is unbumped, and any other is kept until a deinit.
 static inline void arena_free(Arena *a, void *p, size_t len) {
     if (len == 0) return;
     if (len >= ARENA_BIG) {
@@ -283,12 +261,6 @@ static inline void arena_free(Arena *a, void *p, size_t len) {
                 // other holder must drop its pointers before a growth, and
                 // the full tier's ASan fails a test that reads a freed chunk.
                 *link = c->next;
-                // A mark that remembered this chunk as its newest big now
-                // remembers the one before it.
-                ArenaSavedSlice marks = {a->marks, a->marks_len};
-                for (size_t m = 0; m < marks.len; m++) {
-                    if (at(marks, m).bigs == c) at(marks, m).bigs = c->next;
-                }
                 arena_give_back(a, c);
                 return;
             }
@@ -297,44 +269,6 @@ static inline void arena_free(Arena *a, void *p, size_t len) {
         arena_misuse("a free of a big allocation the arena did not make");
     }
     if (arena_is_last(a, p, len)) a->end -= len;
-}
-
-// Opens a mark: `arena_reset` with it gives back everything allocated since.
-// Marks nest, at most `ARENA_MARKS_MAX` deep.
-static inline ArenaMark arena_mark(Arena *a) {
-    if (a->marks_len == ARENA_MARKS_MAX) arena_misuse("more marks open than ARENA_MARKS_MAX");
-    ArenaSaved s = {a->chunk, a->end, a->bigs, a->used};
-    ArenaSavedSlice room = {a->marks, ARENA_MARKS_MAX};
-    at(room, a->marks_len) = s;
-    ArenaMark m = {a->marks_len};
-    a->marks_len++;
-    return m;
-}
-
-// Gives back every chunk, small and big, made since `m`, and closes `m` and
-// every mark opened after it.
-static inline void arena_reset(Arena *a, ArenaMark m) {
-    // DRAGON: use after free. Every chunk made since the mark goes back to
-    // the system, so a pointer into one held by anything older than the mark
-    // dangles: a key in an older map, a stop's message or trail.
-    // REMEDY: only c/tests/test_arena.c resets, on arenas of its own; a run
-    // never does (a yield copies what it keeps into a fresh arena instead).
-    if (m.depth >= a->marks_len) arena_misuse("a reset to a mark that is not open");
-    ArenaSavedSlice open = {a->marks, a->marks_len};
-    ArenaSaved s = at(open, m.depth);
-    while (a->chunk != s.chunk) {
-        ArenaChunk *c = a->chunk;
-        a->chunk = c->next;
-        arena_give_back(a, c);
-    }
-    a->end = s.end;
-    while (a->bigs != s.bigs) {
-        ArenaChunk *c = a->bigs;
-        a->bigs = c->next;
-        arena_give_back(a, c);
-    }
-    a->used = s.used;
-    a->marks_len = m.depth;
 }
 
 // Every chunk back to the system; the arena is empty, its limit and its

@@ -1,6 +1,6 @@
 // arena.h: the budget holds, chunks start at the least and double, big
-// allocations come and go on their own, only the last allocation moves in
-// place, and a reset gives back everything since its mark.
+// allocations come and go on their own, and only the last allocation moves
+// in place.
 
 #include "test.h"
 
@@ -173,59 +173,6 @@ TEST(freeing_the_last_allocation_unbumps_it_and_any_other_is_kept) {
     arena_deinit(&a);
 }
 
-TEST(a_reset_gives_back_everything_since_its_mark) {
-    bool refused = false;
-    Arena a;
-    arena_init(&a, 16 * 1024 * 1024, &refused);
-    EXPECT(arena_alloc(&a, 100, 1) != NULL);
-    size_t held = a.held;
-    size_t used = a.used;
-    ArenaChunk *chunk = a.chunk;
-    ArenaMark m = arena_mark(&a);
-    char *after = arena_alloc(&a, 10, 1);
-    EXPECT(arena_alloc(&a, 20000, 1) != NULL);
-    EXPECT(arena_alloc(&a, 100000, 1) != NULL);
-    EXPECT(a.held > held);
-    arena_reset(&a, m);
-    EXPECT_EQ(a.held, held);
-    EXPECT_EQ(a.used, used);
-    EXPECT(a.chunk == chunk);
-    EXPECT(a.bigs == NULL);
-    EXPECT_EQ(a.marks_len, 0);
-    EXPECT(arena_alloc(&a, 10, 1) == after);
-    arena_deinit(&a);
-}
-
-TEST(a_reset_to_an_outer_mark_closes_the_inner_ones) {
-    bool refused = false;
-    Arena a;
-    arena_init(&a, 16 * 1024 * 1024, &refused);
-    ArenaMark outer = arena_mark(&a);
-    EXPECT(arena_alloc(&a, 10, 1) != NULL);
-    ArenaMark inner = arena_mark(&a);
-    EXPECT(arena_alloc(&a, 100000, 1) != NULL);
-    EXPECT_EQ(a.marks_len, 2);
-    arena_reset(&a, outer);
-    EXPECT_EQ(a.marks_len, 0);
-    EXPECT_EQ(a.held, 0);
-    EXPECT_DIES(arena_reset(&a, inner));
-    arena_deinit(&a);
-}
-
-TEST(a_reset_survives_a_big_from_before_its_mark_freed_after_it) {
-    bool refused = false;
-    Arena a;
-    arena_init(&a, 16 * 1024 * 1024, &refused);
-    char *before = arena_alloc(&a, 100000, 1);
-    ArenaMark m = arena_mark(&a);
-    EXPECT(arena_alloc(&a, 200000, 1) != NULL);
-    arena_free(&a, before, 100000);
-    arena_reset(&a, m);
-    EXPECT_EQ(a.held, 0);
-    EXPECT(a.bigs == NULL);
-    arena_deinit(&a);
-}
-
 TEST(a_refusal_by_the_system_is_a_hit_and_holds_nothing) {
     bool refused = false;
     Arena a;
@@ -383,17 +330,6 @@ TEST(a_misuse_ends_the_process) {
     arena_deinit(&a);
 }
 
-TEST(a_mark_past_the_most_open_ends_the_process) {
-    bool refused = false;
-    Arena a;
-    arena_init(&a, 1 << 20, &refused);
-    for (size_t n = 0; n < ARENA_MARKS_MAX; n++) (void)arena_mark(&a);
-    EXPECT_EQ(a.marks_len, ARENA_MARKS_MAX);
-    EXPECT_DIES((void)arena_mark(&a));
-    EXPECT_EQ(a.marks_len, ARENA_MARKS_MAX);
-    arena_deinit(&a);
-}
-
 TEST_MAIN(
     TEST_CASE(the_budget_refuses_past_its_limit_and_says_it_was_hit),
     TEST_CASE(a_refusal_sets_the_arenas_own_flag_and_no_other),
@@ -405,9 +341,6 @@ TEST_MAIN(
     TEST_CASE(allocations_are_aligned_as_asked),
     TEST_CASE(only_the_last_allocation_grows_in_place),
     TEST_CASE(freeing_the_last_allocation_unbumps_it_and_any_other_is_kept),
-    TEST_CASE(a_reset_gives_back_everything_since_its_mark),
-    TEST_CASE(a_reset_to_an_outer_mark_closes_the_inner_ones),
-    TEST_CASE(a_reset_survives_a_big_from_before_its_mark_freed_after_it),
     TEST_CASE(a_refusal_by_the_system_is_a_hit_and_holds_nothing),
     TEST_CASE(a_zero_length_allocation_holds_nothing_and_is_not_null),
     TEST_CASE(an_array_whose_size_overflows_is_refused),
@@ -416,6 +349,5 @@ TEST_MAIN(
     TEST_CASE(the_arena_never_holds_more_than_its_limit_whatever_grows_in_it),
     TEST_CASE(deinit_gives_back_every_chunk_and_keeps_the_limit),
     TEST_CASE(dup_copies_into_the_arena_and_is_refused_when_full),
-    TEST_CASE(a_misuse_ends_the_process),
-    TEST_CASE(a_mark_past_the_most_open_ends_the_process)
+    TEST_CASE(a_misuse_ends_the_process)
 )

@@ -96,7 +96,7 @@ and its self-test plants a break of each one.
   Zig's names so the two lined up; Zig's `chunk_least` is now
   `ARENA_CHUNK_MIN`.
 - A bound is `_MAX` or `_MIN`, as C's own are (`SIZE_MAX`, `PATH_MAX`):
-  `ARENA_MARKS_MAX`, `ARENA_CHUNK_MIN`, not Zig's `_most` and `_least`.
+  `REGEX_PATTERN_MAX`, `ARENA_CHUNK_MIN`, not Zig's `_most` and `_least`.
 
 ## Comments
 
