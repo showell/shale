@@ -49,7 +49,7 @@ const STORE_PLANTS = {
    old = "if ((uint64_t)st.st_size > room) {", new = "if (0 && (uint64_t)st.st_size > room) {"},
   {name = "the one check lets a host text name a secrets folder", file = "path_run.c", dir = "host", caught_by = "store/test_paths",
    aim = "the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_process",
-   old = "            if (names) c_bug(\"path_run", new = "            if (0 && names) c_bug(\"path_run"},
+   old = "        if (names) c_bug(\"path_run", new = "        if (0 && names) c_bug(\"path_run"},
   {name = "an argument's link to a secrets folder is not followed", file = "paths.c", dir = "host", caught_by = "store/test_paths",
    aim = "secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_the_mount_or_another_way",
    old = "            if (mounts_in_folder(rp, dir)) {", new = "            if (0 && mounts_in_folder(rp, dir)) {"},
