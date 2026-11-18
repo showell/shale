@@ -280,6 +280,19 @@ static STATUS_MUST_USE Status host_env_opt(Run *r, Pos pos, Str k, const Value *
     return OK;
 }
 
+// What `run` keeps of the program's output, decided once where the options
+// are read: the code below switches on it, and never asks which options were
+// given.
+typedef enum {
+    // `head` and `tail` lines (or both), through the filters.
+    HOST_KEEP_LINES,
+    // `whole = N`: every byte, up to N.
+    HOST_KEEP_WHOLE,
+    // `stdout_secret`: stdout to the secret's file, stderr's last
+    // HOST_SECRET_ERR_TAIL lines kept.
+    HOST_KEEP_SECRET,
+} HostKeepMode;
+
 // `run`'s options, as the script gives them. An integer option not given is
 // HOST_UNSET, a value option nil (a script's map never holds nil), and `env`
 // and `secrets` empty. `before`, `after` and `nocase` are 0 or false unset.
@@ -310,6 +323,9 @@ typedef struct {
     Value stage;
     // The program's niceness, 0 to 19; HOST_UNSET leaves `shale`'s.
     uint64_t nice;
+    // Decided from the keep options once they are read: then `head` and
+    // `tail` are 0 unset, and `width` KEEP_WIDTH_DEFAULT.
+    HostKeepMode keep;
 } RunOpts;
 
 // Whether the script gave a value option.
@@ -322,6 +338,38 @@ static STATUS_MUST_USE Status host_str_value_opt(Run *r, Pos pos, Str k, const V
     Str unused = S("");
     TRY(host_str_opt(r, pos, k, x, &unused));
     *out = *x;
+    return OK;
+}
+
+// Decides `o->keep` from the keep options the script gave, holding them to
+// the mode's rules: `stdout_secret` takes no keep, filter or log; `whole`
+// no filter or keep; and without either, `head` or `tail` is required. Then
+// the sizes unset are made what the keep takes.
+static STATUS_MUST_USE Status host_keep_decide(Run *r, Pos pos, RunOpts *o) {
+    bool filtered = host_given(&o->re) || host_given(&o->not_re) || o->before > 0 || o->after > 0 || o->nocase;
+    bool kept = o->head != HOST_UNSET || o->tail != HOST_UNSET;
+    o->keep = host_given(&o->stdout_secret) ? HOST_KEEP_SECRET : o->whole != HOST_UNSET ? HOST_KEEP_WHOLE : HOST_KEEP_LINES;
+    if (o->keep != HOST_KEEP_SECRET && o->secret_replace) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `secret_replace` is `stdout_secret`'s: it says a stored secret may be replaced"));
+    switch (o->keep) {
+    case HOST_KEEP_SECRET:
+        if (o->whole != HOST_UNSET || filtered || kept || o->width != HOST_UNSET || host_given(&o->log)) {
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `stdout_secret` sends stdout to the secret alone, so it takes no keep, filter or log (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`, `width`, `log`): its `out` is stderr's last {d} lines"), MSG_ARGS(MSG_FROM_HOST(S("20"))));
+        }
+        o->tail = HOST_SECRET_ERR_TAIL;
+        break;
+    case HOST_KEEP_WHOLE:
+        if (filtered || kept) {
+            return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `whole` keeps everything, and takes no filter or keep (`re`, `not_re`, `nocase`, `before`, `after`, `head`, `tail`)"));
+        }
+        break;
+    case HOST_KEEP_LINES:
+        if (!kept) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs a keep: `head`, `tail` (or both), or `whole = N`: what to keep of the output is the script's to say"));
+        break;
+    }
+    if ((o->before > 0 || o->after > 0) && !host_given(&o->re)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `before` and `after` are a match's context, and need `re`"));
+    if (o->head == HOST_UNSET) o->head = 0;
+    if (o->tail == HOST_UNSET) o->tail = 0;
+    if (o->width == HOST_UNSET) o->width = KEEP_WIDTH_DEFAULT;
     return OK;
 }
 
@@ -398,25 +446,7 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
     }
     if (o->timeout_ms == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs `timeout_ms`: how long the program may take is the script's to say"));
     if (host_given(&o->stage) && o->cpu_budget_ms == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `stage` names the program in a `cpu_budget_ms` stop, and needs one"));
-    bool filtered = host_given(&o->re) || host_given(&o->not_re) || o->before > 0 || o->after > 0 || o->nocase;
-    bool kept = o->head != HOST_UNSET || o->tail != HOST_UNSET;
-    if (host_given(&o->stdout_secret)) {
-        if (o->whole != HOST_UNSET || filtered || kept || o->width != HOST_UNSET || host_given(&o->log)) {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `stdout_secret` sends stdout to the secret alone, so it takes no keep, filter or log (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`, `width`, `log`): its `out` is stderr's last {d} lines"), MSG_ARGS(MSG_FROM_HOST(S("20"))));
-        }
-        o->tail = HOST_SECRET_ERR_TAIL;
-        return OK;
-    }
-    if (o->secret_replace) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `secret_replace` is `stdout_secret`'s: it says a stored secret may be replaced"));
-    if (o->whole != HOST_UNSET) {
-        if (filtered || kept) {
-            return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `whole` keeps everything, and takes no filter or keep (`re`, `not_re`, `nocase`, `before`, `after`, `head`, `tail`)"));
-        }
-    } else if (!kept) {
-        return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs a keep: `head`, `tail` (or both), or `whole = N`: what to keep of the output is the script's to say"));
-    }
-    if ((o->before > 0 || o->after > 0) && !host_given(&o->re)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`'s `before` and `after` are a match's context, and need `re`"));
-    return OK;
+    return host_keep_decide(r, pos, o);
 }
 
 // ── the refusals ──
@@ -1186,7 +1216,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     bool has_stdin = false;
     Str stdin_bytes = S("");
     TRY(host_run_stdin(r, pos, o, &has_stdin, &stdin_bytes));
-    if (host_given(&o->stdout_secret)) {
+    if (o->keep == HOST_KEEP_SECRET) {
         TRY(host_secret_open(h, r, pos, &o->stdout_secret, o->secret_replace, &held->secret));
         held->has_secret = true;
     }
@@ -1221,15 +1251,18 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     HostPattern patterns[2];
     SLICE_TYPE(HostPatterns, HostPattern);
     HostPatterns pats = {patterns, 2};
-    if (o->whole != HOST_UNSET) {
+    switch (o->keep) {
+    case HOST_KEEP_WHOLE:
         sink_out.whole = &whole_buf;
         sink_out.whole_max = o->whole;
-    } else {
+        break;
+    case HOST_KEEP_LINES:
+    case HOST_KEEP_SECRET: {
         KeepOptions ko;
         keep_options_default(&ko);
-        ko.head = o->head == HOST_UNSET ? 0 : (size_t)o->head;
-        ko.tail = o->tail == HOST_UNSET ? 0 : (size_t)o->tail;
-        ko.width = o->width == HOST_UNSET ? KEEP_WIDTH_DEFAULT : (size_t)o->width;
+        ko.head = (size_t)o->head;
+        ko.tail = (size_t)o->tail;
+        ko.width = (size_t)o->width;
         ko.before = (size_t)o->before;
         ko.after = (size_t)o->after;
         for (size_t i = 0; i < 2; i++) {
@@ -1253,7 +1286,10 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
         }
         if (keep_init(&keeper, sa, ko) != OK) return run_values_oom(r, pos);
         sink_out.keeper = &keeper;
+        break;
     }
+    }
+    bool secret = o->keep == HOST_KEEP_SECRET;
     HostScrub scrub = {secrets, buf_make(sa), buf_make(sa), &sink_out};
     SpawnSink sink = {&scrub, host_scrub_write};
 
@@ -1264,14 +1300,14 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     spec.cwd = cwd;
     spec.env = env;
     spec.stdin_bytes = has_stdin ? &stdin_bytes : NULL;
-    spec.stdout_fd = held->has_secret ? held->secret.file.fd : -1;
+    spec.stdout_fd = secret ? held->secret.file.fd : -1;
     // DRAGON: the budgets. The secret's file is the program's stdout, which
     // no pipe bounds: it could fill the disk before the cap is checked at
     // exit.
     // REMEDY: RLIMIT_FSIZE at the cap plus one, set in the child before exec
     // (spawn.c), so the kernel stops the file one byte past the cap and
     // `host_secret_refuse_over` sees it; test_run_guards prints 10 MB at it.
-    if (held->has_secret) spec.file_max = HOST_SECRET_MAX + 1;
+    if (secret) spec.file_max = HOST_SECRET_MAX + 1;
     if (o->nice != HOST_UNSET) spec.nice = (int)o->nice;
     spec.timeout_ms = o->timeout_ms;
     SpawnOutcome outcome;
@@ -1300,13 +1336,13 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     // Stored only on exit 0, so a failed program leaves nothing half made.
     bool secret_stored = false;
     uint64_t secret_bytes = 0;
-    if (held->has_secret) TRY(host_secret_refuse_over(r, pos, &held->secret, argv0));
-    if (held->has_secret && outcome.ended == SPAWN_EXIT && outcome.code == 0) {
+    if (secret) TRY(host_secret_refuse_over(r, pos, &held->secret, argv0));
+    if (secret && outcome.ended == SPAWN_EXIT && outcome.code == 0) {
         TRY(host_secret_store(r, pos, &held->secret, argv0, o->secret_replace, &secret_bytes));
         secret_stored = true;
     }
     Buf said = buf_make(a);
-    if (held->has_secret) {
+    if (secret) {
         Status s = buf_lit(&said, ", stdout to ");
         if (s == OK) s = buf_str(&said, held->secret.shown);
         if (s == OK && secret_stored) s = buf_lit(&said, " (");
@@ -1324,7 +1360,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     Table *t = NULL;
     TRY(host_run_answer(r, pos, argv, &outcome, &t));
     Str kept_out = S("");
-    if (o->whole != HOST_UNSET) {
+    if (o->keep == HOST_KEEP_WHOLE) {
         if (sink_out.whole_over) {
             return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: the output passed `whole = {d}` bytes ({d}): a keep, `head` and `tail`, takes any size"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, o->whole)), MSG_FROM_HOST(run_unum(r, sink_out.bytes))));
         }
@@ -1345,7 +1381,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
         TRY(run_map_put_int(r, pos, t, S("matched_lines"), (int64_t)kept.matched));
         TRY(run_map_put_int(r, pos, t, S("kept_lines"), (int64_t)kept.kept));
     }
-    if (held->has_secret) {
+    if (secret) {
         TRY(run_map_put_bool(r, pos, t, S("secret_written"), secret_stored));
         TRY(run_map_put_int(r, pos, t, S("secret_bytes"), (int64_t)secret_bytes));
     }
