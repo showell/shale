@@ -1,19 +1,17 @@
 # shale
 
-**Shale** is a small scripting language that looks like Lua, for reading,
-searching and changing a project's files and for running its programs. On
-the box it is built for, agents use it in place of bash, Python, `sed`,
-`awk` and `grep`: a script is written as a heredoc, run, and its output
-read.
+Shale is a small scripting language for working on code. One line greps a
+whole repo. A short script refactors one. Every run is budgeted, confined,
+readable. Agents write it in place of bash, in place of Python.
 
-**Two implementations of one frozen language.** Shale was written in Zig,
-and on 2026-11-17 it was rewritten in C (`c/`), matching the Zig byte for
-byte. **C Shale is the `shale` for all our day-to-day Linux work** on the
-box, and **the golden tests are the one judge of its behaviour**: 1,128
-inputs, each frozen with its output
-([tests/harness/README.md](tests/harness/README.md)). **Zig Shale is still
-the one on bare metal:** angry-gopher's unikernel compiles the Zig sources
-here (`src/`).
+Shale scripts look like Lua. A C runtime reads each one, compiles it to
+bytecode and runs it on a small virtual machine. Its builtins cover the
+common Linux work: reading, editing and searching files, walking folders,
+running programs and background jobs, git, text and JSON. The whole runtime
+builds as one C file, links only the C library, and weighs under a
+megabyte. It currently runs on Linux x86-64, as the only shell on our
+development box: every command our agents issue goes through it, and a hook
+refuses anything else.
 
 ## Why use it instead of bash or Python
 
@@ -185,17 +183,14 @@ own project, and for working on Shale itself.
   the host imports no `std.zig` parser. `zig build` builds it beside
   `shale`; `shale tools/zig_ast/install.shale` installs it where the host
   looks, `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
-- **On a live site:** a signed script, run by the site itself on Zig Shale
-  (`script_route`; Shale's signer, `shale-sign`, was removed on 2026-11-17):
-  [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com), on
-  Linux and on
-  [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel). It
-  names `.shale` in its `build.zig.zon`; the kernel takes `-Dshale-root`.
-  [dog-park](https://github.com/showell/dog-park) ran it too, until that repo
-  was retired on 2026-11-16.
-  The installed suite (`shale_suite`) is built and tested, and no site runs
-  it yet. Every effect goes through zig-webbox's `store`, so a script does
-  the same on Linux and on metal.
+- **On a live site, until 2026-11-18:** Zig Shale ran signed scripts inside
+  [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com),
+  on Linux and on
+  [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel),
+  through its `/admin/script` route. Shale's signer, `shale-sign`, was
+  removed on 2026-11-17, and the route on 2026-11-18, so no site runs Shale
+  now. [dog-park](https://github.com/showell/dog-park) ran it too, until
+  that repo was retired on 2026-11-16.
 
 ## Using Shale with Claude Code on your project
 
@@ -416,7 +411,7 @@ bin=<path>` holds a build of Shale to every golden case, from the outside
 | | |
 |---|---|
 | Source | its history before this repo is zig-webbox's (`git -C ../zig-webbox log -- src/script`) |
-| Runs | C Shale on the box, as every agent's shell (since 2026-11-17); Zig Shale in angry-gopher on Linux and metal, through its build |
+| Runs | C Shale on the box, as every agent's shell (since 2026-11-17); Zig Shale, the first implementation, matched byte for byte by the C, ran in angry-gopher until 2026-11-18 |
 | Tests | the golden tests (`shale tests/golden.shale`, 1,128 cases), the one judge of behaviour; C's own (`shale c/build.shale`) and the Zig modules' unit tests; the request-edge harness for its number parses runs in angry-gopher |
 
 ## Lineage
@@ -433,6 +428,8 @@ a hook refuses every other command, so the language grew from what agents
 actually reached for (`docs/SHALE-WANTS.md` is that ledger). By November
 its design had settled enough to freeze, and on 2026-11-17 it was
 rewritten in C in about a day, against the Zig as its oracle, for faster
-builds and a substrate that needs no LLVM. The bare-metal site still runs
-the Zig, the implementation it was born in; every other `shale` on the box
-is C.
+builds and a substrate that needs no LLVM. The golden tests
+([tests/harness/README.md](tests/harness/README.md)), each input frozen
+with its output, became the one judge of its behaviour. The bare-metal site
+ran the Zig, the implementation Shale was born in, until angry-gopher
+stopped running scripts on 2026-11-18; every `shale` on the box is C.

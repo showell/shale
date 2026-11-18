@@ -197,7 +197,7 @@ and its self-test plants a break of each one.
   the code that made it.
 - What a run starts and ends is held by the run's owner and handed in:
   c/shale.c's run and the tests' `Ran` each hold a `HostZigProc`, which
-  `Host.zig` points at, and each ends it.
+  the host's `zig` field points at, and each ends it.
 - **Held:** no mutable variable of static storage, at file scope or inside a
   function, but those named in `STATICS_KEPT` in c/check_discipline.shale,
   each with why it is the process's and no run's: slice.h's bounds trap,

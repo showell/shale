@@ -1004,7 +1004,7 @@ print(SELF_TEST_PIN)                 -- and its const
 - **A statement at the top level**, with one string literal: never inside
   a block or a function, never a value.
 - **The path is a mount's** (`cookbook:...`, `repos:...`), **or beside the
-  script's own file** (`./items.shale`, `./sub/x.shale`); never the root's
+  script's own file** (`./items.shale`, `./<folder>/x.shale`); never the root's
   or an absolute one: a recipe runs from other repositories' roots, where
   the root's paths are theirs. A `./` path is relative to the folder of
   the script file that holds the `use`, so a recipe and its library load
@@ -1436,9 +1436,9 @@ nest, by their spellings. Symlinks inside the data root are not checked
 (metal has none).
 
 **The signer is gone** (2026-11-17): Shale's `shale-sign`, which made the
-key pair and signed a script, was a relic of bare metal. The route stays
-only while angry-gopher's `admin_script.zig` and its tests import it, and
-goes with them.
+key pair and signed a script, was a relic of bare metal. angry-gopher
+removed its `/admin/script` route on 2026-11-18, so nothing imports the
+route now; it goes with the Zig source.
 
 ## The installed suite: scripts on a schedule
 
