@@ -18,6 +18,7 @@
 #include "buf.h"
 
 #include "../../host/spawn_argv.c"
+#include "../../host/pgroup.c"
 #include "../../host/job_record.c"
 #include "../../host/jobs.c"
 
@@ -282,11 +283,11 @@ TEST(the_reaper_holds_0_1_2_and_its_started_pipe_alone) {
 TEST(a_pgid_below_2_is_refused_before_any_kill_and_a_real_group_is_signalled) {
     // Signal 0 only asks, so the test signals nobody. Unguarded, kill(-1, 0)
     // and kill(0, 0) both succeed.
-    EXPECT(!jobs_signal_group(1, 0));
-    EXPECT(!jobs_signal_group(0, 0));
-    EXPECT(!jobs_signal_group(-7, 0));
+    EXPECT(!pgroup_signal(1, 0));
+    EXPECT(!pgroup_signal(0, 0));
+    EXPECT(!pgroup_signal(-7, 0));
     // The test's own group is there to be asked.
-    EXPECT(jobs_signal_group((int32_t)getpgrp(), 0));
+    EXPECT(pgroup_signal(getpgrp(), 0));
 }
 
 TEST(a_link_planted_at_the_records_temp_file_is_replaced_never_followed) {

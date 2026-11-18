@@ -11,8 +11,8 @@
 // ended. The record, `<log>.job`, is job_record.c's `key=value` lines, each
 // write a new file renamed over the old.
 //
-// Include spawn_argv.c and job_record.c first. The including file defines
-// _GNU_SOURCE before its first include, for pipe2 and syscall.
+// Include spawn_argv.c, pgroup.c and job_record.c first. The including file
+// defines _GNU_SOURCE before its first include, for pipe2 and syscall.
 
 #include <errno.h>
 #include <fcntl.h>
@@ -74,20 +74,6 @@ static bool jobs_reaper_alive(const JobRecord *r) {
     return str_eq(s, r->reaper_start);
 }
 
-// Signals the group `pgid`; whether the kernel took it. A pgid below 2 is
-// refused before any `kill`.
-static bool jobs_signal_group(int32_t pgid, int sig) {
-    // DRAGON: the process boundary. A pgid comes from a record's text, and
-    // kill(-1) signals every process `shale` may signal, kill(0) this
-    // process's own group.
-    // REMEDY: the reaper's fork gives a leader's pid, never 0 or 1, so a
-    // pgid below 2 is a forged or broken record's, and is refused here.
-    // job_record.c refuses a record whose pgid is not its pid, but a record
-    // is any text a file holds, so that is no proof of a fork's pid.
-    if (pgid < 2) return false;
-    return kill(-pgid, sig) == 0;
-}
-
 // How long what a job's leader left in its group has, after the TERM at the
 // leader's exit, before it is KILLed (`jobs_stop`'s and `run`'s grace), and
 // how often the group is asked whether it is empty, as spawn.c asks.
@@ -100,7 +86,7 @@ static bool jobs_alive(const JobRecord *r) {
     JobsStat room;
     Str s = S("");
     if (jobs_start_of(&room, r->pid, &s)) return str_eq(s, r->start);
-    return jobs_signal_group(r->pgid, 0);
+    return pgroup_signal(r->pgid, 0);
 }
 
 static void jobs_sleep_ms(uint64_t ms) {
@@ -123,14 +109,14 @@ static void jobs_signal_leader(const JobRecord *r, int sig) {
 // not close it.
 static bool jobs_stop(const JobRecord *r, uint64_t grace_ms) {
     if (!jobs_alive(r)) return false;
-    jobs_signal_group(r->pgid, SIGTERM);
+    pgroup_signal(r->pgid, SIGTERM);
     // A leader that has not made its group yet is not reached by it.
     jobs_signal_leader(r, SIGTERM);
     for (uint64_t waited = 0; waited < grace_ms; waited += 50) {
         if (!jobs_alive(r)) return true;
         jobs_sleep_ms(50);
     }
-    jobs_signal_group(r->pgid, SIGKILL);
+    pgroup_signal(r->pgid, SIGKILL);
     jobs_signal_leader(r, SIGKILL);
     // The reaper reaps the leader; a little wait for it and the group to go.
     for (uint64_t waited = 0; waited < JOBS_GROUP_GRACE_MS && jobs_alive(r); waited += 20) jobs_sleep_ms(20);
@@ -336,7 +322,7 @@ static JobsLaunched jobs_launch(Arena *a, Str reaper, Str record, Str log, Str c
     // again (host_jobs_find), and what it says (`pid`, `pgid`, `start`)
     // decides what `jobs_stop` and `jobs_alive` send `kill`.
     // REMEDY: job_record.c reads only a record whose pgid is its pid, and
-    // jobs_signal_group refuses a pgid below 2, so no record reaches kill(-1)
+    // pgroup_signal refuses a pgid below 2, so no record reaches kill(-1)
     // or this process's own group. What is left: a forged record can name
     // any process or process group of the user's, which is no more than a
     // script can already do with `run({"kill", ...})`.
@@ -377,30 +363,17 @@ static bool jobs_write_record(const char *record, const char *tmp, JobRecord r) 
     return true;
 }
 
-// Whether no process is left in the group `pgid`. Asked only once its
-// leader is reaped: until then the leader's zombie is a member.
-static bool jobs_group_gone(int32_t pgid) {
-    return kill(-pgid, 0) != 0 && errno == ESRCH;
-}
-
 // Waits, once a job's leader is reaped and its group has had its TERM, for
 // the group to empty: KILL at `grace_ms`, then up to `grace_ms` more for a
 // process stuck in the kernel, which is then left, so the job's end is still
 // written. A process that left the group (`setsid`) is not waited for.
 static void jobs_end_group(int32_t pgid, uint64_t grace_ms) {
     bool killed = false;
-    for (uint64_t waited = 0; !jobs_group_gone(pgid); waited += JOBS_GROUP_TICK_MS) {
+    for (uint64_t waited = 0; !pgroup_gone(pgid); waited += JOBS_GROUP_TICK_MS) {
         if (waited >= 2 * grace_ms) return;
-        // DRAGON: once the leader is reaped, its pid stays the group's id
-        // only while a member is left; a group that empties frees it, and a
-        // new group given the id would be signalled.
-        // REMEDY: the KILL goes only to a group `jobs_group_gone` found not
-        // empty a moment before, whose members hold the id; a group that
-        // empties in that moment is the one window left, as in spawn.c. A
-        // leader KILLed before its `setsid` never made the group, so its id
-        // is free from the reap, and the same check guards it.
+        // The leader is reaped (the DRAGON at pgroup_kill_left).
         if (!killed && waited >= grace_ms) {
-            jobs_signal_group(pgid, SIGKILL);
+            pgroup_kill_left(pgid);
             killed = true;
         }
         jobs_sleep_ms(JOBS_GROUP_TICK_MS);
@@ -492,7 +465,7 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
     // The record is a job's only handle, so a job whose first record cannot
     // be written is killed, and `jobs_launch` says JOBS_NO_RECORD.
     if (!jobs_write_record(record, tmp, r)) {
-        kill(-r.pgid, SIGKILL);
+        pgroup_signal(r.pgid, SIGKILL);
         kill(pid, SIGKILL);
         int st = 0;
         spawn_reap(pid, &st, NULL);
@@ -514,7 +487,7 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
         if (waitid(P_PID, (id_t)pid, &info, WEXITED | WNOWAIT) == 0) break;
         if (errno != EINTR) c_bug("jobs: the reaper's wait for its job's leader failed");
     }
-    jobs_signal_group(r.pgid, SIGTERM);
+    pgroup_signal(r.pgid, SIGTERM);
     int raw = 0;
     spawn_reap(pid, &raw, NULL);
     if (WIFEXITED(raw)) {

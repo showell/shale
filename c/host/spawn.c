@@ -25,7 +25,8 @@
 // does nothing, so a write to a closed stdin is an error, not a death, and a
 // program still starts with SIGPIPE's default.
 //
-// Include spawn_argv.c first: its strings and pipes are jobs.c's too.
+// Include spawn_argv.c and pgroup.c first: spawn_argv.c's strings and pipes
+// are jobs.c's too.
 
 #ifndef _GNU_SOURCE
 #error "spawn.c needs _GNU_SOURCE defined before the first include: pipe2, wait4, signalfd and syscall"
@@ -378,12 +379,6 @@ static void spawn_step(bool exited, bool group_done, bool has_termed, uint64_t t
     *out = s;
 }
 
-// Whether no process is left in the group `pgid`. Asked only once its
-// leader is reaped: until then the leader's zombie is a member.
-static bool spawn_group_gone(pid_t pgid) {
-    return kill(-pgid, 0) != 0 && errno == ESRCH;
-}
-
 // Whether the signalfd held a TERM or HUP, taking it.
 static bool spawn_take_signal(int sig_fd) {
     struct signalfd_siginfo info;
@@ -404,7 +399,7 @@ static void spawn_heard(SpawnLoop *l) {
 // whether its group is gone, and whether it is done (gone, or left a grace
 // after its KILL).
 static void spawn_settle(SpawnLoop *l, uint64_t grace_ms, uint64_t now) {
-    if (l->exited && !l->group_gone) l->group_gone = spawn_group_gone(l->pid);
+    if (l->exited && !l->group_gone) l->group_gone = pgroup_gone(l->pid);
     l->group_done = l->exited && (l->group_gone || (l->killed && now >= l->killed_at + grace_ms));
 }
 
@@ -414,24 +409,18 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
     uint64_t now = spawn_mono_ms();
     SpawnStep step;
     spawn_step(l->exited, l->group_done, l->has_termed, l->termed_at, l->killed, l->deadline, spec->grace_ms, l->drain_until, now, &step);
-    // DRAGON: the process boundary. `kill(-pid)` signals the whole group, so
-    // `pid` must still be the group's id. Once no process holds it, the
-    // kernel may give it to a new process and group, which would be
-    // signalled; and -pid of 0 or 1 would signal this group or every process.
-    // REMEDY: before the reap, the leader's zombie holds the id, so the TERM
-    // at its exit and every signal while it runs are safe. After the reap, a
-    // KILL goes only to a group `spawn_settle` found not gone this turn,
-    // whose members hold the id; a group that empties in that moment is the
-    // one window left. `pid` is fork's, never 0 or 1.
+    // The TERM goes only to a leader not yet reaped, and the KILL, which may
+    // come after the reap, asks first whether the group is gone (the DRAGONs
+    // at pgroup_signal and pgroup_kill_left).
     if (step.term) {
         l->has_why = true;
         l->why = SPAWN_TIMEOUT;
-        kill(-l->pid, SIGTERM);
+        pgroup_signal(l->pid, SIGTERM);
         l->has_termed = true;
         l->termed_at = now;
     }
     if (step.kill) {
-        kill(-l->pid, SIGKILL);
+        pgroup_kill_left(l->pid);
         l->killed = true;
         l->killed_at = now;
     }
@@ -484,13 +473,13 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
         // pid is still the group's id: what it left running in the group
         // gets TERM now, the grace and the KILL after.
         if (!l->has_termed) {
-            kill(-l->pid, SIGTERM);
+            pgroup_signal(l->pid, SIGTERM);
             l->has_termed = true;
             l->termed_at = spawn_mono_ms();
         }
         if (spawn_reaped_now(l->pid, &l->raw, &l->usage)) {
             l->exited = true;
-            l->group_gone = spawn_group_gone(l->pid);
+            l->group_gone = pgroup_gone(l->pid);
             // All the leader wrote is in the pipe now, though this poll may
             // have looked before it was. Read it before the drain starts, so
             // the drain bounds only what outlives the leader.
@@ -502,7 +491,7 @@ static STATUS_MUST_USE Status spawn_turn(SpawnLoop *l, const SpawnSpec *spec, By
     if (at(fds, sig_at).revents != 0 && spawn_take_signal(l->sig_fd)) {
         spawn_heard(l);
         if (!l->exited && !l->has_termed) {
-            kill(-l->pid, SIGTERM);
+            pgroup_signal(l->pid, SIGTERM);
             l->has_termed = true;
             l->termed_at = spawn_mono_ms();
         }
@@ -529,7 +518,7 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     // untracked.
     int pid_fd = (int)syscall(SYS_pidfd_open, pid, 0);
     if (pid_fd < 0) {
-        kill(-pid, SIGKILL);
+        pgroup_signal(pid, SIGKILL);
         int status = 0;
         spawn_reap(pid, &status, NULL);
         return SPAWN_REFUSED;
@@ -564,10 +553,10 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
             // the program ends; without this the program would run on, then
             // linger as a zombie, or what it left in its group would.
             if (!l.exited) {
-                kill(-pid, SIGKILL);
+                pgroup_signal(pid, SIGKILL);
                 spawn_reap(pid, &l.raw, NULL);
             }
-            if (l.exited && !l.group_gone) kill(-pid, SIGKILL);
+            if (l.exited && !l.group_gone) pgroup_kill_left(pid);
             result = SPAWN_SINK_STOPPED;
             break;
         }

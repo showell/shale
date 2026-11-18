@@ -15,6 +15,7 @@
 
 #include "../../host/keep.c"
 #include "../../host/spawn_argv.c"
+#include "../../host/pgroup.c"
 #include "../../host/spawn.c"
 
 #ifndef SPAWN_FIXTURE

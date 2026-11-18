@@ -114,7 +114,7 @@ static void host_zig_stop(HostZigProc *p) {
         nanosleep(&ten, NULL);
     }
     if (!reaped) {
-        kill(-p->pid, SIGKILL);
+        pgroup_signal(p->pid, SIGKILL);
         spawn_reap(p->pid, &status, NULL);
     }
     host_zig_close(&p->out_r);
@@ -207,7 +207,7 @@ static bool host_zig_wait(HostZigProc *p, int fd, short events) {
     for (;;) {
         uint64_t now = host_zig_mono_ms();
         if (now >= p->deadline) {
-            kill(-p->pid, SIGKILL);
+            pgroup_signal(p->pid, SIGKILL);
             p->late = true;
             return false;
         }
