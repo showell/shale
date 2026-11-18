@@ -53,11 +53,11 @@
 -- it needs, so each test file is one compile, under tcc or GCC alike.
 --
 -- Plants are one-time proofs that a test can see its fault, so they live in
--- the full tier alone: a change that adds or moves a test or a plant runs
--- `full=1` before it merges. A plant runs only when its text, its file or
--- its tests' files changed since it was last caught (lib.shale, "Proofs");
--- `full=1 plants=all` runs every one, after a change a proof cannot see:
--- the compilers, test.h, or c/build's plant machinery. A block's plants are a list it hands to
+-- the full tier alone, and run only when asked: `full=1 plants=due` runs
+-- those whose text, file or tests' files changed since each was last caught
+-- (lib.shale, "Proofs"), and `full=1 plants=all` runs every one, after a
+-- change a proof cannot see: the compilers, test.h, or c/build's plant
+-- machinery. A plain `full=1` runs none. A block's plants are a list it hands to
 -- `run_plants(t, phase, plants, extra?)`, each planted in a copy of
 -- c/foundation, c/script and c/host (`dir` names the folder), and each
 -- naming in `aim` the tests that catch it: its test file runs those alone
@@ -74,7 +74,7 @@
 -- first build's run, in a tier that runs as ever: a deliberate change's
 -- refreeze, whose commit says why.
 --
--- Run from the repository's root: shale c/build.shale [full=1 [plants=all]] [refreeze=...]
+-- Run from the repository's root: shale c/build.shale [full=1 [plants=due|all]] [refreeze=...]
 -- budget: programs=200 arena_bytes=268435456
 
 const OUT = "c/out"
@@ -100,8 +100,9 @@ function seconds(ms)
 end
 
 -- The table of each phase's programs, wall time and CPU time, every block's
--- in BLOCKS' order, as each wrote them to c/out/phases.
-function report_phases(full)
+-- in BLOCKS' order, as each wrote them to c/out/phases; `plants` is the
+-- run's `plants=` (empty for none).
+function report_phases(full, plants)
   local rows = {}
   local ms = 0
   local cpu = 0
@@ -133,7 +134,11 @@ function report_phases(full)
       ran = ran + pl.ran
       skipped = skipped + pl.skipped
     end
-    print("plants: " .. ran .. " ran, " .. skipped .. " skipped as already proven (`plants=all` runs every one)")
+    if plants == "" then
+      print("plants: none run (`plants=due` runs those whose proof is stale, `plants=all` every one)")
+    else
+      print("plants: " .. ran .. " ran, " .. skipped .. " skipped as already proven (`plants=all` runs every one)")
+    end
   end
   if full then
     print("* its runs overlap: its wall is the clock's, and its CPU every program's, two at a time as jobs (c/build/job.shale) or in the foreground")
@@ -176,10 +181,14 @@ if exists(mounts) then replace(mounts, mount_line) else create(mounts, mount_lin
 for d in {"phases", "plan", "jobs", "plants"} do
   if exists(OUT .. "/" .. d) then remove_tree(OUT .. "/" .. d) end
 end
--- `plants=all` forgets every plant's proof (c/build/lib.shale, "Proofs"),
--- so the full tier runs each one again.
+-- No plant runs unless asked (Steve, 2026-11-18: a refactor's care goes into
+-- reading it, not into re-proving tests). `plants=due` runs the plants whose
+-- proof is stale (c/build/lib.shale, "Proofs"); `plants=all` forgets every
+-- proof and runs each one.
 local plants = arg("plants", "")
-if plants ~= "" and (plants ~= "all" or not full) then fail("plants=" .. plants .. ": the one value is `all`, with full=1") end
+if plants ~= "" and ((plants ~= "all" and plants ~= "due") or not full) then fail("plants=" .. plants .. ": `due` or `all`, with full=1") end
+if exists(OUT .. "/plants_mode") then remove(OUT .. "/plants_mode") end
+if plants ~= "" then create(OUT .. "/plants_mode", plants .. "\n") end
 if plants == "all" and exists(OUT .. "/proofs") then remove_tree(OUT .. "/proofs") end
 
 -- The block `b` run (c/build/<b>.shale) with `args`; its output printed
@@ -316,7 +325,7 @@ if full then
   if exists(file) then replace(file, text) else create(file, text) end
 end
 
-report_phases(full)
+report_phases(full, plants)
 if tcc == nil then
   fail("tcc is not installed, so the inner loop did not run: `sudo apt install tcc` (Ubuntu noble's tcc 0.9.27+git20200814)")
 end

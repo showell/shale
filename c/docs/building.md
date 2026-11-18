@@ -78,12 +78,16 @@ a plant is caught, its proof is kept in `c/out/proofs/<phase>.json`, not
 tracked: the plant's own text (its fields and the block's flags) and the
 git hash of each file it stands on, the file it plants its fault in and
 the test file of its aimed tests (and, for a part, the binary it builds;
-for the harness fixture's plants, the fixture and its `.expected`). The
-next full tier skips a plant whose proof is the one kept and runs one whose
-text or files changed, and each block says how many ran and how many were
-skipped as already proven, with the tier's total under its table of
-phases. A skipped plant is still held to the tree: its `old` must be in its
+for the harness fixture's plants, the fixture and its `.expected`).
+
+**A plain `full=1` runs no plants** (Steve, 2026-11-18: the care goes into
+reading a refactor and judging its risk, and a clearly safe change is tested
+minimally). Every plant is still held to the tree: its `old` must be in its
 file exactly once and its aim must name its tests, or the tier fails, loud.
+**`full=1 plants=due`** runs the plants whose proof is stale (their text or
+files changed) and skips the rest, each block saying how many ran and how
+many were skipped as already proven. Use it when a lane changes a test or a
+plant, or the code a plant guards in a way that matters.
 **`full=1 plants=all`** forgets every proof and runs every plant. Use it
 after a change no proof can see: a new compiler, a change to test.h (the
 harness every plant's run goes through), to `c/build/lib.shale`'s plant

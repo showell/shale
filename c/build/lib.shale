@@ -641,6 +641,8 @@ end
 -- c/build.shale's line, which forgets every proof.
 
 const PROOFS = "c/out/proofs"
+-- Present when the run asked for plants (`plants=due` or `plants=all`).
+const PLANTS_MODE = "c/out/plants_mode"
 
 -- The files plant `p`'s proof stands on: the file it plants its fault in,
 -- and the test file of its aimed tests and the binary it builds (the same
@@ -746,6 +748,10 @@ end
 -- plants' copies and plans their compiles, and runs nothing.
 function run_plants(t, phase, plants, extra?)
   local d = plants_due(t, phase, plants, extra)
+  -- c/build.shale writes PLANTS_MODE for `plants=due` or `plants=all`; with
+  -- none, no plant runs and no proof is written, though every plant's text
+  -- is still held to the tree above.
+  if not exists(PLANTS_MODE) then d.due = {} end
   if t.stage == "plan" then
     for x in d.due do
       if get(x.p, "build", "tcc") == "asan" and x.p.caught_by ~= "harness" then start_plant(t, phase, x.p, x.k, extra) end
@@ -762,10 +768,13 @@ function run_plants(t, phase, plants, extra?)
   end
   if pending ~= nil then push(said, finish_plant(t, pending)) end
   -- Every plant due was caught (one that wasn't stopped the run), and the
-  -- rest kept their proofs: every plant is proven now.
-  mkdir(PROOFS)
-  local f = proofs_file(phase)
-  if exists(f) then replace(f, json_write(d.proofs)) else create(f, json_write(d.proofs)) end
+  -- rest kept their proofs: every plant is proven now. A run that asked for
+  -- no plants proved nothing, so it keeps no proofs.
+  if exists(PLANTS_MODE) then
+    mkdir(PROOFS)
+    local f = proofs_file(phase)
+    if exists(f) then replace(f, json_write(d.proofs)) else create(f, json_write(d.proofs)) end
+  end
   phase_wall(t, phase, clock_ms() - t0)
   local skipped = #plants - #d.due
   t.plants.ran = t.plants.ran + #d.due
