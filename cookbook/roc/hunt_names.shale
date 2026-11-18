@@ -226,7 +226,11 @@
 --                 by a function that only makes a value, so name it for that
 --                 value (`tree_shapes`). A verb that says what happens to its
 --                 argument is fine (`plus`, `clamp`, `trim_hull`). An effect,
---                 which does act, and a value are not reported.
+--                 which does act, and a value are not reported. A `##` doc
+--                 directly above the definition (or its annotation) answers
+--                 it, saying why the verb stands: a renderer named for what
+--                 its output is drawn as, as `single`'s doc answers it in
+--                 check_boundaries.
 --   where_name    A method in a `where` clause named by one word
 --                 (`[a.height : a -> U64]`). A clause matches by name alone,
 --                 so the name is the whole contract: two words say what it is
@@ -453,6 +457,12 @@ end
 -- annotation mentions, and `args`, each argument's `argument_shape`.
 -- `callback` says it takes an effectful function, an argument whose source
 -- holds `=>`.
+-- Whether a `##` doc stands directly above line `line` of `src`: the
+-- answer a definition gives `world_verb`.
+function has_doc_above(src, line)
+  return line > 1 and starts_with(trim(src[line - 1]), "##")
+end
+
 function annotation_definition(path, src, tree, i)
   local def = {path = path, line = tostring(tree[i].line), name = attribute(tree, i, "name"), owner = owner_of(tree, i), annotation = true, fn = false, callback = false, paired = false}
   local kids = children(tree, i)
@@ -569,6 +579,7 @@ function read_definitions(parsed_files)
       end
       if outer[i] and kind == "s-type-anno" then
         local def = annotation_definition(path, src, tree, i)
+        if def ~= nil then def.has_doc = has_doc_above(src, tree[i].line) end
         if def ~= nil and not is_dictated(tree, i, def, dictated) then
           push(definitions, def)
           annotation_records[tostring(i)] = def
@@ -576,6 +587,7 @@ function read_definitions(parsed_files)
       end
       if outer[i] and kind == "s-decl" then
         local def = value_definition(path, tree, i)
+        if def ~= nil then def.has_doc = has_doc_above(src, tree[i].line) end
         if def ~= nil and not is_dictated(tree, i, def, dictated) then
           local above = get(annotation_records, tostring(previous_sibling(tree, i)))
           if above ~= nil and above.name == def.name then
@@ -840,7 +852,7 @@ function judge_definition(def)
     elseif signature.known then
       judge_list_name({path = path, line = line, name = full_name, kind = signature.is_function and "function" or "value", is_function = signature.is_function, first = signature.first, gives = signature.result})
     end
-    if not has_bang and is_function and has_key(WORLD_VERBS, ws[1]) then report(path, line, "world_verb", "`" .. full_name .. "` is pure, and `" .. ws[1] .. "` claims to act on something outside: name it for the value it gives (`tree_shapes`, not `draw_tree`)") end
+    if not has_bang and is_function and has_key(WORLD_VERBS, ws[1]) and not get(def, "has_doc", false) then report(path, line, "world_verb", "`" .. full_name .. "` is pure, and `" .. ws[1] .. "` claims to act on something outside: name it for the value it gives (`tree_shapes`, not `draw_tree`)") end
     local argument_types = get(def, "argument_types", {})
     local parameters = get(def, "parameters", {})
     for k = 1, #parameters do
