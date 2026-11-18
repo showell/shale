@@ -78,7 +78,9 @@
 --               effect needs a `!` in its name. Roc refuses a generic
 --               constant, so a function whose annotated return type holds a
 --               type variable (`{} -> Viewer(id)`) is quiet. An unannotated
---               function's type is unknown, so it is checked.
+--               function's type is unknown, so it is checked. A `##` doc
+--               above it (or its annotation) answers it, giving the reason
+--               it stays a function, as a `##` doc answers `single`.
 --   dead        A top-level or member function that nothing reaches in the
 --               files read: no production call, no `expect`, no test file, and
 --               no reference to it as a value, a record's shorthand
@@ -761,7 +763,7 @@ for key in sort(keys(FUNCTIONS)) do
       end
     end
   end
-  if func.takes_empty_record_alone and not contains(func.name, "!") and not is_test_file(func.path) then
+  if func.takes_empty_record_alone and not contains(func.name, "!") and not is_test_file(func.path) and func.doc_lines == 0 then
     report(func.path, func.line, "constant", "`" .. name .. "` takes `{}` alone and names no effect, so it gives the same value every call: a constant (`" .. func.name .. " = ...`), or a `!` if it has an effect")
   end
   if judged and #func.params > 1 and has_key(checker_types.real, func.path) then
