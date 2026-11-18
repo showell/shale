@@ -136,8 +136,8 @@ to it. (The line was 90 s until 2026-11-17, when the idle tier measured
 
 ## After the cut-over
 
-Each step is measured with `bench/baseline.shale` against Zig Shale's
-numbers, and taken only if it pays.
+Each step is measured with `bench/baseline.shale` against the last C
+baseline (`bench/baselines/`), and taken only if it pays.
 
 1. **GCC `-O2`, as one translation unit:** the default release build.
 2. **A baseline CPU, chosen once:** `-march=x86-64-v2` or `-v3`, for the
