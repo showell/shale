@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:384:53 (in `the Linux prelude's grep_tree`): store: `stat("src")`: not found (FileNotFound): `exists(p)` asks first (157 steps)
+── stopped at the Linux prelude:384:53 (in `the Linux prelude's grep_tree`): store: `stat("src")`: not found (FileNotFound): `exists(p)` asks first (153 steps)
    called from {base}/case/script.shale:1:11
-── used: 157 of 5000000 steps, 2 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
-── steps: 157 in all; the most 147 (93%): grep_tree, 1 call; 10 (6%): script
+── used: 153 of 5000000 steps, 2 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
+── steps: 153 in all; the most 143 (93%): grep_tree, 1 call; 10 (6%): script
