@@ -295,7 +295,7 @@ TEST(a_use_binds_its_consts_on_its_line_and_its_functions_load_at_their_call) {
     EXPECT_STR(at(r.prog.functions, 0).name, S("cookbook:lib.shale's lim"));
     arena_deinit(&r.arena);
     parse_with(&r, S("use(\"cookbook:gone.shale\")\n"), none, &lib);
-    expect_stop(&r, 1, 1, CLASS_STORE, S("`use(\"cookbook:gone.shale\")`: not found"));
+    expect_stop(&r, 1, 1, CLASS_FILE_SYSTEM, S("`use(\"cookbook:gone.shale\")`: not found"));
     arena_deinit(&r.arena);
     parse_with(&r, S("use(\"/abs/lib.shale\")\n"), none, &lib);
     expect_stop(&r, 1, 1, CLASS_ARGUMENT, S("`use(\"/abs/lib.shale\")`: a library is named through a mount, `name:path` (`cookbook:roc/pinned.shale`), or beside the script's own file, `./name.shale`; never by an absolute path or the root's: a script runs from other repositories' roots"));

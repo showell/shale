@@ -18,8 +18,8 @@ pub const Class = enum {
     argument,
     /// A budget ran out (`Stop.budget` names which).
     budget,
-    /// A store call failed.
-    store,
+    /// A file system call failed.
+    file_system,
     /// The script's own stop, `fail(msg)`, with its message as given.
     /// `attempt` catches it.
     fail,

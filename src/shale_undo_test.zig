@@ -97,7 +97,7 @@ test "undo: a change past the journal's room, a file it cannot read, a path neit
     try t.put("sealed.txt", "s\n");
     const sealed = try std.fmt.allocPrintSentinel(a, "{s}/sealed.txt", .{t.root}, 0);
     try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(sealed, 0o000));
-    try onceStop(&t, "replace(\"sealed.txt\", \"x\")", .store, "sealed.txt cannot be read (AccessDenied), so it could not be put back");
+    try onceStop(&t, "replace(\"sealed.txt\", \"x\")", .file_system, "sealed.txt cannot be read (AccessDenied), so it could not be put back");
     try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(sealed, 0o600));
 
     // A named pipe.
@@ -110,7 +110,7 @@ test "undo: a change past the journal's room, a file it cannot read, a path neit
     const locked = try std.fmt.allocPrintSentinel(a, "{s}/locked", .{t.root}, 0);
     try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(locked, 0o000));
     defer _ = std.os.linux.chmod(locked, 0o700);
-    try onceStop(&t, "append(\"locked/x.txt\", \"x\")", .store, "locked/x.txt cannot be looked at (AccessDenied), so it could not be put back");
+    try onceStop(&t, "append(\"locked/x.txt\", \"x\")", .file_system, "locked/x.txt cannot be looked at (AccessDenied), so it could not be put back");
     try testing.expectEqual(@as(usize, 0), t.host.journal.items.len);
 }
 
@@ -130,7 +130,7 @@ test "undo: the journal's own allocations failing, at each, stop the run on memo
         errdefer std.debug.print("at {d}: {s}: {s}\n", .{ i, @tagName(s.class), s.message });
         // A failed read of a.txt's bytes is the store's, named; any other
         // failure is the arena's budget.
-        if (s.class == .store) {
+        if (s.class == .file_system) {
             try testing.expect(std.mem.indexOf(u8, s.message, "a.txt cannot be read (OutOfMemory)") != null);
         } else {
             try testing.expectEqual(.budget, s.class);

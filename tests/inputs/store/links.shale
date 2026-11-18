@@ -1,4 +1,4 @@
--- Symbolic links, which the store never follows, met by walk, ls, stat and
+-- Symbolic links, which the file system never follows, met by walk, ls, stat and
 -- exists.
 -- differ-before: fixture/setup.shale
 function paths(l)

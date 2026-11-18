@@ -346,7 +346,7 @@ function grep_tree_skip(e, rest, exts, name_like)
   end
   if name_like ~= "" and not like(basename(e.path), name_like) then return nil end
   if e.kind ~= "file" then return "a symbolic link, never followed" end
-  if not named then return "a name the store can't hold" end
+  if not named then return "a name the file system can't hold" end
   if e.size > 0 and contains(read(e.path, 0, 4096), "\0") then return "binary" end
   return ""
 end
@@ -908,7 +908,7 @@ end
 -- the dev channel went to `cp -r` through `run`): `from` copied to `to`, which
 -- must not exist yet, so a copy never overwrites. A folder is copied whole,
 -- hidden files and all, and a symbolic link anywhere in it stops the copy
--- before anything is written, since the store follows none. Each file is one
+-- before anything is written, since the file system follows none. Each file is one
 -- read and one change, so the run's read and change budgets bound it, and a
 -- file past the call-bytes cap stops it. Each file keeps its source's mode
 -- bits (the host's `copy_mode`). The answer is how many files were copied.
@@ -921,7 +921,7 @@ function copy(from, to)
   end
   local entries = walk_all(from, {})
   for e in entries do
-    if e.kind ~= "file" and e.kind ~= "directory" then fail("`copy`: " .. e.path .. " is a symbolic link, which the store never follows; nothing was copied") end
+    if e.kind ~= "file" and e.kind ~= "directory" then fail("`copy`: " .. e.path .. " is a symbolic link, which the file system never follows; nothing was copied") end
   end
   local prefix = from .. "/"
   if ends_with(from, ":") then prefix = from end

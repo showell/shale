@@ -489,7 +489,7 @@ static STATUS_MUST_USE Status grep_tree_hits(Run *r, Pos pos, const GrepTreeAsk 
             // length gives what it gave, with no loop over what is not there.
             int64_t first = around >= m.line ? 1 : m.line - around;
             for (int64_t i = first; i <= m.line - 1; i++) {
-                if ((uint64_t)i > all.len) return run_failf(r, pos, CLASS_STORE, "`grep_tree`: {s} changed while it was searched", S("`grep_tree`: "), path, S(" changed while it was searched"));
+                if ((uint64_t)i > all.len) return run_failf(r, pos, CLASS_FILE_SYSTEM, "`grep_tree`: {s} changed while it was searched", S("`grep_tree`: "), path, S(" changed while it was searched"));
                 TRY(run_charge(r, pos, 1));
                 TRY(grep_tree_push_line(r, pos, before, i, at(all, (size_t)i - 1).text));
             }
@@ -567,7 +567,7 @@ static STATUS_MUST_USE Status grep_tree_entry(Run *r, Pos pos, const GrepTreeAsk
     TRY(grep_tree_wanted(r, pos, ask, e, rest, &wanted, &named));
     if (!wanted) return OK;
     if (!str_eq(e->kind, S("file"))) return grep_tree_pass(r, pos, ans, e->path, S("a symbolic link, never followed"));
-    if (!named) return grep_tree_pass(r, pos, ans, e->path, S("a name the store can't hold"));
+    if (!named) return grep_tree_pass(r, pos, ans, e->path, S("a name the file system can't hold"));
     Arena into;
     arena_init_within(&into, r->ctx.values);
     Status s = grep_tree_file(r, pos, ask, e->path, &into, ans);

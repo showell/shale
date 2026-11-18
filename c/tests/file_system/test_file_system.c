@@ -12,7 +12,7 @@ static Str rep(char c, size_t n, char *room) { // cstr: a buffer of at least n b
     return (Str){room, n};
 }
 
-TEST(names_fat_holds_and_names_it_refuses) {
+TEST(strict_names_held_and_names_refused) {
     char x96[96];
     char x97[97];
     Lits oks = LITS("a", "plan.md", "Plan-2.reactions.jsonl", "0f3a.png", "_session_secret", "a b");
@@ -68,7 +68,7 @@ TEST(write_read_append_read_at_stat_list_remove) {
     sx_deinit(&f);
 }
 
-TEST(a_name_fat_refuses_is_refused_here_too_before_anything_is_made) {
+TEST(a_name_that_is_not_strict_is_refused_before_anything_is_made) {
     Sx f;
     sx_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
@@ -346,9 +346,9 @@ TEST(an_errno_is_named_by_its_error_name) {
 }
 
 TEST_MAIN(
-    TEST_CASE(names_fat_holds_and_names_it_refuses),
+    TEST_CASE(strict_names_held_and_names_refused),
     TEST_CASE(write_read_append_read_at_stat_list_remove),
-    TEST_CASE(a_name_fat_refuses_is_refused_here_too_before_anything_is_made),
+    TEST_CASE(a_name_that_is_not_strict_is_refused_before_anything_is_made),
     TEST_CASE(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_sibling),
     TEST_CASE(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_spell_it),
     TEST_CASE(nothing_there_is_null_and_something_there_that_will_not_read_is_an_error),

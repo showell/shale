@@ -136,7 +136,7 @@ counts hang on the lengths of the paths it is handed (a prelude scans them;
 a folder below their base whose real path is `WORK_PATH_BYTES` (160) bytes
 long (`padded_base`, tests/harness/lib.shale): folders named by `p`s, 63 at
 a time, since a store name holds at most 96. No symbolic link is used,
-since the store follows none. A base whose real path is past 158 bytes is
+since the file system follows none. A base whose real path is past 158 bytes is
 refused, naming the limit. So the goldens hold from GitHub's /home/runner,
 a cloud's /root or a laptop alike.
 

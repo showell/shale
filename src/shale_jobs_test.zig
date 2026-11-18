@@ -217,7 +217,7 @@ test "jobs: a log whose record cannot be read is refused by name, never taken fo
     try init(&t);
     defer t.deinit();
     try t.tmp.dir.createDirPath(t.threaded.io(), "odd.log.job");
-    try onceStop(&t, "job_start({\"shale-fixture\", \"exit\", \"0\"}, {log = \"odd.log\"})", .store, "odd.log.job cannot be read");
+    try onceStop(&t, "job_start({\"shale-fixture\", \"exit\", \"0\"}, {log = \"odd.log\"})", .file_system, "odd.log.job cannot be read");
 }
 
 test "jobs: a reaper that cannot write the job's first record ends the job, so nothing runs that no record names" {
@@ -263,8 +263,8 @@ test "jobs: the mistakes a job's call can make, each named" {
     try t.expectStop("job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"x.log\", tail = 3})", .atomic, .argument, "`job_start` takes log, cwd, env, want and keep_on_stop, not `tail`");
     try t.expectStop("job_start({\"bash\", \"-c\", \"x\"}, {log = \"x.log\"})", .atomic, .refused, "`job_start` of `bash`");
     try t.expectStop("job_start({\"no-such-program-anywhere\"}, {log = \"x.log\"})", .atomic, .host, "`job_start`: `no-such-program-anywhere` is not found along PATH");
-    try t.expectStop("job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"no-such-dir/x.log\"})", .atomic, .store, "`job_start`: no-such-dir/x.log's directory is not there");
-    try t.expectStop("job_alive(\"none.log.job\")", .atomic, .store, "`job_alive`: no job's record at none.log.job");
+    try t.expectStop("job_start({\"shale-fixture\", \"lines\", \"1\"}, {log = \"no-such-dir/x.log\"})", .atomic, .file_system, "`job_start`: no-such-dir/x.log's directory is not there");
+    try t.expectStop("job_alive(\"none.log.job\")", .atomic, .file_system, "`job_alive`: no job's record at none.log.job");
     try t.expectStop("job_wait(\"none.log.job\", {})", .atomic, .argument, "`job_wait` needs `timeout_ms`");
     try t.expectStop("job_wait(\"none.log.job\", {timeout_ms = 10, file = \"a\"})", .atomic, .argument, "`file` without `contains`");
     // A file it cannot read is named as the script named it, never by its
@@ -274,7 +274,7 @@ test "jobs: the mistakes a job's call can make, each named" {
     const shut = try std.fmt.allocPrintSentinel(t.arena.allocator(), "{s}/shut", .{t.root}, 0);
     try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(shut, 0o000));
     defer _ = std.os.linux.chmod(shut, 0o700);
-    try onceStop(&t, "local j = job_start({\"shale-fixture\", \"exit\", \"0\"}, {log = \"w.log\"}) job_wait(j, {timeout_ms = 10000, file = \"shut/x.log\", contains = \"x\"})", .store, "`job_wait`: shut/x.log cannot be read: AccessDenied");
+    try onceStop(&t, "local j = job_start({\"shale-fixture\", \"exit\", \"0\"}, {log = \"w.log\"}) job_wait(j, {timeout_ms = 10000, file = \"shut/x.log\", contains = \"x\"})", .file_system, "`job_wait`: shut/x.log cannot be read: AccessDenied");
 }
 
 test "jobs: a job stopped just after its start is gone when job_stop returns, its leader too, even one that ignores TERM before it made its group" {
@@ -522,8 +522,8 @@ test "jobs: a record whose pgid is not its pid is refused by every job call, so 
     // No process has the leader's id, so only the group is left to ask.
     const none = 0x7ffffff0;
     try t.put("forged.log.job", try std.fmt.allocPrint(a, "pid={d}\npgid={d}\nstart=1\nstarted=0\nargv=x\nreaper={d}\nreaper_start=1\n", .{ none, victim.pgid, none }));
-    try onceStop(&t, "job_stop(\"forged.log.job\")", .store, "`job_stop`: forged.log.job is not a job's record");
-    try onceStop(&t, "job_alive(\"forged.log.job\")", .store, "`job_alive`: forged.log.job is not a job's record");
+    try onceStop(&t, "job_stop(\"forged.log.job\")", .file_system, "`job_stop`: forged.log.job is not a job's record");
+    try onceStop(&t, "job_alive(\"forged.log.job\")", .file_system, "`job_alive`: forged.log.job is not a job's record");
     // The group it named was not signalled.
     try testing.expectEqualStrings("true\n", try once(&t, "print(job_alive(\"victim.log.job\"))"));
     try testing.expectEqualStrings("true\n", try once(&t, "print(job_stop(\"victim.log.job\"))"));

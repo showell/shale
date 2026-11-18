@@ -144,11 +144,11 @@ const cases = [_]Case{
     .{ .src = "local x = 1 ? 2", .line = 1, .column = 13, .class = .syntax, .message = "expected a value, found `?`, which marks an optional parameter (`function f(a, b?)`) and nothing else" },
     .{ .src = "local x = trim(\"a\", \"b\")", .line = 1, .column = 11, .class = .argument, .message = "`trim` takes 1 argument, given 2" },
     .{ .src = "local x = read(\"../auth/secret\")", .line = 1, .column = 11, .class = .argument, .message = "`read`: \"../auth/secret\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)" },
-    .{ .src = "local x = read(\"a/./b\")", .line = 1, .column = 11, .class = .argument, .message = "`read`: \"a/./b\" has a part (\".\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses" },
+    .{ .src = "local x = read(\"a/./b\")", .line = 1, .column = 11, .class = .argument, .message = "`read`: \"a/./b\" has a part (\".\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses" },
     .{ .src = "local x = read(\"/etc/passwd\")", .line = 1, .column = 11, .class = .argument, .message = "`read`: \"/etc/passwd\" is absolute: paths are relative to the data root" },
-    .{ .src = "local x = ls(\"none\")", .line = 1, .column = 11, .class = .store, .message = "`ls(\"none\")`: not found (FileNotFound): `exists(p)` asks first" },
-    .{ .src = "local x = read(\"none.txt\")", .line = 1, .column = 11, .class = .store, .message = "`read(\"none.txt\")`: not found (FileNotFound): `exists(p)` asks first" },
-    .{ .src = "remove(\"none.txt\")", .line = 1, .column = 1, .class = .store, .message = "`remove(\"none.txt\")`: not found (FileNotFound): `exists(p)` asks first" },
+    .{ .src = "local x = ls(\"none\")", .line = 1, .column = 11, .class = .file_system, .message = "`ls(\"none\")`: not found (FileNotFound): `exists(p)` asks first" },
+    .{ .src = "local x = read(\"none.txt\")", .line = 1, .column = 11, .class = .file_system, .message = "`read(\"none.txt\")`: not found (FileNotFound): `exists(p)` asks first" },
+    .{ .src = "remove(\"none.txt\")", .line = 1, .column = 1, .class = .file_system, .message = "`remove(\"none.txt\")`: not found (FileNotFound): `exists(p)` asks first" },
     .{ .src = "local x = read(\"x\", -1)", .line = 1, .column = 11, .class = .argument, .message = "`read`: offset -1 is before the file's start" },
     .{ .src = "local x = walk(\"\", {deep = 1})", .line = 1, .column = 11, .class = .argument, .message = "`walk` takes `depth`, `like`, `kind`, `skip`, `after` and `keep_reads`, not `deep`" },
     .{ .src = "local x = walk(\"\", {keep_reads = -1})", .line = 1, .column = 11, .class = .argument, .message = "`walk`: `keep_reads` of -1: it is a count of reads" },
@@ -314,7 +314,7 @@ test "errors: the report keeps its first line, a stop in the prelude named as th
     try script.report(&r, "seq 7", &w);
     const want =
         \\── effects (0) ──
-        \\── stopped at the prelude:{d}:16 (in `the prelude's count_all`): store: `stat("none")`: not found (FileNotFound): `exists(p)` asks first (
+        \\── stopped at the prelude:{d}:16 (in `the prelude's count_all`): file_system: `stat("none")`: not found (FileNotFound): `exists(p)` asks first (
     ;
     var want_buf: [512]u8 = undefined;
     try testing.expect(std.mem.startsWith(u8, w.buffered(), try std.fmt.bufPrint(&want_buf, want, .{preludeLine("  local size = stat(path).size")})));

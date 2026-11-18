@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:776:32 (in `the Linux prelude's edits_all`): store: `read("w.txt")`: not found (FileNotFound): `exists(p)` asks first (266 steps)
+── stopped at the Linux prelude:776:32 (in `the Linux prelude's edits_all`): file_system: `read("w.txt")`: not found (FileNotFound): `exists(p)` asks first (266 steps)
    called from {base}/case/script.shale:1:7
 ── used: 266 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 266 in all; the most 232 (87%): edits_all, 1 call; 34 (12%): script

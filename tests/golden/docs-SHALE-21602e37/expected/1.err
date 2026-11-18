@@ -1,4 +1,4 @@
-── stopped at {base}/case/script.shale:7:14 (in `every_entry`): store: `walk("chat")`: not found (FileNotFound): `exists(p)` asks first (55 steps)
+── stopped at {base}/case/script.shale:7:14 (in `every_entry`): file_system: `walk("chat")`: not found (FileNotFound): `exists(p)` asks first (55 steps)
    called from {base}/case/script.shale:14:8
 ── used: 55 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 55 in all; the most 49 (89%): script; 5 (9%): walk, 1 call; 1 (1%): keys, 1 call

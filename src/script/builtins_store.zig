@@ -78,7 +78,7 @@ pub fn pathArg(run: *Run, pos: ast.Pos, b: B, v: Value, allow_root: bool) Error!
     while (it.next()) |part| {
         // `..` is the habit worth naming: a sibling folder is a mount's.
         if (std.mem.eql(u8, part, "..")) return run.fail(pos, .argument, "`{s}`: \"{s}\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)", .{ bi.nameOf(run, b), rel });
-        if (!store.fatName(part)) return run.fail(pos, .argument, "`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ bi.nameOf(run, b), rel, part });
+        if (!store.fatName(part)) return run.fail(pos, .argument, "`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses", .{ bi.nameOf(run, b), rel, part });
     }
     // A root of `/` takes no second `/`: `//x` is an empty part to the store.
     const sep = if (std.mem.endsWith(u8, run.root, "/")) "" else "/";
@@ -110,11 +110,11 @@ pub fn storeWords(e: anyerror) []const u8 {
         error.NotFile => "not a file",
         error.PathAlreadyExists => "already there",
         error.DirNotEmpty => "the folder is not empty",
-        error.AccessDenied, error.PermissionDenied => "the store refuses it",
-        error.NoSpaceLeft => "the store is full",
+        error.AccessDenied, error.PermissionDenied => "the file system refuses it",
+        error.NoSpaceLeft => "the file system is full",
         error.SymLinkLoop => "a link loop",
         error.NameTooLong => "the name is too long",
-        else => "the store failed",
+        else => "the file system failed",
     };
 }
 
@@ -131,7 +131,7 @@ pub fn storeHint(e: anyerror) []const u8 {
 
 pub fn storeFailed(run: *Run, pos: ast.Pos, b: B, rel: []const u8, e: anyerror) Error {
     if (e == error.OutOfMemory) return run.oom(pos);
-    return run.fail(pos, .store, "`{s}(\"{s}\")`: {s} ({s}){s}", .{ bi.nameOf(run, b), rel, storeWords(e), @errorName(e), storeHint(e) });
+    return run.fail(pos, .file_system, "`{s}(\"{s}\")`: {s} ({s}){s}", .{ bi.nameOf(run, b), rel, storeWords(e), @errorName(e), storeHint(e) });
 }
 
 pub fn countRead(run: *Run, pos: ast.Pos) Error!void {

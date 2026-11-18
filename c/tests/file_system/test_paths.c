@@ -49,7 +49,7 @@ TEST(every_way_out_of_the_root_is_refused_before_the_file_system_is_asked) {
                    S("`read`: \"../auth/secret\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)")));
     fx_again(&f);
     EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("a/./b"), false, &p), CLASS_ARGUMENT,
-                   S("`read`: \"a/./b\" has a part (\".\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
+                   S("`read`: \"a/./b\" has a part (\".\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses")));
     fx_again(&f);
     EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("mkdir"), S(""), false, &p), CLASS_ARGUMENT, S("`mkdir(\"\")` would act on the whole root: name a path of at least one part")));
     // With metal's hook, the absolute stop is the root's alone.
@@ -125,7 +125,7 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     EXPECT_STR(p.full.s, fx_r(&f, "R/elsewhere/logs"));
     EXPECT(fx_stopped(&f, fx_look(&f, "read", S("nope:x")), CLASS_ARGUMENT, S("the mounts are `runs`, `home`, `gone`")));
     EXPECT(fx_said(&f, fx_look(&f, "read", S("nope:x")), CLASS_ARGUMENT, S("\"nope:x\": `nope:` is not a mount: the mounts are `runs`, `home`, `gone`, `my-runs` (~/.config/shale/mounts)")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("gone:x")), CLASS_STORE, S("the mount `gone` is /no/such/folder, which is not a folder there")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("gone:x")), CLASS_FILE_SYSTEM, S("the mount `gone` is /no/such/folder, which is not a folder there")));
     EXPECT(fx_said(&f, fx_look(&f, "read", S("runs:../x")), CLASS_ARGUMENT, S("\"runs:../x\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)")));
     EXPECT(fx_said(&f, fx_look(&f, "read", S("runs:/etc/passwd")), CLASS_ARGUMENT, S("\"runs:/etc/passwd\" is absolute inside its mount: a mount's paths are relative to it")));
     // No mounts at all: said so.
@@ -490,8 +490,8 @@ TEST(the_file_system_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mo
     for (size_t i = 0; i < cs.len; i++) EXPECT(fx_stopped(&f, fx_look(&f, at(cs, i).who, sx_cs(at(cs, i).path)), CLASS_REFUSED, sx_cs(at(cs, i).says)));
     EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("link_file"), S("x")), CLASS_REFUSED, S("is a symbolic link")));
     // Its exact words, a mount's path spelled as the script wrote it.
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("link_dir/inner.txt")), CLASS_REFUSED, S("link_dir is a symbolic link: the store follows none")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("m:up")), CLASS_REFUSED, S("m:up is a symbolic link: the store follows none")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("link_dir/inner.txt")), CLASS_REFUSED, S("link_dir is a symbolic link: the file system follows none")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("m:up")), CLASS_REFUSED, S("m:up is a symbolic link: the file system follows none")));
     Str text = S("");
     EXPECT(sx_file(&f.base, "real.txt", &text));
     EXPECT_STR(text, S("real"));
@@ -662,7 +662,7 @@ TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_p
     fx_again(&f);
     EXPECT(fx_said(&f, path_fail(&f.run, fx_pos(), CLASS_ARGUMENT, S("`read`: \"{s}\" is absolute"), MSG_ARGS(MSG_FROM_SCRIPT(dir))), CLASS_ARGUMENT, fx_r(&f, "`read`: \"R/keys/tok\" is absolute")));
     // A host text naming the folder is a bug in the C, never a message.
-    EXPECT_DIES(if (path_fail(&f.run, fx_pos(), CLASS_STORE, S("--undo-on-stop: {s} cannot be read"), MSG_ARGS(MSG_FROM_HOST(dir))) != OK) {});
+    EXPECT_DIES(if (path_fail(&f.run, fx_pos(), CLASS_FILE_SYSTEM, S("--undo-on-stop: {s} cannot be read"), MSG_ARGS(MSG_FROM_HOST(dir))) != OK) {});
     // So is one naming it as the run sees it, through a relative root.
     bool names = false;
     EXPECT_OK_IN(&f.ctx, paths_names_secret(&f.paths, &f.run, fx_pos(), fx_r(&f, "x R/keys y"), &names));
@@ -685,7 +685,7 @@ TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_p
         EXPECT(!names);
     }
     // A mount's folder is a host text too, held to the same check.
-    EXPECT_DIES(if (path_fail(&f.run, fx_pos(), CLASS_STORE, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(S("k")), MSG_FROM_HOST(fx_r(&f, "R/keys")))) != OK) {});
+    EXPECT_DIES(if (path_fail(&f.run, fx_pos(), CLASS_FILE_SYSTEM, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(S("k")), MSG_FROM_HOST(fx_r(&f, "R/keys")))) != OK) {});
     // So a mount's folder missing or shut is said by the mount's name alone
     // when the folder is a secrets mount's, or its path spells one; an
     // ordinary mount's names its folder.
@@ -695,23 +695,23 @@ TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_p
     Str secret = S("");
     // Through `run`'s `secrets` and `stdout_secret`, the mount alone.
     fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("k:tok"), &secret), CLASS_STORE, S("the mount `k` is a secrets mount whose folder is missing")));
+    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("k:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `k` is a secrets mount whose folder is missing")));
     fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), S("k:tok"), &secret), CLASS_STORE, S("the mount `k` is a secrets mount whose folder is missing")));
+    EXPECT(fx_said(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), S("k:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `k` is a secrets mount whose folder is missing")));
     // An ordinary mount's names its folder.
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("p:x")), CLASS_STORE, SAYS("the mount `p` is R/no-plain, which is not a folder there")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("p:x")), CLASS_FILE_SYSTEM, SAYS("the mount `p` is R/no-plain, which is not a folder there")));
     // Unless its path spells a secrets mount's folder, inside it or only
     // beginning with it.
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("in:x")), CLASS_STORE, S("the mount `in`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("near:x")), CLASS_STORE, S("the mount `near`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("in:x")), CLASS_FILE_SYSTEM, S("the mount `in`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("near:x")), CLASS_FILE_SYSTEM, S("the mount `near`'s folder is missing; its path holds a secrets mount's folder, so it is not named")));
     // A folder there that cannot be opened: its parent shut.
     EXPECT_EQ(sx_chmod(&f.base, "shut", 0), 0);
     fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("ks:tok"), &secret), CLASS_STORE, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
+    EXPECT(fx_said(&f, paths_secret_path(&f.paths, &f.run, fx_pos(), S("run"), S("ks:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
     fx_again(&f);
-    EXPECT(fx_said(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), S("ks:tok"), &secret), CLASS_STORE, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("ps:x")), CLASS_STORE, SAYS("the mount `ps` is R/shut/plain, which cannot be opened: AccessDenied")));
-    EXPECT(fx_said(&f, fx_look(&f, "read", S("kin:x")), CLASS_STORE, S("the mount `kin`'s folder cannot be opened: AccessDenied; its path holds a secrets mount's folder, so it is not named")));
+    EXPECT(fx_said(&f, paths_secret_target(&f.paths, &f.run, fx_pos(), S("ks:tok"), &secret), CLASS_FILE_SYSTEM, S("the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("ps:x")), CLASS_FILE_SYSTEM, SAYS("the mount `ps` is R/shut/plain, which cannot be opened: AccessDenied")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("kin:x")), CLASS_FILE_SYSTEM, S("the mount `kin`'s folder cannot be opened: AccessDenied; its path holds a secrets mount's folder, so it is not named")));
     EXPECT_EQ(sx_chmod(&f.base, "shut", 0700), 0);
     fx_deinit(&f);
 }
@@ -826,7 +826,7 @@ TEST(undo_a_change_past_the_journal_s_room_a_file_it_cannot_read_a_path_neither_
     // A file that may be stat'd but not read.
     sx_put(&f.base, "sealed.txt", "s\n");
     EXPECT_EQ(sx_chmod(&f.base, "sealed.txt", 0), 0);
-    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("sealed.txt"), S("x")), CLASS_STORE, S("sealed.txt cannot be read (AccessDenied), so it could not be put back")));
+    EXPECT(fx_stopped(&f, fx_change(&f, "replace", S("sealed.txt"), S("x")), CLASS_FILE_SYSTEM, S("sealed.txt cannot be read (AccessDenied), so it could not be put back")));
     EXPECT_EQ(sx_chmod(&f.base, "sealed.txt", 0600), 0);
     // A named pipe.
     FileSystemCPath fifo_cp;
@@ -837,7 +837,7 @@ TEST(undo_a_change_past_the_journal_s_room_a_file_it_cannot_read_a_path_neither_
     // A path in a folder that cannot be searched.
     sx_mkdir(&f.base, "locked");
     EXPECT_EQ(sx_chmod(&f.base, "locked", 0), 0);
-    EXPECT(fx_stopped(&f, fx_change(&f, "append", S("locked/x.txt"), S("x")), CLASS_STORE, S("locked/x.txt cannot be looked at (AccessDenied), so it could not be put back")));
+    EXPECT(fx_stopped(&f, fx_change(&f, "append", S("locked/x.txt"), S("x")), CLASS_FILE_SYSTEM, S("locked/x.txt cannot be looked at (AccessDenied), so it could not be put back")));
     EXPECT_EQ(sx_chmod(&f.base, "locked", 0700), 0);
     EXPECT_EQ(f.paths.journal.len, 0);
     EXPECT(sx_file(&f.base, "sealed.txt", &text));
@@ -859,7 +859,7 @@ TEST(undo_the_journal_s_own_allocations_failing_at_each_stop_the_run_on_memory) 
         if (s == OK) s = fx_change(&f, "create", S("new.txt"), S("n"));
         if (s == OK) {
             done = true;
-        } else if (f.ctx.stop.cls == CLASS_STORE) {
+        } else if (f.ctx.stop.cls == CLASS_FILE_SYSTEM) {
             // A failed read of a.txt's bytes is the file system's, named.
             EXPECT(mem_find(f.ctx.stop.message.ptr, f.ctx.stop.message.len, "a.txt cannot be read (OutOfMemory)", 34) != SIZE_MAX);
             store_stops++;
@@ -1137,7 +1137,7 @@ TEST(a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_n
     CheckedPath p;
     // A mount's spelling is a root path's part that is no strict name.
     fx_again(&f);
-    EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("k:tok"), false, &p), CLASS_ARGUMENT, S("`read`: \"k:tok\" has a part (\"k:tok\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
+    EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("k:tok"), false, &p), CLASS_ARGUMENT, S("`read`: \"k:tok\" has a part (\"k:tok\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses")));
     fx_again(&f);
     EXPECT_OK_IN(&f.ctx, path_arg(&bare, fx_pos(), S("read"), S("a/b"), false, &p));
     EXPECT_STR(p.full.s, fx_r(&f, "R/a/b"));
@@ -1159,12 +1159,12 @@ TEST(a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links
     CheckedPath p;
     // A bad part after a link: the core's message, never the link's.
     fx_again(&f);
-    EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk//x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk//x\" has a part (\"\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
+    EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk//x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk//x\" has a part (\"\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses")));
     fx_again(&f);
     EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk/../x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk/../x\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)")));
     // Every part a name: the hook's walk refuses the link.
     fx_again(&f);
-    EXPECT(fx_stopped(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk/x"), false, &p), CLASS_REFUSED, S("lnk is a symbolic link: the store follows none")));
+    EXPECT(fx_stopped(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk/x"), false, &p), CLASS_REFUSED, S("lnk is a symbolic link: the file system follows none")));
     fx_deinit(&f);
 }
 

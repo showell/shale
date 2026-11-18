@@ -889,7 +889,7 @@ pub const Parser = struct {
             return self.failf(pos, .name, "`use(\"{s}\")` again: it is used at line {d}", .{ path, lib.use_line });
         if (self.extra.len == self.extra_cap) return self.failf(pos, .argument, "`use(\"{s}\")`: more than {d} libraries", .{ path, libraries_most });
         var why: []const u8 = "";
-        const source = (try loader.load(loader.ctx, self.alloc, path, &why)) orelse return self.failf(pos, .store, "`use(\"{s}\")`: {s}", .{ path, why });
+        const source = (try loader.load(loader.ctx, self.alloc, path, &why)) orelse return self.failf(pos, .file_system, "`use(\"{s}\")`: {s}", .{ path, why });
         // Indexed as a prelude is: each `function` and `const` from the start
         // of its line.
         var functions: std.ArrayList(PreludeFunction) = .empty;

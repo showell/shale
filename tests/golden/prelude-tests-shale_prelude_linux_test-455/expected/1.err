@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:918:17 (in `the Linux prelude's copy`): store: `read("site/index.html")`: not found (FileNotFound): `exists(p)` asks first (59 steps)
+── stopped at the Linux prelude:918:17 (in `the Linux prelude's copy`): file_system: `read("site/index.html")`: not found (FileNotFound): `exists(p)` asks first (59 steps)
    called from {base}/case/script.shale:1:1
 ── used: 59 of 5000000 steps, 3 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 59 in all; the most 55 (93%): copy, 1 call; 4 (6%): script

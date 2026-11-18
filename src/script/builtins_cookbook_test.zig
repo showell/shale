@@ -47,7 +47,7 @@ test "cookbook: read_or reads a file, or answers the default when nothing is the
     defer one.deinit();
     try testing.expectEqualStrings("2\n", one.output);
     // A folder is not a missing file: the store's error stands.
-    try f.expectStop("read_or(\"chat\", \"\")", .store);
+    try f.expectStop("read_or(\"chat\", \"\")", .file_system);
     // Its bytes count as a read, so the read budget applies.
     var over = f.run("print(read_or(\"top.txt\", \"\"))", .{ .read_bytes = 2 });
     defer over.deinit();

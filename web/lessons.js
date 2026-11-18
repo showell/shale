@@ -569,7 +569,7 @@ print(page)`,
         ],
         code: R`print(read("posts/missing.md"))`,
         out: R``,
-        stops: "1:7: store: `read(\"posts/missing.md\")`: not found (FileNotFound): `exists(p)` asks first",
+        stops: "1:7: file_system: `read(\"posts/missing.md\")`: not found (FileNotFound): `exists(p)` asks first",
       },
       {
         say: [

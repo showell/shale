@@ -105,15 +105,15 @@ test "use: a library at the source budget is read and one a byte past it is refu
     t.budgets.source_bytes = lib.len;
     try t.expectOutput(src, "2\n");
     t.budgets.source_bytes = lib.len - 1;
-    try t.expectStop(src, .atomic, .store, "`use(\"m:lib.shale\")`: the library is larger than the source budget");
+    try t.expectStop(src, .atomic, .file_system, "`use(\"m:lib.shale\")`: the library is larger than the source budget");
 }
 
 test "use: a missing library, a path not through a mount, a use not at the top level, and a name used above the use line, each refused" {
     var t: T = undefined;
     try init(&t);
     defer t.deinit();
-    try t.expectStop("use(\"m:gone.shale\")", .atomic, .store, "`use(\"m:gone.shale\")`: `read(\"m:gone.shale\")`: not found");
-    try t.expectStop("use(\"nomount:lib.shale\")", .atomic, .store, "`use(\"nomount:lib.shale\")`:");
+    try t.expectStop("use(\"m:gone.shale\")", .atomic, .file_system, "`use(\"m:gone.shale\")`: `read(\"m:gone.shale\")`: not found");
+    try t.expectStop("use(\"nomount:lib.shale\")", .atomic, .file_system, "`use(\"nomount:lib.shale\")`:");
     try t.expectStop("use(\"libs/lib.shale\")", .atomic, .argument, "a library is named through a mount");
     try t.expectStop("use(\"/abs/lib.shale\")", .atomic, .argument, "a library is named through a mount");
     try t.expectStop("if true then use(\"m:lib.shale\") end", .atomic, .refused, "`use` is a top-level statement only");

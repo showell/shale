@@ -424,7 +424,7 @@ fn mountPath(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize, 
         var it = std.mem.splitScalar(u8, rest, '/');
         while (it.next()) |part| {
             if (std.mem.eql(u8, part, "..")) return run.fail(pos, .argument, "\"{s}\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)", .{path});
-            if (!store.fatName(part)) return run.fail(pos, .argument, "\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses", .{ path, part });
+            if (!store.fatName(part)) return run.fail(pos, .argument, "\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses", .{ path, part });
         }
     }
     // A missing mount folder stops the run only when the mount is used. A
@@ -433,17 +433,17 @@ fn mountPath(h: *Host, run: *Run, pos: ast.Pos, path: []const u8, colon: usize, 
     // prints it either).
     if (std.Io.Dir.cwd().openDir(run.io, m.dir, .{})) |d| d.close(run.io) else |e| switch (e) {
         error.FileNotFound, error.NotDir => return if (m.secrets)
-            run.fail(pos, .store, "the mount `{s}` is a secrets mount whose folder is missing", .{m.name})
+            run.fail(pos, .file_system, "the mount `{s}` is a secrets mount whose folder is missing", .{m.name})
         else if (spellsSecretFolder(h, m.dir))
-            run.fail(pos, .store, "the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named", .{m.name})
+            run.fail(pos, .file_system, "the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named", .{m.name})
         else
-            run.fail(pos, .store, "the mount `{s}` is {s}, which is not a folder there", .{ m.name, m.dir }),
+            run.fail(pos, .file_system, "the mount `{s}` is {s}, which is not a folder there", .{ m.name, m.dir }),
         else => return if (m.secrets)
-            run.fail(pos, .store, "the mount `{s}` is a secrets mount whose folder cannot be opened: {s}", .{ m.name, @errorName(e) })
+            run.fail(pos, .file_system, "the mount `{s}` is a secrets mount whose folder cannot be opened: {s}", .{ m.name, @errorName(e) })
         else if (spellsSecretFolder(h, m.dir))
-            run.fail(pos, .store, "the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named", .{ m.name, @errorName(e) })
+            run.fail(pos, .file_system, "the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named", .{ m.name, @errorName(e) })
         else
-            run.fail(pos, .store, "the mount `{s}` is {s}, which cannot be opened: {s}", .{ m.name, m.dir, @errorName(e) }),
+            run.fail(pos, .file_system, "the mount `{s}` is {s}, which cannot be opened: {s}", .{ m.name, m.dir, @errorName(e) }),
     }
     const inside = setup.inFolder(m.dir, h.root_abs);
     const dir = if (inside) std.fmt.allocPrint(run.alloc, "{s}{s}", .{ try rootOf(h, run, pos), m.dir[h.root_abs.len..] }) catch return run.oom(pos) else m.dir;
@@ -468,7 +468,7 @@ fn refuseLinks(run: *Run, pos: ast.Pos, base: []const u8, rest: []const u8, show
         at.appendSlice(run.alloc, part) catch return run.oom(pos);
         shown_end += part.len + @intFromBool(shown_end > 0);
         const st = std.Io.Dir.cwd().statFile(run.io, at.items, .{ .follow_symlinks = false }) catch return;
-        if (st.kind == .sym_link) return run.fail(pos, .refused, "{s}{s} is a symbolic link: the store follows none", .{ shown_prefix, rest[0..shown_end] });
+        if (st.kind == .sym_link) return run.fail(pos, .refused, "{s}{s} is a symbolic link: the file system follows none", .{ shown_prefix, rest[0..shown_end] });
     }
 }
 
@@ -529,14 +529,14 @@ fn noteBefore(h: *Host, run: *Run, pos: ast.Pos, abs_in: []const u8) Error!void 
         .directory => .dir,
         .file => blk: {
             if (st.size > journal_most - h.journal_bytes) return run.fail(pos, .refused, "--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it", .{ journal_most, abs });
-            bytes = cwd.readFileAlloc(io, abs, h.alloc, .limited(journal_most - h.journal_bytes + 1)) catch |e| return run.fail(pos, .store, "--undo-on-stop: {s} cannot be read ({t}), so it could not be put back", .{ abs, e });
+            bytes = cwd.readFileAlloc(io, abs, h.alloc, .limited(journal_most - h.journal_bytes + 1)) catch |e| return run.fail(pos, .file_system, "--undo-on-stop: {s} cannot be read ({t}), so it could not be put back", .{ abs, e });
             h.journal_bytes += bytes.?.len;
             break :blk .{ .file = .{ .bytes = bytes.?, .permissions = st.permissions } };
         },
         else => return run.fail(pos, .refused, "--undo-on-stop: {s} is neither a file nor a folder, and could not be put back", .{abs}),
     } else |e| switch (e) {
         error.FileNotFound => .absent,
-        else => return run.fail(pos, .store, "--undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back", .{ abs, e }),
+        else => return run.fail(pos, .file_system, "--undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back", .{ abs, e }),
     };
     const owned = h.alloc.dupe(u8, abs) catch return run.oom(pos);
     h.journal.append(h.alloc, .{ .abs = owned, .was = was }) catch {
@@ -1139,7 +1139,7 @@ test "host: mounts: a mount's paths, real() for argv, an unknown mount or a miss
     try t.expectOutput("print(host(\"run\", {\"shale-fixture\", \"lines\", \"2\"}, {timeout_ms = 10000, tail = 1, log = \"runs:two.log\"}).kept_lines)", "1\n");
     try testing.expectEqualStrings("line 1\nline 2\n", try t.file("elsewhere/two.log"));
     try t.expectStop("read(\"nope:x\")", .atomic, .argument, "the mounts are `runs`, `home`, `gone`");
-    try t.expectStop("read(\"gone:x\")", .atomic, .store, "not a folder there");
+    try t.expectStop("read(\"gone:x\")", .atomic, .file_system, "not a folder there");
     try t.expectStop("read(\"runs:../x\")", .atomic, .argument, "climbs out of its mount with `..`: a folder beside it is reached through a mount of its own");
     try t.expectStop("read(\"runs:/etc/passwd\")", .atomic, .argument, "absolute inside its mount");
     for ([_]struct { []const u8, []const u8 }{

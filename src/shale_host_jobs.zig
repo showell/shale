@@ -121,7 +121,7 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
     const record_os = try hl.changeOsPath(h, run, pos, log_v, ".job");
     // The reaper writes the log and the record there; it does not make room.
     if (std.fs.path.dirname(log_os)) |dir| std.Io.Dir.cwd().access(run.io, dir, .{}) catch
-        return run.fail(pos, .store, "`job_start`: {s}'s directory is not there: the log and its record go in it", .{log_shown});
+        return run.fail(pos, .file_system, "`job_start`: {s}'s directory is not there: the log and its record go in it", .{log_shown});
     // Refuse a log a job still runs on: its record is the job's only handle,
     // and the old reaper would write its end over the new record. A job whose
     // end is written has a reaper with nothing left to write, but its group
@@ -134,7 +134,7 @@ fn start(h: *Host, run: *Run, pos: ast.Pos, args: []const Value) Error!Value {
         error.FileNotFound => {},
         // Any other failure is not "no job": a job may still run there, and
         // the reaper would start the program before failing to write.
-        else => return run.fail(pos, .store, "`job_start`: {s}.job cannot be read: {s}", .{ log_shown, @errorName(e) }),
+        else => return run.fail(pos, .file_system, "`job_start`: {s}.job cannot be read: {s}", .{ log_shown, @errorName(e) }),
     }
     run.host_runs += 1;
     const r = jobs.launch(a, run.io, reaper, record_os, log_os, cwd, program, argv, env.items) catch |e| switch (e) {
@@ -261,11 +261,11 @@ fn find(h: *Host, run: *Run, pos: ast.Pos, v: Value, name: []const u8) Error!Fou
     if (!std.mem.endsWith(u8, shown, ".job")) return run.fail(pos, .argument, "`{s}`: {s} is not a job's record (`<log>.job`)", .{ name, shown });
     const os = try hl.osPath(h, run, pos, .{ .string = shown }, false);
     const text = std.Io.Dir.cwd().readFileAlloc(run.io, os, run.alloc, .limited(64 * 1024)) catch |e| switch (e) {
-        error.FileNotFound => return run.fail(pos, .store, "`{s}`: no job's record at {s}", .{ name, shown }),
-        else => return run.fail(pos, .store, "`{s}`: its record {s} cannot be read: {s}", .{ name, shown, @errorName(e) }),
+        error.FileNotFound => return run.fail(pos, .file_system, "`{s}`: no job's record at {s}", .{ name, shown }),
+        else => return run.fail(pos, .file_system, "`{s}`: its record {s} cannot be read: {s}", .{ name, shown, @errorName(e) }),
     };
     try chargeRead(run, pos, text.len);
-    const r = job_record.parseRecord(text) orelse return run.fail(pos, .store, "`{s}`: {s} is not a job's record", .{ name, shown });
+    const r = job_record.parseRecord(text) orelse return run.fail(pos, .file_system, "`{s}`: {s} is not a job's record", .{ name, shown });
     return .{ .record = r, .shown = shown, .log = .{ .string = shown[0 .. shown.len - ".job".len] } };
 }
 
@@ -371,7 +371,7 @@ pub const Scan = struct {
     /// failure stops the run rather than reading as "not yet".
     fn look(s: *Scan, sa: std.mem.Allocator, run: *Run, pos: ast.Pos, os: []const u8, shown: []const u8, c: []const u8, r: job_record.Record) Error!bool {
         const store = webbox.store;
-        const st = (store.statOrNull(run.io, sa, os) catch |e| return run.fail(pos, .store, "`job_wait`: {s} cannot be read: {s}", .{ shown, @errorName(e) })) orelse return false;
+        const st = (store.statOrNull(run.io, sa, os) catch |e| return run.fail(pos, .file_system, "`job_wait`: {s} cannot be read: {s}", .{ shown, @errorName(e) })) orelse return false;
         if (s.buf.len == 0) s.buf = sa.alloc(u8, piece + c.len) catch return run.oom(pos);
         var at = s.from(st.size, .{ .pid = r.pid, .started = r.started }, c.len);
         while (at < st.size) {
@@ -380,7 +380,7 @@ pub const Scan = struct {
                     s.done = 0;
                     return false;
                 },
-                else => return run.fail(pos, .store, "`job_wait`: {s} cannot be read: {s}", .{ shown, @errorName(e) }),
+                else => return run.fail(pos, .file_system, "`job_wait`: {s} cannot be read: {s}", .{ shown, @errorName(e) }),
             };
             try chargeRead(run, pos, n);
             if (std.mem.indexOf(u8, s.buf[0..n], c) != null) return true;

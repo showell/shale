@@ -1,2 +1,2 @@
-── stopped at stdin:5:1: store: `use("./lib.shale")`: a `./` path is beside the script's own file, and a script on stdin has none: name the library through a mount (`cookbook:c/items.shale`) (11 steps)
+── stopped at stdin:5:1: file_system: `use("./lib.shale")`: a `./` path is beside the script's own file, and a script on stdin has none: name the library through a mount (`cookbook:c/items.shale`) (11 steps)
 ── used: 11 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

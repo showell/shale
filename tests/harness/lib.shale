@@ -647,7 +647,7 @@ end
 -- `base` padded: a folder below it whose real path is WORK_PATH_BYTES
 -- long, named by `p`s (folders of 63 when one name would pass the store's
 -- 96), so where the base is on a box moves no step count. No symbolic link:
--- the store follows none. A base whose real path leaves no room is refused.
+-- the file system follows none. A base whose real path leaves no room is refused.
 function padded_base(base)
   mkdir(base)
   local prefix = real(base)

@@ -475,7 +475,7 @@ static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind
         case CHANGE_MKDIR: e = file_system_make_dir(rs->file_system, p->full); break;
         case CHANGE_REMOVE: e = file_system_remove(rs->file_system, p->full); break;
         case CHANGE_REMOVE_TREE: e = file_system_remove_tree(rs->file_system, a, p->full); break;
-        default: c_bug("builtins_change: a change of no kind the store makes");
+        default: c_bug("builtins_change: a change of no kind the file system makes");
         }
     }
     Effect logged = {builtin_name(b), p->rel, e == FILE_SYSTEM_OK ? S("ok") : file_system_err_name(e)};

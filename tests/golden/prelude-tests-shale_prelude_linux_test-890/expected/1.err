@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:667:16 (in `the Linux prelude's edit_between`): store: `read("d.md")`: not found (FileNotFound): `exists(p)` asks first (49 steps)
+── stopped at the Linux prelude:667:16 (in `the Linux prelude's edit_between`): file_system: `read("d.md")`: not found (FileNotFound): `exists(p)` asks first (49 steps)
    called from {base}/case/script.shale:1:1
 ── used: 49 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 49 in all; the most 43 (87%): edit_between, 1 call; 6 (12%): script

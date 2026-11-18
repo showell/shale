@@ -26,7 +26,7 @@ const ZOPEN = [=["|'|//]=]
 const REFUSERS = {"cli.zig", "shale_gate.zig", "script_route.zig"}
 
 -- A stop's class as a call's argument: `, .argument,`.
-const CLASSES = [=[[(,] ?\.(syntax|refused|name|type|index|arithmetic|argument|budget|store|fail|host),]=]
+const CLASSES = [=[[(,] ?\.(syntax|refused|name|type|index|arithmetic|argument|budget|file_system|fail|host),]=]
 
 -- The Zig files that make no observable text: tests, benches, fixtures and
 -- generators.

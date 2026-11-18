@@ -1,3 +1,3 @@
-── stopped at {base}/case/script.shale:1:48: store: `read("top.txt")`: not found (FileNotFound): `exists(p)` asks first (44 steps)
+── stopped at {base}/case/script.shale:1:48: file_system: `read("top.txt")`: not found (FileNotFound): `exists(p)` asks first (44 steps)
 ── used: 44 of 5000000 steps, 2 of 10000 reads, 0 of 67108864 read bytes, 11 of 65536 output bytes
 ── steps: 44 in all; the most 28 (63%): script; 8 (18%): exists, 1 call; 8 (18%): read, 1 call

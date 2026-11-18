@@ -1,4 +1,4 @@
 ── budgets from the script's header: changes=5
-── stopped at {base}/case/edits_write_batches.shale:17:7: budget changes: the store-change budget (count) ran out (902 steps)
+── stopped at {base}/case/edits_write_batches.shale:17:7: budget changes: the file-system change budget (count) ran out (902 steps)
 ── used: 902 of 5000000 steps, 11 of 10000 reads, 31 of 67108864 read bytes, 442 of 65536 output bytes
 ── steps: 902 in all; the most 603 (66%): script; 249 (27%): host, 8 calls; 50 (5%): create, 3 calls

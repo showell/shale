@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:499:10 (in `the Linux prelude's zig_move`): store: `zig_move("g.zig")`: not found (FileNotFound): `exists(p)` asks first (61 steps)
+── stopped at the Linux prelude:499:10 (in `the Linux prelude's zig_move`): file_system: `zig_move("g.zig")`: not found (FileNotFound): `exists(p)` asks first (61 steps)
    called from {base}/case/script.shale:1:11
 ── used: 61 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 61 in all; the most 46 (75%): zig_move, 1 call; 15 (24%): script

@@ -114,7 +114,7 @@ test "builtins: the store's changes, each in the effects log with its outcome, a
     // came before it stays done.
     var r = f.run("replace(\"kept.txt\", \"k\") remove(\"no/such/file\") replace(\"never.txt\", \"n\")", .{});
     defer r.deinit();
-    try testing.expectEqual(script.diag.Class.store, r.stop.?.class);
+    try testing.expectEqual(script.diag.Class.file_system, r.stop.?.class);
     try testing.expectEqual(@as(usize, 2), r.effects.len);
     try testing.expectEqualStrings("ok", r.effects[0].outcome);
     try testing.expect(!std.mem.eql(u8, "ok", r.effects[1].outcome));
@@ -164,9 +164,9 @@ test "builtins: store errors stop the script naming the path; the read and chang
     var f: Fixture = undefined;
     try f.init();
     defer f.deinit();
-    try f.expectStop("print(read(\"nope.txt\"))", .store);
-    try f.expectStop("print(ls(\"nope\"))", .store);
-    try f.expectStop("print(stat(\"nope\"))", .store);
+    try f.expectStop("print(read(\"nope.txt\"))", .file_system);
+    try f.expectStop("print(ls(\"nope\"))", .file_system);
+    try f.expectStop("print(stat(\"nope\"))", .file_system);
     {
         var r = f.run("print(read(\"chat/a.md\")) print(read(\"chat/b.md\"))", .{ .read_bytes = 8 });
         defer r.deinit();
@@ -268,13 +268,13 @@ test "builtins: walk lists every entry under a folder, depth first and sorted, f
         defer r.deinit();
         try testing.expectEqual(script.diag.Budget.reads, r.stop.?.budget.?);
     }
-    try f.expectStop("walk(\"nope\")", .store);
+    try f.expectStop("walk(\"nope\")", .file_system);
     // A symlink is listed as other and never entered: one to / doesn't walk
     // the host, and one to its own folder doesn't loop.
     try f.tmp.dir.symLink(f.threaded.io(), "/", "data/chat/host", .{});
     try f.tmp.dir.symLink(f.threaded.io(), ".", "data/chat/loop", .{});
     try f.expectOutput("for e in walk(\"chat\") do print(e.path, e.size, e.kind) end", "chat/a.md\t5\tfile\nchat/b.md\t6\tfile\nchat/host\t0\tother\nchat/loop\t0\tother\n");
-    try f.expectStop("walk(\"top.txt\")", .store);
+    try f.expectStop("walk(\"top.txt\")", .file_system);
     try f.expectStop("walk(\"../auth\")", .argument);
 }
 
@@ -411,8 +411,8 @@ test "builtins: read(p, offset, n) reads only the part, 0-based, clamped at the 
     try f.expectOutput("print(read(\"chat/a.md\", 1, 3), read(\"chat/a.md\", 3), \"[\" .. read(\"chat/a.md\", 5, 2) .. read(\"chat/a.md\", 99) .. \"]\", read(\"chat/a.md\", 0, 0) == \"\")", "ell\tlo\t[]\ttrue\n");
     try f.expectStop("print(read(\"chat/a.md\", -1, 2))", .argument);
     try f.expectStop("print(read(\"chat/a.md\", 0, -2))", .argument);
-    try f.expectStop("print(read(\"chat\", 0, 2))", .store);
-    try f.expectStop("print(read(\"chat/none.md\", 0, 2))", .store);
+    try f.expectStop("print(read(\"chat\", 0, 2))", .file_system);
+    try f.expectStop("print(read(\"chat/none.md\", 0, 2))", .file_system);
     // With three bytes of budget, a part of three reads and one of four
     // stops, as the whole file (five) would.
     var ok = f.run("print(read(\"chat/a.md\", 1, 3))", .{ .read_bytes = 3 });
@@ -674,7 +674,7 @@ test "builtins: a store error is never read as missing: a remove that can't look
     try f.tmp.dir.symLink(io, "loop", "data/loop", .{});
     var r = f.run("remove(\"loop/x\")", .{});
     defer r.deinit();
-    try testing.expectEqual(script.diag.Class.store, r.stop.?.class);
+    try testing.expectEqual(script.diag.Class.file_system, r.stop.?.class);
     try testing.expectEqual(@as(usize, 1), r.effects.len);
     try testing.expect(!std.mem.eql(u8, "FileNotFound", r.effects[0].outcome));
     try testing.expect(std.mem.indexOf(u8, r.stop.?.message, r.effects[0].outcome) != null);
@@ -828,7 +828,7 @@ test "builtins: walk's stats count as reads, a call considers at most call_entri
         while (p.step(.{}) == .paused) {}
         switch (mode) {
             .background => try testing.expectEqualStrings("chat/a.md\nchat/deep\n", p.output()),
-            .atomic => try testing.expectEqual(script.diag.Class.store, p.status().stop.?.class),
+            .atomic => try testing.expectEqual(script.diag.Class.file_system, p.status().stop.?.class),
         }
     }
 }
@@ -887,7 +887,7 @@ test "builtin: read_lines gives whole lines from an offset, where the next part 
     try f.expectOutput("local r = read_lines(\"log.txt\") print(#r.lines, r.done)", "4\ttrue\n");
     try f.expectStop("local r = read_lines(\"log.txt\", -1, 5)", .argument);
     try f.expectStop("local r = read_lines(\"log.txt\", 0, 0)", .argument);
-    try f.expectStop("local r = read_lines(\"none.txt\", 0, 5)", .store);
+    try f.expectStop("local r = read_lines(\"none.txt\", 0, 5)", .file_system);
 }
 
 test "builtin: line_at gives the whole line holding an offset, without its newline, or nil past the end" {
@@ -1301,7 +1301,7 @@ test "builtins: a folder `walk` cannot list (its path past the system's longest)
             var r = script.runOn(engine, io, testing.allocator, f.root, src, .{}, 0, &out_buf, .{});
             defer r.deinit();
             const s = r.stop.?;
-            try testing.expectEqual(script.diag.Class.store, s.class);
+            try testing.expectEqual(script.diag.Class.file_system, s.class);
             try testing.expect(std.mem.indexOf(u8, s.message, "`walk(\"deep/") != null);
             try testing.expect(std.mem.indexOf(u8, s.message, "(NameTooLong)") != null);
         }

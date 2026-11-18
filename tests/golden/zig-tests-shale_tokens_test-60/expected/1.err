@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:515:10 (in `the Linux prelude's shale_tokens`): store: `shale_tokens("k.shale")`: not found (FileNotFound): `exists(p)` asks first (39 steps)
+── stopped at the Linux prelude:515:10 (in `the Linux prelude's shale_tokens`): file_system: `shale_tokens("k.shale")`: not found (FileNotFound): `exists(p)` asks first (39 steps)
    called from {base}/case/script.shale:1:8
 ── used: 39 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 39 in all; the most 29 (74%): shale_tokens, 1 call; 10 (25%): script

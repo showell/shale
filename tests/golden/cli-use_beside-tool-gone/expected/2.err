@@ -1,2 +1,2 @@
-── stopped at tool/gone.shale:1:1: store: `use("./nope.shale")`: `read("tool/nope.shale")`: not found (FileNotFound): `exists(p)` asks first (14 steps)
+── stopped at tool/gone.shale:1:1: file_system: `use("./nope.shale")`: `read("tool/nope.shale")`: not found (FileNotFound): `exists(p)` asks first (14 steps)
 ── used: 14 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes

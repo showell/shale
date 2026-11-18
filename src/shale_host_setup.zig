@@ -130,7 +130,7 @@ pub fn loadMounts(alloc: std.mem.Allocator, io: std.Io, pinned: ?[]const u8, hom
         return e;
     };
     // A link in a mount's own path (`~/zig` to `~/zig-0.16.0`) is the user's
-    // choice, so we resolve it once here; below it, the store follows none.
+    // choice, so we resolve it once here; below it, the file system follows none.
     for (mounts) |*m| {
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const n = std.Io.Dir.cwd().realPathFile(io, m.dir, &buf) catch continue;

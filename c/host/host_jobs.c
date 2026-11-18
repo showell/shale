@@ -67,13 +67,13 @@ static STATUS_MUST_USE Status host_jobs_find(Host *h, Run *r, Pos pos, const Val
     Bytes text = {NULL, 0};
     Str why = S("");
     TRY(host_jobs_read(r, pos, os, &text, &why));
-    if (str_eq(why, S("FileNotFound"))) return host_fail(r, pos, CLASS_STORE, S("`{s}`: no job's record at {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
-    if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`{s}`: its record {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(why)));
+    if (str_eq(why, S("FileNotFound"))) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}`: no job's record at {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
+    if (why.len > 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}`: its record {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(why)));
     TRY(host_jobs_charge_read(r, pos, text.len));
     // The record is the script's text, and decides what `job_stop` signals:
     // the DRAGON at jobs_launch's read (jobs.c) says what a forged one can
     // reach.
-    if (!job_record_parse(text, &out->record)) return host_fail(r, pos, CLASS_STORE, S("`{s}`: {s} is not a job's record"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
+    if (!job_record_parse(text, &out->record)) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}`: {s} is not a job's record"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
     out->shown = shown;
     out->log = str_sub(shown, 0, shown.len - 4);
     return OK;
@@ -162,7 +162,7 @@ static STATUS_MUST_USE Status host_job_refuse_running(Run *r, Pos pos, Str log_s
     Str why = S("");
     TRY(host_jobs_read(r, pos, record_os, &old_text, &why));
     if (str_eq(why, S("FileNotFound"))) return OK;
-    if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}.job cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(why)));
+    if (why.len > 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_start`: {s}.job cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(why)));
     TRY(host_jobs_charge_read(r, pos, old_text.len));
     JobRecord old;
     if (!job_record_parse(old_text, &old)) return OK;
@@ -185,8 +185,8 @@ static STATUS_MUST_USE Status host_job_place(Host *h, Run *r, Pos pos, Str log_s
         const char *dc = NULL;
         int err = ENAMETOOLONG;
         if (file_system_cstr(&dir_cp, os_str_own(dir), &dc) == FILE_SYSTEM_OK) err = access(dc, F_OK) == 0 ? 0 : errno;
-        if (err == ENOENT || err == ENOTDIR) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
-        if (err != 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(err)))));
+        if (err == ENOENT || err == ENOTDIR) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
+        if (err != 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_start`: {s}'s directory cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(err)))));
     }
     return host_job_refuse_running(r, pos, log_shown, *record_os);
 }
@@ -349,7 +349,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
     struct stat st;
     if (ce != FILE_SYSTEM_OK || stat(p, &st) != 0) {
         if (ce == FILE_SYSTEM_OK && errno == ENOENT) return OK;
-        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(ce != FILE_SYSTEM_OK ? ce : file_system_err_of(errno)))));
+        return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(ce != FILE_SYSTEM_OK ? ce : file_system_err_of(errno)))));
     }
     uint64_t size = (uint64_t)st.st_size;
     if (s->buf.len == 0) {
@@ -365,7 +365,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
             s->done = 0;
             return OK;
         }
-        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(errno)))));
+        return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(errno)))));
     }
     while (from < size) {
         size_t want = s->buf.len < size - from ? s->buf.len : (size_t)(size - from);
@@ -373,7 +373,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
         if (got < 0) {
             int e = errno;
             close(fd);
-            return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(e)))));
+            return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(e)))));
         }
         size_t n = (size_t)got;
         Status charged = host_jobs_charge_read(r, pos, n);

@@ -11,8 +11,8 @@ FAIL stops_at_its_first_failure (c/tests/fixtures/harness_fails.c:35): 0
 FAIL eq_i_fails (c/tests/fixtures/harness_fails.c:41): minus_one == 2
   stopped at 3:7: type: `+` takes integers
 FAIL ok_says_its_stop (c/tests/fixtures/harness_fails.c:58): harness_stop(&ctx, CLASS_TYPE, BUDGET_NONE, S("`+` takes integers")) is OK
-  stopped at 3:7: budget reads: the store-read budget (count) ran out
-FAIL ok_says_its_budget (c/tests/fixtures/harness_fails.c:64): harness_stop(&ctx, CLASS_BUDGET, BUDGET_READS, S("the store-read budget (count) ran out")) is OK
+  stopped at 3:7: budget reads: the file-system read budget (count) ran out
+FAIL ok_says_its_budget (c/tests/fixtures/harness_fails.c:64): harness_stop(&ctx, CLASS_BUDGET, BUDGET_READS, S("the file-system read budget (count) ran out")) is OK
   no stop recorded
 FAIL ok_says_no_stop_was_recorded (c/tests/fixtures/harness_fails.c:70): STOP is OK
 c/tests/fixtures/harness_fails.c: 10 of 11 tests failed

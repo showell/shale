@@ -15,7 +15,7 @@ TEST(every_class_has_its_name_and_the_count_traps) {
     EXPECT_STR(stop_class_name(CLASS_ARITHMETIC), S("arithmetic"));
     EXPECT_STR(stop_class_name(CLASS_ARGUMENT), S("argument"));
     EXPECT_STR(stop_class_name(CLASS_BUDGET), S("budget"));
-    EXPECT_STR(stop_class_name(CLASS_STORE), S("store"));
+    EXPECT_STR(stop_class_name(CLASS_FILE_SYSTEM), S("file_system"));
     EXPECT_STR(stop_class_name(CLASS_FAIL), S("fail"));
     EXPECT_STR(stop_class_name(CLASS_HOST), S("host"));
     EXPECT_TRAPS((void)stop_class_name(CLASS_COUNT));
@@ -85,10 +85,10 @@ TEST(every_budget_stop_says_its_message) {
     EXPECT_STR(message_of(BUDGET_ARENA, &v), S("the arena budget ran out"));
     EXPECT_STR(message_of(BUDGET_CALL_DEPTH, &v), S("calls nest deeper than the call-depth budget (64)"));
     EXPECT_STR(message_of(BUDGET_OUTPUT, &v), S("the output budget ran out"));
-    EXPECT_STR(message_of(BUDGET_READS, &v), S("the store-read budget (count) ran out"));
-    EXPECT_STR(message_of(BUDGET_READ_BYTES, &v), S("the store-read budget (bytes) ran out"));
-    EXPECT_STR(message_of(BUDGET_CHANGES, &v), S("the store-change budget (count) ran out"));
-    EXPECT_STR(message_of(BUDGET_CHANGE_BYTES, &v), S("the store-change budget (bytes) ran out"));
+    EXPECT_STR(message_of(BUDGET_READS, &v), S("the file-system read budget (count) ran out"));
+    EXPECT_STR(message_of(BUDGET_READ_BYTES, &v), S("the file-system read budget (bytes) ran out"));
+    EXPECT_STR(message_of(BUDGET_CHANGES, &v), S("the file-system change budget (count) ran out"));
+    EXPECT_STR(message_of(BUDGET_CHANGE_BYTES, &v), S("the file-system change budget (bytes) ran out"));
     EXPECT_STR(message_of(BUDGET_SOURCE, &v), S("the source is larger than the source budget"));
     EXPECT_STR(message_of(BUDGET_NESTING, &v), S("the source nests deeper than the nesting budget"));
     EXPECT_STR(message_of(BUDGET_DEPTH, &v), S("calls and the expressions inside them nest deeper than the depth budget"));

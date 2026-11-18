@@ -61,7 +61,7 @@ TEST(ok_says_its_stop) {
 TEST(ok_says_its_budget) {
     RunCtx ctx;
     memset(&ctx, 0, sizeof ctx);
-    EXPECT_OK_IN(&ctx, harness_stop(&ctx, CLASS_BUDGET, BUDGET_READS, S("the store-read budget (count) ran out")));
+    EXPECT_OK_IN(&ctx, harness_stop(&ctx, CLASS_BUDGET, BUDGET_READS, S("the file-system read budget (count) ran out")));
 }
 
 TEST(ok_says_no_stop_was_recorded) {

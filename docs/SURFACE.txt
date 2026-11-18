@@ -338,12 +338,12 @@
 ### builtins_store (8)
   argument   `{s}(\"\")` would act on the whole root: name a path of at least one part
   argument   `{s}`: \"{s}\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)
-  argument   `{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses
+  argument   `{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses
   argument   `{s}`: \"{s}\" is absolute: it's under the data root, so write \"{s}\"
   argument   `{s}`: \"{s}\" is absolute: it's under the mount `{s}:`, so write \"{s}\"
   argument   `{s}`: \"{s}\" is absolute: paths are relative to the data root
   argument   `{s}`: \"{s}\" is absolute: paths are relative to the data root, or a mount's, `name:path` (`shale --help` lists this box's mounts)
-  store      `{s}(\"{s}\")`: {s} ({s}){s}
+  file_system `{s}(\"{s}\")`: {s} ({s}){s}
 ### builtins_text (13)
   argument   `find` starts at 1 to {d} (`#s + 1`), not {d}
   argument   `match_path`: a path of more than {d} parts
@@ -431,6 +431,7 @@
   argument   `{s}` takes {d} to {d} arguments, given {d}
   argument   more than 16 preludes
   budget     the source nests deeper than the nesting budget
+  file_system `use(\"{s}\")`: {s}
   host       `use`: this host loads no library
   host       {s}: this host takes no prelude after the core's
   index      the key `{s}` is given twice
@@ -473,7 +474,6 @@
   refused    only a name can be called: functions are not values
   refused    several loop names are not in this language: `for k in keys(m) do ... m[k] ... end`
   refused    varargs are not in this language
-  store      `use(\"{s}\")`: {s}
   syntax     `attempt(f, a, b)` calls `f` itself: name it, without its own parentheses
   syntax     `break` outside a loop
   syntax     `continue` outside a loop
@@ -549,18 +549,18 @@
   argument   `job_wait`'s `contains` is \"\": every file holds it
   argument   `job_wait`: `file` without `contains`: what to wait for in it
   argument   `{s}`: {s} is not a job's record (`<log>.job`)
+  file_system `job_start`: {s}'s directory is not there: the log and its record go in it
+  file_system `job_start`: {s}.job cannot be read: {s}
+  file_system `job_wait`: {s} cannot be read: {s}
+  file_system `{s}`: its record {s} cannot be read: {s}
+  file_system `{s}`: no job's record at {s}
+  file_system `{s}`: {s} is not a job's record
   host       `job_start`: `{s}` is not found{s}
   host       `job_start`: a job still runs on {s} (pid {d}, its record {s}.job): `job_stop` or `job_wait` it, or give another log
   host       `job_start`: the reaper could not be forked
   host       `job_start`: the reaper ended without writing a record at {s}.job
   host       `job_start`: this host has no reaper to start a job under
   host       `{s}`: not on this host
-  store      `job_start`: {s}'s directory is not there: the log and its record go in it
-  store      `job_start`: {s}.job cannot be read: {s}
-  store      `job_wait`: {s} cannot be read: {s}
-  store      `{s}`: its record {s} cannot be read: {s}
-  store      `{s}`: no job's record at {s}
-  store      `{s}`: {s} is not a job's record
   type       `job_start`'s `keep_on_stop` is a boolean, not {s}
   type       `job_start`'s argv is a list of strings, not a map
   type       `job_start`'s argv is a list of strings, not {s}
@@ -614,7 +614,7 @@
   type       `json_read`'s options are a map, not {s}
 ### shale_host_linux (46)
   argument   \"{s}\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)
-  argument   \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses
+  argument   \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses
   argument   \"{s}\" is absolute inside its mount: a mount's paths are relative to it
   argument   \"{s}\": `{s}:` is not a mount: the mounts are {s} ({s})
   argument   \"{s}\": `{s}:` is not a mount: there are none ({s})
@@ -625,6 +625,14 @@
   argument   `run`: its `{s}` must be 0 or more, not {d}
   argument   `sleep` takes 0 to {d} ms, not {d}
   argument   `sleep` takes one argument, the ms, given {d}
+  file_system --undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back
+  file_system --undo-on-stop: {s} cannot be read ({t}), so it could not be put back
+  file_system the mount `{s}` is a secrets mount whose folder cannot be opened: {s}
+  file_system the mount `{s}` is a secrets mount whose folder is missing
+  file_system the mount `{s}` is {s}, which cannot be opened: {s}
+  file_system the mount `{s}` is {s}, which is not a folder there
+  file_system the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named
+  file_system the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named
   host       `sleep` was cancelled after its start
   host       `{s}`: not on this host
   refused    --undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it
@@ -644,15 +652,7 @@
   refused    `{s}`'s argument {d} holds the mount `{s}`'s folder, which holds secrets: name a folder beside it
   refused    `{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`
   refused    {s}: mount `{s}` is read-only
-  refused    {s}{s} is a symbolic link: the store follows none
-  store      --undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back
-  store      --undo-on-stop: {s} cannot be read ({t}), so it could not be put back
-  store      the mount `{s}` is a secrets mount whose folder cannot be opened: {s}
-  store      the mount `{s}` is a secrets mount whose folder is missing
-  store      the mount `{s}` is {s}, which cannot be opened: {s}
-  store      the mount `{s}` is {s}, which is not a folder there
-  store      the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named
-  store      the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named
+  refused    {s}{s} is a symbolic link: the file system follows none
   type       `run`'s `stdout_secret` is a path in a `secrets` mount, `\"keys:NAME\"`, not {s}
   type       `run`: its `{s}` must be a map, not a list
   type       `run`: its `{s}` must be a map, not {s}
@@ -700,6 +700,13 @@
   argument   `run`: its cwd is not a folder that can be entered
   argument   `run`: the output passed `whole = {d}` bytes ({d}): a keep, `head` and `tail`, takes any size
   argument   `run`: the secret `{s}`'s file {s} is empty
+  file_system `run`'s `stdout_secret` {s} cannot be looked at: {s}
+  file_system `run`'s `stdout_secret` {s} cannot be synced: nothing is stored
+  file_system `run`'s `stdout_secret` {s} cannot be written: {s}
+  file_system `run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}
+  file_system `run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}
+  file_system `run`: its log {s} cannot be written: {s}
+  file_system `run`: the secret `{s}`'s file {s} cannot be read: {s}
   host       `run`: `{s}` is not found{s}
   host       `run`: `{s}` is there but cannot be run (its permissions, or not a program)
   host       `run`: shale was told to stop (TERM or HUP) while `{s}` ran; it was ended
@@ -709,13 +716,6 @@
   refused    `run`'s `stdout_secret` {s} was made while `{s}` ran: nothing is stored; `secret_replace = true` to replace it
   refused    `run`: its log {s} is there and is not a file
   refused    `run`: the secret `{s}`'s file {s} is there and is not a file
-  store      `run`'s `stdout_secret` {s} cannot be looked at: {s}
-  store      `run`'s `stdout_secret` {s} cannot be synced: nothing is stored
-  store      `run`'s `stdout_secret` {s} cannot be written: {s}
-  store      `run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}
-  store      `run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}
-  store      `run`: its log {s} cannot be written: {s}
-  store      `run`: the secret `{s}`'s file {s} cannot be read: {s}
   type       `run`'s argv is a list of strings, `{\"zig\", \"build\"}`, not {s}
   type       `run`'s argv is a list of strings, not a map
   type       `run`'s argv[{d}] is {s}, not a string: every argument is one, written as the program takes it
@@ -803,7 +803,7 @@
   type       a map cannot hold nil
 ### the preludes' `fail`s (78)
   fail  `assert`: its first argument must be true or false, not {expr}    [the prelude's assert]
-  fail  `copy`: {expr} is a symbolic link, which the store never follows; nothing was copied    [the Linux prelude's copy]
+  fail  `copy`: {expr} is a symbolic link, which the file system never follows; nothing was copied    [the Linux prelude's copy]
   fail  `copy`: {expr} is already there, and a copy never overwrites (`remove_tree` it first)    [the Linux prelude's copy]
   fail  `create`: {expr} is there already: `edit` or `replace` it    [the Linux prelude's create]
   fail  `drop`: a count of {expr}    [the prelude's drop]
@@ -884,6 +884,10 @@
 ## The stops that speak of secrets (the secrets rule's messages, from the list above)
   shale_host_jobs    argument   `job_start`: no `secrets` on a job: a detached job's log has nobody to scrub it
   shale_host_linux   argument   \"{s}\": a secret is a file in the mount, not the mount
+  shale_host_linux   file_system the mount `{s}` is a secrets mount whose folder cannot be opened: {s}
+  shale_host_linux   file_system the mount `{s}` is a secrets mount whose folder is missing
+  shale_host_linux   file_system the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named
+  shale_host_linux   file_system the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named
   shale_host_linux   refused    \"{s}\" is in the mount `{s}`, which holds secrets
   shale_host_linux   refused    \"{s}\": the mount `{s}` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files
   shale_host_linux   refused    `run`'s `stdout_secret` \"{s}\" is in a folder of the mount: a secret is a file directly in it, `\"{s}:NAME\"`
@@ -892,26 +896,22 @@
   shale_host_linux   refused    `{s}`'s `env` {s} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`
   shale_host_linux   refused    `{s}`'s argument {d} holds the mount `{s}`'s folder, which holds secrets: name a folder beside it
   shale_host_linux   refused    `{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`
-  shale_host_linux   store      the mount `{s}` is a secrets mount whose folder cannot be opened: {s}
-  shale_host_linux   store      the mount `{s}` is a secrets mount whose folder is missing
-  shale_host_linux   store      the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named
-  shale_host_linux   store      the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named
   shale_host_linux   type       `run`'s `stdout_secret` is a path in a `secrets` mount, `\"keys:NAME\"`, not {s}
   shale_host_run     argument   `run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms and stage, not `{s}`
   shale_host_run     argument   `run`'s `secret_replace` is `stdout_secret`'s: it says a stored secret may be replaced
   shale_host_run     argument   `run`'s `stdout_secret` sends stdout to the secret alone, so it takes no keep, filter or log (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`, `width`, `log`): its `out` is stderr's last {d} lines
   shale_host_run     argument   `run`: `{s}` printed {d} bytes, past the {d} `secrets` reads: nothing is stored in {s}
   shale_host_run     argument   `run`: the secret `{s}`'s file {s} is empty
+  shale_host_run     file_system `run`'s `stdout_secret` {s} cannot be looked at: {s}
+  shale_host_run     file_system `run`'s `stdout_secret` {s} cannot be synced: nothing is stored
+  shale_host_run     file_system `run`'s `stdout_secret` {s} cannot be written: {s}
+  shale_host_run     file_system `run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}
+  shale_host_run     file_system `run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}
+  shale_host_run     file_system `run`: the secret `{s}`'s file {s} cannot be read: {s}
   shale_host_run     refused    `run`'s `stdout_secret` {s} is there already: `secret_replace = true` to replace it
   shale_host_run     refused    `run`'s `stdout_secret` {s} is there and is not a file
   shale_host_run     refused    `run`'s `stdout_secret` {s} was made while `{s}` ran: nothing is stored; `secret_replace = true` to replace it
   shale_host_run     refused    `run`: the secret `{s}`'s file {s} is there and is not a file
-  shale_host_run     store      `run`'s `stdout_secret` {s} cannot be looked at: {s}
-  shale_host_run     store      `run`'s `stdout_secret` {s} cannot be synced: nothing is stored
-  shale_host_run     store      `run`'s `stdout_secret` {s} cannot be written: {s}
-  shale_host_run     store      `run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}
-  shale_host_run     store      `run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}
-  shale_host_run     store      `run`: the secret `{s}`'s file {s} cannot be read: {s}
   shale_host_run     type       `run`: its `secret_replace` must be true or false, not {s}
 
 ## The budgets (16): name, the core's default, the CLI's, whether `--budget` sets it, what it counts
@@ -942,10 +942,10 @@
   arena         the arena budget ran out
   call_depth    calls nest deeper than the call-depth budget ({d})  ||  calls nest deeper than the call-depth budget
   output        the output budget ran out
-  reads         the store-read budget (count) ran out
-  read_bytes    the store-read budget (bytes) ran out
-  changes       the store-change budget (count) ran out
-  change_bytes  the store-change budget (bytes) ran out
+  reads         the file-system read budget (count) ran out
+  read_bytes    the file-system read budget (bytes) ran out
+  changes       the file-system change budget (count) ran out
+  change_bytes  the file-system change budget (bytes) ran out
   source        the source is larger than the source budget
   nesting       the source nests deeper than the nesting budget
   depth         calls and the expressions inside them nest deeper than the depth budget

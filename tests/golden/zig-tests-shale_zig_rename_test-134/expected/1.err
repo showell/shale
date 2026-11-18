@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:476:10 (in `the Linux prelude's zig_renames`): store: `zig_rename("m.zig")`: not found (FileNotFound): `exists(p)` asks first (48 steps)
+── stopped at the Linux prelude:476:10 (in `the Linux prelude's zig_renames`): file_system: `zig_rename("m.zig")`: not found (FileNotFound): `exists(p)` asks first (48 steps)
    called from {base}/case/script.shale:1:11
 ── used: 48 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 48 in all; the most 27 (56%): zig_renames, 1 call; 21 (43%): script

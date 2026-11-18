@@ -294,7 +294,7 @@ static STATUS_MUST_USE Status refuse_links(LibraryReader *r, Str dir, Str rest, 
         if (lstat(c, &st) != 0) return OK; // skip: a missing part is the read's own stop
         if (S_ISLNK(st.st_mode)) {
             bool got;
-            TRY(reader_why(why, &got, 3, a, prefix, str_sub(rest, 0, shown_end), S(" is a symbolic link: the store follows none")));
+            TRY(reader_why(why, &got, 3, a, prefix, str_sub(rest, 0, shown_end), S(" is a symbolic link: the file system follows none")));
             *refused = true;
             return OK;
         }
@@ -369,7 +369,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     Str part = {0};
     while (cli_split(&left, &done, '/', &part)) {
         if (str_eq(part, S(".."))) return reader_why(why, got, 3, a, S("\""), path, S("\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)"));
-        if (!path_strict_name(part)) return reader_why(why, got, 5, a, S("\""), path, S("\" has a part (\""), part, S("\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses"));
+        if (!path_strict_name(part)) return reader_why(why, got, 5, a, S("\""), path, S("\" has a part (\""), part, S("\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses"));
     }
     // A mount's folder holds no NUL (mounts_parse), nor does the root's.
     const char *dir_c = arena_cstr(a, os_str_own(m->dir));
@@ -397,7 +397,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     }
     // `countRead`: the read's count first, then the file's size.
     if (r->used.reads >= r->budgets.reads) {
-        *why = S("the store-read budget (count) ran out");
+        *why = S("the file-system read budget (count) ran out");
         return OK;
     }
     r->used.reads++;
@@ -406,7 +406,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     if (full_c == NULL) return STOP;
     if (stat(full_c, &st) != 0) {
         if (errno == ENOENT) return reader_why(why, got, 3, a, S("`read(\""), path, S("\")`: not found (FileNotFound): `exists(p)` asks first"));
-        return reader_why(why, got, 5, a, S("`read(\""), path, S("\")`: the store failed ("), error_name(errno), S(")"));
+        return reader_why(why, got, 5, a, S("`read(\""), path, S("\")`: the file system failed ("), error_name(errno), S(")"));
     }
     if (!S_ISREG(st.st_mode)) return reader_why(why, got, 3, a, S("`read(\""), path, S("\")`: a folder, not a file (IsDir): `is_dir(p)` asks first"));
     uint64_t size = (uint64_t)st.st_size;
@@ -415,14 +415,14 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
         return OK;
     }
     if (size > sat_sub(r->budgets.read_bytes, r->used.read_bytes)) {
-        *why = S("the store-read budget (bytes) ran out");
+        *why = S("the file-system read budget (bytes) ran out");
         return OK;
     }
     Str text = {0};
     Str err = {0};
     if (read_path(into, full, (size_t)size, &text, &err) != OK) {
         if (str_eq(err, S("OutOfMemory"))) return STOP;
-        return reader_why(why, got, 5, a, S("`read(\""), path, S("\")`: the store failed ("), err, S(")"));
+        return reader_why(why, got, 5, a, S("`read(\""), path, S("\")`: the file system failed ("), err, S(")"));
     }
     r->used.read_bytes += text.len;
     // `chargeBytes`: a step for every 16 bytes read, rounded up.

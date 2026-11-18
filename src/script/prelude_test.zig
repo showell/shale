@@ -95,7 +95,7 @@ test "prelude: an error inside a prelude function says it is the prelude's" {
     var r = f.run("print(count_all(\"missing.log\", \"x\"))", .{});
     defer r.deinit();
     const s = r.stop orelse return error.TestUnexpectedResult;
-    try testing.expectEqual(script.diag.Class.store, s.class);
+    try testing.expectEqual(script.diag.Class.file_system, s.class);
     try testing.expectEqualStrings("the prelude's count_all", s.function);
 }
 

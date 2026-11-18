@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:505:30 (in `the Linux prelude's zig_tokens`): store: `zig_tokens("k.zig")`: not found (FileNotFound): `exists(p)` asks first (30 steps)
+── stopped at the Linux prelude:505:30 (in `the Linux prelude's zig_tokens`): file_system: `zig_tokens("k.zig")`: not found (FileNotFound): `exists(p)` asks first (30 steps)
    called from {base}/case/script.shale:1:22
 ── used: 30 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 30 in all; the most 24 (80%): zig_tokens, 1 call; 6 (20%): script

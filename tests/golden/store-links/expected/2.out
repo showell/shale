@@ -1,7 +1,7 @@
 e/dangle(other,0,0) e/link(other,0,0) 
 e/dangle(other,0,0) e/link(other,0,0) 
 ["dangle","link"]
-e/link is a symbolic link: the store follows none
-e/dangle is a symbolic link: the store follows none
-e/link is a symbolic link: the store follows none
+e/link is a symbolic link: the file system follows none
+e/dangle is a symbolic link: the file system follows none
+e/link is a symbolic link: the file system follows none
 true

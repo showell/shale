@@ -1,4 +1,4 @@
-── stopped at {base}/case/script.shale:5:15 (in `lines_with`): store: `read_lines("chat/channels/general/sessions/plans.md")`: not found (FileNotFound): `exists(p)` asks first (58 steps)
+── stopped at {base}/case/script.shale:5:15 (in `lines_with`): file_system: `read_lines("chat/channels/general/sessions/plans.md")`: not found (FileNotFound): `exists(p)` asks first (58 steps)
    called from {base}/case/script.shale:13:7
 ── used: 58 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 58 in all; the most 40 (68%): read_lines, 1 call; 18 (31%): script

@@ -1,4 +1,4 @@
-── stopped at the Linux prelude:522:10 (in `the Linux prelude's zig_imports`): store: `zig_imports("a.zig")`: not found (FileNotFound): `exists(p)` asks first (24 steps)
+── stopped at the Linux prelude:522:10 (in `the Linux prelude's zig_imports`): file_system: `zig_imports("a.zig")`: not found (FileNotFound): `exists(p)` asks first (24 steps)
    called from {base}/case/script.shale:1:1
 ── used: 24 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 24 in all; the most 21 (87%): zig_imports, 1 call; 3 (12%): script

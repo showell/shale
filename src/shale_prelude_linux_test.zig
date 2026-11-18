@@ -455,7 +455,7 @@ test "linux prelude: copy copies a file or a tree whole, never over what is ther
     try t.expectStop("copy(\"site/index.html\", \"taken.html\")", .atomic, .fail, "is already there, and a copy never overwrites");
     // A link anywhere in the tree stops it, and nothing is written.
     try t.tmp.dir.symLink(t.threaded.io(), "index.html", "site/link.html", .{});
-    try t.expectStop("copy(\"site\", \"linked\")", .atomic, .fail, "is a symbolic link, which the store never follows; nothing was copied");
+    try t.expectStop("copy(\"site\", \"linked\")", .atomic, .fail, "is a symbolic link, which the file system never follows; nothing was copied");
     try t.expectOutput("print(exists(\"linked\"))", "false\n");
 }
 
@@ -483,7 +483,7 @@ test "linux prelude: grep_tree searches a tree, says what it passed by, and take
         \\for p in r.passed do print(p.path, p.why) end
     ,
         "src/a.zig:2: const HIT = 1;\nsrc/sub/c.zig:2: y HIT\n3\tfalse\n" ++
-            "src/" ++ long ++ "\ta name the store can't hold\nsrc/bin.dat\tbinary\nsrc/link.zig\ta symbolic link, never followed\n",
+            "src/" ++ long ++ "\ta name the file system can't hold\nsrc/bin.dat\tbinary\nsrc/link.zig\ta symbolic link, never followed\n",
     );
     // Either case, in the extensions asked for; a pattern.
     try t.expectOutput("local r = grep_tree(\"src\", \"hit\", {nocase = true, ext = {\"md\"}}) print(r.files, r.hits[1].path, r.hits[1].line, r.hits[1].text)", "1\tsrc/b.md\t1\ta hit here\n");

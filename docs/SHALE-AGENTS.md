@@ -11,7 +11,7 @@ there to stay safe is what an agent wants on Linux too:**
   and says so: its output is a bounded context cost, never a flood.
 - **A stop is one line that says where and why**, with the calls that led
   there (`called from file:line:column (in f)`), and a class: `type`,
-  `index`, `store`, `budget reads`. No traceback to read through.
+  `index`, `file_system`, `budget reads`. No traceback to read through.
 - **A run makes its changes; git is the undo.** There is no dry run:
   every change is checked and logged, an `edit`'s
   diff is printed before it is written, and an edit that would not pin its

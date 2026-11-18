@@ -206,12 +206,12 @@ test "secrets mounts: no read, listing, change, path or argument reaches a token
         .{ "job_start({\"keys/tok\"}, {log = \"j.log\"})", "`job_start`'s argument 1 names the mount `k`'s folder" },
     }) |c| try t.expectStop(c[0], .atomic, .refused, c[1]);
     // A secret's file that is not there is named as the script named it.
-    try t.expectStop("run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:missing\"}})", .atomic, .store, "`run`: the secret `X`'s file k:missing cannot be read: FileNotFound");
+    try t.expectStop("run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:missing\"}})", .atomic, .file_system, "`run`: the secret `X`'s file k:missing cannot be read: FileNotFound");
     // A secret's file past what `secrets` reads is refused, as a read past it.
     const huge = try a.alloc(u8, 64 * 1024 + 1);
     @memset(huge, 'x');
     try t.put("keys/huge", huge);
-    try t.expectStop("run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:huge\"}})", .atomic, .store, "`run`: the secret `X`'s file k:huge cannot be read: StreamTooLong");
+    try t.expectStop("run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:huge\"}})", .atomic, .file_system, "`run`: the secret `X`'s file k:huge cannot be read: StreamTooLong");
     // A secret's file that is a FIFO is refused, not waited on. One run, not
     // the gate's: the gate copies the root, and a copy would wait on it.
     const secret_pipe = try std.fmt.allocPrintSentinel(a, "{s}/keys/pipe", .{t.root}, 0);
@@ -334,13 +334,13 @@ test "stdout_secret: a file made there while the program ran, a folder that refu
     try onceStop(&t, "run({\"sh\", \"-c\", \"printf tok; touch ke''ys/raced\"}, {timeout_ms = 10000, stdout_secret = \"k:raced\", want = \"test: a program that makes the secret's file\"})", .refused, "`run`'s `stdout_secret` k:raced was made while `sh");
     try testing.expectEqualStrings("", try t.file("keys/raced"));
     // The program takes the folder's write away, so the rename is refused.
-    try onceStop(&t, "run({\"sh\", \"-c\", \"printf tok; chmod 500 ke''ys\"}, {timeout_ms = 10000, stdout_secret = \"k:locked\", want = \"test: a program that locks the folder\"})", .store, "`run`'s `stdout_secret` k:locked cannot be written: ACCES");
+    try onceStop(&t, "run({\"sh\", \"-c\", \"printf tok; chmod 500 ke''ys\"}, {timeout_ms = 10000, stdout_secret = \"k:locked\", want = \"test: a program that locks the folder\"})", .file_system, "`run`'s `stdout_secret` k:locked cannot be written: ACCES");
     try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(keys, 0o700));
     try testing.expectError(error.FileNotFound, t.tmp.dir.statFile(io, "keys/locked", .{}));
     // A folder that cannot be searched: the target cannot be looked at.
     try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(keys, 0o000));
     defer _ = std.os.linux.chmod(keys, 0o700);
-    try onceStop(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:hidden\"})", .store, "`run`'s `stdout_secret` k:hidden cannot be looked at: AccessDenied");
+    try onceStop(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:hidden\"})", .file_system, "`run`'s `stdout_secret` k:hidden cannot be looked at: AccessDenied");
 }
 
 /// One run outside the gate, which must stop with `class` and say exactly
@@ -369,22 +369,22 @@ fn folderStopsHideSecrets() !void {
     var why: []const u8 = "";
     t.host.mounts = try host_linux.parseMounts(a, try std.fmt.allocPrint(a, "k = {s}/no-keys secrets\np = {s}/no-plain\nks = {s}/shut/keys secrets\nps = {s}/shut/plain\nin = {s}/no-keys/sub\nnear = {s}/no-keys-old\nkin = {s}/shut/keys/sub\n", .{ t.root, t.root, t.root, t.root, t.root, t.root, t.root }), "/home/x", &why);
     const missing = "the mount `k` is a secrets mount whose folder is missing";
-    try onceSaid(&t, "run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:tok\"}})", .store, missing);
-    try onceSaid(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:tok\"})", .store, missing);
-    try onceSaid(&t, "read(\"p:x\")", .store, try std.fmt.allocPrint(a, "the mount `p` is {s}/no-plain, which is not a folder there", .{t.root}));
+    try onceSaid(&t, "run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"k:tok\"}})", .file_system, missing);
+    try onceSaid(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"k:tok\"})", .file_system, missing);
+    try onceSaid(&t, "read(\"p:x\")", .file_system, try std.fmt.allocPrint(a, "the mount `p` is {s}/no-plain, which is not a folder there", .{t.root}));
     // An ordinary mount whose path spells a secrets mount's folder, inside it
     // or only beginning with it, is not named either.
-    try onceSaid(&t, "read(\"in:x\")", .store, "the mount `in`'s folder is missing; its path holds a secrets mount's folder, so it is not named");
-    try onceSaid(&t, "read(\"near:x\")", .store, "the mount `near`'s folder is missing; its path holds a secrets mount's folder, so it is not named");
+    try onceSaid(&t, "read(\"in:x\")", .file_system, "the mount `in`'s folder is missing; its path holds a secrets mount's folder, so it is not named");
+    try onceSaid(&t, "read(\"near:x\")", .file_system, "the mount `near`'s folder is missing; its path holds a secrets mount's folder, so it is not named");
     // A folder that is there but cannot be opened: its parent shut.
     const shut = try std.fmt.allocPrintSentinel(a, "{s}/shut", .{t.root}, 0);
     try testing.expectEqual(@as(usize, 0), std.os.linux.chmod(shut, 0o000));
     defer _ = std.os.linux.chmod(shut, 0o700);
     const shut_said = "the mount `ks` is a secrets mount whose folder cannot be opened: AccessDenied";
-    try onceSaid(&t, "run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"ks:tok\"}})", .store, shut_said);
-    try onceSaid(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"ks:tok\"})", .store, shut_said);
-    try onceSaid(&t, "read(\"ps:x\")", .store, try std.fmt.allocPrint(a, "the mount `ps` is {s}/shut/plain, which cannot be opened: AccessDenied", .{t.root}));
-    try onceSaid(&t, "read(\"kin:x\")", .store, "the mount `kin`'s folder cannot be opened: AccessDenied; its path holds a secrets mount's folder, so it is not named");
+    try onceSaid(&t, "run({\"shale-fixture\", \"env\", \"X\"}, {timeout_ms = 10000, tail = 5, secrets = {X = \"ks:tok\"}})", .file_system, shut_said);
+    try onceSaid(&t, "run({\"shale-fixture\", \"both\", \"tok\", \"0\"}, {timeout_ms = 10000, stdout_secret = \"ks:tok\"})", .file_system, shut_said);
+    try onceSaid(&t, "read(\"ps:x\")", .file_system, try std.fmt.allocPrint(a, "the mount `ps` is {s}/shut/plain, which cannot be opened: AccessDenied", .{t.root}));
+    try onceSaid(&t, "read(\"kin:x\")", .file_system, "the mount `kin`'s folder cannot be opened: AccessDenied; its path holds a secrets mount's folder, so it is not named");
 }
 
 const script_class = @import("shale").script.diag.Class;
@@ -421,7 +421,7 @@ test "the store follows no link: to a file, to a folder, in the middle of a path
     // What is no link reads as ever, a listing names the links it holds.
     try t.expectOutput("print(read(\"real.txt\"), read(\"m:inner.txt\"), #ls(\"\"))", "real\tinner\t6\n");
     // A log in a folder that is not there cannot be written, and is named.
-    try t.expectStop("run({\"shale-fixture\", \"lines\", \"1\"}, {timeout_ms = 10000, tail = 1, log = \"nodir/x.log\"})", .atomic, .store, "`run`: its log nodir/x.log cannot be written: FileNotFound");
+    try t.expectStop("run({\"shale-fixture\", \"lines\", \"1\"}, {timeout_ms = 10000, tail = 1, log = \"nodir/x.log\"})", .atomic, .file_system, "`run`: its log nodir/x.log cannot be written: FileNotFound");
     // `run`'s log at a FIFO is refused, not waited on: an open for writing
     // would wait there for a reader.
     // One run, not the gate's, whose copy of the root would wait on it.

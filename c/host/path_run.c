@@ -261,12 +261,12 @@ static Str path_file_system_words(FileSystemErr e) {
     case FILE_SYSTEM_NOT_FILE: return S("not a file");
     case FILE_SYSTEM_PATH_ALREADY_EXISTS: return S("already there");
     case FILE_SYSTEM_DIR_NOT_EMPTY: return S("the folder is not empty");
-    case FILE_SYSTEM_ACCESS_DENIED: return S("the store refuses it");
-    case FILE_SYSTEM_PERMISSION_DENIED: return S("the store refuses it");
-    case FILE_SYSTEM_NO_SPACE_LEFT: return S("the store is full");
+    case FILE_SYSTEM_ACCESS_DENIED: return S("the file system refuses it");
+    case FILE_SYSTEM_PERMISSION_DENIED: return S("the file system refuses it");
+    case FILE_SYSTEM_NO_SPACE_LEFT: return S("the file system is full");
     case FILE_SYSTEM_SYM_LINK_LOOP: return S("a link loop");
     case FILE_SYSTEM_NAME_TOO_LONG: return S("the name is too long");
-    default: return S("the store failed");
+    default: return S("the file system failed");
     }
 }
 
@@ -288,7 +288,7 @@ static Str path_file_system_hint(FileSystemErr e) {
 // arena budget for OutOfMemory.
 static STATUS_MUST_USE Status path_file_system_failed(PathRun *r, Pos pos, Str who, Str rel, FileSystemErr e) {
     if (e == FILE_SYSTEM_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
-    return path_fail(r, pos, CLASS_STORE, S("`{s}(\"{s}\")`: {s} ({s}){s}"),
+    return path_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}(\"{s}\")`: {s} ({s}){s}"),
                      MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel), MSG_FROM_HOST(path_file_system_words(e)), MSG_FROM_HOST(file_system_err_name(e)), MSG_FROM_HOST(path_file_system_hint(e))));
 }
 
@@ -379,7 +379,7 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
                              MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel)));
         }
         if (!path_strict_name(part)) {
-            return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses"),
+            return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses"),
                              MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel), MSG_FROM_SCRIPT(part)));
         }
         if (to == rel.len) break;

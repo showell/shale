@@ -372,7 +372,7 @@ static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, 
         FileSystemErr e = file_system_stat_exact(os_str_own(buf_view(&walked)), false, &st);
         if (e != FILE_SYSTEM_OK) return OK; // skip: a missing part ends the walk, the call's own stop
         if (S_ISLNK(st.st_mode)) {
-            return path_fail(r, pos, CLASS_REFUSED, S("{s}{s} is a symbolic link: the store follows none"), MSG_ARGS(MSG_FROM_SCRIPT(shown_prefix), MSG_FROM_SCRIPT(str_sub(rest, 0, shown_end))));
+            return path_fail(r, pos, CLASS_REFUSED, S("{s}{s} is a symbolic link: the file system follows none"), MSG_ARGS(MSG_FROM_SCRIPT(shown_prefix), MSG_FROM_SCRIPT(str_sub(rest, 0, shown_end))));
         }
         if (to == rest.len) break;
         from = to + 1;
@@ -396,7 +396,7 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
             return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)"), MSG_ARGS(MSG_FROM_SCRIPT(path)));
         }
         if (!path_strict_name(part)) {
-            return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_SCRIPT(part)));
+            return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_SCRIPT(part)));
         }
         if (to == rest.len) break;
         from = to + 1;
@@ -416,7 +416,7 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
         FileSystemErr why = e != FILE_SYSTEM_OK ? e : file_system_err_of(errno);
         Str said = S("");
         if (!mounts_folder_failed(paths_values(r), h->mounts, m, why, &said)) return run_oom(r->ctx, pos);
-        return path_fail(r, pos, CLASS_STORE, S("{s}"), MSG_ARGS(MSG_FROM_HOST(said)));
+        return path_fail(r, pos, CLASS_FILE_SYSTEM, S("{s}"), MSG_ARGS(MSG_FROM_HOST(said)));
     }
     Str dir = paths_run_dir_of(h, r, m);
     TRY(paths_refuse_links(r, pos, dir, rest, str_sub(path, 0, colon + 1)));
@@ -568,7 +568,7 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
         Str bytes = S("");
         FileSystemErr re = file_system_read_file(h->arena, os_str_own(abs), room + 1, &bytes);
         if (re != FILE_SYSTEM_OK) {
-            return path_fail(r, pos, CLASS_STORE, S("--undo-on-stop: {s} cannot be read ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(re))));
+            return path_fail(r, pos, CLASS_FILE_SYSTEM, S("--undo-on-stop: {s} cannot be read ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(re))));
         }
         h->journal_bytes += bytes.len;
         p.was = PRIOR_FILE;
@@ -577,7 +577,7 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
     } else if (e == FILE_SYSTEM_OK) {
         return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop: {s} is neither a file nor a folder, and could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs)));
     } else if (e != FILE_SYSTEM_FILE_NOT_FOUND) {
-        return path_fail(r, pos, CLASS_STORE, S("--undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(e))));
+        return path_fail(r, pos, CLASS_FILE_SYSTEM, S("--undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(e))));
     }
     if (!arena_dup(h->arena, abs, &p.abs) || Priors_push(&h->journal, p) != OK) return run_oom(r->ctx, pos);
     return OK;

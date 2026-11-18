@@ -21,7 +21,7 @@ typedef enum {
     CLASS_ARITHMETIC,
     CLASS_ARGUMENT,
     CLASS_BUDGET,
-    CLASS_STORE,
+    CLASS_FILE_SYSTEM,
     CLASS_FAIL,
     CLASS_HOST,
     CLASS_COUNT,
@@ -54,7 +54,7 @@ SLICE_TYPE(Names, const Str);
 static inline Str stop_class_name(StopClass c) {
     static const Str names[] = {
         S_ITEM("syntax"), S_ITEM("refused"), S_ITEM("name"), S_ITEM("type"), S_ITEM("index"),
-        S_ITEM("arithmetic"), S_ITEM("argument"), S_ITEM("budget"), S_ITEM("store"), S_ITEM("fail"),
+        S_ITEM("arithmetic"), S_ITEM("argument"), S_ITEM("budget"), S_ITEM("file_system"), S_ITEM("fail"),
         S_ITEM("host"),
     };
     _Static_assert(sizeof names / sizeof *names == CLASS_COUNT, "a name for every class");
@@ -224,10 +224,10 @@ static inline Str run_budget_message(RunCtx *r, BudgetKind k) {
         if (s == OK) s = buf_lit(&b, ")");
         return s == OK ? buf_view(&b) : S("calls nest deeper than the call-depth budget");
     case BUDGET_OUTPUT: return S("the output budget ran out");
-    case BUDGET_READS: return S("the store-read budget (count) ran out");
-    case BUDGET_READ_BYTES: return S("the store-read budget (bytes) ran out");
-    case BUDGET_CHANGES: return S("the store-change budget (count) ran out");
-    case BUDGET_CHANGE_BYTES: return S("the store-change budget (bytes) ran out");
+    case BUDGET_READS: return S("the file-system read budget (count) ran out");
+    case BUDGET_READ_BYTES: return S("the file-system read budget (bytes) ran out");
+    case BUDGET_CHANGES: return S("the file-system change budget (count) ran out");
+    case BUDGET_CHANGE_BYTES: return S("the file-system change budget (bytes) ran out");
     case BUDGET_SOURCE: return S("the source is larger than the source budget");
     case BUDGET_NESTING: return S("the source nests deeper than the nesting budget");
     case BUDGET_DEPTH: return S("calls and the expressions inside them nest deeper than the depth budget");

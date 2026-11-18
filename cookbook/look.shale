@@ -17,7 +17,7 @@
 -- after the last colon. `find` is a literal (not a pattern), looked for in
 -- each file or folder of `in` (comma-separated; folders searched by the
 -- prelude's `grep_tree`: hidden folders, zig-out, zig-pkg and node_modules
--- left out, and a link, a binary file or a name the store can't hold
+-- left out, and a link, a binary file or a name the file system can't hold
 -- listed at the end as passed by), files
 -- matching `like` (`*` for all; a glob is no plain word, so it goes on
 -- stdin with `--args-stdin`) and ending in one of `ext`'s extensions

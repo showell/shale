@@ -223,7 +223,7 @@ pub fn runProgram(h: *hl.Host, run: *Run, pos: ast.Pos, args: []const Value) Err
         const fd = switch (os_linux.openRegular(path_z, true)) {
             .fd => |fd| fd,
             .not_regular => return run.fail(pos, .refused, "`run`: its log {s} is there and is not a file", .{log_shown}),
-            .failed => |e| return run.fail(pos, .store, "`run`: its log {s} cannot be written: {s}", .{ log_shown, os_linux.errName(e) }),
+            .failed => |e| return run.fail(pos, .file_system, "`run`: its log {s} cannot be written: {s}", .{ log_shown, os_linux.errName(e) }),
         };
         const f: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = false } };
         log_file = f;
@@ -371,7 +371,7 @@ fn readSecret(run: *Run, pos: ast.Pos, k: []const u8, shown: []const u8, path: [
     const fd = switch (os_linux.openRegular(path_z, false)) {
         .fd => |fd| fd,
         .not_regular => return run.fail(pos, .refused, "`run`: the secret `{s}`'s file {s} is there and is not a file", .{ k, shown }),
-        .failed => |e| return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, os_linux.errName(e) }),
+        .failed => |e| return run.fail(pos, .file_system, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, os_linux.errName(e) }),
     };
     defer os_linux.close(fd);
     const buf = a.alloc(u8, secret_most + 1) catch return run.oom(pos);
@@ -382,10 +382,10 @@ fn readSecret(run: *Run, pos: ast.Pos, k: []const u8, shown: []const u8, path: [
                 if (n == 0) break;
                 len += n;
             },
-            .failed => |e| return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, os_linux.errName(e) }), // coverage: not run, a read of a regular file the host opened fails only on a disk error (EIO)
+            .failed => |e| return run.fail(pos, .file_system, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, os_linux.errName(e) }), // coverage: not run, a read of a regular file the host opened fails only on a disk error (EIO)
         }
     }
-    if (len > secret_most) return run.fail(pos, .store, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, "StreamTooLong" });
+    if (len > secret_most) return run.fail(pos, .file_system, "`run`: the secret `{s}`'s file {s} cannot be read: {s}", .{ k, shown, "StreamTooLong" });
     return buf[0..len];
 }
 
@@ -409,12 +409,12 @@ const SecretFile = struct {
             if (!replace) return run.fail(pos, .refused, "`run`'s `stdout_secret` {s} is there already: `secret_replace = true` to replace it", .{shown});
         } else |e| switch (e) {
             error.FileNotFound => {},
-            else => return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be looked at: {s}", .{ shown, @errorName(e) }),
+            else => return run.fail(pos, .file_system, "`run`'s `stdout_secret` {s} cannot be looked at: {s}", .{ shown, @errorName(e) }),
         }
         const tmp = std.fmt.allocPrintSentinel(a, "{s}/.{s}.{d}.shale-tmp", .{ std.fs.path.dirname(path) orelse "/", std.fs.path.basename(path), os_linux.selfPid() }, 0) catch return run.oom(pos);
         var fd: i32 = -1;
         const made = os_linux.createPrivate(tmp, &fd);
-        if (made != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}", .{ shown, @tagName(made) });
+        if (made != .SUCCESS) return run.fail(pos, .file_system, "`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}", .{ shown, @tagName(made) });
         return .{ .shown = shown, .path = a.dupeSentinel(u8, path, 0) catch return run.oom(pos), .tmp = tmp, .fd = fd };
     }
 
@@ -422,7 +422,7 @@ const SecretFile = struct {
     fn refuseOver(s: *SecretFile, run: *Run, pos: ast.Pos, program: []const u8) Error!void {
         var size: u64 = 0;
         const measured = os_linux.fileSize(s.fd, &size);
-        if (measured != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}", .{ s.shown, program, @tagName(measured) });
+        if (measured != .SUCCESS) return run.fail(pos, .file_system, "`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}", .{ s.shown, program, @tagName(measured) });
         if (size > secret_most) return run.fail(pos, .argument, "`run`: `{s}` printed {d} bytes, past the {d} `secrets` reads: nothing is stored in {s}", .{ program, size, secret_most, s.shown });
     }
 
@@ -430,16 +430,16 @@ const SecretFile = struct {
     fn store(s: *SecretFile, run: *Run, pos: ast.Pos, program: []const u8, replace: bool) Error!u64 {
         var size: u64 = 0;
         const measured = os_linux.fileSize(s.fd, &size);
-        if (measured != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}", .{ s.shown, program, @tagName(measured) });
+        if (measured != .SUCCESS) return run.fail(pos, .file_system, "`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}", .{ s.shown, program, @tagName(measured) });
         // Past `secret_most` was refused before (`refuseOver`).
         if (size == 0) return run.fail(pos, .argument, "`run`: `{s}` exited 0 and printed nothing: nothing is stored in {s}", .{ program, s.shown });
-        if (os_linux.sync(s.fd) != .SUCCESS) return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be synced: nothing is stored", .{s.shown});
+        if (os_linux.sync(s.fd) != .SUCCESS) return run.fail(pos, .file_system, "`run`'s `stdout_secret` {s} cannot be synced: nothing is stored", .{s.shown});
         os_linux.close(s.fd);
         s.fd = -1;
         switch (os_linux.renameOver(s.tmp, s.path, replace)) {
             .SUCCESS => s.made = false,
             .EXIST => return run.fail(pos, .refused, "`run`'s `stdout_secret` {s} was made while `{s}` ran: nothing is stored; `secret_replace = true` to replace it", .{ s.shown, program }),
-            else => |e| return run.fail(pos, .store, "`run`'s `stdout_secret` {s} cannot be written: {s}", .{ s.shown, @tagName(e) }),
+            else => |e| return run.fail(pos, .file_system, "`run`'s `stdout_secret` {s} cannot be written: {s}", .{ s.shown, @tagName(e) }),
         }
         return size;
     }

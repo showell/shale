@@ -391,7 +391,7 @@ was in. The classes are:
 | `index` | a missing key, or an index out of range |
 | `arithmetic` | overflow, or division by zero |
 | `argument` | a builtin or function given the wrong arguments |
-| `store` | a store call failed (it names the path) |
+| `file_system` | a file system call failed (it names the path) |
 | `budget` | a budget ran out (it names which) |
 | `fail` | the script's own: `fail(msg)`, its message as given |
 | `host` | `host(name, ...)` where the host has no such call (metal has none) |
@@ -417,7 +417,7 @@ prelude's. So a budget that runs out in the prelude's `walk_all` names the
 line of the script that called it:
 
 ```text
-── stopped at the prelude:19:14 (in `the prelude's walk_all`): budget reads: the store-read budget (count) ran out (134718 steps)
+── stopped at the prelude:19:14 (in `the prelude's walk_all`): budget reads: the file-system read budget (count) ran out (134718 steps)
    called from seq 12:31:15 (in `sizes`)
    called from seq 12:40:1
 ```
@@ -452,7 +452,7 @@ arguments are evaluated first, outside the attempt, as Lua's `pcall` does.
 It gives back a map:
 - `{ok = true, value = v}` when `f` returned (with no `value` if it
   returned nil);
-- or `{ok = false, error = "...", class = "store", line = 12, column = 9,
+- or `{ok = false, error = "...", class = "file_system", line = 12, column = 9,
   in_function = "f", trail = {...}}`. `trail` is the stop's calls,
   innermost first, as the report's `called from` lines: a list of `{line,
   column, in_function}` maps, out to the top level. The `attempt` call is
@@ -568,21 +568,21 @@ change_bytes` past those budgets.
 
 | builtin | gives | errors (besides a wrong type or count) |
 |---|---|---|
-| `ls(p)` | a folder's names, sorted | `store` |
-| `stat(p)` | `{size, kind, modified}` | `store` |
-| `exists(p)`, `is_dir(p)` | booleans | `store` (never for absence) |
-| `read(p[, offset[, n]])` | a file, or its part | `argument` past the call-bytes cap; `budget read_bytes`; `store` |
-| `read_or(p, default)` | a file, or `default` when nothing is there | as `read`; a folder is `store` |
-| `read_lines(p[, offset[, n]])` | `{lines, next, done}`: whole lines from `offset` | `argument` for `n` past the call-bytes cap or a line longer; `store` |
-| `line_at(p, offset)` | the line holding `offset`, or nil past the end | `argument` for a line past the call-bytes cap; `store` |
-| `grep(p, s)` | the lines holding `s`, as `{line, text}` | `argument` for a file past the call-bytes cap; `store` |
+| `ls(p)` | a folder's names, sorted | `file_system` |
+| `stat(p)` | `{size, kind, modified}` | `file_system` |
+| `exists(p)`, `is_dir(p)` | booleans | `file_system` (never for absence) |
+| `read(p[, offset[, n]])` | a file, or its part | `argument` past the call-bytes cap; `budget read_bytes`; `file_system` |
+| `read_or(p, default)` | a file, or `default` when nothing is there | as `read`; a folder is `file_system` |
+| `read_lines(p[, offset[, n]])` | `{lines, next, done}`: whole lines from `offset` | `argument` for `n` past the call-bytes cap or a line longer; `file_system` |
+| `line_at(p, offset)` | the line holding `offset`, or nil past the end | `argument` for a line past the call-bytes cap; `file_system` |
+| `grep(p, s)` | the lines holding `s`, as `{line, text}` | `argument` for a file past the call-bytes cap; `file_system` |
 | `edit(p, old, new[, opts])`, `edit(p, {{old, new}, ...})` | the number replaced, the diff printed first | `argument` for `old` not there, or there twice without `all`; as `replace` |
-| `count_lines(p[, offset[, n]])` | the lines in a file or a range | `argument` past the cap; `store` |
-| `count_in(p, s[, offset[, n]])` | `s`'s occurrences in a file or a range | `argument` for "" or past the cap; `store` |
+| `count_lines(p[, offset[, n]])` | the lines in a file or a range | `argument` past the cap; `file_system` |
+| `count_in(p, s[, offset[, n]])` | `s`'s occurrences in a file or a range | `argument` for "" or past the cap; `file_system` |
 | `find_in(p, s[, offset[, n]])` | the first `s`'s 0-based offset, or nil | as `count_in` |
-| `walk(p[, opts])` | the entries under `p`, a part at a time | `argument` for an unknown option or a bad `after`; `store` |
-| `replace(p, s)`, `append(p, s)` | a file written whole, or added to | `store`; in a background run, `argument` |
-| `mkdir(p)`, `remove(p)`, `remove_tree(p)` | a folder made, with its parents; a file or a tree removed | `store` (`remove` and `remove_tree` of a missing path too, `remove` of a folder too); in a background run, `argument` |
+| `walk(p[, opts])` | the entries under `p`, a part at a time | `argument` for an unknown option or a bad `after`; `file_system` |
+| `replace(p, s)`, `append(p, s)` | a file written whole, or added to | `file_system`; in a background run, `argument` |
+| `mkdir(p)`, `remove(p)`, `remove_tree(p)` | a folder made, with its parents; a file or a tree removed | `file_system` (`remove` and `remove_tree` of a missing path too, `remove` of a folder too); in a background run, `argument` |
 | `split(s, sep)`, `lines(s)`, `words(s)` | lists of strings | `argument` for `sep` = "" |
 | `join(l, sep)` | one string | `type` for an item not a string or integer |
 | `starts_with`, `ends_with`, `contains` `(s, t)` | booleans | |
@@ -630,25 +630,25 @@ change_bytes` past those budgets.
 
 | builtin | gives | costs | errors |
 |---|---|---|---|
-| `ls(p)` | the names in a folder, sorted | a read; a step an entry, and the sort | `store`: missing, or not a folder |
-| `stat(p)` | `{size, kind, modified}`. `kind` is `"file"`, `"directory"` or `"other"`. `modified` is in seconds since 1970, as the host keeps it: metal's FAT to 2 s, and 0 where it keeps none | a read | `store` |
-| `exists(p)` | whether anything is there | a read | `store`, only for a failure other than absence |
-| `is_dir(p)` | whether a folder is there | a read | `store` |
-| `read(p)` | the whole file | a read; each byte a read byte, and a step for 16 | `argument` for a file over the call-bytes cap (1 MiB): read it in parts; `budget read_bytes` when the file is longer than what is left; `store` |
-| `read_or(p, default)` | the whole file, or `default` when nothing is at `p` | one read: where `exists` then `read` was two; its bytes as `read`'s | as `read`; a folder is `store` |
-| `read(p, offset[, n])` | `n` bytes from byte `offset`, or to the end; fewer where the file ends, and "" from its end or past it. **Offsets are 0-based**, as the site's sidecars count them | a read; only those bytes | `argument` for a negative offset or count, or for more than the call-bytes cap; `store` for a folder or a missing file |
-| `read_lines(p[, offset[, n]])` | `{lines, next, done}`: the whole lines from byte `offset` (0 unset), at least `n` bytes (64 KiB unset) and on to the end of the line it stops in, so no line is cut; `lines` as `lines` splits them; `next` where the next part starts; `done` whether that is the file's end. `offset` is a line's start, as `next` is | a read; the part's bytes, then 512 bytes at a time past it to the last line's end, all of it at most the call-bytes cap; a step a byte of the part | `argument` for a negative offset, `n` under 1 or past the cap, or a line longer than the cap; `store` |
-| `grep(p, s)` | the lines of the file holding `s`, a literal, as `{line, text}`, `line` 1-based, in order, a line once however often it holds `s` | a read; the file whole, a step for 16 bytes, and each line kept a step a byte. At most the call-bytes cap: a bigger file goes through `read_lines` | `argument` for `s` empty or a file past the cap; `store` |
+| `ls(p)` | the names in a folder, sorted | a read; a step an entry, and the sort | `file_system`: missing, or not a folder |
+| `stat(p)` | `{size, kind, modified}`. `kind` is `"file"`, `"directory"` or `"other"`. `modified` is in seconds since 1970, as the host keeps it: metal's FAT to 2 s, and 0 where it keeps none | a read | `file_system` |
+| `exists(p)` | whether anything is there | a read | `file_system`, only for a failure other than absence |
+| `is_dir(p)` | whether a folder is there | a read | `file_system` |
+| `read(p)` | the whole file | a read; each byte a read byte, and a step for 16 | `argument` for a file over the call-bytes cap (1 MiB): read it in parts; `budget read_bytes` when the file is longer than what is left; `file_system` |
+| `read_or(p, default)` | the whole file, or `default` when nothing is at `p` | one read: where `exists` then `read` was two; its bytes as `read`'s | as `read`; a folder is `file_system` |
+| `read(p, offset[, n])` | `n` bytes from byte `offset`, or to the end; fewer where the file ends, and "" from its end or past it. **Offsets are 0-based**, as the site's sidecars count them | a read; only those bytes | `argument` for a negative offset or count, or for more than the call-bytes cap; `file_system` for a folder or a missing file |
+| `read_lines(p[, offset[, n]])` | `{lines, next, done}`: the whole lines from byte `offset` (0 unset), at least `n` bytes (64 KiB unset) and on to the end of the line it stops in, so no line is cut; `lines` as `lines` splits them; `next` where the next part starts; `done` whether that is the file's end. `offset` is a line's start, as `next` is | a read; the part's bytes, then 512 bytes at a time past it to the last line's end, all of it at most the call-bytes cap; a step a byte of the part | `argument` for a negative offset, `n` under 1 or past the cap, or a line longer than the cap; `file_system` |
+| `grep(p, s)` | the lines of the file holding `s`, a literal, as `{line, text}`, `line` 1-based, in order, a line once however often it holds `s` | a read; the file whole, a step for 16 bytes, and each line kept a step a byte. At most the call-bytes cap: a bigger file goes through `read_lines` | `argument` for `s` empty or a file past the cap; `file_system` |
 | `edit(p, old, new[, {all, word}])` | the number of occurrences of `old` replaced by `new`; **the change's diff is printed first** (unified: `--- a/p`, `+++ b/p`, a hunk for the lines each occurrence is on). `old` must be in the file once, unless `all`; `word` takes only whole words (no letter, digit or `_` either side). Logged as `edit`. **Where the host says `summary`** (`Options.diffs`; the Linux CLI unless `--verbose`), the diff is one line, `edit p: N hunks, -O +N lines`, printed where the diff is, before the change budgets are checked; the hunk walk is charged as in full, and only the writes' charge goes. **`edit(p, {{old = ..., new = ...[, all = true][, word = true]}, ...})`**, its list form: at most 64 edits a call, in sequence, each to the file as the one before left it, each held to the rules above; one diff, from the file as it was to the file as the last edit left it; one write. An edit that fails stops the run with nothing printed and nothing written, and its error says which edit it was | a read, the file whole (at most the call-bytes cap), a step for 16 bytes, each edit; then `replace`'s change | `argument` for `old` empty, not there, or there more than once without `all`, and for an edit with no `old` or `new` or another key; `type` for an edit not a map; as `read` and `replace` |
-| `line_at(p, offset)` | the whole line holding byte `offset`, without its newline (a newline is its own line's last byte); nil at the file's end or past it | a read; the line, read back and on from `offset` 512 bytes at a time, then once more whole | `argument` for a negative offset or a line longer than the call-bytes cap; `store` |
-| `count_lines(p[, offset[, n]])` | the lines in a file, as `#lines(read(p))` counts them. **Of a range**, `n` bytes from `offset` (or to the end), the newlines in it and, if it reaches the end, a last line without one: the parts' counts add up to the whole's | a read; each byte a read byte, and a step for 16; a step a line; one buffer of 128 KiB for every scan of the run, whatever the file's size, the needle's length and however many files | `argument` for a range (the whole file, without one) over the call-bytes cap (1 MiB): scan it in parts; `store` |
+| `line_at(p, offset)` | the whole line holding byte `offset`, without its newline (a newline is its own line's last byte); nil at the file's end or past it | a read; the line, read back and on from `offset` 512 bytes at a time, then once more whole | `argument` for a negative offset or a line longer than the call-bytes cap; `file_system` |
+| `count_lines(p[, offset[, n]])` | the lines in a file, as `#lines(read(p))` counts them. **Of a range**, `n` bytes from `offset` (or to the end), the newlines in it and, if it reaches the end, a last line without one: the parts' counts add up to the whole's | a read; each byte a read byte, and a step for 16; a step a line; one buffer of 128 KiB for every scan of the run, whatever the file's size, the needle's length and however many files | `argument` for a range (the whole file, without one) over the call-bytes cap (1 MiB): scan it in parts; `file_system` |
 | `count_in(p, s[, offset[, n]])` | how many times `s` occurs, none overlapping; of a range, the matches that start in it, each read to its end (at most `#s - 1` bytes past the range). The parts add up to the whole's unless a match that runs past a part's end overlaps one the next part counts, which only a needle that overlaps itself (`aa`) can do | as `count_lines`, and a step for each match, or first byte of one, it stops at | `argument` for "" or a needle over 64 KiB, or as `count_lines` |
 | `find_in(p, s[, offset[, n]])` | the 0-based offset of the first `s`, a `read` offset, or nil; of a range, the first that starts in it, so a file found in parts gives what the whole file's would | as `count_in`, stopping at the first | as `count_in` |
-| `walk(p[, opts])` | every entry under `p`, depth first, each folder's names sorted and a folder before what it holds, as `{path, size, kind, modified}`, `path` from the root. A folder's size is 0. A symlink is `"other"` (size and `modified` 0) and is never entered | **a read a folder listed and an entry stat'ed** (each a store call, a disk command on metal); a step an entry and each path's bytes. **At most `call_entries` (256) entries a call**: with more to come, the list ends with `{path, kind = "more"}`, and `walk(p, {after = that path})` goes on from it: the prelude's `walk_all` does the parts ("The prelude"). The `more` entry is always the part's last, `kind` and `like` keep it, and its `size` and `modified` are 0. A background run passes by an entry gone between its folder's listing and its stat | `store`; `argument` for an unknown option, or an `after` not under `p` |
-| `replace(p, s)` | writes the file whole: never a torn file. There is no plain `write` | a change; each byte a change byte and a step | `store`, logged |
-| `append(p, s)` | adds to the end | as `replace` | `store`, logged |
-| `mkdir(p)` | a folder, and its parents | a change | `store`, logged |
-| `remove(p)`, `remove_tree(p)` | a file, or a folder and everything in it | **a change, however big the tree**: its size is the store's to bound (its depth, the volume), and a script may call it at most `changes` times | `store` for a missing path (logged). A tree the store fails partway through is logged as one effect with the store's error, and what it had removed by then is gone |
+| `walk(p[, opts])` | every entry under `p`, depth first, each folder's names sorted and a folder before what it holds, as `{path, size, kind, modified}`, `path` from the root. A folder's size is 0. A symlink is `"other"` (size and `modified` 0) and is never entered | **a read a folder listed and an entry stat'ed** (each a store call, a disk command on metal); a step an entry and each path's bytes. **At most `call_entries` (256) entries a call**: with more to come, the list ends with `{path, kind = "more"}`, and `walk(p, {after = that path})` goes on from it: the prelude's `walk_all` does the parts ("The prelude"). The `more` entry is always the part's last, `kind` and `like` keep it, and its `size` and `modified` are 0. A background run passes by an entry gone between its folder's listing and its stat | `file_system`; `argument` for an unknown option, or an `after` not under `p` |
+| `replace(p, s)` | writes the file whole: never a torn file. There is no plain `write` | a change; each byte a change byte and a step | `file_system`, logged |
+| `append(p, s)` | adds to the end | as `replace` | `file_system`, logged |
+| `mkdir(p)` | a folder, and its parents | a change | `file_system`, logged |
+| `remove(p)`, `remove_tree(p)` | a file, or a folder and everything in it | **a change, however big the tree**: its size is the store's to bound (its depth, the volume), and a script may call it at most `changes` times | `file_system` for a missing path (logged). A tree the store fails partway through is logged as one effect with the store's error, and what it had removed by then is gone |
 
 **`walk`'s options:**
 - `depth`: 1 lists only the folder's own entries, which is `ls` with each

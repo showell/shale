@@ -339,7 +339,7 @@ static inline STATUS_MUST_USE Status parse_use_statement(Parser *p, Pos pos, Stm
     Str name = S("");
     bool got = false;
     TRY(p->loader.load(p->loader.ctx, p->arena, path, &why, &source, &name, &got));
-    if (!got) return parse_fail_cat(p, pos, CLASS_STORE, 4, S("`use(\""), path, S("\")`: "), why);
+    if (!got) return parse_fail_cat(p, pos, CLASS_FILE_SYSTEM, 4, S("`use(\""), path, S("\")`: "), why);
     if (name.len == 0) name = path;
     // A `./` path and a mount's may name one file: the file read is the one
     // used again.
