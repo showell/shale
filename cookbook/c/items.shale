@@ -1,0 +1,477 @@
+-- A library that splits a file of Shale's C into its top-level items:
+-- `use("cookbook:c/items.shale")`. There is no C parser on the box, and none
+-- is wanted: c/check_discipline.shale holds the C to a shape a line reader
+-- can trust, and the build fails when a file breaks it, so the dialect is
+-- this parser's contract (c/docs/style.md, "The top level"):
+--
+--   - every line at column 0 opens a top-level item or closes one, and
+--     everything inside an item is indented;
+--   - every function starts at column 0 with `static` (or is `int main(`);
+--   - an opening brace ends its line, and a declaration is one a line;
+--   - comments are `//`, `/* */` only inside a macro; there are no tabs;
+--   - a header is framed by `// <name>: ...`, its guard and `#endif`.
+--
+-- `c_items(p, opts?)` gives the file's items in order. Every line of the file
+-- is in exactly one item, or is blank, or is a `//` comment line between
+-- items; a line that is none of these stops the run, naming `p` and its line,
+-- never a guess. An item is a map with every key below, so none is a stop:
+--
+--   kind           function, prototype, data, struct, enum, union, typedef,
+--                  macro, guard, include, directive, generator, test,
+--                  test_list, static_assert;
+--   name           the name it declares: a function's, a type's, a macro's,
+--                  an include's path, a generator's type, a test's; a
+--                  directive's word and first argument (`if defined`); an
+--                  anonymous `enum`'s first enumerator;
+--   first, last    its lines, from its opening line to its closing one;
+--   comment_first, comment_last
+--                  the `//` lines directly above it, no blank between (0, 0
+--                  for none);
+--   sig_first, sig_last
+--                  its head: a function's or a test's lines up to the one its
+--                  body's `{` ends, a wrapped prototype's lines; else its
+--                  first line alone;
+--   body_first, body_last
+--                  a function's or a test's body (both its line, when the body
+--                  shares the head's line), a braced item's inside; 0, 0 for
+--                  none;
+--   storage        `static inline`, `static` or "";
+--   type           a function's or a prototype's return type, as written;
+--   macro, of      a generator's macro (`VEC_DEFINE`) and the type it holds;
+--   makes          a generator macro's own functions, its `Name##_<x>(`
+--                  suffixes (`make`, `push`), read from its definition, as
+--                  vec.h's VEC_DEFINE is: a finder joins a `VEC_DEFINE(I64s,
+--                  ...)` to them as `I64s_push`;
+--   enumerators    an enum's constants, in order;
+--   uses           with `{uses = true}`, the identifiers a function's, a
+--                  test's or a test list's body names, sorted, each once: its
+--                  masked text's words, never a keyword, a number or a member
+--                  after `.` or `->`. Else empty.
+--
+-- `c_mask(line)` is the masker the splitter reads with: a line with its
+-- strings, character literals and comments blanked, each to spaces between
+-- its quotes, so every column stays where it was. c/check_discipline.shale
+-- judges its code through it. `c_function_head(code)` reads a masked head
+-- line as a function's `{type, name}`, or nil; `c_generator(code)` reads a
+-- `VEC_DEFINE(`, `MAP_DEFINE(` or `SLICE_TYPE(` line.
+--
+-- cookbook/c/map_file.shale prints a file's items, and its `self_test=1`
+-- holds this library to its plants (cookbook/c/plants/map_file/).
+
+-- A string, a character literal, a `//` comment to the line's end, or a
+-- `/* */` comment: the leftmost first, so a quote inside a comment, or a `//`
+-- inside a string, is the other's text.
+const C_MASKED = [=["(\\.|[^"\\])*"|'(\\.|[^'\\])*'|//.*|/\*[^*]*\*/]=]
+
+-- C's keywords and the words of its types and storage, which are no use of
+-- a name.
+const C_KEYWORDS = {"auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "_Alignof", "_Bool", "_Static_assert", "bool", "true", "false", "NULL"}
+
+-- `line` with its strings, character literals and comments blanked: each
+-- string or literal keeps its quotes with spaces between, and each comment
+-- is spaces, so the masked line is as long as the raw one, column for column.
+function c_mask(line)
+  if find(line, "\"") == nil and find(line, "'") == nil and find(line, "/") == nil then return line end
+  local found = re_find_all(line, C_MASKED)
+  if #found == 0 then return line end
+  local parts = {}
+  local at = 1
+  for m in found do
+    push(parts, sub(line, at, m.at - 1))
+    local q = sub(m.text, 1, 1)
+    if q == "/" then
+      push(parts, rep(" ", #m.text))
+    else
+      push(parts, q .. rep(" ", #m.text - 2) .. q)
+    end
+    at = m.at + #m.text
+  end
+  push(parts, sub(line, at))
+  return join(parts, "")
+end
+
+-- A masked head line read as a function's, `{type, name}`, or nil when it
+-- declares none (a variable, a function pointer, a value whose `=` comes
+-- before its first `(`). Its storage and `STATUS_MUST_USE` go first, then a
+-- leading `__attribute__((...))`; `type` is what is left before the name,
+-- `void` among them.
+function c_function_head(code)
+  local s = re_replace(code, [=[^static\s+(inline\s+)?(STATUS_MUST_USE\s+)?]=], "")
+  s = re_replace(s, [=[^__attribute__\(\([\w\s,]*\)\)\s+]=], "")
+  local open = find(s, "(")
+  if open == nil then return nil end
+  local eq = find(s, "=")
+  if eq ~= nil and eq < open then return nil end
+  local m = re_find(trim(sub(s, 1, open - 1)), [=[^(.*[\s*])([A-Za-z_]\w*)$]=])
+  if m == nil then return nil end
+  local ty = trim(m.groups[1])
+  if ty == "" then return nil end
+  return {type = ty, name = m.groups[2]}
+end
+
+-- A masked `VEC_DEFINE(`, `MAP_DEFINE(` or `SLICE_TYPE(` line read as
+-- `{macro, name, of}`, or nil when it is none or its arguments are not a
+-- name and a type.
+function c_generator(code)
+  local m = re_find(code, [=[^(VEC_DEFINE|MAP_DEFINE|SLICE_TYPE)\(\s*(\w+)\s*,\s*([^)]*\S)\s*\)]=])
+  if m == nil then return nil end
+  return {macro = m.groups[1], name = m.groups[2], of = m.groups[3]}
+end
+
+-- An item of `kind` and `name` over lines `first` to `last`, every other key
+-- empty: the caller sets what its kind has.
+function c_item(kind, name, first, last)
+  return {kind = kind, name = name, first = first, last = last, comment_first = 0, comment_last = 0, sig_first = first, sig_last = first, body_first = 0, body_last = 0, storage = "", type = "", macro = "", of = "", makes = {}, enumerators = {}, uses = {}}
+end
+
+-- The stop for line `n` of `p`, which the dialect does not account for: its
+-- place and why first, since a stop's line is cut short, then the line.
+function c_unaccounted(p, n, why, raw)
+  fail(p .. ":" .. n .. ": " .. why .. ": " .. raw)
+end
+
+-- The line that closes the braced item opened at line `from` of `all`: the
+-- first line after `from` at column 0, which must start with `}`. A blank
+-- line, an indented one or a `#` directive (which C writes at column 0, as
+-- an `#ifdef` in a body is) is inside; anything else at column 0 stops.
+function c_brace_close(p, all, from, what)
+  local k = from + 1
+  while k <= #all do
+    local raw = all[k]
+    if raw ~= "" and not starts_with(raw, " ") and not starts_with(raw, "#") then
+      if starts_with(raw, "}") then return k end
+      c_unaccounted(p, k, "a line at column 0 inside " .. what .. " opened at line " .. from .. ", which only a `}` may close", raw)
+    end
+    k = k + 1
+  end
+  c_unaccounted(p, from, what .. " that no `}` at column 0 closes", all[from])
+end
+
+-- The last line of the parenthesized item that opens at line `from`: where
+-- its masked parentheses balance. A line after the first is indented, or
+-- starts with the closing `)` at column 0.
+function c_paren_close(p, all, from)
+  local depth = 0
+  local k = from
+  while k <= #all do
+    local raw = all[k]
+    if k > from and not starts_with(raw, " ") and not starts_with(raw, ")") then
+      c_unaccounted(p, k, "a line at column 0 inside the parentheses opened at line " .. from, raw)
+    end
+    local code = c_mask(raw)
+    depth = depth + #find_all(code, "(") - #find_all(code, ")")
+    if depth <= 0 then return k end
+    k = k + 1
+  end
+  c_unaccounted(p, from, "parentheses that never close", all[from])
+end
+
+-- The last line of a head that opens at line `from`: the first whose masked
+-- code ends with `{`, `;` or `}`. A line after the first is indented.
+function c_head_close(p, all, from)
+  local k = from
+  while k <= #all do
+    local raw = all[k]
+    if k > from and not starts_with(raw, " ") then
+      c_unaccounted(p, k, "a line at column 0 inside the head opened at line " .. from, raw)
+    end
+    local t = trim(c_mask(raw))
+    if ends_with(t, "{") or ends_with(t, ";") or ends_with(t, "}") then return k end
+    k = k + 1
+  end
+  c_unaccounted(p, from, "a head that no `{` or `;` ends", all[from])
+end
+
+-- The name a data item's masked head declares: a function pointer's
+-- `(*name)`, else the last word before its `=`, `[`, `;` or `{`.
+function c_data_name(code)
+  local fp = re_find(code, [=[\(\s*\*\s*(const\s+)?(\w+)\s*\)]=])
+  if fp ~= nil then return fp.groups[2] end
+  local stop = re_find(code, [=[[=\[;{]]=])
+  local head = code
+  if stop ~= nil then head = sub(code, 1, stop.at - 1) end
+  local m = re_find(trim(head), [=[(\w+)$]=])
+  if m == nil then return "" end
+  return m.group
+end
+
+-- An enum's constants, from its masked text: each name that starts an item
+-- of its braces.
+function c_enumerators(text)
+  local inside = between(text, "{", "}")
+  if inside == nil then return {} end
+  local names = {}
+  for part in split(inside, ",") do
+    local m = re_find(part, [=[^\s*([A-Za-z_]\w*)]=])
+    if m ~= nil then push(names, m.group) end
+  end
+  return names
+end
+
+-- The masked text of lines `first` to `last` of `all`, joined by newlines.
+function c_masked_text(all, first, last)
+  local parts = {}
+  local k = first
+  while k <= last do
+    push(parts, c_mask(all[k]))
+    k = k + 1
+  end
+  return join(parts, "\n")
+end
+
+-- The identifiers `code` names, sorted, each once: no keyword, no number, no
+-- member after `.` or `->`, and no directive's own word (`ifdef`), though
+-- the names a directive tests are uses.
+function c_words_used(code)
+  local bare = re_replace(code, [=[(\.|->)\s*[A-Za-z_]\w*]=], " ")
+  bare = re_replace(bare, [=[(^|\n)#\s*\w+]=], "\\1")
+  local keywords = set_of(C_KEYWORDS)
+  local seen = {}
+  for m in re_find_all(bare, [=[\b[A-Za-z_]\w*]=]) do
+    if not has_key(keywords, m.text) then seen[m.text] = true end
+  end
+  local names = keys(seen)
+  sort(names)
+  return names
+end
+
+-- The `static` or `static inline` item at line `i`, a function, a
+-- prototype or data.
+function c_static_item(p, all, i, storage)
+  local last = c_head_close(p, all, i)
+  local head = c_masked_text(all, i, last)
+  local flat = re_replace(head, [=[\s+]=], " ")
+  local fn = c_function_head(flat)
+  local t = trim(c_mask(all[last]))
+  if fn ~= nil then
+    local it = c_item("prototype", fn.name, i, last)
+    it.storage = storage
+    it.type = fn.type
+    it.sig_last = last
+    if ends_with(t, ";") then return it end
+    it.kind = "function"
+    if ends_with(t, "}") then
+      it.body_first = last
+      it.body_last = last
+      return it
+    end
+    it.last = c_brace_close(p, all, last, "the function `" .. fn.name .. "`")
+    if it.last > last + 1 then
+      it.body_first = last + 1
+      it.body_last = it.last - 1
+    end
+    return it
+  end
+  local it = c_item("data", c_data_name(flat), i, last)
+  it.storage = storage
+  it.sig_last = last
+  if ends_with(t, "{") then
+    it.last = c_brace_close(p, all, last, "the data `" .. it.name .. "`")
+    it.body_first = last + 1
+    it.body_last = it.last - 1
+  end
+  return it
+end
+
+-- The `typedef` or `enum` item at line `i`.
+function c_type_item(p, all, i, code)
+  local kind = "typedef"
+  local m = re_find(code, [=[^(typedef\s+)?(struct|enum|union)\b]=])
+  if m ~= nil then kind = m.groups[2] end
+  local last = c_head_close(p, all, i)
+  local t = trim(c_mask(all[last]))
+  local it = c_item(kind, "", i, last)
+  it.sig_last = last
+  if ends_with(t, "{") then
+    it.last = c_brace_close(p, all, last, "the " .. kind)
+    it.body_first = last + 1
+    it.body_last = it.last - 1
+  end
+  local text = c_masked_text(all, i, it.last)
+  if starts_with(code, "typedef") then
+    local fp = re_find(text, [=[\(\s*\*\s*(\w+)\s*\)]=])
+    local nm = re_find(text, [=[(\w+)\s*(\[[^\]]*\])?\s*;\s*$]=])
+    if kind == "typedef" and fp ~= nil then
+      it.name = fp.group
+    elseif nm ~= nil then
+      it.name = nm.groups[1]
+    end
+  else
+    local tag = re_find(code, [=[^enum\s+(\w+)]=])
+    if tag ~= nil then it.name = tag.group end
+  end
+  if kind == "enum" then
+    it.enumerators = c_enumerators(text)
+    if it.name == "" and #it.enumerators > 0 then it.name = it.enumerators[1] end
+  end
+  if it.name == "" then c_unaccounted(p, i, "a " .. kind .. " whose name this reader can't find", all[i]) end
+  return it
+end
+
+-- The `#` item at line `i`: an include, a macro (to its last `\` line), the
+-- header's guard, or another directive.
+function c_hash_item(p, all, i, code)
+  local raw = all[i]
+  local last = i
+  while ends_with(all[last], "\\") and last < #all do last = last + 1 end
+  local w = re_find(code, [=[^#\s*(\w+)\s*(\w*)]=])
+  if w == nil then c_unaccounted(p, i, "a `#` line with no directive", raw) end
+  local word = w.groups[1]
+  local argument = w.groups[2]
+  if word == "include" then
+    local inc = re_find(raw, [=[^#\s*include\s*["<]([^">]+)[">]]=])
+    if inc == nil then c_unaccounted(p, i, "an `#include` with no path", raw) end
+    return c_item("include", inc.group, i, last)
+  end
+  if word == "define" then
+    local it = c_item("macro", argument, i, last)
+    if last > i then
+      it.body_first = i + 1
+      it.body_last = last
+      local seen = {}
+      for s in re_find_all(c_masked_text(all, i, last), [=[static\s[^(]*##_(\w+)\s*\(]=]) do
+        if not has_key(seen, s.groups[1]) then
+          seen[s.groups[1]] = true
+          push(it.makes, s.groups[1])
+        end
+      end
+    end
+    return it
+  end
+  local name = word
+  if argument ~= "" then name = word .. " " .. argument end
+  return c_item("directive", name, i, last)
+end
+
+-- The item that line `i` of `all` opens, its code `code`.
+function c_item_at(p, all, i, code)
+  local raw = all[i]
+  if starts_with(raw, "#") then return c_hash_item(p, all, i, code) end
+  if starts_with(raw, "static inline ") then return c_static_item(p, all, i, "static inline") end
+  if starts_with(raw, "static ") then return c_static_item(p, all, i, "static") end
+  if starts_with(raw, "typedef ") or starts_with(raw, "enum ") then return c_type_item(p, all, i, code) end
+  if starts_with(raw, "SLICE_TYPE(") or starts_with(raw, "VEC_DEFINE(") or starts_with(raw, "MAP_DEFINE(") then
+    local g = c_generator(code)
+    if g == nil then c_unaccounted(p, i, "a generator line whose name and type this reader can't find", raw) end
+    local it = c_item("generator", g.name, i, c_paren_close(p, all, i))
+    it.macro = g.macro
+    it.of = g.of
+    return it
+  end
+  if starts_with(raw, "TEST(") then
+    local m = re_find(code, [=[^TEST\(\s*(\w+)\s*\)\s*\{\s*$]=])
+    if m == nil then c_unaccounted(p, i, "a `TEST(` line that is not `TEST(name) {`", raw) end
+    local it = c_item("test", m.group, i, c_brace_close(p, all, i, "the test `" .. m.group .. "`"))
+    if it.last > i + 1 then
+      it.body_first = i + 1
+      it.body_last = it.last - 1
+    end
+    return it
+  end
+  if starts_with(raw, "TEST_MAIN(") or starts_with(raw, "TEST_PART(") or starts_with(raw, "TEST_PARTS_MAIN(") then
+    local m = re_find(code, [=[^(\w+)\(\s*(\w*)]=])
+    local it = c_item("test_list", m.groups[1], i, c_paren_close(p, all, i))
+    if m.groups[1] == "TEST_PART" and m.groups[2] ~= "" then it.name = m.groups[2] end
+    it.body_first = i
+    it.body_last = it.last
+    return it
+  end
+  if starts_with(raw, "_Static_assert(") then
+    local it = c_item("static_assert", "", i, c_paren_close(p, all, i))
+    for w in re_find_all(c_masked_text(all, i, it.last), [=[\b[A-Za-z_]\w*]=]) do
+      if it.name == "" and w.text ~= "_Static_assert" and w.text ~= "sizeof" then it.name = w.text end
+    end
+    return it
+  end
+  if starts_with(raw, "int main(") then
+    local last = c_head_close(p, all, i)
+    local it = c_item("function", "main", i, c_brace_close(p, all, last, "the function `main`"))
+    it.type = "int"
+    it.sig_last = last
+    if it.last > last + 1 then
+      it.body_first = last + 1
+      it.body_last = it.last - 1
+    end
+    return it
+  end
+  c_unaccounted(p, i, "a line at column 0 that opens no item the dialect knows", raw)
+end
+
+-- The guard of a header: its `#ifndef SHALE_<NAME>_H` and the `#define` after
+-- it made one item, and the `#endif` that ends the file another, each of kind
+-- `guard`, named for the guard. A header without that framing stops.
+function c_frame_guard(p, items)
+  local name = basename(p)
+  local guard = "SHALE_" .. upper(sub(name, 1, #name - 2)) .. "_H"
+  local out = {}
+  local framed = false
+  local k = 1
+  while k <= #items do
+    local it = items[k]
+    if not framed and it.kind == "directive" and it.name == "ifndef " .. guard then
+      if k == #items or items[k + 1].kind ~= "macro" or items[k + 1].name ~= guard then c_unaccounted(p, it.first, "a guard's `#ifndef` with no `#define " .. guard .. "` after it", "#ifndef " .. guard) end
+      local g = c_item("guard", guard, it.first, items[k + 1].last)
+      g.comment_first = it.comment_first
+      g.comment_last = it.comment_last
+      push(out, g)
+      framed = true
+      k = k + 2
+    else
+      push(out, it)
+      k = k + 1
+    end
+  end
+  if not framed then c_unaccounted(p, 1, "a header with no `#ifndef " .. guard .. "`", name) end
+  local tail = out[#out]
+  if tail.kind ~= "directive" or tail.name ~= "endif" then c_unaccounted(p, tail.first, "a header whose last item is not its guard's `#endif`", tail.name) end
+  tail.kind = "guard"
+  tail.name = guard
+  return out
+end
+
+-- The items of the C file at `p`, in order (the header of this library has
+-- their keys). `opts.uses` fills each function's, test's and test list's
+-- `uses`. A line the dialect does not account for stops the run, naming
+-- `p` and the line.
+function c_items(p, opts?)
+  local want_uses = opts ~= nil and get(opts, "uses", false)
+  local all = lines(read(p))
+  local items = {}
+  local comment_first = 0
+  local comment_last = 0
+  local i = 1
+  while i <= #all do
+    local raw = all[i]
+    if raw == "" then
+      comment_first = 0
+      i = i + 1
+    elseif starts_with(raw, "//") then
+      if comment_first == 0 then comment_first = i end
+      comment_last = i
+      i = i + 1
+    elseif starts_with(raw, " ") then
+      c_unaccounted(p, i, "an indented line outside every item", raw)
+    else
+      local it = c_item_at(p, all, i, c_mask(raw))
+      if comment_first ~= 0 then
+        it.comment_first = comment_first
+        it.comment_last = comment_last
+      end
+      if want_uses and it.body_first ~= 0 and (it.kind == "function" or it.kind == "test" or it.kind == "test_list") then
+        local text = c_masked_text(all, it.body_first, it.body_last)
+        if it.body_first == it.sig_last and it.kind ~= "test_list" then
+          -- The body shares the head's line: what follows the `)` that ends
+          -- the parameters.
+          local brace = find(text, "{")
+          if brace ~= nil then text = sub(text, brace) end
+        end
+        it.uses = c_words_used(text)
+      end
+      push(items, it)
+      comment_first = 0
+      i = it.last + 1
+    end
+  end
+  if ends_with(p, ".h") then items = c_frame_guard(p, items) end
+  return items
+end

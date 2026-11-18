@@ -1,0 +1,185 @@
+-- Maps a file of Shale's C: each top-level item, one a line, as
+-- `first-last kind name`, from cookbook/c/items.shale's splitter, which
+-- reads the dialect c/check_discipline.shale holds (that library's header
+-- has the kinds and what each item carries).
+--
+--   shale cookbook:c/map_file.shale file=c/script/vm.c
+--   shale cookbook:c/map_file.shale tree=c         every .c and .h under c/
+--                                                  (c/out left out) split,
+--                                                  each line accounted for
+--   shale cookbook:c/map_file.shale self_test=1    the plants
+--
+-- `tree=` splits every file and proves the split: each line is in exactly
+-- one item, or blank, or a `//` comment line between items, and it prints
+-- one line, the files, lines and items by kind. A line the dialect does not
+-- account for stops the run naming its file and line, in either mode.
+--
+-- `tree=c` takes about 17 million steps and a seventh of a second.
+--
+-- `self_test=1` maps the plants in cookbook/c/plants/map_file/ (a header and
+-- a .c file holding an item of each kind) and holds each to its map, its
+-- comments, heads, bodies and uses, then splits each plant in breaks/,
+-- which must stop naming its file and the line it breaks.
+--
+-- budget: steps=50000000
+
+use("cookbook:c/items.shale")
+
+const PLANTS = "cookbook/c/plants/map_file"
+
+-- The map of the items in `items`, one `first-last kind name` a line.
+function map_lines(items)
+  local out = {}
+  for it in items do push(out, it.first .. "-" .. it.last .. " " .. it.kind .. " " .. it.name) end
+  return out
+end
+
+-- The C files under `dir`, sorted, c/out (the build's output) left out.
+function c_files_under(dir)
+  local files = {}
+  for e in walk_all(dir, {kind = "file", skip = "out"}) do
+    if ends_with(e.path, ".c") or ends_with(e.path, ".h") then push(files, e.path) end
+  end
+  sort(files)
+  return files
+end
+
+-- Each line of `p` in exactly one of `items`, or blank, or a `//` comment
+-- line between them, or the run stops naming the line. Gives the count of
+-- lines.
+function accounted(p, items)
+  local all = lines(read(p))
+  local owner = {}
+  for it in items do
+    local k = it.first
+    while k <= it.last do
+      if has_key(owner, "" .. k) then fail(p .. ":" .. k .. ": in two items, `" .. owner["" .. k] .. "` and `" .. it.name .. "`") end
+      owner["" .. k] = it.name
+      k = k + 1
+    end
+  end
+  local n = 0
+  for raw in all do
+    n = n + 1
+    if not has_key(owner, "" .. n) and raw ~= "" and not starts_with(raw, "//") then fail(p .. ":" .. n .. ": in no item: " .. raw) end
+  end
+  return n
+end
+
+-- Every C file under `dir` split and accounted for, in one line.
+function map_tree(dir)
+  local files = c_files_under(dir)
+  local kinds = {}
+  local total = 0
+  local count = 0
+  for p in files do
+    local items = c_items(p)
+    total = total + accounted(p, items)
+    for it in items do incr(kinds, it.kind) end
+    count = count + #items
+    yield()
+  end
+  local parts = {}
+  local names = keys(kinds)
+  sort(names)
+  for k in names do push(parts, kinds[k] .. " " .. k) end
+  print("PASS c items: " .. #files .. " files under " .. dir .. ", " .. total .. " lines, each in one item or between them; " .. count .. " items: " .. join(parts, ", "))
+  return nil
+end
+
+-- `got` equal to `want`, or the self-test fails, naming `what`.
+function same(what, got, want)
+  if got ~= want then fail("map_file self-test: " .. what .. " is\n" .. got .. "\nit should be\n" .. want) end
+  return nil
+end
+
+-- The item named `name` of kind `kind` in `items`.
+function item_named(items, kind, name)
+  for it in items do
+    if it.kind == kind and it.name == name then return it end
+  end
+  fail("map_file self-test: no " .. kind .. " `" .. name .. "`")
+end
+
+-- An item's lines as `comment a-b, sig c-d, body e-f`.
+function spans(it)
+  return "comment " .. it.comment_first .. "-" .. it.comment_last .. ", sig " .. it.sig_first .. "-" .. it.sig_last .. ", body " .. it.body_first .. "-" .. it.body_last
+end
+
+function self_test()
+  local checks = 0
+  local h = PLANTS .. "/kinds.h"
+  local hi = c_items(h, {uses = true})
+  accounted(h, hi)
+  same(h .. "'s map", join(map_lines(hi), "\n"), join({
+    "2-3 guard SHALE_KINDS_H", "5-5 include stdint.h", "6-6 include slice.h", "9-9 macro KINDS_MAX",
+    "10-17 macro KINDS_DEFINE", "19-19 directive if defined", "20-20 macro KINDS_LINUX", "21-21 directive endif",
+    "23-26 struct KindsPair", "28-28 enum KindsKind", "30-33 union KindsWord", "35-35 typedef KindsHook",
+    "37-40 enum KINDS_FIRST", "42-42 generator KindsPairs", "43-43 generator KindsVec", "45-45 static_assert KindsPair",
+    "47-47 function kinds_sum", "51-58 function kinds_name", "60-61 prototype kinds_check", "63-66 data KINDS_NAMES",
+    "67-67 data KINDS_ONE", "69-69 guard SHALE_KINDS_H"}, "\n"))
+  checks = checks + 1
+  local macro = item_named(hi, "macro", "KINDS_DEFINE")
+  same("KINDS_DEFINE's makes", join(macro.makes, ","), "make,first")
+  same("KINDS_DEFINE's spans", spans(macro), "comment 0-0, sig 10-10, body 11-17")
+  same("KINDS_MAX's spans", spans(item_named(hi, "macro", "KINDS_MAX")), "comment 8-8, sig 9-9, body 0-0")
+  same("KindsKind's enumerators", join(item_named(hi, "enum", "KindsKind").enumerators, ","), "KINDS_A,KINDS_B")
+  same("the anonymous enum's enumerators", join(item_named(hi, "enum", "KINDS_FIRST").enumerators, ","), "KINDS_FIRST,KINDS_SECOND")
+  local vec = item_named(hi, "generator", "KindsVec")
+  same("KindsVec's macro and type", vec.macro .. " " .. vec.of, "VEC_DEFINE KindsPair")
+  local sum = item_named(hi, "function", "kinds_sum")
+  same("kinds_sum", sum.storage .. " | " .. sum.type .. " | " .. spans(sum) .. " | " .. join(sum.uses, ","), "static inline | uint32_t | comment 0-0, sig 47-47, body 47-47 | p")
+  local name = item_named(hi, "function", "kinds_name")
+  same("kinds_name", name.type .. " | " .. spans(name) .. " | " .. join(name.uses, ","), "Str | comment 49-50, sig 51-51, body 52-57 | KINDS_A,KINDS_LINUX,S,k,kinds_label")
+  local check = item_named(hi, "prototype", "kinds_check")
+  same("kinds_check", check.type .. " | " .. spans(check), "Status | comment 0-0, sig 60-61, body 0-0")
+  same("KINDS_NAMES's spans", spans(item_named(hi, "data", "KINDS_NAMES")), "comment 0-0, sig 63-63, body 64-65")
+  checks = checks + 11
+  local c = PLANTS .. "/kinds.c"
+  local ci = c_items(c, {uses = true})
+  accounted(c, ci)
+  same(c .. "'s map", join(map_lines(ci), "\n"), join({
+    "2-2 include test.h", "4-4 data kinds_hook", "6-11 function kinds_wrapped", "13-15 test kinds_test",
+    "17-19 test_list TEST_MAIN", "21-23 function main"}, "\n"))
+  checks = checks + 1
+  local wrapped = item_named(ci, "function", "kinds_wrapped")
+  same("kinds_wrapped", spans(wrapped) .. " | " .. join(wrapped.uses, ","), "comment 0-0, sig 6-7, body 8-10 | a,b,kinds_add,other,p,sum")
+  same("kinds_test's uses", join(item_named(ci, "test", "kinds_test").uses, ","), "EXPECT,kinds_wrapped")
+  same("TEST_MAIN's uses", join(item_named(ci, "test_list", "TEST_MAIN").uses, ","), "TEST_MAIN,kinds_test")
+  same("main's spans", spans(item_named(ci, "function", "main")), "comment 0-0, sig 21-21, body 22-22")
+  checks = checks + 4
+  -- Each break stops, naming its file, its line and why.
+  local breaks = {
+    {f = "indented.c", said = "indented.c:3: an indented line outside every item"},
+    {f = "column0.c", said = "column0.c:2: a line at column 0 that opens no item the dialect knows"},
+    {f = "in_body.c", said = "in_body.c:3: a line at column 0 inside the function `f` opened at line 2, which only a `}` may close"},
+    {f = "unclosed.c", said = "unclosed.c:2: the function `f` that no `}` at column 0 closes"},
+    {f = "no_guard.h", said = "no_guard.h:1: a header with no `#ifndef SHALE_NO_GUARD_H`"},
+    {f = "no_endif.h", said = "no_endif.h:5: a header whose last item is not its guard's `#endif`"},
+    {f = "bad_test.c", said = "bad_test.c:2: a `TEST(` line that is not `TEST(name) {`"},
+    {f = "wrapped_head.c", said = "wrapped_head.c:3: a line at column 0 inside the head opened at line 2"},
+    {f = "bad_generator.c", said = "bad_generator.c:2: a generator line whose name and type this reader can't find"},
+  }
+  for b in breaks do
+    local p = PLANTS .. "/breaks/" .. b.f
+    local r = attempt(c_items, p)
+    if r.ok then fail("map_file self-test: " .. p .. " split, with " .. #r.value .. " items; it should stop with " .. b.said) end
+    if not starts_with(r.error, PLANTS .. "/breaks/" .. b.said .. ": ") then fail("map_file self-test: " .. p .. " stopped with `" .. r.error .. "`; it should stop with `" .. PLANTS .. "/breaks/" .. b.said .. ": <the line>`") end
+    checks = checks + 1
+  end
+  print("PASS map_file self-test: " .. checks .. " checks, each item kind mapped and " .. #breaks .. " shape breaks stopped at their lines")
+  return nil
+end
+
+if arg("self_test", 0) == 1 then
+  self_test()
+else
+  local file = arg("file", "")
+  local tree = arg("tree", "")
+  if (file == "") == (tree == "") then fail("map_file: give `file=<a .c or .h>` or `tree=<a folder>`, one of them") end
+  if file ~= "" then
+    for l in map_lines(c_items(file)) do print(l) end
+  else
+    map_tree(tree)
+  end
+end
