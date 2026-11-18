@@ -347,19 +347,26 @@ static STATUS_MUST_USE Status json_object_members(JsonReader *jr, Table *t) {
     }
 }
 
-static STATUS_MUST_USE Status json_object(JsonReader *jr, Value *out) {
+// Opens the object or array whose first byte is at the cursor: one level
+// deeper, its table made into `*out` and `*t`, and `*closed` true when
+// `close` follows at once, past it. The caller reads what it holds and comes
+// back out a level.
+static STATUS_MUST_USE Status json_open(JsonReader *jr, char close, Value *out, Table **t, bool *closed) {
     TRY(json_enter(jr));
     jr->i++;
-    Table *t = NULL;
-    TRY(run_new_table(jr->r, jr->pos, &t));
-    value_table(out, t);
+    TRY(run_new_table(jr->r, jr->pos, t));
+    value_table(out, *t);
     json_skip_space(jr);
-    Status s = OK;
-    if (json_more(jr) && json_byte(jr) == '}') {
-        jr->i++;
-    } else {
-        s = json_object_members(jr, t);
-    }
+    *closed = json_more(jr) && json_byte(jr) == close;
+    if (*closed) jr->i++;
+    return OK;
+}
+
+static STATUS_MUST_USE Status json_object(JsonReader *jr, Value *out) {
+    Table *t = NULL;
+    bool closed = false;
+    TRY(json_open(jr, '}', out, &t, &closed));
+    Status s = closed ? OK : json_object_members(jr, t);
     jr->depth_left++;
     return s;
 }
@@ -391,18 +398,10 @@ static STATUS_MUST_USE Status json_array_items(JsonReader *jr, Table *t) {
 }
 
 static STATUS_MUST_USE Status json_array(JsonReader *jr, Value *out) {
-    TRY(json_enter(jr));
-    jr->i++;
     Table *t = NULL;
-    TRY(run_new_table(jr->r, jr->pos, &t));
-    value_table(out, t);
-    json_skip_space(jr);
-    Status s = OK;
-    if (json_more(jr) && json_byte(jr) == ']') {
-        jr->i++;
-    } else {
-        s = json_array_items(jr, t);
-    }
+    bool closed = false;
+    TRY(json_open(jr, ']', out, &t, &closed));
+    Status s = closed ? OK : json_array_items(jr, t);
     jr->depth_left++;
     return s;
 }

@@ -280,6 +280,24 @@ static bool store_eq_nocase(Str x, Str y) {
     return true;
 }
 
+// The next entry of the listing `d` that is neither `.` nor `..`, into
+// `*ent` and its name into `*name`; false at the listing's end, with `*err`
+// set when readdir failed and left alone when it ended.
+static bool store_dir_next(DIR *d, struct dirent **ent, Str *name, StoreErr *err) {
+    for (;;) {
+        errno = 0;
+        *ent = readdir(d);
+        if (*ent == NULL) {
+            if (errno != 0) *err = store_err_of(errno);
+            return false;
+        }
+        Str n = {(*ent)->d_name, strlen((*ent)->d_name)};
+        if (str_eq(n, S(".")) || str_eq(n, S(".."))) continue;
+        *name = n;
+        return true;
+    }
+}
+
 // The name in `dir` that is `name` apart from case, in the order the disk
 // gives them, into `*found`; `*has` false when there is none or `dir` is
 // not a folder.
@@ -295,15 +313,9 @@ static StoreErr store_sibling(Arena *a, Str dir, Str name, bool *has, Str *found
         return store_err_of(errno);
     }
     StoreErr got = STORE_OK;
-    for (;;) {
-        errno = 0;
-        struct dirent *ent = readdir(d);
-        if (ent == NULL) {
-            if (errno != 0) got = store_err_of(errno);
-            break;
-        }
-        Str n = {ent->d_name, strlen(ent->d_name)};
-        if (str_eq(n, S(".")) || str_eq(n, S(".."))) continue;
+    struct dirent *ent = NULL;
+    Str n = S("");
+    while (store_dir_next(d, &ent, &n, &got)) {
         if (store_eq_nocase(n, name)) {
             if (!arena_dup(a, n, found)) {
                 got = STORE_OUT_OF_MEMORY;
@@ -538,15 +550,9 @@ static StoreErr store_os_delete_tree(Arena *a, Str path) {
         return store_err_of(errno);
     }
     StoreErr got = STORE_OK;
-    for (;;) {
-        errno = 0;
-        struct dirent *ent = readdir(d);
-        if (ent == NULL) {
-            if (errno != 0) got = store_err_of(errno);
-            break;
-        }
-        Str n = {ent->d_name, strlen(ent->d_name)};
-        if (str_eq(n, S(".")) || str_eq(n, S(".."))) continue;
+    struct dirent *ent = NULL;
+    Str n = S("");
+    while (store_dir_next(d, &ent, &n, &got)) {
         Str child = S("");
         if (!store_join(a, path, n, &child)) {
             got = STORE_OUT_OF_MEMORY;
@@ -774,15 +780,9 @@ static StoreErr store_linux_list(void *ctx, Arena *a, Str dir, StoreEntries *out
     }
     if (d == NULL) return store_err_of(errno);
     StoreErr got = STORE_OK;
-    for (;;) {
-        errno = 0;
-        struct dirent *ent = readdir(d);
-        if (ent == NULL) {
-            if (errno != 0) got = store_err_of(errno);
-            break;
-        }
-        Str n = {ent->d_name, strlen(ent->d_name)};
-        if (str_eq(n, S(".")) || str_eq(n, S(".."))) continue;
+    struct dirent *ent = NULL;
+    Str n = S("");
+    while (store_dir_next(d, &ent, &n, &got)) {
         StoreEntry en = {S(""), store_kind_of_dirent(ent->d_type)};
         if (!arena_dup(a, n, &en.name) || StoreEntries_push(out, en) != OK) {
             got = STORE_OUT_OF_MEMORY;
