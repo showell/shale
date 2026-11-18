@@ -454,11 +454,12 @@ end
 
 -- ── Plants ───────────────────────────────────────────────────────────────
 
--- `text` with `old`, which must be there exactly once, made `new`.
-function replaced_once(text, old, new, what)
+-- `text`, the file `where`'s, with `old`, which must be there exactly once,
+-- made `new`.
+function replaced_once(text, where, old, new, what)
   local i = find(text, old)
-  if i == nil then fail("plant `" .. what .. "`: its text is not in the foundation") end
-  if find(text, old, i + 1) ~= nil then fail("plant `" .. what .. "`: its text is in the foundation twice") end
+  if i == nil then fail("plant `" .. what .. "`: its `old` text is not in " .. where) end
+  if find(text, old, i + 1) ~= nil then fail("plant `" .. what .. "`: its `old` text is in " .. where .. " twice, so the plant can't say which") end
   return sub(text, 1, i - 1) .. new .. sub(text, i + #old)
 end
 
@@ -574,7 +575,7 @@ function plant_copy(dir, p)
     if exists("c/" .. d) then copy("c/" .. d, dir .. "/" .. d) end
   end
   local file = dir .. "/" .. get(p, "dir", "foundation") .. "/" .. p.file
-  replace(file, replaced_once(read(file), p.old, p.new, p.name))
+  replace(file, replaced_once(read(file), "c/" .. get(p, "dir", "foundation") .. "/" .. p.file, p.old, p.new, p.name))
   if p.caught_by == "harness" then return nil end
   plant_aim_holds(p)
   local files = {"c/tests/" .. plant_test_file(p)}
@@ -681,7 +682,7 @@ end
 function plant_text_holds(p)
   local file = "c/" .. get(p, "dir", "foundation") .. "/" .. p.file
   if not exists(file) then fail("plant `" .. p.name .. "`: its file " .. file .. " is not there") end
-  replaced_once(read(file), p.old, p.new, p.name)
+  replaced_once(read(file), file, p.old, p.new, p.name)
   if p.caught_by ~= "harness" then plant_aim_holds(p) end
   return nil
 end

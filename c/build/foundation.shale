@@ -189,7 +189,7 @@ function check_name_tables(t)
   for c in NAME_TABLES do
     local file = dir .. "/" .. c.dir .. "/" .. c.file
     local whole = read(file)
-    replace(file, replaced_once(whole, c.old, c.new, c.says))
+    replace(file, replaced_once(whole, "c/" .. c.dir .. "/" .. c.file, c.old, c.new, c.says))
     local argv = gcc_flags("release", dir .. "/foundation")
     push(argv, "-fsyntax-only")
     push(argv, src)

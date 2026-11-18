@@ -203,8 +203,11 @@ static STATUS_MUST_USE Status oracle(Arena *a, Str out, KeepOptions o, Str *said
         if (!keep) continue;
         Str l = at(lines, i);
         if (l.len > KEEP_LINE_MAX) {
+            // Its first bytes, short of a split character.
             Buf b = buf_make(a);
-            TRY(buf_str(&b, str_sub(l, 0, o.width < KEEP_LINE_MAX ? o.width : KEEP_LINE_MAX)));
+            size_t front = o.width < KEEP_LINE_MAX ? o.width : KEEP_LINE_MAX;
+            while (front > 0 && (str_byte(l, front) & 0xc0) == 0x80) front--;
+            TRY(buf_str(&b, str_sub(l, 0, front)));
             TRY(buf_lit(&b, KEEP_CUT_MARK));
             l = buf_view(&b);
         } else if (l.len > o.width) {
@@ -390,6 +393,32 @@ TEST(the_edges) {
     EXPECT_EQ(w.out.len, KEEP_LINE_MAX + 4);
     EXPECT_STR(str_sub(w.out, KEEP_LINE_MAX, w.out.len), S("\xe2\x80\xa6\n"));
     EXPECT_EQ(w.total, 1);
+    // A character across the cut of a line past KEEP_LINE_MAX is given up
+    // whole: at a width inside it, and at KEEP_LINE_MAX itself, where the
+    // keep has the character's first bytes and not the rest.
+    static char split[KEEP_LINE_MAX + 10];
+    memset(split, 'z', sizeof split);
+    Bytes sb = {split, sizeof split};
+    size_t lead_at = KEEP_LINE_MAX - 1;
+    mem_copy(&at(sb, lead_at), "\xe2\x94\x80", 3);
+    Buf sl = buf_make(&a);
+    EXPECT(buf_str(&sl, (Str){split, sizeof split}) == OK);
+    EXPECT(buf_lit(&sl, "\n") == OK);
+    Kept s;
+    EXPECT(kept_of(&a, buf_view(&sl), wide, 4096, &s));
+    EXPECT_EQ(s.out.len, KEEP_LINE_MAX - 1 + 4);
+    EXPECT_STR(str_sub(s.out, KEEP_LINE_MAX - 2, s.out.len), S("z\xe2\x80\xa6\n"));
+    KeepOptions in;
+    keep_options_default(&in);
+    in.head = 1;
+    in.width = 3;
+    Kept t;
+    Buf tl = buf_make(&a);
+    EXPECT(buf_lit(&tl, "ab\xe2\x94\x80") == OK);
+    EXPECT(buf_str(&tl, (Str){zs, sizeof zs}) == OK);
+    EXPECT(buf_lit(&tl, "\n") == OK);
+    EXPECT(kept_of(&a, buf_view(&tl), in, 4096, &t));
+    EXPECT_STR(t.out, S("ab\xe2\x80\xa6\n"));
     // head 0 and tail 0: nothing kept, the counts still counted.
     KeepOptions no;
     keep_options_default(&no);

@@ -169,12 +169,31 @@ static STATUS_MUST_USE Status keep_slot_room(Arena *a, KeepSlot *s, size_t need)
     return OK;
 }
 
+// The most of `l`'s first `front` bytes that end on a UTF-8 character's
+// boundary: a cut gives back a character's lead and continuation bytes
+// rather than split it. At `l`'s end, where the next byte isn't there to
+// look at, a last character whose lead says it needs more bytes than are
+// left is given back too.
+static size_t keep_utf8_front(Str l, size_t front) {
+    if (front < l.len) {
+        while (front > 0 && (str_byte(l, front) & 0xc0) == 0x80) front--;
+        return front;
+    }
+    size_t lead = front;
+    while (lead > 0 && (str_byte(l, lead - 1) & 0xc0) == 0x80) lead--;
+    if (lead == 0) return front;
+    unsigned char b = (unsigned char)str_byte(l, lead - 1);
+    size_t need = b >= 0xf0 ? 4 : b >= 0xe0 ? 3 : b >= 0xc0 ? 2 : 1;
+    return front - (lead - 1) < need ? lead - 1 : front;
+}
+
 // `l` cut into the scratch slot when it is longer than `width`: its middle
 // left out and said, `… N bytes left out …`, so both its ends are kept. A
 // line's end says why as often as its start says where (a Shale stop's
 // message, after its place; a test's verdict after its name), so a cut at
 // the end alone hid the why. A line past KEEP_LINE_MAX (`over`) has only
-// its first bytes here: it is cut at `width` and ends with the mark.
+// its first bytes here: it is cut at `width`, backed off to a character's
+// boundary, and ends with the mark.
 static STATUS_MUST_USE Status keep_cut(Keep *k, Str l, bool over) {
     size_t width = k->o.width;
     if (l.len <= width && !over) {
@@ -186,7 +205,7 @@ static STATUS_MUST_USE Status keep_cut(Keep *k, Str l, bool over) {
     // The mark is written straight into the slot: a Buf for it would take
     // arena bytes for every cut line, which the arena never gives back.
     Str open = over ? S(KEEP_CUT_MARK) : S(" " KEEP_CUT_MARK " ");
-    size_t front = l.len < width ? l.len : width;
+    size_t front = keep_utf8_front(l, l.len < width ? l.len : width);
     size_t back = 0;
     uint64_t left = 0;
     size_t digits = 0;
