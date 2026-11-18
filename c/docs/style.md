@@ -116,6 +116,11 @@ and its self-test plants a break of each one.
   // REMEDY: <what keeps it safe>.
   ```
 
+  A `DRAGON:` starts its comment's line. A comment that points at one says
+  "the DRAGON at buf_view", with no colon: a `DRAGON:` mid-line (outside
+  backticks) is a finding of its own, since it reads as a marker waiting
+  for a `REMEDY:`.
+
 - **Held by folder:** no comment cites a Zig file's line (`vm.zig:123`).
 - The rules held by folder are reported everywhere: the discipline check
   prints every finding, and fails on them only in the folders its `HELD`

@@ -71,6 +71,9 @@
 --               before the next `DRAGON:`, by a line that starts
 --               `REMEDY:`; a `REMEDY:` mid-line answers nothing. A
 --               `DRAGON:` in backticks names the marker and is none;
+--   dragon mark: a `DRAGON:` starts its comment's line; one mid-line (not
+--               in backticks) is a finding, since a pointer to a dragon
+--               says "the DRAGON at ...", with no colon;
 --   zig cite:   no comment cites a Zig file's line (`vm.zig:123`), after
 --               code or not; a string's text is not a comment's.
 -- **The comment rules are held folder by folder.** The check reports every
@@ -140,7 +143,7 @@ const UTF8_CONT = "[\x80-\xbf]"
 -- A Zig file's line cited: `vm.zig:123`, `src/script/vm.zig:1`.
 const ZIG_CITE = [=[[\w/.-]*\w\.zig:\d+]=]
 -- The comment rules, reported everywhere and held only in HELD's folders.
-const COMMENT_RULES = {"comment wrap", "dragon remedy", "zig cite"}
+const COMMENT_RULES = {"comment wrap", "dragon remedy", "dragon mark", "zig cite"}
 -- The folders (or c/shale.c) whose comment findings fail the check. A sweep
 -- adds its folder here once the folder is clean.
 const HELD = {"c/foundation", "c/gate", "c/host", "c/script", "c/shale.c", "c/shale_gate.c", "c/tests"}
@@ -491,10 +494,12 @@ function check_file(p, in_foundation)
         if starts_with(body, "REMEDY:") then
           dragon = 0
         else
-          if find(body, "DRAGON:") ~= nil and find(body, "`DRAGON:`") == nil then
+          if starts_with(body, "DRAGON:") then
             if dragon ~= 0 then push(found, dragon_unanswered(p, dragon, remedy_mid)) end
             dragon = n
             remedy_mid = false
+          elseif find(body, "DRAGON:") ~= nil and find(body, "`DRAGON:`") == nil then
+            push(found, {path = p, line = n, rule = "dragon mark", text = "a `DRAGON:` mid-line: a marker starts its comment's line, and a pointer to one says \"the DRAGON at ...\", with no colon"})
           end
           if dragon ~= 0 and find(body, "REMEDY:") ~= nil then remedy_mid = true end
         end
@@ -951,6 +956,10 @@ function comment_plants_hold(p)
     {t = "    /* as does a macro's lex.zig:40 */ \\", r = {"zig cite"}},
     {t = "// Naming vm.zig alone, or vm.zig: with no line, passes.", r = {}},
     {t = "static const Str CITE = S(\"a // b vm.zig:5\");", r = {}},
+    -- A `DRAGON:` starts its line: one mid-line is a pointer written as a
+    -- marker, and a pointer says "the DRAGON at ...".
+    {t = "// A pointer: see the DRAGON: at buf_view.", r = {"dragon mark"}},
+    {t = "// A pointer: see the DRAGON at buf_view.", r = {}},
   }
   local text = {}
   local want = {}
@@ -971,6 +980,7 @@ function comment_plants_hold(p)
     {k = "12 dragon remedy", text = "a `DRAGON:` whose `REMEDY:` is mid-line: it starts a line of its own"},
     {k = "35 zig cite", text = "cites `vm.zig:123`"},
     {k = "36 zig cite", text = "cites `src/script/vm.zig:9`"},
+    {k = "40 dragon mark", text = "a `DRAGON:` mid-line: a marker starts its comment's line, and a pointer to one says \"the DRAGON at ...\", with no colon"},
   }
   for w in want_said do
     if said[w.k] ~= w.text then fail("the discipline check's self-test said `" .. said[w.k] .. "` for " .. w.k .. " in " .. p .. "; it should say `" .. w.text .. "`") end
