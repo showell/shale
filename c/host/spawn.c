@@ -47,6 +47,12 @@
 #include "status.h"
 
 // A program to run and how; `spawn_spec_default` gives its defaults.
+// DRAGON: memory. The spec borrows its argv and environment, and an OsStr
+// has no literal a static table can hold, so a list built in a helper's
+// frame and handed back in a spec is read by spawn_run after that frame
+// returned (test_spawn's fixture did, 2026-11-18).
+// REMEDY: a spec's lists live in the frame that calls spawn_run or in an
+// arena; the full tier's ASan build reports a stack use after return.
 typedef struct {
     // argv[0] is found along PATH unless it has a `/`; then it is a path,
     // relative to `cwd`.

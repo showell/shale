@@ -81,7 +81,13 @@ static void fixture_spec(SpawnSpec *s, Arena *a, ArgList *argv, const char *verb
     spawn_spec_default(s);
     s->argv.ptr = argv->ptr;
     s->argv.len = argv->len;
-    const OsStr env_all[1] = {os_str_own(S("PATH=/usr/bin:/bin"))};
+    // In the arena, not this frame: the spec outlives the call (the DRAGON
+    // at SpawnSpec).
+    OsStr *env_all = ARENA_ARRAY(a, OsStr, 1);
+    if (env_all == NULL) abort();
+    SLICE_TYPE(EnvRoom, OsStr);
+    EnvRoom room = {env_all, 1};
+    at(room, 0) = os_str_own(S("PATH=/usr/bin:/bin"));
     s->env.ptr = env_all;
     s->env.len = 1;
     s->timeout_ms = 10000;
