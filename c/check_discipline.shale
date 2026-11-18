@@ -100,6 +100,10 @@
 -- probe, comments.c for the comment rules, statics.c for the static state),
 -- and fails unless exactly the plants are caught.
 --
+-- It reads only the source folders (c_files never enters c/out, the build's
+-- output) and holds one file's text at a time, so it runs in about 6 MiB of
+-- the arena's 16 MiB unset and names no arena budget.
+--
 -- Run from the repository's root: shale c/check_discipline.shale
 -- budget: steps=100000000
 
@@ -499,11 +503,27 @@ function check_file(p, in_foundation)
   return found
 end
 
--- The C files under `dir`, the build's output left out.
+-- The build's output, never walked: c/out holds copies of the sources (the
+-- plants' trees, the probe), and a grown one would fill the run's arena with
+-- entries the check only drops.
+const BUILD_OUT = "c/out"
+
+-- Whether `p` names a C file.
+function is_c_file(p)
+  return ends_with(p, ".c") or ends_with(p, ".h")
+end
+
+-- The C files under `dir`: its own, and those of each folder in it but
+-- BUILD_OUT, which is not entered.
 function c_files(dir)
   local files = {}
-  for p in glob(dir .. "/**/*") do
-    if (ends_with(p, ".c") or ends_with(p, ".h")) and not starts_with(p, "c/out/") then push(files, p) end
+  for e in walk_all(dir, {depth = 1}) do
+    if e.kind == "file" and is_c_file(e.path) then push(files, e.path) end
+    if e.kind == "directory" and e.path ~= BUILD_OUT then
+      for f in walk_all(e.path, {kind = "file"}) do
+        if is_c_file(f.path) then push(files, f.path) end
+      end
+    end
   end
   sort(files)
   return files
@@ -622,31 +642,39 @@ function returned_by(raw)
   return {type = ty, name = m.groups[2]}
 end
 
--- Every function the files return a value from, as {type, fn, path, line}:
--- each column-0 `static` function, and the functions each `VEC_DEFINE` and
--- `MAP_DEFINE` line makes.
+-- Every function the file at `p` returns a value from, pushed on `found` as
+-- {type, fn, path, line}: each column-0 `static` function, and the
+-- functions each `VEC_DEFINE` and `MAP_DEFINE` line makes.
+function returns_in(p, found)
+  local n = 0
+  for raw in lines(read(p)) do
+    n = n + 1
+    if starts_with(raw, "static ") then
+      local f = returned_by(raw)
+      if f ~= nil then push(found, {type = f.type, fn = f.name, path = p, line = n}) end
+    elseif starts_with(raw, "VEC_DEFINE(") or starts_with(raw, "MAP_DEFINE(") then
+      local m = re_find(raw, [=[^(VEC|MAP)_DEFINE\(\s*(\w+)\s*,\s*([^)]*\S)\s*\)]=])
+      if m == nil then fail(p .. ":" .. n .. ": a `_DEFINE(` line this check can't read: " .. raw) end
+      local name = m.groups[2]
+      push(found, {type = name, fn = name .. "_make", path = p, line = n})
+      if m.groups[1] == "VEC" then
+        push(found, {type = m.groups[3], fn = name .. "_pop", path = p, line = n})
+        push(found, {type = name .. "Items", fn = name .. "_items", path = p, line = n})
+      else
+        push(found, {type = m.groups[3], fn = name .. "_value_at", path = p, line = n})
+      end
+    end
+  end
+  return nil
+end
+
+-- returns_in over every file. A yield after each file lets go of its lines,
+-- so the run holds one file's text at a time, not the tree's.
 function returns_of(files)
   local found = {}
   for p in files do
-    local n = 0
-    for raw in lines(read(p)) do
-      n = n + 1
-      if starts_with(raw, "static ") then
-        local f = returned_by(raw)
-        if f ~= nil then push(found, {type = f.type, fn = f.name, path = p, line = n}) end
-      elseif starts_with(raw, "VEC_DEFINE(") or starts_with(raw, "MAP_DEFINE(") then
-        local m = re_find(raw, [=[^(VEC|MAP)_DEFINE\(\s*(\w+)\s*,\s*([^)]*\S)\s*\)]=])
-        if m == nil then fail(p .. ":" .. n .. ": a `_DEFINE(` line this check can't read: " .. raw) end
-        local name = m.groups[2]
-        push(found, {type = name, fn = name .. "_make", path = p, line = n})
-        if m.groups[1] == "VEC" then
-          push(found, {type = m.groups[3], fn = name .. "_pop", path = p, line = n})
-          push(found, {type = name .. "Items", fn = name .. "_items", path = p, line = n})
-        else
-          push(found, {type = m.groups[3], fn = name .. "_value_at", path = p, line = n})
-        end
-      end
-    end
+    returns_in(p, found)
+    yield()
   end
   return found
 end
