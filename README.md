@@ -8,12 +8,12 @@ read.
 
 **Two implementations of one frozen language.** Shale was written in Zig,
 and on 2026-11-17 it was rewritten in C (`c/`), matching the Zig byte for
-byte on every input the differential harness judges
-([tools/differ/README.md](tools/differ/README.md)). **C Shale is the
-`shale` for all our day-to-day Linux work** on the box. **Zig Shale is
-still the one on bare metal:** angry-gopher's unikernel compiles the Zig
-sources here (`src/`), and the Zig binary also serves as the differ's
-oracle until the tests are ported.
+byte. **C Shale is the `shale` for all our day-to-day Linux work** on the
+box, and **the golden tests are the one judge of its behaviour**: 1,128
+inputs, each frozen with its output
+([tests/harness/README.md](tests/harness/README.md)). **Zig Shale is still
+the one on bare metal:** angry-gopher's unikernel compiles the Zig sources
+here (`src/`).
 
 ## Why use it instead of bash or Python
 
@@ -66,8 +66,7 @@ it:
 
 Put `zig-out/bin` on your PATH, or link `zig-out/bin/shale` into a folder
 that is. The hook runs the C gate (`c/shale_gate.c`), which `shale
-c/install.shale` installs; the Zig gate this step builds is the one it is
-held to until the Zig goes.
+c/install.shale` installs.
 
 ## Run a script
 
@@ -379,10 +378,9 @@ are run by hand, by no tier: `zig build script-bench` (Shale's hot paths)
 and `zig build shale-scale` (the largest site each site example fits).
 `shale bench/baseline.shale` is the whole program's baseline, the runtime
 on an agent's workloads and the build's time, one TSV a run
-([bench/README.md](bench/README.md)). `shale tools/differ.shale old=<path>
-new=<path>` judges another build of Shale against today's, from the
-outside, on every input the checks hold it to
-([tools/differ/README.md](tools/differ/README.md)).
+([bench/README.md](bench/README.md)). `shale tests/golden.shale
+bin=<path>` holds a build of Shale to every golden case, from the outside
+([tests/harness/README.md](tests/harness/README.md)).
 
 ## Docs
 
@@ -419,7 +417,7 @@ outside, on every input the checks hold it to
 |---|---|
 | Source | its history before this repo is zig-webbox's (`git -C ../zig-webbox log -- src/script`) |
 | Runs | C Shale on the box, as every agent's shell (since 2026-11-17); Zig Shale in angry-gopher on Linux and metal, through its build |
-| Tests | the Zig modules' unit tests and C's own (`shale c/build.shale`); the differ holds the C to the Zig on 1,166 inputs; the request-edge harness for its number parses runs in angry-gopher |
+| Tests | the golden tests (`shale tests/golden.shale`, 1,128 cases), the one judge of behaviour; C's own (`shale c/build.shale`) and the Zig modules' unit tests; the request-edge harness for its number parses runs in angry-gopher |
 
 ## Lineage
 

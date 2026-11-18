@@ -1,9 +1,9 @@
 # After the cut-over: what the C makes possible
 
-Until C Shale matches Zig Shale byte for byte, the language is frozen and
-nothing here is built. This file holds the ideas for after the cut-over,
-in the order they are meant to be taken up, with the rules Steve set for
-them on 2026-11-17.
+C Shale is the `shale` on the box, and the golden tests
+(`tests/golden.shale`) are the one judge of its behaviour. This file holds
+the ideas the C makes possible, in the order they are meant to be taken
+up, with the rules Steve set for them on 2026-11-17.
 
 ## The rules
 
@@ -41,7 +41,7 @@ them on 2026-11-17.
    needs more.
 4. **A static musl build,** one file that runs on any Linux box. Lower
    priority, and so is a Cosmopolitan build for macOS and Windows. Each
-   build is held by the differential harness.
+   build is held by the golden tests.
 5. **Tooling swaps:** gcov in place of linecov if its counts mean the
    same, perf and callgrind for profiling, and AFL++ for fuzzing the
    parser. Then **hunts over Shale's own C,** reading the C this file's

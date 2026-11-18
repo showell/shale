@@ -24,7 +24,7 @@ const PARSE_PLANTS = {
 }
 
 -- The C `shale` under each of `t.builds`, at c/out/<build>/shale (under
--- `release`, the one -O2 link, the binary the differ judges), compiled two
+-- `release`, the one -O2 link, the binary the golden tests judge), compiled two
 -- at a time (`compile_jobs`).
 function build_commands(t)
   local specs = {}
@@ -43,7 +43,7 @@ function build_commands(t)
 end
 
 -- The C `shale` under `build`: its `--check` of one script that parses and
--- one that stops, each held to Zig's exact report.
+-- one that stops, each held to its exact report.
 function check_command(t, build)
   local bin = OUT .. "/" .. build .. "/shale"
   local good = OUT .. "/command/good.shale"

@@ -15,8 +15,8 @@ edit sweeps.
   has bugs: it miscompiles a struct of 9 to 15 bytes returned straight into
   another call as its argument, and it passes structs through `...` wrongly
   (`style.md` steers around both). The discipline check holds the first,
-  with a canary that fails when TCC gets it right; the differential
-  harness, run under TCC, is the guard for the rest.
+  with a canary that fails when TCC gets it right; the tier's frozen
+  outputs, run under TCC, are the guard for the rest.
 - **GCC** builds everything else: the sanitizer builds, the warnings build
   and every binary we run. It needs no LLVM.
 - **Clang** builds only the browser playground, later, since GCC and TCC
@@ -40,18 +40,29 @@ merge, and defer it while you're about 90% sure it has nothing new to say.
 | Every test under the sanitizers | GCC `-O0`, ASan and UBSan | full | use after free, overruns, leaks, undefined behavior |
 | The code at `-O2 -Werror`, run nowhere | GCC | full | the warnings only the optimizer finds (`-Wrestrict`, some `-Warray-bounds`) |
 | Every planted fault not yet proven | TCC, or GCC's ASan where the plant names `build = "asan"` | full | each test proven able to fail, once |
-| `c/shale.c` at `-O2` | GCC | full | the binary the differential harness judges against Zig Shale |
-| The golden tests, `tests/golden.shale`, under that binary | Shale | full | every input the differ judges, held to the Zig oracle's frozen output, with no Zig at hand |
+| A block's scripts and the gate's golden cases, held to their frozen outputs (`c/tests/frozen/`) | each build's `shale` and `shale-gate` | fast and full | the VM's, the host text calls' and the Zig tools' scripts; every hook input the gate answers |
+| `c/shale.c` at `-O2` | GCC | full | the binary the golden tests judge |
+| The golden tests, `tests/golden.shale`, under that binary | Shale | full | every input the harness collects, held to its frozen output: the one judge of Shale's behaviour |
 | The cookbook's self-tests, live, under that binary | Shale | full | every recipe that reads `arg("self_test"`, run with `self_test=1`, as Zig's `cookbook-test` step runs them |
 
-**The golden tests** (`tools/differ/README.md`, "The golden tests") are
-every input the differential harness collects, frozen in `tests/golden/`
-with the output Zig Shale gave it, masked as the differ masks it. The full
-tier runs them last, under `c/out/release/shale`, as a phase of its own
-(`golden`). `shale tests/golden.shale bin=<path>` runs them under any
-binary; `shale tests/golden.shale freeze=1` rebuilds them from the oracle,
-and refuses a changed case that `refreeze=` does not name. Their run's folder
-is padded to a fixed length, so they hold on any box. The cookbook's
+**The golden tests** ([tests/harness/README.md](../../tests/harness/README.md))
+are every input the harness collects, frozen in `tests/golden/` with the
+output a C `shale` gave it, masked. The full tier runs them last, under
+`c/out/release/shale`, as a phase of its own (`golden`). `shale
+tests/golden.shale bin=<path>` runs them under any binary; `shale
+tests/golden.shale freeze=1` rebuilds them from `bin` (the release build
+unset), and refuses a changed case that `refreeze=` does not name: a
+deliberate change refreezes the cases it names, and its commit says why for
+each. Their run's folder is padded to a fixed length, so they hold on any
+box.
+
+**The frozen outputs** (`c/tests/frozen/`, c/build/lib.shale's "Frozen
+outputs") hold what the vm, host_text and host_zig blocks' scripts print
+under every build, and the gate's golden cases
+(`c/tests/frozen/gate/cases.txt`, c/build/gate_golden.shale), each hook
+input with the answer `shale-gate` gives it. Both tiers run them under
+every build. `shale c/build.shale refreeze=<block>[/<name>]` writes the
+named ones from the first build's run, for a deliberate change. The cookbook's
 self-tests are not frozen: the full tier runs them live after the goldens
 (`cookbook`), each recipe from this tree with `self_test=1` under the -O2
 binary, first on PATH, with `cookbook`, `tools` and a fresh `scratch` as its
@@ -114,8 +125,7 @@ with `TEST_PART`, include it from ran_tests.c and add it to
 When the full tier passes 150 seconds of wall time on an idle box, stop
 and propose ways to cut it, ranked by what they'd save, before adding more
 to it. (The line was 90 s until 2026-11-17, when the idle tier measured
-135 s; the one-time plants and the Zig's removal are expected to bring it
-down.)
+135 s.)
 
 ## After the cut-over
 
@@ -170,6 +180,6 @@ leaves the old link, the old binary and a neighboring link as they were.
 | Fast tier | TCC | every edit, during the port and after |
 | Safety net | GCC `-O0`, ASan and UBSan | before a merge |
 | Warnings | GCC `-O2 -Werror`, run nowhere | before a merge |
-| Judged binary | GCC `-O2` | the golden tests in the full tier; the differential harness, through the cut-over |
+| Judged binary | GCC `-O2` | the golden tests in the full tier |
 | Release | GCC `-O2`, a chosen `-march`, then profile-guided | after the cut-over |
 | Playground | Clang to wasm | later, a tiebreaker |

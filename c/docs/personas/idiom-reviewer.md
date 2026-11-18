@@ -45,7 +45,7 @@ Each finding takes one of three labels:
 
 - **Now:** a pure readability change that moves no behavior, no stop
   text, no budget charge and no allocation. The fidelity reviewer's rules
-  still hold, and the differential harness must stay green after it.
+  still hold, and the golden tests must stay green after it.
 - **After the cut-over:** anything that changes behavior, layout or
   allocation, however small. It goes into `c/docs/after-cutover.md`, under
   "Idioms to adopt", with the file and the change.
@@ -58,4 +58,4 @@ you'd use, and its label. Group the findings by label, with **Bug** first.
 End with a sentence on how C-like the file reads overall.
 
 Be brief, and remember the trade. During the port, a little transcribed
-Zig is the price of an exact oracle.
+Zig is the price of matching the Zig exactly.

@@ -1,7 +1,8 @@
 # The C port's seams
 
-Shale is being rewritten in C (Steve, 2026-11-17). The language is frozen
-byte for byte, and today's Zig Shale is the oracle. This page is the design
+Shale was rewritten in C (Steve, 2026-11-17). The language is frozen byte
+for byte, and the golden tests (`tests/golden.shale`), frozen from the Zig's
+output, are its one judge. This page is the design
 the agents porting it share: how the C represents a run, and where it meets
 what is outside it. It holds no code. The C's style and its foundation (the
 arena, `Str`, `vec`, `map`, err.h) are in c/docs/style.md and c/foundation,
@@ -9,10 +10,9 @@ and how the C is compiled is in c/docs/building.md.
 
 **What the port must match** is [`SURFACE.txt`](SURFACE.txt): every
 builtin, stop text, budget, flag and report line, generated from the Zig
-by `tools/surface.shale` and gated by `zig build surface-check`. The
-differential harness (the `shale-differ` lane) runs both and compares
-output, report, stop and exit code. Where this page and the Zig disagree,
-the Zig wins.
+by `tools/surface.shale` and gated by `zig build surface-check`. The golden
+tests hold every input's output, report, stop and exit code. Where this page
+and the goldens disagree, the goldens win.
 
 ## Values
 
@@ -40,8 +40,8 @@ the Zig wins.
 ## Fidelity: what the arena may change
 
 Steve decided on 2026-11-17 that **arena byte counts are outside the frozen
-surface.** The differential harness found 4 of its 1,024 inputs that observe
-them, so mirroring Zig's layouts would buy little: the C lays out its values,
+surface.** Only 4 of the 1,024 inputs the port was judged on observe them,
+so mirroring Zig's layouts would buy little: the C lays out its values,
 tables, frames, ops and tree for itself, with no `_Static_assert` against a
 Zig size and no Zig probe of them.
 
@@ -60,16 +60,17 @@ Zig size and no Zig probe of them.
   in the same way, so `Budgeted.heap()`'s twin, an allocator whose free
   gives the bytes back, is a nicety for the regex cache and a long call's
   arguments, not a fidelity requirement.
-- **The differ judges these runs by class.** `tools/differ.shale` finds the
-  inputs that observe the layouts mechanically (an arena, kept or machine
-  stop, or a read of `arena_bytes`), compares their stop's class, place and
-  message but not those numbers or the step count, and counts them in its
-  summary as judged by class.
+- **The golden tests judge these runs by class.** The freeze
+  (`tests/harness/freeze.shale`) finds the inputs that observe the layouts
+  mechanically (an arena, kept or machine stop, or a read of
+  `arena_bytes`) and marks them in each case's `case.json`; the run compares
+  their stop's class, place and message but not those numbers or the step
+  count.
 
 ## The VM, the stops and the budgets
 
 - **The C ports the VM, not the tree-walker.** The ops of
-  src/script/compile.zig and the loop of src/script/vm.zig are the oracle:
+  src/script/compile.zig and the loop of src/script/vm.zig are its model:
   the same ops, the same enters charged in the walker's order and hung on the op after them, and a loop that never
   recurses. The walker stays Zig's, as its second implementation.
 - **A stop is err.h's `RunCtx`.** Every function that can stop returns

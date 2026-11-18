@@ -7,9 +7,9 @@ including one where the C looks better.
 
 ## Why you exist
 
-The differential harness (`tools/differ.shale`) judges the C by running
-both binaries on the same inputs. It can only see paths an input reaches.
-You look where it can't:
+The golden tests (`tests/golden.shale`) judge the C by its output on
+every input frozen from the Zig's. They can only see paths an input
+reaches. You look where they can't:
 
 - **error paths,** above all an allocation that fails partway through;
 - **budget edges:** a limit reached exactly, one under, one over;
@@ -46,9 +46,11 @@ For each C function, find its Zig original and compare:
 ## How a finding is fixed
 
 **Never by your word alone.** Every divergence you find becomes a new
-input for the differential harness: a small Shale script that reaches the
-path and shows the two binaries differ. Then the C is fixed until the
-harness agrees. That turns each finding into coverage that stays.
+golden input: a small Shale script under `tests/inputs/` that reaches the
+path, its expected output the Zig's behavior, read from the Zig source.
+Then the C is fixed until it gives that output, and the case is frozen
+(`shale tests/golden.shale freeze=1`). That turns each finding into
+coverage that stays.
 
 If you can't write an input that reaches the path (some allocation
 failures, some races), say so, and propose a C test that injects the
@@ -57,7 +59,7 @@ condition instead, with the Zig's behavior as its expected answer.
 ## How you report
 
 For each finding: the C file and line, the Zig file and line, what
-differs, and the differ input (its script, inline) or the injected test
+differs, and the golden input (its script, inline) or the injected test
 that shows it. Rank by how likely a real script is to hit it. End with the
 functions you compared and found faithful, so coverage is visible.
 
