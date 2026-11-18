@@ -1,0 +1,11 @@
+# Roc's builtin functions of two parameters or more, at the plant: `peers` when the
+# first two have one type, `apart` when not. Written by
+# cookbook/roc/write_builtin_signatures.shale from that pin's Builtin.roc; not edited by hand.
+List.concat	peers
+List.contains	apart
+List.fold	apart
+List.get	apart
+List.map2	peers
+List.walk!	apart
+U8.max	peers
+U8.shift_left_by	peers

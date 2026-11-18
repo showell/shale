@@ -6,8 +6,8 @@ Proven := [].{
 	size = |bytes| bytes.len()
 
 	shout : Str -> Str
-	shout = |s| s.concat("!")
+	shout = |s| s.with_ascii_uppercased()
 }
 
 expect Proven.size([1]) == 1
-expect Proven.shout("a") == "a!"
+expect Proven.shout("a") == "A"

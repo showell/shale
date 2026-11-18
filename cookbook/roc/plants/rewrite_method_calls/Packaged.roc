@@ -7,7 +7,7 @@ import pk.Meter
 
 Packaged :: [].{
 	twice : Meter -> Meter
-	twice = |m| Meter.add(m, m)
+	twice = |m| Meter.scaled(m, 2)
 }
 
 expect Packaged.twice(Meter.two).count() == 4

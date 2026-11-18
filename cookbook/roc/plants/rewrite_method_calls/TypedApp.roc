@@ -7,6 +7,8 @@ import Proven
 import ProvenFails
 import LastSegment
 import Shelf
+import Peers
+import PeerMethods
 
 main : Str
-main = "${Typed.answer}${Proven.shout("a")}${ProvenFails.size(ProvenFails.bytes).to_str()}${LastSegment.label(Shelf.Book.named("a"))}"
+main = "${Typed.answer}${Proven.shout("a")}${ProvenFails.size(ProvenFails.bytes).to_str()}${LastSegment.label(Shelf.Book.named("a"))}${Peers.glued("a", "b")}${PeerMethods.glued("c", "d")}"

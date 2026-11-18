@@ -6,10 +6,19 @@
 -- inside out, so `List.len(List.keep_if(xs, p))` becomes
 -- `xs.keep_if(p).len()`.
 --
+-- A method call names a subject, so a call whose first two arguments are
+-- peers, of one type once aliases are read through (`U64.max(a, b)`,
+-- `Str.concat(a, b)`, an app's `Color.relative(a, b)`), stays a module call,
+-- and with the types every run lists each peer method call, `a.max(b)`, as
+-- a `path:line: peer_receiver: why` finding, counted in the summary;
+-- `peers=undo` turns them back. A builtin's declaration has the last word
+-- (`List.fold`'s two lists are no peers): cookbook/roc/peer_calls.shale.
+--
 --   cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob=app/*.roc root=app/main.roc
 --   cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob=app/*.roc root=app/main.roc apply=1
 --   cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob=app/*.roc root=app/main.roc,app/specs.roc
 --   cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob=src/*.roc root=src/Lib.roc types=0
+--   cd <repo> && shale --undo-on-stop <shale>/cookbook/roc/rewrite_method_calls.shale glob=app/*.roc root=app/main.roc peers=undo apply=1
 --   shale cookbook:roc/rewrite_method_calls.shale self_test=1
 --
 -- The arguments:
@@ -34,10 +43,14 @@
 --          and the rest are `left` as ever. It is the count a report needs
 --          without the trial compiles that make a dry run slow, and it
 --          differs from a dry run's `rewritten` in two ways: a proven call
---          that `roc check` would refuse (a literal whose type defaults, the
---          ProvenFails plant) is counted, and an unsettled call that would
+--          that `roc check` would refuse (a bare tag the call makes a
+--          `Try`, the ProvenFails plant) is counted, and an unsettled call that would
 --          compile is not. It needs the types, so not with `types=0`, and
 --          never with `apply=1`.
+--   peers  with `peers=undo`, the run's candidates are the peer method
+--          calls alone, each turned back into a module call (`a.max(b)` to
+--          `U64.max(a, b)`, through the receiver's type) and judged by the
+--          compiler as a rewrite is. It needs the types; not with trials=0.
 --   types_from  a file in roc-types' format holding the one root's types,
 --          read in place of running roc-types (a gate that has typed the
 --          app already keeps them). Its first line is held to the tree's
@@ -92,8 +105,7 @@
 --     (`m : U64`) and a parameter. A name bound to anything else whose type
 --     only literals give (`start = if c 1 else 0`) is a candidate too, and
 --     its type defaults the same way; the compiler catches that only where
---     the default clashes (the ProvenFails plant), and otherwise only an
---     `expect` would.
+--     the default clashes, and otherwise only an `expect` would.
 -- Without the types, a call whose first argument has another type
 -- (`Str.from_utf8(bytes)`, a list) is tried, and stays because the
 -- compiler reports a `missing method`.
@@ -108,7 +120,8 @@
 --     reason like `the first argument is a List, not a Str`;
 --   - a type whose head is the module itself (`Str`, `List(...)`, `Point`)
 --     proves the call (`proves_module_call`, below);
---   - a type variable, or no type at that spot, leaves the call to the trial.
+--   - a type variable, or no type at that spot, leaves the call to the trial;
+--   - first, a call whose first two arguments are peers stays (`peers`).
 -- The summary counts each kind. The files whose open calls are all proven
 -- are written at once, and one `roc check` and one `roc test` on their root
 -- confirm them together. When that check fails, the files its errors name
@@ -140,7 +153,7 @@
 -- gigabytes there.
 --
 -- The output is the summary line (`files N, candidates N, rewritten N, left
--- N`, and the programs used, the files being those begun, so a gate can tell
+-- N, peer_receiver N`, and the programs used, the files being those begun, so a gate can tell
 -- that the glob found what it meant), a line `path:line: Module.fn: why` for each call that
 -- stays, the count of each kind the types found, and the summary again
 -- (cookbook/findings.shale).
@@ -182,9 +195,15 @@ const COUNT_ONLY = TRIALS_ARG == "0"
 const TYPES_FROM = arg("types_from", "")
 if COUNT_ONLY and APPLY and not SELF_TEST then fail("rewrite_method_calls: trials=0 writes nothing, so not with apply=1") end
 if COUNT_ONLY and not USE_TYPES then fail("rewrite_method_calls: trials=0 counts by the types, so not with types=0") end
+const PEERS_ARG = arg("peers", "")
+if PEERS_ARG ~= "" and PEERS_ARG ~= "undo" then fail("rewrite_method_calls: peers=" .. PEERS_ARG .. ": peers takes only `undo`") end
+const UNDO = PEERS_ARG == "undo"
+if UNDO and (COUNT_ONLY or not USE_TYPES) then fail("rewrite_method_calls: peers=undo judges peers by the types and turns them in trials, so not with trials=0 or types=0 (trials=0 counts them as peer_receiver)") end
 use("./pinned.shale")
 use("cookbook:findings.shale")
 use("./types.shale")
+use("./number_literals.shale")
+use("./peer_calls.shale")
 
 -- Each round leaves out the calls the compiler refused, and the next round
 -- may find more that their errors hid.
@@ -199,134 +218,6 @@ const PROGRAMS_PER_FILE = MAX_ROUNDS + 5
 -- or `"a".to_utf8()`. Any other (a number, a sum, a lambda, an `if`) is
 -- wrapped in them: `(a + b).to_str()`.
 const BARE_RECEIVER_KINDS = {["e-ident"] = true, ["e-apply"] = true, ["e-method-call"] = true, ["e-field-access"] = true, ["e-string"] = true, ["e-list"] = true, ["e-record"] = true, ["e-tuple"] = true, ["e-tag"] = true}
-
--- The number literals whose type only their use fixes (`5`, `-3`, `0x1F`,
--- `1.5`, `1e3`, `'a'`). Typed literals like `5.U64` (`e-typed-int`,
--- `e-typed-frac`) are not among them.
-const UNTYPED_NUMBER_LITERALS = {["e-int"] = true, ["e-frac"] = true, ["e-single-quote"] = true}
-
--- Whether node `i` is a constant numeric expression: untyped number literals
--- joined only by operators (`e-binop`, `unary`) and parentheses (a
--- one-element `e-tuple`), as in `5`, `(5)`, `2 + 3` or `-(1 + 2)`.
-function is_constant_numeric(t, i)
-  local n = t.nodes[i]
-  if has_key(UNTYPED_NUMBER_LITERALS, n.kind) then return true end
-  local joins = n.kind == "e-binop" or n.kind == "unary" or (n.kind == "e-tuple" and #n.kids == 1)
-  if not joins or #n.kids == 0 then return false end
-  for k in n.kids do
-    if not is_constant_numeric(t, k) then return false end
-  end
-  return true
-end
-
-function is_plain_name(n)
-  return n.kind == "e-ident" and find(n.raw, ".") == nil
-end
-
--- The name a definition `name = <value>` binds, or "" for any other node.
-function defined_name(t, n)
-  if n.kind == "s-decl" and #n.kids == 2 and t.nodes[n.kids[1]].kind == "p-ident" then return t.nodes[n.kids[1]].raw end
-  return ""
-end
-
-function has_parameter_named(t, lambda, name)
-  for k in lambda.kids do
-    if t.nodes[k].kind == "args" then
-      for a in t.nodes[k].kids do
-        if t.nodes[a].kind == "p-ident" and t.nodes[a].raw == name then return true end
-      end
-    end
-  end
-  return false
-end
-
--- The binding of the plain name `name`, used at node `at`, that gives it its
--- type: `{value = k}` for a definition `name = <k>` or a `var name = <k>`,
--- `{loop = k}` for a `for name in <k>` around the use, or nil when the name
--- has its type another way (a lambda's parameter, an annotation `name :
--- Type` beside the definition) or no binding is found. The binding that
--- counts is the nearest one up the tree: in a block, the last definition
--- before the statement holding the use; at the top level, any definition,
--- since order doesn't matter there. A `var`'s type is its start's, so for
--- a `$name` only its `var` counts, never a reassignment (`$n = $n + 1`).
-function binding_of(t, at, name)
-  local is_var = starts_with(name, "$")
-  local child = at
-  local up = t.nodes[at].parent
-  while up > 0 do
-    local scope = t.nodes[up]
-    if scope.kind == "e-lambda" and has_parameter_named(t, scope, name) then return nil end
-    if scope.kind == "s-for" and #scope.kids == 3 and child == scope.kids[3] then
-      local pat = t.nodes[scope.kids[1]]
-      if pat.kind == "p-ident" and pat.raw == name then return {loop = scope.kids[2]} end
-    end
-    local in_block = scope.kind == "statements" and scope.parent > 0 and t.nodes[scope.parent].kind == "e-block"
-    local definition = 0
-    local annotated = false
-    for k in scope.kids do
-      if in_block and k == child then break end
-      local s = t.nodes[k]
-      if is_var then
-        if s.kind == "s-var" and s.name == name and #s.kids == 1 then definition = k end
-      elseif defined_name(t, s) == name then
-        definition = k
-      end
-      if s.kind == "s-type-anno" and s.name == name then annotated = true end
-    end
-    if definition > 0 then
-      if annotated then return nil end
-      local d = t.nodes[definition]
-      return {value = d.kids[#d.kids]}
-    end
-    child = up
-    up = scope.parent
-  end
-  return nil
-end
-
--- Whether a value at node `i` takes its type from unsuffixed number
--- literals alone, so that as a receiver it defaults (to `Dec`). With `what`
--- "number", the value is the number itself: a constant numeric expression;
--- a plain name bound, unannotated, to one, or to another such name; a loop
--- variable over a list of them or a range of literals (`for n in [10,
--- 1000]`, `for k in 0..<3`); a `var` whose start is one; or a field of a
--- record literal that holds one (`r.a` after `r = { a: 5 }`). With `what`
--- "items", the value is what a `for` walks: a list literal of such numbers,
--- a range of literals, or a name bound to either. (One function for both,
--- since each asks the other and a function is called only below its
--- declaration.)
-function takes_literal_type(t, i, what, depth)
-  if depth > 8 then return false end
-  if is_constant_numeric(t, i) then return true end
-  local n = t.nodes[i]
-  if is_plain_name(n) then
-    local b = binding_of(t, i, n.raw)
-    if b == nil then return false end
-    if has_key(b, "loop") then return what == "number" and takes_literal_type(t, b.loop, "items", depth + 1) end
-    return takes_literal_type(t, b.value, what, depth + 1)
-  end
-  if what == "items" then
-    if n.kind ~= "e-list" or #n.kids == 0 then return false end
-    for k in n.kids do
-      if not takes_literal_type(t, k, "number", depth + 1) then return false end
-    end
-    return true
-  end
-  if n.kind == "e-field-access" and #n.kids == 2 then
-    local recv = t.nodes[n.kids[1]]
-    local seg = t.nodes[n.kids[2]]
-    if recv.kind ~= "receiver" or #recv.kids ~= 1 or seg.kind ~= "segment" then return false end
-    local r = recv.kids[1]
-    if not is_plain_name(t.nodes[r]) then return false end
-    local b = binding_of(t, r, t.nodes[r].raw)
-    if b == nil or not has_key(b, "value") or t.nodes[b.value].kind ~= "e-record" then return false end
-    for f in t.nodes[b.value].kids do
-      local fn = t.nodes[f]
-      if fn.kind == "field" and fn.field == seg.field and #fn.kids == 1 then return takes_literal_type(t, fn.kids[1], "number", depth + 1) end
-    end
-  end
-  return false
-end
 
 -- ── the tree ─────────────────────────────────────────────────────────────
 
@@ -361,7 +252,7 @@ function parse_trees(paths)
     local t = {nodes = {}, text = text, starts = line_starts(text)}
     for n in f.nodes do
       local span = span_of(n, t.starts)
-      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), name = get(n, "name", ""), field = get(n, "field", ""), span = span or {from = 0, to = 0}, has_span = span ~= nil, kids = n.kids, parent = n.parent, region = n.line .. ":" .. n.col .. ":" .. n.end_line .. ":" .. n.end_col})
+      push(t.nodes, {kind = n.kind, raw = get(n, "raw", ""), name = get(n, "name", ""), field = get(n, "field", ""), method = get(n, "method", ""), span = span or {from = 0, to = 0}, has_span = span ~= nil, kids = n.kids, parent = n.parent, region = n.line .. ":" .. n.col .. ":" .. n.end_line .. ":" .. n.end_col})
     end
     out[f.path] = t
   end
@@ -453,6 +344,18 @@ function emit_node(writer, i, start)
   if has_key(writer.turning, "" .. i) then
     local c = writer.turning["" .. i]
     c.from_line = writer.line
+    -- A peer method call turned back, `a.max(b)` to `U64.max(a, b)`.
+    if get(c, "undo", false) then
+      emit(writer, c.module .. "." .. c.fn .. "(")
+      emit_node(writer, t.nodes[n.kids[1]].kids[1], 0)
+      for a in t.nodes[n.kids[2]].kids do
+        emit(writer, ", ")
+        emit_node(writer, a, 0)
+      end
+      emit(writer, ")")
+      c.to_line = writer.line
+      return nil
+    end
     local args = drop(n.kids, 1)
     local needs_parens = not has_key(BARE_RECEIVER_KINDS, t.nodes[args[1]].kind)
     if needs_parens then emit(writer, "(") end
@@ -641,7 +544,11 @@ function types_by_region(ctx, root)
     end
   end
   for l in got.warnings do print("rewrite_method_calls: roc-types " .. root .. ": " .. l) end
-  return {by_region = by_region, modules = set_of(got.paths)}
+  -- The builtins' declarations, for the peer calls (peer_calls.shale),
+  -- read once the types' pin is known to be the tree's.
+  local table = "cookbook:roc/builtin_signatures/" .. got.pin .. ".txt"
+  if not exists(table) then fail("rewrite_method_calls: no " .. table .. ", the builtins' declarations at the tree's pin, which tell a peer call: `shale cookbook:roc/write_builtin_signatures.shale pin=" .. got.pin .. "` writes it from that pin's Builtin.roc") end
+  return {by_region = by_region, modules = set_of(got.paths), builtins = peer_builtin_table(read(table))}
 end
 
 -- A type's head, as `{head}`, or `{var = true}` for a type variable (`a`,
@@ -695,16 +602,24 @@ function proves_module_call(head, module)
 end
 
 -- Judges each open candidate of the file at `p` by its first argument's
--- type in `types` (from the root that reaches the file). A concrete other
--- type leaves the call, with that reason; a type that proves the call
--- (`proves_module_call`) marks it `proven`; the rest stay open for the
--- trial. Each kind is counted in `kind_counts`.
-function judge_by_types(kind_counts, t, cands, p, types)
+-- type in `types` (from the root that reaches the file). A call whose first
+-- two arguments are peers (`peer_verdict`, with the trees' `aliases`) stays
+-- a module call; a concrete other type leaves the call, with that reason; a
+-- type that proves the call (`proves_module_call`) marks it `proven`; the
+-- rest stay open for the trial. Each kind is counted in `kind_counts`.
+function judge_by_types(kind_counts, t, cands, p, types, aliases)
   local real_path = real(p)
   for c in cands do
     if c.why_left == "" then
-      local key = real_path .. "|" .. t.nodes[t.nodes[c.node].kids[2]].region
-      if not has_key(types.by_region, key) then
+      local call = t.nodes[c.node]
+      local key = real_path .. "|" .. t.nodes[call.kids[2]].region
+      local v = {peers = false}
+      if #call.kids >= 3 then v = peer_verdict(get(types.by_region, key, ""), get(types.by_region, real_path .. "|" .. t.nodes[call.kids[3]].region, ""), aliases) end
+      if v.peers and peer_is_apart(types.builtins, c.module, c.fn) then v.peers = false end
+      if v.peers then
+        incr(kind_counts, "peers")
+        c.why_left = "peers: both arguments are " .. peer_short_type(v.type) .. ", so neither is the subject"
+      elseif not has_key(types.by_region, key) then
         incr(kind_counts, "no type")
         c.kind = "no type"
       else
@@ -722,6 +637,25 @@ function judge_by_types(kind_counts, t, cands, p, types)
           end
         end
       end
+    end
+  end
+  return nil
+end
+
+-- The peer method calls of the file at `p` (`j.method_calls`, judged by
+-- `types`): each method call whose receiver and first argument are peers,
+-- with a module to call through, goes in `j.peers` as a candidate that
+-- turns it back (`undo`), `a.max(b)` to `U64.max(a, b)`. The types prove
+-- the module's function, as the receiver's type is where the method was
+-- found. A call with an argument that has no span stays, as a module call's
+-- does.
+function judge_method_peers(j, t, p, types, aliases)
+  local real_path = real(p)
+  for m in j.method_calls do
+    local v = peer_verdict(get(types.by_region, real_path .. "|" .. t.nodes[m.recv].region, ""), get(types.by_region, real_path .. "|" .. t.nodes[m.first].region, ""), aliases)
+    if v.peers and v.module ~= "" and not peer_is_apart(types.builtins, v.module, m.fn) then
+      local why = m.spanned and "" or "an argument with no span in the tree, whose text cannot be moved"
+      push(j.peers, {node = m.node, module = v.module, fn = m.fn, line = line_at(t, t.nodes[m.node].span.from), why_left = why, proven = true, kind = "", from_line = 0, to_line = 0, undo = true, type = v.type})
     end
   end
   return nil
@@ -890,7 +824,8 @@ function roots_of_files(ctx, paths, from, roots, read_types, open, trees, judged
       if has_key(open, p) and not has_key(found, p) and has_key(types.modules, real(p)) then
         found[p] = true
         out[p] = r
-        judge_by_types(judged[p].kind_counts, trees[p], judged[p].cands, p, types)
+        judge_by_types(judged[p].kind_counts, trees[p], judged[p].cands, p, types, ctx.aliases)
+        judge_method_peers(judged[p], trees[p], p, types, ctx.aliases)
       end
     end
     types = nil
@@ -903,6 +838,16 @@ function roots_of_files(ctx, paths, from, roots, read_types, open, trees, judged
     end
   end
   return {root_of = out, unreached = unreached}
+end
+
+-- Adds the peer method calls of the file `p` (`j.peers`) to `total`'s
+-- findings, a `path:line: peer_receiver: why` each, and to its count.
+function peer_findings(total, p, j)
+  for c in j.peers do
+    total.peers = total.peers + 1
+    push(total.lines, p .. ":" .. c.line .. ": peer_receiver: `." .. c.fn .. "`'s receiver and first argument are both " .. peer_short_type(c.type) .. ", so neither is the subject: " .. c.module .. "." .. c.fn .. "(...)")
+  end
+  return nil
 end
 
 -- `trials=0`'s answer, the files of `paths` from the `from`th on as the
@@ -918,6 +863,7 @@ function counted_by_types(total, paths, from, judged)
     if not j.unreached then total.files = total.files + 1 end
     for kind in keys(j.kind_counts) do incr(total.ctx.type_kind_counts, kind, j.kind_counts[kind]) end
     total.candidates = total.candidates + #cands
+    peer_findings(total, p, j)
     for c in cands do
       if c.why_left ~= "" then
         total.left = total.left + 1
@@ -946,6 +892,7 @@ end
 function run_all(paths, root, from, trees, use_types, roc, opts?)
   local count_only = opts ~= nil and get(opts, "count_only", false)
   local types_from = opts ~= nil and get(opts, "types_from", "") or ""
+  local undo = opts ~= nil and get(opts, "undo", false)
   if use_types and root == "" then fail("rewrite_method_calls: the types need root=, an app importing every file of the glob: roc-types reads an app, and a type module only through one. Give root=, or types=0 to run without them, every candidate tried") end
   if not use_types and find(root, ",") ~= nil then fail("rewrite_method_calls: root=" .. root .. ": several roots need the types, which say which root reaches a file; give one root, or run with the types") end
   local roots = root == "" and {} or roc_types_root_apps("rewrite_method_calls", root)
@@ -960,8 +907,12 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
     trees = parse_trees(paths)
     ctx.programs_used = 1
   end
-  local total = {candidates = 0, rewritten = 0, left = 0, unsettled = 0, lines = {}, files = 0, next = 0, ctx = ctx, unreached = {}}
-  -- Each file's candidates, `{cands, kind_counts, open_count, all_proven}`.
+  ctx.aliases = use_types and peer_aliases(trees) or {}
+  local total = {candidates = 0, rewritten = 0, left = 0, unsettled = 0, peers = 0, lines = {}, files = 0, next = 0, ctx = ctx, unreached = {}}
+  -- Each file's candidates, `{cands, kind_counts, open_count, all_proven,
+  -- method_calls, peers}`. A file the types must judge is in `open`: one
+  -- with a module call to try, or, with the types, a method call that
+  -- passes an argument, which may be a peer call.
   local judged = {}
   local any_open = false
   local open = {}
@@ -975,13 +926,27 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
         open[p] = true
       end
     end
-    judged[p] = {cands = cands, kind_counts = {}, open_count = 0, all_proven = false, unreached = false}
+    local method_calls = use_types and peer_method_calls(trees[p]) or {}
+    if #method_calls > 0 then
+      any_open = true
+      open[p] = true
+    end
+    judged[p] = {cands = cands, kind_counts = {}, open_count = 0, all_proven = false, unreached = false, method_calls = method_calls, peers = {}}
   end
   -- The types judge only open candidates, so with none, roc-types never runs.
   local read_types = use_types and any_open
   local reach = roots_of_files(ctx, paths, from, roots, read_types, open, trees, judged)
   local root_of = reach.root_of
   total.unreached = reach.unreached
+  -- `peers=undo`: a file's candidates are its peer method calls alone.
+  if undo then
+    for k = from, #paths do
+      local j = judged[paths[k]]
+      j.cands = j.peers
+      j.peers = {}
+      j.kind_counts = {}
+    end
+  end
   for k = from, #paths do
     local p = paths[k]
     local j = judged[p]
@@ -1031,6 +996,7 @@ function run_all(paths, root, from, trees, use_types, roc, opts?)
     -- before it leaves them to the next run.
     if not j.unreached then total.files = total.files + 1 end
     for kind in keys(j.kind_counts) do incr(ctx.type_kind_counts, kind, j.kind_counts[kind]) end
+    peer_findings(total, p, j)
     if #cands > 0 then
       local kept = kept_by_confirm
       if kept == 0 and j.open_count > 0 then kept = try_file(ctx, p, trees[p], cands, r, baseline_test_of(ctx, baselines, r)) end
@@ -1085,7 +1051,7 @@ const EXPECT = {
   Typed = {left = 1, why = "the first argument is a List, not a Str", root = "TypedApp", types = true, confirms = 1, rounds = 0},
   Proven = {left = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
   NoCalls = {left = 0, root = "TypedApp", types = true, confirms = 0, rounds = 0, no_types_run = true},
-  ProvenFails = {left = 2, why = "roc check: type mismatch", root = "TypedApp", types = true, confirms = 1, rounds = 2},
+  ProvenFails = {left = 2, why = "roc check: missing method", root = "TypedApp", types = true, confirms = 1, rounds = 2},
   Unrooted = {stop = "the types need root=", types = true},
   NotApp = {stop = "is not an app", root = "Proven", types = true},
   Pin = {stop = "roc-types reads Roc nightly-2026-11-03-34bd006", root = "TypedApp", types = true, tree_pin = "nightly-2026-10-29-a0a9fc2"},
@@ -1100,18 +1066,25 @@ const EXPECT = {
   -- A package's type module, imported as `pk.Meter`, proves its calls.
   Packaged = {left = 0, root = "PkgApp", types = true, confirms = 1, rounds = 0},
   -- `trials=0`: the types alone count, and the plant comes out as it was.
-  -- ProvenFails' three calls are all proven, where the trial leaves two:
-  -- the count's cost, held here.
+  -- ProvenFails' three open calls are all proven, where the trial leaves
+  -- one: the count's cost, held here.
   TypedCount = {file = "Typed", count = true, proven = 1, unsettled = 0, left = 1, why = "the first argument is a List, not a Str", root = "TypedApp", types = true},
-  ProvenFailsCount = {file = "ProvenFails", count = true, proven = 3, unsettled = 0, left = 0, root = "TypedApp", types = true},
+  ProvenFailsCount = {file = "ProvenFails", count = true, proven = 3, unsettled = 0, left = 1, why = "peers: both arguments are U8", root = "TypedApp", types = true},
   ProvenFrom = {file = "Proven", count = true, types_from = true, proven = 2, unsettled = 0, left = 0, root = "TypedApp", types = true},
   LastSegmentCount = {file = "LastSegment", count = true, proven = 0, unsettled = 0, left = 2, why = "the first argument is a Shelf.Shelf, not a Shelf", root = "TypedApp", types = true},
   PackagedCount = {file = "Packaged", count = true, proven = 1, unsettled = 0, left = 0, root = "PkgApp", types = true},
+  -- Peer calls stay module calls; `peers=undo` turns peer method calls
+  -- back. Each `count` plant's `left` counts its listed lines, the
+  -- peer_receiver findings among them. Line 22 of Peers is the alias's.
+  Peers = {left = 4, why = "Peers.roc:22: U64.max: peers: both arguments are U64, so neither is the subject", root = "TypedApp", types = true, confirms = 1, rounds = 0, peers = 0},
+  PeersCount = {file = "Peers", count = true, proven = 2, unsettled = 0, left = 4, peers = 0, why = "Peers.roc:22: U64.max: peers: both arguments are U64", root = "TypedApp", types = true},
+  PeerMethods = {undo = true, left = 0, peers = 0, root = "TypedApp", types = true, confirms = 1, rounds = 0},
+  PeerMethodsCount = {file = "PeerMethods", count = true, proven = 0, unsettled = 0, left = 4, peers = 4, why = "peer_receiver: `.max`'s receiver and first argument are both U64, so neither is the subject: U64.max(...)", root = "TypedApp", types = true},
 }
 
 -- The plants that hold no call and serve only as roots for other plants:
 -- roc-types reads an app, and an app names its platform.
-const ROOT_PLANTS = {TypedApp = true, TypedPf = true, SecondApp = true, PkgApp = true, PlantPkg = true, Meter = true, Shelf = true, Book = true}
+const ROOT_PLANTS = {TypedApp = true, TypedPf = true, SecondApp = true, PkgApp = true, PlantPkg = true, Meter = true, Shelf = true, Book = true, Hues = true}
 
 -- The child run `plant=<name>`: copies the plants to a fresh scratch folder
 -- and runs the one plant there with `apply=1`, then checks the result
@@ -1141,13 +1114,14 @@ function self_test_plant(name)
     replace(types_from, must(run({real(roc_types_exe(roc)), real(roots[1])}, {timeout_ms = 300000, whole = 64000000})).out)
   end
   local count_only = has_key(want, "count")
-  local got = run_all(paths, join(roots, ","), 1, nil, with_types, roc, {count_only = count_only, types_from = types_from})
+  local got = run_all(paths, join(roots, ","), 1, nil, with_types, roc, {count_only = count_only, types_from = types_from, undo = has_key(want, "undo")})
   if has_key(want, "stop") then fail("rewrite_method_calls: self-test: " .. name .. " ran to its end, and was to stop: " .. want.stop) end
   if count_only then
     report_check(failures, got.rewritten == want.proven, name .. ": " .. got.rewritten .. " proven, want " .. want.proven)
     report_check(failures, got.unsettled == want.unsettled, name .. ": " .. got.unsettled .. " unsettled, want " .. want.unsettled)
     report_check(failures, read(p) == read(PLANTS_DIR .. "/" .. file .. ".roc"), name .. ": counted, and left as it was")
   end
+  if has_key(want, "peers") then report_check(failures, got.peers == want.peers, name .. ": " .. got.peers .. " peer_receiver, want " .. want.peers) end
   if types_from ~= "" then report_check(failures, got.ctx.programs_used == 1, name .. ": the types read from a file, so roc-ast the one program (" .. got.ctx.programs_used .. ")") end
   local want_unreached = get(want, "unreached", 0)
   report_check(failures, #got.unreached == want_unreached, name .. ": " .. #got.unreached .. " not reached by a root, want " .. want_unreached .. " (" .. join(got.unreached, ", ") .. ")")
@@ -1222,9 +1196,9 @@ elseif SELF_TEST then
   self_test()
 else
   local paths = paths_of_globs(GLOB)
-  local total = run_all(paths, ROOT, FROM, nil, USE_TYPES, roc_bin("rewrite_method_calls", SELF_TEST), {count_only = COUNT_ONLY, types_from = TYPES_FROM})
-  local summary = (APPLY and "" or "dry run: ") .. "files " .. total.files .. ", candidates " .. total.candidates .. ", rewritten " .. total.rewritten .. ", left " .. total.left .. ", programs " .. total.ctx.programs_used .. " (checks: " .. total.ctx.confirms .. " confirming proven calls, " .. total.ctx.rounds .. " in trial rounds)"
-  if COUNT_ONLY then summary = "count: files " .. total.files .. ", candidates " .. total.candidates .. ", proven " .. total.rewritten .. ", unsettled " .. total.unsettled .. ", left " .. total.left .. ", programs " .. total.ctx.programs_used .. " (no trials: the types alone decide)" end
+  local total = run_all(paths, ROOT, FROM, nil, USE_TYPES, roc_bin("rewrite_method_calls", SELF_TEST), {count_only = COUNT_ONLY, types_from = TYPES_FROM, undo = UNDO})
+  local summary = (UNDO and "peers=undo, " or "") .. (APPLY and "" or "dry run: ") .. "files " .. total.files .. ", candidates " .. total.candidates .. ", rewritten " .. total.rewritten .. ", left " .. total.left .. ", peer_receiver " .. total.peers .. ", programs " .. total.ctx.programs_used .. " (checks: " .. total.ctx.confirms .. " confirming proven calls, " .. total.ctx.rounds .. " in trial rounds)"
+  if COUNT_ONLY then summary = "count: files " .. total.files .. ", candidates " .. total.candidates .. ", proven " .. total.rewritten .. ", unsettled " .. total.unsettled .. ", left " .. total.left .. ", peer_receiver " .. total.peers .. ", programs " .. total.ctx.programs_used .. " (no trials: the types alone decide)" end
   if total.next > 0 then summary = summary .. ", in files " .. FROM .. " to " .. (total.next - 1) .. " of " .. #paths .. ": a run holds " .. MAX_PROGRAMS .. " programs; go on with from=" .. total.next end
   local finding_lines = total.lines
   if USE_TYPES then
