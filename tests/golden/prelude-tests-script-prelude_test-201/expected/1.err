@@ -1,4 +1,4 @@
-── stopped at the prelude:170:7 (in `the prelude's opts_only`): fail: `f` takes `a`, `b`, not `z` (181 steps)
+── stopped at the prelude:174:7 (in `the prelude's opts_only`): fail: `f` takes `a`, `b`, not `z` (181 steps)
    called from {base}/case/script.shale:1:1
 ── used: 181 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 181 in all; the most 170 (93%): opts_only, 1 call; 11 (6%): script

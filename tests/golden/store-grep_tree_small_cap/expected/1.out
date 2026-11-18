@@ -1,0 +1,6 @@
+gt/f.txt	2	bbbb
+gt/f.txt	4	bbbb
+gt/f.txt	3	cccc
+{"lines":["aaaa","bbbb"],"next":10,"done":false}
+{"lines":["a"],"next":2,"done":false}
+`read_lines`: the line at offset 2 runs past 11 bytes, the most one call brings

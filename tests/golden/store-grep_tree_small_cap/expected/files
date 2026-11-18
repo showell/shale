@@ -1,0 +1,5 @@
+root	d	775	-	
+root/gt	d	775	-	
+root/gt/f.txt	f	664	20		sha256 3140cdc271fc7c02dea181f656050d6e54e8abc195f7b89bd6cc70b23d91f7ea
+root/long.txt	f	664	15		sha256 b7ac393aa70b35707da0ab56abdfc7cdd0a1846e97713644a2ea1b53a5238ad0
+scratch	d	775	-	

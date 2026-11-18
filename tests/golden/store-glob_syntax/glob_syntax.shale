@@ -1,0 +1,10 @@
+-- glob's syntax at its edge: `**`, `*` and `?` match, and a shell's `[...]`
+-- or `{a,b}`, which glob does not read, stops it rather than matching
+-- nothing.
+-- differ-before: fixture/setup.shale
+function g(p) return glob(p) end
+print(json_write(glob("*.txt")))
+print(json_write(glob("?.txt")))
+print(attempt(g, "**/*.[ch]").error)
+print(attempt(g, "*.{txt,md}").error)
+print(attempt(g, "sub/[ab].txt").error)

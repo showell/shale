@@ -1,4 +1,4 @@
-── stopped at the prelude:222:19 (in `the prelude's find_all`): fail: `find_all`: an empty string is found at every position; look for one that is not empty (98 steps)
+── stopped at the prelude:226:19 (in `the prelude's find_all`): fail: `find_all`: an empty string is found at every position; look for one that is not empty (98 steps)
    called from {base}/case/script.shale:1:7
 ── used: 98 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 98 in all; the most 93 (94%): find_all, 1 call; 5 (5%): script

@@ -1,4 +1,4 @@
-── stopped at the prelude:143:17 (in `the prelude's drop`): fail: `drop`: a count of -1 (57 steps)
+── stopped at the prelude:147:17 (in `the prelude's drop`): fail: `drop`: a count of -1 (57 steps)
    called from {base}/case/script.shale:1:7
 ── used: 57 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes
 ── steps: 57 in all; the most 51 (89%): drop, 1 call; 6 (10%): script

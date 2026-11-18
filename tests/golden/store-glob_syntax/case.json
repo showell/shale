@@ -1,0 +1,1 @@
+{"id":"store-glob_syntax","source":"store","origin":"tests/inputs/store/glob_syntax.shale","files":["setup.shale","glob_syntax.shale"],"steps":[{"argv":["{case}/setup.shale"],"stdin":"","mounts":[]},{"argv":["{case}/glob_syntax.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

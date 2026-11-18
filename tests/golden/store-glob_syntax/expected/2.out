@@ -1,0 +1,5 @@
+["a.txt","crlf.txt","empty.txt"]
+["a.txt"]
+`glob`: "**/*.[ch]" holds a `[` or a `{`, which glob does not read: its wildcards are `**`, `*` and `?` alone (a glob for each pattern, or `walk_all` and a test of each path)
+`glob`: "*.{txt,md}" holds a `[` or a `{`, which glob does not read: its wildcards are `**`, `*` and `?` alone (a glob for each pattern, or `walk_all` and a test of each path)
+`glob`: "sub/[ab].txt" holds a `[` or a `{`, which glob does not read: its wildcards are `**`, `*` and `?` alone (a glob for each pattern, or `walk_all` and a test of each path)

@@ -1,0 +1,16 @@
+-- grep_tree and read_lines under a call-bytes cap of 11 bytes, far under
+-- their 4 KiB head and 64 KiB part: a file past the cap is searched a part at
+-- a time, each part ending at its last whole line, and only a line longer
+-- than the cap stops.
+-- differ-argv: --budget call_bytes=11 {script}
+mkdir("gt")
+create("gt/f.txt", "aaaa\nbbbb\ncccc\nbbbb\n")
+for h in grep_tree("gt", "bbbb").hits do print(h.path, h.line, h.text) end
+for h in grep_tree("gt", "^c", {regex = true}).hits do print(h.path, h.line, h.text) end
+local p = read_lines("gt/f.txt")
+print(json_write(p))
+create("long.txt", "a\naaaaaaaaaaaa\n")
+function rl(f, o) return read_lines(f, o) end
+p = read_lines("long.txt")
+print(json_write(p))
+print(attempt(rl, "long.txt", p.next).error)

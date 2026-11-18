@@ -1069,6 +1069,8 @@ store-call_bytes-budget-call_bytes-100	store	tests/inputs/store/call_bytes.shale
 store-edit_diffs	store	tests/inputs/store/edit_diffs.shale	2	
 store-edit_refusals	store	tests/inputs/store/edit_refusals.shale	2	
 store-edits_write_batches	store	tests/inputs/store/edits_write_batches.shale	2	
+store-glob_syntax	store	tests/inputs/store/glob_syntax.shale	2	
+store-grep_tree_small_cap	store	tests/inputs/store/grep_tree_small_cap.shale	1	
 store-links	store	tests/inputs/store/links.shale	2	
 store-mount_read_only	store	tests/inputs/store/mount_read_only.shale	2	
 store-mount_walk	store	tests/inputs/store/mount_walk.shale	2	

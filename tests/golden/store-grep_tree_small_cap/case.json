@@ -1,0 +1,1 @@
+{"id":"store-grep_tree_small_cap","source":"store","origin":"tests/inputs/store/grep_tree_small_cap.shale","files":["grep_tree_small_cap.shale"],"steps":[{"argv":["--budget","call_bytes=11","{case}/grep_tree_small_cap.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}
