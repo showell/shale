@@ -276,13 +276,15 @@ end
 
 -- The record for the type declared at `i`. `underlying` is the type it is
 -- built on, `shape` the same as `render_type` gives a shape, and `is_nominal`
--- says it is declared with `:=` or `::`, not as an alias with `:`.
+-- says it is declared with `:=` or `::`, not as an alias with `:`; `is_fn`
+-- that it is built on a function type.
 function declared_type(path, src, tree, i)
   local kids = children(tree, i)
   local name = attribute(tree, kids[1], "name")
   if name == "" then return nil end
-  local record = {path = path, line = tree[i].line, kind = "type", name = name, owner = owner_of(tree, i), underlying = "", shape = "", is_nominal = false, is_tags = false}
+  local record = {path = path, line = tree[i].line, kind = "type", name = name, owner = owner_of(tree, i), underlying = "", shape = "", is_nominal = false, is_tags = false, is_fn = false}
   if #kids > 1 and tree[kids[2]].kind ~= "associated" then
+    record.is_fn = tree[kids[2]].kind == "ty-fn"
     local between = sub(src[tree[kids[1]].end_line], tree[kids[1]].end_col, tree[kids[1]].end_col + 3)
     record.is_nominal = contains(between, ":=") or contains(between, "::")
     record.underlying = render_type(tree, kids[2])

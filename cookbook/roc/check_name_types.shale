@@ -43,7 +43,9 @@
 --                     A `List` has its own empty case, and a type's own member
 --                     of that type (`Attention.none : Attention`) is its
 --                     scale's bottom, so neither is judged, and neither is a
---                     constant with no annotation. A string with something in
+--                     constant with no annotation. An alias of a function
+--                     type is a function's type (`no_draw : Draw`, `Draw : U64
+--                     -> List(U64)`), so it is not judged either. A string with something in
 --                     it is words about the case, not a stand-in for it
 --                     (`no_match_words`), so only `""` is judged.
 --
@@ -135,14 +137,18 @@ end
 
 function judge_no_values(all, report)
   local tag_types = {}
+  -- An alias of a function type (`Draw : U64 -> List(U64)`) makes a value
+  -- of it a function, which `fn` sees only when written out.
+  local function_aliases = {}
   for d in all do
     if d.kind == "type" and d.is_tags then tag_types[d.name] = true end
+    if d.kind == "type" and d.is_fn and not d.is_nominal then function_aliases[d.name] = true end
   end
   for d in all do
     if d.kind == "value" and d.annotated and not d.fn then
       local ws = split(d.name, "_")
       local is_none_word = has_key(NONE_WORDS, ws[1])
-      local is_plain = d.type ~= "Bool" and not d.has_text and not starts_with(d.type, "[") and not starts_with(d.type, "List(") and d.owner ~= last_part(d.type) and not has_key(tag_types, last_part(d.type))
+      local is_plain = d.type ~= "Bool" and not d.has_text and not starts_with(d.type, "[") and not starts_with(d.type, "List(") and d.owner ~= last_part(d.type) and not has_key(tag_types, last_part(d.type)) and not has_key(function_aliases, last_part(d.type))
       if is_none_word and is_plain then push(report, {path = d.path, line = d.line, check = "no_value", what = "`" .. d.name .. "` means none and is a `" .. d.type .. "`: keep the case as a tag"}) end
     end
   end
@@ -161,7 +167,7 @@ function self_test()
     {glob = at .. "bare_any/*.roc", counts = {bare_beside_unit = 1}, says = {"the field `id` is a bare `U64` here"}},
     {glob = at .. "bare_any/*.roc", args = {"table=" .. at .. "table_any.txt"}},
     {glob = at .. "name_type.roc", args = {"table=" .. at .. "table_any.txt"}},
-    {glob = at .. "no_value.roc", counts = {no_value = 3}, says = {"no_value.roc:3: no_value: `no_frames` means none and is a `Steps`"}},
+    {glob = at .. "no_value.roc", counts = {no_value = 4}, says = {"no_value.roc:9: no_value: `no_frames` means none and is a `Steps`"}},
     {glob = at .. "quiet_no_value.roc"},
     {glob = at .. "broken/*.roc", stops = true, says = {"refused: "}},
     {glob = at .. "quiet_name_type.roc", args = {"table=" .. at .. "no_such.txt"}, stops = true, says = {"no table"}},

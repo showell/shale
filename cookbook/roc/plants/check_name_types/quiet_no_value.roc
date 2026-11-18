@@ -2,6 +2,8 @@
 Gaze := [].{
 	Looks : [Found, Lost]
 
+	Draw : U64 -> List(U64)
+
 	no_cat : Bool
 	no_cat = Bool.False
 
@@ -19,6 +21,9 @@ Gaze := [].{
 
 	no_match : Str -> U64
 	no_match = |s| s.count()
+
+	no_draw : Draw
+	no_draw = |_n| []
 
 	no_guess = 3
 
