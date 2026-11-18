@@ -18,7 +18,7 @@ local to = arg("to", "")
 if to == "" then fail("to=: the OS path the binary is copied to") end
 not_option("c/build/binary.shale", "to", to)
 local t = block_start(false, build)
-must(run_in(t, "binary preludes", {"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5}))
+must(run_in(t, "binary preludes", {"tcc", "-run", "c/gen_preludes.c"}, {timeout_ms = 60000, tail = 5}))
 local bin = OUT .. "/" .. build .. "/shale"
 compile_held(build, "c/shale.c", run_in(t, "binary " .. build, command_argv(build, bin), {timeout_ms = COMPILE_TIMEOUT_MS, tail = 40}))
 -- A `to` that names the build's own output is the binary already there:

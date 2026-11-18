@@ -7,7 +7,7 @@ use("build:lib.shale")
 
 -- ── The command: c/shale.c and c/script's parser ───────────────────────
 -- test_lex.c and test_parse.c run in the foundation's block with every test
--- file. Here: c/gen_preludes.shale writes the preludes the C `shale`
+-- file. Here: c/gen_preludes.c writes the preludes the C `shale`
 -- embeds, then c/shale.c is built under each of `t.builds` (tcc in the fast
 -- tier, release and asan added in the full), and each binary's `--check` is
 -- held to a script that parses, one that stops and one too big, its
@@ -185,7 +185,7 @@ function check_help(t, build)
 end
 
 function command_block(t)
-  print(trim(must(run_in(t, "command preludes", {"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5})).out))
+  print(trim(must(run_in(t, "command preludes", {"tcc", "-run", "c/gen_preludes.c"}, {timeout_ms = 60000, tail = 5})).out))
   build_commands(t)
   if t.stage == "plan" then return nil end
   for b in t.builds do

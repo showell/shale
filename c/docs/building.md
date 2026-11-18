@@ -180,6 +180,24 @@ installs into planted folders under `c/out`: a first install, a reinstall
 run that writes nothing, and a binary that fails the smoke test, which
 leaves the old link, the old binary and a neighboring link as they were.
 
+## First install on a new machine
+
+The build's scripts are Shale, so the first `shale` is built by hand, from
+a checkout's root, with TCC and GCC and nothing else:
+
+    tcc -run c/gen_preludes.c
+    mkdir -p c/out/release
+    gcc -std=c11 -Wall -Wextra -Werror -Ic/foundation -O2 -Ic/out/gen -Ic c/shale.c -o c/out/release/shale
+    PATH="$PWD/c/out/release:$PATH" shale c/install.shale
+
+The first line writes `c/out/gen/preludes.h` from `c/preludes/`
+(`gcc -o gen c/gen_preludes.c && ./gen` does the same without TCC; the
+fast tier needs TCC anyway). The compile is the command block's release
+line (`command_argv` in `c/build/lib.shale`). The new `shale` then runs the
+install above, which builds and checks everything again and puts its own
+`shale` on PATH; it needs the mount lines its header names (`tools`, and
+`localbin = ~/.local/bin`).
+
 ## Summary
 
 | Build | Compiler | When |

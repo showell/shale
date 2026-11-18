@@ -56,9 +56,9 @@ Linux on x86-64, GCC and TCC.
   faults. `shale tests/golden.shale` holds a build to every golden case.
 
 C Shale's build scripts are themselves Shale, so a first install on a
-machine with no `shale` needs one to run them. Zig Shale, the first
-implementation, deprecated and frozen in [legacy_zig/](legacy_zig/README.md),
-can build that first one.
+machine with no `shale` builds one by hand, with TCC and GCC alone:
+[c/docs/building.md](c/docs/building.md), "First install on a new
+machine".
 
 ## Run a script
 
