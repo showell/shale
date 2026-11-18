@@ -53,6 +53,7 @@ TEST(run_refuses_each_bad_call_with_its_message) {
                      "print(attempt(f, {\"echo\"}, {tail = 1}).error)\n"
                      "print(attempt(f, {\"echo\"}, {timeout_ms = 1}).error)\n"
                      "print(attempt(f, {\"echo\"}, {timeout_ms = 1, whole = 1, tail = 1}).error)\n"
+                     "print(attempt(f, {\"echo\"}, {timeout_ms = 1, whole = true}).error)\n"
                      "print(attempt(f, {\"no-such-program-x\"}, {timeout_ms = 1000, tail = 1}).error)\n"),
                ran_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
@@ -63,10 +64,20 @@ TEST(run_refuses_each_bad_call_with_its_message) {
                                    "`run` needs `timeout_ms`: how long the program may take is the script's to say\n"
                                    "`run` needs a keep: `head`, `tail` (or both), or `whole = N`: what to keep of the output is the script's to say\n"
                                    "`run`'s `whole` keeps everything, and takes no filter or keep (`re`, `not_re`, `nocase`, `before`, `after`, `head`, `tail`)\n"
+                                   "`run`'s `whole` takes a byte limit, `whole = 65536`, not a boolean\n"
                                    "`run`: `no-such-program-x` is not found along PATH\n"));
     // Only the program that was found ran.
     EXPECT_EQ(x.r.host_runs, 1);
     EXPECT_EQ(x.lh.records.len, 0);
+    ran_free(&x);
+}
+
+TEST(run_s_whole_is_a_byte_limit_and_an_output_past_it_says_so) {
+    static Ran x;
+    ran_source(&x, S("host(\"run\", {\"echo\", \"hello\"}, {timeout_ms = 5000, whole = 1})\n"), ran_budgets());
+    EXPECT_EQ(x.ran, STOP);
+    EXPECT_EQ(x.r.ctx.stop.cls, CLASS_ARGUMENT);
+    EXPECT_STR(x.r.ctx.stop.message, S("`run`: `whole = 1` is a byte limit, and the output was 6 bytes: raise it, or keep lines with `head` and `tail`, which take any size"));
     ran_free(&x);
 }
 
@@ -299,7 +310,8 @@ TEST(run_s_nice_sets_the_programs_niceness_and_refuses_one_past_19) {
 TEST_PART(host_run, TEST_CASE(run_s_nice_sets_the_programs_niceness_and_refuses_one_past_19),
           TEST_CASE(run_keeps_a_line_of_4096_bytes_whole_unset_and_cuts_one_past_it),
           TEST_CASE(run_keeps_the_head_and_tail_and_answers_every_field), TEST_CASE(run_charges_its_output_a_step_per_16_bytes),
-          TEST_CASE(run_refuses_each_bad_call_with_its_message), TEST_CASE(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended),
+          TEST_CASE(run_refuses_each_bad_call_with_its_message), TEST_CASE(run_s_whole_is_a_byte_limit_and_an_output_past_it_says_so),
+          TEST_CASE(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended),
           TEST_CASE(a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended),
           TEST_CASE(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap),
           TEST_CASE(the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv), TEST_CASE(sleep_takes_0_to_600000_ms_and_counts_its_time),

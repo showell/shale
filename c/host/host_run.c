@@ -421,6 +421,7 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
         } else if (str_eq(k, S("secret_replace"))) {
             TRY(host_bool_opt(r, pos, who, k, &x, &o->secret_replace));
         } else if (str_eq(k, S("whole"))) {
+            if (x.tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`run`'s `whole` takes a byte limit, `whole = 65536`, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(&x))));
             TRY(host_int_opt(r, pos, who, k, &x, &o->whole));
         } else if (str_eq(k, S("log"))) {
             TRY(host_str_value_opt(r, pos, who, k, &x, &o->log));
@@ -1414,7 +1415,7 @@ static STATUS_MUST_USE Status host_run_out(Run *r, Pos pos, const RunOpts *o, Ho
     switch (o->keep) {
     case HOST_KEEP_WHOLE: {
         if (s->out.whole_over) {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: the output passed `whole = {d}` bytes ({d}): a keep, `head` and `tail`, takes any size"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, o->whole)), MSG_FROM_HOST(run_unum(r, s->out.bytes))));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: `whole = {d}` is a byte limit, and the output was {d} bytes: raise it, or keep lines with `head` and `tail`, which take any size"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, o->whole)), MSG_FROM_HOST(run_unum(r, s->out.bytes))));
         }
         int64_t lines = (int64_t)host_count_lines(buf_view(&s->whole));
         if (!arena_dup(a, buf_view(&s->whole), kept_out)) return run_values_oom(r, pos);
