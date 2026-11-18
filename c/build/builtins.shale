@@ -49,7 +49,7 @@ const BUILTINS_PLANTS = {
    aim = "a_yield_keeps_the_effects_log",
    old = "        r->files->effects = kept;", new = "        (void)kept;"},
   {name = "a path built and kept holds its growth's slack", dir = "foundation", file = "buf.h", caught_by = "file_system/test_builtins",
-   aim = "many_creates_hold_under_1100_bytes_of_the_arena_each",
+   aim = "many_creates_hold_under_900_bytes_of_the_arena_each",
    old = "    if (b->cap > b->len && arena_is_last(", new = "    if (0 && b->cap > b->len && arena_is_last("},
 }
 

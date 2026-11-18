@@ -318,15 +318,17 @@ static size_t bt_creates_hold(size_t n) {
 // A run of many changes holds about what Zig's does a change: a path made
 // for the kernel lives on the stack, as Zig's posix layer has it, and a
 // path built and kept (a join, a mount's path) holds its length. Here a
-// create holds about 930 bytes; with each join keeping its growth's slack
-// it held about 1,380, and with each kernel path copied into the arena as
-// well, a run of 20,000 creates stopped on the 16 MiB arena at about 6,000,
-// which Zig finishes.
-TEST(many_creates_hold_under_1100_bytes_of_the_arena_each) {
+// create holds about 785 bytes (2026-11-18; about 930 before the case retry
+// went, whose joins and listings a missed name paid for); with each join
+// keeping its growth's slack it holds about 1,070, so the bound sits between,
+// 115 above the one and 170 below the other. With each kernel path copied
+// into the arena as well, a run of 20,000 creates once stopped on the 16 MiB
+// arena at about 6,000, which Zig finishes.
+TEST(many_creates_hold_under_900_bytes_of_the_arena_each) {
     size_t few = bt_creates_hold(50);
     size_t many = bt_creates_hold(550);
     size_t each = (many - few) / 500;
-    EXPECT(each < 1100);
+    EXPECT(each < 900);
 }
 
 TEST_PART(builtins, TEST_CASE(ls_stat_exists_and_is_dir_look_without_changing_and_name_a_missing_path), TEST_CASE(the_reads_whole_in_parts_by_lines_and_scans_across_a_chunks_edge),
@@ -337,4 +339,4 @@ TEST_PART(builtins, TEST_CASE(ls_stat_exists_and_is_dir_look_without_changing_an
           TEST_CASE(edit_word_holds_only_the_edges_where_old_ends_in_a_word_byte), TEST_CASE(read_lines_at_the_call_bytes_cap_ends_a_part_at_its_last_whole_line),
           TEST_CASE(edits_write_writes_every_file_or_none_and_refuses_one_named_twice), TEST_CASE(a_yield_keeps_the_effects_log),
           TEST_CASE(attack_a_change_through_a_read_only_mount_is_refused_before_it_is_written), TEST_CASE(undo_on_stop_puts_back_a_file_changed_and_deletes_one_made),
-          TEST_CASE(many_creates_hold_under_1100_bytes_of_the_arena_each));
+          TEST_CASE(many_creates_hold_under_900_bytes_of_the_arena_each));
