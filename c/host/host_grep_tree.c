@@ -554,10 +554,48 @@ static STATUS_MUST_USE Status grep_tree_str_option(Run *r, Pos pos, Table *o, St
     return OK;
 }
 
+// The options a script may give `grep_tree`, in the order its stop lists
+// them.
+static Names grep_tree_option_names(void) {
+    static const Str names[] = {S_ITEM("regex"), S_ITEM("nocase"), S_ITEM("ext"), S_ITEM("like"), S_ITEM("context"), S_ITEM("most")};
+    Names n = {names, sizeof names / sizeof *names};
+    return n;
+}
+
+// The script's own `opts` (`given`), each key one grep_tree takes: a key it
+// does not take (`max`, a misspelt `nocase`) stops the run, naming the ones
+// it does, as `opts_only` does, so no option is passed by quietly.
+static STATUS_MUST_USE Status grep_tree_known(Run *r, Pos pos, const Value *given) {
+    if (given->tag != VALUE_TABLE || given->as.table->kind != TABLE_MAP) return OK;
+    Names names = grep_tree_option_names();
+    const ValueMap *m = &given->as.table->map;
+    for (size_t k = 0; k < ValueMap_len(m); k++) {
+        Str key = ValueMap_key_at(m, k);
+        bool known = false;
+        for (size_t j = 0; j < names.len; j++) {
+            if (str_eq(at(names, j), key)) known = true;
+        }
+        if (known) continue;
+        Buf b = buf_make(r->ctx.values);
+        bool ok = buf_str(&b, S("`grep_tree` takes ")) == OK;
+        for (size_t j = 0; ok && j < names.len; j++) {
+            ok = (j == 0 || buf_str(&b, S(", ")) == OK) && buf_byte(&b, '`') == OK && buf_str(&b, at(names, j)) == OK && buf_byte(&b, '`') == OK;
+        }
+        ok = ok && buf_str(&b, S(", not `")) == OK && buf_str(&b, key) == OK && buf_byte(&b, '`') == OK;
+        if (!ok) return run_values_oom(r, pos);
+        return run_fail(&r->ctx, pos, CLASS_FAIL, buf_view(&b));
+    }
+    return OK;
+}
+
 // The prelude's options read into `ask`: `place`, `prefix`, `regex`,
-// `nocase`, `ext`, `like`, `context` and `most`.
+// `nocase`, `ext`, `like`, `context` and `most`, after `given`'s keys are
+// held to those a script may give.
 static STATUS_MUST_USE Status grep_tree_ask(Run *r, Pos pos, Str needle, Table *o, GrepTreeAsk *ask) {
     memset(ask, 0, sizeof *ask);
+    Value given;
+    TRY(grep_tree_option(r, pos, o, S("given"), &given));
+    TRY(grep_tree_known(r, pos, &given));
     ask->needle = needle;
     TRY(grep_tree_str_option(r, pos, o, S("place"), &ask->place));
     TRY(grep_tree_str_option(r, pos, o, S("prefix"), &ask->prefix));

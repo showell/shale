@@ -12,7 +12,7 @@
 // them; `show(g)` prints its hits, what it passed by, `files` and `cut`.
 static const char *const GT_LIB =
     "function gt(needle, o)\n"
-    "  local a = {place = \"\", prefix = \"\", entries = {}, regex = false, nocase = false, ext = {}, like = \"\", context = 0, most = 10000}\n"
+    "  local a = {given = {}, place = \"\", prefix = \"\", entries = {}, regex = false, nocase = false, ext = {}, like = \"\", context = 0, most = 10000}\n"
     "  for k in keys(o) do a[k] = o[k] end\n"
     "  return host(\"grep_tree\", needle, a)\n"
     "end\n"
@@ -64,20 +64,114 @@ TEST(grep_tree_searches_each_file_in_path_order_passing_by_a_binary_a_build_fold
     ran_free(&x);
 }
 
-TEST(grep_tree_stops_at_a_planted_secrets_mount_s_file_reading_none_of_it_and_naming_no_folder) {
+TEST(grep_tree_leaves_out_a_planted_secrets_mount_s_folder_unlisted_unread_and_unnamed) {
     static Ran x;
     gt_init(&x, "k = D/root/keys secrets\n");
     ran_put(&x, "root/a.txt", "x\n");
     ran_put(&x, "root/keys/tok", "x s3cret\n");
-    gt_run(&x, "show(gt(\"x\", {}))\n");
-    EXPECT_EQ(x.ran, STOP);
-    EXPECT_EQ(x.r.ctx.stop.cls, CLASS_REFUSED);
-    EXPECT_STR(x.r.ctx.stop.message, S("\"keys/tok\" is in the mount `k`, which holds secrets"));
-    EXPECT(!gt_holds(x.r.ctx.stop.message, x.dir));
-    EXPECT_EQ(x.r.out.len, 0);
-    // a.txt's head and grep, 2 bytes each: not a byte of the secret.
-    EXPECT_EQ(x.r.read_bytes, 4);
+    ran_put(&x, "root/keys/sub/two", "x s3cret too\n");
+    ran_put(&x, "root/z.txt", "x\n");
+    gt_run(&x, "local g = gt(\"x\", {})\nshow(g)\nprint(host(\"json_write\", g))\n");
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("a.txt:1: x\nz.txt:1: x\n2\tfalse\n"
+                                     "{\"hits\":[{\"path\":\"a.txt\",\"line\":1,\"text\":\"x\"},{\"path\":\"z.txt\",\"line\":1,\"text\":\"x\"}],\"files\":2,\"passed\":[],\"cut\":false}\n"));
+    EXPECT(!gt_holds(buf_view(&x.r.out), S("keys")));
+    EXPECT(!gt_holds(buf_view(&x.r.out), S("s3cret")));
+    // The root's listing and a stat each for a.txt and z.txt (3); then each
+    // file's head and grep (4). keys is never stat'ed or listed, and not a
+    // byte of either secret is read.
     EXPECT_EQ(x.r.reads, 7);
+    EXPECT_EQ(x.r.read_bytes, 4 * 2);
+    ran_free(&x);
+}
+
+// The entries `walk` gives, a part at a time, as `walk_all` gathers them:
+// each one's path, kind and size, and the `more` paths between the parts.
+static const char *const GT_WALK =
+    "local after = \"\"\n"
+    "while true do\n"
+    "  local more = nil\n"
+    "  for e in walk(\"\", {after = after, skip = \".*\"}) do\n"
+    "    if e.kind == \"more\" then more = e.path else print(e.path, e.kind, e.size) end\n"
+    "  end\n"
+    "  if more == nil then break end\n"
+    "  print(\"more \" .. more)\n"
+    "  after = more\n"
+    "end\n";
+
+static void gt_walk(Ran *x, uint64_t call_entries) {
+    Budgets b = ran_budgets();
+    b.call_entries = call_entries;
+    ran_run(x, ran_cs(GT_WALK), b);
+}
+
+TEST(walk_leaves_out_a_planted_secrets_mount_s_folder_whole_and_never_ends_a_part_on_it) {
+    static Ran x;
+    gt_init(&x, "k = D/root/keys secrets\n");
+    ran_put(&x, "root/a.txt", "a\n");
+    ran_put(&x, "root/keys/tok", "s3cret\n");
+    ran_put(&x, "root/keys/sub/two", "s3cret too\n");
+    ran_put(&x, "root/z.txt", "zz\n");
+    gt_walk(&x, 256);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("a.txt\tfile\t2\nz.txt\tfile\t3\n"));
+    // The root's listing, and a stat each for a.txt and z.txt.
+    EXPECT_EQ(x.r.reads, 3);
+    EXPECT_EQ(x.r.read_bytes, 0);
+    ran_free(&x);
+    // A part of one entry: a part that would end on keys ends on a.txt, and
+    // the next resumes past keys without listing it.
+    gt_init(&x, "k = D/root/keys secrets\n");
+    ran_put(&x, "root/a.txt", "a\n");
+    ran_put(&x, "root/keys/tok", "s3cret\n");
+    ran_put(&x, "root/z.txt", "zz\n");
+    gt_walk(&x, 1);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("a.txt\tfile\t2\nmore a.txt\nz.txt\tfile\t3\n"));
+    EXPECT(!gt_holds(buf_view(&x.r.out), S("keys")));
+    // Each of the 2 parts lists the root once, and a.txt and z.txt are each
+    // stat'ed once.
+    EXPECT_EQ(x.r.reads, 4);
+    ran_free(&x);
+}
+
+TEST(walk_resumes_past_a_folder_skip_passed_by_and_into_one_it_did_not) {
+    static Ran x;
+    gt_init(&x, "");
+    ran_put(&x, "root/.h/x.txt", "x\n");
+    ran_put(&x, "root/a.txt", "a\n");
+    gt_walk(&x, 1);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    // The first part ends on .h, which skip passed by: the next resumes
+    // after it, never inside it.
+    EXPECT_STR(buf_view(&x.r.out), S("more .h\na.txt\tfile\t2\n"));
+    // Each part lists the root, and a.txt is stat'ed: .h is never listed.
+    EXPECT_EQ(x.r.reads, 3);
+    ran_free(&x);
+    // The near miss: h is not hidden, so the part that ends on it resumes
+    // inside it.
+    gt_init(&x, "");
+    ran_put(&x, "root/a.txt", "a\n");
+    ran_put(&x, "root/h/x.txt", "x\n");
+    gt_walk(&x, 1);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("a.txt\tfile\t2\nmore a.txt\nh\tdirectory\t0\nmore h\nh/x.txt\tfile\t2\n"));
+    // 3 parts' root listings, a stat each for a.txt, h and h/x.txt, and h
+    // listed twice: as the second part enters it and as the third resumes.
+    EXPECT_EQ(x.r.reads, 8);
+    ran_free(&x);
+}
+
+TEST(grep_tree_stops_on_an_option_it_does_not_take_naming_those_it_does_before_any_read) {
+    static Ran x;
+    gt_init(&x, "");
+    ran_put(&x, "root/a.txt", "x\n");
+    gt_run(&x, "show(gt(\"x\", {given = {most = 5, max = 60}}))\n");
+    EXPECT_EQ(x.ran, STOP);
+    EXPECT_EQ(x.r.ctx.stop.cls, CLASS_FAIL);
+    EXPECT_STR(x.r.ctx.stop.message, S("`grep_tree` takes `regex`, `nocase`, `ext`, `like`, `context`, `most`, not `max`"));
+    EXPECT_EQ(x.r.reads, 0);
+    EXPECT_EQ(x.r.out.len, 0);
     ran_free(&x);
 }
 
@@ -183,12 +277,15 @@ TEST(grep_tree_charges_what_its_reads_bring_not_a_script_s_steps) {
     EXPECT_EQ(x.r.read_bytes, 200 * (4096 + 26000));
     // 376,200 of them the read bytes' (a step per 16), the rest the walk's
     // listings and stats, each path's confinement and each entry's step.
-    EXPECT_EQ(x.r.steps, 397733);
+    EXPECT_EQ(x.r.steps, 397739);
     ran_free(&x);
 }
 
 TEST_PART(host_grep_tree, TEST_CASE(grep_tree_searches_each_file_in_path_order_passing_by_a_binary_a_build_folder_and_a_hidden_one),
-          TEST_CASE(grep_tree_stops_at_a_planted_secrets_mount_s_file_reading_none_of_it_and_naming_no_folder),
+          TEST_CASE(grep_tree_leaves_out_a_planted_secrets_mount_s_folder_unlisted_unread_and_unnamed),
+          TEST_CASE(walk_leaves_out_a_planted_secrets_mount_s_folder_whole_and_never_ends_a_part_on_it),
+          TEST_CASE(walk_resumes_past_a_folder_skip_passed_by_and_into_one_it_did_not),
+          TEST_CASE(grep_tree_stops_on_an_option_it_does_not_take_naming_those_it_does_before_any_read),
           TEST_CASE(grep_tree_refuses_to_walk_a_secrets_mount_by_its_name_before_any_read),
           TEST_CASE(grep_tree_passes_by_a_symbolic_link_never_reading_what_it_points_at),
           TEST_CASE(grep_tree_leaves_out_the_build_folders_and_keeps_only_the_extensions_and_names_asked),

@@ -405,11 +405,11 @@ function grep_tree(place, needle, opts?)
   -- `answer` is the shape of what the host gives: `{hits, files, passed,
   -- cut}`, its keys in that order.
   --
-  -- The options go as read here, so a value of the wrong type stops at the
-  -- host, which names the option. An `opts` key this prelude does not read
-  -- (`max`, `skip`) is passed by, as it always was: `most` cuts the hits,
-  -- and a folder whose name starts with `.` is the only one not walked.
+  -- The options go as read here, and `opts` whole as `given`: the host
+  -- stops on a key it does not take, naming the ones it does, before it
+  -- walks; a value of the wrong type stops where this prelude's loop did.
   return host("grep_tree", needle, {
+    given = opts,
     place = place,
     prefix = prefix,
     entries = entries,
