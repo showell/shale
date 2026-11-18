@@ -1392,12 +1392,12 @@ three:
   - the git prelude (`c/preludes/git.shale`): `git_status`,
     `git_log`, `git_commit`, ...;
   - the repo's `.shale/prelude.shale` at the root, as metal-vmm's queue
-    tool is;
+    tool was;
   - the user's: `SHALE_PRELUDE`'s file (`""` for none), else
     `~/.config/shale/prelude.shale`.
 
   A later prelude may not redefine an earlier one's function. **Metal's
-  parse compiles none of this**: zig-webbox's `src/host_io_std.zig` says
+  parse compiles none of this**: zig-webbox's [host_io_std.zig](https://github.com/showell/zig-webbox/blob/master/src/host_io_std.zig) says
   `shale_preludes`, and metal's host_io doesn't.
 - **A run starts at most 1,000 programs** unless its `programs` budget says otherwise (`--budget programs=N`, or a `-- budget: programs=N` line); `budget().programs` says how many are left.
 - **The gate** (`c/shale_gate.c`, installed on the box beside `shale`) is the

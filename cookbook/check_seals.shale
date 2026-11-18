@@ -24,7 +24,7 @@
 -- so a change to a value already made (`id.player_id = raw`) is refused too.
 --
 --   shale cookbook:check_seals.shale dir=zig-server/src seals=id_seal:zig-server/src/player.zig
---   shale cookbook:check_seals.shale dir=zig-webbox/src,angry-gopher/zig-server seals=target_path:zig-webbox/src/http.zig headers=location:zig-webbox/src/http.zig
+--   shale cookbook:check_seals.shale dir=<library>/src,angry-gopher/zig-server seals=target_path:<library>/src/http.zig headers=location:<library>/src/http.zig
 --
 -- `dir` is one tree or several (a consumer's beside its library's), and a
 -- seal's file is named from the root. With `headers=name:file`, a header of

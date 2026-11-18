@@ -40,10 +40,12 @@ On a branch, with the new compiler beside the old:
    `@src().fn_name` ends `__func_<n>`).
 5. **Judge** with the repo's own tests, and commit to the branch, not
    master. The repos that build against their siblings by path (shale,
-   zig-metal-unikernel, angry-gopher, dog-park, observatory) move as a set:
-   a tree of the upgrade's worktrees side by side, judged together, then
-   each branch merged.
+   zig-metal-unikernel, angry-gopher, dog-park, observatory; all but shale
+   and angry-gopher since retired from the box) move as a set: a tree of
+   the upgrade's worktrees side by side, judged together, then each branch
+   merged.
 
 0.17.0's compiler_rt does not compile for the kernel's soft-float x86_64
-target; zig-metal-unikernel carries a patched copy, `compiler_rt_0_17_0/`
+target; zig-metal-unikernel carries a patched copy,
+[compiler_rt_0_17_0](https://github.com/showell/zig-metal-unikernel/tree/master/compiler_rt_0_17_0)
 (its README says why and when to delete it).

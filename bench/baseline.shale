@@ -36,15 +36,17 @@
 -- budget: programs=3000 steps=900000000 reads=300000 read_bytes=4000000000 arena_bytes=1500000000 changes=200000 change_bytes=4000000000 output_bytes=1000000
 
 -- The inputs, pinned so two runs months apart read the same bytes: each
--- repo cloned at its revision under build:bench/inputs/repos.
+-- repo cloned at its revision under build:bench/inputs/repos, from its
+-- checkout under `repos:`, or from `url` for a repo retired from the box
+-- (2026-11-18), whose checkout is gone.
 const PINS = {
   {name = "shale", rev = "0e252294a8663dd517f568b21f1ed53ee7527569"},
   {name = "roc-apps", rev = "ee2565dbddd45727feb1a451abebbee140ab69c2"},
   {name = "angry-gopher", rev = "8484202308fa62a8308c31845d45ce2953c50a9b"},
-  {name = "zig-webbox", rev = "e90cc25b95c871fe2a9aba27970981c05dc2ee70"},
+  {name = "zig-webbox", rev = "e90cc25b95c871fe2a9aba27970981c05dc2ee70", url = "https://github.com/showell/zig-webbox"},
   {name = "roc-chat", rev = "60b0c6b8e71ceb696e50c6955d837f3e206c021d"},
-  {name = "zig-metal-unikernel", rev = "6c04c6c05161f563cd694e9cbdc43790acaae01b"},
-  {name = "metal-vmm", rev = "5fa6796294a3f15b588615a16f7a2b3be7e67936"},
+  {name = "zig-metal-unikernel", rev = "6c04c6c05161f563cd694e9cbdc43790acaae01b", url = "https://github.com/showell/zig-metal-unikernel"},
+  {name = "metal-vmm", rev = "5fa6796294a3f15b588615a16f7a2b3be7e67936", url = "https://github.com/showell/metal-vmm"},
 }
 
 -- What each workload's `bench-ok` line says on the pinned inputs, as Zig
@@ -157,8 +159,8 @@ function command(cmd, fill)
   return argv
 end
 
--- The last part of a path, a mount's included: `repos:zig-webbox` is
--- `zig-webbox`.
+-- The last part of a path, a mount's included: `repos:roc-chat` is
+-- `roc-chat`.
 function last_name(p)
   local parts = split(substitute(p, ":", "/"), "/")
   return parts[#parts]
@@ -168,15 +170,17 @@ function git_rev(repo)
   return said({"git", "-C", real(repo), "rev-parse", "HEAD"})
 end
 
--- `from` cloned at `rev` to `to`, or `to` kept when it is that clone,
--- untouched; anything else there is cloned again.
+-- `from` (a Shale path, or a URL) cloned at `rev` to `to`, or `to` kept
+-- when it is that clone, untouched; anything else there is cloned again.
 function clone_at(from, rev, to)
   if exists(to) then
     if git_rev(to) == rev and git_is_clean(to) then return "kept" end
     remove_tree(to)
   end
   mkdir(dirname(to))
-  said({"git", "clone", "--quiet", "--no-checkout", real(from), real(dirname(to)) .. "/" .. last_name(to)}, {timeout_ms = 600000})
+  local source = from
+  if not contains(from, "://") then source = real(from) end
+  said({"git", "clone", "--quiet", "--no-checkout", source, real(dirname(to)) .. "/" .. last_name(to)}, {timeout_ms = 600000})
   said({"git", "-C", real(to), "checkout", "--quiet", "--detach", rev}, {timeout_ms = 600000})
   return "cloned"
 end
@@ -192,7 +196,7 @@ end
 -- **THE INPUTS**, made once and kept: the pinned repos, the mounts the
 -- workloads run with, one large text file and one JSON document.
 function make_inputs()
-  for p in PINS do clone_at("repos:" .. p.name, p.rev, INPUTS .. "/repos/" .. p.name) end
+  for p in PINS do clone_at(get(p, "url", "repos:" .. p.name), p.rev, INPUTS .. "/repos/" .. p.name) end
   local mounts = "cookbook = " .. real(INPUTS .. "/repos/shale/cookbook") .. " ro\n" .. "tools = " .. real("tools:") .. " ro tools\n"
   local mp = INPUTS .. "/mounts"
   if not exists(mp) or read(mp) ~= mounts then replace_or_create(mp, mounts) end

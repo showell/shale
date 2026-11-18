@@ -407,7 +407,7 @@ has none of it):
   Zig's parser (a split call is one, a comment's or a string's none):
   `{kind, target, name, line, file}`, `file` being `"found"` or
   `"missing"` beside it, or `"module"` (no extension: `std`, `host_io`).
-  It is zig-webbox's library_test.zig's reading too (its `zig_refs`).
+  It was zig-webbox's library_test.zig's reading too (its `zig_refs`).
   `zig_rename` and `zig_move` read identifiers one way
   (`zig-ast/zig_ast.zig`'s `identifiers`): a field, an enum's member or a nested
   container's own declaration of the name is another thing, and

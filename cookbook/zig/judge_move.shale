@@ -10,8 +10,8 @@
 --     function lives does not change its code;
 --   - every test passing.
 --
---   cd <repo> && shale <shale>/cookbook/zig/judge_move.shale mode=baseline bin=zig-out/bin/metal-vmm
---   cd <repo> && shale <shale>/cookbook/zig/judge_move.shale mode=check bin=zig-out/bin/metal-vmm
+--   cd <repo> && shale <shale>/cookbook/zig/judge_move.shale mode=baseline bin=zig-out/bin/<app>
+--   cd <repo> && shale <shale>/cookbook/zig/judge_move.shale mode=check bin=zig-out/bin/<app>
 --
 -- The baseline is zig-out/move-judge.txt.
 --

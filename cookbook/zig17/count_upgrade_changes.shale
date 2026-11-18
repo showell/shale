@@ -7,12 +7,15 @@
 -- count is an upper bound.
 --
 --   cd ~/showell_repos && shale shale/cookbook/zig17/count_upgrade_changes.shale
---   cd ~/showell_repos && shale shale/cookbook/zig17/count_upgrade_changes.shale only=zig-webbox
+--   cd ~/showell_repos && shale shale/cookbook/zig17/count_upgrade_changes.shale only=angry-gopher
 --
 -- budget: steps=900000000 reads=100000 arena_bytes=4000000000
 
 const ONLY = arg("only", "")
-const REPOS = {"zig-coverage-sdk", "zig-webbox", "metal-vmm", "shale", "zig-metal-unikernel", "angry-gopher", "observatory"}
+-- The repos on the box that hold Zig. zig-coverage-sdk, zig-webbox,
+-- metal-vmm, zig-metal-unikernel and observatory were counted too, until
+-- they were retired from the box on 2026-11-18.
+const REPOS = {"shale", "angry-gopher", "zig-ast"}
 
 -- {name, pattern}: each a change in the 0.17 release notes.
 const CHANGES = {

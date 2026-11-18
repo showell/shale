@@ -44,10 +44,17 @@ It builds with the patched Zig that `zig-version` names (from
 [patched-zig-compiler](https://github.com/showell/patched-zig-compiler)),
 with [zig-webbox](https://github.com/showell/zig-webbox) and
 [zig-ast](https://github.com/showell/zig-ast) checked out beside Shale's
-checkout:
+checkout (`build.zig.zon` names them by path), and
+[zig-coverage-sdk](https://github.com/showell/zig-coverage-sdk) too for
+the coverage and fuzz steps:
 
     cd legacy_zig && zig build        # zig-out/bin: shale, shale-gate, zig-ast
     cd legacy_zig && zig build test   # the unit tests
+
+**zig-webbox and zig-coverage-sdk were retired from the box on
+2026-11-18**, their checkouts deleted, so the frozen build may not build on
+this box any more. That is accepted: the Zig is history, and GitHub still
+has both repos, to check out beside it if it is ever wanted.
 
 That build is best-effort. Its paths were moved here and not run again, and
 some tests read the checkout's files by their old paths (the docs, the

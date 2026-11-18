@@ -3,7 +3,7 @@
 -- names against a saved baseline, leaving out the module part of each name
 -- (before ".test."), since a moved test's module changes.
 --
--- Run it from the checkout whose suite it is (zig-webbox's or shale's), once
+-- Run it from the checkout whose suite it is (angry-gopher's, say), once
 -- before the refactor and once after:
 --   shale <shale>/cookbook/zig/check_same_tests.shale mode=baseline
 --   shale <shale>/cookbook/zig/check_same_tests.shale mode=check

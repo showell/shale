@@ -5,7 +5,7 @@
 
 const OVER = arg("over", 1000)
 
-local repos = {"zig-metal-unikernel", "zig-webbox", "shale", "metal-vmm", "observatory", "angry-gopher", "zig-coverage-sdk"}
+local repos = {"shale", "angry-gopher", "zig-ast"}
 local long_files = {}
 local file_count = 0
 for repo in repos do

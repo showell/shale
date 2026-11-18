@@ -329,7 +329,7 @@ browser build) and their tools are there, and get no fixes.
 
 | | |
 |---|---|
-| Source | C, in `c/`; Zig Shale, frozen, in `legacy_zig/`, its history before this repo zig-webbox's (`git -C ../zig-webbox log -- src/script`) |
+| Source | C, in `c/`; Zig Shale, frozen, in `legacy_zig/`, its history before this repo [zig-webbox](https://github.com/showell/zig-webbox)'s (its log of src/script) |
 | Runs | C Shale on the box, as every agent's shell (since 2026-11-17); Zig Shale, the first implementation, matched byte for byte by the C, ran in angry-gopher until 2026-11-18 |
 | Tests | the golden tests (`shale tests/golden.shale`, 1,128 cases), the one judge of behaviour; C's own (`shale c/build.shale`); the Zig's unit tests, frozen with it in `legacy_zig/`; the request-edge harness for its number parses runs in angry-gopher |
 

@@ -41,7 +41,12 @@
 --   shale tools/doc_check.shale self_test=1 self=.
 --   shale tools/doc_check.shale self=. at=repos: only=shale
 
-const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "observatory", "zig-coverage-sdk", "roc-webbox", "roc-chat", "roc-markdown", "chat-client", "roc-apps", "zig-ast"}
+-- The repos beside Shale whose files its docs and the others' cite. Six
+-- once here were retired from the box on 2026-11-18 (zig-webbox,
+-- roc-webbox, zig-metal-unikernel, metal-vmm, observatory and
+-- zig-coverage-sdk): a doc cites their files by GitHub URL, or names the
+-- repo in plain text as history.
+const REPOS = {"shale", "angry-gopher", "roc-chat", "roc-markdown", "chat-client", "roc-apps", "zig-ast"}
 -- **THE OPTIONAL SIBLINGS** (metal-vmm QUEUE 313): the Roc chat's repos,
 -- which many machines have not checked out. One that is not here is said
 -- once (`not_checked_out`), and a path cited as its own (`../roc-chat/x`,
@@ -103,8 +108,8 @@ end
 
 -- A word as cited: `{path, line}` (line 0 for none), or nil when it is no
 -- path: a URL, a glob, a placeholder, a mount (`repos:x`), an absolute or
--- home path, a flag, a module.
-function as_path(w)
+-- home path, a flag, a module. `repos` are the repos checked together.
+function as_path(w, repos)
   w = trim(w)
   while #w > 0 and contains("(\"'[<", sub(w, 1, 1)) do w = sub(w, 2) end
   while #w > 0 and contains(".,;)\"'>]", sub(w, -1)) do w = sub(w, 1, -2) end
@@ -148,7 +153,7 @@ function as_path(w)
   -- a folder named alone (`data/`, `auth/`): the host's data, or a
   -- placeholder, far more often than this repo's.
   if folder and not contains(w, "/") then
-    for r in REPOS do
+    for r in repos do
       if w == r then return {path = w, line = line} end
     end
     return {skip = "a folder named alone"}
@@ -220,10 +225,10 @@ function in_repo(at, repo, p)
   return nil
 end
 
--- The repos a line names, by name.
-function named(text)
+-- The repos of `repos` a line names, by name.
+function named(text, repos)
   local out = {}
-  for r in REPOS do
+  for r in repos do
     if contains(text, r) then push(out, r) end
   end
   return out
@@ -231,13 +236,13 @@ end
 
 -- Where a cited path is: `{found = full path}`, or `{gone = true}`, or
 -- `{ambiguous = "a, b"}`.
-function resolve(at, repo, docdir, c, kind, text, bases, ignores)
+function resolve(at, repo, docdir, c, kind, text, bases, ignores, repos)
   local p = c.path
   -- A bare file name (`router.zig`) is any tracked file of that name: in
   -- the doc's repo, a sibling the line names, then any repo.
   if not contains(p, "/") then
     if has_key(bases, repo) and has_key(bases[repo], p) then return {found = bases[repo][p]} end
-    for r in named(text) do
+    for r in named(text, repos) do
       if has_key(bases, r) and has_key(bases[r], p) then return {found = bases[r][p]} end
     end
     -- A name the doc's repo's `.gitignore` (or a named sibling's) says
@@ -247,14 +252,14 @@ function resolve(at, repo, docdir, c, kind, text, bases, ignores)
     -- siblings happen to be checked out beside it, and some unrelated
     -- repo's file of that name (dog-park's `solo/engine.js`) passed it.
     if has_key(ignores, repo) and has_key(ignores[repo], p) then return {ignored = true} end
-    for r in named(text) do
+    for r in named(text, repos) do
       if has_key(ignores, r) and has_key(ignores[r], p) then return {ignored = true} end
     end
     -- The optional siblings are asked last, so whether one is checked out
     -- never turns a citation another repo answers ambiguous.
     for late in {false, true} do
       local where = {}
-      for r in REPOS do
+      for r in repos do
         if optional(r) == late and has_key(bases, r) and has_key(bases[r], p) then push(where, r) end
       end
       if #where == 1 then return {found = bases[where[1]][p]} end
@@ -274,7 +279,7 @@ function resolve(at, repo, docdir, c, kind, text, bases, ignores)
     p = q
     first = split(p, "/")[1]
   end
-  for r in REPOS do
+  for r in repos do
     if first == r then
       local f = in_repo(at, r, sub(p, #r + 2))
       if f ~= nil then return {found = f} end
@@ -290,14 +295,14 @@ function resolve(at, repo, docdir, c, kind, text, bases, ignores)
     f = in_repo(at, repo, joined(docdir, p))
     if f ~= nil then return {found = f} end
   end
-  for r in named(text) do
+  for r in named(text, repos) do
     f = in_repo(at, r, p)
     if f ~= nil then return {found = f} end
   end
   for late in {false, true} do
     local where = {}
     local found = nil
-    for r in REPOS do
+    for r in repos do
       if optional(r) == late then
         f = in_repo(at, r, p)
         if f ~= nil then
@@ -309,7 +314,7 @@ function resolve(at, repo, docdir, c, kind, text, bases, ignores)
     if #where == 1 then return {found = found} end
     if #where > 1 then return {ambiguous = join(where, ", ")} end
   end
-  -- An untracked `*.conf` is a host's config (`zig-metal-unikernel.conf`).
+  -- An untracked `*.conf` is a host's config (`<host>.conf`).
   if ends_with(p, ".conf") then return {skip = "a host's config"} end
   -- An optional sibling not checked out here, cited as its own: not here
   -- to say.
@@ -323,13 +328,13 @@ function resolve(at, repo, docdir, c, kind, text, bases, ignores)
   if from_doc ~= nil and from_doc ~= p then push(asks, from_doc) end
   local of = {}
   of[repo] = asks
-  for r in named(text) do
+  for r in named(text, repos) do
     if r ~= repo then of[r] = {p} end
   end
   -- A path that starts with a repo beside these but missing from REPOS
   -- says so: else the file is there and the finding reads as a lie.
   local listed = false
-  for r in REPOS do
+  for r in repos do
     if r == first then listed = true end
   end
   if not listed and repo_here(at .. first) and exists(at .. first .. "/.git") and exists(at .. p) then return {gone = true, asks = of, unlisted = first} end
@@ -441,12 +446,12 @@ function check_doc(at, repo, doc, r)
         local ws = {span.text}
         if span.kind == "code" then ws = words(span.text) end
         for w in ws do
-          local c = as_path(w)
+          local c = as_path(w, r.repos)
           if c ~= nil and has_key(c, "skip") then
             r.skipped[c.skip] = get(r.skipped, c.skip, 0) + 1
           elseif c ~= nil then
             r.paths = r.paths + 1
-            local got = resolve(at, repo, docdir, c, span.kind, text, r.bases, r.ignores)
+            local got = resolve(at, repo, docdir, c, span.kind, text, r.bases, r.ignores, r.repos)
             if c.line > 0 then r.lines = r.lines + 1 end
             if has_key(got, "ignored") then
               r.ignored = r.ignored + 1
@@ -465,7 +470,7 @@ function check_doc(at, repo, doc, r)
         end
       end
       for nc in name_cites(text) do
-        local c = as_path(nc.file)
+        local c = as_path(nc.file, r.repos)
         if c ~= nil and not has_key(c, "skip") and identifier(nc.name) and has_key(paths, c.path) then
           local f = paths[c.path].full
           if f == "" then
@@ -531,6 +536,7 @@ function check_all(at, repos)
     local r = fresh()
     r.bases = bases
     r.ignores = ignores
+    r.repos = repos
     if repo_here(dir_of(at, repo)) and not cited_only(repo) and (ONLY == "" or repo == ONLY) then
       for p in tracked[repo] do
         if ends_with(p, ".md") and not history(p) then
@@ -646,20 +652,20 @@ end
 
 function self_test()
   local fix = fresh_fixture_dir()
-  fixture_repo(fix, "metal-vmm", {
+  fixture_repo(fix, "repo-a", {
     ["README.md"] = "See `docs/here.md` and [the guide](docs/here.md), `src/a.zig:3`'s `alpha` (and `src/a.zig:9`'s `alpha`, a wrong line), and `beta` (src/a.zig).\n" ..
-      "Gone: `src/gone.zig`. Sibling: zig-webbox's `src/w.zig`. Both have `src/both.zig`.\n" ..
+      "Gone: `src/gone.zig`. Sibling: repo-b's `src/w.zig`. Both have `src/both.zig`.\n" ..
       "A name gone: `src/a.zig`'s `nothing_here`. Nested: `src/a.zig`'s `Inner.depth`, and `depth` (src/a.zig) alone.\n" ..
       "Made up: `src/a.zig`'s `Inner.bogus`, and `ghost` (src/a.zig), which only a comment names. Broken: `src/bad.zig`'s `x`.\n" ..
       "Not paths: `zig build test`, `a/b`, `src/**/*.zig`, `~/.config/x`, `https://x.y/z.md`, `repos:roc-chat`.\n" ..
       "Whose: `src/both.zig`, on a line naming no repo.\n" ..
-      "Passed by: `.zig`, `_test.zig`, `std.json`, `1/../2`, `data/`, `./auth`; built: `zig-out/bin/x.elf`; a sibling itself: `../zig-webbox`, `angry-gopher/`.\n" ..
+      "Passed by: `.zig`, `_test.zig`, `std.json`, `1/../2`, `data/`, `./auth`; built: `zig-out/bin/x.elf`; a sibling itself: `../repo-b`, `angry-gopher/`.\n" ..
       "```\nsrc/in_a_fence.zig\n```\n" ..
-      "A host's: `data/chat/x.md`, `claude-steve/random1.md`, `chat/channel/general.channel`, `zig-metal-unikernel.conf`; but a data file alone, `random1.md`, and `chat/gone.md`, beside a data root.\n" ..
-      "zig-webbox builds `probe/out.elf`.\n" ..
+      "A host's: `data/chat/x.md`, `claude-steve/random1.md`, `chat/channel/general.channel`, `host.conf`; but a data file alone, `random1.md`, and `chat/gone.md`, beside a data root.\n" ..
+      "repo-b builds `probe/out.elf`.\n" ..
       "Built by whom: `probe/out.elf`.\n" ..
       "Run `./ops/check_x`, and `./ops/missing_x`.\n",
-    ["docs/here.md"] = "Back to [the readme](../README.md); `../zig-webbox/src/w.zig` by path.\n",
+    ["docs/here.md"] = "Back to [the readme](../README.md); `../repo-b/src/w.zig` by path.\n",
     ["docs/roc.md"] = "roc-markdown's `judge/answers.roc` is there, and `../roc-markdown/judge/answers.roc` by path.\n" ..
       "Not written yet in roc-markdown: `judge/made_up.roc`.\n" ..
       "Not checked out here: roc-chat's `app/Session.roc`, and `../roc-chat/app/Gone.roc`.\n" ..
@@ -676,10 +682,10 @@ function self_test()
     ["ops/check_x"] = "#!/bin/sh\n",
     [".gitignore"] = "zig-out/\n",
   })
-  fixture_repo(fix, "zig-webbox", {
+  fixture_repo(fix, "repo-b", {
     ["src/w.zig"] = "pub const w = 1;\n",
     ["src/both.zig"] = "",
-    ["docs/x.md"] = "Our `src/both.zig`, and metal-vmm's `src/a.zig`.\n",
+    ["docs/x.md"] = "Our `src/both.zig`, and repo-a's `src/a.zig`.\n",
     [".gitignore"] = "probe/*.elf\n",
   })
   fixture_repo(fix, "angry-gopher", {["src/both.zig"] = "", ["src/server.zig"] = ""})
@@ -689,8 +695,8 @@ function self_test()
   -- beside the others that is not one of REPOS.
   fixture_repo(fix, "roc-apps", {["CLAUDE.md"] = "Our `src/not_here.roc`.\n", ["docs/roc-style.md"] = ""})
   fixture_repo(fix, "side-repo", {["notes.md"] = ""})
-  local all = check_all(fix .. "/", {"metal-vmm", "zig-webbox", "angry-gopher", "roc-markdown", "roc-chat", "roc-apps"})
-  local m = all["metal-vmm"]
+  local all = check_all(fix .. "/", {"repo-a", "repo-b", "angry-gopher", "roc-markdown", "roc-chat", "roc-apps"})
+  local m = all["repo-a"]
   local gone = join(m.gone, "\n")
   expect(#m.gone == 7 and contains(gone, "README.md:2: `src/gone.zig`"), "a path that is gone is a finding")
   expect(not contains(gone, "roc-apps/"), "a path cited as `roc-apps/x` is found in roc-apps")
@@ -699,7 +705,7 @@ function self_test()
   expect(not contains(gone, "answers.roc"), "a path real in an optional sibling that is here passes, by the line's naming and by `../`")
   expect(contains(gone, "docs/roc.md:2: `judge/made_up.roc`"), "a made-up path in an optional sibling that is here is gone: not written yet is a finding")
   expect(not contains(gone, "Session.roc") and not contains(gone, "Gone.roc") and get(m.skipped, "in an optional sibling not checked out here", 0) == 2, "a path in an optional sibling not checked out is passed by, never gone")
-  local absent = not_checked_out(fix .. "/", {"metal-vmm", "roc-chat", "roc-markdown"})
+  local absent = not_checked_out(fix .. "/", {"repo-a", "roc-chat", "roc-markdown"})
   expect(#absent == 1 and absent[1] == "roc-chat", "an optional sibling not checked out is named once; one that is here is not")
   expect(contains(gone, "README.md:14: `ops/missing_x`") and not contains(gone, "check_"), "a `./` path with no extension is read whole, never one character short")
   expect(contains(gone, "README.md:11: `random1.md`"), "a data file's name with no data root is a finding")
@@ -707,7 +713,7 @@ function self_test()
   expect(contains(gone, "README.md:13: `probe/out.elf`"), "a path a sibling ignores, on a line naming no sibling, is a finding")
   expect(not contains(gone, "w.zig"), "a sibling-named path is found there, by the line's naming and by `../`")
   expect(#m.ambiguous == 0, "a path in this repo is this repo's, though siblings have it; a name another repo answers, an optional sibling's too, is the other repo's")
-  local z = all["zig-webbox"]
+  local z = all["repo-b"]
   expect(#z.gone == 0 and #z.ambiguous == 0, "a sibling's path the line names is found")
   expect(not contains(gone, "here.md") and not contains(gone, "README.md`"), "a link to a doc resolves from the doc's folder")
   expect(not contains(gone, "history_only") and not contains(gone, "essay_only") and not contains(gone, "review_only"), "a history file, a review and an essay are passed by")
@@ -720,10 +726,10 @@ function self_test()
   expect(m.ignored == 2, "a path the repo's .gitignore covers, or a named sibling's, is a build's, passed by")
   expect(get(m.skipped, "an extension or a suffix", 0) == 2 and get(m.skipped, "Zig's std", 0) == 1 and get(m.skipped, "a traversal example", 0) == 1 and get(m.skipped, "a folder named alone", 0) == 2 and get(m.skipped, "a host's data", 0) == 3 and get(m.skipped, "a host's config", 0) == 1, "each rule passes its own by, and counts it")
   expect(m.lines == 2 and m.line_named == 2 and m.line_wrong == 1, "`file:N` counted, and its line checked beside a name")
-  remove(fix .. "/metal-vmm/src/both.zig")
-  local again = check_all(fix .. "/", {"metal-vmm", "zig-webbox", "angry-gopher"})
-  local amb = again["metal-vmm"].ambiguous
-  expect(#amb == 1 and contains(amb[1], "README.md:6: `src/both.zig` is in zig-webbox, angry-gopher"), "a path only in two siblings, the line naming neither, is ambiguous; the line naming one is that one's")
+  remove(fix .. "/repo-a/src/both.zig")
+  local again = check_all(fix .. "/", {"repo-a", "repo-b", "angry-gopher"})
+  local amb = again["repo-a"].ambiguous
+  expect(#amb == 1 and contains(amb[1], "README.md:6: `src/both.zig` is in repo-b, angry-gopher"), "a path only in two siblings, the line naming neither, is ambiguous; the line naming one is that one's")
   -- One doc, two layouts (QUEUE 264): plain checkouts with an unrelated
   -- sibling tracking a file of the same bare name, and a worktree with no
   -- sibling at all. The answer must be the same.
