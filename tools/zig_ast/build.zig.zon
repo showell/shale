@@ -1,0 +1,18 @@
+.{
+    // zig-ast: a Zig file as Zig's own tokenizer and parser see it, served
+    // to Shale's host over a pipe (README.md).
+    .name = .zig_ast,
+    .version = "0.1.0",
+    .fingerprint = 0x589c8427b6410e93,
+    .minimum_zig_version = "0.17.0",
+    .paths = .{ "build.zig", "build.zig.zon", "zig-version", "README.md", "install.shale", "main.zig", "plan.zig", "wire.zig", "zig_ast.zig", "zig_ast_test.zig", "zig_move.zig" },
+    .dependencies = .{
+        // zig-webbox, pinned: its src/zig_refs.zig reads `@import`s, and its
+        // src/ is half of the tests' corpus. A change there that zig-ast
+        // should see is a new commit here (`zig fetch --save=webbox <url>`).
+        .webbox = .{
+            .url = "git+https://github.com/showell/zig-webbox#e90cc25b95c871fe2a9aba27970981c05dc2ee70",
+            .hash = "webbox-0.1.0-jd1bcRYiCAAa0eLaeiPoQMiV4qRw2vAsEjdk-NTdOQb4",
+        },
+    },
+}

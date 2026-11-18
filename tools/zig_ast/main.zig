@@ -6,7 +6,7 @@
 //! edits it writes through its own `edit` machinery). zig-ast writes no file.
 //!
 //! `zig-ast --serve` runs for a whole Shale run: frames in on stdin, frames
-//! out on stdout, until stdin ends (src/shale_zig_wire.zig has the framing).
+//! out on stdout, until stdin ends (wire.zig has the framing).
 //! A request's lines, then its sources:
 //!
 //!   `tokens`, `[tag <name>]`, one source.
@@ -27,7 +27,7 @@
 //! values:
 //!
 //!   tokens: `tag <number> <name>` for each tag kept, then `tb <n>` and the
-//!     n tokens as fixed-width records (src/shale_zig_wire.zig's `Token`).
+//!     n tokens as fixed-width records (wire.zig's `Token`).
 //!   decls: `d <kind> <name> <name_form> <visibility> <linkage> <first>
 //!     <last> <start> <stop> <above_first> <above_last>` (0 0 when there is
 //!     no comment above), then its `u <name>` uses and `r <name>` reaches.
@@ -45,7 +45,7 @@
 //! A request it cannot read is answered `bad <why>`, and the host stops.
 
 const std = @import("std");
-const wire = @import("zig_wire");
+const wire = @import("wire.zig");
 const zig_refs = @import("zig_refs");
 const za = @import("zig_ast.zig");
 const zm = @import("zig_move.zig");
@@ -55,7 +55,7 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     if (args.len != 2 or !std.mem.eql(u8, args[1], "--serve")) {
-        std.debug.print("zig-ast: the one argument is --serve (Shale's host starts it; src/shale_zig_wire.zig)\n", .{});
+        std.debug.print("zig-ast: the one argument is --serve (Shale's host starts it; wire.zig)\n", .{});
         std.process.exit(2);
     }
     var in_buf: [64 * 1024]u8 = undefined;
@@ -448,4 +448,5 @@ fn stop(w: *std.Io.Writer, fields: anytype) ServeError!?FromAs {
 
 test {
     _ = @import("zig_ast_test.zig");
+    _ = wire;
 }

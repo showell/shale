@@ -1,5 +1,5 @@
 // zig_wire.c: the wire between Shale's host and zig-ast (tools/zig_ast),
-// the C side of src/shale_zig_wire.zig, which is the format's one home. Pure
+// the C side of tools/zig_ast/wire.zig, which is the format's one home. Pure
 // bytes and no system call. A frame is `<length>\n` and that many bytes; its
 // body is lines of fields joined by a tab, each field escaped (`\\`, `\t`,
 // `\n`, `\r`); a line `src<TAB><n>` is followed by n raw bytes and a newline,

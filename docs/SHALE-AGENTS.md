@@ -415,7 +415,7 @@ has none of it):
   (Shale's `tools/zig_ast`), Zig's own tokenizer and parser in a program
   of its own, which the host starts at a run's first Zig call and asks for
   each one after (one program a run, whatever the files), over
-  `src/shale_zig_wire.zig`'s frames. The host checks the arguments, reads
+  `tools/zig_ast/wire.zig`'s frames. The host checks the arguments, reads
   the files and writes the edits zig-ast plans through `edit`'s own
   machinery, so each change is diffed and logged as an `edit`'s. It is
   `tools:zig-ast/bin/zig-ast`, installed by `shale

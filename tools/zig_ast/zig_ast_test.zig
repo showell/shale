@@ -1,18 +1,18 @@
 //! zig-ast's own tests: the reader (`zig_ast.decls`), the rename planner
 //! (`plan.zig`) and the mover (`zig_move.move`), pure, over fixtures and over
-//! every Zig file of this repo's src/ and webbox's; and the identifier rule
-//! the host checks names by (src/shale_zig_wire.zig), held to std.zig's. What
-//! the host does with an answer is tested through the prelude, in
-//! src/shale_zig_*_test.zig.
+//! a corpus of real Zig (build.zig's `corpus`: zig-ast's own files and
+//! webbox's src/); and the identifier rule the host checks names by
+//! (wire.zig), held to std.zig's. What Shale's host does with an answer is
+//! tested in Shale's repo, by its C build.
 
 const std = @import("std");
 const testing = std.testing;
-const webbox_root = @import("shale_test_options").webbox_root;
+const corpus = @import("zig_ast_test_options").corpus;
 const zig_ast = @import("zig_ast.zig");
 const za = zig_ast;
 const zm = @import("zig_move.zig");
 const zig = @import("plan.zig");
-const wire = @import("zig_wire");
+const wire = @import("wire.zig");
 
 test "zig-ast: the host's identifier rule is std.zig's: its keywords are std.zig.Token's, and each name it takes or refuses, std.zig.isValidId does" {
     try testing.expectEqual(std.zig.Token.keywords.keys().len, wire.keywords.len);
@@ -20,7 +20,7 @@ test "zig-ast: the host's identifier rule is std.zig's: its keywords are std.zig
     for ([_][]const u8{ "a", "_", "_a1", "A_b", "1a", "", "a.b", "a-b", "const", "fn", "while", "élan", "a b" }) |s| try testing.expectEqual(std.zig.isValidId(s), wire.isValidId(s));
 }
 
-test "zig_decls over this repo's src/**/*.zig and webbox's: in file order, never overlapping, and between them only whitespace and comments" {
+test "zig_decls over the corpus's **/*.zig: in file order, never overlapping, and between them only whitespace and comments" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -29,7 +29,7 @@ test "zig_decls over this repo's src/**/*.zig and webbox's: in file order, never
     const io = threaded.io();
     var files: usize = 0;
     var listed: usize = 0;
-    for ([_][]const u8{ "src", webbox_root ++ "/src" }) |root| {
+    for (corpus) |root| {
         var dir = try std.Io.Dir.cwd().openDir(io, root, .{ .iterate = true });
         defer dir.close(io);
         var walker = try dir.walk(a);
@@ -57,8 +57,8 @@ test "zig_decls over this repo's src/**/*.zig and webbox's: in file order, never
             listed += got.len;
         }
     }
-    try testing.expect(files > 80);
-    try testing.expect(listed > 2000);
+    try testing.expect(files > 40);
+    try testing.expect(listed > 900);
 }
 
 /// Asserts a gap between declarations holds no token but a container doc
@@ -70,12 +70,12 @@ fn onlyComments(a: std.mem.Allocator, path: []const u8, gap: []const u8) !void {
         const t = tz.next();
         if (t.tag == .eof) return;
         if (t.tag == .container_doc_comment) continue;
-        std.debug.print("src/{s}: a gap holds `{s}` ({s})\n", .{ path, z[t.loc.start..t.loc.end], @tagName(t.tag) });
+        std.debug.print("{s}: a gap holds `{s}` ({s})\n", .{ path, z[t.loc.start..t.loc.end], @tagName(t.tag) });
         return error.TestUnexpectedResult;
     }
 }
 
-test "zig_rename's plan, over this repo's src/*.zig and webbox's: renaming a name to one not in the file and back gives the file it began with" {
+test "zig_rename's plan, over the corpus's *.zig: renaming a name to one not in the file and back gives the file it began with" {
     const a = testing.allocator;
     var arena = std.heap.ArenaAllocator.init(a);
     defer arena.deinit();
@@ -85,7 +85,7 @@ test "zig_rename's plan, over this repo's src/*.zig and webbox's: renaming a nam
     const io = threaded.io();
     var files: usize = 0;
     var renamed: usize = 0;
-    for ([_][]const u8{ "src", @import("shale_test_options").webbox_root ++ "/src" }) |root| {
+    for (corpus) |root| {
         var dir = try std.Io.Dir.cwd().openDir(io, root, .{ .iterate = true });
         defer dir.close(io);
         var it = dir.iterate();
@@ -114,7 +114,7 @@ test "zig_rename's plan, over this repo's src/*.zig and webbox's: renaming a nam
             files += 1;
         }
     }
-    try testing.expect(files > 50);
+    try testing.expect(files > 40);
     try testing.expect(renamed > 1000);
 }
 
@@ -273,11 +273,11 @@ test "zig_move: a CRLF file's separators are CRLF, there and back (found by the 
     try testing.expectEqualStrings("const x = 1;\r\n\r\nconst b = 2;\r\n", o.to_now);
 }
 
-/// This repo's src/**/*.zig and webbox's, each read NUL-ended, by path.
+/// The corpus's **/*.zig, each read NUL-ended, by path.
 fn eachSource(a: std.mem.Allocator, io: std.Io) ![]const struct { path: []const u8, src: [:0]const u8 } {
     const Item = struct { path: []const u8, src: [:0]const u8 };
     var out: std.ArrayList(Item) = .empty;
-    for ([_][]const u8{ "src", webbox_root ++ "/src" }) |root| {
+    for (corpus) |root| {
         var dir = try std.Io.Dir.cwd().openDir(io, root, .{ .iterate = true });
         defer dir.close(io);
         var walker = try dir.walk(a);
@@ -289,7 +289,7 @@ fn eachSource(a: std.mem.Allocator, io: std.Io) ![]const struct { path: []const 
     return @ptrCast(out.items);
 }
 
-test "zig_move's mover over this repo's src/**/*.zig and webbox's: two declarations moved to an empty file and back give the file it began with, at each boundary" {
+test "zig_move's mover over the corpus's **/*.zig: two declarations moved to an empty file and back give the file it began with, at each boundary" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -315,7 +315,7 @@ test "zig_move's mover over this repo's src/**/*.zig and webbox's: two declarati
         for (std.enums.values(Boundary)) |b| try thereAndBack(a, f.path, try withBoundary(a, f.src, ds, i, b), i, b);
         tried += 1;
     }
-    try testing.expect(tried > 30);
+    try testing.expect(tried > 20);
 }
 
 const Boundary = enum { blank, trailing, indented, crlf };
@@ -417,5 +417,5 @@ test "zig_rename and zig_move read identifiers alike: a declaration's uses outsi
             compared += 1;
         }
     }
-    try testing.expect(compared > 1000);
+    try testing.expect(compared > 600);
 }

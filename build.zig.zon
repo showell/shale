@@ -12,6 +12,8 @@
         // The web-server-in-a-box library: zig-webbox, a sibling checkout
         // (../zig-webbox): its `store` holds every effect a script has.
         .webbox = .{ .path = "../zig-webbox" },
+        // zig-ast, a package of its own (tools/zig_ast/README.md).
+        .zig_ast = .{ .path = "tools/zig_ast" },
         // The coverage SDK (../zig-coverage-sdk), for `zig build
         // script-coverage` alone: lazy, so `test` and the applications
         // that build Shale never need it.

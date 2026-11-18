@@ -1,7 +1,7 @@
-//! **THE WIRE BETWEEN SHALE'S HOST AND ZIG-AST** (tools/zig_ast): the one home
-//! of the format both sides speak, imported by the host
-//! (src/shale_host_zig.zig) and by zig-ast (its build names this file
-//! `zig_wire`). Pure bytes, no parser.
+//! **THE WIRE BETWEEN SHALE'S HOST AND ZIG-AST**, the Zig host's copy
+//! (src/shale_host_zig.zig imports it). The format's one home is
+//! tools/zig_ast/wire.zig; this copy is frozen with the Zig host. Pure
+//! bytes, no parser.
 //!
 //! zig-ast runs as one process for a run (`zig-ast --serve`), started at the
 //! run's first Zig call. It first writes `zig-ast serve <format> <zig
