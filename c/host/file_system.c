@@ -1,9 +1,9 @@
 // file_system.c: the calls into the file system, every file a script reads
 // or changes, held to Shale's rules: a strict name for what it makes
-// (path.c's `path_strict_name`), case that does not tell two names apart (a
+// (path.h's `path_strict_name`), case that does not tell two names apart (a
 // missing name is looked for in another case, and a new one keeps the case
 // it was given), and, under the host's two bases, the bare-metal host's
-// limits on a path's length and depth. The path algebra is path.c's, which
+// limits on a path's length and depth. The path algebra is path.h's, which
 // makes no call.
 //
 // Two kinds of call. Those a script's path is given to are the ones
@@ -19,7 +19,7 @@
 // call here.
 //
 // The including file defines _GNU_SOURCE before its first include, for
-// `openat`'s and `realpath`'s declarations, and path.c before this.
+// `openat`'s and `realpath`'s declarations.
 
 #ifndef _GNU_SOURCE
 #error "file_system.c needs _GNU_SOURCE defined before the first include: realpath, openat, fdopendir"
@@ -33,6 +33,7 @@
 #include <unistd.h>
 
 #include "buf.h"
+#include "path.h"
 
 // A file system call's failure, by the name Zig gives it: FILE_SYSTEM_OK is
 // none.

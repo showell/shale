@@ -5,11 +5,11 @@
 // (`path_file_system_failed`).
 //
 // A path is the root's unless the hook resolves it (a mount's, on Linux): every
-// part a strict name (path.c's `path_strict_name`), so `.`, `..`, empty parts
+// part a strict name (path.h's `path_strict_name`), so `.`, `..`, empty parts
 // and a leading `/` are refused, `""` the root for the calls that only look.
 // Metal's hook is PATH_HOOK_NONE, and its paths are the root's.
 //
-// Include path.c and file_system.c first.
+// Include file_system.c first.
 
 #include "err.h"
 

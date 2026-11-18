@@ -7,6 +7,7 @@
 #define SHALE_CLI_H
 
 #include "parse.h"
+#include "path.h"
 
 static inline Str cli_usage(void) {
     return S("usage: shale [--root DIR] [--verbose] [--undo-on-stop] [--check] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...\n"
@@ -727,24 +728,6 @@ static inline STATUS_MUST_USE Status cli_unread_arg(Arena *a, const Program *pro
         return OK;
     }
     return OK;
-}
-
-// The longest strict name: c/host/path.c's PATH_STRICT_NAME_MAX, which it
-// must agree with.
-enum { CLI_NAME_MAX = 96 };
-
-// Whether `name` is a strict name: a copy of c/host/path.c's
-// `path_strict_name` for the units that include no path.c.
-static inline bool cli_fat_name(Str name) {
-    if (name.len == 0 || name.len > CLI_NAME_MAX) return false;
-    if (str_eq(name, S(".")) || str_eq(name, S(".."))) return false;
-    for (size_t i = 0; i < name.len; i++) {
-        uint8_t c = str_byte(name, i);
-        if (c < 0x20 || c > 0x7e) return false;
-        if (cli_index_of(S("\"*/:<>?\\|"), (char)c) != SIZE_MAX) return false;
-    }
-    uint8_t last = str_byte(name, name.len - 1);
-    return last != '.' && last != ' ';
 }
 
 #endif

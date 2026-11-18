@@ -157,7 +157,7 @@ its error's Zig name for the message:
   the host makes on paths of its own. Only Linux implemented the store's
   vtable, so it is direct calls now: a host with another file system
   includes its own file_system.c. The path algebra and the strict name
-  rules are c/host/path.c's, which makes no call. The C keeps the root's
+  rules are c/foundation/path.h's, which makes no call. The C keeps the root's
   rules in the core: strict names, no `..`, no absolute path, `""` the
   root.
 - **`PathHook`**, `interp.PathHook`: `resolve` (a mount's path to an OS

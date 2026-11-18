@@ -20,7 +20,6 @@
 #include <unistd.h>
 
 #include "script/run.h"
-#include "host/path.c"
 #include "host/file_system.c"
 #include "host/path_run.c"
 #include "script/regex.c"
@@ -363,7 +362,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
     Str part = {0};
     while (cli_split(&left, &done, '/', &part)) {
         if (str_eq(part, S(".."))) return reader_why(why, got, 3, a, S("\""), path, S("\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)"));
-        if (!cli_fat_name(part)) return reader_why(why, got, 5, a, S("\""), path, S("\" has a part (\""), part, S("\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses"));
+        if (!path_strict_name(part)) return reader_why(why, got, 5, a, S("\""), path, S("\" has a part (\""), part, S("\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses"));
     }
     const char *dir_c = arena_cstr(a, m->dir);
     struct stat dst;

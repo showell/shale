@@ -6,7 +6,7 @@
 // `path_arg`, and every read is counted against the read budgets. The walk is
 // builtins_walk.c, the changes builtins_change.c.
 //
-// A program includes path.c, file_system.c and path_run.c, then this after
+// A program includes file_system.c and path_run.c, then this after
 // builtins.c and builtins_text.c.
 
 // One change the script attempted, in order: the builtin's name, the script's

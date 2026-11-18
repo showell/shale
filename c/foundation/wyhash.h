@@ -1,5 +1,5 @@
 // wyhash.h: Wyhash, the 64-bit hash of Zig's `std.hash.Wyhash`, its
-// one-shot form, step for step. path.c names a replace's temporary file by
+// one-shot form, step for step. path.h names a replace's temporary file by
 // it, so the name is the one Zig Shale gave.
 
 #ifndef SHALE_WYHASH_H

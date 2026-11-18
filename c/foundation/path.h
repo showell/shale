@@ -1,9 +1,14 @@
-// path.c: a path's algebra and the strict name rules, with no call into
+// path.h: a path's algebra and the strict name rule, with no call into
 // the operating system: a path's last part, its folder and a join, as Zig's
 // std.fs.path spells them; the names Shale holds every file to
 // (`path_strict_name`); names that are one apart from case
 // (`path_eq_nocase`); and the temporary name a replace writes beside its
-// file (`path_temp_name`). file_system.c makes the calls.
+// file (`path_temp_name`). c/host/file_system.c makes the calls. This is
+// the strict name rule's one home: the CLI's library reader and `is_name`
+// take it from here too.
+
+#ifndef SHALE_PATH_H
+#define SHALE_PATH_H
 
 #include "buf.h"
 #include "wyhash.h"
@@ -17,7 +22,7 @@ enum {
 // ASCII bytes, none of `" * / : < > ? \ |`, not `.` or `..`, not ending in
 // a dot or a space. Stricter than Linux on purpose: a name that is one
 // everywhere.
-static bool path_strict_name(Str name) {
+static inline bool path_strict_name(Str name) {
     if (name.len == 0 || name.len > PATH_STRICT_NAME_MAX) return false;
     if (str_eq(name, S(".")) || str_eq(name, S(".."))) return false;
     for (size_t i = 0; i < name.len; i++) {
@@ -31,7 +36,7 @@ static bool path_strict_name(Str name) {
 
 // The last part's start and end in `p`, trailing slashes passed by: Zig's
 // component iterator's `last`. False when `p` has no part.
-static bool path_last_part(Str p, size_t *from, size_t *to) {
+static inline bool path_last_part(Str p, size_t *from, size_t *to) {
     size_t end = p.len;
     while (end > 0 && str_byte(p, end - 1) == '/') end--;
     if (end == 0) return false;
@@ -43,7 +48,7 @@ static bool path_last_part(Str p, size_t *from, size_t *to) {
 }
 
 // `p`'s last part, "" when there is none.
-static Str path_basename(Str p) {
+static inline Str path_basename(Str p) {
     size_t from = 0;
     size_t to = 0;
     if (!path_last_part(p, &from, &to)) return S("");
@@ -52,7 +57,7 @@ static Str path_basename(Str p) {
 
 // Zig's `dirnamePosix`: `p` up to the end of the part before the last; the
 // root `/` for an absolute path with one part; false for none.
-static bool path_dirname(Str p, Str *out) {
+static inline bool path_dirname(Str p, Str *out) {
     size_t from = 0;
     size_t to = 0;
     if (!path_last_part(p, &from, &to)) return false;
@@ -71,7 +76,7 @@ static bool path_dirname(Str p, Str *out) {
 
 // `dir` and `name` joined by one `/`, as Zig's `path.join` of two parts
 // does when `name` has no leading slash.
-static bool path_join(Arena *a, Str dir, Str name, Str *out) {
+static inline bool path_join(Arena *a, Str dir, Str name, Str *out) {
     Buf b = buf_make(a);
     bool slash = dir.len > 0 && str_byte(dir, dir.len - 1) != '/';
     if (buf_str(&b, dir) != OK) return false;
@@ -83,7 +88,7 @@ static bool path_join(Arena *a, Str dir, Str name, Str *out) {
 }
 
 // Whether `x` and `y` are the same name apart from ASCII case.
-static bool path_eq_nocase(Str x, Str y) {
+static inline bool path_eq_nocase(Str x, Str y) {
     if (x.len != y.len) return false;
     for (size_t i = 0; i < x.len; i++) {
         uint8_t p = str_byte(x, i);
@@ -99,7 +104,7 @@ static bool path_eq_nocase(Str x, Str y) {
 // hex digits of the low half of a Wyhash of the name in lowercase (its
 // first PATH_STRICT_NAME_MAX bytes), then `.tmp`. Thirteen bytes whatever
 // the name, and one per name in any case.
-static bool path_temp_name(Arena *a, Str name, Str *out) {
+static inline bool path_temp_name(Arena *a, Str name, Str *out) {
     char lower[PATH_STRICT_NAME_MAX];
     Bytes low = {lower, sizeof lower};
     size_t n = name.len < PATH_STRICT_NAME_MAX ? name.len : PATH_STRICT_NAME_MAX;
@@ -118,3 +123,5 @@ static bool path_temp_name(Arena *a, Str name, Str *out) {
     out->len = 13;
     return true;
 }
+
+#endif

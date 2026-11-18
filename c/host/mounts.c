@@ -3,7 +3,7 @@
 // line, `name = /abs/path` or `name = ~/path`, then any of ` ro`, ` tools`
 // and ` secrets`. A mistake names its line.
 //
-// Include path.c and file_system.c first (its error names and its file read).
+// Include file_system.c first (its error names and its file read).
 
 // ` ro` after the path refuses every change through the mount; reads and
 // programs are unaffected.

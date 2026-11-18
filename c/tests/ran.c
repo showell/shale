@@ -10,7 +10,6 @@
 #include <sys/stat.h>
 
 #include "../script/run.h"
-#include "../host/path.c"
 #include "../host/file_system.c"
 #include "../host/path_run.c"
 #include "../script/regex.c"

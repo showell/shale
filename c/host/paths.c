@@ -8,7 +8,7 @@
 // files by any spelling, no program handed its folder) and the journal
 // `--undo-on-stop` keeps (undo.c puts it back).
 //
-// Include path.c, file_system.c, path_run.c and mounts.c first.
+// Include file_system.c, path_run.c and mounts.c first.
 
 // A path as it was before the run's first change of it.
 typedef enum {

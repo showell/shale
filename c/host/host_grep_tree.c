@@ -395,7 +395,7 @@ static STATUS_MUST_USE Status grep_tree_wanted(Run *r, Pos pos, const GrepTreeAs
         size_t to = slash == NULL ? rest.len : from + (size_t)(slash - tail.ptr);
         Str part = str_sub(rest, from, to);
         if (grep_tree_build_part(part)) return OK;
-        if (!cli_fat_name(part)) *named = false;
+        if (!path_strict_name(part)) *named = false;
         if (slash == NULL) break;
         from = to + 1;
     }

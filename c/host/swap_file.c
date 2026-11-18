@@ -4,7 +4,7 @@
 // into place. `run`'s `stdout_secret` (host_run.c) stores a secret this way,
 // and so do `shale --secrets`'s store and deny (secrets_mode.c).
 //
-// Include path.c and file_system.c first.
+// Include file_system.c first.
 
 #include <sys/syscall.h>
 

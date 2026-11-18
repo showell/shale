@@ -5,7 +5,7 @@
 // with two spaces a level. `shale --secrets`'s deny reads the file, finds
 // the deny rules it lacks, adds them and writes it (secrets_mode.c).
 //
-// Include buf.h and vec.h first (path.c includes them).
+// Include buf.h and vec.h first (path.h includes them).
 
 typedef enum {
     SETTINGS_OBJECT,

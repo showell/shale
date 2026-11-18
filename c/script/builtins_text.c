@@ -531,7 +531,7 @@ static STATUS_MUST_USE Status bi_is_name(Run *r, Pos pos, ConstValues args, Valu
     Str s = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_IS_NAME, &at(args, 0), S("its name"), &s));
     TRY(run_charge(r, pos, s.len));
-    value_bool(out, cli_fat_name(s));
+    value_bool(out, path_strict_name(s));
     return OK;
 }
 

@@ -1,5 +1,5 @@
--- c/build/file_system.shale: the file system's block, c/host's path.c,
--- file_system.c, paths and undo journal.
+-- c/build/file_system.shale: the file system's block, c/foundation's
+-- path.h, c/host's file_system.c, paths and undo journal.
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
 -- budget: steps=100000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
@@ -7,7 +7,7 @@
 use("build:lib.shale")
 
 -- ── c/host's file system, paths and undo journal: their own block ────────
--- c/tests/file_system/test_file_system.c (path.c and file_system.c) and
+-- c/tests/file_system/test_file_system.c (path.h and file_system.c) and
 -- test_paths.c (the mounts, the path hook, the secrets rule, the journal),
 -- each under every build of `t.builds`, held to its `TEST(` count and to
 -- FILE_SYSTEM_TESTS. The Zig test files they port are held to
@@ -88,7 +88,7 @@ const FILE_SYSTEM_PLANTS = {
   {name = "Wyhash's first secret is off by one", file = "wyhash.h", caught_by = "file_system/test_file_system",
    aim = "wyhash_its_test_vectors",
    old = "0xa0761d6478bd642full", new = "0xa0761d6478bd642eull"},
-  {name = "case tells two names apart", file = "path.c", dir = "host", caught_by = "file_system/test_file_system",
+  {name = "case tells two names apart", file = "path.h", caught_by = "file_system/test_file_system",
    aim = "case_does_not_tell_two_names_apart_and_the_first_case_is_kept",
    old = "if (p >= 'A' && p <= 'Z') p = (uint8_t)(p + 32);", new = "(void)0;"},
   {name = "a NUL inside a path reaches the kernel", file = "slice.h", caught_by = "file_system/test_file_system",
