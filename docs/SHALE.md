@@ -619,7 +619,7 @@ change_bytes` past those budgets.
 | `get(t, k[, default])` | `t[k]`, or `default` where there is none | `type` for a key of the wrong kind |
 | `now()`, `budget()`, `call_bytes()` | the host's time; what is left; what one call may bring | |
 | `host(name, ...)` | what the host's call gives ("On Linux: behind the seam") | `host` where the host has no such call: metal has none |
-| `print(...)` | nil | `type` for a list or map |
+| `print(...)` | nil | `type` for a map, an empty table, a list beside other arguments, or a list holding anything but strings |
 | `yield()` | nil | |
 | `arg(name[, default])` | the run's value by that name, or `default` | `argument` for a value not of an integer or boolean default's kind |
 | `fail(msg)` | never returns: the run stops | `fail`, with `msg` |
@@ -847,7 +847,7 @@ Perl and Python sometimes take one more turn after it, so on "a",
 | `now()` | the integer the host handed in: the only time a script has |
 | `budget()` | a map of what is left of `steps`, `reads`, `read_bytes`, `changes`, `change_bytes`, `output` and `arena_bytes` (the values' arena, which every string read stays in), so a script can stop at a point of its own (the other budgets are not in it) |
 | `call_bytes()` | what one store call may bring, the call-bytes cap (a cap, never spent), so a scan sizes its parts to it: an integer, built without a map |
-| `print(...)` | scalars only. It evaluates every argument first, joins them with tabs, and ends with a newline: `print()` is an empty line, `print(nil, true)` is `nil<TAB>true` |
+| `print(...)` | scalars, or one list of strings. It evaluates every argument first, joins them with tabs, and ends with a newline: `print()` is an empty line, `print(nil, true)` is `nil<TAB>true`. One list of strings, alone, prints each on its own line (`print(head_lines(p, 5))`); a list holding anything else, a map, an empty table, or a list beside other arguments stops |
 | `arg(name[, default])` | the value the run was given as `name` (the runner's `name=value`), or `default` (nil unset): a script's inputs. An integer or boolean default reads the value as one (`true`, `false`, `1`, `0`); any other, the string. The live site's route gives no values |
 | `fail(msg)` | the run stops here, class `fail`, `msg` its message: one line and its trail, as any stop. The script's own assertion: `if #found == 0 then fail("no config under " .. dir) end`. `attempt` catches it; the CLI exits 1 on it |
 | `yield()` | nil: a collection point, where the run keeps only the values it still reaches (see "The VM"). When a run pauses is the host's to say, never the script's |

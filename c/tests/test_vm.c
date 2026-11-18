@@ -132,6 +132,37 @@ TEST(the_output_budget_writes_what_fits) {
     ran_free(&x);
 }
 
+TEST(print_of_one_list_of_strings_prints_each_on_its_own_line) {
+    static Ran x;
+    ran_source(&x, S("print({\"a\", \"\", \"b\\tc\"})\nprint({\"one\"})\nprint(\"after\")\n"), ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("a\n\nb\tc\none\nafter\n"));
+    ran_free(&x);
+}
+
+// A run of `src`, which must stop at line 1, column `column`, as `type`
+// with `message`, having printed nothing.
+static void vm_print_stop(Str src, uint32_t column, Str message) {
+    static Ran x;
+    ran_source(&x, src, ran_budgets());
+    EXPECT_EQ(x.ran, STOP);
+    EXPECT_EQ(x.r.ctx.stop.cls, CLASS_TYPE);
+    EXPECT_EQ(x.r.ctx.stop.line, 1);
+    EXPECT_EQ(x.r.ctx.stop.column, column);
+    EXPECT_STR(x.r.ctx.stop.message, message);
+    EXPECT_EQ(x.r.out.len, 0);
+    ran_free(&x);
+}
+
+TEST(print_of_a_list_holding_a_non_string_a_map_or_a_list_beside_more_still_stops) {
+    Str list = S("`print` takes scalars, not a list: `for x in l do print(x) end` takes a list's items one by one");
+    vm_print_stop(S("print({\"a\", 2})\n"), 7, list);
+    vm_print_stop(S("print({\"a\", {\"b\"}})\n"), 7, list);
+    vm_print_stop(S("print({\"a\"}, \"b\")\n"), 7, list);
+    vm_print_stop(S("print({a = \"b\"})\n"), 7, S("`print` takes scalars, not a map: `for x in l do print(x) end` takes a list's items one by one"));
+    vm_print_stop(S("print({})\n"), 7, S("`print` takes scalars, not an empty table: `for x in l do print(x) end` takes a list's items one by one"));
+}
+
 TEST(division_floors_and_an_overflow_stops) {
     static Ran x;
     static Arena a;
@@ -443,6 +474,8 @@ TEST_PART(vm, TEST_CASE(the_steps_go_to_the_builtin_script_code_called), TEST_CA
           TEST_CASE(the_call_depth_budget_names_every_call), TEST_CASE(attempt_makes_a_stop_a_value_and_the_run_goes_on),
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
           TEST_CASE(yield_keeps_what_is_reached_and_charges_the_copy), TEST_CASE(the_output_budget_writes_what_fits),
+          TEST_CASE(print_of_one_list_of_strings_prints_each_on_its_own_line),
+          TEST_CASE(print_of_a_list_holding_a_non_string_a_map_or_a_list_beside_more_still_stops),
           TEST_CASE(division_floors_and_an_overflow_stops), TEST_CASE(an_index_past_the_append_names_the_one_that_appends),
           TEST_CASE(maps_and_list_loops_take_their_counted_steps), TEST_CASE(with_no_host_host_stops_naming_the_call_and_attempt_catches_it),
           TEST_CASE(values_name_their_types_and_truth), TEST_CASE(integer_text_and_checked_arithmetic),

@@ -636,10 +636,35 @@ static RUN_COLD STATUS_MUST_USE Status vm_binary(Machine *m, const VmOp *op) {
     return vm_push(m, op->pos, &out);
 }
 
+// `print(l)` of one list of strings: each on its own line, a step an item.
+// A list holding anything but strings stops as any table does, before a
+// line is written.
+static RUN_COLD STATUS_MUST_USE Status vm_print_lines(Run *r, Pos place, const Value *list) {
+    const Table *t = list->as.table;
+    TRY(run_charge(r, place, t->list.len));
+    for (size_t i = 0; i < t->list.len; i++) {
+        if (at(t->list, i).tag == VALUE_STRING) continue;
+        IntText it;
+        Str text = {0};
+        return builtin_scalar_text(r, place, list, &it, S("print"), &text);
+    }
+    for (size_t i = 0; i < t->list.len; i++) {
+        TRY(run_write(r, place, at(t->list, i).as.string));
+        TRY(run_write(r, place, S("\n")));
+    }
+    return OK;
+}
+
 static RUN_COLD STATUS_MUST_USE Status vm_print(Machine *m, const VmOp *op) {
     Run *r = m->r;
     ConstValues vals = vm_args(m, op->a);
     Positions places = {m->code->positions.ptr, m->code->positions.len};
+    const Value *one = vals.len == 1 ? &at(vals, 0) : NULL;
+    if (one != NULL && one->tag == VALUE_TABLE && one->as.table->kind == TABLE_LIST) {
+        TRY(vm_print_lines(r, at(places, op->b), one));
+        m->operands.len -= op->a;
+        return vm_push_nil(m, op->pos);
+    }
     for (size_t i = 0; i < vals.len; i++) {
         Pos place = at(places, op->b + i);
         if (i > 0) TRY(run_write(r, op->pos, S("\t")));
