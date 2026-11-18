@@ -1,10 +1,10 @@
 // test_gate.c: c/gate/gate.c, shale-gate's decision. The first seven tests
-// are tools/shale_gate_test.zig's, the same commands held to the same
-// answers; the rest hold what those leave open: the refusals' whole texts,
-// the limits (64 words, 4096 lines, a refusal past 1024 bytes), the log
-// line's cut, the hook's JSON as std.json reads it, an escape's one append,
-// and `shale --secrets` refused. c/build/gate.shale holds the program to the
-// Zig gate's answers.
+// are the Zig gate's (legacy_zig/tools/shale_gate_test.zig), the same
+// commands held to the same answers; the rest hold what those leave open:
+// the refusals' whole texts, the limits (64 words, 4096 lines, a refusal
+// past 1024 bytes), the log line's cut, the hook's JSON as std.json reads
+// it, an escape's one append, and `shale --secrets` refused.
+// c/build/gate.shale holds the program to the Zig gate's answers.
 #include "test.h"
 #include "../gate/gate.c"
 

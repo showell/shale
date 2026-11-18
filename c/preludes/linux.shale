@@ -58,7 +58,7 @@ function job_stop(job)
   return host("job_stop", job)
 end
 
--- **THE PROCESSES, NEVER THIS ONE** (`src/shale_host_procs.zig`): each
+-- **THE PROCESSES, NEVER THIS ONE** (`c/host/host_procs.c`): each
 -- `{pid, ppid, uid, name, args, start}` (and `args_cut` past 1 MiB) but
 -- this run's and those above it, so a filter of `args` cannot match the
 -- shell that ran it, as `pkill -f` does.
@@ -208,7 +208,7 @@ end
 
 -- The lines of `s` a regular expression matches (`{invert = true}`: the
 -- others; `{nocase = true}`: either case), each `{line, text}`, numbered
--- from 1. The host searches them (`src/shale_host_regex.zig`), at what the
+-- from 1. The host searches them (`c/host/host_text.c`), at what the
 -- searches cost and a step a line.
 function re_lines(s, pattern, opts?)
   if opts == nil then return host("re_lines", s, pattern) end

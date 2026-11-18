@@ -5,8 +5,8 @@ Most you run, with their values on the launch line; a few are libraries,
 which a script loads with `use("cookbook:<path>")` and then calls. A recipe
 you run is named for what it does, verb first (`check_disk_space.shale`); a
 library is named for what it holds (`merge_conflicts.shale`).
-`check_recipe_names.shale` holds every recipe to that, and `zig build test`
-runs it.
+`check_recipe_names.shale` holds every recipe to that, and C's full tier
+(`shale c/build.shale full=1`) runs it.
 
 The launches below go through the `cookbook` mount (a line `cookbook =
 /ABSOLUTE/PATH/TO/shale/cookbook` in `~/.config/shale/mounts`), so they work
@@ -36,7 +36,8 @@ steps left for the writer.
 
 ## For any project
 
-- `build_on_github.shale`: runs `zig build test` on GitHub, not on the box,
+- `build_on_github.shale`: runs a workflow on GitHub (by default Zig Shale's
+  `zig build test`, in legacy_zig/), not on the box,
   and reports the run. `shale cookbook:build_on_github.shale ref=my-branch`
 - `check_page_links.shale`: checks every link and image on a web page,
   through its redirects, by HEAD: what doesn't answer 200, and what moved.

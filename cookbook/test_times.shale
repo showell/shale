@@ -3,7 +3,7 @@
 --   shale cookbook:test_times.shale self_test=1
 --
 -- `timed_run` itself, over a real program and a real `build:` mount, is
--- src/shale_cli_test.zig's.
+-- legacy_zig/src/shale_cli_test.zig's (Zig Shale's, frozen).
 
 use("./times.shale")
 

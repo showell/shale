@@ -44,7 +44,7 @@ merge, and defer it while you're about 90% sure it has nothing new to say.
 | A block's scripts and the gate's golden cases, held to their frozen outputs (`c/tests/frozen/`) | each build's `shale` and `shale-gate` | fast and full | the VM's, the host text calls' and the Zig tools' scripts; every hook input the gate answers |
 | `c/shale.c` at `-O2` | GCC | full | the binary the golden tests judge |
 | The golden tests, `tests/golden.shale`, under that binary | Shale | full | every input the harness collects, held to its frozen output: the one judge of Shale's behaviour |
-| The cookbook's self-tests, live, under that binary | Shale | full | every recipe that reads `arg("self_test"`, run with `self_test=1`, as Zig's `cookbook-test` step runs them |
+| The cookbook's self-tests, live, under that binary | Shale | full | every recipe that reads `arg("self_test"`, run with `self_test=1`, as Zig Shale's `cookbook-test` step ran them |
 
 **The golden tests** ([tests/harness/README.md](../../tests/harness/README.md))
 are every input the harness collects, frozen in `tests/golden/` with the
@@ -67,7 +67,7 @@ named ones from the first build's run, for a deliberate change. The cookbook's
 self-tests are not frozen: the full tier runs them live after the goldens
 (`cookbook`), each recipe from this tree with `self_test=1` under the -O2
 binary, first on PATH, with `cookbook`, `tools` and a fresh `scratch` as its
-mounts, as build.zig's `cookbook-test` does; a failure is named by recipe.
+mounts, as legacy_zig/build.zig's `cookbook-test` did; a failure is named by recipe.
 
 No test runs at `-O2` during the port (Steve, 2026-11-17): the
 optimizer's value then is its warnings, and the sanitizers at `-O0` are

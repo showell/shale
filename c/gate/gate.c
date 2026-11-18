@@ -1,6 +1,7 @@
 // gate.c: shale-gate's decision, the PreToolUse hook on Bash and Monitor that
-// holds Claude to Shale, a port of tools/shale_gate.zig that answers as it
-// does. It reads the hook's JSON and passes (exit 0) exactly:
+// holds Claude to Shale, a port of the Zig gate (legacy_zig/tools/
+// shale_gate.zig, frozen) that answers as it does. It reads the hook's JSON
+// and passes (exit 0) exactly:
 //
 //   - the launch: optionally `cd WORD && `, then `shale` (or an absolute path
 //     ending `/shale`) and its words (`--verbose`, `--undo-on-stop`,

@@ -143,7 +143,7 @@ a cloud's /root or a laptop alike.
 
 **A case** is `tests/golden/<id>/`, its id from its input's origin, never a
 run's numbering, so a regeneration diffs cleanly
-(`src/script/interp_test.zig:192` is `zig-tests-script-interp_test-192`,
+(`src/script/interp_test.zig:192`, in legacy_zig/, is `zig-tests-script-interp_test-192`,
 `tests/inputs/store/store_budgets.shale [--budget reads=3]` is
 `store-store_budgets-budget-reads-3`). A doc block's id is its doc and the
 first 8 hex digits of its text's SHA-256, never its line

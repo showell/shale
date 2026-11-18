@@ -1,6 +1,6 @@
 -- This recipe runs a build on GitHub instead of on the box. It dispatches a
 -- `workflow_dispatch` workflow (shale's .github/workflows/test.yml, which runs
--- `zig build test`) for `ref`, and says the run's URL and id at once. Given
+-- Zig Shale's `zig build test` in legacy_zig/) for `ref`, and says the run's URL and id at once. Given
 -- that id, it checks the run: its status, or once the run is done, PASS or
 -- FAIL with its wall time, and for a failure the last 40 log lines (`gh run
 -- view --log-failed`), failing the launch. The workflow never runs on a push

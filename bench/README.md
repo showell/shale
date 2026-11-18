@@ -56,7 +56,7 @@ box's) and no user prelude. So a run months later reads the same bytes. The
 build clones the source's HEAD under `<build>/bench/src` (for the Zig, with
 zig-webbox beside it) and never builds in the checkout. A fresh clone has
 all the C build needs: `c/out/gen/preludes.h` is not tracked, and the build
-writes it from `src/`'s preludes.
+writes it from `c/preludes/`.
 
 ## A dry run
 

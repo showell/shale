@@ -13,8 +13,10 @@ rollback by default: on Linux, git is the undo, and `shale
 --undo-on-stop` puts back the paths a stopped run changed.
 
 **For an agent using Shale on a code checkout** in place of a shell,
-Python, sed or awk: [`SHALE-AGENTS.md`](SHALE-AGENTS.md). The code is
-`src/script/`.
+Python, sed or awk: [`SHALE-AGENTS.md`](SHALE-AGENTS.md). The code is C,
+in `c/` (the language in `c/script`). The paths to `legacy_zig/src` below
+are Zig Shale's, the first implementation, deprecated and frozen
+(`legacy_zig/README.md`), which the C matches.
 
 ## Before you send a script: the author's checklist
 
@@ -52,7 +54,7 @@ The usual traps, each with what avoids it:
 |---|---|---|
 | lynrummy.com (`POST /admin/script`, angry-gopher's `admin_script`) | atomic (changes, holds the turn); background (reads only, in slices) | atomic: 2,000,000 steps, 500 reads, 16 MiB read, 100 changes, 8 MiB arena; background: the same but 10,000 reads |
 | Dog Park, retired 2026-11-16 (`POST /admin/script`, its src/play/shale.zig) | background only: an atomic run is refused | 50,000,000 steps, 10,000 reads, 256 MiB read, no changes, 8 MiB arena |
-| an installed suite (`src/shale_suite.zig`) | background, on a schedule | the application's background budgets, its output at most 64 KiB |
+| an installed suite (`legacy_zig/src/shale_suite.zig`) | background, on a schedule | the application's background budgets, its output at most 64 KiB |
 | Linux, `shale` | atomic | Shale's defaults (the budgets' table), each settable with `--budget NAME=N` |
 
 ## A first script, step by step
@@ -178,7 +180,7 @@ The host chooses, not the script; a signed request names it
 | may change the store | yes | **no**: `replace`, `append`, `edit`, `mkdir`, `remove` and `remove_tree` stop it, an `argument` error naming `atomic` |
 | its budgets on the live sites | the site's own, small (the table above) | the background's, larger (the table above) |
 
-- **The runner** (`shale`, `zig build script`, below) runs atomic.
+- **The runner** (`shale`, below) runs atomic.
 - A script can ask what is left with `budget()`, but not which mode it is
   in: write a script that changes nothing when it may run either way.
 - A background run's walk passes over a file or folder that vanished
@@ -428,7 +430,7 @@ there is one, the way that works: a store error gives its plain words, its
 name and what asks first (`` `read("none.txt")`: not found (FileNotFound):
 `exists(p)` asks first ``); a budget names which one ran out (the step
 budget gives its number too). The golden corpus,
-`src/script/errors_test.zig`, holds a wrong script of every kind and the
+`legacy_zig/src/script/errors_test.zig`, holds a wrong script of every kind and the
 exact class, place and message it gets, so a message changed is a line
 changed in review.
 
@@ -854,7 +856,7 @@ Perl and Python sometimes take one more turn after it, so on "a",
 
 ## The prelude
 
-**Functions every script has, written in Shale** (`src/script/prelude.shale`).
+**Functions every script has, written in Shale** (`c/preludes/core.shale`).
 Each part of their work is one builtin call under its cap, so a run's
 slices and budgets are as if the script had written them itself. **A
 script may declare a function of the same name:** its calls are then its
@@ -1136,7 +1138,7 @@ step a match).
 
 ## The site examples
 
-The scripts in `src/script/examples/` run as tests (`examples_test.zig`)
+The scripts in `legacy_zig/src/script/examples/` run as tests (`examples_test.zig`)
 against a store shaped like angry-gopher's own data. Its formats come from
 angry-gopher's sources:
 - **Transcripts:** `chat/<a>_<b>/sessions/<sid>.md` and
@@ -1175,7 +1177,7 @@ budgets, and changes nothing.
 
 ### How large a site each script fits
 
-`zig build shale-scale` (`src/shale_scale.zig`) generates a store shaped
+Zig Shale's `zig build shale-scale` (`legacy_zig/src/shale_scale.zig`) generates a store shaped
 like angry-gopher's at a growing number of topics (10, 100 and 1,000
 messages a topic) and runs each read-only script on it, atomic and
 background, under the site's budgets, until it no longer fits; it prints
@@ -1196,7 +1198,7 @@ run: each stops on its budget, says what it found, and where to resume.
 shale [--root DIR] [--verbose] [--undo-on-stop] [--check] [--budget NAME=N]... [FILE [--args-stdin] | -e SOURCE] [NAME=VALUE]...
 shale <<'SHALE'                  # no FILE, no -e: the script is stdin
 shale split.shale --args-stdin <<'ARGS'   # a FILE's values on stdin, one a line, raw
-SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
+SHALE_ROOT=/a/copy/of/data shale legacy_zig/src/script/examples/topics.shale
 ```
 
 - **The root** is `--root`, else `SHALE_ROOT`, else the working
@@ -1296,12 +1298,12 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
 
 **Run it against a copy**, never the live data folder.
 
-`zig build script-bench` times the interpreter's hot paths in ReleaseSafe
+Zig Shale's `zig build script-bench` timed the interpreter's hot paths in ReleaseSafe
 (a loop, a list, a map, calls, strings built by `..` and by `join`, a scan
 and a whole read), the VM's beside the tree-walker's. This box's runs
 differ by up to half from one day to the next: compare runs made side by
-side, never a day's with another's (`tools/bench.shale` reads the logs of
-both).
+side, never a day's with another's (`legacy_zig/tools/bench.shale` reads
+the logs of both).
 
 ## On Linux: behind the seam
 
@@ -1313,9 +1315,9 @@ three:
 
 - **`host(name, ...)`**, the one builtin that reaches outside. It is
   `Options.host`, and on metal it stops with class `host` ("not on this
-  host"). On Linux it is `src/shale_host_linux.zig`:
+  host"). On Linux it is `legacy_zig/src/shale_host_linux.zig`:
   - `run`, a program under a timeout, a keep and a filter (its options
-    are `Opts` in `src/shale_host_run.zig`). **Its filter is charged to the
+    are `Opts` in `legacy_zig/src/shale_host_run.zig`). **Its filter is charged to the
     caller's step budget:** the host searches each line of the output for
     `re` and `not_re`, and what each search spent (by the pattern's size and
     the places it tried) is the run's steps, besides the steps the output's
@@ -1338,14 +1340,14 @@ three:
     `cookbook/times.shale` is a stage's history over this: SHALE-AGENTS.md,
     "A stage states what it may cost";
   - `real`, a path's OS path;
-  - the jobs, `src/shale_host_jobs.zig` over `src/shale_jobs.zig`; the
+  - the jobs, `legacy_zig/src/shale_host_jobs.zig` over `legacy_zig/src/shale_jobs.zig`; the
     host keeps the jobs a run started, so a stopped run ends them
     (`stopWithRun`, called by the runner as `--undo-on-stop`'s undo is);
   - the Zig tools, `zig_rename`, `zig_decls`, `zig_move`, `zig_imports`
-    and `zig_tokens` (`src/shale_host_zig.zig`), which ask zig-ast
+    and `zig_tokens` (`legacy_zig/src/shale_host_zig.zig`), which ask zig-ast
     (`tools/zig_ast`), one process a run, over `tools/zig_ast/wire.zig`'s frames;
   - `shale_tokens`, a Shale file's tokens by the lexer in
-    `src/script/lex.zig` (`src/shale_host_tokens.zig`);
+    `legacy_zig/src/script/lex.zig` (`legacy_zig/src/shale_host_tokens.zig`);
   - `may_change`, the path hook's question before a change (below).
 - **`Options.path_hook`**, called first in every store call's path. Linux's
   is the mounts: a path whose first part has a `:` is a mount's
@@ -1380,14 +1382,14 @@ three:
   Mounts confine the store's calls, not the programs a script runs:
   `run`'s program reaches wherever its user can.
 - **`Options.preludes`**, the preludes after the core's, in order:
-  - the Linux prelude (`src/shale_prelude_linux.shale`): `run`, `real`, `sleep`, `not_option`,
+  - the Linux prelude (`c/preludes/linux.shale`): `run`, `real`, `sleep`, `not_option`,
     `must`, `http`, `http_get`, `re_lines`, `head_lines`, `tail_lines`,
     `grep_all`, `grep_tree`, `report_run`, `copy`, `unique`, `path_under`, `fresh_dir`, `newest`, `create`, `edits_all`, `edit_between`, `json_read`, `json_write`; the Zig tools
     `zig_rename`, `zig_renames`, `zig_decls`, `zig_move`, `zig_tokens` and
     `zig_imports`; `shale_tokens`; the jobs, `job_start`, `job_alive`, `job_stop` and
     `job_wait`; and the processes, `procs` and `proc_stop` (`job_wait`'s helpers `curl_http`, `edit_words`, `edit_word_byte` and `edit_marker_shown`
     take their names too);
-  - the git prelude (`src/shale_prelude_git.shale`): `git_status`,
+  - the git prelude (`c/preludes/git.shale`): `git_status`,
     `git_log`, `git_commit`, ...;
   - the repo's `.shale/prelude.shale` at the root, as metal-vmm's queue
     tool is;
@@ -1402,11 +1404,11 @@ three:
   PreToolUse hook that holds an agent to Shale (SHALE-AGENTS.md, "The gate").
 
 What each function takes and gives is in SHALE-AGENTS.md; the tests are
-`src/shale_*_test.zig` and the host's own.
+`legacy_zig/src/shale_*_test.zig` and the host's own.
 
 ## On the live site: `script_route`
 
-`shale.script_route` (`src/script_route.zig`) is the reusable half of an
+`shale.script_route` (`legacy_zig/src/script_route.zig`) is the reusable half of an
 application's `POST /admin/script`, which angry-gopher mounts. Every
 refusal comes before the script runs, in this order, each with its status
 and reason:
@@ -1448,7 +1450,7 @@ route now; it goes with the Zig source.
 
 ## The installed suite: scripts on a schedule
 
-**An application's own scripts, run every so often** (`src/shale_suite.zig`):
+**An application's own scripts, run every so often** (`legacy_zig/src/shale_suite.zig`):
 it declares each as `{name, source =
 @embedFile(...), args, period_s}`, installs them once (`Suite.install`, with
 its long-lived allocator, the background budgets and the auth paths), and
@@ -1489,7 +1491,7 @@ A script's top-level `return v` ends it; `v` goes nowhere.
 
 ### The contract: a run as a host sees it
 
-**`src/script/process.zig` is the whole of what a host may know of a
+**`legacy_zig/src/script/process.zig` is the whole of what a host may know of a
 run:** the VM is an opaque box to the kernel. A host starts a run with
 `Process.start` (or `startWith`, which takes `Options`: the mode, the
 script's values for `arg`, and on Linux the host, its path hook and the
@@ -1521,8 +1523,8 @@ gives a process already stopped, saying why.
 
 ### The VM
 
-**A script runs on a bytecode VM** (`src/script/compile.zig`,
-`src/script/vm.zig`). The route and the runner use it. The tree-walker
+**A script runs on a bytecode VM** (`legacy_zig/src/script/compile.zig`,
+`legacy_zig/src/script/vm.zig`). The route and the runner use it. The tree-walker
 (`interp.zig`) stays in the tests as the second implementation. The VM is
 a stack machine over the walker's own semantics: every operator, index,
 builtin and charge is the walker's code, called from an op. What is the
@@ -1551,8 +1553,8 @@ the code come from the machine's own arena (the `machine` budget,
 `machine_bytes`), beside the values' arena, so the two engines take the
 same values' arena and stop on it at the same place.
 
-Speed is not the VM's point (`zig build script-bench` times the two side
-by side, within noise of each other); the state a yield can keep is.
+Speed is not the VM's point (Zig Shale's `zig build script-bench` timed the
+two side by side, within noise of each other); the state a yield can keep is.
 
 ### `yield`: a collection point
 
@@ -1612,7 +1614,7 @@ effects and stop, but not to the same steps or arena.
 the caller's `out`; the machine's own memory (the frames' slots, the VM's
 operands and frames, the compiled code) comes from the caller's
 allocator beside the arena, bounded by the call-depth and depth budgets
-and by `machine_bytes`, and freed when the run ends. It assumes no threads. `src/script/portable_test.zig` reads each of the
+and by `machine_bytes`, and freed when the run ends. It assumes no threads. `legacy_zig/src/script/portable_test.zig` reads each of the
 module's sources and refuses anything that names the host outside its
 tests: `std.posix`, `std.os`, `std.c`, `std.process`, `std.Thread`,
 `std.time`, `Io.Dir`, `Threaded`, `page_allocator`, `std.debug.print`, and

@@ -11,7 +11,7 @@
 --   shale tools/surface.shale           fails unless docs/SURFACE.txt is what the source says
 --   shale tools/surface.shale write=1   writes docs/SURFACE.txt from the source
 --
--- `zig build surface-check` (in `zig build test`) runs the first. A change to
+-- C's fast tier (c/build/surface.shale) runs the first. A change to
 -- what a script can observe changes the surface: rerun with write=1 and
 -- review the diff of docs/SURFACE.txt beside the code's.
 

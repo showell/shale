@@ -28,7 +28,7 @@
   The store's limits on a name, a path's length and its depth are zig-webbox's (`is_name`'s rule: 1 to 96 bytes of printable ASCII, none of "*/:<>?\|, not . or .., not ending in . or a space)
 
 ### Steps and costs
-  Every builtin's charge (a step a byte or item, a step for 16 bytes of bulk work, a sort's bound before it runs, a search's stops and compares) is the count `budget()` and `── used:` show, so it is observable; it is held by src/script/charge_test.zig, not by a table here
+  Every builtin's charge (a step a byte or item, a step for 16 bytes of bulk work, a sort's bound before it runs, a search's stops and compares) is the count `budget()` and `── used:` show, so it is observable; it is held by legacy_zig/src/script/charge_test.zig, not by a table here
   EXCEPTION: the arena's byte counts (`budget().arena_bytes`'s value, the exact step where `budget arena` stops) are outside the frozen surface (Steve, 2026-11-17); an arena stop's class and message are inside it: docs/C-SEAMS.md, "Fidelity"
 
 ### The CLI
@@ -49,7 +49,7 @@
 
 ### The gate
   It passes `[cd DIR && ]shale` or an absolute path ending /shale, then --verbose, --undo-on-stop, --args-stdin, --help, --version, --budget NAME=N and plain words, optionally a `<<'TAG'` heredoc (TAG [A-Z_]+) whose last line is TAG and no earlier line is
-  Or the escape: a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, tag [a-z0-9-]+, logged to ~/.local/state/shale/wants.tsv as date, session, kind, tag, text and the command's first 160 bytes, tabs and newlines escaped (tools/shale_gate.zig)
+  Or the escape: a first line `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, tag [a-z0-9-]+, logged to ~/.local/state/shale/wants.tsv as date, session, kind, tag, text and the command's first 160 bytes, tabs and newlines escaped (legacy_zig/tools/shale_gate.zig)
 
 ### The browser and the route
-  The wasm build's exports (src/shale_wasm.zig) and the signed route's envelope (src/script_route.zig's header) are surfaces of their own, listed here only by name: the route's refusal texts are above, its statuses (400, 403, 409, 500, 501, 503) are in docs/SHALE.md
+  The wasm build's exports (legacy_zig/src/shale_wasm.zig) and the signed route's envelope (src/script_route.zig's header) are surfaces of their own, listed here only by name: the route's refusal texts are above, its statuses (400, 403, 409, 500, 501, 503) are in docs/SHALE.md

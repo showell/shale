@@ -1,6 +1,6 @@
 # What Claude reached past Shale for
 
-The ledger of the gate's escapes. The gate (`tools/shale_gate.zig`,
+The ledger of the gate's escapes. The gate (`c/shale_gate.c`,
 SHALE-AGENTS.md's "The gate") passes only a `shale` launch or a logged
 escape. Each escape is a line in `~/.local/state/shale/wants.tsv`
 (`cookbook/read_wants.shale` reads it), and this file gathers the ones still

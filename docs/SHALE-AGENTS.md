@@ -111,8 +111,8 @@ back what it changed, so no half-done edit is left (SHALE.md, "The
 runner": what it cannot put back, it says).
 
 ```sh
-zig build                          # zig-out/bin/shale, always ReleaseSafe: put it on PATH
-shale --version                    # says the mode; `zig build test` stays Debug, to compile fast
+shale c/install.shale              # from Shale's checkout: builds C Shale, checks it, puts it on PATH
+shale --version                    # says the mode: ReleaseSafe for the install, Debug for a tier's build
 shale count.shale dir=src
 shale rename.shale from=old to=new
 shale <<'EOF'
@@ -194,7 +194,7 @@ any other key). **Already there, and still rewritten:** `drop(l, n)`,
 `mkdir`, which makes the parents. The
 whole language is [`SHALE.md`](SHALE.md).
 
-**On Linux, the Linux prelude** (`src/shale_prelude_linux.shale`; metal
+**On Linux, the Linux prelude** (`c/preludes/linux.shale`; metal
 has none of it):
 - **Programs:** `run(argv, opts)` runs one and gives `{argv, code, ended,
   ms, cpu_ms, out, ...}`. `timeout_ms` and a keep, `head` or `tail` (lines)
@@ -419,7 +419,7 @@ has none of it):
   the files and writes the edits zig-ast plans through `edit`'s own
   machinery, so each change is diffed and logged as an `edit`'s. It is
   `tools:zig-ast/bin/zig-ast`, installed by `shale
-  tools/zig_ast/install.shale` (`zig build` also puts one beside `shale`),
+  tools/zig_ast/install.shale` (tools/zig_ast/README.md),
   or the program `SHALE_ZIG_AST` names, as Shale's own tests do; without
   either a Zig call stops, saying how to install it.
   `roc_tree(paths)` is Roc's own parser's tree of each file, in order:
@@ -462,7 +462,7 @@ has none of it):
   `roc_types(root, roc)`, `roc` the tree's Roc, whose pin roc-types' must
   be.
 
-**Git, in the git prelude** (`src/shale_prelude_git.shale`). Every call
+**Git, in the git prelude** (`c/preludes/git.shale`). Every call
 runs git under `run`. A `repo` is a Shale path, `""`
 or `"."` for the root and `repos:roc-chat` for a mount.
 - **Reading:** `git_status(repo)` gives `{code, path[, from]}`.
@@ -551,9 +551,11 @@ builtin, a prelude, another library or the script's own function or local
 is refused at the `use`, naming both places. A stop inside it names its
 file and line. SHALE.md, "Libraries: `use`", has the rules.
 
-Every block of Shale below runs as a test (`src/script/agent_test.zig`), on
-a small checkout shaped like zig-metal-unikernel's, a fresh one each. What it
-prints is in the box after it, exactly.
+Every block of Shale below ran as a test of Zig Shale's
+(`legacy_zig/src/script/agent_test.zig`, frozen), on a small checkout
+shaped like zig-metal-unikernel's, a fresh one each, and printed what the
+box after it says, exactly. Each block is a golden case too
+(`tests/golden/docs-SHALE-AGENTS-*`), run without that checkout.
 
 ## The cookbook, beside what an agent would write otherwise
 
@@ -740,8 +742,8 @@ naming the line, with nothing written (`pub const
 linux_writes.kept_write_deadline_ms` is not Zig): the stop says the block
 was not moved yet, as it does here. The rename
 writes as it goes, so `git diff` shows it and `git checkout` takes it
-back. (A `shale-linux` block runs with the Linux prelude, in
-`src/shale_doc_linux_test.zig`.)
+back. (A `shale-linux` block ran with the Linux prelude, in
+`legacy_zig/src/shale_doc_linux_test.zig`.)
 
 ### Two edits to one file, each asserted, one write
 
@@ -1016,7 +1018,7 @@ scratch, a log or a file to move later. `stdout_secret` is the one way in.
 (`c/shale_gate.c`, installed by `shale c/install.shale` as
 `~/tools/shale/bin/shale-gate` and run by `tools/shale-gate.sh`, which turns
 any failure, a missing binary included, into a refusal). It is a port of
-`tools/shale_gate.zig`, and the C build's tiers hold it to the answer frozen
+the Zig gate (`legacy_zig/tools/shale_gate.zig`, frozen), and the C build's tiers hold it to the answer frozen
 for every case of its golden cases (`c/build/gate_golden.shale`). It passes
 exactly:
 
@@ -1040,9 +1042,9 @@ exactly:
 A subagent is gated like the session that started it: its hook input
 carries an `agent_id`, and the gate reads it like any other call.
 
-Anything else is refused, with one line naming both forms. Put `shale` on
-`PATH` as a link to `zig-out/bin/shale`, so a rebuild is what every launch
-runs. The README's "Using Shale with Claude Code on your project" has the
+Anything else is refused, with one line naming both forms. `shale
+c/install.shale` puts `shale` on `PATH` as a link to
+`~/tools/shale/bin/shale`, so an install is what every launch runs. The README's "Using Shale with Claude Code on your project" has the
 hook's settings, how to turn it off, a block for `<project>/CLAUDE.md`, and
 what the gate refuses with what to do instead.
 

@@ -25,8 +25,8 @@
 -- the header's opening sentence goes in front (`Finds ...` gives `find_`),
 -- else it says `<verb>_`. A library's leading verb moves to the end.
 --
--- `self_test=1` judges the plants, then the cookbook itself, so `zig build
--- test` (its `cookbook-test`) fails on any break. COOKBOOK_ENFORCED false
+-- `self_test=1` judges the plants, then the cookbook itself, so C's full
+-- tier (its `cookbook` phase) fails on any break. COOKBOOK_ENFORCED false
 -- would only count the cookbook's breaks, on the last line.
 
 use("./findings.shale")

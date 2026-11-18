@@ -71,7 +71,7 @@ Zig size and no Zig probe of them.
 ## The VM, the stops and the budgets
 
 - **The C ports the VM, not the tree-walker.** The ops of
-  src/script/compile.zig and the loop of src/script/vm.zig are its model:
+  legacy_zig/src/script/compile.zig and the loop of legacy_zig/src/script/vm.zig are its model:
   the same ops, the same enters charged in the walker's order and hung on the op after them, and a loop that never
   recurses. The walker stays Zig's, as its second implementation.
 - **A stop is err.h's `RunCtx`.** Every function that can stop returns
@@ -93,7 +93,7 @@ Zig size and no Zig probe of them.
   "a background run only reads" (builtins_change.zig:430). The C's CLI
   runs every script as an atomic run, so it ports neither; a C embedder that
   wants a background run must port both.
-- **`attempt` is a frame marked with its answer**, as in src/script/vm.zig: a stop
+- **`attempt` is a frame marked with its answer**, as in legacy_zig/src/script/vm.zig: a stop
   that is not a budget's unwinds to the innermost marked frame, cuts the
   call trail back to its depth, and fills `{ok = false, error, class, ...}`.
   A budget never unwinds.
@@ -176,9 +176,9 @@ its error's Zig name for the message:
 - **`Host`**, `interp.Host`: `call(name, args)`, behind the core's
   `host(...)`. Linux's has the names SURFACE.txt lists: `run` (fork by
   hand, `prctl`'s death signal, its own process group, the parent polling
-  the pipes, a pidfd and a signalfd; `src/shale_spawn.zig`), the jobs
+  the pipes, a pidfd and a signalfd; `legacy_zig/src/shale_spawn.zig`), the jobs
   (`shale --reap` double-forked out of the caller's tree, a job's record as
-  text, `src/shale_jobs.zig`; when the job's leader exits, the reaper TERMs
+  text, `legacy_zig/src/shale_jobs.zig`; when the job's leader exits, the reaper TERMs
   its group while the leader is an unreaped zombie, reaps it, then KILLs
   what is left at 2 seconds and writes the end only once the group is empty,
   as `run` does; the C's reaper, `jobs_reap_main` in c/host/jobs.c, does the
@@ -194,7 +194,7 @@ its error's Zig name for the message:
 ## The browser's host, as a tiebreaker
 
 The playground runs the core over an in-memory tree, with no `Host` at all
-(`src/shale_wasm.zig`, `src/wasm_io.zig`). **The C core builds to wasm with
+(`legacy_zig/src/shale_wasm.zig`, `legacy_zig/src/wasm_io.zig`). **The C core builds to wasm with
 an in-memory file_system.c and no `Host`**, so whatever the browser cannot have
 stays out of the core: a question of where a piece goes is settled by
 whether the playground needs it.
@@ -205,7 +205,7 @@ The parsers Shale reads code with are programs, not part of the C:
 
 - **`roc-ast` and `go-ast`** already are: a recipe's `roc_tree` and
   `go_tree` run the tool under `run` and hand its `--flat` output to the
-  host's reader (`src/shale_host_flat_tree.zig`), which the C ports as is.
+  host's reader (`legacy_zig/src/shale_host_flat_tree.zig`), which the C ports as is.
 - **`zig-ast`** (tools/zig_ast) holds `zig_rename`, `zig_decls`,
   `zig_move`, `zig_imports` and `zig_tokens`, over Zig's own parser, so the
   C needs no Zig parser. The host starts one `zig-ast --serve` process a

@@ -58,7 +58,8 @@ and one that must give two, `// want: vague, vague`. The self-test
 (`check_want_marks` in [parsed.shale](parsed.shale)) holds every marked
 line to exactly its marks, every unmarked line to none, a `quiet_*.go`
 plant to no mark, and each check to firing on some plant, since a check no
-plant fires could be blind. `zig build cookbook-test` runs them all.
+plant fires could be blind. C's full tier (`shale c/build.shale full=1`)
+runs them all.
 
 ## Libraries
 
@@ -74,7 +75,7 @@ plant fires could be blind. `zig build cookbook-test` runs them all.
 ## Why `go_tree` is a builtin
 
 go-ast writes roc-ast's `--flat` format (a node a line, then its
-attributes), so the host's reader, `src/shale_host_flat_tree.zig`, takes
+attributes), so the host's reader, `c/host/flat_tree.c`, takes
 both tools by a tag, and the prelude's `roc_tree` and `go_tree` share one
 runner, `flat_tool_trees`. That is about thirty lines of Zig and a few of
 prelude beyond what Roc already had, with the reader's tests shared. A

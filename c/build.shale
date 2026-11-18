@@ -266,8 +266,8 @@ if full then
   if exists(file) then replace(file, text) else create(file, text) end
 end
 
--- The cookbook's self-tests, live, as Zig's `cookbook-test` step runs them
--- (build.zig): every recipe under cookbook/ that reads `arg("self_test"`,
+-- The cookbook's self-tests, live, as Zig Shale's `cookbook-test` step ran
+-- them (legacy_zig/build.zig): every recipe under cookbook/ that reads `arg("self_test"`,
 -- in sorted order, run from this tree with `self_test=1` by the binary under
 -- test, first on PATH so a self-test's child runs are the same binary, under
 -- a mounts file of `cookbook` (this tree's, read-only), `tools` (the box's,

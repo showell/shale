@@ -40,31 +40,25 @@ Every script runs inside guard rails that a shell does not have:
   naming the paths, so a checkout is never left half merged.
 
 ## Install
+**The source is C, in [c/](c/)**, the only Shale since 2026-11-17: the
+runtime (`c/shale.c`, `c/script`, `c/host`, `c/foundation`), the gate
+(`c/shale_gate.c`, `c/gate`) and the preludes (`c/preludes`). It needs
+Linux on x86-64, GCC and TCC.
 
-**C Shale** (Linux on x86-64, GCC and TCC) is built and installed by
-`shale c/install.shale` from a clean checkout: it builds the release
-binary, runs the fast tier and a smoke test, copies it to
-`~/tools/shale/bin/shale` and points `~/.local/bin/shale` at it (a
-`localbin = ~/.local/bin` mount line is needed;
-[c/docs/building.md](c/docs/building.md) has the whole ladder). C Shale's
-build scripts are themselves Shale, so a first install needs a `shale` to
-run them: build the Zig one below, then install the C.
+- **Build and install:** `shale c/install.shale` from a clean checkout
+  builds the release binary, runs the fast tier and a smoke test, copies it
+  to `~/tools/shale/bin/shale` and points `~/.local/bin/shale` at it (a
+  `localbin = ~/.local/bin` mount line is needed). The hook runs the gate
+  it installs beside it. [c/docs/building.md](c/docs/building.md) has the
+  whole ladder.
+- **Test:** `shale c/build.shale` is the fast tier, in seconds; `shale
+  c/build.shale full=1` adds the GCC release build, ASan and the planted
+  faults. `shale tests/golden.shale` holds a build to every golden case.
 
-**Zig Shale** needs Linux on x86-64 and the patched Zig that `zig-version` names (`0.17.1+patched.3`,
-from [patched-zig-compiler](https://github.com/showell/patched-zig-compiler),
-whose PATCHES.md says how to install it). Shale's own builds and CI use that
-one; a project that builds Shale as a dependency may still be on 0.17.0,
-which Shale also builds on. Shale builds against
-[zig-webbox](https://github.com/showell/zig-webbox), checked out **beside**
-it:
-
-    git clone https://github.com/showell/shale
-    git clone https://github.com/showell/zig-webbox
-    cd shale && zig build   # zig-out/bin: shale, shale-gate, always ReleaseSafe
-
-Put `zig-out/bin` on your PATH, or link `zig-out/bin/shale` into a folder
-that is. The hook runs the C gate (`c/shale_gate.c`), which `shale
-c/install.shale` installs.
+C Shale's build scripts are themselves Shale, so a first install on a
+machine with no `shale` needs one to run them. Zig Shale, the first
+implementation, deprecated and frozen in [legacy_zig/](legacy_zig/README.md),
+can build that first one.
 
 ## Run a script
 
@@ -98,9 +92,9 @@ saved as a file named find.shale:
 ```lua
 -- find.shale: every line holding a literal, with its file and line number
 local pat = arg("pattern", "TODO")
-local dir = arg("dir", "src")
+local dir = arg("dir", "c")
 local hits = 0
-for p in glob(dir .. "/**/*.zig") do
+for p in glob(dir .. "/**/*.c") do
   for g in grep(p, pat) do
     print(p .. ":" .. g.line .. ": " .. g.text)
     hits = hits + 1
@@ -111,11 +105,11 @@ print(hits .. " lines hold " .. pat)
 
 Run in this checkout,
 
-    shale find.shale pattern=job_alive dir=src
+    shale find.shale pattern=job_alive dir=c/host
 
-prints thirteen lines like `src/shale_host_jobs.zig:21: if (std.mem.eql(u8, name,
-"job_alive")) {`, then `13 lines hold job_alive`. (`shale
-cookbook:look.shale find=job_alive in=src ext=zig` is the same search as a
+prints lines like `c/host/host_jobs.c:487:     if (str_eq(name,
+S("job_alive"))) {`, then `7 lines hold job_alive`. (`shale
+cookbook:look.shale find=job_alive in=c/host ext=c` is the same search as a
 ready recipe.)
 
 Running a program and keeping its tail:
@@ -165,7 +159,7 @@ expressions, not Lua's `%d`), are in
   [cookbook/go/](cookbook/go/README.md).
 - **[The tutorial](https://lynrummy.com/shale/tutorial.html)**: fifteen
   lessons that run in the browser, the language from the start
-  (`web/lessons.js`).
+  (`legacy_zig/web/lessons.js`: the browser build is Zig Shale's).
 - **[docs/SHALE.md](docs/SHALE.md)**, the reference: the language, every
   builtin with its cost and errors, the budgets, the runner's flags.
 
@@ -180,9 +174,10 @@ own project, and for working on Shale itself.
   top-level shell call an agent makes (`tools/shale-gate.sh`, the hook; [docs/SHALE-AGENTS.md](docs/SHALE-AGENTS.md)),
   with Zig's own parser behind `zig_decls`, `zig_move` and `zig_rename`:
   zig-ast (`tools/zig_ast`), a program of its own that the host asks, so
-  the host imports no `std.zig` parser. `zig build` builds it beside
-  `shale`; `shale tools/zig_ast/install.shale` installs it where the host
-  looks, `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
+  the host imports no `std.zig` parser. It is a Zig package of its own,
+  with its own build and tests ([tools/zig_ast/README.md](tools/zig_ast/README.md));
+  `shale tools/zig_ast/install.shale` installs it where the host looks,
+  `~/tools/zig-ast/bin/zig-ast` under the `tools` mount.
 - **On a live site, until 2026-11-18:** Zig Shale ran signed scripts inside
   [angry-gopher](https://github.com/showell/angry-gopher) (lynrummy.com),
   on Linux and on
@@ -283,99 +278,23 @@ and comments too: read the summary, then `git diff`. `glob("**/*.ts")`
 enters `node_modules`; `walk_all` with `skip` does not. The `zig/` and
 `roc/` cookbooks are for those languages only.
 
-## The modules
-
-| module | root | what |
-|---|---|---|
-| `shale` | `src/shale.zig` | portable: what an application's code imports |
-| `shale_linux` | `src/shale_linux.zig` | the Linux host (`run`, jobs, mounts, the Zig tools' calls to zig-ast), for a Linux `main` only |
-
-Both take webbox's `webbox` and `host_io` modules: this repo depends on
-zig-webbox by path (`../zig-webbox`), and an application takes `shale` from
-`b.dependency("shale", ...)` beside its `webbox`. zig-metal-unikernel
-compiles the portable half with its own `host_io`, as it does webbox.
-
-**In a browser:** `zig build web` builds the portable half to WebAssembly
-over an in-memory tree (`src/wasm_io.zig`, the `host_io` of
-`src/host_io_wasm.zig`; the exports in `src/shale_wasm.zig`) and installs
-`zig-out/web/`: `index.html`, a playground (a file tree, an editor and the
-run's output, over a sample Python project and scripts to run on it,
-`web/sample.js`), and `tutorial.html`, fifteen lessons that build a small
-blog a script at a time (`web/lessons.js`).
-Serve that folder over HTTP (a page cannot load wasm from `file:`). There is
-no `host` there, so `run`, git and jobs are not in it.
-
-    script.run(io, backing_allocator, root, source, budgets, now, out) -> Result
-
-**The reference is [docs/SHALE.md](docs/SHALE.md):**
-- the language and its grammar;
-- every builtin, with its cost and its errors;
-- the budgets and what each charges;
-- the store and its confinement;
-- the runner (`zig build script`) and the signed route on the live site;
-- a first script, step by step;
-- the site examples, operator scripts each tested against a store shaped
-  like angry-gopher's data;
-- what was decided and refused.
-
 ## Checks
 
-    zig build test          # every unit test, none skipped; the hunt compiled: about 60 s
-    zig build consumers     # the applications' own checks against this tree: minutes
-    zig build fuzz          # the expensive fuzzes and sweeps, for a bug hunt
-    zig build doc-check     # every repo's docs: each cited path and name is there
-    zig build script-coverage   # the lines no unit test runs, per key module: about 2 min
+    shale c/build.shale           # the fast tier: every C test, the discipline, the surface, the gate: seconds
+    shale c/build.shale full=1    # adds the GCC release build, ASan, the planted faults and the cookbook's self-tests
+    shale tests/golden.shale      # a build held to every golden case, from the outside
 
-**`test`** runs the two modules' tests and the gate's, and
-`web-test`: the browser build under Node (`web/smoke_test.mjs`), its
-sample's scripts and every lesson's cell, each held to the output it pins;
-and `cookbook-test`: every cookbook recipe that reads `arg("self_test")`,
-run with `self_test=1` on its plants, a failure named by recipe. The Roc
-name hunt needs roc-ast at `~/tools/roc-ast/bin/roc-ast`, the method
-rewrite roc-types at `~/tools/roc-types/bin/roc-types`, and the Go hunts
-go-ast at `~/tools/go-ast/bin/go-ast`; each fails, saying how to install
-it, without it. CI unpacks the Roc release assets there and builds go-ast
-with its Go. The Zig tools and the Zig recipes use the zig-ast this
-build makes (`SHALE_ZIG_AST`), never the installed one, so they need no
-install; zig-ast's own tests (`tools/zig_ast/zig_ast_test.zig`) are a test
-binary of their own. The
-Zig tools' tests read zig-webbox's checkout too: they replay splits from its
-history and walk its sources beside this repo's. **`consumers`** runs this
-repo's own docs check, metal-vmm's queue tool by this tree's `shale`, then
-zig-metal-unikernel's `zig build gopher` and
-angry-gopher's `ops/check_zig`, one at a time; it needs those checkouts
-beside this one, and fails naming one that is missing. Run it before a change
-here goes to master. **`fuzz`** runs the hunt: the tests named `expensive fuzz: ...` or
-`expensive sweep: ...`, in build.zig's `hunt_files` alone, reached from
-`src/script/hunt.zig` and run by `tools/hunt_runner.zig`, which fails on any
-test that does not pass (a skip among them) and prints how many ran. `test`
-compiles the hunt but never runs it, and skips nothing:
-`src/script/hunt_guard_test.zig` fails on a skip anywhere in `src/` or
-`tools/`, or a hunt outside the list. A fuzz hunts bugs once, and each bug
-it finds becomes a test of its own. **`script-coverage`** runs the coverage SDK's `linecov` (a lazy dependency on
-`../zig-coverage-sdk`, which nothing else needs) over the two unit binaries,
-built Debug, for every file of build.zig's `coverage_files`; `shale
-tools/coverage.shale` reads it back as a table of each module's lines, ran,
-uncovered and exempt (`// coverage: not run, <why>` on the line), and fails
-when an uncovered count differs from `coverage/lines.txt`, the floor a
-change moves in the same commit (`floor=write`). GitHub runs it on every
-push to master and every pull request (`.github/workflows/coverage.yml`,
-on ubuntu-24.04, the box's, since the floor is measured here). **`doc-check`** runs
-`tools/doc_check.shale` from the folder that holds the repos, its fixtures
-first: in every repo's tracked docs but the history, each backticked or
-linked path must resolve, and each `` `file`'s `name` `` must be in that
-file. Each repo's gate runs it for its own docs (`-- only=<repo>`).
+[c/docs/building.md](c/docs/building.md) says what each tier runs and
+costs. The golden tests are the one judge of behaviour
+([tests/harness/README.md](tests/harness/README.md)). `shale
+bench/baseline.shale` is the whole program's baseline, the runtime on an
+agent's workloads and the build's time, one TSV a run
+([bench/README.md](bench/README.md)).
 
-`-Dtest-filter=TEXT` runs only the tests whose names contain it;
-`-Dtest-timing` prints each test's time, slowest first; `-Dscript-fuzz=N`
-sets how many sources the script fuzzer runs. Two more steps measure and
-are run by hand, by no tier: `zig build script-bench` (Shale's hot paths)
-and `zig build shale-scale` (the largest site each site example fits).
-`shale bench/baseline.shale` is the whole program's baseline, the runtime
-on an agent's workloads and the build's time, one TSV a run
-([bench/README.md](bench/README.md)). `shale tests/golden.shale
-bin=<path>` holds a build of Shale to every golden case, from the outside
-([tests/harness/README.md](tests/harness/README.md)).
+**Zig Shale**, the first implementation, is kept in
+[legacy_zig/](legacy_zig/README.md), deprecated and frozen: its modules,
+its `zig build` steps (the unit tests, the hunt, the coverage floor, the
+browser build) and their tools are there, and get no fixes.
 
 ## Docs
 
@@ -396,6 +315,10 @@ bin=<path>` holds a build of Shale to every golden case, from the outside
   the arena's fidelity, the VM and the host's seams.
 - [c/docs/building.md](c/docs/building.md): how the C is compiled, with TCC,
   GCC and its sanitizers, during the port and after it.
+- [tools/zig_ast/README.md](tools/zig_ast/README.md): zig-ast, the program
+  behind the Zig builtins, and the wire C Shale speaks to it.
+- [legacy_zig/README.md](legacy_zig/README.md): Zig Shale, the first
+  implementation, deprecated and frozen.
 - [cookbook/zig/README.md](cookbook/zig/README.md): recipes for finding a
   Zig file's seams, moving code along them and judging the move, each
   tested to parse. Recipes, not builtins: copy one and change it.
@@ -412,9 +335,9 @@ bin=<path>` holds a build of Shale to every golden case, from the outside
 
 | | |
 |---|---|
-| Source | its history before this repo is zig-webbox's (`git -C ../zig-webbox log -- src/script`) |
+| Source | C, in `c/`; Zig Shale, frozen, in `legacy_zig/`, its history before this repo zig-webbox's (`git -C ../zig-webbox log -- src/script`) |
 | Runs | C Shale on the box, as every agent's shell (since 2026-11-17); Zig Shale, the first implementation, matched byte for byte by the C, ran in angry-gopher until 2026-11-18 |
-| Tests | the golden tests (`shale tests/golden.shale`, 1,128 cases), the one judge of behaviour; C's own (`shale c/build.shale`) and the Zig modules' unit tests; the request-edge harness for its number parses runs in angry-gopher |
+| Tests | the golden tests (`shale tests/golden.shale`, 1,128 cases), the one judge of behaviour; C's own (`shale c/build.shale`); the Zig's unit tests, frozen with it in `legacy_zig/`; the request-edge harness for its number parses runs in angry-gopher |
 
 ## Lineage
 
