@@ -1,0 +1,269 @@
+-- c/build/arena_faults.shale: the proof that an allocation refused anywhere
+-- is a clean stop. Run by hand, `shale c/build/arena_faults.shale`, never by
+-- a tier (Steve, 2026-11-18: arena fault injection, restrained). It builds the
+-- C `shale` under ASan with `-DSHALE_ARENA_FAULTS` (arena.h's fault hook, in
+-- no other build) to c/out/arena_faults/shale, then runs each of SCRIPTS,
+-- golden inputs that cover the VM, strings, maps, files, `run`, JSON and the
+-- regular expressions, many times: first with no fault, to count its
+-- allocations, then once for each allocation N it tries, with the Nth
+-- refused (SHALE_ARENA_FAULT=N).
+--
+-- **Which N.** The hook says how many allocations a run asked for, K, and how
+-- many came before the script's own run began, M: the CLI's setup, the
+-- preludes' parse and compile and the run's arenas, about 6,400, nearly all
+-- the same for every script. N runs over all of the script's run, M+1 to K,
+-- and over the setup with a stride of the number of scripts, each script
+-- starting at its place in SCRIPTS: so the eight together try every N of
+-- the setup once, each script an eighth of it. A script's run past RUN_MAX
+-- allocations is strided too, the line saying so.
+--
+-- **A clean end** is one of:
+--   - a stop on the arena budget or the machine budget, `── stopped at
+--     ...: budget arena:` or `budget machine:`, exit 1: the run's, or its
+--     parse's or compile's;
+--   - a refusal before the run (or of its report after it), exit 2, whose
+--     line names the memory it ran out of: `... past the arena ...`, `...
+--     past the system's memory ...`, `OutOfMemory` or `shale: out of
+--     memory`;
+-- with no sanitizer's report (but a leak's: a process ending on a refusal
+-- returns early, past its arenas' deinit, and the kernel takes the memory
+-- back, so the leak check is off), no signal, no timeout, and the hook's
+-- count as the last line, so the process got to its end. A run that finishes (exit 0)
+-- with an allocation refused is unclean: the refusal was swallowed. A script
+-- in UNDO runs under `--undo-on-stop`, and its folder after a stop (exit 1)
+-- must hold the script alone: a file left is a write the undo missed.
+--
+-- An unclean end is run again with SHALE_ARENA_FAULT_TRACE=1, which prints
+-- the refused allocation's calls, and is named by its site, the first
+-- function outside c/foundation. A swallowed refusal at a site in
+-- KNOWN_SWALLOWS is counted and said, not failed: those are findings
+-- queued for their homes. An N past a run's last allocation (a script that
+-- runs a program asks a few more or fewer each time) is counted apart.
+--
+-- It prints one line a script: the allocations tried and clean, and each
+-- unclean reason once, with its count, first N, site and last lines; then
+-- fails if any was unclean. About 4 minutes on this box (2 cores).
+--
+-- budget: programs=100000 steps=2000000000 reads=2000000 read_bytes=4000000000 changes=200000 change_bytes=400000000 output_bytes=1000000
+
+use("./lib.shale")
+
+-- {name, golden case folder, script file}: what each covers is its name.
+const SCRIPTS = {
+  {name = "vm", case = "lessons-1-10", file = "cell-09.shale"},
+  {name = "strings", case = "lessons-1-10", file = "cell-10.shale"},
+  {name = "maps", case = "lessons-1-10", file = "cell-17.shale"},
+  {name = "files", case = "cli-quiet_edit", file = "quiet_edit.shale"},
+  {name = "run", case = "cli-run_nice", file = "run_nice.shale"},
+  {name = "json", case = "prelude-tests-shale_prelude_linux_test-906", file = "script.shale"},
+  {name = "regex", case = "zig-tests-script-builtins_test-1070", file = "script.shale"},
+  {name = "replace", case = "zig-tests-script-builtins_test-973", file = "script.shale"},
+}
+-- The scripts that write files, run under `--undo-on-stop`.
+const UNDO = {"files"}
+-- The sites known to swallow a refusal, each the first function outside
+-- c/foundation on the refused allocation's stack, with why it is not fixed
+-- here: a run that finishes with one of them refused is counted, not
+-- failed. Each is a finding to fix at its home, and leaves the list then.
+const KNOWN_SWALLOWS = {
+  {site = "run_num", why = "a number for a message, made before the message is known to be needed; \"\" on a refusal, and the run goes on"},
+  {site = "run_unum", why = "run_num's twin, for an unsigned number"},
+  {site = "host_keep_ends", why = "the time line's slowest argv, left out of the top on a refusal (host_time_ran says so)"},
+  {site = "host_run_record", why = "a program's record for `--verbose`, dropped on a refusal, as every host_record caller drops it"},
+  {site = "host_record", why = "host_run_record's, a record dropped on a refusal"},
+  {site = "HostRecords_reserve", why = "host_run_record's, a record dropped on a refusal"},
+  {site = "msg_format", why = "a stop's message falls back to its plain format when refused (c/docs/style.md, \"Errors\"), and `attempt` caught the stop"},
+}
+-- The most N of a script's own run tried one by one; past it, a stride.
+const RUN_MAX = 1500
+const DIR = "c/out/arena_faults"
+const FAULT_WANT = "arena-faults: the C shale built with the fault hook, under c/out"
+
+-- The fault build's argv: the command's own (lib.shale's `command_argv`)
+-- under asan, with the hook's define.
+function fault_argv(bin)
+  return compile_argv("asan", "c/shale.c", FOUNDATION, bin, {"-DSHALE_ARENA_FAULTS", "-I" .. OUT .. "/gen", "-Ic"})
+end
+
+-- The hook's last line, {made, run_from, refused}, or nil when the run never
+-- got to say it.
+function hook_line(out)
+  local m = nil
+  for l in lines(out) do
+    local r = re_find(l, "^arena faults: (\\d+) allocations, the run from (\\d+), refused (\\w+)$")
+    if r ~= nil then m = {made = parse_int(r.groups[1]), run_from = parse_int(r.groups[2]), refused = r.groups[3]} end
+  end
+  return m
+end
+
+-- One run of the script in `work` with allocation `n` refused (0 for none).
+function run_one(bin, work, file, undo, env, n)
+  env.SHALE_ARENA_FAULT = tostring(n)
+  local argv = {bin}
+  if undo then push(argv, "--undo-on-stop") end
+  push(argv, file)
+  return run(argv, {cwd = work, env = env, timeout_ms = 30000, tail = 40, want = FAULT_WANT})
+end
+
+-- Why the run `r` with allocation `n` refused is not a clean end, or nil
+-- when it is (the header's list). `work` must hold `file` alone after.
+function unclean(r, n, work, file)
+  if r.ended ~= "exit" then return "ended " .. r.ended end
+  if contains(r.out, "Sanitizer") or contains(r.out, "runtime error:") then return "a sanitizer's report" end
+  local h = hook_line(r.out)
+  if h == nil then return "no count from the hook: the process did not reach its end" end
+  if h.refused == "none" and n > h.made then return "past" end
+  if h.refused ~= tostring(n) then return "the hook refused " .. h.refused .. ", not " .. n end
+  if r.code == 0 then return "finished with an allocation refused: the refusal was swallowed" end
+  if r.code == 1 then
+    local left = {}
+    for e in walk_all(work, {}) do
+      if e.path ~= work .. "/" .. file then push(left, e.path) end
+    end
+    if #left > 0 then return "stopped, and left in its folder: " .. join(left, ", ") end
+    for l in lines(r.out) do
+      if re_find(l, "^── stopped at .*: budget (arena|machine): ") ~= nil then return nil end
+    end
+    return "exit 1 with no arena or machine budget stop"
+  end
+  if r.code == 2 then
+    for l in lines(r.out) do
+      if contains(l, "past the arena") or contains(l, "past the system's memory") or contains(l, "OutOfMemory") or l == "shale: out of memory" then return nil end
+    end
+    return "exit 2 naming no memory"
+  end
+  return "exit " .. r.code
+end
+
+-- The N to try for a script at `place` in SCRIPTS, given its run's M and K.
+function tries(place, m, k)
+  local ns = {}
+  local stride = #SCRIPTS
+  local n = place
+  while n <= m do
+    push(ns, n)
+    n = n + stride
+  end
+  local run_stride = (k - m + RUN_MAX - 1) // RUN_MAX
+  if run_stride < 1 then run_stride = 1 end
+  n = m + 1
+  while n <= k do
+    push(ns, n)
+    n = n + run_stride
+  end
+  return {ns = ns, stride = stride, run_stride = run_stride}
+end
+
+-- A folder emptied of all but `file`, after an unclean run left more.
+function clear_but(work, file)
+  for e in walk_all(work, {}) do
+    if e.path ~= work .. "/" .. file and exists(e.path) then
+      if is_dir(e.path) then remove_tree(e.path) else remove(e.path) end
+    end
+  end
+  return nil
+end
+
+-- Where allocation `n` is refused: the run again with its calls printed
+-- (SHALE_ARENA_FAULT_TRACE), the first function outside c/foundation.
+function site_of(bin, work, file, undo, env, n)
+  env.SHALE_ARENA_FAULT_TRACE = "1"
+  local r = run_one(bin, work, file, undo, env, n)
+  env.SHALE_ARENA_FAULT_TRACE = "0"
+  clear_but(work, file)
+  for l in lines(r.out) do
+    local m = re_find(l, "#\\d+ 0x[0-9a-f]+ in (\\w+) (c/\\S+)")
+    if m ~= nil and not contains(m.groups[2], "foundation/") then return m.groups[1] end
+  end
+  return "(no site in its calls)"
+end
+
+-- The script `s` at `place` in SCRIPTS proved under the binary `bin`: its
+-- line printed, and whether every N it tried ended clean. Each unclean
+-- reason is said once, with how many N gave it and the first N's last lines.
+function prove(bin, env, s, place)
+  local work = DIR .. "/work/" .. s.name
+  if exists(work) then remove_tree(work) end
+  mkdir(work)
+  create(work .. "/" .. s.file, read("tests/golden/" .. s.case .. "/" .. s.file))
+  local undo = has_item(UNDO, s.name)
+  local base = run_one(bin, work, s.file, undo, env, 0)
+  local h = hook_line(base.out)
+  if base.ended ~= "exit" or base.code ~= 0 or h == nil then
+    fail("arena faults: " .. s.name .. " (" .. s.case .. "/" .. s.file .. ") fails with no fault:\n" .. base.out)
+  end
+  clear_but(work, s.file)
+  local plan = tries(place, h.run_from, h.made)
+  local whys = {}
+  local order = {}
+  local clean = 0
+  local past = 0
+  local known = {}
+  local known_sites = {}
+  for k in KNOWN_SWALLOWS do push(known_sites, k.site) end
+  for n in plan.ns do
+    local r = run_one(bin, work, s.file, undo, env, n)
+    local why = unclean(r, n, work, s.file)
+    if why == nil then
+      clean = clean + 1
+    elseif why == "past" then
+      past = past + 1
+    else
+      clear_but(work, s.file)
+      local site = site_of(bin, work, s.file, undo, env, n)
+      if r.code == 0 and has_item(known_sites, site) then
+        incr(known, site)
+        why = nil
+      else
+        why = why .. " (refused in " .. site .. ")"
+      end
+    end
+    if why ~= nil and why ~= "past" then
+      if not has_key(whys, why) then
+        push(order, why)
+        whys[why] = {count = 0, n = n, out = r.out}
+      end
+      whys[why].count = whys[why].count + 1
+    end
+    yield()
+  end
+  local said = s.name .. ": " .. h.made .. " allocations (" .. h.run_from .. " before the run); tried " .. #plan.ns .. " (the setup every " .. plan.stride .. ", the run every " .. plan.run_stride .. "), " .. clean .. " clean"
+  if past > 0 then said = said .. ", " .. past .. " past this run's last" end
+  local ks = {}
+  for k in sort(keys(known)) do push(ks, k .. " x" .. known[k]) end
+  if #ks > 0 then said = said .. "; known swallows: " .. join(ks, ", ") end
+  print(said)
+  for why in order do
+    local w = whys[why]
+    print("  UNCLEAN x" .. w.count .. ", first N=" .. w.n .. ": " .. why)
+    for l in last(lines(w.out), 6) do print("    " .. l) end
+  end
+  return #order == 0
+end
+
+-- `only=<name>` runs that script of SCRIPTS alone, at its own place.
+local only = arg("only", "")
+local t0 = clock_ms()
+must(run({"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5}))
+mkdir(DIR)
+local bin_path = DIR .. "/shale"
+local c = run(fault_argv(bin_path), {timeout_ms = COMPILE_TIMEOUT_MS, tail = 40, nice = 19})
+compile_held("asan", "c/shale.c", c)
+local bin = real(bin_path)
+mkdir(DIR .. "/home")
+if exists(DIR .. "/mounts") then remove(DIR .. "/mounts") end
+create(DIR .. "/mounts", "")
+local env = {SHALE_MOUNTS = real(DIR .. "/mounts"), SHALE_PRELUDE = "", SHALE_NOW = "1767225600", HOME = real(DIR .. "/home"), TZ = "UTC", LC_ALL = "C", ZIG_PROGRESS = "", ASAN_OPTIONS = "detect_leaks=0"}
+local bad = 0
+local place = 0
+local ran = 0
+for s in SCRIPTS do
+  place = place + 1
+  if only == "" or only == s.name then
+    ran = ran + 1
+    if not prove(bin, env, s, place) then bad = bad + 1 end
+  end
+end
+if ran == 0 then fail("arena faults: only=" .. only .. " names none of SCRIPTS") end
+print("── arena faults: " .. ran .. " scripts in " .. ((clock_ms() - t0) // 1000) .. " s")
+if bad > 0 then fail("arena faults: " .. bad .. " of " .. ran .. " scripts ended unclean under a refused allocation") end

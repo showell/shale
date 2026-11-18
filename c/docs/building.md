@@ -130,6 +130,30 @@ part's own tests. A new test file that includes ran.c is a part too: end it
 with `TEST_PART`, include it from ran_tests.c and add it to
 `TEST_PARTS_MAIN`.
 
+**Arena fault injection, on demand only** (Steve, 2026-11-18: "show some
+restraint here"). `shale c/build/arena_faults.shale` proves that an
+allocation refused anywhere ends in a clean stop: the arena budget's or the
+machine budget's, exit 1, or a refusal naming the memory, exit 2, with no
+sanitizer's report, no crash, no refusal swallowed into a finished run, and
+nothing left behind by a stop under `--undo-on-stop`. It is in neither tier.
+It builds `c/shale.c` under ASan with `-DSHALE_ARENA_FAULTS` to
+`c/out/arena_faults/shale`; the define turns on arena.h's hook, which counts
+every `arena_alloc` of the process and refuses the one SHALE_ARENA_FAULT
+names, and no other build has it, so a normal build pays nothing. Then it
+runs eight golden inputs (the VM, strings, maps, files, `run`, JSON and two
+of the regular expressions): every allocation of each script's own run is
+refused in turn, and the setup every script shares (about 6,400
+allocations, mostly the preludes' parse) is split eight ways, so each of
+its allocations is refused once among them. Run it after a change to how a
+refusal travels (arena.h, err.h's `run_oom`, a new allocation site's error
+path). It takes about 4 minutes on this box (about 6,900 runs of the
+binary), and says one line a script. An unclean end is run again with
+SHALE_ARENA_FAULT_TRACE=1 and named by the function that asked for the
+refused allocation; the sites known to swallow a refusal (a number made for
+a message that may never be needed, a `--verbose` record dropped) are its
+`KNOWN_SWALLOWS`, counted rather than failed, each a finding queued for its
+home.
+
 When the full tier passes 150 seconds of wall time on an idle box, stop
 and propose ways to cut it, ranked by what they'd save, before adding more
 to it. (The line was 90 s until 2026-11-17, when the idle tier measured

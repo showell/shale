@@ -19,6 +19,8 @@
 //     and the refusal the arena was made with (`arena_init`'s `refused`, its
 //     run's `RunCtx.refused`). The caller makes that the budget stop
 //     (`run_oom`, err.h), "the arena budget ran out".
+//   - A build with `SHALE_ARENA_FAULTS` refuses one chosen allocation, to
+//     prove every site's refusal is a clean stop (c/build/arena_faults.shale).
 
 #ifndef SHALE_ARENA_H
 #define SHALE_ARENA_H
@@ -206,11 +208,84 @@ static inline bool arena_size_mul(Arena *a, size_t x, size_t y, size_t *out) {
     return true;
 }
 
+static inline void *arena_refuse(Arena *a) {
+    arena_set_hit(a);
+    return NULL;
+}
+
+#ifdef SHALE_ARENA_FAULTS
+// The arena fault hook, built only by c/build/arena_faults.shale (`-D
+// SHALE_ARENA_FAULTS`, in no other build): it makes one allocation of the
+// process refuse, the Nth that arena_alloc is asked for, every arena's
+// counted together, so the driver can prove each site's refusal is a clean
+// stop. N is the environment's SHALE_ARENA_FAULT, read at the first
+// allocation and then unset, so no program the run starts inherits it; none,
+// or 0, refuses nothing and only counts. arena_faults_said writes the count.
+typedef struct {
+    bool read;
+    // Whether the refusal prints its calls (SHALE_ARENA_FAULT_TRACE).
+    bool trace;
+    // The allocation to refuse, from 1; 0 for none.
+    uint64_t at;
+    // The allocations asked for so far.
+    uint64_t made;
+    // Whether the `at`th came, and was refused.
+    bool refused;
+    // `made` when the script's own run began (arena_faults_mark), so the
+    // driver can tell the setup every script shares from the script's run.
+    uint64_t run_from;
+} ArenaFaults;
+
+static ArenaFaults arena_faults;
+
+// Whether this allocation, the next one counted, is the one to refuse. With
+// SHALE_ARENA_FAULT_TRACE=1 too, the refusal prints its calls on stderr, so
+// the driver can say which site an unclean end came from.
+static inline bool arena_fault_now(void) {
+    if (!arena_faults.read) {
+        arena_faults.read = true;
+        const char *at = getenv("SHALE_ARENA_FAULT"); // cstr: the environment's
+        if (at != NULL) arena_faults.at = strtoull(at, NULL, 10);
+        const char *trace = getenv("SHALE_ARENA_FAULT_TRACE"); // cstr: the environment's
+        arena_faults.trace = trace != NULL && strtoull(trace, NULL, 10) != 0;
+        (void)unsetenv("SHALE_ARENA_FAULT"); // ignored: it fails only for a bad name
+        (void)unsetenv("SHALE_ARENA_FAULT_TRACE"); // ignored: it fails only for a bad name
+    }
+    arena_faults.made++;
+    if (arena_faults.made != arena_faults.at) return false;
+    arena_faults.refused = true;
+    // ASan's own, since the fault build is always an ASan build.
+    void __sanitizer_print_stack_trace(void);
+    if (arena_faults.trace) __sanitizer_print_stack_trace();
+    return true;
+}
+
+// Marks where the script's own run begins.
+static inline void arena_faults_mark(void) {
+    arena_faults.run_from = arena_faults.made;
+}
+
+// The count, `arena faults: <made> allocations, the run from <run_from>,
+// refused <at>` (`none` when none was), as the last line on stderr.
+static inline void arena_faults_said(void) {
+    fprintf(stderr, "arena faults: %llu allocations, the run from %llu, refused ", (unsigned long long)arena_faults.made, (unsigned long long)arena_faults.run_from);
+    if (!arena_faults.refused) {
+        fprintf(stderr, "none\n");
+    } else {
+        fprintf(stderr, "%llu\n", (unsigned long long)arena_faults.at);
+    }
+    fflush(stderr);
+}
+#endif
+
 // `len` bytes aligned to `align` (a power of two), or NULL with `hit` set
 // when the budget or the system refuses.
 static inline void *arena_alloc(Arena *a, size_t len, size_t align) {
     if (align == 0 || (align & (align - 1)) != 0) arena_misuse("an alignment that is not a power of two");
     if (len == 0) return arena_empty(align);
+#ifdef SHALE_ARENA_FAULTS
+    if (arena_fault_now()) return arena_refuse(a);
+#endif
     // A chunk's header and its alignment's room are added through
     // arena_size_add, so a huge `len` is refused before the sum wraps.
     size_t need = 0;
@@ -326,11 +401,6 @@ static inline void arena_deinit(Arena *a) {
     size_t limit = a->limit;
     bool *refused = a->refused;
     arena_init(a, limit, refused);
-}
-
-static inline void *arena_refuse(Arena *a) {
-    arena_set_hit(a);
-    return NULL;
 }
 
 // One `T`, or NULL when refused.

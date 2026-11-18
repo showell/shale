@@ -192,10 +192,11 @@ static int flush_and_exit(Out *o, int code) {
     return code;
 }
 
-// A command line refused: `shale: <why>`, then the usage.
+// A command line refused: `shale: <why>`, then the usage. An empty `why`
+// is the arena's refusal (cli_refuse_parts leaves it empty): out of memory.
 static int refuse_command(Out *o, Str why, bool usage) {
     say(o, S("shale: "));
-    say(o, why);
+    say(o, why.len > 0 ? why : S("out of memory"));
     say(o, S("\n"));
     if (usage) say(o, cli_usage());
     return flush_and_exit(o, EXIT_REFUSED);
@@ -746,7 +747,8 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     ssize_t exe_len = readlink("/proc/self/exe", exe, sizeof exe);
     if (exe_len > 0 && (size_t)exe_len < sizeof exe) {
         Str reaper = S("");
-        if (arena_dup(&host_arena, (Str){exe, (size_t)exe_len}, &reaper)) lh.reaper = reaper;
+        if (!arena_dup(&host_arena, (Str){exe, (size_t)exe_len}, &reaper)) return not_ported(o, S("the reaper's path past the arena"));
+        lh.reaper = reaper;
     }
     PathHook hook;
     paths_hook(&lh.paths, &hook);
@@ -761,6 +763,9 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     r.files = &rs;
     RunHost host = {&lh, host_call};
     r.host = host;
+#ifdef SHALE_ARENA_FAULTS
+    arena_faults_mark();
+#endif
     Status ran = run_ended(&r.ctx, vm_main(&r, &code));
     // The run's zig-ast, if a Zig call started one, ends with the run, before
     // any report line, so no early return below can skip it.
@@ -1093,5 +1098,8 @@ int main(int argc, char **argv) {
     Out o = {&a, buf_make(&a), &refused};
     int code = run_main(&o, argc, argv);
     arena_deinit(&a);
+#ifdef SHALE_ARENA_FAULTS
+    arena_faults_said();
+#endif
     return code;
 }
