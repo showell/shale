@@ -34,6 +34,7 @@
 #include "host/spawn_argv.c"
 #include "host/spawn.c"
 #include "host/keep.c"
+#include "host/swap_file.c"
 #include "host/job_record.c"
 #include "host/jobs.c"
 #include "host/host_run.c"

@@ -9,7 +9,7 @@
 // capped at what is left of the run's arena budget, so a tail of 3 over a
 // 10 GB log holds three lines; only the answer goes to the values' arena.
 //
-// Include spawn.c, keep.c, paths.c and builtins_store.c first.
+// Include spawn.c, keep.c, paths.c, swap_file.c and builtins_store.c first.
 
 #include <sys/stat.h>
 
@@ -704,62 +704,38 @@ static Str host_errno_tag(int e) {
 }
 
 // The file a program's stdout goes to while it runs: a temporary file beside
-// the secret, mode 0600, renamed over it by `host_secret_store`, or removed.
+// the secret, mode 0600, renamed over it by `host_secret_store`, or removed
+// (swap_file.c).
 typedef struct {
     // The script's path, `keys:NAME`, for messages.
     Str shown;
-    const char *path; // cstr: NUL-ended for the kernel
-    const char *tmp; // cstr: NUL-ended for the kernel
-    int fd;
-    // Whether `tmp` is there to remove.
-    bool made;
+    SwapFile file;
 } HostSecretFile;
 
 static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const Value *v, bool replace, HostSecretFile *out) {
     memset(out, 0, sizeof *out);
-    out->fd = -1;
+    out->file.fd = -1;
     if (v->tag != VALUE_STRING) {
         return host_fail(r, pos, CLASS_TYPE, S("`run`'s `stdout_secret` is a path in a `secrets` mount, `\"keys:NAME\"`, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(v))));
     }
     Str shown = v->as.string;
     Str path = S("");
     TRY(paths_secret_target(&h->paths, &builtin_store_of(r)->path, pos, shown, &path));
-    StoreCPath cp;
-    const char *c = NULL;
-    StoreErr ce = store_cstr(&cp, path, &c);
+    StoreErr ce = swap_file_target(&out->file, path);
     if (ce != STORE_OK) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(ce))));
-    struct stat st;
     // DRAGON: the secrets rule. The path is a secrets mount's file, which
     // no message may name.
     // REMEDY: every stop below names the script's `shown`, `keys:NAME`,
     // never `path`.
-    if (lstat(c, &st) == 0) {
-        if (!S_ISREG(st.st_mode)) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(shown)));
-        if (!replace) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` {s} is there already: `secret_replace = true` to replace it"), MSG_ARGS(MSG_FROM_SCRIPT(shown)));
-    } else if (errno != ENOENT) {
-        return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(store_err_of(errno)))));
-    }
-    Str dir = path;
-    while (dir.len > 0 && str_byte(dir, dir.len - 1) != '/') dir.len--;
-    Str base = str_sub(path, dir.len, path.len);
-    if (dir.len > 1) dir.len--;
-    if (dir.len == 0) dir = S("/");
-    Buf t = buf_make(r->ctx.values);
-    if (buf_str(&t, dir) != OK || buf_lit(&t, "/.") != OK || buf_str(&t, base) != OK || buf_byte(&t, '.') != OK || buf_u64(&t, (uint64_t)getpid()) != OK || buf_lit(&t, ".shale-tmp") != OK) return run_values_oom(r, pos);
-    StoreCPath tmp_cp;
-    const char *tmp = NULL;
-    StoreErr tmp_e = store_cstr(&tmp_cp, buf_view(&t), &tmp);
-    int fd = tmp_e == STORE_OK ? open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600) : -1;
-    if (fd < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(host_errno_tag(tmp_e == STORE_OK ? errno : store_cstr_errno(tmp_e)))));
-    // 0600 whatever the umask. Its answer is not read: the open's own mode
-    // already holds the file to 0600 or less.
-    int chmodded = fchmod(fd, 0600);
-    (void)chmodded;
+    int err = 0;
+    SwapThere there = swap_file_there(&out->file, &err);
+    if (there == SWAP_NOT_FILE) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(shown)));
+    if (there == SWAP_FILE && !replace) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` {s} is there already: `secret_replace = true` to replace it"), MSG_ARGS(MSG_FROM_SCRIPT(shown)));
+    if (there == SWAP_UNSEEN) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(store_err_of(err)))));
+    int made = swap_file_open(&out->file, r->ctx.values);
+    if (made == SWAP_NO_ROOM) return run_values_oom(r, pos);
+    if (made != 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(host_errno_tag(made))));
     out->shown = shown;
-    out->path = c;
-    out->tmp = tmp;
-    out->fd = fd;
-    out->made = true;
     return OK;
 }
 
@@ -767,7 +743,7 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
 // ended: one held to the cap by RLIMIT_FSIZE ends by SIGXFSZ (or its write
 // fails) with one byte past it written.
 static STATUS_MUST_USE Status host_secret_refuse_over(Run *r, Pos pos, HostSecretFile *s, Str program) {
-    off_t end = lseek(s->fd, 0, SEEK_END);
+    off_t end = lseek(s->file.fd, 0, SEEK_END);
     if (end < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown), MSG_FROM_SCRIPT(program), MSG_FROM_HOST(host_errno_tag(errno))));
     uint64_t size = (uint64_t)end;
     if (size > HOST_SECRET_MAX) {
@@ -779,29 +755,23 @@ static STATUS_MUST_USE Status host_secret_refuse_over(Run *r, Pos pos, HostSecre
 // Renames what the program printed over the secret, giving its bytes. Past
 // the cap was refused before (`host_secret_refuse_over`).
 static STATUS_MUST_USE Status host_secret_store(Run *r, Pos pos, HostSecretFile *s, Str program, bool replace, uint64_t *bytes) {
-    off_t end = lseek(s->fd, 0, SEEK_END);
+    off_t end = lseek(s->file.fd, 0, SEEK_END);
     if (end < 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: what `{s}` printed cannot be measured: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown), MSG_FROM_SCRIPT(program), MSG_FROM_HOST(host_errno_tag(errno))));
     uint64_t size = (uint64_t)end;
     if (size == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: `{s}` exited 0 and printed nothing: nothing is stored in {s}"), MSG_ARGS(MSG_FROM_SCRIPT(program), MSG_FROM_SCRIPT(s->shown)));
-    if (fsync(s->fd) != 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be synced: nothing is stored"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown)));
-    close(s->fd);
-    s->fd = -1;
-    long rc = syscall(SYS_renameat2, AT_FDCWD, s->tmp, AT_FDCWD, s->path, replace ? 0u : 1u);
-    if (rc != 0) {
-        int e = errno;
-        if (e == EEXIST) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` {s} was made while `{s}` ran: nothing is stored; `secret_replace = true` to replace it"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown), MSG_FROM_SCRIPT(program)));
+    int e = 0;
+    SwapEnd end_of = swap_file_commit(&s->file, replace, &e);
+    if (end_of == SWAP_UNSYNCED) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be synced: nothing is stored"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown)));
+    if (end_of != SWAP_DONE) {
+        if (end_of == SWAP_TAKEN) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` {s} was made while `{s}` ran: nothing is stored; `secret_replace = true` to replace it"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown), MSG_FROM_SCRIPT(program)));
         return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(s->shown), MSG_FROM_HOST(host_errno_tag(e))));
     }
-    s->made = false;
     *bytes = size;
     return OK;
 }
 
 static void host_secret_discard(HostSecretFile *s) {
-    if (s->fd >= 0) close(s->fd);
-    s->fd = -1;
-    if (s->made) unlink(s->tmp);
-    s->made = false;
+    swap_file_discard(&s->file);
 }
 
 // ── `run` ──
@@ -1226,7 +1196,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     spec.cwd = cwd;
     spec.env = env;
     spec.stdin_bytes = has_stdin ? &stdin_bytes : NULL;
-    spec.stdout_fd = held->has_secret ? held->secret.fd : -1;
+    spec.stdout_fd = held->has_secret ? held->secret.file.fd : -1;
     // DRAGON: the budgets. The secret's file is the program's stdout, which
     // no pipe bounds: it could fill the disk before the cap is checked at
     // exit.
@@ -1347,7 +1317,7 @@ static STATUS_MUST_USE Status host_run_program(Host *h, Run *r, Pos pos, ConstVa
     HostRunHeld held;
     memset(&held, 0, sizeof held);
     held.log_fd = -1;
-    held.secret.fd = -1;
+    held.secret.file.fd = -1;
     SpawnStrs sargv = {argv, n};
     Status s = host_run_spawned(h, r, pos, sargv, &o, &held, out);
     host_run_release(&held);
