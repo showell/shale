@@ -25,6 +25,9 @@
 --                                 words into a type's name, and a tag's first word
 --   first_argument, success_type, list_element, element_word
 --                                 the parts of a type written as text
+--   project_terms(path), list_name_finding(subject, w)
+--                                 hunt_names' `singular_list`: a project's
+--                                 terms, and what a list's name says
 
 -- The kinds of node a definition may sit in and still be top-level or a
 -- module type's member, which `associated` holds. Inside any other kind,
@@ -227,14 +230,15 @@ function taken_word_kinds(file)
 end
 
 -- cookbook/words/list_names.txt has a word per line followed by its kind,
--- `many`, `one`, `after` or `accumulator`. The result maps each word to its
--- kind.
+-- `many`, `one`, `after`, `accumulator` or `adjective`. The result maps each
+-- word to its kind.
 function list_name_kinds(file)
   local kinds = {}
   for l in word_list_lines("cookbook:words/" .. file) do
     local ws = words(l)
     if #ws > 0 then
-      if #ws ~= 2 or (ws[2] ~= "many" and ws[2] ~= "one" and ws[2] ~= "after" and ws[2] ~= "accumulator") or has_key(kinds, ws[1]) then fail("hunt_names: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `many`, `one`, `after` or `accumulator`") end
+      local kind_known = #ws == 2 and has_item({"many", "one", "after", "accumulator", "adjective"}, ws[2])
+      if not kind_known or has_key(kinds, ws[1]) then fail("hunt_names: cookbook/words/" .. file .. ": `" .. join(ws, " ") .. "` is no new word with its kind, `many`, `one`, `after`, `accumulator` or `adjective`") end
       kinds[ws[1]] = ws[2]
     end
   end
@@ -497,4 +501,165 @@ function element_word(element)
   if head == nil then return "" end
   local type_words = name_words(last_part(head.text))
   return #type_words > 0 and type_words[#type_words] or ""
+end
+
+-- ── what `singular_list` reads of a name, for hunt_names ─────────────────
+--
+-- hunt_names judges a list's name here, beside the readings of a type it
+-- needs, since a library's functions can't call another library's. The word
+-- tables come in as `w`, `{list_names, taken, verbs, prepositions, plain,
+-- participles, ed_verbs, terms}`, as hunt_names loads them.
+
+-- Whether a word reads as a past participle: an irregular one of
+-- participles.txt, or a word past three letters ending in `ed` that
+-- ed_verbs.txt doesn't list.
+function reads_as_participle(word, participles, ed_verbs)
+  if has_key(participles, word) then return true end
+  return #word > 3 and ends_with(word, "ed") and not has_key(ed_verbs, word)
+end
+
+-- A project's own terms, from hunt_names' `terms=` file, none for "": a term
+-- a line, its words joined by `_`, then after a `:` the element type of the
+-- list it names. `route: Stop` says a `List(Stop)` is a route, and `two_opt`
+-- alone is a name read as one word. Gives `{lists, words}`: each term's
+-- element type ("" for none) and its words.
+function project_terms(path)
+  local terms = {lists = {}, words = {}}
+  if path == "" then return terms end
+  if not exists(path) then fail("hunt_names: terms=" .. path .. ": no such file") end
+  for l in word_list_lines(path) do
+    if l ~= "" then
+      local parts = split(l, ":")
+      local term = trim(parts[1])
+      local element = #parts > 1 and trim(parts[2]) or ""
+      local bad_element = element ~= "" and re_find(element, "^[A-Z][A-Za-z0-9]*$") == nil
+      if #parts > 2 or re_find(term, "^[a-z][a-z0-9]*(_[a-z0-9]+)*$") == nil or bad_element or has_key(terms.lists, term) then fail("hunt_names: " .. path .. ": `" .. l .. "` is no new term, `word` or `word: Type`") end
+      terms.lists[term] = element
+      terms.words[term] = split(term, "_")
+    end
+  end
+  return terms
+end
+
+-- `ws` with each run of words that spells a term joined into one word, the
+-- longest term first: `two`, `opt`, `stops` gives `two_opt`, `stops`.
+function joined_terms(ws, terms)
+  local out = {}
+  local k = 1
+  while k <= #ws do
+    local taken = 1
+    for term in keys(terms.words) do
+      local tw = terms.words[term]
+      if #tw > taken and k + #tw - 1 <= #ws then
+        local same = true
+        for j = 1, #tw do
+          if ws[k + j - 1] ~= tw[j] then same = false end
+        end
+        if same then taken = #tw end
+      end
+    end
+    local run = {}
+    for j = k, k + taken - 1 do push(run, ws[j]) end
+    push(out, join(run, "_"))
+    k = k + taken
+  end
+  return out
+end
+
+-- The word of a name that says what it is, by index in `ws`: the one before
+-- the first preposition or word list_names.txt calls `after`, past the name's
+-- first word (`trees_in_view` and `corners_ahead` give `trees` and `corners`),
+-- else the last. Digits alone are no word (`corner_2`).
+function head_word_at(ws, w)
+  for k = 2, #ws do
+    if has_key(w.prepositions, ws[k]) or get(w.list_names, ws[k], "") == "after" then return k - 1 end
+  end
+  local at = #ws
+  while at > 1 and re_find(ws[at], "^[0-9]+$") ~= nil do at = at - 1 end
+  return at
+end
+
+-- Whether a word reads as a plural. An `s` doesn't make one in `class`, in a
+-- word list_names.txt calls `one` (`axis`), or after letters that are no word
+-- (`pts`); after one letter it does (`xs`).
+function reads_as_plural(word, w)
+  if get(w.list_names, word, "") == "one" then return false end
+  if not ends_with(word, "s") or ends_with(word, "ss") then return false end
+  local stem = sub(word, 1, #word - 1)
+  return #stem == 1 or re_find(stem, "[aeiouy]") ~= nil
+end
+
+function plural_of(word)
+  if ends_with(word, "y") and re_find(word, "[aeiou]y$") == nil then return sub(word, 1, #word - 1) .. "ies" end
+  if re_find(word, "(s|x|z|ch|sh)$") ~= nil then return word .. "es" end
+  return word .. "s"
+end
+
+-- The plural of what a list of `element` holds, for a name to say it, or ""
+-- when the element has no word of its own: a type variable, a number, text.
+function held_plural(element, w)
+  local held = element_word(element)
+  if held == "" or re_find(element, "^[A-Z]") == nil or has_key(w.plain, element) then return "" end
+  return plural_of(held)
+end
+
+-- The names `singular_list` offers for `bare`, whose head word is at `at` in
+-- `ws`: the plural of what the list holds put after the head, as in
+-- `herd_cows`, or the head's own plural when the element is that word, a
+-- number or text; else the name with `_list`.
+function honest_list_names(bare, ws, at, element, w)
+  local held = held_plural(element, w)
+  local says_what_it_holds = held ~= "" and element_word(element) ~= ws[at]
+  local plural_words = {}
+  for k = 1, #ws do
+    if k ~= at then
+      push(plural_words, ws[k])
+    elseif says_what_it_holds then
+      push(plural_words, ws[k])
+      push(plural_words, held)
+    else
+      push(plural_words, plural_of(ws[k]))
+    end
+  end
+  return "`" .. join(plural_words, "_") .. "`, or `" .. bare .. "_list`"
+end
+
+-- What a name whose type says many says of one, `{check, why}`, or nil:
+-- hunt_names' `singular_list`, and its `phrase_name` for a list that is no
+-- function and starts with a preposition. `subject` is `{name, kind,
+-- is_function, first, gives}`, `kind` being what the finding calls it.
+function list_name_finding(subject, w)
+  local element = list_element(subject.gives)
+  if element == nil or element == "U8" then return nil end
+  local bare = ends_with(subject.name, "!") and sub(subject.name, 1, #subject.name - 1) or subject.name
+  if #bare < 2 or get(w.taken, bare, "") == "cardinal" or get(w.list_names, bare, "") == "accumulator" then return nil end
+  local ws = joined_terms(split(bare, "_"), w.terms)
+  local says = subject.is_function and "gives" or "holds"
+  local opening = "the " .. subject.kind .. " `" .. subject.name .. "` " .. says .. " `" .. subject.gives .. "`"
+  -- A function that starts so is judged at its definition.
+  if has_key(w.prepositions, ws[1]) and not subject.is_function then return {check = "phrase_name", why = opening .. " and starts with a preposition, `" .. ws[1] .. "`: bare, it hides what it holds; name the thing (`trees_in_view`, not `in_view`)"} end
+  local at = head_word_at(ws, w)
+  local head = ws[at]
+  if head == "list" or reads_as_plural(head, w) then return nil end
+  local term_element = get(w.terms.lists, head)
+  if term_element ~= nil and term_element ~= "" and last_part(re_find(element, "^[A-Za-z0-9_.]*").text) == term_element then return nil end
+  -- A term alone names an act, as a verb does (`two_opt`).
+  if term_element == "" and subject.is_function and #ws == 1 then return nil end
+  local starts_with_act = subject.is_function and has_key(w.verbs, ws[1]) and get(w.list_names, ws[1], "") ~= "one"
+  -- A function that gives its first argument's type is a changed copy,
+  -- whatever its first word (`two_opt`, `coalesce`). Its object may be one
+  -- element of the list (`set_run : List(Run), Run -> List(Run)`): the verb's
+  -- object, not the list, is what its last word names.
+  local is_changed_copy = subject.is_function and subject.first == subject.gives
+  if is_changed_copy and #ws > 1 then return nil end
+  if element_word(element) ~= head then
+    if get(w.list_names, head, "") == "many" or reads_as_participle(head, w.participles, w.ed_verbs) then return nil end
+    if is_changed_copy or (starts_with_act and #ws == 1) then return nil end
+  end
+  if get(w.list_names, head, "") == "adjective" then
+    local held = held_plural(element, w)
+    local example = held ~= "" and (" (`" .. head .. "_" .. held .. "`)") or ""
+    return {check = "singular_list", why = opening .. " but the word that counts, `" .. head .. "`, is an adjective: the name has no noun; say what the list holds" .. example}
+  end
+  return {check = "singular_list", why = opening .. " but reads as one thing, `" .. head .. "`: " .. honest_list_names(bare, ws, at, element, w)}
 end

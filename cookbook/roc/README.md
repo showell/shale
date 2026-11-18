@@ -61,9 +61,11 @@ that doesn't parse is listed at the end, and the run then fails.
   only of vague words, a pure function named by a bare past participle
   (`added`, `named`), a function named as a bare phrase (`in_view`), a
   list named as one thing (`triangle : List(Shape)`), a pure function with a
-  verb that pretends to an effect (`draw_tree`), and eleven other checks. Its word lists are in
-  `cookbook/words/`. `words=1` prints a count of the first words of
-  effects instead of the findings.
+  verb that pretends to an effect (`draw_tree`), a comment that names what a
+  rename left behind (`stale_doc_name`), and twelve other checks. Its word lists are in
+  `cookbook/words/`, and a project's own terms come in as `terms=`, a file of
+  `route: Stop` lines (a `List(Stop)` is a route) and lone terms (`two_opt`).
+  `words=1` prints a count of the first words of effects instead of the findings.
 - [check_errors.shale](check_errors.shale) checks how code reports failure: a shared
   alias of error tags where the tags belong in place, a tag named like an
   optional (`None`) beside a tag with a payload, a `List.set(...) ?? l` that
@@ -322,8 +324,15 @@ run on their own.
   `hunt_names` reads of a type in the tree or written as text, such as
   `union_shape` and `first_argument`. These sit here, not in a library of
   their own, because a library's functions can't call another library's and
-  they need this one's. Used by `check_families`, `hunt_names`, `check_name_types`,
-  `find_unclear_names` and `check_vocabulary`.
+  they need this one's. `hunt_names` judges a list's name here too
+  (`list_name_finding`), with a project's terms (`project_terms`). Used by
+  `check_families`, `hunt_names`, `check_name_types`, `find_unclear_names` and
+  `check_vocabulary`.
+- [doc_names.shale](doc_names.shale): `hunt_names`' `stale_doc_name`, the
+  backticked names in a file's comments and whether each still names
+  something in the file or a module beside it.
+- [naming_plants.shale](naming_plants.shale): `hunt_names`' self-test,
+  which check each plant is for and what a run over them gets wrong.
 - [gate_recipe.shale](gate_recipe.shale): what the recipes that exit
   nonzero on findings share: `verdict_of`, their counts and lines, and
   `check_plants`, a self-test that runs the recipe as a child program once

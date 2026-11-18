@@ -4,11 +4,11 @@
 Draw := [].{
 	Frame := [].{}
 
-	circle! : Frame, { x : F32, y : F32, r : F32 } => {}
+	circle! : Frame, { x : F32, y : F32, radius : F32 } => {}
 
 	panel! : Draw.Frame, Str => {}
 
 	Canvas := [].{}
 
-	rectangle! : Canvas, { w : F32, h : F32 } => {}
+	rectangle! : Canvas, { width : F32, height : F32 } => {}
 }

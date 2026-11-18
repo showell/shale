@@ -6,7 +6,9 @@
 --          name;
 --   after  a word that follows the noun, so a plural before it counts
 --          (`corners_ahead`);
---   accumulator  a short idiom for a list being built, as a whole name only.
+--   accumulator  a short idiom for a list being built, as a whole name only;
+--   adjective  a word that describes the noun, so a name it ends has no noun
+--          (`stable_by_load_desc`), and no plural of it says what the list holds.
 -- A collective noun is no `many`: a herd holds cows, so `herd_cows`. Only a word
 -- a tree needs, or that Steve named, belongs here. `--` starts a note.
 grass many -- Steve's example of a word with no plural; no tree uses it yet
@@ -21,3 +23,5 @@ down after -- `side_wings_down` (safari's BirdStills.roc)
 holding after -- `humans_holding` (roc-chat's GitHubSignIn.roc)
 up after -- `side_wings_up` (safari's BirdStills.roc)
 out accumulator -- Steve: "accumulators can have short idioms"
+cheapest adjective -- Steve's example
+stable adjective -- Steve's example, delivery's `stable_by_load_desc`

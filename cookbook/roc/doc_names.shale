@@ -1,0 +1,136 @@
+-- What hunt_names' `stale_doc_name` reads: the names a file's comments put
+-- in backticks, and whether each still names something in the code. A rename
+-- leaves its comments behind (cookbook/roc/rename.shale counts them and
+-- leaves them), so a doc that names a function by its old name is stale.
+--
+--   use("./doc_names.shale")
+--   doc_names_in(src)                  each backticked name in a comment line
+--   names_in_tree(nodes)               every name a file's tree holds
+--   imports_in_tree(nodes)             the modules a file imports, by name
+--   stale_doc_findings(path, src, nodes, known, cache)
+--                                      each doc name that names nothing
+--
+-- Only a whole comment line is read (`#` or `##` first), and only a name a
+-- reader can't take for a prose word: one of two words or more joined by
+-- `_` (`two_opt`, `read_line!`), or a module's member
+-- (`Route.two_opt`). A one-word name (`for`, `fold`) is often the
+-- language's or the prose's, and is not judged.
+
+-- A backticked doc name, a call's parentheses allowed after it:
+-- `two_opt`, `read_line!`, `Route.two_opt(stops)`.
+const DOC_NAME = "^(?:([A-Z][A-Za-z0-9]*)\\.)?([a-z][a-z0-9]*(?:_[a-z0-9]+)*!?)(?:\\(.*\\))?$"
+
+-- Each backticked name in the comment lines of `src` (a file's lines), as
+-- `{line, module, name}`, `module` "" for a bare name. A bare name of one
+-- word is left out, as the header says.
+function doc_names_in(src)
+  local out = {}
+  for k = 1, #src do
+    local l = trim(src[k])
+    if starts_with(l, "#") then
+      for m in re_find_all(l, "`([^`]+)`") do
+        local found = re_find(m.groups[1], DOC_NAME)
+        if found ~= nil then
+          local module = found.groups[1]
+          local name = found.groups[2]
+          if module ~= "" or contains(name, "_") then push(out, {line = k, module = module, name = name}) end
+        end
+      end
+    end
+  end
+  return out
+end
+
+-- Every name a file's tree holds, as a set: what it declares, binds, calls,
+-- and each record field and method it names, with and without an effect's
+-- `!`.
+function names_in_tree(nodes)
+  local names = {}
+  for n in nodes do
+    for key in {"raw", "name", "field", "method"} do
+      local v = get(n, key, "")
+      if starts_with(v, ".") then v = sub(v, 2) end
+      if v ~= "" then
+        names[v] = true
+        if ends_with(v, "!") then names[sub(v, 1, #v - 1)] = true end
+      end
+    end
+  end
+  return names
+end
+
+-- The modules a file imports, by the name its code calls them (`Route`, and
+-- `Stdout` for `pf.Stdout`), as a list.
+function imports_in_tree(nodes)
+  local out = {}
+  for n in nodes do
+    if n.kind == "s-import" then
+      local parts = split(get(n, "raw", ""), ".")
+      push(out, parts[#parts])
+    end
+  end
+  return out
+end
+
+-- The names module `module` holds, read from `<folder><module>.roc` beside
+-- the file (`folder` ends in its `/`, or is "" at the root), or nil when there
+-- is no such file (a builtin's, a package's) or it doesn't parse: such a
+-- module's names can't be judged. `cache` keeps each file's answer by path,
+-- `{found, names}`.
+function module_names(folder, module, cache)
+  local path = folder .. module .. ".roc"
+  if not has_key(cache, path) then
+    cache[path] = {found = false}
+    if exists(path) then
+      local f = roc_tree({path})[1]
+      if f.err == "" then cache[path] = {found = true, names = names_in_tree(f.nodes)} end
+    end
+  end
+  if not cache[path].found then return nil end
+  return cache[path].names
+end
+
+-- Each backticked name in a comment of the file at `path` that names nothing
+-- there, as `{line, why}`. A bare name is judged against the file's own
+-- names, those of `known` (a set the caller adds, such as the self-test's
+-- check names), and those of every module it imports that sits beside it;
+-- `Module.name` against that module's file, when it has one beside it. The
+-- file's own module may be named either way.
+function stale_doc_findings(path, src, nodes, known, cache)
+  local out = {}
+  local own = names_in_tree(nodes)
+  local base = basename(path)
+  local dir = sub(path, 1, #path - #base)
+  local own_module = sub(base, 1, #base - 4)
+  local imported = {}
+  for module in imports_in_tree(nodes) do
+    local names = module_names(dir, module, cache)
+    if names ~= nil then push(imported, names) end
+  end
+  for d in doc_names_in(src) do
+    local plain = ends_with(d.name, "!") and sub(d.name, 1, #d.name - 1) or d.name
+    local names_something = false
+    local judged = true
+    if d.module == "" or d.module == own_module then
+      if has_key(own, d.name) or has_key(own, plain) or has_key(known, plain) then names_something = true end
+      if d.module == "" then
+        for names in imported do
+          if has_key(names, d.name) or has_key(names, plain) then names_something = true end
+        end
+      end
+    else
+      local names = module_names(dir, d.module, cache)
+      if names == nil then
+        judged = false
+      elseif has_key(names, d.name) or has_key(names, plain) then
+        names_something = true
+      end
+    end
+    if judged and not names_something then
+      local shown = d.module == "" and d.name or (d.module .. "." .. d.name)
+      local place = d.module == "" and "this file or its imports" or (d.module .. ".roc")
+      push(out, {line = d.line, why = "a comment names `" .. shown .. "`, which names nothing in " .. place .. ": a rename left it behind, or it names what is gone"})
+    end
+  end
+  return out
+end

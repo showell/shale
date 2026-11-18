@@ -1,0 +1,4 @@
+-- The self-test's terms, as a project's `terms=` file: a `List(Stop)` is a
+-- route, and `two_opt` is one word.
+route: Stop
+two_opt

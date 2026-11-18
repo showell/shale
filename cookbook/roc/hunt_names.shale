@@ -20,6 +20,11 @@
 --   types      with `types=1`, also ask Roc's type checker (below);
 --   root       the app the type checker starts from, or several
 --              (`root=a.roc,b.roc`);
+--   terms      a project's file of its own terms, which `singular_list`
+--              reads (below): a term a line, its words joined by `_`, and
+--              after a `:` the element type of the list it names. Delivery's
+--              `route: Stop` says a `List(Stop)` is a route, and `two_opt`
+--              alone is one word, an act's name, as a verb is;
 --   self_test  with `self_test=1`, check the plants (below).
 --
 -- An effect is a function whose name ends in `!`. The checks:
@@ -110,12 +115,15 @@
 --                 declaration says whose it is: `## A folder's entry` keeps
 --                 `Entry`, and `## A listing's entries` keeps a field
 --                 `entries`. A type's words are split at its capitals, a
---                 field's at its underscores. Fields in a local's annotation
---                 are not read.
---   short_name    A top-level or member name of one letter (`w : F64`). It
---                 is read far from where it is defined, and a local of the
---                 same letter shadows it. Locals and lambda parameters are
---                 not checked.
+--                 field's at its underscores. A field of one plain value (a
+--                 number, a `Str`, a `Bool`: `entry : F64`) holds nothing a
+--                 container could, so it passes. Fields in a local's
+--                 annotation are not read.
+--   short_name    A top-level or member name, or a record field, of one
+--                 letter (`w : F64`, `{ k : U64 }`). It is read far from where
+--                 it is defined, and a local of the same letter shadows it. A
+--                 field may be a coordinate, `x`, `y` or `z`. Locals and
+--                 lambda parameters are not checked.
 --   worker_name   A name whose last word says only that it is a helper:
 --                 `_acc`, `_loop`, `_inner`, `_helper` or `_rec`
 --                 (`count_acc`). Name a recursive worker for the parameter
@@ -186,7 +194,11 @@
 --                 - a changed copy: `with_*` or `without_*` that gives its
 --                   first argument's type (`with_lean : Bike, Angle -> Bike`).
 --                 A definition with no annotation shows none of this, so it
---                 is reported unless `types=1` supplies its type.
+--                 is reported unless `types=1` supplies its type. A list that
+--                 is no function, a value, a field or a parameter, named from
+--                 a preposition (`by_slot : List(List(Stop))`) is reported
+--                 here, not by `singular_list`: its plural (`by_slots`) would
+--                 still hide what it holds.
 --   singular_list  A name that holds or gives a `List(...)`, or a `Try` of
 --                 one, but reads as one thing: `triangle : List(Shape)`. The
 --                 name ends in a plural of what the list holds (`triangles`,
@@ -202,10 +214,12 @@
 --                   flat run of coordinates can't be told from many readings;
 --                 - a word list_names.txt calls `many`, one that can't be
 --                   counted, and a word read as a participle (`clipped`);
---                 - a function whose whole name is a verb (`draw`), and a
---                   changed copy: one starting with a verb, `with` or
---                   `without` that gives its first argument's type
---                   (`trim_hull`);
+--                 - a function whose whole name is a verb (`draw`) or a term
+--                   (`two_opt`), and a changed copy: a function that gives
+--                   its first argument's type, whatever its first word
+--                   (`trim_hull`, `coalesce`, `stable_by_load_desc`);
+--                 - a word the project's terms (`terms=`) say names a list
+--                   of its element (`route` of `Stop`s);
 --                 - one letter, and a value named by a number, which are
 --                   `short_name`'s and `taken_word`'s to judge;
 --                 - an accumulator's short idiom, as a whole name (`out`);
@@ -217,9 +231,12 @@
 --                 verbs.txt holds that list_names.txt calls `one` is no verb
 --                 here (`route`). An `s` makes no plural after `s` (`class`),
 --                 after letters that are no word (`pts`), or in a `one` word
---                 (`axis`). An alias of a list isn't seen, and with `types=1`
---                 an unannotated definition or parameter is read by its
---                 inferred type.
+--                 (`axis`). A word list_names.txt calls `adjective`
+--                 (`stable`, `cheapest`) is no noun, so the finding says the
+--                 name has none and offers no plural of it. A term's words
+--                 read as one (`two_opt_pass`'s word is `pass`). An alias of
+--                 a list isn't seen, and with `types=1` an unannotated
+--                 definition or parameter is read by its inferred type.
 --   world_verb    A pure function whose first word is a verb of
 --                 cookbook/words/world_verbs.txt, one that claims to act on
 --                 something outside (`draw`, `paint_shape`). Nothing is drawn
@@ -236,6 +253,16 @@
 --                 so the name is the whole contract: two words say what it is
 --                 for (`scenery_height`). The methods Roc calls by name
 --                 (`is_eq`, `plus`, `map`) are fine. A local's clause is read.
+--   stale_doc_name  A backticked name in a comment line (`#` or `##` first)
+--                 that names nothing in the file or the modules it imports:
+--                 a rename leaves its comments behind (rename.shale counts
+--                 and leaves them). A bare name is judged when it has two
+--                 words or more (`cheapest_insert`), since a one-word one
+--                 (`for`, `fold`) is often the language's or the prose's; a
+--                 `Module.name` (`Route.two_opt`, a call's parentheses
+--                 allowed) is judged against `Module.roc` beside the file,
+--                 and left when there is none, as for `List.map`
+--                 (cookbook/roc/doc_names.shale).
 --
 -- Each name is judged once: from its annotation when it has one, else from
 -- its definition. An effect that takes an effectful function (`map2!`,
@@ -271,7 +298,12 @@
 -- plant is named for the check it holds (`question.roc`,
 -- `question_where.roc`) and must make that check report, and no other. A
 -- `quiet_*.roc` plant must make no check report. Every check needs a plant,
--- and a plant named for no check fails the test. The census must also give
+-- and a plant named for no check fails the test. A plant another imports is
+-- a CamelCase module, read as snake case (`QuietDocShelf.roc` is
+-- `quiet_doc_shelf.roc`); the plants' terms are `terms.txt` there; each plant
+-- opens by naming its check, so the check names count as names for
+-- `stale_doc_name`; and cookbook/roc/naming_plants.shale holds these
+-- rules, with what a finding must say, or not. The census must also give
 -- the right verdict for one known word of the plants per verdict. The
 -- plants in `typed/` are checked with the types, from their app
 -- `typed/QuietApp.roc`, and their CamelCase module names read as snake case
@@ -291,6 +323,8 @@ use("./types.shale")
 use("./declared.shale")
 use("./headers.shale")
 use("./house.shale")
+use("./doc_names.shale")
+use("./naming_plants.shale")
 const PLANTS = "cookbook:roc/plants/hunt_names/"
 const GLOB = SELF_TEST and (PLANTS .. "*.roc") or arg("glob", "**/*.roc")
 const TYPES_ARG = arg("types", "0")
@@ -303,7 +337,7 @@ const ROOT = SELF_TEST and (PLANTS .. "typed/QuietApp.roc") or arg("root", "")
 -- unless USE_TYPES.
 const CHECKER_TYPES = {real = {}, pats = {}, exprs = {}, unreached = {}}
 const CENSUS_ONLY = arg("words", "") == "1"
-const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle", "phrase_name", "singular_list", "world_verb", "where_name"}
+const CHECKS = {"state_effect", "question", "vague", "name_type", "negative", "noun_effect", "command_tense", "mixed_tense", "container", "preposition_split", "short_name", "worker_name", "stacked_preposition", "taken_word", "bare_participle", "phrase_name", "singular_list", "world_verb", "where_name", "stale_doc_name"}
 -- `worker_name` reports a helper suffix always, and a suffix that is also an
 -- ordinary word (a fold's `step`, `List.walk`, `can_go`) only on a
 -- definition that calls itself.
@@ -324,6 +358,14 @@ const TAKEN_WORDS = taken_word_kinds("taken.txt")
 const LIST_NAMES = list_name_kinds("list_names.txt")
 const WORLD_VERBS = word_set("cookbook:words/world_verbs.txt")
 const PLAIN_ELEMENTS = set_of({"U16", "U32", "U64", "I16", "I32", "I64", "F32", "F64", "Dec", "Str", "Bool"})
+-- A field of one of these holds one plain value, so `container` passes it.
+const SCALAR_TYPES = set_of({"U8", "U16", "U32", "U64", "U128", "I8", "I16", "I32", "I64", "I128", "F32", "F64", "Dec", "Str", "Bool"})
+-- The coordinates, which `short_name` lets a field be named.
+const COORDINATES = set_of({"x", "y", "z"})
+const TERMS = project_terms(SELF_TEST and (PLANTS .. "terms.txt") or arg("terms", ""))
+-- The tables `singular_list` reads (cookbook/roc/declared.shale's
+-- `list_name_finding`).
+const LIST_WORDS = {list_names = LIST_NAMES, taken = TAKEN_WORDS, verbs = VERBS, prepositions = PREPOSITIONS, plain = PLAIN_ELEMENTS, participles = PARTICIPLES, ed_verbs = ED_VERBS, terms = TERMS}
 const SURFACES = {Frame = true, Canvas = true}
 -- The first words `phrase_name` lets a constructor start with. They are the
 -- ones constructors use in safari, roc-chat and roc-markdown: `Clock.at_step`,
@@ -389,8 +431,7 @@ function report(path, line, check, why)
 end
 
 function is_participle(word)
-  if has_key(PARTICIPLES, word) then return true end
-  return #word > 3 and ends_with(word, "ed") and not has_key(ED_VERBS, word)
+  return reads_as_participle(word, PARTICIPLES, ED_VERBS)
 end
 
 for word in keys(VERBS) do
@@ -675,79 +716,12 @@ function reads_as_maker(def, ws, signature)
   return has_key(CONSTRUCTOR_WORDS, word) and is_own_type(def, success_type(signature.result))
 end
 
--- The word of a name that says what it is, by index in `ws`: the one before
--- the first preposition or word list_names.txt calls `after`, past the name's
--- first word (`trees_in_view` and `corners_ahead` give `trees` and `corners`),
--- else the last. Digits alone are no word (`corner_2`).
-function head_word_at(ws)
-  for k = 2, #ws do
-    if has_key(PREPOSITIONS, ws[k]) or get(LIST_NAMES, ws[k], "") == "after" then return k - 1 end
-  end
-  local at = #ws
-  while at > 1 and re_find(ws[at], "^[0-9]+$") ~= nil do at = at - 1 end
-  return at
-end
-
--- Whether a word reads as a plural. An `s` doesn't make one in `class`, in a
--- word list_names.txt calls `one` (`axis`), or after letters that are no word
--- (`pts`); after one letter it does (`xs`).
-function reads_as_plural(word)
-  if get(LIST_NAMES, word, "") == "one" then return false end
-  if not ends_with(word, "s") or ends_with(word, "ss") then return false end
-  local stem = sub(word, 1, #word - 1)
-  return #stem == 1 or re_find(stem, "[aeiouy]") ~= nil
-end
-
-function plural_of(word)
-  if ends_with(word, "y") and re_find(word, "[aeiou]y$") == nil then return sub(word, 1, #word - 1) .. "ies" end
-  if re_find(word, "(s|x|z|ch|sh)$") ~= nil then return word .. "es" end
-  return word .. "s"
-end
-
--- The names `singular_list` offers for `bare`, whose head word is at `at` in
--- `ws`: the plural of what the list holds put after the head, as in
--- `herd_cows`, or the head's own plural when the element is that word, a
--- number or text; else the name with `_list`.
-function honest_list_names(bare, ws, at, element)
-  local held = element_word(element)
-  local says_what_it_holds = held ~= "" and held ~= ws[at] and re_find(element, "^[A-Z]") ~= nil and not has_key(PLAIN_ELEMENTS, element)
-  local plural_words = {}
-  for k = 1, #ws do
-    if k ~= at then
-      push(plural_words, ws[k])
-    elseif says_what_it_holds then
-      push(plural_words, ws[k])
-      push(plural_words, plural_of(held))
-    else
-      push(plural_words, plural_of(ws[k]))
-    end
-  end
-  return "`" .. join(plural_words, "_") .. "`, or `" .. bare .. "_list`"
-end
-
 -- Reports a name whose type says many and whose head word says one:
 -- `singular_list` in the header. `subject` is `{path, line, name, kind,
 -- is_function, first, gives}`, `kind` being what the report calls it.
 function judge_list_name(subject)
-  local element = list_element(subject.gives)
-  if element == nil or element == "U8" then return nil end
-  local bare = ends_with(subject.name, "!") and sub(subject.name, 1, #subject.name - 1) or subject.name
-  if #bare < 2 or get(TAKEN_WORDS, bare, "") == "cardinal" or get(LIST_NAMES, bare, "") == "accumulator" then return nil end
-  local ws = split(bare, "_")
-  local at = head_word_at(ws)
-  local head = ws[at]
-  if head == "list" or reads_as_plural(head) then return nil end
-  local starts_with_act = subject.is_function and has_key(VERBS, ws[1]) and get(LIST_NAMES, ws[1], "") ~= "one"
-  local is_changed_copy = subject.is_function and subject.first == subject.gives and (starts_with_act or has_key(CHANGED_COPY_WORDS, ws[1]))
-  -- A changed copy's object may be one element of the list it gives
-  -- (`set_run : List(Run), Run -> List(Run)`): the verb's object, not the
-  -- list, is what its last word names.
-  if is_changed_copy and #ws > 1 then return nil end
-  if element_word(element) ~= head then
-    if get(LIST_NAMES, head, "") == "many" or is_participle(head) then return nil end
-    if is_changed_copy or (starts_with_act and #ws == 1) then return nil end
-  end
-  report(subject.path, subject.line, "singular_list", "the " .. subject.kind .. " `" .. subject.name .. "` " .. (subject.is_function and "gives" or "holds") .. " `" .. subject.gives .. "` but reads as one thing, `" .. head .. "`: " .. honest_list_names(bare, ws, at, element))
+  local found = list_name_finding(subject, LIST_WORDS)
+  if found ~= nil then report(subject.path, subject.line, found.check, found.why) end
   return nil
 end
 
@@ -932,6 +906,19 @@ for file in parsed.files do
   judge_where_names(file)
 end
 
+-- `stale_doc_name` in the header. Each plant opens by naming its check, so
+-- in the self-test the check names, and this recipe's, count as names.
+function plant_doc_names()
+  local known = set_of(CHECKS)
+  known.hunt_names = true
+  return known
+end
+const KNOWN_DOC_NAMES = SELF_TEST and plant_doc_names() or {}
+const DOC_MODULES = {}
+for file in parsed.files do
+  for found in stale_doc_findings(file.path, split(read(file.path), "\n"), file.nodes, KNOWN_DOC_NAMES, DOC_MODULES) do report(file.path, found.line, "stale_doc_name", found.why) end
+end
+
 -- Whether a doc says whose a container word is (`a folder's entry`, `a
 -- listing's entries`), in the word's singular or plural.
 function doc_says_whose(doc, word)
@@ -952,7 +939,10 @@ for named in TYPE_AND_FIELD_NAMES do
     if not has_key(VAGUE, w) and not has_key(CONTAINERS, w) then only_container_words = false end
     if doc_says_whose(named.doc, w) then doc_owns_it = true end
   end
-  if only_container_words and not doc_owns_it then report(named.path, named.line, "container", (named.is_field and "the field `" or "the type `") .. named.name .. "` is only container words: name it for what it holds, or say whose it is in its doc (`## A folder's entry`)") end
+  -- A field of a plain value (`entry : F64`) holds nothing a container could.
+  local is_scalar = named.is_field and not named.is_function and has_key(SCALAR_TYPES, named.gives)
+  if named.is_field and #named.name == 1 and not has_key(COORDINATES, named.name) then report(named.path, named.line, "short_name", "the field `" .. named.name .. "` is one letter, read far from where it is set: name what it holds") end
+  if only_container_words and not doc_owns_it and not is_scalar then report(named.path, named.line, "container", (named.is_field and "the field `" or "the type `") .. named.name .. "` is only container words: name it for what it holds, or say whose it is in its doc (`## A folder's entry`)") end
   if named.is_field then judge_list_name({path = named.path, line = named.line, name = named.name, kind = "field", is_function = named.is_function, first = named.first, gives = named.gives}) end
 end
 
@@ -1005,47 +995,20 @@ end
 fail_if_refused("hunt_names", parsed.refused, CHECKER_TYPES.unreached)
 
 -- A plant's name relative to PLANTS. A typed plant is a CamelCase module
--- (`typed/QuestionInferred.roc`), and its name is given in snake case
+-- (`typed/QuestionInferred.roc`), as is a plant another imports
+-- (`QuietDocShelf.roc`), and its name is given in snake case
 -- (`question_inferred.roc`).
 function plant_name(path)
   local name = sub(path, #PLANTS + 1)
-  if starts_with(name, "typed/") then return snake_case_plant_name(sub(name, 7)) end
+  if starts_with(name, "typed/") then name = sub(name, 7) end
+  if re_find(name, "^[A-Z]") ~= nil then return snake_case_plant_name(name) end
   return name
 end
 
-function plant_is_for(plant, check)
-  return plant == check .. ".roc" or starts_with(plant, check .. "_")
-end
-
 if SELF_TEST then
-  -- Every plant is judged before the test fails, so one run shows each
-  -- plant that is wrong.
-  local wrong = {}
-  for c in CHECKS do
-    local planted = 0
-    for path in paths do
-      local is_its_plant = plant_is_for(plant_name(path), c)
-      if is_its_plant then planted = planted + 1 end
-      local fired = has_key(fired_in_file, path .. "|" .. c)
-      if is_its_plant and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. path) end
-      if fired and not is_its_plant then push(wrong, "`" .. c .. "` fires on " .. path .. ", another check's plant") end
-    end
-    if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
-  end
-  -- A plant named for no check could never fail.
-  for path in paths do
-    local plant = plant_name(path)
-    local is_named = starts_with(plant, "quiet_")
-    for c in CHECKS do
-      if plant_is_for(plant, c) then is_named = true end
-    end
-    if not is_named then push(wrong, path .. ": a plant the table does not judge") end
-  end
-  for expected in {{word = "read", verdict = "verb"}, {word = "held", verdict = "participle"}, {word = "process", verdict = "vague"}, {word = "links", verdict = "refused"}} do
-    local got = get(first_word_census, expected.word)
-    if got == nil then push(wrong, "the census has no `" .. expected.word .. "`")
-    elseif got.verdict ~= expected.verdict then push(wrong, "the census calls `" .. expected.word .. "` " .. got.verdict .. ", not " .. expected.verdict) end
-  end
+  local names = {}
+  for path in paths do names[path] = plant_name(path) end
+  local wrong = plants_wrong({plants = PLANTS, checks = CHECKS, paths = paths, names = names, fired = fired_in_file, census = first_word_census, findings = finding_lines})
   for w in wrong do print("FAIL " .. w) end
   if #wrong > 0 then fail("hunt_names self_test: " .. #wrong .. " plants wrong") end
   print("hunt_names (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none, and the census gives each verdict its known word)")

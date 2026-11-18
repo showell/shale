@@ -2,7 +2,8 @@
 -- (`handle_data`, `process!`, `doIt`). The name hunts' `vague` check, in
 -- cookbook/roc/hunt_names.shale and cookbook/zig/hunt_names.shale; a lone
 -- entry point (each hunt's ENTRY: `handle`, `run`) is exempt there.
--- One word a line; `--` starts a note.
+-- One word a line; `--` starts a note. `object` is no vague word: it is
+-- JSON's (roc-apps docs/roc-style.md's `JsonOut.object(...)`).
 handle
 process
 do
@@ -23,4 +24,3 @@ util
 item
 value
 all
-object

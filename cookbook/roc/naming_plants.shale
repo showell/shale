@@ -1,0 +1,65 @@
+-- hunt_names' self-test: which check each plant in
+-- cookbook/roc/plants/hunt_names/ is for, and what is wrong with a run over
+-- them (hunt_names.shale's header says the rules).
+--
+--   use("./naming_plants.shale")
+--   plants_wrong(run)   each way the run's findings break the plants' rules
+
+-- The plants whose finding must say something, or must not: `singular_list`
+-- offers no plural of an adjective, nor `phrase_name` of a preposition's
+-- noun.
+const PLANT_SAYS = {
+  {plant = "singular_list_adjective.roc", says = "has no noun", never = "stables"},
+  {plant = "phrase_name_list_holder.roc", says = "starts with a preposition, `by`", never = "by_slots"},
+}
+
+-- The census's verdict for one known word of the plants per verdict.
+const CENSUS_KNOWN = {{word = "read", verdict = "verb"}, {word = "held", verdict = "participle"}, {word = "process", verdict = "vague"}, {word = "links", verdict = "refused"}}
+
+function plant_is_for(plant, check)
+  return plant == check .. ".roc" or starts_with(plant, check .. "_")
+end
+
+-- Each way a run over the plants is wrong, as a line, so one run shows every
+-- plant that is. `run` is `{plants, checks, paths, names, fired, census,
+-- findings}`: the plants' folder, the checks, the paths read, each path's
+-- plant name, the `path|check` pairs that fired, the effects' census and the
+-- finding lines.
+function plants_wrong(run)
+  local wrong = {}
+  for c in run.checks do
+    local planted = 0
+    for path in run.paths do
+      local is_its_plant = plant_is_for(run.names[path], c)
+      if is_its_plant then planted = planted + 1 end
+      local fired = has_key(run.fired, path .. "|" .. c)
+      if is_its_plant and not fired then push(wrong, "`" .. c .. "` does not fire on its plant " .. path) end
+      if fired and not is_its_plant then push(wrong, "`" .. c .. "` fires on " .. path .. ", another check's plant") end
+    end
+    if planted == 0 then push(wrong, "`" .. c .. "` has no plant") end
+  end
+  -- A plant named for no check could never fail.
+  for path in run.paths do
+    local plant = run.names[path]
+    local is_named = starts_with(plant, "quiet_")
+    for c in run.checks do
+      if plant_is_for(plant, c) then is_named = true end
+    end
+    if not is_named then push(wrong, path .. ": a plant the table does not judge") end
+  end
+  for expected in CENSUS_KNOWN do
+    local got = get(run.census, expected.word)
+    if got == nil then push(wrong, "the census has no `" .. expected.word .. "`")
+    elseif got.verdict ~= expected.verdict then push(wrong, "the census calls `" .. expected.word .. "` " .. got.verdict .. ", not " .. expected.verdict) end
+  end
+  for expected in PLANT_SAYS do
+    local at = run.plants .. expected.plant .. ":"
+    local said = false
+    for l in run.findings do
+      if starts_with(l, at) and contains(l, expected.says) then said = true end
+      if starts_with(l, at) and contains(l, expected.never) then push(wrong, l .. ": says `" .. expected.never .. "`") end
+    end
+    if not said then push(wrong, expected.plant .. ": no finding says `" .. expected.says .. "`") end
+  end
+  return wrong
+end
