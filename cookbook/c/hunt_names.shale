@@ -1,0 +1,319 @@
+-- Hunts Shale's C for names that break c/docs/style.md's "Names" or say
+-- too little, from cookbook/c/items.shale's splitter. A finding is a
+-- question for a reader, never a verdict. The first version is small, each
+-- check narrow enough that its findings are worth reading:
+--
+--   type_case       a type (a struct, union, typedef or tagged enum) not
+--                   `PascalCase`; an anonymous enum is constants, no type
+--   function_case   a function not `snake_case`
+--   constant_case   an enum's constant not `UPPER_SNAKE`
+--   zig_bound       a constant or macro with Zig's bound words, `MOST` or
+--                   `LEAST`: C's are `_MAX` and `_MIN`
+--   bound_order     a constant or macro whose `MAX` or `MIN` is not its last
+--                   word (`STORE_MAX_NAME`, not `STORE_NAME_MAX`), a unit
+--                   after it (`_MS`, `_BYTES`) left alone
+--   vague           a function named of nothing but cookbook/words/vague.txt's
+--                   words (`handle_data`); a lone `run` or `handle` is an
+--                   entry point's, and a piece's noun before a vague word
+--                   (`json_value`, `vm_run`) is no finding
+--   do_word         a function with the word `do` in its name, which says
+--                   only that it acts
+--   vague_local     a local or parameter named only `data`, `info`, `tmp`,
+--                   `temp`, `stuff`, `thing`, `things`, `misc`, `util`,
+--                   `helper`, `obj` or `handle`
+--   container_type  a type named of nothing but container words
+--                   (cookbook/words/containers.txt, and `data`, `info`):
+--                   `Entry`, `NodeInfo`; a type is named for what it holds
+--   abbreviation    a top-level name with a word of
+--                   cookbook/words/c_abbreviations.txt whose spelled-out
+--                   word another top-level name of the tree uses: one thing,
+--                   two spellings (`bi_split` beside `builtin_scan`); one
+--                   finding a file and abbreviation, naming its names
+--
+-- One line a finding, `path:line: check: why`, then the counts by check and
+-- by folder.
+--
+--   shale cookbook:c/hunt_names.shale             over c/
+--   shale cookbook:c/hunt_names.shale dir=c/host
+--   shale cookbook:c/hunt_names.shale self_test=1
+--
+-- `self_test=1` runs it over cookbook/c/plants/hunt_names/, each plant named
+-- for the check it holds (`do_word.c`), each near miss in `quiet_<check>.c`,
+-- and holds the findings to the plants' list exactly: every check fires on
+-- its own plant and on no other, and a quiet plant on none.
+--
+-- budget: steps=400000000 arena_bytes=2000000000 kept_bytes=268435456
+
+use("cookbook:c/items.shale")
+
+const PLANTS = "cookbook/c/plants/hunt_names"
+const CHECKS = {"type_case", "function_case", "constant_case", "zig_bound", "bound_order", "vague", "do_word", "vague_local", "container_type", "abbreviation"}
+const VAGUE_LOCALS = {"data", "info", "tmp", "temp", "stuff", "thing", "things", "misc", "util", "helper", "obj", "handle"}
+const ENTRY = {"run", "handle"}
+-- A unit a bound's name may end with, after its `MAX` or `MIN`.
+const UNITS = {"MS", "NS", "US", "S", "BYTES"}
+-- A declaration's first word that is no type: `return x;` declares nothing.
+const NOT_TYPES = {"return", "else", "case", "goto", "do", "sizeof", "typedef", "break", "continue"}
+
+-- A word table of cookbook/words/, a word a line, `--` starting a note. A
+-- word twice, or a line of two, is a mistake in the table: it fails.
+function word_table(file)
+  local t = {}
+  for l in lines(read("cookbook:words/" .. file)) do
+    local w = trim(split(l, "--")[1])
+    if contains(w, " ") or has_key(t, w) then fail("hunt_names: cookbook/words/" .. file .. ": `" .. w .. "` is no single new word") end
+    if w ~= "" then t[w] = true end
+  end
+  return t
+end
+
+-- cookbook/words/c_abbreviations.txt: an abbreviation to its word.
+function abbreviation_table()
+  local t = {}
+  for l in lines(read("cookbook:words/c_abbreviations.txt")) do
+    local ws = words(trim(split(l, "--")[1]))
+    if #ws == 2 then
+      if has_key(t, ws[1]) then fail("hunt_names: cookbook/words/c_abbreviations.txt: `" .. ws[1] .. "` twice") end
+      t[ws[1]] = ws[2]
+    elseif #ws ~= 0 then
+      fail("hunt_names: cookbook/words/c_abbreviations.txt: `" .. l .. "` is no pair of an abbreviation and its word")
+    end
+  end
+  return t
+end
+
+-- The C files under `dir`, sorted, c/out (the build's output) left out.
+function c_files_under(dir)
+  local files = {}
+  for e in walk_all(dir, {kind = "file", skip = "out"}) do
+    if ends_with(e.path, ".c") or ends_with(e.path, ".h") then push(files, e.path) end
+  end
+  sort(files)
+  return files
+end
+
+-- A C name's words, lower case: `NodeInfo`, `node_info` and `NODE_INFO` all
+-- `{node, info}`.
+function words_of(name)
+  local s = re_replace(name, "([a-z0-9])([A-Z])", "\\1_\\2")
+  local got = {}
+  for w in split(lower(s), "_") do
+    if w ~= "" then push(got, w) end
+  end
+  return got
+end
+
+-- Every word of every table in `t`.
+function all_in(ws, t)
+  if #ws == 0 then return false end
+  for w in ws do
+    if not has_key(t, w) then return false end
+  end
+  return true
+end
+
+-- The names a function's head declares as its parameters: each part's last
+-- word, between the head's first `(` and its last `)`.
+function param_names(head)
+  local open = find(head, "(")
+  local close = nil
+  local k = #head
+  while k > 0 and close == nil do
+    if sub(head, k, k) == ")" then close = k end
+    k = k - 1
+  end
+  if open == nil or close == nil or close <= open then return {} end
+  local names = {}
+  for part in split(sub(head, open + 1, close - 1), ",") do
+    local m = re_find(part, [=[(\w+)\s*(\[[^\]]*\])?\s*$]=])
+    if m ~= nil and m.groups[1] ~= "void" then push(names, m.groups[1]) end
+  end
+  return names
+end
+
+-- A body line's declared local, or nil: `Type name =`, `Type *name;`,
+-- `const Type name[`.
+const DECL = [=[^\s*(?:const\s+|static\s+|struct\s+|unsigned\s+)*([A-Za-z_]\w*)(?:\s*\*+\s*|\s+)(?:const\s+)?\*?([a-z_]\w*)\s*(?:=|;|\[)]=]
+
+function local_of(code)
+  local m = re_find(code, DECL)
+  if m == nil or has_item(NOT_TYPES, m.groups[1]) then return nil end
+  return m.groups[2]
+end
+
+-- What the hunt reads of one file: its findings by every check but
+-- `abbreviation`, and its top-level names `{name, line, words}` for that
+-- check, which needs the whole tree's.
+function hunt_file(p, tables)
+  local all = lines(read(p))
+  local found = {}
+  local named = {}
+  for it in c_items(p) do
+    local k = it.kind
+    local anonymous = k == "enum" and #it.enumerators > 0 and it.enumerators[1] == it.name and not starts_with(all[it.first], "typedef")
+    if (k == "struct" or k == "union" or k == "typedef" or k == "enum") and not anonymous then
+      if not re_match(it.name, "^[A-Z][A-Za-z0-9]*$") then push(found, {line = it.first, check = "type_case", why = "the type `" .. it.name .. "` is not PascalCase"}) end
+      if all_in(words_of(it.name), tables.containers) then push(found, {line = it.first, check = "container_type", why = "the type `" .. it.name .. "` is only container words: name it for what it holds"}) end
+      push(named, {name = it.name, line = it.first})
+    end
+    local constants = {}
+    for en in it.enumerators do push(constants, en) end
+    if k == "macro" and re_match(it.name, "^[A-Z][A-Z0-9_]*$") then push(constants, it.name) end
+    for en in it.enumerators do
+      if not re_match(en, "^[A-Z][A-Z0-9_]*$") then push(found, {line = it.first, check = "constant_case", why = "the constant `" .. en .. "` is not UPPER_SNAKE"}) end
+    end
+    for c in constants do
+      local ws = split(c, "_")
+      if has_item(ws, "MOST") or has_item(ws, "LEAST") then push(found, {line = it.first, check = "zig_bound", why = "`" .. c .. "` is a bound in Zig's words: C's are `_MAX` and `_MIN`"}) end
+      local j = 1
+      while j < #ws do
+        if (ws[j] == "MAX" or ws[j] == "MIN") and not (j == #ws - 1 and has_item(UNITS, ws[#ws])) then
+          local moved = {}
+          local x = 1
+          while x <= #ws do
+            if x ~= j then push(moved, ws[x]) end
+            x = x + 1
+          end
+          push(moved, ws[j])
+          push(found, {line = it.first, check = "bound_order", why = "`" .. c .. "` has `" .. ws[j] .. "` before its last word: a bound ends with it, as `" .. join(moved, "_") .. "` would"})
+          j = #ws
+        end
+        j = j + 1
+      end
+      push(named, {name = c, line = it.first})
+    end
+    if k == "macro" and not re_match(it.name, "^[A-Z][A-Z0-9_]*$") then push(named, {name = it.name, line = it.first}) end
+    if k == "data" and it.name ~= "" then push(named, {name = it.name, line = it.first}) end
+    if k == "function" then
+      local n = it.name
+      push(named, {name = n, line = it.first})
+      if n ~= "main" and not re_match(n, "^[a-z][a-z0-9_]*$") then push(found, {line = it.first, check = "function_case", why = "the function `" .. n .. "` is not snake_case"}) end
+      local ws = words_of(n)
+      if all_in(ws, tables.vague) and not (#ws == 1 and has_item(ENTRY, ws[1])) then push(found, {line = it.first, check = "vague", why = "`" .. n .. "` is only vague words: what does it act on, and how?"}) end
+      if has_item(split(n, "_"), "do") then push(found, {line = it.first, check = "do_word", why = "`" .. n .. "` has `do` in it, which says only that it acts: name the act"}) end
+      local head = re_replace(c_masked_text(all, it.sig_first, it.sig_last), [=[\s+]=], " ")
+      if it.body_first == it.sig_last then head = sub(head, 1, find(head, "{") - 1) end
+      for q in param_names(head) do
+        if has_item(VAGUE_LOCALS, q) then push(found, {line = it.first, check = "vague_local", why = "`" .. n .. "`'s parameter `" .. q .. "` says nothing of what it holds"}) end
+      end
+      if it.body_first ~= 0 and it.body_first ~= it.sig_last then
+        local b = it.body_first
+        while b <= it.body_last do
+          local l = local_of(c_mask(all[b]))
+          if l ~= nil and has_item(VAGUE_LOCALS, l) then push(found, {line = b, check = "vague_local", why = "`" .. n .. "`'s local `" .. l .. "` says nothing of what it holds"}) end
+          b = b + 1
+        end
+      end
+    end
+  end
+  return {found = found, named = named}
+end
+
+-- The findings over `dir`, sorted by place: `{path, line, check, why}`.
+function hunt(dir)
+  local tables = {vague = word_table("vague.txt"), containers = word_table("containers.txt"), abbreviations = abbreviation_table()}
+  tables.containers["data"] = true
+  tables.containers["info"] = true
+  local found = {}
+  local named = {}
+  local files = c_files_under(dir)
+  for p in files do
+    local r = hunt_file(p, tables)
+    for f in r.found do push(found, {path = p, line = f.line, check = f.check, why = f.why}) end
+    for x in r.named do push(named, {path = p, line = x.line, name = x.name, words = words_of(x.name)}) end
+    yield()
+  end
+  -- The words the tree's top-level names spell, for `abbreviation`.
+  local spelled = {}
+  for x in named do
+    for w in x.words do spelled[w] = true end
+  end
+  -- One finding a file and abbreviation, at its first name, naming them.
+  local short = {}
+  local order = {}
+  for x in named do
+    for w in unique(x.words) do
+      if has_key(tables.abbreviations, w) and has_key(spelled, tables.abbreviations[w]) then
+        local key = x.path .. "|" .. w
+        if not has_key(short, key) then
+          short[key] = {path = x.path, line = x.line, word = w, names = {}}
+          push(order, key)
+        end
+        push(short[key].names, x.name)
+      end
+    end
+  end
+  for key in order do
+    local s = short[key]
+    local names = unique(s.names)
+    local shown = "`" .. join(take(names, 4), "`, `") .. "`"
+    if #names > 4 then shown = shown .. " and " .. (#names - 4) .. " more" end
+    local count = #names .. " names"
+    if #names == 1 then count = "1 name" end
+    push(found, {path = s.path, line = s.line, check = "abbreviation", why = "`" .. s.word .. "` for `" .. tables.abbreviations[s.word] .. "`, which other names spell out, in " .. count .. " here: " .. shown})
+  end
+  sort(found, {"path", "line", "check", "why"})
+  return {found = found, files = #files}
+end
+
+-- The findings' lines.
+function finding_lines(found)
+  local out = {}
+  for f in found do push(out, f.path .. ":" .. f.line .. ": " .. f.check .. ": " .. f.why) end
+  return out
+end
+
+function self_test()
+  local r = hunt(PLANTS)
+  local wrong = {}
+  -- Every check fires on its own plant and no other; a quiet plant on none.
+  local fired = {}
+  for f in r.found do fired[f.path .. "|" .. f.check] = true end
+  for c in CHECKS do
+    local mine = PLANTS .. "/" .. c .. ".c"
+    if not has_key(fired, mine .. "|" .. c) then push(wrong, "`" .. c .. "` does not fire on its plant " .. mine) end
+  end
+  for f in r.found do
+    if f.path ~= PLANTS .. "/" .. f.check .. ".c" then push(wrong, "`" .. f.check .. "` fires on " .. f.path .. ":" .. f.line .. ", not its plant") end
+  end
+  local P = PLANTS .. "/"
+  local want = {
+    P .. "abbreviation.c:4: abbreviation: `bi` for `builtin`, which other names spell out, in 1 name here: `bi_length`",
+    P .. "bound_order.c:4: bound_order: `BOUND_MAX_NAME` has `MAX` before its last word: a bound ends with it, as `BOUND_NAME_MAX` would",
+    P .. "constant_case.c:4: constant_case: the constant `constant_wrong` is not UPPER_SNAKE",
+    P .. "container_type.c:4: container_type: the type `Entry` is only container words: name it for what it holds",
+    P .. "container_type.c:8: container_type: the type `NodeInfo` is only container words: name it for what it holds",
+    P .. "do_word.c:4: do_word: `store_do_write` has `do` in it, which says only that it acts: name the act",
+    P .. "function_case.c:4: function_case: the function `readThing` is not snake_case",
+    P .. "type_case.c:4: type_case: the type `bad_type` is not PascalCase",
+    P .. "vague.c:4: vague: `handle_data` is only vague words: what does it act on, and how?",
+    P .. "vague_local.c:4: vague_local: `vague_local_sum`'s parameter `data` says nothing of what it holds",
+    P .. "vague_local.c:5: vague_local: `vague_local_sum`'s local `tmp` says nothing of what it holds",
+    P .. "zig_bound.c:4: zig_bound: `ZIG_BOUND_MOST` is a bound in Zig's words: C's are `_MAX` and `_MIN`",
+    P .. "zig_bound.c:8: zig_bound: `ZIG_BOUND_LEAST` is a bound in Zig's words: C's are `_MAX` and `_MIN`",
+  }
+  local got = join(finding_lines(r.found), "\n")
+  if got ~= join(want, "\n") then push(wrong, "the plants' findings are\n" .. got .. "\nthey should be\n" .. join(want, "\n")) end
+  for w in wrong do print("FAIL " .. w) end
+  if #wrong > 0 then fail("hunt_names self-test: " .. #wrong .. " wrong") end
+  print("PASS hunt_names self-test: " .. #CHECKS .. " checks, each firing on its own plant alone, " .. #want .. " findings exactly, the quiet plants on none")
+  return nil
+end
+
+if arg("self_test", 0) == 1 then
+  self_test()
+else
+  local dir = arg("dir", "c")
+  local r = hunt(dir)
+  for l in finding_lines(r.found) do print(l) end
+  local by = {}
+  local folders = {}
+  for f in r.found do
+    incr(by, f.check)
+    incr(folders, dirname(f.path) .. " " .. f.check)
+  end
+  local parts = {}
+  for c in CHECKS do push(parts, c .. " " .. get(by, c, 0)) end
+  print("hunt_names: " .. r.files .. " files under " .. dir .. "; " .. #r.found .. " findings: " .. join(parts, ", "))
+  for k in sort(keys(folders)) do print("  " .. k .. ": " .. folders[k]) end
+end

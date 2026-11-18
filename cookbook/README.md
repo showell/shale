@@ -199,6 +199,10 @@ finders are built on it. It reads Shale's C, not C at large.
 - `c/find_clones.shale`: finds twin functions, of one shape once every name,
   number and string is masked, and runs of six or more lines alike in two
   places, each pair with its spans and a score. `shale cookbook:c/find_clones.shale`
+- `c/hunt_names.shale`: hunts for names that break c/docs/style.md's "Names"
+  (case, `_MAX` last and not Zig's `MOST`) or say too little (vague words,
+  `do`, container types, an abbreviation the tree also spells out).
+  `shale cookbook:c/hunt_names.shale`
 
 ## go/: Go code ([README](go/README.md))
 

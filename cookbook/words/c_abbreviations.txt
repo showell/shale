@@ -1,0 +1,20 @@
+-- Abbreviations in Shale's C, each with the word it shortens: an
+-- abbreviation then its word, a pair a line; `--` starts a note. The C name
+-- hunt's `abbreviation` check (cookbook/c/hunt_names.shale) reports a
+-- top-level name holding one only where another name of the tree spells
+-- the word out, so the one thing has two spellings (`bi_split` beside
+-- `builtin_scan`). C's own short words are no abbreviation here and are not
+-- listed: `ptr`, `len` and `cap` (c/docs/style.md's slice fields), `buf`,
+-- `str`, `ctx`, `arg`, `err`, `fd`, `pid`, `cwd`, `env`, `argv`, `cstr`; nor
+-- `re`, which names Shale's own `re_*` builtins; nor `opt` and `opts`, the
+-- language's own word for a call's options table (`run(argv, opts)`).
+bi builtin
+fx fixture
+msg message
+num number
+cnt count
+idx index
+val value
+arr array
+func function
+cmd command
