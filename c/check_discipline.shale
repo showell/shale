@@ -143,6 +143,7 @@ const STATICS_KEPT = {
   {at = "c/tests/canaries/tcc_struct_return.c:seen_first", why = "the compiler canary, a program of its own and no run"},
   {at = "c/tests/canaries/tcc_struct_return.c:seen_second", why = "the compiler canary, a program of its own and no run"},
   {at = "c/tests/canaries/tcc_struct_return.c:seen_count", why = "the compiler canary, a program of its own and no run"},
+  {at = "c/host/secrets_mode.c:tty", why = "the terminal settings a signal's handler puts back: the process's terminal, no run's"},
 }
 const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE_TYPE(", "VEC_DEFINE(", "MAP_DEFINE(", "TEST(", "TEST_MAIN(", "TEST_PART(", "TEST_PARTS_MAIN(", "_Static_assert(", "int main(", "}", ")"}
 

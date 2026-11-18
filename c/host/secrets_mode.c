@@ -17,6 +17,7 @@
 // Include store.c, path_run.c, mounts.c, paths.c, swap_file.c and
 // settings_json.c first.
 
+#include <signal.h>
 #include <termios.h>
 
 // The most bytes a stored secret may have: `stdout_secret`'s cap.
@@ -388,9 +389,11 @@ static STATUS_MUST_USE Status secrets_no_charge(void *vm, RunCtx *ctx, Pos pos, 
 }
 
 // The OS path of `shown`, `mount:NAME`, checked as `run`'s `stdout_secret`
-// target is (paths_secret_target): "" in `*why` when it passes, else the
-// check's own message.
-static void secrets_target(Secrets *m, Str shown, Str *abs, Str *why) {
+// target is (paths_secret_target): "" in `*why` when it passes, else what is
+// wrong said for a person. A name that is not a plain file name directly in
+// the mount gets one plain sentence; the check's other stops (a missing
+// folder, a link) are said in its own words, which name no script's option.
+static void secrets_target(Secrets *m, const Mount *mt, Str name, Str shown, Str *abs, Str *why) {
     *why = S("");
     bool refused = false;
     Arena values;
@@ -406,7 +409,18 @@ static void secrets_target(Secrets *m, Str shown, Str *abs, Str *why) {
     Pos pos = {1, 1};
     Str got = S("");
     if (paths_secret_target(&paths, &run, pos, shown, &got) != OK) {
-        if (!ctx.stopped || !arena_dup(m->arena, ctx.stop.message, why)) *why = S("the name cannot be checked");
+        bool plain_name = ctx.stopped && (ctx.stop.cls == CLASS_ARGUMENT || str_find_byte(name, '/') != NULL);
+        if (plain_name) {
+            Buf w = buf_make(m->arena);
+            Status built = buf_lit(&w, "a secret's name is a plain file name directly in the mount, like `");
+            if (built == OK) built = buf_str(&w, mt->name);
+            if (built == OK) built = buf_lit(&w, ":github_token`, not `");
+            if (built == OK) built = buf_str(&w, name);
+            if (built == OK) built = buf_byte(&w, '`');
+            *why = built == OK ? buf_view(&w) : S("the name cannot be checked");
+        } else if (!ctx.stopped || !arena_dup(m->arena, ctx.stop.message, why)) {
+            *why = S("the name cannot be checked");
+        }
     } else if (!arena_dup(m->arena, got, abs)) {
         *why = S("the name cannot be checked");
     }
@@ -439,32 +453,133 @@ static const Mount *secrets_pick_mount(Secrets *m) {
     return NULL;
 }
 
-// Reads the value with the terminal's echo off, into `room`: its length, or
-// a failure said and SIZE_MAX.
-static size_t secrets_read_value(Secrets *m, Bytes room) {
+// The terminal's settings from before the value is read, while they are
+// changed: what a signal's handler puts back. It is the process's terminal
+// and no run's, so it is a static (c/check_discipline.shale's STATICS_KEPT).
+typedef struct {
+    // Whether `saved` is to be put back: set while echo is off.
+    volatile sig_atomic_t held;
+    int fd;
     struct termios saved;
-    if (tcgetattr(m->io.in, &saved) != 0) {
+} SecretsTty;
+
+static SecretsTty *secrets_tty(void) {
+    static SecretsTty tty;
+    return &tty;
+}
+
+// The signals that end the mode while echo is off: each puts the terminal
+// back first.
+static int secrets_signal_at(size_t k) {
+    return k == 0 ? SIGINT : k == 1 ? SIGTERM : SIGHUP;
+}
+
+enum { SECRETS_SIGNALS = 3 };
+
+typedef struct sigaction SecretsAction;
+_Static_assert(SECRETS_SIGNALS == 3, "secrets_read_value keeps one action for each signal");
+
+// SIGINT, SIGTERM or SIGHUP while echo is off: the terminal's settings put
+// back, then the signal raised again under its default, so the mode ends as
+// that signal ends a program. tcsetattr is async-signal-safe.
+static void secrets_on_signal(int sig) {
+    SecretsTty *t = secrets_tty();
+    if (t->held) {
+        int back = tcsetattr(t->fd, TCSANOW, &t->saved);
+        (void)back;
+        t->held = 0;
+    }
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+// The value's bytes, read with the terminal's ICANON and ECHO off a byte at
+// a time to the newline, into `room`: no line limit of the terminal's
+// applies. A DEL or a backspace takes back the byte before it, and a ^D
+// first ends the input. LONG past `room`, read through to the newline.
+static SecretsLine secrets_read_raw(int fd, Bytes room, size_t *len) {
+    *len = 0;
+    bool long_line = false;
+    for (;;) {
+        char c = 0;
+        ssize_t n = read(fd, &c, 1);
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0) return SECRETS_LINE_FAILED;
+        if (n == 0 || (c == 4 && *len == 0 && !long_line)) return SECRETS_LINE_ENDED;
+        if (c == '\n' || c == '\r') break;
+        if (c == 127 || c == 8) {
+            if (*len > 0) (*len)--;
+            continue;
+        }
+        if (*len >= room.len) {
+            long_line = true;
+            continue;
+        }
+        at(room, *len) = c;
+        (*len)++;
+    }
+    return long_line ? SECRETS_LINE_LONG : SECRETS_LINE_OK;
+}
+
+// Reads the value with the terminal's echo and line editing off, into
+// `room`: its length, or a failure said and SIZE_MAX. The terminal's
+// settings come back on every way out: after the read, and from a handler
+// on SIGINT, SIGTERM and SIGHUP while it waits.
+static size_t secrets_read_value(Secrets *m, Bytes room) {
+    SecretsTty *t = secrets_tty();
+    if (tcgetattr(m->io.in, &t->saved) != 0) {
         (void)secrets_fail(m, S("the terminal's echo cannot be turned off; nothing is stored"), SECRETS_FAILED);
         return SIZE_MAX;
     }
-    struct termios quiet = saved;
-    quiet.c_lflag &= ~(tcflag_t)ECHO;
+    t->fd = m->io.in;
+    struct termios quiet = t->saved;
+    quiet.c_lflag &= ~(tcflag_t)(ECHO | ICANON);
+    SLICE_TYPE(CcRoom, cc_t);
+    CcRoom cc = {quiet.c_cc, NCCS};
+    at(cc, VMIN) = 1;
+    at(cc, VTIME) = 0;
     // DRAGON: the secrets rule. A value typed while the terminal still
-    // echoes is shown on the screen.
-    // REMEDY: echo goes off before the prompt is printed, so nothing typed
-    // after the prompt is echoed, and comes back on before anything else.
+    // echoes is shown on the screen, and a terminal left with echo off by a
+    // ^C hides what is typed next, a secret or not.
+    // REMEDY: the handlers go on and the settings are saved before echo goes
+    // off; echo goes off before the prompt is printed, so nothing typed after
+    // it is echoed; and the saved settings come back after the read, or from
+    // the handler (test_secrets holds both).
+    // One for each of SECRETS_SIGNALS.
+    SecretsAction was[3];
+    SLICE_TYPE(Actions, SecretsAction);
+    Actions old = {was, sizeof was / sizeof *was};
+    struct sigaction on;
+    memset(&on, 0, sizeof on);
+    on.sa_handler = secrets_on_signal;
+    sigemptyset(&on.sa_mask);
+    t->held = 1;
+    for (size_t k = 0; k < old.len; k++) {
+        int put = sigaction(secrets_signal_at(k), &on, &at(old, k));
+        (void)put;
+    }
     if (tcsetattr(m->io.in, TCSAFLUSH, &quiet) != 0) {
+        t->held = 0;
+        for (size_t k = 0; k < old.len; k++) {
+            int put = sigaction(secrets_signal_at(k), &at(old, k), NULL);
+            (void)put;
+        }
         (void)secrets_fail(m, S("the terminal's echo cannot be turned off; nothing is stored"), SECRETS_FAILED);
         return SIZE_MAX;
     }
     secrets_say(m, S("The value (it is not shown as you type): "));
     size_t len = 0;
-    SecretsLine got = secrets_read_line(m->io.in, room, &len);
-    int back = tcsetattr(m->io.in, TCSAFLUSH, &saved);
+    SecretsLine got = secrets_read_raw(m->io.in, room, &len);
+    int back = tcsetattr(m->io.in, TCSAFLUSH, &t->saved);
     (void)back;
+    t->held = 0;
+    for (size_t k = 0; k < old.len; k++) {
+        int put = sigaction(secrets_signal_at(k), &at(old, k), NULL);
+        (void)put;
+    }
     secrets_say(m, S("\n"));
     if (got == SECRETS_LINE_LONG) {
-        (void)secrets_fail(m, S("the value is past 64 KiB; nothing is stored"), SECRETS_FAILED);
+        (void)secrets_fail(m, S("the value is longer than 64 KiB, the most a secret may be; nothing is stored"), SECRETS_FAILED);
         return SIZE_MAX;
     }
     if (got != SECRETS_LINE_OK) {
@@ -501,7 +616,7 @@ static int secrets_store(Secrets *m) {
     Str shown = secrets_cat(m, mt->name, S(":"), name);
     Str abs = S("");
     Str why = S("");
-    secrets_target(m, shown, &abs, &why);
+    secrets_target(m, mt, name, shown, &abs, &why);
     if (why.len > 0) return secrets_fail(m, secrets_cat(m, why, S("; nothing is stored"), S("")), SECRETS_FAILED);
     SwapFile f;
     if (swap_file_target(&f, abs) != STORE_OK) return secrets_fail(m, secrets_cat(m, shown, S(": its path is too long; nothing is stored"), S("")), SECRETS_FAILED);

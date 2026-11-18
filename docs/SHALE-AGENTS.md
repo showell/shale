@@ -896,7 +896,10 @@ editing by hand. It shows a menu of three commands:
 2. **store** asks for the mount (when there are two or more) and the
    secret's name, which must be a plain file directly in the mount, checked
    as `stdout_secret`'s file is. It reads the value with the terminal's echo
-   off and writes it as `stdout_secret` does: mode 0600, beside the file
+   and line editing off, a byte at a time to the newline (a backspace takes
+   one back), so a long token is read whole, and refuses one past 64 KiB.
+   The terminal's settings come back however it ends, a ^C included. It
+   writes the value as `stdout_secret` does: mode 0600, beside the file
    first, then renamed into place. A secret already there is replaced only
    after a yes, and an empty value stores nothing. It prints `stored
    keys:NAME (N bytes)`, never the value, and then offers the deny rules

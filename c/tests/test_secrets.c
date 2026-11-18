@@ -333,6 +333,10 @@ typedef struct {
     Buf seen;
     // Where the next tty_expect starts looking.
     size_t from;
+    // Set by tty_end: how the child ended (waitpid's status), and the
+    // terminal's local flags after it.
+    int status;
+    tcflag_t lflag;
 } Tty;
 
 static void tty_start(Tty *t, Sf *f) {
@@ -384,18 +388,33 @@ static bool tty_expect(Tty *t, const char *text) { // cstr: a test's literal
     }
 }
 
-static void tty_send(Tty *t, const char *line) { // cstr: a test's literal
-    Str s = test_cs(line);
-    if (write(t->master, s.ptr, s.len) != (ssize_t)s.len || write(t->master, "\n", 1) != 1) abort();
+// Types `s` at the terminal, whole: a long one waits while the child reads.
+static void tty_type(Tty *t, Str s) {
+    size_t done = 0;
+    while (done < s.len) {
+        ssize_t n = write(t->master, &at(s, done), s.len - done);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) abort();
+        done += (size_t)n;
+    }
 }
 
-// Reads the rest the child prints and waits for it: its exit code.
+static void tty_send(Tty *t, const char *line) { // cstr: a test's literal
+    tty_type(t, test_cs(line));
+    tty_type(t, S("\n"));
+}
+
+// Reads the rest the child prints and waits for it: its exit code, or -1
+// when a signal ended it (`t->status` says which). The terminal's local
+// flags are read after, while the master is still open.
 static int tty_end(Tty *t) {
     for (int k = 0; k < 1000 && tty_pull(t, 5000) > 0; k++) continue;
-    int status = 0;
-    if (waitpid(t->pid, &status, 0) != t->pid) return -1;
+    t->status = 0;
+    if (waitpid(t->pid, &t->status, 0) != t->pid) return -1;
+    struct termios now;
+    t->lflag = tcgetattr(t->master, &now) == 0 ? now.c_lflag : 0;
     close(t->master);
-    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    return WIFEXITED(t->status) ? WEXITSTATUS(t->status) : -1;
 }
 
 static bool tty_said(Tty *t, const char *text) { // cstr: a test's literal
@@ -503,6 +522,9 @@ TEST(store_writes_the_value_0600_says_its_bytes_never_the_value_then_adds_the_de
     tty_send(&t, "y");
     EXPECT(tty_expect(&t, "Added 2 rules to ~/.claude/settings.json.\n"));
     EXPECT_EQ(tty_end(&t), 0);
+    // The terminal's echo and line editing are back on.
+    EXPECT((t.lflag & ECHO) != 0);
+    EXPECT((t.lflag & ICANON) != 0);
     // The secret: its bytes alone, mode 0600, and no temporary file beside it.
     EXPECT_STR(sf_read(&f, "keys/tok"), S("s3cret-VALUE-9x"));
     EXPECT_EQ(sf_mode(&f, "keys/tok"), 0600);
@@ -582,10 +604,11 @@ TEST(store_refuses_a_name_that_is_not_a_file_directly_in_the_mount) {
         const char *says;
     } Bad;
     static const Bad bad[] = {
-        {"sub/x", "shale --secrets: `run`'s `stdout_secret` \"keys:sub/x\" is in a folder of the mount: a secret is a file directly in it, `\"keys:NAME\"`; nothing is stored\n"},
-        {"..", "shale --secrets: \"keys:..\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts); nothing is stored\n"},
-        {"a:b", "shale --secrets: \"keys:a:b\" has a part (\"a:b\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses; nothing is stored\n"},
-        {".", "shale --secrets: \"keys:.\": a secret is a file in the mount, not the mount; nothing is stored\n"},
+        {"sub/x", "shale --secrets: a secret's name is a plain file name directly in the mount, like `keys:github_token`, not `sub/x`; nothing is stored\n"},
+        {"..", "shale --secrets: a secret's name is a plain file name directly in the mount, like `keys:github_token`, not `..`; nothing is stored\n"},
+        {"a:b", "shale --secrets: a secret's name is a plain file name directly in the mount, like `keys:github_token`, not `a:b`; nothing is stored\n"},
+        {".", "shale --secrets: a secret's name is a plain file name directly in the mount, like `keys:github_token`, not `.`; nothing is stored\n"},
+        {"../x", "shale --secrets: a secret's name is a plain file name directly in the mount, like `keys:github_token`, not `../x`; nothing is stored\n"},
     };
     SLICE_TYPE(Bads, const Bad);
     Bads all = {bad, sizeof bad / sizeof *bad};
@@ -602,11 +625,110 @@ TEST(store_refuses_a_name_that_is_not_a_file_directly_in_the_mount) {
         EXPECT_EQ(tty_end(&t), 1);
         EXPECT(tty_expect(&t, at(all, i).says));
         EXPECT(!tty_said(&t, "The value"));
+        EXPECT(!tty_said(&t, "stdout_secret"));
         EXPECT_EQ(sf_count(&f, "keys"), 1);
         EXPECT_EQ(sf_count(&f, "keys/sub"), 0);
         EXPECT_EQ(sf_count(&f, "home"), 0);
         sf_deinit(&f);
     }
+}
+
+// Store, menu to value prompt, for the name `name`.
+static void tty_to_value(Tty *t, Sf *f, const char *name) { // cstr: a test's literal
+    tty_start(t, f);
+    EXPECT(tty_expect(t, "Which one (1, 2 or 3)? "));
+    tty_send(t, "2");
+    EXPECT(tty_expect(t, "): "));
+    tty_send(t, name);
+    EXPECT(tty_expect(t, "The value (it is not shown as you type): "));
+}
+
+// `n` bytes of a value no line of the transcript could hold by chance.
+static Str long_value(Sf *f, size_t n) {
+    Buf b = buf_make(&f->a);
+    Str alphabet = S("Qz7kW2xR");
+    for (size_t k = 0; k < n; k++) {
+        if (buf_byte(&b, (char)str_byte(alphabet, k % alphabet.len)) != OK) abort();
+    }
+    return buf_view(&b);
+}
+
+TEST(store_reads_a_value_past_the_terminals_line_limit_whole_and_refuses_one_past_64_KiB) {
+    Sf f;
+    sf_init(&f, ONE_SECRETS_MOUNT);
+    // Past the 4096 bytes a terminal's line holds in canonical mode.
+    Str v = long_value(&f, 5000);
+    Tty t;
+    tty_to_value(&t, &f, "long");
+    tty_type(&t, v);
+    tty_type(&t, S("\n"));
+    EXPECT(tty_expect(&t, "stored keys:long (5000 bytes)\n"));
+    EXPECT(tty_expect(&t, "Add them? [y/n] "));
+    tty_send(&t, "n");
+    EXPECT_EQ(tty_end(&t), 0);
+    EXPECT_STR(sf_read(&f, "keys/long"), v);
+    EXPECT_EQ(sf_mode(&f, "keys/long"), 0600);
+    EXPECT(!tty_said(&t, "Qz7kW2xRQz7k"));
+    // 64 KiB exactly is stored; one byte past it is refused, nothing stored.
+    Str most = long_value(&f, 65536);
+    tty_to_value(&t, &f, "most");
+    tty_type(&t, most);
+    tty_type(&t, S("\n"));
+    EXPECT(tty_expect(&t, "stored keys:most (65536 bytes)\n"));
+    EXPECT(tty_expect(&t, "Add them? [y/n] "));
+    tty_send(&t, "n");
+    EXPECT_EQ(tty_end(&t), 0);
+    EXPECT_STR(sf_read(&f, "keys/most"), most);
+    tty_to_value(&t, &f, "past");
+    tty_type(&t, long_value(&f, 65537));
+    tty_type(&t, S("\n"));
+    EXPECT_EQ(tty_end(&t), 1);
+    EXPECT(tty_expect(&t, "shale --secrets: the value is longer than 64 KiB, the most a secret may be; nothing is stored\n"));
+    EXPECT_STR(sf_read(&f, "keys/past"), S("<none>"));
+    EXPECT_EQ(sf_count(&f, "keys"), 2);
+    EXPECT((t.lflag & ECHO) != 0);
+    EXPECT((t.lflag & ICANON) != 0);
+    EXPECT(!tty_said(&t, "Qz7kW2xRQz7k"));
+    // A backspace takes back the byte typed before it.
+    tty_to_value(&t, &f, "fixed");
+    tty_send(&t, "abX\x7f" "c");
+    EXPECT(tty_expect(&t, "stored keys:fixed (3 bytes)\n"));
+    EXPECT(tty_expect(&t, "Add them? [y/n] "));
+    tty_send(&t, "n");
+    EXPECT_EQ(tty_end(&t), 0);
+    EXPECT_STR(sf_read(&f, "keys/fixed"), S("abc"));
+    sf_deinit(&f);
+}
+
+TEST(a_ctrl_c_at_the_value_prompt_puts_the_terminals_echo_back_and_stores_nothing) {
+    Sf f;
+    sf_init(&f, ONE_SECRETS_MOUNT);
+    Tty t;
+    tty_to_value(&t, &f, "tok");
+    // Half a value typed, then ^C, which the terminal makes SIGINT.
+    tty_type(&t, S("half-typed"));
+    tty_type(&t, S("\x03"));
+    EXPECT_EQ(tty_end(&t), -1);
+    EXPECT(WIFSIGNALED(t.status));
+    EXPECT_EQ(WTERMSIG(t.status), SIGINT);
+    EXPECT((t.lflag & ECHO) != 0);
+    EXPECT((t.lflag & ICANON) != 0);
+    EXPECT_EQ(sf_count(&f, "keys"), 0);
+    EXPECT_EQ(sf_count(&f, "home"), 0);
+    EXPECT(!tty_said(&t, "half-typed"));
+    // SIGTERM and SIGHUP, sent as another program would, do the same.
+    for (int k = 0; k < 2; k++) {
+        int sig = k == 0 ? SIGTERM : SIGHUP;
+        tty_to_value(&t, &f, "tok");
+        EXPECT(kill(t.pid, sig) == 0);
+        EXPECT_EQ(tty_end(&t), -1);
+        EXPECT(WIFSIGNALED(t.status));
+        EXPECT_EQ(WTERMSIG(t.status), sig);
+        EXPECT((t.lflag & ECHO) != 0);
+        EXPECT((t.lflag & ICANON) != 0);
+        EXPECT_EQ(sf_count(&f, "keys"), 0);
+    }
+    sf_deinit(&f);
 }
 
 TEST(store_an_empty_value_stores_nothing) {
@@ -708,6 +830,8 @@ TEST_MAIN(TEST_CASE(settings_a_file_read_and_written_back_keeps_its_order_its_te
           TEST_CASE(store_writes_the_value_0600_says_its_bytes_never_the_value_then_adds_the_deny_rules),
           TEST_CASE(store_over_a_secret_asks_first_a_no_keeps_it_a_yes_replaces_it),
           TEST_CASE(store_refuses_a_name_that_is_not_a_file_directly_in_the_mount),
+          TEST_CASE(store_reads_a_value_past_the_terminals_line_limit_whole_and_refuses_one_past_64_KiB),
+          TEST_CASE(a_ctrl_c_at_the_value_prompt_puts_the_terminals_echo_back_and_stores_nothing),
           TEST_CASE(store_an_empty_value_stores_nothing),
           TEST_CASE(deny_adds_only_what_is_missing_keeps_the_old_file_as_bak_and_leaves_a_correct_file_untouched),
           TEST_CASE(deny_a_file_that_does_not_parse_or_a_no_writes_nothing))
