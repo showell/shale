@@ -1,0 +1,277 @@
+-- Finds Shale's C that no program reaches, from cookbook/c/items.shale's
+-- splitter. GCC's unused-function warning passes by every `static inline`
+-- function (each header's and those of .c files a unit may not call), and a
+-- function some other dead function calls is no warning at all, so this reads
+-- the whole tree's names instead:
+--
+--   dead       a function, or a generator (`VEC_DEFINE(Name, T)`), that no
+--              program reaches: no item names it, or only items that are
+--              themselves unreached do (`named only by unreached code: ...`);
+--   test_only  a function outside the tests that only tests reach.
+--
+-- One line a finding, `path:line: dead: name` or `path:line: test_only:
+-- name`, then the counts by rule and by folder.
+--
+--   shale cookbook:c/find_dead_code.shale            over c/
+--   shale cookbook:c/find_dead_code.shale dir=c/host
+--   shale cookbook:c/find_dead_code.shale self_test=1
+--
+-- How it reads a use. Every function, test, test list, data item, macro and
+-- generator is a node; its edges are the identifiers its masked text names
+-- (items.shale's `uses` for a body, the whole item's words for data, a
+-- macro and a generator), so a comment, a string and a member after `.` or
+-- `->` are never a use, a prototype is none, and a name taken without a
+-- call (a function pointer in a table) is one. A name resolves to its own
+-- file's item of that name when the file has one (two test files may each
+-- have a `pick`), else to every item of that name in the tree. A generator
+-- answers to its type's name and to each function its macro `makes`
+-- (`VEC_DEFINE(Ints, int)` to `Ints`, `Ints_make`, `Ints_push`), so a use of
+-- `Ints_push` reaches it. A macro is reached by being named, and reaches the
+-- names in its body.
+--
+-- The programs are the roots: each `int main(` outside a `tests` folder
+-- (c/shale.c, c/shale_gate.c) is production's; each test, test list and
+-- `main` under one is the tests'. A function of the tests' own files (under
+-- a `tests` folder, or a file named `test*`, as c/foundation/test.h, the
+-- runner) that the tests reach is a test's helper, never a finding.
+--
+-- What it can't see: a name made by `##` outside a generator (only
+-- test.h's `TEST` and `TEST_PART` do that, and tests are roots), and a
+-- use that a preprocessor branch compiles out: every branch counts.
+--
+-- `self_test=1` runs it over cookbook/c/plants/find_dead_code/ and holds the
+-- findings to the plants' own list, exactly: each way to be used (a call, a
+-- pointer in a table, a macro, a generator's function or its type) and each
+-- near miss (a comment, a string, a member, a prototype, recursion, a macro
+-- nobody uses, a same-named helper in another test file).
+--
+-- budget: steps=400000000 arena_bytes=2000000000 kept_bytes=268435456
+
+use("cookbook:c/items.shale")
+
+const PLANTS = "cookbook/c/plants/find_dead_code"
+
+-- The C files under `dir`, sorted, c/out (the build's output) left out.
+function c_files_under(dir)
+  local files = {}
+  for e in walk_all(dir, {kind = "file", skip = "out"}) do
+    if ends_with(e.path, ".c") or ends_with(e.path, ".h") then push(files, e.path) end
+  end
+  sort(files)
+  return files
+end
+
+-- Whether `p`, below `dir`, is the tests': in a `tests` folder, or a file
+-- whose name starts with `test` (c/foundation/test.h, the tests' runner).
+function is_test_path(dir, p)
+  local rel = sub(p, #dir + 2)
+  return starts_with(rel, "tests/") or contains(rel, "/tests/") or starts_with(basename(p), "test")
+end
+
+-- The kinds that are nodes: each names others, or is named. A type is one,
+-- since a generator's type may be named only in a struct's field.
+const NODE_KINDS = {"function", "test", "test_list", "data", "macro", "generator", "struct", "union", "enum", "typedef"}
+
+-- The kinds whose words are the whole item's text, not a body's `uses`.
+const WHOLE_KINDS = {"data", "macro", "generator", "struct", "union", "enum", "typedef"}
+
+-- The tree's nodes, one for each item that names others or is named:
+-- `{path, line, kind, name, test, words, macro}`, `test` whether its file is
+-- under a `tests` folder.
+function read_nodes(dir)
+  local nodes = {}
+  for p in c_files_under(dir) do
+    local all = lines(read(p))
+    local test = is_test_path(dir, p)
+    for it in c_items(p, {uses = true}) do
+      local k = it.kind
+      if has_item(NODE_KINDS, k) then
+        local words = it.uses
+        if has_item(WHOLE_KINDS, k) then words = c_words_used(c_masked_text(all, it.first, it.last)) end
+        push(nodes, {path = p, line = it.first, kind = k, name = it.name, test = test, words = words, macro = it.macro, makes = it.makes})
+      end
+    end
+    yield()
+  end
+  return nodes
+end
+
+-- The names each node answers to: its own, and a generator's functions. A
+-- test list answers to none: its name is its macro's (`TEST_MAIN`), and a
+-- list is a root.
+-- Gives `{by_name, by_file}`: a name to its nodes' indexes, and
+-- `path|name` to the file's own node.
+function index_nodes(nodes)
+  local makes = {}
+  for n in nodes do
+    if n.kind == "macro" then makes[n.name] = n.makes end
+  end
+  local by_name = {}
+  local by_file = {}
+  local i = 0
+  for n in nodes do
+    i = i + 1
+    if n.name ~= "" and n.kind ~= "test_list" then
+      local names = {n.name}
+      if n.kind == "generator" then
+        for m in get(makes, n.macro, {}) do push(names, n.name .. "_" .. m) end
+      end
+      for nm in names do
+        push_at(by_name, nm, i)
+        by_file[n.path .. "|" .. nm] = i
+      end
+    end
+  end
+  return {by_name = by_name, by_file = by_file}
+end
+
+-- Each node's edges, the nodes its words resolve to (never itself).
+function resolve_edges(nodes, index)
+  local edges = {}
+  local i = 0
+  for n in nodes do
+    i = i + 1
+    local out = {}
+    for w in n.words do
+      local own = n.path .. "|" .. w
+      if has_key(index.by_file, own) then
+        if index.by_file[own] ~= i then push(out, index.by_file[own]) end
+      else
+        for t in get(index.by_name, w, {}) do
+          if t ~= i then push(out, t) end
+        end
+      end
+    end
+    push(edges, out)
+  end
+  return edges
+end
+
+-- The nodes reached from `roots`, as a map of index strings.
+function reach(edges, roots)
+  local seen = {}
+  local work = {}
+  for r in roots do
+    if not has_key(seen, "" .. r) then
+      seen["" .. r] = true
+      push(work, r)
+    end
+  end
+  local next = 1
+  while next <= #work do
+    local at = work[next]
+    next = next + 1
+    for t in edges[at] do
+      if not has_key(seen, "" .. t) then
+        seen["" .. t] = true
+        push(work, t)
+      end
+    end
+  end
+  return seen
+end
+
+-- The findings over `dir`, sorted by place: `{path, line, rule, name, text}`.
+function find_dead(dir)
+  local nodes = read_nodes(dir)
+  local index = index_nodes(nodes)
+  local edges = resolve_edges(nodes, index)
+  local prod_roots = {}
+  local test_roots = {}
+  local i = 0
+  for n in nodes do
+    i = i + 1
+    if n.kind == "function" and n.name == "main" then
+      if n.test then push(test_roots, i) else push(prod_roots, i) end
+    elseif n.kind == "test" or n.kind == "test_list" then
+      push(test_roots, i)
+    end
+  end
+  local prod = reach(edges, prod_roots)
+  local tested = reach(edges, test_roots)
+  -- Who names each node, for a dead one's line.
+  local users = {}
+  i = 0
+  for out in edges do
+    i = i + 1
+    for t in out do push_at(users, "" .. t, i) end
+  end
+  local found = {}
+  i = 0
+  for n in nodes do
+    i = i + 1
+    local key = "" .. i
+    if (n.kind == "function" and n.name ~= "main") or n.kind == "generator" then
+      local rule = ""
+      if has_key(prod, key) then
+        rule = ""
+      elseif has_key(tested, key) then
+        if not n.test then rule = "test_only" end
+      else
+        rule = "dead"
+      end
+      if rule ~= "" then
+        local text = n.name
+        if n.kind == "generator" then text = text .. " (a " .. n.macro .. " generator)" end
+        if rule == "dead" and has_key(users, key) then
+          local who = {}
+          for u in users[key] do push(who, nodes[u].name) end
+          text = text .. " (named only by unreached code: " .. join(unique(sort(who)), ", ") .. ")"
+        end
+        push(found, {path = n.path, line = n.line, rule = rule, name = n.name, text = text})
+      end
+    end
+  end
+  sort(found, {"path", "line"})
+  return {found = found, nodes = #nodes}
+end
+
+-- The findings' lines.
+function finding_lines(found)
+  local out = {}
+  for f in found do push(out, f.path .. ":" .. f.line .. ": " .. f.rule .. ": " .. f.text) end
+  return out
+end
+
+function self_test()
+  local got = finding_lines(find_dead(PLANTS).found)
+  local P = PLANTS .. "/"
+  local want = {
+    P .. "lib.c:6: dead: Chars (a VEC_DEFINE generator)",
+    P .. "lib.c:18: dead: lib_proto_only",
+    P .. "lib.c:43: dead: lib_in_unused_macro (named only by unreached code: LIB_UNUSED_CALL)",
+    P .. "lib.c:50: dead: lib_recursive",
+    P .. "lib.c:56: dead: lib_by_dead (named only by unreached code: lib_recursive)",
+    P .. "lib.c:61: dead: lib_in_comment",
+    P .. "lib.c:66: dead: lib_member",
+    P .. "lib.c:71: test_only: lib_tested",
+    P .. "lib.h:11: dead: lib_header_dead",
+    P .. "lib.h:14: test_only: lib_header_tested",
+    P .. "test.h:14: dead: test_unused_kit",
+    P .. "tests/test_lib.c:10: dead: test_lib_stray",
+    P .. "tests/test_lib.c:16: dead: pick",
+  }
+  local g = join(got, "\n")
+  local w = join(want, "\n")
+  if g ~= w then fail("find_dead_code self-test: the plants' findings are\n" .. g .. "\nthey should be\n" .. w) end
+  print("PASS find_dead_code self-test: " .. #want .. " findings over the plants, exactly, and each near miss left alone")
+  return nil
+end
+
+if arg("self_test", 0) == 1 then
+  self_test()
+else
+  local dir = arg("dir", "c")
+  local r = find_dead(dir)
+  for l in finding_lines(r.found) do print(l) end
+  local rules = {}
+  local folders = {}
+  for f in r.found do
+    incr(rules, f.rule)
+    incr(folders, dirname(f.path) .. " " .. f.rule)
+  end
+  local parts = {}
+  for k in sort(keys(rules)) do push(parts, rules[k] .. " " .. k) end
+  print("find_dead_code: " .. r.nodes .. " items under " .. dir .. "; " .. #r.found .. " findings: " .. join(parts, ", "))
+  for k in sort(keys(folders)) do print("  " .. k .. ": " .. folders[k]) end
+end

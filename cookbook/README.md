@@ -190,6 +190,9 @@ finders are built on it. It reads Shale's C, not C at large.
 - `c/map_file.shale`: prints a file's items, one `first-last kind name` a
   line; `tree=c` splits every file and accounts for each line.
   `shale cookbook:c/map_file.shale file=c/script/vm.c`
+- `c/find_dead_code.shale`: finds the functions and generators no program
+  reaches, and those only tests reach, from every item's names.
+  `shale cookbook:c/find_dead_code.shale dir=c`
 
 ## go/: Go code ([README](go/README.md))
 
