@@ -174,6 +174,23 @@ steps left for the writer.
 - `roc/wrap_long_lines.shale`: shortens long Roc lines by letting `roc fmt`
   lay out their groups. `shale cookbook:roc/wrap_long_lines.shale dir=roc width=100`
 
+## c/: Shale's own C
+
+There is no C parser on the box, and none is wanted: c/check_discipline.shale
+holds Shale's C to a shape a line reader can trust (each line at column 0
+opens or closes an item, braces end their lines, one declaration a line,
+`//` comments), and the build fails when a file breaks it. So the dialect is
+the parser's contract: `c/items.shale` splits a file into its items on it,
+and stops, naming the file and line, at a line it can't account for. The C
+finders are built on it. It reads Shale's C, not C at large.
+
+- `c/items.shale` (library): a file's top-level items, each with its kind,
+  name, lines, head, body and the names its body uses, and the masker that
+  blanks strings and comments. `use("cookbook:c/items.shale")`
+- `c/map_file.shale`: prints a file's items, one `first-last kind name` a
+  line; `tree=c` splits every file and accounts for each line.
+  `shale cookbook:c/map_file.shale file=c/script/vm.c`
+
 ## go/: Go code ([README](go/README.md))
 
 - `go/find_deep_calls.shale`: finds calls nested three or more deep.

@@ -3,7 +3,9 @@
 Shale's C is written by agents, in one domain, in one style. Shale's own
 tools need to read only this C, not arbitrary C, so the style is kept
 regular enough for a small reader to split a file into its items and read
-each one.
+each one. That reader is `cookbook/c/items.shale`: the fast tier splits
+every file with it (`cookbook/c/map_file.shale`, `tree=c`), so a file it can't
+read fails the build.
 
 The foundation in `c/foundation/` follows every rule here.
 `c/check_discipline.shale` holds the rules marked **held** on every build,
