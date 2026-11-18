@@ -1,0 +1,91 @@
+-- Short terms a Roc name may hold though no word list has them, one a line,
+-- each with its reason after `--`. Read by find_unclear_names.shale, whose
+-- `abbreviation` check passes these, and a plural of one (`ids`). A line with
+-- no reason fails the run. A project's own go in its own file, `accepted=`.
+abs     -- Roc's own `Num.abs`
+ai      -- computing's word for a program's own player
+alt     -- HTML's attribute
+amp     -- HTML's entity
+api     -- computing's word for a program's interface
+apos    -- HTML's entity
+argb    -- a colour's channels, by their letters
+ast     -- computing's word for a syntax tree
+atx     -- CommonMark's name for a `#` heading
+br      -- HTML's element
+cos     -- the function's own name
+cr      -- ASCII's name for a carriage return
+css     -- the stylesheet language's own name
+dec     -- Roc's own `Dec`
+del     -- HTML's element
+div     -- HTML's element
+doc     -- Roc's word for a `##` comment
+dom     -- the browser's document model, by its own name
+ecma    -- the standard's own name
+em      -- HTML's element
+eq      -- Roc's own `is_eq`
+fnv     -- the hash's own name
+fps     -- a unit, frames a second
+gib     -- a unit, gibibytes
+git     -- the program's own name
+glsl    -- the shader language's own name
+gt      -- Roc's own `is_gt`, and HTML's entity
+gte     -- Roc's own `is_gte`
+hmac    -- the algorithm's own name
+hr      -- HTML's element
+href    -- HTML's attribute
+html    -- the markup language's own name
+http    -- the protocol's own name
+hud     -- a game's heads-up display, by its own name
+id      -- computing's word for an identifier
+img     -- HTML's element
+init    -- a Roc platform's own name for its start
+io      -- computing's word for input and output
+js      -- the language's own name
+json    -- the format's own name
+lerp    -- graphics' own name for a linear blend
+lf      -- ASCII's name for a line feed
+li      -- HTML's element
+lt      -- Roc's own `is_lt`, and HTML's entity
+lte     -- Roc's own `is_lte`
+mac     -- a message authentication code, by its own name
+max     -- Roc's own `Num.max`
+md      -- Markdown's file extension
+mib     -- a unit, mebibytes
+min     -- Roc's own `Num.min`
+ms      -- a unit, milliseconds
+nav     -- HTML's element
+ol      -- HTML's element
+pi      -- the constant's own name
+png     -- the format's own name
+pow     -- Roc's own `Num.pow`
+ppm     -- the image format's own name
+pre     -- HTML's element
+px      -- a unit, pixels
+quot    -- HTML's entity
+rem     -- Roc's own `Num.rem`
+repo    -- git's own word for a repository
+rgb     -- a colour's channels, by their letters
+rgba    -- a colour's channels, by their letters
+roc     -- the language's own name
+sha256  -- the hash's own name
+sin     -- the function's own name
+spec    -- computing's word for a specification
+sqrt    -- Roc's own `Num.sqrt`
+src     -- HTML's attribute
+str     -- Roc's own `Str`
+svg     -- the format's own name
+tan     -- the function's own name
+tau     -- the constant's own name
+td      -- HTML's element
+th      -- HTML's element
+tr      -- HTML's element
+ul      -- HTML's element
+url     -- computing's word for an address
+utc     -- the time standard's own name
+utf8    -- the encoding's own name
+wasm    -- the format's own name
+xs      -- a list of `x`, Roc's own habit
+ys      -- a list of `y`
+zig     -- the language's own name
+zon     -- Zig's data format, by its own name
+zs      -- a list of `z`

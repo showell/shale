@@ -135,8 +135,11 @@ finding. A project's own words stay with the project and are passed in.
   type alias's field, and answers each from a table of named exceptions, whose
   unused lines fail the run.
 - [find_unclear_names.shale](find_unclear_names.shale) finds a pure function named like a
-  mutation (`pure_mutator`), an abbreviation in a name
-  (`abbreviation`, from `cookbook/words/abbreviations.txt`), and a module
+  mutation (`pure_mutator`), an abbreviation in a name, a parameter's or a
+  local's included (`abbreviation`: a word of `cookbook/words/abbreviations.txt`,
+  or a word of two to four letters, `st` or `Inl`, that neither
+  `cookbook/words/short_words.txt` nor the reasoned table
+  `cookbook/words/accepted_terms.txt` holds), and a module
   with no doc or with history in its top comment (`module_doc`). `terms=`
   names a project's file of fixed terms that open a name and only look like a
   verb, as `set_cookie` does.

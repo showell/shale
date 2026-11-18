@@ -10,6 +10,11 @@
 --   abbreviations  the file of abbreviations, one a line, by default
 --                  cookbook/words/abbreviations.txt, for a project with
 --                  words of its own to add;
+--   words          the English words of two to four letters a name may hold,
+--                  by default cookbook/words/short_words.txt;
+--   accepted       the short terms a name may hold though they are no
+--                  English word, each with its reason, by default
+--                  cookbook/words/accepted_terms.txt (`html`, `url`, `utf8`);
 --   terms          a project's file of fixed terms that open a name and only
 --                  look like a verb, one a line, such as `set_cookie` for
 --                  HTTP's header, which `pure_mutator` leaves alone;
@@ -19,7 +24,8 @@
 --                  `cookbook/roc/plants/find_unclear_names/`.
 --
 -- The checks read top-level names, module members and the record fields of
--- types and annotations, never locals:
+-- types and annotations; `abbreviation` reads module names, parameters and
+-- locals too:
 --
 --   pure_mutator  An annotated pure function whose first word says it changes
 --                 something (`push`, `fill`, `set`, `append`, `add`), though
@@ -31,9 +37,18 @@
 --                 type (`{ so_far : List(U8), count : U64 }`). A first word
 --                 `get` always counts, because a Roc function's plain name
 --                 is already what it gets.
---   abbreviation  A name, member, field or type with a word from the
---                 abbreviations file, since Roc's style guide prefers the
---                 plain word. A name is reported once a file.
+--   abbreviation  A name with a word short for another, since Roc's style
+--                 guide prefers the plain word: a word from the
+--                 abbreviations file, or a word of two to four letters
+--                 (`st`, `tks`, `Inl`, `Emph`) that is no English word of
+--                 the words file, no accepted term, no plural of either, and
+--                 no letter and an axis (`dx`). A type's words are split at
+--                 its capitals, so `TkKind` holds `tk`. A word's marks and
+--                 trailing digits go first (`buf0` is `buf`), and a letter
+--                 alone is hunt_names' `short_name`'s. The names read are a
+--                 module's own (its file's), every type, member, field and
+--                 top-level value, and every parameter and local. A name is
+--                 reported once a file.
 --   module_doc    A module with no `##` doc at the top of its file or above
 --                 its type, or a top comment or a doc above its type that
 --                 tells history (`originally`, `used to`, `emitted`,
@@ -51,6 +66,8 @@
 const SELF_TEST = arg("self_test", "") == "1"
 const GLOB = arg("glob", "**/*.roc")
 const ABBREVIATIONS_FILE = arg("abbreviations", "cookbook:words/abbreviations.txt")
+const SHORT_WORDS_FILE = arg("words", "cookbook:words/short_words.txt")
+const ACCEPTED_FILE = arg("accepted", "cookbook:words/accepted_terms.txt")
 const TERMS_FILE = arg("terms", "")
 use("./declared.shale")
 use("cookbook:findings.shale")
@@ -107,16 +124,60 @@ function judge_mutator(d, aliases, terms, report)
   return nil
 end
 
-function judge_abbreviations(declared, abbreviations, report)
+-- The accepted terms file: a term a line, each with its reason after `--`,
+-- as a set. A line without a reason fails the run.
+function accepted_terms(path)
+  if not exists(path) then fail("no word list " .. path) end
+  for l in lines(read(path)) do
+    local term = trim(split(l, "--")[1])
+    if term ~= "" and trim(get(split(l, "--"), 2, "")) == "" then fail(path .. ": `" .. term .. "` has no reason after `--`") end
+  end
+  return word_set(path)
+end
+
+-- Whether a short word stands as it is: an English word, an accepted term,
+-- or a letter and an axis (`dx`, `vy`), a coordinate's change or part.
+function is_plain_short_word(w, lists)
+  if has_key(lists.words, w) or has_key(lists.accepted, w) then return true end
+  return #w == 2 and has_item({"x", "y", "z"}, sub(w, 2, 2))
+end
+
+-- Whether a word of a name is an abbreviation: one the abbreviations file
+-- lists, or a word of two to four letters that is neither plain nor a plain
+-- word's plural. Its marks (`!`, `$`) and trailing digits (`buf0`) go first;
+-- a letter alone is `short_name`'s, in hunt_names.
+function is_abbreviated(word, lists)
+  local w = re_replace(word, "[^a-z0-9]", "")
+  if has_key(lists.abbreviations, w) then return true end
+  if has_key(lists.accepted, w) then return false end
+  w = re_replace(w, "[0-9]+$", "")
+  if #w < 2 or #w > 4 or re_find(w, "^[a-z]+$") == nil then return false end
+  if is_plain_short_word(w, lists) then return false end
+  return not (ends_with(w, "s") and #w > 2 and is_plain_short_word(sub(w, 1, #w - 1), lists))
+end
+
+-- The names a file gives, each once, with the line it first appears on: its
+-- module's name, what it declares, and each parameter and local.
+function names_given(f, declared)
+  local out = {}
+  if not is_app(f) then push(out, {name = module_name(f.path), line = 1}) end
+  for d in declared do push(out, {name = d.name, line = d.line}) end
+  for n in f.nodes do
+    if n.kind == "p-ident" then push(out, {name = get(n, "raw", ""), line = n.line}) end
+  end
+  return out
+end
+
+function judge_abbreviations(f, declared, lists, report)
   local seen = {}
-  for d in declared do
-    if not has_key(seen, d.name) then
-      seen[d.name] = true
+  for given in names_given(f, declared) do
+    if not has_key(seen, given.name) then
+      seen[given.name] = true
       local found = {}
-      for w in name_words(d.name) do
-        if has_key(abbreviations, w) then push(found, w) end
+      for w in name_words(given.name) do
+        if is_abbreviated(w, lists) then push(found, w) end
       end
-      if #found > 0 then push(report, {path = d.path, line = d.line, check = "abbreviation", what = "`" .. d.name .. "` abbreviates: " .. join(found, ", ")}) end
+      if #found > 0 then push(report, {path = f.path, line = given.line, check = "abbreviation", what = "`" .. given.name .. "` abbreviates: " .. join(found, ", ")}) end
     end
   end
   return nil
@@ -177,7 +238,10 @@ function self_test()
     {glob = at .. "terms.roc", args = {"terms=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
     {glob = at .. "abbreviation.roc", counts = {abbreviation = 4}, says = {"abbreviation.roc:3: abbreviation: `max_vis_cats` abbreviates: vis", "`SunPos` abbreviates: pos", "`dist` abbreviates: dist"}},
     {glob = at .. "quiet_abbreviation.roc"},
-    {glob = at .. "abbreviation.roc", args = {"abbreviations=" .. at .. "project_words.txt"}, counts = {abbreviation = 1}, says = {"`max_vis_cats` abbreviates: cats"}},
+    {glob = at .. "abbreviation.roc", args = {"abbreviations=" .. at .. "project_words.txt"}, counts = {abbreviation = 4}, says = {"`max_vis_cats` abbreviates: vis, cats"}},
+    {glob = at .. "short_words/*.roc", counts = {abbreviation = 5}, says = {"Tbl.roc:1: abbreviation: `Tbl` abbreviates: tbl", "Tbl.roc:4: abbreviation: `Trk` abbreviates: trk", "Tbl.roc:7: abbreviation: `trk` abbreviates: trk", "`pts` abbreviates: pts", "Tbl.roc:9: abbreviation: `hgt` abbreviates: hgt"}},
+    {glob = at .. "quiet_short_words/*.roc"},
+    {glob = at .. "quiet_short_words/*.roc", args = {"accepted=" .. at .. "no_reason.txt"}, stops = true, says = {"`qty` has no reason"}},
     {glob = at .. "quiet_abbreviation.roc", args = {"abbreviations=" .. at .. "no_such.txt"}, stops = true, says = {"no word list"}},
     {glob = at .. "module_doc/*.roc", counts = {module_doc = 5}, says = {"`NoDoc` has no `##` doc", "`Hashless` has no `##` doc", "`Old`'s top comment says `originally`", "`Sky`'s top comment says `used to`", "Sun.roc:3: module_doc: `Sun`'s doc says `originally`"}},
     {glob = at .. "quiet_module_doc/*.roc"},
@@ -188,7 +252,7 @@ function self_test()
 end
 
 function run_check()
-  local abbreviations = word_set(ABBREVIATIONS_FILE)
+  local lists = {abbreviations = word_set(ABBREVIATIONS_FILE), words = word_set(SHORT_WORDS_FILE), accepted = accepted_terms(ACCEPTED_FILE)}
   local terms = TERMS_FILE == "" and {} or word_set(TERMS_FILE)
   local paths = glob(GLOB)
   local parsed = parse_roc_files(paths)
@@ -202,7 +266,7 @@ function run_check()
     for d in declared do
       if d.kind == "value" then judge_mutator(d, aliases, terms, report) end
     end
-    if not house_leaves_out("find_unclear_names", "abbreviation") then judge_abbreviations(declared, abbreviations, report) end
+    if not house_leaves_out("find_unclear_names", "abbreviation") then judge_abbreviations(f, declared, lists, report) end
     judge_module_doc(f, declared, report)
   end
   local verdict = verdict_of("find_unclear_names", CHECKS, report, #paths)
