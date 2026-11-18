@@ -934,14 +934,14 @@ docs-SHALE-909	docs	docs/SHALE.md:909	1
 docs-SHALE-932	docs	docs/SHALE.md:932	1	
 docs-SHALE-953	docs	docs/SHALE.md:953	1	
 docs-SHALE-980	docs	docs/SHALE.md:980	1	
-docs-SHALE-1548	docs	docs/SHALE.md:1548	1	
-docs-SHALE-AGENTS-553	docs	docs/SHALE-AGENTS.md:553	1	
-docs-SHALE-AGENTS-591	docs	docs/SHALE-AGENTS.md:591	1	
-docs-SHALE-AGENTS-616	docs	docs/SHALE-AGENTS.md:616	1	
-docs-SHALE-AGENTS-646	docs	docs/SHALE-AGENTS.md:646	1	
-docs-SHALE-AGENTS-687	docs	docs/SHALE-AGENTS.md:687	1	
-docs-SHALE-AGENTS-703	docs	docs/SHALE-AGENTS.md:703	1	
-docs-SHALE-AGENTS-754	docs	docs/SHALE-AGENTS.md:754	1	
+docs-SHALE-1550	docs	docs/SHALE.md:1550	1	
+docs-SHALE-AGENTS-566	docs	docs/SHALE-AGENTS.md:566	1	
+docs-SHALE-AGENTS-604	docs	docs/SHALE-AGENTS.md:604	1	
+docs-SHALE-AGENTS-629	docs	docs/SHALE-AGENTS.md:629	1	
+docs-SHALE-AGENTS-659	docs	docs/SHALE-AGENTS.md:659	1	
+docs-SHALE-AGENTS-700	docs	docs/SHALE-AGENTS.md:700	1	
+docs-SHALE-AGENTS-716	docs	docs/SHALE-AGENTS.md:716	1	
+docs-SHALE-AGENTS-767	docs	docs/SHALE-AGENTS.md:767	1	
 lessons-1-1	lessons	web/lessons.js: lessons 1-1	2	
 lessons-1-2	lessons	web/lessons.js: lessons 1-2	5	
 lessons-1-3	lessons	web/lessons.js: lessons 1-3	7	
@@ -1041,6 +1041,7 @@ cli-missing_script	cli	tests/inputs/cli/missing_script.shale	1
 cli-mount_script	cli	tests/inputs/cli/mount_script.shale	1	
 cli-now_pinned	cli	tests/inputs/cli/now_pinned.shale	1	
 cli-quiet_edit	cli	tests/inputs/cli/quiet_edit.shale	1	
+cli-run_nice	cli	tests/inputs/cli/run_nice.shale	1	
 cli-script_on_stdin	cli	tests/inputs/cli/script_on_stdin.shale	1	
 cli-undo_on_stop	cli	tests/inputs/cli/undo_on_stop.shale	1	
 cli-unknown_flag	cli	tests/inputs/cli/unknown_flag.shale	1	

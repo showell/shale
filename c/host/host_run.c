@@ -269,6 +269,8 @@ typedef struct {
     // HOST_UNSET is no budget: no program's CPU time passes it.
     uint64_t cpu_budget_ms;
     Value stage;
+    // The program's niceness, 0 to 19; HOST_UNSET leaves `shale`'s.
+    uint64_t nice;
 } RunOpts;
 
 // Whether the script gave a value option.
@@ -293,6 +295,7 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
     o->width = HOST_UNSET;
     o->whole = HOST_UNSET;
     o->cpu_budget_ms = HOST_UNSET;
+    o->nice = HOST_UNSET;
     value_nil(&o->re);
     value_nil(&o->not_re);
     value_nil(&o->log);
@@ -347,8 +350,11 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
             TRY(host_int_opt(r, pos, k, &x, &o->cpu_budget_ms));
         } else if (str_eq(k, S("stage"))) {
             TRY(host_str_value_opt(r, pos, k, &x, &o->stage));
+        } else if (str_eq(k, S("nice"))) {
+            TRY(host_int_opt(r, pos, k, &x, &o->nice));
+            if (o->nice > 19) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `nice` is 0 to 19 (19 the lowest priority), not {d}"), MSG_ARGS(MSG_FROM_HOST(run_num(r, x.as.integer))));
         } else {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms and stage, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms, stage and nice, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
         }
     }
     if (o->timeout_ms == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs `timeout_ms`: how long the program may take is the script's to say"));
@@ -387,7 +393,8 @@ SLICE_TYPE(HostRefusedGroups, const HostRefusedGroup);
 static const HostRefusedGroup HOST_REFUSED[] = {
     {"bash sh dash zsh busybox python python3 perl node ", "a shell or an interpreter: Shale is the script"},
     {"head tail awk gawk cut sort uniq wc cat tr ", "a text tool: Shale's builtins and run's own filter and keep do this"},
-    {"env xargs timeout nice nohup setsid stdbuf time ", "a wrapper that runs another program: run that program, with run's own options"},
+    {"env xargs timeout nohup setsid stdbuf time ", "a wrapper that runs another program: run that program, with run's own options"},
+    {"nice ", "a wrapper that runs another program: run that program, with run's own `nice = N` (0 to 19)"},
 };
 
 // Programs `run` refuses even with a `want`.
@@ -1201,6 +1208,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     // (spawn.c), so the kernel stops the file one byte past the cap and
     // `host_secret_refuse_over` sees it; test_run_guards prints 10 MB at it.
     if (held->has_secret) spec.file_max = HOST_SECRET_MAX + 1;
+    if (o->nice != HOST_UNSET) spec.nice = (int)o->nice;
     spec.timeout_ms = o->timeout_ms;
     SpawnOutcome outcome;
     memset(&outcome, 0, sizeof outcome);

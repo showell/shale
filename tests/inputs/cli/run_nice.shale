@@ -1,0 +1,8 @@
+-- `run`'s `nice`: the program reads its own niceness (/proc/self/stat's
+-- 19th field), 19 as asked; 20 is refused before anything runs.
+function f(o)
+  return run({"true"}, o)
+end
+local s = run({"cat", "/proc/self/stat"}, {timeout_ms = 5000, whole = 4096, nice = 19, want = "golden: the program's own stat"}).out
+print(words(sub(s, find(s, ") ") + 2))[17])
+print(attempt(f, {timeout_ms = 1000, tail = 1, nice = 20}).error)

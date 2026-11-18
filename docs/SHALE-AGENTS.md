@@ -189,8 +189,12 @@ has none of it):
   ms, cpu_ms, out, ...}`. `timeout_ms` and a keep, `head` or `tail` (lines)
   or `whole` (bytes), are required (unless `stdout_secret`); the rest are
   `cwd`, `stdin`, `env`, `secrets`, `stdout_secret`, `secret_replace`,
-  `log`, `want`, `cpu_budget_ms`, `stage`, and the filters `re`, `not_re`, `nocase`,
-  `before`, `after` and `width` (`Opts` in `src/shale_host_run.zig`).
+  `log`, `want`, `cpu_budget_ms`, `stage`, `nice`, and the filters `re`, `not_re`, `nocase`,
+  `before`, `after` and `width` (`RunOpts` in `c/host/host_run.c`).
+  **`nice = 19`** (0 to 19) runs a heavy job at the lowest priority,
+  set in the child before it starts, so it needs no `nice` program (which
+  `run` refuses) and no `want`; a `shale` already nicer than asked runs it
+  at its own.
   **A line longer than `width` keeps both ends**, its middle said as `… N
   bytes left out …` (`c/host/keep.c`'s `keep_cut`): a child `shale`'s stop
   says where at its start and why at its end, and a cut at the end alone

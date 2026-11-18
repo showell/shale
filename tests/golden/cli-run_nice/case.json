@@ -1,0 +1,1 @@
+{"id":"cli-run_nice","source":"cli","origin":"tests/inputs/cli/run_nice.shale","files":["run_nice.shale"],"steps":[{"argv":["{case}/run_nice.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

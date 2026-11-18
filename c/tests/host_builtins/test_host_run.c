@@ -251,7 +251,43 @@ TEST(run_keeps_a_line_of_4096_bytes_whole_unset_and_cuts_one_past_it) {
     ran_free(&x);
 }
 
-TEST_PART(host_run, TEST_CASE(run_keeps_a_line_of_4096_bytes_whole_unset_and_cuts_one_past_it),
+TEST(run_s_nice_sets_the_programs_niceness_and_refuses_one_past_19) {
+    // The program reads its own niceness, /proc/self/stat's 19th field:
+    // 19 when asked, whatever `shale`'s own, and `shale`'s own unset (the
+    // tests may run under `nice`, so that one is read, not assumed).
+    errno = 0;
+    int own = getpriority(PRIO_PROCESS, 0);
+    EXPECT_EQ(errno, 0);
+    static Ran x;
+    ran_source(&x, S("function niceness(o)\n"
+                     "  local s = host(\"run\", {\"cat\", \"/proc/self/stat\"}, o).out\n"
+                     "  return words(sub(s, find(s, \") \") + 2))[17]\n"
+                     "end\n"
+                     "function f(o) return host(\"run\", {\"true\"}, o) end\n"
+                     "function g(a) return host(\"run\", a, {timeout_ms = 1000, tail = 1}) end\n"
+                     "local w = \"test: the program's own stat\"\n"
+                     "print(niceness({timeout_ms = 5000, whole = 4096, want = w, nice = 19}), niceness({timeout_ms = 5000, whole = 4096, want = w}))\n"
+                     "print(attempt(f, {timeout_ms = 1000, tail = 1, nice = 20}).error)\n"
+                     "print(attempt(f, {timeout_ms = 1000, tail = 1, nice = -1}).error)\n"
+                     "print(attempt(f, {timeout_ms = 1000, tail = 1, nice = \"19\"}).error)\n"
+                     "print(attempt(g, {\"nice\", \"true\"}).error)\n"),
+               ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    Buf want = buf_make(&x.host);
+    EXPECT(buf_lit(&want, "19\t") == OK);
+    EXPECT(buf_i64(&want, own) == OK);
+    EXPECT(buf_lit(&want, "\n`run`'s `nice` is 0 to 19 (19 the lowest priority), not 20\n"
+                          "`run`: its `nice` must be 0 or more, not -1\n"
+                          "`run`: its `nice` must be an integer, not a string\n"
+                          "`run` of `nice`: a wrapper that runs another program: run that program, with run's own `nice = N` (0 to 19); {want = \"tag: why\"} to run it anyway\n") == OK);
+    EXPECT_STR(host_text_of(&x), buf_view(&want));
+    // Only the two that were asked to run did: the refusals came first.
+    EXPECT_EQ(x.r.host_runs, 2);
+    ran_free(&x);
+}
+
+TEST_PART(host_run, TEST_CASE(run_s_nice_sets_the_programs_niceness_and_refuses_one_past_19),
+          TEST_CASE(run_keeps_a_line_of_4096_bytes_whole_unset_and_cuts_one_past_it),
           TEST_CASE(run_keeps_the_head_and_tail_and_answers_every_field), TEST_CASE(run_charges_its_output_a_step_per_16_bytes),
           TEST_CASE(run_refuses_each_bad_call_with_its_message), TEST_CASE(a_stream_past_the_arena_budget_stops_on_it_and_the_program_is_ended),
           TEST_CASE(a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended),

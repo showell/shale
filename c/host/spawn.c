@@ -65,6 +65,10 @@ typedef struct {
     // while it runs: past it the kernel ends the program with SIGXFSZ, or its
     // write fails. SPAWN_UNLIMITED for no limit.
     uint64_t file_max;
+    // The niceness the program runs at, 0 to 19, set in the child before
+    // exec (`run`'s `nice`), so no `nice` program wraps it; SPAWN_NICE_UNSET
+    // leaves `shale`'s own.
+    int nice;
     // When the program's group gets TERM.
     uint64_t timeout_ms;
     // The time between TERM and KILL.
@@ -76,11 +80,15 @@ typedef struct {
 // A `file_max` that sets no limit.
 #define SPAWN_UNLIMITED UINT64_MAX
 
+// A `nice` that leaves the niceness as `shale`'s.
+enum { SPAWN_NICE_UNSET = -1 };
+
 static void spawn_spec_default(SpawnSpec *s) {
     memset(s, 0, sizeof *s);
     s->stdin_bytes = NULL;
     s->stdout_fd = -1;
     s->file_max = SPAWN_UNLIMITED;
+    s->nice = SPAWN_NICE_UNSET;
     s->grace_ms = 2000;
     s->drain_ms = 200;
 }
@@ -245,7 +253,7 @@ static void spawn_child_fail(int err_w, uint32_t code) {
 // REMEDY: it makes only raw system calls (and `sigemptyset`) on memory built
 // before the fork (the paths, argv and envp), and leaves by exec or _exit,
 // never by return.
-static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, uint64_t file_max, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
+static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, uint64_t file_max, int nice, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
     // DRAGON: the process boundary. The death signal ends the child when
     // `shale` dies, so a program never outlives it; but `shale` may die
     // before the prctl, and then the child's parent is already another
@@ -277,6 +285,11 @@ static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_f
         struct rlimit lim = {(rlim_t)file_max, (rlim_t)file_max};
         if (syscall(SYS_prlimit64, 0, RLIMIT_FSIZE, &lim, NULL) != 0) spawn_child_fail(err_w, EPERM);
     }
+    // The niceness, one raw setpriority (async-signal safe). A process may
+    // not lower its own niceness unprivileged, so when `shale` already runs
+    // nicer than asked (EACCES, EPERM) the program runs at `shale`'s, never
+    // less nice; any other refusal exits 127 before exec.
+    if (nice != SPAWN_NICE_UNSET && setpriority(PRIO_PROCESS, 0, nice) != 0 && errno != EACCES && errno != EPERM) spawn_child_fail(err_w, (uint32_t)errno);
     if (cwd != NULL && chdir(cwd) != 0) spawn_child_fail(err_w, 1000 + (uint32_t)errno);
     int last = ENOENT;
     for (size_t i = 0; i < paths.len; i++) {
@@ -656,7 +669,7 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
     pid_t parent = getpid();
     pid_t pid = fork();
     if (pid < 0) return SPAWN_REFUSED;
-    if (pid == 0) spawn_child(parent, cwd, at(in_pipe, 0), spec->stdout_fd, spec->file_max, at(out_pipe, 1), at(err_pipe, 1), paths, argv, envp);
+    if (pid == 0) spawn_child(parent, cwd, at(in_pipe, 0), spec->stdout_fd, spec->file_max, spec->nice, at(out_pipe, 1), at(err_pipe, 1), paths, argv, envp);
 
     spawn_close(&at(out_pipe, 1));
     spawn_close(&at(err_pipe, 1));

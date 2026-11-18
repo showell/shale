@@ -1303,7 +1303,9 @@ three:
     35000 (201330 ms of wall time)``. The option `stage = "..."` names it
     (it needs a budget); the argv does by default. The stop takes the
     place of `run`'s answer, so a program that also failed adds how it
-    ended and the end of what was kept of its output.
+    ended and the end of what was kept of its output. In C Shale, `nice =
+    N` (0 to 19) sets the program's niceness before it starts, and an
+    unset `width` is 4096 bytes, a longer line keeping both its ends.
     `cookbook/times.shale` is a stage's history over this: SHALE-AGENTS.md,
     "A stage states what it may cost";
   - `real`, a path's OS path;
