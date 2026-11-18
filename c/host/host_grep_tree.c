@@ -153,28 +153,8 @@ static STATUS_MUST_USE Status grep_tree_read_part(Run *r, Pos pos, const StorePa
     TRY(builtin_file_size(r, pos, b, p, &size));
     uint64_t start = builtin_min_u64(offset, size);
     Buf got = buf_make(into);
-    Str first = {0};
-    TRY(builtin_read_sized_in(r, pos, b, p, size, start, n, into, &first));
-    if (buf_str(&got, first) != OK) return run_values_oom(r, pos);
-    uint64_t end = start + got.len;
-    if (end < size && at(got, got.len - 1) != '\n') {
-        for (;;) {
-            if (end - start >= cap) return builtin_line_too_long(r, pos, b, start, cap);
-            Str piece = {0};
-            TRY(builtin_read_sized_in(r, pos, b, p, size, end, builtin_min_u64(BUILTIN_LINE_PIECE, cap - (end - start)), into, &piece));
-            if (piece.len == 0) break;
-            const char *nl = str_find_byte(piece, '\n');
-            if (nl != NULL) {
-                size_t i = (size_t)(nl - piece.ptr);
-                if (buf_str(&got, str_sub(piece, 0, i + 1)) != OK) return run_values_oom(r, pos);
-                end += i + 1;
-                break;
-            }
-            if (buf_str(&got, piece) != OK) return run_values_oom(r, pos);
-            end += piece.len;
-            if (end == size) break;
-        }
-    }
+    uint64_t end = 0;
+    TRY(builtin_read_part_in(r, pos, b, p, size, start, n, into, &got, &end));
     *part = buf_view(&got);
     *next = end;
     *done = end >= size;
@@ -554,7 +534,9 @@ static STATUS_MUST_USE Status grep_tree_file(Run *r, Pos pos, const GrepTreeAsk 
     uint64_t size = 0;
     TRY(builtin_file_size(r, pos, BUILTIN_READ, &p, &size));
     Str head = S("");
-    TRY(builtin_read_sized_in(r, pos, BUILTIN_READ, &p, size, 0, GREP_TREE_HEAD, into, &head));
+    // The head is cut to the call-bytes cap, which a cap under 4 KiB would
+    // otherwise refuse for any file past it.
+    TRY(builtin_read_sized_in(r, pos, BUILTIN_READ, &p, size, 0, builtin_min_u64(GREP_TREE_HEAD, r->ctx.budgets.call_bytes), into, &head));
     if (str_find_byte(head, '\0') != NULL) return grep_tree_pass(r, pos, ans, path, S("binary"));
     ans->files++;
     GrepTreeLines found = GrepTreeLines_make(into);

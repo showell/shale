@@ -16,7 +16,7 @@ use("build:lib.shale")
 -- c/, each caught by its `aim` tests.
 
 const BUILTINS_TEST_FILE = "c/tests/store/test_builtins.c"
-const BUILTINS_TESTS = 16
+const BUILTINS_TESTS = 17
 const BUILTINS_PLANTS = {
   {name = "a read past the read-bytes budget is taken", dir = "script", file = "builtins_store.c", caught_by = "store/test_builtins",
    aim = "the_read_budgets_stop_a_read_before_its_bytes_are_taken",

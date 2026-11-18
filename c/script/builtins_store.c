@@ -336,9 +336,48 @@ static uint64_t builtin_min_u64(uint64_t a, uint64_t b) {
     return a < b ? a : b;
 }
 
+// A part of `read_lines` into `into`: `n` bytes from `start`, then on a piece
+// at a time to the end of the line they stop in. A part that would pass the
+// call-bytes cap first ends at its last newline instead, so a part of the cap
+// itself (a cap of 64 KiB or less) is whole lines; only a line that starts
+// at `start` and runs past the cap stops. `*end` is the byte after the part.
+static STATUS_MUST_USE Status builtin_read_part_in(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t start, uint64_t n, Arena *into, Buf *got, uint64_t *end) {
+    uint64_t cap = r->ctx.budgets.call_bytes;
+    Str first = {0};
+    TRY(builtin_read_sized_in(r, pos, b, p, size, start, n, into, &first));
+    if (buf_str(got, first) != OK) return run_values_oom(r, pos);
+    *end = start + got->len;
+    if (*end == size || at(*got, got->len - 1) == '\n') return OK;
+    for (;;) {
+        if (*end - start >= cap) {
+            Str held = buf_view(got);
+            size_t keep = held.len;
+            while (keep > 0 && at(held, keep - 1) != '\n') keep--;
+            if (keep == 0) return builtin_line_too_long(r, pos, b, start, cap);
+            got->len = keep;
+            *end = start + keep;
+            return OK;
+        }
+        Str piece = {0};
+        TRY(builtin_read_sized_in(r, pos, b, p, size, *end, builtin_min_u64(BUILTIN_LINE_PIECE, cap - (*end - start)), into, &piece));
+        if (piece.len == 0) return OK;
+        const char *nl = mem_find_byte(piece.ptr, '\n', piece.len);
+        if (nl != NULL) {
+            size_t i = (size_t)(nl - piece.ptr);
+            if (buf_str(got, str_sub(piece, 0, i + 1)) != OK) return run_values_oom(r, pos);
+            *end += i + 1;
+            return OK;
+        }
+        if (buf_str(got, piece) != OK) return run_values_oom(r, pos);
+        *end += piece.len;
+        if (*end == size) return OK;
+    }
+}
+
 // `read_lines(p[, offset[, n]])`: whole lines from the byte `offset`, at least
 // `n` bytes (64 KiB unset) and on to the end of the line it stops in, as
-// `{lines, next, done}`.
+// `{lines, next, done}`. A part the call-bytes cap cuts short ends at its last
+// whole line.
 static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_READ_LINES;
     StorePath p;
@@ -362,29 +401,8 @@ static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, V
     TRY(builtin_file_size(r, pos, b, &p, &size));
     uint64_t start = builtin_min_u64(offset, size);
     Buf got = buf_make(r->ctx.values);
-    Str first = {0};
-    TRY(builtin_read_sized(r, pos, b, &p, size, start, n, &first));
-    if (buf_str(&got, first) != OK) return run_values_oom(r, pos);
-    uint64_t end = start + got.len;
-    // Extend a piece at a time to the end of the last line.
-    if (end < size && at(got, got.len - 1) != '\n') {
-        for (;;) {
-            if (end - start >= cap) return builtin_line_too_long(r, pos, b, start, cap);
-            Str piece = {0};
-            TRY(builtin_read_sized(r, pos, b, &p, size, end, builtin_min_u64(BUILTIN_LINE_PIECE, cap - (end - start)), &piece));
-            if (piece.len == 0) break;
-            const char *nl = mem_find_byte(piece.ptr, '\n', piece.len);
-            if (nl != NULL) {
-                size_t i = (size_t)(nl - piece.ptr);
-                if (buf_str(&got, str_sub(piece, 0, i + 1)) != OK) return run_values_oom(r, pos);
-                end += i + 1;
-                break;
-            }
-            if (buf_str(&got, piece) != OK) return run_values_oom(r, pos);
-            end += piece.len;
-            if (end == size) break;
-        }
-    }
+    uint64_t end = 0;
+    TRY(builtin_read_part_in(r, pos, b, &p, size, start, n, r->ctx.values, &got, &end));
     Table *t = NULL;
     TRY(run_new_table(r, pos, &t));
     Table *list = NULL;

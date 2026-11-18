@@ -217,6 +217,27 @@ TEST(edit_word_holds_only_the_edges_where_old_ends_in_a_word_byte) {
     ran_free(&x);
 }
 
+// A cap of 64 KiB or less is `read_lines`' part itself, so a part that ends
+// mid-line can't go on to the line's end: it ends at its last whole line
+// (before, the first such part stopped, "the line at offset 0 runs past 11
+// bytes"). A part that ends at a newline on the cap is whole, and only a line
+// past the cap from the part's start still stops.
+TEST(read_lines_at_the_call_bytes_cap_ends_a_part_at_its_last_whole_line) {
+    static Ran x;
+    RanOpts o = {NULL, false, false};
+    ran_init(&x, o);
+    Budgets b = bt_budgets();
+    b.call_bytes = 11;
+    ran_run(&x,
+            S("function rl(p, o) return read_lines(p, o) end\nreplace(\"f.txt\", \"aaaa\\nbbbb\\ncccc\\n\")\nlocal p = read_lines(\"f.txt\")\nprint(#p.lines, p.lines[2], p.next, p.done)\np = read_lines(\"f.txt\", p.next)\nprint(#p.lines, "
+              "p.lines[1], p.next, p.done)\nreplace(\"g.txt\", \"aaaaaaaaaa\\nb\\n\")\np = read_lines(\"g.txt\")\nprint(#p.lines, p.next, p.done)\nreplace(\"h.txt\", \"a\\naaaaaaaaaaa\\n\")\np = read_lines(\"h.txt\")\nprint(#p.lines, p.next, "
+              "p.done)\nprint(attempt(rl, \"h.txt\", p.next).error)\n"),
+            b);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("2\tbbbb\t10\tfalse\n1\tcccc\t15\ttrue\n1\t11\tfalse\n1\t2\tfalse\n`read_lines`: the line at offset 2 runs past 11 bytes, the most one call brings\n"));
+    ran_free(&x);
+}
+
 TEST(edits_write_writes_every_file_or_none_and_refuses_one_named_twice) {
     static Ran x;
     ran_init(&x, bt_verbose());
@@ -308,7 +329,7 @@ TEST_PART(builtins, TEST_CASE(ls_stat_exists_and_is_dir_look_without_changing_an
           TEST_CASE(walk_in_parts_ends_each_with_more_and_keep_reads_reads_nothing), TEST_CASE(every_change_is_logged_with_its_outcome_a_failed_one_too),
           TEST_CASE(the_change_bytes_budget_stops_a_change_before_it_is_written), TEST_CASE(the_changes_budget_stops_the_change_past_it),
           TEST_CASE(edit_prints_its_diff_holds_word_and_all_and_says_where_old_parts), TEST_CASE(edit_says_a_diff_as_one_line_without_verbose),
-          TEST_CASE(edit_word_holds_only_the_edges_where_old_ends_in_a_word_byte),
+          TEST_CASE(edit_word_holds_only_the_edges_where_old_ends_in_a_word_byte), TEST_CASE(read_lines_at_the_call_bytes_cap_ends_a_part_at_its_last_whole_line),
           TEST_CASE(edits_write_writes_every_file_or_none_and_refuses_one_named_twice), TEST_CASE(a_yield_keeps_the_effects_log),
           TEST_CASE(attack_a_change_through_a_read_only_mount_is_refused_before_it_is_written), TEST_CASE(undo_on_stop_puts_back_a_file_changed_and_deletes_one_made),
           TEST_CASE(many_creates_hold_under_1100_bytes_of_the_arena_each));
