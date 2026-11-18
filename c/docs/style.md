@@ -83,6 +83,11 @@ and its self-test plants a break of each one.
 - A type is `PascalCase`: `Arena`, `RunCtx`, `StopClass`.
 - A function is `snake_case`, starting with its piece's noun: `arena_alloc`,
   `buf_u64`, `str_eq`, `map_core_find`, `run_budget_stop`, `stop_report`.
+- A prefix is a whole word, or words: `builtin_split`, `message_format`,
+  `fixture_init`, not `bi_`, `msg_` or `fx_`. C's conventional ones are
+  kept: `str_`, `buf_`, `mem_`, `vm_`, `tty_`, `lex_`, `json_` and `c_` (as
+  in `c_bug`), and so is a one-letter parameter (`a`, `b`, `r`, `s`).
+  `ran_` is a word: what ran.c ran.
 - A function a macro makes is its type's name, an underscore, then the verb:
   `I64s_push`, `IntMap_put`.
 - A constant is `UPPER_SNAKE`, starting with its type or piece:
