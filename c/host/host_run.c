@@ -708,46 +708,74 @@ static bool host_starts_with(Str s, Str prefix) {
     return s.len >= prefix.len && str_eq(str_sub(s, 0, prefix.len), prefix);
 }
 
+// Whether `part` is the start of `whole` and shorter: what more bytes may
+// yet make `whole`.
+static bool host_is_proper_prefix(Str part, Str whole) {
+    return part.len < whole.len && host_starts_with(whole, part);
+}
+
+// Whether `rest`, all that is held from here on, could still become a
+// secret.
+static bool host_scrub_may_begin(const HostScrub *s, Str rest) {
+    for (size_t k = 0; k < s->secrets.len; k++) {
+        if (host_is_proper_prefix(rest, at(s->secrets, k).value)) return true;
+    }
+    return false;
+}
+
+// The longest secret `rest` begins with, or NULL for none.
+static const HostSecret *host_scrub_longest(const HostScrub *s, Str rest) {
+    const HostSecret *best = NULL;
+    for (size_t k = 0; k < s->secrets.len; k++) {
+        const HostSecret *kv = &at(s->secrets, k);
+        if (host_starts_with(rest, kv->value) && (best == NULL || kv->value.len > best->value.len)) best = kv;
+    }
+    return best;
+}
+
+// Widens a match in `buf`, from `from` to `*end`, over each secret that
+// starts inside it and runs past its end, until none does. False, unless
+// this is the `last` read, when a secret could start inside it and run past
+// what is held: the next read decides where the match ends.
+static bool host_scrub_widen(const HostScrub *s, Str buf, size_t from, bool last, size_t *end) {
+    for (size_t j = from + 1; j < *end; j++) {
+        Str there = str_sub(buf, j, buf.len);
+        for (size_t k = 0; k < s->secrets.len; k++) {
+            Str o = at(s->secrets, k).value;
+            if (host_starts_with(there, o)) {
+                if (j + o.len > *end) *end = j + o.len;
+            } else if (!last && host_is_proper_prefix(there, o)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// Scrubs what `carry` holds from its start: where a secret starts, its
+// match (the longest, widened) goes on as `<secret K>`, and any other byte
+// goes on as it is. It stops where what is held could still begin a secret
+// or a match's end is not known yet, keeping the rest in `carry` for the
+// next read; the `last` read decides all that is held.
 static STATUS_MUST_USE Status host_scrub_scan(HostScrub *s, bool last) {
     Str buf = buf_view(&s->carry);
     buf_clear(&s->scanned);
     size_t i = 0;
     while (i < buf.len) {
         Str rest = str_sub(buf, i, buf.len);
-        bool wait = false;
-        for (size_t k = 0; !last && k < s->secrets.len; k++) {
-            Str v = at(s->secrets, k).value;
-            if (rest.len < v.len && host_starts_with(v, rest)) wait = true;
-        }
-        if (wait) break;
-        const HostSecret *best = NULL;
-        for (size_t k = 0; k < s->secrets.len; k++) {
-            const HostSecret *kv = &at(s->secrets, k);
-            if (host_starts_with(rest, kv->value) && (best == NULL || kv->value.len > best->value.len)) best = kv;
-        }
-        if (best != NULL) {
-            size_t end = i + best->value.len;
-            for (size_t j = i + 1; !wait && j < end; j++) {
-                for (size_t k = 0; k < s->secrets.len; k++) {
-                    Str o = at(s->secrets, k).value;
-                    Str there = str_sub(buf, j, buf.len);
-                    if (host_starts_with(there, o)) {
-                        if (j + o.len > end) end = j + o.len;
-                    } else if (!last && there.len < o.len && host_starts_with(o, there)) {
-                        wait = true;
-                        break;
-                    }
-                }
-            }
-            if (wait) break;
-            TRY(buf_lit(&s->scanned, "<secret "));
-            TRY(buf_str(&s->scanned, best->name));
-            TRY(buf_byte(&s->scanned, '>'));
-            i = end;
+        if (!last && host_scrub_may_begin(s, rest)) break;
+        const HostSecret *best = host_scrub_longest(s, rest);
+        if (best == NULL) {
+            TRY(buf_byte(&s->scanned, (char)str_byte(buf, i)));
+            i++;
             continue;
         }
-        TRY(buf_byte(&s->scanned, (char)str_byte(buf, i)));
-        i++;
+        size_t end = i + best->value.len;
+        if (!host_scrub_widen(s, buf, i, last, &end)) break;
+        TRY(buf_lit(&s->scanned, "<secret "));
+        TRY(buf_str(&s->scanned, best->name));
+        TRY(buf_byte(&s->scanned, '>'));
+        i = end;
     }
     TRY(host_out_write(s->next, buf_view(&s->scanned)));
     size_t left = buf.len - i;
