@@ -540,7 +540,7 @@ static bool host_started_running(Arena *a, const HostStarted *s) {
     ident.pid = s->pid;
     ident.pgid = s->pgid;
     ident.start = s->start;
-    char *p = spawn_cstr(a, s->record_os);
+    char *p = arena_cstr(a, s->record_os);
     Bytes text = {NULL, 0};
     if (p != NULL && jobs_read_small(a, p, &text)) {
         JobRecord r;

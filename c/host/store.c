@@ -193,20 +193,15 @@ typedef struct {
     char bytes[PATH_MAX];
 } StoreCPath;
 
-// `s` ended by a NUL in `buf`, into `*out`: NameTooLong past PATH_MAX, as
-// Zig's posix layer answers. `*out` lives as long as `buf`.
-// DRAGON: the store's boundaries. A NUL inside `s` would end the kernel's
-// copy early, so the call would act on a shorter path than the one every
-// check judged (`a\0/../x` checked as one, opened as `a`).
-// REMEDY: refused here as Zig's posix layer refuses it, BadPathName, before
-// any call; test_store plants it.
+// `s` ended by a NUL in `buf`, into `*out`, through slice.h's str_cstr_into
+// (the DRAGON of a NUL inside is there): NameTooLong when it does not fit
+// with its NUL, past PATH_MAX, and BadPathName for a NUL inside, as Zig's
+// posix layer answers. `*out` lives as long as `buf`.
 static StoreErr store_cstr(StoreCPath *buf, Str s, const char **out) {
-    // A path that does not fit with its NUL is NameTooLong.
-    if (s.len >= PATH_MAX) return STORE_NAME_TOO_LONG;
-    if (str_find_byte(s, 0) != NULL) return STORE_BAD_PATH_NAME;
     Bytes room = {buf->bytes, sizeof buf->bytes};
-    if (s.len > 0) mem_copy(room.ptr, s.ptr, s.len);
-    at(room, s.len) = 0;
+    StrCStr e = str_cstr_into(room, s);
+    if (e == STR_CSTR_TOO_LONG) return STORE_NAME_TOO_LONG;
+    if (e == STR_CSTR_NUL) return STORE_BAD_PATH_NAME;
     *out = buf->bytes;
     return STORE_OK;
 }

@@ -231,7 +231,7 @@ enum { RAN_REAPER_WAIT_MS = 10000, RAN_REAPER_TICK_MS = 10 };
 static void ran_wait_reapers(Ran *x) {
     for (size_t i = 0; i < x->lh.started.len; i++) {
         const HostStarted *j = &at(x->lh.started, i);
-        char *p = spawn_cstr(&x->host, j->record_os);
+        char *p = arena_cstr(&x->host, j->record_os);
         Bytes text = {NULL, 0};
         JobRecord rec;
         if (p == NULL || !jobs_read_small(&x->host, p, &text) || !job_record_parse(text, &rec)) {

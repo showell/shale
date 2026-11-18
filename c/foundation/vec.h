@@ -34,16 +34,10 @@ static inline size_t vec_grow_capacity(size_t minimum, size_t elem) {
 static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *cap, size_t len, size_t need, size_t elem, size_t align) {
     if (*cap >= need) return OK;
     size_t new_cap = vec_grow_capacity(need, elem);
-    // DRAGON: size overflow. `new_cap * elem` can wrap to a small buffer for
-    // a huge capacity: on a vec of one item, I64s_reserve(SIZE_MAX / 4)
-    // would ask for 64 bytes for 3 * 2^61 + 8 items and say OK.
-    // REMEDY: this division refuses such a capacity before the multiply, and
-    // test_vec catches its plant.
-    if (new_cap > SIZE_MAX / elem) {
-        arena_set_hit(a);
-        return STOP;
-    }
-    size_t bytes = new_cap * elem;
+    // On a vec of one item, I64s_reserve(SIZE_MAX / 4) would ask for 64 bytes
+    // for 3 * 2^61 + 8 items: arena_size_mul refuses the product.
+    size_t bytes = 0;
+    if (!arena_size_mul(a, new_cap, elem, &bytes)) return STOP;
     if (*cap > 0 && arena_resize(a, *ptr, *cap * elem, bytes)) {
         *cap = new_cap;
         return OK;
@@ -83,16 +77,11 @@ static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *
                                                                                              \
     /* Room for `more` items past `len`. */                                                  \
     static inline STATUS_MUST_USE Status Name##_reserve(Name *v, size_t more) {              \
-        /* DRAGON: size overflow. `v->len + more` would wrap below `cap` and report room */  \
-        /* the vec doesn't have, so the push after it writes past the buffer. */             \
-        /* REMEDY: this check refuses such a `more` before the sum, and test_vec */          \
-        /* catches its plant. */                                                             \
-        if (more > SIZE_MAX - v->len) {                                                      \
-            arena_set_hit(v->arena);                                                         \
-            return STOP;                                                                     \
-        }                                                                                    \
+        /* A wrapped `v->len + more` would report room the vec doesn't have. */            \
+        size_t need = 0;                                                                     \
+        if (!arena_size_add(v->arena, v->len, more, &need)) return STOP;                     \
         void *p = v->ptr;                                                                    \
-        Status s = vec_grow_raw(v->arena, &p, &v->cap, v->len, v->len + more, sizeof(T), _Alignof(T)); \
+        Status s = vec_grow_raw(v->arena, &p, &v->cap, v->len, need, sizeof(T), _Alignof(T)); \
         v->ptr = p;                                                                          \
         return s;                                                                            \
     }                                                                                        \

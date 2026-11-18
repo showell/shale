@@ -152,17 +152,6 @@ static void host_zig_child(pid_t parent, int in_r, int out_w, int err_w, int why
     _exit(127);
 }
 
-// `s` with a NUL after it, in `a`; NULL when refused.
-static char *host_zig_cstr(Arena *a, Str s) {
-    if (s.len >= SIZE_MAX - 1) return arena_refuse(a);
-    char *p = ARENA_ARRAY(a, char, s.len + 1);
-    if (p == NULL) return NULL;
-    Bytes room = {p, s.len + 1};
-    if (s.len > 0) mem_copy(room.ptr, s.ptr, s.len);
-    at(room, s.len) = 0;
-    return p;
-}
-
 // The paths an exec of `exe` tries: itself when it has a `/`, else in each
 // folder of PATH, as Zig's spawn searches. False when the arena refuses.
 static bool host_zig_candidates(Arena *a, Str exe, HostZigCStrs *out) {
@@ -183,7 +172,7 @@ static bool host_zig_candidates(Arena *a, Str exe, HostZigCStrs *out) {
         Buf b = buf_make(a);
         if (dir.len > 0 && (buf_str(&b, dir) != OK || buf_byte(&b, '/') != OK)) return false;
         if (buf_str(&b, exe) != OK) return false;
-        at(all, k) = host_zig_cstr(a, buf_view(&b));
+        at(all, k) = arena_cstr(a, buf_view(&b));
         if (at(all, k) == NULL) return false;
         k++;
     }
@@ -347,7 +336,7 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
             if (!str_eq(m->name, S("tools"))) continue;
             Buf b = buf_make(a);
             if (buf_str(&b, m->dir) != OK || buf_lit(&b, "/zig-ast/bin/zig-ast") != OK) return run_values_oom(r, pos);
-            char *c = host_zig_cstr(a, buf_view(&b));
+            char *c = arena_cstr(a, buf_view(&b));
             if (c == NULL) return run_values_oom(r, pos);
             if (access(c, F_OK) != 0) break;
             has_exe = true;
@@ -361,7 +350,7 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
     }
     if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
     r->host_runs++;
-    char *argv_room[3] = {host_zig_cstr(a, exe), host_zig_cstr(a, S("--serve")), NULL};
+    char *argv_room[3] = {arena_cstr(a, exe), arena_cstr(a, S("--serve")), NULL};
     HostZigCStrs argv = {argv_room, 3};
     HostZigCStrs paths = {NULL, 0};
     if (at(argv, 0) == NULL || at(argv, 1) == NULL || !host_zig_candidates(a, exe, &paths)) return run_values_oom(r, pos);

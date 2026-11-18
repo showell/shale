@@ -232,4 +232,32 @@ static inline const char *str_find_byte(Str s, char c) {
     return mem_find_byte(s.ptr, c, s.len);
 }
 
+// ── C strings, for the kernel ─────────────────────────────────────────
+
+// Why str_cstr_into refused, or that it did not.
+typedef enum {
+    STR_CSTR_OK,
+    // `s` and its NUL don't fit the room.
+    STR_CSTR_TOO_LONG,
+    // `s` holds a NUL of its own.
+    STR_CSTR_NUL,
+} StrCStr;
+
+// `s` with a NUL after it, written at the start of `room`, for a call into
+// the kernel; nothing is written when it refuses. Every C string the C makes
+// from a Str is made here: arena.h's arena_cstr in an arena, store.c's
+// store_cstr on the caller's stack.
+// DRAGON: a NUL inside. A NUL inside `s` would end the kernel's copy early,
+// so the call would act on a shorter path or word than the one every check
+// judged (`a\0/../x` checked as one, opened as `a`).
+// REMEDY: refused here, before the copy, as Zig's posix layer refuses it;
+// test_arena holds both sides, and test_store catches its plant.
+static inline StrCStr str_cstr_into(Bytes room, Str s) {
+    if (s.len >= room.len) return STR_CSTR_TOO_LONG;
+    if (str_find_byte(s, 0) != NULL) return STR_CSTR_NUL;
+    mem_copy(room.ptr, s.ptr, s.len);
+    at(room, s.len) = 0;
+    return STR_CSTR_OK;
+}
+
 #endif

@@ -208,7 +208,7 @@ static bool spawn_candidates(Arena *a, Str argv0, SpawnStrs env, SpawnCStrs *pat
         Str dir = str_sub(path, from, i);
         from = i + 1;
         if (dir.len == 0) {
-            at(out, k) = spawn_cstr(a, argv0);
+            at(out, k) = arena_cstr(a, argv0);
         } else {
             if (dir.len > SIZE_MAX / 4 || argv0.len > SIZE_MAX / 4) return arena_refuse(a) != NULL;
             char *full = ARENA_ARRAY(a, char, dir.len + 1 + argv0.len + 1);
@@ -689,7 +689,7 @@ static SpawnResult spawn_run(Arena *a, const SpawnSpec *spec, SpawnSink sink, Sp
     if (!spawn_candidates(a, at(spec->argv, 0), spec->env, &paths)) return SPAWN_OUT_OF_MEMORY;
     char *cwd = NULL;
     if (spec->cwd.len > 0) {
-        cwd = spawn_cstr(a, spec->cwd);
+        cwd = arena_cstr(a, spec->cwd);
         if (cwd == NULL) return SPAWN_OUT_OF_MEMORY;
     }
 

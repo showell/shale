@@ -21,16 +21,11 @@ static inline Buf buf_make(Arena *a) {
 
 // Room for `more` bytes past `len`.
 static inline STATUS_MUST_USE Status buf_reserve(Buf *b, size_t more) {
-    // DRAGON: size overflow. `b->len + more` can wrap below `cap` and report
-    // room the buffer doesn't have, so the append's copy would run past it.
-    // REMEDY: this check refuses such a `more` before the sum, and test_buf
-    // catches its plant.
-    if (more > SIZE_MAX - b->len) {
-        arena_set_hit(b->arena);
-        return STOP;
-    }
+    // A wrapped `b->len + more` would report room the buffer doesn't have.
+    size_t need = 0;
+    if (!arena_size_add(b->arena, b->len, more, &need)) return STOP;
     void *p = b->ptr;
-    Status s = vec_grow_raw(b->arena, &p, &b->cap, b->len, b->len + more, 1, 1);
+    Status s = vec_grow_raw(b->arena, &p, &b->cap, b->len, need, 1, 1);
     b->ptr = p;
     return s;
 }

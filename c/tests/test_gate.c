@@ -421,7 +421,7 @@ static Str fresh_home(Arena *a) {
 static Str read_under(Arena *a, Str home, const char *rel) { // cstr: a test's literal
     Buf p = buf_make(a);
     if (buf_str(&p, home) != OK || buf_str(&p, test_cs(rel)) != OK) abort();
-    int fd = open(gate_cstr(a, buf_view(&p)), O_RDONLY);
+    int fd = open(arena_cstr(a, buf_view(&p)), O_RDONLY);
     if (fd < 0) return S("(none)");
     Buf b = buf_make(a);
     if (buf_reserve(&b, 1 << 16) != OK) abort();
@@ -438,7 +438,7 @@ static void remove_under(Arena *a, Str home) {
     for (size_t i = 0; i < parts.len; i++) {
         Buf p = buf_make(a);
         if (buf_str(&p, home) != OK || buf_str(&p, at(parts, i)) != OK) abort();
-        (void)remove(gate_cstr(a, buf_view(&p)));
+        (void)remove(arena_cstr(a, buf_view(&p)));
     }
 }
 

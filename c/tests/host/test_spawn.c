@@ -700,6 +700,28 @@ TEST(the_paths_tried_follow_the_last_PATH) {
     arena_deinit(&a);
 }
 
+TEST(a_word_holding_a_nul_is_refused_and_a_plain_one_ends_with_one) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, 1 << 20, &refused);
+    static const Str plain_all[2] = {S("echo"), S("")};
+    SpawnStrs plain = {plain_all, 2};
+    char **list = spawn_cstr_list(&a, plain);
+    EXPECT(list != NULL);
+    SpawnCStrs words = {list, 3};
+    EXPECT_STR(((Str){at(words, 0), strlen(at(words, 0))}), S("echo"));
+    EXPECT_EQ(strlen(at(words, 1)), 0);
+    EXPECT(at(words, 2) == NULL);
+    // A NUL inside a word would end the kernel's copy of it early, so the
+    // list is refused, and no arena refused it.
+    static const Str nul_all[2] = {S("echo"), {"a\0b", 3}};
+    SpawnStrs nul = {nul_all, 2};
+    EXPECT(spawn_cstr_list(&a, nul) == NULL);
+    EXPECT(!a.hit);
+    EXPECT(!refused);
+    arena_deinit(&a);
+}
+
 TEST(a_wait_that_fails_on_a_child_of_shale_s_own_ends_the_process) {
     // A pid that is no child of this process: the wait fails with ECHILD,
     // which no child of shale's own may, and the run would read a status of
@@ -732,4 +754,5 @@ TEST_MAIN(TEST_CASE(output_exit_code_stdin_cwd_and_the_environment_as_given),
           TEST_CASE(attack_a_term_or_hup_the_program_sends_its_parent_mid_run_ends_its_group),
           TEST_CASE(attack_a_program_that_never_reads_its_stdin_leaves_shale_standing),
           TEST_CASE(the_paths_tried_follow_the_last_PATH),
+          TEST_CASE(a_word_holding_a_nul_is_refused_and_a_plain_one_ends_with_one),
           TEST_CASE(a_wait_that_fails_on_a_child_of_shale_s_own_ends_the_process))

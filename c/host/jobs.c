@@ -154,7 +154,7 @@ static bool jobs_join(Arena *a, Str dir, Str name, Str *out) {
 }
 
 static bool jobs_runnable(Arena *a, Str p) {
-    char *z = spawn_cstr(a, p);
+    char *z = arena_cstr(a, p);
     return z != NULL && access(z, X_OK) == 0;
 }
 
@@ -278,8 +278,8 @@ static JobsLaunched jobs_launch(Arena *a, Str reaper, Str record, Str log, Str c
     SpawnStrs sargs = {all, n};
     char **zargv = spawn_cstr_list(a, sargs);
     char **zenv = spawn_cstr_list(a, env);
-    char *zexe = spawn_cstr(a, reaper);
-    char *zrecord = spawn_cstr(a, record);
+    char *zexe = arena_cstr(a, reaper);
+    char *zrecord = arena_cstr(a, record);
     if (zargv == NULL || zenv == NULL || zexe == NULL || zrecord == NULL) return JOBS_OUT_OF_MEMORY;
     // An old record would be read as the new one's.
     unlink(zrecord);
@@ -425,11 +425,11 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
     // A temp file of its own, so a reaper ending as another starts never
     // shares one.
     if (buf_str(&tb, record_s) != OK || buf_byte(&tb, '.') != OK || buf_u64(&tb, (uint64_t)getpid()) != OK || buf_lit(&tb, ".tmp") != OK) return 2;
-    char *tmp = spawn_cstr(a, buf_view(&tb));
-    char *record = spawn_cstr(a, record_s);
-    char *log = spawn_cstr(a, jobs_arg(args, n, 1));
-    char *cwd = spawn_cstr(a, jobs_arg(args, n, 2));
-    char *program = spawn_cstr(a, jobs_arg(args, n, 3));
+    char *tmp = arena_cstr(a, buf_view(&tb));
+    char *record = arena_cstr(a, record_s);
+    char *log = arena_cstr(a, jobs_arg(args, n, 1));
+    char *cwd = arena_cstr(a, jobs_arg(args, n, 2));
+    char *program = arena_cstr(a, jobs_arg(args, n, 3));
     if (tmp == NULL || record == NULL || log == NULL || cwd == NULL || program == NULL) return 2;
     size_t argc = n - 5;
     Str *argv = ARENA_ARRAY(a, Str, argc);

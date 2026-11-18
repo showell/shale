@@ -177,21 +177,44 @@ static inline char *arena_big_bytes(ArenaChunk *c, size_t align) {
     return (char *)arena_forward((uintptr_t)arena_chunk_bytes(c), align);
 }
 
+// `x + y` into `*out`, or false with `a`'s `hit` set when the sum would wrap.
+// Every size a piece of the foundation sums before it allocates is summed
+// here, and every product is arena_size_mul's.
+// DRAGON: size overflow. A size that wraps is a small one, so a huge ask
+// would get a tiny buffer that its writes run past: `16 + len + align` for
+// a chunk, `len + more` for a reserve, `len + 1` for a C string's NUL, or
+// `n * size` for an array or a vec's growth.
+// REMEDY: this check refuses before the sum, and arena_size_mul's before
+// the product; test_arena catches both plants.
+static inline bool arena_size_add(Arena *a, size_t x, size_t y, size_t *out) {
+    if (x > SIZE_MAX - y) {
+        arena_set_hit(a);
+        return false;
+    }
+    *out = x + y;
+    return true;
+}
+
+// `x * y` into `*out`, or false with `a`'s `hit` set when the product would
+// wrap (the DRAGON at arena_size_add).
+static inline bool arena_size_mul(Arena *a, size_t x, size_t y, size_t *out) {
+    if (y != 0 && x > SIZE_MAX / y) {
+        arena_set_hit(a);
+        return false;
+    }
+    *out = x * y;
+    return true;
+}
+
 // `len` bytes aligned to `align` (a power of two), or NULL with `hit` set
 // when the budget or the system refuses.
 static inline void *arena_alloc(Arena *a, size_t len, size_t align) {
     if (align == 0 || (align & (align - 1)) != 0) arena_misuse("an alignment that is not a power of two");
     if (len == 0) return arena_empty(align);
-    // DRAGON: size overflow. `16 + len + align` can wrap to a few bytes, and
-    // a huge allocation would get a tiny chunk whose writes run past it.
-    // REMEDY: this check refuses such a `len` before the sum, and test_arena
-    // catches its plant. Every container's growth ends here, so it is the
-    // last check before the heap.
-    if (len > SIZE_MAX - sizeof(ArenaChunk) - align) {
-        arena_set_hit(a);
-        return NULL;
-    }
-    size_t need = sizeof(ArenaChunk) + len + align;
+    // A chunk's header and its alignment's room are added through
+    // arena_size_add, so a huge `len` is refused before the sum wraps.
+    size_t need = 0;
+    if (!arena_size_add(a, len, sizeof(ArenaChunk) + align, &need)) return NULL;
     if (len >= ARENA_BIG) {
         ArenaChunk *c = arena_take(a, need);
         if (c == NULL) return NULL;
@@ -295,14 +318,17 @@ static inline void *arena_refuse(Arena *a) {
 // One `T`, or NULL when refused.
 #define ARENA_NEW(a, T) ((T *)arena_alloc((a), sizeof(T), _Alignof(T)))
 
-// `n` of `T`, or NULL when refused (an `n` whose size overflows among them).
-// DRAGON: size overflow. `n * sizeof(T)` can wrap to a small size (or to 0,
-// whose sentinel is not NULL), and the caller would index `n` items past it.
-// REMEDY: the division refuses such an `n` before the multiply, and
-// test_arena catches its plant. `n` is evaluated twice, and nothing checks
-// it for a side effect: one is the caller's bug.
-#define ARENA_ARRAY(a, T, n) \
-    ((T *)((n) > SIZE_MAX / sizeof(T) ? arena_refuse(a) : arena_alloc((a), (n) * sizeof(T), _Alignof(T))))
+// `n` items of `size` bytes aligned to `align`, or NULL when refused (an `n`
+// whose size overflows among them, through arena_size_mul). A function, so
+// ARENA_ARRAY evaluates its `n` once.
+static inline void *arena_array(Arena *a, size_t n, size_t size, size_t align) {
+    size_t bytes = 0;
+    if (!arena_size_mul(a, n, size, &bytes)) return NULL;
+    return arena_alloc(a, bytes, align);
+}
+
+// `n` of `T`, or NULL when refused.
+#define ARENA_ARRAY(a, T, n) ((T *)arena_array((a), (n), sizeof(T), _Alignof(T)))
 
 // A copy of `s` in the arena; false when refused.
 static inline bool arena_dup(Arena *a, Str s, Str *out) {
@@ -312,6 +338,23 @@ static inline bool arena_dup(Arena *a, Str s, Str *out) {
     out->ptr = p;
     out->len = s.len;
     return true;
+}
+
+// `s` with a NUL after it, in the arena, for a call into the kernel: NULL
+// when `s` holds a NUL (str_cstr_into's refusal: `hit` stays unset, and
+// nothing is kept), or when the arena refuses (`hit` set). The one converter
+// to an arena's C string.
+static inline char *arena_cstr(Arena *a, Str s) { // cstr: the kernel's
+    size_t n = 0;
+    if (!arena_size_add(a, s.len, 1, &n)) return NULL;
+    char *p = arena_alloc(a, n, 1);
+    if (p == NULL) return NULL;
+    Bytes room = {p, n};
+    if (str_cstr_into(room, s) != STR_CSTR_OK) {
+        arena_free(a, p, n);
+        return NULL;
+    }
+    return p;
 }
 
 #endif

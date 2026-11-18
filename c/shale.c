@@ -92,18 +92,6 @@ static Str error_name(int e) {
     }
 }
 
-// `s` as a NUL-ended copy, for a system call.
-static const char *c_string(Arena *a, Str s) { // cstr: the system's own
-    if (s.len == SIZE_MAX) return NULL;
-    // A NUL would cut the path short, so a path holding one is refused.
-    if (s.len > 0 && mem_find_byte(s.ptr, 0, s.len) != NULL) return NULL;
-    char *p = arena_alloc(a, s.len + 1, 1);
-    if (p == NULL) return NULL;
-    Bytes room = {p, s.len + 1};
-    if (s.len > 0) mem_copy(room.ptr, s.ptr, s.len);
-    at(room, s.len) = 0;
-    return p;
-}
 
 static Str from_c(const char *s) { // cstr: the system's own
     Str r = {s, strlen(s)};
@@ -138,7 +126,7 @@ static STATUS_MUST_USE Status read_all(Arena *a, int fd, size_t limit, Str *out,
 }
 
 static STATUS_MUST_USE Status read_path(Arena *a, Str path, size_t limit, Str *out, Str *err) {
-    const char *p = c_string(a, path);
+    const char *p = arena_cstr(a, path);
     if (p == NULL) {
         *err = S("OutOfMemory");
         return STOP;
@@ -155,7 +143,7 @@ static STATUS_MUST_USE Status read_path(Arena *a, Str path, size_t limit, Str *o
 
 // The real path of `p`, or `p` itself when it has none (it is missing).
 static Str real_or_same(Arena *a, Str p) {
-    const char *c = c_string(a, p);
+    const char *c = arena_cstr(a, p);
     if (c == NULL) return p;
     char buf[PATH_MAX];
     if (realpath(c, buf) == NULL) return p;
@@ -291,7 +279,7 @@ static STATUS_MUST_USE Status refuse_links(LibraryReader *r, Str dir, Str rest, 
         r->used.steps++;
         TRY(join(a, sofar, part, &sofar));
         shown_end += part.len + (shown_end > 0 ? 1 : 0);
-        const char *c = c_string(a, sofar);
+        const char *c = arena_cstr(a, sofar);
         if (c == NULL) return STOP;
         struct stat st;
         if (lstat(c, &st) != 0) return OK;
@@ -374,7 +362,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
         if (str_eq(part, S(".."))) return reader_why(why, got, 3, a, S("\""), path, S("\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)"));
         if (!cli_fat_name(part)) return reader_why(why, got, 5, a, S("\""), path, S("\" has a part (\""), part, S("\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses"));
     }
-    const char *dir_c = c_string(a, m->dir);
+    const char *dir_c = arena_cstr(a, m->dir);
     struct stat dst;
     if (dir_c == NULL) return STOP;
     if (stat(dir_c, &dst) != 0 || !S_ISDIR(dst.st_mode)) {
@@ -403,7 +391,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
         return OK;
     }
     r->used.reads++;
-    const char *full_c = c_string(a, full);
+    const char *full_c = arena_cstr(a, full);
     struct stat st;
     if (full_c == NULL) return STOP;
     if (stat(full_c, &st) != 0) {
@@ -830,7 +818,7 @@ static bool help_checkout(Arena *a, Str *out) {
     }
     Str agents = {0};
     if (join(a, up, S("docs/SHALE-AGENTS.md"), &agents) != OK) return false;
-    const char *c = c_string(a, agents);
+    const char *c = arena_cstr(a, agents);
     if (c == NULL || access(c, F_OK) != 0) return false;
     return arena_dup(a, up, out);
 }

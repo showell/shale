@@ -320,6 +320,58 @@ TEST(dup_copies_into_the_arena_and_is_refused_when_full) {
     arena_deinit(&a);
 }
 
+TEST(a_c_string_ends_with_a_nul_and_one_holding_a_nul_is_refused) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, 16 * 1024 * 1024, &refused);
+    char *ab = arena_cstr(&a, S("ab"));
+    EXPECT(ab != NULL);
+    EXPECT_STR(((Str){ab, strlen(ab)}), S("ab"));
+    char *empty = arena_cstr(&a, S(""));
+    EXPECT(empty != NULL);
+    EXPECT_EQ(strlen(empty), 0);
+    // A NUL inside is refused with no arena refusal, and nothing is kept:
+    // the next string starts where the refused one would have.
+    size_t held = a.held;
+    EXPECT(arena_cstr(&a, ((Str){"a\0b", 3})) == NULL);
+    EXPECT(!a.hit);
+    EXPECT(!refused);
+    EXPECT_EQ(a.held, held);
+    char *cd = arena_cstr(&a, S("cd"));
+    EXPECT(cd == empty + 1);
+    EXPECT_STR(((Str){cd, strlen(cd)}), S("cd"));
+    // A length whose NUL would wrap is the arena's refusal, before a read.
+    EXPECT(arena_cstr(&a, ((Str){"x", SIZE_MAX})) == NULL);
+    EXPECT(a.hit);
+    EXPECT(refused);
+    EXPECT_EQ(a.held, held);
+    arena_deinit(&a);
+}
+
+TEST(a_size_sum_or_product_that_wraps_is_refused_and_one_that_fits_is_given) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, 0, &refused);
+    size_t out = 7;
+    EXPECT(arena_size_add(&a, SIZE_MAX - 1, 1, &out));
+    EXPECT_EQ(out, SIZE_MAX);
+    EXPECT(arena_size_mul(&a, SIZE_MAX / 2, 2, &out));
+    EXPECT_EQ(out, SIZE_MAX - 1);
+    EXPECT(arena_size_mul(&a, SIZE_MAX, 0, &out));
+    EXPECT_EQ(out, 0);
+    EXPECT(!a.hit);
+    out = 7;
+    EXPECT(!arena_size_add(&a, SIZE_MAX, 1, &out));
+    EXPECT(a.hit);
+    EXPECT_EQ(out, 7);
+    a.hit = false;
+    EXPECT(!arena_size_mul(&a, SIZE_MAX / 2 + 1, 2, &out));
+    EXPECT(a.hit);
+    EXPECT_EQ(out, 7);
+    EXPECT(refused);
+    arena_deinit(&a);
+}
+
 TEST(a_misuse_ends_the_process) {
     bool refused = false;
     Arena a;
@@ -349,5 +401,7 @@ TEST_MAIN(
     TEST_CASE(the_arena_never_holds_more_than_its_limit_whatever_grows_in_it),
     TEST_CASE(deinit_gives_back_every_chunk_and_keeps_the_limit),
     TEST_CASE(dup_copies_into_the_arena_and_is_refused_when_full),
+    TEST_CASE(a_c_string_ends_with_a_nul_and_one_holding_a_nul_is_refused),
+    TEST_CASE(a_size_sum_or_product_that_wraps_is_refused_and_one_that_fits_is_given),
     TEST_CASE(a_misuse_ends_the_process)
 )
