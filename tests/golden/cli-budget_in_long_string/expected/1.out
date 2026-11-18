@@ -1,0 +1,4 @@
+-- budget: steps=1
+print("a recipe written out")
+
+2

@@ -383,6 +383,27 @@ static inline STATUS_MUST_USE Status cli_arg_lines(Str text, const Command *c, A
     return OK;
 }
 
+// Whether a `-- budget:` line comes after the script's first line of code,
+// `code_line`, where it would never be read. Only a line comment that starts
+// its line counts, as the lexer finds it: a line inside a long string
+// (`[=[ ... ]=]`, a heredoc's text) or a block comment is text, never a
+// budget line. A source that does not lex is left to the parser's stop.
+static inline bool cli_late_budget_line(Str source, uint32_t code_line, Arena *a) {
+    Lexer lx;
+    lexer_init(&lx, a, source);
+    for (;;) {
+        Token t;
+        if (lexer_next_or_comment(&lx, &t) != OK) return false;
+        if (t.tag == TAG_EOF) return false;
+        if (t.tag != TAG_COMMENT || t.line <= code_line) continue;
+        Str body = cli_trim_start(str_sub(t.text, 2, t.text.len));
+        if (!str_starts_with(body, S("budget:"))) continue;
+        size_t k = t.start;
+        while (k > 0 && (str_byte(source, k - 1) == ' ' || str_byte(source, k - 1) == '\t')) k--;
+        if (k == 0 || str_byte(source, k - 1) == '\n') return true;
+    }
+}
+
 // A line `-- budget: NAME=N ...` among the comments opening a script sets those
 // budgets where the command line has not; one after the script's first line of
 // code is refused, as it would never be read.
@@ -391,16 +412,14 @@ static inline STATUS_MUST_USE Status cli_header_budgets(Str source, Command *c, 
     bool done = false;
     bool seen = false;
     Str raw = {0};
+    uint32_t line_no = 0;
     while (cli_split(&rest, &done, '\n', &raw)) {
+        line_no++;
         Str line = cli_trim(raw, S(" \t\r"));
         if (line.len == 0) continue;
         if (!str_starts_with(line, S("--"))) {
-            Str after = {0};
-            while (cli_split(&rest, &done, '\n', &after)) {
-                Str l = cli_trim(after, S(" \t\r"));
-                if (str_starts_with(l, S("--")) && str_starts_with(cli_trim_start(str_sub(l, 2, l.len)), S("budget:")))
-                    return cli_refuse(why, 1, S("a `-- budget:` line after the script's first line of code is never read: put it among the comments opening the script"));
-            }
+            if (cli_late_budget_line(source, line_no, why->arena))
+                return cli_refuse(why, 1, S("a `-- budget:` line after the script's first line of code is never read: put it among the comments opening the script"));
             break;
         }
         Str body = cli_trim_start(str_sub(line, 2, line.len));

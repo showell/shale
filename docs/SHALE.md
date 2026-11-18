@@ -1231,7 +1231,9 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   it took before the run (`── budgets from the script's header: ...`), so
   a recipe's cost is said where it is read and seen when it runs. The
   first line that is neither blank nor a comment ends the opening
-  comments.
+  comments, and a `-- budget:` line comment after it is refused, since it
+  would never be read. A line inside a long string (a recipe written out
+  in `[=[ ... ]=]`) or a block comment is text, never a budget line.
 - `-e SOURCE` is the script itself, in place of a file. **With neither,
   the script is stdin**, and a stop names it `stdin`; a terminal on stdin
   is refused.

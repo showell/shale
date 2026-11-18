@@ -448,6 +448,34 @@ TEST(the_command_line_and_the_header_set_budgets_the_command_line_winning) {
     arena_deinit(&a);
 }
 
+TEST(a_budget_line_inside_a_long_string_or_a_block_comment_is_text) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, 1 << 20, &refused);
+    Buf why = buf_make(&a);
+    Command c;
+    Str argv[1] = {S("a.shale")};
+    EXPECT(cli_parse(argv, 1, false, S(""), &c, &why) == OK);
+    // A heredoc's text in a long string, at levels one and two, and a block
+    // comment: each holds a `-- budget:` line, and none is one.
+    EXPECT(cli_header_budgets(S("local s = [=[\n-- budget: steps=1\n]=]\nprint(s)\n"), &c, &why) == OK);
+    EXPECT(cli_header_budgets(S("local s = [==[\n  -- budget: steps=1\n]=]\n]==]\n"), &c, &why) == OK);
+    EXPECT(cli_header_budgets(S("print(1)\n--[=[\n-- budget: steps=1\n]=]\n"), &c, &why) == OK);
+    // A comment after code on its line was never a budget line, nor is
+    // `-- budget:` inside a quoted string.
+    EXPECT(cli_header_budgets(S("print(1) -- budget: steps=1\nprint(\"-- budget: steps=1\")\n"), &c, &why) == OK);
+    EXPECT_EQ(c.budgets.steps, 5000000);
+    EXPECT_EQ(buf_view(&why).len, 0);
+    // A real one after the long string closes is still refused.
+    EXPECT(cli_header_budgets(S("local s = [=[\n-- budget: steps=1\n]=]\n-- budget: steps=2\n"), &c, &why) == STOP);
+    EXPECT_STR(buf_view(&why), S("a `-- budget:` line after the script's first line of code is never read: put it among the comments opening the script"));
+    buf_clear(&why);
+    // A source that does not lex is the parser's to stop, not this check's.
+    EXPECT(cli_header_budgets(S("local s = [=[\n-- budget: steps=1\n"), &c, &why) == OK);
+    EXPECT_EQ(c.budgets.steps, 5000000);
+    arena_deinit(&a);
+}
+
 TEST(the_parsers_own_lookups_end_the_process_on_a_miss) {
     // A local's slot the frame doesn't hold, and a prelude function its own
     // index lacks, are the parser's bugs, never a script's stop.
@@ -476,4 +504,5 @@ TEST_MAIN(TEST_CASE(a_script_parses_to_its_tree_each_name_a_slot),
           TEST_CASE(statements_hold_their_own_rules),
           TEST_CASE(a_stop_partway_leaves_the_parsers_state_as_it_was),
           TEST_CASE(the_command_line_and_the_header_set_budgets_the_command_line_winning),
+          TEST_CASE(a_budget_line_inside_a_long_string_or_a_block_comment_is_text),
           TEST_CASE(the_parsers_own_lookups_end_the_process_on_a_miss))

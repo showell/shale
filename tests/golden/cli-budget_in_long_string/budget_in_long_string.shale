@@ -1,0 +1,11 @@
+-- A `-- budget:` line inside a long string is the string's text, not a
+-- misplaced budget line: the run goes on, at the default budgets.
+local recipe = [=[
+-- budget: steps=1
+print("a recipe written out")
+]=]
+--[==[
+-- budget: steps=2
+]==]
+print(recipe)
+print(#lines(recipe))

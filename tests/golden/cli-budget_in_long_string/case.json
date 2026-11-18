@@ -1,0 +1,1 @@
+{"id":"cli-budget_in_long_string","source":"cli","origin":"tests/inputs/cli/budget_in_long_string.shale","files":["budget_in_long_string.shale"],"steps":[{"argv":["{case}/budget_in_long_string.shale"],"stdin":"","mounts":[]}],"prefixes":[],"judge":{"class":false,"digits":false},"arena":""}

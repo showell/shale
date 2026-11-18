@@ -934,7 +934,7 @@ docs-SHALE-909	docs	docs/SHALE.md:909	1
 docs-SHALE-932	docs	docs/SHALE.md:932	1	
 docs-SHALE-953	docs	docs/SHALE.md:953	1	
 docs-SHALE-980	docs	docs/SHALE.md:980	1	
-docs-SHALE-1546	docs	docs/SHALE.md:1546	1	
+docs-SHALE-1548	docs	docs/SHALE.md:1548	1	
 docs-SHALE-AGENTS-553	docs	docs/SHALE-AGENTS.md:553	1	
 docs-SHALE-AGENTS-591	docs	docs/SHALE-AGENTS.md:591	1	
 docs-SHALE-AGENTS-616	docs	docs/SHALE-AGENTS.md:616	1	
@@ -1032,6 +1032,7 @@ cli-budget_flag_unknown	cli	tests/inputs/cli/budget_flag_unknown.shale	1
 cli-budget_half	cli	tests/inputs/cli/budget_half.shale	1	
 cli-budget_header	cli	tests/inputs/cli/budget_header.shale	1	
 cli-budget_header_late	cli	tests/inputs/cli/budget_header_late.shale	1	
+cli-budget_in_long_string	cli	tests/inputs/cli/budget_in_long_string.shale	1	
 cli-dash_e	cli	tests/inputs/cli/dash_e.shale	1	
 cli-exit_codes	cli	tests/inputs/cli/exit_codes.shale	1	
 cli-help	cli	tests/inputs/cli/help.shale	1	
