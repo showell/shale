@@ -15,9 +15,10 @@
 //     live buffer, not every one it outgrew.
 //   - Only the last small allocation can grow, shrink or be freed, in place;
 //     any other free gives nothing back until a reset.
-//   - Past the limit an allocation is refused: it returns NULL and sets `hit`.
-//     The caller makes that the budget stop (`run_oom`, err.h), "the arena
-//     budget ran out".
+//   - Past the limit an allocation is refused: it returns NULL and sets `hit`,
+//     and the refusal the arena was made with (`arena_init`'s `refused`, its
+//     run's `RunCtx.refused`). The caller makes that the budget stop
+//     (`run_oom`, err.h), "the arena budget ran out".
 //
 // A mark and a reset give back everything allocated since the mark, small
 // and big alike.
@@ -66,6 +67,9 @@ typedef struct {
     size_t used;
     // Whether an allocation was refused.
     bool hit;
+    // The refusal a refused allocation sets beside `hit`: its run's
+    // `RunCtx.refused`, or a local of the code that made it outside any run.
+    bool *refused;
     // The newest small chunk, linked to the older ones.
     ArenaChunk *chunk;
     // How far into the newest chunk's bytes the next allocation starts.
@@ -81,25 +85,19 @@ typedef struct {
     size_t backing_ok_left;
 } Arena;
 
-// Whether any arena refused since a run last read a refusal as its budget's
-// stop (err.h's run_oom). One flag for the process, not one an arena: a run's
-// refusals come from its values, its machine and a dozen scratch arenas, and
-// the stop that reads one is held to there being one, whichever refused.
+// Marks `a` as having refused an allocation, and its refusal (its run's, for
+// an arena of a run) as one no stop has read yet. A run's refusals come from
+// its values, its machine and a dozen scratch arenas, all made with its
+// RunCtx's `refused`, so the stop that reads one (err.h's run_oom) is held to
+// there being one, whichever refused.
 // DRAGON: the arena budget. A STOP that no arena refused, read as the arena
 // budget, would say a budget ran out when a bug in the C stopped the run.
-// REMEDY: every refusal sets this through arena_set_hit (no `hit = true`
-// anywhere else), run_oom aborts unless it is set and clears it, and
+// REMEDY: every refusal sets `*refused` through arena_set_hit (no `hit =
+// true` anywhere else), run_oom aborts unless it is set and clears it, and
 // test_err's death tests hold both.
-static inline bool *arena_refused_slot(void) {
-    static bool refused;
-    return &refused;
-}
-
-// Marks `a` as having refused an allocation, and the process as holding a
-// refusal no stop has read yet.
 static inline void arena_set_hit(Arena *a) {
     a->hit = true;
-    *arena_refused_slot() = true;
+    *a->refused = true;
 }
 
 // Which mark: a reset gives back what came after it.
@@ -120,10 +118,15 @@ static inline void arena_misuse(const char *what) { // cstr: a literal naming th
     c_bug_str("arena", (Str){what, strlen(what)});
 }
 
-// Makes `*a` an empty arena that may hold at most `limit` bytes.
-static inline void arena_init(Arena *a, size_t limit) {
+// Makes `*a` an empty arena that may hold at most `limit` bytes, whose
+// refusals set `*refused`: its run's `RunCtx.refused`, or, outside any run (a
+// test, the CLI's own setup), a local of the code that made it. There is no
+// arena without one.
+static inline void arena_init(Arena *a, size_t limit, bool *refused) {
+    if (refused == NULL) arena_misuse("an arena made with no refusal to set");
     memset(a, 0, sizeof *a);
     a->limit = limit;
+    a->refused = refused;
 }
 
 static inline size_t arena_sat_sub(size_t a, size_t b) {
@@ -334,7 +337,8 @@ static inline void arena_reset(Arena *a, ArenaMark m) {
     a->marks_len = m.depth;
 }
 
-// Every chunk back to the system; the arena is empty, its limit kept.
+// Every chunk back to the system; the arena is empty, its limit and its
+// refusal kept.
 static inline void arena_deinit(Arena *a) {
     for (int k = 0; k < 2; k++) {
         ArenaChunk *c = k == 0 ? a->chunk : a->bigs;
@@ -345,7 +349,8 @@ static inline void arena_deinit(Arena *a) {
         }
     }
     size_t limit = a->limit;
-    arena_init(a, limit);
+    bool *refused = a->refused;
+    arena_init(a, limit, refused);
 }
 
 static inline void *arena_refuse(Arena *a) {

@@ -949,7 +949,7 @@ typedef Status (*HostZigCall)(Paths *h, Arena *sa, Run *r, Pos pos, ConstValues 
 static STATUS_MUST_USE Status host_zig_with_scratch(HostZigCall f, Paths *h, Run *r, Pos pos, ConstValues args, Value *out) {
     Arena *values = r->ctx.values;
     Arena sa;
-    arena_init(&sa, run_sat_sub(values->limit, values->held));
+    arena_init(&sa, run_sat_sub(values->limit, values->held), &r->ctx.refused);
     Status s = f(h, &sa, r, pos, args, out);
     arena_deinit(&sa);
     return s;

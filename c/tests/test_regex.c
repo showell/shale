@@ -11,6 +11,8 @@ SLICE_TYPE(Strs, const Str);
 
 typedef struct {
     Arena arena;
+    // The arena's refusal, outside any run.
+    bool refused;
     RegexProgram p;
     RegexScratch sc;
 } Compiled;
@@ -21,7 +23,8 @@ static RegexOptions opts(bool nocase) {
 }
 
 static void compiled_make(Compiled *c, Str pattern, RegexOptions o) {
-    arena_init(&c->arena, TEST_REGEX_LIMIT);
+    c->refused = false;
+    arena_init(&c->arena, TEST_REGEX_LIMIT, &c->refused);
     RegexRefusal refused;
     Status s = regex_compile(&c->arena, pattern, o, &c->p, &refused);
     if (s != OK) fprintf(stderr, "  /%.*s/ refused at %zu: %.*s\n", (int)pattern.len, pattern.ptr, refused.at, (int)refused.message.len, refused.message.ptr);
@@ -39,8 +42,9 @@ static RegexSearched found(Str pattern, Str s) {
 }
 
 static RegexRefusal refusal(Str pattern) {
+    bool arena_refused = false;
     Arena a;
-    arena_init(&a, TEST_REGEX_LIMIT);
+    arena_init(&a, TEST_REGEX_LIMIT, &arena_refused);
     RegexProgram p;
     RegexRefusal r;
     Status s = regex_compile(&a, pattern, opts(false), &p, &r);
@@ -237,8 +241,9 @@ TEST(compile_and_cache_put_leave_nothing_behind_when_the_arena_refuses) {
     Str pattern = S("(a|b)[x-z\\d]+c?");
     size_t limit = 0;
     for (;; limit++) {
+        bool arena_refused = false;
         Arena a;
-        arena_init(&a, limit);
+        arena_init(&a, limit, &arena_refused);
         RegexProgram p;
         RegexRefusal refused;
         Status s = regex_compile(&a, pattern, opts(false), &p, &refused);
@@ -262,8 +267,9 @@ TEST(compile_and_cache_put_leave_nothing_behind_when_the_arena_refuses) {
     size_t compile_least = limit;
     EXPECT(compile_least > 0);
 
+    bool cache_refused = false;
     RegexCache c;
-    regex_cache_init(&c);
+    regex_cache_init(&c, &cache_refused);
     RegexCached *other;
     RegexRefusal refused;
     EXPECT(regex_cache_put(&c, S("other"), opts(false), TEST_REGEX_LIMIT, &refused, &other) == OK);
@@ -525,8 +531,9 @@ TEST(nocase_folds_bytes_and_classes_before_negation) {
 // evicted, keyed by text and nocase, and an evicted entry's memory given
 // back.
 TEST(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it_evicts) {
+    bool cache_refused = false;
     RegexCache c;
-    regex_cache_init(&c);
+    regex_cache_init(&c, &cache_refused);
     char buf[8];
     Bytes room = {buf, sizeof buf};
     RegexRefusal refused;

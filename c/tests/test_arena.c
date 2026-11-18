@@ -7,19 +7,49 @@
 #include "arena.h"
 
 TEST(the_budget_refuses_past_its_limit_and_says_it_was_hit) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 64 * 1024);
+    arena_init(&a, 64 * 1024, &refused);
     EXPECT(arena_alloc(&a, 40 * 1024, 1) != NULL);
     EXPECT(!a.hit);
+    EXPECT(!refused);
     EXPECT(arena_alloc(&a, 40 * 1024, 1) == NULL);
     EXPECT(a.hit);
+    EXPECT(refused);
     EXPECT(a.held <= a.limit);
     arena_deinit(&a);
 }
 
-TEST(chunks_start_at_the_least_and_double) {
+TEST(a_refusal_sets_the_arenas_own_flag_and_no_other) {
+    bool mine = false;
+    bool other = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 0, &mine);
+    Arena b;
+    arena_init(&b, 1 << 20, &other);
+    EXPECT(arena_alloc(&a, 1, 1) == NULL);
+    EXPECT(mine);
+    EXPECT(!other);
+    EXPECT(!b.hit);
+    // A deinit keeps the arena's limit and its refusal.
+    arena_deinit(&a);
+    EXPECT(a.refused == &mine);
+    EXPECT_EQ(a.limit, 0);
+    EXPECT(!a.hit);
+    mine = false;
+    EXPECT(arena_alloc(&a, 1, 1) == NULL);
+    EXPECT(mine);
+    EXPECT(!other);
+    arena_deinit(&b);
+    // An arena with no refusal to set is a misuse.
+    Arena none;
+    EXPECT_DIES(arena_init(&none, 1, NULL));
+}
+
+TEST(chunks_start_at_the_least_and_double) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     EXPECT(arena_alloc(&a, 16000, 1) != NULL);
     EXPECT_EQ(a.held, 16384);
     EXPECT(arena_alloc(&a, 1000, 1) != NULL);
@@ -32,8 +62,9 @@ TEST(chunks_start_at_the_least_and_double) {
 }
 
 TEST(a_chunk_near_the_limit_takes_only_what_is_left) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 20000);
+    arena_init(&a, 20000, &refused);
     EXPECT(arena_alloc(&a, 16000, 1) != NULL);
     EXPECT_EQ(a.held, 16384);
     // Twice the last would be 32768; 3616 is what the limit has left.
@@ -50,16 +81,18 @@ TEST(a_chunk_near_the_limit_takes_only_what_is_left) {
 }
 
 TEST(a_chunk_too_small_for_one_allocation_is_made_its_size) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     EXPECT(arena_alloc(&a, 30000, 8) != NULL);
     EXPECT_EQ(a.held, 30000 + 16 + 8);
     arena_deinit(&a);
 }
 
 TEST(a_big_allocation_has_its_own_chunk_and_gives_it_back) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     char *p = arena_alloc(&a, ARENA_BIG, 8);
     EXPECT(p != NULL);
     EXPECT(a.chunk == NULL);
@@ -78,8 +111,9 @@ TEST(a_big_allocation_has_its_own_chunk_and_gives_it_back) {
 }
 
 TEST(big_allocations_are_given_back_in_any_order) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     char *x = arena_alloc(&a, 100000, 1);
     char *y = arena_alloc(&a, 200000, 1);
     char *z = arena_alloc(&a, 300000, 1);
@@ -94,8 +128,9 @@ TEST(big_allocations_are_given_back_in_any_order) {
 }
 
 TEST(allocations_are_aligned_as_asked) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     char *p = arena_alloc(&a, 1, 1);
     char *q = arena_alloc(&a, 8, 8);
     EXPECT_EQ((uintptr_t)q % 8, 0);
@@ -107,8 +142,9 @@ TEST(allocations_are_aligned_as_asked) {
 }
 
 TEST(only_the_last_allocation_grows_in_place) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     char *p = arena_alloc(&a, 10, 1);
     EXPECT(arena_resize(&a, p, 10, 20));
     EXPECT_EQ(a.used, 20);
@@ -125,8 +161,9 @@ TEST(only_the_last_allocation_grows_in_place) {
 }
 
 TEST(freeing_the_last_allocation_unbumps_it_and_any_other_is_kept) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     char *p = arena_alloc(&a, 100, 1);
     arena_free(&a, p, 100);
     EXPECT(arena_alloc(&a, 100, 1) == p);
@@ -137,8 +174,9 @@ TEST(freeing_the_last_allocation_unbumps_it_and_any_other_is_kept) {
 }
 
 TEST(a_reset_gives_back_everything_since_its_mark) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     EXPECT(arena_alloc(&a, 100, 1) != NULL);
     size_t held = a.held;
     size_t used = a.used;
@@ -159,8 +197,9 @@ TEST(a_reset_gives_back_everything_since_its_mark) {
 }
 
 TEST(a_reset_to_an_outer_mark_closes_the_inner_ones) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     ArenaMark outer = arena_mark(&a);
     EXPECT(arena_alloc(&a, 10, 1) != NULL);
     ArenaMark inner = arena_mark(&a);
@@ -174,8 +213,9 @@ TEST(a_reset_to_an_outer_mark_closes_the_inner_ones) {
 }
 
 TEST(a_reset_survives_a_big_from_before_its_mark_freed_after_it) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     char *before = arena_alloc(&a, 100000, 1);
     ArenaMark m = arena_mark(&a);
     EXPECT(arena_alloc(&a, 200000, 1) != NULL);
@@ -187,8 +227,9 @@ TEST(a_reset_survives_a_big_from_before_its_mark_freed_after_it) {
 }
 
 TEST(a_refusal_by_the_system_is_a_hit_and_holds_nothing) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     a.backing_faults = true;
     a.backing_ok_left = 1;
     EXPECT(arena_alloc(&a, 10, 1) != NULL);
@@ -205,8 +246,9 @@ TEST(a_refusal_by_the_system_is_a_hit_and_holds_nothing) {
 }
 
 TEST(a_zero_length_allocation_holds_nothing_and_is_not_null) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 0);
+    arena_init(&a, 0, &refused);
     EXPECT(arena_alloc(&a, 0, 1) != NULL);
     EXPECT_EQ(a.held, 0);
     EXPECT(!a.hit);
@@ -216,8 +258,9 @@ TEST(a_zero_length_allocation_holds_nothing_and_is_not_null) {
 }
 
 TEST(an_array_whose_size_overflows_is_refused) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     EXPECT(ARENA_ARRAY(&a, uint64_t, SIZE_MAX / 4) == NULL);
     EXPECT(a.hit);
     EXPECT_EQ(a.held, 0);
@@ -230,8 +273,9 @@ TEST(an_array_whose_size_overflows_is_refused) {
 TEST(a_size_that_wraps_with_its_header_is_refused) {
     // A length whose chunk, 16 + len + align, wraps to a few bytes would get
     // a tiny chunk that claims to hold it.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     EXPECT(arena_alloc(&a, SIZE_MAX, 1) == NULL);
     EXPECT(a.hit);
     EXPECT_EQ(a.held, 0);
@@ -256,8 +300,9 @@ TEST(a_size_that_wraps_with_its_header_is_refused) {
 TEST(an_array_whose_size_wraps_to_a_small_one_is_refused) {
     // `n * sizeof(T)` for 2^61 items wraps to 0 (the empty sentinel, which is
     // not NULL) or to 16 bytes.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     size_t to_zero = SIZE_MAX / 8 + 1;
     size_t to_sixteen = SIZE_MAX / 8 + 3;
     EXPECT(ARENA_ARRAY(&a, uint64_t, to_zero) == NULL);
@@ -274,8 +319,9 @@ TEST(the_arena_never_holds_more_than_its_limit_whatever_grows_in_it) {
     // Small and big allocations interleaved, some bigs freed: Zig's test held
     // std's arena to 1.7x and 2.0x its count; this one holds to its limit.
     const size_t limit = 1024 * 1024;
+    bool arena_refused = false;
     Arena a;
-    arena_init(&a, limit);
+    arena_init(&a, limit, &arena_refused);
     uint64_t seed = 7;
     size_t refused = 0;
     char *last_big = NULL;
@@ -298,8 +344,9 @@ TEST(the_arena_never_holds_more_than_its_limit_whatever_grows_in_it) {
 }
 
 TEST(deinit_gives_back_every_chunk_and_keeps_the_limit) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1000000);
+    arena_init(&a, 1000000, &refused);
     EXPECT(arena_alloc(&a, 10, 1) != NULL);
     EXPECT(arena_alloc(&a, 100000, 1) != NULL);
     arena_deinit(&a);
@@ -310,8 +357,9 @@ TEST(deinit_gives_back_every_chunk_and_keeps_the_limit) {
 }
 
 TEST(dup_copies_into_the_arena_and_is_refused_when_full) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16384);
+    arena_init(&a, 16384, &refused);
     Str out;
     EXPECT(arena_dup(&a, S("hello"), &out));
     EXPECT_STR(out, S("hello"));
@@ -326,8 +374,9 @@ TEST(dup_copies_into_the_arena_and_is_refused_when_full) {
 }
 
 TEST(a_misuse_ends_the_process) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1000000);
+    arena_init(&a, 1000000, &refused);
     int x = 0;
     EXPECT_DIES((void)arena_alloc(&a, 8, 3));
     EXPECT_DIES(arena_free(&a, &x, ARENA_BIG));
@@ -335,8 +384,9 @@ TEST(a_misuse_ends_the_process) {
 }
 
 TEST(a_mark_past_the_most_open_ends_the_process) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     for (size_t n = 0; n < ARENA_MARKS_MAX; n++) (void)arena_mark(&a);
     EXPECT_EQ(a.marks_len, ARENA_MARKS_MAX);
     EXPECT_DIES((void)arena_mark(&a));
@@ -346,6 +396,7 @@ TEST(a_mark_past_the_most_open_ends_the_process) {
 
 TEST_MAIN(
     TEST_CASE(the_budget_refuses_past_its_limit_and_says_it_was_hit),
+    TEST_CASE(a_refusal_sets_the_arenas_own_flag_and_no_other),
     TEST_CASE(chunks_start_at_the_least_and_double),
     TEST_CASE(a_chunk_near_the_limit_takes_only_what_is_left),
     TEST_CASE(a_chunk_too_small_for_one_allocation_is_made_its_size),

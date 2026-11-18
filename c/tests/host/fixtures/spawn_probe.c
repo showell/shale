@@ -29,10 +29,11 @@ static Str arg_of(char **argv, size_t argc, size_t i) {
 int main(int argc, char **argv) {
     if (argc < 4) return 2;
     spawn_quiet_sigpipe();
+    bool refused = false;
     Arena a;
-    arena_init(&a, (size_t)1 << 30);
+    arena_init(&a, (size_t)1 << 30, &refused);
     Arena held;
-    arena_init(&held, (size_t)1 << 28);
+    arena_init(&held, (size_t)1 << 28, &refused);
     size_t n = (size_t)argc - 3;
     Str *prog = ARENA_ARRAY(&a, Str, n);
     if (prog == NULL) return 3;

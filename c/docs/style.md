@@ -179,9 +179,12 @@ and its self-test plants a break of each one.
   plants one).
 - The top level passes a run's answer through `run_ended`, which aborts on
   a `STOP` with no stop recorded.
-- When an arena refuses, a container returns `STOP` and the arena's `hit`
-  is set. The caller makes that the arena budget with `run_oom(ctx, pos)`.
-  Every out-of-memory is the arena budget, as it is in Zig.
+- When an arena refuses, a container returns `STOP`, and the arena sets its
+  own `hit` and its run's refusal, `RunCtx.refused`, which every arena of
+  the run is made with (`arena_init(&a, limit, &ctx->refused)`). The caller
+  makes that the arena budget with `run_oom(ctx, pos)`, which reads and
+  clears `ctx->refused` and aborts when no arena of the run refused. Every
+  out-of-memory is the arena budget, as it is in Zig.
 - A stop's place, class, budget, message, function and calls live in the
   run's `RunCtx`, never in a return value.
 - A lookup that can miss returns `bool` and fills an out-parameter, or

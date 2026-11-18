@@ -206,6 +206,8 @@ SLICE_TYPE(RegexEntries, RegexCached);
 typedef struct {
     RegexCached entries[REGEX_CACHE_MAX];
     uint64_t clock;
+    // The run's refusal, which each entry's arena sets when it refuses.
+    bool *refused;
 } RegexCache;
 
 #endif

@@ -1152,7 +1152,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     // The stream's arena, capped at what is left of the run's arena budget:
     // what grows as output arrives grows by how the pipe's reads fall.
     uint64_t most = run_sat_sub(r->ctx.budgets.arena_bytes, a->held);
-    arena_init(&held->stream, (size_t)most);
+    arena_init(&held->stream, (size_t)most, &r->ctx.refused);
     held->has_stream = true;
     Arena *sa = &held->stream;
     HostOut sink_out;

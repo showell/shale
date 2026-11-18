@@ -9,8 +9,9 @@
 MAP_DEFINE(IntMap, int64_t)
 
 TEST(put_then_get_and_a_missing_key_is_missing) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     IntMap m = IntMap_make(&a);
     int64_t v = 0;
     EXPECT(!IntMap_get(&m, S("x"), &v));
@@ -30,8 +31,9 @@ TEST(put_then_get_and_a_missing_key_is_missing) {
 }
 
 TEST(keys_are_bytes_and_their_length) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     IntMap m = IntMap_make(&a);
     EXPECT(IntMap_put(&m, S(""), 1) == OK);
     EXPECT(IntMap_put(&m, S("a"), 2) == OK);
@@ -47,8 +49,9 @@ TEST(keys_are_bytes_and_their_length) {
 }
 
 TEST(setting_a_key_again_keeps_its_place) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     IntMap m = IntMap_make(&a);
     EXPECT(IntMap_put(&m, S("b"), 1) == OK);
     EXPECT(IntMap_put(&m, S("a"), 2) == OK);
@@ -71,8 +74,9 @@ static Str key_of(Arena *a, int64_t i) {
 }
 
 TEST(a_thousand_keys_keep_their_order_through_every_growth) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     IntMap m = IntMap_make(&a);
     for (int64_t i = 0; i < 1000; i++) {
         // Every other one backwards, so the order is not the keys' sorted
@@ -94,8 +98,9 @@ TEST(a_thousand_keys_keep_their_order_through_every_growth) {
 }
 
 TEST(a_removal_keeps_the_others_order_and_finds_them_after) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     IntMap m = IntMap_make(&a);
     Str names[] = {S_ITEM("e"), S_ITEM("d"), S_ITEM("c"), S_ITEM("b"), S_ITEM("a")};
     MapKeys all = {names, sizeof names / sizeof *names};
@@ -126,8 +131,9 @@ TEST(a_removal_keeps_the_others_order_and_finds_them_after) {
 }
 
 TEST(removing_every_key_leaves_an_empty_map_that_takes_keys_again) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     IntMap m = IntMap_make(&a);
     for (int64_t i = 0; i < 50; i++) EXPECT(IntMap_put(&m, key_of(&a, i), i) == OK);
     for (int64_t i = 0; i < 50; i++) EXPECT(IntMap_remove(&m, key_of(&a, i)));
@@ -140,10 +146,11 @@ TEST(removing_every_key_leaves_an_empty_map_that_takes_keys_again) {
 }
 
 TEST(a_refused_put_leaves_the_map_as_it_was) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16384);
+    arena_init(&a, 16384, &refused);
     Arena names;
-    arena_init(&names, 1 << 20);
+    arena_init(&names, 1 << 20, &refused);
     IntMap m = IntMap_make(&a);
     size_t n = 0;
     while (IntMap_put(&m, key_of(&names, (int64_t)n), (int64_t)n) == OK) n++;

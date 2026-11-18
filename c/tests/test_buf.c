@@ -7,8 +7,9 @@
 #include "buf.h"
 
 TEST(appends_bytes_and_strings_in_order) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Buf b = buf_make(&a);
     EXPECT_STR(buf_view(&b), S(""));
     EXPECT(buf_byte(&b, 'a') == OK);
@@ -24,8 +25,9 @@ TEST(appends_bytes_and_strings_in_order) {
 }
 
 TEST(numbers_print_in_decimal_the_extremes_among_them) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Buf b = buf_make(&a);
     EXPECT(buf_u64(&b, 0) == OK);
     EXPECT(buf_byte(&b, ' ') == OK);
@@ -43,8 +45,9 @@ TEST(numbers_print_in_decimal_the_extremes_among_them) {
 }
 
 TEST(it_grows_by_half_again_in_place_while_it_is_last) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Buf b = buf_make(&a);
     EXPECT(buf_byte(&b, 'x') == OK);
     // A need of 1 for bytes: 1 + 0 + 64.
@@ -62,8 +65,9 @@ TEST(it_grows_by_half_again_in_place_while_it_is_last) {
 }
 
 TEST(it_moves_and_keeps_its_bytes_when_it_is_not_last) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Buf b = buf_make(&a);
     for (int i = 0; i < 65; i++) EXPECT(buf_byte(&b, (char)('a' + i % 26)) == OK);
     char *first = b.ptr;
@@ -79,8 +83,9 @@ TEST(it_moves_and_keeps_its_bytes_when_it_is_not_last) {
 }
 
 TEST(a_refused_append_leaves_the_buffer_as_it_was) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 100);
+    arena_init(&a, 100, &refused);
     Buf b = buf_make(&a);
     EXPECT(buf_lit(&b, "abc") == OK);
     EXPECT(!a.hit);
@@ -99,8 +104,9 @@ TEST(appending_a_view_of_itself_past_ARENA_BIG_copies_what_it_held) {
     // `s .. s` is buf_str(b, buf_view(b)). The growth frees the big buffer
     // the view points into, so a copy from the view after it would read
     // freed memory.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     Buf b = buf_make(&a);
     for (int i = 0; i < 100000; i++) EXPECT(buf_byte(&b, (char)('a' + i % 26)) == OK);
     EXPECT(b.cap < 200000);
@@ -119,8 +125,9 @@ TEST(appending_a_view_of_itself_past_ARENA_BIG_copies_what_it_held) {
 }
 
 TEST(a_big_buffer_holds_its_live_bytes_not_every_one_it_outgrew) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     Buf b = buf_make(&a);
     for (int i = 0; i < 1000000; i++) EXPECT(buf_byte(&b, 'q') == OK);
     EXPECT_EQ(b.len, 1000000);
@@ -129,8 +136,9 @@ TEST(a_big_buffer_holds_its_live_bytes_not_every_one_it_outgrew) {
 }
 
 TEST(a_fit_gives_back_the_room_past_its_length_only_when_it_is_last) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Buf b = buf_make(&a);
     EXPECT(buf_lit(&b, "/tmp/x/") == OK);
     EXPECT(buf_lit(&b, "f1") == OK);

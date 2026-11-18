@@ -14,6 +14,8 @@ static Str core(void) {
 
 typedef struct {
     Arena arena;
+    // The arena's refusal, outside any run.
+    bool refused;
     Parser p;
     Program prog;
     Status status;
@@ -39,7 +41,8 @@ static STATUS_MUST_USE Status fake_load(void *ctx, Arena *into, Str path, Str *w
 }
 
 static void parse_with(Parsed *r, Str source, Preludes extra, FakeLibrary *lib) {
-    arena_init(&r->arena, 1 << 24);
+    r->refused = false;
+    arena_init(&r->arena, 1 << 24, &r->refused);
     parse_init(&r->p, &r->arena, source, 200);
     ParseLoader none = {NULL, NULL};
     ParseLoader loader = {lib, fake_load};
@@ -183,8 +186,9 @@ TEST(a_syntax_error_right_after_a_long_string_names_its_closer) {
 }
 
 TEST(the_nesting_budget_stops_a_deep_source_where_it_is_passed) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Buf b = buf_make(&a);
     EXPECT(buf_lit(&b, "print(") == OK);
     for (int i = 0; i < 300; i++) EXPECT(buf_byte(&b, '(') == OK);
@@ -371,7 +375,8 @@ TEST(a_stop_partway_leaves_the_parsers_state_as_it_was) {
     // A stop inside a prelude function loaded at its first call puts back
     // the script's lexer and token.
     Str calls = S("local s = \"a\"\nprint(broken(s))\n");
-    arena_init(&r.arena, 1 << 24);
+    r.refused = false;
+    arena_init(&r.arena, 1 << 24, &r.refused);
     parse_init(&r.p, &r.arena, calls, 200);
     Preludes none = {NULL, 0};
     ParseLoader no_loader = {NULL, NULL};
@@ -381,8 +386,9 @@ TEST(a_stop_partway_leaves_the_parsers_state_as_it_was) {
     EXPECT_EQ(r.p.tok.line, 2);
     arena_deinit(&r.arena);
     // The nesting budget's own refusal counts no level it did not enter.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Buf b = buf_make(&a);
     EXPECT(buf_lit(&b, "if true then\n  print(") == OK);
     for (int i = 0; i < 300; i++) EXPECT(buf_byte(&b, '(') == OK);
@@ -405,8 +411,9 @@ TEST(a_stop_partway_leaves_the_parsers_state_as_it_was) {
 }
 
 TEST(the_command_line_and_the_header_set_budgets_the_command_line_winning) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Buf why = buf_make(&a);
     Command c;
     Str ok[5] = {S("--check"), S("--budget"), S("steps=99"), S("a.shale"), S("n=1")};
@@ -443,8 +450,9 @@ TEST(the_command_line_and_the_header_set_budgets_the_command_line_winning) {
 TEST(the_parsers_own_lookups_end_the_process_on_a_miss) {
     // A local's slot the frame doesn't hold, and a prelude function its own
     // index lacks, are the parser's bugs, never a script's stop.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Parser p;
     parse_init(&p, &a, S("local x = 1\n"), 200);
     EXPECT_DIES((void)parse_is_const(&p, 7));

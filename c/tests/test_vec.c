@@ -15,8 +15,9 @@ typedef struct {
 VEC_DEFINE(Pairs, Pair)
 
 TEST(push_pop_and_at_agree) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     I64s v = I64s_make(&a);
     EXPECT(I64s_push(&v, 5) == OK);
     EXPECT(I64s_push(&v, -6) == OK);
@@ -35,8 +36,9 @@ TEST(push_pop_and_at_agree) {
 }
 
 TEST(it_grows_by_half_again_plus_a_line_of_items) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     I64s v = I64s_make(&a);
     EXPECT(I64s_push(&v, 1) == OK);
     // A need of 1 for 8-byte items: 1 + 0 + 64 / 8.
@@ -55,8 +57,9 @@ TEST(it_grows_by_half_again_plus_a_line_of_items) {
 }
 
 TEST(items_survive_every_move_between_two_growing_vecs) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     I64s x = I64s_make(&a);
     I64s y = I64s_make(&a);
     for (int64_t i = 0; i < 5000; i++) {
@@ -71,8 +74,9 @@ TEST(items_survive_every_move_between_two_growing_vecs) {
 }
 
 TEST(items_keep_their_alignment) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     EXPECT(arena_alloc(&a, 1, 1) != NULL);
     Pairs p = Pairs_make(&a);
     for (int64_t i = 0; i < 100; i++) {
@@ -86,8 +90,9 @@ TEST(items_keep_their_alignment) {
 
 TEST(a_refused_push_leaves_the_vec_as_it_was) {
     // A first chunk of 120 bytes: the first buffer fits, its growth does not.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 120);
+    arena_init(&a, 120, &refused);
     I64s v = I64s_make(&a);
     for (int64_t i = 0; i < 9; i++) EXPECT(I64s_push(&v, i) == OK);
     EXPECT(!a.hit);
@@ -105,8 +110,9 @@ TEST(a_refused_push_leaves_the_vec_as_it_was) {
 TEST(a_capacity_whose_size_wraps_is_refused_with_room_to_grow_in_place) {
     // A reserve whose capacity times 8 wraps to 64 bytes, with the vec last
     // in a roomy arena, would fit in place and say OK for 3 * 2^61 + 8 items.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     I64s v = I64s_make(&a);
     EXPECT(I64s_push(&v, 1) == OK);
     EXPECT_EQ(v.cap, 9);
@@ -122,8 +128,9 @@ TEST(a_capacity_whose_size_wraps_is_refused_with_room_to_grow_in_place) {
 }
 
 TEST(a_big_vec_holds_its_live_buffer_not_every_one_it_outgrew) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 16 * 1024 * 1024);
+    arena_init(&a, 16 * 1024 * 1024, &refused);
     I64s v = I64s_make(&a);
     // 160 KB of items: past ARENA_BIG, so the last buffers are bigs.
     for (int64_t i = 0; i < 20000; i++) EXPECT(I64s_push(&v, i) == OK);

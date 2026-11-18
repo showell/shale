@@ -8,6 +8,9 @@
 
 typedef struct {
     Arena values;
+    // The store tests' refusal, outside any run: `values` sets it unless
+    // sx_init is given a run's.
+    bool refused;
     // The root, absolute.
     char root_bytes[PATH_MAX];
     Str root;
@@ -15,9 +18,11 @@ typedef struct {
     Store store;
 } Sx;
 
-static void sx_init(Sx *s) {
+// Makes the fixture, its arena setting `*refused` (`&s->refused`, or a run's
+// for a fixture inside one).
+static void sx_init(Sx *s, bool *refused) {
     memset(s, 0, sizeof *s);
-    arena_init(&s->values, (size_t)256 << 20);
+    arena_init(&s->values, (size_t)256 << 20, refused);
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof cwd) == NULL) abort();
     mkdir("c/out", 0777);
@@ -31,8 +36,9 @@ static void sx_init(Sx *s) {
 }
 
 static void sx_deinit(Sx *s) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, (size_t)1 << 20);
+    arena_init(&a, (size_t)1 << 20, &refused);
     if (store_os_delete_tree(&a, s->root) != STORE_OK) abort();
     arena_deinit(&a);
     arena_deinit(&s->values);

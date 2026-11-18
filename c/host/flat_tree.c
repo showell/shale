@@ -525,7 +525,7 @@ static STATUS_MUST_USE Status flat_read(Run *r, Pos pos, Str text, FlatTool tool
     // own limit, 1 GiB, bounds the rest; its refusal is the arena budget's
     // stop (`run_values_oom`).
     Arena scratch;
-    arena_init(&scratch, (size_t)1 << 30);
+    arena_init(&scratch, (size_t)1 << 30, &r->ctx.refused);
     FlatDump d;
     Status s = flat_parse(&scratch, text, tool, ending, &d);
     if (s != OK) {

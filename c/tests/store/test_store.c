@@ -25,7 +25,7 @@ TEST(names_fat_holds_and_names_it_refuses) {
 
 TEST(write_read_append_read_at_stat_list_remove) {
     Sx f;
-    sx_init(&f);
+    sx_init(&f, &f.refused);
     Store *s = &f.store;
     Arena *a = &f.values;
     Str topic = sx_at(&f, "data/chat/1_2/sessions/topic.md");
@@ -70,7 +70,7 @@ TEST(write_read_append_read_at_stat_list_remove) {
 
 TEST(a_name_fat_refuses_is_refused_here_too_before_anything_is_made) {
     Sx f;
-    sx_init(&f);
+    sx_init(&f, &f.refused);
     Store *s = &f.store;
     Arena *a = &f.values;
     char x97[97];
@@ -90,7 +90,7 @@ TEST(a_name_fat_refuses_is_refused_here_too_before_anything_is_made) {
 
 TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_sibling) {
     Sx f;
-    sx_init(&f);
+    sx_init(&f, &f.refused);
     Store *s = &f.store;
     Arena *a = &f.values;
     Str text = S("");
@@ -142,7 +142,7 @@ TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_s
 
 TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_spell_it) {
     Sx f;
-    sx_init(&f);
+    sx_init(&f, &f.refused);
     Arena *a = &f.values;
     Str data = sx_at(&f, "home/someone/a-long-host-path/prod/data");
     Str auth = sx_at(&f, "home/someone/a-long-host-path/prod/auth");
@@ -187,7 +187,7 @@ TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_s
 
 TEST(nothing_there_is_null_and_something_there_that_will_not_read_is_an_error) {
     Sx f;
-    sx_init(&f);
+    sx_init(&f, &f.refused);
     Store *s = &f.store;
     Arena *a = &f.values;
     sx_put(&f, "a-file", "x");
@@ -213,7 +213,7 @@ TEST(nothing_there_is_null_and_something_there_that_will_not_read_is_an_error) {
 
 TEST(case_does_not_tell_two_names_apart_and_the_first_case_is_kept) {
     Sx f;
-    sx_init(&f);
+    sx_init(&f, &f.refused);
     Store *s = &f.store;
     Arena *a = &f.values;
     Str text = S("");
@@ -265,7 +265,7 @@ TEST(a_path_with_an_empty_part_is_refused_under_a_root_as_metal_refuses_it) {
 
 TEST(a_replace_keeps_the_file_s_mode_on_linux_an_executable_script_stays_one) {
     Sx f;
-    sx_init(&f);
+    sx_init(&f, &f.refused);
     sx_put(&f, "data/run.sh", "old");
     EXPECT_EQ(sx_chmod(&f, "data/run.sh", 0755), 0);
     EXPECT_EQ(f.store.replace(f.store.ctx, &f.values, sx_at(&f, "data/run.sh"), S("new")), STORE_OK);
@@ -280,7 +280,7 @@ TEST(a_replace_keeps_the_file_s_mode_on_linux_an_executable_script_stays_one) {
 
 TEST(a_replace_onto_a_folder_fails_and_leaves_no_temporary_file_beside_it) {
     Sx f;
-    sx_init(&f);
+    sx_init(&f, &f.refused);
     sx_mkdir(&f, "data/x");
     EXPECT(f.store.replace(f.store.ctx, &f.values, sx_at(&f, "data/x"), S("d")) != STORE_OK);
     StoreEntries es;
@@ -332,7 +332,7 @@ TEST(dirname_and_basename_take_trailing_slashes_and_the_root) {
 
 TEST(a_path_with_a_nul_inside_is_refused_before_any_call) {
     Sx f;
-    sx_init(&f);
+    sx_init(&f, &f.refused);
     sx_put(&f, "a", "x");
     Str p = sx_at(&f, "a");
     Buf b = buf_make(&f.values);

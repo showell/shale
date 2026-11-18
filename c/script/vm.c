@@ -255,9 +255,9 @@ static STATUS_MUST_USE Status collect_run(Run *r, Pos pos, Values stack, Values 
     r->collections++;
     Arena *values = r->ctx.values;
     Arena old = *values;
-    arena_init(values, old.limit);
+    arena_init(values, old.limit, old.refused);
     Arena books;
-    arena_init(&books, r->ctx.budgets.machine_bytes);
+    arena_init(&books, r->ctx.budgets.machine_bytes, &r->ctx.refused);
     Copier c;
     memset(&c, 0, sizeof c);
     c.r = r;

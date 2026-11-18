@@ -31,8 +31,10 @@ static bool gate_read_stdin(Buf *b) {
 }
 
 int main(void) {
+    // The gate runs no script, so its arena's refusal is a local of its own.
+    bool refused = false;
     Arena a;
-    arena_init(&a, GATE_ARENA_LIMIT);
+    arena_init(&a, GATE_ARENA_LIMIT, &refused);
     Buf input = buf_make(&a);
     bool read_ok = gate_read_stdin(&input);
     Str home = {"", 0};

@@ -46,9 +46,9 @@ static Pos fx_pos(void) {
 // Makes the fixture: a fresh root, no mounts, no undo.
 static void fx_init(Fx *f) {
     memset(f, 0, sizeof *f);
-    sx_init(&f->base);
-    arena_init(&f->machine, (size_t)16 << 20);
-    arena_init(&f->host, (size_t)256 << 20);
+    sx_init(&f->base, &f->ctx.refused);
+    arena_init(&f->machine, (size_t)16 << 20, &f->ctx.refused);
+    arena_init(&f->host, (size_t)256 << 20, &f->ctx.refused);
     f->ctx = run_ctx_make(&f->base.values, &f->machine, budgets_default());
     f->steps_budget = 5000000;
     if (getcwd(f->cwd_bytes, sizeof f->cwd_bytes) == NULL) abort();

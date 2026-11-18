@@ -74,7 +74,8 @@ reviewer can line the two up. Once the Zig is gone, that reason is gone:
 - `RegexCache` (6,856 bytes) and `Arena` were made by value
   (`regex_cache_make`, `arena_make`); an out-pointer initializer is the
   more ordinary C. *Done (2026-11-18, the run-context lane):*
-  `arena_init(&a, limit)` and `regex_cache_init(&c)`.
+  `arena_init(&a, limit, &ctx->refused)` and `regex_cache_init(&c,
+  &ctx->refused)`, each with its run's refusal (style.md, "Errors").
 
 ## To follow up: coding standards declared in Roc
 

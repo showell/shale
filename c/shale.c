@@ -64,9 +64,13 @@ enum {
     PARSE_ROOM = 256 * 1024 * 1024,
 };
 
+// The CLI's own arena, what it says on stderr, and the refusal its arena and
+// the parse's set: the CLI's setup is outside any run, and a run's arenas set
+// the run's own (`RunCtx.refused`).
 typedef struct {
     Arena *arena;
     Buf err;
+    bool *refused;
 } Out;
 
 // The name of a failed open or read, as the messages print it.
@@ -455,10 +459,9 @@ static int stdout_failed(Out *o, Str why) {
 }
 
 // The machine budget's stop, for a parse or a compile that an arena refused
-// (the machine's tree, or the library reader's). A STOP no arena refused is a
-// bug in the C, never a budget.
-static void machine_stop(Stop *stop) {
-    bool *refused = arena_refused_slot();
+// (the machine's tree, or the library reader's, both setting the CLI's
+// `refused`). A STOP no arena refused is a bug in the C, never a budget.
+static void machine_stop(Stop *stop, bool *refused) {
     if (!*refused) c_bug("shale: a parse or compile stopped with no stop recorded and no arena's refusal");
     *refused = false;
     memset(stop, 0, sizeof *stop);
@@ -522,7 +525,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         return flush_and_exit(o, EXIT_STOPPED);
     }
     Arena tree;
-    arena_init(&tree, b.machine_bytes + PARSE_ROOM);
+    arena_init(&tree, b.machine_bytes + PARSE_ROOM, o->refused);
     Parser p;
     parse_init(&p, &tree, source, b.nesting);
     LibraryReader reader = {a, mounts, mounts_from, b, none};
@@ -535,16 +538,16 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     memset(&code, 0, sizeof code);
     if (s != OK) {
         if (!p.stopped) {
-            machine_stop(&stop);
+            machine_stop(&stop, o->refused);
         } else {
             stop = p.stop;
         }
         stopped = true;
     } else if (cli_unread_arg(&tree, &prog, args, args_len, &stop, &stopped) != OK) {
-        machine_stop(&stop);
+        machine_stop(&stop, o->refused);
         stopped = true;
     } else if (!stopped && compile_program(&tree, &prog, BUILTINS_ARGS_MAX, b.depth, &code) != OK) {
-        machine_stop(&stop);
+        machine_stop(&stop, o->refused);
         stopped = true;
     }
     if (stopped) {
@@ -561,15 +564,16 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         return flush_and_exit(o, EXIT_FINISHED);
     }
     // The values, the machine (the frames' slots, the operands, the frames
-    // and the calls) and the output, each in an arena under its own budget.
-    Arena values;
-    arena_init(&values, b.arena_bytes);
-    Arena machine;
-    arena_init(&machine, b.machine_bytes);
-    Arena output;
-    arena_init(&output, b.output_bytes + ARENA_BIG);
+    // and the calls) and the output, each in an arena under its own budget,
+    // and each setting the run's refusal.
     Run r;
     memset(&r, 0, sizeof r);
+    Arena values;
+    arena_init(&values, b.arena_bytes, &r.ctx.refused);
+    Arena machine;
+    arena_init(&machine, b.machine_bytes, &r.ctx.refused);
+    Arena output;
+    arena_init(&output, b.output_bytes + ARENA_BIG, &r.ctx.refused);
     r.ctx = run_ctx_make(&values, &machine, b);
     r.machine = &machine;
     r.program = &prog;
@@ -587,7 +591,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     r.reads = reader.used.reads;
     r.read_bytes = reader.used.read_bytes;
     r.stack = ValueVec_make(&machine);
-    regex_cache_init(&r.patterns);
+    regex_cache_init(&r.patterns, &r.ctx.refused);
     // The store, measured under the root (and `<root>/../auth`) as the
     // bare-metal host would hold it.
     LinuxStore linux_store;
@@ -600,7 +604,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     // The host's paths: the mounts, the journal `--undo-on-stop` keeps, in
     // an arena of the host's that outlives the run's values.
     Arena host_arena;
-    arena_init(&host_arena, (size_t)1 << 30);
+    arena_init(&host_arena, (size_t)1 << 30, &r.ctx.refused);
     Host lh;
     memset(&lh, 0, sizeof lh);
     paths_make(&lh.paths, &host_arena, where.root_abs, where.cwd_abs, mounts, mounts_from);
@@ -952,9 +956,10 @@ static int run_main(Out *o, int argc, char **argv) {
 
 int main(int argc, char **argv) {
     spawn_quiet_sigpipe();
+    bool refused = false;
     Arena a;
-    arena_init(&a, (size_t)1 << 30);
-    Out o = {&a, buf_make(&a)};
+    arena_init(&a, (size_t)1 << 30, &refused);
+    Out o = {&a, buf_make(&a), &refused};
     int code = run_main(&o, argc, argv);
     arena_deinit(&a);
     return code;

@@ -6,8 +6,9 @@
 #include "../../host/zig_wire.c"
 
 TEST(a_lines_fields_escape_tabs_newlines_crs_and_backslashes_and_read_back_as_written) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Buf w = buf_make(&a);
     EXPECT(zig_wire_field(&w, S("s")) == OK);
     EXPECT(zig_wire_tab(&w) == OK);
@@ -45,8 +46,9 @@ TEST(a_lines_fields_escape_tabs_newlines_crs_and_backslashes_and_read_back_as_wr
 }
 
 TEST(a_line_of_more_fields_than_there_is_room_for_a_line_with_no_newline_and_a_bad_escape_are_refused) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     Str room[2];
     ZigWireFields into = {room, 2};
     size_t n = 0;

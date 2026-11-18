@@ -153,7 +153,8 @@ typedef struct {
 } Stop;
 
 // The run's context, as far as a stop needs it: where messages are made, the
-// budgets they quote, the function and calls the run is in, and its stop.
+// budgets they quote, the function and calls the run is in, its stop, and
+// whether one of its arenas refused.
 typedef struct {
     // The values' arena, where a formatted message is made.
     Arena *values;
@@ -164,6 +165,10 @@ typedef struct {
     CallVec calls;
     bool stopped;
     Stop stop;
+    // Whether an arena of the run refused since a stop last read a refusal:
+    // every arena the run makes points here (arena_init's `refused`), and
+    // run_refused_stop reads and clears it.
+    bool refused;
 } RunCtx;
 
 static inline RunCtx run_ctx_make(Arena *values, Arena *machine, Budgets budgets) {
@@ -260,15 +265,14 @@ static inline STATUS_MUST_USE Status run_budget_stop(RunCtx *r, Pos pos, BudgetK
 }
 
 // A refusal read as budget `k`'s stop, once it is held to being one: an arena
-// refused (arena_set_hit) since the last refusal read so, and no stop is
-// recorded already. Either missing is a bug in the C, which ends the process
-// rather than say a budget ran out.
+// of the run refused (arena_set_hit, `r->refused`) since the last refusal read
+// so, and no stop is recorded already. Either missing is a bug in the C, which
+// ends the process rather than say a budget ran out.
 static inline STATUS_MUST_USE Status run_refused_stop(RunCtx *r, Pos pos, BudgetKind k) {
     if (r->stopped) c_bug("err: an arena's refusal read as a stop over a stop already recorded");
-    bool *refused = arena_refused_slot();
-    if (!*refused) c_bug("err: a STOP read as an arena's refusal when no arena refused");
+    if (!r->refused) c_bug("err: a STOP read as an arena's refusal when no arena refused");
     Status s = run_budget_stop(r, pos, k);
-    *refused = false;
+    r->refused = false;
     return s;
 }
 

@@ -100,8 +100,9 @@ TEST(a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended) {
 }
 
 TEST(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, (size_t)1 << 20);
+    arena_init(&a, (size_t)1 << 20, &refused);
     HostSecret all[2] = {{S("K"), S("abc")}, {S("L"), S("bcdef")}};
     HostSecrets secrets = {all, 2};
     Buf whole = buf_make(&a);
@@ -124,8 +125,9 @@ TEST(the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap) 
 }
 
 TEST(the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, (size_t)1 << 20);
+    arena_init(&a, (size_t)1 << 20, &refused);
     HostTime t;
     memset(&t, 0, sizeof t);
     host_time_ran(&t, &a, S("git log"), 200);

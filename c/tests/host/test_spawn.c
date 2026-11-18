@@ -122,8 +122,9 @@ static long grandchild_pid(Str out) {
 }
 
 TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -184,8 +185,9 @@ TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
 }
 
 TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -249,8 +251,9 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
 }
 
 TEST(cpu_ms_counts_what_a_program_burns_a_child_waited_for_included_and_none_it_sleeps) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -275,8 +278,9 @@ TEST(cpu_ms_counts_what_a_program_burns_a_child_waited_for_included_and_none_it_
 }
 
 TEST(much_output_past_the_pipes_buffer_all_of_it_read) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -297,8 +301,9 @@ static bool term_blocked(void) {
 }
 
 TEST(a_term_to_shale_while_a_program_runs_ends_its_group_and_says_so_and_the_mask_is_put_back) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -319,8 +324,9 @@ TEST(a_term_to_shale_while_a_program_runs_ends_its_group_and_says_so_and_the_mas
 }
 
 TEST(a_sink_that_stops_ends_the_programs_group_and_reaps_it_before_the_stop_is_said) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -345,8 +351,9 @@ TEST(a_sink_that_stops_ends_the_programs_group_and_reaps_it_before_the_stop_is_s
 }
 
 TEST(attack_a_grandchild_that_ignores_term_ends_with_the_group_at_the_deadline) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -372,8 +379,9 @@ TEST(attack_a_grandchild_holding_the_pipe_after_its_leader_exits_is_ended_before
     // for 3 seconds. As in Zig, the leader's exit sends its group TERM, so
     // the grandchild is gone, reaped and all, by the time `run` returns, and
     // `run` waits neither the 3 seconds nor the grace.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -402,8 +410,9 @@ TEST(attack_a_process_that_left_the_group_holding_the_pipe_never_holds_run) {
     // out of the group's TERM, and would hold the output open for 3 seconds.
     // `run` returns after the drain, not when the pipe closes; the child
     // outlives it, and the test ends it itself.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -426,8 +435,9 @@ TEST(attack_a_term_to_shale_after_its_program_exits_while_the_output_drains_stil
     // The leader exits 0 at once; the sink, at the first output, waits until
     // it has, then sends this process a TERM. The loop reads it once the
     // leader is reaped, as its group ends or its output drains: never dropped.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -514,8 +524,9 @@ TEST(attack_the_deadline_and_the_grace_to_the_millisecond) {
     spawn_step(false, false, false, 0, false, 90000, 2000, 0, 0, &far);
     EXPECT_EQ(far.wait_ms, 1000);
     // Live: a deadline of 0 is already past at the first turn.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -543,14 +554,15 @@ static STATUS_MUST_USE Status keep_write(void *ctx, Str bytes) {
 TEST(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds) {
     // 200,000 lines of 100 bytes, 20 MB, through a keep of 2 and 3 in a 1 MiB
     // arena: every line is counted and the arena never holds the output.
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     SpawnSpec s;
     fixture_spec(&s, &a, &argv, "spill-lines", "200000", "");
     s.timeout_ms = 60000;
     Arena held;
-    arena_init(&held, 1 << 20);
+    arena_init(&held, 1 << 20, &refused);
     KeepOptions ko;
     keep_options_default(&ko);
     ko.head = 2;
@@ -576,7 +588,7 @@ TEST(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds) {
     EXPECT(held.held < 256 * 1024);
     // One line of 2 MB with no newline: read past KEEP_LINE_MAX, kept cut.
     Arena held2;
-    arena_init(&held2, 1 << 20);
+    arena_init(&held2, 1 << 20, &refused);
     Keep k2;
     EXPECT(keep_init(&k2, &held2, ko) == OK);
     SpawnSink sink2 = {&k2, keep_write};
@@ -598,8 +610,9 @@ TEST(attack_a_term_or_hup_the_program_sends_its_parent_mid_run_ends_its_group) {
     // loop takes the signal, TERMs the group, and KILLs it at the grace.
     Lits sigs = LITS("15", "1");
     for (size_t i = 0; i < sigs.len; i++) {
+        bool refused = false;
         Arena a;
-        arena_init(&a, 1 << 24);
+        arena_init(&a, 1 << 24, &refused);
         ArgList argv;
         Collect c;
         collect_make(&c, &a);
@@ -623,8 +636,9 @@ TEST(attack_a_program_that_never_reads_its_stdin_leaves_shale_standing) {
     // write meets a pipe with no reader, which must fail with EPIPE, not
     // kill this process with SIGPIPE.
     spawn_quiet_sigpipe();
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 24);
+    arena_init(&a, 1 << 24, &refused);
     ArgList argv;
     Collect c;
     collect_make(&c, &a);
@@ -646,8 +660,9 @@ TEST(attack_a_program_that_never_reads_its_stdin_leaves_shale_standing) {
 }
 
 TEST(the_paths_tried_follow_the_last_PATH) {
+    bool refused = false;
     Arena a;
-    arena_init(&a, 1 << 20);
+    arena_init(&a, 1 << 20, &refused);
     SpawnCStrs p;
     static const Str env_all[2] = {S("PATH=/a"), S("PATH=/b::/c")};
     SpawnStrs env = {env_all, 2};
@@ -668,7 +683,7 @@ TEST(the_paths_tried_follow_the_last_PATH) {
     EXPECT_STR(((Str){at(p, 2), strlen(at(p, 2))}), S("/bin/x"));
     // The arena refused: an answer of OUT_OF_MEMORY, nothing forked.
     Arena tiny;
-    arena_init(&tiny, 8);
+    arena_init(&tiny, 8, &refused);
     SpawnSpec s;
     spawn_spec_default(&s);
     static const Str argv_all[1] = {S("x")};

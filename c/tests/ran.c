@@ -118,7 +118,7 @@ static void ran_init(Ran *x, RanOpts o) {
     memset(x, 0, sizeof *x);
     // A program that leaves its stdin unread must not end the test.
     spawn_quiet_sigpipe();
-    arena_init(&x->host, (size_t)256 << 20);
+    arena_init(&x->host, (size_t)256 << 20, &x->r.ctx.refused);
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof cwd) == NULL) abort();
     mkdir("c/out", 0777);
@@ -150,10 +150,12 @@ static void ran_init(Ran *x, RanOpts o) {
 
 // Parses, compiles and runs `src` on the folder `ran_init` made.
 static void ran_run(Ran *x, Str src, Budgets b) {
-    arena_init(&x->tree, (size_t)64 << 20);
-    arena_init(&x->values, b.arena_bytes);
-    arena_init(&x->machine, b.machine_bytes);
-    arena_init(&x->output, b.output_bytes + ARENA_BIG);
+    // Every arena sets the run's refusal, which run_ctx_make below clears.
+    bool *refused = &x->r.ctx.refused;
+    arena_init(&x->tree, (size_t)64 << 20, refused);
+    arena_init(&x->values, b.arena_bytes, refused);
+    arena_init(&x->machine, b.machine_bytes, refused);
+    arena_init(&x->output, b.output_bytes + ARENA_BIG, refused);
     Parser p;
     parse_init(&p, &x->tree, src, b.nesting);
     ParseLoader none = {NULL, NULL};
@@ -173,7 +175,7 @@ static void ran_run(Ran *x, Str src, Budgets b) {
     r->out.cap = r->out_cap;
     if (r->out.ptr == NULL) return;
     r->stack = ValueVec_make(&x->machine);
-    regex_cache_init(&r->patterns);
+    regex_cache_init(&r->patterns, &r->ctx.refused);
     PathRun path = {&r->ctx, x->root, builtin_path_charge, r, &x->hook};
     x->store.path = path;
     x->store.effects = Effects_make(&x->values);

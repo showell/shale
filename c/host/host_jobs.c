@@ -491,7 +491,7 @@ static STATUS_MUST_USE Status host_job_wait(Host *h, Run *r, Pos pos, ConstValue
     // Each look reads only what the log gained, a piece at a time into one
     // buffer of the call's own, given back when the call ends.
     Arena scratch;
-    arena_init(&scratch, (size_t)HOST_SCAN_PIECE * 4);
+    arena_init(&scratch, (size_t)HOST_SCAN_PIECE * 4, &r->ctx.refused);
     Status s = host_wait_loop(h, r, pos, args, &o, &scratch, out);
     arena_deinit(&scratch);
     return s;
