@@ -44,7 +44,7 @@ typedef enum {
 } SwapEnd;
 
 // Readies `s` for the target `path`, an absolute path: FILE_SYSTEM_OK, or
-// NameTooLong for a path past PATH_MAX.
+// PathTooLong for a path past PATH_MAX.
 static FileSystemErr swap_file_target(SwapFile *s, OsStr path) {
     memset(s, 0, sizeof *s);
     s->fd = -1;

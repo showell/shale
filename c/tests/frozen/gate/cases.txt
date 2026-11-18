@@ -1975,8 +1975,8 @@ home file
 input 80
 {"session_id":"s","tool_name":"Bash","tool_input":{"command":"# want: t: x\ny"}}
 code 2
-out 86
-shale-gate: the escape could not be logged to ~/.local/state/shale/wants.tsv: refused
+out 104
+shale-gate: the escape could not be logged to ~/.local/state/shale/wants.tsv (Not a directory): refused
 
 log 0
 

@@ -20,6 +20,7 @@
 // the program; tools/shale-gate.sh runs it and turns any other failure, a
 // missing binary included, into a refusal.
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -745,9 +746,11 @@ static inline Str gate_iso_now(Arena *a) {
 // One append of `line` to `<home>/.local/state/shale/wants.tsv`, outside
 // every repo, its folders made first as Zig makes them: each prefix of the
 // folder after its first byte, its errors not read. False when the file
-// cannot be opened or the write is short. `home` is the environment's HOME,
-// which the kernel handed over NUL-ended.
-static inline bool gate_append_log(Arena *a, Str home, Str line) {
+// cannot be opened, the write fails or is short, or the arena refuses, with
+// `*why` saying which (libc's words for an errno). `home` is the
+// environment's HOME, which the kernel handed over NUL-ended.
+static inline bool gate_append_log(Arena *a, Str home, Str line, Str *why) {
+    *why = S("out of memory");
     Buf dir = buf_make(a);
     if (buf_str(&dir, home) != OK || buf_lit(&dir, "/.local/state/shale") != OK) return false;
     Str d = buf_view(&dir);
@@ -769,10 +772,18 @@ static inline bool gate_append_log(Arena *a, Str home, Str line) {
     const char *path = arena_cstr(a, os_str_own(buf_view(&file)));
     if (path == NULL) return false;
     int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (fd < 0) return false;
+    if (fd < 0) {
+        const char *e = strerror(errno); // cstr: libc's words for the errno
+        *why = (Str){e, strlen(e)};
+        return false;
+    }
     ssize_t n = write(fd, line.ptr, line.len);
+    int err = errno;
     close(fd);
-    return n >= 0 && (size_t)n == line.len;
+    if (n >= 0 && (size_t)n == line.len) return true;
+    const char *e = n < 0 ? strerror(err) : "a short write"; // cstr: libc's words, or a literal
+    *why = (Str){e, strlen(e)};
+    return false;
 }
 
 static inline void gate_say(Str msg) {
@@ -812,8 +823,11 @@ static inline int gate_run(Arena *a, bool read_ok, Str input, bool has_home, Str
         return 2;
     }
     Buf line = buf_make(a);
-    if (gate_log_line(&line, gate_iso_now(a), d.hook.session, &d.escape, d.hook.command) != OK || !gate_append_log(a, home, buf_view(&line))) {
-        gate_say(S("shale-gate: the escape could not be logged to ~/.local/state/shale/wants.tsv: refused"));
+    Str why = S("out of memory");
+    if (gate_log_line(&line, gate_iso_now(a), d.hook.session, &d.escape, d.hook.command) != OK || !gate_append_log(a, home, buf_view(&line), &why)) {
+        Buf said = buf_make(a);
+        bool built = buf_lit(&said, "shale-gate: the escape could not be logged to ~/.local/state/shale/wants.tsv (") == OK && buf_str(&said, why) == OK && buf_lit(&said, "): refused") == OK;
+        gate_say(built ? buf_view(&said) : S("shale-gate: the escape could not be logged to ~/.local/state/shale/wants.tsv: refused"));
         return 2;
     }
     return 0;

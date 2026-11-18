@@ -266,6 +266,7 @@ static Str path_file_system_words(FileSystemErr e) {
     case FILE_SYSTEM_NO_SPACE_LEFT: return S("the file system is full");
     case FILE_SYSTEM_SYM_LINK_LOOP: return S("a link loop");
     case FILE_SYSTEM_NAME_TOO_LONG: return S("the name is too long");
+    case FILE_SYSTEM_PATH_TOO_LONG: return S("the path is too long");
     default: return S("the file system failed");
     }
 }

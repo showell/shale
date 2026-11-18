@@ -1383,8 +1383,8 @@ static STATUS_MUST_USE Status host_run_spawn(Run *r, Pos pos, const SpawnSpec *s
     case SPAWN_SINK_STOPPED: return host_stream_refused(r, pos, sa, most);
     case SPAWN_NOT_FOUND: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
     case SPAWN_NOT_RUNNABLE: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is there but cannot be run (its permissions, or not a program)"), MSG_ARGS(MSG_FROM_SCRIPT(argv0)));
-    case SPAWN_NO_CWD: return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`: its cwd is not a folder that can be entered"));
-    case SPAWN_REFUSED: return host_fail_plain(r, pos, CLASS_HOST, S("`run`: the program could not be started (a pipe, a fork or a pidfd refused)"));
+    case SPAWN_NO_CWD: return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: its cwd is not a folder that can be entered: {s}"), MSG_ARGS(MSG_FROM_HOST(file_system_err_name(file_system_err_of(outcome->err)))));
+    case SPAWN_REFUSED: return host_fail(r, pos, CLASS_HOST, S("`run`: the program could not be started (a pipe, a fork or a pidfd refused): {s}"), MSG_ARGS(MSG_FROM_HOST(file_system_err_name(file_system_err_of(outcome->err)))));
     }
     if (host_scrub_finish(&s->scrub) != OK) return host_stream_refused(r, pos, sa, most);
     return OK;

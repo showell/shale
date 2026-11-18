@@ -700,6 +700,9 @@ static STATUS_MUST_USE Status paths_names_folder(PathRun *r, Pos pos, Str arg, S
         const char *c = NULL;
         FileSystemErr e = file_system_cstr(&cp, os_str_own(abs), &c);
         char real[PATH_MAX];
+        // skip: a spelling with no real path (not there, or past PATH_MAX)
+        // has no link to follow: its text was judged above, and that is the
+        // whole of what it names.
         if (e == FILE_SYSTEM_OK && realpath(c, real) != NULL) {
             Str rp = {real, strlen(real)};
             if (mounts_in_folder(rp, dir)) {

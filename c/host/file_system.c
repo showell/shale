@@ -122,11 +122,13 @@ typedef struct {
 } FileSystemCPath;
 
 // `s` ended by a NUL in `buf`, into `*out`, through slice.h's str_cstr_into:
-// NameTooLong, its one refusal, when it does not fit with its NUL, past
-// PATH_MAX, as Zig's posix layer answers. `*out` lives as long as `buf`.
+// PathTooLong, its one refusal, when it does not fit with its NUL, past
+// PATH_MAX. Not NameTooLong, the kernel's answer for a part past its most,
+// which no file can have: a path past PATH_MAX may name one that is there,
+// so it is never read as "not there". `*out` lives as long as `buf`.
 static FileSystemErr file_system_cstr(FileSystemCPath *buf, OsStr s, const char **out) {
     Bytes room = {buf->bytes, sizeof buf->bytes};
-    if (!str_cstr_into(room, s)) return FILE_SYSTEM_NAME_TOO_LONG;
+    if (!str_cstr_into(room, s)) return FILE_SYSTEM_PATH_TOO_LONG;
     *out = buf->bytes;
     return FILE_SYSTEM_OK;
 }
@@ -199,12 +201,15 @@ static FileSystemErr file_system_within_limits(const FileSystem *s, Str path) {
 
 // ── the rules of a path a call may make ─────────────────────────────────
 
-// Whether anything is at `path`; a path too long for the kernel is not.
-static bool file_system_exists(OsStr path) {
+// Whether anything is at `path`, into `*there`; PathTooLong for a path past
+// PATH_MAX, which is no answer either way.
+static FileSystemErr file_system_exists(OsStr path, bool *there) {
     FileSystemCPath cp;
     const char *c = NULL;
-    if (file_system_cstr(&cp, path, &c) != FILE_SYSTEM_OK) return false;
-    return access(c, F_OK) == 0;
+    FileSystemErr e = file_system_cstr(&cp, path, &c);
+    if (e != FILE_SYSTEM_OK) return e;
+    *there = access(c, F_OK) == 0;
+    return FILE_SYSTEM_OK;
 }
 
 // The next entry of the listing `d` that is neither `.` nor `..`, into
@@ -238,7 +243,11 @@ static FileSystemErr file_system_for_make_dir(const FileSystem *s, OsStr path) {
     FileSystemErr e = file_system_within_limits(s, path.s);
     if (e != FILE_SYSTEM_OK) return e;
     OsStr rest = path;
-    while (!file_system_exists(rest)) {
+    for (;;) {
+        bool there = false;
+        e = file_system_exists(rest, &there);
+        if (e != FILE_SYSTEM_OK) return e;
+        if (there) break;
         if (!path_strict_name(path_basename(rest.s))) return FILE_SYSTEM_BAD_NAME;
         if (!file_system_dirname(rest, &rest)) break;
     }
@@ -453,7 +462,8 @@ static inline FileSystemErr file_system_stat(const FileSystem *fs, OsStr path, F
 }
 
 // What `stat` answers, or `*found` false when nothing is there: a path not
-// found, through a file, or with a name too long for any file.
+// found, through a file, or with a part too long for any file (NameTooLong).
+// A path past PATH_MAX is PathTooLong, the caller's to say.
 static inline FileSystemErr file_system_stat_or_null(const FileSystem *fs, OsStr path, bool *found, FileSystemStat *out) {
     FileSystemErr e = file_system_stat(fs, path, out);
     *found = e == FILE_SYSTEM_OK;

@@ -325,7 +325,16 @@ TEST(an_os_string_holds_no_nul_and_its_c_string_refuses_only_a_path_past_path_ma
     EXPECT_EQ(file_system_cstr(&cp, os_str_own(S("/a/b")), &c), FILE_SYSTEM_OK);
     EXPECT_STR(((Str){c, strlen(c)}), S("/a/b"));
     char big[PATH_MAX];
-    EXPECT_EQ(file_system_cstr(&cp, os_str_own(rep('x', PATH_MAX, big)), &c), FILE_SYSTEM_NAME_TOO_LONG);
+    EXPECT_EQ(file_system_cstr(&cp, os_str_own(rep('x', PATH_MAX, big)), &c), FILE_SYSTEM_PATH_TOO_LONG);
+    // A path past PATH_MAX is too long, never "not there": it may name a
+    // file that is. A part past the kernel's most is no file, so not there.
+    FileSystem none = {false, S("")};
+    bool found = true;
+    FileSystemStat st;
+    EXPECT_EQ(file_system_stat_or_null(&none, os_str_own(rep('x', PATH_MAX, big)), &found, &st), FILE_SYSTEM_PATH_TOO_LONG);
+    EXPECT(!found);
+    EXPECT_EQ(file_system_stat_or_null(&none, os_str_own(rep('x', 300, big)), &found, &st), FILE_SYSTEM_OK);
+    EXPECT(!found);
 }
 
 TEST(an_errno_is_named_by_its_error_name) {

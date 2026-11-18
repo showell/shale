@@ -115,6 +115,10 @@ typedef struct {
     // (`wait4`'s rusage), in milliseconds. A busy box stretches `ms` and
     // barely moves this, so a budget can judge it.
     uint64_t cpu_ms;
+    // Why a program did not start, when spawn_run said SPAWN_NOT_RUNNABLE,
+    // SPAWN_NO_CWD or SPAWN_REFUSED: the errno of the call that failed (the
+    // exec, the `chdir`, or the pipe, fork, signalfd or pidfd). 0 otherwise.
+    int err;
 } SpawnOutcome;
 
 // What `spawn_run` gives: OK, or why the program did not run to its end.
@@ -442,7 +446,11 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     if (n == (ssize_t)sizeof why) {
         int status = 0;
         spawn_reap(pid, &status, NULL);
-        if (why >= SPAWN_CHILD_NO_CWD) return SPAWN_NO_CWD;
+        if (why >= SPAWN_CHILD_NO_CWD) {
+            outcome->err = (int)(why - SPAWN_CHILD_NO_CWD);
+            return SPAWN_NO_CWD;
+        }
+        outcome->err = (int)why;
         return why == ENOENT ? SPAWN_NOT_FOUND : SPAWN_NOT_RUNNABLE;
     }
     // DRAGON: the process boundary. The loop sees the exit only through the
@@ -452,6 +460,7 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     // untracked.
     int pid_fd = (int)syscall(SYS_pidfd_open, pid, 0);
     if (pid_fd < 0) {
+        outcome->err = errno;
         pgroup_signal(pid, SIGKILL);
         int status = 0;
         spawn_reap(pid, &status, NULL);
@@ -567,9 +576,10 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
     SpawnPipe out_pipe = {f->out_room, 2};
     SpawnPipe err_pipe = {f->err_room, 2};
     SpawnPipe in_pipe = {f->in_room, 2};
-    if (pipe2(out_pipe.ptr, O_CLOEXEC) != 0) return SPAWN_REFUSED;
-    if (pipe2(err_pipe.ptr, O_CLOEXEC) != 0) return SPAWN_REFUSED;
-    if (spec->stdin_bytes != NULL && pipe2(in_pipe.ptr, O_CLOEXEC) != 0) return SPAWN_REFUSED;
+    if (pipe2(out_pipe.ptr, O_CLOEXEC) != 0 || pipe2(err_pipe.ptr, O_CLOEXEC) != 0 || (spec->stdin_bytes != NULL && pipe2(in_pipe.ptr, O_CLOEXEC) != 0)) {
+        outcome->err = errno;
+        return SPAWN_REFUSED;
+    }
 
     // While a program runs, TERM and HUP to `shale` go to the loop instead
     // of the default action; the child unblocks them before exec.
@@ -586,7 +596,10 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
     sigprocmask(SIG_BLOCK, &stop_set, &f->old_mask);
     f->masked = true;
     f->sig_fd = signalfd(-1, &stop_set, SFD_CLOEXEC | SFD_NONBLOCK);
-    if (f->sig_fd < 0) return SPAWN_REFUSED;
+    if (f->sig_fd < 0) {
+        outcome->err = errno;
+        return SPAWN_REFUSED;
+    }
 
     SpawnChild child;
     spawn_child_default(&child);
@@ -603,7 +616,10 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
     child.report_w = at(err_pipe, 1);
     uint64_t start = spawn_mono_ms();
     pid_t pid = fork();
-    if (pid < 0) return SPAWN_REFUSED;
+    if (pid < 0) {
+        outcome->err = errno;
+        return SPAWN_REFUSED;
+    }
     if (pid == 0) spawn_exec_child(&child);
 
     spawn_close(&at(out_pipe, 1));
@@ -616,6 +632,7 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
 // stderr as one stream) to `sink` as it comes, and fills `*outcome`. What it
 // builds for the child (argv, envp, the paths) is in `a`.
 static SpawnResult spawn_run(Arena *a, const SpawnSpec *spec, SpawnSink sink, SpawnOutcome *outcome) {
+    memset(outcome, 0, sizeof *outcome);
     char **argv = spawn_cstr_list(a, spec->argv);
     if (argv == NULL) return SPAWN_OUT_OF_MEMORY;
     char **envp = spawn_cstr_list(a, spec->env);
