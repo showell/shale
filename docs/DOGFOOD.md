@@ -35,3 +35,8 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | quality.shale's findings log leaves out rewrite_method_calls' per-call findings | open |
 | 2026-11-18 | the gate refuses a bare `2>&1` after a `shale` launch | open |
 | 2026-11-18 | **rewrite_method_calls changed behaviour with `roc check` clean:** `I64.to_str(x)` became `x.to_str()` where `x` was a loop variable over a literal list or a `var` starting from a literal, so it defaulted to Dec and printed `10.0`. The recipe guards a literal argument or a name bound to one, not these | open |
+| 2026-11-18 | `grep_tree`'s `skip` stops on a folder that doesn't exist (`c/out` in a fresh lane) while `walk_all`'s `skip` doesn't: the two disagree | open |
+| 2026-11-18 | the 1 MiB `kept_bytes` at a `yield` stops a whole-tree recipe that keeps a graph across files; the docs' advice (yield each file) assumes one file's memory | open |
+| 2026-11-18 | `unique()` fails on a list of integers, because `has_key` takes strings only | open |
+| 2026-11-18 | `mkdir("a/b/")` is refused for its trailing slash | open |
+| 2026-11-18 | `scratch:` is the shared temp root, not the session's scratchpad, so stray files land at its top; testing a lane with `SHALE_MOUNTS` also needs an outer heredoc, since the gate allows no env prefix | open |
