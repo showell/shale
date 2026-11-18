@@ -34,6 +34,7 @@
 #include "host/undo.c"
 #include "host/spawn_argv.c"
 #include "host/pgroup.c"
+#include "host/spawn_child.c"
 #include "host/spawn.c"
 #include "host/keep.c"
 #include "host/swap_file.c"

@@ -12,13 +12,13 @@
 // holds (c/shale.c's run, the tests' Ran) and hands the host (`Host.zig`),
 // never a static.
 //
-// Include zig_wire.c, paths.c and builtins_change.c first.
+// Include spawn_argv.c, pgroup.c, spawn_child.c, zig_wire.c, paths.c and
+// builtins_change.c first.
 
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
-#include <sys/prctl.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -26,9 +26,6 @@
 // The bytes of zig-ast's answers read ahead: Zig's reader's buffer, which
 // also bounds a line `take_line` reads.
 enum { HOST_ZIG_BUF = 64 * 1024 };
-
-// A NULL-ended list of NUL-ended strings, for execve.
-SLICE_TYPE(HostZigCStrs, char *);
 
 // A NUL-ended string of the system's, as a Str.
 static Str host_zig_from_c(const char *s) { // cstr: the system's own
@@ -122,39 +119,9 @@ static void host_zig_stop(HostZigProc *p) {
     p->started = false;
 }
 
-// The child between fork and exec: never returns.
-// DRAGON: the process boundary. Between fork and exec the child holds a copy
-// of the parent's memory and locks, so anything not async-signal-safe can
-// deadlock it.
-// REMEDY: it makes raw system calls alone, on paths and argv built before
-// the fork, and leaves by exec or _exit; an exec that fails writes its errno
-// on the close-on-exec pipe for the parent to read.
-static void host_zig_child(pid_t parent, int in_r, int out_w, int err_w, int why_w, HostZigCStrs paths, char **argv) { // cstr: NUL-ended for the kernel
-    // DRAGON: the process boundary. zig-ast must not outlive `shale`.
-    // REMEDY: a death signal, with the getppid check for a parent that died
-    // before the prctl; and a group of its own, which the stop's KILL ends.
-    prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
-    if (getppid() != parent) _exit(127);
-    setpgid(0, 0);
-    sigset_t none;
-    sigemptyset(&none);
-    sigprocmask(SIG_SETMASK, &none, NULL);
-    dup2(in_r, 0);
-    dup2(out_w, 1);
-    dup2(err_w, 2);
-    int last = ENOENT;
-    for (size_t i = 0; i < paths.len; i++) {
-        execve(at(paths, i), argv, environ);
-        if (errno != ENOENT && errno != ENOTDIR) last = errno;
-    }
-    ssize_t w = write(why_w, &last, sizeof last);
-    (void)w;
-    _exit(127);
-}
-
 // The paths an exec of `exe` tries: itself when it has a `/`, else in each
 // folder of PATH, as Zig's spawn searches. False when the arena refuses.
-static bool host_zig_candidates(Arena *a, Str exe, HostZigCStrs *out) {
+static bool host_zig_candidates(Arena *a, Str exe, SpawnCStrs *out) {
     const char *path_c = getenv("PATH"); // cstr: the environment's
     Str path = path_c != NULL ? host_zig_from_c(path_c) : S("/usr/local/bin:/bin/:/usr/bin");
     if (str_find_byte(exe, '/') != NULL) path = S("");
@@ -162,7 +129,7 @@ static bool host_zig_candidates(Arena *a, Str exe, HostZigCStrs *out) {
     for (size_t i = 0; i < path.len; i++) n += at(path, i) == ':';
     char **list = ARENA_ARRAY(a, char *, n);
     if (list == NULL) return false;
-    HostZigCStrs all = {list, n};
+    SpawnCStrs all = {list, n};
     size_t from = 0;
     size_t k = 0;
     for (size_t i = 0; i <= path.len; i++) {
@@ -351,8 +318,8 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
     if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
     r->host_runs++;
     char *argv_room[3] = {arena_cstr(a, exe), arena_cstr(a, S("--serve")), NULL};
-    HostZigCStrs argv = {argv_room, 3};
-    HostZigCStrs paths = {NULL, 0};
+    SpawnCStrs argv = {argv_room, 3};
+    SpawnCStrs paths = {NULL, 0};
     if (at(argv, 0) == NULL || at(argv, 1) == NULL || !host_zig_candidates(a, exe, &paths)) return run_values_oom(r, pos);
     // A write to a zig-ast that has gone must fail with EPIPE, not end
     // `shale`: a handler that does nothing, as Zig's runtime sets, which an
@@ -376,20 +343,31 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
     if (pipe2(in_p, O_CLOEXEC) != 0 || pipe2(out_p, O_CLOEXEC) != 0 || pipe2(err_p, O_CLOEXEC) != 0 || pipe2(why_p, O_CLOEXEC) != 0) {
         e = errno;
     } else {
-        pid_t parent = getpid();
+        // A death signal, so zig-ast never outlives `shale`, and a group of
+        // its own, which the stop's KILL ends.
+        SpawnChild child;
+        spawn_child_default(&child);
+        child.parent = getpid();
+        child.stdin_fd = at(in_s, 0);
+        child.stdout_fd = at(out_s, 1);
+        child.stderr_fd = at(err_s, 1);
+        child.paths = paths;
+        child.argv = argv_room;
+        child.envp = environ;
+        child.report_w = at(why_s, 1);
         pid = fork();
         if (pid < 0) e = errno;
-        if (pid == 0) host_zig_child(parent, at(in_s, 0), at(out_s, 1), at(err_s, 1), at(why_s, 1), paths, argv_room);
+        if (pid == 0) spawn_exec_child(&child);
     }
     host_zig_close(&at(in_s, 0));
     host_zig_close(&at(out_s, 1));
     host_zig_close(&at(err_s, 1));
     host_zig_close(&at(why_s, 1));
     if (pid > 0) {
-        int why = 0;
+        uint32_t why = 0;
         ssize_t n = read(at(why_s, 0), &why, sizeof why);
         if (n == (ssize_t)sizeof why) {
-            e = why;
+            e = (int)why;
             int status = 0;
             spawn_reap(pid, &status, NULL);
         }

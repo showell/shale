@@ -11,13 +11,12 @@
 // ended. The record, `<log>.job`, is job_record.c's `key=value` lines, each
 // write a new file renamed over the old.
 //
-// Include spawn_argv.c, pgroup.c and job_record.c first. The including file
-// defines _GNU_SOURCE before its first include, for pipe2 and syscall.
+// Include spawn_argv.c, pgroup.c, spawn_child.c and job_record.c first. The
+// including file defines _GNU_SOURCE before its first include, for pipe2.
 
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -272,43 +271,24 @@ static JobsLaunched jobs_launch(Arena *a, Str reaper, Str record, Str log, Str c
     int started[2] = {-1, -1};
     SpawnPipe pipe_ends = {started, 2};
     if (pipe2(pipe_ends.ptr, O_CLOEXEC) != 0) return JOBS_SPAWN;
+    // The reaper: /dev/null as 0 to 2 and the started pipe as fd 3, which
+    // survives the exec, and nothing else.
+    char *exe_room[1] = {zexe};
+    SpawnChild child;
+    spawn_child_default(&child);
+    child.group = SPAWN_CHILD_INHERIT;
+    child.pass_fd = at(pipe_ends, 1);
+    child.pass_at = JOBS_STARTED_FD;
+    child.paths = (SpawnCStrs){exe_room, 1};
+    child.argv = zargv;
+    child.envp = zenv;
     pid_t first = fork();
     if (first < 0) {
         close(at(pipe_ends, 0));
         close(at(pipe_ends, 1));
         return JOBS_SPAWN;
     }
-    if (first == 0) {
-        // DRAGON: the process boundary. Between fork and exec these children
-        // hold a copy of the parent's memory, so a malloc or a stdio call
-        // could deadlock them.
-        // REMEDY: both make only raw system calls on what was built before
-        // the fork (the argv, the environment, the paths), and leave by
-        // exec or _exit.
-        setsid();
-        pid_t second = fork();
-        if (second == 0) {
-            // The started pipe becomes fd 3 and survives the exec: dup2's
-            // copy has no CLOEXEC, and an end already at 3 has it cleared.
-            if (at(pipe_ends, 1) == JOBS_STARTED_FD) {
-                fcntl(JOBS_STARTED_FD, F_SETFD, 0);
-            } else {
-                dup2(at(pipe_ends, 1), JOBS_STARTED_FD);
-            }
-            syscall(SYS_close_range, JOBS_STARTED_FD + 1, ~0u, 0u);
-            // O_CLOEXEC, so the copy beside 0 to 2 never reaches the reaper.
-            int devnull = open("/dev/null", O_RDWR | O_CLOEXEC);
-            dup2(devnull, 0);
-            dup2(devnull, 1);
-            dup2(devnull, 2);
-            sigset_t none;
-            sigemptyset(&none);
-            sigprocmask(SIG_SETMASK, &none, NULL);
-            execve(zexe, zargv, zenv);
-            _exit(127);
-        }
-        _exit(0);
-    }
+    if (first == 0) spawn_exec_detached(&child);
     close(at(pipe_ends, 1));
     int status = 0;
     spawn_reap(first, &status, NULL);
@@ -426,22 +406,21 @@ static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env)
     // O_CLOEXEC, so the job has its log as 1 and 2 alone.
     int log_fd = open(log, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (log_fd < 0) return 2;
+    // The job: a session of its own, stdin /dev/null, stdout and stderr its
+    // log; a `chdir` that fails exits 126, an exec 127.
+    char *program_room[1] = {program};
+    SpawnChild job;
+    spawn_child_default(&job);
+    job.group = SPAWN_CHILD_SESSION;
+    job.stdout_fd = log_fd;
+    job.stderr_fd = log_fd;
+    job.cwd = cwd;
+    job.paths = (SpawnCStrs){program_room, 1};
+    job.argv = zargv;
+    job.envp = zenv;
     pid_t pid = fork();
     if (pid < 0) return 2;
-    if (pid == 0) {
-        // DRAGON: the process boundary. The job's child between fork and
-        // exec holds a copy of the reaper's memory.
-        // REMEDY: raw system calls on what was built before the fork, then
-        // exec or _exit.
-        setsid();
-        int devnull = open("/dev/null", O_RDONLY | O_CLOEXEC);
-        dup2(devnull, 0);
-        dup2(log_fd, 1);
-        dup2(log_fd, 2);
-        if (chdir(cwd) != 0) _exit(126);
-        execve(program, zargv, zenv);
-        _exit(127);
-    }
+    if (pid == 0) spawn_exec_child(&job);
     close(log_fd);
     JobRecord r;
     memset(&r, 0, sizeof r);

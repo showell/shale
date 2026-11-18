@@ -2,12 +2,12 @@
 // poll loop under `run`.
 //
 // It forks by hand, since `posix_spawn` has no hook for a death signal. The
-// child sets a death signal (and checks its parent is still the one that
-// forked it), takes a process group of its own, unblocks signals, gets stdin
-// from the given bytes or /dev/null and stdout and stderr on one pipe (stdout
-// to a given file instead, for `run`'s `stdout_secret`), then `chdir`s and
-// `execve`s along PATH. A failed exec reports its errno through a
-// close-on-exec pipe, so "not found" is an answer, not a hang.
+// child is spawn_child.c's: it sets a death signal, takes a process group of
+// its own, gets stdin from the given bytes or /dev/null and stdout and
+// stderr on one pipe (stdout to a given file instead, for `run`'s
+// `stdout_secret`), then `chdir`s and `execve`s along PATH. A failed exec
+// reports its errno through a close-on-exec pipe, so "not found" is an
+// answer, not a hang.
 //
 // The parent polls the output, the stdin it is still writing, a pidfd for
 // the exit and a signalfd for TERM and HUP. On the deadline, or a TERM or HUP
@@ -25,8 +25,8 @@
 // does nothing, so a write to a closed stdin is an error, not a death, and a
 // program still starts with SIGPIPE's default.
 //
-// Include spawn_argv.c and pgroup.c first: spawn_argv.c's strings and pipes
-// are jobs.c's too.
+// Include spawn_argv.c, pgroup.c and spawn_child.c first: spawn_argv.c's
+// strings and pipes are jobs.c's too.
 
 #ifndef _GNU_SOURCE
 #error "spawn.c needs _GNU_SOURCE defined before the first include: pipe2, wait4, signalfd and syscall"
@@ -36,7 +36,6 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
-#include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/signalfd.h>
 #include <sys/syscall.h>
@@ -77,12 +76,6 @@ typedef struct {
     // How long output is still read after the program exits.
     uint64_t drain_ms;
 } SpawnSpec;
-
-// A `file_max` that sets no limit.
-#define SPAWN_UNLIMITED UINT64_MAX
-
-// A `nice` that leaves the niceness as `shale`'s.
-enum { SPAWN_NICE_UNSET = -1 };
 
 static void spawn_spec_default(SpawnSpec *s) {
     memset(s, 0, sizeof *s);
@@ -237,67 +230,6 @@ static void spawn_close(int *fd) {
 static void spawn_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
-
-// The child's failure: `code` on the error pipe, then exit 127.
-static void spawn_child_fail(int err_w, uint32_t code) {
-    ssize_t w = write(err_w, &code, sizeof code);
-    (void)w;
-    _exit(127);
-}
-
-// The child between fork and exec. It never returns: it execs, or writes an
-// errno to `err_w` and exits 127 (a `chdir`'s as 1000 plus its errno).
-// DRAGON: the process boundary. Between fork and exec the child holds a copy
-// of the parent's memory and locks, so a malloc, a stdio call or anything not
-// async-signal-safe can deadlock or corrupt it.
-// REMEDY: it makes only raw system calls (and `sigemptyset`) on memory built
-// before the fork (the paths, argv and envp), and leaves by exec or _exit,
-// never by return.
-static void spawn_child(pid_t parent, const char *cwd, int stdin_r, int stdout_fd, uint64_t file_max, int nice, int out_w, int err_w, SpawnCStrs paths, char **argv, char **envp) { // cstr: NUL-ended for the kernel
-    // DRAGON: the process boundary. The death signal ends the child when
-    // `shale` dies, so a program never outlives it; but `shale` may die
-    // before the prctl, and then the child's parent is already another
-    // process and no signal will come.
-    // REMEDY: the getppid check closes that race: a child whose parent
-    // changed exits at once.
-    prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
-    if (getppid() != parent) _exit(127);
-    // DRAGON: the process boundary. Its own group is what lets a TERM and a
-    // KILL reach every process the program starts (`kill(-pid)`); a signal
-    // sent before the group exists would miss it.
-    // REMEDY: the parent signals the group only after reading the error
-    // pipe, which closes at the exec, after this call.
-    setpgid(0, 0);
-    sigset_t none;
-    sigemptyset(&none);
-    sigprocmask(SIG_SETMASK, &none, NULL);
-    int in_fd = stdin_r >= 0 ? stdin_r : open("/dev/null", O_RDONLY);
-    dup2(in_fd, 0);
-    dup2(stdout_fd >= 0 ? stdout_fd : out_w, 1);
-    dup2(out_w, 2);
-    // DRAGON: the budgets. `stdout_secret`'s file is the program's stdout,
-    // which no pipe bounds, so it could fill the disk before the cap is
-    // checked at exit.
-    // REMEDY: the hard and soft RLIMIT_FSIZE, one raw prlimit64 (async-signal
-    // safe, nothing allocated), so the kernel holds it to `file_max` bytes;
-    // a failure exits 127 before exec, never running the program unbounded.
-    if (file_max != SPAWN_UNLIMITED) {
-        struct rlimit lim = {(rlim_t)file_max, (rlim_t)file_max};
-        if (syscall(SYS_prlimit64, 0, RLIMIT_FSIZE, &lim, NULL) != 0) spawn_child_fail(err_w, EPERM);
-    }
-    // The niceness, one raw setpriority (async-signal safe). A process may
-    // not lower its own niceness unprivileged, so when `shale` already runs
-    // nicer than asked (EACCES, EPERM) the program runs at `shale`'s, never
-    // less nice; any other refusal exits 127 before exec.
-    if (nice != SPAWN_NICE_UNSET && setpriority(PRIO_PROCESS, 0, nice) != 0 && errno != EACCES && errno != EPERM) spawn_child_fail(err_w, (uint32_t)errno);
-    if (cwd != NULL && chdir(cwd) != 0) spawn_child_fail(err_w, 1000 + (uint32_t)errno);
-    int last = ENOENT;
-    for (size_t i = 0; i < paths.len; i++) {
-        execve(at(paths, i), argv, envp);
-        if (errno != ENOENT && errno != ENOTDIR) last = errno;
-    }
-    spawn_child_fail(err_w, (uint32_t)last);
 }
 
 // Passes what the pipe holds to the sink until a read would block, into
@@ -508,7 +440,7 @@ static SpawnResult spawn_parent(const SpawnSpec *spec, SpawnSink sink, pid_t pid
     if (n == (ssize_t)sizeof why) {
         int status = 0;
         spawn_reap(pid, &status, NULL);
-        if (why >= 1000) return SPAWN_NO_CWD;
+        if (why >= SPAWN_CHILD_NO_CWD) return SPAWN_NO_CWD;
         return why == ENOENT ? SPAWN_NOT_FOUND : SPAWN_NOT_RUNNABLE;
     }
     // DRAGON: the process boundary. The loop sees the exit only through the
@@ -654,11 +586,23 @@ static SpawnResult spawn_started(const SpawnSpec *spec, SpawnSink sink, SpawnFds
     f->sig_fd = signalfd(-1, &stop_set, SFD_CLOEXEC | SFD_NONBLOCK);
     if (f->sig_fd < 0) return SPAWN_REFUSED;
 
+    SpawnChild child;
+    spawn_child_default(&child);
+    child.parent = getpid();
+    child.stdin_fd = at(in_pipe, 0);
+    child.stdout_fd = spec->stdout_fd >= 0 ? spec->stdout_fd : at(out_pipe, 1);
+    child.stderr_fd = at(out_pipe, 1);
+    child.file_max = spec->file_max;
+    child.nice = spec->nice;
+    child.cwd = cwd;
+    child.paths = paths;
+    child.argv = argv;
+    child.envp = envp;
+    child.report_w = at(err_pipe, 1);
     uint64_t start = spawn_mono_ms();
-    pid_t parent = getpid();
     pid_t pid = fork();
     if (pid < 0) return SPAWN_REFUSED;
-    if (pid == 0) spawn_child(parent, cwd, at(in_pipe, 0), spec->stdout_fd, spec->file_max, spec->nice, at(out_pipe, 1), at(err_pipe, 1), paths, argv, envp);
+    if (pid == 0) spawn_exec_child(&child);
 
     spawn_close(&at(out_pipe, 1));
     spawn_close(&at(err_pipe, 1));

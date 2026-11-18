@@ -19,6 +19,7 @@
 
 #include "../../host/spawn_argv.c"
 #include "../../host/pgroup.c"
+#include "../../host/spawn_child.c"
 #include "../../host/job_record.c"
 #include "../../host/jobs.c"
 
