@@ -244,7 +244,7 @@ end
 -- `only=<name>` runs that script of SCRIPTS alone, at its own place.
 local only = arg("only", "")
 local t0 = clock_ms()
-must(run({"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5}))
+must(run({"tcc", "-run", "c/gen_preludes.c"}, {timeout_ms = 60000, tail = 5}))
 mkdir(DIR)
 local bin_path = DIR .. "/shale"
 local c = run(fault_argv(bin_path), {timeout_ms = COMPILE_TIMEOUT_MS, tail = 40, nice = 19})
