@@ -23,3 +23,14 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | wrap_long_lines `tokens=6` can leave lines past 100 columns that check_stacking then flags, and odd layouts | open |
 | 2026-11-18 | wrap_long_lines takes one `dir=`, and prints every wide-string line it leaves as noise | open |
 | 2026-11-18 | most Roc recipes take one glob and can't be limited to git-tracked files, so a gate must hold file counts itself | open |
+| 2026-11-18 | the `── time:` line's `…` cut splits a UTF-8 character, leaving invalid bytes in the output | open |
+| 2026-11-18 | rewrite_method_calls stops the whole run on one file no root reaches, instead of listing it and going on | open |
+| 2026-11-18 | rewrite_method_calls holds every root's types at once: 8 roots ran out of the 2 GB arena, and the stop doesn't say which root | open |
+| 2026-11-18 | `run`'s `re` filter charges the caller's step budget, undocumented; filtering a big child output stopped the caller | open |
+| 2026-11-18 | rewrite_method_calls leaves imports it made unused and lines past 100 columns that the gates then catch | open |
+| 2026-11-18 | wrap_long_lines stacks a list pattern in a `match` arm because a string widened the line | open |
+| 2026-11-18 | check_boundaries `constant` can't be answered in code, unlike `single` | open |
+| 2026-11-18 | roc-apps' quality.shale caches per checkout path, so every lane starts cold (about 205 s), and it can't be limited to some apps | open |
+| 2026-11-18 | quality.shale doesn't pass each project's own tables and exemptions, so its counts differ from Safari's own lints | open |
+| 2026-11-18 | quality.shale's findings log leaves out rewrite_method_calls' per-call findings | open |
+| 2026-11-18 | the gate refuses a bare `2>&1` after a `shale` launch | open |
