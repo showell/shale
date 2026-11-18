@@ -211,11 +211,14 @@ static int out_of_memory(Out *o, Str what) {
     return flush_and_exit(o, EXIT_REFUSED);
 }
 
-// What this C `shale` does not do yet, said as a refusal of its own.
-static int not_ported(Out *o, Str what) {
-    say(o, S("shale (C): "));
-    say(o, what);
-    say(o, S(" is not ported yet\n"));
+// The working folder could not be read (`getcwd` failed with `e`), the
+// refusal's exit: `shale: the working folder is gone (FileNotFound)` for a
+// folder removed under the process, else `... cannot be read (<errno's
+// name>)`.
+static int no_working_folder(Out *o, int e) {
+    say(o, e == ENOENT ? S("shale: the working folder is gone (") : S("shale: the working folder cannot be read ("));
+    say(o, error_name(e));
+    say(o, S(")\n"));
     return flush_and_exit(o, EXIT_REFUSED);
 }
 
@@ -899,7 +902,7 @@ static int secrets_cli(Out *o) {
     }
     char cwd[PATH_MAX];
     Str cwd_abs = S("");
-    if (getcwd(cwd, sizeof cwd) == NULL) return not_ported(o, S("a run with no working folder"));
+    if (getcwd(cwd, sizeof cwd) == NULL) return no_working_folder(o, errno);
     if (!arena_dup(a, from_c(cwd), &cwd_abs)) return out_of_memory(o, S("a working folder"));
     Secrets m = {a, io, home, cwd_abs, Mounts_items(&loaded.mounts), loaded.from};
     return secrets_main(&m);
@@ -1088,7 +1091,7 @@ static int run_main(Out *o, int argc, char **argv) {
         root_abs = S("/");
     } else if (str_byte(root, 0) != '/') {
         char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof cwd) == NULL) return not_ported(o, S("a root with no working folder"));
+        if (getcwd(cwd, sizeof cwd) == NULL) return no_working_folder(o, errno);
         if (join(a, from_c(cwd), root, &root_abs) != OK) return out_of_memory(o, S("a root"));
     }
     Prelude preludes[4];
@@ -1099,7 +1102,7 @@ static int run_main(Out *o, int argc, char **argv) {
     if (now == NULL) pinned_now = (int64_t)time(NULL);
     Where where = {root, root_abs, S("")};
     char cwd_now[PATH_MAX];
-    if (getcwd(cwd_now, sizeof cwd_now) == NULL) return not_ported(o, S("a run with no working folder"));
+    if (getcwd(cwd_now, sizeof cwd_now) == NULL) return no_working_folder(o, errno);
     if (!arena_dup(a, from_c(cwd_now), &where.cwd_abs)) return out_of_memory(o, S("a working folder"));
     return run_script(o, &c, mounts, from, where, source, ps, args, args_len, pinned_now);
 }

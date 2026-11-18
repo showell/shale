@@ -417,6 +417,26 @@ TEST(a_file_builtin_on_a_run_with_no_file_system_ends_the_process) {
     EXPECT_DIES((void)builtin_files_of(&r));
 }
 
+TEST(a_message_number_never_overwrites_one_not_yet_copied) {
+    static Run r;
+    memset(&r, 0, sizeof r);
+    // Sixteen numbers alive at once, each its own digits.
+    Str first = run_num(&r, -7);
+    Str last = S("");
+    for (int k = 2; k <= RUN_NUMS; k++) last = run_unum(&r, (uint64_t)k * 10);
+    EXPECT_STR(first, S("-7"));
+    EXPECT_STR(last, S("160"));
+    EXPECT_EQ(r.nums_live, 16);
+    // A seventeenth would take the first's slot before a message copied it.
+    EXPECT_DIES((void)run_unum(&r, 17));
+    EXPECT_STR(first, S("-7"));
+    // Once a message has copied them, the slots are taken again.
+    run_nums_copied(&r);
+    EXPECT_EQ(r.nums_live, 0);
+    EXPECT_STR(run_unum(&r, 17), S("17"));
+    EXPECT_EQ(r.nums_live, 1);
+}
+
 TEST(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process) {
     // Each answer for a value no case names would be a plausible lie: an
     // operator's text "", a table's kind "an empty table", a count's sign.
@@ -481,7 +501,7 @@ TEST(the_steps_go_to_the_builtin_script_code_called) {
     ran_free(&x);
 }
 
-TEST_PART(vm, TEST_CASE(the_steps_go_to_the_builtin_script_code_called), TEST_CASE(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process), TEST_CASE(the_compilers_own_checks_end_the_process), TEST_CASE(a_file_builtin_on_a_run_with_no_file_system_ends_the_process), TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(a_long_stop_is_whole_in_attempts_error_and_in_the_report), TEST_CASE(the_step_budget_stops_one_past_it),
+TEST_PART(vm, TEST_CASE(the_steps_go_to_the_builtin_script_code_called), TEST_CASE(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process), TEST_CASE(a_message_number_never_overwrites_one_not_yet_copied), TEST_CASE(the_compilers_own_checks_end_the_process), TEST_CASE(a_file_builtin_on_a_run_with_no_file_system_ends_the_process), TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(a_long_stop_is_whole_in_attempts_error_and_in_the_report), TEST_CASE(the_step_budget_stops_one_past_it),
           TEST_CASE(the_call_depth_budget_names_every_call), TEST_CASE(attempt_makes_a_stop_a_value_and_the_run_goes_on),
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
           TEST_CASE(yield_keeps_what_is_reached_and_charges_the_copy), TEST_CASE(the_output_budget_writes_what_fits),

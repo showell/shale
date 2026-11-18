@@ -183,7 +183,9 @@ static STATUS_MUST_USE Status host_record(Host *h, Run *r, Pos pos, const Buf *b
 
 // A stop of the host's, its message the format `fmt` of `args`.
 static STATUS_MUST_USE Status host_fail(Run *r, Pos pos, StopClass cls, Str fmt, MsgArgs args) {
-    return path_fail(&builtin_files_of(r)->path, pos, cls, fmt, args);
+    Status s = path_fail(&builtin_files_of(r)->path, pos, cls, fmt, args);
+    run_nums_copied(r);
+    return s;
 }
 
 // A budget's stop with the message `m` holds, for `host_over_budget` and

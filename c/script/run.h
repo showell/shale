@@ -119,6 +119,9 @@ typedef struct Run {
     // number needs no arena and no refusal can be dropped making one.
     IntText nums[RUN_NUMS];
     size_t nums_next;
+    // The numbers made since a message last copied them (run_nums_copied):
+    // the ring's slots no message has copied yet.
+    size_t nums_live;
 } Run;
 
 // ── stops ──
@@ -151,8 +154,12 @@ static inline Str uint_text(IntText *t, uint64_t n) {
     return str_sub(((Str){t->bytes, sizeof t->bytes}), k, sizeof t->bytes);
 }
 
-// The run's next slot for a number's text.
+// The run's next slot for a number's text. A slot whose number no message
+// has copied yet is never taken: that would put another number's digits in
+// a message with no stop, so it is a bug in the C, and the process ends.
 static inline IntText *run_num_slot(Run *r) {
+    if (r->nums_live == RUN_NUMS) c_bug("run: a message number would overwrite one no message has copied (RUN_NUMS)");
+    r->nums_live++;
     SLICE_TYPE(IntTexts, IntText);
     IntTexts ring = {r->nums, RUN_NUMS};
     IntText *t = &at(ring, r->nums_next);
@@ -160,13 +167,22 @@ static inline IntText *run_num_slot(Run *r) {
     return t;
 }
 
+// Says the numbers made so far are copied into a message, so their slots may
+// be taken again. Every message maker that takes a run's numbers calls it once
+// the message is made: run_fail_parts (run_failf's) and host_fail.
+static inline void run_nums_copied(Run *r) {
+    r->nums_live = 0;
+}
+
 // `n` in decimal, for a message: in the run's ring, so it never refuses.
 // DRAGON: use after overwrite. The text lives in one of RUN_NUMS slots, so a
-// Str kept past RUN_NUMS more numbers reads another number's digits.
+// Str kept past RUN_NUMS more numbers would read another number's digits.
 // REMEDY: every caller makes the number inside the call that makes its
-// message (run_failf, host_fail's MSG_ARGS, paths_cat), which copies it
-// before the next; none keeps one in a variable or a value. No check holds
-// this: a reading of the callers does.
+// message (run_failf, host_fail's MSG_ARGS), which copies it and calls
+// run_nums_copied; a slot not yet copied is never taken (run_num_slot ends
+// the process instead), and test_vm holds that death. A message takes at
+// most 3 numbers today (run.h's index stop, vm.c's argument count and
+// `json_read`'s place), so the 16 slots leave room.
 static inline Str run_num(Run *r, int64_t n) {
     return int_text(run_num_slot(r), n);
 }
@@ -186,6 +202,7 @@ static inline STATUS_MUST_USE Status run_fail_parts(Run *r, Pos pos, StopClass c
     for (size_t k = 0; k < all.len; k++) {
         if (at(all, k).len > 0) msg_str(&m, at(all, k));
     }
+    run_nums_copied(r);
     return run_fail_built(&r->ctx, pos, cls, &m.b, m.s, fallback);
 }
 

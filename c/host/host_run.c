@@ -370,7 +370,8 @@ static STATUS_MUST_USE Status host_argv_arg(Run *r, Pos pos, Str who, const Valu
     // A NUL is refused once every item is known to be a string.
     for (size_t i = 0; i < n; i++) {
         Str what = S("");
-        TRY(paths_cat(&builtin_files_of(r)->path, pos, S("argument "), run_unum(r, i + 1), S(""), &what));
+        IntText nth;
+        TRY(paths_cat(&builtin_files_of(r)->path, pos, S("argument "), uint_text(&nth, i + 1), S(""), &what));
         TRY(os_str(r, pos, who, what, at(argv_t->list, i).as.string, &at(room, i)));
     }
     out->ptr = argv;
