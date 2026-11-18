@@ -17,7 +17,8 @@
 --                                refusals, and every planted fault; then the
 --                                golden tests (tests/golden.shale) and the
 --                                cookbook's self-tests under the -O2 binary,
---                                c/out/release/shale.
+--                                c/out/release/shale, and Shale's docs'
+--                                citations (tools/doc_check.shale).
 --
 -- **The builds.** `tcc` runs each test file (`tcc -run`). `release` is
 -- -std=c11 -O2 -Wall -Wextra -Werror for its warnings alone: each test file
@@ -115,6 +116,7 @@ function report_phases(full, plants)
   if full then
     push(order, "golden")
     push(order, "cookbook")
+    push(order, "docs")
   end
   for b in order do
     local p = json_read(read(OUT .. "/phases/" .. b .. ".json"))
@@ -332,6 +334,39 @@ if full then
   local c = cookbook_self_tests(OUT .. "/release/shale")
   local text = json_write({order = {"cookbook"}, phases = {cookbook = c}})
   local file = OUT .. "/phases/cookbook.json"
+  if exists(file) then replace(file, text) else create(file, text) end
+end
+
+-- Shale's docs' citations, by tools/doc_check.shale under the -O2 binary:
+-- its fixtures first, then every path and name this checkout's docs cite,
+-- resolved here (`self=.`) and in the siblings the `repos` mount reaches.
+-- A finding fails the run, named.
+function docs_check(bin)
+  local ms = 0
+  local cpu = 0
+  local budgets = {"--budget", "arena_bytes=2000000000", "--budget", "steps=1000000000", "--budget", "reads=1000000", "--budget", "read_bytes=2000000000", "--budget", "output_bytes=8000000"}
+  for args in {{"self_test=1", "self=."}, {"self=.", "at=repos:", "only=shale"}} do
+    local argv = {real(bin)}
+    for a in budgets do push(argv, a) end
+    push(argv, "tools/doc_check.shale")
+    for a in args do push(argv, a) end
+    local got = run(argv, {timeout_ms = 120000, tail = 30, want = "c-tests: the binary under test checks the docs' citations"})
+    ms = ms + got.ms
+    cpu = cpu + get(got, "cpu_ms", 0)
+    if get(got, "code", -1) ~= 0 then
+      print(trim(got.out))
+      fail("docs: tools/doc_check.shale " .. join(args, " ") .. " failed: its output is above")
+    end
+    local ls = lines(trim(got.out))
+    print("docs: " .. get(ls, #ls, ""))
+  end
+  return {ms = ms, cpu_ms = cpu, programs = 2}
+end
+
+if full then
+  local d = docs_check(OUT .. "/release/shale")
+  local text = json_write({order = {"docs"}, phases = {docs = d}})
+  local file = OUT .. "/phases/docs.json"
   if exists(file) then replace(file, text) else create(file, text) end
 end
 

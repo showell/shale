@@ -33,7 +33,13 @@
 -- budget: steps=200000000 arena_bytes=2000000000
 --
 --   ... shale/tools/doc_check.shale self_test=1    its fixtures first
--- `zig build doc-check` runs both, with this tree's `shale`.
+--
+-- Or from a Shale checkout, its siblings through a mount: `self=.` is this
+-- checkout, the repo named `shale`, wherever it is (a lane's worktree), and
+-- `at=repos:` the folder of the others. C's full tier runs both so, for
+-- Shale's own docs (c/build.shale, its `docs` phase):
+--   shale tools/doc_check.shale self_test=1 self=.
+--   shale tools/doc_check.shale self=. at=repos: only=shale
 
 const REPOS = {"metal-vmm", "zig-webbox", "shale", "angry-gopher", "zig-metal-unikernel", "observatory", "zig-coverage-sdk", "roc-webbox", "roc-chat", "roc-markdown", "chat-client", "roc-apps"}
 -- **THE OPTIONAL SIBLINGS** (metal-vmm QUEUE 313): the Roc chat's repos,
@@ -67,6 +73,9 @@ const SHOW = parse_int(arg("show", "20"))
 -- `only=<repo>`: that repo's docs alone, still resolved against every
 -- sibling (each repo's gate checks its own docs, never another's).
 const ONLY = arg("only", "")
+-- `self=<folder>`: where the repo named `shale` is, `.` the root, in place
+-- of `<at>shale`.
+const SELF = arg("self", "")
 -- A host's data, never a repo's: a path under one of these is passed by.
 -- A bare data file's name (`polls.txt`) is still a finding. `chat/channel/` is
 -- roc-chat's data disk; a repo may well have a `chat/` of its own.
@@ -186,14 +195,27 @@ function repo_here(path)
   return r.ok and r.value
 end
 
+-- `p` below folder `dir`, `""` the root.
+function under(dir, p)
+  if dir == "" then return p end
+  if p == "" then return dir end
+  return dir .. "/" .. p
+end
+
+-- The folder of `repo` under `at`: `<at><repo>`, but `self=`'s for `shale`.
+function dir_of(at, repo)
+  if repo ~= "shale" or SELF == "" then return at .. repo end
+  if SELF == "." then return "" end
+  return SELF
+end
+
 -- Where `p` is, as a repo-relative path in `repo` under `at`, or nil.
 function in_repo(at, repo, p)
   if p == nil then return nil end
-  if not repo_here(at .. repo) then return nil end
+  if not repo_here(dir_of(at, repo)) then return nil end
   p = joined("", p)
   if p == nil then return nil end
-  local full = at .. repo
-  if p ~= "" then full = full .. "/" .. p end
+  local full = under(dir_of(at, repo), p)
   if exists(full) then return full end
   return nil
 end
@@ -292,7 +314,7 @@ function resolve(at, repo, docdir, c, kind, text, bases, ignores)
   -- An optional sibling not checked out here, cited as its own: not here
   -- to say.
   for r in OPTIONAL do
-    if not repo_here(at .. r) and (first == r or contains(text, r)) then return {skip = "in an optional sibling not checked out here"} end
+    if not repo_here(dir_of(at, r)) and (first == r or contains(text, r)) then return {skip = "in an optional sibling not checked out here"} end
   end
   -- Not here; what the repo's `.gitignore` covers, or a sibling's the line
   -- names, is asked after, all at once (`ignored`).
@@ -321,7 +343,7 @@ end
 function ignored(at, repo, paths)
   local set = {}
   if #paths == 0 then return set end
-  local r = run({"git", "-C", real(at .. repo), "check-ignore", "--no-index", "--stdin"}, {timeout_ms = 60000, whole = 1048576, stdin = join(paths, "\n") .. "\n"})
+  local r = run({"git", "-C", real(dir_of(at, repo)), "check-ignore", "--no-index", "--stdin"}, {timeout_ms = 60000, whole = 1048576, stdin = join(paths, "\n") .. "\n"})
   for p in lines(r.out) do
     if p ~= "" then set[p] = true end
   end
@@ -337,7 +359,7 @@ function ignored_names(dir, tracked)
   local set = {}
   for p in tracked do
     if p == ".gitignore" or ends_with(p, "/.gitignore") then
-      for l in lines(read(dir .. "/" .. p)) do
+      for l in lines(read(under(dir, p))) do
         local t = trim(l)
         if ends_with(t, "/") then t = sub(t, 1, #t - 1) end
         if t ~= "" and not starts_with(t, "#") and not starts_with(t, "!") then
@@ -408,7 +430,7 @@ function check_doc(at, repo, doc, r)
   if #parts > 1 then docdir = join(take(parts, #parts - 1), "/") end
   local fenced = false
   local n = 0
-  for text in lines(read(at .. repo .. "/" .. doc)) do
+  for text in lines(read(under(dir_of(at, repo), doc))) do
     n = n + 1
     if starts_with(trim(text), "```") then
       fenced = not fenced
@@ -492,23 +514,24 @@ function check_all(at, repos)
   local tracked = {}
   local ignores = {}
   for repo in repos do
-    if repo_here(at .. repo) then
+    local d = dir_of(at, repo)
+    if repo_here(d) then
       local set = {}
-      tracked[repo] = git_ls_files(at .. repo)
+      tracked[repo] = git_ls_files(d)
       for p in tracked[repo] do
         local parts = split(p, "/")
         local b = parts[#parts]
-        if has_key(set, b) then set[b] = "" else set[b] = at .. repo .. "/" .. p end
+        if has_key(set, b) then set[b] = "" else set[b] = under(d, p) end
       end
       bases[repo] = set
-      ignores[repo] = ignored_names(at .. repo, tracked[repo])
+      ignores[repo] = ignored_names(d, tracked[repo])
     end
   end
   for repo in repos do
     local r = fresh()
     r.bases = bases
     r.ignores = ignores
-    if repo_here(at .. repo) and not cited_only(repo) and (ONLY == "" or repo == ONLY) then
+    if repo_here(dir_of(at, repo)) and not cited_only(repo) and (ONLY == "" or repo == ONLY) then
       for p in tracked[repo] do
         if ends_with(p, ".md") and not history(p) then
           r.docs = r.docs + 1
@@ -530,7 +553,7 @@ function check_all(at, repos)
   end
   local ig = {}
   for t in keys(asks) do
-    if repo_here(at .. t) then ig[t] = ignored(at, t, unique(asks[t])) else ig[t] = {} end
+    if repo_here(dir_of(at, t)) then ig[t] = ignored(at, t, unique(asks[t])) else ig[t] = {} end
   end
   for repo in keys(all) do
     local r = all[repo]
@@ -551,7 +574,7 @@ end
 function not_checked_out(at, repos)
   local out = {}
   for r in repos do
-    if optional(r) and not repo_here(at .. r) then push(out, r) end
+    if optional(r) and not repo_here(dir_of(at, r)) then push(out, r) end
   end
   return out
 end
@@ -588,19 +611,14 @@ function report(all, repos)
 end
 
 -- **THE FIXTURES**: two repos, each rule's case, each finding expected.
--- Each run builds them in a folder of its own, `mktemp -d` under ZIG_OUT,
--- removed when every expectation holds (left for a look when one fails):
--- two self-tests at once (`zig build consumers` beside a `doc-check`) at
--- one fixed folder removed and rebuilt each other's trees mid-check.
-const ZIG_OUT = "shale/zig-out"
-
+-- Each run builds them in a folder of its own, made by `fresh_dir` under
+-- Shale's c/out (the C build's, ignored by git), removed when every
+-- expectation holds (left for a look when one fails): two self-tests at once
+-- at one fixed folder removed and rebuilt each other's trees mid-check.
 function fresh_fixture_dir()
-  if not exists(ZIG_OUT) then mkdir(ZIG_OUT) end
-  local r = must(run({"mktemp", "-d", "-p", real(ZIG_OUT), "doc_check.XXXXXX"}, {timeout_ms = 30000, whole = 4096}))
-  local parts = split(trim(r.out), "/")
-  local name = parts[#parts]
-  if not starts_with(name, "doc_check.") or not exists(ZIG_OUT .. "/" .. name) then fail("doc check self test: `mktemp` gave " .. r.out .. ", not a folder in " .. ZIG_OUT) end
-  return ZIG_OUT .. "/" .. name
+  local out = under(dir_of(arg("at", ""), "shale"), "c/out")
+  if not exists(out) then mkdir(out) end
+  return fresh_dir(out, "doc_check")
 end
 
 function expect(cond, what)

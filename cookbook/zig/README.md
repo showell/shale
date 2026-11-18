@@ -4,8 +4,8 @@ Recipes for finding a Zig file's structure and moving code along it,
 written in Shale over its Zig builtins (`zig_decls`, `zig_tokens`,
 `zig_move`, `zig_rename`, `zig_renames`, `zig_imports`: Zig's own
 tokenizer and parser). They are recipes, not builtins: read one, copy it,
-change it for the job in front of you. Each is tested to parse
-(`src/shale_cookbook_test.zig`).
+change it for the job in front of you. Zig Shale tested each to parse
+(`legacy_zig/src/shale_cookbook_test.zig`); the C build does not yet.
 
 Run one from the checkout it works on. `<shale>` is the shale checkout
 ; `<repo>` is the repo the recipe works on, its

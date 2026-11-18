@@ -45,6 +45,7 @@ merge, and defer it while you're about 90% sure it has nothing new to say.
 | `c/shale.c` at `-O2` | GCC | full | the binary the golden tests judge |
 | The golden tests, `tests/golden.shale`, under that binary | Shale | full | every input the harness collects, held to its frozen output: the one judge of Shale's behaviour |
 | The cookbook's self-tests, live, under that binary | Shale | full | every recipe that reads `arg("self_test"`, run with `self_test=1`, as Zig Shale's `cookbook-test` step ran them |
+| Shale's docs' citations, `tools/doc_check.shale` (`self=. at=repos: only=shale`), its fixtures first | Shale | full | every path and name the docs cite resolves, here or in a sibling the `repos` mount reaches; under a second |
 
 **The golden tests** ([tests/harness/README.md](../../tests/harness/README.md))
 are every input the harness collects, frozen in `tests/golden/` with the
