@@ -866,10 +866,10 @@ end
 -- The root each file is judged on, by path, with the types judging each
 -- file's open candidates on the way. With the types read, a file's root is
 -- the first of `roots` whose app reaches it; otherwise the one root, or the
--- file itself when there is none. The roots' types are read one at a time,
--- and each is let go before the next is read, so a run holds one root's
--- types however many it names (eight roots at once ran out of a 2 GB
--- arena). A file with a call to try (in the set `open`) that no root
+-- file itself when there is none. The roots' types are read and used one at
+-- a time, but nothing is collected between them: a `yield()` there keeps
+-- every file's tree, which on Safari passes the kept budget's ceiling, so
+-- the arena holds each root's types until the run ends. A file with a call to try (in the set `open`) that no root
 -- reaches is in `unreached`, and the run goes on without it: the types
 -- can't judge it, and a path spelled two ways (through a link) would
 -- quietly find no type for any of its candidates. A file with none has
@@ -894,7 +894,6 @@ function roots_of_files(ctx, paths, from, roots, read_types, open, trees, judged
       end
     end
     types = nil
-    yield()
   end
   for k = from, #paths do
     local p = paths[k]
