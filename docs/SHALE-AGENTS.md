@@ -224,8 +224,12 @@ has none of it):
   with `regex`, `nocase`, `ext = {"zig"}`, `context = N` (each hit's
   `before` and `after`) and `most`; a link, a binary file and a name the
   store can't hold (`is_name`) are in `passed`, never left out quietly.
-  Each file it reads stays in the run's arena, so a tree of more than a
-  few megabytes wants `--budget arena_bytes=N`. `unique(list)` gives each item once. `newest(dir, n)`
+  The walk and the search run in the host (`c/host/host_grep_tree.c`), not
+  in script: a run is charged a step per 16 bytes its reads bring and a
+  step an entry, and a file is held only while it is searched, so the
+  arena keeps the hits, not the tree. Its reads are still a stat an entry,
+  a listing a folder and two a file, so a tree of a few thousand files
+  wants `--budget reads=N`. `unique(list)` gives each item once. `newest(dir, n)`
   gives the names that changed last (the root as `""` or `"."`).
   `path_under(dir, name)` spells a name below a folder as every call takes
   it: `name` in the root, `m:name` in a mount's folder, else `dir/name`.
