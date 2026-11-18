@@ -253,32 +253,32 @@ static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str 
 
 // A store error in plain words, Zig's `storeWords`; its name follows in
 // parentheses.
-static Str path_store_words(StoreErr e) {
+static Str path_store_words(FileSystemErr e) {
     switch (e) {
-    case STORE_FILE_NOT_FOUND: return S("not found");
-    case STORE_NOT_DIR: return S("a part of the path is a file, not a folder");
-    case STORE_IS_DIR: return S("a folder, not a file");
-    case STORE_NOT_FILE: return S("not a file");
-    case STORE_PATH_ALREADY_EXISTS: return S("already there");
-    case STORE_DIR_NOT_EMPTY: return S("the folder is not empty");
-    case STORE_ACCESS_DENIED: return S("the store refuses it");
-    case STORE_PERMISSION_DENIED: return S("the store refuses it");
-    case STORE_NO_SPACE_LEFT: return S("the store is full");
-    case STORE_SYM_LINK_LOOP: return S("a link loop");
-    case STORE_NAME_TOO_LONG: return S("the name is too long");
+    case FILE_SYSTEM_FILE_NOT_FOUND: return S("not found");
+    case FILE_SYSTEM_NOT_DIR: return S("a part of the path is a file, not a folder");
+    case FILE_SYSTEM_IS_DIR: return S("a folder, not a file");
+    case FILE_SYSTEM_NOT_FILE: return S("not a file");
+    case FILE_SYSTEM_PATH_ALREADY_EXISTS: return S("already there");
+    case FILE_SYSTEM_DIR_NOT_EMPTY: return S("the folder is not empty");
+    case FILE_SYSTEM_ACCESS_DENIED: return S("the store refuses it");
+    case FILE_SYSTEM_PERMISSION_DENIED: return S("the store refuses it");
+    case FILE_SYSTEM_NO_SPACE_LEFT: return S("the store is full");
+    case FILE_SYSTEM_SYM_LINK_LOOP: return S("a link loop");
+    case FILE_SYSTEM_NAME_TOO_LONG: return S("the name is too long");
     default: return S("the store failed");
     }
 }
 
 // What to do about it, when there is something.
-static Str path_store_hint(StoreErr e) {
+static Str path_store_hint(FileSystemErr e) {
     switch (e) {
-    case STORE_FILE_NOT_FOUND: return S(": `exists(p)` asks first");
-    case STORE_NOT_DIR: return S(": `is_dir(p)` asks first");
-    case STORE_IS_DIR: return S(": `is_dir(p)` asks first");
-    case STORE_NOT_FILE: return S(": `is_dir(p)` asks first");
-    case STORE_PATH_ALREADY_EXISTS: return S(": `exists(p)` asks first");
-    case STORE_DIR_NOT_EMPTY: return S(": `remove_tree(p)` removes a folder and what is in it");
+    case FILE_SYSTEM_FILE_NOT_FOUND: return S(": `exists(p)` asks first");
+    case FILE_SYSTEM_NOT_DIR: return S(": `is_dir(p)` asks first");
+    case FILE_SYSTEM_IS_DIR: return S(": `is_dir(p)` asks first");
+    case FILE_SYSTEM_NOT_FILE: return S(": `is_dir(p)` asks first");
+    case FILE_SYSTEM_PATH_ALREADY_EXISTS: return S(": `exists(p)` asks first");
+    case FILE_SYSTEM_DIR_NOT_EMPTY: return S(": `remove_tree(p)` removes a folder and what is in it");
     default: return S("");
     }
 }
@@ -286,10 +286,10 @@ static Str path_store_hint(StoreErr e) {
 // The stop for a store call `who` made on the script's `rel` that failed
 // with `e`: `who("rel")`: words (Name)hint, as Zig's `storeFailed`; the
 // arena budget for OutOfMemory.
-static STATUS_MUST_USE Status path_store_failed(PathRun *r, Pos pos, Str who, Str rel, StoreErr e) {
-    if (e == STORE_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
+static STATUS_MUST_USE Status path_store_failed(PathRun *r, Pos pos, Str who, Str rel, FileSystemErr e) {
+    if (e == FILE_SYSTEM_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
     return path_fail(r, pos, CLASS_STORE, S("`{s}(\"{s}\")`: {s} ({s}){s}"),
-                     MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel), MSG_FROM_HOST(path_store_words(e)), MSG_FROM_HOST(store_err_name(e)), MSG_FROM_HOST(path_store_hint(e))));
+                     MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel), MSG_FROM_HOST(path_store_words(e)), MSG_FROM_HOST(file_system_err_name(e)), MSG_FROM_HOST(path_store_hint(e))));
 }
 
 // Where the part of `s` that starts at `from` ends: the next `sep` (`/` for

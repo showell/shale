@@ -94,10 +94,10 @@ const STORE_PLANTS = {
    old = "if (str_find_byte(s, 0) != NULL) return STR_CSTR_NUL;", new = "(void)0;"},
   {name = "the metal host's depth is one deeper", file = "file_system.c", dir = "host", caught_by = "store/test_store",
    aim = "a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_spell_it",
-   old = "if (depth > STORE_MAX_DEPTH) return STORE_PATH_TOO_DEEP;", new = "if (depth > STORE_MAX_DEPTH + 1) return STORE_PATH_TOO_DEEP;"},
+   old = "if (depth > FILE_SYSTEM_DEPTH_MAX) return FILE_SYSTEM_PATH_TOO_DEEP;", new = "if (depth > FILE_SYSTEM_DEPTH_MAX + 1) return FILE_SYSTEM_PATH_TOO_DEEP;"},
   {name = "a refused rename leaves its sibling", file = "file_system.c", dir = "host", caught_by = "store/test_store",
    aim = "a_replace_onto_a_folder_fails_and_leaves_no_temporary_file_beside_it",
-   old = "if (e != STORE_OK && from != NULL) unlink(from);", new = "(void)from;"},}
+   old = "if (e != FILE_SYSTEM_OK && from != NULL) unlink(from);", new = "(void)from;"},}
 
 function store_block(t)
   local tests = {}

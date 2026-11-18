@@ -643,7 +643,7 @@ static STATUS_MUST_USE Status host_zig_move_in(Paths *h, HostZigProc *z, Arena *
     // `to` may be missing: then it is "", its read counted all the same.
     TRY(builtin_count_read(r, pos));
     bool found = false;
-    StoreStat st;
+    FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, BUILTIN_HOST, &q, &found, &st));
     Str to_src = S("");
     if (found) {
@@ -906,9 +906,9 @@ static STATUS_MUST_USE Status host_zig_imports_in(Paths *h, HostZigProc *z, Aren
                 Str full = {0};
                 if (!host_zig_resolve(sa, dir, target, &full)) return run_values_oom(r, pos);
                 bool found = false;
-                StoreStat st;
-                StoreErr e = rs->store.stat_or_null(rs->store.ctx, sa, full, &found, &st);
-                if (e != STORE_OK) {
+                FileSystemStat st;
+                FileSystemErr e = rs->store.stat_or_null(rs->store.ctx, sa, full, &found, &st);
+                if (e != FILE_SYSTEM_OK) {
                     Str kept = {0};
                     TRY(host_zig_keep(r, pos, target, &kept));
                     return builtin_store_failed(r, pos, BUILTIN_HOST, kept, e);

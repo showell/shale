@@ -12,8 +12,8 @@
 // NUL-ended in a buffer of its own (so a swap holds no pointer into itself
 // and may be copied), and the temporary file's descriptor.
 typedef struct {
-    StoreCPath path;
-    StoreCPath tmp;
+    FileSystemCPath path;
+    FileSystemCPath tmp;
     int fd;
     // Whether the temporary file is there to remove.
     bool made;
@@ -43,13 +43,13 @@ typedef enum {
     SWAP_UNRENAMED,
 } SwapEnd;
 
-// Readies `s` for the target `path`, an absolute path: STORE_OK, or the
+// Readies `s` for the target `path`, an absolute path: FILE_SYSTEM_OK, or the
 // store's refusal of the path (too long, a NUL inside).
-static StoreErr swap_file_target(SwapFile *s, Str path) {
+static FileSystemErr swap_file_target(SwapFile *s, Str path) {
     memset(s, 0, sizeof *s);
     s->fd = -1;
     const char *c = NULL; // cstr: NUL-ended for the kernel
-    return store_cstr(&s->path, path, &c);
+    return file_system_cstr(&s->path, path, &c);
 }
 
 // What is at the target now, without following a link there.
@@ -75,8 +75,8 @@ static int swap_file_open(SwapFile *s, Arena *a) {
     Buf t = buf_make(a);
     if (buf_str(&t, dir) != OK || buf_lit(&t, "/.") != OK || buf_str(&t, base) != OK || buf_byte(&t, '.') != OK || buf_u64(&t, (uint64_t)getpid()) != OK || buf_lit(&t, ".shale-tmp") != OK) return SWAP_NO_ROOM;
     const char *c = NULL; // cstr: NUL-ended for the kernel
-    StoreErr e = store_cstr(&s->tmp, buf_view(&t), &c);
-    if (e != STORE_OK) return store_cstr_errno(e);
+    FileSystemErr e = file_system_cstr(&s->tmp, buf_view(&t), &c);
+    if (e != FILE_SYSTEM_OK) return file_system_cstr_errno(e);
     int fd = open(s->tmp.bytes, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0) return errno;
     // 0600 whatever the umask. Its answer is not read: the open's own mode

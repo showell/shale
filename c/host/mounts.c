@@ -212,12 +212,12 @@ static inline MountsResult mounts_load(Arena *a, bool has_pinned, Str pinned, St
         out->from = buf_view(&b);
     }
     Str text = S("");
-    StoreErr e = store_os_read_file(a, out->from, 64 * 1024, &text);
-    if (e == STORE_OUT_OF_MEMORY) return MOUNTS_OUT_OF_MEMORY;
-    if (e != STORE_OK) {
-        if (!has_pinned && e == STORE_FILE_NOT_FOUND) return MOUNTS_OK;
+    FileSystemErr e = store_os_read_file(a, out->from, 64 * 1024, &text);
+    if (e == FILE_SYSTEM_OUT_OF_MEMORY) return MOUNTS_OUT_OF_MEMORY;
+    if (e != FILE_SYSTEM_OK) {
+        if (!has_pinned && e == FILE_SYSTEM_FILE_NOT_FOUND) return MOUNTS_OK;
         Buf b = buf_make(a);
-        if ((has_pinned && buf_lit(&b, "SHALE_MOUNTS=") != OK) || buf_str(&b, out->from) != OK || buf_lit(&b, ": ") != OK || buf_str(&b, store_err_name(e)) != OK) return MOUNTS_OUT_OF_MEMORY;
+        if ((has_pinned && buf_lit(&b, "SHALE_MOUNTS=") != OK) || buf_str(&b, out->from) != OK || buf_lit(&b, ": ") != OK || buf_str(&b, file_system_err_name(e)) != OK) return MOUNTS_OUT_OF_MEMORY;
         *why = buf_view(&b);
         return MOUNTS_MALFORMED;
     }
@@ -231,9 +231,9 @@ static inline MountsResult mounts_load(Arena *a, bool has_pinned, Str pinned, St
     if (r != MOUNTS_OK) return r;
     for (size_t k = 0; k < out->mounts.len; k++) {
         Mount *m = &at(out->mounts, k);
-        StoreCPath cp;
+        FileSystemCPath cp;
         const char *c = NULL;
-        if (store_cstr(&cp, m->dir, &c) != STORE_OK) continue;
+        if (file_system_cstr(&cp, m->dir, &c) != FILE_SYSTEM_OK) continue;
         char resolved[PATH_MAX];
         if (realpath(c, resolved) == NULL) continue;
         if (!arena_dup(a, (Str){resolved, strlen(resolved)}, &m->dir)) return MOUNTS_OUT_OF_MEMORY;

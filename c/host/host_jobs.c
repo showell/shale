@@ -22,19 +22,19 @@ static STATUS_MUST_USE Status host_jobs_charge_read(Run *r, Pos pos, uint64_t n)
 // limit), "" when read.
 static STATUS_MUST_USE Status host_jobs_read(Run *r, Pos pos, Str os, Bytes *out, Str *why) {
     *why = S("");
-    StoreCPath cp;
+    FileSystemCPath cp;
     const char *c = NULL;
-    StoreErr ce = store_cstr(&cp, os, &c);
-    int fd = ce == STORE_OK ? open(c, O_RDONLY | O_CLOEXEC) : -1;
+    FileSystemErr ce = file_system_cstr(&cp, os, &c);
+    int fd = ce == FILE_SYSTEM_OK ? open(c, O_RDONLY | O_CLOEXEC) : -1;
     if (fd < 0) {
-        *why = store_err_name(ce != STORE_OK ? ce : store_err_of(errno));
+        *why = file_system_err_name(ce != FILE_SYSTEM_OK ? ce : file_system_err_of(errno));
         return OK;
     }
     int err = 0;
     bool read_ok = jobs_read_capped(r->ctx.values, fd, out, &err);
     close(fd);
     if (!read_ok) return run_values_oom(r, pos);
-    if (err != 0) *why = store_err_name(store_err_of(err));
+    if (err != 0) *why = file_system_err_name(file_system_err_of(err));
     if (why->len == 0 && out->len > JOBS_RECORD_MAX) *why = S("StreamTooLong");
     return OK;
 }
@@ -235,9 +235,9 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     while (slash > 0 && str_byte(log_os, slash - 1) != '/') slash--;
     if (slash > 0) {
         Str dir = str_sub(log_os, 0, slash > 1 ? slash - 1 : 1);
-        StoreCPath dir_cp;
+        FileSystemCPath dir_cp;
         const char *dc = NULL;
-        if (store_cstr(&dir_cp, dir, &dc) != STORE_OK || access(dc, F_OK) != 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
+        if (file_system_cstr(&dir_cp, dir, &dc) != FILE_SYSTEM_OK || access(dc, F_OK) != 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
     }
     // A log a job still runs on is refused: its record is the job's only
     // handle, and the old reaper would write its end over the new record.
@@ -352,13 +352,13 @@ static uint64_t host_scan_from(HostScan *s, uint64_t size, int32_t pid, int64_t 
 // is a mount's folder.
 static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos pos, Str os, Str shown, Str c, const JobRecord *rec, bool *found) {
     *found = false;
-    StoreCPath cp;
+    FileSystemCPath cp;
     const char *p = NULL;
-    StoreErr ce = store_cstr(&cp, os, &p);
+    FileSystemErr ce = file_system_cstr(&cp, os, &p);
     struct stat st;
-    if (ce != STORE_OK || stat(p, &st) != 0) {
-        if (ce == STORE_OK && errno == ENOENT) return OK;
-        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(ce != STORE_OK ? ce : store_err_of(errno)))));
+    if (ce != FILE_SYSTEM_OK || stat(p, &st) != 0) {
+        if (ce == FILE_SYSTEM_OK && errno == ENOENT) return OK;
+        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(ce != FILE_SYSTEM_OK ? ce : file_system_err_of(errno)))));
     }
     uint64_t size = (uint64_t)st.st_size;
     if (s->buf.len == 0) {
@@ -374,7 +374,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
             s->done = 0;
             return OK;
         }
-        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(store_err_of(errno)))));
+        return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(errno)))));
     }
     while (from < size) {
         size_t want = s->buf.len < size - from ? s->buf.len : (size_t)(size - from);
@@ -382,7 +382,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
         if (got < 0) {
             int e = errno;
             close(fd);
-            return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(store_err_of(e)))));
+            return host_fail(r, pos, CLASS_STORE, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(e)))));
         }
         size_t n = (size_t)got;
         Status charged = host_jobs_charge_read(r, pos, n);

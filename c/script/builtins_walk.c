@@ -10,7 +10,7 @@
 typedef struct {
     Str rel;
     Str full;
-    StoreEntries entries;
+    FileSystemEntries entries;
     size_t at;
     uint64_t depth;
 } WalkLevel;
@@ -26,7 +26,7 @@ typedef struct {
     bool has_like;
     Str like;
     bool has_kind;
-    StoreKind kind;
+    FileSystemKind kind;
     bool has_after;
     Str after;
     bool has_skip;
@@ -77,9 +77,9 @@ static STATUS_MUST_USE Status walk_in_secrets(Run *r, Pos pos, Str full, bool *i
 // Whether the folder entry `en`, under `top`, is one the walk goes into
 // when `after` resumes through it: not one `skip` passes by, which the walk
 // never entered, and not a secrets mount's folder.
-static STATUS_MUST_USE Status walk_resumes_into(Run *r, Pos pos, const WalkOptions *o, const WalkLevel *top, StoreEntry en, bool *into) {
+static STATUS_MUST_USE Status walk_resumes_into(Run *r, Pos pos, const WalkOptions *o, const WalkLevel *top, FileSystemEntry en, bool *into) {
     *into = false;
-    if (en.kind != STORE_KIND_DIRECTORY || top->depth >= o->depth) return OK;
+    if (en.kind != FILE_SYSTEM_KIND_DIRECTORY || top->depth >= o->depth) return OK;
     if (o->has_skip) {
         bool skipped = false;
         TRY(builtin_like(r, pos, en.name, o->skip, &skipped));
@@ -134,11 +134,11 @@ static STATUS_MUST_USE Status walk_options(Run *r, Pos pos, const Value *v, Walk
             Str s = {0};
             TRY(builtin_string_arg(r, pos, BUILTIN_WALK, &x, S("its `kind`"), &s));
             if (str_eq(s, S("file"))) {
-                o->kind = STORE_KIND_FILE;
+                o->kind = FILE_SYSTEM_KIND_FILE;
             } else if (str_eq(s, S("directory"))) {
-                o->kind = STORE_KIND_DIRECTORY;
+                o->kind = FILE_SYSTEM_KIND_DIRECTORY;
             } else if (str_eq(s, S("other"))) {
-                o->kind = STORE_KIND_OTHER;
+                o->kind = FILE_SYSTEM_KIND_OTHER;
             } else {
                 return run_failf(r, pos, CLASS_ARGUMENT, "`walk`: a kind of \"{s}\": \"file\", \"directory\" or \"other\"", S("`walk`: a kind of \""), s, S("\": \"file\", \"directory\" or \"other\""));
             }
@@ -195,7 +195,7 @@ static STATUS_MUST_USE Status walk_resume(Run *r, Pos pos, const StorePath *p, c
             return OK;
         }
         top->at = i + 1;
-        StoreEntry en = at(top->entries, i);
+        FileSystemEntry en = at(top->entries, i);
         bool into = false;
         TRY(walk_resumes_into(r, pos, o, top, en, &into));
         if (!into) return OK;
@@ -217,21 +217,21 @@ static STATUS_MUST_USE Status walk_resume(Run *r, Pos pos, const StorePath *p, c
 // stat'ed: a stat follows links, so a link to `/` would walk the host's files
 // and a link loop would recurse; the listing's kind is trusted instead. A
 // folder's size is 0, since the hosts disagree on it.
-static STATUS_MUST_USE Status walk_entry(Run *r, Pos pos, StoreEntry en, Str rel, Str full, Table *list) {
-    bool has_stat = en.kind != STORE_KIND_OTHER;
-    StoreStat st;
+static STATUS_MUST_USE Status walk_entry(Run *r, Pos pos, FileSystemEntry en, Str rel, Str full, Table *list) {
+    bool has_stat = en.kind != FILE_SYSTEM_KIND_OTHER;
+    FileSystemStat st;
     memset(&st, 0, sizeof st);
     if (has_stat) {
         TRY(builtin_count_read(r, pos));
         RunStore *rs = builtin_store_of(r);
-        StoreErr e = rs->store.stat(rs->store.ctx, r->ctx.values, full, &st);
-        if (e != STORE_OK) return builtin_store_failed(r, pos, BUILTIN_WALK, rel, e);
+        FileSystemErr e = rs->store.stat(rs->store.ctx, r->ctx.values, full, &st);
+        if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, BUILTIN_WALK, rel, e);
     }
     Table *m = NULL;
     TRY(run_new_table(r, pos, &m));
     TRY(run_map_put_str(r, pos, m, S("path"), rel));
     TRY(run_map_put_str(r, pos, m, S("kind"), builtin_kind_name(en.kind)));
-    TRY(run_map_put_int(r, pos, m, S("size"), has_stat && en.kind != STORE_KIND_DIRECTORY ? (int64_t)st.size : 0));
+    TRY(run_map_put_int(r, pos, m, S("size"), has_stat && en.kind != FILE_SYSTEM_KIND_DIRECTORY ? (int64_t)st.size : 0));
     TRY(run_map_put_int(r, pos, m, S("modified"), has_stat ? st.mtime_s : 0));
     m->kind = TABLE_MAP;
     Value v;
@@ -273,10 +273,10 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
     }
     TRY(builtin_count_read(r, pos));
     bool found = false;
-    StoreStat st;
+    FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, BUILTIN_WALK, &p, &found, &st));
-    if (!found) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, STORE_FILE_NOT_FOUND);
-    if (st.kind != STORE_KIND_DIRECTORY) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, STORE_NOT_DIR);
+    if (!found) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_FILE_NOT_FOUND);
+    if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_NOT_DIR);
     WalkLevels levels = WalkLevels_make(r->ctx.values);
     WalkLevel first;
     memset(&first, 0, sizeof first);
@@ -297,7 +297,7 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
         // An entry in a secrets mount's folder (the folder itself among
         // them) is left out before anything else: never stat'ed, listed,
         // counted or named, not even as where a part ends.
-        StoreEntry ahead = at(top->entries, top->at);
+        FileSystemEntry ahead = at(top->entries, top->at);
         Str full = S("");
         TRY(walk_full(r, pos, top->full, ahead.name, &full));
         bool secret = false;
@@ -316,7 +316,7 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
             break;
         }
         considered++;
-        StoreEntry en = at(top->entries, top->at);
+        FileSystemEntry en = at(top->entries, top->at);
         top->at++;
         Str top_rel = top->rel;
         uint64_t depth = top->depth;
@@ -332,7 +332,7 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
         TRY(walk_under(r, pos, top_rel, en.name, &rel));
         last = rel;
         TRY(run_charge(r, pos, rel.len));
-        bool into = en.kind == STORE_KIND_DIRECTORY && depth < o.depth;
+        bool into = en.kind == FILE_SYSTEM_KIND_DIRECTORY && depth < o.depth;
         bool keep = !o.has_kind || o.kind == en.kind;
         if (keep && o.has_like) TRY(builtin_like(r, pos, en.name, o.like, &keep));
         if (keep) TRY(walk_entry(r, pos, en, rel, full, list));

@@ -87,7 +87,7 @@ static STATUS_MUST_USE Status builtin_path(Run *r, Pos pos, Builtin b, const Val
 }
 
 // The stop for builtin `b`'s store call on `rel`.
-static STATUS_MUST_USE Status builtin_store_failed(Run *r, Pos pos, Builtin b, Str rel, StoreErr e) {
+static STATUS_MUST_USE Status builtin_store_failed(Run *r, Pos pos, Builtin b, Str rel, FileSystemErr e) {
     return path_store_failed(&builtin_store_of(r)->path, pos, builtin_who(r, b), rel, e);
 }
 
@@ -98,17 +98,17 @@ static STATUS_MUST_USE Status builtin_count_read(Run *r, Pos pos) {
     return OK;
 }
 
-static Str builtin_kind_name(StoreKind k) {
-    if (k == STORE_KIND_FILE) return S("file");
-    if (k == STORE_KIND_DIRECTORY) return S("directory");
+static Str builtin_kind_name(FileSystemKind k) {
+    if (k == FILE_SYSTEM_KIND_FILE) return S("file");
+    if (k == FILE_SYSTEM_KIND_DIRECTORY) return S("directory");
     return S("other");
 }
 
 // `p`'s stat, `*found` false when nothing is there; a failure is `b`'s stop.
-static STATUS_MUST_USE Status builtin_stat_or_null(Run *r, Pos pos, Builtin b, const StorePath *p, bool *found, StoreStat *st) {
+static STATUS_MUST_USE Status builtin_stat_or_null(Run *r, Pos pos, Builtin b, const StorePath *p, bool *found, FileSystemStat *st) {
     RunStore *rs = builtin_store_of(r);
-    StoreErr e = rs->store.stat_or_null(rs->store.ctx, r->ctx.values, p->full, found, st);
-    if (e != STORE_OK) return builtin_store_failed(r, pos, b, p->rel, e);
+    FileSystemErr e = rs->store.stat_or_null(rs->store.ctx, r->ctx.values, p->full, found, st);
+    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, p->rel, e);
     return OK;
 }
 
@@ -120,8 +120,8 @@ static bool builtin_bytes_less(Str a, Str b) {
 }
 
 static int builtin_entry_order(const void *x, const void *y) {
-    const StoreEntry *a = x;
-    const StoreEntry *b = y;
+    const FileSystemEntry *a = x;
+    const FileSystemEntry *b = y;
     if (builtin_bytes_less(a->name, b->name)) return -1;
     return builtin_bytes_less(b->name, a->name) ? 1 : 0;
 }
@@ -129,14 +129,14 @@ static int builtin_entry_order(const void *x, const void *y) {
 // A folder's entries sorted by name, charged as `ls` is: a step an entry and
 // the sort's bound. The caller counts the read. A folder's names are distinct,
 // so qsort, which is not stable, gives the one order there is.
-static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b, Str full, Str rel, StoreEntries *out) {
+static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b, Str full, Str rel, FileSystemEntries *out) {
     RunStore *rs = builtin_store_of(r);
-    StoreErr e = rs->store.list(rs->store.ctx, r->ctx.values, full, out);
-    if (e != STORE_OK) return builtin_store_failed(r, pos, b, rel, e);
+    FileSystemErr e = rs->store.list(rs->store.ctx, r->ctx.values, full, out);
+    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, rel, e);
     uint64_t name_bytes = 0;
     for (size_t i = 0; i < out->len; i++) name_bytes += at(*out, i).name.len;
     TRY(run_charge(r, pos, out->len + builtin_sort_bound(out->len, name_bytes)));
-    if (out->len > 1) qsort(out->ptr, out->len, sizeof(StoreEntry), builtin_entry_order);
+    if (out->len > 1) qsort(out->ptr, out->len, sizeof(FileSystemEntry), builtin_entry_order);
     return OK;
 }
 
@@ -149,11 +149,11 @@ static STATUS_MUST_USE Status bi_ls(Run *r, Pos pos, ConstValues args, Value *ou
     TRY(builtin_path(r, pos, BUILTIN_LS, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
-    StoreStat st;
+    FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, BUILTIN_LS, &p, &found, &st));
-    if (!found) return builtin_store_failed(r, pos, BUILTIN_LS, p.rel, STORE_FILE_NOT_FOUND);
-    if (st.kind != STORE_KIND_DIRECTORY) return builtin_store_failed(r, pos, BUILTIN_LS, p.rel, STORE_NOT_DIR);
-    StoreEntries entries;
+    if (!found) return builtin_store_failed(r, pos, BUILTIN_LS, p.rel, FILE_SYSTEM_FILE_NOT_FOUND);
+    if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return builtin_store_failed(r, pos, BUILTIN_LS, p.rel, FILE_SYSTEM_NOT_DIR);
+    FileSystemEntries entries;
     TRY(builtin_sorted_entries(r, pos, BUILTIN_LS, p.full, p.rel, &entries));
     Table *t = NULL;
     TRY(builtin_new_list(r, pos, &t));
@@ -169,9 +169,9 @@ static STATUS_MUST_USE Status bi_stat(Run *r, Pos pos, ConstValues args, Value *
     TRY(builtin_path(r, pos, BUILTIN_STAT, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
     RunStore *rs = builtin_store_of(r);
-    StoreStat st;
-    StoreErr e = rs->store.stat(rs->store.ctx, r->ctx.values, p.full, &st);
-    if (e != STORE_OK) return builtin_store_failed(r, pos, BUILTIN_STAT, p.rel, e);
+    FileSystemStat st;
+    FileSystemErr e = rs->store.stat(rs->store.ctx, r->ctx.values, p.full, &st);
+    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, BUILTIN_STAT, p.rel, e);
     Table *t = NULL;
     TRY(run_new_table(r, pos, &t));
     TRY(run_map_put_int(r, pos, t, S("size"), (int64_t)st.size));
@@ -188,8 +188,8 @@ static STATUS_MUST_USE Status bi_exists(Run *r, Pos pos, ConstValues args, Value
     TRY(builtin_count_read(r, pos));
     RunStore *rs = builtin_store_of(r);
     bool has = false;
-    StoreErr e = rs->store.has(rs->store.ctx, r->ctx.values, p.full, &has);
-    if (e != STORE_OK) return builtin_store_failed(r, pos, BUILTIN_EXISTS, p.rel, e);
+    FileSystemErr e = rs->store.has(rs->store.ctx, r->ctx.values, p.full, &has);
+    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, BUILTIN_EXISTS, p.rel, e);
     value_bool(out, has);
     return OK;
 }
@@ -199,9 +199,9 @@ static STATUS_MUST_USE Status bi_is_dir(Run *r, Pos pos, ConstValues args, Value
     TRY(builtin_path(r, pos, BUILTIN_IS_DIR, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
-    StoreStat st;
+    FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, BUILTIN_IS_DIR, &p, &found, &st));
-    value_bool(out, found && st.kind == STORE_KIND_DIRECTORY);
+    value_bool(out, found && st.kind == FILE_SYSTEM_KIND_DIRECTORY);
     return OK;
 }
 
@@ -211,10 +211,10 @@ static STATUS_MUST_USE Status bi_is_dir(Run *r, Pos pos, ConstValues args, Value
 // store call, counted as part of the read.
 static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t *size) {
     bool found = false;
-    StoreStat st;
+    FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, b, p, &found, &st));
-    if (!found) return builtin_store_failed(r, pos, b, p->rel, STORE_FILE_NOT_FOUND);
-    if (st.kind != STORE_KIND_FILE) return builtin_store_failed(r, pos, b, p->rel, STORE_IS_DIR);
+    if (!found) return builtin_store_failed(r, pos, b, p->rel, FILE_SYSTEM_FILE_NOT_FOUND);
+    if (st.kind != FILE_SYSTEM_KIND_FILE) return builtin_store_failed(r, pos, b, p->rel, FILE_SYSTEM_IS_DIR);
     *size = st.size;
     return OK;
 }
@@ -244,8 +244,8 @@ static STATUS_MUST_USE Status builtin_read_sized_in(Run *r, Pos pos, Builtin b, 
     RunStore *rs = builtin_store_of(r);
     Bytes room = {buf, (size_t)want};
     size_t got = 0;
-    StoreErr e = rs->store.read_at(rs->store.ctx, r->ctx.values, p->full, offset, room, &got);
-    if (e != STORE_OK) return builtin_store_failed(r, pos, b, p->rel, e);
+    FileSystemErr e = rs->store.read_at(rs->store.ctx, r->ctx.values, p->full, offset, room, &got);
+    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, p->rel, e);
     r->read_bytes += got;
     TRY(builtin_charge_bytes(r, pos, got));
     out->ptr = buf;
@@ -306,13 +306,13 @@ static STATUS_MUST_USE Status bi_read_or(Run *r, Pos pos, ConstValues args, Valu
     TRY(builtin_path(r, pos, BUILTIN_READ_OR, &at(args, 0), false, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
-    StoreStat st;
+    FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, BUILTIN_READ_OR, &p, &found, &st));
     if (!found) {
         *out = at(args, 1);
         return OK;
     }
-    if (st.kind != STORE_KIND_FILE) return builtin_store_failed(r, pos, BUILTIN_READ_OR, p.rel, STORE_IS_DIR);
+    if (st.kind != FILE_SYSTEM_KIND_FILE) return builtin_store_failed(r, pos, BUILTIN_READ_OR, p.rel, FILE_SYSTEM_IS_DIR);
     Str got = {0};
     TRY(builtin_read_sized(r, pos, BUILTIN_READ_OR, &p, st.size, 0, BUILTIN_TO_END, &got));
     value_string(out, got);
@@ -643,8 +643,8 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, 
         if (want > run_sat_sub(r->ctx.budgets.read_bytes, r->read_bytes)) return run_budget_stop(&r->ctx, pos, BUDGET_READ_BYTES);
         size_t got = 0;
         Bytes into = SLICE_SUB(Bytes, buf, kept, kept + want);
-        StoreErr e = rs->store.read_at(rs->store.ctx, r->ctx.values, p->full, at_, into, &got);
-        if (e != STORE_OK) return builtin_store_failed(r, pos, b, p->rel, e);
+        FileSystemErr e = rs->store.read_at(rs->store.ctx, r->ctx.values, p->full, at_, into, &got);
+        if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, p->rel, e);
         r->read_bytes += got;
         TRY(builtin_charge_bytes(r, pos, got));
         // The file shrank under the scan.

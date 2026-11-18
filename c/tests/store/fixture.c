@@ -78,9 +78,9 @@ static Str fx_r(Fx *f, const char *lit) { // cstr: a test's literal
 }
 
 static void fx_link(Fx *f, const char *target, const char *rel) { // cstr: test literals
-    StoreCPath cp;
+    FileSystemCPath cp;
     const char *c = NULL;
-    if (store_cstr(&cp, sx_at(&f->base, rel), &c) != STORE_OK || symlink(target, c) != 0) abort();
+    if (file_system_cstr(&cp, sx_at(&f->base, rel), &c) != FILE_SYSTEM_OK || symlink(target, c) != 0) abort();
 }
 
 // The mounts `text` (each `R` the root) as the host's, home `/home/x`.
@@ -109,9 +109,9 @@ static STATUS_MUST_USE Status fx_look(Fx *f, const char *who, Str path) { // cst
     StorePath p;
     TRY(path_arg(&f->run, fx_pos(), sx_cs(who), path, true, &p));
     bool found = false;
-    StoreStat st;
-    StoreErr e = f->base.store.stat_or_null(f->base.store.ctx, &f->base.values, p.full, &found, &st);
-    if (e != STORE_OK) return path_store_failed(&f->run, fx_pos(), sx_cs(who), p.rel, e);
+    FileSystemStat st;
+    FileSystemErr e = f->base.store.stat_or_null(f->base.store.ctx, &f->base.values, p.full, &found, &st);
+    if (e != FILE_SYSTEM_OK) return path_store_failed(&f->run, fx_pos(), sx_cs(who), p.rel, e);
     return OK;
 }
 
@@ -122,8 +122,8 @@ static STATUS_MUST_USE Status fx_change(Fx *f, const char *who, Str path, Str da
     StorePath p;
     TRY(path_arg(&f->run, fx_pos(), sx_cs(who), path, false, &p));
     TRY(f->hook.may_change(f->hook.ctx, &f->run, fx_pos(), p.rel, p.full));
-    StoreErr e = f->base.store.replace(f->base.store.ctx, &f->base.values, p.full, data);
-    if (e != STORE_OK) return path_store_failed(&f->run, fx_pos(), sx_cs(who), p.rel, e);
+    FileSystemErr e = f->base.store.replace(f->base.store.ctx, &f->base.values, p.full, data);
+    if (e != FILE_SYSTEM_OK) return path_store_failed(&f->run, fx_pos(), sx_cs(who), p.rel, e);
     return OK;
 }
 

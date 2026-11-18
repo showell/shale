@@ -62,7 +62,7 @@ typedef struct {
     char dir_bytes[PATH_MAX];
     Str dir;
     Str root;
-    LinuxStore linux_store;
+    FileSystem file_system;
     Host lh;
     // The run's zig-ast, which ran_free ends.
     HostZigProc zig;
@@ -105,8 +105,8 @@ static Str ran_at(Ran *x, const char *rel) { // cstr: a test's literal
 static void ran_write(Ran *x, const char *rel, Str text) { // cstr: a test's literal
     Str p = ran_at(x, rel);
     Str dir = S("");
-    if (path_dirname(p, &dir) && store_os_make_path(dir) != STORE_OK) abort();
-    if (store_os_write_file(p, text, 0644) != STORE_OK) abort();
+    if (path_dirname(p, &dir) && store_os_make_path(dir) != FILE_SYSTEM_OK) abort();
+    if (store_os_write_file(p, text, 0644) != FILE_SYSTEM_OK) abort();
 }
 
 // Writes `text` at the folder's `rel`.
@@ -116,7 +116,7 @@ static void ran_put(Ran *x, const char *rel, const char *text) { // cstr: test l
 
 // What the folder's `rel` holds, or false when it cannot be read.
 static bool ran_file(Ran *x, const char *rel, Str *out) { // cstr: a test's literal
-    return store_os_read_file(&x->host, ran_at(x, rel), (size_t)1 << 20, out) == STORE_OK;
+    return store_os_read_file(&x->host, ran_at(x, rel), (size_t)1 << 20, out) == FILE_SYSTEM_OK;
 }
 
 // A fresh folder with an empty `root`, and the mounts `o` names, loaded as
@@ -136,7 +136,7 @@ static void ran_init(Ran *x, RanOpts o) {
     if (n <= 0) abort();
     x->dir = (Str){x->dir_bytes, (size_t)n};
     x->root = ran_at(x, "root");
-    if (store_os_make_path(x->root) != STORE_OK) abort();
+    if (store_os_make_path(x->root) != FILE_SYSTEM_OK) abort();
     ran_write(x, "mounts", ran_d(x, o.mounts != NULL ? o.mounts : ""));
     MountsLoaded loaded;
     Str why = S("");
@@ -144,9 +144,9 @@ static void ran_init(Ran *x, RanOpts o) {
         fprintf(stderr, "mounts: %.*s\n", (int)why.len, why.ptr);
         abort();
     }
-    x->linux_store.has_data_base = true;
-    x->linux_store.data_base = x->root;
-    store_linux(&x->linux_store, &x->store.store);
+    x->file_system.has_data_base = true;
+    x->file_system.data_base = x->root;
+    store_linux(&x->file_system, &x->store.store);
     paths_make(&x->lh.paths, &x->host, x->root, x->dir, Mounts_items(&loaded.mounts), loaded.from);
     x->lh.paths.undo = o.undo;
     SpawnStrs env = {NULL, 0};
@@ -204,9 +204,9 @@ static void ran_run(Ran *x, Str src, Budgets b) {
 // Prints each path left under `dir` to stderr, so a folder that would not
 // delete says what kept it.
 static void ran_say_left(Arena *a, Str dir) {
-    StoreCPath cp;
+    FileSystemCPath cp;
     const char *c = NULL;
-    if (store_cstr(&cp, dir, &c) != STORE_OK) return;
+    if (file_system_cstr(&cp, dir, &c) != FILE_SYSTEM_OK) return;
     DIR *d = opendir(c);
     if (d == NULL) return;
     struct dirent *ent = readdir(d);
@@ -258,9 +258,9 @@ static void ran_free(Ran *x) {
     host_zig_stop(&x->zig);
     regex_cache_deinit(&x->r.patterns);
     ran_wait_reapers(x);
-    StoreErr del = store_os_delete_tree(&x->host, x->dir);
-    if (del != STORE_OK) {
-        Str why = store_err_name(del);
+    FileSystemErr del = store_os_delete_tree(&x->host, x->dir);
+    if (del != FILE_SYSTEM_OK) {
+        Str why = file_system_err_name(del);
         fprintf(stderr, "ran_free: %.*s could not be deleted: %.*s\n", (int)x->dir.len, x->dir.ptr, (int)why.len, why.ptr);
         ran_say_left(&x->host, x->dir);
         abort();

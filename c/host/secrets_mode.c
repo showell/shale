@@ -69,16 +69,16 @@ static void secrets_put(int fd, Str s) {
 
 // An errno by the store's name for it (`FileNotFound`, `AccessDenied`).
 static Str secrets_errno_name(int e) {
-    return store_err_name(store_err_of(e));
+    return file_system_err_name(file_system_err_of(e));
 }
 
 // Reads all of the file at `path`, at most `limit` bytes: "" in `*why`, or
 // why not.
 static void secrets_read_file(Arena *a, Str path, size_t limit, Str *out, Str *why) {
     *why = S("");
-    StoreCPath cp;
+    FileSystemCPath cp;
     const char *c = NULL;
-    if (store_cstr(&cp, path, &c) != STORE_OK) {
+    if (file_system_cstr(&cp, path, &c) != FILE_SYSTEM_OK) {
         *why = S("its path is too long");
         return;
     }
@@ -262,9 +262,9 @@ static bool secrets_settings(Secrets *m, SecretsSettings *s) {
     memset(s, 0, sizeof *s);
     s->path = secrets_cat(m, m->home, S("/.claude/settings.json"), S(""));
     s->bak = secrets_cat(m, s->path, S(".bak"), S(""));
-    StoreCPath cp;
+    FileSystemCPath cp;
     const char *c = NULL;
-    if (s->path.len == 0 || s->bak.len == 0 || store_cstr(&cp, s->path, &c) != STORE_OK) {
+    if (s->path.len == 0 || s->bak.len == 0 || file_system_cstr(&cp, s->path, &c) != FILE_SYSTEM_OK) {
         (void)secrets_fail(m, S(SECRETS_SETTINGS_SHOWN ": its path cannot be made"), SECRETS_FAILED);
         return false;
     }
@@ -311,7 +311,7 @@ static bool secrets_settings(Secrets *m, SecretsSettings *s) {
 // written, else why not.
 static Str secrets_swap(Secrets *m, Str path, Str bytes) {
     SwapFile f;
-    if (swap_file_target(&f, path) != STORE_OK) return S("its path is too long");
+    if (swap_file_target(&f, path) != FILE_SYSTEM_OK) return S("its path is too long");
     int err = 0;
     if (swap_file_there(&f, &err) == SWAP_NOT_FILE) return S("it is there and is not a plain file");
     int made = swap_file_open(&f, m->arena);
@@ -351,9 +351,9 @@ static int secrets_add_denies(Secrets *m, SecretsSettings *s) {
     } else {
         // A first settings file may need its folder.
         Str dir = secrets_cat(m, m->home, S("/.claude"), S(""));
-        StoreCPath cp;
+        FileSystemCPath cp;
         const char *c = NULL;
-        if (store_cstr(&cp, dir, &c) == STORE_OK && mkdir(c, 0700) != 0 && errno != EEXIST) {
+        if (file_system_cstr(&cp, dir, &c) == FILE_SYSTEM_OK && mkdir(c, 0700) != 0 && errno != EEXIST) {
             return secrets_fail(m, secrets_cat(m, S("~/.claude cannot be made ("), secrets_errno_name(errno), S("); nothing is written")), SECRETS_FAILED);
         }
     }
@@ -621,7 +621,7 @@ static int secrets_store(Secrets *m) {
     secrets_target(m, mt, name, shown, &abs, &why);
     if (why.len > 0) return secrets_fail(m, secrets_cat(m, why, S("; nothing is stored"), S("")), SECRETS_FAILED);
     SwapFile f;
-    if (swap_file_target(&f, abs) != STORE_OK) return secrets_fail(m, secrets_cat(m, shown, S(": its path is too long; nothing is stored"), S("")), SECRETS_FAILED);
+    if (swap_file_target(&f, abs) != FILE_SYSTEM_OK) return secrets_fail(m, secrets_cat(m, shown, S(": its path is too long; nothing is stored"), S("")), SECRETS_FAILED);
     int err = 0;
     SwapThere there = swap_file_there(&f, &err);
     if (there == SWAP_NOT_FILE) return secrets_fail(m, secrets_cat(m, shown, S(" is there and is not a plain file; nothing is stored"), S("")), SECRETS_FAILED);

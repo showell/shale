@@ -35,7 +35,7 @@ const BUILTINS_PLANTS = {
    old = "if (r->changes >= r->ctx.budgets.changes)", new = "if (r->changes > r->ctx.budgets.changes)"},
   {name = "removing a missing path is done", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
    aim = "every_change_is_logged_with_its_outcome_a_failed_one_too",
-   old = "if (e == STORE_OK && !found) e = STORE_FILE_NOT_FOUND;", new = "(void)found;"},
+   old = "if (e == FILE_SYSTEM_OK && !found) e = FILE_SYSTEM_FILE_NOT_FOUND;", new = "(void)found;"},
   {name = "a whole word may run on after the match", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
    aim = "edit_prints_its_diff_holds_word_and_all_and_says_where_old_parts",
    old = "if (e.word && (before || after)) {", new = "if (e.word && (before || (after && 0))) {"},

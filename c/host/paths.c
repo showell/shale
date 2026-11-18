@@ -369,8 +369,8 @@ static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, 
         if (buf_byte(&walked, '/') != OK || buf_str(&walked, part) != OK) return run_oom(r->ctx, pos);
         shown_end += part.len + (shown_end > 0 ? 1 : 0);
         struct stat st;
-        StoreErr e = store_os_stat(buf_view(&walked), false, &st);
-        if (e != STORE_OK) return OK;
+        FileSystemErr e = store_os_stat(buf_view(&walked), false, &st);
+        if (e != FILE_SYSTEM_OK) return OK;
         if (S_ISLNK(st.st_mode)) {
             return path_fail(r, pos, CLASS_REFUSED, S("{s}{s} is a symbolic link: the store follows none"), MSG_ARGS(MSG_FROM_SCRIPT(shown_prefix), MSG_FROM_SCRIPT(str_sub(rest, 0, shown_end))));
         }
@@ -404,25 +404,25 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
     // A missing mount folder stops the run only when the mount is used. A
     // stop whose folder would spell a secrets mount's names the mount alone:
     // that folder is what the secrets rule hides.
-    StoreCPath cp;
+    FileSystemCPath cp;
     const char *c = NULL;
-    StoreErr e = store_cstr(&cp, m->dir, &c);
+    FileSystemErr e = file_system_cstr(&cp, m->dir, &c);
     // O_PATH, as Zig's `openDir` without `iterate`: a folder that may be
     // searched but not listed still opens.
-    int fd = e == STORE_OK ? open(c, O_PATH | O_DIRECTORY | O_CLOEXEC) : -1;
+    int fd = e == FILE_SYSTEM_OK ? open(c, O_PATH | O_DIRECTORY | O_CLOEXEC) : -1;
     if (fd >= 0) {
         close(fd);
     } else {
-        StoreErr why = e != STORE_OK ? e : store_err_of(errno);
+        FileSystemErr why = e != FILE_SYSTEM_OK ? e : file_system_err_of(errno);
         bool spells = mounts_spell_secret_folder(h->mounts, m->dir);
-        if (why == STORE_FILE_NOT_FOUND || why == STORE_NOT_DIR) {
+        if (why == FILE_SYSTEM_FILE_NOT_FOUND || why == FILE_SYSTEM_NOT_DIR) {
             if (m->secrets) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is a secrets mount whose folder is missing"), MSG_ARGS(MSG_FROM_HOST(m->name)));
             if (spells) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named"), MSG_ARGS(MSG_FROM_HOST(m->name)));
             return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(m->dir)));
         }
-        if (m->secrets) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is a secrets mount whose folder cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(store_err_name(why))));
-        if (spells) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(store_err_name(why))));
-        return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(m->dir), MSG_FROM_HOST(store_err_name(why))));
+        if (m->secrets) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is a secrets mount whose folder cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(file_system_err_name(why))));
+        if (spells) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(file_system_err_name(why))));
+        return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(m->dir), MSG_FROM_HOST(file_system_err_name(why))));
     }
     Str dir = paths_run_dir_of(h, r, m);
     TRY(paths_refuse_links(r, pos, dir, rest, str_sub(path, 0, colon + 1)));
@@ -561,29 +561,29 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
         if (str_eq(at(h->journal, k).abs, abs)) return OK;
     }
     struct stat st;
-    StoreErr e = store_os_stat(abs, false, &st);
+    FileSystemErr e = store_os_stat(abs, false, &st);
     Prior p = {S(""), PRIOR_ABSENT, S(""), 0};
-    if (e == STORE_OK && S_ISDIR(st.st_mode)) {
+    if (e == FILE_SYSTEM_OK && S_ISDIR(st.st_mode)) {
         p.was = PRIOR_DIR;
-    } else if (e == STORE_OK && S_ISREG(st.st_mode)) {
+    } else if (e == FILE_SYSTEM_OK && S_ISREG(st.st_mode)) {
         size_t room = PATHS_JOURNAL_MAX - h->journal_bytes;
         if ((uint64_t)st.st_size > room) {
             MsgNum most;
             return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it"), MSG_ARGS(MSG_FROM_HOST(msg_num(&most, PATHS_JOURNAL_MAX)), MSG_FROM_HOST(abs)));
         }
         Str bytes = S("");
-        StoreErr re = store_os_read_file(h->arena, abs, room + 1, &bytes);
-        if (re != STORE_OK) {
-            return path_fail(r, pos, CLASS_STORE, S("--undo-on-stop: {s} cannot be read ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(store_err_name(re))));
+        FileSystemErr re = store_os_read_file(h->arena, abs, room + 1, &bytes);
+        if (re != FILE_SYSTEM_OK) {
+            return path_fail(r, pos, CLASS_STORE, S("--undo-on-stop: {s} cannot be read ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(re))));
         }
         h->journal_bytes += bytes.len;
         p.was = PRIOR_FILE;
         p.bytes = bytes;
         p.mode = st.st_mode & 07777;
-    } else if (e == STORE_OK) {
+    } else if (e == FILE_SYSTEM_OK) {
         return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop: {s} is neither a file nor a folder, and could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs)));
-    } else if (e != STORE_FILE_NOT_FOUND) {
-        return path_fail(r, pos, CLASS_STORE, S("--undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(store_err_name(e))));
+    } else if (e != FILE_SYSTEM_FILE_NOT_FOUND) {
+        return path_fail(r, pos, CLASS_STORE, S("--undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(e))));
     }
     if (!arena_dup(h->arena, abs, &p.abs) || Priors_push(&h->journal, p) != OK) return run_oom(r->ctx, pos);
     return OK;
@@ -702,11 +702,11 @@ static STATUS_MUST_USE Status paths_names_folder(PathRun *r, Pos pos, Str arg, S
             *out = PATHS_NAMES_HOLDS;
             return OK;
         }
-        StoreCPath cp;
+        FileSystemCPath cp;
         const char *c = NULL;
-        StoreErr e = store_cstr(&cp, abs, &c);
+        FileSystemErr e = file_system_cstr(&cp, abs, &c);
         char real[PATH_MAX];
-        if (e == STORE_OK && realpath(c, real) != NULL) {
+        if (e == FILE_SYSTEM_OK && realpath(c, real) != NULL) {
             Str rp = {real, strlen(real)};
             if (mounts_in_folder(rp, dir)) {
                 *out = PATHS_NAMES_INSIDE;

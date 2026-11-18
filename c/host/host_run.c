@@ -725,8 +725,8 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     Str shown = v->as.string;
     Str path = S("");
     TRY(paths_secret_target(&h->paths, &builtin_store_of(r)->path, pos, shown, &path));
-    StoreErr ce = swap_file_target(&out->file, path);
-    if (ce != STORE_OK) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(ce))));
+    FileSystemErr ce = swap_file_target(&out->file, path);
+    if (ce != FILE_SYSTEM_OK) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(ce))));
     // DRAGON: the secrets rule. The path is a secrets mount's file, which
     // no message may name.
     // REMEDY: every stop below names the script's `shown`, `keys:NAME`,
@@ -735,7 +735,7 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     SwapThere there = swap_file_there(&out->file, &err);
     if (there == SWAP_NOT_FILE) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(shown)));
     if (there == SWAP_FILE && !replace) return host_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` {s} is there already: `secret_replace = true` to replace it"), MSG_ARGS(MSG_FROM_SCRIPT(shown)));
-    if (there == SWAP_UNSEEN) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(store_err_name(store_err_of(err)))));
+    if (there == SWAP_UNSEEN) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(err)))));
     int made = swap_file_open(&out->file, r->ctx.values);
     if (made == SWAP_NO_ROOM) return run_values_oom(r, pos);
     if (made != 0) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s}: the temporary file beside it cannot be made: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(host_errno_tag(made))));
@@ -898,12 +898,12 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
         // a secret; neither may reach a message or the record.
         // REMEDY: the stops name the script's own path, `shown_path`; the
         // value goes to the environment and the scrubber alone.
-        StoreCPath cp;
+        FileSystemCPath cp;
         const char *c = NULL;
-        StoreErr ce = store_cstr(&cp, path, &c);
+        FileSystemErr ce = file_system_cstr(&cp, path, &c);
         // Neither waited on (a FIFO) nor followed (a link): host_open_regular.
         int fd = -1;
-        int err = ce == STORE_OK ? host_open_regular(c, false, &fd) : store_cstr_errno(ce);
+        int err = ce == FILE_SYSTEM_OK ? host_open_regular(c, false, &fd) : file_system_cstr_errno(ce);
         if (err == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret `{s}`'s file {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path)));
         char *bytes = NULL;
         size_t len = 0;
@@ -927,7 +927,7 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
             close(fd);
         }
         Str why = S("");
-        if (err != 0) why = store_err_name(store_err_of(err));
+        if (err != 0) why = file_system_err_name(file_system_err_of(err));
         if (err == 0 && len > HOST_SECRET_MAX) why = S("StreamTooLong");
         if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`run`: the secret `{s}`'s file {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path), MSG_FROM_HOST(why)));
         Str v = {bytes, len};
@@ -1144,12 +1144,12 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
         // first, then an open that neither waits on a FIFO nor follows a
         // link (both DRAGONs at their functions).
         TRY(host_change_os_path(h, r, pos, log_shown, S(""), &path));
-        StoreCPath cp;
+        FileSystemCPath cp;
         const char *c = NULL;
-        StoreErr ce = store_cstr(&cp, path, &c);
-        int opened = ce == STORE_OK ? host_open_regular(c, true, &held->log_fd) : store_cstr_errno(ce);
+        FileSystemErr ce = file_system_cstr(&cp, path, &c);
+        int opened = ce == FILE_SYSTEM_OK ? host_open_regular(c, true, &held->log_fd) : file_system_cstr_errno(ce);
         if (opened == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: its log {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
-        if (opened != 0) return host_fail(r, pos, CLASS_STORE, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(store_err_name(store_err_of(opened)))));
+        if (opened != 0) return host_fail(r, pos, CLASS_STORE, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(opened)))));
         sink_out.log_fd = held->log_fd;
     }
     Buf whole_buf = buf_make(sa);

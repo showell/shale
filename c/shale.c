@@ -706,13 +706,13 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     regex_cache_init(&r.patterns, &r.ctx.refused);
     // The store, measured under the root (and `<root>/../auth`) as the
     // bare-metal host would hold it.
-    LinuxStore linux_store;
-    memset(&linux_store, 0, sizeof linux_store);
-    linux_store.has_data_base = true;
-    linux_store.data_base = where.root;
-    linux_store.has_auth_base = true;
-    linux_store.auth_base = S("../auth");
-    if (where.root.len > 0 && join(a, where.root, S("../auth"), &linux_store.auth_base) != OK) return not_ported(o, S("a root past the arena"));
+    FileSystem file_system;
+    memset(&file_system, 0, sizeof file_system);
+    file_system.has_data_base = true;
+    file_system.data_base = where.root;
+    file_system.has_auth_base = true;
+    file_system.auth_base = S("../auth");
+    if (where.root.len > 0 && join(a, where.root, S("../auth"), &file_system.auth_base) != OK) return not_ported(o, S("a root past the arena"));
     // The host's paths: the mounts, the journal `--undo-on-stop` keeps, in
     // an arena of the host's that outlives the run's values.
     Arena host_arena;
@@ -738,7 +738,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     paths_hook(&lh.paths, &hook);
     RunStore rs;
     memset(&rs, 0, sizeof rs);
-    store_linux(&linux_store, &rs.store);
+    store_linux(&file_system, &rs.store);
     PathRun path = path_run_make(&r.ctx, where.root.len == 0 ? S("/") : where.root, builtin_path_charge, &r, &hook);
     rs.path = path;
     if (!paths_run_folders_make(&lh.paths, &rs.path)) return not_ported(o, S("the run's folders past the arena"));

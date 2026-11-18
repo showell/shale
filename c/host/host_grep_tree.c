@@ -609,7 +609,7 @@ static bool grep_tree_enters(const GrepTreeAsk *ask, Str rest) {
 typedef struct {
     Str rel;
     Str full;
-    StoreEntries entries;
+    FileSystemEntries entries;
     size_t at;
 } GrepTreeLevel;
 
@@ -629,10 +629,10 @@ static STATUS_MUST_USE Status grep_tree_walk(Run *r, Pos pos, const GrepTreeAsk 
     TRY(builtin_path(r, pos, BUILTIN_WALK, &pv, true, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
-    StoreStat st;
+    FileSystemStat st;
     TRY(builtin_stat_or_null(r, pos, BUILTIN_WALK, &p, &found, &st));
-    if (!found) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, STORE_FILE_NOT_FOUND);
-    if (st.kind != STORE_KIND_DIRECTORY) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, STORE_NOT_DIR);
+    if (!found) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_FILE_NOT_FOUND);
+    if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return builtin_store_failed(r, pos, BUILTIN_WALK, p.rel, FILE_SYSTEM_NOT_DIR);
     GrepTreeLevels levels = GrepTreeLevels_make(r->ctx.values);
     GrepTreeLevel first;
     memset(&first, 0, sizeof first);
@@ -646,7 +646,7 @@ static STATUS_MUST_USE Status grep_tree_walk(Run *r, Pos pos, const GrepTreeAsk 
             (void)GrepTreeLevels_pop(&levels);
             continue;
         }
-        StoreEntry en = at(top->entries, top->at);
+        FileSystemEntry en = at(top->entries, top->at);
         top->at++;
         TRY(run_charge(r, pos, 1));
         if (str_byte(en.name, 0) == '.') continue;
@@ -659,7 +659,7 @@ static STATUS_MUST_USE Status grep_tree_walk(Run *r, Pos pos, const GrepTreeAsk 
         Str rel = S("");
         TRY(walk_under(r, pos, top_rel, en.name, &rel));
         Str rest = grep_tree_rest(ask, rel);
-        if (en.kind == STORE_KIND_DIRECTORY) {
+        if (en.kind == FILE_SYSTEM_KIND_DIRECTORY) {
             if (!grep_tree_enters(ask, rest)) continue;
             TRY(builtin_count_read(r, pos));
             GrepTreeLevel next;
@@ -844,10 +844,10 @@ static STATUS_MUST_USE Status grep_tree_skips(Run *r, Pos pos, GrepTreeAsk *ask,
         TRY(builtin_path(r, pos, BUILTIN_HOST, &uv, false, &sp));
         TRY(builtin_count_read(r, pos));
         bool found = false;
-        StoreStat st;
+        FileSystemStat st;
         TRY(builtin_stat_or_null(r, pos, BUILTIN_HOST, &sp, &found, &st));
         if (!found) return run_failf(r, pos, CLASS_ARGUMENT, "`grep_tree`'s `skip` \"{s}\": there is no {s}", S("`grep_tree`'s `skip` \""), dir, S("\": there is no "), under);
-        if (st.kind != STORE_KIND_DIRECTORY) return run_failf(r, pos, CLASS_ARGUMENT, "`grep_tree`'s `skip` \"{s}\": {s} is not a folder", S("`grep_tree`'s `skip` \""), dir, S("\": "), under, S(" is not a folder"));
+        if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return run_failf(r, pos, CLASS_ARGUMENT, "`grep_tree`'s `skip` \"{s}\": {s} is not a folder", S("`grep_tree`'s `skip` \""), dir, S("\": "), under, S(" is not a folder"));
         if (GrepTreeSkips_push(&ask->skip, dir) != OK) return run_values_oom(r, pos);
     }
     return OK;

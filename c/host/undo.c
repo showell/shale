@@ -22,26 +22,26 @@ static STATUS_MUST_USE Status undo_changes(Paths *h, Buf *w, bool *all) {
     for (size_t k = h->journal.len; k > 0; k--) {
         const Prior *p = &at(h->journal, k - 1);
         if (p->was == PRIOR_ABSENT) {
-            StoreErr e = store_os_delete_file(p->abs);
-            if (e == STORE_IS_DIR) {
-                StoreErr de = store_os_delete_tree(a, p->abs);
-                if (de != STORE_OK) {
-                    TRY(msg_format(w, S("── not put back: {s}: the folder the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(store_err_name(de)))));
+            FileSystemErr e = store_os_delete_file(p->abs);
+            if (e == FILE_SYSTEM_IS_DIR) {
+                FileSystemErr de = store_os_delete_tree(a, p->abs);
+                if (de != FILE_SYSTEM_OK) {
+                    TRY(msg_format(w, S("── not put back: {s}: the folder the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(de)))));
                     *all = false;
                 }
-            } else if (e != STORE_OK && e != STORE_FILE_NOT_FOUND) {
-                TRY(msg_format(w, S("── not put back: {s}: what the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(store_err_name(e)))));
+            } else if (e != FILE_SYSTEM_OK && e != FILE_SYSTEM_FILE_NOT_FOUND) {
+                TRY(msg_format(w, S("── not put back: {s}: what the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(e)))));
                 *all = false;
             }
         } else if (p->was == PRIOR_FILE) {
-            StoreErr e = store_os_write_file(p->abs, p->bytes, p->mode);
-            if (e != STORE_OK) {
-                TRY(msg_format(w, S("── not put back: {s} ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(store_err_name(e)))));
+            FileSystemErr e = store_os_write_file(p->abs, p->bytes, p->mode);
+            if (e != FILE_SYSTEM_OK) {
+                TRY(msg_format(w, S("── not put back: {s} ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(e)))));
                 *all = false;
             }
         } else {
             struct stat st;
-            if (store_os_stat(p->abs, false, &st) != STORE_OK) {
+            if (store_os_stat(p->abs, false, &st) != FILE_SYSTEM_OK) {
                 TRY(msg_format(w, S("── not put back: {s}: a folder removed whole, and its files with it\n"), MSG_ARGS(MSG_FROM_HOST(p->abs))));
                 *all = false;
             }

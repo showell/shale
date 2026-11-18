@@ -460,14 +460,14 @@ static STATUS_MUST_USE Status change_admit(Run *r, Pos pos, const StorePath *p, 
 static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind c, const StorePath *p, Str data) {
     RunStore *rs = builtin_store_of(r);
     Arena *a = r->ctx.values;
-    StoreErr e = STORE_OK;
+    FileSystemErr e = FILE_SYSTEM_OK;
     if (c == CHANGE_REMOVE || c == CHANGE_REMOVE_TREE) {
         bool found = false;
-        StoreStat st;
+        FileSystemStat st;
         e = rs->store.stat_or_null(rs->store.ctx, a, p->full, &found, &st);
-        if (e == STORE_OK && !found) e = STORE_FILE_NOT_FOUND;
+        if (e == FILE_SYSTEM_OK && !found) e = FILE_SYSTEM_FILE_NOT_FOUND;
     }
-    if (e == STORE_OK) {
+    if (e == FILE_SYSTEM_OK) {
         uint64_t size = 0;
         switch (c) {
         case CHANGE_REPLACE: e = rs->store.replace(rs->store.ctx, a, p->full, data); break;
@@ -478,10 +478,10 @@ static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind
         default: c_bug("builtins_change: a change of no kind the store makes");
         }
     }
-    Effect logged = {builtin_name(b), p->rel, e == STORE_OK ? S("ok") : store_err_name(e)};
+    Effect logged = {builtin_name(b), p->rel, e == FILE_SYSTEM_OK ? S("ok") : file_system_err_name(e)};
     // The room was reserved by change_admit, so this push cannot be refused.
     if (Effects_push(&rs->effects, logged) != OK) return run_values_oom(r, pos);
-    if (e != STORE_OK) return builtin_store_failed(r, pos, b, p->rel, e);
+    if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, b, p->rel, e);
     return OK;
 }
 

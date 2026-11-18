@@ -83,7 +83,7 @@ reviewer can line the two up. Once the Zig is gone, that reason is gone:
   stop), `edit`'s `old` and `new` (an empty string), `flat_tree`'s `said`
   (an empty line), zig-ast's program (`SHALE_ZIG_AST=` set empty),
   `mounts_load`'s pinned file (`SHALE_MOUNTS=` set empty), the gate's
-  command (an empty `command`) and `HOME` (set empty), and `LinuxStore`'s
+  command (an empty `command`) and `HOME` (set empty), and `FileSystem`'s
   bases (the root `""` measures every path). `HostRunHeld`'s two say what
   was made, not a value: an `Arena` has no unmade value, and the secret's
   file outlives its `fd`, closed when it is stored. file_system.c's `has_dir` is

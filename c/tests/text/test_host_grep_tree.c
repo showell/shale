@@ -210,9 +210,9 @@ TEST(grep_tree_passes_by_a_symbolic_link_never_reading_what_it_points_at) {
     gt_init(&x, "");
     ran_put(&x, "root/a.txt", "x\n");
     ran_put(&x, "root/far.txt", "x far\n");
-    StoreCPath cp;
+    FileSystemCPath cp;
     const char *link = NULL;
-    if (store_cstr(&cp, ran_at(&x, "root/l.txt"), &link) != STORE_OK || symlink("far.txt", link) != 0) abort();
+    if (file_system_cstr(&cp, ran_at(&x, "root/l.txt"), &link) != FILE_SYSTEM_OK || symlink("far.txt", link) != 0) abort();
     gt_run(&x, "show(gt(\"x\", {ext = {\"txt\"}}))\n");
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("a.txt:1: x\nfar.txt:1: x far\npassed l.txt: a symbolic link, never followed\n2\tfalse\n"));

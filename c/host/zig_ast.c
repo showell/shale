@@ -377,7 +377,7 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
         host_zig_close(&at(in_s, 1));
         host_zig_close(&at(out_s, 0));
         host_zig_close(&at(err_s, 0));
-        return run_failf(r, pos, CLASS_HOST, "`{s}`: zig-ast ({s}) did not start: {t}", S("`"), who, S("`: zig-ast ("), exe, S(") did not start: "), store_err_name(store_err_of(e)));
+        return run_failf(r, pos, CLASS_HOST, "`{s}`: zig-ast ({s}) did not start: {t}", S("`"), who, S("`: zig-ast ("), exe, S(") did not start: "), file_system_err_name(file_system_err_of(e)));
     }
     p->started = true;
     p->pid = pid;
