@@ -41,7 +41,7 @@ static bool lex_fails(LexRun *r, Str src) {
     lex_start(r, src);
     for (;;) {
         Token t;
-        if (lexer_next(&r->lx, &t) != OK) return true;
+        if (lexer_next(&r->lx, &t) != OK) return true; // skip: an error is the answer asked for
         if (t.tag == TAG_EOF) return false;
     }
 }

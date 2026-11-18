@@ -192,7 +192,7 @@ static bool host_zig_wait(HostZigProc *p, int fd, short events) {
             c_bug("zig_ast: a poll of zig-ast's own pipes failed");
         }
         if (at(fds, 1).revents != 0) host_zig_drain_err(p);
-        if (at(fds, 0).revents != 0) return true;
+        if (at(fds, 0).revents != 0) return true; // skip: ready, the wait's answer
     }
 }
 

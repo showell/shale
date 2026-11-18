@@ -135,6 +135,16 @@ and its self-test plants a break of each one.
 
 - A string is a `Str`: a pointer and a length. A literal is `S("...")`. No
   string relies on a NUL at its end.
+- **A string the kernel takes is an `OsStr`** (slice.h): a Str known to hold
+  no NUL, made only by `os_str_of` (false for a NUL) and `os_str_own`
+  (Shale's own string, whose NUL is a bug in the C). A script's string
+  becomes one through the host's `os_str` (host_run.c), which refuses a NUL
+  as CLASS_REFUSED naming the argument; a config file's through its parser
+  (mounts.c's `mounts_parse`, naming the line). `str_cstr_into`,
+  `arena_cstr` and `file_system_cstr` take an OsStr, so their one refusal
+  is no room. **Held:** no search of a string for a NUL outside
+  `os_str_of` (`NUL_SEARCHERS`), but one that says `// nul: <why>` (a
+  binary file's sniff); and no name `RETIRED` lists.
 - A table of names for an enum is sized by its names, `names[]`, never by the
   enum, with `_Static_assert(sizeof names / sizeof *names == X_COUNT, ...)`:
   sized by the enum, a name left out is zero-filled and reads as "". Its
@@ -228,6 +238,16 @@ and its self-test plants a break of each one.
   run's `RunCtx`, never in a return value.
 - A lookup that can miss returns `bool` and fills an out-parameter, or
   returns `NULL` or `SIZE_MAX`.
+- **A refusal is decided where its cause is known, its answer names one
+  cause, and none is swallowed** (Steve, 2026-11-18). A NUL is refused
+  where the string is read, not as the "out of memory" a converter far
+  below would give; a helper that can fail for several causes returns which
+  (an enum, an errno), never a bare `false` its caller reads as one of
+  them; and a failure a caller passes by says why the skip is the answer.
+  **Held:** a one-line test of a failure that skips on (`if (e != OK)
+  return OK;`, `== NULL) continue;`, `< 0) break;`) carries `// skip:
+  <why>`, and a kernel call whose answer is cast away (`(void)unlink(p)`)
+  carries `// ignored: <why>`.
 - A function that holds OS resources (a file descriptor, a child process)
   releases them on its error paths through one `goto` label at its end, as
   ordinary C does: `fail:` closes what is open and returns `STOP`. `goto` is

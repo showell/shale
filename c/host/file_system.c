@@ -403,7 +403,7 @@ static FileSystemErr file_system_delete_tree(Arena *a, OsStr path) {
             break;
         }
         got = file_system_delete_tree(a, child);
-        if (got != FILE_SYSTEM_OK) break;
+        if (got != FILE_SYSTEM_OK) break; // skip: `got` is answered below, once closed
     }
     closedir(d);
     if (got != FILE_SYSTEM_OK) return got;

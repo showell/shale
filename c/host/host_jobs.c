@@ -304,6 +304,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     case JOBS_OUT_OF_MEMORY: return run_values_oom(r, pos);
     case JOBS_SPAWN: return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: the reaper could not be forked"));
     case JOBS_NO_RECORD: return host_fail(r, pos, CLASS_HOST, S("`job_start`: the reaper ended without writing a record at {s}.job"), MSG_ARGS(MSG_FROM_SCRIPT(o.log)));
+    case JOBS_BAD_RECORD: return host_fail(r, pos, CLASS_HOST, S("`job_start`: the reaper's record at {s}.job cannot be read as one (unreadable, too long or malformed)"), MSG_ARGS(MSG_FROM_SCRIPT(o.log)));
     }
     Str joined = S("");
     TRY(host_argv_joined(r, pos, argv, &joined));
@@ -532,7 +533,9 @@ static bool host_started_running(Arena *a, const HostStarted *s) {
     ident.start = s->start;
     char *p = arena_cstr(a, os_str_own(s->record_os));
     Bytes text = {NULL, 0};
-    if (p != NULL && jobs_read_small(a, p, &text)) {
+    // A record that cannot be read (or no room to read it) passes the
+    // "done" check by: whether the job runs is then jobs_alive's alone.
+    if (p != NULL && jobs_read_small(a, p, &text) == 0) {
         JobRecord r;
         if (job_record_parse(text, &r) && r.pid == s->pid && str_eq(r.start, s->start) && job_record_done(r)) return false;
     }

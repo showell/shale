@@ -38,7 +38,7 @@ static STATUS_MUST_USE Status finder_find(const Finder *f, Str hay, size_t from,
     uint64_t paid_compared = 0;
     while (k < hay.len) {
         const char *hit = mem_find_byte(&at(hay, k), first, hay.len - k);
-        if (hit == NULL) break;
+        if (hit == NULL) break; // skip: no more of the first byte, the search's end
         size_t i = (size_t)(hit - hay.ptr);
         stops++;
         if (hay.len - i < n.len) break;

@@ -761,7 +761,7 @@ static inline bool gate_append_log(Arena *a, Str home, Str line) {
         const char *p = arena_cstr(a, os_str_own(buf_view(&made)));
         if (p == NULL) return false;
         (void)mkdir(p, 0755); // ignored: a folder that is not made fails the open below
-        if (slash == NULL) break;
+        if (slash == NULL) break; // skip: the last part made, the loop's end
         from = to + 1;
     }
     Buf file = buf_make(a);

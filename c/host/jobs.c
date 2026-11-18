@@ -199,6 +199,8 @@ typedef enum {
     JOBS_SPAWN,
     // The reaper ended without writing a record.
     JOBS_NO_RECORD,
+    // A record is there that cannot be read, is too long or is no record.
+    JOBS_BAD_RECORD,
 } JobsLaunched;
 
 // The most a job's record may hold, as Zig's `.limited(64 * 1024)`.
@@ -238,24 +240,32 @@ static bool jobs_read_capped(Arena *a, int fd, Bytes *out, int *err) {
     return true;
 }
 
-// A file's bytes, at most 64 KiB, in the arena; false when it cannot be read
-// or is longer.
-static bool jobs_read_small(Arena *a, const char *path, Bytes *out) { // cstr: NUL-ended for the kernel
+// What jobs_read_small gives besides 0 and an errno: the arena refused, or
+// the file is past JOBS_RECORD_MAX. No errno is negative.
+enum { JOBS_READ_NO_ROOM = -1, JOBS_READ_TOO_LONG = -2 };
+
+// A file's bytes, at most 64 KiB, in the arena: 0, the errno of an open or
+// a read that failed, JOBS_READ_TOO_LONG past the limit, or
+// JOBS_READ_NO_ROOM when the arena refuses.
+static int jobs_read_small(Arena *a, const char *path, Bytes *out) { // cstr: NUL-ended for the kernel
     int fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd < 0) return false;
+    if (fd < 0) return errno;
     Bytes text = {NULL, 0};
     int err = 0;
     bool read_ok = jobs_read_capped(a, fd, &text, &err);
     close(fd);
-    if (!read_ok || err != 0 || text.len > JOBS_RECORD_MAX) return false;
+    if (!read_ok) return JOBS_READ_NO_ROOM;
+    if (err != 0) return err;
+    if (text.len > JOBS_RECORD_MAX) return JOBS_READ_TOO_LONG;
     *out = text;
-    return true;
+    return 0;
 }
 
 // Double-forks `reaper --reap <record> <log> <cwd> <program> -- argv...` out
 // of this process's tree with `env`, and reads the job's record once the
 // reaper says it is written by a byte on its fd 3, a pipe. End of file with
-// no byte means the reaper died first (JOBS_NO_RECORD). A slow reaper is
+// no byte means the reaper died first (JOBS_NO_RECORD, or JOBS_BAD_RECORD
+// for one there that is no record). A slow reaper is
 // only slow, so there is no deadline. The record's strings are in `a`.
 static JobsLaunched jobs_launch(Arena *a, OsStr reaper, OsStr record, OsStr log, OsStr cwd, OsStr program, SpawnStrs argv, SpawnStrs env, JobRecord *out) {
     size_t n = 7 + argv.len;
@@ -318,8 +328,10 @@ static JobsLaunched jobs_launch(Arena *a, OsStr reaper, OsStr record, OsStr log,
     // any process or process group of the user's, which is no more than a
     // script can already do with `run({"kill", ...})`.
     Bytes text = {NULL, 0};
-    if (!jobs_read_small(a, zrecord, &text)) return JOBS_NO_RECORD;
-    if (!job_record_parse(text, out)) return JOBS_NO_RECORD;
+    int got = jobs_read_small(a, zrecord, &text);
+    if (got == JOBS_READ_NO_ROOM) return JOBS_OUT_OF_MEMORY;
+    if (got == ENOENT) return JOBS_NO_RECORD;
+    if (got != 0 || !job_record_parse(text, out)) return JOBS_BAD_RECORD;
     return JOBS_LAUNCHED;
 }
 

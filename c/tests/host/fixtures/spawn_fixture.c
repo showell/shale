@@ -105,7 +105,7 @@ static Str fds_line(Bytes room) {
     int n = snprintf(room.ptr, room.len, "fds");
     if (n > 0) len = (size_t)n;
     for (int fd = 0; fd < 64; fd++) {
-        if (fcntl(fd, F_GETFD) < 0) continue;
+        if (fcntl(fd, F_GETFD) < 0) continue; // skip: a closed fd is not listed
         n = snprintf(&at(room, len), room.len - len, " %d", fd);
         if (n > 0) len += (size_t)n;
     }

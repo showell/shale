@@ -396,7 +396,7 @@ static STATUS_MUST_USE Status grep_tree_wanted(Run *r, Pos pos, const GrepTreeAs
         Str part = str_sub(rest, from, to);
         if (grep_tree_build_part(part)) return OK;
         if (!path_strict_name(part)) *named = false;
-        if (slash == NULL) break;
+        if (slash == NULL) break; // skip: the last part, the loop's end
         from = to + 1;
     }
     Table *exts = NULL;
@@ -537,7 +537,7 @@ static STATUS_MUST_USE Status grep_tree_file(Run *r, Pos pos, const GrepTreeAsk 
     // The head is cut to the call-bytes cap, which a cap under 4 KiB would
     // otherwise refuse for any file past it.
     TRY(builtin_read_sized_in(r, pos, BUILTIN_READ, &p, size, 0, builtin_min_u64(GREP_TREE_HEAD, r->ctx.budgets.call_bytes), into, &head));
-    if (str_find_byte(head, '\0') != NULL) return grep_tree_pass(r, pos, ans, path, S("binary"));
+    if (str_find_byte(head, '\0') != NULL) return grep_tree_pass(r, pos, ans, path, S("binary")); // nul: a binary file's sniff, no string bound for the kernel
     ans->files++;
     GrepTreeLines found = GrepTreeLines_make(into);
     if (size > r->ctx.budgets.call_bytes) {
@@ -596,7 +596,7 @@ static bool grep_tree_enters(const GrepTreeAsk *ask, Str rest) {
         const char *slash = str_find_byte(tail, '/');
         size_t to = slash == NULL ? rest.len : from + (size_t)(slash - tail.ptr);
         if (grep_tree_build_part(str_sub(rest, from, to))) return false;
-        if (slash == NULL) break;
+        if (slash == NULL) break; // skip: the last part, the loop's end
         from = to + 1;
     }
     for (size_t k = 0; k < ask->skip.len; k++) {
@@ -823,7 +823,7 @@ static STATUS_MUST_USE Status grep_tree_skips(Run *r, Pos pos, GrepTreeAsk *ask,
             size_t to = slash == NULL ? dir.len : from + (size_t)(slash - tail.ptr);
             Str part = str_sub(dir, from, to);
             if (part.len == 0 || str_eq(part, S(".")) || str_eq(part, S(".."))) names = false;
-            if (slash == NULL) break;
+            if (slash == NULL) break; // skip: the last part, the loop's end
             from = to + 1;
         }
         if (!names) {

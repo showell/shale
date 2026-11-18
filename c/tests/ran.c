@@ -236,7 +236,7 @@ static void ran_wait_reapers(Ran *x) {
         char *p = arena_cstr(&x->host, os_str_own(j->record_os));
         Bytes text = {NULL, 0};
         JobRecord rec;
-        if (p == NULL || !jobs_read_small(&x->host, p, &text) || !job_record_parse(text, &rec)) {
+        if (p == NULL || jobs_read_small(&x->host, p, &text) != 0 || !job_record_parse(text, &rec)) {
             fprintf(stderr, "ran_free: the record of `%.*s` at %.*s cannot be read, so its reaper cannot be waited for\n", (int)j->argv.len, j->argv.ptr, (int)j->record_os.len, j->record_os.ptr);
             abort();
         }

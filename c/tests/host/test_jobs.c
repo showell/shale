@@ -279,7 +279,7 @@ TEST(the_reaper_holds_0_1_2_and_its_started_pipe_alone) {
     JobRecord r;
     Str record = {p.record, strlen(p.record)};
     Str log = {p.log, strlen(p.log)};
-    EXPECT_EQ(jobs_launch(&a, os_str_own(fx), os_str_own(record), os_str_own(log), os_str_own(S(".")), os_str_own(fx), argv, env, &r), JOBS_NO_RECORD);
+    EXPECT_EQ(jobs_launch(&a, os_str_own(fx), os_str_own(record), os_str_own(log), os_str_own(S(".")), os_str_own(fx), argv, env, &r), JOBS_BAD_RECORD);
     char room_bytes[512];
     EXPECT_STR(file_text(p.record, (Bytes){room_bytes, sizeof room_bytes}), S("fds 0 1 2 3\n"));
     place_free(&p);

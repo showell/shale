@@ -534,7 +534,7 @@ static STATUS_MUST_USE Status vm_caught(Machine *m, bool *caught) {
     while (i > 1) {
         i--;
         VmFrame f = at(m->frames, i);
-        if (f.out == NULL) continue;
+        if (f.out == NULL) continue; // skip: a frame no `attempt` made, passed by
         m->frames.len = i;
         vm_steps_back(m, i);
         r->stack.len = f.base;
@@ -971,7 +971,7 @@ static STATUS_MUST_USE Status vm_run(Machine *m) {
                     break;
                 }
                 s = run_charge(r, op->pos, 1);
-                if (s != OK) break;
+                if (s != OK) break; // skip: `s` is the loop's answer, below
                 *vm_slot(m, op->c) = at(t->list, (size_t)i);
                 value_int(vm_slot(m, op->a + 2), i + 1);
                 break;

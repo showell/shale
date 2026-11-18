@@ -251,8 +251,9 @@ typedef struct {
 // so the call would act on a shorter path or word than the one every check
 // judged (`a\0/../x` checked as one, opened as `a`).
 // REMEDY: an OsStr is made only here and by os_str_own, which both search
-// for one; test_slice holds both sides, and test_run_guards plants a
-// script's NUL in each of `run`'s arguments.
+// for one, and check_discipline's `nul search` holds every other search to
+// them; test_file_system holds both sides and catches this one's plant, and
+// test_run_guards a script's NUL in each of `run`'s and `job_start`'s.
 static inline bool os_str_of(Str s, OsStr *out) {
     if (str_find_byte(s, 0) != NULL) return false; // nul: the maker's search
     out->s = s;
@@ -271,8 +272,9 @@ static inline OsStr os_str_own(Str s) {
 
 // `s` with a NUL after it, written at the start of `room`, for a call into
 // the kernel; false, with nothing written, when it and its NUL don't fit.
-// Every C string the C makes is made here: arena.h's arena_cstr in an
-// arena, file_system.c's file_system_cstr on the caller's stack.
+// The C strings the C makes are made here: arena.h's arena_cstr in an
+// arena, file_system.c's file_system_cstr on the caller's stack; spawn.c's
+// PATH candidates alone are joined by hand, of OsStrs' bytes.
 static inline bool str_cstr_into(Bytes room, OsStr s) {
     if (s.s.len >= room.len) return false;
     mem_copy(room.ptr, s.s.ptr, s.s.len);

@@ -370,7 +370,7 @@ static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, 
         shown_end += part.len + (shown_end > 0 ? 1 : 0);
         struct stat st;
         FileSystemErr e = file_system_stat_exact(os_str_own(buf_view(&walked)), false, &st);
-        if (e != FILE_SYSTEM_OK) return OK;
+        if (e != FILE_SYSTEM_OK) return OK; // skip: a missing part ends the walk, the call's own stop
         if (S_ISLNK(st.st_mode)) {
             return path_fail(r, pos, CLASS_REFUSED, S("{s}{s} is a symbolic link: the store follows none"), MSG_ARGS(MSG_FROM_SCRIPT(shown_prefix), MSG_FROM_SCRIPT(str_sub(rest, 0, shown_end))));
         }
@@ -521,7 +521,7 @@ static STATUS_MUST_USE Status paths_absolute_hint(void *ctx, PathRun *r, Pos pos
     out->kind = ABSOLUTE_HINTED;
     out->mount = best != NULL ? best->name : S("");
     out->spelled = tail;
-    if (best == NULL) return OK;
+    if (best == NULL) return OK; // skip: the root's hint, spelled already
     return paths_cat(r, pos, best->name, S(":"), tail, &out->spelled);
 }
 

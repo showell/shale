@@ -357,7 +357,7 @@ static inline STATUS_MUST_USE Status parse_function_named(Parser *p, Str name, u
     if (last > p->extra.len) last = p->extra.len;
     for (size_t k = 1; k <= last; k++) {
         int32_t j = parse_index_at(at(p->extra, k - 1).index, name);
-        if (j < 0) continue;
+        if (j < 0) continue; // skip: not in this prelude, the next is asked
         // A library calls the preludes and itself, never another library.
         if (at(p->extra, k - 1).is_library && p->in_prelude != PARSE_SCRIPT && p->in_prelude != k) continue;
         if (at(at(p->extra, k - 1).loaded, (size_t)j) == PARSE_UNLOADED) TRY(parse_load_prelude(p, k, (size_t)j));

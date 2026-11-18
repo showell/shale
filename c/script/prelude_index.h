@@ -44,7 +44,7 @@ static inline bool parse_next_function(Str src, size_t *at_, uint32_t *line, Pre
         (*line)++;
         if (!str_starts_with(text, S("function "))) continue;
         const char *paren = mem_find_byte(text.ptr, '(', text.len);
-        if (paren == NULL) continue;
+        if (paren == NULL) continue; // skip: no function line, the next is read
         Str name = str_sub(text, 9, (size_t)(paren - text.ptr));
         size_t a = 0;
         size_t b = name.len;

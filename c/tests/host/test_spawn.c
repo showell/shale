@@ -99,7 +99,7 @@ static bool ended_within(long pid, int ms) {
     snprintf(path, sizeof path, "/proc/%ld/stat", pid);
     for (int waited = 0; waited <= ms; waited += 10) {
         int fd = open(path, O_RDONLY);
-        if (fd < 0) return true;
+        if (fd < 0) return true; // skip: no /proc entry is a process ended
         char st[512];
         ssize_t n = read(fd, st, sizeof st - 1);
         close(fd);

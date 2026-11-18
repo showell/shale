@@ -477,10 +477,10 @@ static inline bool parse_assigned_again(Arena *a, Str src, Str name) {
     lexer_init(&lx, a, src);
     Tag before = TAG_EOF;
     Token current = {0};
-    if (lexer_next(&lx, &current) != OK) return true;
+    if (lexer_next(&lx, &current) != OK) return true; // skip: a source that doesn't lex leans to "assigned again"
     while (current.tag != TAG_EOF) {
         Token after = {0};
-        if (lexer_next(&lx, &after) != OK) return true;
+        if (lexer_next(&lx, &after) != OK) return true; // skip: as above, leaning to "assigned again"
         if (current.tag == TAG_NAME && str_eq(current.text, name) && after.tag == TAG_ASSIGN && before != TAG_KW_LOCAL && before != TAG_DOT) return true;
         before = current.tag;
         current = after;

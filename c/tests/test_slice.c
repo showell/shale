@@ -148,7 +148,7 @@ TEST(str_find_byte_finds_the_first_and_never_searches_a_null) {
     EXPECT(str_find_byte(s, '=') == &at(s, 1));
     EXPECT(str_find_byte(s, 'c') == &at(s, 4));
     EXPECT(str_find_byte(s, 'x') == NULL);
-    EXPECT(str_find_byte(S("a\0b"), 0) != NULL);
+    EXPECT(str_find_byte(S("a\0b"), 0) != NULL); // nul: str_find_byte's own test
     // memchr on NULL is undefined even with a length of 0, which UBSan
     // flags: an empty Str may hold NULL, so the helper never searches one.
     Str empty = {NULL, 0};

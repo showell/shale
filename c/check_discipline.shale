@@ -53,6 +53,18 @@
 --               static (style.md, "State"). A `const` one passes, and so
 --               does a function's own in c/tests/ (a test's `static Ran
 --               x;`, kept off the C stack);
+--   nul search: no search of a string for a NUL (`str_find_byte(s, 0)`,
+--               `mem_find_byte(p, '\0', n)`) outside NUL_SEARCHERS, slice.h's
+--               OsStr maker, the one place a NUL bound for the kernel is
+--               decided (style.md, "Errors"); a search that is no kernel
+--               string's (a binary file's sniff) says why, `// nul: <why>`;
+--   retired:    no name RETIRED lists, the refusals and the case retry the
+--               OsStr work took out, so none grows back;
+--   silent skip: a one-line test of a failure that skips on (`if (e != OK)
+--               return OK;`, `== NULL) continue;`, `< 0) break;`) says why
+--               the skip is the answer, `// skip: <why>`, on its line;
+--   ignored:    a kernel call whose answer is cast away (`(void)unlink(p)`)
+--               says why it may be, `// ignored: <why>`, on its line;
 --   return size: no function returns a struct of 9 to 15 bytes by value,
 --               which TCC 0.9.27 miscompiles when the return goes straight
 --               into a call as its argument (style.md, "Declarations"); the
@@ -130,6 +142,18 @@ const RAW_MEM = [=[\bmem(cpy|move|cmp|chr|mem)\s*\(]=]
 -- wrappers, which make none for 0 bytes. Every other caller goes through them.
 const RAW_MEM_WRAPPERS = {"mem_copy", "mem_move", "mem_compare", "mem_find_byte", "mem_find"}
 const SLICE_CALL = [=[\bSLICE_SUB\s*\(]=]
+-- The one function that may search a string for a NUL: slice.h's OsStr
+-- maker, which every string bound for the kernel passes.
+const NUL_SEARCHERS = {"os_str_of"}
+-- A one-byte search, whose second argument is the byte.
+const BYTE_SEARCH = [=[\b(str_find_byte|mem_find_byte)\s*\(]=]
+-- The names the OsStr work retired: a NUL refused anywhere but the maker,
+-- and the case retry. A word of one on a line's code is a finding.
+const RETIRED = {"STR_CSTR_NUL", "STR_CSTR_OK", "STR_CSTR_TOO_LONG", "StrCStr", "FILE_SYSTEM_BAD_PATH_NAME", "file_system_cstr_errno", "host_refuse_nul", "host_refuse_nul_name", "host_has_nul", "path_eq_nocase", "file_system_retry_case", "file_system_resolve_case", "file_system_case_sibling"}
+-- A one-line test of a failure, then a skip that goes on as if none.
+const SILENT_SKIP = [=[(!=\s*\w*OK|==\s*NULL|<\s*0|!=\s*0)\s*\)\s*(continue|break|return\s+(OK|true))\s*;]=]
+-- A kernel call whose answer is cast away.
+const IGNORED_CALL = [=[\(void\)\s*(mkdir|unlink|rename|chmod|fchmod|ftruncate|fsync|write|remove|rmdir)\s*\(]=]
 const STATUS_FN = [=[\bstatic\s+(inline\s+)?Status\s+[\w#]+\s*\(]=]
 const CHAR_PARAM = [=[[(,]\s*(const\s+)?char\s*\*\s*\w+\s*[,)]]=]
 const CHAR_FIELD = [=[^\s*(const\s+)?char\s*\*\s*\w+\s*;]=]
@@ -221,6 +245,56 @@ function calls_args(code, pattern)
   local found = {}
   for m in re_find_all(code, pattern) do push(found, args_at(code, m.at + #m.text - 1)) end
   return found
+end
+
+-- Whether a one-byte search on the line (`code` its masked text, `raw` as
+-- written, column for column) looks for a NUL: its second argument `0`, or
+-- the character literal `'\0'`, which the mask blanks and `raw` keeps.
+function nul_searched(raw, code)
+  for m in re_find_all(code, BYTE_SEARCH) do
+    local open = m.at + #m.text - 1
+    local args = args_at(code, open)
+    local depth = 0
+    local comma = 0
+    local i = 1
+    while i <= #args do
+      local c = sub(args, i, i)
+      if c == "(" then
+        depth = depth + 1
+      elseif c == ")" then
+        depth = depth - 1
+      elseif c == "," and depth == 0 then
+        if comma > 0 then break end
+        comma = i
+      end
+      i = i + 1
+    end
+    if comma > 0 then
+      local second = trim(sub(args, comma + 1, i - 1))
+      local written = trim(sub(raw, open + comma + 1, open + i - 1))
+      if second == "0" or written == "'\\0'" then return true end
+    end
+  end
+  return false
+end
+
+-- The words of `code` that RETIRED names, each once.
+function retired_in(code)
+  local got = {}
+  for name in RETIRED do
+    local at = find(code, name)
+    while at ~= nil do
+      local before = sub(code, at - 1, at - 1)
+      local after = sub(code, at + #name, at + #name)
+      local word = (at == 1 or re_find(before, "\\w") == nil) and (after == "" or re_find(after, "\\w") == nil)
+      if word then
+        push(got, name)
+        break
+      end
+      at = find(code, name, at + 1)
+    end
+  end
+  return got
 end
 
 -- Whether the comment block directly above line `n` holds a `DRAGON:`.
@@ -380,10 +454,18 @@ end
 function check_file(p, in_foundation)
   local name = basename(p)
   local header = ends_with(p, ".h")
-  local all = lines(read(p))
+  local whole = read(p)
+  local all = lines(whole)
   local found = {}
   local kept = kept_statics()
+  -- A retired name is looked for line by line only in a file that holds
+  -- one, a search of the file's text a name.
+  local any_retired = false
+  for r in RETIRED do
+    if find(whole, r) ~= nil then any_retired = true end
+  end
   local wrappers = set_of(RAW_MEM_WRAPPERS)
+  local nul_searchers = set_of(NUL_SEARCHERS)
   -- The function the line is in, "" for none: a column-0 line opens one or
   -- ends it.
   local in_fn = ""
@@ -436,6 +518,21 @@ function check_file(p, in_foundation)
     end
     if find(code, "mem") ~= nil and re_find(code, RAW_MEM) ~= nil and not (in_foundation and has_key(wrappers, in_fn) and dragon_above(all, n)) then
       push(found, {path = p, line = n, rule = "raw mem", text = raw})
+    end
+    if find(code, "_find_byte") ~= nil and not has_key(nul_searchers, in_fn) and find(raw, "// nul: ") == nil and nul_searched(raw, code) then
+      push(found, {path = p, line = n, rule = "nul search", text = raw})
+    end
+    if any_retired then
+      for w in retired_in(code) do
+        push(found, {path = p, line = n, rule = "retired", text = "`" .. w .. "` is retired: a NUL is refused by slice.h's OsStr maker alone, and a name is found in its own case"})
+      end
+    end
+    local skips = find(code, "continue") ~= nil or find(code, "break") ~= nil or find(code, "return OK") ~= nil or find(code, "return true") ~= nil
+    if skips and re_find(code, SILENT_SKIP) ~= nil and find(raw, "// skip: ") == nil then
+      push(found, {path = p, line = n, rule = "silent skip", text = raw})
+    end
+    if find(code, "(void)") ~= nil and re_find(code, IGNORED_CALL) ~= nil and find(raw, "// ignored: ") == nil then
+      push(found, {path = p, line = n, rule = "ignored", text = raw})
     end
     if find(code, "SLICE_SUB") ~= nil then
       for args in calls_args(code, SLICE_CALL) do
@@ -1176,6 +1273,24 @@ static void (*const fixed_hook)(int) = NULL;
 static const char *const said = "static int in_a_string;";
 ]=])
   caught = caught + plants_hold(statics, false, {"2 static state", "3 static state", "4 static state", "6 static state", "9 static state"})
+  local refusals = dir .. "/refusals.c"
+  create(refusals, [=[// refusals.c: the refusal rules' plants: 2 to 6 and 15 break.
+static bool has_nul(Str s) { return str_find_byte(s, 0) != NULL; }
+static bool has_nul_char(Str s) { return mem_find_byte(s.ptr, '\0', s.len) != NULL; }
+static int old(void) { return STR_CSTR_NUL; }
+static STATUS_MUST_USE Status passed_by(int e) { if (e != OK) return OK; return OK; }
+static void cast_away(const char *p) { (void)unlink(p); }
+static bool os_str_of(Str s, OsStr *out) { if (str_find_byte(s, 0) != NULL) return false; out->s = s; return true; }
+static bool sniff(Str s) { return str_find_byte(s, 0) != NULL; } // nul: a plant's sniff of no kernel string
+static bool other_bytes(Str s) { return str_find_byte(s, 'x') != NULL && str_find_byte(s, 10) != NULL; }
+static STATUS_MUST_USE Status said_why(int e) { if (e != OK) return OK; return OK; } // skip: a plant's skip, said
+static void said_ignored(const char *p) { (void)unlink(p); } // ignored: a plant's, said
+static int longer_word(void) { return MY_STR_CSTR_NUL_X; }
+// A comment's STR_CSTR_NUL and str_find_byte(s, 0) are no code.
+static Str in_a_string(void) { return S("(void)unlink(p) and str_find_byte(s, 0)"); }
+static void loop_end(Str s) { for (;;) { if (s.ptr == NULL) break; } }
+]=])
+  caught = caught + plants_hold(refusals, false, {"2 nul search", "3 nul search", "4 retired", "5 silent skip", "6 ignored", "15 silent skip"})
   caught = caught + comment_plants_hold(dir .. "/comments.c")
   remove_tree(dir)
   print("PASS self-test: " .. caught .. " plants caught, every other line passed")

@@ -223,7 +223,7 @@ static STATUS_MUST_USE Status flat_tree_line(Arena *a, FlatFiles *files, Str raw
         }
         at(f, count) = str_sub(rest, 0, end);
         count++;
-        if (tab == NULL) break;
+        if (tab == NULL) break; // skip: the last field, the loop's end
         rest = str_sub(rest, end + 1, rest.len);
     }
     bool bad = false;
