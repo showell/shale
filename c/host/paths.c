@@ -33,6 +33,17 @@ VEC_DEFINE(Priors, Prior)
 // so nothing is changed that could not be put back.
 enum { PATHS_JOURNAL_MAX = 64 << 20 };
 
+// A secrets mount's folder, worked out once for a run: the mount's name, its
+// folder as the mounts file names it (the CLI's), and as this run sees it
+// (paths_run_dir_of's answer).
+typedef struct {
+    Str name;
+    Str cli_dir;
+    Str run_dir;
+} PathsSecretDir;
+
+SLICE_TYPE(PathsSecretDirs, const PathsSecretDir);
+
 // The Linux host's paths, as Zig's `Host` holds them.
 typedef struct {
     // The host's own arena, Zig's `h.alloc`: the journal's copies, which
@@ -50,6 +61,13 @@ typedef struct {
     bool undo;
     Priors journal;
     size_t journal_bytes;
+    // The secrets mounts' folders, in the mounts' order, worked out by
+    // paths_secret_dirs_make for the run whose root is `secret_dirs_root`,
+    // over the mounts `secret_dirs_mounts`; paths_secret_dirs reads them.
+    PathsSecretDirs secret_dirs;
+    Str secret_dirs_root;
+    MountsItems secret_dirs_mounts;
+    bool secret_dirs_made;
 } Paths;
 
 static void paths_make(Paths *h, Arena *arena, Str root_abs, Str cwd_abs, MountsItems mounts, Str mounts_from) {
@@ -119,23 +137,68 @@ static STATUS_MUST_USE Status paths_cat(PathRun *r, Pos pos, Str a, Str b, Str c
     return OK;
 }
 
-// A mount's folder as this run sees it: one inside the CLI's root is taken
-// against the run's own root.
-static STATUS_MUST_USE Status paths_run_dir_of(Paths *h, PathRun *r, Pos pos, const Mount *m, Str *out) {
-    if (!mounts_in_folder(m->dir, h->root_abs)) {
-        *out = m->dir;
-        return OK;
+// A mount's folder `dir` as a run whose root is `run_root` sees it, made in
+// `a`: one inside the CLI's root is taken against the run's own root,
+// absolute (paths_root_of's). false when the arena refuses.
+static bool paths_run_dir_in(const Paths *h, Arena *a, Str run_root, Str dir, Str *out) {
+    if (!mounts_in_folder(dir, h->root_abs)) {
+        *out = dir;
+        return true;
     }
-    Str root = S("");
-    TRY(paths_root_of(h, r, pos, &root));
-    return paths_cat(r, pos, root, str_sub(m->dir, h->root_abs.len, m->dir.len), S(""), out);
+    Str given = mounts_trim_slash(run_root);
+    Str root = given;
+    if (!(given.len > 0 && str_byte(given, 0) == '/') && !paths_resolve_posix(a, h->cwd_abs, given, &root)) return false;
+    Buf w = buf_make(a);
+    if (buf_str(&w, root) != OK || buf_str(&w, str_sub(dir, h->root_abs.len, dir.len)) != OK) return false;
+    buf_fit(&w);
+    *out = buf_view(&w);
+    return true;
 }
 
-static bool paths_any_secrets(const Paths *h) {
+// A mount's folder as this run sees it, in the run's arena.
+static STATUS_MUST_USE Status paths_run_dir_of(Paths *h, PathRun *r, Pos pos, const Mount *m, Str *out) {
+    if (!paths_run_dir_in(h, paths_values(r), r->root, m->dir, out)) return run_oom(r->ctx, pos);
+    return OK;
+}
+
+// Works out the secrets mounts' folders for the run `r`, once, in the host's
+// arena (a yield moves the run's values, and these outlive every call), so
+// the checks below read them and a walk's every entry allocates nothing for
+// them. Called where a run's PathRun is made, and again when a test changes
+// the mounts or the root. false when the arena refuses.
+static bool paths_secret_dirs_make(Paths *h, const PathRun *r) {
+    size_t n = 0;
+    for (size_t k = 0; k < h->mounts.len; k++) n += at(h->mounts, k).secrets ? 1 : 0;
+    PathsSecretDir *dirs = ARENA_ARRAY(h->arena, PathsSecretDir, n);
+    if (dirs == NULL) return false;
+    SLICE_TYPE(Made, PathsSecretDir);
+    Made made = {dirs, n};
+    size_t i = 0;
     for (size_t k = 0; k < h->mounts.len; k++) {
-        if (at(h->mounts, k).secrets) return true;
+        const Mount *m = &at(h->mounts, k);
+        if (!m->secrets) continue;
+        PathsSecretDir d = {m->name, m->dir, S("")};
+        if (!paths_run_dir_in(h, h->arena, r->root, m->dir, &d.run_dir)) return false;
+        at(made, i) = d;
+        i++;
     }
-    return false;
+    h->secret_dirs = (PathsSecretDirs){dirs, n};
+    h->secret_dirs_root = r->root;
+    h->secret_dirs_mounts = h->mounts;
+    h->secret_dirs_made = true;
+    return true;
+}
+
+// The secrets mounts' folders for the run `r`.
+// DRAGON: the secrets rule. A list worked out for another root or other
+// mounts would miss a secrets folder, and every check below would let it by.
+// REMEDY: the list is held to the root and the mounts it was made for, and
+// one made for others, or none made, is a bug in the C that ends the process;
+// test_paths holds the death.
+static PathsSecretDirs paths_secret_dirs(const Paths *h, const PathRun *r) {
+    bool same_mounts = h->secret_dirs_mounts.ptr == h->mounts.ptr && h->secret_dirs_mounts.len == h->mounts.len;
+    if (!h->secret_dirs_made || !same_mounts || !str_eq(h->secret_dirs_root, r->root)) c_bug("paths: the secrets folders were not worked out for this run's root and mounts");
+    return h->secret_dirs;
 }
 
 // Whether byte `c` can continue a file's name in a message: a letter, a
@@ -185,13 +248,11 @@ static inline STATUS_MUST_USE Status paths_report_names_no_secret(Paths *h, Path
 
 static STATUS_MUST_USE Status paths_names_secret(void *ctx, PathRun *r, Pos pos, Str text, bool *names) {
     Paths *h = ctx;
+    (void)pos;
     *names = false;
-    for (size_t k = 0; k < h->mounts.len; k++) {
-        const Mount *m = &at(h->mounts, k);
-        if (!m->secrets) continue;
-        Str dir = S("");
-        TRY(paths_run_dir_of(h, r, pos, m, &dir));
-        if (paths_text_names_dir(text, m->dir) || paths_text_names_dir(text, dir)) {
+    PathsSecretDirs sd = paths_secret_dirs(h, r);
+    for (size_t k = 0; k < sd.len; k++) {
+        if (paths_text_names_dir(text, at(sd, k).cli_dir) || paths_text_names_dir(text, at(sd, k).run_dir)) {
             *names = true;
             return OK;
         }
@@ -209,13 +270,10 @@ static STATUS_MUST_USE Status paths_names_secret(void *ctx, PathRun *r, Pos pos,
 // refused every link on the way; test_paths plants the root's, another
 // mount's and a link's way in.
 static STATUS_MUST_USE Status paths_refuse_secrets_under(Paths *h, PathRun *r, Pos pos, Str shown, Str abs) {
-    for (size_t k = 0; k < h->mounts.len; k++) {
-        const Mount *m = &at(h->mounts, k);
-        if (!m->secrets) continue;
-        Str dir = S("");
-        TRY(paths_run_dir_of(h, r, pos, m, &dir));
-        if (mounts_in_folder(abs, dir)) {
-            return path_fail(r, pos, CLASS_REFUSED, S("\"{s}\" is in the mount `{s}`, which holds secrets"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(m->name)));
+    PathsSecretDirs sd = paths_secret_dirs(h, r);
+    for (size_t k = 0; k < sd.len; k++) {
+        if (mounts_in_folder(abs, at(sd, k).run_dir)) {
+            return path_fail(r, pos, CLASS_REFUSED, S("\"{s}\" is in the mount `{s}`, which holds secrets"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(at(sd, k).name)));
         }
     }
     return OK;
@@ -234,15 +292,12 @@ static STATUS_MUST_USE Status paths_refuse_secrets_under(Paths *h, PathRun *r, P
 static STATUS_MUST_USE Status paths_in_secrets(void *ctx, PathRun *r, Pos pos, Str full, bool *in) {
     Paths *h = ctx;
     *in = false;
-    if (!paths_any_secrets(h)) return OK;
+    PathsSecretDirs sd = paths_secret_dirs(h, r);
+    if (sd.len == 0) return OK;
     Str abs = S("");
     TRY(paths_absolute(h, r, pos, mounts_trim_slash(full), &abs));
-    for (size_t k = 0; k < h->mounts.len; k++) {
-        const Mount *m = &at(h->mounts, k);
-        if (!m->secrets) continue;
-        Str dir = S("");
-        TRY(paths_run_dir_of(h, r, pos, m, &dir));
-        if (mounts_in_folder(abs, dir)) {
+    for (size_t k = 0; k < sd.len; k++) {
+        if (mounts_in_folder(abs, at(sd, k).run_dir)) {
             *in = true;
             return OK;
         }
@@ -388,7 +443,7 @@ static STATUS_MUST_USE Status paths_resolve(void *ctx, PathRun *r, Pos pos, Str 
             from = to + 1;
         }
         TRY(paths_refuse_links(r, pos, mounts_trim_slash(r->root), path, S("")));
-        if (!paths_any_secrets(h)) return OK;
+        if (paths_secret_dirs(h, r).len == 0) return OK;
         Str root = S("");
         TRY(paths_root_of(h, r, pos, &root));
         Str abs = S("");
@@ -425,9 +480,9 @@ static STATUS_MUST_USE Status paths_absolute_hint(void *ctx, PathRun *r, Pos pos
     Paths *h = ctx;
     *has = false;
     Str abs = mounts_trim_slash(abs_given);
-    for (size_t k = 0; k < h->mounts.len; k++) {
-        const Mount *m = &at(h->mounts, k);
-        if (m->secrets && mounts_in_folder(abs, mounts_trim_slash(m->dir))) return OK;
+    PathsSecretDirs sd = paths_secret_dirs(h, r);
+    for (size_t k = 0; k < sd.len; k++) {
+        if (mounts_in_folder(abs, mounts_trim_slash(at(sd, k).cli_dir))) return OK;
     }
     Str best_dir = mounts_trim_slash(h->root_abs);
     const Mount *best = NULL;
@@ -678,11 +733,10 @@ SLICE_TYPE(PathsStrs, const Str);
 // `..` against the program's folder, after an option's `=`, through a link,
 // and a folder above it; test_paths plants each.
 static inline STATUS_MUST_USE Status paths_refuse_secret_args(Paths *h, PathRun *r, Pos pos, Str who, PathsStrs argv, Str cwd, PathsStrs env_keys, PathsStrs env_values) {
-    for (size_t k = 0; k < h->mounts.len; k++) {
-        const Mount *m = &at(h->mounts, k);
-        if (!m->secrets) continue;
-        Str dir = S("");
-        TRY(paths_run_dir_of(h, r, pos, m, &dir));
+    PathsSecretDirs sd = paths_secret_dirs(h, r);
+    for (size_t k = 0; k < sd.len; k++) {
+        const PathsSecretDir *m = &at(sd, k);
+        Str dir = m->run_dir;
         for (size_t i = 0; i < argv.len; i++) {
             PathsNames n = PATHS_NAMES_NONE;
             TRY(paths_names_folder(r, pos, at(argv, i), cwd, dir, &n));

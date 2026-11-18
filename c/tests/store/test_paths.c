@@ -91,6 +91,7 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     EXPECT_STR(at(top, 0).dir, S("/"));
     EXPECT_STR(at(top, 1).dir, S("/tmp"));
     f.paths.mounts = Mounts_items(&ms);
+    EXPECT(paths_secret_dirs_make(&f.paths, &f.run));
     EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("runs:logs/a.txt"), S("via the mount")));
     Str text = S("");
     EXPECT(sx_file(&f.base, "elsewhere/logs/a.txt", &text));
@@ -130,6 +131,7 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     // No mounts at all: said so.
     MountsItems none = {NULL, 0};
     f.paths.mounts = none;
+    EXPECT(paths_secret_dirs_make(&f.paths, &f.run));
     EXPECT(fx_said(&f, fx_look(&f, "read", S("runs:x")), CLASS_ARGUMENT, S("\"runs:x\": `runs:` is not a mount: there are none (~/.config/shale/mounts)")));
     typedef struct {
         const char *text;
@@ -859,6 +861,7 @@ TEST(undo_a_relative_root_is_taken_against_the_working_folder_so_real_gives_an_a
     Str abs = f.base.root;
     // The same folder, spelled from the working folder.
     f.run.root = str_sub(abs, f.cwd.len + 1, abs.len);
+    EXPECT(paths_secret_dirs_make(&f.paths, &f.run));
     EXPECT(str_byte(f.run.root, 0) != '/');
     Str real = S("");
     EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S(""), true, &real));

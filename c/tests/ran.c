@@ -183,6 +183,7 @@ static void ran_run(Ran *x, Str src, Budgets b) {
     regex_cache_init(&r->patterns, &r->ctx.refused);
     PathRun path = {&r->ctx, x->root, builtin_path_charge, r, &x->hook};
     x->store.path = path;
+    if (!paths_secret_dirs_make(&x->lh.paths, &x->store.path)) abort();
     x->store.effects = Effects_make(&x->values);
     r->store = &x->store;
     RunHost host = {&x->lh, host_call};
