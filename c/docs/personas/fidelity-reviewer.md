@@ -27,8 +27,9 @@ For each C function, find its Zig original and compare:
 1. **Every branch.** List the Zig's branches and the C's. A branch on one
    side only is a finding.
 2. **Every stop.** Its class, its exact text, and the point at which it
-   fires. Check them against `docs/SURFACE.txt`, which is generated from
-   the Zig and holds every stop template.
+   fires. `docs/SURFACE.txt`, generated from the Zig, lists every stop
+   template; it is a record, not a promise (a stop's words may have been
+   improved since the cut-over), and the goldens judge.
 3. **Budgets.** Where the Zig charges a step, a read or a byte, the C
    charges the same amount at the same point. A charge moved before or
    after an effect changes where a run stops.

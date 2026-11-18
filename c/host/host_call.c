@@ -1,6 +1,7 @@
 // host_call.c: the Linux host's `host(name, ...)` calls, each sent to its
-// file: `run` and `sleep` (host_run.c), the jobs (host_jobs.c), `real`, the
-// Zig tools (host_zig.c), `re_lines` and `shale_tokens` (host_text.c),
+// file: `run` and `sleep` (host_run.c), the jobs (host_jobs.c), `real` and
+// `copy_mode` (here), the Zig tools (host_zig.c), `re_lines` and
+// `shale_tokens` (host_text.c),
 // `grep_tree` (host_grep_tree.c), `roc_tree` and `go_tree` (flat_tree.c),
 // `json_read` and `json_write` (host_json.c), and `may_change` and
 // `edits_write`, which `edits_all` calls, and `procs` and `proc_stop`
@@ -9,6 +10,37 @@
 // Include paths.c, builtins_change.c, host_run.c, host_jobs.c, host_procs.c,
 // host_json.c, host_text.c, host_grep_tree.c, flat_tree.c and host_zig.c
 // first.
+
+// `copy_mode(from, to)`, which the prelude's `copy` calls after each file it
+// writes: `to` given `from`'s permission bits (0777's, never setuid's), so an
+// executable copied stays one. `from` is a read; `to` is asked of the host
+// as every change is (a read-only mount refuses it, `--undo-on-stop`
+// journals it), and the write it follows was the change counted. Gives true.
+static STATUS_MUST_USE Status host_copy_mode(Host *lh, Run *r, Pos pos, ConstValues args, Value *out) {
+    if (args.len != 2) return run_failf(r, pos, CLASS_ARGUMENT, "`copy_mode` takes two paths, given {d}", S("`copy_mode` takes two paths, given "), run_unum(r, args.len));
+    PathRun *pr = &builtin_files_of(r)->path;
+    CheckedPath from;
+    CheckedPath to;
+    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &from));
+    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 1), false, &to));
+    TRY(change_may(r, pos, &to));
+    Str from_abs = S("");
+    Str to_abs = S("");
+    TRY(paths_absolute(&lh->paths, pr, pos, mounts_trim_slash(from.full), &from_abs));
+    TRY(paths_absolute(&lh->paths, pr, pos, mounts_trim_slash(to.full), &to_abs));
+    TRY(builtin_count_read(r, pos));
+    struct stat st;
+    FileSystemErr e = file_system_stat_exact(from_abs, false, &st);
+    FileSystemCPath cp;
+    const char *c = NULL;
+    if (e == FILE_SYSTEM_OK) e = file_system_cstr(&cp, to_abs, &c);
+    if (e == FILE_SYSTEM_OK && chmod(c, st.st_mode & 0777) != 0) e = file_system_err_of(errno);
+    if (e != FILE_SYSTEM_OK) {
+        return run_failf(r, pos, CLASS_STORE, "`copy`: {s}'s mode could not be given to {s}: {s}", S("`copy`: "), from.rel, S("'s mode could not be given to "), to.rel, S(": "), file_system_err_name(e));
+    }
+    value_bool(out, true);
+    return OK;
+}
 
 // The `RunHost.call` of the Linux host, `ctx` its Host.
 static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out) {
@@ -26,6 +58,7 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
         value_string(out, os);
         return OK;
     }
+    if (str_eq(name, S("copy_mode"))) return host_copy_mode(lh, r, pos, args, out);
     if (str_eq(name, S("re_lines"))) return host_re_lines(r, pos, args, out);
     if (str_eq(name, S("shale_tokens"))) return host_shale_tokens(r, pos, args, out);
     if (str_eq(name, S("grep_tree"))) return host_grep_tree(r, pos, args, out);

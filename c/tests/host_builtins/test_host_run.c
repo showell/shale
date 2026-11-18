@@ -219,7 +219,10 @@ TEST(job_calls_refuse_each_bad_call_with_its_message) {
                      "print(attempt(s, {\"echo\"}, {}).error)\nprint(attempt(s, {\"echo\"}, {log = \"x.log\", secrets = {}}).error)\n"
                      "print(attempt(s, {\"echo\"}, {log = \"x.log\"}).error)\n"
                      "print(attempt(w, \"nope\", {timeout_ms = 1}).error)\nprint(attempt(w, \"nope.job\", {timeout_ms = 1}).error)\n"
-                     "print(attempt(w, \"a.job\", {timeout_ms = 1, contains = \"\"}).error)\n"),
+                     "print(attempt(w, \"a.job\", {timeout_ms = 1, contains = \"\"}).error)\n"
+                     "print(attempt(s, {\"echo\"}, {log = 3}).error)\nprint(attempt(s, {\"echo\"}, {log = \"x.log\", env = {A = 1}}).error)\n"
+                     "print(attempt(w, \"a.job\", {timeout_ms = 1, contains = 3}).error)\nprint(attempt(s, {\"echo\", 2}, {log = \"x.log\"}).error)\n"
+                     "print(attempt(s, 5, {log = \"x.log\"}).error)\n"),
                ran_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(host_text_of(&x), S("`job_start` needs a `log`: a job's output goes there, and its record beside it\n"
@@ -227,7 +230,14 @@ TEST(job_calls_refuse_each_bad_call_with_its_message) {
                                    "`job_start`: this host has no reaper to start a job under\n"
                                    "`job_wait`: nope is not a job's record (`<log>.job`)\n"
                                    "`job_wait`: no job's record at nope.job\n"
-                                   "`job_wait`'s `contains` is \"\": every file holds it\n"));
+                                   "`job_wait`'s `contains` is \"\": every file holds it\n"
+                                   // Each option's stop names its builtin.
+                                   "`job_start`: its `log` must be a string, not an integer\n"
+                                   "`job_start`: its `env` must be a string, not an integer\n"
+                                   "`job_wait`: its `contains` must be a string, not an integer\n"
+                                   // The argv's stops are `run`'s words.
+                                   "`job_start`'s argv[2] is an integer, not a string: every argument is one, written as the program takes it\n"
+                                   "`job_start`'s argv is a list of strings, `{\"zig\", \"build\"}`, not an integer\n"));
     EXPECT_EQ(x.r.host_runs, 0);
     EXPECT_EQ(x.lh.started.len, 0);
     ran_free(&x);

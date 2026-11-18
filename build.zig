@@ -502,8 +502,8 @@ pub fn build(b: *std.Build) void {
 
     // The frozen surface: tools/surface.shale reads what a script or a user
     // can observe from the source, by this tree's own `shale`, and fails
-    // unless docs/SURFACE.txt says the same, so the surface the C port is
-    // held to (docs/C-SEAMS.md) cannot drift unnoticed. A change to it is
+    // unless docs/SURFACE.txt says the same, so the surface cannot drift
+    // unnoticed (it is a record, no promise that the C matches). A change is
     // `shale tools/surface.shale write=1`, its diff reviewed. In `test`.
     {
         const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt(

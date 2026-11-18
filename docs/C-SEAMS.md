@@ -8,11 +8,12 @@ what is outside it. It holds no code. The C's style and its foundation (the
 arena, `Str`, `vec`, `map`, err.h) are in c/docs/style.md and c/foundation,
 and how the C is compiled is in c/docs/building.md.
 
-**What the port must match** is [`SURFACE.txt`](SURFACE.txt): every
+**What the port must match** is the golden tests: every input's output,
+report, stop and exit code. [`SURFACE.txt`](SURFACE.txt) records every
 builtin, stop text, budget, flag and report line, generated from the Zig
-by `tools/surface.shale` and gated by `zig build surface-check`. The golden
-tests hold every input's output, report, stop and exit code. Where this page
-and the goldens disagree, the goldens win.
+and the preludes by `tools/surface.shale`; since 2026-11-18 (Steve) it is
+no promise that the C matches the Zig, and the C's words may improve on
+it. Where this page and the goldens disagree, the goldens win.
 
 ## Values
 
@@ -211,6 +212,5 @@ The parsers Shale reads code with are programs, not part of the C:
   run, at its first Zig call, and speaks to it in framed requests and
   answers. **The C's host speaks the same wire to the same `zig-ast`
   program**; the protocol's one home is `src/shale_zig_wire.zig`, and the C
-  follows it, never a copy of it here. The builtins' messages are
-  SURFACE.txt's, as every builtin's are.
+  follows it, never a copy of it here.
 - `shale_tokens` stays the host's, since it is Shale's own lexer.

@@ -125,9 +125,9 @@ static STATUS_MUST_USE Status host_job_opts(Run *r, Pos pos, const Value *ov, Ho
             TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &x, S("its path"), &unused));
             o->cwd = x;
         } else if (str_eq(k, S("env"))) {
-            TRY(host_env_opt(r, pos, k, &x, false, &o->env));
+            TRY(host_env_opt(r, pos, S("job_start"), k, &x, false, &o->env));
         } else if (str_eq(k, S("want"))) {
-            TRY(host_str_value_opt(r, pos, k, &x, &o->want));
+            TRY(host_str_value_opt(r, pos, S("job_start"), k, &x, &o->want));
         } else if (str_eq(k, S("keep_on_stop"))) {
             if (x.tag != VALUE_BOOL) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s `keep_on_stop` is a boolean, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(&x))));
             o->keep_on_stop = x.as.boolean;
@@ -138,7 +138,7 @@ static STATUS_MUST_USE Status host_job_opts(Run *r, Pos pos, const Value *ov, Ho
         }
     }
     if (!host_given(&log_v)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start` needs a `log`: a job's output goes there, and its record beside it"));
-    return host_str_opt(r, pos, S("log"), &log_v, &o->log);
+    return host_str_opt(r, pos, S("job_start"), S("log"), &log_v, &o->log);
 }
 
 // Refuses an argv too long for the job's record, which holds it escaped:
@@ -260,7 +260,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
         return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes argv and its options, `job_start({{\"zig\", \"build\"}}, {{log = \"runs:build.log\"}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
     }
     SpawnStrs argv = {NULL, 0};
-    TRY(host_argv_arg(r, pos, S("job_start"), S(""), S(""), &at(args, 0), &argv));
+    TRY(host_argv_arg(r, pos, S("job_start"), &at(args, 0), &argv));
     HostJobOpts o;
     TRY(host_job_opts(r, pos, &at(args, 1), &o));
     TRY(run_charge(r, pos, argv.len));
@@ -459,11 +459,11 @@ static STATUS_MUST_USE Status host_job_wait(Host *h, Run *r, Pos pos, ConstValue
         Str k = ValueMap_key_at(&m->map, i);
         Value x = ValueMap_value_at(&m->map, i);
         if (str_eq(k, S("timeout_ms"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o.limit));
+            TRY(host_int_opt(r, pos, S("job_wait"), k, &x, &o.limit));
         } else if (str_eq(k, S("file"))) {
             o.file = x;
         } else if (str_eq(k, S("contains"))) {
-            TRY(host_str_value_opt(r, pos, k, &x, &o.contains));
+            TRY(host_str_value_opt(r, pos, S("job_wait"), k, &x, &o.contains));
         } else {
             return host_fail(r, pos, CLASS_ARGUMENT, S("`job_wait` takes timeout_ms, file and contains, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
         }

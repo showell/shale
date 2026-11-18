@@ -2,7 +2,8 @@
 // program runs (c/host/host_run.c, host_jobs.c, spawn.c, zig_ast.c), each
 // tried by the attack it guards against: a NUL inside an argument, a
 // secret's path shown to git, a log written through a read-only mount or
-// past the undo journal, a FIFO where a file should be, a secret's file
+// past the undo journal, a copy's mode given through a read-only mount, a
+// FIFO where a file should be, a secret's file
 // that grows without bound, an OS path in a message, and a zig-ast that
 // hangs or floods its stderr. Every message is Zig Shale's for the same call.
 
@@ -197,7 +198,44 @@ TEST(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_de
     EXPECT_EQ(unsetenv("SHALE_ZIG_AST"), 0);
 }
 
-TEST_PART(run_guards, TEST_CASE(a_nul_in_an_argument_an_env_or_a_secrets_name_is_refused_before_any_guard),
+// The permission bits of the file at `rel`.
+static mode_t guards_mode(Ran *x, const char *rel) { // cstr: a test's literal
+    FileSystemCPath cp;
+    const char *c = NULL;
+    struct stat st;
+    if (file_system_cstr(&cp, ran_at(x, rel), &c) != FILE_SYSTEM_OK || stat(c, &st) != 0) abort();
+    return st.st_mode & 07777;
+}
+
+TEST(copy_mode_gives_a_copy_its_source_s_bits_and_a_read_only_mount_refuses_it) {
+    static Ran x;
+    guards_ran_with(&x, "ro = D/root/frozen ro\n", false);
+    guards_zig_fake(&x, "root/run.sh", "#!/bin/sh\n");
+    ran_put(&x, "root/copy.sh", "#!/bin/sh\n");
+    ran_put(&x, "root/frozen/a.sh", "#!/bin/sh\n");
+    FileSystemCPath cp;
+    FileSystemCPath frozen_cp;
+    const char *c = NULL;
+    const char *frozen = NULL;
+    EXPECT_EQ(file_system_cstr(&cp, ran_at(&x, "root/copy.sh"), &c), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_cstr(&frozen_cp, ran_at(&x, "root/frozen/a.sh"), &frozen), FILE_SYSTEM_OK);
+    EXPECT_EQ(chmod(c, 0600), 0);
+    EXPECT_EQ(chmod(frozen, 0600), 0);
+    ran_run(&x, S("function m(a, b) return host(\"copy_mode\", a, b) end\n"
+                  "print(host(\"copy_mode\", \"run.sh\", \"copy.sh\"))\n"
+                  "print(attempt(m, \"run.sh\", \"ro:a.sh\").error)\n"
+                  "print(attempt(m, \"gone.sh\", \"copy.sh\").error)\n"),
+           ran_budgets());
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("true\nro:a.sh: mount `ro` is read-only\n`copy`: gone.sh's mode could not be given to copy.sh: FileNotFound\n"));
+    // The copy took the source's bits; the read-only mount's file kept its own.
+    EXPECT_EQ(guards_mode(&x, "root/copy.sh"), 0755);
+    EXPECT_EQ(guards_mode(&x, "root/frozen/a.sh"), 0600);
+    ran_free(&x);
+}
+
+TEST_PART(run_guards, TEST_CASE(copy_mode_gives_a_copy_its_source_s_bits_and_a_read_only_mount_refuses_it),
+          TEST_CASE(a_nul_in_an_argument_an_env_or_a_secrets_name_is_refused_before_any_guard),
           TEST_CASE(a_program_by_a_secret_s_path_is_the_secrets_guard_s_before_git_is_asked),
           TEST_CASE(a_log_is_a_change_a_read_only_mount_refuses_it_and_an_undo_puts_it_back),
           TEST_CASE(a_log_or_a_secret_at_a_fifo_is_refused_not_waited_on),

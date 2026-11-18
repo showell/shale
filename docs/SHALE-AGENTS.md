@@ -264,9 +264,10 @@ has none of it):
   an item that isn't a string stop the run.
   **`skip = {"tests/golden", "c/out"}`** leaves those folders out whole,
   unlisted and unread: each is a folder's path below the place searched,
-  of names (no absolute path, mount, empty part, `.` or `..`), and one
-  that is not there, or is not a folder, stops the run, as does a `skip`
-  for a lone file. An option `grep_tree` does not take stops the run,
+  of names (no absolute path, mount, empty part, `.` or `..`); one that
+  is not there has nothing to skip and passes, as `walk_all`'s does, and
+  one that is not a folder stops the run, as does a `skip` for a lone
+  file. An option `grep_tree` does not take stops the run,
   naming those it does. The walk and the search are the host's
   (`c/host/host_grep_tree.c`), in one pass: a read is a folder listed or
   a file read (a binary file costs its head alone), and each `skip` a

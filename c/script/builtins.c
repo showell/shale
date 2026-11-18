@@ -1,8 +1,8 @@
 // builtins.c: the builtins that need no host, but text's and regular
 // expressions' (builtins_text.c): the argument helpers every builtin shares,
 // lists and maps, numbers, time and the run, and formatting. Their messages
-// are in the frozen surface (docs/SURFACE.txt), and a script sees their step
-// charges through the budgets, so neither changes freely.
+// are held by the goldens, and a script sees their step charges through the
+// budgets, so neither changes freely.
 //
 // A program includes it after run.h; vm.c holds the table that calls them.
 

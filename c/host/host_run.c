@@ -212,28 +212,28 @@ static STATUS_MUST_USE Status host_fail_plain(Run *r, Pos pos, StopClass cls, St
 
 // ── the options ──
 
-static STATUS_MUST_USE Status host_int_opt(Run *r, Pos pos, Str k, const Value *x, uint64_t *out) {
-    if (x->tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`run`: its `{s}` must be an integer, not {s}"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
-    if (x->as.integer < 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: its `{s}` must be 0 or more, not {d}"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_HOST(run_num(r, x->as.integer))));
+static STATUS_MUST_USE Status host_int_opt(Run *r, Pos pos, Str who, Str k, const Value *x, uint64_t *out) {
+    if (x->tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be an integer, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
+    if (x->as.integer < 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: its `{s}` must be 0 or more, not {d}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(run_num(r, x->as.integer))));
     *out = (uint64_t)x->as.integer;
     return OK;
 }
 
-static STATUS_MUST_USE Status host_str_opt(Run *r, Pos pos, Str k, const Value *x, Str *out) {
-    if (x->tag != VALUE_STRING) return host_fail(r, pos, CLASS_TYPE, S("`run`: its `{s}` must be a string, not {s}"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
+static STATUS_MUST_USE Status host_str_opt(Run *r, Pos pos, Str who, Str k, const Value *x, Str *out) {
+    if (x->tag != VALUE_STRING) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be a string, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
     *out = x->as.string;
     return OK;
 }
 
-static STATUS_MUST_USE Status host_map_opt(Run *r, Pos pos, Str k, const Value *x, Table **out) {
-    if (x->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`: its `{s}` must be a map, not {s}"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
-    if (x->as.table->kind == TABLE_LIST) return host_fail(r, pos, CLASS_TYPE, S("`run`: its `{s}` must be a map, not a list"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
+static STATUS_MUST_USE Status host_map_opt(Run *r, Pos pos, Str who, Str k, const Value *x, Table **out) {
+    if (x->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be a map, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
+    if (x->as.table->kind == TABLE_LIST) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be a map, not a list"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k)));
     *out = x->as.table;
     return OK;
 }
 
-static STATUS_MUST_USE Status host_bool_opt(Run *r, Pos pos, Str k, const Value *x, bool *out) {
-    if (x->tag != VALUE_BOOL) return host_fail(r, pos, CLASS_TYPE, S("`run`: its `{s}` must be true or false, not {s}"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
+static STATUS_MUST_USE Status host_bool_opt(Run *r, Pos pos, Str who, Str k, const Value *x, bool *out) {
+    if (x->tag != VALUE_BOOL) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be true or false, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
     *out = x->as.boolean;
     return OK;
 }
@@ -254,9 +254,9 @@ typedef struct {
 // `job_start` alike: a value that is not a string stops the run here, so the
 // guards and the environment below test no value's type. A secret's value is
 // its file's path (`paths`), and its stop says so.
-static STATUS_MUST_USE Status host_env_opt(Run *r, Pos pos, Str k, const Value *x, bool paths, HostEnvOpt *out) {
+static STATUS_MUST_USE Status host_env_opt(Run *r, Pos pos, Str who, Str k, const Value *x, bool paths, HostEnvOpt *out) {
     Table *t = NULL;
-    TRY(host_map_opt(r, pos, k, x, &t));
+    TRY(host_map_opt(r, pos, who, k, x, &t));
     size_t n = ValueMap_len(&t->map);
     Str *names = ARENA_ARRAY(r->ctx.values, Str, n);
     Str *values = ARENA_ARRAY(r->ctx.values, Str, n);
@@ -270,7 +270,7 @@ static STATUS_MUST_USE Status host_env_opt(Run *r, Pos pos, Str k, const Value *
         if (paths) {
             TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &v, S("its path"), &at(vroom, j)));
         } else {
-            TRY(host_str_opt(r, pos, k, &v, &at(vroom, j)));
+            TRY(host_str_opt(r, pos, who, k, &v, &at(vroom, j)));
         }
     }
     out->names.ptr = names;
@@ -334,9 +334,9 @@ static bool host_given(const Value *opt) {
 }
 
 // A string option the script gave, checked to be one, kept as its value.
-static STATUS_MUST_USE Status host_str_value_opt(Run *r, Pos pos, Str k, const Value *x, Value *out) {
+static STATUS_MUST_USE Status host_str_value_opt(Run *r, Pos pos, Str who, Str k, const Value *x, Value *out) {
     Str unused = S("");
-    TRY(host_str_opt(r, pos, k, x, &unused));
+    TRY(host_str_opt(r, pos, who, k, x, &unused));
     *out = *x;
     return OK;
 }
@@ -394,51 +394,52 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
     if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`'s options are a map, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(v))));
     Table *m = v->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`run`'s options are a map, `{{timeout_ms = ..., tail = ...}}`, not a list"));
+    Str who = S("run");
     for (size_t i = 0; i < ValueMap_len(&m->map); i++) {
         Str k = ValueMap_key_at(&m->map, i);
         Value x = ValueMap_value_at(&m->map, i);
         if (str_eq(k, S("timeout_ms"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o->timeout_ms));
+            TRY(host_int_opt(r, pos, who, k, &x, &o->timeout_ms));
         } else if (str_eq(k, S("re"))) {
-            TRY(host_str_value_opt(r, pos, k, &x, &o->re));
+            TRY(host_str_value_opt(r, pos, who, k, &x, &o->re));
         } else if (str_eq(k, S("not_re"))) {
-            TRY(host_str_value_opt(r, pos, k, &x, &o->not_re));
+            TRY(host_str_value_opt(r, pos, who, k, &x, &o->not_re));
         } else if (str_eq(k, S("nocase"))) {
-            TRY(host_bool_opt(r, pos, k, &x, &o->nocase));
+            TRY(host_bool_opt(r, pos, who, k, &x, &o->nocase));
         } else if (str_eq(k, S("before"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o->before));
+            TRY(host_int_opt(r, pos, who, k, &x, &o->before));
         } else if (str_eq(k, S("after"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o->after));
+            TRY(host_int_opt(r, pos, who, k, &x, &o->after));
         } else if (str_eq(k, S("head"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o->head));
+            TRY(host_int_opt(r, pos, who, k, &x, &o->head));
         } else if (str_eq(k, S("tail"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o->tail));
+            TRY(host_int_opt(r, pos, who, k, &x, &o->tail));
         } else if (str_eq(k, S("width"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o->width));
+            TRY(host_int_opt(r, pos, who, k, &x, &o->width));
         } else if (str_eq(k, S("stdout_secret"))) {
             o->stdout_secret = x;
         } else if (str_eq(k, S("secret_replace"))) {
-            TRY(host_bool_opt(r, pos, k, &x, &o->secret_replace));
+            TRY(host_bool_opt(r, pos, who, k, &x, &o->secret_replace));
         } else if (str_eq(k, S("whole"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o->whole));
+            TRY(host_int_opt(r, pos, who, k, &x, &o->whole));
         } else if (str_eq(k, S("log"))) {
-            TRY(host_str_value_opt(r, pos, k, &x, &o->log));
+            TRY(host_str_value_opt(r, pos, who, k, &x, &o->log));
         } else if (str_eq(k, S("cwd"))) {
-            TRY(host_str_value_opt(r, pos, k, &x, &o->cwd));
+            TRY(host_str_value_opt(r, pos, who, k, &x, &o->cwd));
         } else if (str_eq(k, S("stdin"))) {
             o->stdin_v = x;
         } else if (str_eq(k, S("env"))) {
-            TRY(host_env_opt(r, pos, k, &x, false, &o->env));
+            TRY(host_env_opt(r, pos, who, k, &x, false, &o->env));
         } else if (str_eq(k, S("secrets"))) {
-            TRY(host_env_opt(r, pos, k, &x, true, &o->secrets));
+            TRY(host_env_opt(r, pos, who, k, &x, true, &o->secrets));
         } else if (str_eq(k, S("want"))) {
-            TRY(host_str_value_opt(r, pos, k, &x, &o->want));
+            TRY(host_str_value_opt(r, pos, who, k, &x, &o->want));
         } else if (str_eq(k, S("cpu_budget_ms"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o->cpu_budget_ms));
+            TRY(host_int_opt(r, pos, who, k, &x, &o->cpu_budget_ms));
         } else if (str_eq(k, S("stage"))) {
-            TRY(host_str_value_opt(r, pos, k, &x, &o->stage));
+            TRY(host_str_value_opt(r, pos, who, k, &x, &o->stage));
         } else if (str_eq(k, S("nice"))) {
-            TRY(host_int_opt(r, pos, k, &x, &o->nice));
+            TRY(host_int_opt(r, pos, who, k, &x, &o->nice));
             if (o->nice > 19) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `nice` is 0 to 19 (19 the lowest priority), not {d}"), MSG_ARGS(MSG_FROM_HOST(run_num(r, x.as.integer))));
         } else {
             return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms, stage and nice, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
@@ -1235,10 +1236,11 @@ static STATUS_MUST_USE Status host_stream_refused(Run *r, Pos pos, const Arena *
 }
 
 // A program's argv, `run`'s or `job_start`'s (`who`): a list of strings, one
-// at least. Each caller's stops keep Zig's words (docs/SURFACE.txt): `run`'s
-// add an `example` to the one for a value not a list and a `why` to the one
-// for an argument not a string; `job_start`'s add neither.
-static STATUS_MUST_USE Status host_argv_arg(Run *r, Pos pos, Str who, Str example, Str why, const Value *av, SpawnStrs *out) {
+// at least. Both callers' stops say the same: an example for a value not a
+// list, and why for an argument not a string.
+static STATUS_MUST_USE Status host_argv_arg(Run *r, Pos pos, Str who, const Value *av, SpawnStrs *out) {
+    Str example = S(", `{\"zig\", \"build\"}`");
+    Str why = S(": every argument is one, written as the program takes it");
     if (av->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv is a list of strings{s}, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(example), MSG_FROM_HOST(value_type_name(av))));
     Table *argv_t = av->as.table;
     if (argv_t->kind == TABLE_MAP) return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv is a list of strings, not a map"), MSG_ARGS(MSG_FROM_HOST(who)));
@@ -1525,7 +1527,7 @@ static STATUS_MUST_USE Status host_run_program(Host *h, Run *r, Pos pos, ConstVa
         return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes argv and its options, `run({{\"zig\", \"build\"}}, {{timeout_ms = ..., tail = 20}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
     }
     SpawnStrs argv = {NULL, 0};
-    TRY(host_argv_arg(r, pos, S("run"), S(", `{\"zig\", \"build\"}`"), S(": every argument is one, written as the program takes it"), &at(args, 0), &argv));
+    TRY(host_argv_arg(r, pos, S("run"), &at(args, 0), &argv));
     RunOpts o;
     TRY(host_read_opts(r, pos, &at(args, 1), &o));
     TRY(run_charge(r, pos, argv.len));

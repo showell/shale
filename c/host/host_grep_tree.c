@@ -796,9 +796,10 @@ static STATUS_MUST_USE Status grep_tree_ask(Run *r, Pos pos, Table *o, GrepTreeA
 
 // Each folder `skip` names, held to the rules: a path of names below the place
 // searched (none absolute, none with a mount's name, an empty part, `.` or
-// `..`), there and a folder, each checked by a read of the file system's (its
-// stat), so a skip that misses stops the run rather than passing nothing by. A
-// lone file has no folder below it to skip.
+// `..`), and a folder where it is there, each checked by a read of the file
+// system's (its stat). One that is not there has nothing to skip and passes,
+// as `walk_all`'s `skip` does (a build's `c/out` in a fresh lane). A lone
+// file has no folder below it to skip.
 static STATUS_MUST_USE Status grep_tree_skips(Run *r, Pos pos, GrepTreeAsk *ask, const Value *given, bool lone) {
     ask->skip = GrepTreeSkips_make(r->ctx.values);
     if (given->tag != VALUE_TABLE || given->as.table->kind != TABLE_MAP) return OK;
@@ -846,7 +847,7 @@ static STATUS_MUST_USE Status grep_tree_skips(Run *r, Pos pos, GrepTreeAsk *ask,
         bool found = false;
         FileSystemStat st;
         TRY(builtin_stat_or_null(r, pos, BUILTIN_HOST, &sp, &found, &st));
-        if (!found) return run_failf(r, pos, CLASS_ARGUMENT, "`grep_tree`'s `skip` \"{s}\": there is no {s}", S("`grep_tree`'s `skip` \""), dir, S("\": there is no "), under);
+        if (!found) continue;
         if (st.kind != FILE_SYSTEM_KIND_DIRECTORY) return run_failf(r, pos, CLASS_ARGUMENT, "`grep_tree`'s `skip` \"{s}\": {s} is not a folder", S("`grep_tree`'s `skip` \""), dir, S("\": "), under, S(" is not a folder"));
         if (GrepTreeSkips_push(&ask->skip, dir) != OK) return run_values_oom(r, pos);
     }

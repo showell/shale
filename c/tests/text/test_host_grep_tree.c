@@ -297,7 +297,7 @@ TEST(grep_tree_charges_what_its_reads_bring_not_a_script_s_steps) {
     ran_free(&x);
 }
 
-TEST(grep_tree_leaves_out_each_folder_skip_names_unlisted_and_unread_and_no_other) {
+TEST(grep_tree_leaves_out_each_folder_skip_names_and_passes_one_not_there) {
     static Ran x;
     gt_init(&x, "");
     ran_put(&x, "root/c/a.txt", "x a\n");
@@ -305,16 +305,17 @@ TEST(grep_tree_leaves_out_each_folder_skip_names_unlisted_and_unread_and_no_othe
     ran_put(&x, "root/tests/golden/g.txt", "x g\n");
     ran_put(&x, "root/tests/golden2/h.txt", "x h\n");
     ran_put(&x, "root/tests/other.txt", "x t\n");
-    gt_run(&x, "show(gt(\"x\", {given = {skip = {\"tests/golden\", \"c/out\"}}}))\n"
+    gt_run(&x, "show(gt(\"x\", {given = {skip = {\"tests/golden\", \"c/out\", \"c/gone\"}}}))\n"
                "show(gt(\"x\", {place = \"tests\", prefix = \"tests/\", given = {skip = {\"golden\"}}}))\n");
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     // tests/golden2 only begins with a skip's name: it is searched.
     EXPECT_STR(buf_view(&x.r.out), S("c/a.txt:1: x a\ntests/golden2/h.txt:1: x h\ntests/other.txt:1: x t\n3\tfalse\n"
                                      "tests/golden2/h.txt:1: x h\ntests/other.txt:1: x t\n2\tfalse\n"));
-    // The first call: a stat for each skip (2), listings of the root, c,
-    // tests and tests/golden2 (4) and the 3 files (3). The second: a stat
-    // for its skip, listings of tests and tests/golden2, and 2 files.
-    EXPECT_EQ(x.r.reads, 9 + 5);
+    // The first call: a stat for each skip (3, c/gone's finding nothing to
+    // skip), listings of the root, c, tests and tests/golden2 (4) and the 3
+    // files (3). The second: a stat for its skip, listings of tests and
+    // tests/golden2, and 2 files.
+    EXPECT_EQ(x.r.reads, 10 + 5);
     EXPECT_EQ(x.r.read_bytes, 3 * 4 + 2 * 4);
     ran_free(&x);
 }
@@ -339,7 +340,6 @@ static void gt_skip_stop(const char *opts, StopClass cls, Str message) { // cstr
 }
 
 TEST(grep_tree_refuses_a_skip_that_is_not_a_folder_below_the_place_searched) {
-    gt_skip_stop("{given = {skip = {\"c/gone\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"c/gone\": there is no c/gone"));
     gt_skip_stop("{given = {skip = {\"c/a.txt\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"c/a.txt\": c/a.txt is not a folder"));
     gt_skip_stop("{given = {skip = {\"/tmp\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"/tmp\" is absolute: a skip is a folder's path below the place searched"));
     gt_skip_stop("{given = {skip = {\"c/../c\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"c/../c\" is not a path of names: a skip is a folder's path below the place searched, with no mount, empty part, `.` or `..`"));
@@ -499,7 +499,7 @@ TEST_PART(host_grep_tree, TEST_CASE(grep_tree_searches_each_file_in_path_order_p
           TEST_CASE(grep_tree_cuts_the_hits_at_most_and_searches_no_file_after),
           TEST_CASE(grep_tree_finds_either_case_a_pattern_and_the_lines_around_a_hit),
           TEST_CASE(grep_tree_charges_what_its_reads_bring_not_a_script_s_steps),
-          TEST_CASE(grep_tree_leaves_out_each_folder_skip_names_unlisted_and_unread_and_no_other),
+          TEST_CASE(grep_tree_leaves_out_each_folder_skip_names_and_passes_one_not_there),
           TEST_CASE(grep_tree_refuses_a_skip_that_is_not_a_folder_below_the_place_searched),
           TEST_CASE(grep_tree_walks_once_a_listing_a_folder_and_a_read_a_file_at_a_step_an_entry),
           TEST_CASE(grep_tree_finds_a_list_of_needles_in_one_walk_each_hit_naming_its_needle),

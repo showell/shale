@@ -2,11 +2,12 @@
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
 --
--- docs/SURFACE.txt, the frozen surface the C is held to, must be what
+-- docs/SURFACE.txt, the record of what a script can observe, must be what
 -- tools/surface.shale reads from the source today, as Zig's `zig build
--- surface-check` holds it: a change to what a script can observe fails here
--- until `shale tools/surface.shale write=1` has rewritten the file and its
--- diff is reviewed. It runs with no user prelude, as that step does.
+-- surface-check` holds it: a change to the surface fails here until `shale
+-- tools/surface.shale write=1` has rewritten the file and its diff is
+-- reviewed. It is no promise that the C matches the Zig; the goldens judge
+-- the C. It runs with no user prelude, as that step does.
 
 use("build:lib.shale")
 
