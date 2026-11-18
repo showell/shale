@@ -40,3 +40,8 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | `unique()` fails on a list of integers, because `has_key` takes strings only | open |
 | 2026-11-18 | `mkdir("a/b/")` is refused for its trailing slash | open |
 | 2026-11-18 | `scratch:` is the shared temp root, not the session's scratchpad, so stray files land at its top; testing a lane with `SHALE_MOUNTS` also needs an outer heredoc, since the gate allows no env prefix | open |
+| 2026-11-18 | after a heredoc's closing tag, a second command is refused with "the heredoc has no last line", which doesn't say what went wrong | open |
+| 2026-11-18 | no `range()`, so a counted loop is a hand-written `while` | open |
+| 2026-11-18 | a script can't read the arena's bytes in use: `budget().arena_bytes` counts whole chunks | open |
+| 2026-11-18 | bench/baseline.shale has no workload filter, and a not-clean run writes TSVs into the tracked tree | open |
+| 2026-11-18 | the full tier's per-block step budgets assume few plants re-run; a change to a core file re-runs all of a block's plants and goes over (the store block went to 100M) | open |
