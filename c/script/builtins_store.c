@@ -533,11 +533,11 @@ typedef struct {
     uint64_t n;
 } ScanRange;
 
-// What a scan found: the matches, the first's offset, the file's size, its
-// last byte read, and whether the range reached its end.
+// What a scan found: the matches, the first's offset (read only when `count`
+// is past 0), the file's size, its last byte read, and whether the range
+// reached its end.
 typedef struct {
     uint64_t count;
-    bool has_first;
     uint64_t first;
     uint64_t size;
     uint8_t last;
@@ -617,10 +617,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const Sto
             size_t i = 0;
             TRY(finder_find(&f, window, from, &found, &i));
             if (!found) break;
-            if (!res->has_first) {
-                res->has_first = true;
-                res->first = base + i;
-            }
+            if (res->count == 0) res->first = base + i;
             res->count++;
             if (first_only) return OK;
             from = i + needle.len;
@@ -654,7 +651,7 @@ static STATUS_MUST_USE Status builtin_scanner(Run *r, Pos pos, Builtin b, ConstV
     TRY(builtin_scan(r, pos, b, &p, needle, b == BUILTIN_FIND_IN, range, &got));
     if (b == BUILTIN_COUNT_IN) {
         value_int(out, (int64_t)got.count);
-    } else if (got.has_first) {
+    } else if (got.count > 0) {
         value_int(out, (int64_t)got.first);
     } else {
         value_nil(out);

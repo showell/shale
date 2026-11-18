@@ -123,10 +123,10 @@ static bool procs_stat(ProcsStatRoom *room, int32_t pid, ProcsStat *out) {
     }
     if (close_at == SIZE_MAX || close_at < open_at) return false;
     Str rest = str_sub(text, close_at + 1, text.len);
-    bool has_ppid = false;
     int64_t ppid = 0;
     // Field 3 (the state) is the first after `)`; the parent is 4, the start
-    // 22.
+    // 22. The fields are read in order, so the parent is read (or refused)
+    // before the start is reached.
     size_t field = 3;
     size_t i = 0;
     while (i < rest.len) {
@@ -137,10 +137,8 @@ static bool procs_stat(ProcsStatRoom *room, int32_t pid, ProcsStat *out) {
         Str f = str_sub(rest, from, i);
         if (field == 4) {
             if (!procs_parse_int(f, &ppid) || ppid < INT32_MIN || ppid > INT32_MAX) return false;
-            has_ppid = true;
         }
         if (field == 22) {
-            if (!has_ppid) return false;
             out->ppid = (int32_t)ppid;
             out->start = f;
             out->name = str_sub(text, open_at + 1, close_at);

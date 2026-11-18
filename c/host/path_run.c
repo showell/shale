@@ -17,10 +17,10 @@
 // Declared ahead, for the hook's calls; defined below the hook.
 typedef struct PathRun PathRun;
 
-// An absolute path spelled as a script's (`PathHook.absolute_hint`):
-// `has_mount` false for the root, and `spelled` the path to write.
+// An absolute path spelled as a script's (`PathHook.absolute_hint`): the
+// mount it is under, empty for the root (no mount's name is empty), and
+// `spelled` the path to write.
 typedef struct {
-    bool has_mount;
     Str mount;
     Str spelled;
 } AbsoluteHint;
@@ -242,7 +242,7 @@ static STATUS_MUST_USE Status path_absolute_stop(PathRun *r, Pos pos, Str who, S
         return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: paths are relative to the data root, or a mount's, `name:path` (`shale --help` lists this box's mounts)"),
                          MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs)));
     }
-    if (hint.has_mount) {
+    if (hint.mount.len > 0) {
         return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: it's under the mount `{s}:`, so write \"{s}\""),
                          MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs), MSG_FROM_HOST(hint.mount), MSG_FROM_HOST(hint.spelled)));
     }

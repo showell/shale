@@ -619,7 +619,8 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     char exe[PATH_MAX];
     ssize_t exe_len = readlink("/proc/self/exe", exe, sizeof exe);
     if (exe_len > 0 && (size_t)exe_len < sizeof exe) {
-        lh.has_reaper = arena_dup(&host_arena, (Str){exe, (size_t)exe_len}, &lh.reaper);
+        Str reaper = S("");
+        if (arena_dup(&host_arena, (Str){exe, (size_t)exe_len}, &reaper)) lh.reaper = reaper;
     }
     PathHook hook;
     paths_hook(&lh.paths, &hook);

@@ -70,7 +70,24 @@ reviewer can line the two up. Once the Zig is gone, that reason is gone:
   CLI's script (`CliScript`). *Kept, on purpose:* `JobRecord`'s flags (a
   record is text, and every value of a field is one a record can hold),
   and walk's `after`, `like`, `skip`, `kind` and `keep_reads` (an empty or
-  zero one given reads otherwise than none).
+  zero one given reads otherwise than none). *Done (2026-11-18, the loose
+  ends lane), for the rest:* `zig_rename`'s `lines` (`first` 0, since a
+  line is 1 or more), `AbsoluteHint`'s mount (empty for the root, since no
+  mount's name is empty), `Host`'s reaper (an empty path), a scan's first
+  match (read when `count` is past 0, which it always went with), and
+  host_procs' parent (read before the start by the order of the fields, so
+  its flag was always set). *Kept, on purpose:* each where any value, the
+  empty one included, is a value the input can give, so none would read as
+  given: `zig_decls`' `container` and `zig_tokens`' `tag` (any string),
+  `shale_tokens`' `tag` (every tag, `eof` included, which has its own
+  stop), `edit`'s `old` and `new` (an empty string), `flat_tree`'s `said`
+  (an empty line), zig-ast's program (`SHALE_ZIG_AST=` set empty),
+  `mounts_load`'s pinned file (`SHALE_MOUNTS=` set empty), the gate's
+  command (an empty `command`) and `HOME` (set empty), and `LinuxStore`'s
+  bases (the root `""` measures every path). `HostRunHeld`'s two say what
+  was made, not a value: an `Arena` has no unmade value, and the secret's
+  file outlives its `fd`, closed when it is stored. store.c's `has_dir` is
+  a lookup's answer, a `bool` as style.md has it.
 - `RegexCache` (6,856 bytes) and `Arena` were made by value
   (`regex_cache_make`, `arena_make`); an out-pointer initializer is the
   more ordinary C. *Done (2026-11-18, the run-context lane):*

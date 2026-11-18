@@ -65,7 +65,6 @@ TEST(a_log_is_a_change_a_read_only_mount_refuses_it_and_an_undo_puts_it_back) {
     ran_put(&x, "root/frozen/a.txt", "a\n");
     ran_put(&x, "root/old.log", "was\n");
     // The job is refused before its reaper is ever started.
-    x.lh.has_reaper = true;
     x.lh.reaper = S("/nonexistent/shale");
     ran_run(&x, S("function f(a, o) return host(\"run\", a, o) end\nfunction j(a, o) return host(\"job_start\", a, o) end\n"
                   "print(attempt(f, {\"echo\", \"x\"}, {timeout_ms = 5000, tail = 1, log = \"ro:a.txt\"}).error)\n"
@@ -131,7 +130,6 @@ TEST(stdout_secret_s_file_is_held_to_one_byte_past_its_cap_while_the_program_run
 TEST(job_wait_names_the_script_s_path_never_the_os_path) {
     static Ran x;
     guards_ran_with(&x, NULL, false);
-    x.lh.has_reaper = true;
     char exe[PATH_MAX];
     EXPECT(realpath("c/out/tcc/shale", exe) != NULL);
     x.lh.reaper = ran_cs(exe);

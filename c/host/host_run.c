@@ -76,8 +76,8 @@ typedef struct {
     HostTime time;
     // One line each, a program run or a log written: `--verbose`'s `── ran`.
     HostRecords records;
-    // The program a job runs under (`shale --reap`); none means no jobs.
-    bool has_reaper;
+    // The program a job runs under (`shale --reap`), an OS path; empty for
+    // none, which means no jobs.
     Str reaper;
     // The jobs this run started, for a stop to end (`host_jobs_stop_with_run`).
     HostStartedJobs started;
@@ -91,7 +91,7 @@ static void host_make(Host *h, SpawnStrs env, struct HostZigProc *zig) {
     h->zig = zig;
     memset(&h->time, 0, sizeof h->time);
     h->records = HostRecords_make(h->paths.arena);
-    h->has_reaper = false;
+    h->reaper = S("");
     h->started = HostStartedJobs_make(h->paths.arena);
 }
 

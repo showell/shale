@@ -429,7 +429,6 @@ static STATUS_MUST_USE Status paths_absolute_hint(void *ctx, PathRun *r, Pos pos
     }
     Str tail = rest.len == 0 ? S(".") : rest;
     *has = true;
-    out->has_mount = best != NULL;
     out->mount = best != NULL ? best->name : S("");
     out->spelled = tail;
     if (best == NULL) return OK;

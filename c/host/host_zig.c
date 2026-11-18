@@ -21,7 +21,7 @@ typedef enum {
 VEC_DEFINE(HostZigStrs, Str)
 
 typedef struct {
-    bool has_lines;
+    // `lines`' first and last, each 1 or more; `first` 0 for no `lines`.
     size_t first;
     size_t last;
     HostZigScopeKind scope;
@@ -56,7 +56,6 @@ static STATUS_MUST_USE Status host_zig_lines_opt(Run *r, Pos pos, Table *m, Host
         if (first < 1 || last < first) {
             return run_failf(r, pos, CLASS_ARGUMENT, "`zig_rename`'s `lines` ({d}, {d}) is no range: 1 <= first <= last", S("`zig_rename`'s `lines` ("), run_num(r, first), S(", "), run_num(r, last), S(") is no range: 1 <= first <= last"));
         }
-        o->has_lines = true;
         o->first = (size_t)first;
         o->last = (size_t)last;
     }
@@ -175,7 +174,7 @@ static STATUS_MUST_USE Status host_zig_rename_in(Paths *h, HostZigProc *z, Arena
     }
     HostZigRenameOpts o;
     TRY(host_zig_rename_opts(r, pos, &at(args, 2), &o));
-    if (o.scope != HOST_ZIG_SCOPE_NONE && (renames.len != 1 || o.has_lines)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`zig_rename`'s `container` or `via` takes one name and no `lines`"));
+    if (o.scope != HOST_ZIG_SCOPE_NONE && (renames.len != 1 || o.first != 0)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`zig_rename`'s `container` or `via` takes one name and no `lines`"));
     Str was = {0};
     TRY(host_zig_read(r, pos, &p, &was));
     Buf req = buf_make(sa);
@@ -189,7 +188,7 @@ static STATUS_MUST_USE Status host_zig_rename_in(Paths *h, HostZigProc *z, Arena
         if (s == OK) s = zig_wire_end(&req);
         TRY(host_zig_req_ok(r, pos, s));
     }
-    if (o.has_lines) {
+    if (o.first != 0) {
         Status s = buf_lit(&req, "lines\t");
         if (s == OK) s = buf_u64(&req, o.first);
         if (s == OK) s = zig_wire_tab(&req);

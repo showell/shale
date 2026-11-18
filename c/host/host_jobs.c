@@ -196,7 +196,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     if (argv_bytes > JOB_RECORD_ARGV_MAX) {
         return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start`: its argv is {d} bytes in its record, and a record holds {d}"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, argv_bytes)), MSG_FROM_HOST(run_unum(r, JOB_RECORD_ARGV_MAX))));
     }
-    if (!h->has_reaper) return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: this host has no reaper to start a job under"));
+    if (h->reaper.len == 0) return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: this host has no reaper to start a job under"));
 
     Str *env_p = ARENA_ARRAY(a, Str, h->env.len + n_env);
     if (env_p == NULL && h->env.len + n_env > 0) return run_values_oom(r, pos);

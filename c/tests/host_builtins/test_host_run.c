@@ -168,7 +168,6 @@ TEST(a_job_runs_past_its_start_is_waited_for_and_a_stopped_run_ends_the_rest) {
     RanOpts o = {NULL, false, false};
     ran_init(&x, o);
     // The reaper is the C `shale` the tier built.
-    x.lh.has_reaper = true;
     char exe[PATH_MAX];
     EXPECT(realpath("c/out/tcc/shale", exe) != NULL);
     x.lh.reaper = ran_cs(exe);
@@ -201,7 +200,6 @@ TEST(a_poll_of_job_alive_holds_the_arena_flat) {
     static Ran x;
     RanOpts o = {NULL, false, false};
     ran_init(&x, o);
-    x.lh.has_reaper = true;
     char exe[PATH_MAX];
     EXPECT(realpath("c/out/tcc/shale", exe) != NULL);
     x.lh.reaper = ran_cs(exe);
