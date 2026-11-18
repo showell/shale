@@ -1199,6 +1199,218 @@ static STATUS_MUST_USE Status host_change_os_path(Host *h, Run *r, Pos pos, Str 
     return paths_absolute(&h->paths, &rs->path, pos, mounts_trim_slash(p.full), out);
 }
 
+// The stop when a sink refused the output: the stream's arena past its cap
+// is the arena budget's stop (`most` the bytes it had), else the values'
+// arena ran out.
+static STATUS_MUST_USE Status host_stream_refused(Run *r, Pos pos, const Arena *sa, uint64_t most) {
+    return sa->hit ? host_stream_over(r, pos, most) : run_values_oom(r, pos);
+}
+
+// A program's argv, `run`'s or `job_start`'s (`who`): a list of strings, one
+// at least. Each caller's stops keep Zig's words (docs/SURFACE.txt): `run`'s
+// add an `example` to the one for a value not a list and a `why` to the one
+// for an argument not a string; `job_start`'s add neither.
+static STATUS_MUST_USE Status host_argv_arg(Run *r, Pos pos, Str who, Str example, Str why, const Value *av, SpawnStrs *out) {
+    if (av->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv is a list of strings{s}, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(example), MSG_FROM_HOST(value_type_name(av))));
+    Table *argv_t = av->as.table;
+    if (argv_t->kind == TABLE_MAP) return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv is a list of strings, not a map"), MSG_ARGS(MSG_FROM_HOST(who)));
+    if (argv_t->kind == TABLE_EMPTY || argv_t->list.len == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}` of an empty argv: name the program"), MSG_ARGS(MSG_FROM_HOST(who)));
+    size_t n = argv_t->list.len;
+    Str *argv = ARENA_ARRAY(r->ctx.values, Str, n);
+    if (argv == NULL) return run_values_oom(r, pos);
+    SLICE_TYPE(ArgvRoom, Str);
+    ArgvRoom room = {argv, n};
+    for (size_t i = 0; i < n; i++) {
+        const Value *v = &at(argv_t->list, i);
+        if (v->tag != VALUE_STRING) {
+            return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv[{d}] is {s}, not a string{s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(run_unum(r, i + 1)), MSG_FROM_HOST(value_type_name(v)), MSG_FROM_HOST(why)));
+        }
+        at(room, i) = v->as.string;
+    }
+    out->ptr = argv;
+    out->len = n;
+    return OK;
+}
+
+// The argv as one line, its parts by spaces: the time line's and the
+// records' name for a program.
+static STATUS_MUST_USE Status host_argv_joined(Run *r, Pos pos, SpawnStrs argv, Str *out) {
+    Buf jb = buf_make(r->ctx.values);
+    for (size_t i = 0; i < argv.len; i++) {
+        if ((i > 0 && buf_byte(&jb, ' ') != OK) || buf_str(&jb, at(argv, i)) != OK) return run_values_oom(r, pos);
+    }
+    *out = buf_view(&jb);
+    return OK;
+}
+
+// Opens `run`'s log, the script's `shown`, for writing. The log is a change
+// the host makes for the script: `may_change` first, then an open that
+// neither waits on a FIFO nor follows a link (both DRAGONs at their
+// functions).
+static STATUS_MUST_USE Status host_run_open_log(Host *h, Run *r, Pos pos, Str shown, int *fd) {
+    Str path = S("");
+    TRY(host_change_os_path(h, r, pos, shown, S(""), &path));
+    FileSystemCPath cp;
+    const char *c = NULL;
+    FileSystemErr ce = file_system_cstr(&cp, path, &c);
+    int opened = ce == FILE_SYSTEM_OK ? host_open_regular(c, true, fd) : file_system_cstr_errno(ce);
+    if (opened == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: its log {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(shown)));
+    if (opened != 0) return host_fail(r, pos, CLASS_STORE, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(opened)))));
+    return OK;
+}
+
+// Where a program's output streams, in the stream's arena: the scrubber,
+// then the log and the keep or `whole`'s buffer. Made in place
+// (`host_run_sinks`), since each points at the next.
+typedef struct {
+    HostOut out;
+    Buf whole;
+    Keep keeper;
+    // `re` and `not_re`, as the keeper matches them.
+    HostPattern re;
+    HostPattern not_re;
+    HostScrub scrub;
+} HostRunSinks;
+
+// `run`'s `re` or `not_re` (`name`) compiled into `p`, in the values' arena,
+// and `kp` the keep's hold of it. A pattern the regex refuses stops the run,
+// naming its byte.
+static STATUS_MUST_USE Status host_run_pattern(Run *r, Pos pos, Str name, Str pattern, bool nocase, HostPattern *p, KeepPattern *kp) {
+    Arena *a = r->ctx.values;
+    RegexOptions ro = {nocase};
+    RegexRefusal why;
+    memset(&why, 0, sizeof why);
+    if (regex_compile(a, pattern, ro, &p->program, &why) != OK) {
+        if (!why.refused) return run_values_oom(r, pos);
+        return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `{s}`, at its byte {d}: {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_HOST(run_unum(r, (uint64_t)why.at + 1)), MSG_FROM_HOST(why.message)));
+    }
+    if (regex_scratch_make(a, &p->program, &p->scratch) != OK) return run_values_oom(r, pos);
+    KeepPattern hold = {p, host_pattern_matches};
+    *kp = hold;
+    return OK;
+}
+
+// Makes the sinks in place: the log opened when given, then `whole`'s buffer
+// or the keep (its patterns compiled), and the scrubber in front of them.
+static STATUS_MUST_USE Status host_run_sinks(Host *h, Run *r, Pos pos, const RunOpts *o, HostRunHeld *held, HostSecrets secrets, HostRunSinks *s) {
+    Arena *sa = &held->stream;
+    memset(s, 0, sizeof *s);
+    s->out.log_fd = -1;
+    if (host_given(&o->log)) {
+        TRY(host_run_open_log(h, r, pos, o->log.as.string, &held->log_fd));
+        s->out.log_fd = held->log_fd;
+    }
+    s->whole = buf_make(sa);
+    switch (o->keep) {
+    case HOST_KEEP_WHOLE:
+        s->out.whole = &s->whole;
+        s->out.whole_max = o->whole;
+        break;
+    case HOST_KEEP_LINES:
+    case HOST_KEEP_SECRET: {
+        KeepOptions ko;
+        keep_options_default(&ko);
+        ko.head = (size_t)o->head;
+        ko.tail = (size_t)o->tail;
+        ko.width = (size_t)o->width;
+        ko.before = (size_t)o->before;
+        ko.after = (size_t)o->after;
+        if (host_given(&o->re)) TRY(host_run_pattern(r, pos, S("re"), o->re.as.string, o->nocase, &s->re, &ko.re));
+        if (host_given(&o->not_re)) TRY(host_run_pattern(r, pos, S("not_re"), o->not_re.as.string, o->nocase, &s->not_re, &ko.not_re));
+        if (keep_init(&s->keeper, sa, ko) != OK) return run_values_oom(r, pos);
+        s->out.keeper = &s->keeper;
+        break;
+    }
+    }
+    s->scrub.secrets = secrets;
+    s->scrub.carry = buf_make(sa);
+    s->scrub.scanned = buf_make(sa);
+    s->scrub.next = &s->out;
+    return OK;
+}
+
+// Starts the program as `spec` says and streams its output into the sinks
+// until it ends. One that could not be started stops the run, saying why.
+static STATUS_MUST_USE Status host_run_spawn(Run *r, Pos pos, const SpawnSpec *spec, HostRunSinks *s, const Arena *sa, uint64_t most, SpawnOutcome *outcome) {
+    SpawnSink sink = {&s->scrub, host_scrub_write};
+    Str argv0 = at(spec->argv, 0);
+    memset(outcome, 0, sizeof *outcome);
+    r->host_runs++;
+    switch (spawn_run(r->ctx.values, spec, sink, outcome)) {
+    case SPAWN_OK: break;
+    case SPAWN_OUT_OF_MEMORY: return run_values_oom(r, pos);
+    case SPAWN_SINK_STOPPED: return host_stream_refused(r, pos, sa, most);
+    case SPAWN_NOT_FOUND: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
+    case SPAWN_NOT_RUNNABLE: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is there but cannot be run (its permissions, or not a program)"), MSG_ARGS(MSG_FROM_SCRIPT(argv0)));
+    case SPAWN_NO_CWD: return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`: its cwd is not a folder that can be entered"));
+    case SPAWN_REFUSED: return host_fail_plain(r, pos, CLASS_HOST, S("`run`: the program could not be started (a pipe, a fork or a pidfd refused)"));
+    }
+    if (host_scrub_finish(&s->scrub) != OK) return host_stream_refused(r, pos, sa, most);
+    return OK;
+}
+
+// `stdout_secret`'s end, once the program's: refused past its cap however
+// the program ended, stored only on exit 0 (so a failed program leaves
+// nothing half made, `*stored` false), and `said` for the record (`, stdout
+// to keys:x (N bytes)`).
+static STATUS_MUST_USE Status host_run_secret_end(Run *r, Pos pos, HostRunHeld *held, Str argv0, bool replace, const SpawnOutcome *o, Buf *said, bool *stored, uint64_t *bytes) {
+    TRY(host_secret_refuse_over(r, pos, &held->secret, argv0));
+    if (o->ended == SPAWN_EXIT && o->code == 0) {
+        TRY(host_secret_store(r, pos, &held->secret, argv0, replace, bytes));
+        *stored = true;
+    }
+    Status s = buf_lit(said, ", stdout to ");
+    if (s == OK) s = buf_str(said, held->secret.shown);
+    if (s == OK && *stored) s = buf_lit(said, " (");
+    if (s == OK && *stored) s = buf_u64(said, *bytes);
+    if (s == OK) s = buf_str(said, *stored ? S(" bytes)") : S(" (not written)"));
+    if (s != OK) buf_clear(said);
+    return OK;
+}
+
+// The log's record, `log PATH`, which says so when a write failed (fsync's
+// EIO among them) and the log is short.
+static void host_run_log_record(Host *h, Run *r, int fd, Str shown, bool failed) {
+    if (fsync(fd) != 0 && errno == EIO) failed = true;
+    Buf lb = buf_make(r->ctx.values);
+    if (buf_lit(&lb, "log ") == OK && buf_str(&lb, shown) == OK && buf_str(&lb, failed ? S(": a write failed, the log is short") : S("")) == OK) host_record(h, buf_view(&lb));
+}
+
+// The answer's `out` and its line counts, by the keep: `whole`'s buffer
+// whole (refused past `whole = N`), or what the keep kept, its filters'
+// work charged to the caller's steps. `*kept_out` is the `out` given.
+static STATUS_MUST_USE Status host_run_out(Run *r, Pos pos, const RunOpts *o, HostRunSinks *s, const Arena *sa, uint64_t most, Table *t, Str *kept_out) {
+    Arena *a = r->ctx.values;
+    switch (o->keep) {
+    case HOST_KEEP_WHOLE: {
+        if (s->out.whole_over) {
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: the output passed `whole = {d}` bytes ({d}): a keep, `head` and `tail`, takes any size"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, o->whole)), MSG_FROM_HOST(run_unum(r, s->out.bytes))));
+        }
+        int64_t lines = (int64_t)host_count_lines(buf_view(&s->whole));
+        if (!arena_dup(a, buf_view(&s->whole), kept_out)) return run_values_oom(r, pos);
+        TRY(run_map_put_str(r, pos, t, S("out"), *kept_out));
+        TRY(run_map_put_bool(r, pos, t, S("whole"), true));
+        TRY(run_map_put_int(r, pos, t, S("total_lines"), lines));
+        TRY(run_map_put_int(r, pos, t, S("matched_lines"), lines));
+        TRY(run_map_put_int(r, pos, t, S("kept_lines"), lines));
+        break;
+    }
+    case HOST_KEEP_LINES:
+    case HOST_KEEP_SECRET: {
+        Kept kept;
+        if (keep_finish(&s->keeper, &kept) != OK) return host_stream_refused(r, pos, sa, most);
+        TRY(run_charge(r, pos, kept.work));
+        if (!arena_dup(a, kept.out, kept_out)) return run_values_oom(r, pos);
+        TRY(run_map_put_str(r, pos, t, S("out"), *kept_out));
+        TRY(run_map_put_int(r, pos, t, S("total_lines"), (int64_t)kept.total));
+        TRY(run_map_put_int(r, pos, t, S("matched_lines"), (int64_t)kept.matched));
+        TRY(run_map_put_int(r, pos, t, S("kept_lines"), (int64_t)kept.kept));
+        break;
+    }
+    }
+    return OK;
+}
+
 // Runs the program, streams its output through the scrubber to the log and
 // the keep, and gives the answer, once `host_run_program` has read the
 // options.
@@ -1216,7 +1428,8 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     bool has_stdin = false;
     Str stdin_bytes = S("");
     TRY(host_run_stdin(r, pos, o, &has_stdin, &stdin_bytes));
-    if (o->keep == HOST_KEEP_SECRET) {
+    bool secret = o->keep == HOST_KEEP_SECRET;
+    if (secret) {
         TRY(host_secret_open(h, r, pos, &o->stdout_secret, o->secret_replace, &held->secret));
         held->has_secret = true;
     }
@@ -1226,74 +1439,9 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     uint64_t most = run_sat_sub(r->ctx.budgets.arena_bytes, a->held);
     arena_init(&held->stream, (size_t)most, &r->ctx.refused);
     held->has_stream = true;
-    Arena *sa = &held->stream;
-    HostOut sink_out;
-    memset(&sink_out, 0, sizeof sink_out);
-    sink_out.log_fd = -1;
-    Str log_shown = S("");
-    if (host_given(&o->log)) {
-        log_shown = o->log.as.string;
-        Str path = S("");
-        // The log is a change the host makes for the script: `may_change`
-        // first, then an open that neither waits on a FIFO nor follows a
-        // link (both DRAGONs at their functions).
-        TRY(host_change_os_path(h, r, pos, log_shown, S(""), &path));
-        FileSystemCPath cp;
-        const char *c = NULL;
-        FileSystemErr ce = file_system_cstr(&cp, path, &c);
-        int opened = ce == FILE_SYSTEM_OK ? host_open_regular(c, true, &held->log_fd) : file_system_cstr_errno(ce);
-        if (opened == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: its log {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
-        if (opened != 0) return host_fail(r, pos, CLASS_STORE, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(opened)))));
-        sink_out.log_fd = held->log_fd;
-    }
-    Buf whole_buf = buf_make(sa);
-    Keep keeper;
-    HostPattern patterns[2];
-    SLICE_TYPE(HostPatterns, HostPattern);
-    HostPatterns pats = {patterns, 2};
-    switch (o->keep) {
-    case HOST_KEEP_WHOLE:
-        sink_out.whole = &whole_buf;
-        sink_out.whole_max = o->whole;
-        break;
-    case HOST_KEEP_LINES:
-    case HOST_KEEP_SECRET: {
-        KeepOptions ko;
-        keep_options_default(&ko);
-        ko.head = (size_t)o->head;
-        ko.tail = (size_t)o->tail;
-        ko.width = (size_t)o->width;
-        ko.before = (size_t)o->before;
-        ko.after = (size_t)o->after;
-        for (size_t i = 0; i < 2; i++) {
-            const Value *opt = i == 0 ? &o->re : &o->not_re;
-            if (!host_given(opt)) continue;
-            Str p = opt->as.string;
-            RegexOptions ro = {o->nocase};
-            RegexRefusal why;
-            memset(&why, 0, sizeof why);
-            if (regex_compile(a, p, ro, &at(pats, i).program, &why) != OK) {
-                if (!why.refused) return run_values_oom(r, pos);
-                return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `{s}`, at its byte {d}: {s}"), MSG_ARGS(MSG_FROM_HOST(i == 0 ? S("re") : S("not_re")), MSG_FROM_HOST(run_unum(r, (uint64_t)why.at + 1)), MSG_FROM_HOST(why.message)));
-            }
-            if (regex_scratch_make(a, &at(pats, i).program, &at(pats, i).scratch) != OK) return run_values_oom(r, pos);
-            KeepPattern kp = {&at(pats, i), host_pattern_matches};
-            if (i == 0) {
-                ko.re = kp;
-            } else {
-                ko.not_re = kp;
-            }
-        }
-        if (keep_init(&keeper, sa, ko) != OK) return run_values_oom(r, pos);
-        sink_out.keeper = &keeper;
-        break;
-    }
-    }
-    bool secret = o->keep == HOST_KEEP_SECRET;
-    HostScrub scrub = {secrets, buf_make(sa), buf_make(sa), &sink_out};
-    SpawnSink sink = {&scrub, host_scrub_write};
+    HostRunSinks sinks;
+    TRY(host_run_sinks(h, r, pos, o, held, secrets, &sinks));
 
-    r->host_runs++;
     SpawnSpec spec;
     spawn_spec_default(&spec);
     spec.argv = argv;
@@ -1311,76 +1459,26 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     if (o->nice != HOST_UNSET) spec.nice = (int)o->nice;
     spec.timeout_ms = o->timeout_ms;
     SpawnOutcome outcome;
-    memset(&outcome, 0, sizeof outcome);
-    Str argv0 = at(argv, 0);
-    switch (spawn_run(a, &spec, sink, &outcome)) {
-    case SPAWN_OK: break;
-    case SPAWN_OUT_OF_MEMORY: return run_values_oom(r, pos);
-    case SPAWN_SINK_STOPPED: return sa->hit ? host_stream_over(r, pos, most) : run_values_oom(r, pos);
-    case SPAWN_NOT_FOUND: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
-    case SPAWN_NOT_RUNNABLE: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is there but cannot be run (its permissions, or not a program)"), MSG_ARGS(MSG_FROM_SCRIPT(argv0)));
-    case SPAWN_NO_CWD: return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run`: its cwd is not a folder that can be entered"));
-    case SPAWN_REFUSED: return host_fail_plain(r, pos, CLASS_HOST, S("`run`: the program could not be started (a pipe, a fork or a pidfd refused)"));
-    }
-    if (host_scrub_finish(&scrub) != OK) return sa->hit ? host_stream_over(r, pos, most) : run_values_oom(r, pos);
+    TRY(host_run_spawn(r, pos, &spec, &sinks, &held->stream, most, &outcome));
 
     // The output charged as bulk work and as read bytes.
-    TRY(builtin_charge_bytes(r, pos, sink_out.bytes));
-    r->read_bytes += sink_out.bytes;
-    Buf jb = buf_make(a);
-    for (size_t i = 0; i < argv.len; i++) {
-        if ((i > 0 && buf_byte(&jb, ' ') != OK) || buf_str(&jb, at(argv, i)) != OK) return run_values_oom(r, pos);
-    }
-    Str joined = buf_view(&jb);
+    TRY(builtin_charge_bytes(r, pos, sinks.out.bytes));
+    r->read_bytes += sinks.out.bytes;
+    Str joined = S("");
+    TRY(host_argv_joined(r, pos, argv, &joined));
     host_time_ran(&h->time, h->paths.arena, joined, outcome.ms);
-    // Stored only on exit 0, so a failed program leaves nothing half made.
+    Str argv0 = at(argv, 0);
     bool secret_stored = false;
     uint64_t secret_bytes = 0;
-    if (secret) TRY(host_secret_refuse_over(r, pos, &held->secret, argv0));
-    if (secret && outcome.ended == SPAWN_EXIT && outcome.code == 0) {
-        TRY(host_secret_store(r, pos, &held->secret, argv0, o->secret_replace, &secret_bytes));
-        secret_stored = true;
-    }
     Buf said = buf_make(a);
-    if (secret) {
-        Status s = buf_lit(&said, ", stdout to ");
-        if (s == OK) s = buf_str(&said, held->secret.shown);
-        if (s == OK && secret_stored) s = buf_lit(&said, " (");
-        if (s == OK && secret_stored) s = buf_u64(&said, secret_bytes);
-        if (s == OK) s = buf_str(&said, secret_stored ? S(" bytes)") : S(" (not written)"));
-        if (s != OK) buf_clear(&said);
-    }
+    if (secret) TRY(host_run_secret_end(r, pos, held, argv0, o->secret_replace, &outcome, &said, &secret_stored, &secret_bytes));
     host_run_record(h, r, joined, buf_view(&shown_env), o, &outcome, buf_view(&said));
-    if (host_given(&o->log)) {
-        if (fsync(held->log_fd) != 0 && errno == EIO) sink_out.log_failed = true;
-        Buf lb = buf_make(a);
-        if (buf_lit(&lb, "log ") == OK && buf_str(&lb, log_shown) == OK && buf_str(&lb, sink_out.log_failed ? S(": a write failed, the log is short") : S("")) == OK) host_record(h, buf_view(&lb));
-    }
+    if (host_given(&o->log)) host_run_log_record(h, r, held->log_fd, o->log.as.string, sinks.out.log_failed);
 
     Table *t = NULL;
     TRY(host_run_answer(r, pos, argv, &outcome, &t));
     Str kept_out = S("");
-    if (o->keep == HOST_KEEP_WHOLE) {
-        if (sink_out.whole_over) {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: the output passed `whole = {d}` bytes ({d}): a keep, `head` and `tail`, takes any size"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, o->whole)), MSG_FROM_HOST(run_unum(r, sink_out.bytes))));
-        }
-        int64_t lines = (int64_t)host_count_lines(buf_view(&whole_buf));
-        if (!arena_dup(a, buf_view(&whole_buf), &kept_out)) return run_values_oom(r, pos);
-        TRY(run_map_put_str(r, pos, t, S("out"), kept_out));
-        TRY(run_map_put_bool(r, pos, t, S("whole"), true));
-        TRY(run_map_put_int(r, pos, t, S("total_lines"), lines));
-        TRY(run_map_put_int(r, pos, t, S("matched_lines"), lines));
-        TRY(run_map_put_int(r, pos, t, S("kept_lines"), lines));
-    } else {
-        Kept kept;
-        if (keep_finish(&keeper, &kept) != OK) return sa->hit ? host_stream_over(r, pos, most) : run_values_oom(r, pos);
-        TRY(run_charge(r, pos, kept.work));
-        if (!arena_dup(a, kept.out, &kept_out)) return run_values_oom(r, pos);
-        TRY(run_map_put_str(r, pos, t, S("out"), kept_out));
-        TRY(run_map_put_int(r, pos, t, S("total_lines"), (int64_t)kept.total));
-        TRY(run_map_put_int(r, pos, t, S("matched_lines"), (int64_t)kept.matched));
-        TRY(run_map_put_int(r, pos, t, S("kept_lines"), (int64_t)kept.kept));
-    }
+    TRY(host_run_out(r, pos, o, &sinks, &held->stream, most, t, &kept_out));
     if (secret) {
         TRY(run_map_put_bool(r, pos, t, S("secret_written"), secret_stored));
         TRY(run_map_put_int(r, pos, t, S("secret_bytes"), (int64_t)secret_bytes));
@@ -1398,33 +1496,17 @@ static STATUS_MUST_USE Status host_run_program(Host *h, Run *r, Pos pos, ConstVa
     if (args.len != 2) {
         return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes argv and its options, `run({{\"zig\", \"build\"}}, {{timeout_ms = ..., tail = 20}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
     }
-    const Value *av = &at(args, 0);
-    if (av->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`'s argv is a list of strings, `{{\"zig\", \"build\"}}`, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(av))));
-    Table *argv_t = av->as.table;
-    if (argv_t->kind == TABLE_MAP) return host_fail_plain(r, pos, CLASS_TYPE, S("`run`'s argv is a list of strings, not a map"));
-    if (argv_t->kind == TABLE_EMPTY || argv_t->list.len == 0) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` of an empty argv: name the program"));
-    size_t n = argv_t->list.len;
-    Str *argv = ARENA_ARRAY(r->ctx.values, Str, n);
-    if (argv == NULL) return run_values_oom(r, pos);
-    SLICE_TYPE(ArgvRoom, Str);
-    ArgvRoom room = {argv, n};
-    for (size_t i = 0; i < n; i++) {
-        const Value *v = &at(argv_t->list, i);
-        if (v->tag != VALUE_STRING) {
-            return host_fail(r, pos, CLASS_TYPE, S("`run`'s argv[{d}] is {s}, not a string: every argument is one, written as the program takes it"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, i + 1)), MSG_FROM_HOST(value_type_name(v))));
-        }
-        at(room, i) = v->as.string;
-    }
+    SpawnStrs argv = {NULL, 0};
+    TRY(host_argv_arg(r, pos, S("run"), S(", `{\"zig\", \"build\"}`"), S(": every argument is one, written as the program takes it"), &at(args, 0), &argv));
     RunOpts o;
     TRY(host_read_opts(r, pos, &at(args, 1), &o));
-    TRY(run_charge(r, pos, n));
+    TRY(run_charge(r, pos, argv.len));
     if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
     HostRunHeld held;
     memset(&held, 0, sizeof held);
     held.log_fd = -1;
     held.secret.file.fd = -1;
-    SpawnStrs sargv = {argv, n};
-    Status s = host_run_spawned(h, r, pos, sargv, &o, &held, out);
+    Status s = host_run_spawned(h, r, pos, argv, &o, &held, out);
     host_run_release(&held);
     return s;
 }

@@ -91,44 +91,30 @@ static STATUS_MUST_USE Status host_jobs_result(Run *r, Pos pos, Str ended, bool 
     return OK;
 }
 
-// `job_start(argv, opts)`: starts argv under the reaper. The
-// options are `log` (required), `cwd`, `env`, `want` and `keep_on_stop`;
-// there is no `secrets`, since nothing scrubs a detached job's log. It counts
-// against the run's cap on programs.
-static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValues args, Value *out) {
-    Arena *a = r->ctx.values;
-    if (args.len != 2) {
-        return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes argv and its options, `job_start({{\"zig\", \"build\"}}, {{log = \"runs:build.log\"}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
-    }
-    const Value *av = &at(args, 0);
-    if (av->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s argv is a list of strings, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(av))));
-    Table *argv_t = av->as.table;
-    if (argv_t->kind == TABLE_MAP) return host_fail_plain(r, pos, CLASS_TYPE, S("`job_start`'s argv is a list of strings, not a map"));
-    if (argv_t->kind == TABLE_EMPTY || argv_t->list.len == 0) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start` of an empty argv: name the program"));
-    size_t n = argv_t->list.len;
-    Str *argv_p = ARENA_ARRAY(a, Str, n);
-    if (argv_p == NULL) return run_values_oom(r, pos);
-    SLICE_TYPE(ArgvRoom, Str);
-    ArgvRoom argv = {argv_p, n};
-    for (size_t i = 0; i < n; i++) {
-        const Value *v = &at(argv_t->list, i);
-        if (v->tag != VALUE_STRING) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s argv[{d}] is {s}, not a string"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, i + 1)), MSG_FROM_HOST(value_type_name(v))));
-        at(argv, i) = v->as.string;
-    }
-    const Value *ov = &at(args, 1);
+// `job_start`'s options, as its options boundary read them.
+typedef struct {
+    // The log's Shale path; required.
+    Str log;
+    // A string, the folder the job runs in; nil for the root.
+    Value cwd;
+    HostEnvOpt env;
+    // A string, or nil.
+    Value want;
+    bool keep_on_stop;
+} HostJobOpts;
+
+// `job_start`'s options read, each held to its rules: `log` required, and no
+// `secrets`, since nothing scrubs a detached job's log.
+static STATUS_MUST_USE Status host_job_opts(Run *r, Pos pos, const Value *ov, HostJobOpts *o) {
+    memset(o, 0, sizeof *o);
+    value_nil(&o->cwd);
+    value_nil(&o->want);
     if (ov->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s options are a map, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(ov))));
     Table *m = ov->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`job_start`'s options are a map, not a list"));
-    // Each nil until given: a script's map never holds nil.
+    // Nil until given: a script's map never holds nil.
     Value log_v;
     value_nil(&log_v);
-    Value cwd_v;
-    value_nil(&cwd_v);
-    Value want;
-    value_nil(&want);
-    HostEnvOpt env_o;
-    memset(&env_o, 0, sizeof env_o);
-    bool keep_on_stop = false;
     for (size_t i = 0; i < ValueMap_len(&m->map); i++) {
         Str k = ValueMap_key_at(&m->map, i);
         Value x = ValueMap_value_at(&m->map, i);
@@ -137,14 +123,14 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
         } else if (str_eq(k, S("cwd"))) {
             Str unused = S("");
             TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &x, S("its path"), &unused));
-            cwd_v = x;
+            o->cwd = x;
         } else if (str_eq(k, S("env"))) {
-            TRY(host_env_opt(r, pos, k, &x, false, &env_o));
+            TRY(host_env_opt(r, pos, k, &x, false, &o->env));
         } else if (str_eq(k, S("want"))) {
-            TRY(host_str_value_opt(r, pos, k, &x, &want));
+            TRY(host_str_value_opt(r, pos, k, &x, &o->want));
         } else if (str_eq(k, S("keep_on_stop"))) {
             if (x.tag != VALUE_BOOL) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s `keep_on_stop` is a boolean, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(&x))));
-            keep_on_stop = x.as.boolean;
+            o->keep_on_stop = x.as.boolean;
         } else if (str_eq(k, S("secrets"))) {
             return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start`: no `secrets` on a job: a detached job's log has nobody to scrub it"));
         } else {
@@ -152,105 +138,81 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
         }
     }
     if (!host_given(&log_v)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start` needs a `log`: a job's output goes there, and its record beside it"));
-    Str log_shown = S("");
-    TRY(host_str_opt(r, pos, S("log"), &log_v, &log_shown));
-    TRY(run_charge(r, pos, n));
-    if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
-    // No `secrets` on a job; the guards' order is the DRAGON at
-    // host_guard_program (host_run.c).
-    HostEnvOpt no_secrets;
-    memset(&no_secrets, 0, sizeof no_secrets);
-    SpawnStrs argv_s = {argv.ptr, argv.len};
-    HostProgram prog = {S("job_start"), argv_s, &cwd_v, &env_o, &no_secrets, host_given(&want)};
-    Str cwd = S("");
-    TRY(host_guard_program(h, r, pos, &prog, &cwd));
-    // Its record holds the argv, escaped: one too long is said here, not as
-    // a record the reaper could not write.
-    uint64_t argv_bytes = n - 1;
-    for (size_t i = 0; i < n; i++) {
+    return host_str_opt(r, pos, S("log"), &log_v, &o->log);
+}
+
+// Refuses an argv too long for the job's record, which holds it escaped:
+// said here, not as a record the reaper could not write.
+static STATUS_MUST_USE Status host_job_argv_fits(Run *r, Pos pos, SpawnStrs argv) {
+    uint64_t argv_bytes = argv.len - 1;
+    for (size_t i = 0; i < argv.len; i++) {
         Str x = at(argv, i);
         for (size_t k = 0; k < x.len; k++) argv_bytes += (str_byte(x, k) == '\n' || str_byte(x, k) == '\\') ? 2 : 1;
     }
-    if (argv_bytes > JOB_RECORD_ARGV_MAX) {
-        return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start`: its argv is {d} bytes in its record, and a record holds {d}"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, argv_bytes)), MSG_FROM_HOST(run_unum(r, JOB_RECORD_ARGV_MAX))));
-    }
-    if (h->reaper.len == 0) return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: this host has no reaper to start a job under"));
+    if (argv_bytes <= JOB_RECORD_ARGV_MAX) return OK;
+    return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start`: its argv is {d} bytes in its record, and a record holds {d}"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, argv_bytes)), MSG_FROM_HOST(run_unum(r, JOB_RECORD_ARGV_MAX))));
+}
 
-    // A job's record line names no `env`, so what `host_run_env` shows of it
-    // is let go.
-    Buf shown_env = buf_make(a);
-    SpawnStrs senv = {NULL, 0};
-    HostSecrets none = {NULL, 0};
-    TRY(host_run_env(h, r, pos, &env_o, &no_secrets, &shown_env, &senv, &none));
-    bool found = false;
-    Str program = S("");
-    if (jobs_find(a, at(argv, 0), senv, cwd, &found, &program) != OK) return run_values_oom(r, pos);
-    Str argv0 = at(argv, 0);
-    if (!found) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
-    // The reaper truncates the log and writes the record: changes the host
-    // makes for the script, so each asks `may_change` (host_change_os_path).
-    Str log_os = S("");
-    TRY(host_change_os_path(h, r, pos, log_shown, S(""), &log_os));
-    Str record_os = S("");
-    TRY(host_change_os_path(h, r, pos, log_shown, S(".job"), &record_os));
-    // The reaper writes the log and the record there; it does not make room.
-    size_t slash = log_os.len;
-    while (slash > 0 && str_byte(log_os, slash - 1) != '/') slash--;
+// Refuses a log a job still runs on: its record is the job's only handle,
+// and the old reaper would write its end over the new record. A record that
+// cannot be read for any reason but its absence is refused too: a job may
+// still run there.
+static STATUS_MUST_USE Status host_job_refuse_running(Run *r, Pos pos, Str log_shown, Str record_os) {
+    Bytes old_text = {NULL, 0};
+    Str why = S("");
+    TRY(host_jobs_read(r, pos, record_os, &old_text, &why));
+    if (str_eq(why, S("FileNotFound"))) return OK;
+    if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}.job cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(why)));
+    TRY(host_jobs_charge_read(r, pos, old_text.len));
+    JobRecord old;
+    if (!job_record_parse(old_text, &old)) return OK;
+    if (!jobs_alive(&old) && (job_record_done(old) || !jobs_reaper_alive(&old))) return OK;
+    return host_fail(r, pos, CLASS_HOST, S("`job_start`: a job still runs on {s} (pid {d}, its record {s}.job): `job_stop` or `job_wait` it, or give another log"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(run_num(r, old.pid)), MSG_FROM_SCRIPT(log_shown)));
+}
+
+// The job's log and record as OS paths. The reaper truncates the log and
+// writes the record, changes the host makes for the script, so each asks
+// `may_change` (host_change_os_path); it makes no folder, so the log's must
+// be there; and a log a job still runs on is refused.
+static STATUS_MUST_USE Status host_job_place(Host *h, Run *r, Pos pos, Str log_shown, Str *log_os, Str *record_os) {
+    TRY(host_change_os_path(h, r, pos, log_shown, S(""), log_os));
+    TRY(host_change_os_path(h, r, pos, log_shown, S(".job"), record_os));
+    size_t slash = log_os->len;
+    while (slash > 0 && str_byte(*log_os, slash - 1) != '/') slash--;
     if (slash > 0) {
-        Str dir = str_sub(log_os, 0, slash > 1 ? slash - 1 : 1);
+        Str dir = str_sub(*log_os, 0, slash > 1 ? slash - 1 : 1);
         FileSystemCPath dir_cp;
         const char *dc = NULL;
         if (file_system_cstr(&dir_cp, dir, &dc) != FILE_SYSTEM_OK || access(dc, F_OK) != 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
     }
-    // A log a job still runs on is refused: its record is the job's only
-    // handle, and the old reaper would write its end over the new record.
-    Bytes old_text = {NULL, 0};
-    Str why = S("");
-    TRY(host_jobs_read(r, pos, record_os, &old_text, &why));
-    if (why.len == 0) {
-        TRY(host_jobs_charge_read(r, pos, old_text.len));
-        JobRecord old;
-        if (job_record_parse(old_text, &old) && (jobs_alive(&old) || (!job_record_done(old) && jobs_reaper_alive(&old)))) {
-            return host_fail(r, pos, CLASS_HOST, S("`job_start`: a job still runs on {s} (pid {d}, its record {s}.job): `job_stop` or `job_wait` it, or give another log"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(run_num(r, old.pid)), MSG_FROM_SCRIPT(log_shown)));
-        }
-    } else if (!str_eq(why, S("FileNotFound"))) {
-        // Any other failure is not "no job": one may still run there.
-        return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}.job cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(why)));
-    }
-    r->host_runs++;
-    JobRecord rec;
-    SpawnStrs sargv = {argv.ptr, argv.len};
-    switch (jobs_launch(a, h->reaper, record_os, log_os, cwd, program, sargv, senv, &rec)) {
-    case JOBS_LAUNCHED: break;
-    case JOBS_OUT_OF_MEMORY: return run_values_oom(r, pos);
-    case JOBS_SPAWN: return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: the reaper could not be forked"));
-    case JOBS_NO_RECORD: return host_fail(r, pos, CLASS_HOST, S("`job_start`: the reaper ended without writing a record at {s}.job"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
-    }
-    Buf jb = buf_make(a);
-    for (size_t i = 0; i < n; i++) {
-        if ((i > 0 && buf_byte(&jb, ' ') != OK) || buf_str(&jb, at(argv, i)) != OK) return run_values_oom(r, pos);
-    }
-    Str joined = buf_view(&jb);
-    Buf line = buf_make(a);
+    return host_job_refuse_running(r, pos, log_shown, *record_os);
+}
+
+// The record of a job started: `job ARGV [(want: W)] started (pid P), log
+// L[, kept on a stop]`.
+static void host_job_record(Host *h, Run *r, Str joined, const HostJobOpts *o, const JobRecord *rec) {
+    Buf line = buf_make(r->ctx.values);
     Status ls = buf_lit(&line, "job ");
     if (ls == OK) ls = buf_str(&line, joined);
-    if (ls == OK && host_given(&want)) ls = buf_lit(&line, " (want: ");
-    if (ls == OK && host_given(&want)) ls = buf_str(&line, want.as.string);
-    if (ls == OK && host_given(&want)) ls = buf_byte(&line, ')');
+    if (ls == OK && host_given(&o->want)) ls = buf_lit(&line, " (want: ");
+    if (ls == OK && host_given(&o->want)) ls = buf_str(&line, o->want.as.string);
+    if (ls == OK && host_given(&o->want)) ls = buf_byte(&line, ')');
     if (ls == OK) ls = buf_lit(&line, " started (pid ");
-    if (ls == OK) ls = buf_u64(&line, (uint64_t)rec.pid);
+    if (ls == OK) ls = buf_u64(&line, (uint64_t)rec->pid);
     if (ls == OK) ls = buf_lit(&line, "), log ");
-    if (ls == OK) ls = buf_str(&line, log_shown);
-    if (ls == OK && keep_on_stop) ls = buf_lit(&line, ", kept on a stop");
+    if (ls == OK) ls = buf_str(&line, o->log);
+    if (ls == OK && o->keep_on_stop) ls = buf_lit(&line, ", kept on a stop");
     if (ls == OK) host_record(h, buf_view(&line));
-    // Kept by the host, past the run's values, for a stop to end. A job the
-    // host cannot keep would be one a stop leaves running unsaid, so it is
-    // a stop at once, the job ended first.
-    // DRAGON: the process boundary. A job the run started and the host lost
-    // would outlive a stopped run, against the rule that a stop ends its
-    // jobs.
-    // REMEDY: each copy is checked, and a refused one stops the job before
-    // the arena's stop is said.
+}
+
+// Keeps the job started in the host, past the run's values, for a stop to
+// end (`host_jobs_stop_with_run`). A job the host cannot keep would be one a
+// stop leaves running unsaid, so it is a stop at once, the job ended first.
+// DRAGON: the process boundary. A job the run started and the host lost
+// would outlive a stopped run, against the rule that a stop ends its jobs.
+// REMEDY: each copy is checked, and a refused one stops the job before the
+// arena's stop is said.
+static STATUS_MUST_USE Status host_job_keep(Host *h, Run *r, Pos pos, Str joined, Str record_os, const HostJobOpts *o, JobRecord *rec) {
     Arena *ha = h->paths.arena;
     HostStarted kept;
     memset(&kept, 0, sizeof kept);
@@ -263,26 +225,84 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     } else {
         fits = arena_dup(ha, joined, &argv_shown);
     }
-    fits = fits && arena_dup(ha, record_os, &kept.record_os) && arena_dup(ha, log_shown, &kept.log) && arena_dup(ha, rec.start, &kept.start);
+    fits = fits && arena_dup(ha, record_os, &kept.record_os) && arena_dup(ha, o->log, &kept.log) && arena_dup(ha, rec->start, &kept.start);
     kept.argv = argv_shown;
-    kept.pid = rec.pid;
-    kept.pgid = rec.pgid;
-    kept.keep = keep_on_stop;
-    if (!fits || HostStartedJobs_push(&h->started, kept) != OK) {
-        jobs_stop(&rec, JOBS_GROUP_GRACE_MS);
-        return run_values_oom(r, pos);
-    }
+    kept.pid = rec->pid;
+    kept.pgid = rec->pgid;
+    kept.keep = o->keep_on_stop;
+    if (fits && HostStartedJobs_push(&h->started, kept) == OK) return OK;
+    jobs_stop(rec, JOBS_GROUP_GRACE_MS);
+    return run_values_oom(r, pos);
+}
+
+// `{log, record, pid, pgid}`, the job `job_alive`, `job_stop` and `job_wait`
+// take.
+static STATUS_MUST_USE Status host_job_answer(Run *r, Pos pos, Str log_shown, const JobRecord *rec, Value *out) {
     Table *t = NULL;
     TRY(run_new_table(r, pos, &t));
     t->kind = TABLE_MAP;
     TRY(run_map_put_str(r, pos, t, S("log"), log_shown));
-    Buf sb = buf_make(a);
+    Buf sb = buf_make(r->ctx.values);
     if (buf_str(&sb, log_shown) != OK || buf_lit(&sb, ".job") != OK) return run_values_oom(r, pos);
     TRY(run_map_put_str(r, pos, t, S("record"), buf_view(&sb)));
-    TRY(run_map_put_int(r, pos, t, S("pid"), rec.pid));
-    TRY(run_map_put_int(r, pos, t, S("pgid"), rec.pgid));
+    TRY(run_map_put_int(r, pos, t, S("pid"), rec->pid));
+    TRY(run_map_put_int(r, pos, t, S("pgid"), rec->pgid));
     value_table(out, t);
     return OK;
+}
+
+// `job_start(argv, opts)`: starts argv under the reaper, once the guards
+// every program passes have passed it. It counts against the run's cap on
+// programs.
+static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValues args, Value *out) {
+    Arena *a = r->ctx.values;
+    if (args.len != 2) {
+        return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes argv and its options, `job_start({{\"zig\", \"build\"}}, {{log = \"runs:build.log\"}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
+    }
+    SpawnStrs argv = {NULL, 0};
+    TRY(host_argv_arg(r, pos, S("job_start"), S(""), S(""), &at(args, 0), &argv));
+    HostJobOpts o;
+    TRY(host_job_opts(r, pos, &at(args, 1), &o));
+    TRY(run_charge(r, pos, argv.len));
+    if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
+    // No `secrets` on a job; the guards' order is the DRAGON at
+    // host_guard_program (host_run.c).
+    HostEnvOpt no_secrets;
+    memset(&no_secrets, 0, sizeof no_secrets);
+    HostProgram prog = {S("job_start"), argv, &o.cwd, &o.env, &no_secrets, host_given(&o.want)};
+    Str cwd = S("");
+    TRY(host_guard_program(h, r, pos, &prog, &cwd));
+    TRY(host_job_argv_fits(r, pos, argv));
+    if (h->reaper.len == 0) return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: this host has no reaper to start a job under"));
+
+    // A job's record line names no `env`, so what `host_run_env` shows of it
+    // is let go.
+    Buf shown_env = buf_make(a);
+    SpawnStrs env = {NULL, 0};
+    HostSecrets none = {NULL, 0};
+    TRY(host_run_env(h, r, pos, &o.env, &no_secrets, &shown_env, &env, &none));
+    bool found = false;
+    Str program = S("");
+    Str argv0 = at(argv, 0);
+    if (jobs_find(a, argv0, env, cwd, &found, &program) != OK) return run_values_oom(r, pos);
+    if (!found) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
+    Str log_os = S("");
+    Str record_os = S("");
+    TRY(host_job_place(h, r, pos, o.log, &log_os, &record_os));
+
+    r->host_runs++;
+    JobRecord rec;
+    switch (jobs_launch(a, h->reaper, record_os, log_os, cwd, program, argv, env, &rec)) {
+    case JOBS_LAUNCHED: break;
+    case JOBS_OUT_OF_MEMORY: return run_values_oom(r, pos);
+    case JOBS_SPAWN: return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: the reaper could not be forked"));
+    case JOBS_NO_RECORD: return host_fail(r, pos, CLASS_HOST, S("`job_start`: the reaper ended without writing a record at {s}.job"), MSG_ARGS(MSG_FROM_SCRIPT(o.log)));
+    }
+    Str joined = S("");
+    TRY(host_argv_joined(r, pos, argv, &joined));
+    host_job_record(h, r, joined, &o, &rec);
+    TRY(host_job_keep(h, r, pos, joined, record_os, &o, &rec));
+    return host_job_answer(r, pos, o.log, &rec, out);
 }
 
 // A log searched as it grows, never reading again what it already read.
