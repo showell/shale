@@ -1,8 +1,8 @@
 # The Zig 0.17 upgrade cookbook
 
 Recipes for moving Zig code from 0.16 to 0.17, the same mechanical work in
-every repo, kept as the shape of the next upgrade. Zig Shale tested each to
-parse (`legacy_zig/src/shale_cookbook_test.zig`); the C build does not yet.
+every repo, kept as the shape of the next upgrade. Each is held to parse
+and compile (`shale --check`) by C's full tier, `shale c/build.shale full=1`.
 
 ## The method, per repo
 
