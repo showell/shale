@@ -33,6 +33,15 @@ SLICE_TYPE(ConstValues, const Value);
 
 typedef struct Run Run;
 
+// What one spender of a run's steps spent, for the report's `── steps:` line:
+// its steps, and the calls of it from script code.
+typedef struct {
+    uint64_t steps;
+    uint64_t calls;
+} StepsSpent;
+
+SLICE_TYPE(StepsSpents, StepsSpent);
+
 // The store a run's paths reach, its hook and its effects log, as
 // builtins_store.c defines it; NULL for a run with no store.
 typedef struct RunStore RunStore;
@@ -86,6 +95,16 @@ typedef struct Run {
     // The host call running (`host("real", ...)`'s `real`), "" outside one:
     // a stop the host's code meets in a builtin's checks names it.
     Str host_call;
+    // Where the steps went: slot 0 is the script's own code (what the others
+    // leave, vm_steps_top), then one slot a builtin, in ast.h's order, then
+    // one a function of the code, which only a function of Shale's own
+    // preludes spends in. Empty until vm_main makes it, and then nothing is
+    // counted.
+    StepsSpents spent;
+    // The slot spending now, 0 for the script's own code, and, for a
+    // prelude's function, the step count when it began.
+    size_t spent_by;
+    uint64_t spent_from;
 } Run;
 
 // ── stops ──
@@ -168,6 +187,16 @@ static inline STATUS_MUST_USE Status run_charge(Run *r, Pos pos, uint64_t n) {
     if (n > run_sat_sub(r->ctx.budgets.steps, r->steps)) return run_charge_over(r, pos);
     r->steps += n;
     return OK;
+}
+
+// The steps a function of Shale's own preludes spent since it began, counted
+// to it, and the steps from here on the script's own code's. Only a call's
+// edges count anything, so no op on the hot path does.
+static inline void run_steps_end(Run *r) {
+    if (r->spent_by == 0) return;
+    StepsSpent *s = &at(r->spent, r->spent_by);
+    s->steps += run_sat_sub(r->steps, r->spent_from);
+    r->spent_by = 0;
 }
 
 // ── tables ──

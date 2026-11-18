@@ -767,7 +767,9 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     Names effects = {NULL, 0};
     if (c->verbose && store_effect_lines(&rs, a, &effects) != OK) return not_ported(o, S("a report past the arena"));
     Names records = {lh.records.ptr, lh.records.len};
-    if (cli_write_report(&o->err, name, preludes, c->verbose, effects, records, ran == OK ? NULL : &r.ctx.stop, used, &b) != OK) return not_ported(o, S("a report past the arena"));
+    StepsTop steps;
+    vm_steps_top(&r, &code, &steps);
+    if (cli_write_report(&o->err, name, preludes, c->verbose, effects, records, ran == OK ? NULL : &r.ctx.stop, used, &b, &steps) != OK) return not_ported(o, S("a report past the arena"));
     if (host_time_worth_saying(&lh.time, c->verbose) && host_time_write(&o->err, &lh.time) != OK) return not_ported(o, S("a report past the arena"));
     // A stopped run ends the jobs it started (but `keep_on_stop`'s), before
     // any undo, so no job of its writes past the files put back.

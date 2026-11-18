@@ -528,11 +528,97 @@ typedef struct {
     uint64_t output;
 } RunUsed;
 
+// The most spenders the `── steps:` line names.
+enum { CLI_STEPS_TOP = 3 };
+
+// One spender the `── steps:` line names: a builtin (or a function of
+// Shale's own preludes) by its name, with the calls of it from script code,
+// or the script's own code, `script`, which has no calls.
+typedef struct {
+    Str name;
+    uint64_t steps;
+    uint64_t calls;
+    bool has_calls;
+} StepsSpender;
+
+// Where a run's steps went: all of them, and the most spent, most first.
+typedef struct {
+    uint64_t all;
+    StepsSpender top[CLI_STEPS_TOP];
+    size_t top_len;
+} StepsTop;
+
+// A count of steps as the `── steps:` line says it: below 1000 whole, else
+// to a tenth of a thousand (K), a million (M) or a billion (G), cut short as
+// the time line cuts its seconds, so `77,349,012` is `77.3M`.
+static inline STATUS_MUST_USE Status cli_steps_amount(Buf *w, uint64_t n) {
+    if (n < 1000) return buf_u64(w, n);
+    uint64_t unit = 1000;
+    char mark = 'K';
+    if (n >= 1000000000) {
+        unit = 1000000000;
+        mark = 'G';
+    } else if (n >= 1000000) {
+        unit = 1000000;
+        mark = 'M';
+    }
+    TRY(buf_u64(w, n / unit));
+    TRY(buf_byte(w, '.'));
+    TRY(buf_u64(w, n % unit / (unit / 10)));
+    return buf_byte(w, mark);
+}
+
+// `n` in decimal with a comma between each three digits: `2,310`.
+static inline STATUS_MUST_USE Status cli_grouped(Buf *w, uint64_t n) {
+    if (n >= 1000) {
+        TRY(cli_grouped(w, n / 1000));
+        TRY(buf_byte(w, ','));
+        uint64_t rest = n % 1000;
+        if (rest < 100) TRY(buf_byte(w, '0'));
+        if (rest < 10) TRY(buf_byte(w, '0'));
+        return buf_u64(w, rest);
+    }
+    return buf_u64(w, n);
+}
+
+// `part` of `all` in whole percent, cut short, with no overflow in 64 bits.
+static inline uint64_t cli_share(uint64_t part, uint64_t all) {
+    if (all == 0) return 0;
+    if (part <= UINT64_MAX / 100) return part * 100 / all;
+    return part / (all / 100);
+}
+
+// `── steps: 77.3M in all; the most 41.2M (53%): re_find_all, 2,310 calls;
+// 12.0M (16%): lines, 40 calls; 10.1M (13%): script`, the time line's shape.
+static inline STATUS_MUST_USE Status cli_write_steps(Buf *w, const StepsTop *t) {
+    TRY(buf_lit(w, "── steps: "));
+    TRY(cli_steps_amount(w, t->all));
+    TRY(buf_lit(w, " in all"));
+    const StepsSpender *items = t->top;
+    SLICE_TYPE(Spenders, const StepsSpender);
+    Spenders top = {items, t->top_len};
+    for (size_t i = 0; i < top.len; i++) {
+        const StepsSpender *s = &at(top, i);
+        TRY(buf_str(w, i == 0 ? S("; the most ") : S("; ")));
+        TRY(cli_steps_amount(w, s->steps));
+        TRY(buf_lit(w, " ("));
+        TRY(buf_u64(w, cli_share(s->steps, t->all)));
+        TRY(buf_lit(w, "%): "));
+        TRY(buf_str(w, s->name));
+        if (!s->has_calls) continue;
+        TRY(buf_lit(w, ", "));
+        TRY(cli_grouped(w, s->calls));
+        TRY(buf_str(w, s->calls == 1 ? S(" call") : S(" calls")));
+    }
+    return buf_byte(w, '\n');
+}
+
 // The report for a run: with `verbose`, its effects, each line
 // `op path: outcome`; a stop's line and its calls, innermost first, each named
 // by its source; `── finished` when verbose; and the `── used:` line
-// when verbose, stopped, or past half of a budget.
-static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes preludes, bool verbose, Names effects, Names records, const Stop *s, RunUsed u, const Budgets *b) {
+// when verbose, stopped, or past half of a budget, with the `── steps:` line
+// after it, where `steps` went.
+static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes preludes, bool verbose, Names effects, Names records, const Stop *s, RunUsed u, const Budgets *b, const StepsTop *steps) {
     if (verbose) {
         TRY(buf_lit(w, "── effects ("));
         TRY(buf_u64(w, effects.len));
@@ -593,7 +679,8 @@ static inline STATUS_MUST_USE Status cli_write_report(Buf *w, Str name, Preludes
     TRY(buf_u64(w, u.output));
     TRY(buf_lit(w, " of "));
     TRY(buf_u64(w, b->output_bytes));
-    return buf_lit(w, " output bytes\n");
+    TRY(buf_lit(w, " output bytes\n"));
+    return cli_write_steps(w, steps);
 }
 
 // The first value given that no `arg("NAME")` of the program reads, as a stop

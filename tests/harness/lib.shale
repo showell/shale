@@ -441,7 +441,8 @@ end
 
 -- A stream as lines, the `── time:` line left out wherever it is. `judge` says
 -- what else is let go for an input judged by class (`layout_observer`):
--- `class`, the `── used:` line's digits and a stop's `(N steps)`; `digits`,
+-- `class`, the `── used:` and `── steps:` lines' digits and a stop's
+-- `(N steps)`; `digits`,
 -- every digit, for an input that reads `arena_bytes`.
 function normal_lines(text, judge)
   local out = {}
@@ -450,7 +451,7 @@ function normal_lines(text, judge)
       -- Let go whole.
     elseif judge.digits and not starts_with(l, "── stopped at") then
       push(out, re_replace(l, "[0-9]+", "#"))
-    elseif judge.class and starts_with(l, "── used:") then
+    elseif judge.class and (starts_with(l, "── used:") or starts_with(l, "── steps:")) then
       push(out, re_replace(l, "[0-9]+", "#"))
     elseif judge.class and starts_with(l, "── stopped at") then
       push(out, re_replace(l, "\\([0-9]+ steps\\)$", "(# steps)"))

@@ -140,7 +140,7 @@ TEST(division_floors_and_an_overflow_stops) {
     ran_source(&x, S("print(7 // -2, -7 % 3, 7 % -3)\nprint(9223372036854775807 + 1)\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT_STR(buf_view(&x.r.out), S("-4\t2\t-2\n"));
-    EXPECT_STR(ran_report(&x, &a), S("── stopped at stdin:2:27: arithmetic: 9223372036854775807 + 1 overflows 64 bits (24 steps)\n── used: 24 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 8 of 65536 output bytes\n"));
+    EXPECT_STR(ran_report(&x, &a), S("── stopped at stdin:2:27: arithmetic: 9223372036854775807 + 1 overflows 64 bits (24 steps)\n── used: 24 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 8 of 65536 output bytes\n── steps: 24 in all; the most 24 (100%): script\n"));
     arena_deinit(&a);
     ran_free(&x);
 }
@@ -392,7 +392,54 @@ TEST(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process) {
     EXPECT_EQ_I(flat_int((size_t)INT64_MAX), INT64_MAX);
 }
 
-TEST_PART(vm, TEST_CASE(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process), TEST_CASE(the_compilers_own_checks_end_the_process), TEST_CASE(a_store_builtin_on_a_run_with_no_store_ends_the_process), TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(a_long_stop_is_whole_in_attempts_error_and_in_the_report), TEST_CASE(the_step_budget_stops_one_past_it),
+// A function of Shale's own preludes spends its steps as its own: ran.c runs
+// with no preludes, so the command's block holds that, through the C
+// `shale` and its Linux prelude's `create` (c/build/command.shale).
+TEST(the_steps_go_to_the_builtin_script_code_called) {
+    static Ran x;
+    ran_source(&x, S("function parts(s) return split(s, \",\") end\nlocal n = 0\nfor i = 1, 20 do n = n + #split(\"a,b,c\", \",\") end\nprint(n, #parts(\"a,b\"), attempt(parts, 5).ok, upper(\"x\"))\n"), ran_budgets());
+    EXPECT(x.parsed);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("60\t2\tfalse\tX\n"));
+    StepsTop t;
+    vm_steps_top(&x.r, &x.code, &t);
+    // Every step is one spender's, and the run's count is the line's.
+    uint64_t sum = 0;
+    for (size_t k = 0; k < x.r.spent.len; k++) sum += at(x.r.spent, k).steps;
+    EXPECT_EQ(sum, x.r.steps);
+    EXPECT_EQ(t.all, x.r.steps);
+    // `split`, called 20 times in the loop and twice inside the script's own
+    // function (once stopping, its stop caught): a script function is script
+    // code, so each call is split's.
+    StepsSpent split = at(x.r.spent, 1 + BUILTIN_SPLIT);
+    EXPECT_EQ(split.calls, 22);
+    EXPECT(split.steps > 0);
+    EXPECT_EQ(at(x.r.spent, 1 + BUILTIN_UPPER).calls, 1);
+    // No builtin that never ran spent anything.
+    EXPECT_EQ(at(x.r.spent, 1 + BUILTIN_RE_FIND).calls, 0);
+    EXPECT_EQ(at(x.r.spent, 1 + BUILTIN_RE_FIND).steps, 0);
+    // The caught stop left the steps with the script's code.
+    EXPECT_EQ(x.r.spent_by, 0);
+    EXPECT(at(x.r.spent, 0).steps > 0);
+    // The line names the most first, each builtin with its calls and the
+    // script's own code with none.
+    EXPECT_EQ(t.top_len, 3);
+    SLICE_TYPE(TopSpenders, const StepsSpender);
+    TopSpenders top = {t.top, t.top_len};
+    bool named = false;
+    for (size_t i = 0; i < top.len; i++) {
+        if (i > 0) EXPECT(at(top, i - 1).steps >= at(top, i).steps);
+        EXPECT(at(top, i).has_calls == !str_eq(at(top, i).name, S("script")));
+        if (!str_eq(at(top, i).name, S("split"))) continue;
+        named = true;
+        EXPECT_EQ(at(top, i).calls, 22);
+        EXPECT_EQ(at(top, i).steps, split.steps);
+    }
+    EXPECT(named);
+    ran_free(&x);
+}
+
+TEST_PART(vm, TEST_CASE(the_steps_go_to_the_builtin_script_code_called), TEST_CASE(a_value_of_the_cs_own_enums_past_their_cases_ends_the_process), TEST_CASE(the_compilers_own_checks_end_the_process), TEST_CASE(a_store_builtin_on_a_run_with_no_store_ends_the_process), TEST_CASE(arithmetic_and_print_take_their_counted_steps), TEST_CASE(a_long_stop_is_whole_in_attempts_error_and_in_the_report), TEST_CASE(the_step_budget_stops_one_past_it),
           TEST_CASE(the_call_depth_budget_names_every_call), TEST_CASE(attempt_makes_a_stop_a_value_and_the_run_goes_on),
           TEST_CASE(a_budget_is_never_caught), TEST_CASE(a_chain_grows_its_string_in_place),
           TEST_CASE(yield_keeps_what_is_reached_and_charges_the_copy), TEST_CASE(the_output_budget_writes_what_fits),

@@ -45,7 +45,7 @@ TEST(json_read_refuses_a_malformed_text_naming_its_byte_line_and_column) {
     text_expect_stop(&x, CLASS_ARGUMENT, 1, 18, S("`json_read`: a value was expected, not a byte (0x78) at byte 9 (line 3, column 2)"));
     EXPECT_EQ(x.r.out.len, 0);
     EXPECT_STR(ran_report(&x, &x.host), S("── stopped at stdin:1:1: argument: `json_read`: a value was expected, not a byte (0x78) at byte 9 (line 3, column 2) (18 steps)\n"
-                                          "── used: 18 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes\n"));
+                                          "── used: 18 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes\n── steps: 18 in all; the most 14 (77%): host, 1 call; 4 (22%): script\n"));
     ran_free(&x);
 }
 
@@ -243,7 +243,7 @@ TEST(flat_tree_stops_one_past_the_step_budget_at_a_files_nodes) {
     EXPECT_EQ(x.r.steps, 34);
     EXPECT_EQ(x.r.out.len, 0);
     EXPECT_STR(ran_report_of(&x, &x.host, false), S("── stopped at stdin:1:192: budget steps: the step budget (33 steps) ran out (34 steps)\n"
-                                                    "── used: 34 of 33 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes\n"));
+                                                    "── used: 34 of 33 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 0 of 65536 output bytes\n── steps: 34 in all; the most 21 (61%): host, 1 call; 13 (38%): script\n"));
     ran_free(&x);
 }
 

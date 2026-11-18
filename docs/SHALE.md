@@ -1272,7 +1272,17 @@ SHALE_ROOT=/a/copy/of/data zig build script -- src/script/examples/topics.shale
   counts against `output_bytes`); on stderr the report: a stop and its
   trail, the effects, the programs run, and
   `── used:`, which is what the run took of four budgets
-  (steps, reads, read bytes, output bytes) beside each budget; and
+  (steps, reads, read bytes, output bytes) beside each budget; below it,
+  whenever it is said, `── steps:`, where the run's steps went: all of
+  them, then the three spenders that spent the most, each with its share
+  and the calls of it from script code (`── steps: 77.3M in all; the most
+  41.2M (53%): re_find_all, 2,310 calls; 12.0M (16%): lines, 40 calls;
+  10.1M (13%): script`). A spender is a builtin, or a function of Shale's
+  own preludes (the core's, the Linux's, git's) with all it calls, or
+  `script`, the script's own code, its functions, libraries and later
+  preludes included. A count below 1000 is whole, else a tenth of a K, M
+  or G, cut short as the time line's seconds are; a share is whole
+  percent, cut short. A parse's stop ran nothing, so it has none; and
   `── time:`, once programs, job waits and sleeps took a second or more
   (always with `--verbose`): how many programs, their wall time, the
   slowest three's seconds, shares and argvs, the job waits and the sleeps.

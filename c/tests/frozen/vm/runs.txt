@@ -4,3 +4,4 @@ a	6	X1
 ── effects (0) ──
 ── finished (64 steps)
 ── used: 64 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 13 of 65536 output bytes
+── steps: 64 in all; the most 42 (65%): script; 12 (18%): sort, 1 call; 6 (9%): join, 1 call

@@ -25,7 +25,18 @@ there to stay safe is what an agent wants on Linux too:**
 run used of four, steps, reads, read bytes and output bytes (`── used:
 52374 of 5000000 steps, 12 of 10000 reads, ...`), so a script near an edge
 is known before a bigger run finds it;
-`--verbose` says so always, with the effects and the programs run. A run
+`--verbose` says so always, with the effects and the programs run. **Below
+it, the `── steps:` line says where the steps went**, in the time line's
+shape: the three that spent the most, with their shares and how often
+script code called them (`── steps: 77.3M in all; the most 41.2M (53%):
+re_find_all, 2,310 calls; 12.0M (16%): lines, 40 calls; 10.1M (13%):
+script`). A builtin's steps are its own, and so are a function's of
+Shale's own preludes (`grep_tree`, `run`, `create`), with every builtin it
+calls; `script` is the script's own code, its functions and libraries
+included, and what a builtin they call spends is that builtin's. So when a
+run nears its step budget, the line says which call to look at, with no
+profiling script. (A run that stops before it starts, a parse's stop, ran
+nothing and has none.) A run
 that spent a second or more in programs, job waits and sleeps says where,
 the slowest three programs named with their shares of it (`── time: 3
 programs, 52.1 s in all; the slowest 51.8 s (99%): roc build ...; 0.2 s

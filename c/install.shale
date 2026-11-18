@@ -77,7 +77,7 @@ const SMOKE = {
    out = "0\thi\n"},
   {name = "stop", plain = true, code = 1,
    script = "print(\"before\")\nfail(\"planned stop\")\n",
-   out = "before\n── stopped at stop.shale:2:1: fail: planned stop (25 steps)\n── used: 25 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 7 of 65536 output bytes\n"},
+   out = "before\n── stopped at stop.shale:2:1: fail: planned stop (25 steps)\n── used: 25 of 5000000 steps, 0 of 10000 reads, 0 of 67108864 read bytes, 7 of 65536 output bytes\n── steps: 25 in all; the most 13 (52%): script; 12 (48%): fail, 1 call\n"},
   {name = "box", plain = false, code = 0,
    script = "print(\"under the box's prelude and mounts\")\n",
    out = "under the box's prelude and mounts\n"},

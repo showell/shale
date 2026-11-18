@@ -279,7 +279,9 @@ static Str ran_report_of(Ran *x, Arena *a, bool verbose) {
     if (verbose && store_effect_lines(&x->store, a, &effects) != OK) return S("(the report ran out of arena)");
     RunUsed u = {x->r.steps, x->r.reads, x->r.read_bytes, x->r.out.len};
     Budgets b = x->r.ctx.budgets;
-    if (cli_write_report(&w, S("stdin"), none, verbose, effects, records, x->ran == OK ? NULL : &x->r.ctx.stop, u, &b) != OK) return S("(the report ran out of arena)");
+    StepsTop steps;
+    vm_steps_top(&x->r, &x->code, &steps);
+    if (cli_write_report(&w, S("stdin"), none, verbose, effects, records, x->ran == OK ? NULL : &x->r.ctx.stop, u, &b, &steps) != OK) return S("(the report ran out of arena)");
     return buf_view(&w);
 }
 

@@ -127,6 +127,19 @@ static STATUS_MUST_USE Status builtins_call(Run *r, Pos pos, Builtin b, ConstVal
     return s->impl(r, pos, args, out);
 }
 
+// Whether `name` is a function of Shale's own preludes (the core's, the
+// Linux's and git's), which the `── steps:` line counts as a builtin, and
+// its name there, `grep_tree`; a repo's prelude, the user's and a library
+// are the script's own code.
+static bool vm_own_prelude_function(Str name, Str *shown) {
+    Str prefix = S("the prelude's ");
+    if (!str_starts_with(name, prefix)) prefix = S("the Linux prelude's ");
+    if (!str_starts_with(name, prefix)) prefix = S("the git prelude's ");
+    if (!str_starts_with(name, prefix)) return false;
+    *shown = str_sub(name, prefix.len, name.len);
+    return true;
+}
+
 // ── the copy at a yield ──
 
 // The copy's bookkeeping, made fresh at each yield in an arena of its own:
@@ -351,6 +364,13 @@ typedef struct {
     uint32_t pc;
     // The top frame's `walk`, kept here for every op's enters.
     uint32_t walk;
+    // For each function of the code, 1 when it is one of Shale's own
+    // preludes' (vm_own_prelude_function), which spends steps as its own when
+    // script code calls it.
+    Bytes own;
+    // How many frames there were with that function's frame on top, 0 while
+    // the script's own code spends the steps.
+    size_t spent_frame;
 } Machine;
 
 static inline RUN_HOT VmFrame *vm_frame(Machine *m) {
@@ -426,6 +446,18 @@ static inline STATUS_MUST_USE Status vm_enters(Machine *m, const VmOp *op) {
     return vm_enters_each(m, op);
 }
 
+// Function `fi` of the code, one of Shale's own preludes', spends the steps
+// from here on as its own, its frame on top; out of line, as a call of one
+// from script code is rare beside the ops.
+static RUN_COLD void vm_steps_from(Machine *m, uint32_t fi) {
+    Run *r = m->r;
+    size_t by = 1 + BUILTIN_COUNT_OF + fi;
+    at(r->spent, by).calls++;
+    r->spent_by = by;
+    r->spent_from = r->steps;
+    m->spent_frame = m->frames.len;
+}
+
 // A frame for `func`, its `argc` arguments taken off the operand stack. Its
 // walk starts `op->c` deeper than the caller's frame's.
 static STATUS_MUST_USE Status vm_enter_frame(Machine *m, const VmOp *op, const CodeFunc *func, uint32_t argc, Table *out) {
@@ -451,7 +483,22 @@ static STATUS_MUST_USE Status vm_enter_frame(Machine *m, const VmOp *op, const C
     r->depth++;
     m->pc = func->entry;
     m->walk = vm_frame(m)->walk;
+    // A function of Shale's own preludes, called from script code, spends
+    // its steps as its own until its frame ends.
+    if (r->spent_by == 0 && at(m->own, op->a) != 0) vm_steps_from(m, op->a);
     return OK;
+}
+
+// The steps back to the script's own code once the frame that spent them as
+// its own is gone, `frames` frames left. Out of line, so the frames' paths
+// carry only its test.
+static RUN_COLD void vm_steps_back_now(Machine *m) {
+    m->spent_frame = 0;
+    run_steps_end(m->r);
+}
+
+static inline void vm_steps_back(Machine *m, size_t frames) {
+    if (m->spent_frame > frames) vm_steps_back_now(m);
 }
 
 // Ends the top frame with `v`; `*more` false when it was the script's top
@@ -461,6 +508,7 @@ static STATUS_MUST_USE Status vm_leave(Machine *m, const Value *v, bool *more) {
     VmFrame f = VmFrameVec_pop(&m->frames);
     *more = m->frames.len > 0;
     if (!*more) return OK;
+    vm_steps_back(m, m->frames.len);
     r->stack.len = f.base;
     r->base = vm_frame(m)->base;
     m->walk = vm_frame(m)->walk;
@@ -488,6 +536,7 @@ static STATUS_MUST_USE Status vm_caught(Machine *m, bool *caught) {
         VmFrame f = at(m->frames, i);
         if (f.out == NULL) continue;
         m->frames.len = i;
+        vm_steps_back(m, i);
         r->stack.len = f.base;
         r->base = vm_frame(m)->base;
         m->walk = vm_frame(m)->walk;
@@ -656,7 +705,17 @@ static RUN_COLD STATUS_MUST_USE Status vm_op(Machine *m, const VmOp *op, bool *d
     case OP_BUILTIN: {
         ConstValues args = vm_args(m, op->b);
         Value v;
-        TRY(builtins_call(r, op->pos, (Builtin)op->a, args, &v));
+        // A builtin called from script code spends its steps as its own; one
+        // called inside a prelude's function spends them as that function's.
+        // A builtin never runs script code, so nothing inside it is counted.
+        uint64_t from = r->steps;
+        Status called = builtins_call(r, op->pos, (Builtin)op->a, args, &v);
+        if (r->spent_by == 0) {
+            StepsSpent *spent = &at(r->spent, 1 + (size_t)op->a);
+            spent->steps += run_sat_sub(r->steps, from);
+            spent->calls++;
+        }
+        TRY(called);
         m->operands.len -= op->b;
         return vm_push(m, op->pos, &v);
     }
@@ -883,6 +942,43 @@ static STATUS_MUST_USE Status vm_run(Machine *m) {
     }
 }
 
+// Where the run's steps went, for the report's `── steps:` line: a prelude's
+// function the run stopped inside counted to its stop, the script's own code
+// given what the others leave, then the CLI_STEPS_TOP that spent the most,
+// most first, a tie to the slot counted first. A run vm_main never set
+// counting for spent them all in the script's own code.
+static void vm_steps_top(Run *r, const Code *code, StepsTop *out) {
+    memset(out, 0, sizeof *out);
+    out->all = r->steps;
+    StepsSpender *items = out->top;
+    SLICE_TYPE(Spenders, StepsSpender);
+    Spenders top = {items, CLI_STEPS_TOP};
+    if (r->spent.len == 0) {
+        if (r->steps == 0) return;
+        at(top, 0).name = S("script");
+        at(top, 0).steps = r->steps;
+        out->top_len = 1;
+        return;
+    }
+    run_steps_end(r);
+    uint64_t others = 0;
+    for (size_t k = 1; k < r->spent.len; k++) others += at(r->spent, k).steps;
+    at(r->spent, 0).steps = run_sat_sub(r->steps, others);
+    for (size_t k = 0; k < r->spent.len; k++) {
+        StepsSpent s = at(r->spent, k);
+        if (s.steps == 0) continue;
+        size_t i = out->top_len;
+        while (i > 0 && at(top, i - 1).steps < s.steps) i--;
+        if (i == CLI_STEPS_TOP) continue;
+        if (out->top_len < CLI_STEPS_TOP) out->top_len++;
+        for (size_t j = out->top_len - 1; j > i; j--) at(top, j) = at(top, j - 1);
+        StepsSpender one = {S("script"), s.steps, s.calls, k != 0};
+        if (k >= 1 && k <= BUILTIN_COUNT_OF) one.name = builtin_name((Builtin)(k - 1));
+        if (k > BUILTIN_COUNT_OF && !vm_own_prelude_function(at(code->functions, k - 1 - BUILTIN_COUNT_OF).name, &one.name)) c_bug("vm: steps spent by a function that is not of Shale's own preludes");
+        at(top, i) = one;
+    }
+}
+
 // The script's top level run whole: the consts first, then the main frame at
 // the stack's foot.
 static STATUS_MUST_USE Status vm_main(Run *r, const Code *code) {
@@ -905,6 +1001,26 @@ static STATUS_MUST_USE Status vm_main(Run *r, const Code *code) {
     m.operands = ValueVec_make(r->machine);
     m.frames = VmFrameVec_make(r->machine);
     m.pc = code->main.entry;
+    // A slot of steps for the script's own code, each builtin and each
+    // function, and which functions are Shale's own preludes'.
+    size_t spenders = 1 + BUILTIN_COUNT_OF + code->functions.len;
+    StepsSpent *spent = ARENA_ARRAY(r->machine, StepsSpent, spenders);
+    char *own = ARENA_ARRAY(r->machine, char, code->functions.len + 1);
+    if (spent == NULL || own == NULL) return run_machine_oom(r, at_main);
+    r->spent.ptr = spent;
+    r->spent.len = spenders;
+    for (size_t k = 0; k < spenders; k++) {
+        at(r->spent, k).steps = 0;
+        at(r->spent, k).calls = 0;
+    }
+    r->spent_by = 0;
+    r->spent_from = 0;
+    m.own.ptr = own;
+    m.own.len = code->functions.len;
+    for (size_t k = 0; k < m.own.len; k++) {
+        Str shown = {0};
+        at(m.own, k) = vm_own_prelude_function(at(code->functions, k).name, &shown) ? 1 : 0;
+    }
     if (ValueVec_reserve(&m.operands, (size_t)code->main.operands + 1) != OK) return run_machine_oom(r, at_main);
     VmFrame top = {&code->main, 0, 0, 0, 0, S(""), NULL, at_main};
     if (VmFrameVec_push(&m.frames, top) != OK) return run_machine_oom(r, at_main);

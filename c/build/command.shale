@@ -80,7 +80,7 @@ function check_stdout_failed(t, build)
     {how = "closed", argv = {"-e", "print(1)"}, said = "shale: stdout: NotOpenForWriting"},
     {how = "full", argv = {"--version"}, said = "shale: stdout: NoSpaceLeft"},
     {how = "full", argv = {"--undo-on-stop", "-e", "create(\"x.txt\", \"a\")\nprint(1)\nfail(\"no\")\n"},
-     said = "── stopped at -e:3:1: fail: no (34 steps)\n── used: 34 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 2 of 65536 output bytes\n── undone: 1 path(s) the run changed put back\nshale: stdout: NoSpaceLeft"},
+     said = "── stopped at -e:3:1: fail: no (34 steps)\n── used: 34 of 5000000 steps, 1 of 10000 reads, 0 of 67108864 read bytes, 2 of 65536 output bytes\n── steps: 34 in all; the most 20 (58%): create, 1 call; 12 (35%): script; 2 (5%): fail, 1 call\n── undone: 1 path(s) the run changed put back\nshale: stdout: NoSpaceLeft"},
   }
   for c in cases do
     local argv = {real(fx), c.how, bin}

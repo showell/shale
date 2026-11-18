@@ -9,3 +9,4 @@ exit 1
 ── stopped at the Linux prelude:485:30 (in `the Linux prelude's zig_decls`): argument: `zig_decls`: bad.zig does not parse as Zig: line 1 (expected_type_expr) (1069 steps)
    called from s.shale:9:1
 ── used: 1069 of 5000000 steps, 8 of 10000 reads, 941 of 67108864 read bytes, 572 of 65536 output bytes
+── steps: 1.0K in all; the most 681 (63%): script; 134 (12%): zig_move, 2 calls; 118 (11%): zig_rename, 2 calls

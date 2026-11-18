@@ -48,3 +48,4 @@ edit b.zig: ok
 edit a.zig: ok
 ── finished (2597 steps)
 ── used: 2597 of 5000000 steps, 3 of 10000 reads, 549 of 67108864 read bytes, 686 of 65536 output bytes
+── steps: 2.5K in all; the most 2.4K (93%): zig_move, 1 call; 159 (6%): script; 12 (0%): read, 1 call

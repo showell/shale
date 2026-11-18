@@ -88,7 +88,8 @@ identity are pinned, there is no user prelude, and HOME and PATH are fixed.
 The binary is copied to one path, so a message that names it is the same.
 
 A case's frozen output is each step's ending, its stdout and its stderr
-(the `── used:` line is part of stderr), and every file the run left, by
+(the `── used:` and `── steps:` lines are part of stderr), and every file
+the run left, by
 kind, mode and bytes (a git index by what it stages, below).
 
 **Arena bytes are outside the frozen surface** (docs/C-SEAMS.md,
@@ -98,8 +99,9 @@ is **judged by class**: its frozen run stops on the arena, kept or machine
 budget, or its source reads `arena_bytes` outside a comment. The freeze
 finds these from the run and the source, never from a list, and says so in
 the case's `case.json`. Its stop's class, place and message are held
-still; the digits of its `── used:` line and its stop's `(N steps)` are
-let go, and, when it reads `arena_bytes`, every digit of its output.
+still; the digits of its `── used:` and `── steps:` lines and its stop's
+`(N steps)` are let go, and, when it reads `arena_bytes`, every digit of
+its output.
 
 ## What a run does not repeat, and how it is held anyway
 

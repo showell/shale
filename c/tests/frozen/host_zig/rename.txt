@@ -31,3 +31,4 @@ test "adds" {
 ── stopped at the Linux prelude:476:10 (in `the Linux prelude's zig_renames`): argument: `zig_rename`: a.zig declares `total` at line 6, and `x.total` is qualified, which cannot be declared: rename the declaration itself, or leave it out with `lines`; nothing written (1532 steps)
    called from s.shale:4:11
 ── used: 1532 of 5000000 steps, 3 of 10000 reads, 1389 of 67108864 read bytes, 501 of 65536 output bytes
+── steps: 1.5K in all; the most 888 (57%): zig_rename, 1 call; 524 (34%): script; 85 (5%): zig_renames, 1 call
