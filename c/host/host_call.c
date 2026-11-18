@@ -22,8 +22,8 @@ static STATUS_MUST_USE Status host_copy_mode(Host *lh, Run *r, Pos pos, ConstVal
     PathRun *pr = &builtin_files_of(r)->path;
     CheckedPath from;
     CheckedPath to;
-    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &from));
-    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 1), false, &to));
+    TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &from));
+    TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &at(args, 1), false, &to));
     TRY(change_may(r, pos, &to));
     Str from_abs = S("");
     Str to_abs = S("");
@@ -75,7 +75,7 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
     if (str_eq(name, S("may_change"))) {
         if (args.len != 1) return run_failf(r, pos, CLASS_ARGUMENT, "`may_change` takes one path, given {d}", S("`may_change` takes one path, given "), run_unum(r, args.len));
         CheckedPath p;
-        TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
+        TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
         TRY(change_may(r, pos, &p));
         value_bool(out, true);
         return OK;

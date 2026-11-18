@@ -82,7 +82,7 @@ static STATUS_MUST_USE Status walk_resumes_into(Run *r, Pos pos, const WalkOptio
     if (en.kind != FILE_SYSTEM_KIND_DIRECTORY || top->depth >= o->depth) return OK;
     if (o->has_skip) {
         bool skipped = false;
-        TRY(builtin_like(r, pos, en.name, o->skip, &skipped));
+        TRY(builtin_like_text(r, pos, en.name, o->skip, &skipped));
         if (skipped) return OK;
     }
     OsStr full = top->full;
@@ -243,9 +243,9 @@ static STATUS_MUST_USE Status walk_entry(Run *r, Pos pos, FileSystemEntry en, St
 // under `p` as `{path, size, kind, modified}`, at most `call_entries` a call,
 // a `more` entry last when there is more. Each folder listed costs a read and
 // each entry kept a stat; an entry filtered out is never stat'ed.
-static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_walk(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_WALK, &at(args, 0), true, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_WALK, &at(args, 0), true, &p));
     WalkOptions o;
     memset(&o, 0, sizeof o);
     o.depth = WALK_ANY_DEPTH;
@@ -322,7 +322,7 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
         uint64_t depth = top->depth;
         if (o.has_skip) {
             bool skipped = false;
-            TRY(builtin_like(r, pos, en.name, o.skip, &skipped));
+            TRY(builtin_like_text(r, pos, en.name, o.skip, &skipped));
             if (skipped) {
                 TRY(walk_under(r, pos, top_rel, en.name, &last));
                 continue;
@@ -334,7 +334,7 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
         TRY(run_charge(r, pos, rel.len));
         bool into = en.kind == FILE_SYSTEM_KIND_DIRECTORY && depth < o.depth;
         bool keep = !o.has_kind || o.kind == en.kind;
-        if (keep && o.has_like) TRY(builtin_like(r, pos, en.name, o.like, &keep));
+        if (keep && o.has_like) TRY(builtin_like_text(r, pos, en.name, o.like, &keep));
         if (keep) TRY(walk_entry(r, pos, en, rel, full, list));
         if (into) {
             TRY(builtin_count_read(r, pos));

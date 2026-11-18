@@ -81,7 +81,7 @@ static STATUS_MUST_USE Status builtin_path_charge(void *vm, RunCtx *ctx, Pos pos
 }
 
 // `v`, the path builtin `b` was given, confined, its string checked first.
-static STATUS_MUST_USE Status builtin_path(Run *r, Pos pos, Builtin b, const Value *v, bool allow_root, CheckedPath *out) {
+static STATUS_MUST_USE Status builtin_checked_path(Run *r, Pos pos, Builtin b, const Value *v, bool allow_root, CheckedPath *out) {
     Str given = {0};
     TRY(builtin_string_arg(r, pos, b, v, S("its path"), &given));
     return path_arg(&builtin_files_of(r)->path, pos, builtin_who(r, b), given, allow_root, out);
@@ -145,9 +145,9 @@ static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b,
 
 // `ls(p)`: the names in a folder, sorted. The file system lists a missing
 // folder as empty; a script's `ls` of one is a stop.
-static STATUS_MUST_USE Status bi_ls(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_ls(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_LS, &at(args, 0), true, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_LS, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
     FileSystemStat st;
@@ -165,9 +165,9 @@ static STATUS_MUST_USE Status bi_ls(Run *r, Pos pos, ConstValues args, Value *ou
 }
 
 // `stat(p)`: `{size, kind, modified}`, `modified` in whole seconds.
-static STATUS_MUST_USE Status bi_stat(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_stat(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_STAT, &at(args, 0), true, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_STAT, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
     RunFiles *rs = builtin_files_of(r);
     FileSystemStat st;
@@ -183,9 +183,9 @@ static STATUS_MUST_USE Status bi_stat(Run *r, Pos pos, ConstValues args, Value *
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_exists(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_exists(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_EXISTS, &at(args, 0), true, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_EXISTS, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
     RunFiles *rs = builtin_files_of(r);
     bool has = false;
@@ -195,9 +195,9 @@ static STATUS_MUST_USE Status bi_exists(Run *r, Pos pos, ConstValues args, Value
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_is_dir(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_is_dir(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_IS_DIR, &at(args, 0), true, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_IS_DIR, &at(args, 0), true, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
     FileSystemStat st;
@@ -282,9 +282,9 @@ static STATUS_MUST_USE Status builtin_count_arg(Run *r, Pos pos, Builtin b, cons
 
 // `read(p)` gives the whole file; `read(p, offset[, n])` `n` bytes from the
 // 0-based byte `offset`, or to the end, "" at or past the end.
-static STATUS_MUST_USE Status bi_read(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_read(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_READ, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_READ, &at(args, 0), false, &p));
     uint64_t offset = 0;
     uint64_t n = BUILTIN_TO_END;
     if (args.len > 1) {
@@ -303,9 +303,9 @@ static STATUS_MUST_USE Status bi_read(Run *r, Pos pos, ConstValues args, Value *
 // `read_or(p, default)`: the whole file, or `default` when nothing is there, in
 // one file system read; a folder or a failure is the file system's stop, as
 // `read`'s.
-static STATUS_MUST_USE Status bi_read_or(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_read_or(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_READ_OR, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_READ_OR, &at(args, 0), false, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
     FileSystemStat st;
@@ -380,10 +380,10 @@ static STATUS_MUST_USE Status builtin_read_part_in(Run *r, Pos pos, Builtin b, c
 // `n` bytes (64 KiB unset) and on to the end of the line it stops in, as
 // `{lines, next, done}`. A part the call-bytes cap cuts short ends at its last
 // whole line.
-static STATUS_MUST_USE Status bi_read_lines(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_read_lines(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_READ_LINES;
     CheckedPath p;
-    TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, b, &at(args, 0), false, &p));
     uint64_t offset = 0;
     if (args.len > 1) TRY(builtin_offset_arg(r, pos, b, &at(args, 1), &offset));
     uint64_t cap = r->ctx.budgets.call_bytes;
@@ -452,10 +452,10 @@ static uint64_t builtin_newlines(Str s) {
 // `grep(p, s)`: the lines of the file holding the literal `s`, as
 // `{line, text}`, each line once. The file is read whole, at most the
 // call-bytes cap.
-static STATUS_MUST_USE Status bi_grep(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_grep(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_GREP;
     CheckedPath p;
-    TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, b, &at(args, 0), false, &p));
     Str needle = {0};
     TRY(builtin_string_arg(r, pos, b, &at(args, 1), S("what it looks for"), &needle));
     if (needle.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`grep` of \"\" is an error: there is nothing to look for"));
@@ -504,10 +504,10 @@ static STATUS_MUST_USE Status bi_grep(Run *r, Pos pos, ConstValues args, Value *
 // `line_at(p, offset)`: the whole line holding byte `offset`, without its
 // newline, or nil at or past the end; read backward and forward a piece at a
 // time, the line at most the call-bytes cap.
-static STATUS_MUST_USE Status bi_line_at(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_line_at(Run *r, Pos pos, ConstValues args, Value *out) {
     Builtin b = BUILTIN_LINE_AT;
     CheckedPath p;
-    TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, b, &at(args, 0), false, &p));
     uint64_t offset = 0;
     TRY(builtin_offset_arg(r, pos, b, &at(args, 1), &offset));
     TRY(builtin_count_read(r, pos));
@@ -681,7 +681,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, 
 static STATUS_MUST_USE Status builtin_scanner(Run *r, Pos pos, const ScanAsk *ask, ConstValues args, Value *out) {
     Builtin b = ask->b;
     CheckedPath p;
-    TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, b, &at(args, 0), false, &p));
     Str needle = {0};
     TRY(builtin_string_arg(r, pos, b, &at(args, 1), S("what it looks for"), &needle));
     Str who = builtin_who(r, b);
@@ -703,11 +703,11 @@ static STATUS_MUST_USE Status builtin_scanner(Run *r, Pos pos, const ScanAsk *as
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_count_in(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_count_in(Run *r, Pos pos, ConstValues args, Value *out) {
     return builtin_scanner(r, pos, &SCAN_COUNT_IN, args, out);
 }
 
-static STATUS_MUST_USE Status bi_find_in(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_find_in(Run *r, Pos pos, ConstValues args, Value *out) {
     return builtin_scanner(r, pos, &SCAN_FIND_IN, args, out);
 }
 
@@ -715,9 +715,9 @@ static STATUS_MUST_USE Status bi_find_in(Run *r, Pos pos, ConstValues args, Valu
 // counts them, without holding the file. For a range, its newlines and the
 // last line when the range reaches the end, so the parts' counts add up to
 // the whole's.
-static STATUS_MUST_USE Status bi_count_lines(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_count_lines(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_COUNT_LINES, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_COUNT_LINES, &at(args, 0), false, &p));
     ScanRange range;
     TRY(builtin_range_args(r, pos, BUILTIN_COUNT_LINES, args, 1, &range));
     Scanned got;

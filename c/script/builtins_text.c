@@ -68,7 +68,7 @@ static void finder_init(Finder *f, Run *r, Pos pos, Str needle) {
 
 // ── text ──
 
-static STATUS_MUST_USE Status bi_split(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_split(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str sep = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_SPLIT, &at(args, 0), S("its first argument"), &s));
@@ -96,7 +96,7 @@ static STATUS_MUST_USE Status bi_split(Run *r, Pos pos, ConstValues args, Value 
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_join(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_join(Run *r, Pos pos, ConstValues args, Value *out) {
     Table *t = NULL;
     Str sep = {0};
     TRY(builtin_list_arg(r, pos, BUILTIN_JOIN, &at(args, 0), &t));
@@ -123,7 +123,7 @@ static STATUS_MUST_USE Status bi_join(Run *r, Pos pos, ConstValues args, Value *
 
 // `lines(s)`: `s` split at each `\n`, with no empty last piece after a final
 // newline.
-static STATUS_MUST_USE Status bi_lines(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_lines(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_LINES, &at(args, 0), S("its first argument"), &s));
     TRY(run_charge(r, pos, s.len));
@@ -145,7 +145,7 @@ static bool builtin_is_space(uint8_t c) {
 }
 
 // `words(s)`: the runs between ASCII whitespace.
-static STATUS_MUST_USE Status bi_words(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_words(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_WORDS, &at(args, 0), S("its first argument"), &s));
     TRY(run_charge(r, pos, s.len));
@@ -170,7 +170,7 @@ static STATUS_MUST_USE Status builtin_looks_args(Run *r, Pos pos, Builtin b, Con
     return builtin_charge_bytes(r, pos, s->len);
 }
 
-static STATUS_MUST_USE Status bi_starts_with(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_starts_with(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str t = {0};
     TRY(builtin_looks_args(r, pos, BUILTIN_STARTS_WITH, args, &s, &t));
@@ -178,7 +178,7 @@ static STATUS_MUST_USE Status bi_starts_with(Run *r, Pos pos, ConstValues args, 
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_ends_with(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_ends_with(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str t = {0};
     TRY(builtin_looks_args(r, pos, BUILTIN_ENDS_WITH, args, &s, &t));
@@ -186,7 +186,7 @@ static STATUS_MUST_USE Status bi_ends_with(Run *r, Pos pos, ConstValues args, Va
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_contains(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_contains(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str t = {0};
     TRY(builtin_looks_args(r, pos, BUILTIN_CONTAINS, args, &s, &t));
@@ -201,7 +201,7 @@ static STATUS_MUST_USE Status bi_contains(Run *r, Pos pos, ConstValues args, Val
 
 // `find(s, t[, from])`: the 1-based index of the first `t` in `s` at or after
 // `from`, or nil.
-static STATUS_MUST_USE Status bi_find(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_find(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str t = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_FIND, &at(args, 0), S("its first argument"), &s));
@@ -253,7 +253,7 @@ static bool builtin_utf8_valid(Str seq) {
     return v >= 0x10000 && v <= 0x10FFFF;
 }
 
-static STATUS_MUST_USE Status bi_bad_utf8(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_bad_utf8(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_BAD_UTF8, &at(args, 0), S("its text"), &s));
     TRY(builtin_charge_bytes(r, pos, s.len));
@@ -284,7 +284,7 @@ static size_t builtin_sub_range(size_t len, int64_t i, int64_t j, size_t *start)
     return (size_t)(z - a + 1);
 }
 
-static STATUS_MUST_USE Status bi_sub(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_sub(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     int64_t i = 0;
     int64_t j = -1;
@@ -302,13 +302,13 @@ static bool builtin_is_blank(uint8_t c) {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
-static Str builtin_trim_start(Str s) {
+static Str builtin_trim_start_text(Str s) {
     size_t k = 0;
     while (k < s.len && builtin_is_blank(str_byte(s, k))) k++;
     return str_sub(s, k, s.len);
 }
 
-static Str builtin_trim_end(Str s) {
+static Str builtin_trim_end_text(Str s) {
     size_t k = s.len;
     while (k > 0 && builtin_is_blank(str_byte(s, k - 1))) k--;
     return str_sub(s, 0, k);
@@ -320,24 +320,24 @@ static STATUS_MUST_USE Status builtin_trim_arg(Run *r, Pos pos, Builtin b, Const
     return run_charge(r, pos, s->len);
 }
 
-static STATUS_MUST_USE Status bi_trim(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_trim(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     TRY(builtin_trim_arg(r, pos, BUILTIN_TRIM, args, &s));
-    value_string(out, builtin_trim_end(builtin_trim_start(s)));
+    value_string(out, builtin_trim_end_text(builtin_trim_start_text(s)));
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_trim_start(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_trim_start(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     TRY(builtin_trim_arg(r, pos, BUILTIN_TRIM_START, args, &s));
-    value_string(out, builtin_trim_start(s));
+    value_string(out, builtin_trim_start_text(s));
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_trim_end(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_trim_end(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     TRY(builtin_trim_arg(r, pos, BUILTIN_TRIM_END, args, &s));
-    value_string(out, builtin_trim_end(s));
+    value_string(out, builtin_trim_end_text(s));
     return OK;
 }
 
@@ -373,15 +373,15 @@ static STATUS_MUST_USE Status builtin_cased(Run *r, Pos pos, const CaseShift *sh
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_upper(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_upper(Run *r, Pos pos, ConstValues args, Value *out) {
     return builtin_cased(r, pos, &CASE_UPPER, args, out);
 }
 
-static STATUS_MUST_USE Status bi_lower(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_lower(Run *r, Pos pos, ConstValues args, Value *out) {
     return builtin_cased(r, pos, &CASE_LOWER, args, out);
 }
 
-static STATUS_MUST_USE Status bi_tostring(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_tostring(Run *r, Pos pos, ConstValues args, Value *out) {
     IntText it;
     Str t = {0};
     TRY(builtin_scalar_text(r, pos, &at(args, 0), &it, S("tostring"), &t));
@@ -392,7 +392,7 @@ static STATUS_MUST_USE Status bi_tostring(Run *r, Pos pos, ConstValues args, Val
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_tonumber(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_tonumber(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_TONUMBER, &at(args, 0), S("its first argument"), &s));
     TRY(run_charge(r, pos, s.len));
@@ -402,7 +402,7 @@ static STATUS_MUST_USE Status bi_tonumber(Run *r, Pos pos, ConstValues args, Val
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_parse_int(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_parse_int(Run *r, Pos pos, ConstValues args, Value *out) {
     const Value *v = &at(args, 0);
     if (v->tag == VALUE_NIL || v->tag == VALUE_INT) {
         *out = *v;
@@ -411,7 +411,7 @@ static STATUS_MUST_USE Status bi_parse_int(Run *r, Pos pos, ConstValues args, Va
     if (v->tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`parse_int` takes a string (or nil, or an integer), not {s}", S("`parse_int` takes a string (or nil, or an integer), not "), value_type_name(v));
     TRY(run_charge(r, pos, v->as.string.len));
     int64_t n = 0;
-    if (!cli_parse_integer(builtin_trim_end(builtin_trim_start(v->as.string)), &n)) {
+    if (!cli_parse_integer(builtin_trim_end_text(builtin_trim_start_text(v->as.string)), &n)) {
         value_nil(out);
         return OK;
     }
@@ -419,7 +419,7 @@ static STATUS_MUST_USE Status bi_parse_int(Run *r, Pos pos, ConstValues args, Va
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_rep(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_rep(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     int64_t n = 0;
     TRY(builtin_string_arg(r, pos, BUILTIN_REP, &at(args, 0), S("its first argument"), &s));
@@ -437,7 +437,7 @@ static STATUS_MUST_USE Status bi_rep(Run *r, Pos pos, ConstValues args, Value *o
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_substitute(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_substitute(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str old = {0};
     Str new_text = {0};
@@ -496,7 +496,7 @@ static STATUS_MUST_USE Status bi_substitute(Run *r, Pos pos, ConstValues args, V
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_path(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_path(Run *r, Pos pos, ConstValues args, Value *out) {
     uint64_t total = 0;
     for (size_t i = 0; i < args.len; i++) {
         const Value *a = &at(args, i);
@@ -517,7 +517,7 @@ static STATUS_MUST_USE Status bi_path(Run *r, Pos pos, ConstValues args, Value *
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_basename(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_basename(Run *r, Pos pos, ConstValues args, Value *out) {
     Str p = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_BASENAME, &at(args, 0), S("its path"), &p));
     TRY(run_charge(r, pos, p.len));
@@ -527,7 +527,7 @@ static STATUS_MUST_USE Status bi_basename(Run *r, Pos pos, ConstValues args, Val
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_is_name(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_is_name(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_IS_NAME, &at(args, 0), S("its name"), &s));
     TRY(run_charge(r, pos, s.len));
@@ -535,7 +535,7 @@ static STATUS_MUST_USE Status bi_is_name(Run *r, Pos pos, ConstValues args, Valu
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_strip_suffix(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_strip_suffix(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str t = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_STRIP_SUFFIX, &at(args, 0), S("its first argument"), &s));
@@ -548,7 +548,7 @@ static STATUS_MUST_USE Status bi_strip_suffix(Run *r, Pos pos, ConstValues args,
 
 // `between(s, a, b)`: the text after the first `a` and before the first `b`
 // after it, or nil.
-static STATUS_MUST_USE Status bi_between(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_between(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str a = {0};
     Str b = {0};
@@ -580,7 +580,7 @@ static STATUS_MUST_USE Status bi_between(Run *r, Pos pos, ConstValues args, Valu
 
 // The match behind `like`: the classic walk that backtracks only to the last
 // `*`. Every byte examined is a step, charged each 1024.
-static STATUS_MUST_USE Status builtin_like(Run *r, Pos pos, Str s, Str p, bool *out) {
+static STATUS_MUST_USE Status builtin_like_text(Run *r, Pos pos, Str s, Str p, bool *out) {
     size_t si = 0;
     size_t pi = 0;
     bool has_star = false;
@@ -618,13 +618,13 @@ static STATUS_MUST_USE Status builtin_like(Run *r, Pos pos, Str s, Str p, bool *
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_like(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_like(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str p = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_LIKE, &at(args, 0), S("its first argument"), &s));
     TRY(builtin_string_arg(r, pos, BUILTIN_LIKE, &at(args, 1), S("its pattern"), &p));
     bool got = false;
-    TRY(builtin_like(r, pos, s, p, &got));
+    TRY(builtin_like_text(r, pos, s, p, &got));
     value_bool(out, got);
     return OK;
 }
@@ -648,7 +648,7 @@ static bool builtin_split_parts(Str s, PathParts room, size_t *n) {
     return true;
 }
 
-static STATUS_MUST_USE Status bi_match_path(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_match_path(Run *r, Pos pos, ConstValues args, Value *out) {
     Str subject = {0};
     Str pattern = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_MATCH_PATH, &at(args, 0), S("its path"), &subject));
@@ -681,7 +681,7 @@ static STATUS_MUST_USE Status bi_match_path(Run *r, Pos pos, ConstValues args, V
             }
         } else {
             for (size_t j = 1; j < np + 1; j++) {
-                if (at(can, j - 1)) TRY(builtin_like(r, pos, at(ps, j - 1), part, &at(next, j)));
+                if (at(can, j - 1)) TRY(builtin_like_text(r, pos, at(ps, j - 1), part, &at(next, j)));
             }
         }
         for (size_t j = 0; j < can.len; j++) at(can, j) = at(next, j);
@@ -815,7 +815,7 @@ static STATUS_MUST_USE Status builtin_match_value(Run *r, Pos pos, const RegexCa
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_re_find(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_re_find(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str pattern = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_RE_FIND, &at(args, 0), S("its first argument"), &s));
@@ -848,7 +848,7 @@ static STATUS_MUST_USE Status bi_re_find(Run *r, Pos pos, ConstValues args, Valu
     return builtin_match_value(r, pos, c, s, &f, out);
 }
 
-static STATUS_MUST_USE Status bi_re_find_all(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_re_find_all(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str pattern = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_RE_FIND_ALL, &at(args, 0), S("its first argument"), &s));
@@ -879,7 +879,7 @@ static STATUS_MUST_USE Status bi_re_find_all(Run *r, Pos pos, ConstValues args, 
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_re_match(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_re_match(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str pattern = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_RE_MATCH, &at(args, 0), S("its first argument"), &s));
@@ -897,7 +897,7 @@ static STATUS_MUST_USE Status bi_re_match(Run *r, Pos pos, ConstValues args, Val
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_re_replace(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_re_replace(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str pattern = {0};
     Str with = {0};

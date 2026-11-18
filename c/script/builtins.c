@@ -97,7 +97,7 @@ static STATUS_MUST_USE Status builtin_push_str(Run *r, Pos pos, Table *t, Str s)
 
 // ── lists and maps ──
 
-static STATUS_MUST_USE Status bi_push(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_push(Run *r, Pos pos, ConstValues args, Value *out) {
     Table *t = NULL;
     TRY(builtin_list_arg(r, pos, BUILTIN_PUSH, &at(args, 0), &t));
     if (at(args, 1).tag == VALUE_NIL) return run_fail(&r->ctx, pos, CLASS_TYPE, S("a list cannot hold nil"));
@@ -107,7 +107,7 @@ static STATUS_MUST_USE Status bi_push(Run *r, Pos pos, ConstValues args, Value *
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_pop(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_pop(Run *r, Pos pos, ConstValues args, Value *out) {
     Table *t = NULL;
     TRY(builtin_list_arg(r, pos, BUILTIN_POP, &at(args, 0), &t));
     if (t->list.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`pop` of an empty list: nothing to take (`#l > 0` asks first)"));
@@ -115,7 +115,7 @@ static STATUS_MUST_USE Status bi_pop(Run *r, Pos pos, ConstValues args, Value *o
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_reverse(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_reverse(Run *r, Pos pos, ConstValues args, Value *out) {
     Table *t = NULL;
     TRY(builtin_list_arg(r, pos, BUILTIN_REVERSE, &at(args, 0), &t));
     TRY(run_charge(r, pos, t->list.len));
@@ -184,7 +184,7 @@ static STATUS_MUST_USE Status builtin_same_at(Run *r, Pos pos, const Value *a, c
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_same(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_same(Run *r, Pos pos, ConstValues args, Value *out) {
     bool same = false;
     TRY(builtin_same_at(r, pos, &at(args, 0), &at(args, 1), 0, &same));
     value_bool(out, same);
@@ -212,15 +212,15 @@ static STATUS_MUST_USE Status builtin_part(Run *r, Pos pos, Builtin b, ConstValu
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_take(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_take(Run *r, Pos pos, ConstValues args, Value *out) {
     return builtin_part(r, pos, BUILTIN_TAKE, args, false, out);
 }
 
-static STATUS_MUST_USE Status bi_last(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_last(Run *r, Pos pos, ConstValues args, Value *out) {
     return builtin_part(r, pos, BUILTIN_LAST, args, true, out);
 }
 
-static STATUS_MUST_USE Status bi_keys(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_keys(Run *r, Pos pos, ConstValues args, Value *out) {
     Table *t = NULL;
     TRY(builtin_map_arg(r, pos, BUILTIN_KEYS, &at(args, 0), &t));
     Table *o = NULL;
@@ -234,7 +234,7 @@ static STATUS_MUST_USE Status bi_keys(Run *r, Pos pos, ConstValues args, Value *
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_has_key(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_has_key(Run *r, Pos pos, ConstValues args, Value *out) {
     Table *t = NULL;
     TRY(builtin_map_arg(r, pos, BUILTIN_HAS_KEY, &at(args, 0), &t));
     Str k = {0};
@@ -244,7 +244,7 @@ static STATUS_MUST_USE Status bi_has_key(Run *r, Pos pos, ConstValues args, Valu
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_get(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_get(Run *r, Pos pos, ConstValues args, Value *out) {
     Value fallback;
     value_nil(&fallback);
     if (args.len > 2) fallback = at(args, 2);
@@ -271,7 +271,7 @@ static STATUS_MUST_USE Status bi_get(Run *r, Pos pos, ConstValues args, Value *o
     return run_failf(r, pos, CLASS_TYPE, "`get`: a key must be an integer (a list) or a string (a map), not {s}", S("`get`: a key must be an integer (a list) or a string (a map), not "), value_type_name(kv));
 }
 
-static STATUS_MUST_USE Status bi_count(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_count(Run *r, Pos pos, ConstValues args, Value *out) {
     const Value *tv = &at(args, 0);
     if (tv->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`count` takes a map or a list, not {s}", S("`count` takes a map or a list, not "), value_type_name(tv));
     Table *t = tv->as.table;
@@ -478,7 +478,7 @@ static STATUS_MUST_USE Status builtin_sort_by_keys(Run *r, Pos pos, Table *t, co
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_sort(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_sort(Run *r, Pos pos, ConstValues args, Value *out) {
     Table *t = NULL;
     TRY(builtin_list_arg(r, pos, BUILTIN_SORT, &at(args, 0), &t));
     *out = at(args, 0);
@@ -541,15 +541,15 @@ static STATUS_MUST_USE Status builtin_extreme(Run *r, Pos pos, Builtin b, bool k
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_min(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_min(Run *r, Pos pos, ConstValues args, Value *out) {
     return builtin_extreme(r, pos, BUILTIN_MIN, true, args, out);
 }
 
-static STATUS_MUST_USE Status bi_max(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_max(Run *r, Pos pos, ConstValues args, Value *out) {
     return builtin_extreme(r, pos, BUILTIN_MAX, false, args, out);
 }
 
-static STATUS_MUST_USE Status bi_abs(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_abs(Run *r, Pos pos, ConstValues args, Value *out) {
     int64_t x = 0;
     TRY(builtin_int_arg(r, pos, BUILTIN_ABS, &at(args, 0), S("its integer"), &x));
     if (x == INT64_MIN) return run_failf(r, pos, CLASS_ARITHMETIC, "abs({d}) overflows 64 bits", S("abs("), run_num(r, x), S(") overflows 64 bits"));
@@ -559,14 +559,14 @@ static STATUS_MUST_USE Status bi_abs(Run *r, Pos pos, ConstValues args, Value *o
 
 // ── time and the run ──
 
-static STATUS_MUST_USE Status bi_now(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_now(Run *r, Pos pos, ConstValues args, Value *out) {
     (void)pos;
     (void)args;
     value_int(out, r->now);
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_fail(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_fail(Run *r, Pos pos, ConstValues args, Value *out) {
     (void)out;
     Str msg = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_FAIL, &at(args, 0), S("its message"), &msg));
@@ -577,7 +577,7 @@ static STATUS_MUST_USE Status bi_fail(Run *r, Pos pos, ConstValues args, Value *
 // The host's call `name` with the rest of the arguments: its name is what the
 // stops in its checks give, until it returns. Where there is no host (metal), a
 // stop of class `host` naming the call.
-static STATUS_MUST_USE Status bi_host(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_host(Run *r, Pos pos, ConstValues args, Value *out) {
     Str name = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &at(args, 0), S("its call's name"), &name));
     TRY(run_charge(r, pos, name.len));
@@ -592,7 +592,7 @@ static STATUS_MUST_USE Status bi_host(Run *r, Pos pos, ConstValues args, Value *
     return run_failf(r, pos, CLASS_HOST, "`{s}`: not on this host", S("`"), name, S("`: not on this host"));
 }
 
-static STATUS_MUST_USE Status bi_arg(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_arg(Run *r, Pos pos, ConstValues args, Value *out) {
     Str name = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_ARG, &at(args, 0), S("its name"), &name));
     TRY(run_charge(r, pos, name.len));
@@ -634,7 +634,7 @@ static STATUS_MUST_USE Status bi_arg(Run *r, Pos pos, ConstValues args, Value *o
 
 // Never reached: `yield()` compiles to its own op, and a call with arguments
 // is refused by its count, so a call here is a bug in the C.
-static STATUS_MUST_USE Status bi_yield(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_yield(Run *r, Pos pos, ConstValues args, Value *out) {
     (void)r;
     (void)pos;
     (void)args;
@@ -649,7 +649,7 @@ static int64_t builtin_capped(uint64_t n) {
 }
 
 // What is left of each budget a script spends as it runs.
-static STATUS_MUST_USE Status bi_budget(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_budget(Run *r, Pos pos, ConstValues args, Value *out) {
     (void)args;
     const Budgets *b = &r->ctx.budgets;
     Table *t = NULL;
@@ -668,7 +668,7 @@ static STATUS_MUST_USE Status bi_budget(Run *r, Pos pos, ConstValues args, Value
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_call_bytes(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_call_bytes(Run *r, Pos pos, ConstValues args, Value *out) {
     (void)pos;
     (void)args;
     value_int(out, builtin_capped(r->ctx.budgets.call_bytes));
@@ -730,7 +730,7 @@ static STATUS_MUST_USE Status builtin_digits(Buf *b, int64_t n, size_t width) {
     return buf_str(b, s);
 }
 
-static STATUS_MUST_USE Status bi_date(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_date(Run *r, Pos pos, ConstValues args, Value *out) {
     int64_t t = 0;
     TRY(builtin_int_arg(r, pos, BUILTIN_DATE, &at(args, 0), S("its seconds"), &t));
     if (t < 0 || t > BUILTIN_LAST_SECOND) return run_failf(r, pos, CLASS_ARGUMENT, "`date`: {d} is outside 1970-01-01 to 9999-12-31", S("`date`: "), run_num(r, t), S(" is outside 1970-01-01 to 9999-12-31"));
@@ -821,7 +821,7 @@ static bool builtin_parse_time(Str s, int64_t *out) {
     return true;
 }
 
-static STATUS_MUST_USE Status bi_seconds(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_seconds(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     TRY(builtin_string_arg(r, pos, BUILTIN_SECONDS, &at(args, 0), S("its time"), &s));
     TRY(run_charge(r, pos, s.len));
@@ -835,7 +835,7 @@ static STATUS_MUST_USE Status bi_seconds(Run *r, Pos pos, ConstValues args, Valu
 
 // ── formatting ──
 
-static STATUS_MUST_USE Status bi_human(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_human(Run *r, Pos pos, ConstValues args, Value *out) {
     int64_t n = 0;
     TRY(builtin_int_arg(r, pos, BUILTIN_HUMAN, &at(args, 0), S("its size"), &n));
     TRY(run_charge(r, pos, 16));
@@ -905,7 +905,7 @@ static STATUS_MUST_USE Status builtin_cell_text(Run *r, Pos pos, const Value *v,
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_pad(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_pad(Run *r, Pos pos, ConstValues args, Value *out) {
     const Value *v = &at(args, 0);
     int64_t width = 0;
     TRY(builtin_int_arg(r, pos, BUILTIN_PAD, &at(args, 1), S("its width"), &width));
@@ -929,7 +929,7 @@ SLICE_TYPE(Numeric, bool);
 
 // Rows (maps) as aligned text: a line of column names, then one a row,
 // columns two spaces apart, a column of integers right-aligned.
-static STATUS_MUST_USE Status bi_table(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_table(Run *r, Pos pos, ConstValues args, Value *out) {
     Table *rows = NULL;
     Table *cols = NULL;
     TRY(builtin_list_arg(r, pos, BUILTIN_TABLE, &at(args, 0), &rows));

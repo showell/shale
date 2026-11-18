@@ -140,7 +140,7 @@ static STATUS_MUST_USE Status host_zig_rename_in(Paths *h, HostZigProc *z, Arena
     r->tried_change = true;
     if (args.len != 3) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_rename` takes a path, `{{from, to}}` and options, given {d}", S("`zig_rename` takes a path, `{from, to}` and options, given "), run_unum(r, args.len));
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
     const Value *nv = &at(args, 1);
     if (nv->tag != VALUE_TABLE || nv->as.table->kind != TABLE_MAP) return host_zig_names_type(r, pos);
     Table *names = nv->as.table;
@@ -300,7 +300,7 @@ static STATUS_MUST_USE Status host_zig_decls_in(Paths *h, HostZigProc *z, Arena 
         }
     }
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
     Str src = {0};
     TRY(host_zig_read(r, pos, &p, &src));
     Buf req = buf_make(sa);
@@ -402,7 +402,7 @@ static STATUS_MUST_USE Status host_zig_tokens_in(Paths *h, HostZigProc *z, Arena
         }
     }
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
     Str src = {0};
     TRY(host_zig_read(r, pos, &p, &src));
     Buf req = buf_make(sa);
@@ -621,8 +621,8 @@ static STATUS_MUST_USE Status host_zig_move_in(Paths *h, HostZigProc *z, Arena *
     if (args.len != 3) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_move` takes `from`, `to` and `{{names, opts}}`, given {d}", S("`zig_move` takes `from`, `to` and `{names, opts}`, given "), run_unum(r, args.len));
     CheckedPath p;
     CheckedPath q;
-    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
-    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 1), false, &q));
+    TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &at(args, 1), false, &q));
     if (str_eq(p.full.s, q.full.s)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`zig_move`: `from` and `to` are one file"));
     const Value *pv = &at(args, 2);
     if (pv->tag != VALUE_TABLE || pv->as.table->kind != TABLE_MAP) return run_fail(&r->ctx, pos, CLASS_TYPE, S("`zig_move`'s names are a list"));
@@ -879,7 +879,7 @@ static bool host_zig_resolve(Arena *a, Str dir, Str target, Str *out) {
 static STATUS_MUST_USE Status host_zig_imports_in(Paths *h, HostZigProc *z, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
     if (args.len != 1) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_imports` takes a path, given {d} arguments", S("`zig_imports` takes a path, given "), run_unum(r, args.len), S(" arguments"));
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
     Str src = {0};
     TRY(host_zig_read(r, pos, &p, &src));
     Buf req = buf_make(sa);

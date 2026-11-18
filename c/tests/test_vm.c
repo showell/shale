@@ -359,7 +359,7 @@ TEST(a_stop_whose_format_escapes_a_brace_falls_back_to_that_format_raw) {
     EXPECT_EQ(builtin_sort_keys(r, pos, &sort_nokey, false, keys, &n_keys), STOP);
     EXPECT_STR(r->ctx.stop.message, S("`sort`'s key {d} has no `key`: {{key = name, desc = true}}"));
     ConstValues a_subst = {subst, 3};
-    EXPECT_EQ(bi_substitute(r, pos, a_subst, &out), STOP);
+    EXPECT_EQ(builtin_substitute(r, pos, a_subst, &out), STOP);
     EXPECT_STR(r->ctx.stop.message, S("`substitute`: \"{s}\" is not in the text, so nothing was replaced; `{{missing_ok = true}}` if a miss is expected"));
     HostZigRenameOpts o;
     memset(&o, 0, sizeof o);

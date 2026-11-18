@@ -492,7 +492,7 @@ static STATUS_MUST_USE Status change_at(Run *r, Pos pos, Builtin b, ChangeKind c
 
 static STATUS_MUST_USE Status change_builtin(Run *r, Pos pos, Builtin b, ChangeKind c, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, b, &at(args, 0), false, &p));
     Str data = S("");
     if (c == CHANGE_REPLACE || c == CHANGE_APPEND) TRY(builtin_string_arg(r, pos, b, &at(args, 1), S("what it writes"), &data));
     TRY(change_at(r, pos, b, c, &p, data));
@@ -500,23 +500,23 @@ static STATUS_MUST_USE Status change_builtin(Run *r, Pos pos, Builtin b, ChangeK
     return OK;
 }
 
-static STATUS_MUST_USE Status bi_replace(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_replace(Run *r, Pos pos, ConstValues args, Value *out) {
     return change_builtin(r, pos, BUILTIN_REPLACE, CHANGE_REPLACE, args, out);
 }
 
-static STATUS_MUST_USE Status bi_append(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_append(Run *r, Pos pos, ConstValues args, Value *out) {
     return change_builtin(r, pos, BUILTIN_APPEND, CHANGE_APPEND, args, out);
 }
 
-static STATUS_MUST_USE Status bi_mkdir(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_mkdir(Run *r, Pos pos, ConstValues args, Value *out) {
     return change_builtin(r, pos, BUILTIN_MKDIR, CHANGE_MKDIR, args, out);
 }
 
-static STATUS_MUST_USE Status bi_remove(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_remove(Run *r, Pos pos, ConstValues args, Value *out) {
     return change_builtin(r, pos, BUILTIN_REMOVE, CHANGE_REMOVE, args, out);
 }
 
-static STATUS_MUST_USE Status bi_remove_tree(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_remove_tree(Run *r, Pos pos, ConstValues args, Value *out) {
     return change_builtin(r, pos, BUILTIN_REMOVE_TREE, CHANGE_REMOVE_TREE, args, out);
 }
 
@@ -524,9 +524,9 @@ static STATUS_MUST_USE Status bi_remove_tree(Run *r, Pos pos, ConstValues args, 
 // edits made in sequence, the diff printed, the file written once, logged as
 // `edit`; the replacements made. An edit that fails stops the run before
 // anything is printed or written.
-static STATUS_MUST_USE Status bi_edit(Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_edit(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_EDIT, &at(args, 0), false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_EDIT, &at(args, 0), false, &p));
     EditList edits;
     TRY(change_edits_arg(r, pos, args, &edits));
     Plan plan;
@@ -560,7 +560,7 @@ static STATUS_MUST_USE Status change_edits_write(Run *r, Pos pos, const Value *l
         }
         ValueVecItems two = ValueVec_items(&item->as.table->list);
         CheckedPath p;
-        TRY(builtin_path(r, pos, b, &at(two, 0), false, &p));
+        TRY(builtin_checked_path(r, pos, b, &at(two, 0), false, &p));
         for (size_t j = 0; j < k; j++) {
             if (str_eq(at(plans, j).p.full.s, p.full.s)) {
                 return run_failf(r, pos, CLASS_ARGUMENT, "`edits_write`: {s} is named twice: one list of its edits, which apply in sequence", S("`edits_write`: "), p.rel, S(" is named twice: one list of its edits, which apply in sequence"));

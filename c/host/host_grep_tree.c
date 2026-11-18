@@ -425,7 +425,7 @@ static STATUS_MUST_USE Status grep_tree_wanted(Run *r, Pos pos, const GrepTreeAs
         size_t k = e->path.len;
         while (k > 0 && str_byte(e->path, k - 1) != '/') k--;
         bool like = false;
-        TRY(builtin_like(r, pos, str_sub(e->path, k, e->path.len), pattern, &like));
+        TRY(builtin_like_text(r, pos, str_sub(e->path, k, e->path.len), pattern, &like));
         if (!like) return OK;
     }
     *wanted = true;
@@ -529,7 +529,7 @@ static STATUS_MUST_USE Status grep_tree_file(Run *r, Pos pos, const GrepTreeAsk 
     Value pv;
     value_string(&pv, path);
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_READ, &pv, false, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_READ, &pv, false, &p));
     TRY(builtin_count_read(r, pos));
     uint64_t size = 0;
     TRY(builtin_file_size(r, pos, BUILTIN_READ, &p, &size));
@@ -626,7 +626,7 @@ static STATUS_MUST_USE Status grep_tree_walk(Run *r, Pos pos, const GrepTreeAsk 
     Value pv;
     value_string(&pv, ask->place);
     CheckedPath p;
-    TRY(builtin_path(r, pos, BUILTIN_WALK, &pv, true, &p));
+    TRY(builtin_checked_path(r, pos, BUILTIN_WALK, &pv, true, &p));
     TRY(builtin_count_read(r, pos));
     bool found = false;
     FileSystemStat st;
@@ -842,7 +842,7 @@ static STATUS_MUST_USE Status grep_tree_skips(Run *r, Pos pos, GrepTreeAsk *ask,
         Value uv;
         value_string(&uv, under);
         CheckedPath sp;
-        TRY(builtin_path(r, pos, BUILTIN_HOST, &uv, false, &sp));
+        TRY(builtin_checked_path(r, pos, BUILTIN_HOST, &uv, false, &sp));
         TRY(builtin_count_read(r, pos));
         bool found = false;
         FileSystemStat st;
