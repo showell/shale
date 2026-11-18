@@ -52,4 +52,5 @@ Shale's checkout:
 That build is best-effort. Its paths were moved here and not run again, and
 some tests read the checkout's files by their old paths (the docs, the
 cookbook, `tools/`), so they may fail where they look. The GitHub workflows
-`.github/workflows/test.yml` and `coverage.yml` run it in this folder.
+`.github/workflows/test.yml` and `coverage.yml` run it in this folder, on
+demand only.

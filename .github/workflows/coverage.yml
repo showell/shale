@@ -1,15 +1,11 @@
 # Zig Shale's coverage gate (legacy_zig/, deprecated and frozen),
-# `shale tools/coverage.shale` there, on every push to master
-# and every pull request: `zig build script-coverage` (the coverage SDK's
+# `shale tools/coverage.shale` there, on demand only (`gh workflow run
+# coverage.yml -f ref=<ref>`): `zig build script-coverage` (the coverage SDK's
 # linecov, under ptrace, over the unit binaries built Debug) read back and
-# held to coverage/lines.txt, each module's uncovered count exactly. Code
-# that lands without its tests moves a count, and this run goes red.
+# held to coverage/lines.txt, each module's uncovered count exactly.
 name: coverage
 
 on:
-  push:
-    branches: [master]
-  pull_request:
   workflow_dispatch:
     inputs:
       ref:
@@ -18,7 +14,7 @@ on:
         required: true
 
 concurrency:
-  group: coverage-${{ github.event.pull_request.number || inputs.ref || github.ref }}
+  group: coverage-${{ inputs.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -31,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ inputs.ref }}
           path: shale
           # The git prelude's tests read shale's own history.
           fetch-depth: 0
