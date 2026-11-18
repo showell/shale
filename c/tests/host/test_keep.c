@@ -403,6 +403,55 @@ TEST(the_edges) {
     arena_deinit(&a);
 }
 
+// A cut line as keep_cut writes it: its front, the mark saying how many
+// bytes are left out, and its back.
+#define KEEP_CUT(front, n, back) front " " KEEP_CUT_MARK " " n " bytes left out " KEEP_CUT_MARK " " back "\n"
+
+TEST(a_cut_line_ends_on_a_code_points_boundary) {
+    // Every width across `─` (3 bytes) and `🐹` (4 bytes), at the front and
+    // at the back: a cut inside either gives the whole character up, and one
+    // at a character's edge keeps it.
+    bool refused = false;
+    Arena a;
+    arena_init(&a, 1 << 20, &refused);
+    KeepOptions o;
+    keep_options_default(&o);
+    o.head = 1;
+    Str front_line = S("a\xe2\x94\x80\xf0\x9f\x90\xb9" "b\n");
+    static const Str fronts_all[] = {
+        S_ITEM(KEEP_CUT("", "9", "")),
+        S_ITEM(KEEP_CUT("a", "8", "")),
+        S_ITEM(KEEP_CUT("a", "7", "b")),
+        S_ITEM(KEEP_CUT("a", "7", "b")),
+        S_ITEM(KEEP_CUT("a", "7", "b")),
+        S_ITEM(KEEP_CUT("a", "7", "b")),
+        S_ITEM(KEEP_CUT("a", "7", "b")),
+        S_ITEM(KEEP_CUT("a\xe2\x94\x80", "4", "b")),
+        S_ITEM(KEEP_CUT("a\xe2\x94\x80", "4", "b")),
+    };
+    SLICE_TYPE(Wants, const Str);
+    Wants fronts = {fronts_all, sizeof fronts_all / sizeof *fronts_all};
+    for (size_t w = 0; w < fronts.len; w++) {
+        o.width = w;
+        Kept k;
+        EXPECT(kept_of(&a, front_line, o, 3, &k));
+        EXPECT_STR(k.out, at(fronts, w));
+    }
+    // The back: `🐹─` the other way round, so the back reaches the `─`.
+    Str back_line = S("a\xf0\x9f\x90\xb9\xe2\x94\x80" "b\n");
+    o.width = 7;
+    Kept seven;
+    EXPECT(kept_of(&a, back_line, o, 2, &seven));
+    EXPECT_STR(seven.out, S(KEEP_CUT("a", "7", "b")));
+    o.width = 8;
+    Kept eight;
+    EXPECT(kept_of(&a, back_line, o, 2, &eight));
+    EXPECT_STR(eight.out, S(KEEP_CUT("a", "4", "\xe2\x94\x80" "b")));
+    arena_deinit(&a);
+}
+
+#undef KEEP_CUT
+
 TEST(an_arena_refused_anywhere_stops_and_never_answers_wrong) {
     // Zig's test refuses each allocation in turn; an arena takes few chunks,
     // so here every limit from 0 up is tried, each refusing wherever the keep
@@ -484,5 +533,6 @@ TEST(memory_stays_bounded_over_a_flood_of_lines) {
 }
 
 TEST_MAIN(TEST_CASE(the_prng_gives_xoshiro256s_first_draws), TEST_CASE(head_and_tail_and_the_filter_against_the_oracle_on_3000_random_outputs),
-          TEST_CASE(the_first_random_round_exactly), TEST_CASE(the_edges), TEST_CASE(an_arena_refused_anywhere_stops_and_never_answers_wrong),
+          TEST_CASE(the_first_random_round_exactly), TEST_CASE(the_edges), TEST_CASE(a_cut_line_ends_on_a_code_points_boundary),
+          TEST_CASE(an_arena_refused_anywhere_stops_and_never_answers_wrong),
           TEST_CASE(a_long_line_keeps_both_ends_and_says_how_much_is_left_out), TEST_CASE(memory_stays_bounded_over_a_flood_of_lines))
