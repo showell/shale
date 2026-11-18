@@ -103,7 +103,9 @@ each block first plans its compiles, its asan plants' among them, then the
 pool runs every block's at once, the longest first by the last run's CPU,
 and then each block runs its tests on the binaries the pool built, each
 held to the argv its plan gave. So no block's lone compile (the store
-builtins' -O2 build, its asan build) runs with the other core idle. The
+builtins' -O2 build, its asan build) runs with the other core idle. Every
+compile has 150 s (`COMPILE_TIMEOUT_MS`, lib.shale), and one past it fails
+saying it timed out, naming the compile, never as a compile error. The
 tier's checks of wall time hold
 under `nice` and a busy box: a program that burns CPU is held to its
 CPU time, and only programs that wait are held to their wall time.
