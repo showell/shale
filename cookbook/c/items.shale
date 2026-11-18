@@ -58,21 +58,22 @@
 -- cookbook/c/map_file.shale prints a file's items, and its `self_test=1`
 -- holds this library to its plants (cookbook/c/plants/map_file/).
 
--- A string, a character literal, a `//` comment to the line's end, or a
--- `/* */` comment: the leftmost first, so a quote inside a comment, or a `//`
--- inside a string, is the other's text.
-const C_MASKED = [=["(\\.|[^"\\])*"|'(\\.|[^'\\])*'|//.*|/\*[^*]*\*/]=]
+-- A string, a character literal, either, and a `/* */` comment. A line
+-- with both quotes takes them leftmost first, so a `"` in `'"'` is the
+-- literal's; a line with one kind takes the cheaper pattern of that kind
+-- alone (the regex's work is most of the masker's steps).
+const C_STRING = [=["[^"\\]*(?:\\.[^"\\]*)*"]=]
+const C_CHAR = [=['[^'\\]*(?:\\.[^'\\]*)*']=]
+const C_QUOTED = [=["[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*']=]
+const C_BLOCK_COMMENT = [=[/\*[^*]*\*/]=]
 
 -- C's keywords and the words of its types and storage, which are no use of
 -- a name.
 const C_KEYWORDS = {"auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "_Alignof", "_Bool", "_Static_assert", "bool", "true", "false", "NULL"}
 
--- `line` with its strings, character literals and comments blanked: each
--- string or literal keeps its quotes with spaces between, and each comment
--- is spaces, so the masked line is as long as the raw one, column for column.
-function c_mask(line)
-  if find(line, "\"") == nil and find(line, "'") == nil and find(line, "/") == nil then return line end
-  local found = re_find_all(line, C_MASKED)
+-- `line` with each of `found`, its matches in order, blanked: a string or a
+-- literal keeps its quotes with spaces between, a comment is spaces.
+function c_blank(line, found)
   if #found == 0 then return line end
   local parts = {}
   local at = 1
@@ -88,6 +89,27 @@ function c_mask(line)
   end
   push(parts, sub(line, at))
   return join(parts, "")
+end
+
+-- `line` with its strings, character literals and comments blanked, so the
+-- masked line is as long as the raw one, column for column. The quotes go
+-- first, so a `//` or a `/*` left after them is a comment's; a quote inside
+-- a comment pairs only with another in it, and is blanked with it.
+function c_mask(line)
+  local s = line
+  local dq = find(s, "\"") ~= nil
+  local sq = find(s, "'") ~= nil
+  if dq and sq then
+    s = c_blank(s, re_find_all(s, C_QUOTED))
+  elseif dq then
+    s = c_blank(s, re_find_all(s, C_STRING))
+  elseif sq then
+    s = c_blank(s, re_find_all(s, C_CHAR))
+  end
+  if find(s, "/*") ~= nil then s = c_blank(s, re_find_all(s, C_BLOCK_COMMENT)) end
+  local cut = find(s, "//")
+  if cut ~= nil then s = sub(s, 1, cut - 1) .. rep(" ", #s - cut + 1) end
+  return s
 end
 
 -- A masked head line read as a function's, `{type, name}`, or nil when it

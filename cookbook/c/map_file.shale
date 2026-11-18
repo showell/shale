@@ -108,6 +108,13 @@ end
 
 function self_test()
   local checks = 0
+  -- The masker: every column kept, a `"` in a character literal the
+  -- literal's, a `//` in a string the string's, a macro's `/* */` blanked.
+  local raw = [=[    if (c == '"') { x("a // b"); } // c]=]
+  same("the mask of `" .. raw .. "`", c_mask(raw), [=[    if (c == ' ') { x("      "); }     ]=])
+  local macro_line = [=[#define M(x) /* it's */ \]=]
+  same("the mask of `" .. macro_line .. "`", c_mask(macro_line), "#define M(x) " .. rep(" ", 10) .. " \\")
+  checks = checks + 2
   local h = PLANTS .. "/kinds.h"
   local hi = c_items(h, {uses = true})
   accounted(h, hi)

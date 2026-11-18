@@ -41,10 +41,13 @@ function canary_gcc(t)
 end
 
 -- c/check_discipline.shale over the C, then its own self-test, in both
--- tiers; then the canary, under tcc in both and GCC in the full.
+-- tiers; then every C file split into its items by cookbook/c/items.shale,
+-- each line accounted for, so a file the splitter can't read fails the
+-- build; then the canary, under tcc in both and GCC in the full.
 function discipline_block(t)
   print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale"}, {timeout_ms = 60000, tail = 20})).out))
   print(trim(must(run_in(t, "discipline", {"shale", "c/check_discipline.shale", "self_test=1"}, {timeout_ms = 60000, tail = 20})).out))
+  print(trim(must(run_in(t, "discipline", {"shale", "cookbook:c/map_file.shale", "tree=c"}, {timeout_ms = 60000, tail = 20})).out))
   print(canary_tcc(t))
   if t.full then print(canary_gcc(t)) end
   return nil
