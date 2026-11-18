@@ -34,3 +34,4 @@ vehicle; these fixes are the yield.
 | 2026-11-18 | quality.shale doesn't pass each project's own tables and exemptions, so its counts differ from Safari's own lints | open |
 | 2026-11-18 | quality.shale's findings log leaves out rewrite_method_calls' per-call findings | open |
 | 2026-11-18 | the gate refuses a bare `2>&1` after a `shale` launch | open |
+| 2026-11-18 | **rewrite_method_calls changed behaviour with `roc check` clean:** `I64.to_str(x)` became `x.to_str()` where `x` was a loop variable over a literal list or a `var` starting from a literal, so it defaulted to Dec and printed `10.0`. The recipe guards a literal argument or a name bound to one, not these | open |
