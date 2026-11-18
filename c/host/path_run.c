@@ -30,13 +30,15 @@ typedef struct {
 // rules); `may_change` is asked before anything is written and refuses a
 // read-only mount's path; `absolute_hint` gives the folder that holds an
 // absolute path, `*has` false when none may be named; `names_secret` says
-// whether a text names a secrets mount's folder.
+// whether a text names a secrets mount's folder; `in_secrets` whether an OS
+// path the store reached is a secrets mount's folder or inside it.
 typedef struct {
     void *ctx;
     Status (*resolve)(void *ctx, PathRun *r, Pos pos, Str path, bool *resolved, Str *full);
     Status (*may_change)(void *ctx, PathRun *r, Pos pos, Str rel, Str full);
     Status (*absolute_hint)(void *ctx, PathRun *r, Pos pos, Str abs, bool *has, AbsoluteHint *out);
     Status (*names_secret)(void *ctx, PathRun *r, Pos pos, Str text, bool *names);
+    Status (*in_secrets)(void *ctx, PathRun *r, Pos pos, Str full, bool *in);
 } PathHook;
 
 // What a path's check needs of the run: where its stops go, the run's

@@ -221,6 +221,35 @@ static STATUS_MUST_USE Status paths_refuse_secrets_under(Paths *h, PathRun *r, P
     return OK;
 }
 
+// The `PathHook.in_secrets` check: whether `full`, an OS path a walk
+// reached below a folder it was allowed (the root, a mount's), is a secrets
+// mount's folder or inside it, by paths_refuse_secrets_under's own test, so
+// the walk leaves it out.
+// DRAGON: the secrets rule. A walk lists and stats each entry by its OS
+// path, never through the store's confinement, so a secrets mount's folder
+// under the root would be listed, its files named and sized.
+// REMEDY: builtins_walk.c asks this of every entry before it stats, lists or
+// keeps it, and of every folder `after` resumes in; test_host_grep_tree
+// plants a secrets mount under the root.
+static STATUS_MUST_USE Status paths_in_secrets(void *ctx, PathRun *r, Pos pos, Str full, bool *in) {
+    Paths *h = ctx;
+    *in = false;
+    if (!paths_any_secrets(h)) return OK;
+    Str abs = S("");
+    TRY(paths_absolute(h, r, pos, mounts_trim_slash(full), &abs));
+    for (size_t k = 0; k < h->mounts.len; k++) {
+        const Mount *m = &at(h->mounts, k);
+        if (!m->secrets) continue;
+        Str dir = S("");
+        TRY(paths_run_dir_of(h, r, pos, m, &dir));
+        if (mounts_in_folder(abs, dir)) {
+            *in = true;
+            return OK;
+        }
+    }
+    return OK;
+}
+
 // The mount `path` names before its `:` at `colon`, into `*out`; a stop
 // naming the mounts there are when it is none.
 static STATUS_MUST_USE Status paths_mount_of(Paths *h, PathRun *r, Pos pos, Str path, size_t colon, const Mount **out) {
@@ -531,7 +560,7 @@ static STATUS_MUST_USE Status paths_may_change(void *ctx, PathRun *r, Pos pos, S
 }
 
 static void paths_hook(Paths *h, PathHook *out) {
-    PathHook v = {h, paths_resolve, paths_may_change, paths_absolute_hint, paths_names_secret};
+    PathHook v = {h, paths_resolve, paths_may_change, paths_absolute_hint, paths_names_secret, paths_in_secrets};
     *out = v;
 }
 

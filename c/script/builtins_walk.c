@@ -64,6 +64,36 @@ static STATUS_MUST_USE Status walk_full(Run *r, Pos pos, Str folder, Str name, S
     return OK;
 }
 
+// Whether `full`, an entry's OS path, is a secrets mount's folder or inside
+// it: the walk leaves such an entry out, unlisted, unstat'ed and unnamed, as
+// though it were not there. False on a host with no path hook (metal's).
+static STATUS_MUST_USE Status walk_in_secrets(Run *r, Pos pos, Str full, bool *in) {
+    *in = false;
+    RunStore *rs = builtin_store_of(r);
+    const PathHook *hook = rs->path.hook;
+    if (hook == NULL || hook->in_secrets == NULL) return OK;
+    return hook->in_secrets(hook->ctx, &rs->path, pos, full, in);
+}
+
+// Whether the folder entry `en`, under `top`, is one the walk goes into
+// when `after` resumes through it: not one `skip` passes by, which the walk
+// never entered, and not a secrets mount's folder.
+static STATUS_MUST_USE Status walk_resumes_into(Run *r, Pos pos, const WalkOptions *o, const WalkLevel *top, StoreEntry en, bool *into) {
+    *into = false;
+    if (en.kind != STORE_KIND_DIRECTORY || top->depth >= o->depth) return OK;
+    if (o->has_skip) {
+        bool skipped = false;
+        TRY(builtin_like(r, pos, en.name, o->skip, &skipped));
+        if (skipped) return OK;
+    }
+    Str full = S("");
+    TRY(walk_full(r, pos, top->full, en.name, &full));
+    bool secret = false;
+    TRY(walk_in_secrets(r, pos, full, &secret));
+    *into = !secret;
+    return OK;
+}
+
 static uint64_t walk_reads_left(const Run *r) {
     return run_sat_sub(r->ctx.budgets.reads, r->reads);
 }
@@ -167,7 +197,9 @@ static STATUS_MUST_USE Status walk_resume(Run *r, Pos pos, const StorePath *p, c
         }
         top->at = i + 1;
         StoreEntry en = at(top->entries, i);
-        if (en.kind != STORE_KIND_DIRECTORY || top->depth >= o->depth) return OK;
+        bool into = false;
+        TRY(walk_resumes_into(r, pos, o, top, en, &into));
+        if (!into) return OK;
         WalkLevel next;
         memset(&next, 0, sizeof next);
         TRY(walk_under(r, pos, top->rel, en.name, &next.rel));
@@ -263,6 +295,18 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
             (void)WalkLevels_pop(&levels);
             continue;
         }
+        // An entry in a secrets mount's folder (the folder itself among
+        // them) is left out before anything else: never stat'ed, listed,
+        // counted or named, not even as where a part ends.
+        StoreEntry ahead = at(top->entries, top->at);
+        Str full = S("");
+        TRY(walk_full(r, pos, top->full, ahead.name, &full));
+        bool secret = false;
+        TRY(walk_in_secrets(r, pos, full, &secret));
+        if (secret) {
+            top->at++;
+            continue;
+        }
         // At most `call_entries` a call, and none past `keep_reads`; with
         // more to come, the list ends with where to resume.
         bool kept_back = o.has_keep_reads && walk_reads_left(r) < walk_sat_add(o.keep_reads, WALK_ENTRY_READS);
@@ -276,7 +320,6 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
         StoreEntry en = at(top->entries, top->at);
         top->at++;
         Str top_rel = top->rel;
-        Str top_full = top->full;
         uint64_t depth = top->depth;
         if (o.has_skip) {
             bool skipped = false;
@@ -291,8 +334,6 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
         last = rel;
         TRY(run_charge(r, pos, rel.len));
         bool into = en.kind == STORE_KIND_DIRECTORY && depth < o.depth;
-        Str full = S("");
-        if (en.kind != STORE_KIND_OTHER || into) TRY(walk_full(r, pos, top_full, en.name, &full));
         bool keep = !o.has_kind || o.kind == en.kind;
         if (keep && o.has_like) TRY(builtin_like(r, pos, en.name, o.like, &keep));
         if (keep) TRY(walk_entry(r, pos, en, rel, full, list));
