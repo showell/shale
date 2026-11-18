@@ -37,7 +37,7 @@ static STATUS_MUST_USE Status host_copy_mode(Host *lh, Run *r, Pos pos, ConstVal
     if (e == FILE_SYSTEM_OK) e = file_system_cstr(&cp, os_str_own(to_abs), &c);
     if (e == FILE_SYSTEM_OK && chmod(c, st.st_mode & 0777) != 0) e = file_system_err_of(errno);
     if (e != FILE_SYSTEM_OK) {
-        return run_failf(r, pos, CLASS_STORE, "`copy`: {s}'s mode could not be given to {s}: {s}", S("`copy`: "), from.rel, S("'s mode could not be given to "), to.rel, S(": "), file_system_err_name(e));
+        return run_failf(r, pos, CLASS_FILE_SYSTEM, "`copy`: {s}'s mode could not be given to {s}: {s}", S("`copy`: "), from.rel, S("'s mode could not be given to "), to.rel, S(": "), file_system_err_name(e));
     }
     value_bool(out, true);
     return OK;
