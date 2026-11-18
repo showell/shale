@@ -416,13 +416,20 @@ static STATUS_MUST_USE Status grep_tree_hits(Run *r, Pos pos, const GrepTreeAsk 
             Table *after = NULL;
             TRY(run_new_table(r, pos, &before));
             TRY(run_new_table(r, pos, &after));
-            for (int64_t i = m.line - around; i <= m.line - 1; i++) {
-                if (i < 1) continue;
+            // The lines on each side that the file has: the prelude's loops
+            // passed by the rest a step each, so a `context` past the file's
+            // length gives what it gave, with no loop over what is not there.
+            int64_t first = around >= m.line ? 1 : m.line - around;
+            for (int64_t i = first; i <= m.line - 1; i++) {
                 if ((uint64_t)i > all.len) return run_failf(r, pos, CLASS_STORE, "`grep_tree`: {s} changed while it was searched", S("`grep_tree`: "), e->path, S(" changed while it was searched"));
+                TRY(run_charge(r, pos, 1));
                 TRY(grep_tree_push_line(r, pos, before, i, at(all, (size_t)i - 1).text));
             }
-            for (int64_t i = m.line + 1; i <= m.line + around; i++) {
-                if ((uint64_t)i <= all.len) TRY(grep_tree_push_line(r, pos, after, i, at(all, (size_t)i - 1).text));
+            int64_t last = (uint64_t)around >= all.len ? (int64_t)all.len : m.line + around;
+            if (last > (int64_t)all.len) last = (int64_t)all.len;
+            for (int64_t i = m.line + 1; i <= last; i++) {
+                TRY(run_charge(r, pos, 1));
+                TRY(grep_tree_push_line(r, pos, after, i, at(all, (size_t)i - 1).text));
             }
             Value bv;
             Value av;
