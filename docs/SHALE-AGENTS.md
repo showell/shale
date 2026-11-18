@@ -248,6 +248,13 @@ has none of it):
   with `regex`, `nocase`, `ext = {"zig"}`, `context = N` (each hit's
   `before` and `after`) and `most`; a link, a binary file and a name the
   store can't hold (`is_name`) are in `passed`, never left out quietly.
+  **Many needles in one walk:** `grep_tree(dir, {"a", "b"}, opts)` looks
+  for each (literals, or patterns with `regex`), each file read once
+  whatever their number, and each hit names the one it holds, `{path,
+  line, text, needle}`; a line holding two is a hit for each, in the
+  list's order, and `most` counts them all. A needle that is a string
+  gives hits without `needle`, as before. `""`, an empty list, a map and
+  an item that isn't a string stop the run.
   **`skip = {"tests/golden", "c/out"}`** leaves those folders out whole,
   unlisted and unread: each is a folder's path below the place searched,
   of names (no absolute path, mount, empty part, `.` or `..`), and one

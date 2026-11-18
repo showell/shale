@@ -30,23 +30,34 @@ typedef struct {
     int64_t size;
 } GrepTreeEntry;
 
-// A line a file's search found: its number, from 1, and its text.
+// A line a file's search found: its number, from 1, its text, and which
+// needle it holds (an index into the ask's `needles`).
 typedef struct {
     int64_t line;
     Str text;
+    size_t needle;
 } GrepTreeLine;
 
 VEC_DEFINE(GrepTreeLines, GrepTreeLine)
 
 VEC_DEFINE(GrepTreeSkips, Str)
 
+// A needle, and itself in lower case, for `nocase`.
+typedef struct {
+    Str text;
+    Str lowered;
+} GrepTreeNeedle;
+
+VEC_DEFINE(GrepTreeNeedles, GrepTreeNeedle)
+
 // What the prelude's `grep_tree` asks, its options as it read them.
 typedef struct {
     Str place;
     Str prefix;
-    Str needle;
-    // The needle in lower case, for `nocase`.
-    Str lowered;
+    // The needles, one for a string and each of a list's, in its order.
+    GrepTreeNeedles needles;
+    // A list was given, so each hit names the needle it holds.
+    bool many;
     bool regex;
     bool nocase;
     // `nocase` as given, for `re_lines`' own check of it.
@@ -107,7 +118,7 @@ static STATUS_MUST_USE Status grep_tree_lower(Run *r, Pos pos, Arena *into, Str 
 // 1, found in `hay` (`text` itself, or `text` in lower case, the same
 // length): `grep`'s rule, a line is the one the match starts in. Each line's
 // text is `text`'s, and each line found is charged its bytes, as `grep`'s are.
-static STATUS_MUST_USE Status grep_tree_find_lines(Run *r, Pos pos, Str text, Str hay, Str needle, int64_t base, GrepTreeLines *found) {
+static STATUS_MUST_USE Status grep_tree_find_lines(Run *r, Pos pos, Str text, Str hay, Str needle, size_t which, int64_t base, GrepTreeLines *found) {
     int64_t line = base + 1;
     size_t counted = 0;
     size_t from = 0;
@@ -121,7 +132,7 @@ static STATUS_MUST_USE Status grep_tree_find_lines(Run *r, Pos pos, Str text, St
         line += (int64_t)grep_tree_newlines(str_sub(hay, counted, start));
         counted = start;
         TRY(run_charge(r, pos, end - start));
-        GrepTreeLine l = {line, str_sub(text, start, end)};
+        GrepTreeLine l = {line, str_sub(text, start, end), which};
         if (GrepTreeLines_push(found, l) != OK) return run_values_oom(r, pos);
         from = end + 1;
     }
@@ -170,16 +181,17 @@ static STATUS_MUST_USE Status grep_tree_read_part(Run *r, Pos pos, const StorePa
     return OK;
 }
 
-// One part's hits for a pattern, as the prelude's `re_lines(join(lines,
-// "\n"), needle, {nocase})` gave them: each line searched alone, so `^`, `$`
-// and `\b` see its edges, numbered from `base` + 1. A last empty line of the
-// part is no line of the join, so it is not searched, as it was not.
-static STATUS_MUST_USE Status grep_tree_regex_part(Run *r, Pos pos, const GrepTreeAsk *ask, Str part, int64_t base, GrepTreeLines *found) {
+// One part's hits for the pattern `needles[which]`, as the prelude's
+// `re_lines(join(lines, "\n"), needle, {nocase})` gave them: each line
+// searched alone, so `^`, `$` and `\b` see its edges, numbered from `base` +
+// 1. A last empty line of the part is no line of the join, so it is not
+// searched, as it was not.
+static STATUS_MUST_USE Status grep_tree_regex_part(Run *r, Pos pos, const GrepTreeAsk *ask, size_t which, Str part, int64_t base, GrepTreeLines *found) {
     RegexOptions options;
     memset(&options, 0, sizeof options);
     TRY(builtin_flag_option(r, pos, S("re_lines"), S("nocase"), &ask->nocase_given, &options.nocase));
     RegexCached *c = NULL;
-    TRY(builtin_program(r, pos, S("re_lines"), ask->needle, options, &c));
+    TRY(builtin_program(r, pos, S("re_lines"), at(ask->needles, which).text, options, &c));
     Str joined = part;
     if (joined.len > 0 && str_byte(joined, joined.len - 1) == '\n') joined = str_sub(joined, 0, joined.len - 1);
     TRY(builtin_charge_bytes(r, pos, joined.len));
@@ -197,7 +209,7 @@ static STATUS_MUST_USE Status grep_tree_regex_part(Run *r, Pos pos, const GrepTr
         TRY(searches_from(&each, r, pos, c, line, 0, &hit, &match));
         if (!hit) continue;
         TRY(run_charge(r, pos, 1 + line.len));
-        GrepTreeLine l = {n, line};
+        GrepTreeLine l = {n, line, which};
         if (GrepTreeLines_push(found, l) != OK) return run_values_oom(r, pos);
     }
     return searches_done(&each, r, pos);
@@ -205,10 +217,11 @@ static STATUS_MUST_USE Status grep_tree_regex_part(Run *r, Pos pos, const GrepTr
 
 // A file a part at a time, as the prelude's `grep_all` and its loop for a
 // pattern or either case read it: each part's lines numbered across the
-// parts. A literal is found by memmem in the part (in lower case for
-// `nocase`); a needle that holds a newline is in no line.
+// parts, and each part searched for every needle, so the file is read once
+// however many there are. A literal is found by memmem in the part (in lower
+// case for `nocase`, the part lowered once); a needle that holds a newline
+// is in no line.
 static STATUS_MUST_USE Status grep_tree_by_parts(Run *r, Pos pos, const GrepTreeAsk *ask, const StorePath *p, Arena *into, GrepTreeLines *found) {
-    bool in_a_line = str_find_byte(ask->needle, '\n') == NULL;
     int64_t base = 0;
     uint64_t offset = 0;
     for (;;) {
@@ -216,14 +229,16 @@ static STATUS_MUST_USE Status grep_tree_by_parts(Run *r, Pos pos, const GrepTree
         uint64_t next = 0;
         bool done = false;
         TRY(grep_tree_read_part(r, pos, p, offset, into, &part, &next, &done));
-        if (ask->regex) {
-            TRY(grep_tree_regex_part(r, pos, ask, part, base, found));
-        } else if (in_a_line && ask->nocase) {
-            Str hay = S("");
-            TRY(grep_tree_lower(r, pos, into, part, &hay));
-            TRY(grep_tree_find_lines(r, pos, part, hay, ask->lowered, base, found));
-        } else if (in_a_line) {
-            TRY(grep_tree_find_lines(r, pos, part, part, ask->needle, base, found));
+        Str hay = part;
+        if (!ask->regex && ask->nocase) TRY(grep_tree_lower(r, pos, into, part, &hay));
+        for (size_t k = 0; k < ask->needles.len; k++) {
+            const GrepTreeNeedle *nd = &at(ask->needles, k);
+            bool in_a_line = str_find_byte(nd->text, '\n') == NULL;
+            if (ask->regex) {
+                TRY(grep_tree_regex_part(r, pos, ask, k, part, base, found));
+            } else if (in_a_line) {
+                TRY(grep_tree_find_lines(r, pos, part, hay, ask->nocase ? nd->lowered : nd->text, k, base, found));
+            }
         }
         base += (int64_t)grep_tree_line_count(part);
         if (done) return OK;
@@ -231,21 +246,21 @@ static STATUS_MUST_USE Status grep_tree_by_parts(Run *r, Pos pos, const GrepTree
     }
 }
 
-// One file held whole, searched as the prelude searched it: a literal by
+// One file held whole, searched for `needles[which]` as the prelude
+// searched it (`lowered` the file in lower case for `nocase`): a literal by
 // `grep`'s rule (a line is the one its match starts in, so a needle may hold
 // a newline) in a file of at most 1 MiB, and past it line by line as
 // `grep_all`; either case line by line; a pattern each line alone, in the
 // parts `read_lines` would have brought (64 KiB, on to a line's end), since
 // a part's last empty line was no line of its join and was not searched.
-static STATUS_MUST_USE Status grep_tree_search_held(Run *r, Pos pos, const GrepTreeAsk *ask, Str whole, GrepTreeLines *found) {
-    bool in_a_line = str_find_byte(ask->needle, '\n') == NULL;
-    if (!ask->regex && !ask->nocase && whole.len <= 1048576) return grep_tree_find_lines(r, pos, whole, whole, ask->needle, 0, found);
+static STATUS_MUST_USE Status grep_tree_search_held_for(Run *r, Pos pos, const GrepTreeAsk *ask, size_t which, Str whole, Str lowered, GrepTreeLines *found) {
+    const GrepTreeNeedle *nd = &at(ask->needles, which);
+    bool in_a_line = str_find_byte(nd->text, '\n') == NULL;
+    if (!ask->regex && !ask->nocase && whole.len <= 1048576) return grep_tree_find_lines(r, pos, whole, whole, nd->text, which, 0, found);
     if (!ask->regex) {
         if (!in_a_line) return OK;
-        if (!ask->nocase) return grep_tree_find_lines(r, pos, whole, whole, ask->needle, 0, found);
-        Str hay = S("");
-        TRY(grep_tree_lower(r, pos, found->arena, whole, &hay));
-        return grep_tree_find_lines(r, pos, whole, hay, ask->lowered, 0, found);
+        if (!ask->nocase) return grep_tree_find_lines(r, pos, whole, whole, nd->text, which, 0, found);
+        return grep_tree_find_lines(r, pos, whole, lowered, nd->lowered, which, 0, found);
     }
     size_t n = (size_t)builtin_min_u64(BUILTIN_READ_LINES_PART, r->ctx.budgets.call_bytes);
     int64_t base = 0;
@@ -257,10 +272,55 @@ static STATUS_MUST_USE Status grep_tree_search_held(Run *r, Pos pos, const GrepT
             end = nl == NULL ? whole.len : (size_t)(nl - whole.ptr) + 1;
         }
         Str part = str_sub(whole, start, end);
-        TRY(grep_tree_regex_part(r, pos, ask, part, base, found));
+        TRY(grep_tree_regex_part(r, pos, ask, which, part, base, found));
         base += (int64_t)grep_tree_line_count(part);
         start = end;
     }
+    return OK;
+}
+
+// The lines many needles found, in line order and, within a line, in the
+// needles' order: a stable merge sort, since each needle's lines were found
+// in line order, one needle after another. A step an entry a pass.
+static STATUS_MUST_USE Status grep_tree_in_line_order(Run *r, Pos pos, Arena *into, GrepTreeLines *found) {
+    size_t n = found->len;
+    if (n < 2) return OK;
+    GrepTreeLine *room = ARENA_ARRAY(into, GrepTreeLine, n);
+    if (room == NULL) return run_values_oom(r, pos);
+    GrepTreeLinesItems from = {found->ptr, n};
+    GrepTreeLinesItems to = {room, n};
+    for (size_t width = 1; width < n; width *= 2) {
+        TRY(run_charge(r, pos, n));
+        for (size_t lo = 0; lo < n; lo += 2 * width) {
+            size_t mid = n - lo > width ? lo + width : n;
+            size_t hi = n - mid > width ? mid + width : n;
+            size_t i = lo;
+            size_t j = mid;
+            for (size_t k = lo; k < hi; k++) {
+                bool left = i < mid && (j >= hi || at(from, i).line <= at(from, j).line);
+                if (left) {
+                    at(to, k) = at(from, i);
+                    i++;
+                } else {
+                    at(to, k) = at(from, j);
+                    j++;
+                }
+            }
+        }
+        GrepTreeLinesItems was = from;
+        from = to;
+        to = was;
+    }
+    if (from.ptr != found->ptr) mem_copy(found->ptr, from.ptr, n * sizeof *from.ptr);
+    return OK;
+}
+
+// One file held whole, searched for each needle in turn (lowered once for
+// `nocase`), and the lines put in line order when there are many needles.
+static STATUS_MUST_USE Status grep_tree_search_held(Run *r, Pos pos, const GrepTreeAsk *ask, Str whole, GrepTreeLines *found) {
+    Str lowered = whole;
+    if (!ask->regex && ask->nocase) TRY(grep_tree_lower(r, pos, found->arena, whole, &lowered));
+    for (size_t k = 0; k < ask->needles.len; k++) TRY(grep_tree_search_held_for(r, pos, ask, k, whole, lowered, found));
     return OK;
 }
 
@@ -414,7 +474,8 @@ static STATUS_MUST_USE Status grep_tree_hits(Run *r, Pos pos, const GrepTreeAsk 
             const char *nl = str_find_byte(rest, '\n');
             size_t end = nl == NULL ? rest.len : (size_t)(nl - rest.ptr);
             n++;
-            GrepTreeLine l = {n, str_sub(rest, 0, end)};
+            // A line of the file for `context`, which no needle found.
+            GrepTreeLine l = {n, str_sub(rest, 0, end), 0};
             if (GrepTreeLines_push(&all, l) != OK) return run_values_oom(r, pos);
             rest = nl == NULL ? S("") : str_sub(rest, end + 1, rest.len);
         }
@@ -436,6 +497,7 @@ static STATUS_MUST_USE Status grep_tree_hits(Run *r, Pos pos, const GrepTreeAsk 
         TRY(run_map_put_str(r, pos, hit, S("path"), path));
         TRY(run_map_put_int(r, pos, hit, S("line"), m.line));
         TRY(run_map_put_str(r, pos, hit, S("text"), text));
+        if (ask->many) TRY(run_map_put_str(r, pos, hit, S("needle"), at(ask->needles, m.needle).text));
         if (context) {
             int64_t around = ask->context.as.integer;
             Table *before = NULL;
@@ -498,6 +560,7 @@ static STATUS_MUST_USE Status grep_tree_file(Run *r, Pos pos, const GrepTreeAsk 
     GrepTreeLines found = GrepTreeLines_make(into);
     if (size > r->ctx.budgets.call_bytes) {
         TRY(grep_tree_by_parts(r, pos, ask, &p, into, &found));
+        if (ask->needles.len > 1) TRY(grep_tree_in_line_order(r, pos, into, &found));
         return grep_tree_hits(r, pos, ask, path, &p, NULL, into, found, ans);
     }
     Str whole = head;
@@ -509,6 +572,7 @@ static STATUS_MUST_USE Status grep_tree_file(Run *r, Pos pos, const GrepTreeAsk 
         whole = buf_view(&b);
     }
     TRY(grep_tree_search_held(r, pos, ask, whole, &found));
+    if (ask->needles.len > 1) TRY(grep_tree_in_line_order(r, pos, into, &found));
     return grep_tree_hits(r, pos, ask, path, &p, &whole, into, found, ans);
 }
 
@@ -699,15 +763,47 @@ static STATUS_MUST_USE Status grep_tree_known(Run *r, Pos pos, const Value *give
     return OK;
 }
 
+// One needle into `ask`, with itself in lower case; "" is in every line, so
+// it stops the run, `name` saying which needle it was.
+static STATUS_MUST_USE Status grep_tree_needle(Run *r, Pos pos, Str needle, Str name, GrepTreeAsk *ask) {
+    if (needle.len == 0) return run_failf(r, pos, CLASS_FAIL, "`grep_tree` of {s}\"\": every line holds it", S("`grep_tree` of "), name, S("\"\": every line holds it"));
+    GrepTreeNeedle nd = {needle, S("")};
+    TRY(grep_tree_lower(r, pos, r->ctx.values, needle, &nd.lowered));
+    if (GrepTreeNeedles_push(&ask->needles, nd) != OK) return run_values_oom(r, pos);
+    return OK;
+}
+
+// What `grep_tree` looks for: a string, one needle, or a list of strings,
+// each a needle, and then each hit names the needle it holds. A needle of ""
+// stops the run, as do an empty list, a map, and a list item or a value
+// that is not a string.
+static STATUS_MUST_USE Status grep_tree_needles(Run *r, Pos pos, const Value *v, GrepTreeAsk *ask) {
+    ask->needles = GrepTreeNeedles_make(r->ctx.values);
+    if (v->tag == VALUE_STRING) return grep_tree_needle(r, pos, v->as.string, S(""), ask);
+    if (v->tag != VALUE_TABLE) return run_failf(r, pos, CLASS_TYPE, "`grep_tree` looks for a string or a list of strings, not {s}", S("`grep_tree` looks for a string or a list of strings, not "), value_type_name(v));
+    const Table *t = v->as.table;
+    if (t->kind == TABLE_MAP) return run_fail(&r->ctx, pos, CLASS_TYPE, S("`grep_tree` looks for a string or a list of strings, not a map"));
+    if (t->list.len == 0) return run_fail(&r->ctx, pos, CLASS_FAIL, S("`grep_tree` of an empty list: there is nothing to look for"));
+    ask->many = true;
+    for (size_t k = 0; k < t->list.len; k++) {
+        const Value *x = &at(t->list, k);
+        IntText it;
+        Str nth = int_text(&it, (int64_t)k + 1);
+        if (x->tag != VALUE_STRING) return run_failf(r, pos, CLASS_TYPE, "`grep_tree`'s needle {d} is {s}: a needle is a string", S("`grep_tree`'s needle "), nth, S(" is "), value_type_name(x), S(": a needle is a string"));
+        Buf b = buf_make(r->ctx.values);
+        if (buf_str(&b, S("needle ")) != OK || buf_str(&b, nth) != OK || buf_str(&b, S(", ")) != OK) return run_values_oom(r, pos);
+        TRY(grep_tree_needle(r, pos, x->as.string, buf_view(&b), ask));
+    }
+    return OK;
+}
+
 // The prelude's options read into `ask`: `place`, `prefix`, `regex`,
 // `nocase`, `ext`, `like`, `context` and `most`, after `given`'s keys are
 // held to those a script may give.
-static STATUS_MUST_USE Status grep_tree_ask(Run *r, Pos pos, Str needle, Table *o, GrepTreeAsk *ask) {
-    memset(ask, 0, sizeof *ask);
+static STATUS_MUST_USE Status grep_tree_ask(Run *r, Pos pos, Table *o, GrepTreeAsk *ask) {
     Value given;
     TRY(grep_tree_option(r, pos, o, S("given"), &given));
     TRY(grep_tree_known(r, pos, &given));
-    ask->needle = needle;
     TRY(grep_tree_str_option(r, pos, o, S("place"), &ask->place));
     TRY(grep_tree_str_option(r, pos, o, S("prefix"), &ask->prefix));
     Value v;
@@ -718,8 +814,7 @@ static STATUS_MUST_USE Status grep_tree_ask(Run *r, Pos pos, Str needle, Table *
     TRY(grep_tree_option(r, pos, o, S("ext"), &ask->ext));
     TRY(grep_tree_option(r, pos, o, S("like"), &ask->like));
     TRY(grep_tree_option(r, pos, o, S("context"), &ask->context));
-    TRY(grep_tree_option(r, pos, o, S("most"), &ask->most));
-    return grep_tree_lower(r, pos, r->ctx.values, needle, &ask->lowered);
+    return grep_tree_option(r, pos, o, S("most"), &ask->most);
 }
 
 // Each folder `skip` names, held to the rules: a path of names below the
@@ -782,18 +877,18 @@ static STATUS_MUST_USE Status grep_tree_skips(Run *r, Pos pos, GrepTreeAsk *ask,
 }
 
 // `host("grep_tree", needle, {given, place, prefix, entries, regex, nocase,
-// ext, like, context, most})`: the Linux prelude's `grep_tree` after its
-// checks, `given` the script's own options. `entries` is the lone file the
-// prelude stat'ed, or `{}` to walk `place`.
+// ext, like, context, most})`: the Linux prelude's `grep_tree`, `needle` a
+// string or a list of them as the script gave it, `given` the script's own
+// options. `entries` is the lone file the prelude stat'ed, or `{}` to walk
+// `place`.
 static STATUS_MUST_USE Status host_grep_tree(Run *r, Pos pos, ConstValues args, Value *out) {
     if (args.len != 2) return run_failf(r, pos, CLASS_ARGUMENT, "`grep_tree` takes a needle and the prelude's options, given {d} arguments", S("`grep_tree` takes a needle and the prelude's options, given "), run_unum(r, args.len), S(" arguments"));
-    Str needle = S("");
-    TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &at(args, 0), S("its needle"), &needle));
-    if (needle.len == 0) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`grep_tree` of \"\": every line holds it"));
+    GrepTreeAsk ask;
+    memset(&ask, 0, sizeof ask);
+    TRY(grep_tree_needles(r, pos, &at(args, 0), &ask));
     Table *o = NULL;
     TRY(builtin_map_arg(r, pos, BUILTIN_HOST, &at(args, 1), &o));
-    GrepTreeAsk ask;
-    TRY(grep_tree_ask(r, pos, needle, o, &ask));
+    TRY(grep_tree_ask(r, pos, o, &ask));
     Value entries;
     TRY(grep_tree_option(r, pos, o, S("entries"), &entries));
     if (entries.tag != VALUE_TABLE || entries.as.table->kind == TABLE_MAP) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`grep_tree`'s `entries` is a list"));

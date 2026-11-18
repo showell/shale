@@ -799,7 +799,7 @@
   argument   a `for` with a step of 0 never ends
   type       a list cannot hold nil
   type       a map cannot hold nil
-### the preludes' `fail`s (78)
+### the preludes' `fail`s (77)
   fail  `assert`: its first argument must be true or false, not {expr}    [the prelude's assert]
   fail  `copy`: {expr} is a symbolic link, which the store never follows; nothing was copied    [the Linux prelude's copy]
   fail  `copy`: {expr} is already there, and a copy never overwrites (`remove_tree` it first)    [the Linux prelude's copy]
@@ -827,7 +827,6 @@
   fail  `glob` takes `hidden`, not `{expr}`    [the prelude's glob]
   fail  `glob`: \"{expr}\" has a part (\"{expr}\") that is not a name    [the prelude's glob]
   fail  `grep_all` of \"\": every line holds it    [the Linux prelude's grep_all]
-  fail  `grep_tree` of \"\": every line holds it    [the Linux prelude's grep_tree]
   fail  `head_lines`: {expr} lines    [the Linux prelude's head_lines]
   fail  `http` takes body, headers, bearer and timeout_ms, not `{expr}`    [the Linux prelude's curl_http]
   fail  `path_normal`: \"{expr}\" is absolute; a path is the root's, or a mount's (`m:path`)    [the prelude's path_normal]
@@ -1253,4 +1252,4 @@
 
 ## The counts
   builtins 77, host calls 22, prelude functions 93
-  stop texts 606, refusal texts 66, budgets 16 (15 a stop names), flags 11
+  stop texts 605, refusal texts 66, budgets 16 (15 a stop names), flags 11

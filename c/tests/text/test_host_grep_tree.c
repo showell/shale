@@ -392,6 +392,101 @@ TEST(grep_tree_walks_once_a_listing_a_folder_and_a_read_a_file_at_a_step_an_entr
     ran_free(&x);
 }
 
+TEST(grep_tree_finds_a_list_of_needles_in_one_walk_each_hit_naming_its_needle) {
+    static Ran x;
+    gt_init(&x, "");
+    ran_put(&x, "root/a.txt", "one alpha\nbeta and alpha\nneither\n");
+    ran_put(&x, "root/b/c.txt", "BETA\n");
+    gt_run(&x, "local g = gt({\"alpha\", \"beta\"}, {})\n"
+               "for h in g.hits do print(h.path .. \":\" .. h.line .. \": \" .. h.needle .. \": \" .. h.text) end\n"
+               "print(g.files, g.cut)\n"
+               "for h in gt({\"beta\"}, {nocase = true}).hits do print(h.path, h.line, h.needle) end\n"
+               "for h in gt({\"^one\", \"^B\"}, {regex = true}).hits do print(h.path, h.line, h.needle) end\n"
+               "print(#gt({\"alpha\", \"beta\"}, {most = 2}).hits)\n"
+               "print(has_key(gt(\"alpha\", {}).hits[1], \"needle\"))\n");
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    // A line holding two needles is a hit for each, in the needles' order.
+    EXPECT_STR(buf_view(&x.r.out), S("a.txt:1: alpha: one alpha\na.txt:2: alpha: beta and alpha\na.txt:2: beta: beta and alpha\n2\tfalse\n"
+                                     "a.txt\t2\tbeta\nb/c.txt\t1\tbeta\n"
+                                     "a.txt\t1\t^one\nb/c.txt\t1\t^B\n"
+                                     "2\n"
+                                     "false\n"));
+    // Each call lists the root and b once and reads each file once,
+    // however many needles it has: 4 reads each, but the call that `most`
+    // cuts in a.txt, which lists the root and reads a.txt alone.
+    EXPECT_EQ(x.r.reads, 4 * 4 + 2);
+    ran_free(&x);
+}
+
+// A file of 140 KB past a call-bytes cap of 100 KB, searched a part at a
+// time (64 KiB, as `read_lines` brings them) for `needles`; gives the run's
+// reads, and its output in `out`.
+static uint64_t gt_parts(const char *needles, Buf *out) { // cstr: a test's literal
+    static Ran x;
+    gt_init(&x, "");
+    Buf body = buf_make(&x.host);
+    char line[32];
+    for (int k = 1; k <= 20000; k++) {
+        int n = snprintf(line, sizeof line, "l%05d%s%s\n", k, k % 2500 == 0 ? " alpha" : "", k % 4000 == 0 ? " beta" : "");
+        if (n <= 0 || buf_str(&body, (Str){line, (size_t)n}) != OK) abort();
+    }
+    ran_put(&x, "root/big.txt", "");
+    ran_write(&x, "root/big.txt", buf_view(&body));
+    Buf src = buf_make(&x.host);
+    if (buf_str(&src, ran_cs(GT_LIB)) != OK || buf_lit(&src, "for h in gt(") != OK || buf_str(&src, ran_cs(needles)) != OK ||
+        buf_lit(&src, ", {}).hits do print(h.line, h.needle) end\n") != OK) {
+        abort();
+    }
+    Budgets b = ran_budgets();
+    b.call_bytes = 100000;
+    ran_run(&x, buf_view(&src), b);
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    if (buf_str(out, buf_view(&x.r.out)) != OK) abort();
+    uint64_t reads = x.r.reads;
+    ran_free(&x);
+    return reads;
+}
+
+TEST(grep_tree_searches_a_file_past_the_cap_for_each_needle_a_part_at_a_time_in_line_order) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, 1 << 20, &refused);
+    Buf two = buf_make(&a);
+    Buf one = buf_make(&a);
+    uint64_t reads_two = gt_parts("{\"alpha\", \"beta\"}", &two);
+    uint64_t reads_one = gt_parts("{\"alpha\"}", &one);
+    EXPECT_STR(buf_view(&two), S("2500\talpha\n4000\tbeta\n5000\talpha\n7500\talpha\n8000\tbeta\n10000\talpha\n12000\tbeta\n"
+                                 "12500\talpha\n15000\talpha\n16000\tbeta\n17500\talpha\n20000\talpha\n20000\tbeta\n"));
+    EXPECT_STR(buf_view(&one), S("2500\talpha\n5000\talpha\n7500\talpha\n10000\talpha\n12500\talpha\n15000\talpha\n17500\talpha\n20000\talpha\n"));
+    // Each part is read once for both needles: a second costs no read.
+    EXPECT_EQ(reads_two, reads_one);
+    EXPECT(reads_one > 2);
+    arena_deinit(&a);
+}
+
+// A run of `src`, which must stop with `cls` and `message` before any read.
+static void gt_needle_stop(const char *src, StopClass cls, Str message) { // cstr: a test's literal
+    static Ran x;
+    gt_init(&x, "");
+    ran_put(&x, "root/a.txt", "x\n");
+    gt_run(&x, src);
+    EXPECT_EQ(x.ran, STOP);
+    EXPECT_EQ(x.r.ctx.stop.cls, cls);
+    EXPECT_STR(x.r.ctx.stop.message, message);
+    EXPECT_EQ(x.r.reads, 0);
+    EXPECT_EQ(x.r.out.len, 0);
+    ran_free(&x);
+}
+
+TEST(grep_tree_refuses_a_needle_of_nothing_and_a_list_that_is_not_one_of_strings) {
+    gt_needle_stop("show(gt(\"\", {}))\n", CLASS_FAIL, S("`grep_tree` of \"\": every line holds it"));
+    gt_needle_stop("show(gt({\"x\", \"\"}, {}))\n", CLASS_FAIL, S("`grep_tree` of needle 2, \"\": every line holds it"));
+    gt_needle_stop("show(gt({}, {}))\n", CLASS_FAIL, S("`grep_tree` of an empty list: there is nothing to look for"));
+    gt_needle_stop("show(gt({x = \"y\"}, {}))\n", CLASS_TYPE, S("`grep_tree` looks for a string or a list of strings, not a map"));
+    gt_needle_stop("show(gt({\"x\", 3}, {}))\n", CLASS_TYPE, S("`grep_tree`'s needle 2 is an integer: a needle is a string"));
+    gt_needle_stop("show(gt(3, {}))\n", CLASS_TYPE, S("`grep_tree` looks for a string or a list of strings, not an integer"));
+}
+
 TEST_PART(host_grep_tree, TEST_CASE(grep_tree_searches_each_file_in_path_order_passing_by_a_binary_a_build_folder_and_a_hidden_one),
           TEST_CASE(grep_tree_leaves_out_a_planted_secrets_mount_s_folder_unlisted_unread_and_unnamed),
           TEST_CASE(grep_tree_leaves_out_two_planted_secrets_mounts_folders_each_unlisted_and_unread),
@@ -406,4 +501,7 @@ TEST_PART(host_grep_tree, TEST_CASE(grep_tree_searches_each_file_in_path_order_p
           TEST_CASE(grep_tree_charges_what_its_reads_bring_not_a_script_s_steps),
           TEST_CASE(grep_tree_leaves_out_each_folder_skip_names_unlisted_and_unread_and_no_other),
           TEST_CASE(grep_tree_refuses_a_skip_that_is_not_a_folder_below_the_place_searched),
-          TEST_CASE(grep_tree_walks_once_a_listing_a_folder_and_a_read_a_file_at_a_step_an_entry));
+          TEST_CASE(grep_tree_walks_once_a_listing_a_folder_and_a_read_a_file_at_a_step_an_entry),
+          TEST_CASE(grep_tree_finds_a_list_of_needles_in_one_walk_each_hit_naming_its_needle),
+          TEST_CASE(grep_tree_searches_a_file_past_the_cap_for_each_needle_a_part_at_a_time_in_line_order),
+          TEST_CASE(grep_tree_refuses_a_needle_of_nothing_and_a_list_that_is_not_one_of_strings));
