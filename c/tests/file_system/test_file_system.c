@@ -138,8 +138,7 @@ TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_s
     sx_init(&f, &f.refused);
     Arena *a = &f.values;
     OsStr data = sx_at(&f, "home/someone/a-long-host-path/prod/data");
-    OsStr auth = sx_at(&f, "home/someone/a-long-host-path/prod/auth");
-    FileSystem ls = {true, data.s, true, auth.s};
+    FileSystem ls = {true, data.s};
     char x[96];
     char y[96];
     char z[96];
@@ -166,10 +165,7 @@ TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_s
     bool has = true;
     EXPECT_EQ(file_system_has(&ls, deeper, &has), FILE_SYSTEM_OK);
     EXPECT(!has);
-    // Under auth/ too; and not a path that only begins like a root.
-    OsStr under_auth = auth;
-    EXPECT(file_system_join(a, under_auth, rep('x', 96, x), &under_auth) && file_system_join(a, under_auth, rep('y', 96, y), &under_auth) && file_system_join(a, under_auth, rep('z', 96, z), &under_auth));
-    EXPECT_EQ(file_system_replace(&ls, a, under_auth, S("no")), FILE_SYSTEM_PATH_TOO_LONG);
+    // Not a path that only begins like the root.
     OsStr free_path = sx_at(&f, "home/someone/a-long-host-path/prod/data2");
     EXPECT(file_system_join(a, free_path, rep('x', 96, x), &free_path) && file_system_join(a, free_path, rep('y', 96, y), &free_path) && file_system_join(a, free_path, rep('z', 96, z), &free_path));
     EXPECT_EQ(file_system_replace(&ls, a, free_path, S("free")), FILE_SYSTEM_OK);
@@ -238,7 +234,7 @@ TEST(a_name_in_another_case_is_another_name_and_a_miss_is_not_found) {
 }
 
 TEST(a_path_with_an_empty_part_is_refused_under_a_root_as_metal_refuses_it) {
-    FileSystem ls = {true, S("/srv/gopher/data/"), false, S("")};
+    FileSystem ls = {true, S("/srv/gopher/data/")};
     EXPECT_EQ(file_system_within_limits(&ls, S("/srv/gopher/data/chat/1_2/sessions/x.md")), FILE_SYSTEM_OK);
     EXPECT_EQ(file_system_within_limits(&ls, S("/srv/gopher/data/chat//1_2/x.md")), FILE_SYSTEM_BAD_NAME);
     EXPECT_EQ(file_system_within_limits(&ls, S("/srv/gopher/data/chat/")), FILE_SYSTEM_BAD_NAME);

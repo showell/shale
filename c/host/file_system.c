@@ -1,6 +1,6 @@
 // file_system.c: the calls into the file system, every file a script reads
 // or changes, held to Shale's rules: a strict name for what it makes
-// (path.h's `path_strict_name`) and, under the host's two bases, the
+// (path.h's `path_strict_name`) and, under the run's root, the
 // bare-metal host's limits on a path's length and depth. A name is found as
 // it is spelled: one in another case is another name, and a miss is not
 // found. The path algebra is path.h's, which makes no call. Every path is
@@ -164,42 +164,36 @@ enum {
     FILE_SYSTEM_DEPTH_MAX = 16,
 };
 
-// The two roots as the bare-metal host spells them, `data` and `auth`: a
-// path under one is measured as that host would hold it. c/shale.c sets
-// `data` to the run's root and `auth` to `<root>/../auth`; a fixture that
-// sets neither measures nothing.
+// The root as the bare-metal host spells it, `data`: a path under it is
+// measured as that host would hold it. c/shale.c sets it to the run's root;
+// a fixture that sets none measures nothing.
 typedef struct {
     bool has_data_base;
     Str data_base;
-    bool has_auth_base;
-    Str auth_base;
 } FileSystem;
 
 // Refuses a path the bare-metal host could not hold, measured as it would
-// spell it: an empty part (`//` or a trailing `/`) is BadName, past
-// FILE_SYSTEM_PATH_LEN_MAX bytes PathTooLong, past FILE_SYSTEM_DEPTH_MAX
-// parts PathTooDeep. A path under neither base is not measured.
+// spell it, `data/...`: an empty part (`//` or a trailing `/`) is BadName,
+// past FILE_SYSTEM_PATH_LEN_MAX bytes PathTooLong, past FILE_SYSTEM_DEPTH_MAX
+// parts PathTooDeep. A path not under the base is not measured.
 static FileSystemErr file_system_within_limits(const FileSystem *s, Str path) {
-    for (int k = 0; k < 2; k++) {
-        bool has = k == 0 ? s->has_data_base : s->has_auth_base;
-        if (!has) continue;
-        Str base = k == 0 ? s->data_base : s->auth_base;
-        while (base.len > 0 && str_byte(base, base.len - 1) == '/') base.len--;
-        if (!str_starts_with(path, base)) continue;
-        Str rest = str_sub(path, base.len, path.len);
-        if (rest.len != 0 && str_byte(rest, 0) != '/') continue;
-        size_t depth = 1;
-        bool empty_part = rest.len > 0 && str_byte(rest, rest.len - 1) == '/';
-        for (size_t i = 0; i < rest.len; i++) {
-            bool slash = str_byte(rest, i) == '/';
-            if (!slash && (i == 0 || str_byte(rest, i - 1) == '/')) depth++;
-            if (slash && i > 0 && str_byte(rest, i - 1) == '/') empty_part = true;
-        }
-        if (empty_part) return FILE_SYSTEM_BAD_NAME;
-        if (4 + rest.len > FILE_SYSTEM_PATH_LEN_MAX) return FILE_SYSTEM_PATH_TOO_LONG;
-        if (depth > FILE_SYSTEM_DEPTH_MAX) return FILE_SYSTEM_PATH_TOO_DEEP;
-        return FILE_SYSTEM_OK;
+    if (!s->has_data_base) return FILE_SYSTEM_OK;
+    Str base = s->data_base;
+    while (base.len > 0 && str_byte(base, base.len - 1) == '/') base.len--;
+    if (!str_starts_with(path, base)) return FILE_SYSTEM_OK;
+    Str rest = str_sub(path, base.len, path.len);
+    if (rest.len != 0 && str_byte(rest, 0) != '/') return FILE_SYSTEM_OK;
+    size_t depth = 1;
+    bool empty_part = rest.len > 0 && str_byte(rest, rest.len - 1) == '/';
+    for (size_t i = 0; i < rest.len; i++) {
+        bool slash = str_byte(rest, i) == '/';
+        if (!slash && (i == 0 || str_byte(rest, i - 1) == '/')) depth++;
+        if (slash && i > 0 && str_byte(rest, i - 1) == '/') empty_part = true;
     }
+    if (empty_part) return FILE_SYSTEM_BAD_NAME;
+    // `data`, the four bytes the bare-metal host spells the root with.
+    if (4 + rest.len > FILE_SYSTEM_PATH_LEN_MAX) return FILE_SYSTEM_PATH_TOO_LONG;
+    if (depth > FILE_SYSTEM_DEPTH_MAX) return FILE_SYSTEM_PATH_TOO_DEEP;
     return FILE_SYSTEM_OK;
 }
 

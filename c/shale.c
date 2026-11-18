@@ -717,15 +717,12 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     r.read_bytes = reader.used.read_bytes;
     r.stack = ValueVec_make(&machine);
     regex_cache_init(&r.patterns, &r.ctx.refused);
-    // The file system, measured under the root (and `<root>/../auth`) as the
-    // bare-metal host would hold it.
+    // The file system, measured under the root as the bare-metal host would
+    // hold it.
     FileSystem file_system;
     memset(&file_system, 0, sizeof file_system);
     file_system.has_data_base = true;
     file_system.data_base = where.root;
-    file_system.has_auth_base = true;
-    file_system.auth_base = S("../auth");
-    if (where.root.len > 0 && join(a, where.root, S("../auth"), &file_system.auth_base) != OK) return not_ported(o, S("a root past the arena"));
     // The host's paths: the mounts, the journal `--undo-on-stop` keeps, in
     // an arena of the host's that outlives the run's values.
     Arena host_arena;
