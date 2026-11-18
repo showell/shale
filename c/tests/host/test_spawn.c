@@ -578,7 +578,8 @@ TEST(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds) {
     EXPECT(keep_finish(&k, &kept) == OK);
     EXPECT_EQ(kept.total, 200000);
     EXPECT_EQ(kept.kept, 5);
-    Str x10 = S("xxxxxxxxxx\xe2\x80\xa6\n");
+    // Each 99-byte line keeps its first and last 5 bytes (keep_cut).
+    Str x10 = S("xxxxx \xe2\x80\xa6 89 bytes left out \xe2\x80\xa6 xxxxx\n");
     Buf want = buf_make(&a);
     for (int i = 0; i < 2; i++) EXPECT(buf_str(&want, x10) == OK);
     EXPECT(buf_lit(&want, "\xe2\x80\xa6 199995 lines left out \xe2\x80\xa6\n") == OK);
@@ -598,7 +599,9 @@ TEST(attack_output_past_any_keep_is_read_whole_and_kept_to_its_bounds) {
     Kept one;
     EXPECT(keep_finish(&k2, &one) == OK);
     EXPECT_EQ(one.total, 1);
-    EXPECT_STR(one.out, x10);
+    // Past KEEP_LINE_MAX only its first bytes are held, so it is cut at the
+    // end alone.
+    EXPECT_STR(one.out, S("xxxxxxxxxx\xe2\x80\xa6\n"));
     EXPECT(!held2.hit);
     arena_deinit(&held);
     arena_deinit(&held2);
