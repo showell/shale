@@ -196,6 +196,9 @@ finders are built on it. It reads Shale's C, not C at large.
 - `c/list_long_functions.shale`: lists the functions past a length in lines of
   code (comments and blank lines counted apart), by default past the tree's
   95th percentile, with the distribution. `shale cookbook:c/list_long_functions.shale over=60`
+- `c/find_clones.shale`: finds twin functions, of one shape once every name,
+  number and string is masked, and runs of six or more lines alike in two
+  places, each pair with its spans and a score. `shale cookbook:c/find_clones.shale`
 
 ## go/: Go code ([README](go/README.md))
 
