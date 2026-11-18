@@ -1,6 +1,6 @@
 // host_zig.c: the host's Zig tools, `zig_rename`, `zig_decls`, `zig_tokens`,
 // `zig_move` and `zig_imports`. It holds no Zig grammar: it checks a
-// call's arguments, reads the files through the store, asks the run's
+// call's arguments, reads the files through the file system, asks the run's
 // zig-ast (zig_ast.c), and acts on the answer in order: its charges, its
 // stops (each message said here), the values it gives the
 // script, and the edits, written as `edit`'s are, so each change is diffed
@@ -771,7 +771,7 @@ static STATUS_MUST_USE Status host_zig_move_in(Paths *h, HostZigProc *z, Arena *
     if (r->changes + writes > r->ctx.budgets.changes) return run_budget_stop(&r->ctx, pos, BUDGET_CHANGES);
     if (bytes > run_sat_sub(r->ctx.budgets.change_bytes, r->change_bytes)) return run_budget_stop(&r->ctx, pos, BUDGET_CHANGE_BYTES);
     TRY(host_zig_rewrite(r, pos, &q, to_src, to_now, to_spans));
-    // The store or the output budget can still stop the second write; the
+    // The file system or the output budget can still stop the second write; the
     // message then says `to` already holds the copies.
     if (host_zig_rewrite(r, pos, &p, from_src, from_now, from_spans) != OK) {
         Stop *s = &r->ctx.stop;
@@ -814,7 +814,7 @@ static STATUS_MUST_USE Status host_zig_move_in(Paths *h, HostZigProc *z, Arena *
 
 // ── zig_imports ──
 
-// The folder of a store path, Zig's `std.fs.path.dirnamePosix(p) orelse
+// The folder of a path, Zig's `std.fs.path.dirnamePosix(p) orelse
 // "."`.
 static Str host_zig_dirname(Str p) {
     size_t n = p.len;

@@ -12,7 +12,7 @@ Read these first. They are what a bug would break:
 - **The budgets.** Every run is bounded in steps, reads, bytes, output,
   arena, programs and CPU. A script that escapes a budget can take its host
   down.
-- **The store's boundaries.** A script reads and writes only under its root
+- **The file system's boundaries.** A script reads and writes only under its root
   and its mounts. No `..`, no absolute path, no symbolic link followed.
 - **The secrets rule.** A secrets mount can be used but never named, listed
   or shown in a message.

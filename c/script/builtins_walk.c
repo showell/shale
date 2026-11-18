@@ -1,8 +1,8 @@
-// builtins_walk.c: the store's `walk`: every entry under a folder, depth first,
-// each folder's names sorted and a folder before what it holds, a part at a
-// time, each part resumed after the path the last one ended at. The walk keeps
-// its own stack of folders, so a tree's depth is the store's to choose, never
-// the C stack's.
+// builtins_walk.c: the file system's `walk`: every entry under a folder, depth
+// first, each folder's names sorted and a folder before what it holds, a part
+// at a time, each part resumed after the path the last one ended at. The walk
+// keeps its own stack of folders, so a tree's depth is the file system's to
+// choose, never the C stack's.
 //
 // A program includes it after builtins_files.c.
 

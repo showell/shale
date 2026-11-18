@@ -14,10 +14,11 @@ and its self-test plants a break of each one.
 ## Files
 
 - The foundation is header-only. Each piece is one header: `arena.h`,
-  `slice.h`, `buf.h`, `vec.h`, `map.h`, `status.h`, `err.h` and `test.h`.
+  `slice.h`, `buf.h`, `vec.h`, `map.h`, `status.h`, `err.h`, `wyhash.h` and
+  `test.h`.
 - A header includes the headers below it, and nothing includes one above it.
-  The order is slice, arena, status, vec, buf, map, err. `test.h` needs
-  only slice.
+  The order is slice, arena, status, vec, buf, map, err. `test.h` and
+  `wyhash.h` need only slice.
 - **The C builds as one translation unit** (Steve, 2026-11-17). A `.c`
   file's functions are all `static`, and a program or test `#include`s the
   `.c` files it needs, as `test_regex.c` includes `../script/regex.c`.
@@ -256,7 +257,7 @@ and its self-test plants a break of each one.
 - A call that must give OK, where a run's context is in scope, is
   `EXPECT_OK_IN(ctx, expr)`: on a failure it prints the stop the context
   recorded (its place, class, budget and message), so a failing host or
-  store test says why. A Ran's context is `&x.r.ctx`, the path fixture's
+  file system test says why. A Ran's context is `&x.r.ctx`, the path fixture's
   `&f.ctx`. `EXPECT((expr) == OK)` stays for a call that has no context,
   as a buffer's append has none.
 - A table of cases is counted by the compiler, never by hand: a list of

@@ -66,7 +66,7 @@ reviewer can line the two up. Once the Zig is gone, that reason is gone:
   (2026-11-17):* `RunOpts` and job_start's and job_wait's options (nil
   values and `HOST_UNSET`), `SpawnSpec` and `SpawnOutcome` (an empty
   `cwd`, a NULL `stdin_bytes`, `SPAWN_UNLIMITED`, `SPAWN_NO_CODE`), walk's
-  `depth` (`WALK_ANY_DEPTH`), the store's reads (`BUILTIN_TO_END`) and the
+  `depth` (`WALK_ANY_DEPTH`), the file system's reads (`BUILTIN_TO_END`) and the
   CLI's script (`CliScript`). *Kept, on purpose:* `JobRecord`'s flags (a
   record is text, and every value of a field is one a record can hold),
   and walk's `after`, `like`, `skip`, `kind` and `keep_reads` (an empty or

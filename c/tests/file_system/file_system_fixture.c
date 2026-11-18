@@ -10,7 +10,7 @@
 
 typedef struct {
     Arena values;
-    // The store tests' refusal, outside any run: `values` sets it unless
+    // The file system tests' refusal, outside any run: `values` sets it unless
     // sx_init is given a run's.
     bool refused;
     // The root, absolute.

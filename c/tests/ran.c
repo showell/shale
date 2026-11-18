@@ -1,6 +1,6 @@
 // ran.c: a source parsed, compiled and run as the C `shale` runs it, with no
 // preludes, over a fresh folder of its own (c/out/ran-tmp/t.XXXXXX): its
-// `root`, the Linux store measured under it, the path hook over the mounts a
+// `root`, the file system measured under it, the path hook over the mounts a
 // test gives (each `D` in their text the folder), the Linux host's calls and
 // `--undo-on-stop`'s putting back. What the parts of ran_tests.c share.
 //
@@ -51,7 +51,7 @@ typedef struct {
     bool undo;
 } RanOpts;
 
-// One source's run: its arenas, its folder, its parse and code, its store
+// One source's run: its arenas, its folder, its parse and code, its file system
 // and hook, and how it ended.
 typedef struct {
     Arena tree;

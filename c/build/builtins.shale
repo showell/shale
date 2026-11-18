@@ -1,4 +1,4 @@
--- c/build/builtins.shale: the store builtins' block, c/script's
+-- c/build/builtins.shale: the file builtins' block, c/script's
 -- builtins_files.c, builtins_walk.c and builtins_change.c and the Linux
 -- host's calls in c/host/host_call.c.
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
@@ -7,7 +7,7 @@
 
 use("build:lib.shale")
 
--- ── The store builtins ─────────────────────────────────────────────────
+-- ── The file builtins ─────────────────────────────────────────────────
 -- c/tests/file_system/test_builtins.c, each source run as the C `shale --verbose`
 -- runs it (c/tests/ran.c) and held to Zig's output, report and files: a
 -- part of c/tests/ran_tests.c, which the ran block runs under every build
@@ -61,7 +61,7 @@ function builtins_block(t)
   run_plants(t, "builtins plants", BUILTINS_PLANTS)
   return nil
 end
--- ── end of the store builtins' block ───────────────────────────────────
+-- ── end of the file builtins' block ───────────────────────────────────
 
 -- ── The run ─────────────────────────────────────────────────────────────
 

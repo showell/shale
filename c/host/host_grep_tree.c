@@ -383,7 +383,7 @@ static STATUS_MUST_USE Status grep_tree_positive(Run *r, Pos pos, const Value *v
 // Whether the entry is a file of the search at all, as the prelude's
 // `grep_tree_skip` judged it before reading: not a folder, nothing under a
 // build's folder, an extension and a name asked for. `*named` says whether
-// every part of `rest` is a name the store can hold.
+// every part of `rest` is a name the file system can hold.
 static STATUS_MUST_USE Status grep_tree_wanted(Run *r, Pos pos, const GrepTreeAsk *ask, const GrepTreeEntry *e, Str rest, bool *wanted, bool *named) {
     *wanted = false;
     *named = true;
@@ -519,12 +519,12 @@ static STATUS_MUST_USE Status grep_tree_hits(Run *r, Pos pos, const GrepTreeAsk 
 // passes the file by unread past it.
 enum { GREP_TREE_HEAD = 4096 };
 
-// One file read and searched: one read of the store's (its stat and its
-// bytes), its head first and the rest only when the head holds no zero
-// byte, so a binary file costs its head alone. A file past the call-bytes
-// cap is read a part at a time, a read a part, as `read_lines` reads it.
-// Its path is confined as every store call's is, so a link on the way or a
-// secrets mount's folder is refused as `read`'s.
+// One file read and searched: one read of the file system's (its stat and its
+// bytes), its head first and the rest only when the head holds no zero byte, so
+// a binary file costs its head alone. A file past the call-bytes cap is read a
+// part at a time, a read a part, as `read_lines` reads it. Its path is confined
+// as every file system call's is, so a link on the way or a secrets mount's
+// folder is refused as `read`'s.
 static STATUS_MUST_USE Status grep_tree_file(Run *r, Pos pos, const GrepTreeAsk *ask, Str path, Arena *into, GrepTreeAnswer *ans) {
     Value pv;
     value_string(&pv, path);
@@ -794,11 +794,11 @@ static STATUS_MUST_USE Status grep_tree_ask(Run *r, Pos pos, Table *o, GrepTreeA
     return grep_tree_option(r, pos, o, S("most"), &ask->most);
 }
 
-// Each folder `skip` names, held to the rules: a path of names below the
-// place searched (none absolute, none with a mount's name, an empty part, `.`
-// or `..`), there and a folder, each checked by a read of the store's (its
-// stat), so a skip that misses stops the run rather than passing nothing by.
-// A lone file has no folder below it to skip.
+// Each folder `skip` names, held to the rules: a path of names below the place
+// searched (none absolute, none with a mount's name, an empty part, `.` or
+// `..`), there and a folder, each checked by a read of the file system's (its
+// stat), so a skip that misses stops the run rather than passing nothing by. A
+// lone file has no folder below it to skip.
 static STATUS_MUST_USE Status grep_tree_skips(Run *r, Pos pos, GrepTreeAsk *ask, const Value *given, bool lone) {
     ask->skip = GrepTreeSkips_make(r->ctx.values);
     if (given->tag != VALUE_TABLE || given->as.table->kind != TABLE_MAP) return OK;

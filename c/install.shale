@@ -107,7 +107,7 @@ end
 
 -- What is at OS path `os`, its links not followed: {kind, inode, target},
 -- `kind` stat's word for it (`regular file`, `symbolic link`) or `none`,
--- `target` the link's text when it is one. The store follows no link, so
+-- `target` the link's text when it is one. The file system follows no link, so
 -- stat and readlink look.
 function entry_at(os)
   local s = run({"stat", "-c", "%F|%i", os}, {timeout_ms = 10000, tail = 5})
@@ -265,7 +265,7 @@ function install(bin, dest, links, dry)
   end
   print(would .. "copy " .. real(bin) .. " to " .. staged_os .. ", chmod 755, run its --version, then rename it over " .. final_os .. " (now " .. old_bin.kind .. ")")
   if not dry then
-    -- A shale.new is a failed run's leftover: never a link, which the store
+    -- A shale.new is a failed run's leftover: never a link, which the file system
     -- refuses to remove.
     if entry_at(staged_os).kind ~= "none" then remove(staged) end
     prog({"cp", real(bin), staged_os}, "copying the binary")

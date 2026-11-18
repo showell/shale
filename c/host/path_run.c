@@ -1,13 +1,13 @@
 // path_run.c: a script's path as the core takes it, and the hook a host
 // hangs on every path (`PathHook`). Also where the stops built from a path,
 // and the host's, are made (`path_fail`, which checks their host-made
-// arguments against the secrets rule), and the store's failure in words
+// arguments against the secrets rule), and the file system's failure in words
 // (`path_file_system_failed`).
 //
-// A path is the root's unless the hook resolves it (a mount's, on Linux):
-// every part a name FAT holds, so `.`, `..`, empty parts and a leading `/`
-// are refused, `""` the root for the calls that only look. Metal's hook is
-// PATH_HOOK_NONE, and its paths are the root's.
+// A path is the root's unless the hook resolves it (a mount's, on Linux): every
+// part a strict name (path.c's `path_strict_name`), so `.`, `..`, empty parts
+// and a leading `/` are refused, `""` the root for the calls that only look.
+// Metal's hook is PATH_HOOK_NONE, and its paths are the root's.
 //
 // Include path.c and file_system.c first.
 
@@ -42,7 +42,7 @@ typedef struct {
 // is asked before anything is written and refuses a read-only mount's path;
 // `absolute_hint` says what may be said of an absolute path; `names_secret`
 // says whether a text names a secrets mount's folder; `in_secrets` whether an
-// OS path the store reached is a secrets mount's folder or inside it.
+// OS path the file system reached is a secrets mount's folder or inside it.
 typedef struct {
     void *ctx;
     Status (*resolve)(void *ctx, PathRun *r, Pos pos, Str path, bool *resolved, Str *full);
@@ -67,8 +67,8 @@ typedef struct PathRun {
 } PathRun;
 
 // A PathRun, the one way one is made.
-// DRAGON: the store's boundaries and the secrets rule. A PathRun with no hook
-// would have every caller test for one, and a caller that forgot would
+// DRAGON: the file system's boundaries and the secrets rule. A PathRun with no
+// hook would have every caller test for one, and a caller that forgot would
 // crash, or skip a check.
 // REMEDY: a hook is required here, metal's the no-op PATH_HOOK_NONE, and none
 // is a bug in the C that ends the process; test_paths holds the death.
@@ -251,7 +251,7 @@ static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str 
     return run_fail_built(r->ctx, pos, cls, &b, built, fmt);
 }
 
-// A store error in plain words, Zig's `storeWords`; its name follows in
+// A file system error in plain words, Zig's `storeWords`; its name follows in
 // parentheses.
 static Str path_file_system_words(FileSystemErr e) {
     switch (e) {
@@ -283,7 +283,7 @@ static Str path_file_system_hint(FileSystemErr e) {
     }
 }
 
-// The stop for a store call `who` made on the script's `rel` that failed
+// The stop for a file system call `who` made on the script's `rel` that failed
 // with `e`: `who("rel")`: words (Name)hint, as Zig's `storeFailed`; the
 // arena budget for OutOfMemory.
 static STATUS_MUST_USE Status path_file_system_failed(PathRun *r, Pos pos, Str who, Str rel, FileSystemErr e) {
@@ -334,12 +334,12 @@ static STATUS_MUST_USE Status path_absolute_stop(PathRun *r, Pos pos, Str who, S
 }
 
 // `given`, the path a call `who` was given, confined (Zig's `pathArg`, its
-// string already checked by the caller): `.` is the root and `m:.` the
-// mount `m`; the hook resolves a mount's path; `""` is the root only when
-// `allow_root`; a leading `/`, a `..` and a part FAT refuses each stop. The
-// steps charged are the path's bytes.
-// DRAGON: the store's boundaries. Every path a builtin hands the store
-// comes through here, so a path that skipped it could name anything the
+// string already checked by the caller): `.` is the root and `m:.` the mount
+// `m`; the hook resolves a mount's path; `""` is the root only when
+// `allow_root`; a leading `/`, a `..` and a part that is no strict name each
+// stop. The steps charged are the path's bytes.
+// DRAGON: the file system's boundaries. Every path a builtin hands the file
+// system comes through here, so a path that skipped it could name anything the
 // process can reach; the hook's answer is trusted whole.
 // REMEDY: `..`, a leading `/`, an empty part and the whole root are refused
 // below, and paths.c checks a mount's every part itself; test_paths plants
@@ -384,7 +384,8 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
     }
     // Every part is a name: the hook's own checks of a root path.
     TRY(r->hook->check_root(r->hook->ctx, r, pos, rel));
-    // A root of `/` takes no second `/`: `//x` is an empty part to the store.
+    // A root of `/` takes no second `/`: `//x` is an empty part to the file
+    // system.
     bool sep = r->root.len == 0 || str_byte(r->root, r->root.len - 1) != '/';
     Buf b = buf_make(r->ctx->values);
     if (buf_str(&b, r->root) != OK || (sep && buf_byte(&b, '/') != OK) || buf_str(&b, rel) != OK) return run_oom(r->ctx, pos);

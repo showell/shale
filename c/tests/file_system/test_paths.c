@@ -839,7 +839,7 @@ TEST(undo_the_journal_s_own_allocations_failing_at_each_stop_the_run_on_memory) 
         if (s == OK) {
             done = true;
         } else if (f.ctx.stop.cls == CLASS_STORE) {
-            // A failed read of a.txt's bytes is the store's, named.
+            // A failed read of a.txt's bytes is the file system's, named.
             EXPECT(mem_find(f.ctx.stop.message.ptr, f.ctx.stop.message.len, "a.txt cannot be read (OutOfMemory)", 34) != SIZE_MAX);
             store_stops++;
         } else {
@@ -883,7 +883,7 @@ TEST(undo_on_stop_puts_back_an_edit_a_file_made_a_folder_made_a_file_removed_an_
     EXPECT_OK_IN(&f.ctx, fx_tree(&f, true, S("made")));
     EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("made/inner.txt"), S("in\n")));
     EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("x.sh"), S("#!/bin/sh\necho new\n")));
-    // `remove`: the hook, then the store's remove.
+    // `remove`: the hook, then the file system's remove.
     fx_again(&f);
     CheckedPath p;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("remove"), S("gone.txt"), false, &p));
@@ -1114,7 +1114,7 @@ TEST(a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_n
     EXPECT_DIES((void)path_run_make(&f.ctx, f.base.root, fx_charge, &f, NULL));
     PathRun bare = path_run_make(&f.ctx, f.base.root, fx_charge, &f, &PATH_HOOK_NONE);
     CheckedPath p;
-    // A mount's spelling is a root path's part FAT refuses.
+    // A mount's spelling is a root path's part that is no strict name.
     fx_again(&f);
     EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("k:tok"), false, &p), CLASS_ARGUMENT, S("`read`: \"k:tok\" has a part (\"k:tok\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
     fx_again(&f);

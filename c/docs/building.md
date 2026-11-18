@@ -103,7 +103,7 @@ full tier they run in one pool before any test does (`c/build/pool.shale`):
 each block first plans its compiles, its asan plants' among them, then the
 pool runs every block's at once, the longest first by the last run's CPU,
 and then each block runs its tests on the binaries the pool built, each
-held to the argv its plan gave. So no block's lone compile (the store
+held to the argv its plan gave. So no block's lone compile (the file
 builtins' -O2 build, its asan build) runs with the other core idle. Every
 compile has 150 s (`COMPILE_TIMEOUT_MS`, lib.shale), and one past it fails
 saying it timed out, naming the compile, never as a compile error. The

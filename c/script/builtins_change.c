@@ -1,4 +1,4 @@
-// builtins_change.c: the store's builtins that change it: a file written,
+// builtins_change.c: the file system's builtins that change it: a file written,
 // appended to or removed, a folder made or removed, and `edit`, which replaces
 // a literal and prints the diff; and `edits_write`, the Linux host's write of
 // several files' edits as one. Every change asks the host's hook first, is
@@ -427,7 +427,7 @@ static STATUS_MUST_USE Status change_write_diff(Run *r, Pos pos, Str rel, Str wa
 
 // Asks the host whether `p` may change: every change asks before anything is
 // written.
-// DRAGON: the store's boundaries. A change that skipped this would write
+// DRAGON: the file system's boundaries. A change that skipped this would write
 // through a read-only mount, and past `--undo-on-stop`'s journal.
 // REMEDY: `change_admit` calls it for every change, `edit`'s and
 // `edits_write`'s among them, before its budgets are counted; test_builtins
@@ -455,8 +455,8 @@ static STATUS_MUST_USE Status change_admit(Run *r, Pos pos, const CheckedPath *p
 }
 
 // Makes a change `change_admit` let through and logs it with its outcome; a
-// failed one also stops the run. The store takes removing a missing path as
-// done, and a script's removal of one is a stop, logged.
+// failed one also stops the run. The file system takes removing a missing path
+// as done, and a script's removal of one is a stop, logged.
 static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind c, const CheckedPath *p, Str data) {
     RunFiles *rs = builtin_files_of(r);
     Arena *a = r->ctx.values;
@@ -541,9 +541,9 @@ static STATUS_MUST_USE Status bi_edit(Run *r, Pos pos, ConstValues args, Value *
 // `edit` over several files as one (the Linux host's `edits_write`, under the
 // prelude's `edits_all`): `list` is `{{p, {edits}}, ...}`. Every file is
 // planned, every diff printed and every change admitted before any is written,
-// so a stop of any kind leaves every file as it was; only the store failing a
-// write after the first can part them, and the effects say which were made. A
-// file named twice is refused.
+// so a stop of any kind leaves every file as it was; only the file system
+// failing a write after the first can part them, and the effects say which were
+// made. A file named twice is refused.
 static STATUS_MUST_USE Status change_edits_write(Run *r, Pos pos, const Value *list, Value *out) {
     Builtin b = BUILTIN_EDIT;
     Table *t = NULL;

@@ -102,8 +102,8 @@ static void fx_again(Fx *f) {
 }
 
 // A builtin that only looks, `who(path)`: its path confined with the root
-// allowed, then the store's stat, a missing path no stop. `exists`, `stat`,
-// `ls` and the reads make these calls in this order.
+// allowed, then the file system's stat, a missing path no stop. `exists`,
+// `stat`, `ls` and the reads make these calls in this order.
 static STATUS_MUST_USE Status fx_look(Fx *f, const char *who, Str path) { // cstr: a builtin's name
     fx_again(f);
     CheckedPath p;
@@ -116,7 +116,7 @@ static STATUS_MUST_USE Status fx_look(Fx *f, const char *who, Str path) { // cst
 }
 
 // A change builtin, `who(path, data)`: its path confined (never the root),
-// the hook asked, then the store's replace, as a change builtin does.
+// the hook asked, then the file system's replace, as a change builtin does.
 static STATUS_MUST_USE Status fx_change(Fx *f, const char *who, Str path, Str data) { // cstr: a builtin's name
     fx_again(f);
     CheckedPath p;

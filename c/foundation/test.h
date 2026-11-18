@@ -122,7 +122,7 @@ static inline void test_fail(const char *file, int line, Str what) { // cstr: __
 
 // `expr` must give OK; when it doesn't, the failure says the stop that the
 // run `ctx` (a `RunCtx *`) recorded: its place, class, budget if any and
-// message, or that it recorded none. A host or store test that fails then
+// message, or that it recorded none. A host or file system test that fails then
 // says why, where `EXPECT((expr) == OK)` says only that it stopped. It
 // reads err.h's RunCtx at its use, so test.h itself still needs only slice.
 #define EXPECT_OK_IN(ctx, expr)                                                             \

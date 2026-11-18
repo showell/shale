@@ -104,7 +104,7 @@ static BuiltinSpecs builtin_specs(void) {
     return all;
 }
 
-// Whether builtin `b` changes the store: what a background run refuses.
+// Whether builtin `b` changes the file system: what a background run refuses.
 static bool builtin_changes_files(Builtin b) {
     return b == BUILTIN_REPLACE || b == BUILTIN_APPEND || b == BUILTIN_MKDIR || b == BUILTIN_REMOVE || b == BUILTIN_REMOVE_TREE || b == BUILTIN_EDIT;
 }

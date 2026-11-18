@@ -729,11 +729,12 @@ static inline STATUS_MUST_USE Status cli_unread_arg(Arena *a, const Program *pro
     return OK;
 }
 
-// The longest name FAT holds on the bare-metal host, which must agree with
-// zig-webbox's store (`max_name`).
+// The longest strict name: c/host/path.c's PATH_STRICT_NAME_MAX, which it
+// must agree with.
 enum { CLI_NAME_MAX = 96 };
 
-// Whether `name` is a part of a path FAT can hold.
+// Whether `name` is a strict name: a copy of c/host/path.c's
+// `path_strict_name` for the units that include no path.c.
 static inline bool cli_fat_name(Str name) {
     if (name.len == 0 || name.len > CLI_NAME_MAX) return false;
     if (str_eq(name, S(".")) || str_eq(name, S(".."))) return false;

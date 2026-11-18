@@ -653,9 +653,9 @@ enum { HOST_NOT_REGULAR = -1 };
 
 // Opens `c`, which must be a regular file, for writing (made if missing,
 // truncated) or reading: 0 with `*fd` set, HOST_NOT_REGULAR, or the errno.
-// DRAGON: the run's deadline and the store's boundaries. A FIFO or a device
-// at the path would hold the open, and `shale` with it, until a reader or a
-// writer came; a link planted at the last part would be followed.
+// DRAGON: the run's deadline and the file system's boundaries. A FIFO or a
+// device at the path would hold the open, and `shale` with it, until a reader
+// or a writer came; a link planted at the last part would be followed.
 // REMEDY: O_NONBLOCK so the open returns at once (a FIFO with no reader is
 // ENXIO), O_NOFOLLOW so a link is refused (ELOOP), then fstat must say a
 // regular file before O_NONBLOCK is cleared and the fd handed back.
@@ -1058,9 +1058,9 @@ static STATUS_MUST_USE Status host_refuse_nul(Run *r, Pos pos, Str who, SpawnStr
 // A path the host itself writes for the script (`run`'s log, a job's log and
 // record, `suffix` added to the script's path first), as an OS path, once
 // `may_change` let it change.
-// DRAGON: the store's boundaries and the undo journal. A file the host opens
-// for writing outside `change_may` would write through a read-only mount and
-// past `--undo-on-stop`'s journal.
+// DRAGON: the file system's boundaries and the undo journal. A file the host
+// opens for writing outside `change_may` would write through a read-only mount
+// and past `--undo-on-stop`'s journal.
 // REMEDY: every such open takes its path from here; test_run_guards plants a
 // log into a read-only mount and one put back by an undo.
 static STATUS_MUST_USE Status host_change_os_path(Host *h, Run *r, Pos pos, Str given, Str suffix, Str *out) {

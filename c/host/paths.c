@@ -3,7 +3,7 @@
 // secrets rule's checks of a path, a link's target and a program's
 // arguments. It holds the mounts (`runs:x` is the mount `runs`'s folder
 // joined with `x`, held to the root's rules), the walk of each part with
-// `lstat` (the store follows no symbolic link), the read-only mounts, the
+// `lstat` (the file system follows no symbolic link), the read-only mounts, the
 // secrets rule (no read, listing, `stat` or `real` of a secrets mount's
 // files by any spelling, no program handed its folder) and the journal
 // `--undo-on-stop` keeps (undo.c puts it back).
@@ -183,8 +183,8 @@ static bool paths_run_folders_make(Paths *h, const PathRun *r) {
 }
 
 // The run `r`'s folders.
-// DRAGON: the secrets rule and the store's boundaries. Folders worked out for
-// another root or other mounts would miss a secrets folder or a read-only
+// DRAGON: the secrets rule and the file system's boundaries. Folders worked out
+// for another root or other mounts would miss a secrets folder or a read-only
 // one, and every check below would let it by.
 // REMEDY: they are held to the root and the mounts they were made for, and
 // ones made for others, or none made, are a bug in the C that ends the
@@ -302,8 +302,8 @@ static STATUS_MUST_USE Status paths_refuse_secrets_under(Paths *h, PathRun *r, P
 // reached below a folder it was allowed (the root, a mount's), is a secrets
 // mount's folder or inside it, by paths_refuse_secrets_under's own test, so
 // the walk leaves it out.
-// DRAGON: the secrets rule. A walk lists and stats each entry by its OS
-// path, never through the store's confinement, so a secrets mount's folder
+// DRAGON: the secrets rule. A walk lists and stats each entry by its OS path,
+// never through the file system's confinement, so a secrets mount's folder
 // under the root would be listed, its files named and sized.
 // REMEDY: builtins_walk.c asks this of every entry before it stats, lists or
 // keeps it, and of every folder `after` resumes in; test_host_grep_tree
@@ -349,11 +349,11 @@ static STATUS_MUST_USE Status paths_mount_of(Paths *h, PathRun *r, Pos pos, Str 
 // Stops the run if any part of `rest` below `base` is a symbolic link,
 // each part `lstat`ed and charged a step; a missing part ends the walk.
 // The stop names the path as the script wrote it, `shown_prefix` first.
-// DRAGON: the store's boundaries. A link anywhere below the root or a
+// DRAGON: the file system's boundaries. A link anywhere below the root or a
 // mount's folder would let a path that passes every check land outside them
-// (`dir/up -> ../../etc`). A link made between this walk and the store's call
-// is the one race it cannot see.
-// REMEDY: each part is lstat'ed, never followed, before the store is
+// (`dir/up -> ../../etc`). A link made between this walk and the file system's
+// call is the one race it cannot see.
+// REMEDY: each part is lstat'ed, never followed, before the file system is
 // called; test_paths plants a link to a file, to a folder, in the middle, in
 // a mount and out of the root.
 static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, Str rest, Str shown_prefix) {
@@ -464,8 +464,8 @@ static STATUS_MUST_USE Status paths_resolve(void *ctx, PathRun *r, Pos pos, Str 
     if (!paths_colon(path, &colon)) return OK;
     const Mount *m = NULL;
     TRY(paths_mount_of(h, r, pos, path, colon, &m));
-    // DRAGON: the secrets rule. A secrets mount's own name reaching the store
-    // would read, list or change its tokens.
+    // DRAGON: the secrets rule. A secrets mount's own name reaching the file
+    // system would read, list or change its tokens.
     // REMEDY: refused here, before its folder is opened or walked, for every
     // call; only paths_secret_path and paths_secret_target take one.
     // test_paths plants each builtin's path through it.
@@ -593,7 +593,7 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
 // by its name or by a root path into its folder (a writable mount inside it
 // decides for its own folder), then journals the path under
 // `--undo-on-stop`.
-// DRAGON: the store's boundaries. A builtin that skipped this would write
+// DRAGON: the file system's boundaries. A builtin that skipped this would write
 // through a read-only mount.
 // REMEDY: every change builtin asks it before it writes (builtins_change's
 // `admit`), and it judges where the path lands as well as its name, so

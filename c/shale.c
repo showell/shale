@@ -260,8 +260,8 @@ static STATUS_MUST_USE Status steps_ran_out(LibraryReader *r, Str *why) {
 // Whether any part of `rest` below the mount's folder `dir` is a symbolic
 // link, each part checked with `lstat` and charged a step, a missing part
 // ending the walk. On a link, `*why` names it.
-// DRAGON: the store's boundary. The store follows no link below a mount's
-// folder, so a link there could lead a library's read out of it.
+// DRAGON: the file system's boundary. The file system follows no link below a
+// mount's folder, so a link there could lead a library's read out of it.
 // REMEDY: this walk refuses one before the read; a link made between the
 // walk and the open is a race left open.
 static STATUS_MUST_USE Status refuse_links(LibraryReader *r, Str dir, Str rest, Str prefix, Str *why, bool *refused) {
@@ -704,7 +704,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     r.read_bytes = reader.used.read_bytes;
     r.stack = ValueVec_make(&machine);
     regex_cache_init(&r.patterns, &r.ctx.refused);
-    // The store, measured under the root (and `<root>/../auth`) as the
+    // The file system, measured under the root (and `<root>/../auth`) as the
     // bare-metal host would hold it.
     FileSystem file_system;
     memset(&file_system, 0, sizeof file_system);

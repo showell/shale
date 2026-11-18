@@ -100,7 +100,7 @@ Zig size and no Zig probe of them.
   CLI's own (output 64 KiB, call bytes 64 MiB) are set by the CLI, never the
   core. Each budget is checked where Zig checks it: steps at each enter and
   each charge, `depth` at each enter, the arena at each allocation, reads
-  and changes at each store call. A charge past what is left stops one step
+  and changes at each file system call. A charge past what is left stops one step
   past the budget, as `Run.charge` does.
 - **Zig's formatting is the C's**: `{d}`, `{s}`, `{x:0>2}`, `{t}` (an
   error's or an enum's name) each get a buf.h writer that prints what
@@ -146,16 +146,20 @@ instead.
 ## The host interface
 
 The core makes no system call. What zig-webbox and the Linux host give
-today, the C gives as three vtables of function pointers, each returning
-`Status` and leaving its error's Zig name for the message:
+today, the C gives as one set of calls and two vtables of function
+pointers, each returning `Status` (the calls, a `FileSystemErr`) and leaving
+its error's Zig name for the message:
 
-- **`Store`**, zig-webbox's `store`: list, stat, stat-or-null, has, read-at,
-  replace (whole, never torn), append, make-dir, remove, remove-tree, and
-  the bases a path is measured from. The C keeps the root's rules in the
-  core: FAT names, no `..`, no absolute path, `""` the root. The C's Store
-  is a port of webbox's Linux store. Whether metal (zig-metal-unikernel)
-  ever takes the C, with a store of its own, is Steve's to decide; nothing
-  here depends on it.
+- **The file system**, zig-webbox's `store` once: c/host/file_system.c's
+  list, stat, stat-or-null, has, read-at, replace (whole, never torn),
+  append, make-dir, remove and remove-tree, each taking the run's
+  `FileSystem` (the bases a path is measured from), over the exact calls
+  the host makes on paths of its own. Only Linux implemented the store's
+  vtable, so it is direct calls now: a host with another file system
+  includes its own file_system.c. The path algebra and the strict name
+  rules are c/host/path.c's, which makes no call. The C keeps the root's
+  rules in the core: strict names, no `..`, no absolute path, `""` the
+  root.
 - **`PathHook`**, `interp.PathHook`: `resolve` (a mount's path to an OS
   path), `check_root` (a root path's own checks, once the core has held its
   every part to be a name), `may_change` (asked before every change: a
@@ -190,7 +194,7 @@ today, the C gives as three vtables of function pointers, each returning
 
 The playground runs the core over an in-memory tree, with no `Host` at all
 (`src/shale_wasm.zig`, `src/wasm_io.zig`). **The C core builds to wasm with
-the in-memory `Store` and no `Host`**, so whatever the browser cannot have
+an in-memory file_system.c and no `Host`**, so whatever the browser cannot have
 stays out of the core: a question of where a piece goes is settled by
 whether the playground needs it.
 

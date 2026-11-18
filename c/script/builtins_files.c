@@ -10,7 +10,7 @@
 // builtins.c and builtins_text.c.
 
 // One change the script attempted, in order: the builtin's name, the script's
-// path, and "ok" or the store's error.
+// path, and "ok" or the file system's error.
 typedef struct {
     Str op;
     Str path;
@@ -19,7 +19,7 @@ typedef struct {
 
 VEC_DEFINE(Effects, Effect)
 
-// What a run's store builtins need beyond the run itself: the file system,
+// What a run's file builtins need beyond the run itself: the file system,
 // the path checks' context (the root, the run's charge, the host's hook),
 // the effects log, the scans' buffer and how a change's diff is printed.
 typedef struct RunFiles {
@@ -87,12 +87,12 @@ static STATUS_MUST_USE Status builtin_path(Run *r, Pos pos, Builtin b, const Val
     return path_arg(&builtin_files_of(r)->path, pos, builtin_who(r, b), given, allow_root, out);
 }
 
-// The stop for builtin `b`'s store call on `rel`.
+// The stop for builtin `b`'s file system call on `rel`.
 static STATUS_MUST_USE Status builtin_file_system_failed(Run *r, Pos pos, Builtin b, Str rel, FileSystemErr e) {
     return path_file_system_failed(&builtin_files_of(r)->path, pos, builtin_who(r, b), rel, e);
 }
 
-// One store read, against the reads budget.
+// One file system read, against the reads budget.
 static STATUS_MUST_USE Status builtin_count_read(Run *r, Pos pos) {
     if (r->reads >= r->ctx.budgets.reads) return run_budget_stop(&r->ctx, pos, BUDGET_READS);
     r->reads++;
@@ -143,8 +143,8 @@ static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b,
 
 // ── `ls`, `stat`, `exists`, `is_dir` ──
 
-// `ls(p)`: the names in a folder, sorted. The store lists a missing folder as
-// empty; a script's `ls` of one is a stop.
+// `ls(p)`: the names in a folder, sorted. The file system lists a missing
+// folder as empty; a script's `ls` of one is a stop.
 static STATUS_MUST_USE Status bi_ls(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_LS, &at(args, 0), true, &p));
@@ -209,7 +209,7 @@ static STATUS_MUST_USE Status bi_is_dir(Run *r, Pos pos, ConstValues args, Value
 // ── reading files ──
 
 // The size of the file at `p`: a stop when it is missing or not a file. One
-// store call, counted as part of the read.
+// file system call, counted as part of the read.
 static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, const CheckedPath *p, uint64_t *size) {
     bool found = false;
     FileSystemStat st;
@@ -300,8 +300,9 @@ static STATUS_MUST_USE Status bi_read(Run *r, Pos pos, ConstValues args, Value *
     return OK;
 }
 
-// `read_or(p, default)`: the whole file, or `default` when nothing is there,
-// in one store read; a folder or a failure is the store's stop, as `read`'s.
+// `read_or(p, default)`: the whole file, or `default` when nothing is there, in
+// one file system read; a folder or a failure is the file system's stop, as
+// `read`'s.
 static STATUS_MUST_USE Status bi_read_or(Run *r, Pos pos, ConstValues args, Value *out) {
     CheckedPath p;
     TRY(builtin_path(r, pos, BUILTIN_READ_OR, &at(args, 0), false, &p));
@@ -597,8 +598,8 @@ static const ScanAsk SCAN_COUNT_LINES = {BUILTIN_COUNT_LINES, false, S_ITEM("")}
 
 // Reads the file BUILTIN_SCAN_CHUNK bytes at a time into one reused buffer,
 // counting `needle`'s non-overlapping matches that start in `range`, or
-// stopping at the first (`ask->first_only`), across the chunks' edges: one
-// store read a call, every byte counted against the read budget and charged.
+// stopping at the first (`ask->first_only`), across the chunks' edges: one file
+// system read a call, every byte counted against the read budget and charged.
 static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, const CheckedPath *p, Str needle, ScanRange range, Scanned *res) {
     Builtin b = ask->b;
     TRY(builtin_count_read(r, pos));

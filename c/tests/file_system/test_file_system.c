@@ -1,7 +1,7 @@
-// The store's tests: zig-webbox's store tests that reach the calls Shale
-// makes, with the same inputs and answers, then Wyhash's own vectors for the
-// sibling name a replace writes, and the dirname and basename cases of Zig's
-// standard library, which the store's must match.
+// The file system's tests: zig-webbox's file system tests that reach the calls
+// Shale makes, with the same inputs and answers, then Wyhash's own vectors for
+// the sibling name a replace writes, and the dirname and basename cases of
+// Zig's standard library, which the file system's must match.
 #define _GNU_SOURCE
 #include "test.h"
 
@@ -122,7 +122,7 @@ TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_s
     EXPECT_EQ(es.len, 1);
     EXPECT(sx_file(&f, "data/chat/topic.count", &text));
     EXPECT_STR(text, S("3 30\n"));
-    // A name FAT cannot hold is refused before anything is written.
+    // A name that is not strict is refused before anything is written.
     EXPECT_EQ(file_system_replace(s, a, sx_at(&f, "data/what?"), S("x")), FILE_SYSTEM_BAD_NAME);
     // One sibling name per file, in any case, and short enough for any name.
     Str one = S("");
@@ -218,7 +218,7 @@ TEST(case_does_not_tell_two_names_apart_and_the_first_case_is_kept) {
     EXPECT_EQ(file_system_replace(s, a, sx_at(&f, "data/chat/channels/Dev/sessions/plan.md"), S("one")), FILE_SYSTEM_OK);
     char three[3];
     size_t got = 0;
-    // Read in another case: the same file, as FAT finds it.
+    // Read in another case: the same file, found apart from case.
     EXPECT_EQ(file_system_read_at(s, a, sx_at(&f, "data/chat/channels/dev/sessions/PLAN.md"), 0, (Bytes){three, 3}, &got), FILE_SYSTEM_OK);
     EXPECT_STR(((Str){three, got}), S("one"));
     bool has = false;

@@ -39,10 +39,10 @@ static Str mounts_trim_slash(Str p) {
 
 // Whether `abs` is the folder `dir` or a path below it (`dir` absolute, `/`
 // included).
-// DRAGON: the store's boundaries. Every mount's, the root's and the secrets
-// folder's containment is this test, and a prefix alone would put `/tmp/xy`
-// inside `/tmp/x`, so a read-only or secrets mount's guard would miss a
-// sibling that only begins with its name, or claim one.
+// DRAGON: the file system's boundaries. Every mount's, the root's and the
+// secrets folder's containment is this test, and a prefix alone would put
+// `/tmp/xy` inside `/tmp/x`, so a read-only or secrets mount's guard would miss
+// a sibling that only begins with its name, or claim one.
 // REMEDY: the byte after the prefix must be `/` or the end; test_paths
 // plants the prefix.
 static bool mounts_in_folder(Str abs, Str dir) {
@@ -202,7 +202,7 @@ typedef struct {
 // `~/.config/shale/mounts`. A missing default file is no mounts; a missing
 // pinned one, or any mistake in a file, is MOUNTS_MALFORMED with `*why`
 // naming the file. A link in a mount's own path is the user's choice, so it
-// is resolved once here; below it, the store follows none.
+// is resolved once here; below it, the file system follows none.
 static inline MountsResult mounts_load(Arena *a, bool has_pinned, Str pinned, Str home, MountsLoaded *out, Str *why) {
     out->mounts = Mounts_make(a);
     out->from = pinned;
