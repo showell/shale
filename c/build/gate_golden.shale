@@ -110,17 +110,16 @@ function gate_answer(bin, dir, c)
   return {code = get(r, "code", -1), ended = r.ended, out = r.out, log = join(shown, "\n"), log_bytes = #added, ms = r.ms, cpu_ms = get(r, "cpu_ms", 0)}
 end
 
--- The gate at OS path `bin` over every case, with a HOME of its own under
+-- The gate at OS path `bin` over every case of `cases` (gate_cases'), with a HOME of its own under
 -- `dir`. The first case whose answer is not the frozen one stops the run,
 -- showing both; with `refreeze`, every answer is written from this gate's
 -- instead. Gives how many cases were held, how many of them it passed,
 -- refused and logged, how many answers a refreeze moved, and the runs'
 -- wall and CPU time (`ms`, `cpu_ms`).
-function gate_golden_check(bin, dir, refreeze)
+function gate_golden_check(cases, bin, dir, refreeze)
   if exists(dir) then remove_tree(dir) end
   mkdir(dir .. "/home")
   create(dir .. "/a-file", "not a folder\n")
-  local cases = gate_cases()
   local got = {}
   local passed = 0
   local refused = 0

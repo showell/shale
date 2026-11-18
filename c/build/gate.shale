@@ -1,7 +1,7 @@
 -- c/build/gate.shale: the gate's block, c/shale_gate.c and c/gate/gate.c.
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
--- budget: steps=40000000 programs=1000 arena_bytes=268435456 changes=20000 change_bytes=1073741824 call_bytes=67108864
+-- budget: steps=80000000 programs=1000 arena_bytes=268435456 changes=20000 change_bytes=1073741824 call_bytes=67108864
 --
 -- test_gate.c runs in the foundation's block with every test file. Here, in
 -- both tiers: its port of tools/shale_gate_test.zig's tests held to that
@@ -115,8 +115,11 @@ end
 -- `refreeze`, every later one held to what it wrote.
 function gate_golden(t, builds, refreeze)
   local first = true
+  local cases = gate_cases()
   for b in builds do
-    local p = gate_golden_check(real(OUT .. "/" .. b .. "/shale-gate"), OUT .. "/gate/golden-" .. b, refreeze and first)
+    -- A refreeze's answers are what every later build is held to.
+    if refreeze and not first then cases = gate_cases() end
+    local p = gate_golden_check(cases, real(OUT .. "/" .. b .. "/shale-gate"), OUT .. "/gate/golden-" .. b, refreeze and first)
     charge(t, "gate golden", p.cases, p.ms, p.cpu_ms)
     if refreeze and first then print("refrozen: " .. GATE_CASES .. ", from `" .. b .. "`'s gate: " .. p.moved .. " of " .. p.cases .. " answers moved") end
     print("gate golden " .. b .. ": " .. p.cases .. " cases answered as frozen (" .. p.passed .. " passed, " .. p.refused .. " refused, " .. p.logged .. " logged)")
