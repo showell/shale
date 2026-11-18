@@ -53,6 +53,16 @@ typedef struct {
     Status (*call)(void *ctx, Run *r, Pos pos, Str name, ConstValues args, Value *out);
 } RunHost;
 
+// The text of a 64-bit integer in decimal.
+typedef struct {
+    char bytes[24];
+} IntText;
+
+enum {
+    // The numbers' texts a run holds at once for its messages (run_num).
+    RUN_NUMS = 16,
+};
+
 typedef struct Run {
     // The stop's place and the calls in progress; `ctx.values` is the values'
     // arena, `ctx.function` the function the run is in.
@@ -105,14 +115,13 @@ typedef struct Run {
     // prelude's function, the step count when it began.
     size_t spent_by;
     uint64_t spent_from;
+    // The ring run_num and run_unum write a message's numbers into, so a
+    // number needs no arena and no refusal can be dropped making one.
+    IntText nums[RUN_NUMS];
+    size_t nums_next;
 } Run;
 
 // ── stops ──
-
-// The text of a 64-bit integer in decimal.
-typedef struct {
-    char bytes[24];
-} IntText;
 
 static inline Str int_text(IntText *t, int64_t n) {
     Bytes room = {t->bytes, sizeof t->bytes};
@@ -130,19 +139,41 @@ static inline Str int_text(IntText *t, int64_t n) {
     return str_sub(((Str){t->bytes, sizeof t->bytes}), k, sizeof t->bytes);
 }
 
-// `n` in decimal in the values' arena, for a message; "" when refused, and the
-// message that holds it is refused then too.
-static inline Str run_num(Run *r, int64_t n) {
-    IntText t;
-    Str s = {0};
-    if (!arena_dup(r->ctx.values, int_text(&t, n), &s)) return S("");
-    return s;
+// The text of `n` in decimal, unsigned.
+static inline Str uint_text(IntText *t, uint64_t n) {
+    Bytes room = {t->bytes, sizeof t->bytes};
+    size_t k = room.len;
+    do {
+        k--;
+        at(room, k) = (char)('0' + n % 10);
+        n /= 10;
+    } while (n > 0);
+    return str_sub(((Str){t->bytes, sizeof t->bytes}), k, sizeof t->bytes);
 }
 
+// The run's next slot for a number's text.
+static inline IntText *run_num_slot(Run *r) {
+    SLICE_TYPE(IntTexts, IntText);
+    IntTexts ring = {r->nums, RUN_NUMS};
+    IntText *t = &at(ring, r->nums_next);
+    r->nums_next = (r->nums_next + 1) % RUN_NUMS;
+    return t;
+}
+
+// `n` in decimal, for a message: in the run's ring, so it never refuses.
+// DRAGON: use after overwrite. The text lives in one of RUN_NUMS slots, so a
+// Str kept past RUN_NUMS more numbers reads another number's digits.
+// REMEDY: every caller makes the number inside the call that makes its
+// message (run_failf, host_fail's MSG_ARGS, paths_cat), which copies it
+// before the next; none keeps one in a variable or a value. No check holds
+// this: a reading of the callers does.
+static inline Str run_num(Run *r, int64_t n) {
+    return int_text(run_num_slot(r), n);
+}
+
+// `n` in decimal, unsigned: run_num's (its DRAGON).
 static inline Str run_unum(Run *r, uint64_t n) {
-    Buf b = buf_make(r->ctx.values);
-    if (buf_u64(&b, n) != OK) return S("");
-    return buf_view(&b);
+    return uint_text(run_num_slot(r), n);
 }
 
 // A stop whose message is `parts` joined, or `fallback` (the format text) when

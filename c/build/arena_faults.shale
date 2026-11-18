@@ -21,24 +21,26 @@
 --   - a stop on the arena budget or the machine budget, `── stopped at
 --     ...: budget arena:` or `budget machine:`, exit 1: the run's, or its
 --     parse's or compile's;
---   - a refusal before the run (or of its report after it), exit 2, whose
---     line names the memory it ran out of: `... past the arena ...`, `...
---     past the system's memory ...`, `OutOfMemory` or `shale: out of
---     memory`;
+--   - a refusal before the run (or of its report after it), exit 2, said as
+--     `shale: out of memory...` or a read's `OutOfMemory`;
+--   - the one exception, FALLBACK_CAUGHT: a finish (exit 0) whose refusal
+--     was answered, the hook saying no refusal flag was left set. Only a
+--     stop's message answers a refusal and lets the run go on: it falls back
+--     to its format text (c/docs/style.md, "Errors"), reads the refusal
+--     (err.h's run_fail_built), and `attempt` catches the stop;
 -- with no sanitizer's report (but a leak's: a process ending on a refusal
 -- returns early, past its arenas' deinit, and the kernel takes the memory
 -- back, so the leak check is off), no signal, no timeout, and the hook's
--- count as the last line, so the process got to its end. A run that finishes (exit 0)
--- with an allocation refused is unclean: the refusal was swallowed. A script
--- in UNDO runs under `--undo-on-stop`, and its folder after a stop (exit 1)
--- must hold the script alone: a file left is a write the undo missed.
+-- count as the last line, so the process got to its end. A finish with a
+-- refusal flag left set (`, left unanswered`) is unclean: the refusal was
+-- swallowed. A script in UNDO runs under `--undo-on-stop`, and its folder
+-- after a stop (exit 1) must hold the script alone: a file left is a write
+-- the undo missed.
 --
 -- An unclean end is run again with SHALE_ARENA_FAULT_TRACE=1, which prints
 -- the refused allocation's calls, and is named by its site, the first
--- function outside c/foundation. A swallowed refusal at a site in
--- KNOWN_SWALLOWS is counted and said, not failed: those are findings
--- queued for their homes. An N past a run's last allocation (a script that
--- runs a program asks a few more or fewer each time) is counted apart.
+-- function outside c/foundation. An N past a run's last allocation (a script
+-- that runs a program asks a few more or fewer each time) is counted apart.
 --
 -- It prints one line a script: the allocations tried and clean, and each
 -- unclean reason once, with its count, first N, site and last lines; then
@@ -61,19 +63,8 @@ const SCRIPTS = {
 }
 -- The scripts that write files, run under `--undo-on-stop`.
 const UNDO = {"files"}
--- The sites known to swallow a refusal, each the first function outside
--- c/foundation on the refused allocation's stack, with why it is not fixed
--- here: a run that finishes with one of them refused is counted, not
--- failed. Each is a finding to fix at its home, and leaves the list then.
-const KNOWN_SWALLOWS = {
-  {site = "run_num", why = "a number for a message, made before the message is known to be needed; \"\" on a refusal, and the run goes on"},
-  {site = "run_unum", why = "run_num's twin, for an unsigned number"},
-  {site = "host_keep_ends", why = "the time line's slowest argv, left out of the top on a refusal (host_time_ran says so)"},
-  {site = "host_run_record", why = "a program's record for `--verbose`, dropped on a refusal, as every host_record caller drops it"},
-  {site = "host_record", why = "host_run_record's, a record dropped on a refusal"},
-  {site = "HostRecords_reserve", why = "host_run_record's, a record dropped on a refusal"},
-  {site = "msg_format", why = "a stop's message falls back to its plain format when refused (c/docs/style.md, \"Errors\"), and `attempt` caught the stop"},
-}
+-- The one finish a refusal may end in, and why (the header's list).
+const FALLBACK_CAUGHT = "a stop's message fell back to its format text, which read the refusal, and `attempt` caught the stop"
 -- The most N of a script's own run tried one by one; past it, a stride.
 const RUN_MAX = 1500
 const DIR = "c/out/arena_faults"
@@ -85,13 +76,13 @@ function fault_argv(bin)
   return compile_argv("asan", "c/shale.c", FOUNDATION, bin, {"-DSHALE_ARENA_FAULTS", "-I" .. OUT .. "/gen", "-Ic"})
 end
 
--- The hook's last line, {made, run_from, refused}, or nil when the run never
+-- The hook's last line, {made, run_from, refused, left}, or nil when the run never
 -- got to say it.
 function hook_line(out)
   local m = nil
   for l in lines(out) do
-    local r = re_find(l, "^arena faults: (\\d+) allocations, the run from (\\d+), refused (\\w+)$")
-    if r ~= nil then m = {made = parse_int(r.groups[1]), run_from = parse_int(r.groups[2]), refused = r.groups[3]} end
+    local r = re_find(l, "^arena faults: (\\d+) allocations, the run from (\\d+), refused (\\w+)(, left unanswered)?$")
+    if r ~= nil then m = {made = parse_int(r.groups[1]), run_from = parse_int(r.groups[2]), refused = r.groups[3], left = contains(l, ", left unanswered")} end
   end
   return m
 end
@@ -114,7 +105,10 @@ function unclean(r, n, work, file)
   if h == nil then return "no count from the hook: the process did not reach its end" end
   if h.refused == "none" and n > h.made then return "past" end
   if h.refused ~= tostring(n) then return "the hook refused " .. h.refused .. ", not " .. n end
-  if r.code == 0 then return "finished with an allocation refused: the refusal was swallowed" end
+  if r.code == 0 then
+    if h.left then return "finished with the refusal left unanswered: it was swallowed" end
+    return "fallback"
+  end
   if r.code == 1 then
     local left = {}
     for e in walk_all(work, {}) do
@@ -128,7 +122,7 @@ function unclean(r, n, work, file)
   end
   if r.code == 2 then
     for l in lines(r.out) do
-      if contains(l, "past the arena") or contains(l, "past the system's memory") or contains(l, "OutOfMemory") or l == "shale: out of memory" then return nil end
+      if starts_with(l, "shale: out of memory") or contains(l, ": OutOfMemory") then return nil end
     end
     return "exit 2 naming no memory"
   end
@@ -198,9 +192,7 @@ function prove(bin, env, s, place)
   local order = {}
   local clean = 0
   local past = 0
-  local known = {}
-  local known_sites = {}
-  for k in KNOWN_SWALLOWS do push(known_sites, k.site) end
+  local fallbacks = 0
   for n in plan.ns do
     local r = run_one(bin, work, s.file, undo, env, n)
     local why = unclean(r, n, work, s.file)
@@ -208,17 +200,14 @@ function prove(bin, env, s, place)
       clean = clean + 1
     elseif why == "past" then
       past = past + 1
+    elseif why == "fallback" then
+      clear_but(work, s.file)
+      fallbacks = fallbacks + 1
     else
       clear_but(work, s.file)
-      local site = site_of(bin, work, s.file, undo, env, n)
-      if r.code == 0 and has_item(known_sites, site) then
-        incr(known, site)
-        why = nil
-      else
-        why = why .. " (refused in " .. site .. ")"
-      end
+      why = why .. " (refused in " .. site_of(bin, work, s.file, undo, env, n) .. ")"
     end
-    if why ~= nil and why ~= "past" then
+    if why ~= nil and why ~= "past" and why ~= "fallback" then
       if not has_key(whys, why) then
         push(order, why)
         whys[why] = {count = 0, n = n, out = r.out}
@@ -229,9 +218,7 @@ function prove(bin, env, s, place)
   end
   local said = s.name .. ": " .. h.made .. " allocations (" .. h.run_from .. " before the run); tried " .. #plan.ns .. " (the setup every " .. plan.stride .. ", the run every " .. plan.run_stride .. "), " .. clean .. " clean"
   if past > 0 then said = said .. ", " .. past .. " past this run's last" end
-  local ks = {}
-  for k in sort(keys(known)) do push(ks, k .. " x" .. known[k]) end
-  if #ks > 0 then said = said .. "; known swallows: " .. join(ks, ", ") end
+  if fallbacks > 0 then said = said .. "; " .. fallbacks .. " finished, " .. FALLBACK_CAUGHT end
   print(said)
   for why in order do
     local w = whys[why]

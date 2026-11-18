@@ -141,10 +141,10 @@ TEST(the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv) {
     arena_init(&a, (size_t)1 << 20, &refused);
     HostTime t;
     memset(&t, 0, sizeof t);
-    host_time_ran(&t, &a, S("git log"), 200);
-    host_time_ran(&t, &a, S("zig build test"), 1200);
-    host_time_ran(&t, &a, S("ls"), 10);
-    host_time_ran(&t, &a, S("true"), 5);
+    EXPECT(host_time_ran(&t, &a, S("git log"), 200) == OK);
+    EXPECT(host_time_ran(&t, &a, S("zig build test"), 1200) == OK);
+    EXPECT(host_time_ran(&t, &a, S("ls"), 10) == OK);
+    EXPECT(host_time_ran(&t, &a, S("true"), 5) == OK);
     t.waits = 1;
     t.wait_ms = 40000;
     t.sleep_ms = 300;

@@ -202,6 +202,15 @@ static int refuse_command(Out *o, Str why, bool usage) {
     return flush_and_exit(o, EXIT_REFUSED);
 }
 
+// The arena refused what the CLI makes for itself (`what`): `shale: out of
+// memory: <what>`, the refusal's exit.
+static int out_of_memory(Out *o, Str what) {
+    say(o, S("shale: out of memory: "));
+    say(o, what);
+    say(o, S("\n"));
+    return flush_and_exit(o, EXIT_REFUSED);
+}
+
 // What this C `shale` does not do yet, said as a refusal of its own.
 static int not_ported(Out *o, Str what) {
     say(o, S("shale (C): "));
@@ -642,7 +651,7 @@ static int source_budget_stop(Out *o, Command *c) {
     s.budget = BUDGET_SOURCE;
     s.message = S("the source is larger than the source budget");
     s.function = S("");
-    if (cli_write_stop(&o->err, cli_script_name(c), &s, none, &c->budgets) != OK) return not_ported(o, S("a report past the arena"));
+    if (cli_write_stop(&o->err, cli_script_name(c), &s, none, &c->budgets) != OK) return out_of_memory(o, S("a report"));
     return flush_and_exit(o, EXIT_STOPPED);
 }
 
@@ -657,7 +666,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     Parser p;
     parse_init(&p, &tree, source, b.nesting);
     Beside beside = {BESIDE_STDIN, S("")};
-    if (script_beside(a, c, mounts, where.root_abs, where.cwd_abs, &beside) != OK) return not_ported(o, S("a script's folder past the arena"));
+    if (script_beside(a, c, mounts, where.root_abs, where.cwd_abs, &beside) != OK) return out_of_memory(o, S("a script's folder"));
     LibraryReader reader = {a, mounts, mounts_from, b, none, beside, where.root_abs};
     ParseLoader loader = {&reader, load_library};
     Program prog = {0};
@@ -683,7 +692,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     if (stopped) {
         // A run's report says its effects first, with `--verbose`.
         if (c->verbose && !c->check) say(o, S("── effects (0) ──\n"));
-        if (cli_write_stop(&o->err, name, &stop, reader.used, &b) != OK) return not_ported(o, S("a report past the arena"));
+        if (cli_write_stop(&o->err, name, &stop, reader.used, &b) != OK) return out_of_memory(o, S("a report"));
         int code_out = flush_and_exit(o, EXIT_STOPPED);
         arena_deinit(&tree);
         return code_out;
@@ -714,7 +723,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     // arena.
     r.out.ptr = arena_alloc(&output, r.out_cap, 1);
     r.out.cap = r.out_cap;
-    if (r.out.ptr == NULL) return not_ported(o, S("an output budget past the system's memory"));
+    if (r.out.ptr == NULL) return out_of_memory(o, S("the output budget"));
     r.args = args;
     r.args_len = args_len;
     r.steps = reader.used.steps;
@@ -737,7 +746,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     paths_make(&lh.paths, &host_arena, where.root_abs, where.cwd_abs, mounts, mounts_from);
     lh.paths.undo = c->undo_on_stop;
     SpawnStrs env = {NULL, 0};
-    if (base_env(&host_arena, &env) != OK) return not_ported(o, S("an environment past the arena"));
+    if (base_env(&host_arena, &env) != OK) return out_of_memory(o, S("an environment"));
     // The run's zig-ast, started at its first Zig call.
     HostZigProc zig;
     host_zig_init(&zig);
@@ -747,7 +756,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     ssize_t exe_len = readlink("/proc/self/exe", exe, sizeof exe);
     if (exe_len > 0 && (size_t)exe_len < sizeof exe) {
         Str reaper = S("");
-        if (!arena_dup(&host_arena, (Str){exe, (size_t)exe_len}, &reaper)) return not_ported(o, S("the reaper's path past the arena"));
+        if (!arena_dup(&host_arena, (Str){exe, (size_t)exe_len}, &reaper)) return out_of_memory(o, S("the reaper's path"));
         lh.reaper = reaper;
     }
     PathHook hook;
@@ -757,7 +766,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     rs.file_system = &file_system;
     PathRun path = path_run_make(&r.ctx, where.root.len == 0 ? S("/") : where.root, builtin_path_charge, &r, &hook);
     rs.path = path;
-    if (!paths_run_folders_make(&lh.paths, &rs.path)) return not_ported(o, S("the run's folders past the arena"));
+    if (!paths_run_folders_make(&lh.paths, &rs.path)) return out_of_memory(o, S("the run's folders"));
     rs.effects = Effects_make(&values);
     rs.diffs_summary = !c->verbose;
     r.files = &rs;
@@ -775,20 +784,20 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     Str out_failed = write_stdout(buf_view(&r.out));
     RunUsed used = {r.steps, r.reads, r.read_bytes, r.out.len};
     Names effects = {NULL, 0};
-    if (c->verbose && builtin_effect_lines(&rs, a, &effects) != OK) return not_ported(o, S("a report past the arena"));
+    if (c->verbose && builtin_effect_lines(&rs, a, &effects) != OK) return out_of_memory(o, S("a report"));
     Names records = {lh.records.ptr, lh.records.len};
     StepsTop steps;
     vm_steps_top(&r, &code, &steps);
-    if (cli_write_report(&o->err, name, preludes, c->verbose, effects, records, ran == OK ? NULL : &r.ctx.stop, used, &b, &steps) != OK) return not_ported(o, S("a report past the arena"));
-    if (host_time_worth_saying(&lh.time, c->verbose) && host_time_write(&o->err, &lh.time) != OK) return not_ported(o, S("a report past the arena"));
+    if (cli_write_report(&o->err, name, preludes, c->verbose, effects, records, ran == OK ? NULL : &r.ctx.stop, used, &b, &steps) != OK) return out_of_memory(o, S("a report"));
+    if (host_time_worth_saying(&lh.time, c->verbose) && host_time_write(&o->err, &lh.time) != OK) return out_of_memory(o, S("a report"));
     // A stopped run ends the jobs it started (but `keep_on_stop`'s), before
     // any undo, so no job of its writes past the files put back.
-    if (ran != OK && host_jobs_stop_with_run(&lh, &o->err) != OK) return not_ported(o, S("a report past the arena"));
+    if (ran != OK && host_jobs_stop_with_run(&lh, &o->err) != OK) return out_of_memory(o, S("a report"));
     // `--undo-on-stop`: a stopped run puts back what it changed.
     if (c->undo_on_stop && ran != OK) {
         bool all = false;
         Buf undone = buf_make(&host_arena);
-        if (undo_changes(&lh.paths, &undone, &all) != OK) return not_ported(o, S("an undo past the arena"));
+        if (undo_changes(&lh.paths, &undone, &all) != OK) return out_of_memory(o, S("an undo"));
         // DRAGON: the secrets rule. The undo's lines name absolute paths,
         // which no stop's check sees: they are said here, not through
         // path_fail.
@@ -797,11 +806,14 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         // lines are asked paths_names_secret, the hook path_fail asks, and
         // one that names a secrets folder ends the process
         // (paths_report_names_no_secret; test_paths holds its death).
-        if (paths_report_names_no_secret(&lh.paths, &rs.path, buf_view(&undone)) != OK) return not_ported(o, S("an undo past the arena"));
+        if (paths_report_names_no_secret(&lh.paths, &rs.path, buf_view(&undone)) != OK) return out_of_memory(o, S("an undo"));
         say(o, buf_view(&undone));
     }
     int ended = ran == OK ? EXIT_FINISHED : EXIT_STOPPED;
     if (out_failed.len > 0) ended = stdout_failed(o, out_failed);
+#ifdef SHALE_ARENA_FAULTS
+    arena_faults_left(r.ctx.refused);
+#endif
     int exit_code = flush_and_exit(o, ended);
     arena_deinit(&host_arena);
     regex_cache_deinit(&r.patterns);
@@ -828,13 +840,13 @@ static int help_main(Out *o) {
     Arena *a = o->arena;
     Buf w = buf_make(a);
     bool built = buf_str(&w, cli_usage()) == OK && buf_lit(&w, HELP_SECRETS "\nThe docs (start with the first):\n" HELP_DOCS) == OK;
-    if (!built) return not_ported(o, S("a help past the arena"));
+    if (!built) return out_of_memory(o, S("a help"));
     const char *home_c = getenv("HOME"); // cstr: the environment's
     const char *pinned = getenv("SHALE_MOUNTS"); // cstr: the environment's
     MountsLoaded loaded;
     Str why = S("");
     MountsResult mr = mounts_load(a, pinned != NULL, pinned != NULL ? from_c(pinned) : S(""), from_c(home_c != NULL ? home_c : "/"), &loaded, &why);
-    if (mr == MOUNTS_OUT_OF_MEMORY) return not_ported(o, S("the mounts past the arena"));
+    if (mr == MOUNTS_OUT_OF_MEMORY) return out_of_memory(o, S("the mounts"));
     if (mr == MOUNTS_MALFORMED) {
         Str failed = write_stdout(buf_view(&w));
         say(o, S("shale: the mounts: "));
@@ -861,7 +873,7 @@ static int help_main(Out *o) {
         if (built && m->tools) built = buf_lit(&w, "  tools") == OK;
         built = built && buf_byte(&w, '\n') == OK;
     }
-    if (!built) return not_ported(o, S("a help past the arena"));
+    if (!built) return out_of_memory(o, S("a help"));
     Str failed = write_stdout(buf_view(&w));
     return flush_and_exit(o, failed.len > 0 ? stdout_failed(o, failed) : EXIT_FINISHED);
 }
@@ -878,7 +890,7 @@ static int secrets_cli(Out *o) {
     MountsLoaded loaded;
     Str why = S("");
     MountsResult mr = mounts_load(a, pinned != NULL, pinned != NULL ? from_c(pinned) : S(""), home, &loaded, &why);
-    if (mr == MOUNTS_OUT_OF_MEMORY) return not_ported(o, S("the mounts past the arena"));
+    if (mr == MOUNTS_OUT_OF_MEMORY) return out_of_memory(o, S("the mounts"));
     if (mr == MOUNTS_MALFORMED) {
         say(o, S("shale: the mounts: "));
         say(o, why);
@@ -887,7 +899,8 @@ static int secrets_cli(Out *o) {
     }
     char cwd[PATH_MAX];
     Str cwd_abs = S("");
-    if (getcwd(cwd, sizeof cwd) == NULL || !arena_dup(a, from_c(cwd), &cwd_abs)) return not_ported(o, S("a run with no working folder"));
+    if (getcwd(cwd, sizeof cwd) == NULL) return not_ported(o, S("a run with no working folder"));
+    if (!arena_dup(a, from_c(cwd), &cwd_abs)) return out_of_memory(o, S("a working folder"));
     Secrets m = {a, io, home, cwd_abs, Mounts_items(&loaded.mounts), loaded.from};
     return secrets_main(&m);
 }
@@ -895,7 +908,7 @@ static int secrets_cli(Out *o) {
 // `shale --version`: the mode this `shale` was built in.
 static int version_main(Out *o) {
     Buf w = buf_make(o->arena);
-    if (buf_lit(&w, "shale ") != OK || buf_str(&w, cli_build_mode()) != OK || buf_byte(&w, '\n') != OK) return not_ported(o, S("a version past the arena"));
+    if (buf_lit(&w, "shale ") != OK || buf_str(&w, cli_build_mode()) != OK || buf_byte(&w, '\n') != OK) return out_of_memory(o, S("a version"));
     Str failed = write_stdout(buf_view(&w));
     return flush_and_exit(o, failed.len > 0 ? stdout_failed(o, failed) : EXIT_FINISHED);
 }
@@ -912,7 +925,7 @@ static int load_preludes(Out *o, Str root_abs, Prelude *out, size_t *n) {
     at(slots, 1) = git_prelude;
     *n = 2;
     Str repo = {0};
-    if (join(a, root_abs, S(".shale/prelude.shale"), &repo) != OK) return not_ported(o, S("a prelude's path past the arena"));
+    if (join(a, root_abs, S(".shale/prelude.shale"), &repo) != OK) return out_of_memory(o, S("a prelude's path"));
     Str text = {0};
     Str err = {0};
     if (read_path(a, repo, 64 * 1024, &text, &err) == OK) {
@@ -938,7 +951,7 @@ static int load_preludes(Out *o, Str root_abs, Prelude *out, size_t *n) {
         required = true;
     } else {
         const char *home = getenv("HOME"); // cstr: the environment's
-        if (join(a, from_c(home != NULL ? home : "/"), S(".config/shale/prelude.shale"), &user) != OK) return not_ported(o, S("a prelude's path past the arena"));
+        if (join(a, from_c(home != NULL ? home : "/"), S(".config/shale/prelude.shale"), &user) != OK) return out_of_memory(o, S("a prelude's path"));
         shown = S("~/.config/shale/prelude.shale");
     }
     if (read_path(a, user, 64 * 1024, &text, &err) == OK) {
@@ -962,7 +975,7 @@ static int run_main(Out *o, int argc, char **argv) {
     SLICE_TYPE(Args, char *);
     Args raw = {argv, (size_t)argc};
     Str *words = ARENA_ARRAY(a, Str, raw.len);
-    if (words == NULL) return not_ported(o, S("a command line past the arena"));
+    if (words == NULL) return out_of_memory(o, S("a command line"));
     SLICE_TYPE(Words, Str);
     Words all = {words, raw.len};
     for (size_t i = 0; i < raw.len; i++) at(all, i) = from_c(at(raw, i));
@@ -1013,7 +1026,7 @@ static int run_main(Out *o, int argc, char **argv) {
     MountsLoaded loaded;
     Str mounts_why = S("");
     MountsResult mr = mounts_load(a, pinned_mounts != NULL, pinned_mounts != NULL ? from_c(pinned_mounts) : S(""), home, &loaded, &mounts_why);
-    if (mr == MOUNTS_OUT_OF_MEMORY) return not_ported(o, S("the mounts past the arena"));
+    if (mr == MOUNTS_OUT_OF_MEMORY) return out_of_memory(o, S("the mounts"));
     if (mr == MOUNTS_MALFORMED) {
         say(o, S("shale: the mounts: "));
         say(o, mounts_why);
@@ -1029,7 +1042,7 @@ static int run_main(Out *o, int argc, char **argv) {
     } else if (c.script == CLI_SCRIPT_FILE) {
         Str file = {0};
         bool missing = 0;
-        if (script_file(a, c.file, mounts, &file, &missing) != OK) return not_ported(o, S("a script path past the arena"));
+        if (script_file(a, c.file, mounts, &file, &missing) != OK) return out_of_memory(o, S("a script path"));
         if (missing) {
             say(o, S("shale: "));
             say(o, c.file);
@@ -1062,20 +1075,21 @@ static int run_main(Out *o, int argc, char **argv) {
     }
     buf_clear(&why);
     if (cli_header_budgets(source, &c, &why) != OK) return refuse_command(o, buf_view(&why), false);
-    if (cli_write_header_budgets(&o->err, &c) != OK) return not_ported(o, S("a report past the arena"));
+    if (cli_write_header_budgets(&o->err, &c) != OK) return out_of_memory(o, S("a report"));
     // Said before the run starts, so it leads the run's own output.
     flush_err(o);
     // The root in one spelling, its real path, as the mounts' folders are.
     Str given_root = c.root;
     while (given_root.len > 0 && str_byte(given_root, given_root.len - 1) == '/') given_root = str_sub(given_root, 0, given_root.len - 1);
     Str root = given_root;
-    if (root.len > 0 && real_or_same(a, given_root, &root) != OK) return not_ported(o, S("a root past the arena"));
+    if (root.len > 0 && real_or_same(a, given_root, &root) != OK) return out_of_memory(o, S("a root"));
     Str root_abs = root;
     if (root.len == 0) {
         root_abs = S("/");
     } else if (str_byte(root, 0) != '/') {
         char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof cwd) == NULL || join(a, from_c(cwd), root, &root_abs) != OK) return not_ported(o, S("a root with no working folder"));
+        if (getcwd(cwd, sizeof cwd) == NULL) return not_ported(o, S("a root with no working folder"));
+        if (join(a, from_c(cwd), root, &root_abs) != OK) return out_of_memory(o, S("a root"));
     }
     Prelude preludes[4];
     size_t n_preludes = 0;
@@ -1086,7 +1100,7 @@ static int run_main(Out *o, int argc, char **argv) {
     Where where = {root, root_abs, S("")};
     char cwd_now[PATH_MAX];
     if (getcwd(cwd_now, sizeof cwd_now) == NULL) return not_ported(o, S("a run with no working folder"));
-    if (!arena_dup(a, from_c(cwd_now), &where.cwd_abs)) return not_ported(o, S("a working folder past the arena"));
+    if (!arena_dup(a, from_c(cwd_now), &where.cwd_abs)) return out_of_memory(o, S("a working folder"));
     return run_script(o, &c, mounts, from, where, source, ps, args, args_len, pinned_now);
 }
 
@@ -1099,6 +1113,7 @@ int main(int argc, char **argv) {
     int code = run_main(&o, argc, argv);
     arena_deinit(&a);
 #ifdef SHALE_ARENA_FAULTS
+    arena_faults_left(refused);
     arena_faults_said();
 #endif
     return code;

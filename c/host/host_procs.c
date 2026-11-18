@@ -446,7 +446,10 @@ static STATUS_MUST_USE Status procs_stop_through(Host *h, Run *r, Pos pos, int f
         if (!procs_pidfd_ends(fd, 2000)) return host_fail(r, pos, CLASS_HOST, S("`proc_stop`: pid {d} is still there 2 seconds after KILL"), MSG_ARGS(MSG_FROM_HOST(run_num(r, pid))));
     }
     Buf b = buf_make(r->ctx.values);
-    if (buf_lit(&b, "process ") == OK && buf_u64(&b, (uint64_t)pid) == OK && buf_lit(&b, " stopped") == OK) host_record(h, buf_view(&b));
+    Status s = buf_lit(&b, "process ");
+    if (s == OK) s = buf_u64(&b, (uint64_t)pid);
+    if (s == OK) s = buf_lit(&b, " stopped");
+    TRY(host_record(h, r, pos, &b, s));
     value_bool(out, true);
     return OK;
 }

@@ -320,7 +320,7 @@ static STATUS_MUST_USE Status host_run_answer(Run *r, Pos pos, SpawnStrs argv, c
 
 // The record of a program run: `run ARGV[ ENV] [(want: W)] -> ENDED[ CODE]
 // (MS ms)[, stdout to ...]`.
-static void host_run_record(Host *h, Run *r, Str joined, Str shown_env, const RunOpts *o, const SpawnOutcome *out, Str secret_said) {
+static STATUS_MUST_USE Status host_run_record(Host *h, Run *r, Pos pos, Str joined, Str shown_env, const RunOpts *o, const SpawnOutcome *out, Str secret_said) {
     Buf b = buf_make(r->ctx.values);
     Status s = buf_lit(&b, "run ");
     if (s == OK) s = buf_str(&b, joined);
@@ -336,7 +336,7 @@ static void host_run_record(Host *h, Run *r, Str joined, Str shown_env, const Ru
     if (s == OK) s = buf_u64(&b, out->ms);
     if (s == OK) s = buf_lit(&b, " ms)");
     if (s == OK) s = buf_str(&b, secret_said);
-    if (s == OK) host_record(h, buf_view(&b));
+    return host_record(h, r, pos, &b, s);
 }
 
 // The stop when a sink refused the output: the stream's arena past its cap
@@ -497,10 +497,13 @@ static STATUS_MUST_USE Status host_run_spawn(Run *r, Pos pos, const SpawnSpec *s
 
 // The log's record, `log PATH`, which says so when a write failed (fsync's
 // EIO among them) and the log is short.
-static void host_run_log_record(Host *h, Run *r, int fd, Str shown, bool failed) {
+static STATUS_MUST_USE Status host_run_log_record(Host *h, Run *r, Pos pos, int fd, Str shown, bool failed) {
     if (fsync(fd) != 0 && errno == EIO) failed = true;
     Buf lb = buf_make(r->ctx.values);
-    if (buf_lit(&lb, "log ") == OK && buf_str(&lb, shown) == OK && buf_str(&lb, failed ? S(": a write failed, the log is short") : S("")) == OK) host_record(h, buf_view(&lb));
+    Status s = buf_lit(&lb, "log ");
+    if (s == OK) s = buf_str(&lb, shown);
+    if (s == OK) s = buf_str(&lb, failed ? S(": a write failed, the log is short") : S(""));
+    return host_record(h, r, pos, &lb, s);
 }
 
 // The answer's `out` and its line counts, by the keep: `whole`'s buffer
@@ -587,14 +590,14 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     r->read_bytes += sinks.out.bytes;
     Str joined = S("");
     TRY(host_argv_joined(r, pos, argv, &joined));
-    host_time_ran(&h->time, h->paths.arena, joined, outcome.ms);
+    if (host_time_ran(&h->time, h->paths.arena, joined, outcome.ms) != OK) return run_values_oom(r, pos);
     Str argv0 = at(argv, 0).s;
     bool secret_stored = false;
     uint64_t secret_bytes = 0;
     Buf said = buf_make(a);
     if (secret) TRY(host_run_secret_end(r, pos, &held->secret, argv0, o->secret_replace, &outcome, &said, &secret_stored, &secret_bytes));
-    host_run_record(h, r, joined, buf_view(&shown_env), o, &outcome, buf_view(&said));
-    if (host_given(&o->log)) host_run_log_record(h, r, held->log_fd, o->log.as.string, sinks.out.log_failed);
+    TRY(host_run_record(h, r, pos, joined, buf_view(&shown_env), o, &outcome, buf_view(&said)));
+    if (host_given(&o->log)) TRY(host_run_log_record(h, r, pos, held->log_fd, o->log.as.string, sinks.out.log_failed));
 
     Table *t = NULL;
     TRY(host_run_answer(r, pos, argv, &outcome, &t));

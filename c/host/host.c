@@ -101,22 +101,23 @@ static bool host_keep_ends(Arena *a, Str argv, Str *out) {
     return true;
 }
 
-// Counts one program's `ms`, keeping its argv if it is among the slowest.
-// An argv the arena refuses is left out of the top, and the count still
-// holds it.
-static void host_time_ran(HostTime *t, Arena *a, Str argv, uint64_t ms) {
+// Counts one program's `ms`, keeping its argv if it is among the slowest;
+// STOP when the arena refuses the argv, which the caller reads as running out
+// of memory.
+static STATUS_MUST_USE Status host_time_ran(HostTime *t, Arena *a, Str argv, uint64_t ms) {
     t->runs++;
     t->run_ms += ms;
     HostSlows top = {t->top, 3};
     size_t k = 0;
     while (k < t->top_len && at(top, k).ms >= ms) k++;
-    if (k == 3) return;
+    if (k == 3) return OK;
     Str kept = S("");
-    if (!host_keep_ends(a, argv, &kept)) return;
+    if (!host_keep_ends(a, argv, &kept)) return STOP;
     if (t->top_len < 3) t->top_len++;
     for (size_t i = (size_t)t->top_len - 1; i > k; i--) at(top, i) = at(top, i - 1);
     at(top, k).ms = ms;
     at(top, k).argv = kept;
+    return OK;
 }
 
 // Said after the report when it passes a second, or always with `--verbose`.
@@ -167,12 +168,15 @@ static inline STATUS_MUST_USE Status host_time_write(Buf *w, const HostTime *t) 
     return buf_byte(w, '\n');
 }
 
-// One line for `--verbose`'s `── ran`, in the host's arena. A line the arena
-// refuses is left out, and the run goes on.
-static void host_record(Host *h, Str line) {
+// One line for `--verbose`'s `── ran`, in the host's arena, its text `b`
+// (`built` its making's answer). A line the arena refuses, made or kept, is
+// the arena budget's stop, never a line left out.
+static STATUS_MUST_USE Status host_record(Host *h, Run *r, Pos pos, const Buf *b, Status built) {
+    if (built != OK) return run_values_oom(r, pos);
     Str kept = S("");
-    if (!arena_dup(h->paths.arena, line, &kept)) return;
-    if (HostRecords_push(&h->records, kept) != OK) return;
+    if (!arena_dup(h->paths.arena, buf_view(b), &kept)) return run_values_oom(r, pos);
+    if (HostRecords_push(&h->records, kept) != OK) return run_values_oom(r, pos);
+    return OK;
 }
 
 // ── stops ──

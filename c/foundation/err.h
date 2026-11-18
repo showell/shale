@@ -200,9 +200,12 @@ static inline STATUS_MUST_USE Status run_fail(RunCtx *r, Pos pos, StopClass cls,
 }
 
 // Stops the run with the message `b` built, or `fallback` when building it was
-// refused.
+// refused. The fallback answers that refusal, so it is read here: no stale
+// `refused` outlives the stop (`attempt` may catch it, and the run goes on).
 static inline STATUS_MUST_USE Status run_fail_built(RunCtx *r, Pos pos, StopClass cls, const Buf *b, Status built, Str fallback) {
-    return run_fail(r, pos, cls, built == OK ? buf_view(b) : fallback);
+    if (built == OK) return run_fail(r, pos, cls, buf_view(b));
+    r->refused = false;
+    return run_fail(r, pos, cls, fallback);
 }
 
 // The message of a budget's stop, made in the values' arena where it quotes a

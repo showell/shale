@@ -89,9 +89,8 @@ static STATUS_MUST_USE Status change_edits_arg(Run *r, Pos pos, ConstValues args
         EditList all = {edits, t->list.len};
         for (size_t k = 0; k < all.len; k++) {
             const Value *v = &at(t->list, k);
-            Str nth = run_unum(r, k + 1);
             if (v->tag != VALUE_TABLE || v->as.table->kind != TABLE_MAP) {
-                return run_failf(r, pos, CLASS_TYPE, "`edit`: edit {d} must be a map, `{{old = ..., new = ...}}`, not {s}", S("`edit`: edit "), nth, S(" must be a map, `{old = ..., new = ...}`, not "), value_type_name(v));
+                return run_failf(r, pos, CLASS_TYPE, "`edit`: edit {d} must be a map, `{{old = ..., new = ...}}`, not {s}", S("`edit`: edit "), run_unum(r, k + 1), S(" must be a map, `{old = ..., new = ...}`, not "), value_type_name(v));
             }
             const ValueMap *m = &v->as.table->map;
             Edit got = {S(""), S(""), false, false};
@@ -111,10 +110,10 @@ static STATUS_MUST_USE Status change_edits_arg(Run *r, Pos pos, ConstValues args
                 } else if (str_eq(key, S("word"))) {
                     TRY(change_bool_option(r, pos, key, &x, &got.word));
                 } else {
-                    return run_failf(r, pos, CLASS_ARGUMENT, "`edit`: edit {d} takes `old`, `new`, `all` and `word`, not `{s}`", S("`edit`: edit "), nth, S(" takes `old`, `new`, `all` and `word`, not `"), key, S("`"));
+                    return run_failf(r, pos, CLASS_ARGUMENT, "`edit`: edit {d} takes `old`, `new`, `all` and `word`, not `{s}`", S("`edit`: edit "), run_unum(r, k + 1), S(" takes `old`, `new`, `all` and `word`, not `"), key, S("`"));
                 }
             }
-            if (!has_old || !has_new) return run_failf(r, pos, CLASS_ARGUMENT, "`edit`: edit {d} has no `{s}`", S("`edit`: edit "), nth, S(" has no `"), has_old ? S("new") : S("old"), S("`"));
+            if (!has_old || !has_new) return run_failf(r, pos, CLASS_ARGUMENT, "`edit`: edit {d} has no `{s}`", S("`edit`: edit "), run_unum(r, k + 1), S(" has no `"), has_old ? S("new") : S("old"), S("`"));
             at(all, k) = got;
         }
         *out = all;

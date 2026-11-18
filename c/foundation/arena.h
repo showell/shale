@@ -231,6 +231,9 @@ typedef struct {
     uint64_t made;
     // Whether the `at`th came, and was refused.
     bool refused;
+    // Whether a refusal flag the process ended with was still set: a
+    // refusal no stop or fallback answered (arena_faults_left).
+    bool left;
     // `made` when the script's own run began (arena_faults_mark), so the
     // driver can tell the setup every script shares from the script's run.
     uint64_t run_from;
@@ -260,20 +263,28 @@ static inline bool arena_fault_now(void) {
     return true;
 }
 
+// Notes a refusal flag (`RunCtx.refused`, the CLI's own) as the process ends
+// with it: set means a refusal was dropped.
+static inline void arena_faults_left(bool refused) {
+    if (refused) arena_faults.left = true;
+}
+
 // Marks where the script's own run begins.
 static inline void arena_faults_mark(void) {
     arena_faults.run_from = arena_faults.made;
 }
 
 // The count, `arena faults: <made> allocations, the run from <run_from>,
-// refused <at>` (`none` when none was), as the last line on stderr.
+// refused <at>` (`none` when none was), then `, left unanswered` when a
+// refusal flag was left set, as the last line on stderr.
 static inline void arena_faults_said(void) {
     fprintf(stderr, "arena faults: %llu allocations, the run from %llu, refused ", (unsigned long long)arena_faults.made, (unsigned long long)arena_faults.run_from);
     if (!arena_faults.refused) {
-        fprintf(stderr, "none\n");
+        fprintf(stderr, "none");
     } else {
-        fprintf(stderr, "%llu\n", (unsigned long long)arena_faults.at);
+        fprintf(stderr, "%llu", (unsigned long long)arena_faults.at);
     }
+    fputs(arena_faults.left ? ", left unanswered\n" : "\n", stderr);
     fflush(stderr);
 }
 #endif

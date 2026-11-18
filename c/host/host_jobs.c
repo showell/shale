@@ -193,7 +193,7 @@ static STATUS_MUST_USE Status host_job_place(Host *h, Run *r, Pos pos, Str log_s
 
 // The record of a job started: `job ARGV [(want: W)] started (pid P), log
 // L[, kept on a stop]`.
-static void host_job_record(Host *h, Run *r, Str joined, const HostJobOpts *o, const JobRecord *rec) {
+static STATUS_MUST_USE Status host_job_record(Host *h, Run *r, Pos pos, Str joined, const HostJobOpts *o, const JobRecord *rec) {
     Buf line = buf_make(r->ctx.values);
     Status ls = buf_lit(&line, "job ");
     if (ls == OK) ls = buf_str(&line, joined);
@@ -205,7 +205,7 @@ static void host_job_record(Host *h, Run *r, Str joined, const HostJobOpts *o, c
     if (ls == OK) ls = buf_lit(&line, "), log ");
     if (ls == OK) ls = buf_str(&line, o->log);
     if (ls == OK && o->keep_on_stop) ls = buf_lit(&line, ", kept on a stop");
-    if (ls == OK) host_record(h, buf_view(&line));
+    return host_record(h, r, pos, &line, ls);
 }
 
 // Keeps the job started in the host, past the run's values, for a stop to
@@ -308,7 +308,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     }
     Str joined = S("");
     TRY(host_argv_joined(r, pos, argv, &joined));
-    host_job_record(h, r, joined, &o, &rec);
+    TRY(host_job_record(h, r, pos, joined, &o, &rec));
     TRY(host_job_keep(h, r, pos, joined, record_os, &o, &rec));
     return host_job_answer(r, pos, o.log, &rec, out);
 }
@@ -508,7 +508,10 @@ static STATUS_MUST_USE Status host_jobs_call(Host *h, Run *r, Pos pos, Str name,
         bool was = jobs_stop(&j.record, JOBS_GROUP_GRACE_MS);
         if (was) {
             Buf b = buf_make(r->ctx.values);
-            if (buf_lit(&b, "job ") == OK && buf_str(&b, j.shown) == OK && buf_lit(&b, " stopped") == OK) host_record(h, buf_view(&b));
+            Status s = buf_lit(&b, "job ");
+            if (s == OK) s = buf_str(&b, j.shown);
+            if (s == OK) s = buf_lit(&b, " stopped");
+            TRY(host_record(h, r, pos, &b, s));
         }
         value_bool(out, was);
         return OK;
