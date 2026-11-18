@@ -809,41 +809,12 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
 
 // ── `--help` and `--version` ──
 
-// The folder of a path as /proc/self/exe spells one (absolute, no `//`): the
-// path without its last part, `/` for a part at the root, and
-// false for `/` itself.
-static bool help_dirname(Str p, Str *out) {
-    size_t end = p.len;
-    while (end > 0 && str_byte(p, end - 1) == '/') end--;
-    while (end > 0 && str_byte(p, end - 1) != '/') end--;
-    if (end == 0) return false;
-    while (end > 1 && str_byte(p, end - 1) == '/') end--;
-    *out = str_sub(p, 0, end);
-    return true;
-}
-
-// The checkout this binary runs from, as `<checkout>/zig-out/bin/shale` would
-// be: three folders up from /proc/self/exe, when it holds
-// docs/SHALE-AGENTS.md.
-static bool help_checkout(Arena *a, Str *out) {
-    char exe[PATH_MAX];
-    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe);
-    if (n <= 0 || (size_t)n >= sizeof exe) return false;
-    Str up = {exe, (size_t)n};
-    for (int k = 0; k < 3; k++) {
-        if (!help_dirname(up, &up)) return false;
-    }
-    Str agents = {0};
-    if (join(a, up, S("docs/SHALE-AGENTS.md"), &agents) != OK) return false;
-    // The executable's own path, from the kernel.
-    const char *c = arena_cstr(a, os_str_own(agents));
-    if (c == NULL || access(c, F_OK) != 0) return false; // skip: --help says where the docs are only when found
-    return arena_dup(a, up, out);
-}
-
 // `--secrets`'s line in `--help`, below the usage: the usage itself is Zig
 // Shale's, which has no such mode.
 #define HELP_SECRETS "  --secrets         a person's commands for the secrets mounts, at a terminal: where\n                    they are, storing a secret, Claude Code's deny rules (alone)\n"
+
+// Where `--help` says the docs are.
+#define HELP_DOCS "  docs/SHALE-AGENTS.md and docs/SHALE.md at github.com/showell/shale\n"
 
 // `shale --help`: the usage, where the docs are and the mounts
 // in force, on stdout, each mount with its folder but a `secrets` mount's. A
@@ -851,15 +822,7 @@ static bool help_checkout(Arena *a, Str *out) {
 static int help_main(Out *o) {
     Arena *a = o->arena;
     Buf w = buf_make(a);
-    Str checkout = {0};
-    bool in_checkout = help_checkout(a, &checkout);
-    bool built = buf_str(&w, cli_usage()) == OK && buf_lit(&w, HELP_SECRETS "\nThe docs (start with the first):\n") == OK;
-    if (built && in_checkout) {
-        built = buf_lit(&w, "  ") == OK && buf_str(&w, checkout) == OK && buf_lit(&w, "/docs/SHALE-AGENTS.md\n  ") == OK &&
-                buf_str(&w, checkout) == OK && buf_lit(&w, "/docs/SHALE.md\n") == OK;
-    } else if (built) {
-        built = buf_lit(&w, "  docs/SHALE-AGENTS.md and docs/SHALE.md at github.com/showell/shale\n") == OK;
-    }
+    bool built = buf_str(&w, cli_usage()) == OK && buf_lit(&w, HELP_SECRETS "\nThe docs (start with the first):\n" HELP_DOCS) == OK;
     if (!built) return not_ported(o, S("a help past the arena"));
     const char *home_c = getenv("HOME"); // cstr: the environment's
     const char *pinned = getenv("SHALE_MOUNTS"); // cstr: the environment's
