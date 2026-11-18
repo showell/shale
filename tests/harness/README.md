@@ -144,7 +144,16 @@ a cloud's /root or a laptop alike.
 run's numbering, so a regeneration diffs cleanly
 (`src/script/interp_test.zig:192` is `zig-tests-script-interp_test-192`,
 `tests/inputs/store/store_budgets.shale [--budget reads=3]` is
-`store-store_budgets-budget-reads-3`):
+`store-store_budgets-budget-reads-3`). A doc block's id is its doc and the
+first 8 hex digits of its text's SHA-256, never its line
+(`docs-SHALE-AGENTS-1a2b3c4d`), so a paragraph added above it renames
+nothing; two blocks of a doc whose digits collide take `-2`, `-3` in the
+doc's order (`collect_docs`). Its origin in the manifest and `case.json`
+keeps the line, as of the last freeze. A doc block whose text changes is a
+new case, and its old one is gone: the freeze adds the new one and refuses
+the loss until `refreeze=` names the old id.
+
+A case holds:
 
 - its files: a Zig test's or a doc block's source as `script.shale`, a
   lesson's cells as `cell-NN.shale`, a hand-written probe and its fixture by

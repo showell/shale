@@ -161,7 +161,19 @@ function collect_zig(c)
   end
 end
 
+-- The first 8 hex digits of `text`'s SHA-256: a doc block's name.
+function short_hash(text)
+  return sub(trim(must(run({"sha256sum"}, {stdin = text, timeout_ms = 60000, tail = 2})).out), 1, 8)
+end
+
+-- Every shale block of DOCS. A block's case is named by its doc and a hash
+-- of its text (`doc_key`), never its line, so a paragraph added above it
+-- renames nothing; its origin keeps the line it starts at, as of the
+-- collection. Two blocks of one doc whose hashes agree (no text is
+-- collected twice, so only a collision of the 8 digits) take `-2`, `-3`, in
+-- the doc's order.
 function collect_docs(c)
+  local used = {}
   for d in DOCS do
     local n = 0
     local body = nil
@@ -170,7 +182,18 @@ function collect_docs(c)
       n = n + 1
       if body ~= nil then
         if l == "```" then
-          add_input(c, "docs", d .. ":" .. start, join(body, "\n") .. "\n", nil)
+          local text = join(body, "\n") .. "\n"
+          if add_input(c, "docs", d .. ":" .. start, text, nil) ~= nil then
+            local h = short_hash(text)
+            local key = h
+            local k = 1
+            while has_key(used, d .. "/" .. key) do
+              k = k + 1
+              key = h .. "-" .. k
+            end
+            used[d .. "/" .. key] = true
+            c.inputs[#c.inputs].doc_key = key
+          end
           body = nil
         else
           push(body, l)
@@ -820,9 +843,12 @@ end
 
 -- A case's id from its input's origin: stable across a regeneration, never
 -- a run's numbering (`src/script/interp_test.zig:192` is
--- `zig-tests-script-interp_test-192`).
+-- `zig-tests-script-interp_test-192`). A doc block's is its doc and its
+-- `doc_key` instead of its line (`docs/SHALE-AGENTS.md:546` is
+-- `docs-SHALE-AGENTS-1a2b3c4d`), so it holds across line moves.
 function case_id(inp)
   local o = inp.origin
+  if inp.source == "docs" then o = split(o, ":")[1] .. ":" .. inp.doc_key end
   for pre in {"^src/", "^tests/inputs/(?:stops|cli|store|git)/", "^cookbook/", "^docs/", "^web/lessons\\.js: lessons "} do o = re_replace(o, pre, "") end
   o = re_replace(o, "\\.(?:zig|shale|md)\\b", "")
   o = re_replace(o, "[^A-Za-z0-9_]+", "-")
