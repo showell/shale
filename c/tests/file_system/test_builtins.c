@@ -3,8 +3,8 @@
 // `may_change` and `edits_write` (c/host/host_call.c), each source run as
 // the C `shale --verbose` runs it (ran.c) over a fresh root. Every output,
 // report (its effects, its stop, its steps, reads and read bytes) and file
-// left is the one Zig's `shale --verbose` gives the same source on the same
-// tree: the sources and answers below are its runs', copied whole.
+// left is C Shale's own: the sources and answers began as Zig Shale's runs',
+// copied whole, and the goldens hold them now.
 
 // A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
 // includes test.h and ran.c before it.

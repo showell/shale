@@ -11,9 +11,10 @@ code and its tests could not work out alone:
 - **why** the code is this way and not the obvious way;
 - **what holds** that the code relies on but doesn't check: an invariant,
   an ordering, a caller's promise;
-- **what Zig Shale did,** where the C must match it byte for byte and the
-  reason isn't visible (during the port, "Zig's `ArrayList` grows by half
-  again" explains a growth rule that would otherwise look arbitrary);
+- **where a rule came from,** when the reason isn't visible (a growth
+  rule kept from Zig Shale, "Zig's `ArrayList` grows by half again",
+  would otherwise look arbitrary). A stop's text is C Shale's own, held by
+  the goldens, never "Zig's";
 - **where a dragon is.** The security auditor's `DRAGON:` markers are
   comments too, and the same rules apply: plain, specific and short.
 

@@ -1,5 +1,5 @@
 // The job record's tests, with Zig Shale's record tests' inputs and answers,
-// and the record's text held to Zig's byte for byte.
+// and the record's text held byte for byte.
 #include "test.h"
 
 #include "../../host/job_record.c"
@@ -40,7 +40,7 @@ TEST(a_record_reads_back_as_it_was_written_and_a_broken_one_is_none) {
     w.ended = 11;
     Str text;
     EXPECT(job_record_format(buf, w, &text));
-    // Zig's text for the same record, exactly.
+    // The record's text, exactly.
     EXPECT_STR(text, S("pid=42\npgid=42\nstart=123\nstarted=9\nargv=zig build\nreaper=0\nreaper_start=\nexit=3\nended=11\n"));
     Bytes mine = {buf_bytes, text.len};
     JobRecord r;

@@ -1,7 +1,7 @@
 // test_vm.c: the VM (c/script/vm.c), the compiler (compile.h), the run's
 // semantics (run.h) and the values (value.h), each source parsed, compiled
 // and run as the C `shale` runs it, with no preludes (ran.c). Every output,
-// stop and step count is the one Zig's `shale` gives the same source.
+// stop and step count is C Shale's own, as the goldens hold them.
 
 // A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
 // includes test.h and ran.c before it.

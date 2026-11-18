@@ -5,7 +5,7 @@
 // past the undo journal, a copy's mode given through a read-only mount, a
 // FIFO where a file should be, a secret's file
 // that grows without bound, an OS path in a message, and a zig-ast that
-// hangs or floods its stderr. Every message is Zig Shale's for the same call.
+// hangs or floods its stderr. Every message is C Shale's own.
 
 // A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
 // includes test.h and ran.c before it.

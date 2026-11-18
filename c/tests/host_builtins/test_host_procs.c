@@ -1,8 +1,8 @@
 // test_host_procs.c: the Linux host's `procs` and `proc_stop`
 // (c/host/host_procs.c), each source run as the C `shale` runs it (ran.c),
 // with `host(...)` called bare since ran.c loads no prelude: Zig Shale's
-// procs tests. Every message is the one Zig's `shale` gives
-// the same call. The processes stopped are this test's own children, a
+// procs tests. Every message is C Shale's own, as the goldens hold
+// it. The processes stopped are this test's own children, a
 // `sh` waiting on a pipe only the test writes, so no test signals anything
 // but its own.
 

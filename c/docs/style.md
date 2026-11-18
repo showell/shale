@@ -234,9 +234,11 @@ and its self-test plants a break of each one.
   for that alone. Memory needs none, since the arena owns it.
 - A bug in the C (a bad index, an arena misuse, a stop that names no
   budget) aborts with one line on stderr. It is never a script's stop.
-- A message a stop prints is Zig Shale's text, byte for byte. Where Zig
-  formats a message and falls back to a plain one when memory runs out, the
-  C does the same.
+- A message a stop prints is C Shale's own text, held byte for byte by the
+  golden tests (`tests/golden.shale`); a change to one is a named refreeze
+  (`refreeze=<ids>`), its commit saying why (Steve, 2026-11-18: no parity
+  with the Zig). A message formatted with arguments falls back to its plain
+  format when memory runs out.
 - **Held:** no `run_fail(` has a `{` or `}` in its literal. Zig's format
   escapes a brace (`{{`), and a refused arena shows that raw format, so the
   stop goes through `run_failf` or `path_fail` with the format as its

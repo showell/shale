@@ -3,9 +3,9 @@
 // stop's place, its class (`type`, `index`, `budget` with which budget), its
 // message, the function it stopped in and the calls that led there.
 //
-// The names and the texts are Zig Shale's, byte for byte, since the differ
-// holds the C's output to it: the class and budget names, the budget stops'
-// messages and the report's lines.
+// The names and the texts are C Shale's own, held byte for byte by the
+// golden tests: the class and budget names, the budget stops' messages and
+// the report's lines. A change to one is a named refreeze.
 
 #ifndef SHALE_ERR_H
 #define SHALE_ERR_H

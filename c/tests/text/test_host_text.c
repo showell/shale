@@ -3,7 +3,7 @@
 // c/host/flat_tree.c (`roc_tree` and `go_tree`, the reading of roc-ast's and
 // go-ast's `--flat` output), each source run as the C `shale` runs it
 // (../ran.c) and called through `host`, with no preludes. Every output, stop
-// and step count is the one Zig's `shale --verbose` gives the same source.
+// and step count is C Shale's own, as the goldens hold them.
 
 // A part of ran_tests.c (`TEST_PART`, test.h), which defines _GNU_SOURCE and
 // includes test.h and ran.c before it.
