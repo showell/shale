@@ -1,5 +1,6 @@
 -- c/build/host_builtins.shale: the host builtins' block, c/host's `run`,
--- `sleep` and jobs in the C VM's host (host_run.c, jobs.c, host_jobs.c).
+-- `sleep` and jobs in the C VM's host (host.c, host_refusals.c,
+-- host_write_gate.c, host_run_secrets.c, host_run.c, jobs.c, host_jobs.c).
 -- c/build.shale runs it, with the `build` mount that `use` below reads; see
 -- that file for the tiers and the blocks.
 -- budget: steps=40000000 programs=400 arena_bytes=268435456 changes=20000 change_bytes=1073741824
@@ -18,22 +19,22 @@ use("build:lib.shale")
 
 const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 9}
 const HOST_BUILTINS_PLANTS = {
-  {name = "a script's NUL is made an OS string", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+  {name = "a script's NUL is made an OS string", file = "host.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard",
    old = "    if (os_str_of(s, out)) return OK;\n", new = "    out->s = s;\n    return OK;\n"},
-  {name = "a git that cannot start is a program it does not track", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+  {name = "a git that cannot start is a program it does not track", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_run_guards",
    aim = "a_git_that_cannot_start_is_said_not_taken_for_a_program_it_does_not_track",
    old = "    if (got != SPAWN_OK) {\n        Str why", new = "    if (0) {\n        Str why"},
-  {name = "a secret's start at a read's end is passed on raw", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+  {name = "a secret's start at a read's end is passed on raw", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",
    old = "if (host_is_proper_prefix(rest, at(s->secrets, k).value)) return true;", new = "if (0 && host_is_proper_prefix(rest, at(s->secrets, k).value)) return true;"},
-  {name = "a secret inside another is not widened over", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+  {name = "a secret inside another is not widened over", file = "host_run_secrets.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",
    old = "if (j + o.len > *end) *end = j + o.len;", new = "(void)end;"},
-  {name = "a want lets `grep` run", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+  {name = "a want lets `grep` run", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "run_refuses_each_bad_call_with_its_message",
    old = "    HostRefusedGroups never = {HOST_NEVER, sizeof HOST_NEVER / sizeof *HOST_NEVER};\n    for", new = "    HostRefusedGroups never = {HOST_NEVER, sizeof HOST_NEVER / sizeof *HOST_NEVER};\n    if (has_want) return OK;\n    for"},
-  {name = "a version suffix is kept on argv[0]", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+  {name = "a version suffix is kept on argv[0]", file = "host_refusals.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "run_refuses_each_bad_call_with_its_message",
    old = "        b = str_sub(b, 0, dot - 1);", new = "        break;"},
   {name = "the output is charged a step a byte", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
@@ -45,7 +46,7 @@ const HOST_BUILTINS_PLANTS = {
   {name = "a cpu budget's stop leaves out how the program ended", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "a_cpu_budget_stops_naming_the_stage_and_how_the_program_ended",
    old = "    bool failed = o->ended != SPAWN_EXIT || o->code != 0;", new = "    bool failed = false;"},
-  {name = "the time line's share is of the programs alone", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
+  {name = "the time line's share is of the programs alone", file = "host.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_time_line_keeps_the_slowest_three_and_both_ends_of_a_long_argv",
    old = "    uint64_t whole = t->run_ms + t->wait_ms + t->sleep_ms;", new = "    uint64_t whole = t->run_ms;"},
   {name = "a stopped run passes by the jobs it started", file = "host_jobs.c", dir = "host", caught_by = "host_builtins/test_host_run",

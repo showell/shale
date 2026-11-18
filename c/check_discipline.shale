@@ -747,7 +747,8 @@ const PROBE_MODULES = {
   "c/foundation/test.h", "c/script/run.h", "c/host/file_system.c", "c/host/path_run.c", "c/script/regex.c",
   "c/script/builtins.c", "c/script/builtins_text.c", "c/script/builtins_files.c", "c/script/builtins_walk.c",
   "c/script/builtins_change.c", "c/script/vm.c", "c/host/mounts.c", "c/host/paths.c", "c/host/undo.c",
-  "c/host/spawn_argv.c", "c/host/pgroup.c", "c/host/spawn_child.c", "c/host/spawn.c", "c/host/keep.c", "c/host/job_record.c", "c/host/jobs.c", "c/host/swap_file.c", "c/host/host_run.c",
+  "c/host/spawn_argv.c", "c/host/pgroup.c", "c/host/spawn_child.c", "c/host/spawn.c", "c/host/keep.c", "c/host/job_record.c", "c/host/jobs.c", "c/host/swap_file.c", "c/host/host.c",
+  "c/host/host_refusals.c", "c/host/host_write_gate.c", "c/host/host_run_secrets.c", "c/host/host_run.c",
   "c/host/host_jobs.c", "c/host/host_procs.c", "c/host/host_json.c", "c/host/host_text.c", "c/host/host_grep_tree.c", "c/host/flat_tree.c", "c/host/zig_wire.c", "c/host/zig_ast.c",
   "c/host/host_zig.c", "c/host/host_call.c", "c/host/settings_json.c", "c/host/secrets_mode.c", "c/gate/gate.c",
 }
