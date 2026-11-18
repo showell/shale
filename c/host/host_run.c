@@ -1088,7 +1088,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     if (host_given(&o->cwd)) {
         TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), o->cwd.as.string, true, &cwd));
     } else {
-        TRY(paths_root_of(&h->paths, &rs->path, pos, &cwd));
+        cwd = paths_root_of(&h->paths, &rs->path);
     }
     size_t n_env = o->env != NULL ? ValueMap_len(&o->env->map) : 0;
     Str *keys = ARENA_ARRAY(a, Str, n_env);

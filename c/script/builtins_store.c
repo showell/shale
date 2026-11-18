@@ -58,7 +58,7 @@ static STATUS_MUST_USE Status store_effect_lines(RunStore *rs, Arena *a, Names *
         TRY(buf_str(&b, at(e, k).outcome));
         bool names = false;
         Pos none = {0, 0};
-        if (hook != NULL && hook->names_secret(hook->ctx, &rs->path, none, buf_view(&b), &names) != OK) return STOP;
+        if (hook->names_secret(hook->ctx, &rs->path, none, buf_view(&b), &names) != OK) return STOP;
         if (names) c_bug("builtins_store: a report line names a secrets mount's folder");
         at(all, k) = buf_view(&b);
     }

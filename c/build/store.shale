@@ -14,7 +14,7 @@ use("build:lib.shale")
 -- a copy of c/, c/tests/store copied whole beside it (its fixture.c reaches
 -- the copy's c/host), each caught by its `aim` tests (`run_plants`).
 
-const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 28}
+const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 31}
 const STORE_ZIG_TESTS = {["src/shale_abs_path_test.zig"] = 3, ["src/shale_undo_test.zig"] = 4, ["src/shale_ro_links_test.zig"] = 9}
 const STORE_PLANTS = {
   {name = "a folder that begins with a mount's name is in it", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
@@ -40,7 +40,7 @@ const STORE_PLANTS = {
    old = "        if (str_eq(part, S(\"..\"))) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"\\\"{s}\\\" climbs out of its mount", new = "        if (0) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"\\\"{s}\\\" climbs out of its mount"},
   {name = "a read-only mount is read-only only by its name", file = "paths.c", dir = "host", caught_by = "store/test_paths",
    aim = "ro_mounts_every_change_through_one_is_refused_before_anything_is_written_a_read_works",
-   old = "if (named || (under && !paths_under_writable_within(h, r, pos, abs, dir))) {", new = "if (named || (0 && under && !paths_under_writable_within(h, r, pos, abs, dir))) {"},
+   old = "if (named || (under && !paths_under_writable_within(h, r, abs, dir))) {", new = "if (named || (0 && under && !paths_under_writable_within(h, r, abs, dir))) {"},
   {name = "a path is journaled at each change", file = "paths.c", dir = "host", caught_by = "store/test_paths",
    aim = "undo_each_path_is_journaled_once_before_its_first_change_as_a_file_s_bytes_a_folder_or_nothing_there",
    old = "if (str_eq(at(h->journal, k).abs, abs)) return OK;", new = "(void)k;"},
@@ -59,9 +59,18 @@ const STORE_PLANTS = {
   {name = "a walk's every entry works out the secrets folders again", file = "paths.c", dir = "host", caught_by = "store/test_paths",
    aim = "secrets_folders_are_worked_out_once_a_run_so_a_walk_s_check_of_each_entry_allocates_nothing",
    old = "        if (mounts_in_folder(abs, at(sd, k).run_dir)) {\n            *in = true;", new = "        Str again = S(\"\");\n        TRY(paths_cat(r, pos, at(sd, k).run_dir, S(\"\"), S(\"\"), &again));\n        if (mounts_in_folder(abs, again)) {\n            *in = true;"},
-  {name = "a secrets list made for other mounts or another root is read", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+  {name = "a run's folders made for other mounts or another root are read", file = "paths.c", dir = "host", caught_by = "store/test_paths",
    aim = "secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process",
-   old = "if (!h->secret_dirs_made || !same_mounts || !str_eq(h->secret_dirs_root, r->root)) c_bug(", new = "if (0 && same_mounts) c_bug("},
+   old = "if (!f->made || !same_mounts || !str_eq(f->root, r->root)) c_bug(", new = "if (0 && same_mounts) c_bug("},
+  {name = "a PathRun is made with no hook", file = "path_run.c", dir = "host", caught_by = "store/test_paths",
+   aim = "a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_no_secret",
+   old = "    if (hook == NULL) c_bug(\"path_run: a PathRun", new = "    if (0) c_bug(\"path_run: a PathRun"},
+  {name = "a root path's links are walked before its names are checked", file = "path_run.c", dir = "host", caught_by = "store/test_paths",
+   aim = "a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links",
+   old = "    TRY(path_charge(r, pos, given.len));\n", new = "    TRY(path_charge(r, pos, given.len));\n    if (rel.len > 0 && str_byte(rel, 0) != '/' && str_find_byte(rel, ':') == NULL) TRY(r->hook->check_root(r->hook->ctx, r, pos, rel));\n"},
+  {name = "a read-only mount's folder is worked out again per change", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+   aim = "read_only_mounts_folders_are_worked_out_once_a_run_so_a_change_s_check_allocates_nothing",
+   old = "        Str dir = paths_run_dir_of(h, r, m);\n        bool under", new = "        Str dir = S(\"\");\n        TRY(paths_cat(r, pos, paths_run_dir_of(h, r, m), S(\"\"), S(\"\"), &dir));\n        bool under"},
   {name = "the mounts file's line without `=` is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
    aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
    old = "S(\"the line is not `name = value`\"), none);", new = "S(\"`{s}` is not `name = value`\"), MSG_ARGS(MSG_FROM_HOST(line)));"},

@@ -157,9 +157,13 @@ today, the C gives as three vtables of function pointers, each returning
   ever takes the C, with a store of its own, is Steve's to decide; nothing
   here depends on it.
 - **`PathHook`**, `interp.PathHook`: `resolve` (a mount's path to an OS
-  path), `may_change` (asked before every change: a read-only mount
-  refuses, and the undo journal records the path's state), and
-  `absolute_hint` (the mount to name in an absolute path's stop). The Linux
+  path), `check_root` (a root path's own checks, once the core has held its
+  every part to be a name), `may_change` (asked before every change: a
+  read-only mount refuses, and the undo journal records the path's state),
+  `absolute_hint` (what an absolute path's stop may say: the root's words
+  alone, nothing named, or the mount to name), `names_secret` and
+  `in_secrets`. Every PathRun has one (`path_run_make` refuses none);
+  metal's would be `PATH_HOOK_NONE`, which knows no mounts. The Linux
   hook holds the mounts file's parse, the walk of each part with `lstat`
   (no symbolic link followed) and the secrets rule: no read, listing,
   `stat` or `real` of a secrets mount's files, no program handed its folder,

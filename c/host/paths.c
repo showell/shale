@@ -43,6 +43,22 @@ typedef struct {
 } PathsSecretDir;
 
 SLICE_TYPE(PathsSecretDirs, const PathsSecretDir);
+SLICE_TYPE(PathsRunDirs, const Str);
+
+// What the paths' checks need of a run that is fixed once it starts, worked
+// out once by paths_run_folders_make and read by paths_run_folders: the
+// run's root, absolute; each mount's folder as the run sees it (one inside
+// the CLI's root is taken against the run's own root), by the mount's
+// index; and the secrets mounts' folders, in the mounts' order. `root` and
+// `mounts` are what it was made for.
+typedef struct {
+    Str root_abs;
+    PathsRunDirs dirs;
+    PathsSecretDirs secrets;
+    Str root;
+    MountsItems mounts;
+    bool made;
+} PathsRunFolders;
 
 // The Linux host's paths, as Zig's `Host` holds them.
 typedef struct {
@@ -61,13 +77,9 @@ typedef struct {
     bool undo;
     Priors journal;
     size_t journal_bytes;
-    // The secrets mounts' folders, in the mounts' order, worked out by
-    // paths_secret_dirs_make for the run whose root is `secret_dirs_root`,
-    // over the mounts `secret_dirs_mounts`; paths_secret_dirs reads them.
-    PathsSecretDirs secret_dirs;
-    Str secret_dirs_root;
-    MountsItems secret_dirs_mounts;
-    bool secret_dirs_made;
+    // In the host's arena: a yield moves the run's values, and these outlive
+    // every call.
+    PathsRunFolders run;
 } Paths;
 
 static void paths_make(Paths *h, Arena *arena, Str root_abs, Str cwd_abs, MountsItems mounts, Str mounts_from) {
@@ -124,8 +136,79 @@ static STATUS_MUST_USE Status paths_absolute(Paths *h, PathRun *r, Pos pos, Str 
 }
 
 // The run's own root, absolute.
-static STATUS_MUST_USE Status paths_root_of(Paths *h, PathRun *r, Pos pos, Str *out) {
-    return paths_absolute(h, r, pos, mounts_trim_slash(r->root), out);
+// Works out the run `r`'s folders once (PathsRunFolders), where its PathRun
+// is made, and again when a test changes the mounts or the root, so no check
+// below works out a folder per call (a walk asks of every entry). false when
+// the host's arena refuses.
+static bool paths_run_folders_make(Paths *h, const PathRun *r) {
+    Arena *a = h->arena;
+    PathsRunFolders f;
+    memset(&f, 0, sizeof f);
+    Str given = mounts_trim_slash(r->root);
+    f.root_abs = given;
+    if (!(given.len > 0 && str_byte(given, 0) == '/') && !paths_resolve_posix(a, h->cwd_abs, given, &f.root_abs)) return false;
+    size_t n = h->mounts.len;
+    size_t nsecrets = 0;
+    for (size_t k = 0; k < n; k++) nsecrets += at(h->mounts, k).secrets ? 1 : 0;
+    Str *dirs = ARENA_ARRAY(a, Str, n);
+    PathsSecretDir *secrets = ARENA_ARRAY(a, PathsSecretDir, nsecrets);
+    if (dirs == NULL || secrets == NULL) return false;
+    SLICE_TYPE(MadeDirs, Str);
+    SLICE_TYPE(MadeSecrets, PathsSecretDir);
+    MadeDirs made_dirs = {dirs, n};
+    MadeSecrets made_secrets = {secrets, nsecrets};
+    size_t i = 0;
+    for (size_t k = 0; k < n; k++) {
+        const Mount *m = &at(h->mounts, k);
+        Str dir = m->dir;
+        if (mounts_in_folder(m->dir, h->root_abs)) {
+            Buf w = buf_make(a);
+            if (buf_str(&w, f.root_abs) != OK || buf_str(&w, str_sub(m->dir, h->root_abs.len, m->dir.len)) != OK) return false;
+            buf_fit(&w);
+            dir = buf_view(&w);
+        }
+        at(made_dirs, k) = dir;
+        if (!m->secrets) continue;
+        PathsSecretDir d = {m->name, m->dir, dir};
+        at(made_secrets, i) = d;
+        i++;
+    }
+    f.dirs = (PathsRunDirs){dirs, n};
+    f.secrets = (PathsSecretDirs){secrets, nsecrets};
+    f.root = r->root;
+    f.mounts = h->mounts;
+    f.made = true;
+    h->run = f;
+    return true;
+}
+
+// The run `r`'s folders.
+// DRAGON: the secrets rule and the store's boundaries. Folders worked out for
+// another root or other mounts would miss a secrets folder or a read-only
+// one, and every check below would let it by.
+// REMEDY: they are held to the root and the mounts they were made for, and
+// ones made for others, or none made, are a bug in the C that ends the
+// process; test_paths holds the death.
+static const PathsRunFolders *paths_run_folders(const Paths *h, const PathRun *r) {
+    const PathsRunFolders *f = &h->run;
+    bool same_mounts = f->mounts.ptr == h->mounts.ptr && f->mounts.len == h->mounts.len;
+    if (!f->made || !same_mounts || !str_eq(f->root, r->root)) c_bug("paths: the run's folders were not worked out for this run's root and mounts");
+    return f;
+}
+
+// The run's own root, absolute.
+static Str paths_root_of(const Paths *h, const PathRun *r) {
+    return paths_run_folders(h, r)->root_abs;
+}
+
+// The mount `m`'s folder (one of `h->mounts`) as this run sees it.
+static Str paths_run_dir_of(const Paths *h, const PathRun *r, const Mount *m) {
+    return at(paths_run_folders(h, r)->dirs, (size_t)(m - h->mounts.ptr));
+}
+
+// The secrets mounts' folders for the run `r`.
+static PathsSecretDirs paths_secret_dirs(const Paths *h, const PathRun *r) {
+    return paths_run_folders(h, r)->secrets;
 }
 
 // `a` then `b` then `c`, in the run's arena.
@@ -135,70 +218,6 @@ static STATUS_MUST_USE Status paths_cat(PathRun *r, Pos pos, Str a, Str b, Str c
     buf_fit(&w);
     *out = buf_view(&w);
     return OK;
-}
-
-// A mount's folder `dir` as a run whose root is `run_root` sees it, made in
-// `a`: one inside the CLI's root is taken against the run's own root,
-// absolute (paths_root_of's). false when the arena refuses.
-static bool paths_run_dir_in(const Paths *h, Arena *a, Str run_root, Str dir, Str *out) {
-    if (!mounts_in_folder(dir, h->root_abs)) {
-        *out = dir;
-        return true;
-    }
-    Str given = mounts_trim_slash(run_root);
-    Str root = given;
-    if (!(given.len > 0 && str_byte(given, 0) == '/') && !paths_resolve_posix(a, h->cwd_abs, given, &root)) return false;
-    Buf w = buf_make(a);
-    if (buf_str(&w, root) != OK || buf_str(&w, str_sub(dir, h->root_abs.len, dir.len)) != OK) return false;
-    buf_fit(&w);
-    *out = buf_view(&w);
-    return true;
-}
-
-// A mount's folder as this run sees it, in the run's arena.
-static STATUS_MUST_USE Status paths_run_dir_of(Paths *h, PathRun *r, Pos pos, const Mount *m, Str *out) {
-    if (!paths_run_dir_in(h, paths_values(r), r->root, m->dir, out)) return run_oom(r->ctx, pos);
-    return OK;
-}
-
-// Works out the secrets mounts' folders for the run `r`, once, in the host's
-// arena (a yield moves the run's values, and these outlive every call), so
-// the checks below read them and a walk's every entry allocates nothing for
-// them. Called where a run's PathRun is made, and again when a test changes
-// the mounts or the root. false when the arena refuses.
-static bool paths_secret_dirs_make(Paths *h, const PathRun *r) {
-    size_t n = 0;
-    for (size_t k = 0; k < h->mounts.len; k++) n += at(h->mounts, k).secrets ? 1 : 0;
-    PathsSecretDir *dirs = ARENA_ARRAY(h->arena, PathsSecretDir, n);
-    if (dirs == NULL) return false;
-    SLICE_TYPE(Made, PathsSecretDir);
-    Made made = {dirs, n};
-    size_t i = 0;
-    for (size_t k = 0; k < h->mounts.len; k++) {
-        const Mount *m = &at(h->mounts, k);
-        if (!m->secrets) continue;
-        PathsSecretDir d = {m->name, m->dir, S("")};
-        if (!paths_run_dir_in(h, h->arena, r->root, m->dir, &d.run_dir)) return false;
-        at(made, i) = d;
-        i++;
-    }
-    h->secret_dirs = (PathsSecretDirs){dirs, n};
-    h->secret_dirs_root = r->root;
-    h->secret_dirs_mounts = h->mounts;
-    h->secret_dirs_made = true;
-    return true;
-}
-
-// The secrets mounts' folders for the run `r`.
-// DRAGON: the secrets rule. A list worked out for another root or other
-// mounts would miss a secrets folder, and every check below would let it by.
-// REMEDY: the list is held to the root and the mounts it was made for, and
-// one made for others, or none made, is a bug in the C that ends the process;
-// test_paths holds the death.
-static PathsSecretDirs paths_secret_dirs(const Paths *h, const PathRun *r) {
-    bool same_mounts = h->secret_dirs_mounts.ptr == h->mounts.ptr && h->secret_dirs_mounts.len == h->mounts.len;
-    if (!h->secret_dirs_made || !same_mounts || !str_eq(h->secret_dirs_root, r->root)) c_bug("paths: the secrets folders were not worked out for this run's root and mounts");
-    return h->secret_dirs;
 }
 
 // Whether byte `c` can continue a file's name in a message: a letter, a
@@ -405,8 +424,7 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
         if (spells) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(store_err_name(why))));
         return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(m->dir), MSG_FROM_HOST(store_err_name(why))));
     }
-    Str dir = S("");
-    TRY(paths_run_dir_of(h, r, pos, m, &dir));
+    Str dir = paths_run_dir_of(h, r, m);
     TRY(paths_refuse_links(r, pos, dir, rest, str_sub(path, 0, colon + 1)));
     if (rest.len == 0) {
         *out = dir;
@@ -424,32 +442,26 @@ static bool paths_colon(Str path, size_t *colon) {
     return true;
 }
 
+// The `PathHook.check_root` of a root path whose every part the core has
+// held to be a name: its links, and its way into a secrets mount's folder,
+// are refused.
+static STATUS_MUST_USE Status paths_check_root(void *ctx, PathRun *r, Pos pos, Str path) {
+    Paths *h = ctx;
+    TRY(paths_refuse_links(r, pos, mounts_trim_slash(r->root), path, S("")));
+    if (paths_secret_dirs(h, r).len == 0) return OK;
+    Str abs = S("");
+    TRY(paths_cat(r, pos, paths_root_of(h, r), S("/"), path, &abs));
+    return paths_refuse_secrets_under(h, r, pos, path, abs);
+}
+
 // The `PathHook.resolve` of a mount's path to its folder joined with the
-// rest (`*resolved` true); a root path is left to the root's rules, after
-// its links and its way into a secrets mount's folder are refused. Zig's
-// `resolve`.
+// rest (`*resolved` true); a root path (no `:` in its first part) is left
+// to the core's rules, then paths_check_root. Zig's `resolve`.
 static STATUS_MUST_USE Status paths_resolve(void *ctx, PathRun *r, Pos pos, Str path, bool *resolved, Str *full) {
     Paths *h = ctx;
     *resolved = false;
     size_t colon = 0;
-    if (!paths_colon(path, &colon)) {
-        // The core checks a root path's names; links are refused only once
-        // every part is a name, so a bad name gets the core's message.
-        size_t from = 0;
-        while (from <= path.len) {
-            size_t to = path_part_end(path, from);
-            if (!store_fat_name(str_sub(path, from, to))) return OK;
-            if (to == path.len) break;
-            from = to + 1;
-        }
-        TRY(paths_refuse_links(r, pos, mounts_trim_slash(r->root), path, S("")));
-        if (paths_secret_dirs(h, r).len == 0) return OK;
-        Str root = S("");
-        TRY(paths_root_of(h, r, pos, &root));
-        Str abs = S("");
-        TRY(paths_cat(r, pos, root, S("/"), path, &abs));
-        return paths_refuse_secrets_under(h, r, pos, path, abs);
-    }
+    if (!paths_colon(path, &colon)) return OK;
     const Mount *m = NULL;
     TRY(paths_mount_of(h, r, pos, path, colon, &m));
     // DRAGON: the secrets rule. A secrets mount's own name reaching the store
@@ -476,9 +488,9 @@ static STATUS_MUST_USE Status paths_resolve(void *ctx, PathRun *r, Pos pos, Str 
 // stop names neither that mount nor where its folder is; neither does one
 // whose rest is no script's path. The folders are the CLI's (`root_abs`, a
 // mount's `dir`), as the script's author sees them.
-static STATUS_MUST_USE Status paths_absolute_hint(void *ctx, PathRun *r, Pos pos, Str abs_given, bool *has, AbsoluteHint *out) {
+static STATUS_MUST_USE Status paths_absolute_hint(void *ctx, PathRun *r, Pos pos, Str abs_given, AbsoluteHint *out) {
     Paths *h = ctx;
-    *has = false;
+    out->kind = ABSOLUTE_UNNAMED;
     Str abs = mounts_trim_slash(abs_given);
     PathsSecretDirs sd = paths_secret_dirs(h, r);
     for (size_t k = 0; k < sd.len; k++) {
@@ -512,7 +524,7 @@ static STATUS_MUST_USE Status paths_absolute_hint(void *ctx, PathRun *r, Pos pos
         from = to + 1;
     }
     Str tail = rest.len == 0 ? S(".") : rest;
-    *has = true;
+    out->kind = ABSOLUTE_HINTED;
     out->mount = best != NULL ? best->name : S("");
     out->spelled = tail;
     if (best == NULL) return OK;
@@ -520,20 +532,12 @@ static STATUS_MUST_USE Status paths_absolute_hint(void *ctx, PathRun *r, Pos pos
 }
 
 // Whether `abs` is under a writable mount whose folder is inside `ro_dir`:
-// the nearer mount decides. Zig's `underWritableWithin`, which reads a
-// failure to spell a mount's folder as no.
-static bool paths_under_writable_within(Paths *h, PathRun *r, Pos pos, Str abs, Str ro_dir) {
+// the nearer mount decides. Zig's `underWritableWithin`.
+static bool paths_under_writable_within(const Paths *h, const PathRun *r, Str abs, Str ro_dir) {
     for (size_t k = 0; k < h->mounts.len; k++) {
         const Mount *m = &at(h->mounts, k);
         if (m->access == MOUNT_READ_ONLY) continue;
-        Str dir = S("");
-        Stop saved = r->ctx->stop;
-        bool was = r->ctx->stopped;
-        if (paths_run_dir_of(h, r, pos, m, &dir) != OK) {
-            r->ctx->stop = saved;
-            r->ctx->stopped = was;
-            return false;
-        }
+        Str dir = paths_run_dir_of(h, r, m);
         if (dir.len <= ro_dir.len || !mounts_in_folder(dir, ro_dir)) continue;
         if (mounts_in_folder(abs, dir)) return true;
     }
@@ -603,10 +607,9 @@ static STATUS_MUST_USE Status paths_may_change(void *ctx, PathRun *r, Pos pos, S
         const Mount *m = &at(h->mounts, k);
         if (m->access != MOUNT_READ_ONLY) continue;
         bool named = str_starts_with(rel, m->name) && rel.len > m->name.len && str_byte(rel, m->name.len) == ':';
-        Str dir = S("");
-        TRY(paths_run_dir_of(h, r, pos, m, &dir));
+        Str dir = paths_run_dir_of(h, r, m);
         bool under = mounts_in_folder(abs, dir);
-        if (named || (under && !paths_under_writable_within(h, r, pos, abs, dir))) {
+        if (named || (under && !paths_under_writable_within(h, r, abs, dir))) {
             return path_fail(r, pos, CLASS_REFUSED, S("{s}: mount `{s}` is read-only"), MSG_ARGS(MSG_FROM_SCRIPT(rel), MSG_FROM_HOST(m->name)));
         }
     }
@@ -615,7 +618,7 @@ static STATUS_MUST_USE Status paths_may_change(void *ctx, PathRun *r, Pos pos, S
 }
 
 static void paths_hook(Paths *h, PathHook *out) {
-    PathHook v = {h, paths_resolve, paths_may_change, paths_absolute_hint, paths_names_secret, paths_in_secrets};
+    PathHook v = {h, paths_resolve, paths_check_root, paths_may_change, paths_absolute_hint, paths_names_secret, paths_in_secrets};
     *out = v;
 }
 

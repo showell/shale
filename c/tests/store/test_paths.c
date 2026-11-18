@@ -52,8 +52,8 @@ TEST(every_way_out_of_the_root_is_refused_before_the_store_is_asked) {
                    S("`read`: \"a/./b\" has a part (\".\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
     fx_again(&f);
     EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("mkdir"), S(""), false, &p), CLASS_ARGUMENT, S("`mkdir(\"\")` would act on the whole root: name a path of at least one part")));
-    // With no hook, as on metal, the absolute stop is the root's alone.
-    PathRun bare = {&f.ctx, f.base.root, fx_charge, &f, NULL};
+    // With metal's hook, the absolute stop is the root's alone.
+    PathRun bare = path_run_make(&f.ctx, f.base.root, fx_charge, &f, &PATH_HOOK_NONE);
     fx_again(&f);
     EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("/etc/passwd"), false, &p), CLASS_ARGUMENT, S("`read`: \"/etc/passwd\" is absolute: paths are relative to the data root")));
     // What is in the root is found, `.` is the root, and the steps are the
@@ -91,7 +91,7 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     EXPECT_STR(at(top, 0).dir, S("/"));
     EXPECT_STR(at(top, 1).dir, S("/tmp"));
     f.paths.mounts = Mounts_items(&ms);
-    EXPECT(paths_secret_dirs_make(&f.paths, &f.run));
+    EXPECT(paths_run_folders_make(&f.paths, &f.run));
     EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("runs:logs/a.txt"), S("via the mount")));
     Str text = S("");
     EXPECT(sx_file(&f.base, "elsewhere/logs/a.txt", &text));
@@ -131,7 +131,7 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     // No mounts at all: said so.
     MountsItems none = {NULL, 0};
     f.paths.mounts = none;
-    EXPECT(paths_secret_dirs_make(&f.paths, &f.run));
+    EXPECT(paths_run_folders_make(&f.paths, &f.run));
     EXPECT(fx_said(&f, fx_look(&f, "read", S("runs:x")), CLASS_ARGUMENT, S("\"runs:x\": `runs:` is not a mount: there are none (~/.config/shale/mounts)")));
     typedef struct {
         const char *text;
@@ -861,7 +861,7 @@ TEST(undo_a_relative_root_is_taken_against_the_working_folder_so_real_gives_an_a
     Str abs = f.base.root;
     // The same folder, spelled from the working folder.
     f.run.root = str_sub(abs, f.cwd.len + 1, abs.len);
-    EXPECT(paths_secret_dirs_make(&f.paths, &f.run));
+    EXPECT(paths_run_folders_make(&f.paths, &f.run));
     EXPECT(str_byte(f.run.root, 0) != '/');
     Str real = S("");
     EXPECT_OK_IN(&f.ctx, paths_os_path(&f.paths, &f.run, fx_pos(), S("real"), S(""), true, &real));
@@ -997,9 +997,11 @@ TEST(secrets_folders_are_worked_out_once_a_run_so_a_walk_s_check_of_each_entry_a
     Fx f;
     fx_init(&f);
     fx_two_vaults(&f);
-    EXPECT_EQ(f.paths.secret_dirs.len, 2);
-    EXPECT_STR(at(f.paths.secret_dirs, 1).name, S("v"));
-    EXPECT_STR(at(f.paths.secret_dirs, 1).run_dir, fx_r(&f, "R/deep/vault"));
+    EXPECT_EQ(f.paths.run.secrets.len, 2);
+    EXPECT_STR(at(f.paths.run.secrets, 1).name, S("v"));
+    EXPECT_STR(at(f.paths.run.secrets, 1).run_dir, fx_r(&f, "R/deep/vault"));
+    EXPECT_EQ(f.paths.run.dirs.len, 3);
+    EXPECT_STR(at(f.paths.run.dirs, 1), f.base.root);
     Str plain = fx_r(&f, "R/deep/notes.txt");
     Str sibling = fx_r(&f, "R/deep/vault2/x");
     Str in_first = fx_r(&f, "R/keys/tok");
@@ -1043,13 +1045,12 @@ TEST(secrets_folders_worked_out_once_every_refusal_still_fires_for_the_second_mo
     EXPECT(fx_said(&f, paths_refuse_secret_args(&f.paths, &f.run, fx_pos(), S("job_start"), none, f.base.root, ek, ev), CLASS_REFUSED,
                    S("`job_start`'s `env` F names the mount `v`'s folder, which holds secrets: hand one over as `secrets`")));
     // An absolute path inside one has no hint; one beside it has one.
-    bool has = true;
     AbsoluteHint hint;
     fx_again(&f);
-    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "R/deep/vault/tok"), &has, &hint));
-    EXPECT(!has);
-    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "R/deep/vault2/x"), &has, &hint));
-    EXPECT(has);
+    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "R/deep/vault/tok"), &hint));
+    EXPECT_EQ(hint.kind, ABSOLUTE_UNNAMED);
+    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "R/deep/vault2/x"), &hint));
+    EXPECT_EQ(hint.kind, ABSOLUTE_HINTED);
     EXPECT_STR(hint.spelled, S("deep/vault2/x"));
     // A text naming the second folder is a text naming a secret.
     bool names = false;
@@ -1083,6 +1084,69 @@ TEST(secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process
     fx_deinit(&f);
 }
 
+TEST(read_only_mounts_folders_are_worked_out_once_a_run_so_a_change_s_check_allocates_nothing) {
+    Fx f;
+    fx_init(&f);
+    sx_mkdir(&f.base, "frozen/open");
+    fx_mounts(&f, "ro = R/frozen ro\nopen = R/frozen/open\n");
+    Str inside = fx_r(&f, "R/frozen/open/a.txt");
+    Str beside = fx_r(&f, "R/notes.txt");
+    size_t values = f.base.values.used;
+    size_t host = f.host.used;
+    // A thousand changes' checks: the writable mount inside the read-only
+    // one decides for its folder, and not a byte is taken for the folders.
+    for (size_t i = 0; i < 1000; i++) {
+        fx_again(&f);
+        EXPECT_OK_IN(&f.ctx, f.hook.may_change(f.hook.ctx, &f.run, fx_pos(), S("x"), i % 2 == 0 ? inside : beside));
+    }
+    EXPECT_EQ(f.base.values.used, values);
+    EXPECT_EQ(f.host.used, host);
+    // The read-only folder itself is refused, by a root path and by its name.
+    EXPECT(fx_said(&f, fx_change(&f, "replace", S("frozen/a.txt"), S("x")), CLASS_REFUSED, S("frozen/a.txt: mount `ro` is read-only")));
+    EXPECT(fx_said(&f, fx_change(&f, "replace", S("ro:a.txt"), S("x")), CLASS_REFUSED, S("ro:a.txt: mount `ro` is read-only")));
+    EXPECT_OK_IN(&f.ctx, fx_change(&f, "replace", S("frozen/open/b.txt"), S("x")));
+    fx_deinit(&f);
+}
+
+TEST(a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_no_secret) {
+    Fx f;
+    fx_init(&f);
+    EXPECT_DIES((void)path_run_make(&f.ctx, f.base.root, fx_charge, &f, NULL));
+    PathRun bare = path_run_make(&f.ctx, f.base.root, fx_charge, &f, &PATH_HOOK_NONE);
+    StorePath p;
+    // A mount's spelling is a root path's part FAT refuses.
+    fx_again(&f);
+    EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("k:tok"), false, &p), CLASS_ARGUMENT, S("`read`: \"k:tok\" has a part (\"k:tok\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
+    fx_again(&f);
+    EXPECT_OK_IN(&f.ctx, path_arg(&bare, fx_pos(), S("read"), S("a/b"), false, &p));
+    EXPECT_STR(p.full, fx_r(&f, "R/a/b"));
+    bool yes = true;
+    EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.names_secret(NULL, &bare, fx_pos(), f.base.root, &yes));
+    EXPECT(!yes);
+    yes = true;
+    EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.in_secrets(NULL, &bare, fx_pos(), f.base.root, &yes));
+    EXPECT(!yes);
+    EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.may_change(NULL, &bare, fx_pos(), S("a"), f.base.root));
+    fx_deinit(&f);
+}
+
+TEST(a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links) {
+    Fx f;
+    fx_init(&f);
+    sx_mkdir(&f.base, "elsewhere");
+    fx_link(&f, "elsewhere", "lnk");
+    StorePath p;
+    // A bad part after a link: the core's message, never the link's.
+    fx_again(&f);
+    EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk//x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk//x\" has a part (\"\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
+    fx_again(&f);
+    EXPECT(fx_said(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk/../x"), false, &p), CLASS_ARGUMENT, S("`read`: \"lnk/../x\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)")));
+    // Every part a name: the hook's walk refuses the link.
+    fx_again(&f);
+    EXPECT(fx_stopped(&f, path_arg(&f.run, fx_pos(), S("read"), S("lnk/x"), false, &p), CLASS_REFUSED, S("lnk is a symbolic link: the store follows none")));
+    fx_deinit(&f);
+}
+
 TEST_MAIN(
     TEST_CASE(every_way_out_of_the_root_is_refused_before_the_store_is_asked),
     TEST_CASE(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_files_mistakes_by_line),
@@ -1111,5 +1175,8 @@ TEST_MAIN(
     TEST_CASE(a_host_report_line_naming_a_secrets_folder_ends_the_process),
     TEST_CASE(secrets_folders_are_worked_out_once_a_run_so_a_walk_s_check_of_each_entry_allocates_nothing),
     TEST_CASE(secrets_folders_worked_out_once_every_refusal_still_fires_for_the_second_mount),
-    TEST_CASE(secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process)
+    TEST_CASE(secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process),
+    TEST_CASE(read_only_mounts_folders_are_worked_out_once_a_run_so_a_change_s_check_allocates_nothing),
+    TEST_CASE(a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_no_secret),
+    TEST_CASE(a_root_path_s_names_are_the_core_s_to_check_before_the_hook_walks_its_links)
 )

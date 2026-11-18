@@ -56,9 +56,9 @@ static void fx_init(Fx *f) {
     Mounts none = Mounts_make(&f->host);
     paths_make(&f->paths, &f->host, f->base.root, f->cwd, Mounts_items(&none), S("~/.config/shale/mounts"));
     paths_hook(&f->paths, &f->hook);
-    PathRun r = {&f->ctx, f->base.root, fx_charge, f, &f->hook};
+    PathRun r = path_run_make(&f->ctx, f->base.root, fx_charge, f, &f->hook);
     f->run = r;
-    if (!paths_secret_dirs_make(&f->paths, &f->run)) abort();
+    if (!paths_run_folders_make(&f->paths, &f->run)) abort();
 }
 
 static void fx_deinit(Fx *f) {
@@ -92,7 +92,7 @@ static void fx_mounts(Fx *f, const char *text) { // cstr: a test's literal
         abort();
     }
     f->paths.mounts = Mounts_items(&ms);
-    if (!paths_secret_dirs_make(&f->paths, &f->run)) abort();
+    if (!paths_run_folders_make(&f->paths, &f->run)) abort();
 }
 
 // The run made ready for its next call: no stop, the steps kept.

@@ -428,7 +428,6 @@ static STATUS_MUST_USE Status change_write_diff(Run *r, Pos pos, Str rel, Str wa
 static STATUS_MUST_USE Status change_may(Run *r, Pos pos, const StorePath *p) {
     RunStore *rs = builtin_store_of(r);
     const PathHook *h = rs->path.hook;
-    if (h == NULL || h->may_change == NULL) return OK;
     return h->may_change(h->ctx, &rs->path, pos, p->rel, p->full);
 }
 

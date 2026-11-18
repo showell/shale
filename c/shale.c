@@ -632,9 +632,9 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     RunStore rs;
     memset(&rs, 0, sizeof rs);
     store_linux(&linux_store, &rs.store);
-    PathRun path = {&r.ctx, where.root.len == 0 ? S("/") : where.root, builtin_path_charge, &r, &hook};
+    PathRun path = path_run_make(&r.ctx, where.root.len == 0 ? S("/") : where.root, builtin_path_charge, &r, &hook);
     rs.path = path;
-    if (!paths_secret_dirs_make(&lh.paths, &rs.path)) return not_ported(o, S("the secrets folders past the arena"));
+    if (!paths_run_folders_make(&lh.paths, &rs.path)) return not_ported(o, S("the run's folders past the arena"));
     rs.effects = Effects_make(&values);
     rs.diffs_summary = !c->verbose;
     r.store = &rs;

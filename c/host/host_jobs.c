@@ -162,7 +162,7 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
         TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &cwd_v, S("its path"), &given));
         TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), given, true, &cwd));
     } else {
-        TRY(paths_root_of(&h->paths, &rs->path, pos, &cwd));
+        cwd = paths_root_of(&h->paths, &rs->path);
     }
     size_t n_env = env_t != NULL ? ValueMap_len(&env_t->map) : 0;
     Str *keys = ARENA_ARRAY(a, Str, n_env);

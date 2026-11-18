@@ -6,8 +6,8 @@
 //
 // A path is the root's unless the hook resolves it (a mount's, on Linux):
 // every part a name FAT holds, so `.`, `..`, empty parts and a leading `/`
-// are refused, `""` the root for the calls that only look. Metal has no
-// hook, and its paths are the root's.
+// are refused, `""` the root for the calls that only look. Metal's hook is
+// PATH_HOOK_NONE, and its paths are the root's.
 //
 // Include store.c first.
 
@@ -17,32 +17,45 @@
 // Declared ahead, for the hook's calls; defined below the hook.
 typedef struct PathRun PathRun;
 
-// An absolute path spelled as a script's (`PathHook.absolute_hint`): the
-// mount it is under, empty for the root (no mount's name is empty), and
-// `spelled` the path to write.
+// What the hook says of an absolute path: its host has no mounts (metal's,
+// so the stop is the root's alone), none may be named (no folder holds it,
+// or a secrets mount's does), or the folder that holds it.
+typedef enum {
+    ABSOLUTE_ROOT_ONLY,
+    ABSOLUTE_UNNAMED,
+    ABSOLUTE_HINTED,
+} AbsoluteHintKind;
+
+// An absolute path spelled as a script's (`PathHook.absolute_hint`): with
+// ABSOLUTE_HINTED, the mount it is under, empty for the root (no mount's
+// name is empty), and `spelled` the path to write.
 typedef struct {
+    AbsoluteHintKind kind;
     Str mount;
     Str spelled;
 } AbsoluteHint;
 
-// The one hook on paths, `interp.PathHook`, as a vtable. `resolve` gives
-// the OS path a mount's path names (`*resolved` false for the root's
-// rules); `may_change` is asked before anything is written and refuses a
-// read-only mount's path; `absolute_hint` gives the folder that holds an
-// absolute path, `*has` false when none may be named; `names_secret` says
-// whether a text names a secrets mount's folder; `in_secrets` whether an OS
-// path the store reached is a secrets mount's folder or inside it.
+// The one hook on paths, `interp.PathHook`, as a vtable; every PathRun has
+// one, metal's PATH_HOOK_NONE. `resolve` gives the OS path a mount's path
+// names (`*resolved` false for the root's rules); `check_root` is asked of a
+// root path once the core has held its every part to be a name; `may_change`
+// is asked before anything is written and refuses a read-only mount's path;
+// `absolute_hint` says what may be said of an absolute path; `names_secret`
+// says whether a text names a secrets mount's folder; `in_secrets` whether an
+// OS path the store reached is a secrets mount's folder or inside it.
 typedef struct {
     void *ctx;
     Status (*resolve)(void *ctx, PathRun *r, Pos pos, Str path, bool *resolved, Str *full);
+    Status (*check_root)(void *ctx, PathRun *r, Pos pos, Str path);
     Status (*may_change)(void *ctx, PathRun *r, Pos pos, Str rel, Str full);
-    Status (*absolute_hint)(void *ctx, PathRun *r, Pos pos, Str abs, bool *has, AbsoluteHint *out);
+    Status (*absolute_hint)(void *ctx, PathRun *r, Pos pos, Str abs, AbsoluteHint *out);
     Status (*names_secret)(void *ctx, PathRun *r, Pos pos, Str text, bool *names);
     Status (*in_secrets)(void *ctx, PathRun *r, Pos pos, Str full, bool *in);
 } PathHook;
 
 // What a path's check needs of the run: where its stops go, the run's
-// step charge, the data root, and the host's hook (NULL on metal).
+// step charge, the data root, and the host's hook (never NULL: path_run_make
+// holds it).
 typedef struct PathRun {
     RunCtx *ctx;
     // The data root as the run was given it.
@@ -52,6 +65,78 @@ typedef struct PathRun {
     void *vm;
     const PathHook *hook;
 } PathRun;
+
+// A PathRun, the one way one is made.
+// DRAGON: the store's boundaries and the secrets rule. A PathRun with no hook
+// would have every caller test for one, and a caller that forgot would
+// crash, or skip a check.
+// REMEDY: a hook is required here, metal's the no-op PATH_HOOK_NONE, and none
+// is a bug in the C that ends the process; test_paths holds the death.
+static PathRun path_run_make(RunCtx *ctx, Str root, Status (*charge)(void *vm, RunCtx *ctx, Pos pos, uint64_t n), void *vm, const PathHook *hook) {
+    if (hook == NULL) c_bug("path_run: a PathRun is made with no hook (metal's is PATH_HOOK_NONE)");
+    PathRun r = {ctx, root, charge, vm, hook};
+    return r;
+}
+
+// ── PATH_HOOK_NONE: metal's hook, which knows no mounts ──
+
+static STATUS_MUST_USE Status path_none_resolve(void *ctx, PathRun *r, Pos pos, Str path, bool *resolved, Str *full) {
+    (void)ctx;
+    (void)r;
+    (void)pos;
+    (void)path;
+    (void)full;
+    *resolved = false;
+    return OK;
+}
+
+static STATUS_MUST_USE Status path_none_check_root(void *ctx, PathRun *r, Pos pos, Str path) {
+    (void)ctx;
+    (void)r;
+    (void)pos;
+    (void)path;
+    return OK;
+}
+
+static STATUS_MUST_USE Status path_none_may_change(void *ctx, PathRun *r, Pos pos, Str rel, Str full) {
+    (void)ctx;
+    (void)r;
+    (void)pos;
+    (void)rel;
+    (void)full;
+    return OK;
+}
+
+static STATUS_MUST_USE Status path_none_absolute_hint(void *ctx, PathRun *r, Pos pos, Str abs, AbsoluteHint *out) {
+    (void)ctx;
+    (void)r;
+    (void)pos;
+    (void)abs;
+    out->kind = ABSOLUTE_ROOT_ONLY;
+    return OK;
+}
+
+static STATUS_MUST_USE Status path_none_names_secret(void *ctx, PathRun *r, Pos pos, Str text, bool *names) {
+    (void)ctx;
+    (void)r;
+    (void)pos;
+    (void)text;
+    *names = false;
+    return OK;
+}
+
+static STATUS_MUST_USE Status path_none_in_secrets(void *ctx, PathRun *r, Pos pos, Str full, bool *in) {
+    (void)ctx;
+    (void)r;
+    (void)pos;
+    (void)full;
+    *in = false;
+    return OK;
+}
+
+// Metal's hook: no mount resolves, every change may be made, an absolute
+// path's stop is the root's alone, and no text or path is a secret's.
+static const PathHook PATH_HOOK_NONE = {NULL, path_none_resolve, path_none_check_root, path_none_may_change, path_none_absolute_hint, path_none_names_secret, path_none_in_secrets};
 
 static STATUS_MUST_USE Status path_charge(PathRun *r, Pos pos, uint64_t n) {
     return r->charge(r->vm, r->ctx, pos, n);
@@ -155,13 +240,11 @@ static STATUS_MUST_USE Status msg_format(Buf *b, Str fmt, MsgArgs args) {
 // (docs/C-SEAMS.md, "The secrets rule's check").
 // test_paths plants a host argument that names one.
 static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str fmt, MsgArgs args) {
-    if (r->hook != NULL && r->hook->names_secret != NULL) {
-        for (size_t k = 0; k < args.len; k++) {
-            if (at(args, k).kind != MSG_HOST) continue;
-            bool names = false;
-            TRY(r->hook->names_secret(r->hook->ctx, r, pos, at(args, k).text, &names));
-            if (names) c_bug("path_run: a stop's message names a secrets mount's folder");
-        }
+    for (size_t k = 0; k < args.len; k++) {
+        if (at(args, k).kind != MSG_HOST) continue;
+        bool names = false;
+        TRY(r->hook->names_secret(r->hook->ctx, r, pos, at(args, k).text, &names));
+        if (names) c_bug("path_run: a stop's message names a secrets mount's folder");
     }
     Buf b = buf_make(r->ctx->values);
     Status built = msg_format(&b, fmt, args);
@@ -233,14 +316,13 @@ typedef struct {
 // The stop for an absolute path, the one home of its words: where the hook
 // knows the folder that holds it, the stop says how to write it there.
 static STATUS_MUST_USE Status path_absolute_stop(PathRun *r, Pos pos, Str who, Str abs) {
-    if (r->hook == NULL || r->hook->absolute_hint == NULL) {
-        return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: paths are relative to the data root"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs)));
-    }
-    bool has = false;
     AbsoluteHint hint;
     memset(&hint, 0, sizeof hint);
-    TRY(r->hook->absolute_hint(r->hook->ctx, r, pos, abs, &has, &hint));
-    if (!has) {
+    TRY(r->hook->absolute_hint(r->hook->ctx, r, pos, abs, &hint));
+    if (hint.kind == ABSOLUTE_ROOT_ONLY) {
+        return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: paths are relative to the data root"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs)));
+    }
+    if (hint.kind == ABSOLUTE_UNNAMED) {
         return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: paths are relative to the data root, or a mount's, `name:path` (`shale --help` lists this box's mounts)"),
                          MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs)));
     }
@@ -270,15 +352,13 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
         rel = str_sub(given, 0, given.len - 1);
     }
     TRY(path_charge(r, pos, given.len));
-    if (r->hook != NULL) {
-        bool resolved = false;
-        Str full = S("");
-        TRY(r->hook->resolve(r->hook->ctx, r, pos, rel, &resolved, &full));
-        if (resolved) {
-            out->full = full;
-            out->rel = rel;
-            return OK;
-        }
+    bool resolved = false;
+    Str full = S("");
+    TRY(r->hook->resolve(r->hook->ctx, r, pos, rel, &resolved, &full));
+    if (resolved) {
+        out->full = full;
+        out->rel = rel;
+        return OK;
     }
     if (rel.len == 0) {
         if (!allow_root) return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}(\"\")` would act on the whole root: name a path of at least one part"), MSG_ARGS(MSG_FROM_HOST(who)));
@@ -302,6 +382,8 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
         if (to == rel.len) break;
         from = to + 1;
     }
+    // Every part is a name: the hook's own checks of a root path.
+    TRY(r->hook->check_root(r->hook->ctx, r, pos, rel));
     // A root of `/` takes no second `/`: `//x` is an empty part to the store.
     bool sep = r->root.len == 0 || str_byte(r->root, r->root.len - 1) != '/';
     Buf b = buf_make(r->ctx->values);

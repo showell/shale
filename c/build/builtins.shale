@@ -29,7 +29,7 @@ const BUILTINS_PLANTS = {
    old = "        top->at = i + 1;", new = "        top->at = i;"},
   {name = "a change does not ask the hook", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
    aim = "attack_a_change_through_a_read_only_mount_is_refused_before_it_is_written,undo_on_stop_puts_back_a_file_changed_and_deletes_one_made",
-   old = "    if (h == NULL || h->may_change == NULL) return OK;", new = "    if (h != NULL || h == NULL) return OK;"},
+   old = "    return h->may_change(h->ctx, &rs->path, pos, p->rel, p->full);", new = "    (void)h;\n    return OK;"},
   {name = "the changes budget lets one more through", dir = "script", file = "builtins_change.c", caught_by = "store/test_builtins",
    aim = "the_changes_budget_stops_the_change_past_it",
    old = "if (r->changes >= r->ctx.budgets.changes)", new = "if (r->changes > r->ctx.budgets.changes)"},

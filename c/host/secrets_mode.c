@@ -405,10 +405,10 @@ static void secrets_target(Secrets *m, const Mount *mt, Str name, Str shown, Str
     paths_make(&paths, m->arena, m->cwd, m->cwd, m->mounts, m->mounts_from);
     PathHook hook;
     paths_hook(&paths, &hook);
-    PathRun run = {&ctx, m->cwd, secrets_no_charge, NULL, &hook};
+    PathRun run = path_run_make(&ctx, m->cwd, secrets_no_charge, NULL, &hook);
     Pos pos = {1, 1};
     Str got = S("");
-    if (!paths_secret_dirs_make(&paths, &run)) {
+    if (!paths_run_folders_make(&paths, &run)) {
         *why = S("the name cannot be checked");
     } else if (paths_secret_target(&paths, &run, pos, shown, &got) != OK) {
         bool plain_name = ctx.stopped && (ctx.stop.cls == CLASS_ARGUMENT || str_find_byte(name, '/') != NULL);

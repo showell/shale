@@ -66,12 +66,11 @@ static STATUS_MUST_USE Status walk_full(Run *r, Pos pos, Str folder, Str name, S
 
 // Whether `full`, an entry's OS path, is a secrets mount's folder or inside
 // it: the walk leaves such an entry out, unlisted, unstat'ed and unnamed, as
-// though it were not there. False on a host with no path hook (metal's).
+// though it were not there. False on metal (PATH_HOOK_NONE).
 static STATUS_MUST_USE Status walk_in_secrets(Run *r, Pos pos, Str full, bool *in) {
     *in = false;
     RunStore *rs = builtin_store_of(r);
     const PathHook *hook = rs->path.hook;
-    if (hook == NULL || hook->in_secrets == NULL) return OK;
     return hook->in_secrets(hook->ctx, &rs->path, pos, full, in);
 }
 
