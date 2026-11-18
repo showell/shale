@@ -611,7 +611,10 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     lh.paths.undo = c->undo_on_stop;
     SpawnStrs env = {NULL, 0};
     if (base_env(&host_arena, &env) != OK) return not_ported(o, S("an environment past the arena"));
-    host_make(&lh, env);
+    // The run's zig-ast, started at its first Zig call.
+    HostZigProc zig;
+    host_zig_init(&zig);
+    host_make(&lh, env, &zig);
     // The jobs' reaper is this program, `shale --reap`.
     char exe[PATH_MAX];
     ssize_t exe_len = readlink("/proc/self/exe", exe, sizeof exe);
@@ -633,7 +636,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     Status ran = run_ended(&r.ctx, vm_main(&r, &code));
     // The run's zig-ast, if a Zig call started one, ends with the run, before
     // any report line, so no early return below can skip it.
-    host_zig_stop();
+    host_zig_stop(&zig);
     // A stdout that refuses the output does not end the run's work: the
     // report, the jobs' end and the undo still come, then the failure.
     Str out_failed = write_stdout(buf_view(&r.out));

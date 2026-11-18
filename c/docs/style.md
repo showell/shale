@@ -168,6 +168,33 @@ and its self-test plants a break of each one.
   message.
 - A container takes its arena when it is made (`buf_make(a)`,
   `I64s_make(a)`) and keeps it.
+- An arena and the regex cache are made by an out-pointer initializer,
+  `arena_init(&a, limit, &ctx->refused)` and `regex_cache_init(&c,
+  &ctx->refused)`, not returned by value.
+
+## State
+
+- **Everything a run owns hangs off the run and is passed, never a static**
+  (Steve, 2026-11-18): as Odin's implicit `context` and Zig's explicit
+  allocators and `Io` are passed, so are the run's things here. Its arenas,
+  its refusal, its regex cache and its zig-ast are on its `RunCtx`, its
+  `Run` or its `Host`, and a function that needs one takes it. Two runs in
+  one process (the tests' runner makes many) share nothing.
+- A run's arenas are made with its refusal, `&ctx->refused`; one outside any
+  run (a test, the CLI's own setup and parse, the gate) points at a local of
+  the code that made it.
+- What a run starts and ends is held by the run's owner and handed in:
+  c/shale.c's run and the tests' `Ran` each hold a `HostZigProc`, which
+  `Host.zig` points at, and each ends it.
+- **Held:** no mutable variable of static storage, at file scope or inside a
+  function, but those named in `STATICS_KEPT` in c/check_discipline.shale,
+  each with why it is the process's and no run's: slice.h's bounds trap,
+  test.h's runner state and the compiler canary's counts. A `const` one
+  passes. So does a test's own in its function (`static Ran x;`), which
+  keeps a run off the C stack and is that test's alone.
+- What the process has once is no variable, and stays the process's: the
+  signal dispositions (`spawn_quiet_sigpipe`), a child's death signal, and
+  the environment `getenv` reads.
 
 ## Errors
 

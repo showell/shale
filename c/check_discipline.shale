@@ -43,6 +43,13 @@
 --   inline:     a function in a header is `static inline`;
 --   header:     a header's first line is `// <its name>: `, its guard
 --               `SHALE_<NAME>_H`, and its last line `#endif`;
+--   static state: no mutable variable of static storage, at file scope or
+--               in a function (`static int n;`, `static Foo *p = NULL;`),
+--               but those STATICS_KEPT names with why: what a run owns
+--               hangs off its RunCtx or its Run and is passed, never a
+--               static (style.md, "State"). A `const` one passes, and so
+--               does a function's own in c/tests/ (a test's `static Ran
+--               x;`, kept off the C stack);
 --   return size: no function returns a struct of 9 to 15 bytes by value,
 --               which TCC 0.9.27 miscompiles when the return goes straight
 --               into a call as its argument (style.md, "Declarations"); the
@@ -90,8 +97,8 @@
 -- `self_test=1` writes one plant of each rule, and lines that must pass
 -- beside them, to c/out/discipline/ (plant.h and outside.h judged as any
 -- file outside the foundation, inside.h as one in it, returns.c through the
--- probe, comments.c for the comment rules), and fails unless exactly the
--- plants are caught.
+-- probe, comments.c for the comment rules, statics.c for the static state),
+-- and fails unless exactly the plants are caught.
 --
 -- Run from the repository's root: shale c/check_discipline.shale
 -- budget: steps=100000000
@@ -101,7 +108,7 @@ const ALLOC = [=[\b(malloc|free|calloc|realloc|aligned_alloc|strdup|strndup)\s*\
 -- declaration's size is taken out (ARRAY_DECL); and a pointer's sum deref'd.
 const INDEX = [=[[\w)\]]\s*\[]=]
 const PTR_SUM = [=[\*\s*\(\s*[A-Za-z_][A-Za-z0-9_.>-]*ptr\s*\+]=]
-const ARRAY_DECL = [=[\b(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)(\s+\**\s*\w+)\s*\[[^\]]*\]]=]
+const ARRAY_DECL = [=[\b(int|char|bool|size_t|uintptr_t|u?int\d+_t|[A-Z]\w*)(\s+\**\s*(?:const\s+)?\w+)\s*\[[^\]]*\]]=]
 const MEM_CALL = [=[\bmem(cpy|move|set|cmp|_copy|_move|_compare)\s*\(]=]
 const RAW_MEM = [=[\bmem(cpy|move|cmp|chr)\s*\(]=]
 const SLICE_CALL = [=[\bSLICE_SUB\s*\(]=]
@@ -122,6 +129,16 @@ const COMMENT_RULES = {"comment wrap", "dragon remedy", "zig cite"}
 -- The folders (or c/shale.c) whose comment findings fail the check. A sweep
 -- adds its folder here once the folder is clean.
 const HELD = {"c/foundation", "c/gate", "c/host", "c/script", "c/shale.c", "c/shale_gate.c", "c/tests"}
+-- The mutable statics kept, each `<path>:<name>` with why it is the
+-- process's and no run's. A new one is a run's state until shown otherwise:
+-- it goes on the run, not here.
+const STATICS_KEPT = {
+  {at = "c/foundation/slice.h:trap", why = "the bounds trap a death test's child sets, the one way the process ends"},
+  {at = "c/foundation/test.h:state", why = "the test runner's own state, one runner a test process"},
+  {at = "c/tests/canaries/tcc_struct_return.c:seen_first", why = "the compiler canary, a program of its own and no run"},
+  {at = "c/tests/canaries/tcc_struct_return.c:seen_second", why = "the compiler canary, a program of its own and no run"},
+  {at = "c/tests/canaries/tcc_struct_return.c:seen_count", why = "the compiler canary, a program of its own and no run"},
+}
 const TOP = {"//", "#", "static inline ", "static ", "typedef ", "enum ", "SLICE_TYPE(", "VEC_DEFINE(", "MAP_DEFINE(", "TEST(", "TEST_MAIN(", "TEST_PART(", "TEST_PARTS_MAIN(", "_Static_assert(", "int main(", "}", ")"}
 
 -- The line's code: its strings and character literals emptied, its comments cut.
@@ -291,6 +308,48 @@ function fail_braced(raw)
   return false
 end
 
+-- STATICS_KEPT's places as a set.
+function kept_statics()
+  local set = {}
+  for k in STATICS_KEPT do set[k.at] = true end
+  return set
+end
+
+-- The variable a line's `static` declaration makes, as {name}, or nil when it
+-- declares a function or a `const` object. `code` is the line's code, its
+-- leading space taken off.
+function static_var(code)
+  local m = re_find(code, [=[^static\s+(.*)$]=])
+  if m == nil then return nil end
+  local s = m.group
+  if starts_with(s, "inline ") then return nil end
+  local stop = re_find(s, [=[[(=;\[{]]=])
+  if stop == nil then return nil end
+  local name = ""
+  local ty = ""
+  if stop.text == "(" then
+    local fp = re_find(s, [=[^([^(]*)\(\s*\*\s*(const\s+)?(\w+)\s*\)]=])
+    if fp == nil then return nil end
+    if fp.groups[2] ~= "" then return nil end
+    name = fp.groups[3]
+    ty = fp.groups[1] .. "*"
+  else
+    local head = trim(sub(s, 1, stop.at - 1))
+    local nm = re_find(head, [=[^(.*[\s*])(\w+)$]=])
+    if nm == nil then return nil end
+    name = nm.groups[2]
+    ty = nm.groups[1]
+  end
+  -- The object is `const` when its own declarator is: `const T x`, or the
+  -- part after a pointer's last `*` (`T *const x`); `const char *p` is a
+  -- pointer that changes.
+  local own = ty
+  local stars = find_all(ty, "*")
+  if #stars > 0 then own = sub(ty, stars[#stars] + 1) end
+  if re_find(own, [=[\bconst\b]=]) ~= nil then return nil end
+  return {name = name}
+end
+
 -- Each break of the rules in the file at `p`, as {path, line, rule, text}.
 -- `in_foundation` says whether it is judged as a foundation header.
 function check_file(p, in_foundation)
@@ -298,6 +357,7 @@ function check_file(p, in_foundation)
   local header = ends_with(p, ".h")
   local all = lines(read(p))
   local found = {}
+  local kept = kept_statics()
   if header then
     local guard = "#ifndef SHALE_" .. upper(sub(name, 1, #name - 2)) .. "_H"
     if #all == 0 or not starts_with(all[1], "// " .. name .. ": ") then
@@ -385,6 +445,13 @@ function check_file(p, in_foundation)
     end
     if header and find(raw, "{") ~= nil and re_find(raw, [=[^[A-Za-z_].*\w\s*\(.*\)\s*\{]=]) ~= nil and not starts_with(raw, "static inline ") and not starts_with(raw, "#") then
       push(found, {path = p, line = n, rule = "inline", text = raw})
+    end
+    if starts_with(trimmed, "static ") then
+      local in_fn = starts_with(raw, " ")
+      local v = static_var(trimmed)
+      if v ~= nil and not (in_fn and starts_with(p, "c/tests/")) and not has_key(kept, p .. ":" .. v.name) then
+        push(found, {path = p, line = n, rule = "static state", text = "`" .. v.name .. "` is a mutable static: what a run owns goes on its RunCtx or Run and is passed (c/docs/style.md, \"State\"); one truly the process's is named in STATICS_KEPT with why"})
+      end
     end
     -- The comment rules. A line whose code is empty (or a macro's `\`
     -- alone) may be a whole comment line, of one kind or the other.
@@ -822,21 +889,21 @@ function comment_plants_hold(p)
     {t = "    (x)", r = {}},
     -- A `DRAGON:` wants a `REMEDY:` line after it in its own comment.
     {t = "// DRAGON: a plant that nothing answers.", r = {"dragon remedy"}},
-    {t = "static int a1;", r = {}},
+    {t = "static const int a1 = 0;", r = {}},
     {t = "// DRAGON: a plant whose answer is mid-line. REMEDY: here.", r = {"dragon remedy"}},
-    {t = "static int a2;", r = {}},
+    {t = "static const int a2 = 0;", r = {}},
     {t = "// DRAGON: a plant answered in the next comment.", r = {"dragon remedy"}},
     {t = "", r = {}},
     {t = "// REMEDY: too late, since the blank line ended the comment.", r = {}},
-    {t = "static int a3;", r = {}},
+    {t = "static const int a3 = 0;", r = {}},
     {t = "// DRAGON: the first of two, which the one remedy can't answer.", r = {"dragon remedy"}},
     {t = "// DRAGON: the second of two.", r = {}},
     {t = "// REMEDY: the second's alone.", r = {}},
-    {t = "static int a4;", r = {}},
+    {t = "static const int a4 = 0;", r = {}},
     {t = "    // DRAGON: answered, as a near miss.", r = {}},
     {t = "    // It runs on a line or two.", r = {}},
     {t = "    // REMEDY: on a line of its own, in the same comment.", r = {}},
-    {t = "static int a5;", r = {}},
+    {t = "static const int a5 = 0;", r = {}},
     {t = "#define N(x) \\", r = {}},
     {t = "    /* DRAGON: a macro's, answered. */ \\", r = {}},
     {t = "    /* REMEDY: on a line of its own. */ \\", r = {}},
@@ -848,7 +915,7 @@ function comment_plants_hold(p)
     {t = "static const Str MARK = S(\"DRAGON: in a string\");", r = {}},
     -- A Zig citation breaks the last rule in a comment, never in a string.
     {t = "// A comment citing vm.zig:123 breaks it.", r = {"zig cite"}},
-    {t = "static int a6; // so does src/script/vm.zig:9 in a trailing one", r = {"zig cite"}},
+    {t = "static const int a6 = 0; // so does src/script/vm.zig:9 in a trailing one", r = {"zig cite"}},
     {t = "    /* as does a macro's lex.zig:40 */ \\", r = {"zig cite"}},
     {t = "// Naming vm.zig alone, or vm.zig: with no line, passes.", r = {}},
     {t = "static const Str CITE = S(\"a // b vm.zig:5\");", r = {}},
@@ -1019,6 +1086,25 @@ static inline void unmarked(uint64_t *xs, size_t n) { memcpy(xs, xs, n); }
 #endif
 ]=])
   caught = caught + plants_hold(inside, true, {"4 mem arithmetic", "4 raw mem", "8 raw mem"})
+  local statics = dir .. "/statics.c"
+  create(statics, [=[// statics.c: the static-state rule's plants: lines 2, 3, 4, 6 and 9 break it.
+static int count;
+static const char *name;
+static void (*hook)(int);
+static const Str FIXED = S("x");
+static Foo *cache = NULL;
+static char *const PINNED = NULL;
+static int counted(void) {
+    static uint64_t calls;
+    static const Str names[] = {
+    return 0;
+}
+static inline int also(void) { return 1; }
+static void (*const fixed_hook)(int) = NULL;
+// static int in_a_comment;
+static const char *const said = "static int in_a_string;";
+]=])
+  caught = caught + plants_hold(statics, false, {"2 static state", "3 static state", "4 static state", "6 static state", "9 static state"})
   caught = caught + comment_plants_hold(dir .. "/comments.c")
   remove_tree(dir)
   print("PASS self-test: " .. caught .. " plants caught, every other line passed")

@@ -8,7 +8,9 @@
 //
 // It is `tools:zig-ast/bin/zig-ast`, or the program `SHALE_ZIG_AST` names,
 // and it ends with the run (`host_zig_stop`), so a recipe that reads a
-// hundred files pays one program.
+// hundred files pays one program. It is the run's, a HostZigProc its owner
+// holds (c/shale.c's run, the tests' Ran) and hands the host (`Host.zig`),
+// never a static.
 //
 // Include zig_wire.c, paths.c and builtins_change.c first.
 
@@ -39,9 +41,9 @@ static Str host_zig_from_c(const char *s) { // cstr: the system's own
 enum { HOST_ZIG_EXIT_WAIT_MS = 2000, HOST_ZIG_STDERR_WAIT_MS = 2000 };
 
 // How long one request may wait on zig-ast (its header, a write, an
-// answer's bytes) before the call stops. A test
-// sets a shorter one.
-static uint64_t host_zig_answer_ms = 60000;
+// answer's bytes) before the call stops, unless the run sets another
+// (`HostZigProc.answer_ms`, which a test sets shorter).
+enum { HOST_ZIG_ANSWER_MS = 60000 };
 
 // The run's zig-ast: its pid, its three pipes, and the answers read ahead.
 // DRAGON: the run's deadline. zig-ast is a program of its own, and a hung
@@ -50,7 +52,7 @@ static uint64_t host_zig_answer_ms = 60000;
 // REMEDY: every wait polls under the request's `deadline` and drains stderr
 // into `said` the while (`host_zig_wait`); past it zig-ast is killed and the
 // call stops, saying so. test_zig_wire plants a hung one and a flood.
-typedef struct {
+typedef struct HostZigProc {
     bool started;
     pid_t pid;
     int in_w;
@@ -67,11 +69,19 @@ typedef struct {
     uint64_t deadline;
     // Set when a wait passed the deadline and zig-ast was killed.
     bool late;
+    // How long one request may wait on zig-ast.
+    uint64_t answer_ms;
 } HostZigProc;
 
-// The run's one zig-ast, a static since a `shale` process runs one run;
-// `host_zig_stop` ends it.
-static HostZigProc host_zig_proc;
+// Makes `*p` a run's zig-ast not yet started, which the run's first Zig call
+// starts and `host_zig_stop` ends.
+static inline void host_zig_init(HostZigProc *p) {
+    memset(p, 0, sizeof *p);
+    p->in_w = -1;
+    p->out_r = -1;
+    p->err_r = -1;
+    p->answer_ms = HOST_ZIG_ANSWER_MS;
+}
 
 static void host_zig_close(int *fd) {
     if (*fd >= 0) close(*fd);
@@ -91,8 +101,7 @@ static void host_zig_quiet(int sig) {
 // that does not exit on its stdin's end within HOST_ZIG_EXIT_WAIT_MS gets
 // KILL, its group with it, before the reap; and its death signal ends it
 // should `shale` itself be killed first.
-static void host_zig_stop(void) {
-    HostZigProc *p = &host_zig_proc;
+static void host_zig_stop(HostZigProc *p) {
     if (!p->started) return;
     host_zig_close(&p->in_w);
     int status = 0;
@@ -305,8 +314,7 @@ static bool host_zig_write_all(HostZigProc *p, Str s) {
 // what the waits drained, or else one read within
 // HOST_ZIG_STDERR_WAIT_MS, its spaces and newlines trimmed. One past the
 // deadline says so in place of `why`.
-static STATUS_MUST_USE Status host_zig_ended(Run *r, Pos pos, Str who, Str why) {
-    HostZigProc *p = &host_zig_proc;
+static STATUS_MUST_USE Status host_zig_ended(HostZigProc *p, Run *r, Pos pos, Str who, Str why) {
     struct pollfd fd = {p->err_r, POLLIN, 0};
     if (p->said_len == 0 && p->err_r >= 0 && poll(&fd, 1, HOST_ZIG_STDERR_WAIT_MS) > 0) host_zig_drain_err(p);
     Str got = {p->said, p->said_len};
@@ -317,15 +325,14 @@ static STATUS_MUST_USE Status host_zig_ended(Run *r, Pos pos, Str who, Str why) 
     Str said = str_sub(got, a, b);
     if (p->late) {
         Buf late = buf_make(r->ctx.values);
-        if (buf_lit(&late, "did not answer within ") == OK && buf_u64(&late, host_zig_answer_ms) == OK && buf_lit(&late, " ms") == OK) why = buf_view(&late);
+        if (buf_lit(&late, "did not answer within ") == OK && buf_u64(&late, p->answer_ms) == OK && buf_lit(&late, " ms") == OK) why = buf_view(&late);
     }
     return run_failf(r, pos, CLASS_HOST, "`{s}`: zig-ast {s}{s}{s}", S("`"), who, S("`: zig-ast "), why, said.len > 0 ? S(": ") : S(""), said);
 }
 
 // The run's zig-ast, started if it is not yet. A start
 // counts against the `programs` budget, as any program does.
-static STATUS_MUST_USE Status host_zig_proc_of(Paths *h, Run *r, Pos pos, Str who) {
-    HostZigProc *p = &host_zig_proc;
+static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r, Pos pos, Str who) {
     if (p->started) return OK;
     Arena *a = r->ctx.values;
     bool has_exe = false;
@@ -414,13 +421,13 @@ static STATUS_MUST_USE Status host_zig_proc_of(Paths *h, Run *r, Pos pos, Str wh
     p->to = 0;
     p->said_len = 0;
     p->late = false;
-    p->deadline = host_zig_mono_ms() + host_zig_answer_ms;
+    p->deadline = host_zig_mono_ms() + p->answer_ms;
     // Writes that would block wait in `host_zig_wait`, under the deadline.
     int fl = fcntl(p->in_w, F_GETFL, 0);
     if (fl >= 0) fcntl(p->in_w, F_SETFL, fl | O_NONBLOCK);
     Str said = S("");
     if (!host_zig_take_line(p, a, &said) || !str_starts_with(said, S(ZIG_WIRE_HEADER))) {
-        return host_zig_ended(r, pos, who, S("gave no `" ZIG_WIRE_HEADER "<zig version>` line first"));
+        return host_zig_ended(p, r, pos, who, S("gave no `" ZIG_WIRE_HEADER "<zig version>` line first"));
     }
     return OK;
 }
@@ -442,22 +449,21 @@ static STATUS_MUST_USE Status host_zig_wrong(HostZigAnswer *an) {
 }
 
 // Sends a request, `body`, and takes the answer.
-static STATUS_MUST_USE Status host_zig_ask(Paths *h, Arena *sa, Run *r, Pos pos, Str who, Str body, HostZigAnswer *an) {
-    TRY(host_zig_proc_of(h, r, pos, who));
-    HostZigProc *p = &host_zig_proc;
-    p->deadline = host_zig_mono_ms() + host_zig_answer_ms;
+static STATUS_MUST_USE Status host_zig_ask(HostZigProc *p, Paths *h, Arena *sa, Run *r, Pos pos, Str who, Str body, HostZigAnswer *an) {
+    TRY(host_zig_proc_of(p, h, r, pos, who));
+    p->deadline = host_zig_mono_ms() + p->answer_ms;
     // A stop says what zig-ast wrote while it served this request.
     p->said_len = 0;
     p->late = false;
     Buf head = buf_make(sa);
     if (buf_u64(&head, body.len) != OK || buf_byte(&head, '\n') != OK) return run_values_oom(r, pos);
-    if (!host_zig_write_all(p, buf_view(&head)) || !host_zig_write_all(p, body)) return host_zig_ended(r, pos, who, S("stopped taking requests"));
+    if (!host_zig_write_all(p, buf_view(&head)) || !host_zig_write_all(p, body)) return host_zig_ended(p, r, pos, who, S("stopped taking requests"));
     Str len = S("");
-    if (!host_zig_take_line(p, sa, &len)) return host_zig_ended(r, pos, who, S("ended before it answered"));
+    if (!host_zig_take_line(p, sa, &len)) return host_zig_ended(p, r, pos, who, S("ended before it answered"));
     size_t n = 0;
-    if (!zig_wire_int(len, &n)) return host_zig_ended(r, pos, who, S("answered with no length"));
+    if (!zig_wire_int(len, &n)) return host_zig_ended(p, r, pos, who, S("answered with no length"));
     Str got = S("");
-    if (!host_zig_take(p, sa, n, &got)) return host_zig_ended(r, pos, who, S("ended in the middle of its answer"));
+    if (!host_zig_take(p, sa, n, &got)) return host_zig_ended(p, r, pos, who, S("ended in the middle of its answer"));
     memset(an, 0, sizeof *an);
     an->lines.body = got;
     an->sa = sa;

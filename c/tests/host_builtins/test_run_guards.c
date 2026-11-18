@@ -161,10 +161,11 @@ static Str guards_zig_fake(Ran *x, const char *rel, const char *script) { // cst
 }
 
 TEST(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_deadline) {
-    uint64_t was = host_zig_answer_ms;
-    host_zig_answer_ms = 2000;
     static Ran x;
     guards_ran_with(&x, NULL, false);
+    // The deadline is the run's own, so a shorter one here is this run's
+    // alone.
+    x.zig.answer_ms = 2000;
     ran_put(&x, "root/a.zig", "const a = 1;\n");
     // 200,000 bytes on stderr before the answer: a host that did not drain
     // stderr would never get it.
@@ -180,6 +181,8 @@ TEST(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_de
 
     static Ran y;
     guards_ran_with(&y, NULL, false);
+    EXPECT_EQ(y.zig.answer_ms, 60000);
+    y.zig.answer_ms = 2000;
     ran_put(&y, "root/a.zig", "const a = 1;\n");
     Str hang = guards_zig_fake(&y, "hang.sh", "#!/bin/sh\necho 'zig-ast serve 1 fake'\nsleep 30\n");
     StoreCPath hang_cp;
@@ -194,7 +197,6 @@ TEST(zig_ast_s_stderr_is_drained_while_it_answers_and_a_hung_one_stops_at_the_de
     EXPECT_STR(got, S("const a = 1;\n"));
     ran_free(&y);
     EXPECT_EQ(unsetenv("SHALE_ZIG_AST"), 0);
-    host_zig_answer_ms = was;
 }
 
 TEST_PART(run_guards, TEST_CASE(a_nul_in_an_argument_an_env_or_a_secrets_name_is_refused_before_any_guard),

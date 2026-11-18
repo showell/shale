@@ -46,7 +46,7 @@ static STATUS_MUST_USE Status host_call(void *ctx, Run *r, Pos pos, Str name, Co
     Status ps = host_procs_call(lh, r, pos, name, args, out, &procs);
     if (procs) return ps;
     bool zig = false;
-    Status zs = host_zig_call(h, r, pos, name, args, out, &zig);
+    Status zs = host_zig_call(h, lh->zig, r, pos, name, args, out, &zig);
     if (zig) return zs;
     return run_failf(r, pos, CLASS_HOST, "`{s}`: not on this host", S("`"), name, S("`: not on this host"));
 }

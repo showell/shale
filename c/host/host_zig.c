@@ -137,7 +137,7 @@ static STATUS_MUST_USE Status host_zig_renames_none(Run *r, Pos pos) {
 // and writes through `edit`'s tail if anything is renamed. Gives
 // `{renamed, left_in_comments}` (and `left` with `via`). `{many = {a =
 // "x.a"}}` in place of `{from, to}` is `zig_renames`.
-static STATUS_MUST_USE Status host_zig_rename_in(Paths *h, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status host_zig_rename_in(Paths *h, HostZigProc *z, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
     r->tried_change = true;
     if (args.len != 3) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_rename` takes a path, `{{from, to}}` and options, given {d}", S("`zig_rename` takes a path, `{from, to}` and options, given "), run_unum(r, args.len));
     StorePath p;
@@ -201,7 +201,7 @@ static STATUS_MUST_USE Status host_zig_rename_in(Paths *h, Arena *sa, Run *r, Po
     for (size_t k = 0; o.scope == HOST_ZIG_SCOPE_VIA && k < o.via.len; k++) TRY(host_zig_req_line(r, pos, &req, S("via"), at(o.via, k), HOST_ZIG_NONE));
     TRY(host_zig_req_ok(r, pos, zig_wire_source(&req, was)));
     HostZigAnswer an;
-    TRY(host_zig_ask(h, sa, r, pos, r->host_call, buf_view(&req), &an));
+    TRY(host_zig_ask(z, h, sa, r, pos, r->host_call, buf_view(&req), &an));
     size_t renamed = 0;
     size_t left_in_comments = 0;
     HostZigEdits edits = HostZigEdits_make(sa);
@@ -282,7 +282,7 @@ static STATUS_MUST_USE Status host_zig_rename_in(Paths *h, Arena *sa, Run *r, Po
 // `host("zig_decls", path[, {container}])`: a Zig file's top-level
 // declarations (or that container's members) as maps, in file order. A
 // parse error stops the run at its first line.
-static STATUS_MUST_USE Status host_zig_decls_in(Paths *h, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status host_zig_decls_in(Paths *h, HostZigProc *z, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
     if (args.len < 1 || args.len > 2) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_decls` takes a path and options, given {d} arguments", S("`zig_decls` takes a path and options, given "), run_unum(r, args.len), S(" arguments"));
     bool has_container = false;
     Str container = S("");
@@ -309,7 +309,7 @@ static STATUS_MUST_USE Status host_zig_decls_in(Paths *h, Arena *sa, Run *r, Pos
     if (has_container) TRY(host_zig_req_line(r, pos, &req, S("container"), container, HOST_ZIG_NONE));
     TRY(host_zig_req_ok(r, pos, zig_wire_source(&req, src)));
     HostZigAnswer an;
-    TRY(host_zig_ask(h, sa, r, pos, r->host_call, buf_view(&req), &an));
+    TRY(host_zig_ask(z, h, sa, r, pos, r->host_call, buf_view(&req), &an));
     Table *list = NULL;
     TRY(host_zig_list(r, pos, &list));
     // The declaration whose `u` and `r` lines come next.
@@ -384,7 +384,7 @@ static STATUS_MUST_USE Status host_zig_decls_in(Paths *h, Arena *sa, Run *r, Pos
 
 // `host("zig_tokens", path[, {tag}])`: the file's tokens as `{tag, text,
 // line}`, `tag` a std.zig.Token.Tag name; `{tag = name}` keeps one kind.
-static STATUS_MUST_USE Status host_zig_tokens_in(Paths *h, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status host_zig_tokens_in(Paths *h, HostZigProc *z, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
     if (args.len < 1 || args.len > 2) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_tokens` takes a path and options, given {d} arguments", S("`zig_tokens` takes a path and options, given "), run_unum(r, args.len), S(" arguments"));
     bool has_only = false;
     Str only = S("");
@@ -411,7 +411,7 @@ static STATUS_MUST_USE Status host_zig_tokens_in(Paths *h, Arena *sa, Run *r, Po
     if (has_only) TRY(host_zig_req_line(r, pos, &req, S("tag"), only, HOST_ZIG_NONE));
     TRY(host_zig_req_ok(r, pos, zig_wire_source(&req, src)));
     HostZigAnswer an;
-    TRY(host_zig_ask(h, sa, r, pos, r->host_call, buf_view(&req), &an));
+    TRY(host_zig_ask(z, h, sa, r, pos, r->host_call, buf_view(&req), &an));
     Table *list = NULL;
     TRY(host_zig_list(r, pos, &list));
     // Each tag's name, by its number, as the answer names it.
@@ -617,7 +617,7 @@ static Str host_zig_basename(Str p) {
 // from one Zig file to another (zig-ast plans it) and says what the move
 // broke. A missing `to` is made. `to` is written before `from`, so a stop
 // between them leaves the declarations in both, never in neither.
-static STATUS_MUST_USE Status host_zig_move_in(Paths *h, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status host_zig_move_in(Paths *h, HostZigProc *z, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
     r->tried_change = true;
     if (args.len != 3) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_move` takes `from`, `to` and `{{names, opts}}`, given {d}", S("`zig_move` takes `from`, `to` and `{names, opts}`, given "), run_unum(r, args.len));
     StorePath p;
@@ -662,7 +662,7 @@ static STATUS_MUST_USE Status host_zig_move_in(Paths *h, Arena *sa, Run *r, Pos 
     TRY(host_zig_req_ok(r, pos, zig_wire_source(&req, from_src)));
     TRY(host_zig_req_ok(r, pos, zig_wire_source(&req, to_src)));
     HostZigAnswer an;
-    TRY(host_zig_ask(h, sa, r, pos, r->host_call, buf_view(&req), &an));
+    TRY(host_zig_ask(z, h, sa, r, pos, r->host_call, buf_view(&req), &an));
     static const Str group_names_all[] = {S_ITEM("to"), S_ITEM("from"), S_ITEM("to_q"), S_ITEM("to_i"), S_ITEM("from_p")};
     static const Str report_names_all[] = {S_ITEM("needs_pub"), S_ITEM("needs_import"), S_ITEM("needs_from_from"), S_ITEM("uses_left")};
     _Static_assert(sizeof group_names_all / sizeof *group_names_all == HOST_ZIG_GROUPS, "a name for each group");
@@ -877,7 +877,7 @@ static bool host_zig_resolve(Arena *a, Str dir, Str target, Str *out) {
 // source order, as `{kind, target, name, line, file}`, `file` being `found`
 // or `missing` beside the importer, or `module` for a target with no
 // extension.
-static STATUS_MUST_USE Status host_zig_imports_in(Paths *h, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status host_zig_imports_in(Paths *h, HostZigProc *z, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out) {
     if (args.len != 1) return run_failf(r, pos, CLASS_ARGUMENT, "`zig_imports` takes a path, given {d} arguments", S("`zig_imports` takes a path, given "), run_unum(r, args.len), S(" arguments"));
     StorePath p;
     TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
@@ -887,7 +887,7 @@ static STATUS_MUST_USE Status host_zig_imports_in(Paths *h, Arena *sa, Run *r, P
     TRY(host_zig_req_line(r, pos, &req, S("imports"), HOST_ZIG_NONE, HOST_ZIG_NONE));
     TRY(host_zig_req_ok(r, pos, zig_wire_source(&req, src)));
     HostZigAnswer an;
-    TRY(host_zig_ask(h, sa, r, pos, r->host_call, buf_view(&req), &an));
+    TRY(host_zig_ask(z, h, sa, r, pos, r->host_call, buf_view(&req), &an));
     Str dir = host_zig_dirname(p.full);
     Table *list = NULL;
     TRY(host_zig_list(r, pos, &list));
@@ -941,28 +941,29 @@ static STATUS_MUST_USE Status host_zig_imports_in(Paths *h, Arena *sa, Run *r, P
 
 // ── the calls ──
 
-typedef Status (*HostZigCall)(Paths *h, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out);
+typedef Status (*HostZigCall)(Paths *h, HostZigProc *z, Arena *sa, Run *r, Pos pos, ConstValues args, Value *out);
 
 // One of the Zig calls, with its own scratch for the request and the answer:
 // an arena capped by what the run's arena budget has left, as Zig's
 // `Scratch` is, and given back when the call returns.
-static STATUS_MUST_USE Status host_zig_with_scratch(HostZigCall f, Paths *h, Run *r, Pos pos, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status host_zig_with_scratch(HostZigCall f, Paths *h, HostZigProc *z, Run *r, Pos pos, ConstValues args, Value *out) {
     Arena *values = r->ctx.values;
     Arena sa;
     arena_init(&sa, run_sat_sub(values->limit, values->held), &r->ctx.refused);
-    Status s = f(h, &sa, r, pos, args, out);
+    Status s = f(h, z, &sa, r, pos, args, out);
     arena_deinit(&sa);
     return s;
 }
 
-// The Zig call `name`, `*handled` false for a name that is none of them.
-static STATUS_MUST_USE Status host_zig_call(Paths *h, Run *r, Pos pos, Str name, ConstValues args, Value *out, bool *handled) {
+// The Zig call `name`, `*handled` false for a name that is none of them,
+// asked of the run's zig-ast `z`.
+static STATUS_MUST_USE Status host_zig_call(Paths *h, HostZigProc *z, Run *r, Pos pos, Str name, ConstValues args, Value *out, bool *handled) {
     *handled = true;
-    if (str_eq(name, S("zig_rename"))) return host_zig_with_scratch(host_zig_rename_in, h, r, pos, args, out);
-    if (str_eq(name, S("zig_decls"))) return host_zig_with_scratch(host_zig_decls_in, h, r, pos, args, out);
-    if (str_eq(name, S("zig_move"))) return host_zig_with_scratch(host_zig_move_in, h, r, pos, args, out);
-    if (str_eq(name, S("zig_imports"))) return host_zig_with_scratch(host_zig_imports_in, h, r, pos, args, out);
-    if (str_eq(name, S("zig_tokens"))) return host_zig_with_scratch(host_zig_tokens_in, h, r, pos, args, out);
+    if (str_eq(name, S("zig_rename"))) return host_zig_with_scratch(host_zig_rename_in, h, z, r, pos, args, out);
+    if (str_eq(name, S("zig_decls"))) return host_zig_with_scratch(host_zig_decls_in, h, z, r, pos, args, out);
+    if (str_eq(name, S("zig_move"))) return host_zig_with_scratch(host_zig_move_in, h, z, r, pos, args, out);
+    if (str_eq(name, S("zig_imports"))) return host_zig_with_scratch(host_zig_imports_in, h, z, r, pos, args, out);
+    if (str_eq(name, S("zig_tokens"))) return host_zig_with_scratch(host_zig_tokens_in, h, z, r, pos, args, out);
     *handled = false;
     return OK;
 }

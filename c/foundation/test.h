@@ -230,7 +230,7 @@ typedef struct {
     Str file;
 } TestPart;
 
-SLICE_TYPE(TestParts, const TestPart *);
+SLICE_TYPE(TestParts, const TestPart *const);
 
 // Whether every comma-separated name in `only` names a case of one of the
 // parts; the first that doesn't goes in `missing`.
@@ -337,7 +337,7 @@ static inline int test_run(TestParts parts, Str file) {
 #define TEST_MAIN(...)                                                              \
     TEST_PART(main_file, __VA_ARGS__);                                              \
     int main(void) {                                                                \
-        static const TestPart *parts[] = {&test_part_main_file};                    \
+        static const TestPart *const parts[] = {&test_part_main_file};              \
         TestParts all = {parts, 1};                                                 \
         return test_run(all, S(__FILE__));                                          \
     }
@@ -346,7 +346,7 @@ static inline int test_run(TestParts parts, Str file) {
 // it includes each part's file.
 #define TEST_PARTS_MAIN(...)                                                        \
     int main(void) {                                                                \
-        static const TestPart *parts[] = {__VA_ARGS__};                             \
+        static const TestPart *const parts[] = {__VA_ARGS__};                       \
         TestParts all = {parts, sizeof parts / sizeof(const TestPart *)};           \
         return test_run(all, S(__FILE__));                                          \
     }

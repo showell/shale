@@ -59,6 +59,8 @@ typedef struct {
     Str root;
     LinuxStore linux_store;
     Host lh;
+    // The run's zig-ast, which ran_free ends.
+    HostZigProc zig;
     PathHook hook;
     RunStore store;
     Program prog;
@@ -143,7 +145,8 @@ static void ran_init(Ran *x, RanOpts o) {
     paths_make(&x->lh.paths, &x->host, x->root, x->dir, Mounts_items(&loaded.mounts), loaded.from);
     x->lh.paths.undo = o.undo;
     SpawnStrs env = {NULL, 0};
-    host_make(&x->lh, env);
+    host_zig_init(&x->zig);
+    host_make(&x->lh, env, &x->zig);
     paths_hook(&x->lh.paths, &x->hook);
     x->store.diffs_summary = !o.verbose;
 }
@@ -246,7 +249,7 @@ static void ran_wait_reapers(Ran *x) {
 
 static void ran_free(Ran *x) {
     // A Zig call's zig-ast ends with the run, as the CLI ends it.
-    host_zig_stop();
+    host_zig_stop(&x->zig);
     regex_cache_deinit(&x->r.patterns);
     ran_wait_reapers(x);
     StoreErr del = store_os_delete_tree(&x->host, x->dir);

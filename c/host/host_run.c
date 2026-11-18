@@ -81,10 +81,14 @@ typedef struct {
     Str reaper;
     // The jobs this run started, for a stop to end (`host_jobs_stop_with_run`).
     HostStartedJobs started;
+    // The run's zig-ast (zig_ast.c), which the run's owner holds and ends.
+    struct HostZigProc *zig;
 } Host;
 
-static void host_make(Host *h, SpawnStrs env) {
+static void host_make(Host *h, SpawnStrs env, struct HostZigProc *zig) {
+    if (zig == NULL) c_bug("host_run: a host made with no zig-ast of its run's");
     h->env = env;
+    h->zig = zig;
     memset(&h->time, 0, sizeof h->time);
     h->records = HostRecords_make(h->paths.arena);
     h->has_reaper = false;
