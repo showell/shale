@@ -95,8 +95,8 @@
 -- compiler reports a `missing method`.
 --
 -- By default the recipe first reads every expression's type from Roc's own
--- type checker, `roc-types` (`tools:roc-types/bin/roc-types`, built from
--- Shale's `tools/roc_types` and read through cookbook/roc/types.shale). It
+-- type checker, `roc-types` (`tools:roc-types/bin/roc-types`, from
+-- https://github.com/showell/roc-types, read through cookbook/roc/types.shale). It
 -- runs once on each root, before any file is tried. The type of each
 -- candidate's first argument decides what happens to it:
 --   - a concrete type of another kind (`List(U8)` for a `Str` call, a
@@ -1102,7 +1102,7 @@ end
 -- Runs every plant in a child run of its own; a failed plant is named, and
 -- the rest still run.
 function self_test()
-  if not exists(ROC_TYPES_EXE) then fail("rewrite_method_calls: self-test: no " .. ROC_TYPES_EXE .. ", which the plants marked `types` are judged by: Shale's `shale tools/roc_types/install.shale` installs it") end
+  if not exists(ROC_TYPES_EXE) then fail("rewrite_method_calls: self-test: no " .. ROC_TYPES_EXE .. ", which the plants marked `types` are judged by: " .. ROC_TYPES_INSTALL) end
   local failed = {}
   local globbed = paths_of_globs(PLANTS_DIR .. "/Proven.roc, " .. PLANTS_DIR .. "/NoC*.roc," .. PLANTS_DIR .. "/Proven.roc")
   local globs_held = #globbed == 2 and basename(globbed[1]) == "Proven.roc" and basename(globbed[2]) == "NoCalls.roc"

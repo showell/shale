@@ -1,4 +1,0 @@
-# The published roc-types asset, read by install.shale and CI (test.yml):
-# its URL and its sha256, each `key value` on a line. A TODO is refused.
-url https://github.com/showell/roc-apps/releases/download/roc-types-2026-11-16/roc-types-3-34bd006-linux-x86_64.tar.gz
-sha256 cd845659c8f6e167d0dff543f7a342fe41c361f7d5f1f4fdb8597a2e35a2f527

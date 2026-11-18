@@ -290,8 +290,9 @@ run on their own.
   `groups_to_unstack(ls, tokens, width)`, and what it can't reach,
   `without_targets_section(ls)`. Used by `wrap_long_lines` and `check_stacking`, so the two
   read a group the same way.
-- [types.shale](types.shale): runs roc-types, Shale's tool that asks Roc's
-  type checker for the type of every expression and pattern in an app.
+- [types.shale](types.shale): runs
+  [roc-types](https://github.com/showell/roc-types), the tool that asks
+  Roc's type checker for the type of every expression and pattern in an app.
   `roc_types(root, roc)` reads one app; `roc_types_for_files(who, root,
   roc, paths, exempt)` gathers the types for a recipe's files from one or
   more apps and lists the files none of them reaches. Used by
@@ -314,12 +315,12 @@ run on their own.
 
 ## Tools the recipes need
 
-Run the install scripts from the shale checkout.
-
 - roc-ast, Roc's own parser, gives the recipes their syntax trees through
-  Shale's `roc_tree`. Install it with `shale tools/roc_ast/install.shale`.
-- roc-types gives the types. Install it with
-  `shale tools/roc_types/install.shale`.
+  Shale's `roc_tree`. Install it with `shale tools/roc_ast/install.shale`,
+  run from the shale checkout.
+- [roc-types](https://github.com/showell/roc-types) gives the types. Its
+  source is a repo of its own; install it by running `shale install.shale`
+  in a checkout of that repo. It lands at `~/tools/roc-types/bin/roc-types`.
 - The Roc compiler named in `roc-version`, at `tools:roc-<version>/roc`.
 
 ## Writing a recipe that edits Roc

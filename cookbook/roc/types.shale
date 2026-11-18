@@ -1,13 +1,15 @@
 -- A library for the Roc recipes that check types, loaded with
--- `use("cookbook:roc/types.shale")`. It runs roc-types, Shale's tool that
--- asks Roc's own type checker for the type of every expression and pattern
--- in an app, and reads what the tool prints. The tool's source is
--- tools/roc_types, and `shale tools/roc_types/install.shale` installs it
--- under the `tools` mount. Its output format is described at the top of
--- tools/roc_types/main.zig; this file reads version 1 of that format.
+-- `use("cookbook:roc/types.shale")`. It runs roc-types, the tool that asks
+-- Roc's own type checker for the type of every expression and pattern in an
+-- app, and reads what the tool prints. The tool's home is its own repo,
+-- https://github.com/showell/roc-types, whose install.shale installs it
+-- under the `tools` mount. Its output format is that repo's FORMAT.md; this
+-- file reads version 1 of that format.
 
 const ROC_TYPES_EXE = "tools:roc-types/bin/roc-types"
 const ROC_TYPES_FORMAT = "1"
+-- How to install it, for the stops that find it missing or mismatched.
+const ROC_TYPES_INSTALL = "`shale install.shale` in a checkout of https://github.com/showell/roc-types installs it"
 
 -- A type's text with roc-types' escapes of `\`, tab, newline and carriage
 -- return undone.
@@ -61,12 +63,12 @@ function parse_roc_types_output(r, root, roc)
   local all = lines(r.out)
   local head = ""
   if #all > 0 then head = all[1] end
-  if not starts_with(head, "roc-types ") then fail("`roc_types`: no `roc-types " .. ROC_TYPES_FORMAT .. "` header (" .. root .. ", the first line `" .. head .. "`): an older roc-types, or not roc-types; Shale's `shale tools/roc_types/install.shale` installs the one this reads") end
+  if not starts_with(head, "roc-types ") then fail("`roc_types`: no `roc-types " .. ROC_TYPES_FORMAT .. "` header (" .. root .. ", the first line `" .. head .. "`): an older roc-types, or not roc-types; " .. ROC_TYPES_INSTALL) end
   local said = words(head)
-  if #said < 2 or said[2] ~= ROC_TYPES_FORMAT then fail("`roc_types`: roc-types' header is `" .. head .. "`, not format " .. ROC_TYPES_FORMAT .. "'s, the one this reads: Shale's `shale tools/roc_types/install.shale` installs the matching roc-types") end
+  if #said < 2 or said[2] ~= ROC_TYPES_FORMAT then fail("`roc_types`: roc-types' header is `" .. head .. "`, not format " .. ROC_TYPES_FORMAT .. "'s, the one this reads; " .. ROC_TYPES_INSTALL) end
   if #said ~= 3 then fail("`roc_types`: a header that is not `roc-types <N> <pin>`: " .. head) end
   local own = "tools:roc-" .. said[3] .. "/roc"
-  if not exists(own) or real(own) ~= roc then fail("`roc_types`: roc-types reads Roc " .. said[3] .. ", and " .. root .. "'s tree is built with " .. roc .. ": its types would be another compiler's. Install the roc-types of the tree's pin (Shale's tools/roc_types), or move the tree to " .. said[3]) end
+  if not exists(own) or real(own) ~= roc then fail("`roc_types`: roc-types reads Roc " .. said[3] .. ", and " .. root .. "'s tree is built with " .. roc .. ": its types would be another compiler's. Install the roc-types of the tree's pin (https://github.com/showell/roc-types), or move the tree to " .. said[3]) end
   if r.ended ~= "exit" or r.code ~= 0 then
     local why = slice(all, 2, 61)
     if #all > 61 then push(why, "(" .. (#all - 61) .. " lines more)") end
@@ -121,7 +123,7 @@ end
 -- version other than `roc`'s.
 function roc_types(root, roc)
   local exe = roc_types_exe(roc)
-  if not exists(exe) then fail("`roc_types`: no " .. exe .. ": Shale's `shale tools/roc_types/install.shale` installs it") end
+  if not exists(exe) then fail("`roc_types`: no " .. exe .. ": " .. ROC_TYPES_INSTALL) end
   return parse_roc_types_output(run({real(exe), real(root)}, {timeout_ms = 300000, whole = 64000000}), root, roc)
 end
 

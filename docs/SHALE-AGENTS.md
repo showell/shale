@@ -399,14 +399,15 @@ has none of it):
   which; `tools/go_ast/main.go`'s header has the format. A file that does
   not parse, or cannot be read, is that file's `err`. The Go recipes are
   [`cookbook/go/`](../cookbook/go/README.md).
-  **The types beside the tree:** roc-types (Shale's `tools/roc_types`) is
+  **The types beside the tree:**
+  [roc-types](https://github.com/showell/roc-types), a repo of its own, is
   Roc's own checker at the same pin, through the compiler's embedding API:
   given an app, it writes every expression's and pattern's type, by
   region, for every module the app reaches, and fails on any error. It
   links most of the compiler, so it is built on GitHub and installed by
-  `shale tools/roc_types/install.shale` as `roc-types/bin/roc-types` under
-  the `tools` mount. Its format's home is `tools/roc_types/main.zig`'s
-  header; the library `cookbook:roc/types.shale` reads it,
+  that repo's install.shale (`shale install.shale` in its checkout) as
+  `roc-types/bin/roc-types` under the `tools` mount. Its format's home is
+  that repo's FORMAT.md; the library `cookbook:roc/types.shale` reads it,
   `roc_types(root, roc)`, `roc` the tree's Roc, whose pin roc-types' must
   be.
 
