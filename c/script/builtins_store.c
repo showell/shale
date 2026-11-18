@@ -561,11 +561,27 @@ static STATUS_MUST_USE Status builtin_range_args(Run *r, Pos pos, Builtin b, Con
     return OK;
 }
 
+// What a scanning builtin asks of a scan, filled by its wrapper so the
+// shared code never asks which builtin called it.
+typedef struct {
+    // The builtin, for its name in a stop.
+    Builtin b;
+    // Stop at the first match, whose offset is the answer; else count them.
+    bool first_only;
+    // What stands between `p, ` and `offset` in a too-big stop's advice.
+    Str args_before_offset;
+} ScanAsk;
+
+static const ScanAsk SCAN_COUNT_IN = {BUILTIN_COUNT_IN, false, S_ITEM("s, ")};
+static const ScanAsk SCAN_FIND_IN = {BUILTIN_FIND_IN, true, S_ITEM("s, ")};
+static const ScanAsk SCAN_COUNT_LINES = {BUILTIN_COUNT_LINES, false, S_ITEM("")};
+
 // Reads the file BUILTIN_SCAN_CHUNK bytes at a time into one reused buffer,
 // counting `needle`'s non-overlapping matches that start in `range`, or
-// stopping at the first (`first_only`), across the chunks' edges: one store
-// read a call, every byte counted against the read budget and charged.
-static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const StorePath *p, Str needle, bool first_only, ScanRange range, Scanned *res) {
+// stopping at the first (`ask->first_only`), across the chunks' edges: one
+// store read a call, every byte counted against the read budget and charged.
+static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, const StorePath *p, Str needle, ScanRange range, Scanned *res) {
+    Builtin b = ask->b;
     TRY(builtin_count_read(r, pos));
     uint64_t file_size = 0;
     TRY(builtin_file_size(r, pos, b, p, &file_size));
@@ -575,7 +591,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const Sto
     if (end - start > cap) {
         Str who = builtin_who(r, b);
         return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` scans at most {d} bytes in one call, and this would be {d}: scan it in parts, `{s}(p, {s}offset, n)`", S("`"), who, S("` scans at most "), run_unum(r, cap),
-                         S(" bytes in one call, and this would be "), run_unum(r, end - start), S(": scan it in parts, `"), who, S("(p, "), b == BUILTIN_COUNT_LINES ? S("") : S("s, "), S("offset, n)`"));
+                         S(" bytes in one call, and this would be "), run_unum(r, end - start), S(": scan it in parts, `"), who, S("(p, "), ask->args_before_offset, S("offset, n)`"));
     }
     size_t keep_max = needle.len - 1;
     // Reading at most `needle.len - 1` past the range keeps every match found
@@ -626,7 +642,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const Sto
             if (!found) break;
             if (res->count == 0) res->first = base + i;
             res->count++;
-            if (first_only) return OK;
+            if (ask->first_only) return OK;
             from = i + needle.len;
         }
         // Keep the tail that could still start a match: the last `keep_max`
@@ -642,7 +658,8 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, Builtin b, const Sto
 
 // `count_in(p, s[, offset[, n]])` and `find_in`: the matches of `s` counted,
 // or the first one's offset (nil for none), without holding the file.
-static STATUS_MUST_USE Status builtin_scanner(Run *r, Pos pos, Builtin b, ConstValues args, Value *out) {
+static STATUS_MUST_USE Status builtin_scanner(Run *r, Pos pos, const ScanAsk *ask, ConstValues args, Value *out) {
+    Builtin b = ask->b;
     StorePath p;
     TRY(builtin_path(r, pos, b, &at(args, 0), false, &p));
     Str needle = {0};
@@ -655,8 +672,8 @@ static STATUS_MUST_USE Status builtin_scanner(Run *r, Pos pos, Builtin b, ConstV
     ScanRange range;
     TRY(builtin_range_args(r, pos, b, args, 2, &range));
     Scanned got;
-    TRY(builtin_scan(r, pos, b, &p, needle, b == BUILTIN_FIND_IN, range, &got));
-    if (b == BUILTIN_COUNT_IN) {
+    TRY(builtin_scan(r, pos, ask, &p, needle, range, &got));
+    if (!ask->first_only) {
         value_int(out, (int64_t)got.count);
     } else if (got.count > 0) {
         value_int(out, (int64_t)got.first);
@@ -667,11 +684,11 @@ static STATUS_MUST_USE Status builtin_scanner(Run *r, Pos pos, Builtin b, ConstV
 }
 
 static STATUS_MUST_USE Status bi_count_in(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_scanner(r, pos, BUILTIN_COUNT_IN, args, out);
+    return builtin_scanner(r, pos, &SCAN_COUNT_IN, args, out);
 }
 
 static STATUS_MUST_USE Status bi_find_in(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_scanner(r, pos, BUILTIN_FIND_IN, args, out);
+    return builtin_scanner(r, pos, &SCAN_FIND_IN, args, out);
 }
 
 // `count_lines(p[, offset[, n]])`: the file's lines, as `#lines(read(p))`
@@ -684,7 +701,7 @@ static STATUS_MUST_USE Status bi_count_lines(Run *r, Pos pos, ConstValues args, 
     ScanRange range;
     TRY(builtin_range_args(r, pos, BUILTIN_COUNT_LINES, args, 1, &range));
     Scanned got;
-    TRY(builtin_scan(r, pos, BUILTIN_COUNT_LINES, &p, S("\n"), false, range, &got));
+    TRY(builtin_scan(r, pos, &SCAN_COUNT_LINES, &p, S("\n"), range, &got));
     bool unended = got.to_end && got.size > 0 && got.last != '\n';
     value_int(out, (int64_t)(got.count + (unended ? 1 : 0)));
     return OK;

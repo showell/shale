@@ -529,24 +529,26 @@ static STATUS_MUST_USE Status bi_sort(Run *r, Pos pos, ConstValues args, Value *
 
 // ── numbers ──
 
-static STATUS_MUST_USE Status builtin_extreme(Run *r, Pos pos, Builtin b, ConstValues args, Value *out) {
+// `min` and `max`: the least of the integers when `keep_less`, else the
+// greatest.
+static STATUS_MUST_USE Status builtin_extreme(Run *r, Pos pos, Builtin b, bool keep_less, ConstValues args, Value *out) {
     int64_t best = 0;
     TRY(builtin_int_arg(r, pos, b, &at(args, 0), S("each argument"), &best));
     for (size_t i = 1; i < args.len; i++) {
         int64_t x = 0;
         TRY(builtin_int_arg(r, pos, b, &at(args, i), S("each argument"), &x));
-        if (b == BUILTIN_MIN ? x < best : x > best) best = x;
+        if (keep_less ? x < best : x > best) best = x;
     }
     value_int(out, best);
     return OK;
 }
 
 static STATUS_MUST_USE Status bi_min(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_extreme(r, pos, BUILTIN_MIN, args, out);
+    return builtin_extreme(r, pos, BUILTIN_MIN, true, args, out);
 }
 
 static STATUS_MUST_USE Status bi_max(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_extreme(r, pos, BUILTIN_MAX, args, out);
+    return builtin_extreme(r, pos, BUILTIN_MAX, false, args, out);
 }
 
 static STATUS_MUST_USE Status bi_abs(Run *r, Pos pos, ConstValues args, Value *out) {

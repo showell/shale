@@ -162,21 +162,34 @@ static STATUS_MUST_USE Status bi_words(Run *r, Pos pos, ConstValues args, Value 
     return OK;
 }
 
-// `starts_with`, `ends_with` and `contains`.
-static STATUS_MUST_USE Status builtin_looks(Run *r, Pos pos, Builtin b, ConstValues args, Value *out) {
+// The two strings `starts_with`, `ends_with` and `contains` take, the first
+// charged.
+static STATUS_MUST_USE Status builtin_looks_args(Run *r, Pos pos, Builtin b, ConstValues args, Str *s, Str *t) {
+    TRY(builtin_string_arg(r, pos, b, &at(args, 0), S("its first argument"), s));
+    TRY(builtin_string_arg(r, pos, b, &at(args, 1), S("what it looks for"), t));
+    return builtin_charge_bytes(r, pos, s->len);
+}
+
+static STATUS_MUST_USE Status bi_starts_with(Run *r, Pos pos, ConstValues args, Value *out) {
     Str s = {0};
     Str t = {0};
-    TRY(builtin_string_arg(r, pos, b, &at(args, 0), S("its first argument"), &s));
-    TRY(builtin_string_arg(r, pos, b, &at(args, 1), S("what it looks for"), &t));
-    TRY(builtin_charge_bytes(r, pos, s.len));
-    if (b == BUILTIN_STARTS_WITH) {
-        value_bool(out, str_starts_with(s, t));
-        return OK;
-    }
-    if (b == BUILTIN_ENDS_WITH) {
-        value_bool(out, s.len >= t.len && str_eq(str_sub(s, s.len - t.len, s.len), t));
-        return OK;
-    }
+    TRY(builtin_looks_args(r, pos, BUILTIN_STARTS_WITH, args, &s, &t));
+    value_bool(out, str_starts_with(s, t));
+    return OK;
+}
+
+static STATUS_MUST_USE Status bi_ends_with(Run *r, Pos pos, ConstValues args, Value *out) {
+    Str s = {0};
+    Str t = {0};
+    TRY(builtin_looks_args(r, pos, BUILTIN_ENDS_WITH, args, &s, &t));
+    value_bool(out, s.len >= t.len && str_eq(str_sub(s, s.len - t.len, s.len), t));
+    return OK;
+}
+
+static STATUS_MUST_USE Status bi_contains(Run *r, Pos pos, ConstValues args, Value *out) {
+    Str s = {0};
+    Str t = {0};
+    TRY(builtin_looks_args(r, pos, BUILTIN_CONTAINS, args, &s, &t));
     Finder f;
     finder_init(&f, r, pos, t);
     bool found = false;
@@ -184,18 +197,6 @@ static STATUS_MUST_USE Status builtin_looks(Run *r, Pos pos, Builtin b, ConstVal
     TRY(finder_find(&f, s, 0, &found, &i));
     value_bool(out, found);
     return OK;
-}
-
-static STATUS_MUST_USE Status bi_starts_with(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_looks(r, pos, BUILTIN_STARTS_WITH, args, out);
-}
-
-static STATUS_MUST_USE Status bi_ends_with(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_looks(r, pos, BUILTIN_ENDS_WITH, args, out);
-}
-
-static STATUS_MUST_USE Status bi_contains(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_looks(r, pos, BUILTIN_CONTAINS, args, out);
 }
 
 // `find(s, t[, from])`: the 1-based index of the first `t` in `s` at or after
@@ -313,39 +314,58 @@ static Str builtin_trim_end(Str s) {
     return str_sub(s, 0, k);
 }
 
-static STATUS_MUST_USE Status builtin_trimmed(Run *r, Pos pos, Builtin b, ConstValues args, Value *out) {
-    Str s = {0};
-    TRY(builtin_string_arg(r, pos, b, &at(args, 0), S("its first argument"), &s));
-    TRY(run_charge(r, pos, s.len));
-    if (b != BUILTIN_TRIM_END) s = builtin_trim_start(s);
-    if (b != BUILTIN_TRIM_START) s = builtin_trim_end(s);
-    value_string(out, s);
-    return OK;
+// The one string the trims take, charged.
+static STATUS_MUST_USE Status builtin_trim_arg(Run *r, Pos pos, Builtin b, ConstValues args, Str *s) {
+    TRY(builtin_string_arg(r, pos, b, &at(args, 0), S("its first argument"), s));
+    return run_charge(r, pos, s->len);
 }
 
 static STATUS_MUST_USE Status bi_trim(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_trimmed(r, pos, BUILTIN_TRIM, args, out);
+    Str s = {0};
+    TRY(builtin_trim_arg(r, pos, BUILTIN_TRIM, args, &s));
+    value_string(out, builtin_trim_end(builtin_trim_start(s)));
+    return OK;
 }
 
 static STATUS_MUST_USE Status bi_trim_start(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_trimmed(r, pos, BUILTIN_TRIM_START, args, out);
+    Str s = {0};
+    TRY(builtin_trim_arg(r, pos, BUILTIN_TRIM_START, args, &s));
+    value_string(out, builtin_trim_start(s));
+    return OK;
 }
 
 static STATUS_MUST_USE Status bi_trim_end(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_trimmed(r, pos, BUILTIN_TRIM_END, args, out);
+    Str s = {0};
+    TRY(builtin_trim_arg(r, pos, BUILTIN_TRIM_END, args, &s));
+    value_string(out, builtin_trim_end(s));
+    return OK;
 }
 
-static STATUS_MUST_USE Status builtin_cased(Run *r, Pos pos, Builtin b, ConstValues args, Value *out) {
+// Which bytes a case change moves, and by how much: `upper`'s and `lower`'s,
+// chosen by the wrapper before the loop.
+typedef struct {
+    Builtin b;
+    uint8_t lo;
+    uint8_t hi;
+    int delta;
+} CaseShift;
+
+static const CaseShift CASE_UPPER = {BUILTIN_UPPER, 'a', 'z', -32};
+static const CaseShift CASE_LOWER = {BUILTIN_LOWER, 'A', 'Z', 32};
+
+static STATUS_MUST_USE Status builtin_cased(Run *r, Pos pos, const CaseShift *shift, ConstValues args, Value *out) {
     Str s = {0};
-    TRY(builtin_string_arg(r, pos, b, &at(args, 0), S("its first argument"), &s));
+    TRY(builtin_string_arg(r, pos, shift->b, &at(args, 0), S("its first argument"), &s));
     TRY(run_charge(r, pos, s.len));
     char *p = arena_alloc(r->ctx.values, s.len, 1);
     if (p == NULL) return run_values_oom(r, pos);
     Bytes o = {p, s.len};
+    uint8_t lo = shift->lo;
+    uint8_t hi = shift->hi;
+    int delta = shift->delta;
     for (size_t k = 0; k < s.len; k++) {
         uint8_t c = str_byte(s, k);
-        if (b == BUILTIN_UPPER && c >= 'a' && c <= 'z') c = (uint8_t)(c - 32);
-        if (b == BUILTIN_LOWER && c >= 'A' && c <= 'Z') c = (uint8_t)(c + 32);
+        if (c >= lo && c <= hi) c = (uint8_t)(c + delta);
         at(o, k) = (char)c;
     }
     Str t = {p, s.len};
@@ -354,11 +374,11 @@ static STATUS_MUST_USE Status builtin_cased(Run *r, Pos pos, Builtin b, ConstVal
 }
 
 static STATUS_MUST_USE Status bi_upper(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_cased(r, pos, BUILTIN_UPPER, args, out);
+    return builtin_cased(r, pos, &CASE_UPPER, args, out);
 }
 
 static STATUS_MUST_USE Status bi_lower(Run *r, Pos pos, ConstValues args, Value *out) {
-    return builtin_cased(r, pos, BUILTIN_LOWER, args, out);
+    return builtin_cased(r, pos, &CASE_LOWER, args, out);
 }
 
 static STATUS_MUST_USE Status bi_tostring(Run *r, Pos pos, ConstValues args, Value *out) {
@@ -702,25 +722,40 @@ static STATUS_MUST_USE Status builtin_flag_option(Run *r, Pos pos, Str who, Str 
     return run_failf(r, pos, CLASS_TYPE, "`{s}`: its `{s}` must be true or false, not {s}", S("`"), who, S("`: its `"), name, S("` must be true or false, not "), value_type_name(x));
 }
 
+// Where a regex builtin's options sit and what it takes there, filled by
+// each builtin so the shared reader never asks which one called it.
+typedef struct {
+    Builtin b;
+    // The options map's argument, from 0.
+    size_t at;
+    // `re_find`'s `from`, read by the builtin itself and passed over here.
+    bool takes_from;
+    // A key it doesn't take: the stop's class, and the keys it names.
+    // `re_find_all`'s is a fail, `opts_only`'s class; the others' an
+    // argument.
+    StopClass unknown_class;
+    Str takes;
+} RegexAsk;
+
+static const RegexAsk REGEX_RE_FIND = {BUILTIN_RE_FIND, 2, true, CLASS_ARGUMENT, S_ITEM("nocase` or `from")};
+static const RegexAsk REGEX_RE_FIND_ALL = {BUILTIN_RE_FIND_ALL, 2, false, CLASS_FAIL, S_ITEM("nocase")};
+static const RegexAsk REGEX_RE_MATCH = {BUILTIN_RE_MATCH, 2, false, CLASS_ARGUMENT, S_ITEM("nocase")};
+static const RegexAsk REGEX_RE_REPLACE = {BUILTIN_RE_REPLACE, 3, false, CLASS_ARGUMENT, S_ITEM("nocase")};
+
 // The options map a call may end with: `{nocase = true}`, and `re_find`'s
 // `from`.
-static STATUS_MUST_USE Status builtin_regex_options(Run *r, Pos pos, Builtin b, ConstValues args, RegexOptions *o) {
+static STATUS_MUST_USE Status builtin_regex_options(Run *r, Pos pos, const RegexAsk *ask, ConstValues args, RegexOptions *o) {
     o->nocase = false;
-    size_t k = b == BUILTIN_RE_REPLACE ? 3 : 2;
-    if (args.len <= k) return OK;
+    if (args.len <= ask->at) return OK;
+    Str name = builtin_name(ask->b);
     Table *m = NULL;
-    TRY(builtin_map_arg(r, pos, b, &at(args, k), &m));
+    TRY(builtin_map_arg(r, pos, ask->b, &at(args, ask->at), &m));
     for (size_t i = 0; i < ValueMap_len(&m->map); i++) {
         Str key = ValueMap_key_at(&m->map, i);
         Value x = ValueMap_value_at(&m->map, i);
-        if (b == BUILTIN_RE_FIND && str_eq(key, S("from"))) continue;
-        if (!str_eq(key, S("nocase"))) {
-            // `re_find_all`'s stop has `opts_only`'s class (a fail) and
-            // wording, unlike the other regex builtins'.
-            if (b == BUILTIN_RE_FIND_ALL) return run_failf(r, pos, CLASS_FAIL, "`re_find_all` takes `nocase`, not `{s}`", S("`re_find_all` takes `nocase`, not `"), key, S("`"));
-            return run_failf(r, pos, CLASS_ARGUMENT, "`{s}` takes `{s}`, not `{s}`", S("`"), builtin_name(b), b == BUILTIN_RE_FIND ? S("` takes `nocase` or `from`, not `") : S("` takes `nocase`, not `"), key, S("`"));
-        }
-        TRY(builtin_flag_option(r, pos, builtin_name(b), S("nocase"), &x, &o->nocase));
+        if (ask->takes_from && str_eq(key, S("from"))) continue;
+        if (!str_eq(key, S("nocase"))) return run_failf(r, pos, ask->unknown_class, "`{s}` takes `{s}`, not `{s}`", S("`"), name, S("` takes `"), ask->takes, S("`, not `"), key, S("`"));
+        TRY(builtin_flag_option(r, pos, name, S("nocase"), &x, &o->nocase));
     }
     return OK;
 }
@@ -798,7 +833,7 @@ static STATUS_MUST_USE Status bi_re_find(Run *r, Pos pos, ConstValues args, Valu
         }
     }
     RegexOptions o;
-    TRY(builtin_regex_options(r, pos, BUILTIN_RE_FIND, args, &o));
+    TRY(builtin_regex_options(r, pos, &REGEX_RE_FIND, args, &o));
     RegexCached *c = NULL;
     TRY(builtin_program(r, pos, S("re_find"), pattern, o, &c));
     Searches each = {0, 0};
@@ -819,7 +854,7 @@ static STATUS_MUST_USE Status bi_re_find_all(Run *r, Pos pos, ConstValues args, 
     TRY(builtin_string_arg(r, pos, BUILTIN_RE_FIND_ALL, &at(args, 0), S("its first argument"), &s));
     TRY(builtin_string_arg(r, pos, BUILTIN_RE_FIND_ALL, &at(args, 1), S("its pattern"), &pattern));
     RegexOptions o;
-    TRY(builtin_regex_options(r, pos, BUILTIN_RE_FIND_ALL, args, &o));
+    TRY(builtin_regex_options(r, pos, &REGEX_RE_FIND_ALL, args, &o));
     RegexCached *c = NULL;
     TRY(builtin_program(r, pos, S("re_find_all"), pattern, o, &c));
     // A list once it holds a match, `{}` while it holds none.
@@ -850,7 +885,7 @@ static STATUS_MUST_USE Status bi_re_match(Run *r, Pos pos, ConstValues args, Val
     TRY(builtin_string_arg(r, pos, BUILTIN_RE_MATCH, &at(args, 0), S("its first argument"), &s));
     TRY(builtin_string_arg(r, pos, BUILTIN_RE_MATCH, &at(args, 1), S("its pattern"), &pattern));
     RegexOptions o;
-    TRY(builtin_regex_options(r, pos, BUILTIN_RE_MATCH, args, &o));
+    TRY(builtin_regex_options(r, pos, &REGEX_RE_MATCH, args, &o));
     RegexCached *c = NULL;
     TRY(builtin_program(r, pos, S("re_match"), pattern, o, &c));
     Searches each = {0, 0};
@@ -870,7 +905,7 @@ static STATUS_MUST_USE Status bi_re_replace(Run *r, Pos pos, ConstValues args, V
     TRY(builtin_string_arg(r, pos, BUILTIN_RE_REPLACE, &at(args, 1), S("its pattern"), &pattern));
     TRY(builtin_string_arg(r, pos, BUILTIN_RE_REPLACE, &at(args, 2), S("its replacement"), &with));
     RegexOptions o;
-    TRY(builtin_regex_options(r, pos, BUILTIN_RE_REPLACE, args, &o));
+    TRY(builtin_regex_options(r, pos, &REGEX_RE_REPLACE, args, &o));
     RegexCached *c = NULL;
     TRY(builtin_program(r, pos, S("re_replace"), pattern, o, &c));
     size_t groups = c->program.groups;
