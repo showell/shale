@@ -43,6 +43,7 @@
 #include "host/host_procs.c"
 #include "host/host_json.c"
 #include "host/host_text.c"
+#include "host/host_grep_tree.c"
 #include "host/flat_tree.c"
 #include "host/zig_wire.c"
 #include "host/zig_ast.c"

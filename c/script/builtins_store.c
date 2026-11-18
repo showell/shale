@@ -225,8 +225,10 @@ static STATUS_MUST_USE Status builtin_file_size(Run *r, Pos pos, Builtin b, cons
 
 // `n` bytes from `offset` (to the end for BUILTIN_TO_END) of a file whose
 // size is known: "" at or past the end; at most the call-bytes cap and what
-// the read-bytes budget has left; the bytes read charged a step per 16.
-static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t offset, uint64_t n, Str *out) {
+// the read-bytes budget has left; the bytes read charged a step per 16. The
+// bytes are `into`'s: the run's values arena, or a scratch arena of the
+// caller's that holds a file only while it is searched (host_grep_tree.c).
+static STATUS_MUST_USE Status builtin_read_sized_in(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t offset, uint64_t n, Arena *into, Str *out) {
     *out = S("");
     if (offset >= size) return OK;
     uint64_t left = size - offset;
@@ -237,7 +239,7 @@ static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, con
                          S("`"), builtin_who(r, b), S("` brings at most "), run_unum(r, cap), S(" bytes in one call, and this would be "), run_unum(r, want), S(": read it in parts, `read(p, offset, n)`"));
     }
     if (want > run_sat_sub(r->ctx.budgets.read_bytes, r->read_bytes)) return run_budget_stop(&r->ctx, pos, BUDGET_READ_BYTES);
-    char *buf = arena_alloc(r->ctx.values, (size_t)want, 1);
+    char *buf = arena_alloc(into, (size_t)want, 1);
     if (buf == NULL) return run_values_oom(r, pos);
     RunStore *rs = builtin_store_of(r);
     Bytes room = {buf, (size_t)want};
@@ -249,6 +251,11 @@ static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, con
     out->ptr = buf;
     out->len = got;
     return OK;
+}
+
+// builtin_read_sized_in's bytes in the run's values arena.
+static STATUS_MUST_USE Status builtin_read_sized(Run *r, Pos pos, Builtin b, const StorePath *p, uint64_t size, uint64_t offset, uint64_t n, Str *out) {
+    return builtin_read_sized_in(r, pos, b, p, size, offset, n, r->ctx.values, out);
 }
 
 // An offset into a file, which must not be negative: "`<who>`: offset N is

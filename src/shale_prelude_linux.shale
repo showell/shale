@@ -384,42 +384,42 @@ function grep_tree(place, needle, opts?)
     entries = {{path = place, kind = "file", size = stat(place).size}}
     prefix = ""
   else
-    entries = walk_all(place, {skip = ".*"})
+    -- The walk, which `entries` left empty asks for, is the host's.
+    entries = {}
   end
-  for e in entries do
-    if answer.cut then break end
-    local rest = e.path
-    if prefix ~= "" and starts_with(e.path, prefix) then rest = sub(e.path, #prefix + 1) end
-    if prefix == "" and e.path == place then rest = basename(place) end
-    local why = grep_tree_skip(e, rest, exts, name_like)
-    if why ~= nil and why ~= "" then push(answer.passed, {path = e.path, why = why}) end
-    if why == "" then
-      answer.files = answer.files + 1
-      local found = grep_tree_file(e.path, e.size, needle, regex, nocase)
-      local all = {}
-      if context > 0 and #found > 0 then all = lines(read(e.path)) end
-      for m in found do
-        if #answer.hits >= most then
-          answer.cut = true
-          break
-        end
-        local hit = {path = e.path, line = m.line, text = m.text}
-        if context > 0 then
-          local before = {}
-          local after = {}
-          for i = m.line - context, m.line - 1 do
-            if i >= 1 then push(before, {line = i, text = all[i]}) end
-          end
-          for i = m.line + 1, m.line + context do
-            if i <= #all then push(after, {line = i, text = all[i]}) end
-          end
-          hit = {path = e.path, line = m.line, text = m.text, before = before, after = after}
-        end
-        push(answer.hits, hit)
-      end
-    end
-  end
-  return answer
+  -- The walk, each entry passed by or searched, and the answer are the
+  -- host's (c/host/host_grep_tree.c), in C rather than in script: the same
+  -- hits, in the same order, `passed` and `cut` as this prelude's loop gave
+  -- them, the same stops, and the same reads and read bytes, since the host
+  -- makes each store call this prelude made (`walk` a part at a time, as
+  -- `walk_all` calls it; `read(p, 0, 4096)` for a binary file; `grep`, or
+  -- `read_lines` a part at a time for a pattern, either case or a file past
+  -- 1 MiB; `read` for `context`). What it charges differs: a step per 16
+  -- bytes a read brings, a step and the path's bytes an entry, and each
+  -- hit's text, not a script's steps. A file's bytes are held while it is
+  -- searched, so the run's arena keeps what the hits keep, not the tree.
+  --
+  -- `grep_tree_skip` and `grep_tree_file` above say, in script, what the
+  -- host decides for each entry.
+  --
+  -- `answer` is the shape of what the host gives: `{hits, files, passed,
+  -- cut}`, its keys in that order.
+  --
+  -- The options go as read here, so a value of the wrong type stops at the
+  -- host, which names the option. An `opts` key this prelude does not read
+  -- (`max`, `skip`) is passed by, as it always was: `most` cuts the hits,
+  -- and a folder whose name starts with `.` is the only one not walked.
+  return host("grep_tree", needle, {
+    place = place,
+    prefix = prefix,
+    entries = entries,
+    regex = regex,
+    nocase = nocase,
+    ext = exts,
+    like = name_like,
+    context = context,
+    most = most,
+  })
 end
 
 -- **A NAME BELOW A FOLDER**, spelled as every call takes it: in the root
