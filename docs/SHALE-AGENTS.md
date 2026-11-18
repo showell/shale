@@ -888,6 +888,34 @@ A token an agent receives (an API key redeemed over HTTP) belongs in a
   the file `SHALE_MOUNTS` names), `name = path` then its words:
   `keys = ~/.shale-keys secrets`.
 
+**`shale --secrets`, run in your own terminal,** stores a secret you have
+and sets up Claude Code's side, so `~/.claude/settings.json` needs no
+editing by hand. It shows a menu of three commands:
+
+1. **where** prints each secrets mount's name and folder, and nothing else.
+2. **store** asks for the mount (when there are two or more) and the
+   secret's name, which must be a plain file directly in the mount, checked
+   as `stdout_secret`'s file is. It reads the value with the terminal's echo
+   off and writes it as `stdout_secret` does: mode 0600, beside the file
+   first, then renamed into place. A secret already there is replaced only
+   after a yes, and an empty value stores nothing. It prints `stored
+   keys:NAME (N bytes)`, never the value, and then offers the deny rules
+   when any is missing.
+3. **deny** adds a `Read` and an `Edit` rule for each secrets folder to
+   `permissions.deny` in `~/.claude/settings.json`, so Claude Code's own
+   file tools (Read, Edit, Write, Grep and Glob) stay out of it as Shale
+   does. A rule is `Read(//<home>/.shale-keys/**)`: the folder's absolute
+   path after `//`, as Claude Code's permission rules write one. It shows the rules it will
+   add and asks first. It adds only the rules that are missing, inside the
+   one `permissions` block, and writes nothing to a file that holds them all
+   already. It keeps the old file as `settings.json.bak` and writes the new
+   one beside it and renames it into place, laid out two spaces a level, its
+   keys in their order. A file that does not parse is left as it is.
+
+It refuses to start unless its stdin and its stdout are both a terminal,
+and the gate refuses `shale --secrets` too, so an agent cannot run it: an
+agent asks the person to.
+
 **Storing a secret received** is `run`'s `stdout_secret`, the program's
 stdout written to the file and never to the script. Where the service
 answers with the secret alone:
