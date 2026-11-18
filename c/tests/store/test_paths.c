@@ -185,7 +185,8 @@ TEST(the_mounts_file_shale_mounts_pins_it_the_default_s_absence_is_no_mounts_a_p
 }
 
 TEST(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing_word_or_one_twice_refused_by_line) {
-    Arena a = arena_make((size_t)1 << 20);
+    Arena a;
+    arena_init(&a, (size_t)1 << 20);
     Mounts ms;
     Str why = S("");
     EXPECT_EQ(mounts_parse(&a, S("a = /x ro\nb = /y\nc = /z ro tools\nd = /w tools ro\ne = /v tools\n"), S("/home/x"), &ms, &why), MOUNTS_OK);
@@ -225,7 +226,8 @@ TEST(ro_mounts_the_mounts_file_s_ro_and_tools_in_either_order_any_other_trailing
 }
 
 TEST(secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one) {
-    Arena a = arena_make((size_t)1 << 20);
+    Arena a;
+    arena_init(&a, (size_t)1 << 20);
     Str why = S("");
     // Each line holds a planted folder, `.planted-keys`, where a secrets
     // mount's would be, as in Zig's test of the same name.
@@ -948,7 +950,8 @@ TEST(a_step_budget_met_in_the_walk_of_a_path_stops_one_past_it) {
 }
 
 TEST(a_message_whose_arguments_miss_its_placeholders_ends_the_process) {
-    Arena a = arena_make(1 << 20);
+    Arena a;
+    arena_init(&a, 1 << 20);
     Buf b = buf_make(&a);
     MsgArgs none = {NULL, 0};
     EXPECT_EQ(msg_format(&b, S("`{s}` and {{braces}}"), MSG_ARGS(MSG_FROM_SCRIPT(S("x")))), OK);

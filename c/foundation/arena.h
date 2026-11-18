@@ -55,7 +55,7 @@ typedef struct {
     // DRAGON: the arena budget. The fields are public, so a caller that
     // writes `limit` or `held` lets a run hold more than its budget.
     // REMEDY: only arena_take adds to `held`, after checking `limit`, and only
-    // arena_give_back takes from it; only arena_make and the tests set
+    // arena_give_back takes from it; only arena_init and the tests set
     // `limit`. No check holds this: a reading of the C does.
 
     // The most `held` may reach.
@@ -120,11 +120,10 @@ static inline void arena_misuse(const char *what) { // cstr: a literal naming th
     c_bug_str("arena", (Str){what, strlen(what)});
 }
 
-static inline Arena arena_make(size_t limit) {
-    Arena a;
-    memset(&a, 0, sizeof a);
-    a.limit = limit;
-    return a;
+// Makes `*a` an empty arena that may hold at most `limit` bytes.
+static inline void arena_init(Arena *a, size_t limit) {
+    memset(a, 0, sizeof *a);
+    a->limit = limit;
 }
 
 static inline size_t arena_sat_sub(size_t a, size_t b) {
@@ -345,7 +344,8 @@ static inline void arena_deinit(Arena *a) {
             c = next;
         }
     }
-    *a = arena_make(a->limit);
+    size_t limit = a->limit;
+    arena_init(a, limit);
 }
 
 static inline void *arena_refuse(Arena *a) {

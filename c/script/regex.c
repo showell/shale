@@ -854,7 +854,8 @@ static STATUS_MUST_USE Status regex_compile(Arena *a, Str pattern, RegexOptions 
     // REMEDY: the tree's limit is what `a` had left (`a->limit - a->held`), and
     // arena_deinit gives the tree back before this returns, so a compile holds
     // at most twice what was left, at its peak, and nothing after.
-    Arena tree = arena_make(arena_sat_sub(a->limit, a->held));
+    Arena tree;
+    arena_init(&tree, arena_sat_sub(a->limit, a->held));
     Status s = regex_compile_in(a, &tree, pattern, options, out, refused);
     if (s != OK && !refused->refused) arena_set_hit(a);
     arena_deinit(&tree);
@@ -1141,10 +1142,9 @@ static RegexEntries regex_entries(RegexCache *c) {
     return e;
 }
 
-static RegexCache regex_cache_make(void) {
-    RegexCache c;
-    memset(&c, 0, sizeof c);
-    return c;
+// Makes `*c` an empty cache.
+static void regex_cache_init(RegexCache *c) {
+    memset(c, 0, sizeof *c);
 }
 
 // The cached entry for the pattern, marked used, or NULL.
@@ -1187,7 +1187,7 @@ static STATUS_MUST_USE Status regex_cached_fill(RegexCached *got, Str pattern, R
 static STATUS_MUST_USE Status regex_cache_put(RegexCache *c, Str pattern, RegexOptions options, size_t limit, RegexRefusal *refused, RegexCached **out) {
     RegexCached fresh;
     memset(&fresh, 0, sizeof fresh);
-    fresh.arena = arena_make(limit);
+    arena_init(&fresh.arena, limit);
     if (regex_cached_fill(&fresh, pattern, options, refused) != OK) {
         arena_deinit(&fresh.arena);
         return STOP;
@@ -1222,5 +1222,5 @@ static void regex_cache_deinit(RegexCache *c) {
     for (size_t k = 0; k < es.len; k++) {
         if (at(es, k).present) arena_deinit(&at(es, k).arena);
     }
-    *c = regex_cache_make();
+    regex_cache_init(c);
 }

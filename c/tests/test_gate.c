@@ -24,7 +24,8 @@ static GateVerdict classified(Arena *a, Str cmd) {
 }
 
 static void passes_str(Str cmd) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     GateVerdict v = classified(&a, cmd);
     if (v.kind != GATE_LAUNCH) fprintf(stderr, "  refused or escaped: %.*s\n  %.*s\n", (int)cmd.len, cmd.ptr, (int)v.why.len, v.why.ptr);
     arena_deinit(&a);
@@ -38,7 +39,8 @@ static void passes(const char *cmd) { // cstr: a test's literal
 // Whether the refusal of `cmd` (its bytes `len`, so a NUL may be in it)
 // holds `says`.
 static bool refused_saying(Str cmd, const char *says) { // cstr: a test's literal
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     GateVerdict v = classified(&a, cmd);
     bool ok = v.kind == GATE_REFUSED && gate_index_of(v.why, test_cs(says)) != SIZE_MAX;
     if (!ok) fprintf(stderr, "  %.*s\n  said: %.*s\n", (int)cmd.len, cmd.ptr, (int)v.why.len, v.why.ptr);
@@ -101,7 +103,8 @@ TEST(a_heredocs_failure_modes) {
 }
 
 TEST(the_escape_a_want_or_an_out_of_scope_its_tag_and_text_read) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     GateVerdict w = classified(&a, S("# want: sed-in-place: one replacement in a big file\nsed -i s/a/b/ x"));
     EXPECT(w.kind == GATE_ESCAPE);
     EXPECT_STR(w.escape_kind, S("want"));
@@ -126,7 +129,8 @@ TEST(the_escape_a_want_or_an_out_of_scope_its_tag_and_text_read) {
 }
 
 TEST(a_log_line_is_one_line_tabs_and_newlines_shown_the_commands_first_160_bytes) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     char cmd_bytes[19 + 300];
     Bytes cmd = {cmd_bytes, sizeof cmd_bytes};
     mem_copy(cmd_bytes, "# want: t: why\tnot\n", 19);
@@ -156,7 +160,8 @@ TEST(a_log_line_is_one_line_tabs_and_newlines_shown_the_commands_first_160_bytes
 }
 
 TEST(the_hooks_input_the_command_of_bash_and_monitor_any_other_tool_passed_input_it_cannot_read_refused) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     GateHook h;
     bool ok = false;
     EXPECT(gate_read_hook(&a, S("{\"session_id\":\"s1\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"shale x.shale\",\"timeout\":5}}"), &h, &ok) == OK);
@@ -187,7 +192,8 @@ static Str refusal_of(Arena *a, Str cmd) {
 }
 
 TEST(each_refusal_is_its_whole_line_word_for_word) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     EXPECT_STR(refusal_of(&a, S("ls -la")), S("shale-gate: `ls` is not `shale`; only " GATE_FORMS));
     EXPECT_STR(refusal_of(&a, S("# nope")), S("shale-gate: an escape is `# want: <tag>: <text>` or `# out-of-scope: <tag>: <text>`, the tag `[a-z0-9-]`; only " GATE_FORMS));
     EXPECT_STR(refusal_of(&a, S("cd $X && shale a")), S("shale-gate: `cd $X` is not a plain folder; only " GATE_FORMS));
@@ -215,7 +221,8 @@ TEST(each_refusal_is_its_whole_line_word_for_word) {
 }
 
 TEST(the_limits_64_words_4096_lines_and_a_refusal_past_1024_bytes) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     Buf words = buf_make(&a);
     EXPECT(buf_lit(&words, "shale") == OK);
     for (int i = 1; i < 64; i++) EXPECT(buf_lit(&words, " w") == OK);
@@ -244,7 +251,8 @@ TEST(the_limits_64_words_4096_lines_and_a_refusal_past_1024_bytes) {
 }
 
 TEST(a_log_line_past_its_room_is_cut_at_4095_bytes_mid_escape) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     // `d`, a tab, then a session of 4092 bytes and a tab: the line's room
     // ends inside the tab's escape, whose first byte alone is kept.
     Buf session = buf_make(&a);
@@ -261,7 +269,8 @@ TEST(a_log_line_past_its_room_is_cut_at_4095_bytes_mid_escape) {
 
 // Whether std.json would read `json` as a hook the gate can read.
 static bool reads(Str json) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     GateHook h;
     bool ok = false;
     EXPECT(gate_read_hook(&a, json, &h, &ok) == OK);
@@ -279,7 +288,8 @@ static Str command_of(Arena *a, Str json) {
 }
 
 TEST(the_hooks_json_is_read_as_std_json_reads_it) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     EXPECT(reads(S(" \t\r\n{\"tool_name\":\"Read\"} \n")));
     EXPECT(!reads(S("")));
     EXPECT(!reads(S("[]")));
@@ -345,7 +355,8 @@ TEST(the_hooks_json_is_read_as_std_json_reads_it) {
 }
 
 TEST(a_nesting_a_megabyte_deep_is_read_without_recursion) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     Buf b = buf_make(&a);
     EXPECT(buf_lit(&b, "{\"tool_name\":\"Read\",\"x\":") == OK);
     for (int i = 0; i < 300000; i++) EXPECT(buf_lit(&b, "[{\"a\":") == OK);
@@ -357,7 +368,8 @@ TEST(a_nesting_a_megabyte_deep_is_read_without_recursion) {
 }
 
 TEST(the_decision_each_way_the_gate_answers) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     GateDecision d;
     gate_decide(&a, false, S(""), &d);
     EXPECT_EQ(d.code, 2);
@@ -418,7 +430,8 @@ static void remove_under(Arena *a, Str home) {
 }
 
 TEST(an_escape_is_one_append_to_homes_wants_tsv_its_folders_made) {
-    Arena a = arena_make(TEST_GATE_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_GATE_LIMIT);
     Str home = fresh_home(&a);
     Str want = S("{\"session_id\":\"s7\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"# want: sed-in-place: one edit\\nsed -i s/a/b/ x\"}}");
     EXPECT_EQ(gate_run(&a, true, want, true, home), 0);

@@ -96,7 +96,8 @@ static int reap_fixture(JobsPlace *p, const char *verb, const char *ms, uint64_t
         dup2(devnull, 1);
         dup2(devnull, 2);
         syscall(SYS_close_range, JOBS_STARTED_FD + 1, ~0u, 0u);
-        Arena a = arena_make((size_t)1 << 20);
+        Arena a;
+        arena_init(&a, (size_t)1 << 20);
         static const Str env_all[1] = {S("PATH=/usr/bin:/bin")};
         SpawnStrs env = {env_all, 1};
         _exit(jobs_reap_main(&a, args_all, n, env));
@@ -213,7 +214,8 @@ TEST(the_job_holds_0_1_and_2_alone_no_dev_null_or_log_fd_leaks_into_it) {
 }
 
 TEST(find_takes_a_path_or_the_path_and_a_job_gone_is_neither_alive_nor_stopped) {
-    Arena a = arena_make((size_t)1 << 20);
+    Arena a;
+    arena_init(&a, (size_t)1 << 20);
     char fixture[4400];
     fixture_abs(fixture, sizeof fixture);
     Str fx = {fixture, strlen(fixture)};
@@ -251,7 +253,8 @@ TEST(find_takes_a_path_or_the_path_and_a_job_gone_is_neither_alive_nor_stopped) 
 }
 
 TEST(the_reaper_holds_0_1_2_and_its_started_pipe_alone) {
-    Arena a = arena_make((size_t)1 << 20);
+    Arena a;
+    arena_init(&a, (size_t)1 << 20);
     JobsPlace p;
     place_make(&p, "reaper");
     char fixture[4400];

@@ -112,7 +112,7 @@ TEST(the_output_budget_writes_what_fits) {
 TEST(division_floors_and_an_overflow_stops) {
     static Ran x;
     static Arena a;
-    a = arena_make(1 << 20);
+    arena_init(&a, 1 << 20);
     ran_source(&x, S("print(7 // -2, -7 % 3, 7 % -3)\nprint(9223372036854775807 + 1)\n"), ran_budgets());
     EXPECT_EQ(x.ran, STOP);
     EXPECT_STR(buf_view(&x.r.out), S("-4\t2\t-2\n"));
@@ -266,7 +266,8 @@ TEST(a_stop_whose_format_escapes_a_brace_falls_back_to_that_format_raw) {
     Value subst[3] = {vm_str("abc"), vm_str("x"), vm_str("y")};
     Value lines_int = vm_table_of(&x, TABLE_MAP, S("lines"), vm_int(5));
     Value lines_one = vm_table_of(&x, TABLE_MAP, S("lines"), vm_table_of(&x, TABLE_LIST, S(""), vm_int(1)));
-    Arena refuses = arena_make(0);
+    Arena refuses;
+    arena_init(&refuses, 0);
     x.r.ctx.values = &refuses;
     Run *r = &x.r;
     Pos pos = {1, 1};
@@ -316,7 +317,8 @@ TEST(a_stop_whose_format_escapes_a_brace_falls_back_to_that_format_raw) {
 }
 
 TEST(the_compilers_own_checks_end_the_process) {
-    Arena a = arena_make(1 << 20);
+    Arena a;
+    arena_init(&a, 1 << 20);
     Compiler c;
     memset(&c, 0, sizeof c);
     c.arena = &a;

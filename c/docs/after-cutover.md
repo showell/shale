@@ -71,10 +71,10 @@ reviewer can line the two up. Once the Zig is gone, that reason is gone:
   record is text, and every value of a field is one a record can hold),
   and walk's `after`, `like`, `skip`, `kind` and `keep_reads` (an empty or
   zero one given reads otherwise than none).
-- `RegexCache` (6,856 bytes) and `Arena` are made by value
-  (`regex_cache_make`, `arena_make`); an out-pointer initializer,
-  `regex_cache_init(&c)`, is the more ordinary C. *Taken by the run-context
-  lane* (Steve, 2026-11-17), with `arena_make`'s new signature.
+- `RegexCache` (6,856 bytes) and `Arena` were made by value
+  (`regex_cache_make`, `arena_make`); an out-pointer initializer is the
+  more ordinary C. *Done (2026-11-18, the run-context lane):*
+  `arena_init(&a, limit)` and `regex_cache_init(&c)`.
 
 ## To follow up: coding standards declared in Roc
 

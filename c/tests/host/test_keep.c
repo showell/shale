@@ -261,7 +261,8 @@ TEST(head_and_tail_and_the_filter_against_the_oracle_on_3000_random_outputs) {
     // The patterns' order: none, `error|FAIL`, `^ok`, `x$`, `warn`.
     uint64_t fp = 0xcbf29ce484222325ULL;
     for (int round = 0; round < 3000; round++) {
-        Arena a = arena_make(1 << 24);
+        Arena a;
+        arena_init(&a, 1 << 24);
         Buf out = buf_make(&a);
         uint64_t n = prng_at_most(&p, 60);
         for (uint64_t i = 0; i < n; i++) EXPECT(buf_str(&out, at(pieces, prng_less_than(&p, pieces.len))) == OK);
@@ -303,7 +304,8 @@ TEST(head_and_tail_and_the_filter_against_the_oracle_on_3000_random_outputs) {
 TEST(the_first_random_round_exactly) {
     // Round 0 as the generator draws it: head 0, tail 0, width 3, before 1,
     // re `x$`.
-    Arena a = arena_make(1 << 20);
+    Arena a;
+    arena_init(&a, 1 << 20);
     KeepOptions o;
     keep_options_default(&o);
     o.width = 3;
@@ -320,7 +322,8 @@ TEST(the_first_random_round_exactly) {
 }
 
 TEST(the_edges) {
-    Arena a = arena_make(1 << 24);
+    Arena a;
+    arena_init(&a, 1 << 24);
     KeepOptions o;
     keep_options_default(&o);
     o.head = 2;
@@ -395,7 +398,8 @@ TEST(an_arena_refused_anywhere_stops_and_never_answers_wrong) {
     size_t refused = 0;
     size_t limit = 0;
     for (;; limit += 8) {
-        Arena a = arena_make(limit);
+        Arena a;
+        arena_init(&a, limit);
         Kept k;
         bool ok = kept_of(&a, out, o, 5, &k);
         if (ok) {
@@ -414,7 +418,8 @@ TEST(an_arena_refused_anywhere_stops_and_never_answers_wrong) {
 TEST(memory_stays_bounded_over_a_flood_of_lines) {
     // A million lines through a tail of 3: the slots are written over, never
     // taken anew, so the arena holds a few chunks, not the output.
-    Arena a = arena_make(1 << 20);
+    Arena a;
+    arena_init(&a, 1 << 20);
     KeepOptions o;
     keep_options_default(&o);
     o.tail = 3;

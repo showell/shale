@@ -521,7 +521,8 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
         if (cli_write_stop(&o->err, name, &s, none, &b) != OK) return not_ported(o, S("a report past the arena"));
         return flush_and_exit(o, EXIT_STOPPED);
     }
-    Arena tree = arena_make(b.machine_bytes + PARSE_ROOM);
+    Arena tree;
+    arena_init(&tree, b.machine_bytes + PARSE_ROOM);
     Parser p;
     parse_init(&p, &tree, source, b.nesting);
     LibraryReader reader = {a, mounts, mounts_from, b, none};
@@ -561,9 +562,12 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     }
     // The values, the machine (the frames' slots, the operands, the frames
     // and the calls) and the output, each in an arena under its own budget.
-    Arena values = arena_make(b.arena_bytes);
-    Arena machine = arena_make(b.machine_bytes);
-    Arena output = arena_make(b.output_bytes + ARENA_BIG);
+    Arena values;
+    arena_init(&values, b.arena_bytes);
+    Arena machine;
+    arena_init(&machine, b.machine_bytes);
+    Arena output;
+    arena_init(&output, b.output_bytes + ARENA_BIG);
     Run r;
     memset(&r, 0, sizeof r);
     r.ctx = run_ctx_make(&values, &machine, b);
@@ -583,7 +587,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     r.reads = reader.used.reads;
     r.read_bytes = reader.used.read_bytes;
     r.stack = ValueVec_make(&machine);
-    r.patterns = regex_cache_make();
+    regex_cache_init(&r.patterns);
     // The store, measured under the root (and `<root>/../auth`) as the
     // bare-metal host would hold it.
     LinuxStore linux_store;
@@ -595,7 +599,8 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     if (where.root.len > 0 && join(a, where.root, S("../auth"), &linux_store.auth_base) != OK) return not_ported(o, S("a root past the arena"));
     // The host's paths: the mounts, the journal `--undo-on-stop` keeps, in
     // an arena of the host's that outlives the run's values.
-    Arena host_arena = arena_make((size_t)1 << 30);
+    Arena host_arena;
+    arena_init(&host_arena, (size_t)1 << 30);
     Host lh;
     memset(&lh, 0, sizeof lh);
     paths_make(&lh.paths, &host_arena, where.root_abs, where.cwd_abs, mounts, mounts_from);
@@ -947,7 +952,8 @@ static int run_main(Out *o, int argc, char **argv) {
 
 int main(int argc, char **argv) {
     spawn_quiet_sigpipe();
-    Arena a = arena_make((size_t)1 << 30);
+    Arena a;
+    arena_init(&a, (size_t)1 << 30);
     Out o = {&a, buf_make(&a)};
     int code = run_main(&o, argc, argv);
     arena_deinit(&a);

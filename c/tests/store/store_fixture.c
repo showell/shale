@@ -17,7 +17,7 @@ typedef struct {
 
 static void sx_init(Sx *s) {
     memset(s, 0, sizeof *s);
-    s->values = arena_make((size_t)256 << 20);
+    arena_init(&s->values, (size_t)256 << 20);
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof cwd) == NULL) abort();
     mkdir("c/out", 0777);
@@ -31,7 +31,8 @@ static void sx_init(Sx *s) {
 }
 
 static void sx_deinit(Sx *s) {
-    Arena a = arena_make((size_t)1 << 20);
+    Arena a;
+    arena_init(&a, (size_t)1 << 20);
     if (store_os_delete_tree(&a, s->root) != STORE_OK) abort();
     arena_deinit(&a);
     arena_deinit(&s->values);

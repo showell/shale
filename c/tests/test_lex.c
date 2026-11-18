@@ -11,7 +11,7 @@ typedef struct {
 } LexRun;
 
 static void lex_start(LexRun *r, Str src) {
-    r->arena = arena_make(1 << 20);
+    arena_init(&r->arena, 1 << 20);
     lexer_init(&r->lx, &r->arena, src);
 }
 
@@ -294,7 +294,8 @@ TEST(a_string_across_its_line_or_never_closed_stops_at_its_quote) {
     arena_deinit(&r.arena);
     // The arena's refusal is no lex error: the caller reads it as the arena
     // budget.
-    Arena tiny = arena_make(8);
+    Arena tiny;
+    arena_init(&tiny, 8);
     Lexer lx;
     lexer_init(&lx, &tiny, S("\"a string longer than the arena allows\""));
     Token t;

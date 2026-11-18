@@ -62,7 +62,8 @@ TEST(every_budget_has_its_default) {
 }
 
 static Str message_of(BudgetKind k, Arena *values) {
-    Arena machine = arena_make(1 << 20);
+    Arena machine;
+    arena_init(&machine, 1 << 20);
     RunCtx r = run_ctx_make(values, &machine, budgets_default());
     Pos at = {3, 9};
     EXPECT(run_budget_stop(&r, at, k) == STOP);
@@ -76,7 +77,8 @@ static Str message_of(BudgetKind k, Arena *values) {
 }
 
 TEST(every_budget_stop_says_its_message) {
-    Arena v = arena_make(1 << 20);
+    Arena v;
+    arena_init(&v, 1 << 20);
     EXPECT_STR(message_of(BUDGET_STEPS, &v), S("the step budget (5000000 steps) ran out"));
     EXPECT_STR(message_of(BUDGET_ARENA, &v), S("the arena budget ran out"));
     EXPECT_STR(message_of(BUDGET_CALL_DEPTH, &v), S("calls nest deeper than the call-depth budget (64)"));
@@ -96,7 +98,8 @@ TEST(every_budget_stop_says_its_message) {
 }
 
 TEST(a_message_the_arena_refuses_falls_back_to_a_plain_one) {
-    Arena full = arena_make(0);
+    Arena full;
+    arena_init(&full, 0);
     EXPECT_STR(message_of(BUDGET_STEPS, &full), S("the step budget ran out"));
     EXPECT_STR(message_of(BUDGET_CALL_DEPTH, &full), S("calls nest deeper than the call-depth budget"));
     EXPECT_STR(message_of(BUDGET_MACHINE, &full), S("the machine's memory is past its budget"));
@@ -107,8 +110,10 @@ TEST(a_message_the_arena_refuses_falls_back_to_a_plain_one) {
 }
 
 TEST(a_message_quotes_the_budget_set_not_the_default) {
-    Arena v = arena_make(1 << 20);
-    Arena machine = arena_make(1 << 20);
+    Arena v;
+    arena_init(&v, 1 << 20);
+    Arena machine;
+    arena_init(&machine, 1 << 20);
     Budgets b = budgets_default();
     b.steps = 900;
     RunCtx r = run_ctx_make(&v, &machine, b);
@@ -120,8 +125,10 @@ TEST(a_message_quotes_the_budget_set_not_the_default) {
 }
 
 TEST(a_stop_on_no_budget_ends_the_process) {
-    Arena v = arena_make(1 << 20);
-    Arena machine = arena_make(1 << 20);
+    Arena v;
+    arena_init(&v, 1 << 20);
+    Arena machine;
+    arena_init(&machine, 1 << 20);
     RunCtx r = run_ctx_make(&v, &machine, budgets_default());
     Pos at = {1, 1};
     EXPECT_DIES(EXPECT(run_budget_stop(&r, at, BUDGET_NONE) == STOP));
@@ -132,15 +139,18 @@ TEST(a_stop_on_no_budget_ends_the_process) {
 // An arena's refusal, as a container's STOP leaves one: what run_oom is
 // held to there being.
 static void refuse_once(void) {
-    Arena none = arena_make(0);
+    Arena none;
+    arena_init(&none, 0);
     EXPECT(arena_alloc(&none, 1, 1) == NULL);
     EXPECT(none.hit);
     EXPECT(*arena_refused_slot());
 }
 
 TEST(run_oom_is_the_arena_budget_with_its_function_and_trail) {
-    Arena v = arena_make(1 << 20);
-    Arena machine = arena_make(1 << 20);
+    Arena v;
+    arena_init(&v, 1 << 20);
+    Arena machine;
+    arena_init(&machine, 1 << 20);
     RunCtx r = run_ctx_make(&v, &machine, budgets_default());
     Call outer = {2, 1, S("")};
     Call inner = {1, 21, S("f")};
@@ -162,8 +172,10 @@ TEST(run_oom_is_the_arena_budget_with_its_function_and_trail) {
 }
 
 TEST(run_fail_keeps_its_class_and_has_no_budget) {
-    Arena v = arena_make(1 << 20);
-    Arena machine = arena_make(1 << 20);
+    Arena v;
+    arena_init(&v, 1 << 20);
+    Arena machine;
+    arena_init(&machine, 1 << 20);
     RunCtx r = run_ctx_make(&v, &machine, budgets_default());
     Pos at = {5, 6};
     EXPECT(run_fail(&r, at, CLASS_INDEX, S("no key `x` in the map")) == STOP);
@@ -189,7 +201,8 @@ static Str report_of(Arena *a, Str name, const Stop *s, uint64_t steps) {
 }
 
 TEST(a_report_names_the_place_the_class_the_budget_and_the_steps) {
-    Arena a = arena_make(1 << 20);
+    Arena a;
+    arena_init(&a, 1 << 20);
     Calls none = {NULL, 0};
     Stop top = {2, 12, CLASS_BUDGET, BUDGET_ARENA, S("the arena budget ran out"), S(""), none};
     EXPECT_STR(report_of(&a, S("stdin"), &top, 1088860),
@@ -202,7 +215,8 @@ TEST(a_report_names_the_place_the_class_the_budget_and_the_steps) {
 
 TEST(a_report_gives_the_calls_innermost_first) {
     // A nested call: g stopped, called from f, called from the top.
-    Arena a = arena_make(1 << 20);
+    Arena a;
+    arena_init(&a, 1 << 20);
     Call calls[2] = {{2, 1, S("")}, {1, 21, S("f")}};
     Calls trail = {calls, 2};
     Stop s = {1, 30, CLASS_FAIL, BUDGET_NONE, S("no"), S("g"), trail};
@@ -214,7 +228,8 @@ TEST(a_report_gives_the_calls_innermost_first) {
 }
 
 TEST(a_report_names_a_line_in_the_prelude_as_the_preludes) {
-    Arena a = arena_make(1 << 20);
+    Arena a;
+    arena_init(&a, 1 << 20);
     Call calls[1] = {{4, 2, S("")}};
     Calls trail = {calls, 1};
     Stop s = {11, 10, CLASS_HOST, BUDGET_NONE, S("not found"), S("the prelude's run"), trail};
@@ -225,7 +240,8 @@ TEST(a_report_names_a_line_in_the_prelude_as_the_preludes) {
 }
 
 TEST(a_report_the_arena_refuses_says_so) {
-    Arena full = arena_make(0);
+    Arena full;
+    arena_init(&full, 0);
     Calls none = {NULL, 0};
     Stop s = {1, 1, CLASS_FAIL, BUDGET_NONE, S("x"), S(""), none};
     Buf w = buf_make(&full);
@@ -237,8 +253,10 @@ TEST(a_report_the_arena_refuses_says_so) {
 TEST(a_stop_with_no_stop_recorded_ends_the_process) {
     // A container's STOP passed up without run_oom would end the run with a
     // zeroed Stop that names no budget.
-    Arena values = arena_make(1 << 20);
-    Arena machine = arena_make(1 << 20);
+    Arena values;
+    arena_init(&values, 1 << 20);
+    Arena machine;
+    arena_init(&machine, 1 << 20);
     RunCtx r = run_ctx_make(&values, &machine, budgets_default());
     EXPECT(run_ended(&r, OK) == OK);
     EXPECT_DIES(EXPECT(run_ended(&r, STOP) == STOP));
@@ -255,8 +273,10 @@ TEST(a_stop_with_no_stop_recorded_ends_the_process) {
 TEST(a_stop_read_as_a_refusal_no_arena_made_ends_the_process) {
     // A STOP that no arena refused, read as a budget, would say the budget
     // ran out when a bug in the C stopped the run.
-    Arena values = arena_make(1 << 20);
-    Arena machine = arena_make(1 << 20);
+    Arena values;
+    arena_init(&values, 1 << 20);
+    Arena machine;
+    arena_init(&machine, 1 << 20);
     RunCtx r = run_ctx_make(&values, &machine, budgets_default());
     Pos at = {1, 2};
     *arena_refused_slot() = false;
@@ -275,8 +295,10 @@ TEST(a_stop_read_as_a_refusal_no_arena_made_ends_the_process) {
 TEST(a_refusal_read_over_a_recorded_stop_ends_the_process) {
     // A refusal read as the arena budget over a stop already recorded would
     // write the budget over the stop the run had.
-    Arena values = arena_make(1 << 20);
-    Arena machine = arena_make(1 << 20);
+    Arena values;
+    arena_init(&values, 1 << 20);
+    Arena machine;
+    arena_init(&machine, 1 << 20);
     RunCtx r = run_ctx_make(&values, &machine, budgets_default());
     Pos at = {3, 4};
     EXPECT(run_fail(&r, at, CLASS_INDEX, S("no key")) == STOP);
@@ -289,8 +311,10 @@ TEST(a_refusal_read_over_a_recorded_stop_ends_the_process) {
 }
 
 TEST(a_stop_whose_class_and_budget_disagree_ends_the_process) {
-    Arena values = arena_make(1 << 20);
-    Arena machine = arena_make(1 << 20);
+    Arena values;
+    arena_init(&values, 1 << 20);
+    Arena machine;
+    arena_init(&machine, 1 << 20);
     RunCtx r = run_ctx_make(&values, &machine, budgets_default());
     Pos at = {2, 3};
     EXPECT(run_budget_stop(&r, at, BUDGET_STEPS) == STOP);

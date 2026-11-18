@@ -21,7 +21,7 @@ static RegexOptions opts(bool nocase) {
 }
 
 static void compiled_make(Compiled *c, Str pattern, RegexOptions o) {
-    c->arena = arena_make(TEST_REGEX_LIMIT);
+    arena_init(&c->arena, TEST_REGEX_LIMIT);
     RegexRefusal refused;
     Status s = regex_compile(&c->arena, pattern, o, &c->p, &refused);
     if (s != OK) fprintf(stderr, "  /%.*s/ refused at %zu: %.*s\n", (int)pattern.len, pattern.ptr, refused.at, (int)refused.message.len, refused.message.ptr);
@@ -39,7 +39,8 @@ static RegexSearched found(Str pattern, Str s) {
 }
 
 static RegexRefusal refusal(Str pattern) {
-    Arena a = arena_make(TEST_REGEX_LIMIT);
+    Arena a;
+    arena_init(&a, TEST_REGEX_LIMIT);
     RegexProgram p;
     RegexRefusal r;
     Status s = regex_compile(&a, pattern, opts(false), &p, &r);
@@ -236,7 +237,8 @@ TEST(compile_and_cache_put_leave_nothing_behind_when_the_arena_refuses) {
     Str pattern = S("(a|b)[x-z\\d]+c?");
     size_t limit = 0;
     for (;; limit++) {
-        Arena a = arena_make(limit);
+        Arena a;
+        arena_init(&a, limit);
         RegexProgram p;
         RegexRefusal refused;
         Status s = regex_compile(&a, pattern, opts(false), &p, &refused);
@@ -260,7 +262,8 @@ TEST(compile_and_cache_put_leave_nothing_behind_when_the_arena_refuses) {
     size_t compile_least = limit;
     EXPECT(compile_least > 0);
 
-    RegexCache c = regex_cache_make();
+    RegexCache c;
+    regex_cache_init(&c);
     RegexCached *other;
     RegexRefusal refused;
     EXPECT(regex_cache_put(&c, S("other"), opts(false), TEST_REGEX_LIMIT, &refused, &other) == OK);
@@ -522,7 +525,8 @@ TEST(nocase_folds_bytes_and_classes_before_negation) {
 // evicted, keyed by text and nocase, and an evicted entry's memory given
 // back.
 TEST(the_cache_keeps_eight_evicts_the_least_recently_used_and_gives_back_what_it_evicts) {
-    RegexCache c = regex_cache_make();
+    RegexCache c;
+    regex_cache_init(&c);
     char buf[8];
     Bytes room = {buf, sizeof buf};
     RegexRefusal refused;

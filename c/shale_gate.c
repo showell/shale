@@ -31,7 +31,8 @@ static bool gate_read_stdin(Buf *b) {
 }
 
 int main(void) {
-    Arena a = arena_make(GATE_ARENA_LIMIT);
+    Arena a;
+    arena_init(&a, GATE_ARENA_LIMIT);
     Buf input = buf_make(&a);
     bool read_ok = gate_read_stdin(&input);
     Str home = {"", 0};
