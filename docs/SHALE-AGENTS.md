@@ -202,6 +202,13 @@ has none of it):
   `cwd`, `stdin`, `env`, `secrets`, `stdout_secret`, `secret_replace`,
   `log`, `want`, `cpu_budget_ms`, `stage`, `nice`, and the filters `re`, `not_re`, `nocase`,
   `before`, `after` and `width` (`RunOpts` in `c/host/host_run.c`).
+  **The filters cost the script's steps:** each output line's search for
+  `re` or `not_re` is charged to the run's step budget, so a pattern over a
+  megabyte of output can stop the run on `budget steps` after the program
+  has ended (the `── steps:` line puts it under `run`). A pattern that
+  begins with a byte rare in the output is cheapest, as with `re_lines`:
+  over `seq 1 200000`, `re = "x"` costs about 0.3M steps and `re =
+  "(1|2|3)+9$"` about 9.4M, past the 5M a run has unset.
   **`nice = 19`** (0 to 19) runs a heavy job at the lowest priority,
   set in the child before it starts, so it needs no `nice` program (which
   `run` refuses) and no `want`; a `shale` already nicer than asked runs it

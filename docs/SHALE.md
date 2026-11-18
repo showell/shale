@@ -1315,7 +1315,13 @@ three:
   `Options.host`, and on metal it stops with class `host` ("not on this
   host"). On Linux it is `src/shale_host_linux.zig`:
   - `run`, a program under a timeout, a keep and a filter (its options
-    are `Opts` in `src/shale_host_run.zig`). Its answer gives `ms`, the wall
+    are `Opts` in `src/shale_host_run.zig`). **Its filter is charged to the
+    caller's step budget:** the host searches each line of the output for
+    `re` and `not_re`, and what each search spent (by the pattern's size and
+    the places it tried) is the run's steps, besides the steps the output's
+    bytes cost with no filter. A pattern over a megabyte of output can stop
+    the run on `budget steps` once the program has ended, and the `──
+    steps:` line counts it under `run`. Its answer gives `ms`, the wall
     time, and `cpu_ms`, the user and system CPU time of the program and the
     children it waited for (`wait4`'s rusage), which a busy box barely
     moves; a child left running when the program ends is not counted. The
