@@ -21,5 +21,11 @@ local t = block_start(false, build)
 must(run_in(t, "binary preludes", {"shale", "c/gen_preludes.shale"}, {timeout_ms = 60000, tail = 5}))
 local bin = OUT .. "/" .. build .. "/shale"
 compile_held(build, "c/shale.c", run_in(t, "binary " .. build, command_argv(build, bin), {timeout_ms = COMPILE_TIMEOUT_MS, tail = 40}))
+-- A `to` that names the build's own output is the binary already there:
+-- `install` would refuse to copy a file onto itself.
+if to == real(bin) then
+  print("binary " .. build .. ": c/shale.c built to " .. bin .. ", which `to` names: nothing to install")
+  return nil
+end
 must(run_in(t, "binary install", {"install", "-D", "-m", "755", real(bin), to}, {timeout_ms = 10000, tail = 5}))
 print("binary " .. build .. ": c/shale.c built to " .. bin .. ", installed at " .. to)

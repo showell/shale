@@ -193,7 +193,7 @@
   git_real(repo, shown)  opts: -  host: -
   git_call(repo, args, opts, reading, stdin)  opts: -  host: -
   git_status(repo)  opts: -  host: -
-  git_log(repo, opts?)  opts: fields,n,range,ref,timeout_ms  host: -
+  git_log(repo, opts?)  opts: fields,n,paths,range,ref,timeout_ms  host: -
   git_diff(repo, opts?)  opts: paths,range,stat,timeout_ms  host: -
   git_show(repo, what)  opts: -  host: -
   git_ls_files(repo)  opts: -  host: -

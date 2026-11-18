@@ -466,8 +466,8 @@ has none of it):
 runs git under `run`. A `repo` is a Shale path, `""`
 or `"."` for the root and `repos:roc-chat` for a mount.
 - **Reading:** `git_status(repo)` gives `{code, path[, from]}`.
-  `git_log(repo, {n, range, ref, fields})` gives `{hash, subject, date,
-  author}`, `date` in ISO 8601 with a numeric offset (`+00:00`, never `Z`,
+  `git_log(repo, {n, range, ref, fields, paths})` gives `{hash, subject,
+  date, author}` (with `paths`, the commits that touch them), `date` in ISO 8601 with a numeric offset (`+00:00`, never `Z`,
   whatever the git). `git_diff(repo, {range, paths, stat})` and `git_show(repo,
   "rev:path")` give text. `git_ls_files(repo)`, `git_is_clean(repo)` and
   `git_head(repo)` give the tracked paths, whether the tree is clean, and
