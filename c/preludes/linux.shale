@@ -910,12 +910,13 @@ end
 -- hidden files and all, and a symbolic link anywhere in it stops the copy
 -- before anything is written, since the store follows none. Each file is one
 -- read and one change, so the run's read and change budgets bound it, and a
--- file past the call-bytes cap stops it. The answer is how many files were
--- copied.
+-- file past the call-bytes cap stops it. Each file keeps its source's mode
+-- bits (the host's `copy_mode`). The answer is how many files were copied.
 function copy(from, to)
   if exists(to) then fail("`copy`: " .. to .. " is already there, and a copy never overwrites (`remove_tree` it first)") end
   if not is_dir(from) then
     replace(to, read(from))
+    host("copy_mode", from, to)
     return 1
   end
   local entries = walk_all(from, {})
@@ -935,6 +936,7 @@ function copy(from, to)
       mkdir(target)
     else
       replace(target, read(e.path))
+      host("copy_mode", e.path, target)
       files = files + 1
     end
   end
