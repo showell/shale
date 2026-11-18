@@ -2,8 +2,9 @@
 // are tools/shale_gate_test.zig's, the same commands held to the same
 // answers; the rest hold what those leave open: the refusals' whole texts,
 // the limits (64 words, 4096 lines, a refusal past 1024 bytes), the log
-// line's cut, the hook's JSON as std.json reads it, and an escape's one
-// append. c/build/gate.shale holds the program to the Zig gate's answers.
+// line's cut, the hook's JSON as std.json reads it, an escape's one append,
+// and `shale --secrets` refused. c/build/gate.shale holds the program to the
+// Zig gate's answers.
 #include "test.h"
 #include "../gate/gate.c"
 
@@ -465,6 +466,17 @@ TEST(an_escape_is_one_append_to_homes_wants_tsv_its_folders_made) {
     arena_deinit(&a);
 }
 
+// `shale --secrets` is for a person at a terminal: the gate refuses it in
+// every form a launch takes, so an agent's shell cannot start it.
+TEST(shale_secrets_is_refused_in_every_form_of_a_launch) {
+    refuses("shale --secrets", "`--secrets` is not an option the gate passes; ");
+    refuses("cd /home/x && shale --secrets", "`--secrets` is not an option the gate passes; ");
+    refuses("/home/x/tools/shale/bin/shale --secrets", "`--secrets` is not an option the gate passes; ");
+    refuses("shale --verbose --secrets", "`--secrets` is not an option the gate passes; ");
+    refuses("shale --secrets <<'SHALE'\n2\nkeys\nSHALE", "`--secrets` is not an option the gate passes; ");
+    refuses("shale --secrets", BOTH);
+}
+
 TEST_MAIN(
     TEST_CASE(the_launch_every_form_the_design_names),
     TEST_CASE(what_it_refuses_naming_both_forms),
@@ -479,5 +491,6 @@ TEST_MAIN(
     TEST_CASE(the_hooks_json_is_read_as_std_json_reads_it),
     TEST_CASE(a_nesting_a_megabyte_deep_is_read_without_recursion),
     TEST_CASE(the_decision_each_way_the_gate_answers),
-    TEST_CASE(an_escape_is_one_append_to_homes_wants_tsv_its_folders_made)
+    TEST_CASE(an_escape_is_one_append_to_homes_wants_tsv_its_folders_made),
+    TEST_CASE(shale_secrets_is_refused_in_every_form_of_a_launch)
 )
