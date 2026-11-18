@@ -205,14 +205,19 @@ TEST(edit_says_a_diff_as_one_line_without_verbose) {
 
 // Word mode holds an edge only where `old`'s own edge is a word byte: `f(`
 // is whole before `x`, which it was not before (the call stopped: "not in
-// w.txt as a whole word"), and still not after the `a` of `af(`.
+// w.txt as a whole word"), and still not after the `a` of `af(`. A miss that
+// is there inside a word says so (it said "each of its lines is in it, but
+// not together").
 TEST(edit_word_holds_only_the_edges_where_old_ends_in_a_word_byte) {
     static Ran x;
     RanOpts o = {NULL, false, false};
     ran_init(&x, o);
-    ran_run(&x, S("replace(\"w.txt\", \"f(x) af(y) f(z)\\n(x)\\n\")\nprint(edit(\"w.txt\", \"f(\", \"g(\", {all = true, word = true}))\nprint(edit(\"w.txt\", \"(x)\\n\", \"[x]\\n\", {word = true}))\n"), bt_budgets());
+    ran_run(&x,
+            S("function ed(p, a, b, o) return edit(p, a, b, o) end\nreplace(\"w.txt\", \"f(x) af(y) f(z)\\n(x)\\n\")\nprint(edit(\"w.txt\", \"f(\", \"g(\", {all = true, word = true}))\nprint(edit(\"w.txt\", \"(x)\\n\", \"[x]\\n\", {word = "
+              "true}))\nprint(attempt(ed, \"w.txt\", \"a\", \"b\", {word = true}).error)\n"),
+            bt_budgets());
     EXPECT_OK_IN(&x.r.ctx, x.ran);
-    EXPECT_STR(buf_view(&x.r.out), S("edit w.txt: 1 hunk, -1 +1 lines\n2\nedit w.txt: 1 hunk, -1 +1 lines\n1\n"));
+    EXPECT_STR(buf_view(&x.r.out), S("edit w.txt: 1 hunk, -1 +1 lines\n2\nedit w.txt: 1 hunk, -1 +1 lines\n1\n`edit`: \"a\" is not in w.txt as a whole word: it is there, but each time inside a longer word\n"));
     EXPECT(bt_holds(&x, "w.txt", "g(x) af(y) g(z)\n[x]\n"));
     ran_free(&x);
 }

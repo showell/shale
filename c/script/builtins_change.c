@@ -301,7 +301,11 @@ static STATUS_MUST_USE Status change_plan(Run *r, Pos pos, const StorePath *p, E
         Str shown = str_sub(e.old, 0, e.old.len < 40 ? e.old.len : 40);
         if (places.len == 0) {
             Str hint = S("");
-            TRY(change_miss_hint(r, pos, now, e.old, &hint));
+            if (e.word && change_index_of(now, 0, e.old) != SIZE_MAX) {
+                hint = S(": it is there, but each time inside a longer word");
+            } else {
+                TRY(change_miss_hint(r, pos, now, e.old, &hint));
+            }
             return run_failf(r, pos, CLASS_ARGUMENT, "`edit`: \"{s}\" is not in {s}{s}{s}{s}", S("`edit`: \""), shown, S("\" is not in "), p->rel, e.word ? S(" as a whole word") : S(""), hint, which);
         }
         if (places.len > 1 && !e.all) {
