@@ -224,12 +224,19 @@ has none of it):
   with `regex`, `nocase`, `ext = {"zig"}`, `context = N` (each hit's
   `before` and `after`) and `most`; a link, a binary file and a name the
   store can't hold (`is_name`) are in `passed`, never left out quietly.
-  The walk and the search run in the host (`c/host/host_grep_tree.c`), not
-  in script: a run is charged a step per 16 bytes its reads bring and a
-  step an entry, and a file is held only while it is searched, so the
-  arena keeps the hits, not the tree. Its reads are still a stat an entry,
-  a listing a folder and two a file, so a tree of a few thousand files
-  wants `--budget reads=N`. `unique(list)` gives each item once. `newest(dir, n)`
+  **`skip = {"tests/golden", "c/out"}`** leaves those folders out whole,
+  unlisted and unread: each is a folder's path below the place searched,
+  of names (no absolute path, mount, empty part, `.` or `..`), and one
+  that is not there, or is not a folder, stops the run, as does a `skip`
+  for a lone file. An option `grep_tree` does not take stops the run,
+  naming those it does. The walk and the search are the host's
+  (`c/host/host_grep_tree.c`), in one pass: a read is a folder listed or
+  a file read (a binary file costs its head alone), and each `skip` a
+  stat; a run is charged a step an entry, each listing's sort, a step per
+  16 bytes read and each hit's text. A file is held only while it is
+  searched, so the arena keeps the hits, not the tree; a cut by `most`
+  ends the walk there. A secrets mount's folder below the place is left
+  out unnamed, as `walk` leaves it. `unique(list)` gives each item once. `newest(dir, n)`
   gives the names that changed last (the root as `""` or `"."`).
   `path_under(dir, name)` spells a name below a folder as every call takes
   it: `name` in the root, `m:name` in a mount's folder, else `dir/name`.

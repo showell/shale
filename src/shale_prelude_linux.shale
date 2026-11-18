@@ -388,16 +388,16 @@ function grep_tree(place, needle, opts?)
     entries = {}
   end
   -- The walk, each entry passed by or searched, and the answer are the
-  -- host's (c/host/host_grep_tree.c), in C rather than in script: the same
-  -- hits, in the same order, `passed` and `cut` as this prelude's loop gave
-  -- them, the same stops, and the same reads and read bytes, since the host
-  -- makes each store call this prelude made (`walk` a part at a time, as
-  -- `walk_all` calls it; `read(p, 0, 4096)` for a binary file; `grep`, or
-  -- `read_lines` a part at a time for a pattern, either case or a file past
-  -- 1 MiB; `read` for `context`). What it charges differs: a step per 16
-  -- bytes a read brings, a step and the path's bytes an entry, and each
-  -- hit's text, not a script's steps. A file's bytes are held while it is
-  -- searched, so the run's arena keeps what the hits keep, not the tree.
+  -- host's (c/host/host_grep_tree.c), in C, in one pass: each folder listed
+  -- and sorted once, each file judged and searched as the walk meets it, so
+  -- `most` ends the walk where it cuts. The hits, their order, `passed` and
+  -- `cut` are this prelude's loop's. A read is a folder listed or a file
+  -- read (its stat and its bytes, its head first so a binary costs no
+  -- more), a part a read past the call-bytes cap, and a stat each `skip`.
+  -- Passed by unlisted: a name starting with `.`, a build's folder, a
+  -- folder `skip` names, and a secrets mount's folder, never named. A run
+  -- is charged a step an entry, each listing's sort, a step per 16 bytes
+  -- read and each hit's text; the arena keeps the hits, not the tree.
   --
   -- `grep_tree_skip` and `grep_tree_file` above say, in script, what the
   -- host decides for each entry.

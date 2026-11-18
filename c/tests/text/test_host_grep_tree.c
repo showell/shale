@@ -54,13 +54,11 @@ TEST(grep_tree_searches_each_file_in_path_order_passing_by_a_binary_a_build_fold
     gt_run(&x, "show(gt(\"x\", {}))\n");
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("a.txt:1: one x\na.txt:3: x three\nsrc/b.zig:1: fn x() {}\npassed bin.dat: binary\n4\tfalse\n"));
-    // The walk: the root's listing, a stat for each of the 9 entries kept
-    // and a listing for each of the 3 folders entered (13); then a.txt,
-    // src/b.zig and src/sub/c.md each a 4 KiB head and a grep, bin.dat its
-    // head alone, and empty.txt a grep alone (8). zig-out/d.txt is stat'ed
-    // and never read; .hidden is never listed.
-    EXPECT_EQ(x.r.reads, 21);
-    EXPECT_EQ(x.r.read_bytes, 2 * 18 + 4 + 2 * 10 + 2 * 3);
+    // One pass: a listing each for the root, src and src/sub (3), and a
+    // read each for a.txt, bin.dat, empty.txt, src/b.zig and src/sub/c.md
+    // (5), each file's bytes once. zig-out and .hidden are never listed.
+    EXPECT_EQ(x.r.reads, 8);
+    EXPECT_EQ(x.r.read_bytes, 18 + 4 + 10 + 3);
     ran_free(&x);
 }
 
@@ -77,11 +75,10 @@ TEST(grep_tree_leaves_out_a_planted_secrets_mount_s_folder_unlisted_unread_and_u
                                      "{\"hits\":[{\"path\":\"a.txt\",\"line\":1,\"text\":\"x\"},{\"path\":\"z.txt\",\"line\":1,\"text\":\"x\"}],\"files\":2,\"passed\":[],\"cut\":false}\n"));
     EXPECT(!gt_holds(buf_view(&x.r.out), S("keys")));
     EXPECT(!gt_holds(buf_view(&x.r.out), S("s3cret")));
-    // The root's listing and a stat each for a.txt and z.txt (3); then each
-    // file's head and grep (4). keys is never stat'ed or listed, and not a
-    // byte of either secret is read.
-    EXPECT_EQ(x.r.reads, 7);
-    EXPECT_EQ(x.r.read_bytes, 4 * 2);
+    // The root's listing and a read each of a.txt and z.txt: keys is never
+    // listed, and not a byte of either secret is read.
+    EXPECT_EQ(x.r.reads, 3);
+    EXPECT_EQ(x.r.read_bytes, 2 * 2);
     ran_free(&x);
 }
 
@@ -169,7 +166,7 @@ TEST(grep_tree_stops_on_an_option_it_does_not_take_naming_those_it_does_before_a
     gt_run(&x, "show(gt(\"x\", {given = {most = 5, max = 60}}))\n");
     EXPECT_EQ(x.ran, STOP);
     EXPECT_EQ(x.r.ctx.stop.cls, CLASS_FAIL);
-    EXPECT_STR(x.r.ctx.stop.message, S("`grep_tree` takes `regex`, `nocase`, `ext`, `like`, `context`, `most`, not `max`"));
+    EXPECT_STR(x.r.ctx.stop.message, S("`grep_tree` takes `regex`, `nocase`, `ext`, `like`, `context`, `most`, `skip`, not `max`"));
     EXPECT_EQ(x.r.reads, 0);
     EXPECT_EQ(x.r.out.len, 0);
     ran_free(&x);
@@ -201,9 +198,9 @@ TEST(grep_tree_passes_by_a_symbolic_link_never_reading_what_it_points_at) {
     gt_run(&x, "show(gt(\"x\", {ext = {\"txt\"}}))\n");
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("a.txt:1: x\nfar.txt:1: x far\npassed l.txt: a symbolic link, never followed\n2\tfalse\n"));
-    // A link is never stat'ed or read: the walk's 3 reads, then 2 a file.
-    EXPECT_EQ(x.r.reads, 7);
-    EXPECT_EQ(x.r.read_bytes, 2 * 2 + 2 * 6);
+    // A link is never read: the root's listing, then a read a file.
+    EXPECT_EQ(x.r.reads, 3);
+    EXPECT_EQ(x.r.read_bytes, 2 + 6);
     ran_free(&x);
 }
 
@@ -232,10 +229,10 @@ TEST(grep_tree_cuts_the_hits_at_most_and_searches_no_file_after) {
     gt_run(&x, "show(gt(\"x\", {most = 3}))\nshow(gt(\"x\", {most = 0}))\n");
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("a.txt:1: x1\na.txt:2: x2\na.txt:3: x3\n1\ttrue\n1\ttrue\n"));
-    // Each call walks the whole tree first (3 reads), as walk_all did, then
-    // reads a.txt alone (2): b.txt is never read.
-    EXPECT_EQ(x.r.reads, 10);
-    EXPECT_EQ(x.r.read_bytes, 4 * 15);
+    // Each call lists the root and reads a.txt, where the cut ends the
+    // walk: b.txt is never read.
+    EXPECT_EQ(x.r.reads, 4);
+    EXPECT_EQ(x.r.read_bytes, 2 * 15);
     ran_free(&x);
 }
 
@@ -273,11 +270,107 @@ TEST(grep_tree_charges_what_its_reads_bring_not_a_script_s_steps) {
     gt_run(&x, "show(gt(\"needle!\", {}))\n");
     EXPECT_OK_IN(&x.r.ctx, x.ran);
     EXPECT_STR(buf_view(&x.r.out), S("200\tfalse\n"));
-    EXPECT_EQ(x.r.reads, 3 + 200 + 200 * 2);
-    EXPECT_EQ(x.r.read_bytes, 200 * (4096 + 26000));
-    // 376,200 of them the read bytes' (a step per 16), the rest the walk's
-    // listings and stats, each path's confinement and each entry's step.
-    EXPECT_EQ(x.r.steps, 397739);
+    // The root's and d's listings, and a read a file, its bytes once.
+    EXPECT_EQ(x.r.reads, 2 + 200);
+    EXPECT_EQ(x.r.read_bytes, 200 * 26000);
+    // 325,000 of them the read bytes' (a step per 16), the rest the two
+    // listings, each file's step and its path's confinement.
+    EXPECT_EQ(x.r.steps, 343935);
+    ran_free(&x);
+}
+
+TEST(grep_tree_leaves_out_each_folder_skip_names_unlisted_and_unread_and_no_other) {
+    static Ran x;
+    gt_init(&x, "");
+    ran_put(&x, "root/c/a.txt", "x a\n");
+    ran_put(&x, "root/c/out/o.txt", "x o\n");
+    ran_put(&x, "root/tests/golden/g.txt", "x g\n");
+    ran_put(&x, "root/tests/golden2/h.txt", "x h\n");
+    ran_put(&x, "root/tests/other.txt", "x t\n");
+    gt_run(&x, "show(gt(\"x\", {given = {skip = {\"tests/golden\", \"c/out\"}}}))\n"
+               "show(gt(\"x\", {place = \"tests\", prefix = \"tests/\", given = {skip = {\"golden\"}}}))\n");
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    // tests/golden2 only begins with a skip's name: it is searched.
+    EXPECT_STR(buf_view(&x.r.out), S("c/a.txt:1: x a\ntests/golden2/h.txt:1: x h\ntests/other.txt:1: x t\n3\tfalse\n"
+                                     "tests/golden2/h.txt:1: x h\ntests/other.txt:1: x t\n2\tfalse\n"));
+    // The first call: a stat for each skip (2), listings of the root, c,
+    // tests and tests/golden2 (4) and the 3 files (3). The second: a stat
+    // for its skip, listings of tests and tests/golden2, and 2 files.
+    EXPECT_EQ(x.r.reads, 9 + 5);
+    EXPECT_EQ(x.r.read_bytes, 3 * 4 + 2 * 4);
+    ran_free(&x);
+}
+
+// The stop `skip` gives, run alone on a fresh tree with `c/a.txt`.
+static void gt_skip_stop(const char *opts, StopClass cls, Str message) { // cstr: a test's literal
+    static Ran x;
+    gt_init(&x, "k = D/root/keys secrets\n");
+    ran_put(&x, "root/c/a.txt", "x\n");
+    ran_put(&x, "root/keys/tok", "s3cret\n");
+    Buf b = buf_make(&x.host);
+    if (buf_str(&b, S("show(gt(\"x\", ")) != OK || buf_str(&b, ran_cs(opts)) != OK || buf_str(&b, S("))\n")) != OK) abort();
+    Buf src = buf_make(&x.host);
+    if (buf_str(&src, buf_view(&b)) != OK || buf_byte(&src, 0) != OK) abort();
+    gt_run(&x, src.ptr);
+    EXPECT_EQ(x.ran, STOP);
+    EXPECT_EQ(x.r.ctx.stop.cls, cls);
+    EXPECT_STR(x.r.ctx.stop.message, message);
+    EXPECT_EQ(x.r.out.len, 0);
+    EXPECT_EQ(x.r.read_bytes, 0);
+    ran_free(&x);
+}
+
+TEST(grep_tree_refuses_a_skip_that_is_not_a_folder_below_the_place_searched) {
+    gt_skip_stop("{given = {skip = {\"c/gone\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"c/gone\": there is no c/gone"));
+    gt_skip_stop("{given = {skip = {\"c/a.txt\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"c/a.txt\": c/a.txt is not a folder"));
+    gt_skip_stop("{given = {skip = {\"/tmp\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"/tmp\" is absolute: a skip is a folder's path below the place searched"));
+    gt_skip_stop("{given = {skip = {\"c/../c\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"c/../c\" is not a path of names: a skip is a folder's path below the place searched, with no mount, empty part, `.` or `..`"));
+    gt_skip_stop("{given = {skip = {\"c//out\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"c//out\" is not a path of names: a skip is a folder's path below the place searched, with no mount, empty part, `.` or `..`"));
+    gt_skip_stop("{given = {skip = {\"\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"\" is not a path of names: a skip is a folder's path below the place searched, with no mount, empty part, `.` or `..`"));
+    gt_skip_stop("{given = {skip = {\"k:\"}}}", CLASS_ARGUMENT, S("`grep_tree`'s `skip` \"k:\" is not a path of names: a skip is a folder's path below the place searched, with no mount, empty part, `.` or `..`"));
+    gt_skip_stop("{given = {skip = \"c\"}}", CLASS_TYPE, S("`grep_tree`'s `skip` is a list of folders' paths below the place searched, not a string"));
+    gt_skip_stop("{given = {skip = {3}}}", CLASS_TYPE, S("`grep_tree`'s `skip` holds an integer: a folder's path is a string"));
+    gt_skip_stop("{given = {skip = {\"keys\"}}}", CLASS_REFUSED, S("\"keys\" is in the mount `k`, which holds secrets"));
+    gt_skip_stop("{place = \"c/a.txt\", entries = {{path = \"c/a.txt\", kind = \"file\", size = 2}}, given = {skip = {\"c\"}}}", CLASS_ARGUMENT,
+                 S("`grep_tree`'s `skip` \"c\": the place searched, \"c/a.txt\", is a file, with no folder below it"));
+}
+
+TEST(grep_tree_walks_once_a_listing_a_folder_and_a_read_a_file_at_a_step_an_entry) {
+    static Ran x;
+    gt_init(&x, "");
+    // 3 levels of 4 folders and 5 files each (84 folders, 420 files), a hit
+    // in each of the 320 deepest files (24 bytes) and none in the rest (25).
+    char name[64];
+    for (int a = 0; a < 4; a++) {
+        for (int b = 0; b < 4; b++) {
+            for (int c = 0; c < 4; c++) {
+                for (int f = 0; f < 5; f++) {
+                    int n = snprintf(name, sizeof name, "root/a%d/b%d/c%d/f%d.txt", a, b, c, f);
+                    if (n <= 0) abort();
+                    ran_put(&x, name, "a line of text, needle!\n");
+                }
+            }
+            for (int f = 0; f < 5; f++) {
+                int n = snprintf(name, sizeof name, "root/a%d/b%d/f%d.txt", a, b, f);
+                if (n <= 0) abort();
+                ran_put(&x, name, "a line of text, no hit..\n");
+            }
+        }
+        for (int f = 0; f < 5; f++) {
+            int n = snprintf(name, sizeof name, "root/a%d/f%d.txt", a, f);
+            if (n <= 0) abort();
+            ran_put(&x, name, "a line of text, no hit..\n");
+        }
+    }
+    gt_run(&x, "local g = gt(\"needle!\", {})\nprint(g.files, #g.hits, g.hits[1].path, g.hits[#g.hits].path)\n");
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("420\t320\ta0/b0/c0/f0.txt\ta3/b3/c3/f4.txt\n"));
+    // The root and 84 folders listed once each, and 420 files read once.
+    EXPECT_EQ(x.r.reads, 1 + 84 + 420);
+    EXPECT_EQ(x.r.read_bytes, 320 * 24 + 100 * 25);
+    // A step an entry (504), each listing's entries and sort bound, a step
+    // per 16 bytes read, each file's path confined and each hit's text.
+    EXPECT_EQ(x.r.steps, 29082);
     ran_free(&x);
 }
 
@@ -291,4 +384,7 @@ TEST_PART(host_grep_tree, TEST_CASE(grep_tree_searches_each_file_in_path_order_p
           TEST_CASE(grep_tree_leaves_out_the_build_folders_and_keeps_only_the_extensions_and_names_asked),
           TEST_CASE(grep_tree_cuts_the_hits_at_most_and_searches_no_file_after),
           TEST_CASE(grep_tree_finds_either_case_a_pattern_and_the_lines_around_a_hit),
-          TEST_CASE(grep_tree_charges_what_its_reads_bring_not_a_script_s_steps));
+          TEST_CASE(grep_tree_charges_what_its_reads_bring_not_a_script_s_steps),
+          TEST_CASE(grep_tree_leaves_out_each_folder_skip_names_unlisted_and_unread_and_no_other),
+          TEST_CASE(grep_tree_refuses_a_skip_that_is_not_a_folder_below_the_place_searched),
+          TEST_CASE(grep_tree_walks_once_a_listing_a_folder_and_a_read_a_file_at_a_step_an_entry));
