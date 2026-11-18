@@ -97,7 +97,6 @@ static STATUS_MUST_USE Status host_jobs_result(Run *r, Pos pos, Str ended, bool 
 // against the run's cap on programs.
 static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValues args, Value *out) {
     Arena *a = r->ctx.values;
-    RunFiles *rs = builtin_files_of(r);
     if (args.len != 2) {
         return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes argv and its options, `job_start({{\"zig\", \"build\"}}, {{log = \"runs:build.log\"}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
     }
@@ -127,7 +126,8 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     value_nil(&cwd_v);
     Value want;
     value_nil(&want);
-    Table *env_t = NULL;
+    HostEnvOpt env_o;
+    memset(&env_o, 0, sizeof env_o);
     bool keep_on_stop = false;
     for (size_t i = 0; i < ValueMap_len(&m->map); i++) {
         Str k = ValueMap_key_at(&m->map, i);
@@ -135,9 +135,11 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
         if (str_eq(k, S("log"))) {
             log_v = x;
         } else if (str_eq(k, S("cwd"))) {
+            Str unused = S("");
+            TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &x, S("its path"), &unused));
             cwd_v = x;
         } else if (str_eq(k, S("env"))) {
-            TRY(host_map_opt(r, pos, k, &x, &env_t));
+            TRY(host_env_opt(r, pos, k, &x, false, &env_o));
         } else if (str_eq(k, S("want"))) {
             TRY(host_str_value_opt(r, pos, k, &x, &want));
         } else if (str_eq(k, S("keep_on_stop"))) {
@@ -154,38 +156,14 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     TRY(host_str_opt(r, pos, S("log"), &log_v, &log_shown));
     TRY(run_charge(r, pos, n));
     if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
+    // No `secrets` on a job; the guards' order is the DRAGON at
+    // host_guard_program (host_run.c).
+    HostEnvOpt no_secrets;
+    memset(&no_secrets, 0, sizeof no_secrets);
     SpawnStrs argv_s = {argv.ptr, argv.len};
-    TRY(host_refuse_nul(r, pos, S("job_start"), argv_s, env_t, NULL));
+    HostProgram prog = {S("job_start"), argv_s, &cwd_v, &env_o, &no_secrets, host_given(&want)};
     Str cwd = S("");
-    if (host_given(&cwd_v)) {
-        Str given = S("");
-        TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &cwd_v, S("its path"), &given));
-        TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), given, true, &cwd));
-    } else {
-        cwd = paths_root_of(&h->paths, &rs->path);
-    }
-    size_t n_env = env_t != NULL ? ValueMap_len(&env_t->map) : 0;
-    Str *keys = ARENA_ARRAY(a, Str, n_env);
-    Str *vals = ARENA_ARRAY(a, Str, n_env);
-    if (n_env > 0 && (keys == NULL || vals == NULL)) return run_values_oom(r, pos);
-    SLICE_TYPE(StrRoom, Str);
-    StrRoom kroom = {keys, n_env};
-    StrRoom vroom = {vals, n_env};
-    size_t n_str = 0;
-    for (size_t j = 0; j < n_env; j++) {
-        Value x = ValueMap_value_at(&env_t->map, j);
-        if (x.tag != VALUE_STRING) continue;
-        at(kroom, n_str) = ValueMap_key_at(&env_t->map, j);
-        at(vroom, n_str) = x.as.string;
-        n_str++;
-    }
-    PathsStrs argv_c = {argv.ptr, argv.len};
-    PathsStrs env_keys = {keys, n_str};
-    PathsStrs env_vals = {vals, n_str};
-    TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, S("job_start"), argv_c, cwd, env_keys, env_vals));
-    // The secrets guard before `host_refuse`, which hands argv[0] to git
-    // (the DRAGON at host_run.c's call).
-    TRY(host_refuse(h, r, pos, S("job_start"), at(argv, 0), cwd, host_given(&want)));
+    TRY(host_guard_program(h, r, pos, &prog, &cwd));
     // Its record holds the argv, escaped: one too long is said here, not as
     // a record the reaper could not write.
     uint64_t argv_bytes = n - 1;
@@ -198,27 +176,12 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     }
     if (h->reaper.len == 0) return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: this host has no reaper to start a job under"));
 
-    Str *env_p = ARENA_ARRAY(a, Str, h->env.len + n_env);
-    if (env_p == NULL && h->env.len + n_env > 0) return run_values_oom(r, pos);
-    StrRoom env = {env_p, h->env.len + n_env};
-    size_t ne = 0;
-    for (size_t i = 0; i < h->env.len; i++) {
-        Str e = at(h->env, i);
-        const char *eq = str_find_byte(e, '=');
-        Str k = eq != NULL ? str_sub(e, 0, (size_t)(eq - e.ptr)) : e;
-        bool over = false;
-        for (size_t j = 0; !over && j < n_env; j++) over = str_eq(ValueMap_key_at(&env_t->map, j), k);
-        if (!over) at(env, ne++) = e;
-    }
-    for (size_t j = 0; j < n_env; j++) {
-        Value x = ValueMap_value_at(&env_t->map, j);
-        Str v = S("");
-        TRY(host_str_opt(r, pos, S("env"), &x, &v));
-        Buf kv = buf_make(a);
-        if (buf_str(&kv, ValueMap_key_at(&env_t->map, j)) != OK || buf_byte(&kv, '=') != OK || buf_str(&kv, v) != OK) return run_values_oom(r, pos);
-        at(env, ne++) = buf_view(&kv);
-    }
-    SpawnStrs senv = {env_p, ne};
+    // A job's record line names no `env`, so what `host_run_env` shows of it
+    // is let go.
+    Buf shown_env = buf_make(a);
+    SpawnStrs senv = {NULL, 0};
+    HostSecrets none = {NULL, 0};
+    TRY(host_run_env(h, r, pos, &env_o, &no_secrets, &shown_env, &senv, &none));
     bool found = false;
     Str program = S("");
     if (jobs_find(a, at(argv, 0), senv, cwd, &found, &program) != OK) return run_values_oom(r, pos);

@@ -1,7 +1,8 @@
 // host_run.c: the Linux host's `run`, and what it shares with the jobs: the
 // host itself (`Host`: its paths, the environment a program inherits, the
 // records `--verbose` lists and where the run's time went), the refusals
-// (`host_refuse`), the option readers, the scrubber of secrets
+// and the one guard prologue every program passes (`host_guard_program`),
+// the option readers, the environment a program gets, the scrubber of secrets
 // (`HostScrub`) and the output's sinks (`HostOut`).
 //
 // A program's output streams through the scrubber, then to the log, and to
@@ -241,9 +242,47 @@ static STATUS_MUST_USE Status host_bool_opt(Run *r, Pos pos, Str k, const Value 
 // INT64_MAX, so no option given is this.
 #define HOST_UNSET UINT64_MAX
 
+// A program's `env` or `secrets` as the options boundary read it: each name
+// beside its string (`env`'s value, a secret's path as the script gave it),
+// in the map's order. None given is empty.
+typedef struct {
+    PathsStrs names;
+    PathsStrs values;
+} HostEnvOpt;
+
+// `env` or `secrets`, read once into names and their strings, for `run` and
+// `job_start` alike: a value that is not a string stops the run here, so the
+// guards and the environment below test no value's type. A secret's value is
+// its file's path (`paths`), and its stop says so.
+static STATUS_MUST_USE Status host_env_opt(Run *r, Pos pos, Str k, const Value *x, bool paths, HostEnvOpt *out) {
+    Table *t = NULL;
+    TRY(host_map_opt(r, pos, k, x, &t));
+    size_t n = ValueMap_len(&t->map);
+    Str *names = ARENA_ARRAY(r->ctx.values, Str, n);
+    Str *values = ARENA_ARRAY(r->ctx.values, Str, n);
+    if (n > 0 && (names == NULL || values == NULL)) return run_values_oom(r, pos);
+    SLICE_TYPE(EnvRoom, Str);
+    EnvRoom nroom = {names, n};
+    EnvRoom vroom = {values, n};
+    for (size_t j = 0; j < n; j++) {
+        Value v = ValueMap_value_at(&t->map, j);
+        at(nroom, j) = ValueMap_key_at(&t->map, j);
+        if (paths) {
+            TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &v, S("its path"), &at(vroom, j)));
+        } else {
+            TRY(host_str_opt(r, pos, k, &v, &at(vroom, j)));
+        }
+    }
+    out->names.ptr = names;
+    out->names.len = n;
+    out->values.ptr = values;
+    out->values.len = n;
+    return OK;
+}
+
 // `run`'s options, as the script gives them. An integer option not given is
-// HOST_UNSET, a value option nil (a script's map never holds nil), and a
-// table option NULL. `before`, `after` and `nocase` are 0 or false unset.
+// HOST_UNSET, a value option nil (a script's map never holds nil), and `env`
+// and `secrets` empty. `before`, `after` and `nocase` are 0 or false unset.
 typedef struct {
     uint64_t timeout_ms;
     // `re`, `not_re`, `want` and `stage`: strings.
@@ -261,8 +300,8 @@ typedef struct {
     Value log;
     Value cwd;
     Value stdin_v;
-    Table *env;
-    Table *secrets;
+    HostEnvOpt env;
+    HostEnvOpt secrets;
     Value want;
     Value stdout_secret;
     bool secret_replace;
@@ -341,9 +380,9 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
         } else if (str_eq(k, S("stdin"))) {
             o->stdin_v = x;
         } else if (str_eq(k, S("env"))) {
-            TRY(host_map_opt(r, pos, k, &x, &o->env));
+            TRY(host_env_opt(r, pos, k, &x, false, &o->env));
         } else if (str_eq(k, S("secrets"))) {
-            TRY(host_map_opt(r, pos, k, &x, &o->secrets));
+            TRY(host_env_opt(r, pos, k, &x, true, &o->secrets));
         } else if (str_eq(k, S("want"))) {
             TRY(host_str_value_opt(r, pos, k, &x, &o->want));
         } else if (str_eq(k, S("cpu_budget_ms"))) {
@@ -507,6 +546,71 @@ static STATUS_MUST_USE Status host_refuse(Host *h, Run *r, Pos pos, Str who, Str
     TRY(host_tracked(h, r, pos, argv0, cwd, &known));
     if (known) return OK;
     return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: a program by path that git does not track (a script just written?); {{want = \"tag: why\"}} to run it anyway"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(argv0)));
+}
+
+static bool host_has_nul(Str s) {
+    return str_find_byte(s, 0) != NULL;
+}
+
+static STATUS_MUST_USE Status host_refuse_nul_name(Run *r, Pos pos, Str who, Str opt) {
+    return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `{s}` has a name that holds a NUL byte, where the kernel would end it"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(opt)));
+}
+
+// Refuses a NUL byte in a program's argument, in an `env` name or value, or
+// in a `secrets` name.
+static STATUS_MUST_USE Status host_refuse_nul(Run *r, Pos pos, Str who, SpawnStrs argv, const HostEnvOpt *env, const HostEnvOpt *secrets) {
+    for (size_t i = 0; i < argv.len; i++) {
+        if (host_has_nul(at(argv, i))) {
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s argument {d} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(run_unum(r, i + 1))));
+        }
+    }
+    for (size_t j = 0; j < env->names.len; j++) {
+        if (host_has_nul(at(env->names, j))) return host_refuse_nul_name(r, pos, who, S("env"));
+        if (host_has_nul(at(env->values, j))) {
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` {s} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(at(env->names, j))));
+        }
+    }
+    for (size_t j = 0; j < secrets->names.len; j++) {
+        if (host_has_nul(at(secrets->names, j))) return host_refuse_nul_name(r, pos, who, S("secrets"));
+    }
+    return OK;
+}
+
+// A program as the guards see it, from `run`'s options or `job_start`'s.
+typedef struct {
+    // `run` or `job_start`, for the messages.
+    Str who;
+    SpawnStrs argv;
+    // A string, the folder it runs in; nil for the root.
+    const Value *cwd;
+    const HostEnvOpt *env;
+    const HostEnvOpt *secrets;
+    bool has_want;
+} HostProgram;
+
+// The guards a program passes before it starts, one prologue for `run` and
+// `job_start`, giving the folder it runs in as an OS path.
+// DRAGON: the secrets rule. A guard that tests other bytes than the program
+// is handed lets a secret's path through: a Shale string may hold a NUL, and
+// the kernel ends an argument at it, so `"keys\0x"` passes the secrets
+// folder's guard whole and reaches the program as `keys`. And `host_refuse`
+// hands argv[0] to git (`ls-files`), which must never be shown a secret's
+// path.
+// REMEDY: the order here. The NUL refusal runs first, so every guard after
+// it tests exactly the bytes the program is handed; the secrets guard runs
+// before `host_refuse`, so a path into a secrets folder stops the run before
+// git starts. test_run_guards plants each, for both callers.
+static STATUS_MUST_USE Status host_guard_program(Host *h, Run *r, Pos pos, const HostProgram *p, Str *cwd) {
+    RunFiles *rs = builtin_files_of(r);
+    TRY(host_refuse_nul(r, pos, p->who, p->argv, p->env, p->secrets));
+    if (host_given(p->cwd)) {
+        TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), p->cwd->as.string, true, cwd));
+    } else {
+        *cwd = paths_root_of(&h->paths, &rs->path);
+    }
+    PathsStrs argv = {p->argv.ptr, p->argv.len};
+    TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, p->who, argv, *cwd, p->env->names, p->env->values));
+    return host_refuse(h, r, pos, p->who, at(p->argv, 0), *cwd, p->has_want);
 }
 
 // ── the output's way: scrub, then log, keep or whole ──
@@ -851,13 +955,91 @@ static void host_run_release(HostRunHeld *held) {
     held->has_stream = false;
 }
 
-// The environment a program gets: the inherited one, less what `env` and
-// `secrets` set, then `env`'s, then the secrets' (read from their files).
-// `shown` gets ` K=V` and ` K=<secret path>` for the record.
-static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOpts *o, Buf *shown, SpawnStrs *env_out, HostSecrets *secrets_out) {
+// Reads into `into` until it is full or the file ends: 0 with `*len` read,
+// or the errno.
+static int host_read_up_to(int fd, Bytes into, size_t *len) {
+    *len = 0;
+    while (*len < into.len) {
+        ssize_t got = read(fd, &at(into, *len), into.len - *len);
+        if (got < 0 && errno == EINTR) continue;
+        if (got < 0) return errno;
+        if (got == 0) return 0;
+        *len += (size_t)got;
+    }
+    return 0;
+}
+
+// A secret's value: the file at the script's `given` (a secrets mount's
+// path) read whole, at most HOST_SECRET_MAX bytes, space trimmed from both
+// ends. A file that is not there, not a file, too long or empty stops the
+// run.
+// DRAGON: the secrets rule. `path` is a secret's file and `bytes` a secret;
+// neither may reach a message or the record.
+// REMEDY: the stops name the script's own path, `given`; the value goes to
+// the environment and the scrubber alone.
+static STATUS_MUST_USE Status host_secret_read(Host *h, Run *r, Pos pos, Str name, Str given, Str *value) {
+    Str path = S("");
+    TRY(paths_secret_path(&h->paths, &builtin_files_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, &path));
+    FileSystemCPath cp;
+    const char *c = NULL;
+    FileSystemErr ce = file_system_cstr(&cp, path, &c);
+    // Neither waited on (a FIFO) nor followed (a link): host_open_regular.
+    int fd = -1;
+    int err = ce == FILE_SYSTEM_OK ? host_open_regular(c, false, &fd) : file_system_cstr_errno(ce);
+    if (err == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret `{s}`'s file {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(name), MSG_FROM_SCRIPT(given)));
+    char *bytes = NULL;
+    size_t len = 0;
+    if (err == 0) {
+        bytes = arena_alloc(r->ctx.values, HOST_SECRET_MAX + 1, 1);
+        if (bytes == NULL) {
+            close(fd);
+            return run_values_oom(r, pos);
+        }
+        Bytes into = {bytes, HOST_SECRET_MAX + 1};
+        err = host_read_up_to(fd, into, &len);
+        close(fd);
+    }
+    Str why = S("");
+    if (err != 0) why = file_system_err_name(file_system_err_of(err));
+    if (err == 0 && len > HOST_SECRET_MAX) why = S("StreamTooLong");
+    if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`run`: the secret `{s}`'s file {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(name), MSG_FROM_SCRIPT(given), MSG_FROM_HOST(why)));
+    Str v = {bytes, len};
+    while (v.len > 0 && mem_find_byte(" \t\r\n", str_byte(v, 0), 4) != NULL) v = str_sub(v, 1, v.len);
+    while (v.len > 0 && mem_find_byte(" \t\r\n", str_byte(v, v.len - 1), 4) != NULL) v = str_sub(v, 0, v.len - 1);
+    if (v.len == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: the secret `{s}`'s file {s} is empty"), MSG_ARGS(MSG_FROM_SCRIPT(name), MSG_FROM_SCRIPT(given)));
+    *value = v;
+    return OK;
+}
+
+// Whether the inherited `K=V` is one that `env` or `secrets` sets anew.
+static bool host_env_overridden(Str inherited, const HostEnvOpt *env, const HostEnvOpt *secrets) {
+    const char *eq = str_find_byte(inherited, '=');
+    Str k = eq != NULL ? str_sub(inherited, 0, (size_t)(eq - inherited.ptr)) : inherited;
+    for (size_t j = 0; j < env->names.len; j++) {
+        if (str_eq(at(env->names, j), k)) return true;
+    }
+    for (size_t j = 0; j < secrets->names.len; j++) {
+        if (str_eq(at(secrets->names, j), k)) return true;
+    }
+    return false;
+}
+
+// `K=V`, in the values' arena.
+static STATUS_MUST_USE Status host_env_pair(Run *r, Pos pos, Str k, Str v, Str *out) {
+    Buf kv = buf_make(r->ctx.values);
+    if (buf_str(&kv, k) != OK || buf_byte(&kv, '=') != OK || buf_str(&kv, v) != OK) return run_values_oom(r, pos);
+    *out = buf_view(&kv);
+    return OK;
+}
+
+// The environment a program gets, `run`'s or a job's: the inherited one,
+// less what `env` and `secrets` set, then `env`'s, then the secrets' (read
+// from their files). `shown` gets ` K=V` and ` K=<secret path>` for the
+// record.
+static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const HostEnvOpt *envs, const HostEnvOpt *secret_paths, Buf *shown, SpawnStrs *env_out, HostSecrets *secrets_out) {
     Arena *a = r->ctx.values;
-    size_t extra = o->env != NULL ? ValueMap_len(&o->env->map) : 0;
-    size_t nsecrets = o->secrets != NULL ? ValueMap_len(&o->secrets->map) : 0;
+    size_t extra = envs->names.len;
+    size_t nsecrets = secret_paths->names.len;
     Str *env = ARENA_ARRAY(a, Str, h->env.len + extra + nsecrets);
     if (env == NULL && h->env.len + extra + nsecrets > 0) return run_values_oom(r, pos);
     HostSecret *secrets = ARENA_ARRAY(a, HostSecret, nsecrets);
@@ -869,77 +1051,25 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const RunOp
     size_t n = 0;
     for (size_t i = 0; i < h->env.len; i++) {
         Str e = at(h->env, i);
-        const char *eq = str_find_byte(e, '=');
-        Str k = eq != NULL ? str_sub(e, 0, (size_t)(eq - e.ptr)) : e;
-        bool over = false;
-        for (size_t j = 0; !over && j < extra; j++) over = str_eq(ValueMap_key_at(&o->env->map, j), k);
-        for (size_t j = 0; !over && j < nsecrets; j++) over = str_eq(ValueMap_key_at(&o->secrets->map, j), k);
-        if (!over) at(room, n++) = e;
+        if (!host_env_overridden(e, envs, secret_paths)) at(room, n++) = e;
     }
     for (size_t j = 0; j < extra; j++) {
-        Str k = ValueMap_key_at(&o->env->map, j);
-        Value x = ValueMap_value_at(&o->env->map, j);
-        Str v = S("");
-        TRY(host_str_opt(r, pos, S("env"), &x, &v));
-        Buf kv = buf_make(a);
-        if (buf_str(&kv, k) != OK || buf_byte(&kv, '=') != OK || buf_str(&kv, v) != OK) return run_values_oom(r, pos);
-        at(room, n++) = buf_view(&kv);
+        Str k = at(envs->names, j);
+        Str v = at(envs->values, j);
+        TRY(host_env_pair(r, pos, k, v, &at(room, n)));
+        n++;
         if (buf_byte(shown, ' ') != OK || buf_str(shown, k) != OK || buf_byte(shown, '=') != OK || buf_str(shown, v) != OK) return run_values_oom(r, pos);
     }
     for (size_t j = 0; j < nsecrets; j++) {
-        Str k = ValueMap_key_at(&o->secrets->map, j);
-        Value x = ValueMap_value_at(&o->secrets->map, j);
-        Str given = S("");
-        TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &x, S("its path"), &given));
-        Str path = S("");
-        TRY(paths_secret_path(&h->paths, &builtin_files_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, &path));
-        Str shown_path = given;
-        // DRAGON: the secrets rule. `path` is a secret's file and `bytes`
-        // a secret; neither may reach a message or the record.
-        // REMEDY: the stops name the script's own path, `shown_path`; the
-        // value goes to the environment and the scrubber alone.
-        FileSystemCPath cp;
-        const char *c = NULL;
-        FileSystemErr ce = file_system_cstr(&cp, path, &c);
-        // Neither waited on (a FIFO) nor followed (a link): host_open_regular.
-        int fd = -1;
-        int err = ce == FILE_SYSTEM_OK ? host_open_regular(c, false, &fd) : file_system_cstr_errno(ce);
-        if (err == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret `{s}`'s file {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path)));
-        char *bytes = NULL;
-        size_t len = 0;
-        if (err == 0) {
-            bytes = arena_alloc(a, HOST_SECRET_MAX + 1, 1);
-            if (bytes == NULL) {
-                close(fd);
-                return run_values_oom(r, pos);
-            }
-            Bytes into = {bytes, HOST_SECRET_MAX + 1};
-            while (len < into.len) {
-                ssize_t got = read(fd, &at(into, len), into.len - len);
-                if (got < 0 && errno == EINTR) continue;
-                if (got < 0) {
-                    err = errno;
-                    break;
-                }
-                if (got == 0) break;
-                len += (size_t)got;
-            }
-            close(fd);
-        }
-        Str why = S("");
-        if (err != 0) why = file_system_err_name(file_system_err_of(err));
-        if (err == 0 && len > HOST_SECRET_MAX) why = S("StreamTooLong");
-        if (why.len > 0) return host_fail(r, pos, CLASS_STORE, S("`run`: the secret `{s}`'s file {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path), MSG_FROM_HOST(why)));
-        Str v = {bytes, len};
-        while (v.len > 0 && mem_find_byte(" \t\r\n", str_byte(v, 0), 4) != NULL) v = str_sub(v, 1, v.len);
-        while (v.len > 0 && mem_find_byte(" \t\r\n", str_byte(v, v.len - 1), 4) != NULL) v = str_sub(v, 0, v.len - 1);
-        if (v.len == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: the secret `{s}`'s file {s} is empty"), MSG_ARGS(MSG_FROM_SCRIPT(k), MSG_FROM_SCRIPT(shown_path)));
-        Buf kv = buf_make(a);
-        if (buf_str(&kv, k) != OK || buf_byte(&kv, '=') != OK || buf_str(&kv, v) != OK) return run_values_oom(r, pos);
-        at(room, n++) = buf_view(&kv);
+        Str k = at(secret_paths->names, j);
+        Str given = at(secret_paths->values, j);
+        Str v = S("");
+        TRY(host_secret_read(h, r, pos, k, given, &v));
+        TRY(host_env_pair(r, pos, k, v, &at(room, n)));
+        n++;
         at(sroom, j).name = k;
         at(sroom, j).value = v;
-        if (buf_byte(shown, ' ') != OK || buf_str(shown, k) != OK || buf_lit(shown, "=<secret ") != OK || buf_str(shown, shown_path) != OK || buf_byte(shown, '>') != OK) return run_values_oom(r, pos);
+        if (buf_byte(shown, ' ') != OK || buf_str(shown, k) != OK || buf_lit(shown, "=<secret ") != OK || buf_str(shown, given) != OK || buf_byte(shown, '>') != OK) return run_values_oom(r, pos);
     }
     env_out->ptr = env;
     env_out->len = n;
@@ -1017,44 +1147,6 @@ static void host_run_record(Host *h, Run *r, Str joined, Str shown_env, const Ru
     if (s == OK) host_record(h, buf_view(&b));
 }
 
-static bool host_has_nul(Str s) {
-    return str_find_byte(s, 0) != NULL;
-}
-
-// `host_refuse_nul`'s look at one map, `env` or `secrets`: a name, and for
-// `env` a string value, holding a NUL.
-static STATUS_MUST_USE Status host_refuse_nul_map(Run *r, Pos pos, Str who, Str opt, Table *t) {
-    if (t == NULL) return OK;
-    bool env = str_eq(opt, S("env"));
-    for (size_t j = 0; j < ValueMap_len(&t->map); j++) {
-        Str k = ValueMap_key_at(&t->map, j);
-        if (host_has_nul(k)) return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `{s}` has a name that holds a NUL byte, where the kernel would end it"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(opt)));
-        Value x = ValueMap_value_at(&t->map, j);
-        if (env && x.tag == VALUE_STRING && host_has_nul(x.as.string)) {
-            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` {s} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k)));
-        }
-    }
-    return OK;
-}
-
-// Refuses a NUL byte in a program's argument, in an `env` name or value, or
-// in a `secrets` name. `run` and `job_start` call it
-// before any other guard.
-// DRAGON: the secrets rule. A Shale string may hold a NUL, and the kernel
-// ends an argument at it: `"keys\0x"` passes the secrets folder's guard whole
-// and reaches the program as `keys`.
-// REMEDY: this runs first, so every guard after it tests exactly the bytes
-// the program is handed; test_run_guards plants each kind.
-static STATUS_MUST_USE Status host_refuse_nul(Run *r, Pos pos, Str who, SpawnStrs argv, Table *env, Table *secrets) {
-    for (size_t i = 0; i < argv.len; i++) {
-        if (host_has_nul(at(argv, i))) {
-            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s argument {d} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(run_unum(r, i + 1))));
-        }
-    }
-    TRY(host_refuse_nul_map(r, pos, who, S("env"), env));
-    return host_refuse_nul_map(r, pos, who, S("secrets"), secrets);
-}
-
 // A path the host itself writes for the script (`run`'s log, a job's log and
 // record, `suffix` added to the script's path first), as an OS path, once
 // `may_change` let it change.
@@ -1082,43 +1174,15 @@ static STATUS_MUST_USE Status host_change_os_path(Host *h, Run *r, Pos pos, Str 
 // options.
 static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnStrs argv, const RunOpts *o, HostRunHeld *held, Value *out) {
     Arena *a = r->ctx.values;
-    RunFiles *rs = builtin_files_of(r);
-    TRY(host_refuse_nul(r, pos, S("run"), argv, o->env, o->secrets));
+    // The guards' order is the DRAGON at host_guard_program.
+    HostProgram prog = {S("run"), argv, &o->cwd, &o->env, &o->secrets, host_given(&o->want)};
     Str cwd = S("");
-    if (host_given(&o->cwd)) {
-        TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), o->cwd.as.string, true, &cwd));
-    } else {
-        cwd = paths_root_of(&h->paths, &rs->path);
-    }
-    size_t n_env = o->env != NULL ? ValueMap_len(&o->env->map) : 0;
-    Str *keys = ARENA_ARRAY(a, Str, n_env);
-    Str *vals = ARENA_ARRAY(a, Str, n_env);
-    if (n_env > 0 && (keys == NULL || vals == NULL)) return run_values_oom(r, pos);
-    SLICE_TYPE(StrRoom, Str);
-    StrRoom kroom = {keys, n_env};
-    StrRoom vroom = {vals, n_env};
-    size_t n_str = 0;
-    for (size_t j = 0; j < n_env; j++) {
-        Value x = ValueMap_value_at(&o->env->map, j);
-        if (x.tag != VALUE_STRING) continue;
-        at(kroom, n_str) = ValueMap_key_at(&o->env->map, j);
-        at(vroom, n_str) = x.as.string;
-        n_str++;
-    }
-    PathsStrs argv_c = {argv.ptr, argv.len};
-    PathsStrs env_keys = {keys, n_str};
-    PathsStrs env_vals = {vals, n_str};
-    TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, S("run"), argv_c, cwd, env_keys, env_vals));
-    // DRAGON: the secrets rule. `host_refuse` hands argv[0] to git
-    // (`ls-files`), which must never be shown a secret's path.
-    // REMEDY: the secrets guard runs first, so a path into a secrets folder
-    // stops the run before git starts; test_run_guards plants the swap.
-    TRY(host_refuse(h, r, pos, S("run"), at(argv, 0), cwd, host_given(&o->want)));
+    TRY(host_guard_program(h, r, pos, &prog, &cwd));
 
     Buf shown_env = buf_make(a);
     SpawnStrs env = {NULL, 0};
     HostSecrets secrets = {NULL, 0};
-    TRY(host_run_env(h, r, pos, o, &shown_env, &env, &secrets));
+    TRY(host_run_env(h, r, pos, &o->env, &o->secrets, &shown_env, &env, &secrets));
     bool has_stdin = false;
     Str stdin_bytes = S("");
     TRY(host_run_stdin(r, pos, o, &has_stdin, &stdin_bytes));
