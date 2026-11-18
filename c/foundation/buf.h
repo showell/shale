@@ -108,13 +108,7 @@ static inline STATUS_MUST_USE Status buf_utf8(Buf *b, uint32_t cp) {
     return buf_str(b, str_sub(((Str){seq, sizeof seq}), 0, n));
 }
 
-// What the buffer holds.
-// DRAGON: use after free. A growth moves the bytes and can free the old ones
-// to the system, so a view kept across an append can dangle, not just go
-// stale.
-// REMEDY: a caller holds a view only until the buffer's next append, which
-// nothing checks; buf_str rebases a view of its own buffer, and the full
-// tier's ASan fails a test that reads a freed one.
+// What the buffer holds, until its next append (the DRAGON at arena_free).
 static inline Str buf_view(const Buf *b) {
     Str s = {b->ptr, b->len};
     return s;

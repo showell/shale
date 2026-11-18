@@ -48,13 +48,7 @@ static inline STATUS_MUST_USE Status vec_grow_raw(Arena *a, void **ptr, size_t *
     // and warns (-Wrestrict); they never overlap, and the cost is the same.
     // A vec never grown holds NULL and no items, so mem_move makes no call.
     mem_move(fresh, *ptr, len * elem);
-    // DRAGON: use after free. The old buffer is freed here, back to the
-    // system when it is big, so a pointer into the items taken before a
-    // growth (`&at(v, i)`, an Items slice, a map's `_ptr`, a buf_view)
-    // dangles after it.
-    // REMEDY: none here, since nothing tracks such pointers: a caller drops
-    // them before its next push, and the full tier's ASan fails a test that
-    // reads a freed big buffer.
+    // A pointer into the old buffer dangles now (arena_free's DRAGON).
     if (*cap > 0) arena_free(a, *ptr, *cap * elem);
     *ptr = fresh;
     *cap = new_cap;

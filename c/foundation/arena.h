@@ -276,9 +276,12 @@ static inline void arena_free(Arena *a, void *p, size_t len) {
             char *from = arena_chunk_bytes(c);
             if ((char *)p >= from && (char *)p < (char *)c + c->total) {
                 // DRAGON: use after free. The chunk goes back to the system,
-                // so every pointer into it dangles from here: a buf_view, a
-                // map's `_ptr`, a key or an Items slice taken before a
-                // growth.
+                // so every pointer into it dangles from here: a vec's growth
+                // frees its old buffer through this, so a buf_view, a map's
+                // `_ptr`, a key, an `&at(v, i)` or an Items slice taken before
+                // a growth dangles after it. This is the one place memory
+                // goes back, so it is this risk's one home, and vec.h, buf.h
+                // and map.h point here.
                 // REMEDY: none in the arena, which can't see who holds a
                 // pointer. buf_str rebases its own view of the buffer; every
                 // other holder must drop its pointers before a growth, and

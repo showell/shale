@@ -202,10 +202,8 @@ static inline void map_core_remove_at(MapCore *m, size_t e) {
         return OK;                                                                           \
     }                                                                                        \
                                                                                              \
-    /* The value's place, or NULL when `key` is not there. */                                \
-    /* DRAGON: use after free. The place is in the values, which the next put may move, */   \
-    /* freeing a big buffer to the system. */                                                \
-    /* REMEDY: a caller uses it before its next put or remove, which nothing checks. */      \
+    /* The value's place, or NULL when `key` is not there, until the next put or remove */   \
+    /* (the DRAGON at arena_free). */                                                        \
     static inline V *Name##_ptr(Name *m, Str key) {                                          \
         size_t e = map_core_find(&m->core, key);                                             \
         if (e == SIZE_MAX) return NULL;                                                      \
