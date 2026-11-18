@@ -254,23 +254,6 @@ static STATUS_MUST_USE Status settings_read(SettingsReader *r, Arena *a, Str tex
     return OK;
 }
 
-static STATUS_MUST_USE Status settings_utf8(Buf *b, uint32_t cp) {
-    if (cp < 0x80) return buf_byte(b, (char)cp);
-    if (cp < 0x800) {
-        TRY(buf_byte(b, (char)(0xc0 | (cp >> 6))));
-        return buf_byte(b, (char)(0x80 | (cp & 0x3f)));
-    }
-    if (cp < 0x10000) {
-        TRY(buf_byte(b, (char)(0xe0 | (cp >> 12))));
-        TRY(buf_byte(b, (char)(0x80 | ((cp >> 6) & 0x3f))));
-        return buf_byte(b, (char)(0x80 | (cp & 0x3f)));
-    }
-    TRY(buf_byte(b, (char)(0xf0 | (cp >> 18))));
-    TRY(buf_byte(b, (char)(0x80 | ((cp >> 12) & 0x3f))));
-    TRY(buf_byte(b, (char)(0x80 | ((cp >> 6) & 0x3f))));
-    return buf_byte(b, (char)(0x80 | (cp & 0x3f)));
-}
-
 // The four hex digits of `s` from `i`; settings_string checked them.
 static uint32_t settings_hex4(Str s, size_t i) {
     uint32_t v = 0;
@@ -314,7 +297,7 @@ static STATUS_MUST_USE Status settings_string_value(Arena *a, Str raw, Str *out)
                 i += 6;
             }
         }
-        TRY(settings_utf8(&b, cp));
+        TRY(buf_utf8(&b, cp));
     }
     *out = buf_view(&b);
     return OK;

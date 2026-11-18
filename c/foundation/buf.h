@@ -90,6 +90,29 @@ static inline STATUS_MUST_USE Status buf_i64(Buf *b, int64_t n) {
     return buf_u64(b, (uint64_t)(-(n + 1)) + 1);
 }
 
+// The code point `cp` as UTF-8, one to four bytes appended whole. The caller
+// has refused a surrogate half, and `cp` is at most U+10FFFF.
+static inline STATUS_MUST_USE Status buf_utf8(Buf *b, uint32_t cp) {
+    char seq[4];
+    Bytes s = {seq, sizeof seq};
+    size_t n = 4;
+    if (cp < 0x80) {
+        at(s, 0) = (char)cp;
+        n = 1;
+    } else if (cp < 0x800) {
+        at(s, 0) = (char)(0xC0 | (cp >> 6));
+        n = 2;
+    } else if (cp < 0x10000) {
+        at(s, 0) = (char)(0xE0 | (cp >> 12));
+        n = 3;
+    } else {
+        at(s, 0) = (char)(0xF0 | (cp >> 18));
+    }
+    // Each continuation byte carries six bits, the last the lowest.
+    for (size_t k = 1; k < n; k++) at(s, k) = (char)(0x80 | ((cp >> (6 * (n - 1 - k))) & 0x3F));
+    return buf_str(b, str_sub(((Str){seq, sizeof seq}), 0, n));
+}
+
 // What the buffer holds.
 // DRAGON: use after free. A growth moves the bytes and can free the old ones
 // to the system, so a view kept across an append can dangle, not just go

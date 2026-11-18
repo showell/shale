@@ -110,25 +110,6 @@ static bool json_utf8_valid(Str s) {
     return true;
 }
 
-// A code point as UTF-8: the caller has refused a surrogate half, and `cp` is
-// at most U+10FFFF.
-static STATUS_MUST_USE Status json_utf8_put(Buf *b, uint32_t cp) {
-    if (cp < 0x80) return buf_byte(b, (char)cp);
-    if (cp < 0x800) {
-        TRY(buf_byte(b, (char)(0xC0 | (cp >> 6))));
-        return buf_byte(b, (char)(0x80 | (cp & 0x3F)));
-    }
-    if (cp < 0x10000) {
-        TRY(buf_byte(b, (char)(0xE0 | (cp >> 12))));
-        TRY(buf_byte(b, (char)(0x80 | ((cp >> 6) & 0x3F))));
-        return buf_byte(b, (char)(0x80 | (cp & 0x3F)));
-    }
-    TRY(buf_byte(b, (char)(0xF0 | (cp >> 18))));
-    TRY(buf_byte(b, (char)(0x80 | ((cp >> 12) & 0x3F))));
-    TRY(buf_byte(b, (char)(0x80 | ((cp >> 6) & 0x3F))));
-    return buf_byte(b, (char)(0x80 | (cp & 0x3F)));
-}
-
 // Four bytes as Zig's `std.fmt.parseInt(u16, s, 16)` reads them: an optional
 // `+` or `-`, then hex digits with `_` between them (never first or last).
 // A `-` before any digit but zero is an overflow for a u16. False for what
@@ -233,7 +214,7 @@ static STATUS_MUST_USE Status json_string(JsonReader *jr, Str *out) {
         } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
             return json_fail_lit(jr, jr->i - 6, S("a low surrogate with no high one before it"));
         }
-        if (json_utf8_put(&b, cp) != OK) return run_values_oom(r, jr->pos);
+        if (buf_utf8(&b, cp) != OK) return run_values_oom(r, jr->pos);
     }
 }
 

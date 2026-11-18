@@ -33,7 +33,7 @@ const GATE_PLANTS = {
    old = "if (f->object && gate_keys_twice(&f->keys)) return OK;", new = "if (0 && f->object && gate_keys_twice(&f->keys)) return OK;"},
   {name = "a high surrogate half alone is read",
    aim = "the_hooks_json_is_read_as_std_json_reads_it", dir = "gate", file = "gate.c", caught_by = "test_gate",
-   old = "if (gate_json_peek(j) != '\\\\') return OK;", new = "if (gate_json_peek(j) != '\\\\') {\n                        TRY(gate_json_utf8(&b, u));\n                        continue;\n                    }"},
+   old = "if (gate_json_peek(j) != '\\\\') return OK;", new = "if (gate_json_peek(j) != '\\\\') {\n                        TRY(buf_utf8(&b, (uint32_t)u));\n                        continue;\n                    }"},
   {name = "the log line keeps a byte more",
    aim = "a_log_line_past_its_room_is_cut_at_4095_bytes_mid_escape", dir = "gate", file = "gate.c", caught_by = "test_gate",
    old = "GATE_LOG_BYTES = 4095,", new = "GATE_LOG_BYTES = 4096,"},

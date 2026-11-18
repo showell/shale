@@ -413,24 +413,6 @@ static inline long gate_json_unit(GateJson *j) {
     return u;
 }
 
-// The code point `cp` as UTF-8.
-static inline STATUS_MUST_USE Status gate_json_utf8(Buf *b, long cp) {
-    if (cp < 0x80) return buf_byte(b, (char)cp);
-    if (cp < 0x800) {
-        TRY(buf_byte(b, (char)(0xC0 | (cp >> 6))));
-        return buf_byte(b, (char)(0x80 | (cp & 0x3F)));
-    }
-    if (cp < 0x10000) {
-        TRY(buf_byte(b, (char)(0xE0 | (cp >> 12))));
-        TRY(buf_byte(b, (char)(0x80 | ((cp >> 6) & 0x3F))));
-        return buf_byte(b, (char)(0x80 | (cp & 0x3F)));
-    }
-    TRY(buf_byte(b, (char)(0xF0 | (cp >> 18))));
-    TRY(buf_byte(b, (char)(0x80 | ((cp >> 12) & 0x3F))));
-    TRY(buf_byte(b, (char)(0x80 | ((cp >> 6) & 0x3F))));
-    return buf_byte(b, (char)(0x80 | (cp & 0x3F)));
-}
-
 // How many continuation bytes a UTF-8 lead byte takes, and the range its
 // first one must be in (std.json's Scanner, byte for byte); 0 for a byte
 // that leads nothing.
@@ -489,7 +471,7 @@ static inline STATUS_MUST_USE Status gate_json_string(GateJson *j, Str *out, boo
                     if (low < 0xDC00 || low > 0xDFFF) return OK;
                     u = 0x10000 + ((u - 0xD800) << 10) + (low - 0xDC00);
                 }
-                TRY(gate_json_utf8(&b, u));
+                TRY(buf_utf8(&b, (uint32_t)u));
             } else {
                 return OK;
             }

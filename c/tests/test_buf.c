@@ -6,6 +6,8 @@
 
 #include "buf.h"
 
+SLICE_TYPE(CodePoints, const uint32_t);
+
 TEST(appends_bytes_and_strings_in_order) {
     bool refused = false;
     Arena a;
@@ -41,6 +43,19 @@ TEST(numbers_print_in_decimal_the_extremes_among_them) {
     EXPECT(buf_byte(&b, ' ') == OK);
     EXPECT(buf_i64(&b, INT64_MAX) == OK);
     EXPECT_STR(buf_view(&b), S("0 42 18446744073709551615 -1 -9223372036854775808 9223372036854775807"));
+    arena_deinit(&a);
+}
+
+TEST(a_code_point_is_utf8_at_the_edges_of_each_length) {
+    bool refused = false;
+    Arena a;
+    arena_init(&a, 1 << 20, &refused);
+    Buf b = buf_make(&a);
+    static const uint32_t cps[] = {0x00, 0x7F, 0x80, 0x7FF, 0x800, 0xFFFF, 0x10000, 0x10FFFF, 0xE9, 0x20AC, 0x1F600};
+    CodePoints all = {cps, sizeof cps / sizeof *cps};
+    for (size_t k = 0; k < all.len; k++) EXPECT(buf_utf8(&b, at(all, k)) == OK);
+    EXPECT_STR(buf_view(&b), S("\x00" "\x7F" "\xC2\x80" "\xDF\xBF" "\xE0\xA0\x80" "\xEF\xBF\xBF" "\xF0\x90\x80\x80" "\xF4\x8F\xBF\xBF" "\xC3\xA9" "\xE2\x82\xAC" "\xF0\x9F\x98\x80"));
+    EXPECT_EQ(b.len, 29);
     arena_deinit(&a);
 }
 
@@ -172,6 +187,7 @@ TEST(a_fit_gives_back_the_room_past_its_length_only_when_it_is_last) {
 TEST_MAIN(
     TEST_CASE(appends_bytes_and_strings_in_order),
     TEST_CASE(numbers_print_in_decimal_the_extremes_among_them),
+    TEST_CASE(a_code_point_is_utf8_at_the_edges_of_each_length),
     TEST_CASE(it_grows_by_half_again_in_place_while_it_is_last),
     TEST_CASE(it_moves_and_keeps_its_bytes_when_it_is_not_last),
     TEST_CASE(a_refused_append_leaves_the_buffer_as_it_was),
