@@ -16,7 +16,6 @@ typedef struct {
     char root_bytes[PATH_MAX];
     Str root;
     FileSystem file_system;
-    Store store;
 } Sx;
 
 // Makes the fixture, its arena setting `*refused` (`&s->refused`, or a run's
@@ -33,14 +32,13 @@ static void sx_init(Sx *s, bool *refused) {
     int n = snprintf(s->root_bytes, sizeof s->root_bytes, "%s/%s", cwd, tmpl);
     if (n <= 0) abort();
     s->root = (Str){s->root_bytes, (size_t)n};
-    store_linux(&s->file_system, &s->store);
 }
 
 static void sx_deinit(Sx *s) {
     bool refused = false;
     Arena a;
     arena_init(&a, (size_t)1 << 20, &refused);
-    if (store_os_delete_tree(&a, s->root) != FILE_SYSTEM_OK) abort();
+    if (file_system_delete_tree(&a, s->root) != FILE_SYSTEM_OK) abort();
     arena_deinit(&a);
     arena_deinit(&s->values);
 }
@@ -57,14 +55,14 @@ static Str sx_at(Sx *s, const char *rel) { // cstr: a test's literal
 }
 
 static void sx_mkdir(Sx *s, const char *rel) { // cstr: a test's literal
-    if (store_os_make_path(sx_at(s, rel)) != FILE_SYSTEM_OK) abort();
+    if (file_system_make_path(sx_at(s, rel)) != FILE_SYSTEM_OK) abort();
 }
 
 static void sx_put(Sx *s, const char *rel, const char *text) { // cstr: test literals
     Str p = sx_at(s, rel);
     Str dir = S("");
-    if (path_dirname(p, &dir) && store_os_make_path(dir) != FILE_SYSTEM_OK) abort();
-    if (store_os_write_file(p, sx_cs(text), 0644) != FILE_SYSTEM_OK) abort();
+    if (path_dirname(p, &dir) && file_system_make_path(dir) != FILE_SYSTEM_OK) abort();
+    if (file_system_write_file(p, sx_cs(text), 0644) != FILE_SYSTEM_OK) abort();
 }
 
 static int sx_chmod(Sx *s, const char *rel, mode_t mode) { // cstr: a test's literal
@@ -76,10 +74,10 @@ static int sx_chmod(Sx *s, const char *rel, mode_t mode) { // cstr: a test's lit
 
 // What the root's `rel` holds, or false when it cannot be read.
 static bool sx_file(Sx *s, const char *rel, Str *out) { // cstr: a test's literal
-    return store_os_read_file(&s->values, sx_at(s, rel), (size_t)1 << 20, out) == FILE_SYSTEM_OK;
+    return file_system_read_file(&s->values, sx_at(s, rel), (size_t)1 << 20, out) == FILE_SYSTEM_OK;
 }
 
 static bool sx_there(Sx *s, const char *rel) { // cstr: a test's literal
     struct stat st;
-    return store_os_stat(sx_at(s, rel), false, &st) == FILE_SYSTEM_OK;
+    return file_system_stat_exact(sx_at(s, rel), false, &st) == FILE_SYSTEM_OK;
 }

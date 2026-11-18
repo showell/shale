@@ -180,7 +180,7 @@ TEST(the_mounts_file_shale_mounts_pins_it_the_default_s_absence_is_no_mounts_a_p
     Buf text = buf_make(a);
     EXPECT(buf_lit(&text, "l = ") == OK && buf_str(&text, sx_at(&f.base, "linked")) == OK && buf_lit(&text, "\n") == OK);
     sx_put(&f.base, "mounts", "");
-    EXPECT_EQ(f.base.store.replace(f.base.store.ctx, a, file, buf_view(&text)), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_replace(&f.base.file_system, a, file, buf_view(&text)), FILE_SYSTEM_OK);
     EXPECT_EQ(mounts_load(a, true, file, S("/h"), &got, &why), MOUNTS_OK);
     EXPECT_STR(at(got.mounts, 0).dir, sx_at(&f.base, "real-folder"));
     fx_deinit(&f);
@@ -431,12 +431,12 @@ TEST(a_walk_through_a_mount_its_paths_are_the_mounts_and_each_lands_where_the_mo
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:sub"), true, &p));
     EXPECT_STR(p.full, fx_r(&f, "R/elsewhere/sub"));
     FileSystemEntries es;
-    EXPECT_EQ(f.base.store.list(f.base.store.ctx, &f.base.values, p.full, &es), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_list(&f.base.file_system, &f.base.values, p.full, &es), FILE_SYSTEM_OK);
     EXPECT_EQ(es.len, 1);
     EXPECT_STR(at(es, 0).name, S("b.zig"));
     FileSystemStat st;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:sub/b.zig"), true, &p));
-    EXPECT_EQ(f.base.store.stat(f.base.store.ctx, &f.base.values, p.full, &st), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_stat(&f.base.file_system, &f.base.values, p.full, &st), FILE_SYSTEM_OK);
     EXPECT_EQ(st.size, 2);
     fx_deinit(&f);
 }
@@ -732,7 +732,7 @@ static STATUS_MUST_USE Status fx_tree(Fx *f, bool make, Str path) {
     StorePath p;
     TRY(path_arg(&f->run, fx_pos(), make ? S("mkdir") : S("remove_tree"), path, false, &p));
     TRY(f->hook.may_change(f->hook.ctx, &f->run, fx_pos(), p.rel, p.full));
-    FileSystemErr e = make ? f->base.store.make_dir(f->base.store.ctx, &f->base.values, p.full) : f->base.store.remove_tree(f->base.store.ctx, &f->base.values, p.full);
+    FileSystemErr e = make ? file_system_make_dir(&f->base.file_system, &f->base.values, p.full) : file_system_remove_tree(&f->base.file_system, &f->base.values, p.full);
     return e == FILE_SYSTEM_OK ? OK : path_store_failed(&f->run, fx_pos(), make ? S("mkdir") : S("remove_tree"), p.rel, e);
 }
 
@@ -888,7 +888,7 @@ TEST(undo_on_stop_puts_back_an_edit_a_file_made_a_folder_made_a_file_removed_an_
     StorePath p;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("remove"), S("gone.txt"), false, &p));
     EXPECT_OK_IN(&f.ctx, f.hook.may_change(f.hook.ctx, &f.run, fx_pos(), p.rel, p.full));
-    EXPECT_EQ(f.base.store.remove(f.base.store.ctx, &f.base.values, p.full), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_remove(&f.base.file_system, &f.base.values, p.full), FILE_SYSTEM_OK);
     EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("there/n.txt"), S("n\n")));
     Buf w = buf_make(&f.host);
     bool all = false;
@@ -908,7 +908,7 @@ TEST(undo_on_stop_puts_back_an_edit_a_file_made_a_folder_made_a_file_removed_an_
     // The folder that was there is there still, and the executable still one.
     EXPECT(sx_there(&f.base, "there"));
     struct stat st;
-    EXPECT_EQ(store_os_stat(sx_at(&f.base, "x.sh"), true, &st), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_stat_exact(sx_at(&f.base, "x.sh"), true, &st), FILE_SYSTEM_OK);
     EXPECT_EQ(st.st_mode & 0777, 0755);
     fx_deinit(&f);
 }
@@ -919,7 +919,7 @@ TEST(undo_of_nothing_there_whose_path_is_gone_already_is_put_back_as_nothing) {
     f.paths.undo = true;
     EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("brief.txt"), S("b")));
     // Something else took it away before the undo: nothing to do, all put back.
-    EXPECT_EQ(f.base.store.remove(f.base.store.ctx, &f.base.values, sx_at(&f.base, "brief.txt")), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_remove(&f.base.file_system, &f.base.values, sx_at(&f.base, "brief.txt")), FILE_SYSTEM_OK);
     Buf w = buf_make(&f.host);
     bool all = false;
     EXPECT_EQ(undo_changes(&f.paths, &w, &all), OK);

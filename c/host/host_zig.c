@@ -907,7 +907,7 @@ static STATUS_MUST_USE Status host_zig_imports_in(Paths *h, HostZigProc *z, Aren
                 if (!host_zig_resolve(sa, dir, target, &full)) return run_values_oom(r, pos);
                 bool found = false;
                 FileSystemStat st;
-                FileSystemErr e = rs->store.stat_or_null(rs->store.ctx, sa, full, &found, &st);
+                FileSystemErr e = file_system_stat_or_null(rs->file_system, sa, full, &found, &st);
                 if (e != FILE_SYSTEM_OK) {
                     Str kept = {0};
                     TRY(host_zig_keep(r, pos, target, &kept));

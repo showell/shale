@@ -22,9 +22,9 @@ static STATUS_MUST_USE Status undo_changes(Paths *h, Buf *w, bool *all) {
     for (size_t k = h->journal.len; k > 0; k--) {
         const Prior *p = &at(h->journal, k - 1);
         if (p->was == PRIOR_ABSENT) {
-            FileSystemErr e = store_os_delete_file(p->abs);
+            FileSystemErr e = file_system_delete_file(p->abs);
             if (e == FILE_SYSTEM_IS_DIR) {
-                FileSystemErr de = store_os_delete_tree(a, p->abs);
+                FileSystemErr de = file_system_delete_tree(a, p->abs);
                 if (de != FILE_SYSTEM_OK) {
                     TRY(msg_format(w, S("── not put back: {s}: the folder the run made ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(de)))));
                     *all = false;
@@ -34,14 +34,14 @@ static STATUS_MUST_USE Status undo_changes(Paths *h, Buf *w, bool *all) {
                 *all = false;
             }
         } else if (p->was == PRIOR_FILE) {
-            FileSystemErr e = store_os_write_file(p->abs, p->bytes, p->mode);
+            FileSystemErr e = file_system_write_file(p->abs, p->bytes, p->mode);
             if (e != FILE_SYSTEM_OK) {
                 TRY(msg_format(w, S("── not put back: {s} ({t})\n"), MSG_ARGS(MSG_FROM_HOST(p->abs), MSG_FROM_HOST(file_system_err_name(e)))));
                 *all = false;
             }
         } else {
             struct stat st;
-            if (store_os_stat(p->abs, false, &st) != FILE_SYSTEM_OK) {
+            if (file_system_stat_exact(p->abs, false, &st) != FILE_SYSTEM_OK) {
                 TRY(msg_format(w, S("── not put back: {s}: a folder removed whole, and its files with it\n"), MSG_ARGS(MSG_FROM_HOST(p->abs))));
                 *all = false;
             }

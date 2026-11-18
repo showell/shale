@@ -738,7 +738,7 @@ static int run_script(Out *o, Command *c, MountsItems mounts, Str mounts_from, W
     paths_hook(&lh.paths, &hook);
     RunStore rs;
     memset(&rs, 0, sizeof rs);
-    store_linux(&file_system, &rs.store);
+    rs.file_system = &file_system;
     PathRun path = path_run_make(&r.ctx, where.root.len == 0 ? S("/") : where.root, builtin_path_charge, &r, &hook);
     rs.path = path;
     if (!paths_run_folders_make(&lh.paths, &rs.path)) return not_ported(o, S("the run's folders past the arena"));

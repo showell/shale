@@ -464,17 +464,17 @@ static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind
     if (c == CHANGE_REMOVE || c == CHANGE_REMOVE_TREE) {
         bool found = false;
         FileSystemStat st;
-        e = rs->store.stat_or_null(rs->store.ctx, a, p->full, &found, &st);
+        e = file_system_stat_or_null(rs->file_system, a, p->full, &found, &st);
         if (e == FILE_SYSTEM_OK && !found) e = FILE_SYSTEM_FILE_NOT_FOUND;
     }
     if (e == FILE_SYSTEM_OK) {
         uint64_t size = 0;
         switch (c) {
-        case CHANGE_REPLACE: e = rs->store.replace(rs->store.ctx, a, p->full, data); break;
-        case CHANGE_APPEND: e = rs->store.append(rs->store.ctx, a, p->full, data, &size); break;
-        case CHANGE_MKDIR: e = rs->store.make_dir(rs->store.ctx, a, p->full); break;
-        case CHANGE_REMOVE: e = rs->store.remove(rs->store.ctx, a, p->full); break;
-        case CHANGE_REMOVE_TREE: e = rs->store.remove_tree(rs->store.ctx, a, p->full); break;
+        case CHANGE_REPLACE: e = file_system_replace(rs->file_system, a, p->full, data); break;
+        case CHANGE_APPEND: e = file_system_append(rs->file_system, a, p->full, data, &size); break;
+        case CHANGE_MKDIR: e = file_system_make_dir(rs->file_system, a, p->full); break;
+        case CHANGE_REMOVE: e = file_system_remove(rs->file_system, a, p->full); break;
+        case CHANGE_REMOVE_TREE: e = file_system_remove_tree(rs->file_system, a, p->full); break;
         default: c_bug("builtins_change: a change of no kind the store makes");
         }
     }

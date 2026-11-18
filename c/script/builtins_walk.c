@@ -224,7 +224,7 @@ static STATUS_MUST_USE Status walk_entry(Run *r, Pos pos, FileSystemEntry en, St
     if (has_stat) {
         TRY(builtin_count_read(r, pos));
         RunStore *rs = builtin_store_of(r);
-        FileSystemErr e = rs->store.stat(rs->store.ctx, r->ctx.values, full, &st);
+        FileSystemErr e = file_system_stat(rs->file_system, r->ctx.values, full, &st);
         if (e != FILE_SYSTEM_OK) return builtin_store_failed(r, pos, BUILTIN_WALK, rel, e);
     }
     Table *m = NULL;

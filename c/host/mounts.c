@@ -212,7 +212,7 @@ static inline MountsResult mounts_load(Arena *a, bool has_pinned, Str pinned, St
         out->from = buf_view(&b);
     }
     Str text = S("");
-    FileSystemErr e = store_os_read_file(a, out->from, 64 * 1024, &text);
+    FileSystemErr e = file_system_read_file(a, out->from, 64 * 1024, &text);
     if (e == FILE_SYSTEM_OUT_OF_MEMORY) return MOUNTS_OUT_OF_MEMORY;
     if (e != FILE_SYSTEM_OK) {
         if (!has_pinned && e == FILE_SYSTEM_FILE_NOT_FOUND) return MOUNTS_OK;

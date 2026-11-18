@@ -6,13 +6,17 @@
 // limits on a path's length and depth. The path algebra is path.c's, which
 // makes no call.
 //
-// Its calls are the ones Shale's builtins make: stat, stat-or-null, has,
-// list, read-at, replace (never torn), append, make-dir, remove and
-// remove-tree, each given as a `Store` vtable (`store_linux`). An error is
-// a `FileSystemErr`, whose name is Zig's (`file_system_err_name`), since a
-// stop prints it. The file system refuses no path for where it is: the
-// root's and the mounts' confinement is the caller's (path_run.c, paths.c),
-// checked before any call here.
+// Two kinds of call. Those a script's path is given to are the ones
+// Shale's builtins make, each taking the run's `FileSystem`: stat,
+// stat-or-null, has, list, read-at, replace (never torn), append, make-dir,
+// remove and remove-tree, held to the rules above. The exact calls the host
+// makes on a path of its own (`file_system_stat_exact`, `_read_file`,
+// `_write_file`, `_delete_file`, `_delete_tree`, `_make_path`) take the path
+// as it is, with no rule and no other case. An error is a `FileSystemErr`,
+// whose name is Zig's (`file_system_err_name`), since a stop prints it. The
+// file system refuses no path for where it is: the root's and the mounts'
+// confinement is the caller's (path_run.c, paths.c), checked before any
+// call here.
 //
 // The including file defines _GNU_SOURCE before its first include, for
 // `openat`'s and `realpath`'s declarations, and path.c before this.
@@ -30,7 +34,8 @@
 
 #include "buf.h"
 
-// A store call's failure, by the name Zig gives it: FILE_SYSTEM_OK is none.
+// A file system call's failure, by the name Zig gives it: FILE_SYSTEM_OK is
+// none.
 typedef enum {
     FILE_SYSTEM_OK,
     FILE_SYSTEM_FILE_NOT_FOUND,
@@ -146,9 +151,9 @@ enum {
 };
 
 // The two roots as the bare-metal host spells them, `data` and `auth`: a
-// path under one is measured as that host would hold it. Neither is set
-// under `shale` (only the site's runner sets them), so a CLI run measures
-// nothing. And the stat a store call answers.
+// path under one is measured as that host would hold it. c/shale.c sets
+// `data` to the run's root and `auth` to `<root>/../auth`; a fixture that
+// sets neither measures nothing.
 typedef struct {
     bool has_data_base;
     Str data_base;
@@ -295,7 +300,7 @@ static FileSystemErr file_system_retry_case(Arena *a, Str path, bool *has, Str *
 }
 
 // `path` resolved for a call that may create its last part, which must be
-// a name FAT holds.
+// a strict name.
 static FileSystemErr file_system_for_write(const FileSystem *s, Arena *a, Str path, Str *out) {
     if (!path_strict_name(path_basename(path))) return FILE_SYSTEM_BAD_NAME;
     FileSystemErr e = file_system_within_limits(s, path);
@@ -304,7 +309,7 @@ static FileSystemErr file_system_for_write(const FileSystem *s, Arena *a, Str pa
 }
 
 // `path` resolved for a call that makes folders: every part past what is
-// there must be a name FAT holds.
+// there must be a strict name.
 static FileSystemErr file_system_for_make_dir(const FileSystem *s, Arena *a, Str path, Str *out) {
     FileSystemErr e = file_system_within_limits(s, path);
     if (e != FILE_SYSTEM_OK) return e;
@@ -343,7 +348,7 @@ static FileSystemKind file_system_kind_of(mode_t m) {
     return FILE_SYSTEM_KIND_OTHER;
 }
 
-static FileSystemErr store_os_stat(Str path, bool follow, struct stat *st) {
+static FileSystemErr file_system_stat_exact(Str path, bool follow, struct stat *st) {
     FileSystemCPath cp;
     const char *c = NULL;
     FileSystemErr e = file_system_cstr(&cp, path, &c);
@@ -354,7 +359,7 @@ static FileSystemErr store_os_stat(Str path, bool follow, struct stat *st) {
 
 // Makes `path` hold `data`, created with `mode` if it is not there (the
 // umask applies, as Zig's `writeFile`); a file there keeps its own mode.
-static FileSystemErr store_os_write_file(Str path, Str data, mode_t mode) {
+static FileSystemErr file_system_write_file(Str path, Str data, mode_t mode) {
     FileSystemCPath cp;
     const char *c = NULL;
     FileSystemErr e = file_system_cstr(&cp, path, &c);
@@ -380,7 +385,7 @@ static FileSystemErr store_os_write_file(Str path, Str data, mode_t mode) {
 // The whole file at `path` in `a`, at most `limit` bytes: one more is
 // StreamTooLong, and a refusal of the arena OutOfMemory, as Zig's
 // `readFileAlloc` with `.limited(limit)` answers.
-static FileSystemErr store_os_read_file(Arena *a, Str path, size_t limit, Str *out) {
+static FileSystemErr file_system_read_file(Arena *a, Str path, size_t limit, Str *out) {
     FileSystemCPath cp;
     const char *c = NULL;
     FileSystemErr e = file_system_cstr(&cp, path, &c);
@@ -414,7 +419,7 @@ static FileSystemErr store_os_read_file(Arena *a, Str path, size_t limit, Str *o
 
 // Removes the file at `path`: IsDir for a folder, as Linux's `unlink`
 // answers it.
-static FileSystemErr store_os_delete_file(Str path) {
+static FileSystemErr file_system_delete_file(Str path) {
     FileSystemCPath cp;
     const char *c = NULL;
     FileSystemErr e = file_system_cstr(&cp, path, &c);
@@ -423,16 +428,16 @@ static FileSystemErr store_os_delete_file(Str path) {
 }
 
 // The folder `path` opened to be listed, following no link, into `*fd`.
-// Its own function, so the recursion of store_os_delete_tree holds no path
+// Its own function, so the recursion of file_system_delete_tree holds no path
 // buffer of its own a level.
-static FileSystemErr store_os_open_dir(Str path, int *fd) {
+static FileSystemErr file_system_open_dir(Str path, int *fd) {
     FileSystemCPath cp;
     const char *c = NULL;
     FileSystemErr e = file_system_cstr(&cp, path, &c);
     if (e != FILE_SYSTEM_OK) return e;
-    // DRAGON: the store's boundaries. A folder swapped for a link to another
-    // tree between store_os_delete_tree's unlink and this open would be
-    // entered and emptied.
+    // DRAGON: the file system's boundaries. A folder swapped for a link to
+    // another tree between file_system_delete_tree's unlink and this open
+    // would be entered and emptied.
     // REMEDY: O_NOFOLLOW on the folder; a link met inside is unlinked as a
     // file by the recursion's first step, never followed.
     *fd = open(c, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
@@ -440,7 +445,7 @@ static FileSystemErr store_os_open_dir(Str path, int *fd) {
 }
 
 // Removes the empty folder `path`.
-static FileSystemErr store_os_remove_dir(Str path) {
+static FileSystemErr file_system_remove_dir(Str path) {
     FileSystemCPath cp;
     const char *c = NULL;
     FileSystemErr e = file_system_cstr(&cp, path, &c);
@@ -450,12 +455,12 @@ static FileSystemErr store_os_remove_dir(Str path) {
 
 // Removes `path` and everything under it, following no link (a link is
 // removed, never entered); nothing there is done.
-static FileSystemErr store_os_delete_tree(Arena *a, Str path) {
-    FileSystemErr e = store_os_delete_file(path);
+static FileSystemErr file_system_delete_tree(Arena *a, Str path) {
+    FileSystemErr e = file_system_delete_file(path);
     if (e == FILE_SYSTEM_OK || e == FILE_SYSTEM_FILE_NOT_FOUND) return FILE_SYSTEM_OK;
     if (e != FILE_SYSTEM_IS_DIR) return e;
     int fd = -1;
-    e = store_os_open_dir(path, &fd);
+    e = file_system_open_dir(path, &fd);
     if (e != FILE_SYSTEM_OK) return e;
     DIR *d = fdopendir(fd);
     if (d == NULL) {
@@ -471,19 +476,19 @@ static FileSystemErr store_os_delete_tree(Arena *a, Str path) {
             got = FILE_SYSTEM_OUT_OF_MEMORY;
             break;
         }
-        got = store_os_delete_tree(a, child);
+        got = file_system_delete_tree(a, child);
         if (got != FILE_SYSTEM_OK) break;
     }
     closedir(d);
     if (got != FILE_SYSTEM_OK) return got;
-    return store_os_remove_dir(path);
+    return file_system_remove_dir(path);
 }
 
 // Makes the one folder `path`: done when a folder is there already, NotDir
 // for a file in the way, and `*missing` true when its parent is not there.
-// Its own function, so the recursion of store_os_make_path holds no path
+// Its own function, so the recursion of file_system_make_path holds no path
 // buffer of its own a level.
-static FileSystemErr store_os_make_dir_one(Str path, bool *missing) {
+static FileSystemErr file_system_make_dir_one(Str path, bool *missing) {
     *missing = false;
     FileSystemCPath cp;
     const char *c = NULL;
@@ -502,30 +507,30 @@ static FileSystemErr store_os_make_dir_one(Str path, bool *missing) {
 
 // Makes the folder `path` and every folder above it that is missing; a
 // file in the way is NotDir.
-static FileSystemErr store_os_make_path(Str path) {
+static FileSystemErr file_system_make_path(Str path) {
     bool missing = false;
-    FileSystemErr e = store_os_make_dir_one(path, &missing);
+    FileSystemErr e = file_system_make_dir_one(path, &missing);
     if (!missing) return e;
     Str parent = S("");
     if (!path_dirname(path, &parent)) return FILE_SYSTEM_FILE_NOT_FOUND;
-    e = store_os_make_path(parent);
+    e = file_system_make_path(parent);
     if (e != FILE_SYSTEM_OK) return e;
-    return store_os_make_dir_one(path, &missing);
+    return file_system_make_dir_one(path, &missing);
 }
 
-// ── the store's calls ───────────────────────────────────────────────────
+// ── the calls a script's path is given to ───────────────────────────────
 
-static FileSystemErr store_linux_stat(void *ctx, Arena *a, Str path, FileSystemStat *out) {
-    (void)ctx;
+static inline FileSystemErr file_system_stat(const FileSystem *fs, Arena *a, Str path, FileSystemStat *out) {
+    (void)fs;
     struct stat st;
-    FileSystemErr e = store_os_stat(path, true, &st);
+    FileSystemErr e = file_system_stat_exact(path, true, &st);
     if (e == FILE_SYSTEM_FILE_NOT_FOUND) {
         bool has = false;
         Str p = path;
         FileSystemErr r = file_system_retry_case(a, path, &has, &p);
         if (r != FILE_SYSTEM_OK) return r;
         if (!has) return e;
-        e = store_os_stat(p, true, &st);
+        e = file_system_stat_exact(p, true, &st);
     }
     if (e != FILE_SYSTEM_OK) return e;
     out->size = (uint64_t)st.st_size;
@@ -537,8 +542,8 @@ static FileSystemErr store_linux_stat(void *ctx, Arena *a, Str path, FileSystemS
 
 // What `stat` answers, or `*found` false when nothing is there: a path not
 // found, through a file, or with a name too long for any file.
-static FileSystemErr store_linux_stat_or_null(void *ctx, Arena *a, Str path, bool *found, FileSystemStat *out) {
-    FileSystemErr e = store_linux_stat(ctx, a, path, out);
+static inline FileSystemErr file_system_stat_or_null(const FileSystem *fs, Arena *a, Str path, bool *found, FileSystemStat *out) {
+    FileSystemErr e = file_system_stat(fs, a, path, out);
     *found = e == FILE_SYSTEM_OK;
     if (e == FILE_SYSTEM_FILE_NOT_FOUND || e == FILE_SYSTEM_NOT_DIR || e == FILE_SYSTEM_NAME_TOO_LONG) return FILE_SYSTEM_OK;
     return e;
@@ -546,9 +551,9 @@ static FileSystemErr store_linux_stat_or_null(void *ctx, Arena *a, Str path, boo
 
 // Whether there is a file or folder at `path`, in any case: "no" only for
 // what is not there, any other failure the caller's.
-static FileSystemErr store_linux_has(void *ctx, Arena *a, Str path, bool *out) {
+static inline FileSystemErr file_system_has(const FileSystem *fs, Arena *a, Str path, bool *out) {
     FileSystemStat st;
-    return store_linux_stat_or_null(ctx, a, path, out, &st);
+    return file_system_stat_or_null(fs, a, path, out, &st);
 }
 
 typedef struct {
@@ -566,8 +571,8 @@ static FileSystemKind file_system_kind_of_dirent(unsigned char t) {
 
 // What a folder holds, in the order the disk gives it; a folder that is not
 // there holds nothing.
-static FileSystemErr store_linux_list(void *ctx, Arena *a, Str dir, FileSystemEntries *out) {
-    (void)ctx;
+static inline FileSystemErr file_system_list(const FileSystem *fs, Arena *a, Str dir, FileSystemEntries *out) {
+    (void)fs;
     *out = FileSystemEntries_make(a);
     FileSystemCPath cp;
     const char *c = NULL;
@@ -600,8 +605,8 @@ static FileSystemErr store_linux_list(void *ctx, Arena *a, Str dir, FileSystemEn
 }
 
 // Up to `buf.len` bytes from `offset`, into `*got`.
-static FileSystemErr store_linux_read_at(void *ctx, Arena *a, Str path, uint64_t offset, Bytes buf, size_t *got) {
-    (void)ctx;
+static inline FileSystemErr file_system_read_at(const FileSystem *fs, Arena *a, Str path, uint64_t offset, Bytes buf, size_t *got) {
+    (void)fs;
     *got = 0;
     FileSystemCPath cp;
     const char *c = NULL;
@@ -635,35 +640,35 @@ static FileSystemErr store_linux_read_at(void *ctx, Arena *a, Str path, uint64_t
     return r;
 }
 
-static FileSystemErr store_linux_make_dir(void *ctx, Arena *a, Str path) {
+static inline FileSystemErr file_system_make_dir(const FileSystem *fs, Arena *a, Str path) {
     Str p = path;
-    FileSystemErr e = file_system_for_make_dir(ctx, a, path, &p);
+    FileSystemErr e = file_system_for_make_dir(fs, a, path, &p);
     if (e != FILE_SYSTEM_OK) return e;
-    return store_os_make_path(p);
+    return file_system_make_path(p);
 }
 
 // Makes `path` hold exactly `data`, so that no stop loses it: written to a
 // sibling (`path_temp_name`) with the old file's mode, then renamed
 // over it. A rename refused leaves no sibling behind.
-static FileSystemErr store_linux_replace(void *ctx, Arena *a, Str path, Str data) {
+static inline FileSystemErr file_system_replace(const FileSystem *fs, Arena *a, Str path, Str data) {
     Str p = path;
-    FileSystemErr e = file_system_for_write(ctx, a, path, &p);
+    FileSystemErr e = file_system_for_write(fs, a, path, &p);
     if (e != FILE_SYSTEM_OK) return e;
     Str dir = S("");
     bool has_dir = path_dirname(p, &dir);
     if (has_dir) {
-        e = store_linux_make_dir(ctx, a, dir);
+        e = file_system_make_dir(fs, a, dir);
         if (e != FILE_SYSTEM_OK) return e;
     }
     Str tmp = S("");
     if (!path_temp_name(a, path_basename(p), &tmp)) return FILE_SYSTEM_OUT_OF_MEMORY;
     if (has_dir && !path_join(a, dir, tmp, &tmp)) return FILE_SYSTEM_OUT_OF_MEMORY;
     struct stat st;
-    e = store_os_stat(p, true, &st);
+    e = file_system_stat_exact(p, true, &st);
     if (e == FILE_SYSTEM_OK) {
-        e = store_os_write_file(tmp, data, st.st_mode & 07777);
+        e = file_system_write_file(tmp, data, st.st_mode & 07777);
     } else if (e == FILE_SYSTEM_FILE_NOT_FOUND) {
-        e = store_os_write_file(tmp, data, 0666);
+        e = file_system_write_file(tmp, data, 0666);
     }
     if (e != FILE_SYSTEM_OK) return e;
     FileSystemCPath from_cp;
@@ -679,13 +684,13 @@ static FileSystemErr store_linux_replace(void *ctx, Arena *a, Str path, Str data
 
 // Adds `bytes` at the end of `path`, making it and its folders if needed,
 // and gives its size after.
-static FileSystemErr store_linux_append(void *ctx, Arena *a, Str path, Str bytes, uint64_t *size) {
+static inline FileSystemErr file_system_append(const FileSystem *fs, Arena *a, Str path, Str bytes, uint64_t *size) {
     Str p = path;
-    FileSystemErr e = file_system_for_write(ctx, a, path, &p);
+    FileSystemErr e = file_system_for_write(fs, a, path, &p);
     if (e != FILE_SYSTEM_OK) return e;
     Str dir = S("");
     if (path_dirname(p, &dir)) {
-        e = store_linux_make_dir(ctx, a, dir);
+        e = file_system_make_dir(fs, a, dir);
         if (e != FILE_SYSTEM_OK) return e;
     }
     FileSystemCPath cp;
@@ -714,50 +719,25 @@ static FileSystemErr store_linux_append(void *ctx, Arena *a, Str path, Str bytes
 }
 
 // Removes the file at `path`; not there is done.
-static FileSystemErr store_linux_remove(void *ctx, Arena *a, Str path) {
-    (void)ctx;
-    FileSystemErr e = store_os_delete_file(path);
+static inline FileSystemErr file_system_remove(const FileSystem *fs, Arena *a, Str path) {
+    (void)fs;
+    FileSystemErr e = file_system_delete_file(path);
     if (e != FILE_SYSTEM_FILE_NOT_FOUND) return e;
     bool has = false;
     Str p = path;
     e = file_system_retry_case(a, path, &has, &p);
     if (e != FILE_SYSTEM_OK || !has) return e;
-    return store_os_delete_file(p);
+    return file_system_delete_file(p);
 }
 
-// Removes `path` and everything under it, refusing a last name FAT would
-// not hold: an empty or blank one joined onto a root would name the root.
-static FileSystemErr store_linux_remove_tree(void *ctx, Arena *a, Str path) {
-    (void)ctx;
+// Removes `path` and everything under it, refusing a last name that is not
+// strict: an empty or blank one joined onto a root would name the root.
+static inline FileSystemErr file_system_remove_tree(const FileSystem *fs, Arena *a, Str path) {
+    (void)fs;
     if (!path_strict_name(path_basename(path))) return FILE_SYSTEM_BAD_NAME;
     bool has = false;
     Str p = path;
     FileSystemErr e = file_system_retry_case(a, path, &has, &p);
     if (e != FILE_SYSTEM_OK) return e;
-    return store_os_delete_tree(a, has ? p : path);
-}
-
-// The store as the builtins call it, zig-webbox's `store`: each call takes
-// an OS path the caller has already confined, and the arena its paths and
-// answers are made in.
-typedef struct {
-    void *ctx;
-    FileSystemErr (*stat)(void *ctx, Arena *a, Str path, FileSystemStat *out);
-    FileSystemErr (*stat_or_null)(void *ctx, Arena *a, Str path, bool *found, FileSystemStat *out);
-    FileSystemErr (*has)(void *ctx, Arena *a, Str path, bool *out);
-    FileSystemErr (*list)(void *ctx, Arena *a, Str dir, FileSystemEntries *out);
-    FileSystemErr (*read_at)(void *ctx, Arena *a, Str path, uint64_t offset, Bytes buf, size_t *got);
-    FileSystemErr (*replace)(void *ctx, Arena *a, Str path, Str data);
-    FileSystemErr (*append)(void *ctx, Arena *a, Str path, Str bytes, uint64_t *size);
-    FileSystemErr (*make_dir)(void *ctx, Arena *a, Str path);
-    FileSystemErr (*remove)(void *ctx, Arena *a, Str path);
-    FileSystemErr (*remove_tree)(void *ctx, Arena *a, Str path);
-} Store;
-
-static inline void store_linux(FileSystem *s, Store *out) {
-    Store v = {
-        s, store_linux_stat, store_linux_stat_or_null, store_linux_has, store_linux_list, store_linux_read_at,
-        store_linux_replace, store_linux_append, store_linux_make_dir, store_linux_remove, store_linux_remove_tree,
-    };
-    *out = v;
+    return file_system_delete_tree(a, has ? p : path);
 }

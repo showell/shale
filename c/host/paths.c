@@ -369,7 +369,7 @@ static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, 
         if (buf_byte(&walked, '/') != OK || buf_str(&walked, part) != OK) return run_oom(r->ctx, pos);
         shown_end += part.len + (shown_end > 0 ? 1 : 0);
         struct stat st;
-        FileSystemErr e = store_os_stat(buf_view(&walked), false, &st);
+        FileSystemErr e = file_system_stat_exact(buf_view(&walked), false, &st);
         if (e != FILE_SYSTEM_OK) return OK;
         if (S_ISLNK(st.st_mode)) {
             return path_fail(r, pos, CLASS_REFUSED, S("{s}{s} is a symbolic link: the store follows none"), MSG_ARGS(MSG_FROM_SCRIPT(shown_prefix), MSG_FROM_SCRIPT(str_sub(rest, 0, shown_end))));
@@ -561,7 +561,7 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
         if (str_eq(at(h->journal, k).abs, abs)) return OK;
     }
     struct stat st;
-    FileSystemErr e = store_os_stat(abs, false, &st);
+    FileSystemErr e = file_system_stat_exact(abs, false, &st);
     Prior p = {S(""), PRIOR_ABSENT, S(""), 0};
     if (e == FILE_SYSTEM_OK && S_ISDIR(st.st_mode)) {
         p.was = PRIOR_DIR;
@@ -572,7 +572,7 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
             return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it"), MSG_ARGS(MSG_FROM_HOST(msg_num(&most, PATHS_JOURNAL_MAX)), MSG_FROM_HOST(abs)));
         }
         Str bytes = S("");
-        FileSystemErr re = store_os_read_file(h->arena, abs, room + 1, &bytes);
+        FileSystemErr re = file_system_read_file(h->arena, abs, room + 1, &bytes);
         if (re != FILE_SYSTEM_OK) {
             return path_fail(r, pos, CLASS_STORE, S("--undo-on-stop: {s} cannot be read ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(re))));
         }
