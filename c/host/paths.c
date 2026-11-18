@@ -8,7 +8,7 @@
 // files by any spelling, no program handed its folder) and the journal
 // `--undo-on-stop` keeps (undo.c puts it back).
 //
-// Include store.c, path_run.c and mounts.c first.
+// Include path.c, file_system.c, path_run.c and mounts.c first.
 
 // A path as it was before the run's first change of it.
 typedef enum {
@@ -395,7 +395,7 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
         if (str_eq(part, S(".."))) {
             return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)"), MSG_ARGS(MSG_FROM_SCRIPT(path)));
         }
-        if (!store_fat_name(part)) {
+        if (!path_strict_name(part)) {
             return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_SCRIPT(part)));
         }
         if (to == rest.len) break;
@@ -519,7 +519,7 @@ static STATUS_MUST_USE Status paths_absolute_hint(void *ctx, PathRun *r, Pos pos
     size_t from = 0;
     while (rest.len > 0 && from <= rest.len) {
         size_t to = path_part_end(rest, from);
-        if (!store_fat_name(str_sub(rest, from, to))) return OK;
+        if (!path_strict_name(str_sub(rest, from, to))) return OK;
         if (to == rest.len) break;
         from = to + 1;
     }

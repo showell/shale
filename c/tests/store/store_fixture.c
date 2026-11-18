@@ -4,7 +4,8 @@
 
 #include <sys/stat.h>
 
-#include "../../host/store.c"
+#include "../../host/path.c"
+#include "../../host/file_system.c"
 
 typedef struct {
     Arena values;
@@ -51,7 +52,7 @@ static Str sx_cs(const char *lit) { // cstr: a test's literal
 // `rel` under the root, as an OS path.
 static Str sx_at(Sx *s, const char *rel) { // cstr: a test's literal
     Str out = S("");
-    if (!store_join(&s->values, s->root, sx_cs(rel), &out)) abort();
+    if (!path_join(&s->values, s->root, sx_cs(rel), &out)) abort();
     return out;
 }
 
@@ -62,7 +63,7 @@ static void sx_mkdir(Sx *s, const char *rel) { // cstr: a test's literal
 static void sx_put(Sx *s, const char *rel, const char *text) { // cstr: test literals
     Str p = sx_at(s, rel);
     Str dir = S("");
-    if (store_dirname(p, &dir) && store_os_make_path(dir) != STORE_OK) abort();
+    if (path_dirname(p, &dir) && store_os_make_path(dir) != STORE_OK) abort();
     if (store_os_write_file(p, sx_cs(text), 0644) != STORE_OK) abort();
 }
 

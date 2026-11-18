@@ -10,7 +10,8 @@
 #include <sys/stat.h>
 
 #include "../script/run.h"
-#include "../host/store.c"
+#include "../host/path.c"
+#include "../host/file_system.c"
 #include "../host/path_run.c"
 #include "../script/regex.c"
 #include "../script/builtins.c"
@@ -96,7 +97,7 @@ static Str ran_d(Ran *x, const char *lit) { // cstr: a test's literal
 // `rel` under the folder, as an OS path.
 static Str ran_at(Ran *x, const char *rel) { // cstr: a test's literal
     Str out = S("");
-    if (!store_join(&x->host, x->dir, ran_cs(rel), &out)) abort();
+    if (!path_join(&x->host, x->dir, ran_cs(rel), &out)) abort();
     return out;
 }
 
@@ -104,7 +105,7 @@ static Str ran_at(Ran *x, const char *rel) { // cstr: a test's literal
 static void ran_write(Ran *x, const char *rel, Str text) { // cstr: a test's literal
     Str p = ran_at(x, rel);
     Str dir = S("");
-    if (store_dirname(p, &dir) && store_os_make_path(dir) != STORE_OK) abort();
+    if (path_dirname(p, &dir) && store_os_make_path(dir) != STORE_OK) abort();
     if (store_os_write_file(p, text, 0644) != STORE_OK) abort();
 }
 
@@ -212,7 +213,7 @@ static void ran_say_left(Arena *a, Str dir) {
     while (ent != NULL) {
         Str n = {ent->d_name, strlen(ent->d_name)};
         Str child = S("");
-        if (!str_eq(n, S(".")) && !str_eq(n, S("..")) && store_join(a, dir, n, &child)) {
+        if (!str_eq(n, S(".")) && !str_eq(n, S("..")) && path_join(a, dir, n, &child)) {
             fprintf(stderr, "  left: %.*s\n", (int)child.len, child.ptr);
             if (ent->d_type == DT_DIR) ran_say_left(a, child);
         }

@@ -14,7 +14,7 @@
 // refuses `shale --secrets` too, since it is not an option the gate passes.
 // Nothing it prints holds a secret's value.
 //
-// Include store.c, path_run.c, mounts.c, paths.c, swap_file.c and
+// Include path.c, file_system.c, path_run.c, mounts.c, paths.c, swap_file.c and
 // settings_json.c first.
 
 #include <signal.h>

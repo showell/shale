@@ -245,7 +245,7 @@ typedef enum {
 
 // `s` with a NUL after it, written at the start of `room`, for a call into
 // the kernel; nothing is written when it refuses. Every C string the C makes
-// from a Str is made here: arena.h's arena_cstr in an arena, store.c's
+// from a Str is made here: arena.h's arena_cstr in an arena, file_system.c's
 // store_cstr on the caller's stack.
 // DRAGON: a NUL inside. A NUL inside `s` would end the kernel's copy early,
 // so the call would act on a shorter path or word than the one every check

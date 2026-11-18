@@ -86,7 +86,7 @@ reviewer can line the two up. Once the Zig is gone, that reason is gone:
   command (an empty `command`) and `HOME` (set empty), and `LinuxStore`'s
   bases (the root `""` measures every path). `HostRunHeld`'s two say what
   was made, not a value: an `Arena` has no unmade value, and the secret's
-  file outlives its `fd`, closed when it is stored. store.c's `has_dir` is
+  file outlives its `fd`, closed when it is stored. file_system.c's `has_dir` is
   a lookup's answer, a `bool` as style.md has it.
 - `RegexCache` (6,856 bytes) and `Arena` were made by value
   (`regex_cache_make`, `arena_make`); an out-pointer initializer is the

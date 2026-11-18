@@ -16,11 +16,11 @@ TEST(names_fat_holds_and_names_it_refuses) {
     char x96[96];
     char x97[97];
     Lits oks = LITS("a", "plan.md", "Plan-2.reactions.jsonl", "0f3a.png", "_session_secret", "a b");
-    for (size_t i = 0; i < oks.len; i++) EXPECT(store_fat_name(sx_cs(at(oks, i))));
-    EXPECT(store_fat_name(rep('x', 96, x96)));
+    for (size_t i = 0; i < oks.len; i++) EXPECT(path_strict_name(sx_cs(at(oks, i))));
+    EXPECT(path_strict_name(rep('x', 96, x96)));
     Lits bads = LITS("", ".", "..", "what?", "a:b", "a/b", "a\\b", "trailing.", "trailing ", "caf\xc3\xa9", "tab\t");
-    for (size_t i = 0; i < bads.len; i++) EXPECT(!store_fat_name(sx_cs(at(bads, i))));
-    EXPECT(!store_fat_name(rep('x', 97, x97)));
+    for (size_t i = 0; i < bads.len; i++) EXPECT(!path_strict_name(sx_cs(at(bads, i))));
+    EXPECT(!path_strict_name(rep('x', 97, x97)));
 }
 
 TEST(write_read_append_read_at_stat_list_remove) {
@@ -77,7 +77,7 @@ TEST(a_name_fat_refuses_is_refused_here_too_before_anything_is_made) {
     uint64_t size = 0;
     EXPECT_EQ(s->replace(s->ctx, a, sx_at(&f, "data/what?.md"), S("x")), STORE_BAD_NAME);
     Str long_name = S("");
-    EXPECT(store_join(a, sx_at(&f, "data"), rep('x', 97, x97), &long_name));
+    EXPECT(path_join(a, sx_at(&f, "data"), rep('x', 97, x97), &long_name));
     EXPECT_EQ(s->append(s->ctx, a, long_name, S("x"), &size), STORE_BAD_NAME);
     EXPECT_EQ(s->make_dir(s->ctx, a, sx_at(&f, "data/trailing./inner")), STORE_BAD_NAME);
     EXPECT_EQ(s->remove_tree(s->ctx, a, sx_at(&f, "data/users/   ")), STORE_BAD_NAME);
@@ -113,9 +113,9 @@ TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_s
     EXPECT_STR(text, S("2 20\n"));
     // A sibling a stop left behind is written over.
     Str sib = S("");
-    EXPECT(store_sibling_name(a, S("topic.count"), &sib));
+    EXPECT(path_temp_name(a, S("topic.count"), &sib));
     Str left = S("");
-    EXPECT(store_join(a, sx_at(&f, "data/chat"), sib, &left));
+    EXPECT(path_join(a, sx_at(&f, "data/chat"), sib, &left));
     EXPECT_EQ(store_os_write_file(left, S("stale"), 0644), STORE_OK);
     EXPECT_EQ(s->replace(s->ctx, a, sx_at(&f, "data/chat/topic.count"), S("3 30\n")), STORE_OK);
     EXPECT_EQ(s->list(s->ctx, a, sx_at(&f, "data/chat"), &es), STORE_OK);
@@ -127,16 +127,16 @@ TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_s
     // One sibling name per file, in any case, and short enough for any name.
     Str one = S("");
     Str two = S("");
-    EXPECT(store_sibling_name(a, S("Topic.count"), &one));
-    EXPECT(store_sibling_name(a, S("topic.COUNT"), &two));
+    EXPECT(path_temp_name(a, S("Topic.count"), &one));
+    EXPECT(path_temp_name(a, S("topic.COUNT"), &two));
     EXPECT_STR(one, two);
-    EXPECT(store_sibling_name(a, S("a.count"), &one));
-    EXPECT(store_sibling_name(a, S("b.count"), &two));
+    EXPECT(path_temp_name(a, S("a.count"), &one));
+    EXPECT(path_temp_name(a, S("b.count"), &two));
     EXPECT(!str_eq(one, two));
     char x96[96];
-    EXPECT(store_sibling_name(a, rep('x', 96, x96), &one));
+    EXPECT(path_temp_name(a, rep('x', 96, x96), &one));
     EXPECT_EQ(one.len, 13);
-    EXPECT(store_fat_name(one));
+    EXPECT(path_strict_name(one));
     sx_deinit(&f);
 }
 
@@ -155,21 +155,21 @@ TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_s
     char q[70];
     // data/ + 245 bytes is 250: held. Spelled here it is far longer.
     Str near = data;
-    EXPECT(store_join(a, near, rep('x', 90, x), &near) && store_join(a, near, rep('y', 90, y), &near) && store_join(a, near, rep('z', 63, z), &near));
+    EXPECT(path_join(a, near, rep('x', 90, x), &near) && path_join(a, near, rep('y', 90, y), &near) && path_join(a, near, rep('z', 63, z), &near));
     EXPECT_EQ(s.replace(s.ctx, a, near, S("ok")), STORE_OK);
     // data/ + 252 bytes is 257: refused, before anything is made.
     Str over = data;
-    EXPECT(store_join(a, over, rep('x', 90, x), &over) && store_join(a, over, rep('y', 90, y), &over) && store_join(a, over, rep('q', 70, q), &over));
+    EXPECT(path_join(a, over, rep('x', 90, x), &over) && path_join(a, over, rep('y', 90, y), &over) && path_join(a, over, rep('q', 70, q), &over));
     uint64_t size = 0;
     EXPECT_EQ(s.replace(s.ctx, a, over, S("no")), STORE_PATH_TOO_LONG);
     EXPECT_EQ(s.append(s.ctx, a, over, S("no"), &size), STORE_PATH_TOO_LONG);
     EXPECT_EQ(s.make_dir(s.ctx, a, over), STORE_PATH_TOO_LONG);
     // 16 names from the volume's root (data and 15 more): held; 17: refused.
     Str deep = data;
-    for (int k = 0; k < 15; k++) EXPECT(store_join(a, deep, S("d"), &deep));
+    for (int k = 0; k < 15; k++) EXPECT(path_join(a, deep, S("d"), &deep));
     EXPECT_EQ(s.replace(s.ctx, a, deep, S("ok")), STORE_OK);
     Str deeper = S("");
-    EXPECT(store_join(a, deep, S("d"), &deeper));
+    EXPECT(path_join(a, deep, S("d"), &deeper));
     EXPECT_EQ(s.replace(s.ctx, a, deeper, S("no")), STORE_PATH_TOO_DEEP);
     EXPECT_EQ(s.make_dir(s.ctx, a, deeper), STORE_PATH_TOO_DEEP);
     bool has = true;
@@ -177,10 +177,10 @@ TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_s
     EXPECT(!has);
     // Under auth/ too; and not a path that only begins like a root.
     Str under_auth = auth;
-    EXPECT(store_join(a, under_auth, rep('x', 96, x), &under_auth) && store_join(a, under_auth, rep('y', 96, y), &under_auth) && store_join(a, under_auth, rep('z', 96, z), &under_auth));
+    EXPECT(path_join(a, under_auth, rep('x', 96, x), &under_auth) && path_join(a, under_auth, rep('y', 96, y), &under_auth) && path_join(a, under_auth, rep('z', 96, z), &under_auth));
     EXPECT_EQ(s.replace(s.ctx, a, under_auth, S("no")), STORE_PATH_TOO_LONG);
     Str free_path = sx_at(&f, "home/someone/a-long-host-path/prod/data2");
-    EXPECT(store_join(a, free_path, rep('x', 96, x), &free_path) && store_join(a, free_path, rep('y', 96, y), &free_path) && store_join(a, free_path, rep('z', 96, z), &free_path));
+    EXPECT(path_join(a, free_path, rep('x', 96, x), &free_path) && path_join(a, free_path, rep('y', 96, y), &free_path) && path_join(a, free_path, rep('z', 96, z), &free_path));
     EXPECT_EQ(s.replace(s.ctx, a, free_path, S("free")), STORE_OK);
     sx_deinit(&f);
 }
@@ -307,27 +307,27 @@ TEST(wyhash_its_test_vectors) {
     };
     SLICE_TYPE(Vectors, const Vector);
     Vectors all = {vs, sizeof vs / sizeof *vs};
-    for (size_t i = 0; i < all.len; i++) EXPECT_EQ(store_wyhash(at(all, i).seed, sx_cs(at(all, i).input)), at(all, i).expected);
+    for (size_t i = 0; i < all.len; i++) EXPECT_EQ(wyhash(at(all, i).seed, sx_cs(at(all, i).input)), at(all, i).expected);
 }
 
 TEST(dirname_and_basename_take_trailing_slashes_and_the_root) {
     Str d = S("");
-    EXPECT(store_dirname(S("/a/b/c"), &d));
+    EXPECT(path_dirname(S("/a/b/c"), &d));
     EXPECT_STR(d, S("/a/b"));
-    EXPECT(store_dirname(S("/a/b/c///"), &d));
+    EXPECT(path_dirname(S("/a/b/c///"), &d));
     EXPECT_STR(d, S("/a/b"));
-    EXPECT(store_dirname(S("/a"), &d));
+    EXPECT(path_dirname(S("/a"), &d));
     EXPECT_STR(d, S("/"));
-    EXPECT(!store_dirname(S("/"), &d));
-    EXPECT(!store_dirname(S("//"), &d));
-    EXPECT(!store_dirname(S(""), &d));
-    EXPECT(!store_dirname(S("a"), &d));
-    EXPECT(!store_dirname(S("a//"), &d));
-    EXPECT_STR(store_basename(S("")), S(""));
-    EXPECT_STR(store_basename(S("/")), S(""));
-    EXPECT_STR(store_basename(S("/dir/basename.ext")), S("basename.ext"));
-    EXPECT_STR(store_basename(S("/basename.ext")), S("basename.ext"));
-    EXPECT_STR(store_basename(S("a/b/")), S("b"));
+    EXPECT(!path_dirname(S("/"), &d));
+    EXPECT(!path_dirname(S("//"), &d));
+    EXPECT(!path_dirname(S(""), &d));
+    EXPECT(!path_dirname(S("a"), &d));
+    EXPECT(!path_dirname(S("a//"), &d));
+    EXPECT_STR(path_basename(S("")), S(""));
+    EXPECT_STR(path_basename(S("/")), S(""));
+    EXPECT_STR(path_basename(S("/dir/basename.ext")), S("basename.ext"));
+    EXPECT_STR(path_basename(S("/basename.ext")), S("basename.ext"));
+    EXPECT_STR(path_basename(S("a/b/")), S("b"));
 }
 
 TEST(a_path_with_a_nul_inside_is_refused_before_any_call) {

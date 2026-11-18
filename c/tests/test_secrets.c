@@ -14,7 +14,8 @@
 #include <pty.h>
 #include <sys/stat.h>
 
-#include "../host/store.c"
+#include "../host/path.c"
+#include "../host/file_system.c"
 #include "../host/path_run.c"
 #include "../host/mounts.c"
 #include "../host/paths.c"

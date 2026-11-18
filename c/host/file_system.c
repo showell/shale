@@ -1,9 +1,10 @@
-// store.c: the store, every file a script reads or changes, on Linux,
-// held to the bare-metal store's rules. FAT's rules hold on every host: a
-// name FAT holds (`store_fat_name`), case that does not tell two names apart
-// (a missing name is looked for in another case, and a new one keeps the
-// case it was given), and, under the host's two bases, the bare-metal host's
-// limits on a path's length and depth.
+// file_system.c: the calls into the file system, every file a script reads
+// or changes, held to Shale's rules: a strict name for what it makes
+// (path.c's `path_strict_name`), case that does not tell two names apart (a
+// missing name is looked for in another case, and a new one keeps the case
+// it was given), and, under the host's two bases, the bare-metal host's
+// limits on a path's length and depth. The path algebra is path.c's, which
+// makes no call.
 //
 // Its calls are the ones Shale's builtins make: stat, stat-or-null, has,
 // list, read-at, replace (never torn), append, make-dir, remove and
@@ -14,10 +15,10 @@
 // here.
 //
 // The including file defines _GNU_SOURCE before its first include, for
-// `openat`'s and `realpath`'s declarations.
+// `openat`'s and `realpath`'s declarations, and path.c before this.
 
 #ifndef _GNU_SOURCE
-#error "store.c needs _GNU_SOURCE defined before the first include: realpath, openat, fdopendir"
+#error "file_system.c needs _GNU_SOURCE defined before the first include: realpath, openat, fdopendir"
 #endif
 
 #include <dirent.h>
@@ -106,84 +107,6 @@ static StoreErr store_err_of(int e) {
     }
 }
 
-// The longest name the bare-metal host reads and writes, its longest path,
-// and the most parts a path has from the volume's root.
-enum {
-    STORE_MAX_NAME = 96,
-    STORE_MAX_PATH = 256,
-    STORE_MAX_DEPTH = 16,
-};
-
-// Whether FAT, as the bare-metal host holds it, can store `name`: 1 to 96
-// printable ASCII bytes, none of `" * / : < > ? \ |`, not `.` or `..`, not
-// ending in a dot or a space.
-static bool store_fat_name(Str name) {
-    if (name.len == 0 || name.len > STORE_MAX_NAME) return false;
-    if (str_eq(name, S(".")) || str_eq(name, S(".."))) return false;
-    for (size_t i = 0; i < name.len; i++) {
-        uint8_t c = str_byte(name, i);
-        if (c < 0x20 || c > 0x7E) return false;
-        if (mem_find_byte("\"*/:<>?\\|", c, 9) != NULL) return false;
-    }
-    uint8_t last = str_byte(name, name.len - 1);
-    return last != '.' && last != ' ';
-}
-
-// ── paths, as Zig's std.fs.path spells them ─────────────────────────────
-
-// The last part's start and end in `p`, trailing slashes passed by: Zig's
-// component iterator's `last`. False when `p` has no part.
-static bool store_last_part(Str p, size_t *from, size_t *to) {
-    size_t end = p.len;
-    while (end > 0 && str_byte(p, end - 1) == '/') end--;
-    if (end == 0) return false;
-    size_t start = end;
-    while (start > 0 && str_byte(p, start - 1) != '/') start--;
-    *from = start;
-    *to = end;
-    return true;
-}
-
-// `p`'s last part, "" when there is none.
-static Str store_basename(Str p) {
-    size_t from = 0;
-    size_t to = 0;
-    if (!store_last_part(p, &from, &to)) return S("");
-    return str_sub(p, from, to);
-}
-
-// Zig's `dirnamePosix`: `p` up to the end of the part before the last; the
-// root `/` for an absolute path with one part; false for none.
-static bool store_dirname(Str p, Str *out) {
-    size_t from = 0;
-    size_t to = 0;
-    if (!store_last_part(p, &from, &to)) return false;
-    size_t end = from;
-    while (end > 0 && str_byte(p, end - 1) == '/') end--;
-    if (end == 0) {
-        if (from > 0) {
-            *out = str_sub(p, 0, 1);
-            return true;
-        }
-        return false;
-    }
-    *out = str_sub(p, 0, end);
-    return true;
-}
-
-// `dir` and `name` joined by one `/`, as Zig's `path.join` of two parts
-// does when `name` has no leading slash.
-static bool store_join(Arena *a, Str dir, Str name, Str *out) {
-    Buf b = buf_make(a);
-    bool slash = dir.len > 0 && str_byte(dir, dir.len - 1) != '/';
-    if (buf_str(&b, dir) != OK) return false;
-    if (slash && buf_byte(&b, '/') != OK) return false;
-    if (buf_str(&b, name) != OK) return false;
-    buf_fit(&b);
-    *out = buf_view(&b);
-    return true;
-}
-
 // A path ended by a NUL, for the kernel, on the caller's stack: Zig's
 // posix layer copies a path into a PATH_MAX buffer on its stack for each
 // call. A copy in the arena outlived the call, so a run of many changes,
@@ -214,6 +137,13 @@ static inline int store_cstr_errno(StoreErr e) {
 }
 
 // ── the bare-metal host's limits ────────────────────────────────────────
+
+// The bare-metal host's longest path, and the most parts a path has from
+// the volume's root.
+enum {
+    STORE_MAX_PATH = 256,
+    STORE_MAX_DEPTH = 16,
+};
 
 // The two roots as the bare-metal host spells them, `data` and `auth`: a
 // path under one is measured as that host would hold it. Neither is set
@@ -263,18 +193,6 @@ static bool store_exists(Str path) {
     return access(c, F_OK) == 0;
 }
 
-static bool store_eq_nocase(Str x, Str y) {
-    if (x.len != y.len) return false;
-    for (size_t i = 0; i < x.len; i++) {
-        uint8_t p = str_byte(x, i);
-        uint8_t q = str_byte(y, i);
-        if (p >= 'A' && p <= 'Z') p = (uint8_t)(p + 32);
-        if (q >= 'A' && q <= 'Z') q = (uint8_t)(q + 32);
-        if (p != q) return false;
-    }
-    return true;
-}
-
 // The next entry of the listing `d` that is neither `.` nor `..`, into
 // `*ent` and its name into `*name`; false at the listing's end, with `*err`
 // set when readdir failed and left alone when it ended.
@@ -311,7 +229,7 @@ static StoreErr store_sibling(Arena *a, Str dir, Str name, bool *has, Str *found
     struct dirent *ent = NULL;
     Str n = S("");
     while (store_dir_next(d, &ent, &n, &got)) {
-        if (store_eq_nocase(n, name)) {
+        if (path_eq_nocase(n, name)) {
             if (!arena_dup(a, n, found)) {
                 got = STORE_OUT_OF_MEMORY;
             } else {
@@ -333,8 +251,8 @@ static StoreErr store_resolve(Arena *a, Str path, Str *out) {
         return STORE_OK;
     }
     Str parent = S("");
-    if (!store_dirname(path, &parent)) parent = S("");
-    Str name = store_basename(path);
+    if (!path_dirname(path, &parent)) parent = S("");
+    Str name = path_basename(path);
     Str dir = parent;
     if (parent.len > 0) {
         StoreErr e = store_resolve(a, parent, &dir);
@@ -349,7 +267,7 @@ static StoreErr store_resolve(Arena *a, Str path, Str *out) {
         *out = found;
         return STORE_OK;
     }
-    return store_join(a, dir, found, out) ? STORE_OK : STORE_OUT_OF_MEMORY;
+    return path_join(a, dir, found, out) ? STORE_OK : STORE_OUT_OF_MEMORY;
 }
 
 // A lookup that missed: the same path in another case, into `*out` with
@@ -379,7 +297,7 @@ static StoreErr store_retry(Arena *a, Str path, bool *has, Str *out) {
 // `path` resolved for a call that may create its last part, which must be
 // a name FAT holds.
 static StoreErr store_for_write(const LinuxStore *s, Arena *a, Str path, Str *out) {
-    if (!store_fat_name(store_basename(path))) return STORE_BAD_NAME;
+    if (!path_strict_name(path_basename(path))) return STORE_BAD_NAME;
     StoreErr e = store_within_limits(s, path);
     if (e != STORE_OK) return e;
     return store_resolve(a, path, out);
@@ -395,8 +313,8 @@ static StoreErr store_for_make_dir(const LinuxStore *s, Arena *a, Str path, Str 
     if (e != STORE_OK) return e;
     Str rest = p;
     while (!store_exists(rest)) {
-        if (!store_fat_name(store_basename(rest))) return STORE_BAD_NAME;
-        if (!store_dirname(rest, &rest)) break;
+        if (!path_strict_name(path_basename(rest))) return STORE_BAD_NAME;
+        if (!path_dirname(rest, &rest)) break;
     }
     *out = p;
     return STORE_OK;
@@ -549,7 +467,7 @@ static StoreErr store_os_delete_tree(Arena *a, Str path) {
     Str n = S("");
     while (store_dir_next(d, &ent, &n, &got)) {
         Str child = S("");
-        if (!store_join(a, path, n, &child)) {
+        if (!path_join(a, path, n, &child)) {
             got = STORE_OUT_OF_MEMORY;
             break;
         }
@@ -589,117 +507,10 @@ static StoreErr store_os_make_path(Str path) {
     StoreErr e = store_os_make_dir_one(path, &missing);
     if (!missing) return e;
     Str parent = S("");
-    if (!store_dirname(path, &parent)) return STORE_FILE_NOT_FOUND;
+    if (!path_dirname(path, &parent)) return STORE_FILE_NOT_FOUND;
     e = store_os_make_path(parent);
     if (e != STORE_OK) return e;
     return store_os_make_dir_one(path, &missing);
-}
-
-// ── Wyhash, for a replace's sibling name ────────────────────────────────
-
-// The 128-bit product of `*a` and `*b`, its low half to `*a` and its high
-// to `*b`, in 64-bit halves: TCC has no 128-bit integer.
-static void store_wy_mum(uint64_t *a, uint64_t *b) {
-    uint64_t x = *a;
-    uint64_t y = *b;
-    uint64_t xl = x & 0xffffffffu;
-    uint64_t xh = x >> 32;
-    uint64_t yl = y & 0xffffffffu;
-    uint64_t yh = y >> 32;
-    uint64_t ll = xl * yl;
-    uint64_t lh = xl * yh;
-    uint64_t hl = xh * yl;
-    uint64_t hh = xh * yh;
-    uint64_t mid = (ll >> 32) + (lh & 0xffffffffu) + (hl & 0xffffffffu);
-    *a = (ll & 0xffffffffu) | (mid << 32);
-    *b = hh + (lh >> 32) + (hl >> 32) + (mid >> 32);
-}
-
-static uint64_t store_wy_mix(uint64_t a, uint64_t b) {
-    store_wy_mum(&a, &b);
-    return a ^ b;
-}
-
-// `bytes` (4 or 8) little-endian bytes of `s` from `from`.
-static uint64_t store_wy_read(Str s, size_t from, size_t bytes) {
-    uint64_t v = 0;
-    for (size_t k = bytes; k > 0; k--) v = (v << 8) | str_byte(s, from + k - 1);
-    return v;
-}
-
-// Zig's `std.hash.Wyhash.hash(seed, input)`, its one-shot form, step for
-// step.
-static uint64_t store_wyhash(uint64_t seed, Str in) {
-    static const uint64_t secret_words[4] = {0xa0761d6478bd642full, 0xe7037ed1a0b428dbull, 0x8ebc6af09c88c6e3ull, 0x589965cc75374cc3ull};
-    SLICE_TYPE(Words, const uint64_t);
-    Words secret = {secret_words, 4};
-    uint64_t state_words[3];
-    SLICE_TYPE(State, uint64_t);
-    State state = {state_words, 3};
-    at(state, 0) = seed ^ store_wy_mix(seed ^ at(secret, 0), at(secret, 1));
-    at(state, 1) = at(state, 0);
-    at(state, 2) = at(state, 0);
-    uint64_t a = 0;
-    uint64_t b = 0;
-    if (in.len <= 16) {
-        if (in.len >= 4) {
-            size_t end = in.len - 4;
-            size_t quarter = (in.len >> 3) << 2;
-            a = (store_wy_read(in, 0, 4) << 32) | store_wy_read(in, quarter, 4);
-            b = (store_wy_read(in, end, 4) << 32) | store_wy_read(in, end - quarter, 4);
-        } else if (in.len > 0) {
-            a = ((uint64_t)str_byte(in, 0) << 16) | ((uint64_t)str_byte(in, in.len >> 1) << 8) | str_byte(in, in.len - 1);
-        }
-    } else {
-        size_t i = 0;
-        if (in.len >= 48) {
-            while (i + 48 < in.len) {
-                for (size_t r = 0; r < 3; r++) {
-                    uint64_t x = store_wy_read(in, i + 16 * r, 8);
-                    uint64_t y = store_wy_read(in, i + 16 * r + 8, 8);
-                    at(state, r) = store_wy_mix(x ^ at(secret, r + 1), y ^ at(state, r));
-                }
-                i += 48;
-            }
-            at(state, 0) ^= at(state, 1) ^ at(state, 2);
-        }
-        Str rest = str_sub(in, i, in.len);
-        size_t j = 0;
-        while (j + 16 < rest.len) {
-            at(state, 0) = store_wy_mix(store_wy_read(rest, j, 8) ^ at(secret, 1), store_wy_read(rest, j + 8, 8) ^ at(state, 0));
-            j += 16;
-        }
-        a = store_wy_read(in, in.len - 16, 8);
-        b = store_wy_read(in, in.len - 8, 8);
-    }
-    a ^= at(secret, 1);
-    b ^= at(state, 0);
-    store_wy_mum(&a, &b);
-    return store_wy_mix(a ^ at(secret, 0) ^ (uint64_t)in.len, b ^ at(secret, 1));
-}
-
-// The temporary name `replace` writes beside `name`: `~`, eight lowercase
-// hex digits of the low half of a Wyhash of the name in lowercase (its
-// first STORE_MAX_NAME bytes), then `.tmp`. Thirteen bytes whatever the
-// name, and one per name in any case.
-static bool store_sibling_name(Arena *a, Str name, Str *out) {
-    char lower[STORE_MAX_NAME];
-    Bytes low = {lower, sizeof lower};
-    size_t n = name.len < STORE_MAX_NAME ? name.len : STORE_MAX_NAME;
-    for (size_t i = 0; i < n; i++) {
-        uint8_t c = str_byte(name, i);
-        at(low, i) = (char)(c >= 'A' && c <= 'Z' ? c + 32 : c);
-    }
-    uint32_t h = (uint32_t)store_wyhash(0, (Str){lower, n});
-    char *p = arena_alloc(a, 13, 1);
-    if (p == NULL) return false;
-    Bytes t = {p, 13};
-    at(t, 0) = '~';
-    for (size_t k = 0; k < 8; k++) at(t, 1 + k) = "0123456789abcdef"[(h >> (28 - 4 * k)) & 0xf];
-    mem_copy(&at(t, 9), ".tmp", 4);
-    out->ptr = p;
-    out->len = 13;
-    return true;
 }
 
 // ── the store's calls ───────────────────────────────────────────────────
@@ -832,21 +643,21 @@ static StoreErr store_linux_make_dir(void *ctx, Arena *a, Str path) {
 }
 
 // Makes `path` hold exactly `data`, so that no stop loses it: written to a
-// sibling (`store_sibling_name`) with the old file's mode, then renamed
+// sibling (`path_temp_name`) with the old file's mode, then renamed
 // over it. A rename refused leaves no sibling behind.
 static StoreErr store_linux_replace(void *ctx, Arena *a, Str path, Str data) {
     Str p = path;
     StoreErr e = store_for_write(ctx, a, path, &p);
     if (e != STORE_OK) return e;
     Str dir = S("");
-    bool has_dir = store_dirname(p, &dir);
+    bool has_dir = path_dirname(p, &dir);
     if (has_dir) {
         e = store_linux_make_dir(ctx, a, dir);
         if (e != STORE_OK) return e;
     }
     Str tmp = S("");
-    if (!store_sibling_name(a, store_basename(p), &tmp)) return STORE_OUT_OF_MEMORY;
-    if (has_dir && !store_join(a, dir, tmp, &tmp)) return STORE_OUT_OF_MEMORY;
+    if (!path_temp_name(a, path_basename(p), &tmp)) return STORE_OUT_OF_MEMORY;
+    if (has_dir && !path_join(a, dir, tmp, &tmp)) return STORE_OUT_OF_MEMORY;
     struct stat st;
     e = store_os_stat(p, true, &st);
     if (e == STORE_OK) {
@@ -873,7 +684,7 @@ static StoreErr store_linux_append(void *ctx, Arena *a, Str path, Str bytes, uin
     StoreErr e = store_for_write(ctx, a, path, &p);
     if (e != STORE_OK) return e;
     Str dir = S("");
-    if (store_dirname(p, &dir)) {
+    if (path_dirname(p, &dir)) {
         e = store_linux_make_dir(ctx, a, dir);
         if (e != STORE_OK) return e;
     }
@@ -918,7 +729,7 @@ static StoreErr store_linux_remove(void *ctx, Arena *a, Str path) {
 // not hold: an empty or blank one joined onto a root would name the root.
 static StoreErr store_linux_remove_tree(void *ctx, Arena *a, Str path) {
     (void)ctx;
-    if (!store_fat_name(store_basename(path))) return STORE_BAD_NAME;
+    if (!path_strict_name(path_basename(path))) return STORE_BAD_NAME;
     bool has = false;
     Str p = path;
     StoreErr e = store_retry(a, path, &has, &p);

@@ -9,7 +9,7 @@
 // are refused, `""` the root for the calls that only look. Metal's hook is
 // PATH_HOOK_NONE, and its paths are the root's.
 //
-// Include store.c first.
+// Include path.c and file_system.c first.
 
 #include "err.h"
 
@@ -375,7 +375,7 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
             return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)"),
                              MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel)));
         }
-        if (!store_fat_name(part)) {
+        if (!path_strict_name(part)) {
             return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses"),
                              MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel), MSG_FROM_SCRIPT(part)));
         }
