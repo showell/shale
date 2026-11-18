@@ -369,7 +369,7 @@ static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, 
         if (buf_byte(&walked, '/') != OK || buf_str(&walked, part) != OK) return run_oom(r->ctx, pos);
         shown_end += part.len + (shown_end > 0 ? 1 : 0);
         struct stat st;
-        FileSystemErr e = file_system_stat_exact(buf_view(&walked), false, &st);
+        FileSystemErr e = file_system_stat_exact(os_str_own(buf_view(&walked)), false, &st);
         if (e != FILE_SYSTEM_OK) return OK;
         if (S_ISLNK(st.st_mode)) {
             return path_fail(r, pos, CLASS_REFUSED, S("{s}{s} is a symbolic link: the store follows none"), MSG_ARGS(MSG_FROM_SCRIPT(shown_prefix), MSG_FROM_SCRIPT(str_sub(rest, 0, shown_end))));
@@ -406,7 +406,7 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
     // that folder is what the secrets rule hides.
     FileSystemCPath cp;
     const char *c = NULL;
-    FileSystemErr e = file_system_cstr(&cp, m->dir, &c);
+    FileSystemErr e = file_system_cstr(&cp, os_str_own(m->dir), &c);
     // O_PATH, as Zig's `openDir` without `iterate`: a folder that may be
     // searched but not listed still opens.
     int fd = e == FILE_SYSTEM_OK ? open(c, O_PATH | O_DIRECTORY | O_CLOEXEC) : -1;
@@ -414,15 +414,9 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
         close(fd);
     } else {
         FileSystemErr why = e != FILE_SYSTEM_OK ? e : file_system_err_of(errno);
-        bool spells = mounts_spell_secret_folder(h->mounts, m->dir);
-        if (why == FILE_SYSTEM_FILE_NOT_FOUND || why == FILE_SYSTEM_NOT_DIR) {
-            if (m->secrets) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is a secrets mount whose folder is missing"), MSG_ARGS(MSG_FROM_HOST(m->name)));
-            if (spells) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}`'s folder is missing; its path holds a secrets mount's folder, so it is not named"), MSG_ARGS(MSG_FROM_HOST(m->name)));
-            return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which is not a folder there"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(m->dir)));
-        }
-        if (m->secrets) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is a secrets mount whose folder cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(file_system_err_name(why))));
-        if (spells) return path_fail(r, pos, CLASS_STORE, S("the mount `{s}`'s folder cannot be opened: {s}; its path holds a secrets mount's folder, so it is not named"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(file_system_err_name(why))));
-        return path_fail(r, pos, CLASS_STORE, S("the mount `{s}` is {s}, which cannot be opened: {s}"), MSG_ARGS(MSG_FROM_HOST(m->name), MSG_FROM_HOST(m->dir), MSG_FROM_HOST(file_system_err_name(why))));
+        Str said = S("");
+        if (!mounts_folder_failed(paths_values(r), h->mounts, m, why, &said)) return run_oom(r->ctx, pos);
+        return path_fail(r, pos, CLASS_STORE, S("{s}"), MSG_ARGS(MSG_FROM_HOST(said)));
     }
     Str dir = paths_run_dir_of(h, r, m);
     TRY(paths_refuse_links(r, pos, dir, rest, str_sub(path, 0, colon + 1)));
@@ -561,7 +555,7 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
         if (str_eq(at(h->journal, k).abs, abs)) return OK;
     }
     struct stat st;
-    FileSystemErr e = file_system_stat_exact(abs, false, &st);
+    FileSystemErr e = file_system_stat_exact(os_str_own(abs), false, &st);
     Prior p = {S(""), PRIOR_ABSENT, S(""), 0};
     if (e == FILE_SYSTEM_OK && S_ISDIR(st.st_mode)) {
         p.was = PRIOR_DIR;
@@ -572,7 +566,7 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
             return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it"), MSG_ARGS(MSG_FROM_HOST(msg_num(&most, PATHS_JOURNAL_MAX)), MSG_FROM_HOST(abs)));
         }
         Str bytes = S("");
-        FileSystemErr re = file_system_read_file(h->arena, abs, room + 1, &bytes);
+        FileSystemErr re = file_system_read_file(h->arena, os_str_own(abs), room + 1, &bytes);
         if (re != FILE_SYSTEM_OK) {
             return path_fail(r, pos, CLASS_STORE, S("--undo-on-stop: {s} cannot be read ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(re))));
         }
@@ -628,7 +622,7 @@ static void paths_hook(Paths *h, PathHook *out) {
 static STATUS_MUST_USE Status paths_os_path(Paths *h, PathRun *r, Pos pos, Str who, Str given, bool allow_root, Str *out) {
     CheckedPath p;
     TRY(path_arg(r, pos, who, given, allow_root, &p));
-    return paths_absolute(h, r, pos, mounts_trim_slash(p.full), out);
+    return paths_absolute(h, r, pos, mounts_trim_slash(p.full.s), out);
 }
 
 // A secret's file, for `run`'s `secrets`: its OS path, through any mount, a
@@ -704,7 +698,7 @@ static STATUS_MUST_USE Status paths_names_folder(PathRun *r, Pos pos, Str arg, S
         }
         FileSystemCPath cp;
         const char *c = NULL;
-        FileSystemErr e = file_system_cstr(&cp, abs, &c);
+        FileSystemErr e = file_system_cstr(&cp, os_str_own(abs), &c);
         char real[PATH_MAX];
         if (e == FILE_SYSTEM_OK && realpath(c, real) != NULL) {
             Str rp = {real, strlen(real)};

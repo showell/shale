@@ -26,14 +26,15 @@ static STATUS_MUST_USE Status host_copy_mode(Host *lh, Run *r, Pos pos, ConstVal
     TRY(change_may(r, pos, &to));
     Str from_abs = S("");
     Str to_abs = S("");
-    TRY(paths_absolute(&lh->paths, pr, pos, mounts_trim_slash(from.full), &from_abs));
-    TRY(paths_absolute(&lh->paths, pr, pos, mounts_trim_slash(to.full), &to_abs));
+    TRY(paths_absolute(&lh->paths, pr, pos, mounts_trim_slash(from.full.s), &from_abs));
+    TRY(paths_absolute(&lh->paths, pr, pos, mounts_trim_slash(to.full.s), &to_abs));
     TRY(builtin_count_read(r, pos));
     struct stat st;
-    FileSystemErr e = file_system_stat_exact(from_abs, false, &st);
+    // Both CheckedPaths', made absolute.
+    FileSystemErr e = file_system_stat_exact(os_str_own(from_abs), false, &st);
     FileSystemCPath cp;
     const char *c = NULL;
-    if (e == FILE_SYSTEM_OK) e = file_system_cstr(&cp, to_abs, &c);
+    if (e == FILE_SYSTEM_OK) e = file_system_cstr(&cp, os_str_own(to_abs), &c);
     if (e == FILE_SYSTEM_OK && chmod(c, st.st_mode & 0777) != 0) e = file_system_err_of(errno);
     if (e != FILE_SYSTEM_OK) {
         return run_failf(r, pos, CLASS_STORE, "`copy`: {s}'s mode could not be given to {s}: {s}", S("`copy`: "), from.rel, S("'s mode could not be given to "), to.rel, S(": "), file_system_err_name(e));

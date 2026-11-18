@@ -69,19 +69,19 @@ static Str fixture_path(Arena *a) {
     return buf_view(&b);
 }
 
-VEC_DEFINE(ArgList, Str);
+VEC_DEFINE(ArgList, OsStr);
 
 // A spec running the fixture with `verb` and up to two arguments ("" none).
 static void fixture_spec(SpawnSpec *s, Arena *a, ArgList *argv, const char *verb, const char *x, const char *y) { // cstr: literals
     *argv = ArgList_make(a);
-    if (ArgList_push(argv, fixture_path(a)) != OK) abort();
-    if (ArgList_push(argv, (Str){verb, strlen(verb)}) != OK) abort();
-    if (strlen(x) > 0 && ArgList_push(argv, (Str){x, strlen(x)}) != OK) abort();
-    if (strlen(y) > 0 && ArgList_push(argv, (Str){y, strlen(y)}) != OK) abort();
+    if (ArgList_push(argv, os_str_own(fixture_path(a))) != OK) abort();
+    if (ArgList_push(argv, os_str_own((Str){verb, strlen(verb)})) != OK) abort();
+    if (strlen(x) > 0 && ArgList_push(argv, os_str_own((Str){x, strlen(x)})) != OK) abort();
+    if (strlen(y) > 0 && ArgList_push(argv, os_str_own((Str){y, strlen(y)})) != OK) abort();
     spawn_spec_default(s);
     s->argv.ptr = argv->ptr;
     s->argv.len = argv->len;
-    static const Str env_all[1] = {S("PATH=/usr/bin:/bin")};
+    const OsStr env_all[1] = {os_str_own(S("PATH=/usr/bin:/bin"))};
     s->env.ptr = env_all;
     s->env.len = 1;
     s->timeout_ms = 10000;
@@ -131,7 +131,7 @@ TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
     Collect c;
     collect_make(&c, &a);
     SpawnOutcome o;
-    static const Str env_all[2] = {S("SHALE_FIXTURE=present"), S("PATH=/usr/bin:/bin")};
+    const OsStr env_all[2] = {os_str_own(S("SHALE_FIXTURE=present")), os_str_own(S("PATH=/usr/bin:/bin"))};
     SpawnSpec s;
     fixture_spec(&s, &a, &argv, "lines", "3", "");
     s.env.ptr = env_all;
@@ -175,7 +175,7 @@ TEST(output_exit_code_stdin_cwd_and_the_environment_as_given) {
     EXPECT_STR(buf_view(&c.out), S("(unset)\n"));
     buf_clear(&c.out);
     fixture_spec(&s, &a, &argv, "pwd", "", "");
-    s.cwd = S("/");
+    s.cwd = os_str_own(S("/"));
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_OK);
     EXPECT_STR(buf_view(&c.out), S("/\n"));
     buf_clear(&c.out);
@@ -216,19 +216,19 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
     EXPECT_EQ(o.ended, SPAWN_SIGNAL);
     EXPECT_EQ(o.signal, SIGKILL);
     EXPECT_EQ(o.code, SPAWN_NO_CODE);
-    static const Str missing[1] = {S("shale-no-such-program")};
+    const OsStr missing[1] = {os_str_own(S("shale-no-such-program"))};
     s.argv.ptr = missing;
     s.argv.len = 1;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_NOT_FOUND);
-    static const Str relative[1] = {S("./not-here")};
+    const OsStr relative[1] = {os_str_own(S("./not-here"))};
     s.argv.ptr = relative;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_NOT_FOUND);
     // A folder is there but is no program.
-    static const Str folder[1] = {S("/tmp")};
+    const OsStr folder[1] = {os_str_own(S("/tmp"))};
     s.argv.ptr = folder;
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_NOT_RUNNABLE);
     fixture_spec(&s, &a, &argv, "pwd", "", "");
-    s.cwd = S("/no/such/folder");
+    s.cwd = os_str_own(S("/no/such/folder"));
     EXPECT_EQ(spawn_run(&a, &s, sink_of(&c), &o), SPAWN_NO_CWD);
     // Found along PATH: a program with no `/` in its name, past a folder
     // that is not there.
@@ -239,8 +239,8 @@ TEST(a_deadline_ends_it_a_signal_of_its_own_is_said_and_not_found_is_an_answer) 
     Buf path_env = buf_make(&a);
     EXPECT(buf_lit(&path_env, "PATH=/nonexistent:") == OK);
     EXPECT(buf_str(&path_env, str_sub(full, 0, slash - 1)) == OK);
-    Str env_one[1] = {buf_view(&path_env)};
-    Str by_name[3] = {str_sub(full, slash, full.len), S("lines"), S("1")};
+    OsStr env_one[1] = {os_str_own(buf_view(&path_env))};
+    OsStr by_name[3] = {os_str_own(str_sub(full, slash, full.len)), os_str_own(S("lines")), os_str_own(S("1"))};
     spawn_spec_default(&s);
     s.argv.ptr = by_name;
     s.argv.len = 3;
@@ -669,20 +669,20 @@ TEST(the_paths_tried_follow_the_last_PATH) {
     Arena a;
     arena_init(&a, 1 << 20, &refused);
     SpawnCStrs p;
-    static const Str env_all[2] = {S("PATH=/a"), S("PATH=/b::/c")};
+    const OsStr env_all[2] = {os_str_own(S("PATH=/a")), os_str_own(S("PATH=/b::/c"))};
     SpawnStrs env = {env_all, 2};
     // The last PATH wins; an empty folder is the name itself.
-    EXPECT(spawn_candidates(&a, S("prog"), env, &p));
+    EXPECT(spawn_candidates(&a, os_str_own(S("prog")), env, &p));
     EXPECT_EQ(p.len, 3);
     EXPECT_STR(((Str){at(p, 0), strlen(at(p, 0))}), S("/b/prog"));
     EXPECT_STR(((Str){at(p, 1), strlen(at(p, 1))}), S("prog"));
     EXPECT_STR(((Str){at(p, 2), strlen(at(p, 2))}), S("/c/prog"));
     // A name with a `/` is the one path; no PATH is the default.
-    EXPECT(spawn_candidates(&a, S("./x"), env, &p));
+    EXPECT(spawn_candidates(&a, os_str_own(S("./x")), env, &p));
     EXPECT_EQ(p.len, 1);
     EXPECT_STR(((Str){at(p, 0), strlen(at(p, 0))}), S("./x"));
     SpawnStrs none = {env_all, 0};
-    EXPECT(spawn_candidates(&a, S("x"), none, &p));
+    EXPECT(spawn_candidates(&a, os_str_own(S("x")), none, &p));
     EXPECT_EQ(p.len, 3);
     EXPECT_STR(((Str){at(p, 0), strlen(at(p, 0))}), S("/usr/local/bin/x"));
     EXPECT_STR(((Str){at(p, 2), strlen(at(p, 2))}), S("/bin/x"));
@@ -691,7 +691,7 @@ TEST(the_paths_tried_follow_the_last_PATH) {
     arena_init(&tiny, 8, &refused);
     SpawnSpec s;
     spawn_spec_default(&s);
-    static const Str argv_all[1] = {S("x")};
+    const OsStr argv_all[1] = {os_str_own(S("x"))};
     s.argv.ptr = argv_all;
     s.argv.len = 1;
     SpawnOutcome o;
@@ -702,11 +702,11 @@ TEST(the_paths_tried_follow_the_last_PATH) {
     arena_deinit(&a);
 }
 
-TEST(a_word_holding_a_nul_is_refused_and_a_plain_one_ends_with_one) {
+TEST(a_word_ends_with_a_nul_and_only_the_arena_refuses_a_list) {
     bool refused = false;
     Arena a;
     arena_init(&a, 1 << 20, &refused);
-    static const Str plain_all[2] = {S("echo"), S("")};
+    const OsStr plain_all[2] = {os_str_own(S("echo")), os_str_own(S(""))};
     SpawnStrs plain = {plain_all, 2};
     char **list = spawn_cstr_list(&a, plain);
     EXPECT(list != NULL);
@@ -714,13 +714,12 @@ TEST(a_word_holding_a_nul_is_refused_and_a_plain_one_ends_with_one) {
     EXPECT_STR(((Str){at(words, 0), strlen(at(words, 0))}), S("echo"));
     EXPECT_EQ(strlen(at(words, 1)), 0);
     EXPECT(at(words, 2) == NULL);
-    // A NUL inside a word would end the kernel's copy of it early, so the
-    // list is refused, and no arena refused it.
-    static const Str nul_all[2] = {S("echo"), {"a\0b", 3}};
-    SpawnStrs nul = {nul_all, 2};
-    EXPECT(spawn_cstr_list(&a, nul) == NULL);
     EXPECT(!a.hit);
-    EXPECT(!refused);
+    // An OsStr holds no NUL (slice.h), so the arena is the one refusal.
+    Arena tiny;
+    arena_init(&tiny, 8, &refused);
+    EXPECT(spawn_cstr_list(&tiny, plain) == NULL);
+    EXPECT(tiny.hit);
     arena_deinit(&a);
 }
 
@@ -756,5 +755,5 @@ TEST_MAIN(TEST_CASE(output_exit_code_stdin_cwd_and_the_environment_as_given),
           TEST_CASE(attack_a_term_or_hup_the_program_sends_its_parent_mid_run_ends_its_group),
           TEST_CASE(attack_a_program_that_never_reads_its_stdin_leaves_shale_standing),
           TEST_CASE(the_paths_tried_follow_the_last_PATH),
-          TEST_CASE(a_word_holding_a_nul_is_refused_and_a_plain_one_ends_with_one),
+          TEST_CASE(a_word_ends_with_a_nul_and_only_the_arena_refuses_a_list),
           TEST_CASE(a_wait_that_fails_on_a_child_of_shale_s_own_ends_the_process))

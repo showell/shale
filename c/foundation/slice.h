@@ -232,32 +232,52 @@ static inline const char *str_find_byte(Str s, char c) {
     return mem_find_byte(s.ptr, c, s.len);
 }
 
-// ── C strings, for the kernel ─────────────────────────────────────────
+// ── OS strings, for the kernel ────────────────────────────────────────
 
-// Why str_cstr_into refused, or that it did not.
-typedef enum {
-    STR_CSTR_OK,
-    // `s` and its NUL don't fit the room.
-    STR_CSTR_TOO_LONG,
-    // `s` holds a NUL of its own.
-    STR_CSTR_NUL,
-} StrCStr;
+// A Str known to hold no NUL: the only string the C hands the kernel (a
+// path, a program's argument, its folder, an environment entry). Only the
+// two makers below make one, so a call that takes an OsStr was handed bytes
+// the kernel will read whole.
+typedef struct {
+    Str s;
+} OsStr;
 
-// `s` with a NUL after it, written at the start of `room`, for a call into
-// the kernel; nothing is written when it refuses. Every C string the C makes
-// from a Str is made here: arena.h's arena_cstr in an arena, file_system.c's
-// file_system_cstr on the caller's stack.
+// `s` as an OsStr into `*out`, or false when it holds a NUL. The one search
+// for a NUL in a string bound for the kernel: a script's string comes here
+// through the host's `os_str` (host_run.c), which refuses it naming the
+// argument, and a config file's through its parser (mounts.c's
+// `mounts_parse`), which names the line.
 // DRAGON: a NUL inside. A NUL inside `s` would end the kernel's copy early,
 // so the call would act on a shorter path or word than the one every check
 // judged (`a\0/../x` checked as one, opened as `a`).
-// REMEDY: refused here, before the copy, as Zig's posix layer refuses it;
-// test_arena holds both sides, and test_file_system catches its plant.
-static inline StrCStr str_cstr_into(Bytes room, Str s) {
-    if (s.len >= room.len) return STR_CSTR_TOO_LONG;
-    if (str_find_byte(s, 0) != NULL) return STR_CSTR_NUL;
-    mem_copy(room.ptr, s.ptr, s.len);
-    at(room, s.len) = 0;
-    return STR_CSTR_OK;
+// REMEDY: an OsStr is made only here and by os_str_own, which both search
+// for one; test_slice holds both sides, and test_run_guards plants a
+// script's NUL in each of `run`'s arguments.
+static inline bool os_str_of(Str s, OsStr *out) {
+    if (str_find_byte(s, 0) != NULL) return false; // nul: the maker's search
+    out->s = s;
+    return true;
+}
+
+// Shale's own string as an OsStr: one built of others' OsStr parts and
+// fixed words, or a name the kernel gave (a folder's entry, `realpath`'s
+// answer), which hold no NUL by how they were made. A NUL in one is a bug
+// in the C.
+static inline OsStr os_str_own(Str s) {
+    OsStr o;
+    if (!os_str_of(s, &o)) c_bug("an OS string of Shale's own holds a NUL");
+    return o;
+}
+
+// `s` with a NUL after it, written at the start of `room`, for a call into
+// the kernel; false, with nothing written, when it and its NUL don't fit.
+// Every C string the C makes is made here: arena.h's arena_cstr in an
+// arena, file_system.c's file_system_cstr on the caller's stack.
+static inline bool str_cstr_into(Bytes room, OsStr s) {
+    if (s.s.len >= room.len) return false;
+    mem_copy(room.ptr, s.s.ptr, s.s.len);
+    at(room, s.s.len) = 0;
+    return true;
 }
 
 #endif

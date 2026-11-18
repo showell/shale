@@ -608,7 +608,7 @@ static bool grep_tree_enters(const GrepTreeAsk *ask, Str rest) {
 // A folder the walk is in: its entries, sorted, and the next to take.
 typedef struct {
     Str rel;
-    Str full;
+    OsStr full;
     FileSystemEntries entries;
     size_t at;
 } GrepTreeLevel;
@@ -651,7 +651,7 @@ static STATUS_MUST_USE Status grep_tree_walk(Run *r, Pos pos, const GrepTreeAsk 
         TRY(run_charge(r, pos, 1));
         if (str_byte(en.name, 0) == '.') continue;
         Str top_rel = top->rel;
-        Str full = S("");
+        OsStr full = top->full;
         TRY(walk_full(r, pos, top->full, en.name, &full));
         bool secret = false;
         TRY(walk_in_secrets(r, pos, full, &secret));

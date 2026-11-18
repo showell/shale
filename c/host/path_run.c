@@ -308,8 +308,11 @@ static size_t path_part_end(Str s, size_t from) {
 // A script's path, confined: `full` is the OS path (the root's, or the
 // hook's), `rel` the script's own. Only `path_arg` makes one, so a call
 // that takes a CheckedPath took a checked one (Zig's sealed `Path`).
+// `full` is an OsStr by how it is made: every part a strict name, which
+// holds no control byte, under the root or a mount's folder, which hold
+// none either (the CLI's argument, and mounts.c's `mounts_parse`).
 typedef struct {
-    Str full;
+    OsStr full;
     Str rel;
 } CheckedPath;
 
@@ -356,13 +359,13 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
     Str full = S("");
     TRY(r->hook->resolve(r->hook->ctx, r, pos, rel, &resolved, &full));
     if (resolved) {
-        out->full = full;
+        out->full = os_str_own(full);
         out->rel = rel;
         return OK;
     }
     if (rel.len == 0) {
         if (!allow_root) return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}(\"\")` would act on the whole root: name a path of at least one part"), MSG_ARGS(MSG_FROM_HOST(who)));
-        out->full = r->root;
+        out->full = os_str_own(r->root);
         out->rel = S("");
         return OK;
     }
@@ -389,7 +392,7 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
     bool sep = r->root.len == 0 || str_byte(r->root, r->root.len - 1) != '/';
     Buf b = buf_make(r->ctx->values);
     if (buf_str(&b, r->root) != OK || (sep && buf_byte(&b, '/') != OK) || buf_str(&b, rel) != OK) return run_oom(r->ctx, pos);
-    out->full = buf_view(&b);
+    out->full = os_str_own(buf_view(&b));
     out->rel = rel;
     return OK;
 }

@@ -16,8 +16,14 @@ use("build:lib.shale")
 -- faults below planted in a copy of c/ (`run_plants`), each caught by its
 -- `aim` tests.
 
-const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 8}
+const HOST_BUILTINS_TESTS = {["c/tests/host_builtins/test_host_run.c"] = 14, ["c/tests/host_builtins/test_run_guards.c"] = 9}
 const HOST_BUILTINS_PLANTS = {
+  {name = "a script's NUL is made an OS string", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_nul_in_an_argument_an_env_a_secrets_name_or_a_secret_is_refused_before_any_guard",
+   old = "    if (os_str_of(s, out)) return OK;\n", new = "    out->s = s;\n    return OK;\n"},
+  {name = "a git that cannot start is a program it does not track", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_run_guards",
+   aim = "a_git_that_cannot_start_is_said_not_taken_for_a_program_it_does_not_track",
+   old = "    if (got != SPAWN_OK) {\n        Str why", new = "    if (0) {\n        Str why"},
   {name = "a secret's start at a read's end is passed on raw", file = "host_run.c", dir = "host", caught_by = "host_builtins/test_host_run",
    aim = "the_scrubber_holds_back_a_secret_split_across_reads_and_widens_an_overlap",
    old = "if (host_is_proper_prefix(rest, at(s->secrets, k).value)) return true;", new = "if (0 && host_is_proper_prefix(rest, at(s->secrets, k).value)) return true;"},

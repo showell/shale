@@ -43,9 +43,9 @@ typedef enum {
     SWAP_UNRENAMED,
 } SwapEnd;
 
-// Readies `s` for the target `path`, an absolute path: FILE_SYSTEM_OK, or the
-// store's refusal of the path (too long, a NUL inside).
-static FileSystemErr swap_file_target(SwapFile *s, Str path) {
+// Readies `s` for the target `path`, an absolute path: FILE_SYSTEM_OK, or
+// NameTooLong for a path past PATH_MAX.
+static FileSystemErr swap_file_target(SwapFile *s, OsStr path) {
     memset(s, 0, sizeof *s);
     s->fd = -1;
     const char *c = NULL; // cstr: NUL-ended for the kernel
@@ -75,14 +75,13 @@ static int swap_file_open(SwapFile *s, Arena *a) {
     Buf t = buf_make(a);
     if (buf_str(&t, dir) != OK || buf_lit(&t, "/.") != OK || buf_str(&t, base) != OK || buf_byte(&t, '.') != OK || buf_u64(&t, (uint64_t)getpid()) != OK || buf_lit(&t, ".shale-tmp") != OK) return SWAP_NO_ROOM;
     const char *c = NULL; // cstr: NUL-ended for the kernel
-    FileSystemErr e = file_system_cstr(&s->tmp, buf_view(&t), &c);
-    if (e != FILE_SYSTEM_OK) return file_system_cstr_errno(e);
+    FileSystemErr e = file_system_cstr(&s->tmp, os_str_own(buf_view(&t)), &c);
+    if (e != FILE_SYSTEM_OK) return ENAMETOOLONG;
     int fd = open(s->tmp.bytes, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0) return errno;
     // 0600 whatever the umask. Its answer is not read: the open's own mode
     // already holds the file to 0600 or less.
-    int chmodded = fchmod(fd, 0600);
-    (void)chmodded;
+    (void)fchmod(fd, 0600); // ignored: the open's own mode already holds it
     s->fd = fd;
     s->made = true;
     return 0;
@@ -124,6 +123,6 @@ static SwapEnd swap_file_commit(SwapFile *s, bool replace, int *err) {
 static void swap_file_discard(SwapFile *s) {
     if (s->fd >= 0) close(s->fd);
     s->fd = -1;
-    if (s->made) unlink(s->tmp.bytes);
+    if (s->made) (void)unlink(s->tmp.bytes); // ignored: a discard on a path that failed
     s->made = false;
 }

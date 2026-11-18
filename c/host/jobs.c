@@ -124,7 +124,7 @@ static bool jobs_stop(const JobRecord *r, uint64_t grace_ms) {
 
 // `dir/name` in the arena, as spawn.c's candidates are made; false when
 // refused.
-static bool jobs_join(Arena *a, Str dir, Str name, Str *out) {
+static bool jobs_join(Arena *a, Str dir, Str name, OsStr *out) {
     if (dir.len > SIZE_MAX / 4 || name.len > SIZE_MAX / 4) return arena_refuse(a) != NULL;
     char *p = ARENA_ARRAY(a, char, dir.len + 1 + name.len);
     if (p == NULL) return false;
@@ -133,33 +133,39 @@ static bool jobs_join(Arena *a, Str dir, Str name, Str *out) {
     at(room, dir.len) = '/';
     Bytes tail = SLICE_SUB(Bytes, room, dir.len + 1, room.len);
     if (name.len > 0) mem_copy(tail.ptr, name.ptr, name.len);
-    out->ptr = p;
-    out->len = room.len;
+    *out = os_str_own((Str){p, room.len});
     return true;
 }
 
-static bool jobs_runnable(Arena *a, Str p) {
+// Whether `p` is a program this process may run: 0, or `access`'s errno
+// (ENOENT for nothing there), into `*err`; false when the arena refuses.
+static bool jobs_runnable(Arena *a, OsStr p, int *err) {
     char *z = arena_cstr(a, p);
-    return z != NULL && access(z, X_OK) == 0;
+    if (z == NULL) return false;
+    *err = access(z, X_OK) == 0 ? 0 : errno;
+    return true;
 }
 
 // argv[0] as execve would find it: a path (relative to `cwd`), or along
-// PATH (its last `PATH=`). `*found` false when nothing runnable is there;
+// PATH (its last `PATH=`), into `*out`. `*err` is 0 when it is found, ENOENT
+// (or ENOTDIR) when nothing is there, and the errno of the first one there
+// that cannot be run (EACCES) otherwise, as execve tells the two apart.
 // STOP when the arena refuses.
-static STATUS_MUST_USE Status jobs_find(Arena *a, Str argv0, SpawnStrs env, Str cwd, bool *found, Str *out) {
-    *found = false;
+static STATUS_MUST_USE Status jobs_find(Arena *a, OsStr argv0_os, SpawnStrs env, OsStr cwd, int *err, OsStr *out) {
+    *err = ENOENT;
+    Str argv0 = argv0_os.s;
     if (str_find_byte(argv0, '/') != NULL) {
-        Str p = argv0;
-        if (str_byte(argv0, 0) != '/' && !jobs_join(a, cwd, argv0, &p)) return STOP;
-        if (jobs_runnable(a, p)) {
-            *found = true;
-            *out = p;
-        }
+        OsStr p = argv0_os;
+        if (str_byte(argv0, 0) != '/' && !jobs_join(a, cwd.s, argv0, &p)) return STOP;
+        if (!jobs_runnable(a, p, err)) return STOP;
+        *out = p;
         return OK;
     }
+    int seen = 0;
     Str path = S("/usr/local/bin:/usr/bin:/bin");
     for (size_t i = 0; i < env.len; i++) {
-        if (str_starts_with(at(env, i), S("PATH="))) path = str_sub(at(env, i), 5, at(env, i).len);
+        Str e = at(env, i).s;
+        if (str_starts_with(e, S("PATH="))) path = str_sub(e, 5, e.len);
     }
     Str rest = path;
     while (1) {
@@ -167,15 +173,20 @@ static STATUS_MUST_USE Status jobs_find(Arena *a, Str argv0, SpawnStrs env, Str 
         size_t to = colon != NULL ? (size_t)(colon - rest.ptr) : rest.len;
         Str dir = str_sub(rest, 0, to);
         if (dir.len > 0) {
-            Str p = S("");
-            if (!jobs_join(a, dir, argv0, &p)) return STOP;
-            if (jobs_runnable(a, p)) {
-                *found = true;
+            OsStr p = argv0_os;
+            int e = 0;
+            if (!jobs_join(a, dir, argv0, &p) || !jobs_runnable(a, p, &e)) return STOP;
+            if (e == 0) {
+                *err = 0;
                 *out = p;
                 return OK;
             }
+            if (seen == 0 && e != ENOENT && e != ENOTDIR) seen = e;
         }
-        if (colon == NULL) return OK;
+        if (colon == NULL) {
+            if (seen != 0) *err = seen;
+            return OK;
+        }
         rest = str_sub(rest, to + 1, rest.len);
     }
 }
@@ -246,19 +257,19 @@ static bool jobs_read_small(Arena *a, const char *path, Bytes *out) { // cstr: N
 // reaper says it is written by a byte on its fd 3, a pipe. End of file with
 // no byte means the reaper died first (JOBS_NO_RECORD). A slow reaper is
 // only slow, so there is no deadline. The record's strings are in `a`.
-static JobsLaunched jobs_launch(Arena *a, Str reaper, Str record, Str log, Str cwd, Str program, SpawnStrs argv, SpawnStrs env, JobRecord *out) {
+static JobsLaunched jobs_launch(Arena *a, OsStr reaper, OsStr record, OsStr log, OsStr cwd, OsStr program, SpawnStrs argv, SpawnStrs env, JobRecord *out) {
     size_t n = 7 + argv.len;
-    Str *all = ARENA_ARRAY(a, Str, n);
+    OsStr *all = ARENA_ARRAY(a, OsStr, n);
     if (all == NULL) return JOBS_OUT_OF_MEMORY;
-    SLICE_TYPE(ArgsRoom, Str);
+    SLICE_TYPE(ArgsRoom, OsStr);
     ArgsRoom args = {all, n};
     at(args, 0) = reaper;
-    at(args, 1) = S("--reap");
+    at(args, 1) = os_str_own(S("--reap"));
     at(args, 2) = record;
     at(args, 3) = log;
     at(args, 4) = cwd;
     at(args, 5) = program;
-    at(args, 6) = S("--");
+    at(args, 6) = os_str_own(S("--"));
     for (size_t i = 0; i < argv.len; i++) at(args, 7 + i) = at(argv, i);
     SpawnStrs sargs = {all, n};
     char **zargv = spawn_cstr_list(a, sargs);
@@ -360,10 +371,12 @@ static void jobs_end_group(int32_t pgid, uint64_t grace_ms) {
     }
 }
 
-static Str jobs_arg(char **argv, size_t argc, size_t i) {
+// The reaper's argument `i`, as the kernel handed it: NUL-ended, so it
+// holds no NUL.
+static OsStr jobs_arg(char **argv, size_t argc, size_t i) {
     SLICE_TYPE(Argv, char *);
     Argv all = {argv, argc};
-    return (Str){at(all, i), strlen(at(all, i))};
+    return os_str_own((Str){at(all, i), strlen(at(all, i))});
 }
 
 // The reaper, `shale --reap <record> <log> <cwd> <program> -- argv...`, its
@@ -372,27 +385,27 @@ static Str jobs_arg(char **argv, size_t argc, size_t i) {
 // its group is empty. The exit code says only whether it could. `args` are
 // the words after `--reap`.
 static inline int jobs_reap_main(Arena *a, char **args, size_t n, SpawnStrs env) {
-    if (n < 6 || !str_eq(jobs_arg(args, n, 4), S("--"))) return 2;
-    Str record_s = jobs_arg(args, n, 0);
+    if (n < 6 || !str_eq(jobs_arg(args, n, 4).s, S("--"))) return 2;
+    OsStr record_s = jobs_arg(args, n, 0);
     Buf tb = buf_make(a);
     // A temp file of its own, so a reaper ending as another starts never
     // shares one.
-    if (buf_str(&tb, record_s) != OK || buf_byte(&tb, '.') != OK || buf_u64(&tb, (uint64_t)getpid()) != OK || buf_lit(&tb, ".tmp") != OK) return 2;
-    char *tmp = arena_cstr(a, buf_view(&tb));
+    if (buf_str(&tb, record_s.s) != OK || buf_byte(&tb, '.') != OK || buf_u64(&tb, (uint64_t)getpid()) != OK || buf_lit(&tb, ".tmp") != OK) return 2;
+    char *tmp = arena_cstr(a, os_str_own(buf_view(&tb)));
     char *record = arena_cstr(a, record_s);
     char *log = arena_cstr(a, jobs_arg(args, n, 1));
     char *cwd = arena_cstr(a, jobs_arg(args, n, 2));
     char *program = arena_cstr(a, jobs_arg(args, n, 3));
     if (tmp == NULL || record == NULL || log == NULL || cwd == NULL || program == NULL) return 2;
     size_t argc = n - 5;
-    Str *argv = ARENA_ARRAY(a, Str, argc);
+    OsStr *argv = ARENA_ARRAY(a, OsStr, argc);
     if (argv == NULL) return 2;
-    SLICE_TYPE(ArgvRoom, Str);
+    SLICE_TYPE(ArgvRoom, OsStr);
     ArgvRoom room = {argv, argc};
     Buf shown = buf_make(a);
     for (size_t i = 0; i < argc; i++) {
         at(room, i) = jobs_arg(args, n, 5 + i);
-        if ((i > 0 && buf_byte(&shown, ' ') != OK) || buf_str(&shown, at(room, i)) != OK) return 2;
+        if ((i > 0 && buf_byte(&shown, ' ') != OK) || buf_str(&shown, at(room, i).s) != OK) return 2;
     }
     SpawnStrs sargv = {argv, argc};
     char **zargv = spawn_cstr_list(a, sargv);

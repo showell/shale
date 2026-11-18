@@ -745,7 +745,8 @@ static inline Str gate_iso_now(Arena *a) {
 // One append of `line` to `<home>/.local/state/shale/wants.tsv`, outside
 // every repo, its folders made first as Zig makes them: each prefix of the
 // folder after its first byte, its errors not read. False when the file
-// cannot be opened or the write is short.
+// cannot be opened or the write is short. `home` is the environment's HOME,
+// which the kernel handed over NUL-ended.
 static inline bool gate_append_log(Arena *a, Str home, Str line) {
     Buf dir = buf_make(a);
     if (buf_str(&dir, home) != OK || buf_lit(&dir, "/.local/state/shale") != OK) return false;
@@ -757,15 +758,15 @@ static inline bool gate_append_log(Arena *a, Str home, Str line) {
         const char *slash = str_find_byte(str_sub(parts, from, parts.len), '/');
         size_t to = slash == NULL ? parts.len : from + (size_t)(slash - (parts.ptr + from));
         if (buf_byte(&made, '/') != OK || buf_str(&made, str_sub(parts, from, to)) != OK) return false;
-        const char *p = arena_cstr(a, buf_view(&made));
+        const char *p = arena_cstr(a, os_str_own(buf_view(&made)));
         if (p == NULL) return false;
-        (void)mkdir(p, 0755);
+        (void)mkdir(p, 0755); // ignored: a folder that is not made fails the open below
         if (slash == NULL) break;
         from = to + 1;
     }
     Buf file = buf_make(a);
     if (buf_str(&file, d) != OK || buf_lit(&file, "/wants.tsv") != OK) return false;
-    const char *path = arena_cstr(a, buf_view(&file));
+    const char *path = arena_cstr(a, os_str_own(buf_view(&file)));
     if (path == NULL) return false;
     int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd < 0) return false;

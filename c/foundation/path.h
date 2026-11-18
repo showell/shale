@@ -1,8 +1,7 @@
 // path.h: a path's algebra and the strict name rule, with no call into
 // the operating system: a path's last part, its folder and a join, as Zig's
 // std.fs.path spells them; the names Shale holds every file to
-// (`path_strict_name`); names that are one apart from case
-// (`path_eq_nocase`); and the temporary name a replace writes beside its
+// (`path_strict_name`); and the temporary name a replace writes beside its
 // file (`path_temp_name`). c/host/file_system.c makes the calls. This is
 // the strict name rule's one home: the CLI's library reader and `is_name`
 // take it from here too.
@@ -84,19 +83,6 @@ static inline bool path_join(Arena *a, Str dir, Str name, Str *out) {
     if (buf_str(&b, name) != OK) return false;
     buf_fit(&b);
     *out = buf_view(&b);
-    return true;
-}
-
-// Whether `x` and `y` are the same name apart from ASCII case.
-static inline bool path_eq_nocase(Str x, Str y) {
-    if (x.len != y.len) return false;
-    for (size_t i = 0; i < x.len; i++) {
-        uint8_t p = str_byte(x, i);
-        uint8_t q = str_byte(y, i);
-        if (p >= 'A' && p <= 'Z') p = (uint8_t)(p + 32);
-        if (q >= 'A' && q <= 'Z') q = (uint8_t)(q + 32);
-        if (p != q) return false;
-    }
     return true;
 }
 

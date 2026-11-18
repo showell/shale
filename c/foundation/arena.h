@@ -359,19 +359,15 @@ static inline bool arena_dup(Arena *a, Str s, Str *out) {
 }
 
 // `s` with a NUL after it, in the arena, for a call into the kernel: NULL
-// when `s` holds a NUL (str_cstr_into's refusal: `hit` stays unset, and
-// nothing is kept), or when the arena refuses (`hit` set). The one converter
-// to an arena's C string.
-static inline char *arena_cstr(Arena *a, Str s) { // cstr: the kernel's
+// only when the arena refuses (`hit` set), since an OsStr holds no NUL. The
+// one converter to an arena's C string.
+static inline char *arena_cstr(Arena *a, OsStr s) { // cstr: the kernel's
     size_t n = 0;
-    if (!arena_size_add(a, s.len, 1, &n)) return NULL;
+    if (!arena_size_add(a, s.s.len, 1, &n)) return NULL;
     char *p = arena_alloc(a, n, 1);
     if (p == NULL) return NULL;
     Bytes room = {p, n};
-    if (str_cstr_into(room, s) != STR_CSTR_OK) {
-        arena_free(a, p, n);
-        return NULL;
-    }
+    if (!str_cstr_into(room, s)) c_bug("arena_cstr: a room sized for the string refused it");
     return p;
 }
 

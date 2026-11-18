@@ -101,7 +101,7 @@ static int reap_fixture(JobsPlace *p, const char *verb, const char *ms, uint64_t
         bool refused = false;
         Arena a;
         arena_init(&a, (size_t)1 << 20, &refused);
-        static const Str env_all[1] = {S("PATH=/usr/bin:/bin")};
+        const OsStr env_all[1] = {os_str_own(S("PATH=/usr/bin:/bin"))};
         SpawnStrs env = {env_all, 1};
         _exit(jobs_reap_main(&a, args_all, n, env));
     }
@@ -223,15 +223,20 @@ TEST(find_takes_a_path_or_the_path_and_a_job_gone_is_neither_alive_nor_stopped) 
     char fixture[4400];
     fixture_abs(fixture, sizeof fixture);
     Str fx = {fixture, strlen(fixture)};
-    static const Str env_all[1] = {S("PATH=/usr/bin:/bin")};
+    const OsStr env_all[1] = {os_str_own(S("PATH=/usr/bin:/bin"))};
     SpawnStrs env = {env_all, 1};
-    bool found = false;
-    Str out = S("");
-    EXPECT_EQ(jobs_find(&a, fx, env, S("."), &found, &out), OK);
-    EXPECT(found);
-    EXPECT_STR(out, fx);
-    EXPECT_EQ(jobs_find(&a, S("no-such-program-x"), env, S("."), &found, &out), OK);
-    EXPECT(!found);
+    int found = -1;
+    OsStr out = os_str_own(S(""));
+    OsStr here = os_str_own(S("."));
+    EXPECT_EQ(jobs_find(&a, os_str_own(fx), env, here, &found, &out), OK);
+    EXPECT_EQ(found, 0);
+    EXPECT_STR(out.s, fx);
+    EXPECT_EQ(jobs_find(&a, os_str_own(S("no-such-program-x")), env, here, &found, &out), OK);
+    EXPECT_EQ(found, ENOENT);
+    // A file there that cannot be run is told from one not there, as execve
+    // tells them apart.
+    EXPECT_EQ(jobs_find(&a, os_str_own(S("c/tests/host/test_jobs.c")), env, here, &found, &out), OK);
+    EXPECT_EQ(found, EACCES);
     // A job run to its end: its leader, its group and its reaper are gone.
     JobsPlace p;
     place_make(&p, "gone");
@@ -267,14 +272,14 @@ TEST(the_reaper_holds_0_1_2_and_its_started_pipe_alone) {
     Str fx = {fixture, strlen(fixture)};
     // The fixture as the reaper: it writes the fds it was handed to the
     // record's path, which is then no record.
-    static const Str argv_all[1] = {S("x")};
+    const OsStr argv_all[1] = {os_str_own(S("x"))};
     SpawnStrs argv = {argv_all, 1};
-    static const Str env_all[1] = {S("PATH=/usr/bin:/bin")};
+    const OsStr env_all[1] = {os_str_own(S("PATH=/usr/bin:/bin"))};
     SpawnStrs env = {env_all, 1};
     JobRecord r;
     Str record = {p.record, strlen(p.record)};
     Str log = {p.log, strlen(p.log)};
-    EXPECT_EQ(jobs_launch(&a, fx, record, log, S("."), fx, argv, env, &r), JOBS_NO_RECORD);
+    EXPECT_EQ(jobs_launch(&a, os_str_own(fx), os_str_own(record), os_str_own(log), os_str_own(S(".")), os_str_own(fx), argv, env, &r), JOBS_NO_RECORD);
     char room_bytes[512];
     EXPECT_STR(file_text(p.record, (Bytes){room_bytes, sizeof room_bytes}), S("fds 0 1 2 3\n"));
     place_free(&p);

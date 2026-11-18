@@ -61,12 +61,12 @@ TEST(every_way_out_of_the_root_is_refused_before_the_file_system_is_asked) {
     fx_again(&f);
     uint64_t before = f.steps;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("exists"), S("chat/a.md"), true, &p));
-    EXPECT_STR(p.full, fx_r(&f, "R/chat/a.md"));
+    EXPECT_STR(p.full.s, fx_r(&f, "R/chat/a.md"));
     EXPECT_STR(p.rel, S("chat/a.md"));
     // Nine bytes, then a step for each of its two parts' lstat.
     EXPECT_EQ(f.steps - before, 11);
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("ls"), S("."), true, &p));
-    EXPECT_STR(p.full, f.base.root);
+    EXPECT_STR(p.full.s, f.base.root);
     EXPECT_STR(p.rel, S(""));
     Str text = S("");
     EXPECT(sx_file(&f.base, "top.txt", &text));
@@ -100,7 +100,7 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     fx_again(&f);
     uint64_t before = f.steps;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("read"), S("runs:logs/a.txt"), false, &p));
-    EXPECT_STR(p.full, fx_r(&f, "R/elsewhere/logs/a.txt"));
+    EXPECT_STR(p.full.s, fx_r(&f, "R/elsewhere/logs/a.txt"));
     EXPECT_STR(p.rel, S("runs:logs/a.txt"));
     // Its bytes, then a step for each part below the mount's folder.
     EXPECT_EQ(f.steps - before, 17);
@@ -122,7 +122,7 @@ TEST(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_f
     EXPECT_STR(m_dot, m_bare);
     // A mount whose name has a `-` resolves as any other.
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("glob"), S("my-runs:logs"), true, &p));
-    EXPECT_STR(p.full, fx_r(&f, "R/elsewhere/logs"));
+    EXPECT_STR(p.full.s, fx_r(&f, "R/elsewhere/logs"));
     EXPECT(fx_stopped(&f, fx_look(&f, "read", S("nope:x")), CLASS_ARGUMENT, S("the mounts are `runs`, `home`, `gone`")));
     EXPECT(fx_said(&f, fx_look(&f, "read", S("nope:x")), CLASS_ARGUMENT, S("\"nope:x\": `nope:` is not a mount: the mounts are `runs`, `home`, `gone`, `my-runs` (~/.config/shale/mounts)")));
     EXPECT(fx_said(&f, fx_look(&f, "read", S("gone:x")), CLASS_STORE, S("the mount `gone` is /no/such/folder, which is not a folder there")));
@@ -165,7 +165,7 @@ TEST(the_mounts_file_shale_mounts_pins_it_the_default_s_absence_is_no_mounts_a_p
     EXPECT_EQ(mounts_load(a, true, S("/no/such/mounts"), S("/h"), &got, &why), MOUNTS_MALFORMED);
     EXPECT_STR(why, S("SHALE_MOUNTS=/no/such/mounts: FileNotFound"));
     sx_put(&f.base, "mounts", "runs = ~/runs\n");
-    Str file = sx_at(&f.base, "mounts");
+    Str file = sx_at(&f.base, "mounts").s;
     EXPECT_EQ(mounts_load(a, true, file, S("/h"), &got, &why), MOUNTS_OK);
     EXPECT_STR(at(got.mounts, 0).dir, S("/h/runs"));
     EXPECT_STR(got.from, file);
@@ -178,11 +178,32 @@ TEST(the_mounts_file_shale_mounts_pins_it_the_default_s_absence_is_no_mounts_a_p
     sx_mkdir(&f.base, "real-folder");
     fx_link(&f, "real-folder", "linked");
     Buf text = buf_make(a);
-    EXPECT(buf_lit(&text, "l = ") == OK && buf_str(&text, sx_at(&f.base, "linked")) == OK && buf_lit(&text, "\n") == OK);
+    EXPECT(buf_lit(&text, "l = ") == OK && buf_str(&text, sx_at(&f.base, "linked").s) == OK && buf_lit(&text, "\n") == OK);
     sx_put(&f.base, "mounts", "");
-    EXPECT_EQ(file_system_replace(&f.base.file_system, a, file, buf_view(&text)), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_replace(&f.base.file_system, a, os_str_own(file), buf_view(&text)), FILE_SYSTEM_OK);
     EXPECT_EQ(mounts_load(a, true, file, S("/h"), &got, &why), MOUNTS_OK);
-    EXPECT_STR(at(got.mounts, 0).dir, sx_at(&f.base, "real-folder"));
+    EXPECT_STR(at(got.mounts, 0).dir, sx_at(&f.base, "real-folder").s);
+    // A folder that is missing keeps its spelling, for the run that uses it
+    // to stop on; one that cannot be resolved for another cause is refused,
+    // naming the mount and the cause, never the folder.
+    sx_mkdir(&f.base, "shut/inner");
+    buf_clear(&text);
+    EXPECT(buf_lit(&text, "gone = ") == OK && buf_str(&text, sx_at(&f.base, "nowhere").s) == OK && buf_lit(&text, "\ns = ") == OK && buf_str(&text, sx_at(&f.base, "shut/inner").s) == OK && buf_lit(&text, "\n") == OK);
+    EXPECT_EQ(file_system_replace(&f.base.file_system, a, os_str_own(file), buf_view(&text)), FILE_SYSTEM_OK);
+    EXPECT_EQ(sx_chmod(&f.base, "shut", 0), 0);
+    MountsResult shut = mounts_load(a, true, file, S("/h"), &got, &why);
+    EXPECT_EQ(sx_chmod(&f.base, "shut", 0755), 0);
+    EXPECT_EQ(shut, MOUNTS_MALFORMED);
+    EXPECT(str_starts_with(why, file));
+    tail = S(": the mount `s`'s folder cannot be resolved: AccessDenied");
+    EXPECT(why.len >= tail.len && str_eq(str_sub(why, why.len - tail.len, why.len), tail));
+    EXPECT_EQ(mounts_load(a, true, file, S("/h"), &got, &why), MOUNTS_OK);
+    EXPECT_STR(at(got.mounts, 0).dir, sx_at(&f.base, "nowhere").s);
+    // A NUL in a mount's path is refused where its line is known, not as
+    // the arena's refusal it would read as at the kernel.
+    Mounts ms;
+    EXPECT_EQ(mounts_parse(a, ((Str){"ok = /x\nbad = /a\0b\n", 19}), S("/h"), &ms, &why), MOUNTS_MALFORMED);
+    EXPECT_STR(why, S("line 2: `bad`'s path holds a NUL byte, which no path can carry"));
     fx_deinit(&f);
 }
 
@@ -424,19 +445,19 @@ TEST(a_walk_through_a_mount_its_paths_are_the_mounts_and_each_lands_where_the_mo
     fx_mounts(&f, "m = R/elsewhere\n");
     CheckedPath p;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:"), true, &p));
-    EXPECT_STR(p.full, fx_r(&f, "R/elsewhere"));
+    EXPECT_STR(p.full.s, fx_r(&f, "R/elsewhere"));
     EXPECT_STR(p.rel, S("m:"));
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:."), true, &p));
     EXPECT_STR(p.rel, S("m:"));
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:sub"), true, &p));
-    EXPECT_STR(p.full, fx_r(&f, "R/elsewhere/sub"));
+    EXPECT_STR(p.full.s, fx_r(&f, "R/elsewhere/sub"));
     FileSystemEntries es;
     EXPECT_EQ(file_system_list(&f.base.file_system, &f.base.values, p.full, &es), FILE_SYSTEM_OK);
     EXPECT_EQ(es.len, 1);
     EXPECT_STR(at(es, 0).name, S("b.zig"));
     FileSystemStat st;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("walk"), S("m:sub/b.zig"), true, &p));
-    EXPECT_EQ(file_system_stat(&f.base.file_system, &f.base.values, p.full, &st), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_stat(&f.base.file_system, p.full, &st), FILE_SYSTEM_OK);
     EXPECT_EQ(st.size, 2);
     fx_deinit(&f);
 }
@@ -485,7 +506,7 @@ TEST(the_file_system_follows_no_link_to_a_file_to_a_folder_in_the_middle_in_a_mo
 
 // Whether the stop the run made names the secrets folder `keys` under the root.
 static bool fx_names_keys(Fx *f) {
-    Str dir = sx_at(&f->base, "keys");
+    Str dir = sx_at(&f->base, "keys").s;
     Str m = f->ctx.stop.message;
     return mem_find(m.ptr, m.len, dir.ptr, dir.len) != SIZE_MAX;
 }
@@ -636,7 +657,7 @@ TEST(the_secrets_rule_s_one_check_a_host_text_naming_a_secrets_folder_ends_the_p
     fx_init(&f);
     sx_mkdir(&f.base, "keys");
     fx_mounts(&f, "k = R/keys secrets\n");
-    Str dir = sx_at(&f.base, "keys/tok");
+    Str dir = sx_at(&f.base, "keys/tok").s;
     // The script's own text may come back, as Zig's plain stop gives it back.
     fx_again(&f);
     EXPECT(fx_said(&f, path_fail(&f.run, fx_pos(), CLASS_ARGUMENT, S("`read`: \"{s}\" is absolute"), MSG_ARGS(MSG_FROM_SCRIPT(dir))), CLASS_ARGUMENT, fx_r(&f, "`read`: \"R/keys/tok\" is absolute")));
@@ -731,8 +752,8 @@ static STATUS_MUST_USE Status fx_tree(Fx *f, bool make, Str path) {
     fx_again(f);
     CheckedPath p;
     TRY(path_arg(&f->run, fx_pos(), make ? S("mkdir") : S("remove_tree"), path, false, &p));
-    TRY(f->hook.may_change(f->hook.ctx, &f->run, fx_pos(), p.rel, p.full));
-    FileSystemErr e = make ? file_system_make_dir(&f->base.file_system, &f->base.values, p.full) : file_system_remove_tree(&f->base.file_system, &f->base.values, p.full);
+    TRY(f->hook.may_change(f->hook.ctx, &f->run, fx_pos(), p.rel, p.full.s));
+    FileSystemErr e = make ? file_system_make_dir(&f->base.file_system, p.full) : file_system_remove_tree(&f->base.file_system, &f->base.values, p.full);
     return e == FILE_SYSTEM_OK ? OK : path_file_system_failed(&f->run, fx_pos(), make ? S("mkdir") : S("remove_tree"), p.rel, e);
 }
 
@@ -887,8 +908,8 @@ TEST(undo_on_stop_puts_back_an_edit_a_file_made_a_folder_made_a_file_removed_an_
     fx_again(&f);
     CheckedPath p;
     EXPECT_OK_IN(&f.ctx, path_arg(&f.run, fx_pos(), S("remove"), S("gone.txt"), false, &p));
-    EXPECT_OK_IN(&f.ctx, f.hook.may_change(f.hook.ctx, &f.run, fx_pos(), p.rel, p.full));
-    EXPECT_EQ(file_system_remove(&f.base.file_system, &f.base.values, p.full), FILE_SYSTEM_OK);
+    EXPECT_OK_IN(&f.ctx, f.hook.may_change(f.hook.ctx, &f.run, fx_pos(), p.rel, p.full.s));
+    EXPECT_EQ(file_system_remove(&f.base.file_system, p.full), FILE_SYSTEM_OK);
     EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("there/n.txt"), S("n\n")));
     Buf w = buf_make(&f.host);
     bool all = false;
@@ -919,7 +940,7 @@ TEST(undo_of_nothing_there_whose_path_is_gone_already_is_put_back_as_nothing) {
     f.paths.undo = true;
     EXPECT_OK_IN(&f.ctx, fx_change(&f, "create", S("brief.txt"), S("b")));
     // Something else took it away before the undo: nothing to do, all put back.
-    EXPECT_EQ(file_system_remove(&f.base.file_system, &f.base.values, sx_at(&f.base, "brief.txt")), FILE_SYSTEM_OK);
+    EXPECT_EQ(file_system_remove(&f.base.file_system, sx_at(&f.base, "brief.txt")), FILE_SYSTEM_OK);
     Buf w = buf_make(&f.host);
     bool all = false;
     EXPECT_EQ(undo_changes(&f.paths, &w, &all), OK);
@@ -1119,7 +1140,7 @@ TEST(a_path_run_has_a_hook_always_metal_s_answers_nothing_resolved_no_hint_and_n
     EXPECT(fx_said(&f, path_arg(&bare, fx_pos(), S("read"), S("k:tok"), false, &p), CLASS_ARGUMENT, S("`read`: \"k:tok\" has a part (\"k:tok\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses")));
     fx_again(&f);
     EXPECT_OK_IN(&f.ctx, path_arg(&bare, fx_pos(), S("read"), S("a/b"), false, &p));
-    EXPECT_STR(p.full, fx_r(&f, "R/a/b"));
+    EXPECT_STR(p.full.s, fx_r(&f, "R/a/b"));
     bool yes = true;
     EXPECT_OK_IN(&f.ctx, PATH_HOOK_NONE.names_secret(NULL, &bare, fx_pos(), f.base.root, &yes));
     EXPECT(!yes);

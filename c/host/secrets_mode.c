@@ -78,7 +78,8 @@ static void secrets_read_file(Arena *a, Str path, size_t limit, Str *out, Str *w
     *why = S("");
     FileSystemCPath cp;
     const char *c = NULL;
-    if (file_system_cstr(&cp, path, &c) != FILE_SYSTEM_OK) {
+    // The path is made from HOME, which the kernel handed over NUL-ended.
+    if (file_system_cstr(&cp, os_str_own(path), &c) != FILE_SYSTEM_OK) {
         *why = S("its path is too long");
         return;
     }
@@ -264,8 +265,12 @@ static bool secrets_settings(Secrets *m, SecretsSettings *s) {
     s->bak = secrets_cat(m, s->path, S(".bak"), S(""));
     FileSystemCPath cp;
     const char *c = NULL;
-    if (s->path.len == 0 || s->bak.len == 0 || file_system_cstr(&cp, s->path, &c) != FILE_SYSTEM_OK) {
-        (void)secrets_fail(m, S(SECRETS_SETTINGS_SHOWN ": its path cannot be made"), SECRETS_FAILED);
+    if (s->path.len == 0 || s->bak.len == 0) {
+        (void)secrets_fail(m, S(SECRETS_SETTINGS_SHOWN ": out of memory"), SECRETS_FAILED);
+        return false;
+    }
+    if (file_system_cstr(&cp, os_str_own(s->path), &c) != FILE_SYSTEM_OK) {
+        (void)secrets_fail(m, S(SECRETS_SETTINGS_SHOWN ": its path is too long"), SECRETS_FAILED);
         return false;
     }
     struct stat st;
@@ -311,7 +316,7 @@ static bool secrets_settings(Secrets *m, SecretsSettings *s) {
 // written, else why not.
 static Str secrets_swap(Secrets *m, Str path, Str bytes) {
     SwapFile f;
-    if (swap_file_target(&f, path) != FILE_SYSTEM_OK) return S("its path is too long");
+    if (swap_file_target(&f, os_str_own(path)) != FILE_SYSTEM_OK) return S("its path is too long");
     int err = 0;
     if (swap_file_there(&f, &err) == SWAP_NOT_FILE) return S("it is there and is not a plain file");
     int made = swap_file_open(&f, m->arena);
@@ -351,9 +356,11 @@ static int secrets_add_denies(Secrets *m, SecretsSettings *s) {
     } else {
         // A first settings file may need its folder.
         Str dir = secrets_cat(m, m->home, S("/.claude"), S(""));
+        if (dir.len == 0) return secrets_fail(m, S("~/.claude: out of memory; nothing is written"), SECRETS_FAILED);
         FileSystemCPath cp;
         const char *c = NULL;
-        if (file_system_cstr(&cp, dir, &c) == FILE_SYSTEM_OK && mkdir(c, 0700) != 0 && errno != EEXIST) {
+        if (file_system_cstr(&cp, os_str_own(dir), &c) != FILE_SYSTEM_OK) return secrets_fail(m, S("~/.claude: its path is too long; nothing is written"), SECRETS_FAILED);
+        if (mkdir(c, 0700) != 0 && errno != EEXIST) {
             return secrets_fail(m, secrets_cat(m, S("~/.claude cannot be made ("), secrets_errno_name(errno), S("); nothing is written")), SECRETS_FAILED);
         }
     }
@@ -621,7 +628,8 @@ static int secrets_store(Secrets *m) {
     secrets_target(m, mt, name, shown, &abs, &why);
     if (why.len > 0) return secrets_fail(m, secrets_cat(m, why, S("; nothing is stored"), S("")), SECRETS_FAILED);
     SwapFile f;
-    if (swap_file_target(&f, abs) != FILE_SYSTEM_OK) return secrets_fail(m, secrets_cat(m, shown, S(": its path is too long; nothing is stored"), S("")), SECRETS_FAILED);
+    // Its name was held to the strict name rule (paths_secret_target).
+    if (swap_file_target(&f, os_str_own(abs)) != FILE_SYSTEM_OK) return secrets_fail(m, secrets_cat(m, shown, S(": its path is too long; nothing is stored"), S("")), SECRETS_FAILED);
     int err = 0;
     SwapThere there = swap_file_there(&f, &err);
     if (there == SWAP_NOT_FILE) return secrets_fail(m, secrets_cat(m, shown, S(" is there and is not a plain file; nothing is stored"), S("")), SECRETS_FAILED);

@@ -99,6 +99,36 @@ static bool mounts_next_word(Str s, size_t *from, Str *word) {
     return true;
 }
 
+// What is said of the mount `m` whose folder could not be opened, `why` the
+// error (FileNotFound or NotDir for a folder that is not there), into `*out`
+// in `a`; false when the arena refuses. The one home of these words, for
+// paths.c's stop on a mount a script uses and the CLI's library reader's.
+// DRAGON: the secrets rule. The folder of a secrets mount, or a path that
+// spells one, would print where the tokens are.
+// REMEDY: the folder is named only when the mount is no secrets mount and
+// its path spells none (mounts_spell_secret_folder).
+static bool mounts_folder_failed(Arena *a, MountsItems ms, const Mount *m, FileSystemErr why, Str *out) {
+    bool missing = why == FILE_SYSTEM_FILE_NOT_FOUND || why == FILE_SYSTEM_NOT_DIR;
+    bool spells = mounts_spell_secret_folder(ms, m->dir);
+    Buf b = buf_make(a);
+    if (buf_lit(&b, "the mount `") != OK || buf_str(&b, m->name) != OK) return false;
+    Status s = OK;
+    if (m->secrets) {
+        s = buf_str(&b, missing ? S("` is a secrets mount whose folder is missing") : S("` is a secrets mount whose folder cannot be opened: "));
+    } else if (spells) {
+        s = buf_str(&b, missing ? S("`'s folder is missing") : S("`'s folder cannot be opened: "));
+    } else {
+        s = buf_lit(&b, "` is ");
+        if (s == OK) s = buf_str(&b, m->dir);
+        if (s == OK) s = buf_str(&b, missing ? S(", which is not a folder there") : S(", which cannot be opened: "));
+    }
+    if (s == OK && !missing) s = buf_str(&b, file_system_err_name(why));
+    if (s == OK && spells && !m->secrets) s = buf_lit(&b, "; its path holds a secrets mount's folder, so it is not named");
+    if (s != OK) return false;
+    *out = buf_view(&b);
+    return true;
+}
+
 typedef enum {
     MOUNTS_OK,
     MOUNTS_MALFORMED,
@@ -176,6 +206,10 @@ static MountsResult mounts_parse(Arena *a, Str text, Str home, Mounts *out, Str 
         for (size_t k = 0; k < out->len; k++) {
             if (str_eq(at(*out, k).name, name)) return mounts_malformed(a, why, n, S("the mount `{s}` is named twice"), MSG_ARGS(MSG_FROM_HOST(name)));
         }
+        // A NUL is refused here, where its line is known: past the parse
+        // the folder is a path the kernel takes (paths.c, shale.c).
+        OsStr checked;
+        if (!os_str_of(value, &checked)) return mounts_malformed(a, why, n, S("`{s}`'s path holds a NUL byte, which no path can carry"), MSG_ARGS(MSG_FROM_HOST(name)));
         Str dir = S("");
         if (str_starts_with(value, S("~/"))) {
             Buf b = buf_make(a);
@@ -212,7 +246,7 @@ static inline MountsResult mounts_load(Arena *a, bool has_pinned, Str pinned, St
         out->from = buf_view(&b);
     }
     Str text = S("");
-    FileSystemErr e = file_system_read_file(a, out->from, 64 * 1024, &text);
+    FileSystemErr e = file_system_read_file(a, os_str_own(out->from), 64 * 1024, &text);
     if (e == FILE_SYSTEM_OUT_OF_MEMORY) return MOUNTS_OUT_OF_MEMORY;
     if (e != FILE_SYSTEM_OK) {
         if (!has_pinned && e == FILE_SYSTEM_FILE_NOT_FOUND) return MOUNTS_OK;
@@ -233,9 +267,20 @@ static inline MountsResult mounts_load(Arena *a, bool has_pinned, Str pinned, St
         Mount *m = &at(out->mounts, k);
         FileSystemCPath cp;
         const char *c = NULL;
-        if (file_system_cstr(&cp, m->dir, &c) != FILE_SYSTEM_OK) continue;
+        FileSystemErr ce = file_system_cstr(&cp, os_str_own(m->dir), &c);
         char resolved[PATH_MAX];
-        if (realpath(c, resolved) == NULL) continue;
+        int err = ENAMETOOLONG;
+        if (ce == FILE_SYSTEM_OK) err = realpath(c, resolved) != NULL ? 0 : errno;
+        // A folder that is not there keeps its spelling: a run that uses
+        // the mount stops on it then (paths.c's paths_mount_path).
+        if (err == ENOENT || err == ENOTDIR) continue; // skip: missing is the mount's own stop
+        if (err != 0) {
+            // The folder is not named: it may be a secrets mount's.
+            Buf b = buf_make(a);
+            if (buf_str(&b, out->from) != OK || buf_lit(&b, ": the mount `") != OK || buf_str(&b, m->name) != OK || buf_lit(&b, "`'s folder cannot be resolved: ") != OK || buf_str(&b, file_system_err_name(file_system_err_of(err))) != OK) return MOUNTS_OUT_OF_MEMORY;
+            *why = buf_view(&b);
+            return MOUNTS_MALFORMED;
+        }
         if (!arena_dup(a, (Str){resolved, strlen(resolved)}, &m->dir)) return MOUNTS_OUT_OF_MEMORY;
     }
     return MOUNTS_OK;

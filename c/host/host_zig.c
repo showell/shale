@@ -623,7 +623,7 @@ static STATUS_MUST_USE Status host_zig_move_in(Paths *h, HostZigProc *z, Arena *
     CheckedPath q;
     TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 0), false, &p));
     TRY(builtin_path(r, pos, BUILTIN_HOST, &at(args, 1), false, &q));
-    if (str_eq(p.full, q.full)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`zig_move`: `from` and `to` are one file"));
+    if (str_eq(p.full.s, q.full.s)) return run_fail(&r->ctx, pos, CLASS_ARGUMENT, S("`zig_move`: `from` and `to` are one file"));
     const Value *pv = &at(args, 2);
     if (pv->tag != VALUE_TABLE || pv->as.table->kind != TABLE_MAP) return run_fail(&r->ctx, pos, CLASS_TYPE, S("`zig_move`'s names are a list"));
     Table *packed_args = pv->as.table;
@@ -887,7 +887,7 @@ static STATUS_MUST_USE Status host_zig_imports_in(Paths *h, HostZigProc *z, Aren
     TRY(host_zig_req_ok(r, pos, zig_wire_source(&req, src)));
     HostZigAnswer an;
     TRY(host_zig_ask(z, h, sa, r, pos, r->host_call, buf_view(&req), &an));
-    Str dir = host_zig_dirname(p.full);
+    Str dir = host_zig_dirname(p.full.s);
     Table *list = NULL;
     TRY(host_zig_list(r, pos, &list));
     RunFiles *rs = builtin_files_of(r);
@@ -905,9 +905,12 @@ static STATUS_MUST_USE Status host_zig_imports_in(Paths *h, HostZigProc *z, Aren
             if (host_zig_has_extension(target)) {
                 Str full = {0};
                 if (!host_zig_resolve(sa, dir, target, &full)) return run_values_oom(r, pos);
+                // The target is the file's own text, which may hold a NUL.
+                OsStr full_os;
+                if (!os_str_of(full, &full_os)) return run_failf(r, pos, CLASS_REFUSED, "`zig_imports`: an import of {s} holds a NUL byte, which no path can carry", S("`zig_imports`: an import of "), p.rel, S(" holds a NUL byte, which no path can carry"));
                 bool found = false;
                 FileSystemStat st;
-                FileSystemErr e = file_system_stat_or_null(rs->file_system, sa, full, &found, &st);
+                FileSystemErr e = file_system_stat_or_null(rs->file_system, full_os, &found, &st);
                 if (e != FILE_SYSTEM_OK) {
                     Str kept = {0};
                     TRY(host_zig_keep(r, pos, target, &kept));

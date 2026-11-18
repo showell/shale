@@ -108,7 +108,7 @@ static Str builtin_kind_name(FileSystemKind k) {
 // `p`'s stat, `*found` false when nothing is there; a failure is `b`'s stop.
 static STATUS_MUST_USE Status builtin_stat_or_null(Run *r, Pos pos, Builtin b, const CheckedPath *p, bool *found, FileSystemStat *st) {
     RunFiles *rs = builtin_files_of(r);
-    FileSystemErr e = file_system_stat_or_null(rs->file_system, r->ctx.values, p->full, found, st);
+    FileSystemErr e = file_system_stat_or_null(rs->file_system, p->full, found, st);
     if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, b, p->rel, e);
     return OK;
 }
@@ -130,7 +130,7 @@ static int builtin_entry_order(const void *x, const void *y) {
 // A folder's entries sorted by name, charged as `ls` is: a step an entry and
 // the sort's bound. The caller counts the read. A folder's names are distinct,
 // so qsort, which is not stable, gives the one order there is.
-static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b, Str full, Str rel, FileSystemEntries *out) {
+static STATUS_MUST_USE Status builtin_sorted_entries(Run *r, Pos pos, Builtin b, OsStr full, Str rel, FileSystemEntries *out) {
     RunFiles *rs = builtin_files_of(r);
     FileSystemErr e = file_system_list(rs->file_system, r->ctx.values, full, out);
     if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, b, rel, e);
@@ -171,7 +171,7 @@ static STATUS_MUST_USE Status bi_stat(Run *r, Pos pos, ConstValues args, Value *
     TRY(builtin_count_read(r, pos));
     RunFiles *rs = builtin_files_of(r);
     FileSystemStat st;
-    FileSystemErr e = file_system_stat(rs->file_system, r->ctx.values, p.full, &st);
+    FileSystemErr e = file_system_stat(rs->file_system, p.full, &st);
     if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, BUILTIN_STAT, p.rel, e);
     Table *t = NULL;
     TRY(run_new_table(r, pos, &t));
@@ -189,7 +189,7 @@ static STATUS_MUST_USE Status bi_exists(Run *r, Pos pos, ConstValues args, Value
     TRY(builtin_count_read(r, pos));
     RunFiles *rs = builtin_files_of(r);
     bool has = false;
-    FileSystemErr e = file_system_has(rs->file_system, r->ctx.values, p.full, &has);
+    FileSystemErr e = file_system_has(rs->file_system, p.full, &has);
     if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, BUILTIN_EXISTS, p.rel, e);
     value_bool(out, has);
     return OK;
@@ -245,7 +245,7 @@ static STATUS_MUST_USE Status builtin_read_sized_in(Run *r, Pos pos, Builtin b, 
     RunFiles *rs = builtin_files_of(r);
     Bytes room = {buf, (size_t)want};
     size_t got = 0;
-    FileSystemErr e = file_system_read_at(rs->file_system, r->ctx.values, p->full, offset, room, &got);
+    FileSystemErr e = file_system_read_at(rs->file_system, p->full, offset, room, &got);
     if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, b, p->rel, e);
     r->read_bytes += got;
     TRY(builtin_charge_bytes(r, pos, got));
@@ -645,7 +645,7 @@ static STATUS_MUST_USE Status builtin_scan(Run *r, Pos pos, const ScanAsk *ask, 
         if (want > run_sat_sub(r->ctx.budgets.read_bytes, r->read_bytes)) return run_budget_stop(&r->ctx, pos, BUDGET_READ_BYTES);
         size_t got = 0;
         Bytes into = SLICE_SUB(Bytes, buf, kept, kept + want);
-        FileSystemErr e = file_system_read_at(rs->file_system, r->ctx.values, p->full, at_, into, &got);
+        FileSystemErr e = file_system_read_at(rs->file_system, p->full, at_, into, &got);
         if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, b, p->rel, e);
         r->read_bytes += got;
         TRY(builtin_charge_bytes(r, pos, got));

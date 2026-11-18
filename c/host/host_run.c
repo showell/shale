@@ -210,6 +210,15 @@ static STATUS_MUST_USE Status host_fail_plain(Run *r, Pos pos, StopClass cls, St
     return path_fail(&builtin_files_of(r)->path, pos, cls, fmt, none);
 }
 
+// `s`, a script's string that `who` hands the kernel as its `what` (`argument
+// 2`, "`env` F"), as an OsStr into `*out`: the one way a script's string
+// becomes one. A NUL in it is refused here, CLASS_REFUSED naming the
+// argument, where the cause is known; past here no call can meet one.
+static STATUS_MUST_USE Status os_str(Run *r, Pos pos, Str who, Str what, Str s, OsStr *out) {
+    if (os_str_of(s, out)) return OK;
+    return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s {s} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(what)));
+}
+
 // ── the options ──
 
 static STATUS_MUST_USE Status host_int_opt(Run *r, Pos pos, Str who, Str k, const Value *x, uint64_t *out) {
@@ -250,10 +259,12 @@ typedef struct {
     PathsStrs values;
 } HostEnvOpt;
 
-// `env` or `secrets`, read once into names and their strings, for `run` and
-// `job_start` alike: a value that is not a string stops the run here, so the
-// guards and the environment below test no value's type. A secret's value is
-// its file's path (`paths`), and its stop says so.
+// `env` or `secrets` (`k`), read once into names and their strings, for
+// `who`, `run` or `job_start`: a value that is not a string, and a NUL in a
+// name or an `env` value, stop the run here (`os_str`), so the guards and
+// the environment below test no value's type and meet no NUL. A secret's
+// value is its file's path (`paths`), held to a path's rules, and its stop
+// says so.
 static STATUS_MUST_USE Status host_env_opt(Run *r, Pos pos, Str who, Str k, const Value *x, bool paths, HostEnvOpt *out) {
     Table *t = NULL;
     TRY(host_map_opt(r, pos, who, k, x, &t));
@@ -266,11 +277,18 @@ static STATUS_MUST_USE Status host_env_opt(Run *r, Pos pos, Str who, Str k, cons
     EnvRoom vroom = {values, n};
     for (size_t j = 0; j < n; j++) {
         Value v = ValueMap_value_at(&t->map, j);
-        at(nroom, j) = ValueMap_key_at(&t->map, j);
+        Str name = ValueMap_key_at(&t->map, j);
+        Str what = S("");
+        TRY(paths_cat(&builtin_files_of(r)->path, pos, S("`"), k, S("` name"), &what));
+        OsStr checked;
+        TRY(os_str(r, pos, who, what, name, &checked));
+        at(nroom, j) = name;
         if (paths) {
             TRY(builtin_string_arg(r, pos, BUILTIN_HOST, &v, S("its path"), &at(vroom, j)));
         } else {
             TRY(host_str_opt(r, pos, who, k, &v, &at(vroom, j)));
+            TRY(paths_cat(&builtin_files_of(r)->path, pos, S("`env` "), name, S(""), &what));
+            TRY(os_str(r, pos, who, what, at(vroom, j), &checked));
         }
     }
     out->names.ptr = names;
@@ -532,29 +550,36 @@ static STATUS_MUST_USE Status host_discard(void *ctx, Str bytes) {
     return OK;
 }
 
-// Whether git tracks the program at `path`, relative to `cwd`. A git that
-// cannot start is "no".
-static STATUS_MUST_USE Status host_tracked(Host *h, Run *r, Pos pos, Str path, Str cwd, bool *out) {
-    Str argv_all[5] = {S("git"), S("ls-files"), S("--error-unmatch"), S("--"), path};
+// Whether git tracks the program at `path`, relative to `cwd`, for `who`'s
+// guard. A git that cannot start stops the run, saying so: read as "no", it
+// would refuse the program as untracked, a cause it is not.
+static STATUS_MUST_USE Status host_tracked(Host *h, Run *r, Pos pos, Str who, OsStr path, Str cwd, bool *out) {
+    OsStr argv_all[5] = {os_str_own(S("git")), os_str_own(S("ls-files")), os_str_own(S("--error-unmatch")), os_str_own(S("--")), path};
     SpawnSpec spec;
     spawn_spec_default(&spec);
     spec.argv.ptr = argv_all;
     spec.argv.len = 5;
-    spec.cwd = cwd;
+    // The folder is a CheckedPath's, made absolute (host_guard_program).
+    spec.cwd = os_str_own(cwd);
     spec.env = h->env;
     spec.timeout_ms = 10000;
     SpawnSink sink = {NULL, host_discard};
     SpawnOutcome o;
     SpawnResult got = spawn_run(r->ctx.values, &spec, sink, &o);
     if (got == SPAWN_OUT_OF_MEMORY) return run_values_oom(r, pos);
-    *out = got == SPAWN_OK && o.ended == SPAWN_EXIT && o.code == 0;
+    if (got != SPAWN_OK) {
+        Str why = got == SPAWN_NOT_FOUND ? S("there is no git") : got == SPAWN_NOT_RUNNABLE ? S("git is not runnable") : got == SPAWN_NO_CWD ? S("its folder cannot be entered") : S("the kernel refused a pipe or a fork");
+        return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: a program by path is run only when git tracks it, and git could not start to say: {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(path.s), MSG_FROM_HOST(why)));
+    }
+    *out = o.ended == SPAWN_EXIT && o.code == 0;
     return OK;
 }
 
 // Refuses a program in HOST_NEVER whatever the want; then, without one, a
 // program in HOST_REFUSED and a program by a path git does not track, unless
 // it is under a ` tools` mount. Used by `run` and `job_start`.
-static STATUS_MUST_USE Status host_refuse(Host *h, Run *r, Pos pos, Str who, Str argv0, Str cwd, bool has_want) {
+static STATUS_MUST_USE Status host_refuse(Host *h, Run *r, Pos pos, Str who, OsStr argv0_os, Str cwd, bool has_want) {
+    Str argv0 = argv0_os.s;
     Str base = host_base_name(argv0);
     Str bare = base;
     while (bare.len > 0 && str_byte(bare, bare.len - 1) >= '0' && str_byte(bare, bare.len - 1) <= '9') bare = str_sub(bare, 0, bare.len - 1);
@@ -575,37 +600,9 @@ static STATUS_MUST_USE Status host_refuse(Host *h, Run *r, Pos pos, Str who, Str
     }
     if (str_find_byte(argv0, '/') == NULL || host_under_tools_mount(h, argv0)) return OK;
     bool known = false;
-    TRY(host_tracked(h, r, pos, argv0, cwd, &known));
+    TRY(host_tracked(h, r, pos, who, argv0_os, cwd, &known));
     if (known) return OK;
     return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: a program by path that git does not track (a script just written?); {{want = \"tag: why\"}} to run it anyway"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(argv0)));
-}
-
-static bool host_has_nul(Str s) {
-    return str_find_byte(s, 0) != NULL;
-}
-
-static STATUS_MUST_USE Status host_refuse_nul_name(Run *r, Pos pos, Str who, Str opt) {
-    return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `{s}` has a name that holds a NUL byte, where the kernel would end it"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(opt)));
-}
-
-// Refuses a NUL byte in a program's argument, in an `env` name or value, or
-// in a `secrets` name.
-static STATUS_MUST_USE Status host_refuse_nul(Run *r, Pos pos, Str who, SpawnStrs argv, const HostEnvOpt *env, const HostEnvOpt *secrets) {
-    for (size_t i = 0; i < argv.len; i++) {
-        if (host_has_nul(at(argv, i))) {
-            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s argument {d} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(run_unum(r, i + 1))));
-        }
-    }
-    for (size_t j = 0; j < env->names.len; j++) {
-        if (host_has_nul(at(env->names, j))) return host_refuse_nul_name(r, pos, who, S("env"));
-        if (host_has_nul(at(env->values, j))) {
-            return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` {s} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(at(env->names, j))));
-        }
-    }
-    for (size_t j = 0; j < secrets->names.len; j++) {
-        if (host_has_nul(at(secrets->names, j))) return host_refuse_nul_name(r, pos, who, S("secrets"));
-    }
-    return OK;
 }
 
 // A program as the guards see it, from `run`'s options or `job_start`'s.
@@ -624,23 +621,28 @@ typedef struct {
 // `job_start`, giving the folder it runs in as an OS path.
 // DRAGON: the secrets rule. A guard that tests other bytes than the program
 // is handed lets a secret's path through: a Shale string may hold a NUL, and
-// the kernel ends an argument at it, so `"keys\0x"` passes the secrets
-// folder's guard whole and reaches the program as `keys`. And `host_refuse`
+// the kernel ends an argument at it, so `"keys\0x"` would pass the secrets
+// folder's guard whole and reach the program as `keys`. And `host_refuse`
 // hands argv[0] to git (`ls-files`), which must never be shown a secret's
 // path.
-// REMEDY: the order here. The NUL refusal runs first, so every guard after
-// it tests exactly the bytes the program is handed; the secrets guard runs
-// before `host_refuse`, so a path into a secrets folder stops the run before
-// git starts. test_run_guards plants each, for both callers.
+// REMEDY: the argv is OsStrs and the `env` read through `os_str`, so no NUL
+// is here to be cut and every guard tests exactly the bytes the program is
+// handed; the secrets guard runs before `host_refuse`, so a path into a
+// secrets folder stops the run before git starts. test_run_guards plants
+// each, for both callers.
 static STATUS_MUST_USE Status host_guard_program(Host *h, Run *r, Pos pos, const HostProgram *p, Str *cwd) {
     RunFiles *rs = builtin_files_of(r);
-    TRY(host_refuse_nul(r, pos, p->who, p->argv, p->env, p->secrets));
     if (host_given(p->cwd)) {
         TRY(paths_os_path(&h->paths, &rs->path, pos, builtin_who(r, BUILTIN_HOST), p->cwd->as.string, true, cwd));
     } else {
         *cwd = paths_root_of(&h->paths, &rs->path);
     }
-    PathsStrs argv = {p->argv.ptr, p->argv.len};
+    // The argv's bytes, as the secrets guard reads them.
+    SLICE_TYPE(Words, Str);
+    Words words = {ARENA_ARRAY(r->ctx.values, Str, p->argv.len), p->argv.len};
+    if (words.ptr == NULL) return run_values_oom(r, pos);
+    for (size_t i = 0; i < words.len; i++) at(words, i) = at(p->argv, i).s;
+    PathsStrs argv = {words.ptr, words.len};
     TRY(paths_refuse_secret_args(&h->paths, &rs->path, pos, p->who, argv, *cwd, p->env->names, p->env->values));
     return host_refuse(h, r, pos, p->who, at(p->argv, 0), *cwd, p->has_want);
 }
@@ -889,7 +891,7 @@ static STATUS_MUST_USE Status host_secret_open(Host *h, Run *r, Pos pos, const V
     Str shown = v->as.string;
     Str path = S("");
     TRY(paths_secret_target(&h->paths, &builtin_files_of(r)->path, pos, shown, &path));
-    FileSystemErr ce = swap_file_target(&out->file, path);
+    FileSystemErr ce = swap_file_target(&out->file, os_str_own(path));
     if (ce != FILE_SYSTEM_OK) return host_fail(r, pos, CLASS_STORE, S("`run`'s `stdout_secret` {s} cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(ce))));
     // DRAGON: the secrets rule. The path is a secrets mount's file, which
     // no message may name.
@@ -1042,10 +1044,10 @@ static STATUS_MUST_USE Status host_secret_read(Host *h, Run *r, Pos pos, Str nam
     TRY(paths_secret_path(&h->paths, &builtin_files_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), given, &path));
     FileSystemCPath cp;
     const char *c = NULL;
-    FileSystemErr ce = file_system_cstr(&cp, path, &c);
+    FileSystemErr ce = file_system_cstr(&cp, os_str_own(path), &c);
     // Neither waited on (a FIFO) nor followed (a link): host_open_regular.
     int fd = -1;
-    int err = ce == FILE_SYSTEM_OK ? host_open_regular(c, false, &fd) : file_system_cstr_errno(ce);
+    int err = ce == FILE_SYSTEM_OK ? host_open_regular(c, false, &fd) : ENAMETOOLONG;
     if (err == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret `{s}`'s file {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(name), MSG_FROM_SCRIPT(given)));
     char *bytes = NULL;
     size_t len = 0;
@@ -1067,6 +1069,8 @@ static STATUS_MUST_USE Status host_secret_read(Host *h, Run *r, Pos pos, Str nam
     while (v.len > 0 && mem_find_byte(" \t\r\n", str_byte(v, 0), 4) != NULL) v = str_sub(v, 1, v.len);
     while (v.len > 0 && mem_find_byte(" \t\r\n", str_byte(v, v.len - 1), 4) != NULL) v = str_sub(v, 0, v.len - 1);
     if (v.len == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: the secret `{s}`'s file {s} is empty"), MSG_ARGS(MSG_FROM_SCRIPT(name), MSG_FROM_SCRIPT(given)));
+    OsStr checked;
+    if (!os_str_of(v, &checked)) return host_fail(r, pos, CLASS_REFUSED, S("`run`: the secret `{s}`'s file {s} holds a NUL byte, which no environment can carry"), MSG_ARGS(MSG_FROM_SCRIPT(name), MSG_FROM_SCRIPT(given)));
     *value = v;
     return OK;
 }
@@ -1084,11 +1088,12 @@ static bool host_env_overridden(Str inherited, const HostEnvOpt *env, const Host
     return false;
 }
 
-// `K=V`, in the values' arena.
-static STATUS_MUST_USE Status host_env_pair(Run *r, Pos pos, Str k, Str v, Str *out) {
+// `K=V`, in the values' arena, of a name and a value read through `os_str`
+// (host_env_opt) or a secret's checked bytes (host_secret_read).
+static STATUS_MUST_USE Status host_env_pair(Run *r, Pos pos, Str k, Str v, OsStr *out) {
     Buf kv = buf_make(r->ctx.values);
     if (buf_str(&kv, k) != OK || buf_byte(&kv, '=') != OK || buf_str(&kv, v) != OK) return run_values_oom(r, pos);
-    *out = buf_view(&kv);
+    *out = os_str_own(buf_view(&kv));
     return OK;
 }
 
@@ -1100,18 +1105,18 @@ static STATUS_MUST_USE Status host_run_env(Host *h, Run *r, Pos pos, const HostE
     Arena *a = r->ctx.values;
     size_t extra = envs->names.len;
     size_t nsecrets = secret_paths->names.len;
-    Str *env = ARENA_ARRAY(a, Str, h->env.len + extra + nsecrets);
+    OsStr *env = ARENA_ARRAY(a, OsStr, h->env.len + extra + nsecrets);
     if (env == NULL && h->env.len + extra + nsecrets > 0) return run_values_oom(r, pos);
     HostSecret *secrets = ARENA_ARRAY(a, HostSecret, nsecrets);
     if (secrets == NULL && nsecrets > 0) return run_values_oom(r, pos);
-    SLICE_TYPE(EnvRoom, Str);
+    SLICE_TYPE(EnvRoom, OsStr);
     SLICE_TYPE(SecretRoom, HostSecret);
     EnvRoom room = {env, h->env.len + extra + nsecrets};
     SecretRoom sroom = {secrets, nsecrets};
     size_t n = 0;
     for (size_t i = 0; i < h->env.len; i++) {
-        Str e = at(h->env, i);
-        if (!host_env_overridden(e, envs, secret_paths)) at(room, n++) = e;
+        OsStr e = at(h->env, i);
+        if (!host_env_overridden(e.s, envs, secret_paths)) at(room, n++) = e;
     }
     for (size_t j = 0; j < extra; j++) {
         Str k = at(envs->names, j);
@@ -1172,7 +1177,7 @@ static STATUS_MUST_USE Status host_run_answer(Run *r, Pos pos, SpawnStrs argv, c
     list->kind = TABLE_LIST;
     for (size_t i = 0; i < argv.len; i++) {
         Value s;
-        value_string(&s, at(argv, i));
+        value_string(&s, at(argv, i).s);
         TRY(run_list_push(r, pos, list, &s));
     }
     Value lv;
@@ -1226,7 +1231,7 @@ static STATUS_MUST_USE Status host_change_os_path(Host *h, Run *r, Pos pos, Str 
     CheckedPath p;
     TRY(path_arg(&rs->path, pos, builtin_who(r, BUILTIN_HOST), full, false, &p));
     TRY(change_may(r, pos, &p));
-    return paths_absolute(&h->paths, &rs->path, pos, mounts_trim_slash(p.full), out);
+    return paths_absolute(&h->paths, &rs->path, pos, mounts_trim_slash(p.full.s), out);
 }
 
 // The stop when a sink refused the output: the stream's arena past its cap
@@ -1247,16 +1252,21 @@ static STATUS_MUST_USE Status host_argv_arg(Run *r, Pos pos, Str who, const Valu
     if (argv_t->kind == TABLE_MAP) return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv is a list of strings, not a map"), MSG_ARGS(MSG_FROM_HOST(who)));
     if (argv_t->kind == TABLE_EMPTY || argv_t->list.len == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}` of an empty argv: name the program"), MSG_ARGS(MSG_FROM_HOST(who)));
     size_t n = argv_t->list.len;
-    Str *argv = ARENA_ARRAY(r->ctx.values, Str, n);
+    OsStr *argv = ARENA_ARRAY(r->ctx.values, OsStr, n);
     if (argv == NULL) return run_values_oom(r, pos);
-    SLICE_TYPE(ArgvRoom, Str);
+    SLICE_TYPE(ArgvRoom, OsStr);
     ArgvRoom room = {argv, n};
     for (size_t i = 0; i < n; i++) {
         const Value *v = &at(argv_t->list, i);
         if (v->tag != VALUE_STRING) {
             return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv[{d}] is {s}, not a string{s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(run_unum(r, i + 1)), MSG_FROM_HOST(value_type_name(v)), MSG_FROM_HOST(why)));
         }
-        at(room, i) = v->as.string;
+    }
+    // A NUL is refused once every item is known to be a string.
+    for (size_t i = 0; i < n; i++) {
+        Str what = S("");
+        TRY(paths_cat(&builtin_files_of(r)->path, pos, S("argument "), run_unum(r, i + 1), S(""), &what));
+        TRY(os_str(r, pos, who, what, at(argv_t->list, i).as.string, &at(room, i)));
     }
     out->ptr = argv;
     out->len = n;
@@ -1268,7 +1278,7 @@ static STATUS_MUST_USE Status host_argv_arg(Run *r, Pos pos, Str who, const Valu
 static STATUS_MUST_USE Status host_argv_joined(Run *r, Pos pos, SpawnStrs argv, Str *out) {
     Buf jb = buf_make(r->ctx.values);
     for (size_t i = 0; i < argv.len; i++) {
-        if ((i > 0 && buf_byte(&jb, ' ') != OK) || buf_str(&jb, at(argv, i)) != OK) return run_values_oom(r, pos);
+        if ((i > 0 && buf_byte(&jb, ' ') != OK) || buf_str(&jb, at(argv, i).s) != OK) return run_values_oom(r, pos);
     }
     *out = buf_view(&jb);
     return OK;
@@ -1283,8 +1293,8 @@ static STATUS_MUST_USE Status host_run_open_log(Host *h, Run *r, Pos pos, Str sh
     TRY(host_change_os_path(h, r, pos, shown, S(""), &path));
     FileSystemCPath cp;
     const char *c = NULL;
-    FileSystemErr ce = file_system_cstr(&cp, path, &c);
-    int opened = ce == FILE_SYSTEM_OK ? host_open_regular(c, true, fd) : file_system_cstr_errno(ce);
+    FileSystemErr ce = file_system_cstr(&cp, os_str_own(path), &c);
+    int opened = ce == FILE_SYSTEM_OK ? host_open_regular(c, true, fd) : ENAMETOOLONG;
     if (opened == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: its log {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(shown)));
     if (opened != 0) return host_fail(r, pos, CLASS_STORE, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(opened)))));
     return OK;
@@ -1364,7 +1374,7 @@ static STATUS_MUST_USE Status host_run_sinks(Host *h, Run *r, Pos pos, const Run
 // until it ends. One that could not be started stops the run, saying why.
 static STATUS_MUST_USE Status host_run_spawn(Run *r, Pos pos, const SpawnSpec *spec, HostRunSinks *s, const Arena *sa, uint64_t most, SpawnOutcome *outcome) {
     SpawnSink sink = {&s->scrub, host_scrub_write};
-    Str argv0 = at(spec->argv, 0);
+    Str argv0 = at(spec->argv, 0).s;
     memset(outcome, 0, sizeof *outcome);
     r->host_runs++;
     switch (spawn_run(r->ctx.values, spec, sink, outcome)) {
@@ -1476,7 +1486,8 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     SpawnSpec spec;
     spawn_spec_default(&spec);
     spec.argv = argv;
-    spec.cwd = cwd;
+    // The folder is a CheckedPath's, made absolute (host_guard_program).
+    spec.cwd = os_str_own(cwd);
     spec.env = env;
     spec.stdin_bytes = has_stdin ? &stdin_bytes : NULL;
     spec.stdout_fd = secret ? held->secret.file.fd : -1;
@@ -1498,7 +1509,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     Str joined = S("");
     TRY(host_argv_joined(r, pos, argv, &joined));
     host_time_ran(&h->time, h->paths.arena, joined, outcome.ms);
-    Str argv0 = at(argv, 0);
+    Str argv0 = at(argv, 0).s;
     bool secret_stored = false;
     uint64_t secret_bytes = 0;
     Buf said = buf_make(a);

@@ -127,8 +127,12 @@ static STATUS_MUST_USE Status read_all(Arena *a, int fd, size_t limit, Str *out,
     return OK;
 }
 
+// The file at `path`, at most `limit` bytes, into `*out`; STOP with the
+// error's name in `*err`. `path` is the CLI's own: an argument or the
+// environment's, which the kernel handed over NUL-ended, or one made of
+// them and strict names.
 static STATUS_MUST_USE Status read_path(Arena *a, Str path, size_t limit, Str *out, Str *err) {
-    const char *p = arena_cstr(a, path);
+    const char *p = arena_cstr(a, os_str_own(path));
     if (p == NULL) {
         *err = S("OutOfMemory");
         return STOP;
@@ -143,15 +147,17 @@ static STATUS_MUST_USE Status read_path(Arena *a, Str path, size_t limit, Str *o
     return s;
 }
 
-// The real path of `p`, or `p` itself when it has none (it is missing).
-static Str real_or_same(Arena *a, Str p) {
-    const char *c = arena_cstr(a, p);
-    if (c == NULL) return p;
+// The real path of `p` into `*out`, or `p` itself when it has none (it is
+// missing); STOP when the arena refuses. `p` is the CLI's own, as
+// read_path's is.
+static STATUS_MUST_USE Status real_or_same(Arena *a, Str p, Str *out) {
+    *out = p;
+    const char *c = arena_cstr(a, os_str_own(p));
+    if (c == NULL) return STOP;
     char buf[PATH_MAX];
-    if (realpath(c, buf) == NULL) return p;
-    Str r = {0};
-    if (!arena_dup(a, from_c(buf), &r)) return p;
-    return r;
+    if (realpath(c, buf) == NULL) return OK; // skip: no real path is `p` as given
+    if (!arena_dup(a, from_c(buf), out)) return STOP;
+    return OK;
 }
 
 static STATUS_MUST_USE Status join(Arena *a, Str x, Str y, Str *out) {
@@ -281,10 +287,11 @@ static STATUS_MUST_USE Status refuse_links(LibraryReader *r, Str dir, Str rest, 
         r->used.steps++;
         TRY(join(a, sofar, part, &sofar));
         shown_end += part.len + (shown_end > 0 ? 1 : 0);
-        const char *c = arena_cstr(a, sofar);
+        // A mount's folder, then strict names.
+        const char *c = arena_cstr(a, os_str_own(sofar));
         if (c == NULL) return STOP;
         struct stat st;
-        if (lstat(c, &st) != 0) return OK;
+        if (lstat(c, &st) != 0) return OK; // skip: a missing part is the read's own stop
         if (S_ISLNK(st.st_mode)) {
             bool got;
             TRY(reader_why(why, &got, 3, a, prefix, str_sub(rest, 0, shown_end), S(" is a symbolic link: the store follows none")));
@@ -364,14 +371,15 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
         if (str_eq(part, S(".."))) return reader_why(why, got, 3, a, S("\""), path, S("\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)"));
         if (!path_strict_name(part)) return reader_why(why, got, 5, a, S("\""), path, S("\" has a part (\""), part, S("\") that is not a name: no `.`, `..`, empty parts or characters FAT refuses"));
     }
-    const char *dir_c = arena_cstr(a, m->dir);
+    // A mount's folder holds no NUL (mounts_parse), nor does the root's.
+    const char *dir_c = arena_cstr(a, os_str_own(m->dir));
     struct stat dst;
     if (dir_c == NULL) return STOP;
-    if (stat(dir_c, &dst) != 0 || !S_ISDIR(dst.st_mode)) {
-        // A folder whose path spells a secrets mount's is not named (a
-        // secrets mount itself was refused above).
-        if (mounts_spell_secret_folder(r->mounts, m->dir)) return reader_why(why, got, 3, a, S("the mount `"), m->name, S("`'s folder is missing; its path holds a secrets mount's folder, so it is not named"));
-        return reader_why(why, got, 5, a, S("the mount `"), m->name, S("` is "), m->dir, S(", which is not a folder there"));
+    int dir_err = stat(dir_c, &dst) != 0 ? errno : S_ISDIR(dst.st_mode) ? 0 : ENOTDIR;
+    if (dir_err != 0) {
+        Str said = S("");
+        if (!mounts_folder_failed(a, r->mounts, m, file_system_err_of(dir_err), &said)) return STOP;
+        return reader_why(why, got, 1, a, said);
     }
     bool linked = false;
     TRY(refuse_links(r, m->dir, rest, prefix, why, &linked));
@@ -393,7 +401,7 @@ static STATUS_MUST_USE Status load_library(void *ctx, Arena *into, Str path, Str
         return OK;
     }
     r->used.reads++;
-    const char *full_c = arena_cstr(a, full);
+    const char *full_c = arena_cstr(a, os_str_own(full));
     struct stat st;
     if (full_c == NULL) return STOP;
     if (stat(full_c, &st) != 0) {
@@ -490,7 +498,8 @@ static STATUS_MUST_USE Status script_beside(Arena *a, const Command *c, MountsIt
     if (file.len == 0 || str_byte(file, 0) != '/') TRY(join(a, cwd_abs, file, &abs));
     Str dir = folder_of(abs);
     if (dir.len > 1) dir = str_sub(dir, 0, dir.len - 1);
-    Str real = real_or_same(a, dir);
+    Str real = dir;
+    TRY(real_or_same(a, dir, &real));
     if (mounts_in_folder(real, root_abs)) {
         out->kind = BESIDE_ROOT;
         Str below = str_sub(real, str_eq(root_abs, S("/")) ? 1 : root_abs.len, real.len);
@@ -589,15 +598,15 @@ static STATUS_MUST_USE Status base_env(Arena *a, SpawnStrs *out) {
     extern char **environ;
     size_t n = 0;
     for (char **p = environ; *p != NULL; p++) n++; // cstr: the environment's, NULL-ended
-    Str *env = ARENA_ARRAY(a, Str, n);
+    OsStr *env = ARENA_ARRAY(a, OsStr, n);
     if (env == NULL && n > 0) return STOP;
-    SLICE_TYPE(EnvRoom, Str);
+    SLICE_TYPE(EnvRoom, OsStr);
     EnvRoom room = {env, n};
     size_t k = 0;
     for (char **p = environ; *p != NULL; p++) {
         Str e = from_c(*p); // cstr: the environment's, NULL-ended
         if (str_starts_with(e, S("ZIG_PROGRESS="))) continue;
-        at(room, k++) = e;
+        at(room, k++) = os_str_own(e);
     }
     out->ptr = env;
     out->len = k;
@@ -825,8 +834,9 @@ static bool help_checkout(Arena *a, Str *out) {
     }
     Str agents = {0};
     if (join(a, up, S("docs/SHALE-AGENTS.md"), &agents) != OK) return false;
-    const char *c = arena_cstr(a, agents);
-    if (c == NULL || access(c, F_OK) != 0) return false;
+    // The executable's own path, from the kernel.
+    const char *c = arena_cstr(a, os_str_own(agents));
+    if (c == NULL || access(c, F_OK) != 0) return false; // skip: --help says where the docs are only when found
     return arena_dup(a, up, out);
 }
 
@@ -1089,7 +1099,8 @@ static int run_main(Out *o, int argc, char **argv) {
     // The root in one spelling, its real path, as the mounts' folders are.
     Str given_root = c.root;
     while (given_root.len > 0 && str_byte(given_root, given_root.len - 1) == '/') given_root = str_sub(given_root, 0, given_root.len - 1);
-    Str root = given_root.len == 0 ? given_root : real_or_same(a, given_root);
+    Str root = given_root;
+    if (root.len > 0 && real_or_same(a, given_root, &root) != OK) return not_ported(o, S("a root past the arena"));
     Str root_abs = root;
     if (root.len == 0) {
         root_abs = S("/");

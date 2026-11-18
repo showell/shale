@@ -24,7 +24,7 @@ static STATUS_MUST_USE Status host_jobs_read(Run *r, Pos pos, Str os, Bytes *out
     *why = S("");
     FileSystemCPath cp;
     const char *c = NULL;
-    FileSystemErr ce = file_system_cstr(&cp, os, &c);
+    FileSystemErr ce = file_system_cstr(&cp, os_str_own(os), &c);
     int fd = ce == FILE_SYSTEM_OK ? open(c, O_RDONLY | O_CLOEXEC) : -1;
     if (fd < 0) {
         *why = file_system_err_name(ce != FILE_SYSTEM_OK ? ce : file_system_err_of(errno));
@@ -146,7 +146,7 @@ static STATUS_MUST_USE Status host_job_opts(Run *r, Pos pos, const Value *ov, Ho
 static STATUS_MUST_USE Status host_job_argv_fits(Run *r, Pos pos, SpawnStrs argv) {
     uint64_t argv_bytes = argv.len - 1;
     for (size_t i = 0; i < argv.len; i++) {
-        Str x = at(argv, i);
+        Str x = at(argv, i).s;
         for (size_t k = 0; k < x.len; k++) argv_bytes += (str_byte(x, k) == '\n' || str_byte(x, k) == '\\') ? 2 : 1;
     }
     if (argv_bytes <= JOB_RECORD_ARGV_MAX) return OK;
@@ -183,7 +183,10 @@ static STATUS_MUST_USE Status host_job_place(Host *h, Run *r, Pos pos, Str log_s
         Str dir = str_sub(*log_os, 0, slash > 1 ? slash - 1 : 1);
         FileSystemCPath dir_cp;
         const char *dc = NULL;
-        if (file_system_cstr(&dir_cp, dir, &dc) != FILE_SYSTEM_OK || access(dc, F_OK) != 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
+        int err = ENAMETOOLONG;
+        if (file_system_cstr(&dir_cp, os_str_own(dir), &dc) == FILE_SYSTEM_OK) err = access(dc, F_OK) == 0 ? 0 : errno;
+        if (err == ENOENT || err == ENOTDIR) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
+        if (err != 0) return host_fail(r, pos, CLASS_STORE, S("`job_start`: {s}'s directory cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(err)))));
     }
     return host_job_refuse_running(r, pos, log_shown, *record_os);
 }
@@ -281,18 +284,22 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     SpawnStrs env = {NULL, 0};
     HostSecrets none = {NULL, 0};
     TRY(host_run_env(h, r, pos, &o.env, &no_secrets, &shown_env, &env, &none));
-    bool found = false;
-    Str program = S("");
-    Str argv0 = at(argv, 0);
-    if (jobs_find(a, argv0, env, cwd, &found, &program) != OK) return run_values_oom(r, pos);
-    if (!found) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
+    int found = 0;
+    OsStr program = at(argv, 0);
+    Str argv0 = at(argv, 0).s;
+    // The folder is a CheckedPath's, made absolute (host_guard_program).
+    OsStr cwd_os = os_str_own(cwd);
+    if (jobs_find(a, at(argv, 0), env, cwd_os, &found, &program) != OK) return run_values_oom(r, pos);
+    if (found == ENOENT || found == ENOTDIR) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
+    if (found != 0) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is there but cannot be run (its permissions, or not a program)"), MSG_ARGS(MSG_FROM_SCRIPT(argv0)));
     Str log_os = S("");
     Str record_os = S("");
     TRY(host_job_place(h, r, pos, o.log, &log_os, &record_os));
 
     r->host_runs++;
     JobRecord rec;
-    switch (jobs_launch(a, h->reaper, record_os, log_os, cwd, program, argv, env, &rec)) {
+    // The reaper is the CLI's own path, and the log and record CheckedPaths'.
+    switch (jobs_launch(a, os_str_own(h->reaper), os_str_own(record_os), os_str_own(log_os), cwd_os, program, argv, env, &rec)) {
     case JOBS_LAUNCHED: break;
     case JOBS_OUT_OF_MEMORY: return run_values_oom(r, pos);
     case JOBS_SPAWN: return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: the reaper could not be forked"));
@@ -337,7 +344,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
     *found = false;
     FileSystemCPath cp;
     const char *p = NULL;
-    FileSystemErr ce = file_system_cstr(&cp, os, &p);
+    FileSystemErr ce = file_system_cstr(&cp, os_str_own(os), &p);
     struct stat st;
     if (ce != FILE_SYSTEM_OK || stat(p, &st) != 0) {
         if (ce == FILE_SYSTEM_OK && errno == ENOENT) return OK;
@@ -523,7 +530,7 @@ static bool host_started_running(Arena *a, const HostStarted *s) {
     ident.pid = s->pid;
     ident.pgid = s->pgid;
     ident.start = s->start;
-    char *p = arena_cstr(a, s->record_os);
+    char *p = arena_cstr(a, os_str_own(s->record_os));
     Bytes text = {NULL, 0};
     if (p != NULL && jobs_read_small(a, p, &text)) {
         JobRecord r;

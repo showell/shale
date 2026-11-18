@@ -9,7 +9,7 @@
 // A folder the walk is in: its entries, and the index of the next to take.
 typedef struct {
     Str rel;
-    Str full;
+    OsStr full;
     FileSystemEntries entries;
     size_t at;
     uint64_t depth;
@@ -56,22 +56,22 @@ static STATUS_MUST_USE Status walk_under(Run *r, Pos pos, Str folder, Str name, 
     return OK;
 }
 
-// An entry's OS path: its folder's, `/`, its name.
-static STATUS_MUST_USE Status walk_full(Run *r, Pos pos, Str folder, Str name, Str *out) {
+// An entry's OS path: its folder's, `/`, its name, which the kernel gave.
+static STATUS_MUST_USE Status walk_full(Run *r, Pos pos, OsStr folder, Str name, OsStr *out) {
     Buf b = buf_make(r->ctx.values);
-    if (buf_str(&b, folder) != OK || buf_byte(&b, '/') != OK || buf_str(&b, name) != OK) return run_values_oom(r, pos);
-    *out = buf_view(&b);
+    if (buf_str(&b, folder.s) != OK || buf_byte(&b, '/') != OK || buf_str(&b, name) != OK) return run_values_oom(r, pos);
+    *out = os_str_own(buf_view(&b));
     return OK;
 }
 
 // Whether `full`, an entry's OS path, is a secrets mount's folder or inside
 // it: the walk leaves such an entry out, unlisted, unstat'ed and unnamed, as
 // though it were not there. False on metal (PATH_HOOK_NONE).
-static STATUS_MUST_USE Status walk_in_secrets(Run *r, Pos pos, Str full, bool *in) {
+static STATUS_MUST_USE Status walk_in_secrets(Run *r, Pos pos, OsStr full, bool *in) {
     *in = false;
     RunFiles *rs = builtin_files_of(r);
     const PathHook *hook = rs->path.hook;
-    return hook->in_secrets(hook->ctx, &rs->path, pos, full, in);
+    return hook->in_secrets(hook->ctx, &rs->path, pos, full.s, in);
 }
 
 // Whether the folder entry `en`, under `top`, is one the walk goes into
@@ -85,7 +85,7 @@ static STATUS_MUST_USE Status walk_resumes_into(Run *r, Pos pos, const WalkOptio
         TRY(builtin_like(r, pos, en.name, o->skip, &skipped));
         if (skipped) return OK;
     }
-    Str full = S("");
+    OsStr full = top->full;
     TRY(walk_full(r, pos, top->full, en.name, &full));
     bool secret = false;
     TRY(walk_in_secrets(r, pos, full, &secret));
@@ -217,14 +217,14 @@ static STATUS_MUST_USE Status walk_resume(Run *r, Pos pos, const CheckedPath *p,
 // stat'ed: a stat follows links, so a link to `/` would walk the host's files
 // and a link loop would recurse; the listing's kind is trusted instead. A
 // folder's size is 0, since the hosts disagree on it.
-static STATUS_MUST_USE Status walk_entry(Run *r, Pos pos, FileSystemEntry en, Str rel, Str full, Table *list) {
+static STATUS_MUST_USE Status walk_entry(Run *r, Pos pos, FileSystemEntry en, Str rel, OsStr full, Table *list) {
     bool has_stat = en.kind != FILE_SYSTEM_KIND_OTHER;
     FileSystemStat st;
     memset(&st, 0, sizeof st);
     if (has_stat) {
         TRY(builtin_count_read(r, pos));
         RunFiles *rs = builtin_files_of(r);
-        FileSystemErr e = file_system_stat(rs->file_system, r->ctx.values, full, &st);
+        FileSystemErr e = file_system_stat(rs->file_system, full, &st);
         if (e != FILE_SYSTEM_OK) return builtin_file_system_failed(r, pos, BUILTIN_WALK, rel, e);
     }
     Table *m = NULL;
@@ -298,7 +298,7 @@ static STATUS_MUST_USE Status bi_walk(Run *r, Pos pos, ConstValues args, Value *
         // them) is left out before anything else: never stat'ed, listed,
         // counted or named, not even as where a part ends.
         FileSystemEntry ahead = at(top->entries, top->at);
-        Str full = S("");
+        OsStr full = top->full;
         TRY(walk_full(r, pos, top->full, ahead.name, &full));
         bool secret = false;
         TRY(walk_in_secrets(r, pos, full, &secret));

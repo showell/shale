@@ -39,7 +39,7 @@ static void sx_deinit(Sx *s) {
     bool refused = false;
     Arena a;
     arena_init(&a, (size_t)1 << 20, &refused);
-    if (file_system_delete_tree(&a, s->root) != FILE_SYSTEM_OK) abort();
+    if (file_system_delete_tree(&a, os_str_own(s->root)) != FILE_SYSTEM_OK) abort();
     arena_deinit(&a);
     arena_deinit(&s->values);
 }
@@ -49,9 +49,9 @@ static Str sx_cs(const char *lit) { // cstr: a test's literal
 }
 
 // `rel` under the root, as an OS path.
-static Str sx_at(Sx *s, const char *rel) { // cstr: a test's literal
-    Str out = S("");
-    if (!path_join(&s->values, s->root, sx_cs(rel), &out)) abort();
+static OsStr sx_at(Sx *s, const char *rel) { // cstr: a test's literal
+    OsStr out = os_str_own(s->root);
+    if (!file_system_join(&s->values, out, sx_cs(rel), &out)) abort();
     return out;
 }
 
@@ -60,9 +60,9 @@ static void sx_mkdir(Sx *s, const char *rel) { // cstr: a test's literal
 }
 
 static void sx_put(Sx *s, const char *rel, const char *text) { // cstr: test literals
-    Str p = sx_at(s, rel);
-    Str dir = S("");
-    if (path_dirname(p, &dir) && file_system_make_path(dir) != FILE_SYSTEM_OK) abort();
+    OsStr p = sx_at(s, rel);
+    OsStr dir = p;
+    if (file_system_dirname(p, &dir) && file_system_make_path(dir) != FILE_SYSTEM_OK) abort();
     if (file_system_write_file(p, sx_cs(text), 0644) != FILE_SYSTEM_OK) abort();
 }
 

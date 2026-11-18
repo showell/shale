@@ -52,7 +52,7 @@ typedef struct {
     // relative to `cwd`.
     SpawnStrs argv;
     // The OS folder it starts in; empty for `shale`'s own.
-    Str cwd;
+    OsStr cwd;
     // The whole environment, as `K=V` strings.
     SpawnStrs env;
     // The bytes for stdin, or NULL for /dev/null.
@@ -181,13 +181,15 @@ static uint64_t spawn_usage_ms(const struct rusage *u) {
 // has a `/`, else argv[0] in each folder of the environment's PATH (its last
 // `PATH=`), or of a default PATH; an empty folder is
 // argv[0] itself. False when the arena refuses.
-static bool spawn_candidates(Arena *a, Str argv0, SpawnStrs env, SpawnCStrs *paths) {
+static bool spawn_candidates(Arena *a, OsStr argv0_os, SpawnStrs env, SpawnCStrs *paths) {
+    Str argv0 = argv0_os.s;
     Str path = S("/usr/local/bin:/usr/bin:/bin");
     if (str_find_byte(argv0, '/') != NULL) {
         path = S("");
     } else {
         for (size_t i = 0; i < env.len; i++) {
-            if (str_starts_with(at(env, i), S("PATH="))) path = str_sub(at(env, i), 5, at(env, i).len);
+            Str e = at(env, i).s;
+            if (str_starts_with(e, S("PATH="))) path = str_sub(e, 5, e.len);
         }
     }
     size_t n = 1;
@@ -202,7 +204,7 @@ static bool spawn_candidates(Arena *a, Str argv0, SpawnStrs env, SpawnCStrs *pat
         Str dir = str_sub(path, from, i);
         from = i + 1;
         if (dir.len == 0) {
-            at(out, k) = arena_cstr(a, argv0);
+            at(out, k) = arena_cstr(a, argv0_os);
         } else {
             if (dir.len > SIZE_MAX / 4 || argv0.len > SIZE_MAX / 4) return arena_refuse(a) != NULL;
             char *full = ARENA_ARRAY(a, char, dir.len + 1 + argv0.len + 1);
@@ -621,7 +623,7 @@ static SpawnResult spawn_run(Arena *a, const SpawnSpec *spec, SpawnSink sink, Sp
     SpawnCStrs paths = {NULL, 0};
     if (!spawn_candidates(a, at(spec->argv, 0), spec->env, &paths)) return SPAWN_OUT_OF_MEMORY;
     char *cwd = NULL;
-    if (spec->cwd.len > 0) {
+    if (spec->cwd.s.len > 0) {
         cwd = arena_cstr(a, spec->cwd);
         if (cwd == NULL) return SPAWN_OUT_OF_MEMORY;
     }

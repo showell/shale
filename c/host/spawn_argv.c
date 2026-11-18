@@ -9,14 +9,15 @@
 
 #include "arena.h"
 
-SLICE_TYPE(SpawnStrs, const Str);
+// A program's argv or environment, each item an OsStr (slice.h).
+SLICE_TYPE(SpawnStrs, const OsStr);
 // A NUL-ended string for the kernel, and a list of them ended by NULL.
 SLICE_TYPE(SpawnCStrs, char *);
 // A pipe's two ends, as `pipe2` fills them.
 SLICE_TYPE(SpawnPipe, int);
 
-// `items` as a NULL-ended list of NUL-ended strings, for execve; NULL when
-// the arena refuses or an item holds a NUL (arena_cstr's refusals).
+// `items` as a NULL-ended list of NUL-ended strings, for execve; NULL only
+// when the arena refuses.
 static char **spawn_cstr_list(Arena *a, SpawnStrs items) {
     char **list = ARENA_ARRAY(a, char *, items.len + 1);
     if (list == NULL) return NULL;

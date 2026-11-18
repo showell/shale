@@ -121,7 +121,8 @@ static void host_zig_stop(HostZigProc *p) {
 
 // The paths an exec of `exe` tries: itself when it has a `/`, else in each
 // folder of PATH, as Zig's spawn searches. False when the arena refuses.
-static bool host_zig_candidates(Arena *a, Str exe, SpawnCStrs *out) {
+static bool host_zig_candidates(Arena *a, OsStr exe_os, SpawnCStrs *out) {
+    Str exe = exe_os.s;
     const char *path_c = getenv("PATH"); // cstr: the environment's
     Str path = path_c != NULL ? host_zig_from_c(path_c) : S("/usr/local/bin:/bin/:/usr/bin");
     if (str_find_byte(exe, '/') != NULL) path = S("");
@@ -139,7 +140,8 @@ static bool host_zig_candidates(Arena *a, Str exe, SpawnCStrs *out) {
         Buf b = buf_make(a);
         if (dir.len > 0 && (buf_str(&b, dir) != OK || buf_byte(&b, '/') != OK)) return false;
         if (buf_str(&b, exe) != OK) return false;
-        at(all, k) = arena_cstr(a, buf_view(&b));
+        // PATH's folders, from the environment, hold no NUL.
+        at(all, k) = arena_cstr(a, os_str_own(buf_view(&b)));
         if (at(all, k) == NULL) return false;
         k++;
     }
@@ -208,38 +210,49 @@ static bool host_zig_fill(HostZigProc *p) {
     }
 }
 
+// What a take from zig-ast's stdout gave: its bytes, or one cause for none.
+typedef enum {
+    HOST_ZIG_TOOK,
+    // The stream ended (or failed, or passed the deadline) first.
+    HOST_ZIG_ENDED,
+    // A line past the read-ahead.
+    HOST_ZIG_TOO_LONG,
+    // The arena refused the bytes.
+    HOST_ZIG_NO_ROOM,
+} HostZigTook;
+
 // One line of zig-ast's stdout, its newline taken off, Zig's
-// `takeDelimiter`: the rest at the end of the stream, and false for an end
-// with nothing, an error, or a line past the read-ahead.
-static bool host_zig_take_line(HostZigProc *p, Arena *a, Str *out) {
+// `takeDelimiter`: the rest at the end of the stream, HOST_ZIG_ENDED for an
+// end with nothing.
+static HostZigTook host_zig_take_line(HostZigProc *p, Arena *a, Str *out) {
     Buf b = buf_make(a);
     bool any = false;
     for (;;) {
         if (p->from == p->to && !host_zig_fill(p)) {
             *out = buf_view(&b);
-            return any;
+            return any ? HOST_ZIG_TOOK : HOST_ZIG_ENDED;
         }
         Bytes room = {p->room, sizeof p->room};
         char c = at(room, p->from);
         p->from++;
         any = true;
         if (c == '\n') break;
-        if (b.len + 1 >= HOST_ZIG_BUF) return false;
-        if (buf_byte(&b, c) != OK) return false;
+        if (b.len + 1 >= HOST_ZIG_BUF) return HOST_ZIG_TOO_LONG;
+        if (buf_byte(&b, c) != OK) return HOST_ZIG_NO_ROOM;
     }
     *out = buf_view(&b);
-    return true;
+    return HOST_ZIG_TOOK;
 }
 
-// `n` bytes of zig-ast's stdout, Zig's `readAllocAll`: false when it ends
-// first or the scratch refuses them.
-static bool host_zig_take(HostZigProc *p, Arena *a, size_t n, Str *out) {
+// `n` bytes of zig-ast's stdout, Zig's `readAllocAll`: HOST_ZIG_ENDED when
+// it ends first, HOST_ZIG_NO_ROOM when the scratch refuses them.
+static HostZigTook host_zig_take(HostZigProc *p, Arena *a, size_t n, Str *out) {
     char *dst = arena_alloc(a, n, 1);
-    if (dst == NULL && n > 0) return false;
+    if (dst == NULL && n > 0) return HOST_ZIG_NO_ROOM;
     Bytes into = {dst, n};
     size_t got = 0;
     while (got < n) {
-        if (p->from == p->to && !host_zig_fill(p)) return false;
+        if (p->from == p->to && !host_zig_fill(p)) return HOST_ZIG_ENDED;
         size_t have = p->to - p->from;
         size_t take = have < n - got ? have : n - got;
         Bytes from = {p->room, sizeof p->room};
@@ -249,8 +262,9 @@ static bool host_zig_take(HostZigProc *p, Arena *a, size_t n, Str *out) {
     }
     out->ptr = dst;
     out->len = n;
-    return true;
+    return HOST_ZIG_TOOK;
 }
+
 
 // Writes `s` to zig-ast's stdin (non-blocking since its start): false when
 // it has gone or the deadline passes.
@@ -286,28 +300,41 @@ static STATUS_MUST_USE Status host_zig_ended(HostZigProc *p, Run *r, Pos pos, St
     return run_failf(r, pos, CLASS_HOST, "`{s}`: zig-ast {s}{s}{s}", S("`"), who, S("`: zig-ast "), why, said.len > 0 ? S(": ") : S(""), said);
 }
 
+// The stop for a take that gave HOST_ZIG_TOO_LONG or HOST_ZIG_NO_ROOM, or
+// for HOST_ZIG_ENDED the one `ended` says.
+static STATUS_MUST_USE Status host_zig_took_stop(HostZigProc *p, Run *r, Pos pos, Str who, HostZigTook t, Str ended) {
+    if (t == HOST_ZIG_NO_ROOM) return run_values_oom(r, pos);
+    if (t == HOST_ZIG_TOO_LONG) return host_zig_ended(p, r, pos, who, S("wrote a line past its read-ahead"));
+    return host_zig_ended(p, r, pos, who, ended);
+}
+
 // The run's zig-ast, started if it is not yet. A start
 // counts against the `programs` budget, as any program does.
 static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r, Pos pos, Str who) {
     if (p->started) return OK;
     Arena *a = r->ctx.values;
     bool has_exe = false;
-    Str exe = S("");
+    OsStr exe = os_str_own(S(""));
     const char *pinned = getenv("SHALE_ZIG_AST"); // cstr: the environment's
     if (pinned != NULL) {
         has_exe = true;
-        exe = host_zig_from_c(pinned);
+        exe = os_str_own(host_zig_from_c(pinned));
     } else {
         for (size_t k = 0; k < h->mounts.len; k++) {
             const Mount *m = &at(h->mounts, k);
             if (!str_eq(m->name, S("tools"))) continue;
             Buf b = buf_make(a);
             if (buf_str(&b, m->dir) != OK || buf_lit(&b, "/zig-ast/bin/zig-ast") != OK) return run_values_oom(r, pos);
-            char *c = arena_cstr(a, buf_view(&b));
+            // A mount's folder holds no NUL: mounts_parse refused one.
+            OsStr at_mount = os_str_own(buf_view(&b));
+            char *c = arena_cstr(a, at_mount);
             if (c == NULL) return run_values_oom(r, pos);
-            if (access(c, F_OK) != 0) break;
+            if (access(c, F_OK) != 0) {
+                if (errno == ENOENT || errno == ENOTDIR) break; // skip: no zig-ast there is the stop below
+                return run_failf(r, pos, CLASS_HOST, "`{s}`: tools:zig-ast/bin/zig-ast cannot be looked at: {t}", S("`"), who, S("`: tools:zig-ast/bin/zig-ast cannot be looked at: "), file_system_err_name(file_system_err_of(errno)));
+            }
             has_exe = true;
-            exe = buf_view(&b);
+            exe = at_mount;
             break;
         }
     }
@@ -317,7 +344,7 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
     }
     if (r->host_runs >= r->ctx.budgets.programs) return run_budget_stop(&r->ctx, pos, BUDGET_PROGRAMS);
     r->host_runs++;
-    char *argv_room[3] = {arena_cstr(a, exe), arena_cstr(a, S("--serve")), NULL};
+    char *argv_room[3] = {arena_cstr(a, exe), arena_cstr(a, os_str_own(S("--serve"))), NULL};
     SpawnCStrs argv = {argv_room, 3};
     SpawnCStrs paths = {NULL, 0};
     if (at(argv, 0) == NULL || at(argv, 1) == NULL || !host_zig_candidates(a, exe, &paths)) return run_values_oom(r, pos);
@@ -377,7 +404,7 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
         host_zig_close(&at(in_s, 1));
         host_zig_close(&at(out_s, 0));
         host_zig_close(&at(err_s, 0));
-        return run_failf(r, pos, CLASS_HOST, "`{s}`: zig-ast ({s}) did not start: {t}", S("`"), who, S("`: zig-ast ("), exe, S(") did not start: "), file_system_err_name(file_system_err_of(e)));
+        return run_failf(r, pos, CLASS_HOST, "`{s}`: zig-ast ({s}) did not start: {t}", S("`"), who, S("`: zig-ast ("), exe.s, S(") did not start: "), file_system_err_name(file_system_err_of(e)));
     }
     p->started = true;
     p->pid = pid;
@@ -393,9 +420,9 @@ static STATUS_MUST_USE Status host_zig_proc_of(HostZigProc *p, Paths *h, Run *r,
     int fl = fcntl(p->in_w, F_GETFL, 0);
     if (fl >= 0) fcntl(p->in_w, F_SETFL, fl | O_NONBLOCK);
     Str said = S("");
-    if (!host_zig_take_line(p, a, &said) || !str_starts_with(said, S(ZIG_WIRE_HEADER))) {
-        return host_zig_ended(p, r, pos, who, S("gave no `" ZIG_WIRE_HEADER "<zig version>` line first"));
-    }
+    HostZigTook first = host_zig_take_line(p, a, &said);
+    if (first != HOST_ZIG_TOOK) return host_zig_took_stop(p, r, pos, who, first, S("gave no `" ZIG_WIRE_HEADER "<zig version>` line first"));
+    if (!str_starts_with(said, S(ZIG_WIRE_HEADER))) return host_zig_ended(p, r, pos, who, S("gave no `" ZIG_WIRE_HEADER "<zig version>` line first"));
     return OK;
 }
 
@@ -426,11 +453,13 @@ static STATUS_MUST_USE Status host_zig_ask(HostZigProc *p, Paths *h, Arena *sa, 
     if (buf_u64(&head, body.len) != OK || buf_byte(&head, '\n') != OK) return run_values_oom(r, pos);
     if (!host_zig_write_all(p, buf_view(&head)) || !host_zig_write_all(p, body)) return host_zig_ended(p, r, pos, who, S("stopped taking requests"));
     Str len = S("");
-    if (!host_zig_take_line(p, sa, &len)) return host_zig_ended(p, r, pos, who, S("ended before it answered"));
+    HostZigTook took = host_zig_take_line(p, sa, &len);
+    if (took != HOST_ZIG_TOOK) return host_zig_took_stop(p, r, pos, who, took, S("ended before it answered"));
     size_t n = 0;
     if (!zig_wire_int(len, &n)) return host_zig_ended(p, r, pos, who, S("answered with no length"));
     Str got = S("");
-    if (!host_zig_take(p, sa, n, &got)) return host_zig_ended(p, r, pos, who, S("ended in the middle of its answer"));
+    took = host_zig_take(p, sa, n, &got);
+    if (took != HOST_ZIG_TOOK) return host_zig_took_stop(p, r, pos, who, took, S("ended in the middle of its answer"));
     memset(an, 0, sizeof *an);
     an->lines.body = got;
     an->sa = sa;

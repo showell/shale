@@ -435,7 +435,7 @@ static STATUS_MUST_USE Status change_write_diff(Run *r, Pos pos, Str rel, Str wa
 static STATUS_MUST_USE Status change_may(Run *r, Pos pos, const CheckedPath *p) {
     RunFiles *rs = builtin_files_of(r);
     const PathHook *h = rs->path.hook;
-    return h->may_change(h->ctx, &rs->path, pos, p->rel, p->full);
+    return h->may_change(h->ctx, &rs->path, pos, p->rel, p->full.s);
 }
 
 // Everything a change asks before it is made: the host lets `p` change and the
@@ -464,16 +464,16 @@ static STATUS_MUST_USE Status change_make(Run *r, Pos pos, Builtin b, ChangeKind
     if (c == CHANGE_REMOVE || c == CHANGE_REMOVE_TREE) {
         bool found = false;
         FileSystemStat st;
-        e = file_system_stat_or_null(rs->file_system, a, p->full, &found, &st);
+        e = file_system_stat_or_null(rs->file_system, p->full, &found, &st);
         if (e == FILE_SYSTEM_OK && !found) e = FILE_SYSTEM_FILE_NOT_FOUND;
     }
     if (e == FILE_SYSTEM_OK) {
         uint64_t size = 0;
         switch (c) {
         case CHANGE_REPLACE: e = file_system_replace(rs->file_system, a, p->full, data); break;
-        case CHANGE_APPEND: e = file_system_append(rs->file_system, a, p->full, data, &size); break;
-        case CHANGE_MKDIR: e = file_system_make_dir(rs->file_system, a, p->full); break;
-        case CHANGE_REMOVE: e = file_system_remove(rs->file_system, a, p->full); break;
+        case CHANGE_APPEND: e = file_system_append(rs->file_system, p->full, data, &size); break;
+        case CHANGE_MKDIR: e = file_system_make_dir(rs->file_system, p->full); break;
+        case CHANGE_REMOVE: e = file_system_remove(rs->file_system, p->full); break;
         case CHANGE_REMOVE_TREE: e = file_system_remove_tree(rs->file_system, a, p->full); break;
         default: c_bug("builtins_change: a change of no kind the store makes");
         }
@@ -563,7 +563,7 @@ static STATUS_MUST_USE Status change_edits_write(Run *r, Pos pos, const Value *l
         CheckedPath p;
         TRY(builtin_path(r, pos, b, &at(two, 0), false, &p));
         for (size_t j = 0; j < k; j++) {
-            if (str_eq(at(plans, j).p.full, p.full)) {
+            if (str_eq(at(plans, j).p.full.s, p.full.s)) {
                 return run_failf(r, pos, CLASS_ARGUMENT, "`edits_write`: {s} is named twice: one list of its edits, which apply in sequence", S("`edits_write`: "), p.rel, S(" is named twice: one list of its edits, which apply in sequence"));
             }
         }
