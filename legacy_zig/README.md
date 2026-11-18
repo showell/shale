@@ -23,7 +23,7 @@ Three files here are frozen copies of live ones, kept so the Zig still
 builds as it was: the preludes (`src/script/prelude.shale`,
 `src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`; the live
 ones are `../c/preludes/`) and the zig-ast wire (`src/shale_zig_wire.zig`;
-the live one is zig-ast's `wire.zig`). zig-ast itself is live, a repo of
+the live one is `zig-ast/wire.zig`). zig-ast itself is live, a repo of
 its own, [zig-ast](https://github.com/showell/zig-ast).
 
 ## Why it is kept

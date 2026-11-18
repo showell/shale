@@ -1345,7 +1345,7 @@ three:
     (`stopWithRun`, called by the runner as `--undo-on-stop`'s undo is);
   - the Zig tools, `zig_rename`, `zig_decls`, `zig_move`, `zig_imports`
     and `zig_tokens` (`legacy_zig/src/shale_host_zig.zig`), which ask zig-ast
-    (github.com/showell/zig-ast), one process a run, over its `wire.zig`'s frames;
+    (github.com/showell/zig-ast), one process a run, over `zig-ast/wire.zig`'s frames;
   - `shale_tokens`, a Shale file's tokens by the lexer in
     `legacy_zig/src/script/lex.zig` (`legacy_zig/src/shale_host_tokens.zig`);
   - `may_change`, the path hook's question before a change (below).

@@ -409,13 +409,13 @@ has none of it):
   `"missing"` beside it, or `"module"` (no extension: `std`, `host_io`).
   It is zig-webbox's library_test.zig's reading too (its `zig_refs`).
   `zig_rename` and `zig_move` read identifiers one way
-  (zig-ast's `zig_ast.zig`, its `identifiers`): a field, an enum's member or a nested
+  (`zig-ast/zig_ast.zig`'s `identifiers`): a field, an enum's member or a nested
   container's own declaration of the name is another thing, and
   `[]const X` is a use of `X`. **Where the Zig tools read Zig:** zig-ast
   ([a repo of its own](https://github.com/showell/zig-ast)), Zig's own tokenizer and parser in a program
   of its own, which the host starts at a run's first Zig call and asks for
   each one after (one program a run, whatever the files), over
-  its `wire.zig`'s frames. The host checks the arguments, reads
+  `zig-ast/wire.zig`'s frames. The host checks the arguments, reads
   the files and writes the edits zig-ast plans through `edit`'s own
   machinery, so each change is diffed and logged as an `edit`'s. It is
   `tools:zig-ast/bin/zig-ast`, installed by `shale install.shale` in

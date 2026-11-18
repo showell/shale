@@ -209,6 +209,6 @@ The parsers Shale reads code with are programs, not part of the C:
   C needs no Zig parser. The host starts one `zig-ast --serve` process a
   run, at its first Zig call, and speaks to it in framed requests and
   answers. **The C's host speaks the same wire to the same `zig-ast`
-  program**; the protocol's one home is that repo's `wire.zig`, and the C
+  program**; the protocol's one home is `zig-ast/wire.zig` (its repo's), and the C
   follows it, never a copy of it here.
 - `shale_tokens` stays the host's, since it is Shale's own lexer.
