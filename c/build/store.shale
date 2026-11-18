@@ -14,7 +14,7 @@ use("build:lib.shale")
 -- a copy of c/, c/tests/store copied whole beside it (its fixture.c reaches
 -- the copy's c/host), each caught by its `aim` tests (`run_plants`).
 
-const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 25}
+const STORE_TESTS = {["c/tests/store/test_store.c"] = 14, ["c/tests/store/test_paths.c"] = 28}
 const STORE_ZIG_TESTS = {["src/shale_abs_path_test.zig"] = 3, ["src/shale_undo_test.zig"] = 4, ["src/shale_ro_links_test.zig"] = 9}
 const STORE_PLANTS = {
   {name = "a folder that begins with a mount's name is in it", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
@@ -28,7 +28,7 @@ const STORE_PLANTS = {
    old = "    if (m->secrets) {\n        return path_fail(", new = "    if (0 && m->secrets) {\n        return path_fail("},
   {name = "the root's way into a secrets folder is let through", file = "paths.c", dir = "host", caught_by = "store/test_paths",
    aim = "secrets_mounts_no_read_listing_change_path_or_argument_reaches_a_token_by_the_mount_or_another_way",
-   old = "        if (mounts_in_folder(abs, dir)) {\n            return path_fail(r, pos, CLASS_REFUSED, S(\"\\\"{s}\\\" is in the mount", new = "        if (0 && mounts_in_folder(abs, dir)) {\n            return path_fail(r, pos, CLASS_REFUSED, S(\"\\\"{s}\\\" is in the mount"},
+   old = "        if (mounts_in_folder(abs, at(sd, k).run_dir)) {\n            return path_fail(r, pos, CLASS_REFUSED, S(\"\\\"{s}\\\" is in the mount", new = "        if (0 && mounts_in_folder(abs, at(sd, k).run_dir)) {\n            return path_fail(r, pos, CLASS_REFUSED, S(\"\\\"{s}\\\" is in the mount"},
   {name = "a `..` in a root path is let through to the name check", file = "path_run.c", dir = "host", caught_by = "store/test_paths",
    aim = "every_way_out_of_the_root_is_refused_before_the_store_is_asked",
    old = "        if (str_eq(part, S(\"..\"))) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"`{s}`: ", new = "        if (0) {\n            return path_fail(r, pos, CLASS_ARGUMENT, S(\"`{s}`: "},
@@ -55,7 +55,13 @@ const STORE_PLANTS = {
    old = "            if (mounts_in_folder(rp, dir)) {", new = "            if (0 && mounts_in_folder(rp, dir)) {"},
   {name = "an absolute path in a secrets folder names the mount above it", file = "paths.c", dir = "host", caught_by = "store/test_paths",
    aim = "an_absolute_path_s_stop_a_path_in_a_secrets_mount_s_folder_names_neither_the_mount_nor_its_folder",
-   old = "if (m->secrets && mounts_in_folder(abs, mounts_trim_slash(m->dir))) return OK;", new = "(void)m;"},
+   old = "if (mounts_in_folder(abs, mounts_trim_slash(at(sd, k).cli_dir))) return OK;", new = "(void)sd;"},
+  {name = "a walk's every entry works out the secrets folders again", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+   aim = "secrets_folders_are_worked_out_once_a_run_so_a_walk_s_check_of_each_entry_allocates_nothing",
+   old = "        if (mounts_in_folder(abs, at(sd, k).run_dir)) {\n            *in = true;", new = "        Str again = S(\"\");\n        TRY(paths_cat(r, pos, at(sd, k).run_dir, S(\"\"), S(\"\"), &again));\n        if (mounts_in_folder(abs, again)) {\n            *in = true;"},
+  {name = "a secrets list made for other mounts or another root is read", file = "paths.c", dir = "host", caught_by = "store/test_paths",
+   aim = "secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process",
+   old = "if (!h->secret_dirs_made || !same_mounts || !str_eq(h->secret_dirs_root, r->root)) c_bug(", new = "if (0 && same_mounts) c_bug("},
   {name = "the mounts file's line without `=` is quoted", file = "mounts.c", dir = "host", caught_by = "store/test_paths",
    aim = "secrets_mounts_the_mounts_file_s_mistakes_name_the_line_and_the_mount_never_the_line_s_text_a_path_or_a_word_after_one",
    old = "S(\"the line is not `name = value`\"), none);", new = "S(\"`{s}` is not `name = value`\"), MSG_ARGS(MSG_FROM_HOST(line)));"},

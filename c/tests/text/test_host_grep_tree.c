@@ -82,6 +82,24 @@ TEST(grep_tree_leaves_out_a_planted_secrets_mount_s_folder_unlisted_unread_and_u
     ran_free(&x);
 }
 
+TEST(grep_tree_leaves_out_two_planted_secrets_mounts_folders_each_unlisted_and_unread) {
+    static Ran x;
+    gt_init(&x, "k = D/root/keys secrets\nv = D/root/deep/vault secrets\n");
+    ran_put(&x, "root/a.txt", "x\n");
+    ran_put(&x, "root/keys/tok", "x s3cret\n");
+    ran_put(&x, "root/deep/b.txt", "x\n");
+    ran_put(&x, "root/deep/vault/tok", "x s3cret\n");
+    ran_put(&x, "root/deep/vault2/c.txt", "x\n");
+    gt_run(&x, "show(gt(\"x\", {}))\n");
+    EXPECT_OK_IN(&x.r.ctx, x.ran);
+    EXPECT_STR(buf_view(&x.r.out), S("a.txt:1: x\ndeep/b.txt:1: x\ndeep/vault2/c.txt:1: x\n3\tfalse\n"));
+    EXPECT(!gt_holds(buf_view(&x.r.out), S("s3cret")));
+    // The root's, deep's and deep/vault2's listings and a read of each of
+    // the three files: neither secrets folder is listed or read.
+    EXPECT_EQ(x.r.reads, 6);
+    ran_free(&x);
+}
+
 // The entries `walk` gives, a part at a time, as `walk_all` gathers them:
 // each one's path, kind and size, and the `more` paths between the parts.
 static const char *const GT_WALK =
@@ -376,6 +394,7 @@ TEST(grep_tree_walks_once_a_listing_a_folder_and_a_read_a_file_at_a_step_an_entr
 
 TEST_PART(host_grep_tree, TEST_CASE(grep_tree_searches_each_file_in_path_order_passing_by_a_binary_a_build_folder_and_a_hidden_one),
           TEST_CASE(grep_tree_leaves_out_a_planted_secrets_mount_s_folder_unlisted_unread_and_unnamed),
+          TEST_CASE(grep_tree_leaves_out_two_planted_secrets_mounts_folders_each_unlisted_and_unread),
           TEST_CASE(walk_leaves_out_a_planted_secrets_mount_s_folder_whole_and_never_ends_a_part_on_it),
           TEST_CASE(walk_resumes_past_a_folder_skip_passed_by_and_into_one_it_did_not),
           TEST_CASE(grep_tree_stops_on_an_option_it_does_not_take_naming_those_it_does_before_any_read),

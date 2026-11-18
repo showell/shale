@@ -982,6 +982,107 @@ TEST(a_host_report_line_naming_a_secrets_folder_ends_the_process) {
     fx_deinit(&f);
 }
 
+// ── the secrets folders, worked out once a run ──────────────────────────
+
+// Two secrets mounts under the root and one that reaches both, so each check
+// is seen to walk past the first secrets folder to the second.
+static void fx_two_vaults(Fx *f) {
+    sx_mkdir(&f->base, "keys");
+    sx_mkdir(&f->base, "deep/vault");
+    sx_put(&f->base, "deep/vault/tok", "s3cret\n");
+    fx_mounts(f, "k = R/keys secrets\nall = R\nv = R/deep/vault secrets\n");
+}
+
+TEST(secrets_folders_are_worked_out_once_a_run_so_a_walk_s_check_of_each_entry_allocates_nothing) {
+    Fx f;
+    fx_init(&f);
+    fx_two_vaults(&f);
+    EXPECT_EQ(f.paths.secret_dirs.len, 2);
+    EXPECT_STR(at(f.paths.secret_dirs, 1).name, S("v"));
+    EXPECT_STR(at(f.paths.secret_dirs, 1).run_dir, fx_r(&f, "R/deep/vault"));
+    Str plain = fx_r(&f, "R/deep/notes.txt");
+    Str sibling = fx_r(&f, "R/deep/vault2/x");
+    Str in_first = fx_r(&f, "R/keys/tok");
+    Str in_second = fx_r(&f, "R/deep/vault/sub/tok");
+    size_t values = f.base.values.used;
+    size_t host = f.host.used;
+    // A thousand entries' checks, as a walk of a thousand files makes them:
+    // not a byte of either arena for the secrets folders.
+    size_t secret = 0;
+    for (size_t i = 0; i < 1000; i++) {
+        Str full = i % 4 == 0 ? plain : i % 4 == 1 ? sibling : i % 4 == 2 ? in_first : in_second;
+        bool in = false;
+        EXPECT_OK_IN(&f.ctx, f.hook.in_secrets(f.hook.ctx, &f.run, fx_pos(), full, &in));
+        secret += in ? 1 : 0;
+    }
+    EXPECT_EQ(secret, 500);
+    EXPECT_EQ(f.base.values.used, values);
+    EXPECT_EQ(f.host.used, host);
+    fx_deinit(&f);
+}
+
+TEST(secrets_folders_worked_out_once_every_refusal_still_fires_for_the_second_mount) {
+    Fx f;
+    fx_init(&f);
+    fx_two_vaults(&f);
+    // A secrets mount under the root, by a root path and by another mount's.
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("deep/vault/tok")), CLASS_REFUSED, S("\"deep/vault/tok\" is in the mount `v`, which holds secrets")));
+    EXPECT(fx_said(&f, fx_look(&f, "read", S("all:deep/vault/tok")), CLASS_REFUSED, S("\"all:deep/vault/tok\" is in the mount `v`, which holds secrets")));
+    // A secrets folder named in a program's argument, and in its `env`.
+    const Str argv_items[2] = {S("shale-fixture"), S("deep/vault/tok")};
+    PathsStrs argv = {argv_items, 2};
+    PathsStrs none = {NULL, 0};
+    fx_again(&f);
+    EXPECT(fx_said(&f, paths_refuse_secret_args(&f.paths, &f.run, fx_pos(), S("run"), argv, f.base.root, none, none), CLASS_REFUSED,
+                   S("`run`'s argument 2 names the mount `v`'s folder, which holds secrets: hand one over as `secrets`")));
+    const Str env_k[1] = {S("F")};
+    const Str env_v[1] = {S("deep/vault")};
+    PathsStrs ek = {env_k, 1};
+    PathsStrs ev = {env_v, 1};
+    fx_again(&f);
+    EXPECT(fx_said(&f, paths_refuse_secret_args(&f.paths, &f.run, fx_pos(), S("job_start"), none, f.base.root, ek, ev), CLASS_REFUSED,
+                   S("`job_start`'s `env` F names the mount `v`'s folder, which holds secrets: hand one over as `secrets`")));
+    // An absolute path inside one has no hint; one beside it has one.
+    bool has = true;
+    AbsoluteHint hint;
+    fx_again(&f);
+    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "R/deep/vault/tok"), &has, &hint));
+    EXPECT(!has);
+    EXPECT_OK_IN(&f.ctx, f.hook.absolute_hint(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "R/deep/vault2/x"), &has, &hint));
+    EXPECT(has);
+    EXPECT_STR(hint.spelled, S("deep/vault2/x"));
+    // A text naming the second folder is a text naming a secret.
+    bool names = false;
+    EXPECT_OK_IN(&f.ctx, f.hook.names_secret(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "at R/deep/vault."), &names));
+    EXPECT(names);
+    EXPECT_OK_IN(&f.ctx, f.hook.names_secret(f.hook.ctx, &f.run, fx_pos(), fx_r(&f, "at R/deep/vault2"), &names));
+    EXPECT(!names);
+    fx_deinit(&f);
+}
+
+TEST(secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process) {
+    Fx f;
+    fx_init(&f);
+    fx_two_vaults(&f);
+    bool in = false;
+    Str full = fx_r(&f, "R/deep/vault/tok");
+    // The mounts changed and the list not made again: it would miss them.
+    MountsItems kept = f.paths.mounts;
+    MountsItems fewer = {kept.ptr, 1};
+    f.paths.mounts = fewer;
+    EXPECT_DIES(if (f.hook.in_secrets(f.hook.ctx, &f.run, fx_pos(), full, &in) != OK) {});
+    f.paths.mounts = kept;
+    // Another root.
+    Str root = f.run.root;
+    f.run.root = S("/elsewhere");
+    EXPECT_DIES(if (f.hook.in_secrets(f.hook.ctx, &f.run, fx_pos(), full, &in) != OK) {});
+    f.run.root = root;
+    // As made, it answers.
+    EXPECT_OK_IN(&f.ctx, f.hook.in_secrets(f.hook.ctx, &f.run, fx_pos(), full, &in));
+    EXPECT(in);
+    fx_deinit(&f);
+}
+
 TEST_MAIN(
     TEST_CASE(every_way_out_of_the_root_is_refused_before_the_store_is_asked),
     TEST_CASE(mounts_a_mounts_paths_real_an_unknown_mount_or_a_missing_folder_named_the_files_mistakes_by_line),
@@ -1007,5 +1108,8 @@ TEST_MAIN(
     TEST_CASE(undo_of_nothing_there_whose_path_is_gone_already_is_put_back_as_nothing),
     TEST_CASE(a_step_budget_met_in_the_walk_of_a_path_stops_one_past_it),
     TEST_CASE(a_message_whose_arguments_miss_its_placeholders_ends_the_process),
-    TEST_CASE(a_host_report_line_naming_a_secrets_folder_ends_the_process)
+    TEST_CASE(a_host_report_line_naming_a_secrets_folder_ends_the_process),
+    TEST_CASE(secrets_folders_are_worked_out_once_a_run_so_a_walk_s_check_of_each_entry_allocates_nothing),
+    TEST_CASE(secrets_folders_worked_out_once_every_refusal_still_fires_for_the_second_mount),
+    TEST_CASE(secrets_folders_worked_out_for_other_mounts_or_another_root_end_the_process)
 )
