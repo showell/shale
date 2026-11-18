@@ -211,7 +211,9 @@
 --                 - an accumulator's short idiom, as a whole name (`out`);
 --                 - a name `phrase_name` reports, to be named again anyway.
 --                 The word list, a participle and a verb don't pass a word
---                 that is the element's own (`route : List(Route)`). A word
+--                 that is the element's own (`route : List(Route)`), and a
+--                 changed copy of more than one word does, as its object is
+--                 one element (`set_run : List(Run), Run -> List(Run)`). A word
 --                 verbs.txt holds that list_names.txt calls `one` is no verb
 --                 here (`route`). An `s` makes no plural after `s` (`class`),
 --                 after letters that are no word (`pts`), or in a `one` word
@@ -723,10 +725,14 @@ function judge_list_name(subject)
   local at = head_word_at(ws)
   local head = ws[at]
   if head == "list" or reads_as_plural(head) then return nil end
+  local starts_with_act = subject.is_function and has_key(VERBS, ws[1]) and get(LIST_NAMES, ws[1], "") ~= "one"
+  local is_changed_copy = subject.is_function and subject.first == subject.gives and (starts_with_act or has_key(CHANGED_COPY_WORDS, ws[1]))
+  -- A changed copy's object may be one element of the list it gives
+  -- (`set_run : List(Run), Run -> List(Run)`): the verb's object, not the
+  -- list, is what its last word names.
+  if is_changed_copy and #ws > 1 then return nil end
   if element_word(element) ~= head then
     if get(LIST_NAMES, head, "") == "many" or is_participle(head) then return nil end
-    local starts_with_act = subject.is_function and has_key(VERBS, ws[1]) and get(LIST_NAMES, ws[1], "") ~= "one"
-    local is_changed_copy = subject.is_function and subject.first == subject.gives and (starts_with_act or has_key(CHANGED_COPY_WORDS, ws[1]))
     if is_changed_copy or (starts_with_act and #ws == 1) then return nil end
   end
   report(subject.path, subject.line, "singular_list", "the " .. subject.kind .. " `" .. subject.name .. "` " .. (subject.is_function and "gives" or "holds") .. " `" .. subject.gives .. "` but reads as one thing, `" .. head .. "`: " .. honest_list_names(bare, ws, at, element))
