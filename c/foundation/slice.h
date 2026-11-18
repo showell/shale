@@ -115,7 +115,7 @@ static inline size_t slice_check(uint64_t i, size_t len, const char *file, int l
 // insists on, and nothing holds it true.
 // REMEDY: a search for `at_unchecked(` lists every use, each with its reason,
 // and each is read by hand as a raw index. The uses are few: loops bounded
-// by `len`, and one walk to the MSG_END that ends every list it walks.
+// by `len`, and one walk to the MESSAGE_END that ends every list it walks.
 #define at_unchecked(s, i, reason) \
     ((s).ptr[((void)sizeof(char[sizeof("" reason "") > 1 ? 1 : -1]), (i))])
 

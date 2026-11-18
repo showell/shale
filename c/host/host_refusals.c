@@ -102,7 +102,7 @@ static STATUS_MUST_USE Status host_tracked(Host *h, Run *r, Pos pos, Str who, Os
     if (got == SPAWN_OUT_OF_MEMORY) return run_values_oom(r, pos);
     if (got != SPAWN_OK) {
         Str why = got == SPAWN_NOT_FOUND ? S("there is no git") : got == SPAWN_NOT_RUNNABLE ? S("git is not runnable") : got == SPAWN_NO_CWD ? S("its folder cannot be entered") : S("the kernel refused a pipe or a fork");
-        return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: a program by path is run only when git tracks it, and git could not start to say: {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(path.s), MSG_FROM_HOST(why)));
+        return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: a program by path is run only when git tracks it, and git could not start to say: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(path.s), MESSAGE_FROM_HOST(why)));
     }
     *out = o.ended == SPAWN_EXIT && o.code == 0;
     return OK;
@@ -120,7 +120,7 @@ static STATUS_MUST_USE Status host_refuse(Host *h, Run *r, Pos pos, Str who, OsS
     for (size_t g = 0; g < never.len; g++) {
         const HostRefusedGroup *grp = &at(never, g);
         if (host_group_has(grp, base) || host_group_has(grp, bare)) {
-            return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`, even with a want: {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(base), MSG_FROM_HOST(((Str){grp->why, strlen(grp->why)}))));
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`, even with a want: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(base), MESSAGE_FROM_HOST(((Str){grp->why, strlen(grp->why)}))));
         }
     }
     if (has_want) return OK;
@@ -128,12 +128,12 @@ static STATUS_MUST_USE Status host_refuse(Host *h, Run *r, Pos pos, Str who, OsS
     for (size_t g = 0; g < refused.len; g++) {
         const HostRefusedGroup *grp = &at(refused, g);
         if (host_group_has(grp, base) || host_group_has(grp, bare)) {
-            return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: {s}; {{want = \"tag: why\"}} to run it anyway"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(base), MSG_FROM_HOST(((Str){grp->why, strlen(grp->why)}))));
+            return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: {s}; {{want = \"tag: why\"}} to run it anyway"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(base), MESSAGE_FROM_HOST(((Str){grp->why, strlen(grp->why)}))));
         }
     }
     if (str_find_byte(argv0, '/') == NULL || host_under_tools_mount(h, argv0)) return OK;
     bool known = false;
     TRY(host_tracked(h, r, pos, who, argv0_os, cwd, &known));
     if (known) return OK;
-    return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: a program by path that git does not track (a script just written?); {{want = \"tag: why\"}} to run it anyway"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(argv0)));
+    return host_fail(r, pos, CLASS_REFUSED, S("`{s}` of `{s}`: a program by path that git does not track (a script just written?); {{want = \"tag: why\"}} to run it anyway"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(argv0)));
 }

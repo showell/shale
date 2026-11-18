@@ -137,8 +137,8 @@ typedef enum {
 
 // `*why`, the `line {d}: ...` text of `fmt`, made in `a`; MOUNTS_MALFORMED,
 // or MOUNTS_OUT_OF_MEMORY when the arena refuses it.
-static MountsResult mounts_malformed(Arena *a, Str *why, size_t n, Str fmt, MsgArgs args) {
-    MsgNum num;
+static MountsResult mounts_malformed(Arena *a, Str *why, size_t n, Str fmt, MessageArgs args) {
+    MessageNum num;
     Buf b = buf_make(a);
     if (buf_lit(&b, "line ") != OK || buf_str(&b, message_num(&num, n)) != OK || buf_lit(&b, ": ") != OK || message_format(&b, fmt, args) != OK) return MOUNTS_OUT_OF_MEMORY;
     *why = buf_view(&b);
@@ -157,7 +157,7 @@ static MountsResult mounts_malformed(Arena *a, Str *why, size_t n, Str fmt, MsgA
 static MountsResult mounts_parse(Arena *a, Str text, Str home, Mounts *out, Str *why) {
     *out = Mounts_make(a);
     // The two messages that name no mount take no arguments.
-    MsgArgs none = {NULL, 0};
+    MessageArgs none = {NULL, 0};
     size_t n = 0;
     size_t from = 0;
     while (from <= text.len) {
@@ -191,9 +191,9 @@ static MountsResult mounts_parse(Arena *a, Str text, Str home, Mounts *out, Str 
             } else if (str_eq(w, S("secrets"))) {
                 seen = secrets;
             } else {
-                return mounts_malformed(a, why, n, S("only `ro`, `tools` and `secrets` may follow `{s}`'s path (and a path has no space)"), MSG_ARGS(MSG_FROM_HOST(name)));
+                return mounts_malformed(a, why, n, S("only `ro`, `tools` and `secrets` may follow `{s}`'s path (and a path has no space)"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name)));
             }
-            if (seen) return mounts_malformed(a, why, n, S("`{s}` twice after `{s}`'s path"), MSG_ARGS(MSG_FROM_HOST(w), MSG_FROM_HOST(name)));
+            if (seen) return mounts_malformed(a, why, n, S("`{s}` twice after `{s}`'s path"), MESSAGE_ARGS(MESSAGE_FROM_HOST(w), MESSAGE_FROM_HOST(name)));
             if (str_eq(w, S("ro"))) {
                 said_ro = true;
             } else if (str_eq(w, S("tools"))) {
@@ -202,14 +202,14 @@ static MountsResult mounts_parse(Arena *a, Str text, Str home, Mounts *out, Str 
                 secrets = true;
             }
         }
-        if (secrets && tools) return mounts_malformed(a, why, n, S("`{s}` is `secrets` and `tools`: a toolchain's programs are not tokens"), MSG_ARGS(MSG_FROM_HOST(name)));
+        if (secrets && tools) return mounts_malformed(a, why, n, S("`{s}` is `secrets` and `tools`: a toolchain's programs are not tokens"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name)));
         for (size_t k = 0; k < out->len; k++) {
-            if (str_eq(at(*out, k).name, name)) return mounts_malformed(a, why, n, S("the mount `{s}` is named twice"), MSG_ARGS(MSG_FROM_HOST(name)));
+            if (str_eq(at(*out, k).name, name)) return mounts_malformed(a, why, n, S("the mount `{s}` is named twice"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name)));
         }
         // A NUL is refused here, where its line is known: past the parse
         // the folder is a path the kernel takes (paths.c, shale.c).
         OsStr checked;
-        if (!os_str_of(value, &checked)) return mounts_malformed(a, why, n, S("`{s}`'s path holds a NUL byte, which no path can carry"), MSG_ARGS(MSG_FROM_HOST(name)));
+        if (!os_str_of(value, &checked)) return mounts_malformed(a, why, n, S("`{s}`'s path holds a NUL byte, which no path can carry"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name)));
         Str dir = S("");
         if (str_starts_with(value, S("~/"))) {
             Buf b = buf_make(a);
@@ -218,7 +218,7 @@ static MountsResult mounts_parse(Arena *a, Str text, Str home, Mounts *out, Str 
         } else if (value.len > 0 && str_byte(value, 0) == '/') {
             if (!arena_dup(a, value, &dir)) return MOUNTS_OUT_OF_MEMORY;
         } else {
-            return mounts_malformed(a, why, n, S("`{s}`'s value is relative: an absolute path, or one from `~/`"), MSG_ARGS(MSG_FROM_HOST(name)));
+            return mounts_malformed(a, why, n, S("`{s}`'s value is relative: an absolute path, or one from `~/`"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name)));
         }
         Mount m = {S(""), mounts_trim_slash(dir), said_ro || secrets ? MOUNT_READ_ONLY : MOUNT_READ_WRITE, tools, secrets};
         if (!arena_dup(a, name, &m.name) || Mounts_push(out, m) != OK) return MOUNTS_OUT_OF_MEMORY;

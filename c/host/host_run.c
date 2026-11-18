@@ -86,7 +86,7 @@ static STATUS_MUST_USE Status host_keep_decide(Run *r, Pos pos, RunOpts *o) {
     switch (o->keep) {
     case HOST_KEEP_SECRET:
         if (o->whole != HOST_UNSET || filtered || kept || o->width != HOST_UNSET || host_given(&o->log)) {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `stdout_secret` sends stdout to the secret alone, so it takes no keep, filter or log (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`, `width`, `log`): its `out` is stderr's last {d} lines"), MSG_ARGS(MSG_FROM_HOST(S("20"))));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `stdout_secret` sends stdout to the secret alone, so it takes no keep, filter or log (`whole`, `head`, `tail`, `re`, `not_re`, `nocase`, `before`, `after`, `width`, `log`): its `out` is stderr's last {d} lines"), MESSAGE_ARGS(MESSAGE_FROM_HOST(S("20"))));
         }
         o->tail = HOST_SECRET_ERR_TAIL;
         break;
@@ -124,7 +124,7 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
     value_nil(&o->want);
     value_nil(&o->stdout_secret);
     value_nil(&o->stage);
-    if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`'s options are a map, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(v))));
+    if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`'s options are a map, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(v))));
     Table *m = v->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`run`'s options are a map, `{{timeout_ms = ..., tail = ...}}`, not a list"));
     Str who = S("run");
@@ -154,7 +154,7 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
         } else if (str_eq(k, S("secret_replace"))) {
             TRY(host_bool_opt(r, pos, who, k, &x, &o->secret_replace));
         } else if (str_eq(k, S("whole"))) {
-            if (x.tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`run`'s `whole` takes a byte limit, `whole = 65536`, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(&x))));
+            if (x.tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`run`'s `whole` takes a byte limit, `whole = 65536`, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(&x))));
             TRY(host_int_opt(r, pos, who, k, &x, &o->whole));
         } else if (str_eq(k, S("log"))) {
             TRY(host_str_value_opt(r, pos, who, k, &x, &o->log));
@@ -174,9 +174,9 @@ static STATUS_MUST_USE Status host_read_opts(Run *r, Pos pos, const Value *v, Ru
             TRY(host_str_value_opt(r, pos, who, k, &x, &o->stage));
         } else if (str_eq(k, S("nice"))) {
             TRY(host_int_opt(r, pos, who, k, &x, &o->nice));
-            if (o->nice > 19) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `nice` is 0 to 19 (19 the lowest priority), not {d}"), MSG_ARGS(MSG_FROM_HOST(run_num(r, x.as.integer))));
+            if (o->nice > 19) return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `nice` is 0 to 19 (19 the lowest priority), not {d}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_num(r, x.as.integer))));
         } else {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms, stage and nice, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes timeout_ms, re, not_re, nocase, before, after, head, tail, width, whole, log, cwd, stdin, env, secrets, want, stdout_secret, secret_replace, cpu_budget_ms, stage and nice, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
         }
     }
     if (o->timeout_ms == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`run` needs `timeout_ms`: how long the program may take is the script's to say"));
@@ -281,7 +281,7 @@ static STATUS_MUST_USE Status host_run_stdin(Run *r, Pos pos, const RunOpts *o, 
         *out = v->as.string;
         return OK;
     }
-    if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`'s stdin is a string or a run's result, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(v))));
+    if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`run`'s stdin is a string or a run's result, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(v))));
     Table *t = v->as.table;
     if (t->kind != TABLE_MAP) return host_fail_plain(r, pos, CLASS_TYPE, S("`run`'s stdin is a string or a run's result, not a list"));
     Value whole;
@@ -352,10 +352,10 @@ static STATUS_MUST_USE Status host_stream_refused(Run *r, Pos pos, const Arena *
 static STATUS_MUST_USE Status host_argv_arg(Run *r, Pos pos, Str who, const Value *av, SpawnStrs *out) {
     Str example = S(", `{\"zig\", \"build\"}`");
     Str why = S(": every argument is one, written as the program takes it");
-    if (av->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv is a list of strings{s}, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(example), MSG_FROM_HOST(value_type_name(av))));
+    if (av->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv is a list of strings{s}, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_HOST(example), MESSAGE_FROM_HOST(value_type_name(av))));
     Table *argv_t = av->as.table;
-    if (argv_t->kind == TABLE_MAP) return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv is a list of strings, not a map"), MSG_ARGS(MSG_FROM_HOST(who)));
-    if (argv_t->kind == TABLE_EMPTY || argv_t->list.len == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}` of an empty argv: name the program"), MSG_ARGS(MSG_FROM_HOST(who)));
+    if (argv_t->kind == TABLE_MAP) return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv is a list of strings, not a map"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who)));
+    if (argv_t->kind == TABLE_EMPTY || argv_t->list.len == 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}` of an empty argv: name the program"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who)));
     size_t n = argv_t->list.len;
     OsStr *argv = ARENA_ARRAY(r->ctx.values, OsStr, n);
     if (argv == NULL) return run_values_oom(r, pos);
@@ -364,7 +364,7 @@ static STATUS_MUST_USE Status host_argv_arg(Run *r, Pos pos, Str who, const Valu
     for (size_t i = 0; i < n; i++) {
         const Value *v = &at(argv_t->list, i);
         if (v->tag != VALUE_STRING) {
-            return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv[{d}] is {s}, not a string{s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(run_unum(r, i + 1)), MSG_FROM_HOST(value_type_name(v)), MSG_FROM_HOST(why)));
+            return host_fail(r, pos, CLASS_TYPE, S("`{s}`'s argv[{d}] is {s}, not a string{s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_HOST(run_unum(r, i + 1)), MESSAGE_FROM_HOST(value_type_name(v)), MESSAGE_FROM_HOST(why)));
         }
     }
     // A NUL is refused once every item is known to be a string.
@@ -401,8 +401,8 @@ static STATUS_MUST_USE Status host_run_open_log(Host *h, Run *r, Pos pos, Str sh
     const char *c = NULL;
     FileSystemErr ce = file_system_cstr(&cp, os_str_own(path), &c);
     int opened = ce == FILE_SYSTEM_OK ? host_open_regular(c, true, fd) : ENAMETOOLONG;
-    if (opened == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: its log {s} is there and is not a file"), MSG_ARGS(MSG_FROM_SCRIPT(shown)));
-    if (opened != 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`run`: its log {s} cannot be written: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(opened)))));
+    if (opened == HOST_NOT_REGULAR) return host_fail(r, pos, CLASS_REFUSED, S("`run`: its log {s} is there and is not a file"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown)));
+    if (opened != 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`run`: its log {s} cannot be written: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown), MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(opened)))));
     return OK;
 }
 
@@ -429,7 +429,7 @@ static STATUS_MUST_USE Status host_run_pattern(Run *r, Pos pos, Str name, Str pa
     memset(&why, 0, sizeof why);
     if (regex_compile(a, pattern, ro, &p->program, &why) != OK) {
         if (!why.refused) return run_values_oom(r, pos);
-        return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `{s}`, at its byte {d}: {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_HOST(run_unum(r, (uint64_t)why.at + 1)), MSG_FROM_HOST(why.message)));
+        return host_fail(r, pos, CLASS_ARGUMENT, S("`run`'s `{s}`, at its byte {d}: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name), MESSAGE_FROM_HOST(run_unum(r, (uint64_t)why.at + 1)), MESSAGE_FROM_HOST(why.message)));
     }
     if (regex_scratch_make(a, &p->program, &p->scratch) != OK) return run_values_oom(r, pos);
     KeepPattern hold = {p, host_pattern_matches};
@@ -487,10 +487,10 @@ static STATUS_MUST_USE Status host_run_spawn(Run *r, Pos pos, const SpawnSpec *s
     case SPAWN_OK: break;
     case SPAWN_OUT_OF_MEMORY: return run_values_oom(r, pos);
     case SPAWN_SINK_STOPPED: return host_stream_refused(r, pos, sa, most);
-    case SPAWN_NOT_FOUND: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
-    case SPAWN_NOT_RUNNABLE: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is there but cannot be run (its permissions, or not a program)"), MSG_ARGS(MSG_FROM_SCRIPT(argv0)));
-    case SPAWN_NO_CWD: return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: its cwd is not a folder that can be entered: {s}"), MSG_ARGS(MSG_FROM_HOST(file_system_err_name(file_system_err_of(outcome->err)))));
-    case SPAWN_REFUSED: return host_fail(r, pos, CLASS_HOST, S("`run`: the program could not be started (a pipe, a fork or a pidfd refused): {s}"), MSG_ARGS(MSG_FROM_HOST(file_system_err_name(file_system_err_of(outcome->err)))));
+    case SPAWN_NOT_FOUND: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is not found{s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(argv0), MESSAGE_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
+    case SPAWN_NOT_RUNNABLE: return host_fail(r, pos, CLASS_HOST, S("`run`: `{s}` is there but cannot be run (its permissions, or not a program)"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(argv0)));
+    case SPAWN_NO_CWD: return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: its cwd is not a folder that can be entered: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(outcome->err)))));
+    case SPAWN_REFUSED: return host_fail(r, pos, CLASS_HOST, S("`run`: the program could not be started (a pipe, a fork or a pidfd refused): {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(outcome->err)))));
     }
     if (host_scrub_finish(&s->scrub) != OK) return host_stream_refused(r, pos, sa, most);
     return OK;
@@ -515,7 +515,7 @@ static STATUS_MUST_USE Status host_run_out(Run *r, Pos pos, const RunOpts *o, Ho
     switch (o->keep) {
     case HOST_KEEP_WHOLE: {
         if (s->out.whole_over) {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: `whole = {d}` is a byte limit, and the output was {d} bytes: raise it, or keep lines with `head` and `tail`, which take any size"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, o->whole)), MSG_FROM_HOST(run_unum(r, s->out.bytes))));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`run`: `whole = {d}` is a byte limit, and the output was {d} bytes: raise it, or keep lines with `head` and `tail`, which take any size"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, o->whole)), MESSAGE_FROM_HOST(run_unum(r, s->out.bytes))));
         }
         int64_t lines = (int64_t)host_count_lines(buf_view(&s->whole));
         if (!arena_dup(a, buf_view(&s->whole), kept_out)) return run_values_oom(r, pos);
@@ -610,7 +610,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
     }
     if (r->read_bytes > r->ctx.budgets.read_bytes) return run_budget_stop(&r->ctx, pos, BUDGET_READ_BYTES);
     // An interrupted `shale` stops here, once the program's group is gone.
-    if (outcome.ended == SPAWN_INTERRUPTED) return host_fail(r, pos, CLASS_HOST, S("`run`: shale was told to stop (TERM or HUP) while `{s}` ran; it was ended"), MSG_ARGS(MSG_FROM_SCRIPT(argv0)));
+    if (outcome.ended == SPAWN_INTERRUPTED) return host_fail(r, pos, CLASS_HOST, S("`run`: shale was told to stop (TERM or HUP) while `{s}` ran; it was ended"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(argv0)));
     if (outcome.cpu_ms > o->cpu_budget_ms) return host_over_budget(r, pos, host_given(&o->stage) ? o->stage.as.string : joined, o->cpu_budget_ms, &outcome, kept_out);
     value_table(out, t);
     return OK;
@@ -619,7 +619,7 @@ static STATUS_MUST_USE Status host_run_spawned(Host *h, Run *r, Pos pos, SpawnSt
 // `host("run", argv, opts)`.
 static STATUS_MUST_USE Status host_run_program(Host *h, Run *r, Pos pos, ConstValues args, Value *out) {
     if (args.len != 2) {
-        return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes argv and its options, `run({{\"zig\", \"build\"}}, {{timeout_ms = ..., tail = 20}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
+        return host_fail(r, pos, CLASS_ARGUMENT, S("`run` takes argv and its options, `run({{\"zig\", \"build\"}}, {{timeout_ms = ..., tail = 20}})`, given {d} arguments"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
     }
     SpawnStrs argv = {NULL, 0};
     TRY(host_argv_arg(r, pos, S("run"), &at(args, 0), &argv));
@@ -639,11 +639,11 @@ static STATUS_MUST_USE Status host_run_program(Host *h, Run *r, Pos pos, ConstVa
 // `host("sleep", ms)`: a wait that is no program, so it spends none of the
 // `programs` budget.
 static STATUS_MUST_USE Status host_sleep(Host *h, Run *r, Pos pos, ConstValues args, Value *out) {
-    if (args.len != 1) return host_fail(r, pos, CLASS_ARGUMENT, S("`sleep` takes one argument, the ms, given {d}"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
+    if (args.len != 1) return host_fail(r, pos, CLASS_ARGUMENT, S("`sleep` takes one argument, the ms, given {d}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
     const Value *v = &at(args, 0);
-    if (v->tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`sleep`'s ms must be an integer, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(v))));
+    if (v->tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`sleep`'s ms must be an integer, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(v))));
     int64_t ms = v->as.integer;
-    if (ms < 0 || ms > HOST_SLEEP_MAX_MS) return host_fail(r, pos, CLASS_ARGUMENT, S("`sleep` takes 0 to {d} ms, not {d}"), MSG_ARGS(MSG_FROM_HOST(S("600000")), MSG_FROM_HOST(run_num(r, ms))));
+    if (ms < 0 || ms > HOST_SLEEP_MAX_MS) return host_fail(r, pos, CLASS_ARGUMENT, S("`sleep` takes 0 to {d} ms, not {d}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(S("600000")), MESSAGE_FROM_HOST(run_num(r, ms))));
     TRY(run_charge(r, pos, 1));
     struct timespec ts = {(time_t)(ms / 1000), (long)(ms % 1000) * 1000000L};
     while (nanosleep(&ts, &ts) != 0 && errno == EINTR) {

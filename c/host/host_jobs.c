@@ -56,24 +56,24 @@ static STATUS_MUST_USE Status host_jobs_find(Host *h, Run *r, Pos pos, const Val
     } else if (v->tag == VALUE_TABLE) {
         Value rec;
         bool got = v->as.table->kind == TABLE_MAP && ValueMap_get(&v->as.table->map, S("record"), &rec) && rec.tag == VALUE_STRING;
-        if (!got) return host_fail(r, pos, CLASS_TYPE, S("`{s}` takes a job (what `job_start` gave) or its record's path, not that table"), MSG_ARGS(MSG_FROM_HOST(name)));
+        if (!got) return host_fail(r, pos, CLASS_TYPE, S("`{s}` takes a job (what `job_start` gave) or its record's path, not that table"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name)));
         shown = rec.as.string;
     } else {
-        return host_fail(r, pos, CLASS_TYPE, S("`{s}` takes a job or its record's path, not {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_HOST(value_type_name(v))));
+        return host_fail(r, pos, CLASS_TYPE, S("`{s}` takes a job or its record's path, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name), MESSAGE_FROM_HOST(value_type_name(v))));
     }
-    if (!host_ends_with(shown, S(".job"))) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: {s} is not a job's record (`<log>.job`)"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
+    if (!host_ends_with(shown, S(".job"))) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: {s} is not a job's record (`<log>.job`)"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name), MESSAGE_FROM_SCRIPT(shown)));
     Str os = S("");
     TRY(paths_os_path(&h->paths, &builtin_files_of(r)->path, pos, builtin_who(r, BUILTIN_HOST), shown, false, &os));
     Bytes text = {NULL, 0};
     Str why = S("");
     TRY(host_jobs_read(r, pos, os, &text, &why));
-    if (str_eq(why, S("FileNotFound"))) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}`: no job's record at {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
-    if (why.len > 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}`: its record {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(why)));
+    if (str_eq(why, S("FileNotFound"))) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}`: no job's record at {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name), MESSAGE_FROM_SCRIPT(shown)));
+    if (why.len > 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}`: its record {s} cannot be read: {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name), MESSAGE_FROM_SCRIPT(shown), MESSAGE_FROM_HOST(why)));
     TRY(host_jobs_charge_read(r, pos, text.len));
     // The record is the script's text, and decides what `job_stop` signals:
     // the DRAGON at jobs_launch's read (jobs.c) says what a forged one can
     // reach.
-    if (!job_record_parse(text, &out->record)) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}`: {s} is not a job's record"), MSG_ARGS(MSG_FROM_HOST(name), MSG_FROM_SCRIPT(shown)));
+    if (!job_record_parse(text, &out->record)) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}`: {s} is not a job's record"), MESSAGE_ARGS(MESSAGE_FROM_HOST(name), MESSAGE_FROM_SCRIPT(shown)));
     out->shown = shown;
     out->log = str_sub(shown, 0, shown.len - 4);
     return OK;
@@ -109,7 +109,7 @@ static STATUS_MUST_USE Status host_job_opts(Run *r, Pos pos, const Value *ov, Ho
     memset(o, 0, sizeof *o);
     value_nil(&o->cwd);
     value_nil(&o->want);
-    if (ov->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s options are a map, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(ov))));
+    if (ov->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s options are a map, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(ov))));
     Table *m = ov->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`job_start`'s options are a map, not a list"));
     // Nil until given: a script's map never holds nil.
@@ -129,12 +129,12 @@ static STATUS_MUST_USE Status host_job_opts(Run *r, Pos pos, const Value *ov, Ho
         } else if (str_eq(k, S("want"))) {
             TRY(host_str_value_opt(r, pos, S("job_start"), k, &x, &o->want));
         } else if (str_eq(k, S("keep_on_stop"))) {
-            if (x.tag != VALUE_BOOL) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s `keep_on_stop` is a boolean, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(&x))));
+            if (x.tag != VALUE_BOOL) return host_fail(r, pos, CLASS_TYPE, S("`job_start`'s `keep_on_stop` is a boolean, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(&x))));
             o->keep_on_stop = x.as.boolean;
         } else if (str_eq(k, S("secrets"))) {
             return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start`: no `secrets` on a job: a detached job's log has nobody to scrub it"));
         } else {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes log, cwd, env, want and keep_on_stop, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes log, cwd, env, want and keep_on_stop, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
         }
     }
     if (!host_given(&log_v)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_start` needs a `log`: a job's output goes there, and its record beside it"));
@@ -150,7 +150,7 @@ static STATUS_MUST_USE Status host_job_argv_fits(Run *r, Pos pos, SpawnStrs argv
         for (size_t k = 0; k < x.len; k++) argv_bytes += (str_byte(x, k) == '\n' || str_byte(x, k) == '\\') ? 2 : 1;
     }
     if (argv_bytes <= JOB_RECORD_ARGV_MAX) return OK;
-    return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start`: its argv is {d} bytes in its record, and a record holds {d}"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, argv_bytes)), MSG_FROM_HOST(run_unum(r, JOB_RECORD_ARGV_MAX))));
+    return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start`: its argv is {d} bytes in its record, and a record holds {d}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, argv_bytes)), MESSAGE_FROM_HOST(run_unum(r, JOB_RECORD_ARGV_MAX))));
 }
 
 // Refuses a log a job still runs on: its record is the job's only handle,
@@ -162,12 +162,12 @@ static STATUS_MUST_USE Status host_job_refuse_running(Run *r, Pos pos, Str log_s
     Str why = S("");
     TRY(host_jobs_read(r, pos, record_os, &old_text, &why));
     if (str_eq(why, S("FileNotFound"))) return OK;
-    if (why.len > 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_start`: {s}.job cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(why)));
+    if (why.len > 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_start`: {s}.job cannot be read: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(log_shown), MESSAGE_FROM_HOST(why)));
     TRY(host_jobs_charge_read(r, pos, old_text.len));
     JobRecord old;
     if (!job_record_parse(old_text, &old)) return OK;
     if (!jobs_alive(&old) && (job_record_done(old) || !jobs_reaper_alive(&old))) return OK;
-    return host_fail(r, pos, CLASS_HOST, S("`job_start`: a job still runs on {s} (pid {d}, its record {s}.job): `job_stop` or `job_wait` it, or give another log"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(run_num(r, old.pid)), MSG_FROM_SCRIPT(log_shown)));
+    return host_fail(r, pos, CLASS_HOST, S("`job_start`: a job still runs on {s} (pid {d}, its record {s}.job): `job_stop` or `job_wait` it, or give another log"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(log_shown), MESSAGE_FROM_HOST(run_num(r, old.pid)), MESSAGE_FROM_SCRIPT(log_shown)));
 }
 
 // The job's log and record as OS paths. The reaper truncates the log and
@@ -185,8 +185,8 @@ static STATUS_MUST_USE Status host_job_place(Host *h, Run *r, Pos pos, Str log_s
         const char *dc = NULL;
         int err = ENAMETOOLONG;
         if (file_system_cstr(&dir_cp, os_str_own(dir), &dc) == FILE_SYSTEM_OK) err = access(dc, F_OK) == 0 ? 0 : errno;
-        if (err == ENOENT || err == ENOTDIR) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown)));
-        if (err != 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_start`: {s}'s directory cannot be looked at: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(log_shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(err)))));
+        if (err == ENOENT || err == ENOTDIR) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_start`: {s}'s directory is not there: the log and its record go in it"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(log_shown)));
+        if (err != 0) return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_start`: {s}'s directory cannot be looked at: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(log_shown), MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(err)))));
     }
     return host_job_refuse_running(r, pos, log_shown, *record_os);
 }
@@ -260,7 +260,7 @@ static STATUS_MUST_USE Status host_job_answer(Run *r, Pos pos, Str log_shown, co
 static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValues args, Value *out) {
     Arena *a = r->ctx.values;
     if (args.len != 2) {
-        return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes argv and its options, `job_start({{\"zig\", \"build\"}}, {{log = \"runs:build.log\"}})`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
+        return host_fail(r, pos, CLASS_ARGUMENT, S("`job_start` takes argv and its options, `job_start({{\"zig\", \"build\"}}, {{log = \"runs:build.log\"}})`, given {d} arguments"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
     }
     SpawnStrs argv = {NULL, 0};
     TRY(host_argv_arg(r, pos, S("job_start"), &at(args, 0), &argv));
@@ -290,8 +290,8 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     // The folder is a CheckedPath's, made absolute (host_guard_program).
     OsStr cwd_os = os_str_own(cwd);
     if (jobs_find(a, at(argv, 0), env, cwd_os, &found, &program) != OK) return run_values_oom(r, pos);
-    if (found == ENOENT || found == ENOTDIR) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is not found{s}"), MSG_ARGS(MSG_FROM_SCRIPT(argv0), MSG_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
-    if (found != 0) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is there but cannot be run (its permissions, or not a program)"), MSG_ARGS(MSG_FROM_SCRIPT(argv0)));
+    if (found == ENOENT || found == ENOTDIR) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is not found{s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(argv0), MESSAGE_FROM_HOST(str_find_byte(argv0, '/') == NULL ? S(" along PATH") : S(""))));
+    if (found != 0) return host_fail(r, pos, CLASS_HOST, S("`job_start`: `{s}` is there but cannot be run (its permissions, or not a program)"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(argv0)));
     Str log_os = S("");
     Str record_os = S("");
     TRY(host_job_place(h, r, pos, o.log, &log_os, &record_os));
@@ -303,8 +303,8 @@ static STATUS_MUST_USE Status host_job_start(Host *h, Run *r, Pos pos, ConstValu
     case JOBS_LAUNCHED: break;
     case JOBS_OUT_OF_MEMORY: return run_values_oom(r, pos);
     case JOBS_SPAWN: return host_fail_plain(r, pos, CLASS_HOST, S("`job_start`: the reaper could not be forked"));
-    case JOBS_NO_RECORD: return host_fail(r, pos, CLASS_HOST, S("`job_start`: the reaper ended without writing a record at {s}.job"), MSG_ARGS(MSG_FROM_SCRIPT(o.log)));
-    case JOBS_BAD_RECORD: return host_fail(r, pos, CLASS_HOST, S("`job_start`: the reaper's record at {s}.job cannot be read as one (unreadable, too long or malformed)"), MSG_ARGS(MSG_FROM_SCRIPT(o.log)));
+    case JOBS_NO_RECORD: return host_fail(r, pos, CLASS_HOST, S("`job_start`: the reaper ended without writing a record at {s}.job"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(o.log)));
+    case JOBS_BAD_RECORD: return host_fail(r, pos, CLASS_HOST, S("`job_start`: the reaper's record at {s}.job cannot be read as one (unreadable, too long or malformed)"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(o.log)));
     }
     Str joined = S("");
     TRY(host_argv_joined(r, pos, argv, &joined));
@@ -349,7 +349,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
     struct stat st;
     if (ce != FILE_SYSTEM_OK || stat(p, &st) != 0) {
         if (ce == FILE_SYSTEM_OK && errno == ENOENT) return OK;
-        return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(ce != FILE_SYSTEM_OK ? ce : file_system_err_of(errno)))));
+        return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_wait`: {s} cannot be read: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown), MESSAGE_FROM_HOST(file_system_err_name(ce != FILE_SYSTEM_OK ? ce : file_system_err_of(errno)))));
     }
     uint64_t size = (uint64_t)st.st_size;
     if (s->buf.len == 0) {
@@ -365,7 +365,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
             s->done = 0;
             return OK;
         }
-        return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(errno)))));
+        return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_wait`: {s} cannot be read: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown), MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(errno)))));
     }
     while (from < size) {
         size_t want = s->buf.len < size - from ? s->buf.len : (size_t)(size - from);
@@ -373,7 +373,7 @@ static STATUS_MUST_USE Status host_scan_look(HostScan *s, Arena *sa, Run *r, Pos
         if (got < 0) {
             int e = errno;
             close(fd);
-            return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_wait`: {s} cannot be read: {s}"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(file_system_err_name(file_system_err_of(e)))));
+            return host_fail(r, pos, CLASS_FILE_SYSTEM, S("`job_wait`: {s} cannot be read: {s}"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown), MESSAGE_FROM_HOST(file_system_err_name(file_system_err_of(e)))));
         }
         size_t n = (size_t)got;
         Status charged = host_jobs_charge_read(r, pos, n);
@@ -454,9 +454,9 @@ static STATUS_MUST_USE Status host_wait_loop(Host *h, Run *r, Pos pos, ConstValu
 }
 
 static STATUS_MUST_USE Status host_job_wait(Host *h, Run *r, Pos pos, ConstValues args, Value *out) {
-    if (args.len != 2) return host_fail(r, pos, CLASS_ARGUMENT, S("`job_wait` takes a job and its options, `{{timeout_ms = ...}}`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
+    if (args.len != 2) return host_fail(r, pos, CLASS_ARGUMENT, S("`job_wait` takes a job and its options, `{{timeout_ms = ...}}`, given {d} arguments"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
     const Value *ov = &at(args, 1);
-    if (ov->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`job_wait`'s options are a map, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(ov))));
+    if (ov->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`job_wait`'s options are a map, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(ov))));
     Table *m = ov->as.table;
     if (m->kind == TABLE_LIST) return host_fail_plain(r, pos, CLASS_TYPE, S("`job_wait`'s options are a map, not a list"));
     HostWaitOpts o;
@@ -473,7 +473,7 @@ static STATUS_MUST_USE Status host_job_wait(Host *h, Run *r, Pos pos, ConstValue
         } else if (str_eq(k, S("contains"))) {
             TRY(host_str_value_opt(r, pos, S("job_wait"), k, &x, &o.contains));
         } else {
-            return host_fail(r, pos, CLASS_ARGUMENT, S("`job_wait` takes timeout_ms, file and contains, not `{s}`"), MSG_ARGS(MSG_FROM_SCRIPT(k)));
+            return host_fail(r, pos, CLASS_ARGUMENT, S("`job_wait` takes timeout_ms, file and contains, not `{s}`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(k)));
         }
     }
     if (o.limit == HOST_UNSET) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`job_wait` needs `timeout_ms`, under the Bash call's own timeout"));
@@ -493,7 +493,7 @@ static STATUS_MUST_USE Status host_job_wait(Host *h, Run *r, Pos pos, ConstValue
 static STATUS_MUST_USE Status host_jobs_call(Host *h, Run *r, Pos pos, Str name, ConstValues args, Value *out) {
     if (str_eq(name, S("job_start"))) return host_job_start(h, r, pos, args, out);
     if (str_eq(name, S("job_alive"))) {
-        if (args.len != 1) return host_fail(r, pos, CLASS_ARGUMENT, S("`job_alive` takes a job, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
+        if (args.len != 1) return host_fail(r, pos, CLASS_ARGUMENT, S("`job_alive` takes a job, given {d} arguments"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
         HostJobFound j;
         TRY(host_jobs_find(h, r, pos, &at(args, 0), name, &j));
         TRY(run_charge(r, pos, 1));
@@ -501,7 +501,7 @@ static STATUS_MUST_USE Status host_jobs_call(Host *h, Run *r, Pos pos, Str name,
         return OK;
     }
     if (str_eq(name, S("job_stop"))) {
-        if (args.len != 1) return host_fail(r, pos, CLASS_ARGUMENT, S("`job_stop` takes a job, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
+        if (args.len != 1) return host_fail(r, pos, CLASS_ARGUMENT, S("`job_stop` takes a job, given {d} arguments"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
         HostJobFound j;
         TRY(host_jobs_find(h, r, pos, &at(args, 0), name, &j));
         TRY(run_charge(r, pos, 1));
@@ -523,7 +523,7 @@ static STATUS_MUST_USE Status host_jobs_call(Host *h, Run *r, Pos pos, Str name,
         h->time.wait_ms += spawn_mono_ms() - began;
         return s;
     }
-    return host_fail(r, pos, CLASS_HOST, S("`{s}`: not on this host"), MSG_ARGS(MSG_FROM_SCRIPT(name)));
+    return host_fail(r, pos, CLASS_HOST, S("`{s}`: not on this host"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(name)));
 }
 
 // Whether a started job still runs and has not ended by the run's own hand:

@@ -775,7 +775,7 @@ static STATUS_MUST_USE Status host_zig_move_in(Paths *h, HostZigProc *z, Arena *
     // message then says `to` already holds the copies.
     if (host_zig_rewrite(r, pos, &p, from_src, from_now, from_spans) != OK) {
         Stop *s = &r->ctx.stop;
-        Msg m;
+        Message m;
         message_init(&m, r->ctx.values);
         message_str(&m, s->message);
         message_str(&m, S("; `zig_move` wrote "));

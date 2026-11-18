@@ -182,7 +182,7 @@ static STATUS_MUST_USE Status host_record(Host *h, Run *r, Pos pos, const Buf *b
 // ── stops ──
 
 // A stop of the host's, its message the format `fmt` of `args`.
-static STATUS_MUST_USE Status host_fail(Run *r, Pos pos, StopClass cls, Str fmt, MsgArgs args) {
+static STATUS_MUST_USE Status host_fail(Run *r, Pos pos, StopClass cls, Str fmt, MessageArgs args) {
     Status s = path_fail(&builtin_files_of(r)->path, pos, cls, fmt, args);
     run_nums_copied(r);
     return s;
@@ -199,7 +199,7 @@ static STATUS_MUST_USE Status host_budget_fail(Run *r, Pos pos, BudgetKind b, Bu
 
 // A stop of the host's whose message takes no argument.
 static STATUS_MUST_USE Status host_fail_plain(Run *r, Pos pos, StopClass cls, Str fmt) {
-    MsgArgs none = {NULL, 0};
+    MessageArgs none = {NULL, 0};
     return path_fail(&builtin_files_of(r)->path, pos, cls, fmt, none);
 }
 
@@ -209,33 +209,33 @@ static STATUS_MUST_USE Status host_fail_plain(Run *r, Pos pos, StopClass cls, St
 // argument, where the cause is known; past here no call can meet one.
 static STATUS_MUST_USE Status os_str(Run *r, Pos pos, Str who, Str what, Str s, OsStr *out) {
     if (os_str_of(s, out)) return OK;
-    return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s {s} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(what)));
+    return host_fail(r, pos, CLASS_REFUSED, S("`{s}`'s {s} holds a NUL byte, where the kernel would end it: the program would be handed less than the guards saw"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(what)));
 }
 
 // ── the options ──
 
 static STATUS_MUST_USE Status host_int_opt(Run *r, Pos pos, Str who, Str k, const Value *x, uint64_t *out) {
-    if (x->tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be an integer, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
-    if (x->as.integer < 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: its `{s}` must be 0 or more, not {d}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(run_num(r, x->as.integer))));
+    if (x->tag != VALUE_INT) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be an integer, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(k), MESSAGE_FROM_HOST(value_type_name(x))));
+    if (x->as.integer < 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: its `{s}` must be 0 or more, not {d}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(k), MESSAGE_FROM_HOST(run_num(r, x->as.integer))));
     *out = (uint64_t)x->as.integer;
     return OK;
 }
 
 static STATUS_MUST_USE Status host_str_opt(Run *r, Pos pos, Str who, Str k, const Value *x, Str *out) {
-    if (x->tag != VALUE_STRING) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be a string, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
+    if (x->tag != VALUE_STRING) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be a string, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(k), MESSAGE_FROM_HOST(value_type_name(x))));
     *out = x->as.string;
     return OK;
 }
 
 static STATUS_MUST_USE Status host_map_opt(Run *r, Pos pos, Str who, Str k, const Value *x, Table **out) {
-    if (x->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be a map, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
-    if (x->as.table->kind == TABLE_LIST) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be a map, not a list"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k)));
+    if (x->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be a map, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(k), MESSAGE_FROM_HOST(value_type_name(x))));
+    if (x->as.table->kind == TABLE_LIST) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be a map, not a list"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(k)));
     *out = x->as.table;
     return OK;
 }
 
 static STATUS_MUST_USE Status host_bool_opt(Run *r, Pos pos, Str who, Str k, const Value *x, bool *out) {
-    if (x->tag != VALUE_BOOL) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be true or false, not {s}"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(k), MSG_FROM_HOST(value_type_name(x))));
+    if (x->tag != VALUE_BOOL) return host_fail(r, pos, CLASS_TYPE, S("`{s}`: its `{s}` must be true or false, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(k), MESSAGE_FROM_HOST(value_type_name(x))));
     *out = x->as.boolean;
     return OK;
 }

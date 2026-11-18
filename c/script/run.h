@@ -178,7 +178,7 @@ static inline void run_nums_copied(Run *r) {
 // DRAGON: use after overwrite. The text lives in one of RUN_NUMS slots, so a
 // Str kept past RUN_NUMS more numbers would read another number's digits.
 // REMEDY: every caller makes the number inside the call that makes its
-// message (run_failf, host_fail's MSG_ARGS), which copies it and calls
+// message (run_failf, host_fail's MESSAGE_ARGS), which copies it and calls
 // run_nums_copied; a slot not yet copied is never taken (run_num_slot ends
 // the process instead), and test_vm holds that death. A message takes at
 // most 3 numbers today (run.h's index stop, vm.c's argument count and
@@ -197,7 +197,7 @@ static inline Str run_unum(Run *r, uint64_t n) {
 // are joined and no count can drop one.
 static inline STATUS_MUST_USE Status run_fail_parts(Run *r, Pos pos, StopClass cls, Str fallback, StrPieces parts) {
     StrParts all = {parts.piece, sizeof parts.piece / sizeof(Str)};
-    Msg m;
+    Message m;
     message_init(&m, r->ctx.values);
     for (size_t k = 0; k < all.len; k++) {
         if (at(all, k).len > 0) message_str(&m, at(all, k));

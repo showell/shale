@@ -13,7 +13,7 @@
 #include "../../host/undo.c"
 
 typedef struct {
-    Sx base;
+    FileSystemFixture base;
     Arena machine;
     Arena host;
     RunCtx ctx;
@@ -24,10 +24,10 @@ typedef struct {
     Paths paths;
     PathHook hook;
     PathRun run;
-} Fx;
+} Fixture;
 
 static STATUS_MUST_USE Status fixture_charge(void *vm, RunCtx *ctx, Pos pos, uint64_t n) {
-    Fx *f = vm;
+    Fixture *f = vm;
     // A charge past what is left stops one step past the budget, as a run's
     // own charge does.
     if (n > f->steps_budget - f->steps) {
@@ -44,7 +44,7 @@ static Pos fixture_pos(void) {
 }
 
 // Makes the fixture: a fresh root, no mounts, no undo.
-static void fixture_init(Fx *f) {
+static void fixture_init(Fixture *f) {
     memset(f, 0, sizeof *f);
     file_system_fixture_init(&f->base, &f->ctx.refused);
     arena_init(&f->machine, (size_t)16 << 20, &f->ctx.refused);
@@ -61,14 +61,14 @@ static void fixture_init(Fx *f) {
     if (!paths_run_folders_make(&f->paths, &f->run)) abort();
 }
 
-static void fixture_deinit(Fx *f) {
+static void fixture_deinit(Fixture *f) {
     file_system_fixture_deinit(&f->base);
     arena_deinit(&f->machine);
     arena_deinit(&f->host);
 }
 
 // `lit` with each `R` the root's path.
-static Str fixture_r(Fx *f, const char *lit) { // cstr: a test's literal
+static Str fixture_r(Fixture *f, const char *lit) { // cstr: a test's literal
     Buf b = buf_make(&f->base.values);
     for (const char *p = lit; *p != 0; p++) {
         Status s = *p == 'R' ? buf_str(&b, f->base.root) : buf_byte(&b, *p);
@@ -77,14 +77,14 @@ static Str fixture_r(Fx *f, const char *lit) { // cstr: a test's literal
     return buf_view(&b);
 }
 
-static void fixture_link(Fx *f, const char *target, const char *rel) { // cstr: test literals
+static void fixture_link(Fixture *f, const char *target, const char *rel) { // cstr: test literals
     FileSystemCPath cp;
     const char *c = NULL;
     if (file_system_cstr(&cp, file_system_fixture_at(&f->base, rel), &c) != FILE_SYSTEM_OK || symlink(target, c) != 0) abort();
 }
 
 // The mounts `text` (each `R` the root) as the host's, home `/home/x`.
-static void fixture_mounts(Fx *f, const char *text) { // cstr: a test's literal
+static void fixture_mounts(Fixture *f, const char *text) { // cstr: a test's literal
     Mounts ms;
     Str why = S("");
     if (mounts_parse(&f->host, fixture_r(f, text), S("/home/x"), &ms, &why) != MOUNTS_OK) {
@@ -96,7 +96,7 @@ static void fixture_mounts(Fx *f, const char *text) { // cstr: a test's literal
 }
 
 // The run made ready for its next call: no stop, the steps kept.
-static void fixture_again(Fx *f) {
+static void fixture_again(Fixture *f) {
     f->ctx.stopped = false;
     memset(&f->ctx.stop, 0, sizeof f->ctx.stop);
 }
@@ -104,7 +104,7 @@ static void fixture_again(Fx *f) {
 // A builtin that only looks, `who(path)`: its path confined with the root
 // allowed, then the file system's stat, a missing path no stop. `exists`,
 // `stat`, `ls` and the reads make these calls in this order.
-static STATUS_MUST_USE Status fixture_look(Fx *f, const char *who, Str path) { // cstr: a builtin's name
+static STATUS_MUST_USE Status fixture_look(Fixture *f, const char *who, Str path) { // cstr: a builtin's name
     fixture_again(f);
     CheckedPath p;
     TRY(path_arg(&f->run, fixture_pos(), file_system_fixture_cs(who), path, true, &p));
@@ -117,7 +117,7 @@ static STATUS_MUST_USE Status fixture_look(Fx *f, const char *who, Str path) { /
 
 // A change builtin, `who(path, data)`: its path confined (never the root),
 // the hook asked, then the file system's replace, as a change builtin does.
-static STATUS_MUST_USE Status fixture_change(Fx *f, const char *who, Str path, Str data) { // cstr: a builtin's name
+static STATUS_MUST_USE Status fixture_change(Fixture *f, const char *who, Str path, Str data) { // cstr: a builtin's name
     fixture_again(f);
     CheckedPath p;
     TRY(path_arg(&f->run, fixture_pos(), file_system_fixture_cs(who), path, false, &p));
@@ -129,7 +129,7 @@ static STATUS_MUST_USE Status fixture_change(Fx *f, const char *who, Str path, S
 
 // Whether the run stopped with class `cls` and a message holding `says`;
 // prints what it said when not.
-static bool fixture_stopped(Fx *f, Status s, StopClass cls, Str says) {
+static bool fixture_stopped(Fixture *f, Status s, StopClass cls, Str says) {
     if (s != STOP || !f->ctx.stopped) {
         fprintf(stderr, "  no stop; wanted: %.*s\n", (int)says.len, says.ptr);
         return false;
@@ -145,7 +145,7 @@ static bool fixture_stopped(Fx *f, Status s, StopClass cls, Str says) {
 }
 
 // Whether the run stopped with class `cls` and exactly the message `says`.
-static bool fixture_said(Fx *f, Status s, StopClass cls, Str says) {
+static bool fixture_said(Fixture *f, Status s, StopClass cls, Str says) {
     if (!fixture_stopped(f, s, cls, says)) return false;
     if (!str_eq(f->ctx.stop.message, says)) {
         fprintf(stderr, "  said:   %.*s\n  wanted: %.*s\n", (int)f->ctx.stop.message.len, f->ctx.stop.message.ptr, (int)says.len, says.ptr);

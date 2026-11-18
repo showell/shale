@@ -145,48 +145,48 @@ static STATUS_MUST_USE Status path_charge(PathRun *r, Pos pos, uint64_t n) {
 // What an argument of a stop's message is: the script's own text, which a
 // message may give back, or the host's, which the secrets check reads.
 typedef enum {
-    MSG_SCRIPT,
-    MSG_HOST,
-    // The end of MSG_ARGS's list, never a message's.
-    MSG_END,
-} MsgKind;
+    MESSAGE_SCRIPT,
+    MESSAGE_HOST,
+    // The end of MESSAGE_ARGS's list, never a message's.
+    MESSAGE_END,
+} MessageKind;
 
 typedef struct {
     Str text;
-    MsgKind kind;
-} MsgArg;
+    MessageKind kind;
+} MessageArg;
 
-SLICE_TYPE(MsgArgs, const MsgArg);
+SLICE_TYPE(MessageArgs, const MessageArg);
 
-// An argument of MSG_ARGS, as a brace initializer: TCC 0.9.27 refuses a
+// An argument of MESSAGE_ARGS, as a brace initializer: TCC 0.9.27 refuses a
 // compound literal inside the array's initializer ("index too large").
-#define MSG_FROM_SCRIPT(s) {(s), MSG_SCRIPT}
-#define MSG_FROM_HOST(s) {(s), MSG_HOST}
-// The list ends with an MSG_END item and is counted when it is made: a
+#define MESSAGE_FROM_SCRIPT(s) {(s), MESSAGE_SCRIPT}
+#define MESSAGE_FROM_HOST(s) {(s), MESSAGE_HOST}
+// The list ends with an MESSAGE_END item and is counted when it is made: a
 // brace item's comma would split a preprocessor count, and TCC 0.9.27
 // refuses `sizeof` of the compound literal when an item calls a function.
-typedef const MsgArg MsgArgArray[];
-#define MSG_ARGS(...) message_args_of((MsgArgArray){__VA_ARGS__, {{NULL, 0}, MSG_END}})
+typedef const MessageArg MessageArgArray[];
+#define MESSAGE_ARGS(...) message_args_of((MessageArgArray){__VA_ARGS__, {{NULL, 0}, MESSAGE_END}})
 
-// DRAGON: bounds. The walk to MSG_END is unchecked, so a list without its
+// DRAGON: bounds. The walk to MESSAGE_END is unchecked, so a list without its
 // end would be read past.
-// REMEDY: only MSG_ARGS calls this, and it appends the end to every list it
+// REMEDY: only MESSAGE_ARGS calls this, and it appends the end to every list it
 // makes.
-static MsgArgs message_args_of(const MsgArg *items) {
-    MsgArgs open = {items, SIZE_MAX};
+static MessageArgs message_args_of(const MessageArg *items) {
+    MessageArgs open = {items, SIZE_MAX};
     size_t n = 0;
-    while (at_unchecked(open, n, "MSG_ARGS ends every list with MSG_END").kind != MSG_END) n++;
-    MsgArgs a = {items, n};
+    while (at_unchecked(open, n, "MESSAGE_ARGS ends every list with MESSAGE_END").kind != MESSAGE_END) n++;
+    MessageArgs a = {items, n};
     return a;
 }
 
 // Room for a number's digits, so a message's number needs no arena.
 typedef struct {
     char digits[20];
-} MsgNum;
+} MessageNum;
 
 // `n` in decimal, as Zig's `{d}`, its digits in `room`.
-static Str message_num(MsgNum *room, uint64_t n) {
+static Str message_num(MessageNum *room, uint64_t n) {
     Bytes d = {room->digits, sizeof room->digits};
     size_t k = d.len;
     do {
@@ -200,7 +200,7 @@ static Str message_num(MsgNum *room, uint64_t n) {
 // `fmt`, Zig's format string, with each `{s}`, `{d}` or `{t}` the next of
 // `args` and `{{` and `}}` one brace. A placeholder with no argument, or an
 // argument left over, is a bug in the C.
-static STATUS_MUST_USE Status message_format(Buf *b, Str fmt, MsgArgs args) {
+static STATUS_MUST_USE Status message_format(Buf *b, Str fmt, MessageArgs args) {
     size_t k = 0;
     for (size_t i = 0; i < fmt.len; i++) {
         char c = at(fmt, i);
@@ -240,9 +240,9 @@ static STATUS_MUST_USE Status message_format(Buf *b, Str fmt, MsgArgs args) {
 // no check, and hold only the script's own text and fixed words today
 // (docs/C-SEAMS.md, "The secrets rule's check").
 // test_paths plants a host argument that names one.
-static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str fmt, MsgArgs args) {
+static STATUS_MUST_USE Status path_fail(PathRun *r, Pos pos, StopClass cls, Str fmt, MessageArgs args) {
     for (size_t k = 0; k < args.len; k++) {
-        if (at(args, k).kind != MSG_HOST) continue;
+        if (at(args, k).kind != MESSAGE_HOST) continue;
         bool names = false;
         TRY(r->hook->names_secret(r->hook->ctx, r, pos, at(args, k).text, &names));
         if (names) c_bug("path_run: a stop's message names a secrets mount's folder");
@@ -291,7 +291,7 @@ static Str path_file_system_hint(FileSystemErr e) {
 static STATUS_MUST_USE Status path_file_system_failed(PathRun *r, Pos pos, Str who, Str rel, FileSystemErr e) {
     if (e == FILE_SYSTEM_OUT_OF_MEMORY) return run_oom(r->ctx, pos);
     return path_fail(r, pos, CLASS_FILE_SYSTEM, S("`{s}(\"{s}\")`: {s} ({s}){s}"),
-                     MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel), MSG_FROM_HOST(path_file_system_words(e)), MSG_FROM_HOST(file_system_err_name(e)), MSG_FROM_HOST(path_file_system_hint(e))));
+                     MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(rel), MESSAGE_FROM_HOST(path_file_system_words(e)), MESSAGE_FROM_HOST(file_system_err_name(e)), MESSAGE_FROM_HOST(path_file_system_hint(e))));
 }
 
 // Where the part of `s` that starts at `from` ends: the next `sep` (`/` for
@@ -325,17 +325,17 @@ static STATUS_MUST_USE Status path_absolute_stop(PathRun *r, Pos pos, Str who, S
     memset(&hint, 0, sizeof hint);
     TRY(r->hook->absolute_hint(r->hook->ctx, r, pos, abs, &hint));
     if (hint.kind == ABSOLUTE_ROOT_ONLY) {
-        return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: paths are relative to the data root"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs)));
+        return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: paths are relative to the data root"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(abs)));
     }
     if (hint.kind == ABSOLUTE_UNNAMED) {
         return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: paths are relative to the data root, or a mount's, `name:path` (`shale --help` lists this box's mounts)"),
-                         MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs)));
+                         MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(abs)));
     }
     if (hint.mount.len > 0) {
         return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: it's under the mount `{s}:`, so write \"{s}\""),
-                         MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs), MSG_FROM_HOST(hint.mount), MSG_FROM_HOST(hint.spelled)));
+                         MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(abs), MESSAGE_FROM_HOST(hint.mount), MESSAGE_FROM_HOST(hint.spelled)));
     }
-    return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: it's under the data root, so write \"{s}\""), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(abs), MSG_FROM_HOST(hint.spelled)));
+    return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" is absolute: it's under the data root, so write \"{s}\""), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(abs), MESSAGE_FROM_HOST(hint.spelled)));
 }
 
 // `given`, the path a call `who` was given, confined (Zig's `pathArg`, its
@@ -366,7 +366,7 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
         return OK;
     }
     if (rel.len == 0) {
-        if (!allow_root) return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}(\"\")` would act on the whole root: name a path of at least one part"), MSG_ARGS(MSG_FROM_HOST(who)));
+        if (!allow_root) return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}(\"\")` would act on the whole root: name a path of at least one part"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who)));
         out->full = os_str_own(r->root);
         out->rel = S("");
         return OK;
@@ -378,11 +378,11 @@ static STATUS_MUST_USE Status path_arg(PathRun *r, Pos pos, Str who, Str given, 
         Str part = str_sub(rel, from, to);
         if (str_eq(part, S(".."))) {
             return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" climbs out of the root with `..`: a folder beside it is reached through a mount, such as `repos:<name>/...` (`shale --help` lists this box's mounts)"),
-                             MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel)));
+                             MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(rel)));
         }
         if (!path_strict_name(part)) {
             return path_fail(r, pos, CLASS_ARGUMENT, S("`{s}`: \"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses"),
-                             MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(rel), MSG_FROM_SCRIPT(part)));
+                             MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(rel), MESSAGE_FROM_SCRIPT(part)));
         }
         if (to == rel.len) break;
         from = to + 1;

@@ -174,7 +174,7 @@ static inline STATUS_MUST_USE Status parse_library_name_was(Parser *p, Str path,
         *was = S("the prelude's");
         return OK;
     }
-    Msg m;
+    Message m;
     message_init(&m, p->arena);
     for (size_t k = 0; k < p->extra.len; k++) {
         const ParseExtra *e = &at(p->extra, k);

@@ -192,18 +192,18 @@ static inline Str parse_lua_name(Str name) {
 typedef struct {
     Buf b;
     Status s;
-} Msg;
+} Message;
 
-static inline void message_init(Msg *m, Arena *a) {
+static inline void message_init(Message *m, Arena *a) {
     m->b = buf_make(a);
     m->s = OK;
 }
 
-static inline void message_str(Msg *m, Str s) {
+static inline void message_str(Message *m, Str s) {
     if (m->s == OK) m->s = buf_str(&m->b, s);
 }
 
-static inline void message_u64(Msg *m, uint64_t n) {
+static inline void message_u64(Message *m, uint64_t n) {
     if (m->s == OK) m->s = buf_u64(&m->b, n);
 }
 
@@ -226,7 +226,7 @@ static inline STATUS_MUST_USE Status parse_set_stop(Parser *p, Pos pos, StopClas
 // would hold it.
 static inline STATUS_MUST_USE Status parse_fail(Parser *p, Pos pos, StopClass cls, Str message) {
     if (cls == CLASS_SYNTAX && p->after_long && pos.line == p->tok.line && pos.column == p->tok.column) {
-        Msg m;
+        Message m;
         message_init(&m, p->arena);
         message_str(&m, message);
         message_str(&m, S(" (the long string at "));
@@ -249,7 +249,7 @@ static inline STATUS_MUST_USE Status parse_fail(Parser *p, Pos pos, StopClass cl
 
 // A stop whose message is made, the arena's refusal a STOP with `stopped` false
 // rather than a fallback message.
-static inline STATUS_MUST_USE Status parse_fail_msg(Parser *p, Pos pos, StopClass cls, const Msg *m) {
+static inline STATUS_MUST_USE Status parse_fail_msg(Parser *p, Pos pos, StopClass cls, const Message *m) {
     if (m->s != OK) return STOP;
     return parse_fail(p, pos, cls, buf_view(&m->b));
 }
@@ -266,7 +266,7 @@ SLICE_TYPE(StrParts, const Str);
 // A stop whose message is the first `n` of `parts` joined.
 static inline STATUS_MUST_USE Status parse_fail_parts(Parser *p, Pos pos, StopClass cls, StrPieces parts, size_t n) {
     StrParts all = {parts.piece, n};
-    Msg m;
+    Message m;
     message_init(&m, p->arena);
     for (size_t k = 0; k < all.len; k++) message_str(&m, at(all, k));
     return parse_fail_msg(p, pos, cls, &m);
@@ -306,7 +306,7 @@ static inline Str parse_describe(Parser *p, Token t) {
     case TAG_QUESTION: return S("`?`, which marks an optional parameter (`function f(a, b?)`) and nothing else");
     default: break;
     }
-    Msg m;
+    Message m;
     message_init(&m, p->arena);
     if (t.tag == TAG_NAME) {
         message_str(&m, S("the name `"));

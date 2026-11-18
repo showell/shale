@@ -30,7 +30,7 @@ typedef struct {
     Value null_as;
 } JsonReader;
 
-static void json_hex2(Msg *m, uint8_t c) {
+static void json_hex2(Message *m, uint8_t c) {
     static const char hex[] = "0123456789abcdef";
     Str digits = {hex, 16};
     char pair[2] = {at(digits, c >> 4), at(digits, c & 15)};
@@ -39,7 +39,7 @@ static void json_hex2(Msg *m, uint8_t c) {
 
 // Zig's `failAt`: `said`, then where in the text it is, by byte and by line
 // and column (each byte before it a column, a newline a line).
-static STATUS_MUST_USE Status json_fail_at(JsonReader *jr, size_t at_, Msg *said) {
+static STATUS_MUST_USE Status json_fail_at(JsonReader *jr, size_t at_, Message *said) {
     Run *r = jr->r;
     if (said->s != OK) return run_values_oom(r, jr->pos);
     uint64_t line = 1;
@@ -58,7 +58,7 @@ static STATUS_MUST_USE Status json_fail_at(JsonReader *jr, size_t at_, Msg *said
 }
 
 static STATUS_MUST_USE Status json_fail_lit(JsonReader *jr, size_t at_, Str said) {
-    Msg m;
+    Message m;
     message_init(&m, jr->r->ctx.values);
     message_str(&m, said);
     return json_fail_at(jr, at_, &m);
@@ -161,7 +161,7 @@ static STATUS_MUST_USE Status json_string(JsonReader *jr, Str *out) {
             return OK;
         }
         if (c < 0x20) {
-            Msg m;
+            Message m;
             message_init(&m, r->ctx.values);
             message_str(&m, S("a control byte (0x"));
             json_hex2(&m, c);
@@ -188,7 +188,7 @@ static STATUS_MUST_USE Status json_string(JsonReader *jr, Str *out) {
         case 't': plain = '\t'; break;
         case 'u': break;
         default: {
-            Msg m;
+            Message m;
             message_init(&m, r->ctx.values);
             message_str(&m, S("the escape `\\"));
             char one = (char)e;
@@ -265,7 +265,7 @@ static STATUS_MUST_USE Status json_number(JsonReader *jr, Value *out) {
     }
     int64_t n = 0;
     if (!json_parse_i64(text, &n)) {
-        Msg m;
+        Message m;
         message_init(&m, jr->r->ctx.values);
         message_str(&m, S("the integer "));
         message_str(&m, text);
@@ -278,7 +278,7 @@ static STATUS_MUST_USE Status json_number(JsonReader *jr, Value *out) {
 
 static STATUS_MUST_USE Status json_word(JsonReader *jr, Str w, const Value *v, Value *out) {
     if (!str_starts_with(str_sub(jr->s, jr->i, jr->s.len), w)) {
-        Msg m;
+        Message m;
         message_init(&m, jr->r->ctx.values);
         message_str(&m, S("`"));
         message_str(&m, w);
@@ -299,7 +299,7 @@ static STATUS_MUST_USE Status json_enter(JsonReader *jr) {
 static STATUS_MUST_USE Status json_value(JsonReader *jr, Value *out);
 
 static STATUS_MUST_USE Status json_fail_after(JsonReader *jr, Str before) {
-    Msg m;
+    Message m;
     message_init(&m, jr->r->ctx.values);
     message_str(&m, before);
     message_str(&m, json_shown(json_byte(jr)));
@@ -321,7 +321,7 @@ static STATUS_MUST_USE Status json_object_members(JsonReader *jr, Table *t) {
         TRY(json_value(jr, &v));
         Value was;
         if (ValueMap_get(&t->map, key, &was)) {
-            Msg m;
+            Message m;
             message_init(&m, r->ctx.values);
             message_str(&m, S("the key \""));
             message_str(&m, key);
@@ -438,7 +438,7 @@ static STATUS_MUST_USE Status json_value(JsonReader *jr, Value *out) {
     default: break;
     }
     if (c == '-' || json_is_digit(c)) return json_number(jr, out);
-    Msg m;
+    Message m;
     message_init(&m, jr->r->ctx.values);
     message_str(&m, S("a value was expected, not "));
     message_str(&m, json_shown(c));

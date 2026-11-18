@@ -705,7 +705,7 @@ static inline STATUS_MUST_USE Status cli_unread_arg(Arena *a, const Program *pro
             if (str_eq(at(prog->args_read, k), name)) read = true;
         }
         if (read) continue;
-        Msg m;
+        Message m;
         message_init(&m, a);
         message_str(&m, S("`"));
         message_str(&m, name);

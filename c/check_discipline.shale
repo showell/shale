@@ -1214,7 +1214,7 @@ static inline Bytes called(Bytes b) { return SLICE_SUB(Bytes, b, f(1), 3); }
 static inline Bytes assigned(Bytes b, size_t k) { return SLICE_SUB(Bytes, b, k = 1, 3); }
 static inline Status dropped(Buf *b) { return buf_byte(b, 'x'); }
 static inline STATUS_MUST_USE Status braced(RunCtx *r, Pos p) { return run_fail(r, p, CLASS_FAIL, S("`f` is {not} a map")); }
-static inline STATUS_MUST_USE Status formatted(RunCtx *r, Pos p) { return run_failf(r, p, CLASS_FAIL, S("`{s}` {{a}}"), MSG_ARGS(MSG_FROM_HOST(S("f")))); }
+static inline STATUS_MUST_USE Status formatted(RunCtx *r, Pos p) { return run_failf(r, p, CLASS_FAIL, S("`{s}` {{a}}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(S("f")))); }
 // A comment's run_fail(r, p, CLASS_FAIL, S("{")) is no call.
 static inline STATUS_MUST_USE Status plain_fail(RunCtx *r, Pos p) { if (r == NULL) { return run_fail(r, p, CLASS_FAIL, S("no map (')')")); } return OK; } // S("{")
 static inline Str named(void) { return S("run_fail(\"{\")"); }

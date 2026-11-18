@@ -17,11 +17,11 @@ typedef struct {
     char root_bytes[PATH_MAX];
     Str root;
     FileSystem file_system;
-} Sx;
+} FileSystemFixture;
 
 // Makes the fixture, its arena setting `*refused` (`&s->refused`, or a run's
 // for a fixture inside one).
-static void file_system_fixture_init(Sx *s, bool *refused) {
+static void file_system_fixture_init(FileSystemFixture *s, bool *refused) {
     memset(s, 0, sizeof *s);
     arena_init(&s->values, (size_t)256 << 20, refused);
     char cwd[PATH_MAX];
@@ -35,7 +35,7 @@ static void file_system_fixture_init(Sx *s, bool *refused) {
     s->root = (Str){s->root_bytes, (size_t)n};
 }
 
-static void file_system_fixture_deinit(Sx *s) {
+static void file_system_fixture_deinit(FileSystemFixture *s) {
     bool refused = false;
     Arena a;
     arena_init(&a, (size_t)1 << 20, &refused);
@@ -49,24 +49,24 @@ static Str file_system_fixture_cs(const char *lit) { // cstr: a test's literal
 }
 
 // `rel` under the root, as an OS path.
-static OsStr file_system_fixture_at(Sx *s, const char *rel) { // cstr: a test's literal
+static OsStr file_system_fixture_at(FileSystemFixture *s, const char *rel) { // cstr: a test's literal
     OsStr out = os_str_own(s->root);
     if (!file_system_join(&s->values, out, file_system_fixture_cs(rel), &out)) abort();
     return out;
 }
 
-static void file_system_fixture_mkdir(Sx *s, const char *rel) { // cstr: a test's literal
+static void file_system_fixture_mkdir(FileSystemFixture *s, const char *rel) { // cstr: a test's literal
     if (file_system_make_path(file_system_fixture_at(s, rel)) != FILE_SYSTEM_OK) abort();
 }
 
-static void file_system_fixture_put(Sx *s, const char *rel, const char *text) { // cstr: test literals
+static void file_system_fixture_put(FileSystemFixture *s, const char *rel, const char *text) { // cstr: test literals
     OsStr p = file_system_fixture_at(s, rel);
     OsStr dir = p;
     if (file_system_dirname(p, &dir) && file_system_make_path(dir) != FILE_SYSTEM_OK) abort();
     if (file_system_write_file(p, file_system_fixture_cs(text), 0644) != FILE_SYSTEM_OK) abort();
 }
 
-static int file_system_fixture_chmod(Sx *s, const char *rel, mode_t mode) { // cstr: a test's literal
+static int file_system_fixture_chmod(FileSystemFixture *s, const char *rel, mode_t mode) { // cstr: a test's literal
     FileSystemCPath cp;
     const char *c = NULL;
     if (file_system_cstr(&cp, file_system_fixture_at(s, rel), &c) != FILE_SYSTEM_OK) abort();
@@ -74,11 +74,11 @@ static int file_system_fixture_chmod(Sx *s, const char *rel, mode_t mode) { // c
 }
 
 // What the root's `rel` holds, or false when it cannot be read.
-static bool file_system_fixture_file(Sx *s, const char *rel, Str *out) { // cstr: a test's literal
+static bool file_system_fixture_file(FileSystemFixture *s, const char *rel, Str *out) { // cstr: a test's literal
     return file_system_read_file(&s->values, file_system_fixture_at(s, rel), (size_t)1 << 20, out) == FILE_SYSTEM_OK;
 }
 
-static bool file_system_fixture_there(Sx *s, const char *rel) { // cstr: a test's literal
+static bool file_system_fixture_there(FileSystemFixture *s, const char *rel) { // cstr: a test's literal
     struct stat st;
     return file_system_stat_exact(file_system_fixture_at(s, rel), false, &st) == FILE_SYSTEM_OK;
 }

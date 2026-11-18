@@ -24,7 +24,7 @@ TEST(strict_names_held_and_names_refused) {
 }
 
 TEST(write_read_append_read_at_stat_list_remove) {
-    Sx f;
+    FileSystemFixture f;
     file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
     Arena *a = &f.values;
@@ -69,7 +69,7 @@ TEST(write_read_append_read_at_stat_list_remove) {
 }
 
 TEST(a_name_that_is_not_strict_is_refused_before_anything_is_made) {
-    Sx f;
+    FileSystemFixture f;
     file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
     Arena *a = &f.values;
@@ -89,7 +89,7 @@ TEST(a_name_that_is_not_strict_is_refused_before_anything_is_made) {
 }
 
 TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_sibling) {
-    Sx f;
+    FileSystemFixture f;
     file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
     Arena *a = &f.values;
@@ -134,7 +134,7 @@ TEST(replace_makes_the_file_hold_exactly_the_data_keeps_its_name_and_leaves_no_s
 }
 
 TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_spell_it) {
-    Sx f;
+    FileSystemFixture f;
     file_system_fixture_init(&f, &f.refused);
     Arena *a = &f.values;
     OsStr data = file_system_fixture_at(&f, "home/someone/a-long-host-path/prod/data");
@@ -173,7 +173,7 @@ TEST(a_path_the_bare_metal_host_could_not_hold_is_refused_measured_as_it_would_s
 }
 
 TEST(nothing_there_is_null_and_something_there_that_will_not_read_is_an_error) {
-    Sx f;
+    FileSystemFixture f;
     file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
     file_system_fixture_put(&f, "a-file", "x");
@@ -198,7 +198,7 @@ TEST(nothing_there_is_null_and_something_there_that_will_not_read_is_an_error) {
 }
 
 TEST(a_name_in_another_case_is_another_name_and_a_miss_is_not_found) {
-    Sx f;
+    FileSystemFixture f;
     file_system_fixture_init(&f, &f.refused);
     const FileSystem *s = &f.file_system;
     Arena *a = &f.values;
@@ -244,7 +244,7 @@ TEST(a_path_with_an_empty_part_is_refused_under_a_root_as_metal_refuses_it) {
 }
 
 TEST(a_replace_keeps_the_file_s_mode_on_linux_an_executable_script_stays_one) {
-    Sx f;
+    FileSystemFixture f;
     file_system_fixture_init(&f, &f.refused);
     file_system_fixture_put(&f, "data/run.sh", "old");
     EXPECT_EQ(file_system_fixture_chmod(&f, "data/run.sh", 0755), 0);
@@ -259,7 +259,7 @@ TEST(a_replace_keeps_the_file_s_mode_on_linux_an_executable_script_stays_one) {
 }
 
 TEST(a_replace_onto_a_folder_fails_and_leaves_no_temporary_file_beside_it) {
-    Sx f;
+    FileSystemFixture f;
     file_system_fixture_init(&f, &f.refused);
     file_system_fixture_mkdir(&f, "data/x");
     EXPECT(file_system_replace(&f.file_system, &f.values, file_system_fixture_at(&f, "data/x"), S("d")) != FILE_SYSTEM_OK);

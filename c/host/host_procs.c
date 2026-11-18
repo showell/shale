@@ -403,19 +403,19 @@ static STATUS_MUST_USE Status procs_signal(Run *r, Pos pos, int fd, int32_t pid,
     }
     int e = errno;
     if (e == ESRCH) return OK;
-    return host_fail(r, pos, CLASS_HOST, S("`proc_stop`: pid {d} refused {t}: {t}"), MSG_ARGS(MSG_FROM_HOST(run_num(r, pid)), MSG_FROM_HOST(sig_name), MSG_FROM_HOST(procs_errno_tag(e))));
+    return host_fail(r, pos, CLASS_HOST, S("`proc_stop`: pid {d} refused {t}: {t}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_num(r, pid)), MESSAGE_FROM_HOST(sig_name), MESSAGE_FROM_HOST(procs_errno_tag(e))));
 }
 
 // `proc_stop`'s entry checked: its pid and its start. Zig's `stop` before
 // its first charge.
 static STATUS_MUST_USE Status procs_stop_target(Run *r, Pos pos, const Value *v, int32_t *pid, Str *start) {
-    if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`proc_stop` takes an entry of `procs()`, not {s}"), MSG_ARGS(MSG_FROM_HOST(value_type_name(v))));
+    if (v->tag != VALUE_TABLE) return host_fail(r, pos, CLASS_TYPE, S("`proc_stop` takes an entry of `procs()`, not {s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(value_type_name(v))));
     const Table *m = v->as.table;
     if (m->kind != TABLE_MAP) return host_fail_plain(r, pos, CLASS_TYPE, S("`proc_stop` takes an entry of `procs()`, a map, not a list"));
     Value p;
     if (!ValueMap_get(&m->map, S("pid"), &p)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`proc_stop`: the entry has no `pid`: hand it one of `procs()`"));
     if (p.tag != VALUE_INT) return host_fail_plain(r, pos, CLASS_TYPE, S("`proc_stop`: the entry's `pid` is not an integer"));
-    if (p.as.integer < INT32_MIN || p.as.integer > INT32_MAX) return host_fail(r, pos, CLASS_ARGUMENT, S("`proc_stop`: pid {d} is no process's"), MSG_ARGS(MSG_FROM_HOST(run_num(r, p.as.integer))));
+    if (p.as.integer < INT32_MIN || p.as.integer > INT32_MAX) return host_fail(r, pos, CLASS_ARGUMENT, S("`proc_stop`: pid {d} is no process's"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_num(r, p.as.integer))));
     *pid = (int32_t)p.as.integer;
     Value s;
     if (!ValueMap_get(&m->map, S("start"), &s)) return host_fail_plain(r, pos, CLASS_ARGUMENT, S("`proc_stop`: the entry has no `start`: hand it one of `procs()`, which names a process by its pid and its start"));
@@ -430,7 +430,7 @@ static STATUS_MUST_USE Status procs_stop_target(Run *r, Pos pos, const Value *v,
     // above this process.
     ProcsLineage l;
     procs_lineage(&l);
-    if (*pid <= 1 || procs_in_lineage(&l, *pid)) return host_fail(r, pos, CLASS_ARGUMENT, S("`proc_stop`: pid {d} is this run or one above it, which a script never stops"), MSG_ARGS(MSG_FROM_HOST(run_num(r, *pid))));
+    if (*pid <= 1 || procs_in_lineage(&l, *pid)) return host_fail(r, pos, CLASS_ARGUMENT, S("`proc_stop`: pid {d} is this run or one above it, which a script never stops"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_num(r, *pid))));
     return OK;
 }
 
@@ -443,7 +443,7 @@ static STATUS_MUST_USE Status procs_stop_through(Host *h, Run *r, Pos pos, int f
     if (!sent) return OK;
     if (!procs_pidfd_ends(fd, 2000)) {
         TRY(procs_signal(r, pos, fd, pid, SIGKILL, S("KILL"), &sent));
-        if (!procs_pidfd_ends(fd, 2000)) return host_fail(r, pos, CLASS_HOST, S("`proc_stop`: pid {d} is still there 2 seconds after KILL"), MSG_ARGS(MSG_FROM_HOST(run_num(r, pid))));
+        if (!procs_pidfd_ends(fd, 2000)) return host_fail(r, pos, CLASS_HOST, S("`proc_stop`: pid {d} is still there 2 seconds after KILL"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_num(r, pid))));
     }
     Buf b = buf_make(r->ctx.values);
     Status s = buf_lit(&b, "process ");
@@ -478,7 +478,7 @@ static STATUS_MUST_USE Status procs_stop(Host *h, Run *r, Pos pos, const Value *
     if (fd < 0) {
         int e = errno;
         if (e == ESRCH) return OK;
-        return host_fail(r, pos, CLASS_HOST, S("`proc_stop`: pid {d}: pidfd_open: {t}"), MSG_ARGS(MSG_FROM_HOST(run_num(r, pid)), MSG_FROM_HOST(procs_errno_tag(e))));
+        return host_fail(r, pos, CLASS_HOST, S("`proc_stop`: pid {d}: pidfd_open: {t}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_num(r, pid)), MESSAGE_FROM_HOST(procs_errno_tag(e))));
     }
     Status s = procs_stop_through(h, r, pos, fd, pid, start, out);
     close(fd);
@@ -489,11 +489,11 @@ static STATUS_MUST_USE Status procs_stop(Host *h, Run *r, Pos pos, const Value *
 static STATUS_MUST_USE Status host_procs_call(Host *h, Run *r, Pos pos, Str name, ConstValues args, Value *out, bool *mine) {
     *mine = true;
     if (str_eq(name, S("procs"))) {
-        if (args.len != 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`procs` takes nothing, given {d} arguments: filter its list by `args` or `name`"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
+        if (args.len != 0) return host_fail(r, pos, CLASS_ARGUMENT, S("`procs` takes nothing, given {d} arguments: filter its list by `args` or `name`"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
         return procs_list(r, pos, out);
     }
     if (str_eq(name, S("proc_stop"))) {
-        if (args.len != 1) return host_fail(r, pos, CLASS_ARGUMENT, S("`proc_stop` takes one entry of `procs()`, given {d} arguments"), MSG_ARGS(MSG_FROM_HOST(run_unum(r, args.len))));
+        if (args.len != 1) return host_fail(r, pos, CLASS_ARGUMENT, S("`proc_stop` takes one entry of `procs()`, given {d} arguments"), MESSAGE_ARGS(MESSAGE_FROM_HOST(run_unum(r, args.len))));
         return procs_stop(h, r, pos, &at(args, 0), out);
     }
     *mine = false;

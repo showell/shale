@@ -292,7 +292,7 @@ static STATUS_MUST_USE Status paths_refuse_secrets_under(Paths *h, PathRun *r, P
     PathsSecretDirs sd = paths_secret_dirs(h, r);
     for (size_t k = 0; k < sd.len; k++) {
         if (mounts_in_folder(abs, at(sd, k).run_dir)) {
-            return path_fail(r, pos, CLASS_REFUSED, S("\"{s}\" is in the mount `{s}`, which holds secrets"), MSG_ARGS(MSG_FROM_SCRIPT(shown), MSG_FROM_HOST(at(sd, k).name)));
+            return path_fail(r, pos, CLASS_REFUSED, S("\"{s}\" is in the mount `{s}`, which holds secrets"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown), MESSAGE_FROM_HOST(at(sd, k).name)));
         }
     }
     return OK;
@@ -335,7 +335,7 @@ static STATUS_MUST_USE Status paths_mount_of(Paths *h, PathRun *r, Pos pos, Str 
         }
     }
     if (h->mounts.len == 0) {
-        return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\": `{s}:` is not a mount: there are none ({s})"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_SCRIPT(name), MSG_FROM_HOST(h->mounts_from)));
+        return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\": `{s}:` is not a mount: there are none ({s})"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path), MESSAGE_FROM_SCRIPT(name), MESSAGE_FROM_HOST(h->mounts_from)));
     }
     Buf names = buf_make(paths_values(r));
     for (size_t k = 0; k < h->mounts.len; k++) {
@@ -343,7 +343,7 @@ static STATUS_MUST_USE Status paths_mount_of(Paths *h, PathRun *r, Pos pos, Str 
         if (buf_byte(&names, '`') != OK || buf_str(&names, at(h->mounts, k).name) != OK || buf_byte(&names, '`') != OK) return run_oom(r->ctx, pos);
     }
     return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\": `{s}:` is not a mount: the mounts are {s} ({s})"),
-                     MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_SCRIPT(name), MSG_FROM_HOST(buf_view(&names)), MSG_FROM_HOST(h->mounts_from)));
+                     MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path), MESSAGE_FROM_SCRIPT(name), MESSAGE_FROM_HOST(buf_view(&names)), MESSAGE_FROM_HOST(h->mounts_from)));
 }
 
 // Stops the run if any part of `rest` below `base` is a symbolic link,
@@ -372,7 +372,7 @@ static STATUS_MUST_USE Status paths_refuse_links(PathRun *r, Pos pos, Str base, 
         FileSystemErr e = file_system_stat_exact(os_str_own(buf_view(&walked)), false, &st);
         if (e != FILE_SYSTEM_OK) return OK; // skip: a missing part ends the walk, the call's own stop
         if (S_ISLNK(st.st_mode)) {
-            return path_fail(r, pos, CLASS_REFUSED, S("{s}{s} is a symbolic link: the file system follows none"), MSG_ARGS(MSG_FROM_SCRIPT(shown_prefix), MSG_FROM_SCRIPT(str_sub(rest, 0, shown_end))));
+            return path_fail(r, pos, CLASS_REFUSED, S("{s}{s} is a symbolic link: the file system follows none"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(shown_prefix), MESSAGE_FROM_SCRIPT(str_sub(rest, 0, shown_end))));
         }
         if (to == rest.len) break;
         from = to + 1;
@@ -386,17 +386,17 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
     Str rest = str_sub(path, colon + 1, path.len);
     if (str_eq(rest, S("."))) rest = S("");
     if (rest.len > 0 && str_byte(rest, 0) == '/') {
-        return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" is absolute inside its mount: a mount's paths are relative to it"), MSG_ARGS(MSG_FROM_SCRIPT(path)));
+        return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" is absolute inside its mount: a mount's paths are relative to it"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path)));
     }
     size_t from = 0;
     while (rest.len > 0 && from <= rest.len) {
         size_t to = path_part_end(rest, from);
         Str part = str_sub(rest, from, to);
         if (str_eq(part, S(".."))) {
-            return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)"), MSG_ARGS(MSG_FROM_SCRIPT(path)));
+            return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" climbs out of its mount with `..`: a folder beside it is reached through a mount of its own (`shale --help` lists this box's mounts)"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path)));
         }
         if (!path_strict_name(part)) {
-            return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_SCRIPT(part)));
+            return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\" has a part (\"{s}\") that is not a name: no `.`, `..`, empty parts or characters a strict name refuses"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path), MESSAGE_FROM_SCRIPT(part)));
         }
         if (to == rest.len) break;
         from = to + 1;
@@ -416,7 +416,7 @@ static STATUS_MUST_USE Status paths_mount_path(Paths *h, PathRun *r, Pos pos, St
         FileSystemErr why = e != FILE_SYSTEM_OK ? e : file_system_err_of(errno);
         Str said = S("");
         if (!mounts_folder_failed(paths_values(r), h->mounts, m, why, &said)) return run_oom(r->ctx, pos);
-        return path_fail(r, pos, CLASS_FILE_SYSTEM, S("{s}"), MSG_ARGS(MSG_FROM_HOST(said)));
+        return path_fail(r, pos, CLASS_FILE_SYSTEM, S("{s}"), MESSAGE_ARGS(MESSAGE_FROM_HOST(said)));
     }
     Str dir = paths_run_dir_of(h, r, m);
     TRY(paths_refuse_links(r, pos, dir, rest, str_sub(path, 0, colon + 1)));
@@ -464,7 +464,7 @@ static STATUS_MUST_USE Status paths_resolve(void *ctx, PathRun *r, Pos pos, Str 
     // call; only paths_secret_path and paths_secret_target take one.
     // test_paths plants each builtin's path through it.
     if (m->secrets) {
-        return path_fail(r, pos, CLASS_REFUSED, S("\"{s}\": the mount `{s}` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_HOST(m->name)));
+        return path_fail(r, pos, CLASS_REFUSED, S("\"{s}\": the mount `{s}` holds secrets: only `run`'s `secrets` (or `http_get`'s `bearer`) may name its files"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path), MESSAGE_FROM_HOST(m->name)));
     }
     Str os = S("");
     TRY(paths_mount_path(h, r, pos, path, colon, m, &os));
@@ -562,22 +562,22 @@ static STATUS_MUST_USE Status paths_note_before(Paths *h, PathRun *r, Pos pos, S
     } else if (e == FILE_SYSTEM_OK && S_ISREG(st.st_mode)) {
         size_t room = PATHS_JOURNAL_MAX - h->journal_bytes;
         if ((uint64_t)st.st_size > room) {
-            MsgNum most;
-            return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it"), MSG_ARGS(MSG_FROM_HOST(message_num(&most, PATHS_JOURNAL_MAX)), MSG_FROM_HOST(abs)));
+            MessageNum most;
+            return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop keeps at most {d} bytes of what a run changes, and {s} would pass it"), MESSAGE_ARGS(MESSAGE_FROM_HOST(message_num(&most, PATHS_JOURNAL_MAX)), MESSAGE_FROM_HOST(abs)));
         }
         Str bytes = S("");
         FileSystemErr re = file_system_read_file(h->arena, os_str_own(abs), room + 1, &bytes);
         if (re != FILE_SYSTEM_OK) {
-            return path_fail(r, pos, CLASS_FILE_SYSTEM, S("--undo-on-stop: {s} cannot be read ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(re))));
+            return path_fail(r, pos, CLASS_FILE_SYSTEM, S("--undo-on-stop: {s} cannot be read ({t}), so it could not be put back"), MESSAGE_ARGS(MESSAGE_FROM_HOST(abs), MESSAGE_FROM_HOST(file_system_err_name(re))));
         }
         h->journal_bytes += bytes.len;
         p.was = PRIOR_FILE;
         p.bytes = bytes;
         p.mode = st.st_mode & 07777;
     } else if (e == FILE_SYSTEM_OK) {
-        return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop: {s} is neither a file nor a folder, and could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs)));
+        return path_fail(r, pos, CLASS_REFUSED, S("--undo-on-stop: {s} is neither a file nor a folder, and could not be put back"), MESSAGE_ARGS(MESSAGE_FROM_HOST(abs)));
     } else if (e != FILE_SYSTEM_FILE_NOT_FOUND) {
-        return path_fail(r, pos, CLASS_FILE_SYSTEM, S("--undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back"), MSG_ARGS(MSG_FROM_HOST(abs), MSG_FROM_HOST(file_system_err_name(e))));
+        return path_fail(r, pos, CLASS_FILE_SYSTEM, S("--undo-on-stop: {s} cannot be looked at ({t}), so it could not be put back"), MESSAGE_ARGS(MESSAGE_FROM_HOST(abs), MESSAGE_FROM_HOST(file_system_err_name(e))));
     }
     if (!arena_dup(h->arena, abs, &p.abs) || Priors_push(&h->journal, p) != OK) return run_oom(r->ctx, pos);
     return OK;
@@ -604,7 +604,7 @@ static STATUS_MUST_USE Status paths_may_change(void *ctx, PathRun *r, Pos pos, S
         Str dir = paths_run_dir_of(h, r, m);
         bool under = mounts_in_folder(abs, dir);
         if (named || (under && !paths_under_writable_within(h, r, abs, dir))) {
-            return path_fail(r, pos, CLASS_REFUSED, S("{s}: mount `{s}` is read-only"), MSG_ARGS(MSG_FROM_SCRIPT(rel), MSG_FROM_HOST(m->name)));
+            return path_fail(r, pos, CLASS_REFUSED, S("{s}: mount `{s}` is read-only"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(rel), MESSAGE_FROM_HOST(m->name)));
         }
     }
     if (h->undo) TRY(paths_note_before(h, r, pos, abs));
@@ -634,7 +634,7 @@ static inline STATUS_MUST_USE Status paths_secret_path(Paths *h, PathRun *r, Pos
     const Mount *m = NULL;
     TRY(paths_mount_of(h, r, pos, path, colon, &m));
     if (!m->secrets) return paths_os_path(h, r, pos, who, path, false, out);
-    if (colon + 1 == path.len) return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\": a secret is a file in the mount, not the mount"), MSG_ARGS(MSG_FROM_SCRIPT(path)));
+    if (colon + 1 == path.len) return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\": a secret is a file in the mount, not the mount"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path)));
     Str os = S("");
     TRY(paths_mount_path(h, r, pos, path, colon, m, &os));
     return paths_absolute(h, r, pos, os, out);
@@ -647,17 +647,17 @@ static inline STATUS_MUST_USE Status paths_secret_path(Paths *h, PathRun *r, Pos
 static STATUS_MUST_USE Status paths_secret_target(Paths *h, PathRun *r, Pos pos, Str path, Str *out) {
     size_t colon = 0;
     if (!paths_colon(path, &colon)) {
-        return path_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` \"{s}\" is not in a mount: a secret is stored only in a `secrets` mount, `\"keys:NAME\"`"), MSG_ARGS(MSG_FROM_SCRIPT(path)));
+        return path_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` \"{s}\" is not in a mount: a secret is stored only in a `secrets` mount, `\"keys:NAME\"`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path)));
     }
     const Mount *m = NULL;
     TRY(paths_mount_of(h, r, pos, path, colon, &m));
     if (!m->secrets) {
-        return path_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` \"{s}\": the mount `{s}` does not hold secrets: a secret is stored only in a `secrets` mount"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_HOST(m->name)));
+        return path_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` \"{s}\": the mount `{s}` does not hold secrets: a secret is stored only in a `secrets` mount"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path), MESSAGE_FROM_HOST(m->name)));
     }
     Str rest = str_sub(path, colon + 1, path.len);
-    if (rest.len == 0 || str_eq(rest, S("."))) return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\": a secret is a file in the mount, not the mount"), MSG_ARGS(MSG_FROM_SCRIPT(path)));
+    if (rest.len == 0 || str_eq(rest, S("."))) return path_fail(r, pos, CLASS_ARGUMENT, S("\"{s}\": a secret is a file in the mount, not the mount"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path)));
     if (str_find_byte(rest, '/') != NULL) {
-        return path_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` \"{s}\" is in a folder of the mount: a secret is a file directly in it, `\"{s}:NAME\"`"), MSG_ARGS(MSG_FROM_SCRIPT(path), MSG_FROM_HOST(m->name)));
+        return path_fail(r, pos, CLASS_REFUSED, S("`run`'s `stdout_secret` \"{s}\" is in a folder of the mount: a secret is a file directly in it, `\"{s}:NAME\"`"), MESSAGE_ARGS(MESSAGE_FROM_SCRIPT(path), MESSAGE_FROM_HOST(m->name)));
     }
     Str os = S("");
     TRY(paths_mount_path(h, r, pos, path, colon, m, &os));
@@ -740,20 +740,20 @@ static inline STATUS_MUST_USE Status paths_refuse_secret_args(Paths *h, PathRun 
         for (size_t i = 0; i < argv.len; i++) {
             PathsNames n = PATHS_NAMES_NONE;
             TRY(paths_names_folder(r, pos, at(argv, i), cwd, dir, &n));
-            MsgNum num;
+            MessageNum num;
             Str nth = message_num(&num, i + 1);
             if (n == PATHS_NAMES_INSIDE) {
-                return path_fail(r, pos, CLASS_REFUSED, S("`{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(nth), MSG_FROM_HOST(m->name)));
+                return path_fail(r, pos, CLASS_REFUSED, S("`{s}`'s argument {d} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_HOST(nth), MESSAGE_FROM_HOST(m->name)));
             }
             if (n == PATHS_NAMES_HOLDS) {
-                return path_fail(r, pos, CLASS_REFUSED, S("`{s}`'s argument {d} holds the mount `{s}`'s folder, which holds secrets: name a folder beside it"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_HOST(nth), MSG_FROM_HOST(m->name)));
+                return path_fail(r, pos, CLASS_REFUSED, S("`{s}`'s argument {d} holds the mount `{s}`'s folder, which holds secrets: name a folder beside it"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_HOST(nth), MESSAGE_FROM_HOST(m->name)));
             }
         }
         for (size_t i = 0; i < env_keys.len; i++) {
             PathsNames n = PATHS_NAMES_NONE;
             TRY(paths_names_folder(r, pos, at(env_values, i), cwd, dir, &n));
             if (n != PATHS_NAMES_NONE) {
-                return path_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` {s} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`"), MSG_ARGS(MSG_FROM_HOST(who), MSG_FROM_SCRIPT(at(env_keys, i)), MSG_FROM_HOST(m->name)));
+                return path_fail(r, pos, CLASS_REFUSED, S("`{s}`'s `env` {s} names the mount `{s}`'s folder, which holds secrets: hand one over as `secrets`"), MESSAGE_ARGS(MESSAGE_FROM_HOST(who), MESSAGE_FROM_SCRIPT(at(env_keys, i)), MESSAGE_FROM_HOST(m->name)));
             }
         }
     }

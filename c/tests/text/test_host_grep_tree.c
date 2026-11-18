@@ -10,7 +10,7 @@
 
 // `gt(needle, o)` is the host's call with the prelude's defaults, `o` over
 // them; `show(g)` prints its hits, what it passed by, `files` and `cut`.
-static const char *const GT_LIB =
+static const char *const GREP_TREE_TEST_LIB =
     "function gt(needle, o)\n"
     "  local a = {given = {}, place = \"\", prefix = \"\", entries = {}, regex = false, nocase = false, ext = {}, like = \"\", context = 0, most = 10000}\n"
     "  for k in keys(o) do a[k] = o[k] end\n"
@@ -22,8 +22,8 @@ static const char *const GT_LIB =
     "  print(g.files, g.cut)\n"
     "end\n";
 
-// A run of GT_LIB and then `src` on the tree the test planted, `mounts` its
-// mounts (each `D` the folder).
+// A run of GREP_TREE_TEST_LIB and then `src` on the tree the test planted,
+// `mounts` its mounts (each `D` the folder).
 static void grep_tree_test_init(Ran *x, const char *mounts) { // cstr: a test's literal
     RanOpts o = {mounts, false, false};
     ran_init(x, o);
@@ -31,7 +31,7 @@ static void grep_tree_test_init(Ran *x, const char *mounts) { // cstr: a test's 
 
 static void grep_tree_test_run(Ran *x, const char *src) { // cstr: a test's literal
     Buf b = buf_make(&x->host);
-    if (buf_str(&b, ran_cs(GT_LIB)) != OK || buf_str(&b, ran_cs(src)) != OK) abort();
+    if (buf_str(&b, ran_cs(GREP_TREE_TEST_LIB)) != OK || buf_str(&b, ran_cs(src)) != OK) abort();
     ran_run(x, buf_view(&b), ran_budgets());
 }
 
@@ -102,7 +102,7 @@ TEST(grep_tree_leaves_out_two_planted_secrets_mounts_folders_each_unlisted_and_u
 
 // The entries `walk` gives, a part at a time, as `walk_all` gathers them:
 // each one's path, kind and size, and the `more` paths between the parts.
-static const char *const GT_WALK =
+static const char *const GREP_TREE_TEST_WALK =
     "local after = \"\"\n"
     "while true do\n"
     "  local more = nil\n"
@@ -117,7 +117,7 @@ static const char *const GT_WALK =
 static void grep_tree_test_walk(Ran *x, uint64_t call_entries) {
     Budgets b = ran_budgets();
     b.call_entries = call_entries;
-    ran_run(x, ran_cs(GT_WALK), b);
+    ran_run(x, ran_cs(GREP_TREE_TEST_WALK), b);
 }
 
 TEST(walk_leaves_out_a_planted_secrets_mount_s_folder_whole_and_never_ends_a_part_on_it) {
@@ -433,7 +433,7 @@ static uint64_t grep_tree_test_parts(const char *needles, Buf *out) { // cstr: a
     ran_put(&x, "root/big.txt", "");
     ran_write(&x, "root/big.txt", buf_view(&body));
     Buf src = buf_make(&x.host);
-    if (buf_str(&src, ran_cs(GT_LIB)) != OK || buf_lit(&src, "for h in gt(") != OK || buf_str(&src, ran_cs(needles)) != OK ||
+    if (buf_str(&src, ran_cs(GREP_TREE_TEST_LIB)) != OK || buf_lit(&src, "for h in gt(") != OK || buf_str(&src, ran_cs(needles)) != OK ||
         buf_lit(&src, ", {}).hits do print(h.line, h.needle) end\n") != OK) {
         abort();
     }

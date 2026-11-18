@@ -236,10 +236,10 @@ typedef struct {
     char root_bytes[PATH_MAX];
     Str root;
     Secrets m;
-} Sf;
+} SecretsFixture;
 
 // `lit` with each `@` the root's path.
-static Str secrets_fixture_at(Sf *f, const char *lit) { // cstr: a test's literal
+static Str secrets_fixture_at(SecretsFixture *f, const char *lit) { // cstr: a test's literal
     Buf b = buf_make(&f->a);
     for (const char *p = lit; *p != 0; p++) {
         Status s = *p == '@' ? buf_str(&b, f->root) : buf_byte(&b, *p);
@@ -249,13 +249,13 @@ static Str secrets_fixture_at(Sf *f, const char *lit) { // cstr: a test's litera
 }
 
 // The root's `rel`, NUL-ended for the kernel.
-static const char *secrets_fixture_path(Sf *f, const char *rel) { // cstr: a test's literal, and the kernel's path
+static const char *secrets_fixture_path(SecretsFixture *f, const char *rel) { // cstr: a test's literal, and the kernel's path
     Buf b = buf_make(&f->a);
     if (buf_str(&b, f->root) != OK || buf_byte(&b, '/') != OK || buf_str(&b, test_cs(rel)) != OK || buf_byte(&b, 0) != OK) abort();
     return b.ptr;
 }
 
-static void secrets_fixture_init(Sf *f, const char *mounts) { // cstr: a test's literal
+static void secrets_fixture_init(SecretsFixture *f, const char *mounts) { // cstr: a test's literal
     // This unit makes no file system call, so nothing calls
     // path_file_system_failed, which cannot be `static inline` as other
     // functions this unit leaves alone are: TCC 0.9.27 then refuses
@@ -288,12 +288,12 @@ static int secrets_fixture_remove_one(const char *p, const struct stat *st, int 
 }
 
 // Removes the planted root and everything in it, then the arena.
-static void secrets_fixture_deinit(Sf *f) {
+static void secrets_fixture_deinit(SecretsFixture *f) {
     if (nftw(f->root_bytes, secrets_fixture_remove_one, 16, FTW_DEPTH | FTW_PHYS) != 0) abort();
     arena_deinit(&f->a);
 }
 
-static void secrets_fixture_put(Sf *f, const char *rel, const char *text) { // cstr: test literals
+static void secrets_fixture_put(SecretsFixture *f, const char *rel, const char *text) { // cstr: test literals
     int fd = open(secrets_fixture_path(f, rel), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     Str s = test_cs(text);
     if (fd < 0 || write(fd, s.ptr, s.len) != (ssize_t)s.len) abort();
@@ -301,21 +301,21 @@ static void secrets_fixture_put(Sf *f, const char *rel, const char *text) { // c
 }
 
 // The file's bytes, or "<none>" when it is not there.
-static Str secrets_fixture_read(Sf *f, const char *rel) { // cstr: a test's literal
+static Str secrets_fixture_read(SecretsFixture *f, const char *rel) { // cstr: a test's literal
     Str out = S("");
     Str why = S("");
     secrets_read_file(&f->a, test_cs(secrets_fixture_path(f, rel)), (size_t)1 << 20, &out, &why);
     return why.len > 0 ? S("<none>") : out;
 }
 
-static unsigned secrets_fixture_mode(Sf *f, const char *rel) { // cstr: a test's literal
+static unsigned secrets_fixture_mode(SecretsFixture *f, const char *rel) { // cstr: a test's literal
     struct stat st;
     if (stat(secrets_fixture_path(f, rel), &st) != 0) return 0;
     return (unsigned)(st.st_mode & 07777);
 }
 
 // How many entries a folder holds, `.` and `..` left out.
-static size_t secrets_fixture_count(Sf *f, const char *rel) { // cstr: a test's literal
+static size_t secrets_fixture_count(SecretsFixture *f, const char *rel) { // cstr: a test's literal
     DIR *d = opendir(secrets_fixture_path(f, rel));
     if (d == NULL) return SIZE_MAX;
     size_t n = 0;
@@ -341,7 +341,7 @@ typedef struct {
     tcflag_t lflag;
 } Tty;
 
-static void tty_start(Tty *t, Sf *f) {
+static void tty_start(Tty *t, SecretsFixture *f) {
     t->seen = buf_make(&f->a);
     t->from = 0;
     pid_t pid = forkpty(&t->master, NULL, NULL, NULL);
@@ -431,7 +431,7 @@ static bool tty_said(Tty *t, const char *text) { // cstr: a test's literal
 #define DENY_ONLY "{\n  \"permissions\": {\n    \"deny\": [\n      \"Read(/@/keys/\x2a\x2a)\",\n      \"Edit(/@/keys/\x2a\x2a)\"\n    ]\n  }\n}\n"
 
 TEST(the_mode_refuses_unless_stdin_and_stdout_are_both_a_terminal) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     // Each pipe's read end, then its write end.
     SLICE_TYPE(Fds, int);
@@ -471,7 +471,7 @@ TEST(the_mode_refuses_unless_stdin_and_stdout_are_both_a_terminal) {
 }
 
 TEST(the_menu_refuses_a_choice_it_does_not_offer_and_mounts_with_no_secrets_mount) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     Tty t;
     tty_start(&t, &f);
@@ -488,7 +488,7 @@ TEST(the_menu_refuses_a_choice_it_does_not_offer_and_mounts_with_no_secrets_moun
 }
 
 TEST(where_names_each_secrets_mount_and_its_folder_and_no_other_mount) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, "keys = @/keys secrets\nplain = @/plain\nvault = @/vault/ secrets\n");
     Tty t;
     tty_start(&t, &f);
@@ -504,7 +504,7 @@ TEST(where_names_each_secrets_mount_and_its_folder_and_no_other_mount) {
 }
 
 TEST(store_writes_the_value_0600_says_its_bytes_never_the_value_then_adds_the_deny_rules) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     Tty t;
     tty_start(&t, &f);
@@ -542,7 +542,7 @@ TEST(store_writes_the_value_0600_says_its_bytes_never_the_value_then_adds_the_de
 }
 
 TEST(store_over_a_secret_asks_first_a_no_keeps_it_a_yes_replaces_it) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, "keys = @/keys secrets\nvault = @/vault secrets\n");
     secrets_fixture_put(&f, "keys/tok", "old-bytes");
     // Both mounts' rules are there already, so no deny question follows.
@@ -615,7 +615,7 @@ TEST(store_refuses_a_name_that_is_not_a_file_directly_in_the_mount) {
     SLICE_TYPE(Bads, const Bad);
     Bads all = {bad, sizeof bad / sizeof *bad};
     for (size_t i = 0; i < all.len; i++) {
-        Sf f;
+        SecretsFixture f;
         secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
         if (mkdir(secrets_fixture_path(&f, "keys/sub"), 0700) != 0) abort();
         Tty t;
@@ -636,7 +636,7 @@ TEST(store_refuses_a_name_that_is_not_a_file_directly_in_the_mount) {
 }
 
 // Store, menu to value prompt, for the name `name`.
-static void tty_to_value(Tty *t, Sf *f, const char *name) { // cstr: a test's literal
+static void tty_to_value(Tty *t, SecretsFixture *f, const char *name) { // cstr: a test's literal
     tty_start(t, f);
     EXPECT(tty_expect(t, "Which one (1, 2 or 3)? "));
     tty_send(t, "2");
@@ -646,7 +646,7 @@ static void tty_to_value(Tty *t, Sf *f, const char *name) { // cstr: a test's li
 }
 
 // `n` bytes of a value no line of the transcript could hold by chance.
-static Str long_value(Sf *f, size_t n) {
+static Str long_value(SecretsFixture *f, size_t n) {
     Buf b = buf_make(&f->a);
     Str alphabet = S("Qz7kW2xR");
     for (size_t k = 0; k < n; k++) {
@@ -656,7 +656,7 @@ static Str long_value(Sf *f, size_t n) {
 }
 
 TEST(store_reads_a_value_past_the_terminals_line_limit_whole_and_refuses_one_past_64_KiB) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     // Past the 4096 bytes a terminal's line holds in canonical mode.
     Str v = long_value(&f, 5000);
@@ -703,7 +703,7 @@ TEST(store_reads_a_value_past_the_terminals_line_limit_whole_and_refuses_one_pas
 }
 
 TEST(a_ctrl_c_at_the_value_prompt_puts_the_terminals_echo_back_and_stores_nothing) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     Tty t;
     tty_to_value(&t, &f, "tok");
@@ -734,7 +734,7 @@ TEST(a_ctrl_c_at_the_value_prompt_puts_the_terminals_echo_back_and_stores_nothin
 }
 
 TEST(store_an_empty_value_stores_nothing) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     Tty t;
     tty_start(&t, &f);
@@ -752,7 +752,7 @@ TEST(store_an_empty_value_stores_nothing) {
 }
 
 TEST(deny_adds_only_what_is_missing_keeps_the_old_file_as_bak_and_leaves_a_correct_file_untouched) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     if (mkdir(secrets_fixture_path(&f, "home/.claude"), 0700) != 0) abort();
     Str old = secrets_fixture_at(&f, "{\"model\": \"opus\", \"permissions\": {\"deny\": [\"Read(/@/keys/\x2a\x2a)\"]}}");
@@ -795,7 +795,7 @@ TEST(deny_adds_only_what_is_missing_keeps_the_old_file_as_bak_and_leaves_a_corre
 }
 
 TEST(deny_a_file_that_does_not_parse_or_a_no_writes_nothing) {
-    Sf f;
+    SecretsFixture f;
     secrets_fixture_init(&f, ONE_SECRETS_MOUNT);
     if (mkdir(secrets_fixture_path(&f, "home/.claude"), 0700) != 0) abort();
     secrets_fixture_put(&f, "home/.claude/settings.json", "{\"model\": \"opus\",}");
